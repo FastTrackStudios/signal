@@ -77,6 +77,38 @@ web-stage: tailwind
     cd apps/fasttrackstudio && dx build --platform web --release --no-default-features --features signal,session
     rm -rf apps/fasttrackstudio/web-dist
     cp -r target/dx/fasttrackstudio/release/web/public apps/fasttrackstudio/web-dist
+    just keys-worklet-wasm
+
+# Stage the browser keys rig's AudioWorklet bundle (W4 of
+# crates/signal/docs/browser-keys-rig.md) into the web bundle:
+# a RELEASE wasm build of signal-keys-worklet (KeysWorklet =
+# WebRenderer + headless KeysRig), wasm-bindgen'd `--target web`, plus
+# daw-standalone's processor.js (already keys-aware: `entry: 'keys'` +
+# the keys message kinds; the glue URL arrives in the init message, so
+# it stages verbatim). The page (src/web_keys_rig.rs) expects exactly:
+#   /worklet/keys_processor.js
+#   /worklet/signal_keys_worklet.js
+#   /worklet/signal_keys_worklet_bg.wasm
+# wasm-bindgen-cli comes from the dev shell, pinned to the workspace
+# wasm-bindgen version (same as task-worklet-wasm).
+keys-worklet-wasm out='apps/fasttrackstudio/web-dist/worklet':
+    cargo build -p signal-keys-worklet --lib \
+        --target wasm32-unknown-unknown --release
+    mkdir -p {{out}}
+    wasm-bindgen --target web --out-dir {{out}} \
+        --out-name signal_keys_worklet \
+        target/wasm32-unknown-unknown/release/signal_keys_worklet.wasm
+    cp features/standalone/daw-standalone/examples/web_worklet/processor.js \
+        {{out}}/keys_processor.js
+
+# ONE engine binary serving the whole browser keys rig: stage the web
+# bundle + keys worklet (web-stage), then embed it into the release
+# binary. Order matters — embed-web include_dir!s web-dist/ at compile
+# time, so staging runs first. Then:
+#   target/release/fasttrackstudio --engine     (binds 0.0.0.0:4040)
+# and open http://<host>:4040/rigs/keys/worship (tailnet-reachable).
+keys-web: web-stage
+    cargo build --release -p fasttrackstudio --features embed-web
 
 # Build the RELEASE binary (web bundle EMBEDDED) and deploy the ONE
 # artifact to ~/.local/lib/fts/fasttrackstudio behind the signal-engine

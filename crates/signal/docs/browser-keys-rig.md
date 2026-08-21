@@ -78,10 +78,37 @@ Reuse, don't reinvent:
     MidiAccess/MidiInput/MidiMessageEvent features), raw 3-byte messages
     forwarded to the worklet port. Converges with the demo player on the
     same input seam.
-- **W4** — staging/serving: a `just` target that wasm-bindgen-builds the
-  keys worklet and stages it into the dx web bundle (`web-stage`), then
-  `--features embed-web` so ONE engine binary serves UI + packs + vox on
-  :4040 → tailnet.
+- **W4** — staging/serving. DONE — ONE engine binary serves the whole rig:
+  - `just keys-worklet-wasm` (Justfile): release wasm build of
+    `signal-keys-worklet` + `wasm-bindgen --target web --out-name
+    signal_keys_worklet` into `apps/fasttrackstudio/web-dist/worklet/`,
+    plus daw-standalone's `examples/web_worklet/processor.js` copied
+    verbatim as `keys_processor.js` (it is already keys-aware — `entry:
+    'keys'` + the keys message kinds — and the glue URL arrives in the
+    init message, so nothing is hardcoded). Yields exactly the three URLs
+    `web_keys_rig.rs` expects: `/worklet/keys_processor.js`,
+    `/worklet/signal_keys_worklet.js`, `/worklet/signal_keys_worklet_bg.wasm`.
+  - `just web-stage` now runs the worklet staging after the dx copy, so
+    every staged bundle carries the worklet.
+  - `just keys-web` = web-stage, then `cargo build --release -p
+    fasttrackstudio --features embed-web` (staging FIRST — embed-web
+    `include_dir!`s `web-dist/` at compile time). Default features stay
+    on, so the engine has the keys backend + PackLibrary.
+  - No serving fixes were needed: `architect::host`'s embedded fallback
+    already handles nested paths (`include_dir::get_file`), serves
+    `application/wasm` for `.wasm`, and falls back to `index.html` for
+    SPA routes like `/rigs/keys/worship`. PackLibrary scans
+    `/run/media/AudioHaven/Signal/Libraries` by default
+    (`FTS_PACK_LIBRARY` overrides) — the Worship proxy tree included.
+  - Run it: `just keys-web`, then `target/release/fasttrackstudio
+    --engine` (binds `0.0.0.0:4040`; `SIGNAL_ENGINE_ADDR` overrides) and
+    open `http://<tailnet-host>:4040/rigs/keys/worship`.
+  - Smoke-tested headless (scratch port via
+    `SIGNAL_ENGINE_ADDR=127.0.0.1:14041`): `/health` → ok;
+    `/rigs/keys/worship` → 200 SPA index (`text/html`);
+    `/worklet/signal_keys_worklet_bg.wasm` → 200 `application/wasm`,
+    5.75 MB; the processor + glue js → 200 `text/javascript`; `/vox` →
+    101 Switching Protocols; pack library scanned 8433 packs.
 
 - **W5 — Playwright end-to-end test** (+ interactive browser-tools
   verification during development):
