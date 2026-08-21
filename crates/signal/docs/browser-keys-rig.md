@@ -427,6 +427,78 @@ Grafana on top), the same `architect_telemetry` pattern as task-server.
 - Browser-side telemetry (wasm page errors → engine) is a follow-up;
   `architect_telemetry` is no-op stubs on wasm today.
 
+### W11 — field fixes: output latency, layout fit, the app shell, MIDI hot-plug (DONE)
+
+Two tailnet field reports ("needs to be live playable, like a 256 buffer";
+"dead space left + horizontal scroll on my screen") plus two mid-pass
+addenda (use the app's real chrome; hot-plugged controllers never work).
+
+- **Output latency**: the render path was already quantum-tight; the felt
+  latency was the OUTPUT pipeline (observed base 13.7 ms + output
+  32–45 ms under `interactive`). The hint set grew NUMERIC choices —
+  `low` → `AudioContextOptions.latencyHint = 0.005` (seconds, double) and
+  `ultra` → `0.0027` (~one quantum) — same Reflect path, same
+  `fts.keys-latency-hint` key; the page DEFAULTS to `low` now
+  (`interactive` proved conservative). The Audio panel keeps the achieved
+  base/output readout and adds a one-line tip when outputLatency > 20 ms
+  (`audio-latency-tip`): "launch the browser with
+  `--audio-buffer-size=256`" — past that point the browser's output
+  buffer is the wall and only launching it smaller moves it. (A
+  sampleRate-vs-device mismatch readout was skipped — not cheaply
+  detectable.) Note for the e2e suite: under `low` the browser wakes the
+  worklet per 1–2 quanta instead of batches, and the processor's ~1 ms
+  clock rounds isolated calls up — `renderLoad()` reads 0.8–1.1 on a
+  healthy box, so the load assertion is `< 1.5` (runaway CPU still reads
+  several×).
+- **Layout**: `KeysRigRemote`'s natural width is ~2360–2420 px (the
+  mixer's engine-card band: `flex: 0 0 auto` cards whose min-content
+  escapes through flex ancestors, so the page grew a horizontal scrollbar
+  on anything narrower and the body scrolled the rig off the left edge).
+  Fix is WEB-SIDE ONLY: a `ScaleToFit` wrapper (`#keys-fit-outer` /
+  `#keys-fit-inner`) measures the unscaled layout via `scrollWidth`
+  (transform-independent) against the frame's room and applies
+  `transform: scale(room/natural)` with `transform-origin: top left`,
+  inner width pinned at the natural width and inner height grown by 1/s
+  so the scaled box exactly fills the outer (overflow hidden — the page
+  NEVER scrolls sideways). Wider-than-natural viewports keep scale 1 and
+  the fluid layout fills edge to edge. Two traps encoded in comments:
+  style declarations are patched per-property, so BOTH branches must name
+  the transform (a stale `scale(0.52)` survived the wide branch until
+  made symmetric); and content growth widens `scrollWidth` without
+  resizing any observed box, so a 1 s `setInterval` backs up the
+  ResizeObserver.
+- **The app shell**: the page's hand-rolled top bar is gone. The page
+  mounts `fts_chrome::AppFrame` + `TopBar` + `IconRail` + `PanelRail` —
+  the SAME shell the desktop app builds in main.rs — and registers its
+  widgets through the chrome seams: crumbs `Keys ▸ {profile}`; the
+  Resolution pill (`rig-resolution`, amber `RESOLUTION n%` → green
+  `FULL RESOLUTION`) and the master meter as status items; Soundsources
+  (incl. demo player + MIDI section) and Audio as PANELS on the right
+  rail beside the rig's own Routing/MIDI. Two additive seams were added
+  to fts-chrome for the e2e contract: `PanelSpec::testid(..)` (a
+  `data-testid` on the rail's toggle button — `ssm-button` /
+  `audio-button` live there now) and `StatusItem::tagged(testid, item)`
+  (a wrapping variant rendered as a testid'd span). Publishing happens
+  from a LEAF component (`KeysChrome`) so the 10 Hz meter tick re-renders
+  only it and the TopBar, not the whole page tree. Every prior testid and
+  the `__ftsRig` hook survive.
+- **WebMIDI hot-plug**: `init_webmidi` used to enumerate once — a
+  controller connected after page load was invisible. Now the MIDIAccess
+  is kept, `statechange` re-walks the live input map (new ports get the
+  forwarding handler, gone ports drop out; the raw JS closure only pokes
+  an mpsc channel — the re-walk and Signal writes run in the spawned
+  task, inside the runtime). A rejected `requestMIDIAccess` is SAID:
+  "MIDI permission blocked — allow it in the address bar"
+  (`midi-status`), distinct from "no MIDI devices". The port gate
+  defaults to OMNI (`midi_port: None`). e2e proofs (no hardware in CI):
+  `__ftsRig.midiInputs()` / `midiHotplugArmed()` / `midiOmni()`; note
+  this chromium only grants Web MIDI with BOTH playwright permissions
+  `['midi', 'midi-sysex']`.
+- **e2e**: the latency test also flips through `low` (stored pref +
+  full recovery); new serial tests assert the WebMIDI plumbing and the
+  viewport fit at 1366×768 and 1920×1080 (no horizontal overflow,
+  `#keys-fit-inner` starts inside the viewport and fits it).
+
 ## Open questions / later
 
 - Piano-lane weight on travel links: consider a lower-quality travel

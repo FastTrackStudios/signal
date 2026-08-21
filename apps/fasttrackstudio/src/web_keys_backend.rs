@@ -339,6 +339,12 @@ pub(crate) fn midi_allows(name: &str) -> bool {
     }
 }
 
+/// Whether the MIDI port gate is OMNI (no specific input selected) — the
+/// fresh-page default, proven by the e2e suite via `__ftsRig.midiOmni()`.
+pub(crate) fn midi_omni() -> bool {
+    backend().is_none_or(|b| b.shared.borrow().midi_port.is_none())
+}
+
 /// The compat lane strip's snapshot: `(linear volume, muted)` per lane, in
 /// lane order — keeps the strip coherent with mixer edits made through
 /// `KeysRigRemote`.

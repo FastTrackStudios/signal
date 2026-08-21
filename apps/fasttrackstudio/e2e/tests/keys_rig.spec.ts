@@ -13,8 +13,12 @@ let page: Page;
 
 test.beforeAll(async ({ browser }) => {
   // ONE context for the whole suite: the refresh-resume test relies on
-  // OPFS/IDB persisting across a reload in the same context.
-  context = await browser.newContext();
+  // OPFS/IDB persisting across a reload in the same context. MIDI is
+  // granted so the W11 hot-plug plumbing assertions see an armed
+  // statechange listener instead of a permission denial.
+  // (This chromium only grants Web MIDI when BOTH names are present —
+  // 'midi' alone still rejects requestMIDIAccess.)
+  context = await browser.newContext({ permissions: ['midi', 'midi-sysex'] });
   // Pin the page's engine target to THIS suite's scratch engine — the
   // page's dev-server heuristic must never route it to the live :4040.
   const wsUrl = `${process.env.FTS_E2E_BASEURL!.replace(/^http/, 'ws')}/vox`;
@@ -199,7 +203,13 @@ test('audio out: notes and the demo player move the master peak', async () => {
     15_000, 250, 'renderLoad() > 0 while the demo plays',
   );
   expect(load).toBeGreaterThan(0);
-  expect(load).toBeLessThan(0.9);
+  // W11: the default hint is now `low`, where the browser wakes the
+  // worklet per 1–2 quanta instead of in batches — and the processor's
+  // ~1 ms clock rounds each isolated render call up, inflating the read
+  // by up to ~0.4 (1 ms against a 2.67 ms quantum). Observed 0.8–1.1 on
+  // a healthy box; a genuinely overloaded rig reads several×, so 1.5
+  // still catches runaway CPU without flaking on clock quantization.
+  expect(load).toBeLessThan(1.5);
   const latency = await page.evaluate(() => (window as any).__ftsRig?.latencyMs() ?? null);
   expect(latency).toBeGreaterThan(0);
   const statsJson = await page.evaluate(() => (window as any).__ftsRig?.audioStats() ?? '');
@@ -249,8 +259,10 @@ test('refresh-resume: cached packs return to ready from OPFS, no re-stream', asy
 test('latency hint: flipping to playback re-boots the audio path and sound survives', async () => {
   // W8: the selector stores fts.keys-latency-hint and re-runs the whole
   // boot (new AudioContext with the hint, cached program, OPFS packs) —
-  // this is also a regression test of the in-page re-boot path.
-  test.setTimeout(180_000);
+  // this is also a regression test of the in-page re-boot path. (W11
+  // added a second flip — through the numeric `low` hint — to the same
+  // test, hence the wider budget.)
+  test.setTimeout(300_000);
   await pollUntil(
     rigState,
     (s) => s === 'running' || s === 'ready',
@@ -297,4 +309,83 @@ test('latency hint: flipping to playback re-boots the audio path and sound survi
   );
   expect(peak).toBeGreaterThan(0.001);
   await page.evaluate(() => (window as any).__ftsRig.noteOff(60));
+
+  // ── W11: flip through the numeric `low` hint the same way — stored
+  // pref + full recovery. (Absolute latency numbers are machine-dependent
+  // and NOT asserted; this proves the hint plumbing end to end.)
+  await pollUntil(
+    async () => page.getByTestId('audio-latency-hint').isEnabled(),
+    (e) => e === true,
+    30_000, 500, 'hint selector enabled again before the low flip',
+  );
+  await page.getByTestId('audio-latency-hint').selectOption('low');
+  const storedLow = await page.evaluate(() => localStorage.getItem('fts.keys-latency-hint'));
+  expect(storedLow).toBe('low');
+  await pollUntil(
+    rigState,
+    (s) => s === 'running' || s === 'ready',
+    60_000, 500, "state() to recover after the low flip",
+  );
+  const audioStateLow = await pollUntil(
+    rigAudioState,
+    (s) => s === 'running',
+    15_000, 250, "audioState() 'running' after the low flip",
+  );
+  expect(audioStateLow).toBe('running');
+  const peakLow = await pollUntil(
+    async () => {
+      await page.evaluate(() => (window as any).__ftsRig.noteOn(60, 100));
+      return masterPeak();
+    },
+    (p) => typeof p === 'number' && p > 0.001,
+    20_000, 500, 'masterPeak() > 0.001 after the low re-boot',
+  );
+  expect(peakLow).toBeGreaterThan(0.001);
+  await page.evaluate(() => (window as any).__ftsRig.noteOff(60));
+});
+
+test('webmidi: hot-plug listener armed, port gate defaults to omni', async () => {
+  // No hardware in CI — assert the W11 plumbing: the statechange listener
+  // is installed (hot-plugged controllers will be picked up), the live
+  // input list is served, and a fresh page forwards from EVERY input.
+  const armed = await pollUntil(
+    () => page.evaluate(() => (window as any).__ftsRig?.midiHotplugArmed?.() ?? null),
+    (a) => a === true,
+    30_000, 500, 'midiHotplugArmed() === true',
+  );
+  expect(armed).toBe(true);
+  const inputsJson = await page.evaluate(() => (window as any).__ftsRig.midiInputs());
+  expect(Array.isArray(JSON.parse(inputsJson))).toBe(true);
+  const omni = await page.evaluate(() => (window as any).__ftsRig.midiOmni());
+  expect(omni).toBe(true);
+});
+
+test('viewport fit: no horizontal scroll at 1366x768 and 1920x1080', async () => {
+  // W11: the rig scales to fit narrow viewports (transform, top-left
+  // origin) and fills wide ones — never a horizontal page scrollbar,
+  // never a rig pushed off the left edge.
+  const original = page.viewportSize();
+  try {
+    for (const size of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
+      await page.setViewportSize(size);
+      await pollUntil(
+        () => page.evaluate(() =>
+          document.documentElement.scrollWidth - window.innerWidth),
+        (d) => typeof d === 'number' && d <= 1,
+        10_000, 250, `no horizontal overflow at ${size.width}x${size.height}`,
+      );
+      const box = await page.evaluate(() => {
+        const el = document.getElementById('keys-fit-inner');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, width: r.width };
+      });
+      expect(box, 'rig content mounted').not.toBeNull();
+      expect(box!.left, 'rig starts inside the viewport').toBeGreaterThanOrEqual(0);
+      expect(box!.left, 'no dead space pushing the rig out').toBeLessThan(size.width / 2);
+      expect(box!.right, 'rig fits the viewport').toBeLessThanOrEqual(size.width + 1);
+    }
+  } finally {
+    if (original) await page.setViewportSize(original);
+  }
 });

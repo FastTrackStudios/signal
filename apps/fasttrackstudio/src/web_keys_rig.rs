@@ -56,15 +56,35 @@ const PROGRAM_CACHE_KEY: &str = "lane-program";
 /// path (new AudioContext, packs re-attach from OPFS).
 const LATENCY_HINT_KEY: &str = "fts.keys-latency-hint";
 
-/// The stored `latencyHint` (validated), defaulting to `interactive` —
-/// the browser default for `new AudioContext()` and the right choice for
-/// a playable instrument.
+/// A stored hint choice is one of these. `interactive`/`balanced`/
+/// `playback` are the spec's category strings; `low` and `ultra` (W11) are
+/// NUMERIC hints — the spec allows a double in seconds, and Chrome honours
+/// it down to about one render quantum, which is what "live playable"
+/// needs on top of an output pipeline that `interactive` leaves at 30+ ms.
+fn valid_hint(v: &str) -> bool {
+    matches!(v, "low" | "ultra" | "interactive" | "balanced" | "playback")
+}
+
+/// The seconds value for a numeric hint choice, if it is one.
+fn hint_seconds(v: &str) -> Option<f64> {
+    match v {
+        "low" => Some(0.005),
+        "ultra" => Some(0.0027), // ~one 128-sample quantum @ 48 kHz
+        _ => None,
+    }
+}
+
+/// The stored `latencyHint` (validated), defaulting to `low` (W11) — the
+/// rig is a playable instrument first, and `interactive` proved
+/// conservative in the field (32–45 ms of output latency on top of the
+/// base). `low` asks for 5 ms and lets the browser clamp to what the
+/// device can do.
 fn latency_hint_pref() -> String {
     web_sys::window()
         .and_then(|w| w.local_storage().ok().flatten())
         .and_then(|s| s.get_item(LATENCY_HINT_KEY).ok().flatten())
-        .filter(|v| matches!(v.as_str(), "interactive" | "balanced" | "playback"))
-        .unwrap_or_else(|| "interactive".into())
+        .filter(|v| valid_hint(v))
+        .unwrap_or_else(|| "low".into())
 }
 
 /// The demo SMFs are authored at this tempo (they carry no tempo meta;
@@ -306,9 +326,16 @@ async fn boot_worklet() -> Result<Worklet, String> {
     let window = web_sys::window().ok_or("no window")?;
     // The stored latencyHint rides AudioContextOptions (Reflect-set onto
     // the options dict — it is a plain JS object, and the union-typed
-    // setter shape varies across web-sys versions).
+    // setter shape varies across web-sys versions). Category choices go
+    // over as strings; `low`/`ultra` go over as NUMERIC seconds (the
+    // spec's double form), which the browser clamps to the device floor.
     let opts = web_sys::AudioContextOptions::new();
-    let _ = Reflect::set(&opts, &"latencyHint".into(), &latency_hint_pref().as_str().into());
+    let pref = latency_hint_pref();
+    let hint: JsValue = match hint_seconds(&pref) {
+        Some(secs) => JsValue::from_f64(secs),
+        None => pref.as_str().into(),
+    };
+    let _ = Reflect::set(&opts, &"latencyHint".into(), &hint);
     let ctx = AudioContext::new_with_context_options(&opts)
         .map_err(|e| format!("AudioContext: {}", js_str(e)))?;
     // Autoplay insurance: a context created outside a real user gesture
@@ -603,6 +630,10 @@ struct RigHook {
     /// Last audio_stats reading (W8) — `renderLoad()` / `latencyMs()` /
     /// `audioStats()` read these.
     audio: AudioStats,
+    /// Live WebMIDI input names, JSON array (`midiInputs()`).
+    midi_inputs_json: String,
+    /// The `statechange` hot-plug listener is armed (`midiHotplugArmed()`).
+    midi_hotplug: bool,
 }
 
 thread_local! {
@@ -685,6 +716,17 @@ fn hook_set_audio(stats: AudioStats) {
     RIG_HOOK.with(|h| h.borrow_mut().audio = stats);
 }
 
+/// Mirror the live WebMIDI input list (+ whether the hot-plug listener is
+/// armed) onto the hook for the e2e suite.
+fn hook_set_midi(names: &[String], hotplug: bool) {
+    let json = facet_json::to_string(&names.to_vec()).unwrap_or_default();
+    RIG_HOOK.with(|h| {
+        let mut h = h.borrow_mut();
+        h.midi_inputs_json = json;
+        h.midi_hotplug = hotplug;
+    });
+}
+
 /// The `audioStats()` JSON row (mirrors [`AudioStats`], camelCase keys for
 /// the e2e suite / remote debugging).
 #[derive(facet::Facet, Default)]
@@ -756,6 +798,24 @@ fn install_hook() {
     let _ = Reflect::set(&obj, &"setLaneMute".into(), set_lane_mute.as_ref());
     lanes_fn.forget();
     set_lane_mute.forget();
+    // W11 WebMIDI plumbing proofs for the e2e suite (no hardware in CI):
+    // the live input-name list, whether the statechange hot-plug listener
+    // is armed, and whether the port gate defaults to omni.
+    let midi_inputs_fn = Closure::<dyn FnMut() -> JsValue>::new(|| {
+        RIG_HOOK.with(|h| JsValue::from_str(&h.borrow().midi_inputs_json))
+    });
+    let midi_hotplug_fn = Closure::<dyn FnMut() -> JsValue>::new(|| {
+        RIG_HOOK.with(|h| JsValue::from_bool(h.borrow().midi_hotplug))
+    });
+    let midi_omni_fn = Closure::<dyn FnMut() -> JsValue>::new(|| {
+        JsValue::from_bool(crate::web_keys_backend::midi_omni())
+    });
+    let _ = Reflect::set(&obj, &"midiInputs".into(), midi_inputs_fn.as_ref());
+    let _ = Reflect::set(&obj, &"midiHotplugArmed".into(), midi_hotplug_fn.as_ref());
+    let _ = Reflect::set(&obj, &"midiOmni".into(), midi_omni_fn.as_ref());
+    midi_inputs_fn.forget();
+    midi_hotplug_fn.forget();
+    midi_omni_fn.forget();
     let _ = Reflect::set(&obj, &"state".into(), state.as_ref());
     let _ = Reflect::set(&obj, &"packStates".into(), packs.as_ref());
     let _ = Reflect::set(&obj, &"masterPeak".into(), peak.as_ref());
@@ -862,8 +922,9 @@ pub fn KeysWebRig() -> Element {
     let worklet = use_signal(|| Option::<Worklet>::None);
     let master = use_signal(|| 0.0f32);
     let midi_inputs = use_signal(Vec::<String>::new);
-    let ssm_open = use_signal(|| false);
-    let audio_open = use_signal(|| false);
+    // WebMIDI availability text ("" = fine): permission denied / unsupported
+    // reads very differently from "no devices plugged in" (W11).
+    let midi_status = use_signal(String::new);
     let astats = use_signal(AudioStats::default);
     // The in-process vox clients KeysRigRemote consumes (established once
     // the backend is installed; survive the latency-hint re-boot).
@@ -886,7 +947,7 @@ pub fn KeysWebRig() -> Element {
         }
         boot.set(Boot::Starting("booting audio worklet…".into()));
         hook_set_state("starting");
-        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, astats, clients));
+        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, midi_status, astats, clients));
     });
 
     // Full re-boot of the audio path (the latency-hint selector's change
@@ -910,98 +971,61 @@ pub fn KeysWebRig() -> Element {
         lanes.set(Vec::new());
         boot.set(Boot::Starting("restarting audio…".into()));
         hook_set_state("starting");
-        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, astats, clients));
+        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, midi_status, astats, clients));
     });
 
-    // Usable = attached and sounding (ready OR playable-while-filling);
-    // the badge answers "can I play it?", the Resolution meter answers
-    // "am I hearing all of it?".
-    let ready_count = packs.read().iter().filter(|p| p.phase.usable()).count();
-    let pack_count = packs.read().len();
-    let streaming = pack_count > ready_count;
-    let resolution = resolution_pct(&packs.read());
+    let boot_running = matches!(boot(), Boot::Running);
+    let rail_items = vec![fts_chrome::RailItem::new(
+        "keys",
+        "Keys",
+        fts_chrome::Icon::Keys,
+        true,
+        Callback::new(|_| {}),
+    )];
 
     rsx! {
-        document::Style { {"html,body{margin:0;padding:0;height:100%;background:#0a0a0a;}*{box-sizing:border-box;}"} }
-        div {
-            style: "min-height:100vh; background:#0a0a0a; color:#e4e4e7; font-family:sans-serif; display:flex; flex-direction:column;",
-            // ── Top bar ────────────────────────────────────────────────
-            header {
-                style: "display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid #27272a; position:relative;",
-                span { style: "font-weight:700; letter-spacing:1px; font-size:12px; color:#a1a1aa;", "FASTTRACKSTUDIO" }
-                span { style: "font-size:11px; letter-spacing:1px; color:#52525b; text-transform:uppercase;", "keys · {profile}" }
-                div { style: "flex:1;" }
-                // Rig-wide Resolution — PROMINENT: a player in the first
-                // minute must see the sound is not final yet.
-                if pack_count > 0 {
-                    if resolution < 100 {
-                        div {
-                            "data-testid": "rig-resolution",
-                            style: "display:flex; align-items:center; gap:8px;",
-                            title: "delivered sample detail across every soundsource",
-                            span { style: "font-size:11px; font-weight:700; letter-spacing:1px; color:#fbbf24;",
-                                "RESOLUTION {resolution}%"
-                            }
-                            div {
-                                style: "width:70px; height:6px; border-radius:3px; background:#18181b; border:1px solid #27272a; overflow:hidden;",
-                                div { style: "height:100%; width:{resolution}%; background:#fbbf24;" }
-                            }
+        document::Style { {"html,body{margin:0;padding:0;height:100%;background:#0a0a0a;overflow:hidden;}*{box-sizing:border-box;}"} }
+        fts_chrome::AppFrame {
+            top: rsx! {
+                fts_chrome::TopBar {
+                    leading: rsx! {
+                        span {
+                            style: "font-weight: 700; letter-spacing: 1px; font-size: 12px; \
+                                    color: #71717a; cursor: default; padding-right: 2px;",
+                            "FTS"
                         }
-                    } else {
-                        div {
-                            "data-testid": "rig-resolution",
-                            style: "display:flex; align-items:center;",
-                            span { style: "font-size:11px; font-weight:600; letter-spacing:1px; color:#22c55e;",
-                                "FULL RESOLUTION"
-                            }
-                        }
-                    }
-                }
-                MasterMeter { master }
-                button {
-                    "data-testid": "audio-button",
-                    style: "display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:6px; background:#111113; color:#e4e4e7; border:1px solid #27272a; font-size:12px; cursor:pointer;",
-                    onclick: {
-                        let mut audio_open = audio_open;
-                        move |_| { let v = *audio_open.peek(); audio_open.set(!v); }
                     },
-                    span { "🎚" }
-                    span { style: "color:#a1a1aa;", "Audio" }
                 }
-                if audio_open() {
-                    AudioPanel { astats, restart, boot_running: matches!(boot(), Boot::Running) }
+            },
+            rail: rsx! {
+                fts_chrome::IconRail { items: rail_items }
+            },
+            // The page's flyouts, exactly like the desktop app's
+            // engines/settings: content rendered by PanelHost, opened from
+            // the right rail.
+            panel: rsx! {
+                fts_chrome::PanelHost { id: "web.ssm".to_string(),
+                    SoundsourceManager { packs, worklet, lanes, midi_inputs, midi_status, demo, boot_running }
                 }
-                button {
-                    "data-testid": "ssm-button",
-                    style: "display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:6px; background:#111113; color:#e4e4e7; border:1px solid #27272a; font-size:12px; cursor:pointer;",
-                    onclick: {
-                        let mut ssm_open = ssm_open;
-                        move |_| { let v = *ssm_open.peek(); ssm_open.set(!v); }
-                    },
-                    span { "🎛" }
-                    if pack_count == 0 {
-                        span { style: "color:#71717a;", "Soundsources" }
-                    } else if streaming {
-                        span { style: "color:#fbbf24;", "{ready_count}/{pack_count}" }
-                    } else {
-                        span { style: "color:#22c55e;", "{ready_count}/{pack_count}" }
-                    }
+                fts_chrome::PanelHost { id: "web.audio".to_string(),
+                    AudioPanel { astats, restart, boot_running }
                 }
-                if ssm_open() {
-                    SoundsourceManager { packs, worklet, lanes, midi_inputs, demo, boot_running: matches!(boot(), Boot::Running) }
-                }
-            }
-            // ── Body ───────────────────────────────────────────────────
+            },
+            right: rsx! { fts_chrome::PanelRail {} },
+            // Publishes the page's crumbs / status / panels into the chrome
+            // from a LEAF component, so the 10 Hz master-meter tick
+            // re-renders only this (and the TopBar) — never the whole page.
+            KeysChrome { packs, master, profile: profile.clone() }
             main {
-                style: if matches!(boot(), Boot::Running) {
+                style: if boot_running {
                     // The full remote UI wants the whole viewport.
-                    "flex:1; min-height:0; display:flex; flex-direction:column;"
+                    "flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;"
                 } else {
-                    "flex:1; display:flex; flex-direction:column; gap:16px; padding:20px; max-width:860px; width:100%; margin:0 auto;"
+                    "flex:1; min-width:0; display:flex; flex-direction:column; gap:16px; padding:20px;"
                 },
                 match boot() {
                     Boot::Idle => rsx! {
-                        div { style: "display:flex; flex-direction:column; align-items:center; gap:12px; margin:auto;",
+                        div { style: "display:flex; flex-direction:column; align-items:center; gap:12px; margin:auto; max-width:520px;",
                             span { style: "font-size:18px; font-weight:700;", "Keys rig — {profile}" }
                             span { style: "font-size:13px; color:#a1a1aa; text-align:center; max-width:420px;",
                                 "Plays the rig entirely in this browser: packs stream from the engine and cache locally; MIDI from your keyboard (WebMIDI) or the demo player."
@@ -1018,7 +1042,7 @@ pub fn KeysWebRig() -> Element {
                         div { style: "margin:auto; color:#a1a1aa; font-size:14px;", "{msg}" }
                     },
                     Boot::Failed(msg) => rsx! {
-                        div { style: "display:flex; flex-direction:column; align-items:center; gap:10px; margin:auto;",
+                        div { style: "display:flex; flex-direction:column; align-items:center; gap:10px; margin:auto; max-width:520px;",
                             span { style: "color:#ef4444; font-size:14px; font-weight:600;", "Could not start the rig" }
                             span { style: "color:#a1a1aa; font-size:13px; max-width:480px; text-align:center;", "{msg}" }
                             button {
@@ -1031,9 +1055,12 @@ pub fn KeysWebRig() -> Element {
                     Boot::Running => rsx! {
                         document::Style { {SIGNAL_TAILWIND} }
                         // The real remote UI over the in-process clients,
-                        // with the chrome's panel rail at its right edge
-                        // (Routing + MIDI monitor open beside the mixer).
-                        div { style: "flex:1; min-height:0; display:flex;",
+                        // inside the scale-to-fit wrapper (W11): a viewport
+                        // narrower than the rig's natural width gets the
+                        // WHOLE rig scaled down instead of a horizontal
+                        // scrollbar. KeysRigRemote's own PanelHosts
+                        // (Routing / MIDI) render inside it as always.
+                        ScaleToFit {
                             match clients() {
                                 Some((rig, stream)) => {
                                     let _ = provide_context(rig);
@@ -1046,15 +1073,136 @@ pub fn KeysWebRig() -> Element {
                                     }
                                 },
                             }
-                            fts_chrome::PanelRail {}
                         }
-                        // No footer: the remote UI's own keyboard and mixer
-                        // are the input and per-lane controls. The e2e
-                        // suite's lane access moved to the `__ftsRig`
-                        // hook (`lanes()` / `setLaneMute`).
                     },
                 }
             }
+        }
+    }
+}
+
+/// The page's contributions to the app chrome (W11): crumbs, the
+/// Resolution pill + master meter as REGISTERED status items, and the
+/// Soundsources/Audio panels on the right rail — the same seams the
+/// desktop app and the rig views publish through, instead of a second,
+/// hand-rolled top bar. A leaf component so the 10 Hz meter tick
+/// re-renders only this and the TopBar.
+#[component]
+fn KeysChrome(
+    packs: Signal<Vec<PackRow>>,
+    master: Signal<f32>,
+    profile: String,
+) -> Element {
+    // Usable = attached and sounding (ready OR playable-while-filling);
+    // the count answers "can I play it?", the Resolution pill answers
+    // "am I hearing all of it?".
+    let ready_count = packs.read().iter().filter(|p| p.phase.usable()).count();
+    let pack_count = packs.read().len();
+    let streaming = pack_count > ready_count;
+    let resolution = resolution_pct(&packs.read());
+
+    let level = fts_chrome::use_chrome_level(1);
+    level.crumbs(vec![
+        fts_chrome::Crumb::here("Keys"),
+        fts_chrome::Crumb::here(profile),
+    ]);
+    let mut status = Vec::new();
+    if pack_count > 0 {
+        // Rig-wide Resolution — PROMINENT: a player in the first minute
+        // must see the sound is not final yet.
+        let pill = if resolution < 100 {
+            fts_chrome::StatusItem::pill(format!("RESOLUTION {resolution}%"), "#fbbf24", "#292312")
+        } else {
+            fts_chrome::StatusItem::pill("FULL RESOLUTION", "#22c55e", "#0f2417")
+        };
+        status.push(fts_chrome::StatusItem::tagged("rig-resolution", pill));
+        if streaming {
+            status.push(fts_chrome::StatusItem::text(format!(
+                "{ready_count}/{pack_count} soundsources"
+            )));
+        }
+    }
+    status.push(fts_chrome::StatusItem::meter(master(), "#22c55e"));
+    level.status(status);
+    level.panels(vec![
+        fts_chrome::PanelSpec::new("web.ssm", "Soundsources", fts_chrome::Icon::Browser)
+            .width(400)
+            .testid("ssm-button"),
+        fts_chrome::PanelSpec::new("web.audio", "Audio", fts_chrome::Icon::Engine)
+            .width(320)
+            .testid("audio-button"),
+    ]);
+    rsx! {}
+}
+
+/// Scale-to-fit wrapper (W11): measures the content's UNSCALED layout
+/// width (`scrollWidth` is transform-independent) against the room the
+/// frame gives it, and applies `transform: scale(s)` with the layout box
+/// compensated — inner width pinned at the natural width and inner height
+/// grown by 1/s, so the scaled result exactly fills the outer box and the
+/// page never scrolls sideways. A viewport wider than the natural width
+/// leaves scale at 1 and the fluid layout fills it edge to edge.
+#[component]
+fn ScaleToFit(children: Element) -> Element {
+    // (scale, natural width px, outer height px)
+    let mut fit = use_signal(|| (1.0f64, 0.0f64, 0.0f64));
+    use_future(move || async move {
+        let mut ev = dioxus::document::eval(
+            r#"
+            const measure = () => {
+                const outer = document.getElementById('keys-fit-outer');
+                const inner = document.getElementById('keys-fit-inner');
+                if (!outer || !inner) return;
+                // scrollWidth reports the unscaled layout, so re-measuring
+                // while scaled stays stable; only genuine content growth
+                // or a viewport change moves it.
+                const natural = inner.scrollWidth;
+                const room = outer.clientWidth;
+                const scale = natural > room + 1 ? room / natural : 1;
+                dioxus.send([scale, natural, outer.clientHeight]);
+            };
+            window.addEventListener('resize', measure);
+            const ro = new ResizeObserver(measure);
+            const arm = () => {
+                const outer = document.getElementById('keys-fit-outer');
+                const inner = document.getElementById('keys-fit-inner');
+                if (outer && inner) { ro.observe(outer); ro.observe(inner); measure(); }
+                else { setTimeout(arm, 120); }
+            };
+            arm();
+            // Content GROWTH (packs attaching, panels opening) widens
+            // scrollWidth without resizing the observed boxes, so a slow
+            // safety poll catches what the ResizeObserver cannot. The recv
+            // side dedupes, so an unchanged reading costs nothing.
+            setInterval(measure, 1000);
+            "#,
+        );
+        while let Ok(v) = ev.recv::<(f64, f64, f64)>().await {
+            if *fit.peek() != v {
+                fit.set(v);
+            }
+        }
+    });
+    let (scale, natural, outer_h) = fit();
+    // BOTH branches name every property the other uses: style declarations
+    // are patched individually, so a property present only in the scaled
+    // branch would survive the switch back to scale 1 (a stale transform
+    // shrank the rig on wide viewports until this was made symmetric).
+    let inner_style = if scale < 0.999 && natural > 0.0 {
+        format!(
+            "width:{natural}px; height:{:.1}px; transform:scale({scale:.5}); \
+             transform-origin:top left; display:flex;",
+            outer_h / scale,
+        )
+    } else {
+        "width:100%; height:100%; transform:scale(1); transform-origin:top left; display:flex;"
+            .to_string()
+    };
+    rsx! {
+        div {
+            id: "keys-fit-outer",
+            style: "flex:1; min-width:0; min-height:0; overflow:hidden;",
+            div { id: "keys-fit-inner", style: "{inner_style}", {children} }
         }
     }
 }
@@ -1068,6 +1216,7 @@ async fn boot_rig(
     mut worklet_out: Signal<Option<Worklet>>,
     master: Signal<f32>,
     midi_inputs: Signal<Vec<String>>,
+    midi_status: Signal<String>,
     astats: Signal<AudioStats>,
     mut clients: Signal<Option<(KeysRigClient, KeysRigStreamClient)>>,
 ) {
@@ -1171,7 +1320,7 @@ async fn boot_rig(
     }
 
     // 4. WebMIDI in the background.
-    spawn(init_webmidi(worklet.clone(), midi_inputs));
+    spawn(init_webmidi(worklet.clone(), midi_inputs, midi_status));
 
     // 5. Meter poll (~10 Hz) + audio-stats poll (2 Hz — the processor's
     // load window only turns over every ~0.7 s anyway).
@@ -1833,20 +1982,17 @@ async fn finalize_progressive_job(mut job: ProgressiveJob, packs: &mut Signal<Ve
     }
 }
 
-/// Enumerate WebMIDI inputs and forward every 3-byte message to the rig.
-async fn init_webmidi(worklet: Worklet, mut names_out: Signal<Vec<String>>) {
-    let Some(window) = web_sys::window() else { return };
-    let Ok(promise) = window.navigator().request_midi_access() else {
-        return;
-    };
-    let Ok(access) = JsFuture::from(promise).await else {
-        return; // denied / unsupported — the indicator stays "no MIDI"
-    };
-    let Ok(access) = access.dyn_into::<web_sys::MidiAccess>() else {
-        return;
-    };
-    let inputs = access.inputs();
+/// Walk the (live) MIDIInputMap: attach the forwarding handler to any
+/// input not yet seen (by port id) and rebuild the current name list. The
+/// map itself only holds currently-available ports, so a re-walk after a
+/// `statechange` is the whole hot-plug story.
+fn sync_midi_inputs(
+    access: &web_sys::MidiAccess,
+    worklet: &Worklet,
+    seen: &Rc<RefCell<std::collections::HashSet<String>>>,
+) -> Vec<String> {
     let mut names = Vec::new();
+    let inputs = access.inputs();
     if let Ok(Some(iter)) = js_sys::try_iter(&inputs) {
         for entry in iter.flatten() {
             // Map iteration yields [key, value] pairs.
@@ -1856,6 +2002,10 @@ async fn init_webmidi(worklet: Worklet, mut names_out: Signal<Vec<String>>) {
             };
             let name = input.name().unwrap_or_else(|| "MIDI input".into());
             names.push(name.clone());
+            let id = input.id();
+            if !seen.borrow_mut().insert(id) {
+                continue; // handler already attached to this port
+            }
             let w = worklet.clone();
             let onmsg = Closure::<dyn FnMut(web_sys::MidiMessageEvent)>::new(
                 move |ev: web_sys::MidiMessageEvent| {
@@ -1878,8 +2028,66 @@ async fn init_webmidi(worklet: Worklet, mut names_out: Signal<Vec<String>>) {
             onmsg.forget(); // page-lifetime
         }
     }
+    names
+}
+
+/// Enumerate WebMIDI inputs and forward every 3-byte message to the rig.
+/// Keeps the MIDIAccess alive and listens to `statechange` (W11), so a
+/// controller plugged in AFTER the page loaded starts working the moment
+/// the browser sees it — and a denied permission is SAID, not shown as
+/// the ambiguous "no MIDI devices".
+async fn init_webmidi(
+    worklet: Worklet,
+    mut names_out: Signal<Vec<String>>,
+    mut status_out: Signal<String>,
+) {
+    let Some(window) = web_sys::window() else { return };
+    let Ok(promise) = window.navigator().request_midi_access() else {
+        status_out.set("WebMIDI is not available in this browser".into());
+        hook_set_midi(&[], false);
+        return;
+    };
+    let access = match JsFuture::from(promise).await {
+        Ok(a) => a,
+        Err(_) => {
+            // Rejected: permission denied (or the policy blocks it).
+            status_out
+                .set("MIDI permission blocked — allow it in the address bar".into());
+            hook_set_midi(&[], false);
+            return;
+        }
+    };
+    let Ok(access) = access.dyn_into::<web_sys::MidiAccess>() else {
+        status_out.set("WebMIDI is not available in this browser".into());
+        hook_set_midi(&[], false);
+        return;
+    };
+    status_out.set(String::new());
+
+    let seen: Rc<RefCell<std::collections::HashSet<String>>> =
+        Rc::new(RefCell::new(std::collections::HashSet::new()));
+    let names = sync_midi_inputs(&access, &worklet, &seen);
     crate::web_keys_backend::set_webmidi_inputs(names.clone());
+    hook_set_midi(&names, true);
     names_out.set(names);
+
+    // Hot-plug: on any port state change, re-walk the map — new inputs get
+    // the handler, gone inputs drop out of the list. The raw JS closure
+    // only pokes a channel; the re-walk (and the Signal writes) happen in
+    // THIS task, inside the Dioxus runtime like every other signal write.
+    let (tx, mut rx) = futures_channel::mpsc::unbounded::<()>();
+    let onstate = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev: web_sys::Event| {
+        let _ = tx.unbounded_send(());
+    });
+    access.set_onstatechange(Some(onstate.as_ref().unchecked_ref()));
+    onstate.forget(); // page-lifetime (keeps the sender alive too)
+    use futures_util::StreamExt as _;
+    while rx.next().await.is_some() {
+        let names = sync_midi_inputs(&access, &worklet, &seen);
+        crate::web_keys_backend::set_webmidi_inputs(names.clone());
+        hook_set_midi(&names, true);
+        names_out.set(names);
+    }
 }
 
 /// True while `worklet` is still the page's live worklet — poll loops
@@ -1952,18 +2160,6 @@ async fn poll_audio_stats(
 
 // ── UI pieces ──────────────────────────────────────────────────────────────
 
-#[component]
-fn MasterMeter(master: Signal<f32>) -> Element {
-    let pct = (master() .clamp(0.0, 1.0) * 100.0) as u32;
-    rsx! {
-        div {
-            style: "width:90px; height:8px; border-radius:4px; background:#18181b; border:1px solid #27272a; overflow:hidden;",
-            title: "master",
-            div { style: "height:100%; width:{pct}%; background:#22c55e;" }
-        }
-    }
-}
-
 fn mb(bytes: u64) -> String {
     format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
 }
@@ -1999,8 +2195,7 @@ fn AudioPanel(
     rsx! {
         div {
             "data-testid": "audio-popover",
-            style: "position:absolute; top:44px; right:12px; z-index:60; width:300px; background:#111113; border:1px solid #27272a; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:8px; box-shadow:0 8px 30px rgba(0,0,0,.5);",
-            span { style: "font-size:12px; font-weight:700; letter-spacing:1px; color:#a1a1aa; text-transform:uppercase;", "Audio" }
+            style: "display:flex; flex-direction:column; gap:8px; padding:12px; font-family:sans-serif; color:#e4e4e7;",
             div { style: row_style,
                 span { style: key_style, "sample rate" }
                 span { style: val_style, "{a.sample_rate as u32} Hz" }
@@ -2013,6 +2208,16 @@ fn AudioPanel(
                 span { style: key_style, "latency (base + output)" }
                 span { style: val_style,
                     "{a.base_ms:.1} + {a.output_ms:.1} = {a.latency_ms():.1} ms"
+                }
+            }
+            // W11: past ~20 ms of OUTPUT latency the hint alone cannot help —
+            // the browser's output buffer is the wall, and only launching it
+            // smaller moves it.
+            if a.output_ms > 20.0 {
+                span {
+                    "data-testid": "audio-latency-tip",
+                    style: "font-size:11px; color:#fbbf24; line-height:1.4;",
+                    "for lowest latency, launch the browser with --audio-buffer-size=256"
                 }
             }
             div { style: "display:flex; flex-direction:column; gap:3px;",
@@ -2047,7 +2252,7 @@ fn AudioPanel(
                     value: "{hint}",
                     onchange: move |ev| {
                         let choice = ev.value();
-                        if !matches!(choice.as_str(), "interactive" | "balanced" | "playback") {
+                        if !valid_hint(&choice) {
                             return;
                         }
                         if let Some(s) = web_sys::window().and_then(|w| w.local_storage().ok().flatten()) {
@@ -2058,6 +2263,8 @@ fn AudioPanel(
                         // network).
                         restart.call(());
                     },
+                    option { value: "ultra", "ultra (2.7 ms)" }
+                    option { value: "low", "low (5 ms)" }
                     option { value: "interactive", "interactive" }
                     option { value: "balanced", "balanced" }
                     option { value: "playback", "playback" }
@@ -2079,6 +2286,7 @@ fn SoundsourceManager(
     worklet: Signal<Option<Worklet>>,
     lanes: Signal<Vec<LaneRow>>,
     midi_inputs: Signal<Vec<String>>,
+    midi_status: Signal<String>,
     demo: Signal<(Option<usize>, bool, u64)>,
     boot_running: bool,
 ) -> Element {
@@ -2088,12 +2296,12 @@ fn SoundsourceManager(
         .map(|r| if r.phase == PackPhase::Ready { r.total } else { r.bytes })
         .sum();
     let inputs = midi_inputs.read().clone();
+    let midi_msg = midi_status.read().clone();
 
     rsx! {
         div {
             "data-testid": "ssm-popover",
-            style: "position:absolute; top:44px; right:12px; z-index:50; width:380px; max-height:70vh; overflow-y:auto; background:#111113; border:1px solid #27272a; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; box-shadow:0 8px 30px rgba(0,0,0,.5);",
-            span { style: "font-size:12px; font-weight:700; letter-spacing:1px; color:#a1a1aa; text-transform:uppercase;", "Soundsources" }
+            style: "display:flex; flex-direction:column; gap:10px; padding:12px; font-family:sans-serif; color:#e4e4e7;",
             if rows.is_empty() {
                 span { style: "font-size:12px; color:#52525b;", "No packs yet — start the rig." }
             }
@@ -2108,8 +2316,21 @@ fn SoundsourceManager(
             DemoPlayer { worklet, demo, enabled: boot_running }
             // ── MIDI indicator ─────────────────────────────────────────
             span { style: "font-size:12px; font-weight:700; letter-spacing:1px; color:#a1a1aa; text-transform:uppercase; margin-top:4px;", "MIDI" }
-            if inputs.is_empty() {
-                span { style: "font-size:12px; color:#52525b;", "no MIDI devices" }
+            // Denied/unsupported reads very differently from "nothing
+            // plugged in" — say which one it is (W11). Hot-plugged devices
+            // appear here live via the statechange listener.
+            if !midi_msg.is_empty() {
+                span {
+                    "data-testid": "midi-status",
+                    style: "font-size:12px; color:#ef4444;",
+                    "{midi_msg}"
+                }
+            } else if inputs.is_empty() {
+                span {
+                    "data-testid": "midi-status",
+                    style: "font-size:12px; color:#52525b;",
+                    "no MIDI devices (hot-plug works — connect one any time)"
+                }
             } else {
                 for name in inputs {
                     span { style: "font-size:12px; color:#22c55e;", "● {name}" }
