@@ -12,7 +12,6 @@
 //! ```
 
 use std::path::Path;
-use std::sync::Arc;
 
 use signal_sampler::engine::cache::{SampleCache, SignalPcmPack};
 use signal_sampler::engine::stream::{CHUNK_FRAMES, HEAD_FRAMES, StreamedSample};
@@ -39,7 +38,7 @@ fn main() -> eyre::Result<()> {
         let reference = cache.get(path)?;
         let map = pack.mmap_handle();
         let Some(streamed) = StreamedSample::open(
-            Arc::clone(&map),
+            map.clone(),
             entry.offset() as usize,
             entry.bytes() as usize,
             entry.channels(),
