@@ -196,6 +196,14 @@ required-features = ["signal-guitar"]
 name = "iroh_echo"
 required-features = ["signal-guitar"]
 
+# Author the browser keys rig's bundled demo SMFs (assets/demo-midi/*.mid)
+# with daw-proto's codec. `test = true` so its #[test] (parse the committed
+# assets back) runs under `cargo test -p fasttrackstudio --example
+# demo_midi_gen --no-default-features` without building the whole app.
+[[example]]
+name = "demo_midi_gen"
+test = true
+
 # KeysRig service probe (the browser remote's establish, verbosely).
 [[example]]
 name = "keys_probe"
@@ -209,6 +217,11 @@ utils.workspace = true
 signal-space-proto = { workspace = true, optional = true }
 signal-ekit-proto = { workspace = true, optional = true }
 signal-rigs-proto.workspace = true
+# Standard-MIDI-file codec (daw-proto's `midi::smf`) — the browser keys
+# rig's demo MIDI player parses the bundled .mid presets with it, and the
+# `demo_midi_gen` example authors them. Wasm-clean, deliberately
+# unconditional so the example builds with --no-default-features.
+daw-proto.workspace = true
 tracing.workspace = true
 
 # Signal domain (the rig)
@@ -359,7 +372,36 @@ collection-proto = { workspace = true, features = ["vox"], optional = true }
 # NO daw-ui here: its daw-control backend is not wasm-clean, and the daw
 # panels (Arrangement / Mixer) are native-only workspaces anyway — the
 # session feature's "dep:daw-ui" is a no-op on the web build.
-web-sys = { version = "0.3", features = ["Window", "Storage", "Location"] }
+web-sys = { version = "0.3", features = [
+    "Window", "Storage", "Location",
+    # ── Browser keys rig (/rigs/keys/:profile — web_keys_rig.rs) ──
+    # AudioWorklet boot + the main-thread ↔ worklet message port.
+    "AudioContext", "BaseAudioContext", "AudioWorklet", "AudioWorkletNode",
+    "AudioWorkletNodeOptions", "AudioNode", "AudioDestinationNode",
+    "MessagePort", "MessageEvent", "Event", "EventTarget", "Response",
+    # OPFS pack cache (web_packs.rs).
+    "Navigator", "StorageManager", "FileSystemDirectoryHandle",
+    "FileSystemFileHandle", "FileSystemGetDirectoryOptions",
+    "FileSystemGetFileOptions", "FileSystemCreateWritableOptions",
+    "FileSystemWritableFileStream", "File", "Blob",
+    # IndexedDB download ledger + lane-program cache.
+    "IdbFactory", "IdbOpenDbRequest", "IdbDatabase", "IdbObjectStore",
+    "IdbTransaction", "IdbTransactionMode", "IdbRequest",
+    # WebMIDI input.
+    "MidiAccess", "MidiInput", "MidiInputMap", "MidiMessageEvent",
+    "MidiOptions", "MidiPort",
+] }
+# The keys-rig page's async browser plumbing: js promises, transferable
+# pack bytes, oneshot replies from the worklet port, sha256 verify of
+# streamed packs, and the facet-json ledger/cache rows in IndexedDB.
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+futures-channel = { workspace = true }
+futures-util = { workspace = true }
+sha2 = { workspace = true }
+facet = { workspace = true }
+facet-json = { workspace = true }
 # Chart pane: @font-face data URIs for the engraver's embedded fonts.
 base64 = { workspace = true }
 # getrandom 0.3 (transitive via iroh) needs its js backend on wasm32.

@@ -340,6 +340,55 @@ pub struct KeysStatus {
     pub last_error: Option<String>,
 }
 
+// ── Browser lane program (the worklet boot payload) ─────────────────────────
+
+/// One `.signalpack` a lane program references — what a browser client must
+/// stream (over `signal-packs-proto`'s `PackLibrary`) and install before the
+/// referencing lane sounds.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysPackRef {
+    /// The spec-path KEY the lane trees reference (`RigBlock.sample`) — the
+    /// exact string to hand `signal_sampler::pack_registry::install`. On the
+    /// engine this is the pack's absolute path; the registry also matches by
+    /// file name, so installing the fetched bytes under this key resolves.
+    pub key: String,
+    /// The pack's library name (file stem) — what `PackLibrary::read` takes.
+    /// Pick the variant client-side (`"proxy"` when listed, else `"full"`).
+    pub name: String,
+}
+
+/// One lane of the program, for browser UI that treats `program_json` as
+/// opaque: which engine it belongs to and which pack makes it sound.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysLaneRef {
+    pub engine: String,
+    /// Layer/lane name ("Keys A") — also the daw track name in lane mode.
+    pub name: String,
+    /// The first streamable pack this lane references
+    /// ([`KeysPackRef::key`]), empty when it has none (the lane is silent
+    /// natively too, or purely synthesized).
+    pub key: String,
+}
+
+/// The engine's CURRENT profile, resolved for a browser worklet: the lane
+/// program as the `WireProgram` JSON `signal-keys-worklet`'s `openLanes`
+/// accepts, plus the packs it references. Everything (profile, patch
+/// resolution, spec scan) happens on the engine — the browser never needs
+/// the resolvers. Empty `program_json` = no profile is loaded.
+///
+/// Worklet track order (for `trackPeaks` / `setTrackVolume` indices): the
+/// rig folder first, then each engine's folder track followed by its lanes,
+/// engines and lanes in `lanes` order.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysLaneProgram {
+    /// `signal_sampler::keys_rig::WireProgram` as facet-json.
+    pub program_json: String,
+    /// Every distinct pack the program's lanes reference, in lane order.
+    pub packs: Vec<KeysPackRef>,
+    /// The program's lanes, in order.
+    pub lanes: Vec<KeysLaneRef>,
+}
+
 pub mod keys {
     //! Live keys-rig control. `KeysRig` → `KeysRigClient` / `KeysRigService` /
     //! `keys_rig_serve`, plus the `#[subscribe]` stream sibling.
@@ -347,8 +396,8 @@ pub mod keys {
     use facet::Facet;
 
     use super::{
-        KeysEngineDetail, KeysLayerDetail, KeysMacro, KeysMixer, KeysNode, KeysPerform,
-        KeysPreset, KeysStatus,
+        KeysEngineDetail, KeysLaneProgram, KeysLayerDetail, KeysMacro, KeysMixer, KeysNode,
+        KeysPerform, KeysPreset, KeysStatus,
     };
     // `KeysModule` rides inside `KeysLayerDetail`.
 
@@ -390,6 +439,10 @@ pub mod keys {
         fn load_preset(&self, index: u32);
         /// The loaded composition tree (engine → layers → blocks).
         fn tree(&self) -> KeysNode;
+        /// The current profile resolved for a browser worklet: the lane
+        /// program as `WireProgram` JSON plus the packs it references (see
+        /// [`KeysLaneProgram`]). Browsers cache this and stream the packs.
+        fn lane_program_wire(&self) -> KeysLaneProgram;
 
         // ── Mixer ───────────────────────────────────────────────────────
         /// The live mixer: engines, their layers, faders and patches.

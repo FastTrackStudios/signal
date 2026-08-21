@@ -18,8 +18,9 @@ use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
 use signal_keys_proto::{
-    KeysEngineDetail, KeysEngineModel, KeysLayerDetail, KeysLayerModel, KeysMacro, KeysMeter,
-    KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStack, KeysStatus,
+    KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel,
+    KeysMacro, KeysMeter, KeysMixer, KeysNode, KeysPackRef, KeysPerform, KeysPreset, KeysStack,
+    KeysStatus,
 };
 
 use crate::profile::{worship_profile, KeysProfile};
@@ -2190,6 +2191,18 @@ impl KeysRigBackend {
         ))
     }
 
+    /// Every distinct `.signalpack` the current profile's lanes reference,
+    /// in lane order — the pack half of [`KeysRigSvc::lane_program_wire`].
+    /// Non-pack specs (raw `library.styx` extractions, `.prt_omn` patches)
+    /// are skipped: a browser can only stream built packs, and those lanes
+    /// are exactly the ones that stay silent natively too.
+    fn profile_pack_refs(&self) -> (Vec<KeysPackRef>, Vec<signal_keys_proto::KeysLaneRef>) {
+        let Some((profile, index, _lanes)) = self.profile_inputs() else {
+            return (Vec::new(), Vec::new());
+        };
+        (pack_refs_for(&profile, &index), lane_refs_for(&profile, &index))
+    }
+
     /// Push every live fader / mute / solo into the running program.
     ///
     /// Lane mode: faders/mutes/solos are daw track ops (the renderer folds
@@ -2924,6 +2937,27 @@ impl KeysRigSvc for KeysRigBackend {
             .unwrap_or_default()
     }
 
+    fn lane_program_wire(&self) -> KeysLaneProgram {
+        tracing::debug!("keys rpc: lane_program_wire →");
+        let Some(program) = self.profile_lane_program() else {
+            return KeysLaneProgram::default();
+        };
+        let wire = signal_sampler::keys_rig::WireProgram::from_program(&program);
+        let program_json = match facet_json::to_string(&wire) {
+            Ok(json) => json,
+            Err(e) => {
+                tracing::error!("keys rig: lane program wire serialize failed: {e}");
+                return KeysLaneProgram::default();
+            }
+        };
+        let (packs, lanes) = self.profile_pack_refs();
+        KeysLaneProgram {
+            program_json,
+            packs,
+            lanes,
+        }
+    }
+
     fn trigger(&self, note: u32, velocity: u32) {
         let (note, velocity) = (note as u8, velocity as u8);
         if let Ok(rig) = self.inner.rig.lock() {
@@ -3651,6 +3685,72 @@ impl Services for KeysRigBackend {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+/// Every distinct `.signalpack` `profile`'s lanes reference, in lane order —
+/// resolved through `index` (patch name → scanned spec path), skipping
+/// non-pack specs (raw `library.styx` extractions, `.prt_omn` patches): a
+/// browser can only stream built packs, and those lanes are exactly the ones
+/// that stay silent natively too.
+fn pack_refs_for(profile: &KeysProfile, index: &BTreeMap<String, PathBuf>) -> Vec<KeysPackRef> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for engine in &profile.engines {
+        for layer in &engine.layers {
+            for patch in layer.module_patches() {
+                let Some(path) = index.get(&patch) else {
+                    continue;
+                };
+                if !path
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"))
+                {
+                    continue;
+                }
+                let key = path.to_string_lossy().into_owned();
+                if !seen.insert(key.clone()) {
+                    continue;
+                }
+                let name = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or_default()
+                    .to_string();
+                out.push(KeysPackRef { key, name });
+            }
+        }
+    }
+    out
+}
+
+/// The program's lanes in order, each with the first streamable pack it
+/// references (empty key = nothing to stream; the lane is silent natively
+/// too, or purely synthesized).
+fn lane_refs_for(
+    profile: &KeysProfile,
+    index: &BTreeMap<String, PathBuf>,
+) -> Vec<signal_keys_proto::KeysLaneRef> {
+    let mut out = Vec::new();
+    for engine in &profile.engines {
+        for layer in &engine.layers {
+            let key = layer
+                .module_patches()
+                .into_iter()
+                .filter_map(|p| index.get(&p))
+                .find(|path| {
+                    path.extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"))
+                })
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            out.push(signal_keys_proto::KeysLaneRef {
+                engine: engine.name.clone(),
+                name: layer.name.clone(),
+                key,
+            });
+        }
+    }
+    out
+}
+
 fn note_ev(note: u8, velocity: u8) -> MidiEvent {
     use midicore::{Channel, KeyNumber, Velocity};
     MidiEvent::NoteOn {
@@ -4268,5 +4368,79 @@ mod tests {
             s.engines.get("Keys").expect("engine").spans.is_empty(),
             "the engine's baseline described a patch that no longer exists"
         );
+    }
+
+    // ── The browser boot payload (lane_program_wire's two halves) ────────
+
+    /// The worship profile's lane program survives the WireProgram JSON
+    /// round trip — the exact bytes `lane_program_wire` serves and the keys
+    /// worklet's `openLanes` parses.
+    #[test]
+    fn lane_program_wire_roundtrips_through_json() {
+        let profile = worship_profile();
+        let program = profile.build_lane_program(
+            |patch| Some(format!("/packs/{patch}.signalpack")),
+            |_, _| Default::default(),
+        );
+        let wire = signal_sampler::keys_rig::WireProgram::from_program(&program);
+        let json = facet_json::to_string(&wire).expect("wire program serializes");
+        let back: signal_sampler::keys_rig::WireProgram =
+            facet_json::from_str(&json).expect("wire program parses back");
+        let back = back.into_lane_program();
+        assert_eq!(back.name, program.name);
+        let shape = |p: &signal_sampler::keys_rig::LaneProgram| -> Vec<(String, Vec<String>)> {
+            p.engines
+                .iter()
+                .map(|e| {
+                    (
+                        e.name.clone(),
+                        e.layers.iter().map(|l| l.name.clone()).collect(),
+                    )
+                })
+                .collect()
+        };
+        assert_eq!(shape(&back), shape(&program));
+        assert_eq!(back.tail.is_some(), program.tail.is_some());
+    }
+
+    /// The pack manifest lists each referenced `.signalpack` once (spec-path
+    /// key + file-stem name) and skips specs a browser cannot stream.
+    #[test]
+    fn pack_refs_dedup_and_skip_non_packs() {
+        let profile = worship_profile();
+        let patches: Vec<String> = profile
+            .engines
+            .iter()
+            .flat_map(|e| e.layers.iter())
+            .flat_map(|l| l.module_patches())
+            .filter(|p| !p.is_empty())
+            .collect();
+        assert!(patches.len() > 2, "worship profile references patches");
+        let mut index: BTreeMap<String, PathBuf> = BTreeMap::new();
+        // First patch resolves to a non-pack spec; the rest to packs.
+        index.insert(
+            patches[0].clone(),
+            PathBuf::from(format!("/specs/{}.prt_omn", patches[0])),
+        );
+        for p in &patches[1..] {
+            index.insert(p.clone(), PathBuf::from(format!("/packs/{p}.signalpack")));
+        }
+        let refs = pack_refs_for(&profile, &index);
+        assert!(!refs.is_empty());
+        assert!(
+            refs.iter().all(|r| r.key.ends_with(".signalpack")),
+            "only built packs are streamable"
+        );
+        assert!(
+            !refs.iter().any(|r| r.key.contains(&patches[0])),
+            "the non-pack spec is skipped"
+        );
+        let mut keys: Vec<&str> = refs.iter().map(|r| r.key.as_str()).collect();
+        keys.sort_unstable();
+        keys.dedup();
+        assert_eq!(keys.len(), refs.len(), "each pack listed once");
+        for r in &refs {
+            assert_eq!(r.key, format!("/packs/{}.signalpack", r.name));
+        }
     }
 }

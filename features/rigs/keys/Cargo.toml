@@ -30,6 +30,9 @@ signal-keys-proto.workspace = true
 # Profiles are Facet data (styx-authorable, like every other rig spec).
 facet.workspace = true
 facet-styx.workspace = true
+# The browser boot payload: `lane_program_wire` serializes the profile's
+# WireProgram mirror as the JSON the keys worklet's `openLanes` parses.
+facet-json.workspace = true
 signal-proto.workspace = true
 # The Signal Engine — every lane is one of its layers (source stack →
 # filters → amp → FX). Keys and Synth are the same engine; this crate owns it.

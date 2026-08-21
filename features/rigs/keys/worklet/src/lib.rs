@@ -17,67 +17,21 @@
 //! [`KeysRig`]: signal_sampler::KeysRig
 //! [`KeysInstrument`]: signal_sampler::KeysInstrument
 
-use facet::Facet;
-use signal_sampler::keys_rig::{LaneEngine, LaneLayer, LaneProgram};
-use signal_sampler::rig_node::Container;
-
 // ── The LaneProgram wire shape ──────────────────────────────────────────────
 //
-// `LaneProgram` itself carries no derives (it holds compiled trees), so the
-// worklet takes a Facet mirror parsed from JSON. The `tree` leaves are the
-// same `Container` the native styx profiles serialize.
+// The Facet mirror (`WireProgram` and friends) lives in
+// `signal_sampler::keys_rig` — the one crate both this worklet and the
+// engine backend (signal-keys, which SERIALIZES the same JSON from
+// `KeysRig::lane_program_wire`) depend on. Re-exported so existing
+// consumers keep their import path.
 
-/// One layer: its name + composition subtree (zone included).
-#[derive(Debug, Clone, Facet)]
-pub struct WireLayer {
-    pub name: String,
-    pub tree: Container,
-}
+pub use signal_sampler::keys_rig::{WireEngine, WireLayer, WireProgram};
 
-/// One engine: a folder of layers.
-#[derive(Debug, Clone, Facet)]
-pub struct WireEngine {
-    pub name: String,
-    pub layers: Vec<WireLayer>,
-}
-
-/// A whole lane program — the JSON the worklet's `open_lanes` message
-/// carries.
-#[derive(Debug, Clone, Facet)]
-pub struct WireProgram {
-    pub name: String,
-    pub engines: Vec<WireEngine>,
-    pub tail: Option<Container>,
-}
-
-impl WireProgram {
-    /// Parse a program from its JSON wire form.
-    pub fn from_json(text: &str) -> eyre::Result<Self> {
-        facet_json::from_str(text).map_err(|e| eyre::eyre!("lane program JSON: {e}"))
-    }
-
-    /// Convert into the rig's native `LaneProgram`.
-    pub fn into_lane_program(self) -> LaneProgram {
-        LaneProgram {
-            name: self.name,
-            engines: self
-                .engines
-                .into_iter()
-                .map(|e| LaneEngine {
-                    name: e.name,
-                    layers: e
-                        .layers
-                        .into_iter()
-                        .map(|l| LaneLayer {
-                            name: l.name,
-                            tree: l.tree,
-                        })
-                        .collect(),
-                })
-                .collect(),
-            tail: self.tail,
-        }
-    }
+/// Parse a lane program from its JSON wire form (the payload of the
+/// worklet's `open_lanes` message — the engine's `lane_program_wire` RPC
+/// produces it).
+pub fn wire_program_from_json(text: &str) -> eyre::Result<WireProgram> {
+    facet_json::from_str(text).map_err(|e| eyre::eyre!("lane program JSON: {e}"))
 }
 
 // ── The wasm worklet entry ──────────────────────────────────────────────────
@@ -92,7 +46,7 @@ mod web {
     use signal_sampler::KeysRig;
     use signal_sampler::keys_rig::LaneProgram;
 
-    use crate::WireProgram;
+    use crate::wire_program_from_json;
 
     fn js_err(e: impl std::fmt::Display) -> JsValue {
         JsValue::from_str(&e.to_string())
@@ -138,7 +92,7 @@ mod web {
         /// `render` produces the lanes. Returns the number of layer lanes.
         #[wasm_bindgen(js_name = openLanes)]
         pub fn open_lanes(&self, program_json: &str) -> Result<u32, JsValue> {
-            let program = WireProgram::from_json(program_json)
+            let program = wire_program_from_json(program_json)
                 .map_err(js_err)?
                 .into_lane_program();
             let lanes: u32 = program
@@ -242,6 +196,21 @@ mod web {
         }
         pub fn stop(&self) {
             self.renderer.stop();
+        }
+
+        // ── Track mixer (indices follow `trackPeaks` order: rig folder
+        // first, then engines/layers in project order) ───────────────────
+
+        /// Set one project track's volume (linear, 1.0 = unity).
+        #[wasm_bindgen(js_name = setTrackVolume)]
+        pub fn set_track_volume(&self, index: u32, volume: f64) {
+            self.renderer.set_track_volume(index, volume);
+        }
+
+        /// Mute / unmute one project track.
+        #[wasm_bindgen(js_name = setTrackMute)]
+        pub fn set_track_mute(&self, index: u32, muted: bool) {
+            self.renderer.set_track_mute(index, muted);
         }
 
         // ── Read-side ────────────────────────────────────────────────────

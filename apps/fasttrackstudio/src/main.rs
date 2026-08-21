@@ -53,6 +53,13 @@ mod remote;
 mod pack_client;
 #[cfg(feature = "signal")]
 mod rig_view;
+// Browser keys rig (/rigs/keys/:profile): the keys AudioWorklet + streamed
+// packs cached in OPFS + WebMIDI/demo MIDI. Wasm-only — the desktop app
+// plays rigs through the engine instead.
+#[cfg(all(feature = "signal", target_arch = "wasm32"))]
+mod web_keys_rig;
+#[cfg(all(feature = "signal", target_arch = "wasm32"))]
+mod web_packs;
 mod ekit_view;
 mod space_view;
 // The in-process session player (daw-standalone + audio + guide) is
@@ -260,6 +267,13 @@ fn launch_app() {
 
 #[cfg(target_arch = "wasm32")]
 fn launch_app() {
+    // Additive branch: a `/rigs/keys/{profile}` URL launches the browser
+    // keys rig instead of the app shell.
+    #[cfg(feature = "signal")]
+    if web_keys_rig::route_matches() {
+        dioxus::launch(web_keys_rig::KeysWebRig);
+        return;
+    }
     // Additive branch: a `/{org}/{collection}` URL launches the standalone
     // collection browser instead of the app shell. Every other path (root,
     // `#session` deep links, …) falls through to the normal app unchanged.

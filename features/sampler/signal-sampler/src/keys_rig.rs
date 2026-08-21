@@ -216,6 +216,87 @@ impl LaneProgram {
     }
 }
 
+// ── The LaneProgram wire shape ──────────────────────────────────────────────
+//
+// `LaneProgram` itself carries no derives (it holds compiled trees), so the
+// browser boundary speaks a Facet mirror: the engine serializes one to JSON
+// (`KeysRig::lane_program_wire` on the keys service) and the worklet
+// (`signal-keys-worklet`) parses the same JSON back. The `tree` leaves are
+// the same `Container` the native styx profiles serialize, so the mirror
+// lives HERE — the one crate both the backend (signal-keys) and the worklet
+// depend on.
+
+/// One layer: its name + composition subtree (zone included).
+#[derive(Debug, Clone, facet::Facet)]
+pub struct WireLayer {
+    pub name: String,
+    pub tree: Container,
+}
+
+/// One engine: a folder of layers.
+#[derive(Debug, Clone, facet::Facet)]
+pub struct WireEngine {
+    pub name: String,
+    pub layers: Vec<WireLayer>,
+}
+
+/// A whole lane program — the JSON the worklet's `open_lanes` message
+/// carries.
+#[derive(Debug, Clone, facet::Facet)]
+pub struct WireProgram {
+    pub name: String,
+    pub engines: Vec<WireEngine>,
+    pub tail: Option<Container>,
+}
+
+impl WireProgram {
+    /// Mirror a compiled [`LaneProgram`] for the wire.
+    pub fn from_program(p: &LaneProgram) -> Self {
+        WireProgram {
+            name: p.name.clone(),
+            engines: p
+                .engines
+                .iter()
+                .map(|e| WireEngine {
+                    name: e.name.clone(),
+                    layers: e
+                        .layers
+                        .iter()
+                        .map(|l| WireLayer {
+                            name: l.name.clone(),
+                            tree: l.tree.clone(),
+                        })
+                        .collect(),
+                })
+                .collect(),
+            tail: p.tail.clone(),
+        }
+    }
+
+    /// Convert into the rig's native [`LaneProgram`].
+    pub fn into_lane_program(self) -> LaneProgram {
+        LaneProgram {
+            name: self.name,
+            engines: self
+                .engines
+                .into_iter()
+                .map(|e| LaneEngine {
+                    name: e.name,
+                    layers: e
+                        .layers
+                        .into_iter()
+                        .map(|l| LaneLayer {
+                            name: l.name,
+                            tree: l.tree,
+                        })
+                        .collect(),
+                })
+                .collect(),
+            tail: self.tail,
+        }
+    }
+}
+
 /// The hosted track set in lane mode.
 struct LaneHost {
     /// The rig folder track (master fader + tail FX + rig meter cell 0).
