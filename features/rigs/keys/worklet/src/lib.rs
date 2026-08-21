@@ -124,6 +124,9 @@ mod web {
         /// scoping matched NOTHING and fell back to the full rebuild.
         reload_lanes: std::cell::Cell<u32>,
         reload_full: std::cell::Cell<u32>,
+        /// Zones handed to the streamer workers to open (W13's shared-memory
+        /// path) — the counterpart of `pcm_inserted` on the copy path.
+        opens_queued: std::cell::Cell<u32>,
     }
 
     thread_local! {
@@ -204,6 +207,18 @@ mod web {
         0
     }
 
+    /// Zones OPENED by the streamer workers since boot — the shared-memory
+    /// path's throughput number (`pcmInserts` counts the copy path).
+    #[wasm_bindgen(js_name = streamerOpened)]
+    pub fn streamer_opened() -> u32 {
+        #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+        {
+            signal_sampler::engine::stream_wasm::opened() as u32
+        }
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+        0
+    }
+
     #[wasm_bindgen(js_name = streamerDropped)]
     pub fn streamer_dropped() -> u32 {
         #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
@@ -260,12 +275,47 @@ mod web {
                 pcm_refused: std::cell::Cell::new(0),
                 reload_lanes: std::cell::Cell::new(0),
                 reload_full: std::cell::Cell::new(0),
+                opens_queued: std::cell::Cell::new(0),
             }
         }
 
-        /// Resolve what a note-on needs and queue the non-resident paths
-        /// for the decoder worker (deduped, bounded at 64 pending).
+        /// Resolve what a note-on needs and get it opened OFF this thread.
+        ///
+        /// With shared memory (W13) the streamer workers open zones
+        /// directly into the caches this rig reads — one enqueue per
+        /// missing zone and nothing crosses a thread boundary. Without it
+        /// (single-threaded build, or a page that is not cross-origin
+        /// isolated) the paths go to the decoder worker instead, which
+        /// decodes in its own heap and ships PCM back as copies.
         fn queue_warm_requests(&self, rig: &KeysRig, note: u8, velocity: u8) {
+            // BOTH paths, deliberately — they are not yet interchangeable.
+            //
+            // The shared-memory path enqueues the zone for a streamer
+            // worker, which is where this is going. But it cannot COMPLETE
+            // yet: pack bytes live on the WORKLET's JS heap (W6
+            // attach-by-handle, reachable only through the
+            // `__ftsPackRead` hook installed in this scope), so a worker
+            // sharing the wasm heap still cannot read them and its
+            // `cache.get` fails. Until pack bytes move to a
+            // SharedArrayBuffer every thread can read, the decoder worker
+            // remains the path that actually makes a cold note sound.
+            //
+            // Taking only the new path made far-out cold notes silent —
+            // enqueued, never opened. Never trade a working path for an
+            // unfinished one.
+            #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+            {
+                let queued = rig.queue_note_opens(note, velocity);
+                self.opens_queued
+                    .set(self.opens_queued.get().wrapping_add(queued as u32));
+            }
+            self.queue_warm_requests_via_worker(rig, note, velocity);
+        }
+
+        /// Hand the paths to the page's decoder worker (deduped, bounded at
+        /// 64 pending). Still the path that actually completes — see the
+        /// note in `queue_warm_requests`.
+        fn queue_warm_requests_via_worker(&self, rig: &KeysRig, note: u8, velocity: u8) {
             let missing = rig.missing_note_samples(note, velocity);
             if missing.is_empty() {
                 return;
@@ -717,6 +767,14 @@ mod web {
             } else {
                 limit as f64 / (1024.0 * 1024.0)
             }
+        }
+
+        /// Zones this thread handed to the streamer workers (W13). Paired
+        /// with `streamerOpened`: queued-but-never-opened means the workers
+        /// are not draining; zero queued means the note path never asked.
+        #[wasm_bindgen(js_name = opensQueued)]
+        pub fn opens_queued(&self) -> u32 {
+            self.opens_queued.get()
         }
 
         /// Samples inserted via `insertPcm` since boot (diagnostic).

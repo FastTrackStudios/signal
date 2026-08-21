@@ -283,6 +283,10 @@ impl Worklet {
             warm_depth: f("warmDepth").unwrap_or(0.0),
             pcm_inserts: f("pcmInserts").unwrap_or(0.0),
             pcm_refused: f("pcmRefused").unwrap_or(0.0),
+            zones_opened: f("zonesOpened").unwrap_or(0.0),
+            opens_queued: f("opensQueued").unwrap_or(0.0),
+            streamer_depth: f("streamerDepth").unwrap_or(0.0),
+            streamer_dropped: f("streamerDropped").unwrap_or(0.0),
             pcm_used_mb: f("pcmUsedMb").unwrap_or(0.0),
             pcm_limit_mb: f("pcmLimitMb").unwrap_or(0.0),
         })
@@ -701,6 +705,18 @@ struct AudioStats {
     warm_depth: f64,
     pcm_inserts: f64,
     pcm_refused: f64,
+    /// Zones opened by the streamer workers directly into the audio
+    /// thread's caches (W13's shared-memory path — no copy). `pcm_inserts`
+    /// counts the older copy path; on a threaded build this is the one
+    /// that should move.
+    zones_opened: f64,
+    /// Zones the audio thread QUEUED for the streamer workers, the queue
+    /// depth right now, and drops. Queued > 0 with opened == 0 means the
+    /// workers are not draining it; queued == 0 means the note path never
+    /// asked (e.g. a build without atomics).
+    opens_queued: f64,
+    streamer_depth: f64,
+    streamer_dropped: f64,
     /// Decoded PCM resident / its ceiling, in MB (limit -1 = unlimited) —
     /// says whether the budget is what is keeping the rig from sounding.
     pcm_used_mb: f64,
@@ -854,6 +870,14 @@ struct HookAudio {
     pcm_inserts: f64,
     #[facet(rename = "pcmRefused")]
     pcm_refused: f64,
+    #[facet(rename = "zonesOpened")]
+    zones_opened: f64,
+    #[facet(rename = "opensQueued")]
+    opens_queued: f64,
+    #[facet(rename = "streamerDepth")]
+    streamer_depth: f64,
+    #[facet(rename = "streamerDropped")]
+    streamer_dropped: f64,
     #[facet(rename = "pcmUsedMb")]
     pcm_used_mb: f64,
     #[facet(rename = "pcmLimitMb")]
@@ -905,6 +929,10 @@ fn install_hook() {
             warm_depth: a.warm_depth,
             pcm_inserts: a.pcm_inserts,
             pcm_refused: a.pcm_refused,
+            zones_opened: a.zones_opened,
+            opens_queued: a.opens_queued,
+            streamer_depth: a.streamer_depth,
+            streamer_dropped: a.streamer_dropped,
             pcm_used_mb: a.pcm_used_mb,
             pcm_limit_mb: a.pcm_limit_mb,
         };
@@ -2612,7 +2640,7 @@ fn AudioPanel(
             div { style: row_style,
                 span { style: key_style, "decoder" }
                 span { style: val_style,
-                    "{a.pcm_inserts as u64} in · {a.warm_depth as u64} pending · {a.pcm_refused as u64} full"
+                    "{a.zones_opened as u64} zones · {a.pcm_inserts as u64} copied · {a.warm_depth as u64} pending"
                 }
             }
             div { style: "display:flex; flex-direction:column; gap:3px;",

@@ -703,6 +703,53 @@ impl RenderNode {
         }
     }
 
+    /// Queue every zone this note needs but has not OPENED yet onto the
+    /// shared streamer queue, for a worker thread to open.
+    ///
+    /// The wasm answer to "this note's zone does not exist yet".
+    /// `SampleCache` is `Send + Sync` and lives in the shared heap, so a
+    /// streamer worker calls `cache.get(path)` and the audio thread finds
+    /// the result already in its own map — no copy, no message, no second
+    /// heap (which is what the decoder-worker path needed). Costs one
+    /// enqueue per missing zone on this thread and nothing else.
+    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+    pub fn queue_note_opens(&mut self, note: u8, velocity: u8) -> usize {
+        match self {
+            RenderNode::Leaf { inst: Some(LeafBackend::Source(src)), .. } => {
+                let Some(sampler) = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                else {
+                    return 0;
+                };
+                let engine = sampler.engine();
+                let Some(path) = engine.resolve_note_sample_path(note, velocity) else {
+                    return 0;
+                };
+                if engine.is_sample_resident(&path) {
+                    return 0;
+                }
+                crate::engine::stream_wasm::enqueue_open(&engine.cache_handle(), &path);
+                1
+            }
+            RenderNode::Leaf { .. } => 0,
+            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+                v.iter_mut().map(|n| n.queue_note_opens(note, velocity)).sum()
+            }
+            RenderNode::Zoned { zone, inner } => {
+                if zone.note_gain(note, velocity) > 0.0 {
+                    inner.queue_note_opens(note, velocity)
+                } else {
+                    0
+                }
+            }
+            RenderNode::Gain { inner, .. }
+            | RenderNode::Modulated { inner, .. }
+            | RenderNode::SendTap { inner, .. }
+            | RenderNode::BusInject { inner, .. } => inner.queue_note_opens(note, velocity),
+        }
+    }
+
     /// Insert PCM decoded elsewhere into every **sampler** source of this
     /// subtree whose cache knows `path` (pack entry / prepared entry).
     /// Returns whether any leaf accepted it. `charge_past_ceiling` follows

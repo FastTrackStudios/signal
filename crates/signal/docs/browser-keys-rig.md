@@ -617,6 +617,43 @@ Latency, honestly: "zero" is not physical — the floor is one render quantum
 never exceeding that floor: no stall, no underrun, no growth under load. The
 underrun counter and `worstHandlerMs` from W12 are how each step gets judged.
 
+### W14 — collapsing the copy path into shared memory (BLOCKED, diagnosed)
+
+The remaining copy is the decoder worker: it opens/decodes zones in its OWN
+wasm heap and ships PCM back over a MessagePort. With shared memory that
+should be unnecessary — and `SampleCache` IS `Send + Sync` (verified by a
+compile-time assertion), so a streamer worker can hold a cache handle and
+`cache.get(path)` straight into the map the audio thread reads.
+
+Built: an OPEN-jobs ring beside the chunk ring in `stream_wasm`
+(`enqueue_open`, drained before chunk fills — a note waiting on an unopened
+zone is SILENT, a chunk fill belongs to a voice already sounding),
+`RenderNode::queue_note_opens`, `KeysRig::queue_note_opens`, and the
+`opensQueued` / `zonesOpened` / `streamerDepth` counters.
+
+**It does not complete, and the counters say exactly why**: `opensQueued`
+46, `zonesOpened` 0, `streamerDropped` 0. The audio thread enqueues; the
+worker can never finish the job. **Pack BYTES live on the worklet's JS
+heap** (W6 attach-by-handle — `this.packs` in keys_processor.js, reached
+through the `__ftsPackRead` hook installed in that scope). A streamer
+worker shares the wasm heap but NOT that JS heap, so its `cache.get` cannot
+read pack bytes at all.
+
+So the blocker is not threads or memory — both work — it is **pack-byte
+locality**. To finish this:
+
+- Move pack bytes into a **SharedArrayBuffer** per pack (NOT wasm linear
+  memory — the Worship set is ~2.4 GB against a 4 GB address space, which
+  is exactly why W6 put them on the JS heap). Every thread installs a
+  `__ftsPackRead` over the same SAB, and the worker's `cache.get`
+  completes.
+- Only then can `queue_warm_requests` drop the decoder-worker call.
+
+Until that lands, note-on takes BOTH paths: it enqueues the open (harmless,
+and it exercises the plumbing) AND asks the decoder worker, which is what
+actually makes a cold note sound. Taking only the new path made far-out
+cold notes silent — enqueued, never opened.
+
 **DONE — the suite is green (7/7), including the `realtime` test: a chord
 sustained through twelve cold notes at both ends of the keyboard with ZERO
 underruns and no audio-thread handler over 20 ms while playing.**

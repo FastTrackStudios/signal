@@ -846,6 +846,29 @@ impl KeysRig {
         out
     }
 
+    /// Queue every zone this note needs but has not opened onto the shared
+    /// streamer queue (wasm + threads only). Returns how many were queued.
+    ///
+    /// The audio thread calls this on note-on INSTEAD of decoding: a worker
+    /// opens the zones into the same cache maps this rig reads, so the note
+    /// sounds on a subsequent press with nothing copied between threads.
+    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+    pub fn queue_note_opens(&self, note: u8, velocity: u8) -> usize {
+        let layers: Vec<String> = match &self.hosting {
+            Hosting::Single { .. } => vec![String::new()],
+            Hosting::Lanes(l) => l.layers.iter().map(|t| t.name.clone()).collect(),
+        };
+        let mut queued = 0;
+        for layer in &layers {
+            queued += self
+                .edit_lane(layer, |inst| {
+                    inst.render_mut().queue_note_opens(note, velocity)
+                })
+                .unwrap_or(0);
+        }
+        queued
+    }
+
     /// Insert PCM decoded out-of-process into `layer`'s instrument (see
     /// `RenderNode::insert_decoded_sample`). Returns whether the lane
     /// accepted it — `false` with `charge_past_ceiling: false` means the

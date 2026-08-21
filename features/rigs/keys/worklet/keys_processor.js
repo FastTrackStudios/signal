@@ -441,6 +441,10 @@ class KeysRigProcessor extends AudioWorkletProcessor {
           let pcmLimitMb = 0;
           let reloadLanes = 0;
           let reloadFull = 0;
+          let zonesOpened = 0;
+          let streamerDepth = 0;
+          let streamerDropped = 0;
+          let opensQueued = 0;
           try {
             if (this.renderer) {
               if (typeof this.renderer.warmQueueDepth === 'function') {
@@ -458,6 +462,18 @@ class KeysRigProcessor extends AudioWorkletProcessor {
                 reloadLanes = this.renderer.reloadLaneCount();
                 reloadFull = this.renderer.reloadFullCount();
               }
+            }
+            // W13 shared-memory path: zones opened by the streamer
+            // workers straight into the caches this thread reads.
+            if (typeof wasm.streamerOpened === 'function') {
+              zonesOpened = wasm.streamerOpened();
+              streamerDepth = wasm.streamerDepth();
+              streamerDropped = wasm.streamerDropped();
+            }
+            // Enqueued BY this thread — separates "nothing was queued"
+            // from "queued but nobody drained it".
+            if (typeof this.renderer.opensQueued === 'function') {
+              opensQueued = this.renderer.opensQueued();
             }
           } catch (_e) { /* trapped wasm must not take the reply down */ }
           this.reply(msg, {
@@ -478,6 +494,10 @@ class KeysRigProcessor extends AudioWorkletProcessor {
             pcmLimitMb,
             reloadLanes,
             reloadFull,
+            zonesOpened,
+            streamerDepth,
+            streamerDropped,
+            opensQueued,
           });
           break;
         }

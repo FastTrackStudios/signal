@@ -61,6 +61,30 @@ thread_local! {
     static LAST_ERROR: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
+/// Whether the streamer workers should run AT ALL.
+///
+/// OFF by default, and that is a measured decision rather than caution:
+/// the workers cannot currently finish either kind of job. Both chunk
+/// fills and zone opens read pack bytes through `__ftsPackRead`, and that
+/// hook is installed in the WORKLET's scope over pack buffers on the
+/// worklet's JS heap — a worker sharing the wasm heap cannot reach them
+/// (see W14 in browser-keys-rig.md). Spawning them anyway costs real CPU:
+/// N workers waking every few ms to drain a queue they can never satisfy
+/// pushed measured render load from ~1.0 to 1.73 and failed the e2e
+/// headroom check.
+///
+/// Set `fts.keys-threads = "on"` in localStorage to run them anyway (for
+/// developing W14). Once pack bytes live in a SharedArrayBuffer every
+/// thread can read, this flips to on by default and the decoder-worker
+/// copy path retires.
+fn enabled() -> bool {
+    web_sys::window()
+        .and_then(|w| w.local_storage().ok().flatten())
+        .and_then(|s| s.get_item("fts.keys-threads").ok().flatten())
+        .map(|v| v == "on")
+        .unwrap_or(false)
+}
+
 /// Whether this page can host wasm threads at all.
 pub(crate) fn supported() -> bool {
     let isolated = web_sys::window()
@@ -90,7 +114,7 @@ pub(crate) fn last_error() -> String {
 /// single-threaded path. Workers report `ready` asynchronously; the
 /// returned memory is usable immediately either way.
 pub(crate) fn spawn() -> Option<JsValue> {
-    if !supported() {
+    if !supported() || !enabled() {
         return None;
     }
     // Terminate any previous generation (a latency-hint re-boot builds a
