@@ -92,14 +92,17 @@ web-stage: tailwind
 # wasm-bindgen-cli comes from the dev shell, pinned to the workspace
 # wasm-bindgen version (same as task-worklet-wasm).
 keys-worklet-wasm out='apps/fasttrackstudio/web-dist/worklet':
+    # --max-memory: default wasm linear memory caps at 2 GB — resident pack
+    # bytes + decoded-PCM budget + app need the full 4 GB address space.
+    RUSTFLAGS="-C link-arg=--max-memory=4294967296" \
     cargo build -p signal-keys-worklet --lib \
         --target wasm32-unknown-unknown --release
     mkdir -p {{out}}
     wasm-bindgen --target web --out-dir {{out}} \
         --out-name signal_keys_worklet \
         target/wasm32-unknown-unknown/release/signal_keys_worklet.wasm
-    cp features/standalone/daw-standalone/examples/web_worklet/processor.js \
-        {{out}}/keys_processor.js
+    cp features/rigs/keys/worklet/keys_processor.js {{out}}/keys_processor.js
+    cp features/rigs/keys/worklet/worklet_polyfill.js {{out}}/worklet_polyfill.js
 
 # ONE engine binary serving the whole browser keys rig: stage the web
 # bundle + keys worklet (web-stage), then embed it into the release

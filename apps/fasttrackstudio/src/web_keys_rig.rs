@@ -179,6 +179,24 @@ impl Worklet {
 async fn boot_worklet() -> Result<Worklet, String> {
     let window = web_sys::window().ok_or("no window")?;
     let ctx = AudioContext::new().map_err(|e| format!("AudioContext: {}", js_str(e)))?;
+    // Autoplay insurance: a context created outside a real user gesture
+    // starts 'suspended' and our own resume() call is then rejected too —
+    // silence with everything else working. Any genuine pointer press on the
+    // page is a resume opportunity; keep the listener for the page's life
+    // (resume() on a running context is a no-op).
+    {
+        let ctx2 = ctx.clone();
+        let on_pointer = Closure::<dyn FnMut()>::new(move || {
+            let _ = ctx2.resume();
+        });
+        if let Some(doc) = window.document() {
+            let _ = doc.add_event_listener_with_callback(
+                "pointerdown",
+                on_pointer.as_ref().unchecked_ref(),
+            );
+        }
+        on_pointer.forget();
+    }
     let worklet = ctx
         .audio_worklet()
         .map_err(|e| format!("audioWorklet: {}", js_str(e)))?;
@@ -193,7 +211,11 @@ async fn boot_worklet() -> Result<Worklet, String> {
     let opts = AudioWorkletNodeOptions::new();
     let counts = Array::of1(&2u32.into());
     opts.set_output_channel_count(&counts);
-    let node = AudioWorkletNode::new_with_options(&ctx, "daw-standalone", &opts)
+    // The name keys_processor.js registers — the keys-specific processor
+    // with a STATIC glue import (AudioWorkletGlobalScope has no dynamic
+    // import(), which is why the generic daw-standalone processor cannot
+    // boot here).
+    let node = AudioWorkletNode::new_with_options(&ctx, "fts-keys-rig", &opts)
         .map_err(|e| format!("AudioWorkletNode: {}", js_str(e)))?;
     node.connect_with_audio_node(&ctx.destination())
         .map_err(|e| format!("connect: {}", js_str(e)))?;
@@ -288,6 +310,11 @@ pub(crate) enum PackPhase {
     Streaming,
     Verifying,
     Ready,
+    /// Streamed + cached in OPFS but NOT attached: the worklet's linear
+    /// memory can't take it. Deliberately distinct from `Failed` — the
+    /// bytes are here and correct; only residency is deferred (per-sample
+    /// range streaming is the planned fix, browser-keys-rig.md).
+    Deferred,
     Failed(String),
 }
 
@@ -298,10 +325,19 @@ impl PackPhase {
             Self::Streaming => "streaming",
             Self::Verifying => "verifying",
             Self::Ready => "ready",
+            Self::Deferred => "deferred (too large for browser memory)",
             Self::Failed(_) => "failed",
         }
     }
 }
+
+/// Resident pack-bytes ceiling inside the worklet's wasm memory. The 4 GB
+/// address space also holds the decoded-PCM budget (768 MB on wasm), the
+/// attach-time transfer copy of the LARGEST pack, and the app itself — and
+/// an allocation failure doesn't error, it TRAPS the instance and takes
+/// every working lane with it. Attaches that would cross this line are
+/// refused page-side and the pack parked as `Deferred`.
+const WASM_PACK_RESIDENT_CAP: u64 = 1_500_000_000;
 
 /// One pack row in the Soundsource Manager.
 #[derive(Clone, PartialEq)]
@@ -652,6 +688,36 @@ async fn boot_rig(
     boot.set(Boot::Running);
     hook_set_state("running");
 
+    // Diagnostics onto the state hook now that the worklet exists:
+    // `audioState()` (the AudioContext's state — 'suspended' is the autoplay
+    // trap wearing its disguise) and `noteOn(note, vel)` / `noteOff(note)`
+    // (raw injection past the UI, for the e2e test and remote debugging).
+    if let Some(w) = web_sys::window() {
+        if let Ok(hook) = Reflect::get(&w, &"__ftsRig".into()) {
+            let ctx2 = worklet.ctx.clone();
+            let audio_state = Closure::<dyn FnMut() -> JsValue>::new(move || {
+                // Reflect, not the typed getter — `AudioContextState` isn't in
+                // this crate's web-sys feature set and a string is all we need.
+                Reflect::get(ctx2.as_ref(), &"state".into())
+                    .unwrap_or_else(|_| JsValue::from_str("unknown"))
+            });
+            let _ = Reflect::set(&hook, &"audioState".into(), audio_state.as_ref());
+            audio_state.forget();
+            let wk = worklet.clone();
+            let note_on = Closure::<dyn FnMut(f64, f64)>::new(move |n: f64, v: f64| {
+                wk.midi(0x90, n as u8, v as u8);
+            });
+            let _ = Reflect::set(&hook, &"noteOn".into(), note_on.as_ref());
+            note_on.forget();
+            let wk = worklet.clone();
+            let note_off = Closure::<dyn FnMut(f64)>::new(move |n: f64| {
+                wk.midi(0x80, n as u8, 64);
+            });
+            let _ = Reflect::set(&hook, &"noteOff".into(), note_off.as_ref());
+            note_off.forget();
+        }
+    }
+
     // 4. WebMIDI in the background.
     spawn(init_webmidi(worklet.clone(), midi_inputs));
 
@@ -765,6 +831,19 @@ async fn attach_pack(
     i: usize,
     packs: &mut Signal<Vec<PackRow>>,
 ) {
+    // Refuse attaches the wasm memory can't take (see the cap's doc) —
+    // resident = every pack already Ready, plus this one.
+    let incoming = bytes.byte_length() as u64;
+    let resident: u64 = packs
+        .read()
+        .iter()
+        .filter(|r| r.phase == PackPhase::Ready)
+        .map(|r| r.total)
+        .sum();
+    if resident + incoming > WASM_PACK_RESIDENT_CAP {
+        update_row(packs, i, |r| r.phase = PackPhase::Deferred);
+        return;
+    }
     let attach = worklet
         .rpc(
             "attach_pack",
@@ -932,6 +1011,7 @@ fn PackRowView(
         PackPhase::Streaming => ("#fbbf24", format!("{} / {}", mb(row.bytes), mb(row.total))),
         PackPhase::Verifying => ("#38bdf8", "sha256…".into()),
         PackPhase::Ready => ("#22c55e", mb(row.total)),
+        PackPhase::Deferred => ("#a78bfa", "cached — too large for browser memory".into()),
         PackPhase::Failed(e) => ("#ef4444", e.clone()),
     };
     let name = row.name.clone();
@@ -1189,6 +1269,7 @@ fn LaneList(
                         None | Some(PackPhase::Queued) => ("#52525b", "waiting"),
                         Some(PackPhase::Streaming) | Some(PackPhase::Verifying) => ("#fbbf24", "streaming"),
                         Some(PackPhase::Ready) => ("#22c55e", "ready"),
+                        Some(PackPhase::Deferred) => ("#a78bfa", "pack cached, not resident"),
                         Some(PackPhase::Failed(_)) => ("#ef4444", "failed"),
                     };
                     let peak_pct = (row.peak.clamp(0.0, 1.0) * 100.0) as u32;

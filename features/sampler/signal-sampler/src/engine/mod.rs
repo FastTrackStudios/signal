@@ -1023,17 +1023,29 @@ impl SampleEngine {
 
     /// Decode all indexed samples into the cache before live playback.
     pub fn preload_samples(&mut self) -> PreloadStats {
+        // `Instant::now` panics on wasm32-unknown-unknown — the browser rig
+        // runs this synchronously inside the worklet on lane reloads, and
+        // the timing is a native diagnostic anyway.
+        #[cfg(not(target_arch = "wasm32"))]
         let start = std::time::Instant::now();
         let total = self.patch.total_samples();
         let stats = self
             .cache
             .preload(self.patch.sample_paths().map(|p| p.as_path()));
+        #[cfg(not(target_arch = "wasm32"))]
         tracing::info!(
             "signal-sampler: preloaded {}/{} samples ({:.1} MiB PCM) in {:.2}s",
             self.cache.len(),
             total,
             stats.bytes as f64 / 1024.0 / 1024.0,
             start.elapsed().as_secs_f64()
+        );
+        #[cfg(target_arch = "wasm32")]
+        tracing::info!(
+            "signal-sampler: preloaded {}/{} samples ({:.1} MiB PCM)",
+            self.cache.len(),
+            total,
+            stats.bytes as f64 / 1024.0 / 1024.0,
         );
         stats
     }

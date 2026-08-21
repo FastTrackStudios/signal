@@ -66,11 +66,55 @@ mod web {
         program: RefCell<Option<LaneProgram>>,
     }
 
+    thread_local! {
+        /// The last Rust panic's message (see the hook in `KeysWorklet::new`).
+        static LAST_PANIC: std::cell::RefCell<String> = std::cell::RefCell::default();
+    }
+
+    /// The most recent panic message, for the processor's error replies —
+    /// after a panic the failing call surfaces only as
+    /// `RuntimeError: unreachable`; this names it.
+    #[wasm_bindgen(js_name = lastPanicMessage)]
+    pub fn last_panic_message() -> String {
+        LAST_PANIC.with(|p| p.borrow().clone())
+    }
+
     #[wasm_bindgen]
     impl KeysWorklet {
         /// `sample_rate` is the worklet's actual `sampleRate`.
         #[wasm_bindgen(constructor)]
         pub fn new(sample_rate: u32) -> KeysWorklet {
+            // Panics otherwise surface as a bare `RuntimeError: unreachable`
+            // with no message — route them to the worklet console so a
+            // failure names itself.
+            {
+                use std::sync::Once;
+                static HOOK: Once = Once::new();
+                HOOK.call_once(|| {
+                    std::panic::set_hook(Box::new(|info| {
+                        // Stash the message where `lastPanicMessage()` can
+                        // fetch it — the worklet scope's console is invisible
+                        // to page-side tooling, and the trap that follows a
+                        // panic reads as a bare `RuntimeError: unreachable`.
+                        LAST_PANIC.with(|p| *p.borrow_mut() = format!("{info}"));
+                        // Also onto the worklet scope's globalThis: after the
+                        // panic the whole wasm instance traps, so JS is the
+                        // only place the message survives.
+                        let _ = js_sys::Reflect::set(
+                            &js_sys::global(),
+                            &"__ftsPanic".into(),
+                            &format!("{info}").into(),
+                        );
+                        use wasm_bindgen::JsCast as _;
+                        let _ = js_sys::eval("console").ok().and_then(|c| {
+                            let f = js_sys::Reflect::get(&c, &"error".into()).ok()?;
+                            let f: js_sys::Function = f.dyn_into().ok()?;
+                            f.call1(&c, &format!("keys-worklet panic: {info}").into())
+                                .ok()
+                        });
+                    }));
+                });
+            }
             KeysWorklet {
                 renderer: WebRenderer::new(sample_rate),
                 rig: RefCell::new(None),
