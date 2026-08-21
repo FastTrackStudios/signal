@@ -83,9 +83,9 @@ web-stage: tailwind
 # crates/signal/docs/browser-keys-rig.md) into the web bundle:
 # a RELEASE wasm build of signal-keys-worklet (KeysWorklet =
 # WebRenderer + headless KeysRig), wasm-bindgen'd `--target web`, plus
-# daw-standalone's processor.js (already keys-aware: `entry: 'keys'` +
-# the keys message kinds; the glue URL arrives in the init message, so
-# it stages verbatim). The page (src/web_keys_rig.rs) expects exactly:
+# the keys-specific processor + worklet polyfill (AudioWorkletGlobalScope
+# has no dynamic import(), TextDecoder, crypto, or performance — see
+# features/rigs/keys/worklet/). The page (src/web_keys_rig.rs) expects:
 #   /worklet/keys_processor.js
 #   /worklet/signal_keys_worklet.js
 #   /worklet/signal_keys_worklet_bg.wasm
@@ -112,6 +112,14 @@ keys-worklet-wasm out='apps/fasttrackstudio/web-dist/worklet':
 # and open http://<host>:4040/rigs/keys/worship (tailnet-reachable).
 keys-web: web-stage
     cargo build --release -p fasttrackstudio --features embed-web
+
+# Playwright end-to-end suite for the browser keys rig (W5): spawns its
+# own engine on a scratch port (SIGNAL_ENGINE_ADDR) and proves the rig
+# makes SOUND in real chromium. Expects target/release/fasttrackstudio
+# to exist — build it with `just keys-web` first. Needs the real pack
+# library (or FTS_PACK_LIBRARY pointing at one with the Worship proxies).
+keys-web-e2e:
+    cd apps/fasttrackstudio/e2e && npm install --no-fund --no-audit && npx playwright test
 
 # Build the RELEASE binary (web bundle EMBEDDED) and deploy the ONE
 # artifact to ~/.local/lib/fts/fasttrackstudio behind the signal-engine

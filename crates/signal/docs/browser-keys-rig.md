@@ -110,8 +110,33 @@ Reuse, don't reinvent:
     5.75 MB; the processor + glue js → 200 `text/javascript`; `/vox` →
     101 Switching Protocols; pack library scanned 8433 packs.
 
-- **W5 — Playwright end-to-end test** (+ interactive browser-tools
+- **W5 — Playwright end-to-end test** — DONE (+ interactive browser-tools
   verification during development):
+  - Lives at `apps/fasttrackstudio/e2e/` (`@playwright/test` ~1.59, pinned
+    to the chromium-1217 revision the flake's `PLAYWRIGHT_BROWSERS_PATH`
+    nix store carries). Run: `just keys-web-e2e` (expects
+    `target/release/fasttrackstudio` to exist — `just keys-web` builds it;
+    needs the real pack library or `FTS_PACK_LIBRARY`). A globalSetup
+    picks a free scratch port, spawns the release binary with
+    `SIGNAL_ENGINE_ADDR`, waits on `/health`, and teardown kills that
+    exact pid — never port 4040.
+  - Three serial tests, ONE browser context (so OPFS/IDB persist for the
+    reload): **boot** (click `rig-start`, `state()` → running → ready,
+    the three smallest Worship proxies — Choir Women / Big Berthas /
+    Prophet 5 — stream to `ready` with bytes == total; never waits on the
+    full ~2.4 GB set); **audio out** (`audioState()==='running'`,
+    `noteOn` chord then `demo-play-0` via the soundsource popover, each
+    drives `masterPeak() > 0.001`; popover screenshot saved to
+    test-results); **refresh-resume** (reload + restart: the cached packs
+    return `ready` with bytes == total from OPFS, no re-stream — observed
+    ~15 s, dominated by the worklet re-boot, not streaming).
+  - Chromium launches with `--autoplay-policy=no-user-gesture-required` —
+    the page-side AudioContext runs without a gesture, so `masterPeak()`
+    is a real audio-out proof (CDP input can't grant user activation).
+  - The fixture-pack idea below stays open for CI; the suite currently
+    runs against the real library (the three proxies total ~19 MB, boot
+    ≈ 1.8 min, whole suite ≈ 2 min).
+  - Original sketch:
   - A real-browser test that proves the whole chain: launch the engine
     binary on an ephemeral port serving the embedded web bundle → open
     `/rigs/keys/worship` in chromium
