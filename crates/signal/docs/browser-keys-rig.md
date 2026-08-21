@@ -207,6 +207,83 @@ Reuse, don't reinvent:
     `noteOn(96)` assertion exercising warm-on-note beyond preload
     coverage. Suite green 3×, ~2.2 min.
 
+- **W7 — network range streaming with musical prioritization** — DONE.
+  A pack becomes PLAYABLE in seconds and gains detail as it streams;
+  misses driven by actual playing jump the queue.
+  - **Proto** (`signal-packs-proto`): `read_range(name, variant,
+    range: String /* "start+len", PackRange's Display/FromStr */, tx)`
+    streams exactly one range (absolute offsets, contiguous,
+    stream-close = range done); `pack_plan(name, variant, start, tx)`
+    streams the plan as the UTF-8 bytes of facet-json
+    `Vec<PackSegment>` where each `PackSegment{start, len, rank: u64,
+    label}` tiles the file exactly once (total + sha256 come from the
+    `packs()` listing). `read` additionally accepts VIRTUAL names —
+    `"plan:<name>"` and `"range:<start>+<len>:<name>"` — that route to
+    the same two operations over `read`'s exact signature; the browser
+    client uses those. (The dedicated methods are exercised natively —
+    `pack-library/tests/plan_roundtrip.rs` and the `pack_probe`
+    example's `plan:`/`planfirst:` modes.)
+  - **The 4040 trap (a whole debugging arc, recorded so nobody repeats
+    it)**: the wasm `server_url()` used to redirect ANY local page not
+    on :4040 to `ws://127.0.0.1:4040/vox` (a dx-dev-server
+    convenience) — so the e2e's page silently drove the LIVE studio
+    engine, and every new RPC failed with phantom phon schema-compat
+    errors ("writer and reader schema kinds differ" = an old binary
+    without the methods; later `NotFound` = its `read` seeing the
+    virtual name). The heuristic now redirects only the known dx dev
+    ports (8080/8087), and both e2e suites pin
+    `fts.signal-engine-ws-url` in localStorage to their scratch engine.
+    The streamed/virtual wire shapes were kept anyway — proven, and
+    resume-friendly.
+  - **Planner** (`signal_sampler::pack_plan`, served by
+    `signal-pack-library`, memoized per pack): rank 0 = the exact bytes
+    `SignalPcmPack::open` reads — the 64-byte header plus the index span
+    (`SignalPcmPack::index_span()`, new) with its embedded spec — TWO
+    segments, since the index sits at the file end. Ranks 1.. are one
+    audio entry each: velocity-layer distance from the middle layer
+    first, then |key − 60| middle-out, then rr (0 first); zone mode reads
+    the embedded spec's zones, convention mode parses filenames; unknown
+    entries go last in file order; defensive `gap` segments keep coverage
+    exact. Unit-tested natively (rank-0-only bytes literally `open_bytes`
+    successfully; ordering; exact tiling).
+  - **Client** (`web_packs.rs` + `web_keys_rig.rs`): packs ≤ 32 MB keep
+    the W6 whole-file path; larger packs go progressive — plan + a plan
+    LEDGER in IndexedDB (`plan:<name>.<variant>`, received-segment
+    bitmap) + sparse bytes at true offsets in OPFS
+    (`….signalpack.sparse`, commit-every-16MB, ledger marks segments only
+    after a commit). Rank-0 fetches first, then
+    `attach_pack_progressive` → the row turns `playable` ("playable —
+    loading detail n%") and the lanes reload; detail segments stream in
+    rank order over ONE reused connection, CONCURRENT with the small
+    packs' whole-file streams. At 100%: whole-file sha256 (when known),
+    rename into place, ordinary ready ledger — the next boot attaches it
+    as a normal cached pack. Refresh-resume replays committed segments
+    from the sparse file (contiguous runs, few reads) and fetches the
+    rest.
+  - **Worklet** (`keys_processor.js`): `this.packs` entries are either a
+    whole Uint8Array (W6) or a sparse `{len, segs}` store fed by
+    fire-and-forget `pack_segment {id, start, bytes}` (page-allocated ids
+    from 2^20; exactly-adjacent segments coalesce). `__ftsPackRead`
+    serves covered ranges (plan segments are whole entries, so
+    single-segment hits are the norm), records uncovered ones in a
+    bounded deduped miss list, and returns null — the engine drops that
+    voice silently and retries next press (fts-sample never
+    negative-caches a failed load, so NO reload is needed when the bytes
+    arrive). `take_misses` drains the list; the page polls ~1 Hz and
+    bumps the covering plan segments to the queue front.
+  - **Resolution**: one rig-wide number — delivered sample segments over
+    total sample segments across every referenced pack (rank-0 excluded;
+    whole-file packs all-or-nothing). Prominent in the top bar
+    (`data-testid="rig-resolution"`, amber `RESOLUTION n%` bar →
+    quiet green `FULL RESOLUTION`), and `__ftsRig.resolution()`.
+  - **e2e** (`keys_rig_progressive.spec.ts`, its own cleared context):
+    piano playable < 30 s with bytes ≪ total; the HEADLINE — middle C
+    sounds (other lanes muted via the new `lane-row-*`/`lane-mute-*`
+    testids) while the pack is still `playable` and resolution < 100;
+    an extreme note (24) silent at first then sounding within 60 s via
+    the miss path; everything `ready`, resolution 100, FULL RESOLUTION
+    rendered. The W6 suite runs unchanged before it.
+
 ## Open questions / later
 
 - Piano-lane weight on travel links: consider a lower-quality travel

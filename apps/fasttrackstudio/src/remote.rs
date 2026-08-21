@@ -38,13 +38,18 @@ pub(crate) fn server_url() -> String {
             "https:" => "wss",
             _ => "ws",
         };
-        // A dev server (`dx serve`) runs the page on a non-4040 localhost port
-        // and does NOT serve `/vox`; point it at the local engine so hot-reload
-        // iteration connects without a manual `signal-engine-ws-url` override.
-        // Deployed builds are served BY the engine (same-origin), so keep the
-        // origin there.
+        // A dev server (`dx serve`) does NOT serve `/vox`; point those
+        // KNOWN dev ports at the local engine so hot-reload iteration
+        // connects without a manual `signal-engine-ws-url` override.
+        // Everything else — including an engine bound to a scratch port
+        // via SIGNAL_ENGINE_ADDR (the e2e suite, side-by-side engines) —
+        // is served BY the engine, so it stays same-origin. (The old
+        // rule, "any local port that isn't 4040", silently pointed the
+        // e2e's page at the LIVE :4040 engine — W7 chased phantom
+        // schema-compat errors that were really an old binary.)
         let is_local = hostname == "localhost" || hostname == "127.0.0.1";
-        if is_local && !host.ends_with(":4040") {
+        let dx_dev_port = host.ends_with(":8080") || host.ends_with(":8087");
+        if is_local && dx_dev_port {
             return Some("ws://127.0.0.1:4040/vox".to_string());
         }
         Some(format!("{scheme}://{host}/vox"))

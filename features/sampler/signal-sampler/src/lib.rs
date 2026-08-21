@@ -106,6 +106,7 @@ pub mod node_render;
 pub mod nord;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pack_cli;
+pub mod pack_plan;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pack_rewrite;
 /// The NI Essential Pianos' Color / Dynamic Range controls, as velocity-domain

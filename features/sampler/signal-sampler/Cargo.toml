@@ -118,6 +118,8 @@ walkdir     = "2"
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
+# pack_plan planner tests build a scratch zoned pack on disk.
+tempfile = { workspace = true }
 # The relocated "held looping voice over a streamed sample" test (engine::voice)
 # mmaps its FLAC fixture to feed `StreamedSample::open`.
 memmap2 = { workspace = true }

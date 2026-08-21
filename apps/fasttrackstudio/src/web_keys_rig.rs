@@ -122,6 +122,73 @@ impl Worklet {
         let _ = self.port.post_message(&o);
     }
 
+    /// Fire-and-forget message with a transferred buffer.
+    fn fire_transfer(&self, kind: &str, fields: &[(&str, JsValue)], transfer: &JsValue) {
+        let o = Self::obj(kind);
+        for (k, v) in fields {
+            Self::set(&o, k, v);
+        }
+        let _ = self
+            .port
+            .post_message_with_transferable(&o, &Array::of1(transfer));
+    }
+
+    /// One streamed plan segment for a progressive pack (fire-and-forget;
+    /// the buffer is TRANSFERRED to the worklet's JS heap).
+    fn pack_segment(&self, id: u32, start: u64, bytes: &[u8]) {
+        let arr = js_sys::Uint8Array::from(bytes);
+        let buf = arr.buffer();
+        self.fire_transfer(
+            "pack_segment",
+            &[
+                ("id", id.into()),
+                ("start", JsValue::from_f64(start as f64)),
+                ("bytes", buf.clone().into()),
+            ],
+            buf.as_ref(),
+        );
+    }
+
+    /// Attach a sparse (progressive) pack by id — its rank-0 segments must
+    /// already be pushed via [`pack_segment`](Self::pack_segment).
+    async fn attach_progressive(&self, key: &str, id: u32, len: u64) -> Result<(), String> {
+        let v = self
+            .rpc(
+                "attach_pack_progressive",
+                &[
+                    ("key", key.into()),
+                    ("id", id.into()),
+                    ("len", JsValue::from_f64(len as f64)),
+                ],
+                None,
+            )
+            .await?;
+        if v.as_bool() == Some(true) {
+            Ok(())
+        } else {
+            Err(format!("attach_pack_progressive: {}", js_str(v)))
+        }
+    }
+
+    /// Drain the worklet's read-miss list: `(pack id, start, len)` of
+    /// ranges the engine wanted but the sparse store did not hold.
+    async fn take_misses(&self) -> Vec<(u32, u64, u64)> {
+        let Ok(v) = self.rpc("take_misses", &[], None).await else {
+            return Vec::new();
+        };
+        let Ok(arr) = v.dyn_into::<Array>() else {
+            return Vec::new();
+        };
+        arr.iter()
+            .filter_map(|m| {
+                let id = Reflect::get(&m, &"id".into()).ok()?.as_f64()? as u32;
+                let start = Reflect::get(&m, &"start".into()).ok()?.as_f64()? as u64;
+                let len = Reflect::get(&m, &"len".into()).ok()?.as_f64()? as u64;
+                Some((id, start, len))
+            })
+            .collect()
+    }
+
     /// Raw 3-byte MIDI to every lane.
     pub(crate) fn midi(&self, status: u8, d1: u8, d2: u8) {
         let arr = Array::of3(&status.into(), &d1.into(), &d2.into());
@@ -310,6 +377,10 @@ pub(crate) enum PackPhase {
     Streaming,
     Verifying,
     Ready,
+    /// Attached and PLAYABLE (rank-0 landed; the worklet opens the pack
+    /// and decodes whatever segments exist) while detail keeps streaming.
+    /// `pct` = delivered sample segments / total sample segments.
+    Playable { pct: u8 },
     /// Streamed + cached in OPFS but NOT attached: the total pack bytes
     /// held by the worklet would cross the tab-memory sanity cap.
     /// Deliberately distinct from `Failed` — the bytes are here and
@@ -328,9 +399,15 @@ impl PackPhase {
             Self::Streaming => "streaming",
             Self::Verifying => "verifying",
             Self::Ready => "ready",
+            Self::Playable { .. } => "playable",
             Self::Deferred => "deferred (past the tab-memory sanity cap)",
             Self::Failed(_) => "failed",
         }
+    }
+
+    /// Attached and sounding (fully or partially).
+    fn usable(&self) -> bool {
+        matches!(self, Self::Ready | Self::Playable { .. })
     }
 }
 
@@ -354,6 +431,26 @@ struct PackRow {
     total: u64,
     bytes: u64,
     phase: PackPhase,
+    /// Sample segments DELIVERED to the worklet (rank-0 index segments
+    /// excluded) — the rig-wide Resolution numerator. Whole-file packs
+    /// are all-or-nothing: 0 until `Ready`, then `seg_total`.
+    seg_done: u32,
+    /// Total sample segments (1 for whole-file packs).
+    seg_total: u32,
+}
+
+/// Rig-wide Resolution (0–100): delivered sample segments over total
+/// sample segments across every pack the profile references. A pack still
+/// queued/streaming counts 0; whole-file packs flip all-at-once on ready.
+fn resolution_pct(rows: &[PackRow]) -> u32 {
+    let (done, total) = rows.iter().fold((0u64, 0u64), |(d, t), r| {
+        (d + u64::from(r.seg_done), t + u64::from(r.seg_total.max(1)))
+    });
+    if total == 0 {
+        return 100;
+    }
+    // Integer floor — only ALL segments delivered reads 100.
+    ((done * 100) / total) as u32
 }
 
 /// One lane row (from `KeysLaneProgram::lanes`).
@@ -393,6 +490,8 @@ struct RigHook {
     state: String,
     packs_json: String,
     master_peak: f64,
+    /// Rig-wide Resolution 0–100 (see [`resolution_pct`]).
+    resolution: f64,
 }
 
 thread_local! {
@@ -406,6 +505,9 @@ struct HookPack {
     state: String,
     bytes: u64,
     total: u64,
+    /// Failure text / playable pct — diagnostics for the e2e suite and
+    /// remote debugging (the popover shows the same string).
+    detail: String,
 }
 
 fn hook_set_state(state: &str) {
@@ -413,6 +515,7 @@ fn hook_set_state(state: &str) {
 }
 
 fn hook_set_packs(rows: &[PackRow]) {
+    let resolution = f64::from(resolution_pct(rows));
     let rows: Vec<HookPack> = rows
         .iter()
         .map(|r| HookPack {
@@ -420,10 +523,19 @@ fn hook_set_packs(rows: &[PackRow]) {
             state: r.phase.label().to_string(),
             bytes: r.bytes,
             total: r.total,
+            detail: match &r.phase {
+                PackPhase::Failed(e) => e.clone(),
+                PackPhase::Playable { pct } => format!("{pct}%"),
+                _ => String::new(),
+            },
         })
         .collect();
     let json = facet_json::to_string(&rows).unwrap_or_default();
-    RIG_HOOK.with(|h| h.borrow_mut().packs_json = json);
+    RIG_HOOK.with(|h| {
+        let mut h = h.borrow_mut();
+        h.packs_json = json;
+        h.resolution = resolution;
+    });
 }
 
 fn hook_set_peak(peak: f64) {
@@ -446,14 +558,19 @@ fn install_hook() {
     let peak = Closure::<dyn FnMut() -> JsValue>::new(|| {
         RIG_HOOK.with(|h| JsValue::from_f64(h.borrow().master_peak))
     });
+    let resolution = Closure::<dyn FnMut() -> JsValue>::new(|| {
+        RIG_HOOK.with(|h| JsValue::from_f64(h.borrow().resolution))
+    });
     let _ = Reflect::set(&obj, &"state".into(), state.as_ref());
     let _ = Reflect::set(&obj, &"packStates".into(), packs.as_ref());
     let _ = Reflect::set(&obj, &"masterPeak".into(), peak.as_ref());
+    let _ = Reflect::set(&obj, &"resolution".into(), resolution.as_ref());
     let _ = Reflect::set(&window, &"__ftsRig".into(), &obj);
     // Page-lifetime closures.
     state.forget();
     packs.forget();
     peak.forget();
+    resolution.forget();
 }
 
 // ── Engine plumbing ────────────────────────────────────────────────────────
@@ -557,9 +674,13 @@ pub fn KeysWebRig() -> Element {
         spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs));
     });
 
-    let ready_count = packs.read().iter().filter(|p| p.phase == PackPhase::Ready).count();
+    // Usable = attached and sounding (ready OR playable-while-filling);
+    // the badge answers "can I play it?", the Resolution meter answers
+    // "am I hearing all of it?".
+    let ready_count = packs.read().iter().filter(|p| p.phase.usable()).count();
     let pack_count = packs.read().len();
     let streaming = pack_count > ready_count;
+    let resolution = resolution_pct(&packs.read());
 
     rsx! {
         document::Style { {"html,body{margin:0;padding:0;height:100%;background:#0a0a0a;}*{box-sizing:border-box;}"} }
@@ -571,6 +692,32 @@ pub fn KeysWebRig() -> Element {
                 span { style: "font-weight:700; letter-spacing:1px; font-size:12px; color:#a1a1aa;", "FASTTRACKSTUDIO" }
                 span { style: "font-size:11px; letter-spacing:1px; color:#52525b; text-transform:uppercase;", "keys · {profile}" }
                 div { style: "flex:1;" }
+                // Rig-wide Resolution — PROMINENT: a player in the first
+                // minute must see the sound is not final yet.
+                if pack_count > 0 {
+                    if resolution < 100 {
+                        div {
+                            "data-testid": "rig-resolution",
+                            style: "display:flex; align-items:center; gap:8px;",
+                            title: "delivered sample detail across every soundsource",
+                            span { style: "font-size:11px; font-weight:700; letter-spacing:1px; color:#fbbf24;",
+                                "RESOLUTION {resolution}%"
+                            }
+                            div {
+                                style: "width:70px; height:6px; border-radius:3px; background:#18181b; border:1px solid #27272a; overflow:hidden;",
+                                div { style: "height:100%; width:{resolution}%; background:#fbbf24;" }
+                            }
+                        }
+                    } else {
+                        div {
+                            "data-testid": "rig-resolution",
+                            style: "display:flex; align-items:center;",
+                            span { style: "font-size:11px; font-weight:600; letter-spacing:1px; color:#22c55e;",
+                                "FULL RESOLUTION"
+                            }
+                        }
+                    }
+                }
                 MasterMeter { master }
                 button {
                     "data-testid": "ssm-button",
@@ -729,8 +876,10 @@ async fn boot_rig(
     // 5. Meter poll.
     spawn(poll_peaks(worklet.clone(), lanes, master));
 
-    // 6. Stream the packs, lane order (synth lanes are MBs — playable in
-    // seconds; the pianos fill in behind and reload their lanes).
+    // 6. Stream the packs, lane order. Small packs stream whole (the W6
+    // path — seconds); packs past PROGRESSIVE_THRESHOLD go PROGRESSIVE:
+    // plan + rank-0 + attach now (playable), detail afterwards. Phase A
+    // gets EVERY pack attached before any pack's detail fills in.
     packs.set(
         program
             .packs
@@ -742,14 +891,39 @@ async fn boot_rig(
                 total: 0,
                 bytes: 0,
                 phase: PackPhase::Queued,
+                seg_done: 0,
+                seg_total: 1,
             })
             .collect(),
     );
     hook_set_packs(&packs.peek());
     let listing = fetch_pack_listing(&target).await.unwrap_or_default();
-    for i in 0..program.packs.len() {
-        stream_one_pack(&target, &listing, i, packs, &worklet).await;
+    // Progressive (big) packs FIRST: their phase-A cost is a plan + a few
+    // MB of rank-0, and it turns a piano playable in seconds. Their
+    // detail fill then runs CONCURRENTLY with the small packs' whole-file
+    // streams (two vox connections — modest), so a key pressed in the
+    // first minute pulls its segment forward immediately.
+    let (big_idx, small_idx): (Vec<usize>, Vec<usize>) = {
+        let rows = packs.peek();
+        (0..rows.len()).partition(|&i| {
+            pick_variant(&listing, &rows[i].name)
+                .map(|w| w.size_bytes > web_packs::PROGRESSIVE_THRESHOLD)
+                .unwrap_or(false)
+        })
+    };
+    let mut jobs = Vec::new();
+    for i in big_idx {
+        if let Some(job) = stream_one_pack(&target, &listing, i, packs, &worklet).await {
+            jobs.push(job);
+        }
     }
+    let fill = run_progressive_fill(&target, jobs, packs, &worklet);
+    let whole = async {
+        for i in small_idx {
+            let _ = stream_one_pack(&target, &listing, i, packs, &worklet).await;
+        }
+    };
+    futures_util::join!(fill, whole);
     hook_set_state("ready");
 }
 
@@ -765,16 +939,19 @@ fn update_row(packs: &mut Signal<Vec<PackRow>>, i: usize, f: impl FnOnce(&mut Pa
 }
 
 /// OPFS-first fetch of one manifest pack, attach + lane reload on success.
+/// Packs past [`web_packs::PROGRESSIVE_THRESHOLD`] return a
+/// [`ProgressiveJob`]: attached PLAYABLE here (plan + rank-0), detail
+/// filled by [`run_progressive_fill`].
 async fn stream_one_pack(
     target: &EngineTarget,
     listing: &[PackInfo],
     i: usize,
     mut packs: Signal<Vec<PackRow>>,
     worklet: &Worklet,
-) {
+) -> Option<ProgressiveJob> {
     let (key, name) = {
         let rows = packs.peek();
-        let Some(row) = rows.get(i) else { return };
+        let row = rows.get(i)?;
         (row.key.clone(), row.name.clone())
     };
 
@@ -788,7 +965,7 @@ async fn stream_one_pack(
                 r.bytes = total;
             });
             attach_pack(worklet, &key, bytes, i, &mut packs).await;
-            return;
+            return None;
         }
     }
 
@@ -796,8 +973,11 @@ async fn stream_one_pack(
         update_row(&mut packs, i, |r| {
             r.phase = PackPhase::Failed("not offered by the pack host".into());
         });
-        return;
+        return None;
     };
+    if want.size_bytes > web_packs::PROGRESSIVE_THRESHOLD {
+        return start_progressive(target, &want, &key, i, packs, worklet).await;
+    }
     update_row(&mut packs, i, |r| {
         r.variant = want.variant.clone();
         r.total = want.size_bytes;
@@ -825,6 +1005,7 @@ async fn stream_one_pack(
         Ok(bytes) => attach_pack(worklet, &key, bytes, i, &mut packs).await,
         Err(e) => update_row(&mut packs, i, |r| r.phase = PackPhase::Failed(e)),
     }
+    None
 }
 
 /// Transfer the pack bytes into the worklet and reload the lanes so the
@@ -843,7 +1024,7 @@ async fn attach_pack(
     let resident: u64 = packs
         .read()
         .iter()
-        .filter(|r| r.phase == PackPhase::Ready)
+        .filter(|r| r.phase.usable())
         .map(|r| r.total)
         .sum();
     if resident + incoming > JS_PACK_RESIDENT_SANITY_CAP {
@@ -860,12 +1041,485 @@ async fn attach_pack(
     match attach {
         Ok(v) if v.as_bool() == Some(true) => {
             let _ = worklet.rpc("reload_lanes", &[], None).await;
-            update_row(packs, i, |r| r.phase = PackPhase::Ready);
+            update_row(packs, i, |r| {
+                r.phase = PackPhase::Ready;
+                r.seg_done = r.seg_total.max(1);
+            });
         }
         Ok(v) => update_row(packs, i, |r| {
             r.phase = PackPhase::Failed(format!("attach: {}", js_str(v)));
         }),
         Err(e) => update_row(packs, i, |r| r.phase = PackPhase::Failed(e)),
+    }
+}
+
+// ── Progressive streaming (W7) ─────────────────────────────────────────────
+
+/// Page-allocated worklet pack ids for progressive attaches. Starts at
+/// 2^20 so it can never collide with the processor's own whole-buffer
+/// counter (which starts at 1 and counts packs, not segments).
+fn next_prog_id() -> u32 {
+    thread_local! {
+        static NEXT: Cell<u32> = const { Cell::new(1 << 20) };
+    }
+    NEXT.with(|c| {
+        let v = c.get();
+        c.set(v + 1);
+        v
+    })
+}
+
+/// One attached-but-still-filling pack: the plan, what the worklet has,
+/// what OPFS has, and the fetch queue (misses jump the front).
+struct ProgressiveJob {
+    row: usize,
+    name: String,
+    variant: String,
+    /// Worklet pack id (page-allocated, see [`next_prog_id`]).
+    id: u32,
+    total: u64,
+    sha256: String,
+    segments: Vec<web_packs::SegRow>,
+    /// Parallel to `segments`: COMMITTED in the `.sparse` OPFS file
+    /// (persisted — what a refresh resumes from).
+    received: Vec<bool>,
+    /// Parallel to `segments`: delivered to the worklet this session.
+    delivered: Vec<bool>,
+    /// Segment indices still to fetch, rank order; misses move to front.
+    queue: std::collections::VecDeque<usize>,
+    /// A miss bumped this job's queue — service it before round-robin.
+    urgent: bool,
+    /// Indices written to OPFS since the last commit (only a COMMIT makes
+    /// them safe to mark `received` — OPFS writables persist on close).
+    uncommitted: Vec<usize>,
+    writer: web_packs::SparseWriter,
+    /// Sample segments (rank > 0) — the Resolution denominator share.
+    sample_total: u32,
+}
+
+impl ProgressiveJob {
+    fn sample_done(&self) -> u32 {
+        self.segments
+            .iter()
+            .zip(&self.delivered)
+            .filter(|(s, d)| s.rank > 0 && **d)
+            .count() as u32
+    }
+
+    fn playable_pct(&self) -> u8 {
+        if self.sample_total == 0 {
+            return 100;
+        }
+        ((u64::from(self.sample_done()) * 100) / u64::from(self.sample_total)) as u8
+    }
+
+    /// A worklet read-miss landed in `[start, start+len)` — move the plan
+    /// segments covering it (not yet delivered) to the queue front.
+    fn bump_range(&mut self, start: u64, len: u64) {
+        let end = start.saturating_add(len);
+        let hit: Vec<usize> = self
+            .segments
+            .iter()
+            .enumerate()
+            .filter(|(idx, s)| {
+                !self.delivered[*idx] && s.start < end && s.start + s.len > start
+            })
+            .map(|(idx, _)| idx)
+            .collect();
+        if hit.is_empty() {
+            return;
+        }
+        self.queue.retain(|i| !hit.contains(i));
+        for idx in hit.into_iter().rev() {
+            self.queue.push_front(idx);
+        }
+        self.urgent = true;
+    }
+
+    fn ledger(&self) -> web_packs::PlanLedger {
+        web_packs::PlanLedger {
+            name: self.name.clone(),
+            variant: self.variant.clone(),
+            total: self.total,
+            sha256: self.sha256.clone(),
+            segments: self.segments.clone(),
+            received: self.received.clone(),
+        }
+    }
+}
+
+/// Mirror a job's delivery state onto its pack row (phase / bytes /
+/// Resolution counters) and the JS hook.
+fn sync_progressive_row(job: &ProgressiveJob, packs: &mut Signal<Vec<PackRow>>) {
+    let bytes: u64 = job
+        .segments
+        .iter()
+        .zip(&job.delivered)
+        .filter(|(_, d)| **d)
+        .map(|(s, _)| s.len)
+        .sum();
+    let (done, pct) = (job.sample_done(), job.playable_pct());
+    update_row(packs, job.row, |r| {
+        r.bytes = bytes;
+        r.seg_done = done;
+        r.seg_total = job.sample_total.max(1);
+        r.phase = PackPhase::Playable { pct };
+    });
+}
+
+/// Start one progressive pack: plan (engine, else the stored ledger),
+/// resume delivered segments from OPFS, fetch any missing rank-0
+/// segments, attach + reload — the pack turns PLAYABLE here. Detail is
+/// [`run_progressive_fill`]'s job.
+async fn start_progressive(
+    target: &EngineTarget,
+    want: &PackWant,
+    key: &str,
+    i: usize,
+    mut packs: Signal<Vec<PackRow>>,
+    worklet: &Worklet,
+) -> Option<ProgressiveJob> {
+    let fail = |packs: &mut Signal<Vec<PackRow>>, msg: String| {
+        update_row(packs, i, |r| r.phase = PackPhase::Failed(msg));
+    };
+    update_row(&mut packs, i, |r| {
+        r.variant = want.variant.clone();
+        r.total = want.size_bytes;
+        r.phase = PackPhase::Streaming;
+    });
+    web_packs::request_persist().await;
+
+    // Plan: the engine's, validated against (or replaced by) the stored
+    // ledger so a refresh resumes instead of restarting. Total + sha come
+    // from the pack listing (`want`); the plan is only the segment tiling.
+    let fetched =
+        web_packs::fetch_pack_plan(target, &want.name, &want.variant, want.size_bytes).await;
+    let stored = web_packs::plan_ledger_get(&want.name, &want.variant).await;
+    let (total, sha256, segments, received) = match (fetched, stored) {
+        (Ok(plan), stored) => {
+            let segments: Vec<web_packs::SegRow> = plan
+                .iter()
+                .map(|s| web_packs::SegRow {
+                    start: s.start,
+                    len: s.len,
+                    rank: u32::try_from(s.rank).unwrap_or(u32::MAX),
+                })
+                .collect();
+            match stored {
+                Some(s) if s.matches(want.size_bytes, &segments) => {
+                    (want.size_bytes, want.sha256.clone(), segments, s.received)
+                }
+                _ => {
+                    // Plan changed (or first visit): stale sparse bytes
+                    // would fail the whole-file sha — start clean.
+                    web_packs::discard_sparse(&want.name, &want.variant).await;
+                    let n = segments.len();
+                    (want.size_bytes, want.sha256.clone(), segments, vec![false; n])
+                }
+            }
+        }
+        (Err(_), Some(s)) => {
+            // Offline: resume what the ledger knows; fetching waits for
+            // the host to come back.
+            let received = s.received.clone();
+            (s.total, s.sha256.clone(), s.segments, received)
+        }
+        (Err(e), None) => {
+            // Diagnostic: does read_range work where pack_plan failed?
+            let probe = match crate::remote::establish_verbose::<PackLibraryClient>(target).await {
+                Ok(c) => {
+                    match web_packs::read_range_to_vec(&c, &want.name, &want.variant, 0, 64).await {
+                        Ok(b) => format!("read_range probe OK ({} bytes)", b.len()),
+                        Err(pe) => format!("read_range probe FAILED: {pe}"),
+                    }
+                }
+                Err(ce) => format!("probe connect failed: {ce}"),
+            };
+            fail(&mut packs, format!("{e} [{probe}]"));
+            return None;
+        }
+    };
+    let sample_total = segments.iter().filter(|s| s.rank > 0).count() as u32;
+
+    let writer = match web_packs::SparseWriter::open(&want.name, &want.variant).await {
+        Ok(w) => w,
+        Err(e) => {
+            fail(&mut packs, format!("OPFS sparse file: {e}"));
+            return None;
+        }
+    };
+    let mut job = ProgressiveJob {
+        row: i,
+        name: want.name.clone(),
+        variant: want.variant.clone(),
+        id: next_prog_id(),
+        total,
+        sha256,
+        delivered: vec![false; segments.len()],
+        queue: std::collections::VecDeque::new(),
+        urgent: false,
+        uncommitted: Vec::new(),
+        writer,
+        sample_total,
+        segments,
+        received,
+    };
+    web_packs::plan_ledger_put(&job.ledger()).await;
+
+    // Resume: push already-committed bytes from OPFS to the worklet as
+    // CONTIGUOUS RUNS (the sparse store doesn't care about plan
+    // boundaries; runs keep a half-streamed piano to a handful of reads).
+    let sparse = web_packs::sparse_name(&job.name, &job.variant);
+    const MAX_RUN: u64 = 64 * 1024 * 1024;
+    let mut run: Option<(u64, u64, Vec<usize>)> = None; // (start, end, indices)
+    let mut runs: Vec<(u64, u64, Vec<usize>)> = Vec::new();
+    let mut order: Vec<usize> = (0..job.segments.len()).collect();
+    order.sort_by_key(|&idx| job.segments[idx].start);
+    for idx in order {
+        if !job.received[idx] {
+            continue;
+        }
+        let s = &job.segments[idx];
+        match &mut run {
+            Some((start, end, indices))
+                if *end == s.start && (s.start + s.len) - *start <= MAX_RUN =>
+            {
+                *end = s.start + s.len;
+                indices.push(idx);
+            }
+            _ => {
+                if let Some(r) = run.take() {
+                    runs.push(r);
+                }
+                run = Some((s.start, s.start + s.len, vec![idx]));
+            }
+        }
+    }
+    if let Some(r) = run.take() {
+        runs.push(r);
+    }
+    for (start, end, indices) in runs {
+        match web_packs::read_file_slice(&sparse, start, end - start).await {
+            Ok(bytes) => {
+                worklet.pack_segment(job.id, start, &bytes);
+                for idx in indices {
+                    job.delivered[idx] = true;
+                }
+            }
+            Err(_) => {
+                // The sparse file disagrees with the ledger — treat those
+                // segments as missing and refetch them.
+                for idx in indices {
+                    job.received[idx] = false;
+                }
+            }
+        }
+    }
+
+    // Rank-0 segments the resume did not cover come from the network NOW —
+    // the attach cannot succeed without them.
+    let rank0_missing: Vec<usize> = job
+        .segments
+        .iter()
+        .enumerate()
+        .filter(|(idx, s)| s.rank == 0 && !job.delivered[*idx])
+        .map(|(idx, _)| idx)
+        .collect();
+    if !rank0_missing.is_empty() {
+        let client: PackLibraryClient = match crate::remote::establish_verbose(target).await {
+            Ok(c) => c,
+            Err(e) => {
+                fail(&mut packs, format!("pack host unreachable: {e}"));
+                return None;
+            }
+        };
+        for idx in rank0_missing {
+            let seg = job.segments[idx];
+            match web_packs::read_range_to_vec(&client, &job.name, &job.variant, seg.start, seg.len)
+                .await
+            {
+                Ok(bytes) => {
+                    worklet.pack_segment(job.id, seg.start, &bytes);
+                    if let Err(e) = job.writer.write_at(seg.start, &bytes).await {
+                        fail(&mut packs, format!("OPFS write: {e}"));
+                        return None;
+                    }
+                    job.delivered[idx] = true;
+                    job.uncommitted.push(idx);
+                }
+                Err(e) => {
+                    fail(&mut packs, e);
+                    return None;
+                }
+            }
+        }
+        // Commit rank-0 immediately — the open set is the one part a
+        // refresh must never lose.
+        if job.writer.commit().await.is_ok() {
+            for idx in job.uncommitted.drain(..) {
+                job.received[idx] = true;
+            }
+            web_packs::plan_ledger_put(&job.ledger()).await;
+        }
+    }
+
+    // Attach (rank-0 is in the worklet's sparse store) + reload lanes.
+    if let Err(e) = worklet.attach_progressive(key, job.id, job.total).await {
+        fail(&mut packs, e);
+        return None;
+    }
+    let _ = worklet.rpc("reload_lanes", &[], None).await;
+
+    // Queue the rest in rank order.
+    let mut pending: Vec<usize> =
+        (0..job.segments.len()).filter(|&idx| !job.delivered[idx]).collect();
+    pending.sort_by_key(|&idx| (job.segments[idx].rank, job.segments[idx].start));
+    job.queue = pending.into();
+
+    sync_progressive_row(&job, &mut packs);
+    if job.queue.is_empty() {
+        finalize_progressive_job(job, &mut packs).await;
+        return None;
+    }
+    Some(job)
+}
+
+/// Phase B: fill in every progressive pack's detail, one segment at a
+/// time over ONE shared connection, misses first (~1 Hz poll of the
+/// worklet's read-miss list — a played hole jumps the queue).
+async fn run_progressive_fill(
+    target: &EngineTarget,
+    mut jobs: Vec<ProgressiveJob>,
+    mut packs: Signal<Vec<PackRow>>,
+    worklet: &Worklet,
+) {
+    if jobs.is_empty() {
+        return;
+    }
+    let mut client: Option<PackLibraryClient> = None;
+    let mut last_miss_poll = 0.0f64;
+    while !jobs.is_empty() {
+        // ── Misses jump the queue (rate-limited ~1 Hz) ───────────────────
+        let now = js_sys::Date::now();
+        if now - last_miss_poll >= 1000.0 {
+            last_miss_poll = now;
+            for (id, start, len) in worklet.take_misses().await {
+                if let Some(job) = jobs.iter_mut().find(|j| j.id == id) {
+                    job.bump_range(start, len);
+                }
+            }
+        }
+
+        // ── Pick: urgent (miss-bumped) jobs first, else the first open ───
+        let ji = jobs
+            .iter()
+            .position(|j| j.urgent && !j.queue.is_empty())
+            .or_else(|| jobs.iter().position(|j| !j.queue.is_empty()));
+        let Some(ji) = ji else {
+            // Queues are empty but jobs remain — finalize stragglers.
+            for job in jobs.drain(..) {
+                finalize_progressive_job(job, &mut packs).await;
+            }
+            break;
+        };
+        let (idx, seg, row, name, variant) = {
+            let job = &mut jobs[ji];
+            job.urgent = false;
+            let Some(idx) = job.queue.pop_front() else { continue };
+            if job.delivered[idx] {
+                continue;
+            }
+            (idx, job.segments[idx], job.row, job.name.clone(), job.variant.clone())
+        };
+
+        // ── Fetch: establish lazily, one reconnect, then give up ─────────
+        let mut fetched: Result<Vec<u8>, String> = Err("not attempted".into());
+        for _attempt in 0..2 {
+            if client.is_none() {
+                match crate::remote::establish_verbose(target).await {
+                    Ok(c) => client = Some(c),
+                    Err(e) => {
+                        fetched = Err(format!("pack host unreachable: {e}"));
+                        continue;
+                    }
+                }
+            }
+            let c = client.as_ref().expect("client established");
+            match web_packs::read_range_to_vec(c, &name, &variant, seg.start, seg.len).await {
+                Ok(bytes) => {
+                    fetched = Ok(bytes);
+                    break;
+                }
+                Err(e) => {
+                    // Drop the (possibly dead) connection; the next
+                    // attempt re-establishes.
+                    client = None;
+                    fetched = Err(e);
+                }
+            }
+        }
+        let bytes = match fetched {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                update_row(&mut packs, row, |r| r.phase = PackPhase::Failed(e));
+                jobs.remove(ji);
+                continue;
+            }
+        };
+        let job = &mut jobs[ji];
+
+        // ── Deliver to the worklet (audible immediately) + persist ───────
+        worklet.pack_segment(job.id, seg.start, &bytes);
+        job.delivered[idx] = true;
+        match job.writer.write_at(seg.start, &bytes).await {
+            Ok(committed) => {
+                job.uncommitted.push(idx);
+                if committed {
+                    for u in job.uncommitted.drain(..) {
+                        job.received[u] = true;
+                    }
+                    web_packs::plan_ledger_put(&job.ledger()).await;
+                }
+            }
+            Err(e) => {
+                // OPFS trouble: keep streaming into the worklet (audible >
+                // resumable), but this session won't refresh-resume.
+                tracing::warn!("sparse write failed for {}: {e}", job.name);
+            }
+        }
+        sync_progressive_row(job, &mut packs);
+
+        if job.queue.is_empty() {
+            let job = jobs.remove(ji);
+            finalize_progressive_job(job, &mut packs).await;
+        }
+    }
+}
+
+/// All segments delivered: final OPFS commit, whole-file sha verify,
+/// rename into place, row → `Ready`.
+async fn finalize_progressive_job(mut job: ProgressiveJob, packs: &mut Signal<Vec<PackRow>>) {
+    if job.writer.commit().await.is_ok() {
+        for u in job.uncommitted.drain(..) {
+            job.received[u] = true;
+        }
+    }
+    // Everything written is now committed; the ledger is about to be
+    // dropped by finalize on success anyway.
+    for r in job.received.iter_mut() {
+        *r = true;
+    }
+    web_packs::plan_ledger_put(&job.ledger()).await;
+    let ProgressiveJob { name, variant, total, sha256, row, writer, sample_total, .. } = job;
+    let _ = writer.finish().await;
+    match web_packs::finalize_progressive(&name, &variant, total, &sha256).await {
+        Ok(()) => update_row(packs, row, |r| {
+            r.bytes = total;
+            r.seg_done = sample_total.max(1);
+            r.seg_total = sample_total.max(1);
+            r.phase = PackPhase::Ready;
+        }),
+        Err(e) => update_row(packs, row, |r| r.phase = PackPhase::Failed(e)),
     }
 }
 
@@ -1017,6 +1671,10 @@ fn PackRowView(
         PackPhase::Streaming => ("#fbbf24", format!("{} / {}", mb(row.bytes), mb(row.total))),
         PackPhase::Verifying => ("#38bdf8", "sha256…".into()),
         PackPhase::Ready => ("#22c55e", mb(row.total)),
+        // Amber-green: sounding, still gaining detail.
+        PackPhase::Playable { pct } => {
+            ("#a3e635", format!("playable — loading detail {pct}%"))
+        }
         PackPhase::Deferred => ("#a78bfa", "cached — past the tab-memory sanity cap".into()),
         PackPhase::Failed(e) => ("#ef4444", e.clone()),
     };
@@ -1032,11 +1690,15 @@ fn PackRowView(
             update_row(&mut packs, index, |r| {
                 r.phase = PackPhase::Queued;
                 r.bytes = 0;
+                r.seg_done = 0;
+                r.seg_total = 1;
             });
             let target = EngineTarget::current();
             let listing = fetch_pack_listing(&target).await.unwrap_or_default();
             if let Some(w) = worklet.peek().clone() {
-                stream_one_pack(&target, &listing, index, packs, &w).await;
+                if let Some(job) = stream_one_pack(&target, &listing, index, packs, &w).await {
+                    run_progressive_fill(&target, vec![job], packs, &w).await;
+                }
             }
         });
     };
@@ -1056,6 +1718,8 @@ fn PackRowView(
                 update_row(&mut packs, index, |r| {
                     r.phase = PackPhase::Queued;
                     r.bytes = 0;
+                    r.seg_done = 0;
+                    r.seg_total = 1;
                 });
             });
         }
@@ -1265,6 +1929,14 @@ fn LaneList(
     let pack_phase = |key: &str| -> Option<PackPhase> {
         packs.read().iter().find(|p| p.key == key).map(|p| p.phase.clone())
     };
+    let pack_name = |key: &str| -> String {
+        packs
+            .read()
+            .iter()
+            .find(|p| p.key == key)
+            .map(|p| p.name.clone())
+            .unwrap_or_default()
+    };
     rsx! {
         div { style: "display:flex; flex-direction:column; gap:6px;",
             for (i, row) in rows.iter().enumerate() {
@@ -1275,6 +1947,8 @@ fn LaneList(
                         None | Some(PackPhase::Queued) => ("#52525b", "waiting"),
                         Some(PackPhase::Streaming) | Some(PackPhase::Verifying) => ("#fbbf24", "streaming"),
                         Some(PackPhase::Ready) => ("#22c55e", "ready"),
+                        // Distinct "filling in": playable now, detail streaming.
+                        Some(PackPhase::Playable { .. }) => ("#a3e635", "playable — filling in"),
                         Some(PackPhase::Deferred) => ("#a78bfa", "pack cached, not resident"),
                         Some(PackPhase::Failed(_)) => ("#ef4444", "failed"),
                     };
@@ -1282,9 +1956,12 @@ fn LaneList(
                     let vol_pct = (row.volume * 80.0) as i64;
                     let track = row.track;
                     let muted = row.muted;
+                    let lane_pack = pack_name(&row.key);
                     rsx! {
                         div {
                             key: "{row.engine}/{row.name}",
+                            "data-testid": "lane-row-{i}",
+                            "data-pack-name": "{lane_pack}",
                             style: "display:flex; align-items:center; gap:10px; padding:8px 12px; border:1px solid #27272a; border-radius:8px; background:#111113;",
                             span { style: "width:8px; height:8px; border-radius:999px; background:{dot}; flex:none;", title: "{dot_title}" }
                             div { style: "display:flex; flex-direction:column; min-width:140px;",
@@ -1304,6 +1981,7 @@ fn LaneList(
                                 },
                             }
                             button {
+                                "data-testid": "lane-mute-{i}",
                                 style: if muted {
                                     "padding:1px 8px; border-radius:4px; background:#7f1d1d; color:#fecaca; border:1px solid #7f1d1d; font-size:11px; cursor:pointer;"
                                 } else {

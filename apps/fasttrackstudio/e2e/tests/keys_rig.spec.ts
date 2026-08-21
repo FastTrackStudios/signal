@@ -15,6 +15,12 @@ test.beforeAll(async ({ browser }) => {
   // ONE context for the whole suite: the refresh-resume test relies on
   // OPFS/IDB persisting across a reload in the same context.
   context = await browser.newContext();
+  // Pin the page's engine target to THIS suite's scratch engine — the
+  // page's dev-server heuristic must never route it to the live :4040.
+  const wsUrl = `${process.env.FTS_E2E_BASEURL!.replace(/^http/, 'ws')}/vox`;
+  await context.addInitScript((url) => {
+    localStorage.setItem('fts.signal-engine-ws-url', url);
+  }, wsUrl);
   page = await context.newPage();
 });
 
@@ -75,8 +81,10 @@ test('boot: rig starts, streams ALL packs to ready — none deferred', async () 
   // W6 (attach-by-handle): every pack in the Worship set attaches — the
   // bytes live on the worklet's JS heap, so nothing defers on wasm memory.
   // Dolceola (841 MB) + Clavichord (574 MB) stream from local disk; the
-  // full set is ~2.4 GB, so the ready wait gets a generous budget.
-  test.setTimeout(360_000);
+  // full set is ~2.4 GB. Since W7 the big packs go PROGRESSIVE (playable
+  // in seconds, then per-segment detail fill), which trades whole-file
+  // throughput for playability — the all-ready wait gets a bigger budget.
+  test.setTimeout(720_000);
   await page.goto('/rigs/keys/worship');
   await page.getByTestId('rig-start').click();
 
@@ -91,14 +99,14 @@ test('boot: rig starts, streams ALL packs to ready — none deferred', async () 
   await pollUntil(
     rigState,
     (s) => s === 'ready',
-    300_000, 1000, "state() to reach 'ready'",
+    600_000, 1000, "state() to reach 'ready'",
   );
 
   // EVERY pack row must be fully resident — none deferred, none failed.
   const states = await pollUntil(
     packStates,
     (ps) => ps.length > 0 && ps.every((p) => p.state === 'ready'),
-    300_000, 1000, 'ALL packs to be ready',
+    600_000, 1000, 'ALL packs to be ready',
   );
   // The Worship program references nine packed soundsources (PHAT Bass is
   // synthesis-mode — no pack); every one must attach.

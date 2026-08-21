@@ -7,9 +7,22 @@ authors.workspace = true
 
 [dependencies]
 signal-packs-proto.workspace = true
+# The range-streaming planner (`signal_sampler::pack_plan`) — ranks a
+# pack's entries musically from its embedded spec. Native-only crate;
+# the engine (this backend's one consumer) links signal-sampler anyway.
+signal-sampler.workspace = true
+# pack_plan replies ride as facet-json text (see the trait docs).
+facet-json.workspace = true
 architect = { workspace = true, features = ["vox"] }
 vox.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util"] }
 walkdir.workspace = true
 sha2.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+# In-process vox roundtrip of the W7 plan/range RPCs (tests/plan_roundtrip.rs).
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+tempfile = { workspace = true }
+hound = "3.5"
+futures-util = { workspace = true }

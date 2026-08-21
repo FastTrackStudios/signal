@@ -32,6 +32,11 @@ use crate::remote::EngineTarget;
 /// Commit interval — how much streamed data a refresh can lose.
 const FLUSH_BYTES: u64 = 16 * 1024 * 1024;
 
+/// Packs at or under this stream whole-file (the W6 path — they finish in
+/// seconds); larger packs go PROGRESSIVE: plan + ranged segments, playable
+/// after rank 0.
+pub(crate) const PROGRESSIVE_THRESHOLD: u64 = 32 * 1024 * 1024;
+
 /// Progress callbacks out of [`ensure_pack`].
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum PackEvent {
@@ -494,11 +499,310 @@ pub(crate) async fn ensure_pack(
     read_bytes(&dir, &file).await
 }
 
-/// Drop a pack from the cache (bytes + ledger). In-flight `.part`s go too.
+/// Drop a pack from the cache (bytes + ledger). In-flight `.part`s and
+/// progressive `.sparse` files (with their plan ledgers) go too.
 pub(crate) async fn delete_pack(name: &str, variant: &str) -> Result<(), String> {
     let dir = packs_dir().await?;
     let file = format!("{name}.{variant}.signalpack");
     remove_file(&dir, &file).await;
     remove_file(&dir, &format!("{file}.part")).await;
+    remove_file(&dir, &format!("{file}.sparse")).await;
+    let _ = idb_delete(&plan_key(name, variant)).await;
     idb_delete(&ledger_key(name, variant)).await
+}
+
+// ── Progressive (W7): plan ledger + sparse OPFS file + ranged fetch ────────
+
+/// One plan segment as persisted in the plan ledger (label dropped — it is
+/// diagnostics-only and a piano plan has thousands of rows).
+#[derive(Clone, Copy, Debug, Default, facet::Facet)]
+pub(crate) struct SegRow {
+    pub start: u64,
+    pub len: u64,
+    pub rank: u32,
+}
+
+/// The progressive download ledger for one pack, under key
+/// `plan:<name>.<variant>`: the fetched plan plus which segments are
+/// COMMITTED in the `.sparse` OPFS file. Refresh-resume = re-send the
+/// received segments to the worklet from OPFS, keep fetching the rest.
+#[derive(Clone, Debug, Default, facet::Facet)]
+pub(crate) struct PlanLedger {
+    pub name: String,
+    pub variant: String,
+    pub total: u64,
+    pub sha256: String,
+    pub segments: Vec<SegRow>,
+    /// Parallel to `segments`: committed to OPFS.
+    pub received: Vec<bool>,
+}
+
+impl PlanLedger {
+    pub(crate) fn received_count(&self) -> usize {
+        self.received.iter().filter(|r| **r).count()
+    }
+
+    /// Whether every rank-0 segment (the pack open set) is committed.
+    pub(crate) fn rank0_complete(&self) -> bool {
+        self.segments
+            .iter()
+            .zip(&self.received)
+            .all(|(s, r)| s.rank != 0 || *r)
+    }
+
+    /// Same plan as `other`? (shape check for resume — a rebuilt pack
+    /// invalidates the sparse cache).
+    pub(crate) fn matches(&self, total: u64, segments: &[SegRow]) -> bool {
+        self.total == total
+            && self.segments.len() == segments.len()
+            && self
+                .segments
+                .iter()
+                .zip(segments)
+                .all(|(a, b)| a.start == b.start && a.len == b.len)
+    }
+}
+
+fn plan_key(name: &str, variant: &str) -> String {
+    format!("plan:{name}.{variant}")
+}
+
+pub(crate) async fn plan_ledger_get(name: &str, variant: &str) -> Option<PlanLedger> {
+    let json = idb_get(&plan_key(name, variant)).await.ok()??;
+    facet_json::from_str(&json).ok()
+}
+
+pub(crate) async fn plan_ledger_put(ledger: &PlanLedger) {
+    if let Ok(json) = facet_json::to_string(ledger) {
+        let _ = idb_put(&plan_key(&ledger.name, &ledger.variant), &json).await;
+    }
+}
+
+pub(crate) async fn plan_ledger_delete(name: &str, variant: &str) {
+    let _ = idb_delete(&plan_key(name, variant)).await;
+}
+
+/// The pack's sparse OPFS file name (true offsets; becomes the final file
+/// by rename once complete + verified).
+pub(crate) fn sparse_name(name: &str, variant: &str) -> String {
+    format!("{name}.{variant}.signalpack.sparse")
+}
+
+/// Drop a stale `.sparse` file (plan changed / fresh start).
+pub(crate) async fn discard_sparse(name: &str, variant: &str) {
+    if let Ok(dir) = packs_dir().await {
+        remove_file(&dir, &sparse_name(name, variant)).await;
+    }
+}
+
+/// Read `[start, start+len)` of an OPFS packs file into a Vec.
+pub(crate) async fn read_file_slice(
+    file_name: &str,
+    start: u64,
+    len: u64,
+) -> Result<Vec<u8>, String> {
+    let dir = packs_dir().await?;
+    let handle = file_handle(&dir, file_name, false).await?;
+    let file = file_of(&handle).await?;
+    let slice = file
+        .slice_with_f64_and_f64(start as f64, (start + len) as f64)
+        .map_err(js_str)?;
+    let buf = JsFuture::from(slice.array_buffer()).await.map_err(js_str)?;
+    Ok(Uint8Array::new(&buf).to_vec())
+}
+
+/// A random-access writer over the `.sparse` file. Same OPFS semantics as
+/// [`PartWriter`] (writables only persist on close), so it commits every
+/// [`FLUSH_BYTES`]; only COMMITTED segments may be marked received in the
+/// plan ledger.
+pub(crate) struct SparseWriter {
+    dir: FileSystemDirectoryHandle,
+    name: String,
+    stream: FileSystemWritableFileStream,
+    pending: u64,
+}
+
+impl SparseWriter {
+    pub(crate) async fn open(name: &str, variant: &str) -> Result<Self, String> {
+        let dir = packs_dir().await?;
+        let file = sparse_name(name, variant);
+        let stream = Self::stream_of(&dir, &file).await?;
+        Ok(SparseWriter { dir, name: file, stream, pending: 0 })
+    }
+
+    async fn stream_of(
+        dir: &FileSystemDirectoryHandle,
+        name: &str,
+    ) -> Result<FileSystemWritableFileStream, String> {
+        let handle = file_handle(dir, name, true).await?;
+        let opts = FileSystemCreateWritableOptions::new();
+        opts.set_keep_existing_data(true);
+        let stream = JsFuture::from(handle.create_writable_with_options(&opts))
+            .await
+            .map_err(js_str)?;
+        stream.dyn_into().map_err(|_| "not a writable".to_string())
+    }
+
+    /// Write `bytes` at absolute offset `start`. Returns `true` when this
+    /// write triggered a commit (safe point for ledger updates).
+    pub(crate) async fn write_at(&mut self, start: u64, bytes: &[u8]) -> Result<bool, String> {
+        JsFuture::from(self.stream.seek_with_f64(start as f64).map_err(js_str)?)
+            .await
+            .map_err(js_str)?;
+        let p = self.stream.write_with_u8_array(bytes).map_err(js_str)?;
+        JsFuture::from(p).await.map_err(js_str)?;
+        self.pending += bytes.len() as u64;
+        if self.pending >= FLUSH_BYTES {
+            self.commit().await?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    /// Close (persisting everything written) and reopen.
+    pub(crate) async fn commit(&mut self) -> Result<(), String> {
+        JsFuture::from(self.stream.close()).await.map_err(js_str)?;
+        self.pending = 0;
+        self.stream = Self::stream_of(&self.dir, &self.name).await?;
+        Ok(())
+    }
+
+    /// Final close.
+    pub(crate) async fn finish(self) -> Result<(), String> {
+        JsFuture::from(self.stream.close()).await.map_err(js_str)?;
+        Ok(())
+    }
+}
+
+/// Fetch one plan for `(name, variant)` from the pack host. `total` is
+/// the listing's `size_bytes` — an honest plan's segments sum to exactly
+/// that (the tiling invariant), which doubles as the staleness check.
+pub(crate) async fn fetch_pack_plan(
+    target: &EngineTarget,
+    name: &str,
+    variant: &str,
+    total: u64,
+) -> Result<Vec<signal_packs_proto::PackSegment>, String> {
+    let client: PackLibraryClient = crate::remote::establish_verbose(target)
+        .await
+        .map_err(|e| format!("pack host unreachable: {e}"))?;
+    // The plan streams as chunked JSON bytes over the VIRTUAL-NAME `read`
+    // (see the proto docs): `read` is the one method signature the wasm
+    // client provably drives — every dedicated new method (any reply
+    // shape, sync or async) fails the browser-side phon schema compat
+    // with "writer and reader schema kinds differ" while working
+    // natively.
+    let (tx, mut rx) = vox::channel::<PackChunk>();
+    let call = client.read(format!("plan:{name}"), variant.to_string(), 0, tx);
+    let mut json_bytes: Vec<u8> = Vec::new();
+    let drain = async {
+        let mut at = 0u64;
+        while let Ok(Some(chunk)) = rx.recv().await {
+            let chunk = chunk.get();
+            if chunk.offset != at {
+                return Err(format!("plan chunk gap at {} (expected {at})", chunk.offset));
+            }
+            json_bytes.extend_from_slice(&chunk.bytes);
+            at += chunk.bytes.len() as u64;
+        }
+        Ok(())
+    };
+    let (call_result, drain_result) = futures_util::join!(call, drain);
+    drain_result?;
+    call_result.map_err(|e| format!("pack_plan: {e:?}"))?;
+    let json = String::from_utf8(json_bytes).map_err(|e| format!("plan utf8: {e}"))?;
+    if json.trim().is_empty() {
+        return Err("pack host returned no plan for this pack".into());
+    }
+    let segments: Vec<signal_packs_proto::PackSegment> =
+        facet_json::from_str(&json).map_err(|e| format!("pack_plan json: {e}"))?;
+    if segments.is_empty() {
+        return Err("pack host returned no plan for this pack".into());
+    }
+    let covered: u64 = segments.iter().map(|s| s.len).sum();
+    if covered != total {
+        return Err(format!(
+            "plan covers {covered} bytes but the listing says {total} — stale listing?"
+        ));
+    }
+    Ok(segments)
+}
+
+/// Fetch exactly `[start, start+len)` of a pack over an ESTABLISHED
+/// client (callers reuse one connection across a fill session).
+pub(crate) async fn read_range_to_vec(
+    client: &PackLibraryClient,
+    name: &str,
+    variant: &str,
+    start: u64,
+    len: u64,
+) -> Result<Vec<u8>, String> {
+    // Virtual-name `read` (see `fetch_pack_plan` for why not the
+    // dedicated `read_range` method from wasm).
+    let (tx, mut rx) = vox::channel::<PackChunk>();
+    let call = client.read(
+        format!("range:{}:{name}", signal_packs_proto::PackRange { start, len }),
+        variant.to_string(),
+        0,
+        tx,
+    );
+    let mut out = Vec::with_capacity(usize::try_from(len).unwrap_or(0));
+    let drain = async {
+        let mut at = start;
+        while let Ok(Some(chunk)) = rx.recv().await {
+            let chunk = chunk.get();
+            if chunk.offset != at {
+                return Err(format!("non-contiguous chunk at {} (expected {at})", chunk.offset));
+            }
+            out.extend_from_slice(&chunk.bytes);
+            at += chunk.bytes.len() as u64;
+        }
+        Ok(())
+    };
+    let (call_result, drain_result) = futures_util::join!(call, drain);
+    drain_result?;
+    call_result.map_err(|e| format!("read_range: {e:?}"))?;
+    if out.len() as u64 != len {
+        return Err(format!("short range: {} of {len} bytes", out.len()));
+    }
+    Ok(out)
+}
+
+/// Finalize a completed progressive download: verify the whole-file
+/// sha256 (when known), rename `.sparse` → the final pack name, write the
+/// ready [`LedgerRow`], and drop the plan ledger. On sha mismatch the
+/// sparse file and plan ledger are removed so a retry restarts clean.
+pub(crate) async fn finalize_progressive(
+    name: &str,
+    variant: &str,
+    total: u64,
+    sha256: &str,
+) -> Result<(), String> {
+    let dir = packs_dir().await?;
+    let sparse = sparse_name(name, variant);
+    let size = file_size(&dir, &sparse).await.unwrap_or(0);
+    if size != total {
+        return Err(format!("sparse file is {size} bytes, expected {total}"));
+    }
+    if !sha256.is_empty() {
+        let actual = sha256_file(&dir, &sparse).await?;
+        if actual != sha256 {
+            remove_file(&dir, &sparse).await;
+            plan_ledger_delete(name, variant).await;
+            return Err("sha256 mismatch — corrupt download removed, retry".into());
+        }
+    }
+    let file = format!("{name}.{variant}.signalpack");
+    rename(&dir, &sparse, &file).await?;
+    ledger_put(&LedgerRow {
+        name: name.to_string(),
+        variant: variant.to_string(),
+        expected_size: total,
+        sha256: sha256.to_string(),
+        bytes: total,
+        state: "ready".into(),
+    })
+    .await;
+    plan_ledger_delete(name, variant).await;
+    Ok(())
 }

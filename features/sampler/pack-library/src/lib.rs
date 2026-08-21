@@ -12,9 +12,11 @@ use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use std::collections::HashMap;
+
 use architect::{Layer, Services, layers};
 use signal_packs_proto::packs::PackLibrary;
-use signal_packs_proto::{PackChunk, PackError, PackInfo};
+use signal_packs_proto::{PackChunk, PackError, PackInfo, PackRange, PackSegment};
 use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _};
 
 /// Default library root scanned when `FTS_PACK_LIBRARY` is unset.
@@ -33,6 +35,11 @@ struct Entry {
 #[derive(Clone, architect::HasDispatcher)]
 pub struct PackLibraryBackend {
     entries: Arc<Mutex<Vec<Entry>>>,
+    /// Memoized range-streaming plans (facet-json of `Vec<PackSegment>`),
+    /// keyed `(name, variant)` — planning re-opens the pack (header +
+    /// index), so a piano's plan is computed once per process, not once
+    /// per client.
+    plans: Arc<Mutex<HashMap<(String, String), String>>>,
 }
 
 impl Default for PackLibraryBackend {
@@ -54,7 +61,8 @@ impl PackLibraryBackend {
         let root = root.into();
         let entries = scan(&root);
         tracing::info!(root = %root.display(), packs = entries.len(), "pack library scanned");
-        let backend = Self { entries: Arc::new(Mutex::new(entries)) };
+        let backend =
+            Self { entries: Arc::new(Mutex::new(entries)), plans: Arc::new(Mutex::new(HashMap::new())) };
         backend.spawn_hasher();
         backend
     }
@@ -122,6 +130,17 @@ impl PackLibrary for PackLibraryBackend {
         start: u64,
         tx: vox::Tx<PackChunk>,
     ) -> Result<(), PackError> {
+        // Virtual names (see the trait docs) — the browser's route to the
+        // W7 plan/range operations over the one proven wire signature.
+        if let Some(pname) = name.strip_prefix("plan:") {
+            return self.pack_plan(pname.to_string(), variant, start, tx).await;
+        }
+        if let Some(rest) = name.strip_prefix("range:") {
+            let (range, pname) = rest.split_once(':').ok_or_else(|| {
+                PackError::InvalidRange("virtual name is not range:<start>+<len>:<name>".into())
+            })?;
+            return self.read_range(pname.to_string(), variant, range.to_string(), tx).await;
+        }
         let entry = self.find(&name, &variant).ok_or(PackError::NotFound)?;
         let size = entry.info.size_bytes;
         if start > size {
@@ -146,6 +165,122 @@ impl PackLibrary for PackLibraryBackend {
             }
             offset += n as u64;
         }
+    }
+
+    async fn read_range(
+        &self,
+        name: String,
+        variant: String,
+        range: String,
+        tx: vox::Tx<PackChunk>,
+    ) -> Result<(), PackError> {
+        let range: PackRange = range.parse().map_err(PackError::InvalidRange)?;
+        let entry = self.find(&name, &variant).ok_or(PackError::NotFound)?;
+        let size = entry.info.size_bytes;
+        let end = range
+            .start
+            .checked_add(range.len)
+            .filter(|&e| e <= size)
+            .ok_or_else(|| {
+                PackError::InvalidRange(format!(
+                    "range {}+{} exceeds size {size}",
+                    range.start, range.len
+                ))
+            })?;
+        let mut file = tokio::fs::File::open(&entry.path)
+            .await
+            .map_err(|e| PackError::Io(e.to_string()))?;
+        file.seek(std::io::SeekFrom::Start(range.start))
+            .await
+            .map_err(|e| PackError::Io(e.to_string()))?;
+        let mut offset = range.start;
+        let mut buf = vec![0u8; CHUNK_BYTES];
+        while offset < end {
+            let want = usize::try_from((end - offset).min(CHUNK_BYTES as u64))
+                .expect("chunk fits usize");
+            let n = file
+                .read(&mut buf[..want])
+                .await
+                .map_err(|e| PackError::Io(e.to_string()))?;
+            if n == 0 {
+                return Err(PackError::Io(format!(
+                    "pack truncated at {offset} (wanted {end})"
+                )));
+            }
+            if tx.send(PackChunk { offset, bytes: buf[..n].to_vec() }).await.is_err() {
+                // Receiver went away (fetch cancelled) — not an error.
+                return Ok(());
+            }
+            offset += n as u64;
+        }
+        Ok(())
+    }
+
+    /// Stream the prioritized plan (facet-json of `Vec<PackSegment>`,
+    /// UTF-8 bytes chunked like a pack read — see the trait docs for why
+    /// it is a byte stream). Planning itself is a header + index read (a
+    /// few MB even for a multi-GB pack), memoized per pack, and run off
+    /// the async executor.
+    async fn pack_plan(
+        &self,
+        name: String,
+        variant: String,
+        start: u64,
+        tx: vox::Tx<PackChunk>,
+    ) -> Result<(), PackError> {
+        let entry = self.find(&name, &variant).ok_or(PackError::NotFound)?;
+        let total = entry.info.size_bytes;
+        let key = (name, variant);
+        let cached = self.plans.lock().ok().and_then(|p| p.get(&key).cloned());
+        let json = match cached {
+            Some(json) => json,
+            None => {
+                let path = entry.path.clone();
+                let planned = tokio::task::spawn_blocking(move || {
+                    signal_sampler::pack_plan::plan_pack_file(&path)
+                })
+                .await
+                .map_err(|e| PackError::Io(e.to_string()))?
+                .map_err(|e| PackError::Io(e.to_string()))?;
+                if planned.total != total {
+                    return Err(PackError::Io(format!(
+                        "pack size changed under the library ({} planned vs {total} listed)",
+                        planned.total
+                    )));
+                }
+                let segments: Vec<PackSegment> = planned
+                    .segments
+                    .into_iter()
+                    .map(|s| PackSegment {
+                        start: s.start,
+                        len: s.len,
+                        rank: u64::from(s.rank),
+                        label: s.label,
+                    })
+                    .collect();
+                let json = facet_json::to_string(&segments)
+                    .map_err(|e| PackError::Io(format!("plan json: {e}")))?;
+                if let Ok(mut plans) = self.plans.lock() {
+                    plans.insert(key, json.clone());
+                }
+                json
+            }
+        };
+        let bytes = json.as_bytes();
+        let len = bytes.len() as u64;
+        if start > len {
+            return Err(PackError::InvalidRange(format!("start {start} > plan size {len}")));
+        }
+        let mut offset = start;
+        while offset < len {
+            let end = (offset + CHUNK_BYTES as u64).min(len);
+            let chunk = bytes[offset as usize..end as usize].to_vec();
+            if tx.send(PackChunk { offset, bytes: chunk }).await.is_err() {
+                return Ok(()); // receiver went away — not an error
+            }
+            offset = end;
+        }
+        Ok(())
     }
 }
 

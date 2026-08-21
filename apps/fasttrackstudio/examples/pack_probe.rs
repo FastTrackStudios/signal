@@ -58,6 +58,29 @@ async fn main() -> eyre::Result<()> {
             .map_err(|e| eyre::eyre!("vox handshake (iroh): {e:?}"))?
     };
 
+    // `planfirst:<name>` — call pack_plan as the FIRST method on this
+    // fresh connection (the browser's call pattern), before packs().
+    if let Some(pname) = std::env::args().nth(2).as_deref().and_then(|w| {
+        w.strip_prefix("planfirst:").map(str::to_string)
+    }) {
+        let (ptx, mut prx) = vox::channel::<PackChunk>();
+        let plan_call = client.pack_plan(pname.clone(), "proxy".to_string(), 0, ptx);
+        let mut json_bytes = Vec::new();
+        let plan_drain = async {
+            while let Ok(Some(chunk)) = prx.recv().await {
+                json_bytes.extend_from_slice(&chunk.get().bytes);
+            }
+        };
+        let (plan_result, ()) = futures_util::join!(plan_call, plan_drain);
+        plan_result.map_err(|e| eyre::eyre!("pack_plan (first call): {e:?}"))?;
+        println!(
+            "pack_plan as FIRST call: {} bytes of json, {} segments",
+            json_bytes.len(),
+            String::from_utf8_lossy(&json_bytes).matches("\"start\"").count()
+        );
+        return Ok(());
+    }
+
     let packs = client.packs().await.map_err(|e| eyre::eyre!("packs: {e:?}"))?;
     println!("{} packs on {url}:", packs.len());
     for p in &packs {
@@ -72,6 +95,46 @@ async fn main() -> eyre::Result<()> {
     }
 
     let Some(name) = want else { return Ok(()) };
+
+    // `plan:<name>` — probe the W7 pack_plan + a rank-0 read_range instead
+    // of downloading. Diagnoses the range-streaming path from native.
+    if let Some(pname) = name.strip_prefix("plan:") {
+        let (ptx, mut prx) = vox::channel::<PackChunk>();
+        let plan_call = client.pack_plan(pname.to_string(), "proxy".to_string(), 0, ptx);
+        let mut json_bytes = Vec::new();
+        let plan_drain = async {
+            while let Ok(Some(chunk)) = prx.recv().await {
+                json_bytes.extend_from_slice(&chunk.get().bytes);
+            }
+        };
+        let (plan_result, ()) = futures_util::join!(plan_call, plan_drain);
+        plan_result.map_err(|e| eyre::eyre!("pack_plan: {e:?}"))?;
+        let json = String::from_utf8(json_bytes)?;
+        eyre::ensure!(!json.trim().is_empty(), "empty plan for {pname:?}");
+        let segment_count = json.matches("\"start\"").count();
+        println!("plan for {pname}: {} bytes of json, {} segments", json.len(), segment_count);
+        println!("  head: {}", &json[..json.len().min(200)]);
+        // Rank-0 header segment is always [0, 64) — probe read_range on it.
+        let (tx, mut rx) = vox::channel::<PackChunk>();
+        let call = client.read_range(
+            pname.to_string(),
+            "proxy".to_string(),
+            signal_packs_proto::PackRange { start: 0, len: 64 }.to_string(),
+            tx,
+        );
+        let drain = async {
+            let mut got = 0u64;
+            while let Ok(Some(chunk)) = rx.recv().await {
+                got += chunk.get().bytes.len() as u64;
+            }
+            got
+        };
+        let (call_result, got) = futures_util::join!(call, drain);
+        call_result.map_err(|e| eyre::eyre!("read_range: {e:?}"))?;
+        println!("read_range header seg: {got} of 64 bytes");
+        return Ok(());
+    }
+
     let info = packs
         .iter()
         .find(|p| p.name == name && p.variant == "proxy")
