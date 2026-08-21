@@ -108,14 +108,20 @@ test('HEADLINE: middle C sounds while the piano is still playable (not ready)', 
   test.setTimeout(120_000);
   // Isolate the piano: mute every lane backed by a different pack, so the
   // peak we measure is the streaming piano, not an already-ready synth.
-  const laneCount = await page.locator('[data-testid^="lane-row-"]').count();
-  for (let i = 0; i < laneCount; i++) {
-    const row = page.getByTestId(`lane-row-${i}`);
-    const pack = await row.getAttribute('data-pack-name');
-    if (pack !== pianoName) {
-      await page.getByTestId(`lane-mute-${i}`).click();
-    }
-  }
+  // Lane access goes through the __ftsRig hook — the visible compat strip
+  // (and its lane-row/lane-mute testids) is gone; the remote UI's mixer
+  // owns the on-screen controls now.
+  await page.evaluate((piano) => {
+    const rig = (window as any).__ftsRig;
+    const packs = JSON.parse(rig.packStates());
+    const pianoKey = packs.find((p: any) => p.name === piano)?.key ?? '';
+    const lanes = JSON.parse(rig.lanes());
+    lanes.forEach((l: any, i: number) => {
+      if (l.key !== pianoKey) {
+        rig.setLaneMute(i, true);
+      }
+    });
+  }, pianoName);
 
   // Press middle C repeatedly; it must sound WHILE the pack is still
   // 'playable' — its mid-velocity middle-C segment is at the front of the

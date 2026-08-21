@@ -356,6 +356,7 @@ pub(crate) fn strip_state() -> Vec<(f64, bool)> {
 }
 
 /// The compat strip's volume slider (linear 0..~1.25) for lane `i`.
+#[allow(dead_code)] // the strip's fader path — kept for a future hook use
 pub(crate) fn strip_set_volume(i: usize, linear: f64) {
     let Some(b) = backend() else { return };
     let db = 20.0 * linear.max(0.000_1).log10();
@@ -365,7 +366,23 @@ pub(crate) fn strip_set_volume(i: usize, linear: f64) {
     }
 }
 
+/// Set lane `i`'s mute explicitly (the `__ftsRig.setLaneMute` e2e hook —
+/// the visible compat strip is gone; tests mute through this). Returns the
+/// applied state.
+pub(crate) fn strip_set_mute(i: usize, muted: bool) -> bool {
+    let Some(b) = backend() else { return false };
+    let name = b.shared.borrow().lanes.get(i).map(|l| l.name.clone());
+    match name {
+        Some(name) => {
+            KeysRigSvc::set_layer_mute(&b, name, muted);
+            muted
+        }
+        None => false,
+    }
+}
+
 /// The compat strip's mute toggle for lane `i`. Returns the new state.
+#[allow(dead_code)]
 pub(crate) fn strip_toggle_mute(i: usize) -> bool {
     let Some(b) = backend() else { return false };
     let target = b

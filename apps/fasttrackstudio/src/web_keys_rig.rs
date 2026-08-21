@@ -15,9 +15,10 @@
 //! phone mount — backed by real `KeysRigClient`/`KeysRigStreamClient`
 //! vox clients served in-process by `web_keys_backend.rs` (architect's
 //! `LocalServer` over its wasm memory link). The W3–W8 top-bar chrome
-//! (Resolution, Soundsources + demo player, Audio panel) stays around it,
-//! with the compact lane strip + on-screen octave below (the strip also
-//! carries the `lane-row-*`/`lane-mute-*` e2e testids).
+//! (Resolution, Soundsources + demo player, Audio panel) stays around it.
+//! The remote UI's own keyboard and mixer are the input and per-lane
+//! controls; the e2e suite reaches lanes through `__ftsRig.lanes()` /
+//! `setLaneMute()` (the visible compat strip is gone since W9.5).
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -328,6 +329,18 @@ async fn boot_worklet() -> Result<Worklet, String> {
         }
         on_pointer.forget();
     }
+    // AudioWorklet (and OPFS) exist only in SECURE contexts — https or
+    // localhost. Over plain http on a LAN/tailnet IP, `ctx.audioWorklet`
+    // is undefined and the raw failure is an unreadable TypeError deep in
+    // addModule. Name the actual problem and the fix instead.
+    if !window.is_secure_context() {
+        return Err(
+            "this page needs a SECURE context for audio (AudioWorklet): open it via \
+             https (e.g. the tailscale-served https://<machine>.ts.net URL) or \
+             http://localhost — plain http on an IP cannot work"
+                .to_string(),
+        );
+    }
     let worklet = ctx
         .audio_worklet()
         .map_err(|e| format!("audioWorklet: {}", js_str(e)))?;
@@ -581,6 +594,9 @@ impl AudioStats {
 struct RigHook {
     state: String,
     packs_json: String,
+    /// Lane rows (engine/name/pack/track) for the e2e suite — set once at
+    /// lane build; replaced the visible compat strip's DOM testids.
+    lanes_json: String,
     master_peak: f64,
     /// Rig-wide Resolution 0–100 (see [`resolution_pct`]).
     resolution: f64,
@@ -597,6 +613,8 @@ thread_local! {
 #[derive(facet::Facet, Default)]
 struct HookPack {
     name: String,
+    /// The pack's spec-path key — joins pack rows to `lanes()` rows.
+    key: String,
     state: String,
     bytes: u64,
     total: u64,
@@ -609,12 +627,38 @@ fn hook_set_state(state: &str) {
     RIG_HOOK.with(|h| h.borrow_mut().state = state.to_string());
 }
 
+/// One row of the hook's `lanes()` JSON (the e2e suite's lane access).
+#[derive(facet::Facet, Default)]
+struct HookLane {
+    engine: String,
+    name: String,
+    /// The pack spec-path key (empty = no pack, silent natively too).
+    key: String,
+    /// The worklet track index this lane renders on.
+    track: u32,
+}
+
+fn hook_set_lanes(rows: &[LaneRow]) {
+    let rows: Vec<HookLane> = rows
+        .iter()
+        .map(|r| HookLane {
+            engine: r.engine.clone(),
+            name: r.name.clone(),
+            key: r.key.clone(),
+            track: r.track,
+        })
+        .collect();
+    let json = facet_json::to_string(&rows).unwrap_or_default();
+    RIG_HOOK.with(|h| h.borrow_mut().lanes_json = json);
+}
+
 fn hook_set_packs(rows: &[PackRow]) {
     let resolution = f64::from(resolution_pct(rows));
     let rows: Vec<HookPack> = rows
         .iter()
         .map(|r| HookPack {
             name: r.name.clone(),
+            key: r.key.clone(),
             state: r.phase.label().to_string(),
             bytes: r.bytes,
             total: r.total,
@@ -701,6 +745,17 @@ fn install_hook() {
         };
         JsValue::from_str(&facet_json::to_string(&row).unwrap_or_default())
     });
+    // Lane access for the e2e suite (replaced the visible compat strip).
+    let lanes_fn = Closure::<dyn FnMut() -> JsValue>::new(|| {
+        RIG_HOOK.with(|h| JsValue::from_str(&h.borrow().lanes_json))
+    });
+    let set_lane_mute = Closure::<dyn FnMut(f64, bool) -> JsValue>::new(|i: f64, muted: bool| {
+        JsValue::from_bool(crate::web_keys_backend::strip_set_mute(i as usize, muted))
+    });
+    let _ = Reflect::set(&obj, &"lanes".into(), lanes_fn.as_ref());
+    let _ = Reflect::set(&obj, &"setLaneMute".into(), set_lane_mute.as_ref());
+    lanes_fn.forget();
+    set_lane_mute.forget();
     let _ = Reflect::set(&obj, &"state".into(), state.as_ref());
     let _ = Reflect::set(&obj, &"packStates".into(), packs.as_ref());
     let _ = Reflect::set(&obj, &"masterPeak".into(), peak.as_ref());
@@ -993,13 +1048,10 @@ pub fn KeysWebRig() -> Element {
                             }
                             fts_chrome::PanelRail {}
                         }
-                        // The no-hardware input + the compact lane strip
-                        // (per-lane mute/volume straight onto the worklet
-                        // tracks — also the e2e suite's lane testids).
-                        div { style: "flex:none; border-top:1px solid #27272a; padding:8px 14px; display:flex; flex-direction:column; gap:8px; max-height:38vh; overflow-y:auto;",
-                            OnScreenKeys { worklet }
-                            LaneList { lanes, packs, worklet }
-                        }
+                        // No footer: the remote UI's own keyboard and mixer
+                        // are the input and per-lane controls. The e2e
+                        // suite's lane access moved to the `__ftsRig`
+                        // hook (`lanes()` / `setLaneMute`).
                     },
                 }
             }
@@ -1066,6 +1118,7 @@ async fn boot_rig(
             })
             .collect(),
     );
+    hook_set_lanes(&lanes.read());
     worklet_out.set(Some(worklet.clone()));
 
     // W9: install (or refresh, on a re-boot) the in-tab backend and hand
@@ -2331,137 +2384,7 @@ async fn run_demo(
     worklet.all_notes_off();
 }
 
-/// The lane list: per-lane ready state, volume + mute (daw track ops on
-/// the worklet), and a small peak bar.
-#[component]
-fn LaneList(
-    lanes: Signal<Vec<LaneRow>>,
-    packs: Signal<Vec<PackRow>>,
-    worklet: Signal<Option<Worklet>>,
-) -> Element {
-    // Mixer writes go through the backend now (kept as a prop so the
-    // strip stays mountable before the backend exists).
-    let _ = worklet;
-    let rows = lanes.read().clone();
-    let pack_phase = |key: &str| -> Option<PackPhase> {
-        packs.read().iter().find(|p| p.key == key).map(|p| p.phase.clone())
-    };
-    let pack_name = |key: &str| -> String {
-        packs
-            .read()
-            .iter()
-            .find(|p| p.key == key)
-            .map(|p| p.name.clone())
-            .unwrap_or_default()
-    };
-    rsx! {
-        div { style: "display:flex; flex-direction:column; gap:6px;",
-            for (i, row) in rows.iter().enumerate() {
-                {
-                    let phase = if row.key.is_empty() { None } else { pack_phase(&row.key) };
-                    let (dot, dot_title) = match &phase {
-                        None if row.key.is_empty() => ("#52525b", "no pack (silent natively too)"),
-                        None | Some(PackPhase::Queued) => ("#52525b", "waiting"),
-                        Some(PackPhase::Streaming) | Some(PackPhase::Verifying) => ("#fbbf24", "streaming"),
-                        Some(PackPhase::Ready) => ("#22c55e", "ready"),
-                        // Distinct "filling in": playable now, detail streaming.
-                        Some(PackPhase::Playable { .. }) => ("#a3e635", "playable — filling in"),
-                        Some(PackPhase::Deferred) => ("#a78bfa", "pack cached, not resident"),
-                        Some(PackPhase::Failed(_)) => ("#ef4444", "failed"),
-                    };
-                    let peak_pct = (row.peak.clamp(0.0, 1.0) * 100.0) as u32;
-                    let vol_pct = (row.volume * 80.0) as i64;
-                    let muted = row.muted;
-                    let lane_pack = pack_name(&row.key);
-                    rsx! {
-                        div {
-                            key: "{row.engine}/{row.name}",
-                            "data-testid": "lane-row-{i}",
-                            "data-pack-name": "{lane_pack}",
-                            style: "display:flex; align-items:center; gap:10px; padding:8px 12px; border:1px solid #27272a; border-radius:8px; background:#111113;",
-                            span { style: "width:8px; height:8px; border-radius:999px; background:{dot}; flex:none;", title: "{dot_title}" }
-                            div { style: "display:flex; flex-direction:column; min-width:140px;",
-                                span { style: "font-size:13px; color:#e4e4e7; font-weight:500;", "{row.name}" }
-                                span { style: "font-size:10px; color:#52525b; text-transform:uppercase; letter-spacing:1px;", "{row.engine}" }
-                            }
-                            input {
-                                r#type: "range",
-                                min: "0",
-                                max: "100",
-                                value: "{vol_pct}",
-                                style: "flex:1; accent-color:#22c55e;",
-                                oninput: move |ev| {
-                                    let v = ev.value().parse::<f64>().unwrap_or(80.0) / 80.0;
-                                    if let Some(row) = lanes.write().get_mut(i) { row.volume = v; }
-                                    // Through the backend so KeysRigRemote's
-                                    // mixer sees the same fader move.
-                                    crate::web_keys_backend::strip_set_volume(i, v);
-                                },
-                            }
-                            button {
-                                "data-testid": "lane-mute-{i}",
-                                style: if muted {
-                                    "padding:1px 8px; border-radius:4px; background:#7f1d1d; color:#fecaca; border:1px solid #7f1d1d; font-size:11px; cursor:pointer;"
-                                } else {
-                                    "padding:1px 8px; border-radius:4px; background:transparent; color:#a1a1aa; border:1px solid #27272a; font-size:11px; cursor:pointer;"
-                                },
-                                onclick: move |_| {
-                                    let now = crate::web_keys_backend::strip_toggle_mute(i);
-                                    if let Some(row) = lanes.write().get_mut(i) { row.muted = now; }
-                                },
-                                "M"
-                            }
-                            div { style: "width:60px; height:6px; border-radius:3px; background:#18181b; overflow:hidden; flex:none;",
-                                div { style: "height:100%; width:{peak_pct}%; background:#22c55e;" }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// An on-screen octave (C4–C5) that plays the whole rig.
-#[component]
-fn OnScreenKeys(worklet: Signal<Option<Worklet>>) -> Element {
-    // (midi note, label, is black)
-    const KEYS: [(u8, &str, bool); 13] = [
-        (60, "C", false),
-        (61, "C#", true),
-        (62, "D", false),
-        (63, "D#", true),
-        (64, "E", false),
-        (65, "F", false),
-        (66, "F#", true),
-        (67, "G", false),
-        (68, "G#", true),
-        (69, "A", false),
-        (70, "A#", true),
-        (71, "B", false),
-        (72, "C", false),
-    ];
-    rsx! {
-        div { style: "display:flex; gap:3px; justify-content:center; padding:10px 0;",
-            for (note, label, black) in KEYS {
-                button {
-                    style: if black {
-                        "width:34px; height:90px; border-radius:0 0 6px 6px; background:#18181b; color:#a1a1aa; border:1px solid #27272a; font-size:10px; cursor:pointer; align-self:flex-start; display:flex; align-items:flex-end; justify-content:center; padding-bottom:6px;"
-                    } else {
-                        "width:44px; height:130px; border-radius:0 0 6px 6px; background:#e4e4e7; color:#3f3f46; border:1px solid #27272a; font-size:11px; cursor:pointer; display:flex; align-items:flex-end; justify-content:center; padding-bottom:8px;"
-                    },
-                    onpointerdown: move |_| {
-                        if let Some(w) = worklet.peek().clone() { w.midi(0x90, note, 100); }
-                    },
-                    onpointerup: move |_| {
-                        if let Some(w) = worklet.peek().clone() { w.midi(0x80, note, 0); }
-                    },
-                    onpointerleave: move |_| {
-                        if let Some(w) = worklet.peek().clone() { w.midi(0x80, note, 0); }
-                    },
-                    "{label}"
-                }
-            }
-        }
-    }
-}
+// (The compat lane strip and on-screen octave that lived here until W9.5
+// are gone: the remote UI's own keyboard and mixer are the input and
+// per-lane controls. The e2e suite reaches lanes through `__ftsRig`'s
+// `lanes()` / `setLaneMute()` instead of DOM testids.)
