@@ -15,9 +15,18 @@ pipewire = []
 jack = ["daw-audio-io/jack"]
 
 [dependencies]
-daw = { workspace = true, features = ["standalone-audio"] }
-daw-audio-io.workspace = true
+# Base: the project/track/FX-slot topology half — wasm-clean (`standalone`
+# only). The realtime-engine half (RigHost / start_output / start_duplex)
+# is native and pulls `standalone-audio` + daw-audio-io via the target
+# table below, so the topology builder (`RigProject`) compiles for
+# wasm32 (the browser keys rig seeds lane tracks headless; rendering is
+# owned by the worklet).
+daw = { workspace = true, features = ["standalone"] }
 eyre.workspace = true
 tracing.workspace = true
 facet.workspace = true
 facet-styx.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+daw = { workspace = true, features = ["standalone-audio"] }
+daw-audio-io.workspace = true

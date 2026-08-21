@@ -35,34 +35,47 @@
 //! `InputProbe` pass-through that records the **input** peak it sees
 //! (post-input-trim, pre-amp) into a shared atomic.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use signal_proto::block::{BlockCategory, BlockType};
 
 use facet::Facet;
 
+#[cfg(not(target_arch = "wasm32"))]
 use daw::service::{FxChainContext, FxChains, FxParams, ProjectContext, TrackRef, Tracks};
+#[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::Standalone;
+#[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::metering::{Meters, linear_to_db};
+#[cfg(not(target_arch = "wasm32"))]
 use daw_audio_io::duplex::EngineStats;
 // The shared daw-backed host: project seeding, track/FX-slot reservation, the
 // realtime engine (native duplex `pw_filter` on Linux with the `pipewire`
 // feature, cpal fallback elsewhere), meters, transport.
+#[cfg(not(target_arch = "wasm32"))]
 use signal_rig_host::{DuplexRigHost, RigProject};
+use signal_plugin_host::PluginInstance;
+#[cfg(not(target_arch = "wasm32"))]
 use signal_plugin_host::{
-    PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
+    PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginParamInfo,
 };
 
 use crate::convolver::Convolver;
 use crate::mixer::FX_PREPARE_BLOCK;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::nam::NamProcessor;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::rig_prefs::RigAudioPrefs;
 
 /// Max block size the rig prepares models / plugins for. daw's callback block is
 /// normally 64–1024 frames; preparing for [`FX_PREPARE_BLOCK`] keeps us safe
 /// against larger backend buffers without per-block re-preparation.
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_BLOCK: usize = FX_PREPARE_BLOCK as usize;
 
 /// Fixed number of FX slots reserved on the rig track. Slot 0 is the
@@ -70,6 +83,7 @@ const MAX_BLOCK: usize = FX_PREPARE_BLOCK as usize;
 /// chain's blocks (identity pass-throughs fill unused ones). Reserving a
 /// constant count keeps the project's `fx_chain` (guids) immutable, so patch
 /// switches never rebuild the renderer's snapshot — the swap is pure box-insert.
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_CHAIN_SLOTS: usize = 24;
 
 /// Identifies a chain resident control-side. Assigned on install; opaque
@@ -498,6 +512,7 @@ pub struct SlotInfo {
 }
 
 /// An enumerated audio device — name, channel count, native sample rate.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Debug)]
 pub struct DeviceInfo {
     pub name: String,
@@ -510,6 +525,7 @@ pub struct DeviceInfo {
 /// Shared atomic the `InputProbe` writes the per-block input peak into, read
 /// by the UI input meter. Held by both the rig (reader) and the probe instance
 /// (audio-thread writer).
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Default)]
 struct InputMeterShared {
     /// Latest block input peak (linear), as `f32` bits.
@@ -536,8 +552,10 @@ struct InputMeterShared {
 /// Mono window the tuner runs autocorrelation over. At 48 kHz this covers
 /// ~85 ms — long enough to resolve a low-E (~82 Hz, ~12 ms period) several
 /// times over.
+#[cfg(not(target_arch = "wasm32"))]
 const TUNER_WINDOW: usize = 4096;
 
+#[cfg(not(target_arch = "wasm32"))]
 impl InputMeterShared {
     fn store(&self, peak: f32) {
         self.peak.store(peak.to_bits(), Ordering::Relaxed);
@@ -618,6 +636,7 @@ impl InputMeterShared {
 /// Load a mono f32 loop from a wav for the fake-DI debug input
 /// (`SIGNAL_FAKE_DI=/path/to.wav`) — screenshots and demos with the meters
 /// alive, no instrument plugged in.
+#[cfg(not(target_arch = "wasm32"))]
 fn load_fake_di() -> Option<Vec<f32>> {
     let path = std::env::var("SIGNAL_FAKE_DI").ok().filter(|p| !p.is_empty())?;
     let (mono, _) = fts_sample::load_mono_f32(
@@ -633,6 +652,7 @@ fn load_fake_di() -> Option<Vec<f32>> {
     })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 struct InputProbe {
     shared: Arc<InputMeterShared>,
     /// Fake-DI loop + cursor (debug input; None in normal operation).
@@ -643,6 +663,7 @@ struct InputProbe {
     mono: Vec<f32>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl InputProbe {
     fn new(shared: Arc<InputMeterShared>) -> Self {
         Self {
@@ -655,6 +676,7 @@ impl InputProbe {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl PluginInstance for InputProbe {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
@@ -736,16 +758,19 @@ impl PluginInstance for InputProbe {
 
 /// A unity pass-through [`PluginInstance`] used to fill the rig track's unused
 /// FX slots (chains shorter than [`MAX_CHAIN_SLOTS`]). Copies input → output.
+#[cfg(not(target_arch = "wasm32"))]
 struct Identity {
     prepared: bool,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Identity {
     fn new() -> Self {
         Self { prepared: true }
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl PluginInstance for Identity {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
@@ -806,6 +831,9 @@ pub fn native_dsp_available(block_type: BlockType) -> bool {
 /// A built, prepared chain block plus the level metadata the rig needs to
 /// level-match and input-stage it. Non-NAM blocks leave the NAM-only fields
 /// `None`.
+// The level-metadata fields are read only by the native chain installer
+// (GuitarRig); on wasm32 `build_block` still fills them.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub(crate) struct BuiltBlock {
     pub boxed: Box<dyn PluginInstance>,
     pub display_name: String,
@@ -839,6 +867,11 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
     // before touching a loader.
     block.validate()?;
     if block.is_nam() {
+        // wasm32: no NAM — the C++ core doesn't build there.
+        #[cfg(target_arch = "wasm32")]
+        return Err("NAM blocks are not available in the browser build".into());
+        #[cfg(not(target_arch = "wasm32"))]
+        {
         let mut nam = NamProcessor::load(&block.nam, sample_rate as f64, MAX_BLOCK)?;
         nam.input_gain_db = block.input_trim_db;
         nam.output_gain_db = block.output_trim_db;
@@ -868,11 +901,20 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
             input_level_dbu,
             output_level_dbu,
         })
+        }
     } else if block.is_cab_ir() {
         let conv = Convolver::load(&block.ir)?;
         let dn = conv.display_name.clone();
         Ok(BuiltBlock::plain(Box::new(conv), format!("{dn} (cab)")))
     } else if block.is_plugin() {
+        // wasm32: no dynamic plugin loading (libloading / native dylibs).
+        #[cfg(target_arch = "wasm32")]
+        return Err(format!(
+            "hosted CLAP/VST3 plugins are not available in the browser build: {}",
+            block.plugin
+        ));
+        #[cfg(not(target_arch = "wasm32"))]
+        {
         // Hosted CLAP/VST3: go through daw's own plugin loader, which returns a
         // `Box<dyn PluginInstance>` ready to drop straight into the FX chain —
         // no signal-side re-wrapping needed (the renderer drives it directly).
@@ -896,6 +938,7 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
         }
         let dn = plugin.descriptor().name;
         Ok(BuiltBlock::plain(plugin, format!("{dn} (plugin)")))
+        }
     } else if block.is_sample() {
         // Sample library → the Sample Soundsource, wrapped in the generic
         // leaf: `build_block`'s callers are graph boundaries that need a
@@ -949,12 +992,32 @@ pub(crate) fn build_sample_source(
     } else {
         std::path::PathBuf::from(&block.samples_root)
     };
-    let patch = if is_pack {
+    // In-memory packs win over the filesystem: a pack installed under this
+    // spec-path key (see `crate::pack_registry`) supplies all audio — the
+    // browser path (fetched bytes, no filesystem), also usable natively.
+    let registered = crate::pack_registry::get(&block.sample);
+    #[cfg(not(target_arch = "wasm32"))]
+    let patch = if let Some(pack) = registered {
+        crate::PlayerPatch::from_opened_pack(pack)
+            .map_err(|e| format!("load in-memory sample pack {}: {e}", block.sample))?
+    } else if is_pack {
         crate::PlayerPatch::from_pack(spec_path)
             .map_err(|e| format!("load sample pack {}: {e}", block.sample))?
     } else {
         crate::PlayerPatch::load(spec_path, &root)
             .map_err(|e| format!("load sample library {}: {e}", block.sample))?
+    };
+    #[cfg(target_arch = "wasm32")]
+    let patch = {
+        let _ = (is_pack, &root);
+        let Some(pack) = registered else {
+            return Err(format!(
+                "no in-memory pack installed for {} — attach its bytes first (pack_registry::install)",
+                block.sample
+            ));
+        };
+        crate::PlayerPatch::from_opened_pack(pack)
+            .map_err(|e| format!("load in-memory sample pack {}: {e}", block.sample))?
     };
     let section = if block.sample_section.trim().is_empty() {
         patch
@@ -1024,6 +1087,7 @@ pub(crate) fn build_sample_source(
         }
     }
     let label = name.clone();
+    #[cfg(not(target_arch = "wasm32"))]
     if let Err(err) = std::thread::Builder::new()
         .name(format!("signal-preload:{label}"))
         .spawn(move || {
@@ -1042,6 +1106,21 @@ pub(crate) fn build_sample_source(
     {
         tracing::warn!(err = %err, "failed to spawn sample block preload thread");
     }
+    // wasm32: no threads in the AudioWorklet scope — preload synchronously
+    // (the pack is already resident bytes; a preload is an index + head
+    // decode, and the caller is the control side of the worklet, not the
+    // render callback).
+    #[cfg(target_arch = "wasm32")]
+    {
+        let stats = cache.preload(paths.iter().map(|p| p.as_path()));
+        tracing::info!(
+            library = %label,
+            loaded = stats.loaded,
+            failed = stats.failed,
+            skipped = stats.skipped,
+            "sample block preload complete (synchronous, wasm)"
+        );
+    }
     // A first-class Sample Soundsource.
     Ok((crate::SamplerInstrument::new(engine), name))
 }
@@ -1049,6 +1128,7 @@ pub(crate) fn build_sample_source(
 /// A resident chain: its pre-built + prepared boxes (one per chain slot, in
 /// order) plus its control-side [`SlotInfo`]. Switching to it inserts these
 /// boxes into the track's slot guids.
+#[cfg(not(target_arch = "wasm32"))]
 struct ResidentChain {
     #[allow(dead_code)]
     info: SlotInfo,
@@ -1066,6 +1146,7 @@ struct ResidentChain {
 /// resident chains live here because both install (write) and activate (swap)
 /// touch them; the actual box-swap goes through `daw.insert_plugin_instance`,
 /// which is itself `&self`.
+#[cfg(not(target_arch = "wasm32"))]
 struct SwapState {
     /// Resident chains keyed by [`ModelId`].
     chains: std::collections::HashMap<ModelId, ResidentChain>,
@@ -1079,6 +1160,7 @@ struct SwapState {
 
 /// A live guitar rig: a single input-armed daw track whose FX chain is the
 /// active patch, running on daw's realtime `AudioEngine`.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct GuitarRig {
     daw: Standalone,
     // The shared daw host (project + realtime engine + transport); drop =
@@ -1104,9 +1186,12 @@ pub struct GuitarRig {
 }
 
 /// Project/track names for the rig's tiny daw project.
+#[cfg(not(target_arch = "wasm32"))]
 const RIG_PROJECT_NAME: &str = "Signal Guitar Rig";
+#[cfg(not(target_arch = "wasm32"))]
 const RIG_TRACK_NAME: &str = "Guitar In";
 
+#[cfg(not(target_arch = "wasm32"))]
 impl GuitarRig {
     /// Open the system default input + output devices.
     pub fn new() -> eyre::Result<Self> {
@@ -1796,6 +1881,7 @@ fn default_block_id(path: &str) -> String {
 }
 
 /// Decode a standard-base64 plugin state chunk.
+#[cfg(not(target_arch = "wasm32"))]
 fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD

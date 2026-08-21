@@ -1,0 +1,46 @@
+[package]
+name = "signal-keys-worklet"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+description = "Browser keys rig — the AudioWorklet entry wrapping daw-standalone's WebRenderer + signal-sampler's headless KeysRig"
+
+# `cdylib` is the wasm-bindgen bundle the worklet loads; `rlib` keeps the
+# native test build (and any in-tree consumer) linking normally.
+#
+# This crate exists because the dependency arrow is one-way: signal-sampler
+# depends on the `daw` facade, which contains daw-standalone — so
+# daw-standalone can never depend on signal-sampler. The worklet-with-keys
+# entry therefore lives HERE, on top of both.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The wasm worklet renderer (WebRenderer) + the standalone backend. `web`
+# is wasm-only glue; `decode` brings the render path + wasm live-MIDI queue.
+daw-standalone = { workspace = true, features = ["decode", "web"] }
+# Headless KeysRig (lane topology + KeysInstrument) + the in-memory pack
+# registry. On wasm32 the native halves of the crate vanish by target.
+signal-sampler = { workspace = true }
+eyre = { workspace = true }
+tracing = { workspace = true }
+facet = { workspace = true }
+# The LaneProgram wire shape parses from JSON (facet, matching the styx/
+# facet idiom of the native profiles).
+facet-json = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+
+[dev-dependencies]
+# The native open_headless test drives daw's own render path and the
+# live-MIDI ring (`ProjectRenderer::connect_live_midi` needs `audio`).
+daw-standalone = { workspace = true, features = ["decode", "audio"] }
+# Build the test pack (bytes) with fts-sample's native encoder.
+fts-sample = { workspace = true, features = ["load", "engine"] }
+hound = "3.5"
+
+[lints]
+workspace = true

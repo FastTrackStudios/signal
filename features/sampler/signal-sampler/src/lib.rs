@@ -73,6 +73,11 @@
 //! # Ok::<(), eyre::Error>(())
 //! ```
 
+// Native-only modules (audio devices, hardware MIDI, the NAM C++ core,
+// filesystem scans, the pack CLI). The wasm32 build keeps the pure engine +
+// tree renderer + the keys lane machinery — see `keys_rig::KeysRig::
+// open_headless` and the browser worklet entry (signal-keys-worklet).
+#[cfg(not(target_arch = "wasm32"))]
 pub mod api;
 pub mod audio_soundsource;
 pub mod bank;
@@ -84,36 +89,46 @@ pub mod engine;
 pub mod engine_spec;
 pub mod instrument;
 pub mod keys_rig;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod kit_tracks;
 pub mod loudness;
 pub mod midi;
 pub mod mixer;
 pub mod module_spec;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod nam;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod nam_calibrate;
 pub mod native;
 pub mod native_osc;
 pub mod soundsource;
 pub mod node_render;
 pub mod nord;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod pack_cli;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod pack_rewrite;
 /// The NI Essential Pianos' Color / Dynamic Range controls, as velocity-domain
 /// transforms. See `features/rigs/keys/spec/piano-voice.md`.
 pub mod piano_voice;
 pub mod ref_match;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod report;
 pub mod preset_registry;
 pub mod preset_spec;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod retag;
 pub mod rig;
 pub mod rig_library;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod rig_manager;
 pub mod rig_node;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod rig_prefs;
 pub mod rig_profile;
 pub mod runtime;
 pub mod sample_map;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod sampler_rig;
 pub mod spec;
 pub mod stats;
@@ -138,6 +153,7 @@ pub use mixer::{
     FxTarget, MixerLayout, MixerMeters, Send as MixerSend, SendStrip,
 };
 pub use module_spec::{ModulePort, ModuleSpec};
+#[cfg(not(target_arch = "wasm32"))]
 pub use nam::NamProcessor;
 pub use audio_soundsource::AudioSoundsource;
 pub use native_osc::{NativeOscillator, OscWave};
@@ -148,18 +164,25 @@ pub use preset_spec::{
     MacroDef, MacroTarget, MasterFxSlot, NoteRoute, PresetEngineRef, PresetModuleRef, PresetSpec,
     RoutingRule,
 };
-pub use rig::{BlockImpl, DeviceInfo, GuitarRig, ModelId, RigBlock, SlotInfo};
+pub use rig::{BlockImpl, ModelId, RigBlock, SlotInfo};
+#[cfg(not(target_arch = "wasm32"))]
+pub use rig::{DeviceInfo, GuitarRig};
 pub use rig_library::{Library, RigPreset, RigScene, RigSection, RigSong};
+#[cfg(not(target_arch = "wasm32"))]
 pub use rig_manager::RigManager;
 pub use rig_node::{Combine, Container, Param, RigNode, Role, Send, Zone};
+#[cfg(not(target_arch = "wasm32"))]
 pub use rig_prefs::RigAudioPrefs;
-pub use rig_profile::{ProfileRig, RigPatch, RigProfile};
+#[cfg(not(target_arch = "wasm32"))]
+pub use rig_profile::ProfileRig;
+pub use rig_profile::{RigPatch, RigProfile};
 pub use runtime::{
     BufferRef, EngineInstance, LayerRuntime, ModuleInstance, PortRuntime, PresetRuntime,
     ResolvedEdge,
 };
 pub use sample_map::{SampleKey, SampleMap, SampleQuery};
 pub use midicore::MidiMonitor;
+#[cfg(not(target_arch = "wasm32"))]
 pub use sampler_rig::{BusTrack, InstrumentTrack, SamplerRig};
 // Hardware MIDI input primitives live in `midicore` (the `midir` OS backend);
 // re-export the selector + handle + event types so rig consumers (e.g. the
@@ -167,6 +190,7 @@ pub use sampler_rig::{BusTrack, InstrumentTrack, SamplerRig};
 pub use midicore;
 pub use midicore::MidiEvent;
 pub use midicore::PortSelector as MidiSelection;
+#[cfg(not(target_arch = "wasm32"))]
 pub use midicore::midir::MidiInput as MidiInputHandle;
 pub use spec::LibrarySpec;
 pub use stats::AudioStatsSnapshot;
@@ -179,6 +203,7 @@ pub mod pack {
     //! Cheap header-only inspection without decoding any audio.
 
     use super::{LibrarySpec, SamplerError, SignalPcmPack};
+    #[cfg(not(target_arch = "wasm32"))]
     use std::path::Path;
 
     /// Result of [`read_pack_header`] — parsed library spec plus pack stats.
@@ -194,6 +219,7 @@ pub mod pack {
     ///
     /// Returns the embedded `LibrarySpec` plus pack statistics. No audio is
     /// decoded — suitable for browse/list panels.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn read_pack_header(pack_path: &Path) -> Result<PackHeader, SamplerError> {
         let pack = SignalPcmPack::open(pack_path)?;
         let spec = parse_embedded_spec(&pack)?;
@@ -216,7 +242,79 @@ pub mod pack {
     }
 }
 
-pub use pack::{PackHeader, read_pack_header};
+pub use pack::PackHeader;
+#[cfg(not(target_arch = "wasm32"))]
+pub use pack::read_pack_header;
+
+pub mod pack_registry {
+    //! In-memory `.signalpack`s, keyed by the spec-path string lanes
+    //! reference (`RigBlock.sample`) — the browser seam: packs arrive as
+    //! fetched bytes, not files, so `build_sample_source` consults this
+    //! registry before touching disk. Native callers may use it too (tests,
+    //! network-fed rigs); an installed entry always wins over the
+    //! filesystem.
+    //!
+    //! Bytes are parsed once at [`install`] (surfacing a bad pack at the
+    //! transfer boundary, not at note-on) and stored as an opened
+    //! [`SignalPcmPack`](super::SignalPcmPack); handing one out clones the
+    //! parsed index over the shared `Arc`'d bytes — no audio is copied.
+
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    use super::{SamplerError, SignalPcmPack};
+
+    static PACKS: OnceLock<Mutex<HashMap<String, SignalPcmPack>>> = OnceLock::new();
+
+    fn packs() -> &'static Mutex<HashMap<String, SignalPcmPack>> {
+        PACKS.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+
+    /// Parse `bytes` as a `.signalpack` and install it under `key` (the
+    /// spec-path string lanes reference). Replaces any previous entry.
+    pub fn install(key: &str, bytes: Vec<u8>) -> Result<(), SamplerError> {
+        let pack = SignalPcmPack::open_bytes(bytes)?;
+        packs()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(key.to_string(), pack);
+        Ok(())
+    }
+
+    /// Remove the entry under `key` (already-built engines keep their clone).
+    pub fn remove(key: &str) {
+        packs()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(key);
+    }
+
+    /// The pack installed for `path` — exact key match first, then a
+    /// file-name match so `packs/foo.signalpack` resolves an entry
+    /// installed as `foo.signalpack` (and vice versa).
+    pub fn get(path: &str) -> Option<SignalPcmPack> {
+        let map = packs()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(p) = map.get(path) {
+            return Some(p.clone());
+        }
+        let file_name = std::path::Path::new(path).file_name()?;
+        map.iter()
+            .find(|(k, _)| std::path::Path::new(k).file_name() == Some(file_name))
+            .map(|(_, p)| p.clone())
+    }
+
+    /// Installed keys (diagnostics / soundsource-manager UIs).
+    pub fn keys() -> Vec<String> {
+        packs()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .keys()
+            .cloned()
+            .collect()
+    }
+}
 
 /// Identifier for a loaded instrument within the bank.
 pub type InstrumentId = String;
@@ -375,9 +473,24 @@ impl PlayerPatch {
     /// per groove rooted at `slice_base_note` so a single MIDI key triggers
     /// the whole loop. Slicing and time-stretch are intentionally not
     /// implemented — the loop plays sample-rate-locked at original tempo.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn from_pack(pack_path: &Path) -> Result<Self, SamplerError> {
         use crate::engine::cache::SignalPcmPack;
         let pack = SignalPcmPack::open(pack_path)?;
+        Self::from_opened_pack(pack)
+    }
+
+    /// [`from_pack`](Self::from_pack) over a pack handed over as one
+    /// in-memory buffer — the wasm path (a fetched pack), and anything else
+    /// with no file to open. See also [`crate::pack_registry`].
+    pub fn from_pack_bytes(bytes: Vec<u8>) -> Result<Self, SamplerError> {
+        let pack = crate::engine::cache::SignalPcmPack::open_bytes(bytes)?;
+        Self::from_opened_pack(pack)
+    }
+
+    /// Build a patch from an ALREADY-OPENED pack, however its bytes arrived
+    /// (mmap'd file, in-memory buffer, registry clone).
+    pub fn from_opened_pack(pack: crate::engine::cache::SignalPcmPack) -> Result<Self, SamplerError> {
         let mut spec = pack::parse_embedded_spec(&pack)?;
 
         // Stylus / groove libraries: synthesize one zone per groove so the

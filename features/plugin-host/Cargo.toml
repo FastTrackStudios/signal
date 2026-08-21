@@ -9,7 +9,15 @@ license.workspace = true
 # Format-agnostic plugin host trait + CLAP/VST3 backends, reached through
 # the `daw` facade (re-exported under `daw::plugin`). Backend features are
 # passthroughs to daw — consumers pick the ones they need.
-daw = { workspace = true, features = ["standalone", "standalone-audio"] }
+#
+# Base is `standalone` only (the `daw::plugin` trait surface is wasm-clean);
+# the realtime-audio half rides the native target table so the trait +
+# `HostedPlugin` wrapper compile for wasm32 (the browser keys rig hosts
+# synthetic `PluginInstance`s — no dynamic loading there).
+daw = { workspace = true, features = ["standalone"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+daw = { workspace = true, features = ["standalone-audio"] }
 
 [dev-dependencies]
 # WAV capture for the load_plugin example (A/B render harness).

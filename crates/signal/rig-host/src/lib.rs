@@ -30,17 +30,23 @@
 //! ([`lock::panic_message`]), the styx config-dir store ([`store`]), and the
 //! process-unique project guid ([`uuid_string`]).
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::{Arc, Mutex};
 
 use daw::service::handle::DawHandle as _;
 use daw::service::ProjectInfo;
 use daw::standalone::Standalone;
+#[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::audio_engine::AudioEngine;
-#[cfg(target_os = "linux")]
+#[cfg(all(not(target_arch = "wasm32"), target_os = "linux"))]
 use daw::standalone::audio_engine::DuplexAudioEngine;
+#[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::metering::Meters;
+#[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::transport_engine::{PlayStateRepr, TransportShared};
+#[cfg(not(target_arch = "wasm32"))]
 use daw_audio_io::AudioIoPrefs;
+#[cfg(not(target_arch = "wasm32"))]
 use daw_audio_io::duplex::EngineStats;
 
 pub mod gestures;
@@ -54,6 +60,7 @@ pub mod store;
 /// so output-only hosts stay `Sync` (the duplex engine owns raw PipeWire
 /// pointers and is `Send`-only — rigs that use it already serialize through a
 /// `Mutex`).
+#[cfg(not(target_arch = "wasm32"))]
 pub trait HostedEngine: Sized {
     fn open(
         daw: Standalone,
@@ -69,6 +76,7 @@ pub trait HostedEngine: Sized {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl HostedEngine for AudioEngine {
     fn open(
         daw: Standalone,
@@ -105,13 +113,14 @@ impl HostedEngine for DuplexAudioEngine {
 
 /// The duplex host's engine: the native PipeWire `pw_filter` engine where
 /// available, the cpal engine (with a live input stream) elsewhere.
-#[cfg(target_os = "linux")]
+#[cfg(all(not(target_arch = "wasm32"), target_os = "linux"))]
 pub type DuplexEngine = DuplexAudioEngine;
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "linux")))]
 pub type DuplexEngine = AudioEngine;
 
 /// A running duplex (live-input) rig host — `Send`-only under the native
 /// PipeWire engine; serialize access through a `Mutex` like the guitar rig.
+#[cfg(not(target_arch = "wasm32"))]
 pub type DuplexRigHost = RigHost<DuplexEngine>;
 
 /// A seeded rig project **before** the engine opens: add tracks and reserve
@@ -137,9 +146,31 @@ impl RigProject {
         Self { daw, project_guid }
     }
 
+    /// Seed a fresh one-off project named `project_name` on an EXISTING
+    /// `Standalone` and make it current. The headless variant of
+    /// [`new`](Self::new): the caller owns the backend (e.g. the browser
+    /// worklet's `WebRenderer` daw) and drives rendering itself — no engine
+    /// is ever started on this project.
+    pub fn on(daw: &Standalone, project_name: &str) -> Self {
+        let daw = daw.clone();
+        let project_guid = uuid_string();
+        daw.seed_project(ProjectInfo {
+            guid: project_guid.clone(),
+            name: project_name.to_string(),
+            path: String::new(),
+        });
+        daw.set_current_project(&project_guid);
+        Self { daw, project_guid }
+    }
+
     /// The underlying daw service handle (cheap to clone).
     pub fn daw(&self) -> &Standalone {
         &self.daw
+    }
+
+    /// The seeded project's guid.
+    pub fn project_guid(&self) -> &str {
+        &self.project_guid
     }
 
     /// Add a track; returns its guid.
@@ -167,6 +198,7 @@ impl RigProject {
     /// Open the output-only realtime engine (a sampler/synth generates,
     /// never records) and return the running host. `prefs.sample_rate == 0`
     /// requests 48 kHz (the rig default); `want_input` is forced off.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn start_output(self, prefs: &AudioIoPrefs) -> eyre::Result<RigHost> {
         let mut io = prefs.clone();
         io.want_input = false;
@@ -176,12 +208,14 @@ impl RigProject {
     /// Open the duplex (live input → FX chain → output) engine — the native
     /// PipeWire `pw_filter` engine on Linux with the `pipewire` feature, the
     /// cpal engine elsewhere. `want_input` is forced on.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn start_duplex(self, prefs: &AudioIoPrefs) -> eyre::Result<DuplexRigHost> {
         let mut io = prefs.clone();
         io.want_input = true;
         self.start_with::<DuplexEngine>(&io)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn start_with<E: HostedEngine>(self, io: &AudioIoPrefs) -> eyre::Result<RigHost<E>> {
         request_low_latency_quantum(io);
         let req_rate = if io.sample_rate != 0 {
@@ -209,6 +243,7 @@ impl RigProject {
 /// The default engine parameter is the output-only cpal engine (`Sync`, so a
 /// sampler rig can share the host freely); [`DuplexRigHost`] is the live-input
 /// variant.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct RigHost<E: HostedEngine = AudioEngine> {
     daw: Standalone,
     project_guid: String,
@@ -219,6 +254,7 @@ pub struct RigHost<E: HostedEngine = AudioEngine> {
     sample_rate: u32,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<E: HostedEngine> RigHost<E> {
     /// The underlying daw service handle (cheap to clone) — insert plugin
     /// instances, push live MIDI, drive `Tracks`/`FxChains`/`Routing` here.
@@ -300,6 +336,7 @@ fn add_fx_slot(daw: &Standalone, track_guid: &str, label: &str) -> eyre::Result<
 /// before the JACK client connects (the client can't set the buffer there).
 /// No-op unless built with the `jack` feature, or when `PIPEWIRE_LATENCY` is
 /// already set / no buffer size is requested.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn request_low_latency_quantum(prefs: &AudioIoPrefs) {
     #[cfg(feature = "jack")]
     {
@@ -329,10 +366,12 @@ mod uuid {
     //! just for rig project guids. Not cryptographically strong; only needs
     //! to be unique within this process.
     use std::sync::atomic::{AtomicU64, Ordering};
+    #[cfg(not(target_arch = "wasm32"))]
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new_v4_string() -> String {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -341,6 +380,15 @@ mod uuid {
         let c = COUNTER.fetch_add(1, Ordering::Relaxed);
         let pid = std::process::id() as u64;
         format!("signal-rig-{nanos:x}-{pid:x}-{c:x}")
+    }
+
+    /// wasm32: `SystemTime::now()` / `process::id()` are unsupported in the
+    /// AudioWorklet scope — a process-local counter is unique enough (the
+    /// guid only has to be unique within this instance's `Standalone`).
+    #[cfg(target_arch = "wasm32")]
+    pub fn new_v4_string() -> String {
+        let c = COUNTER.fetch_add(1, Ordering::Relaxed);
+        format!("signal-rig-wasm-{c:x}")
     }
 }
 

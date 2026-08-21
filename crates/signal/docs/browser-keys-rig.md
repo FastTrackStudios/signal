@@ -41,7 +41,17 @@ Reuse, don't reinvent:
   in `render/mod.rs` (plain `RefCell<VecDeque<_>>` — the worklet scope is
   single-threaded) + `#[wasm_bindgen] noteOn/noteOff/cc/pitchBend/panic` on
   `WebRenderer`; worklet messages `open_lanes { program }`,
-  `attach_pack { name, bytes }`, `midi`.
+  `attach_pack { name, bytes }`, `midi`. DONE — target-gating (no core
+  crate needed): signal-sampler / signal-rig-host / signal-plugin-host
+  compile for wasm32 as-is (native halves in
+  `[target.'cfg(not(wasm32))'.dependencies]` + `#[cfg]`), packs-from-bytes
+  via `signal_sampler::pack_registry`, and the worklet-with-keys entry is
+  the NEW crate `signal-keys-worklet` (features/rigs/keys/worklet —
+  daw-standalone can't dep signal-sampler, the arrow runs the other way):
+  `KeysWorklet` = `WebRenderer` + `KeysRig::open_headless_on` +
+  `attachPack/openLanes/reloadLanes/noteOn/…`. The wasm queue is a
+  `Mutex<VecDeque<_>>` on `Standalone` (not `RefCell` — keeps `Standalone:
+  Sync`; uncontended in the single-threaded worklet), drained per block.
 - **W3** — browser app phase (the fts dx web build):
   - Route: a `/rigs/keys/:profile` URL branch in `launch_app` (alongside
     `collection_browser`'s pathname sniffing), mounting the existing
@@ -72,6 +82,33 @@ Reuse, don't reinvent:
   keys worklet and stages it into the dx web bundle (`web-stage`), then
   `--features embed-web` so ONE engine binary serves UI + packs + vox on
   :4040 → tailnet.
+
+- **W5 — Playwright end-to-end test** (+ interactive browser-tools
+  verification during development):
+  - A real-browser test that proves the whole chain: launch the engine
+    binary on an ephemeral port serving the embedded web bundle → open
+    `/rigs/keys/worship` in chromium
+    (`--autoplay-policy=no-user-gesture-required` so the AudioContext can
+    start) → wait for a FIXTURE pack to stream and turn `ready` in the
+    Soundsource Manager → drive the demo MIDI player → assert audio.
+  - **Fixture pack**: a tiny bundled `.signalpack` (few hundred KB, built
+    by the fts-sample test encoder) served by a test pack root, so CI never
+    needs AudioHaven or a 500 MB piano.
+  - **Audio assertion**: the page exposes rig state + master peak to JS
+    (e.g. `window.__ftsRig = { state, packStates, masterPeak() }` fed by
+    the same status the UI renders) — the test polls `masterPeak() > 0`
+    while the demo file plays; plus screenshots of the manager popover
+    states (streaming / ready) as visual artifacts.
+  - Also covers refresh-resume: reload mid-download, assert the ledger
+    resumes from the stored offset rather than restarting.
+  - Lives in `apps/fasttrackstudio/e2e/` (package.json + playwright
+    config); its own `just` target (e.g. `just keys-web-e2e`) that builds
+    web-stage + the worklet, starts the engine on a scratch port, runs
+    playwright, tears down. CI job is separate from the cargo gates (needs
+    node + chromium).
+  - This imposes on W3: stable `data-testid` attributes on the top-bar
+    button, per-pack rows, and demo player controls; and the JS state hook
+    above.
 
 ## Open questions / later
 

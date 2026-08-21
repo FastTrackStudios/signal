@@ -181,7 +181,24 @@ impl SamplerBlock {
         params: BlockParams,
         sample_rate: u32,
     ) -> Result<Self, SamplerError> {
-        let patch = PlayerPatch::from_pack(pack_path)?;
+        // In-memory packs (see `crate::pack_registry`) win over the
+        // filesystem; on wasm they are the only source.
+        let patch = match crate::pack_registry::get(&pack_path.to_string_lossy()) {
+            Some(pack) => PlayerPatch::from_opened_pack(pack)?,
+            None => {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    PlayerPatch::from_pack(pack_path)?
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    return Err(SamplerError::SpecParse(format!(
+                        "no in-memory pack installed for {} — attach its bytes first (pack_registry::install)",
+                        pack_path.display()
+                    )));
+                }
+            }
+        };
         let section = patch
             .spec
             .sections

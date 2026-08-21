@@ -728,6 +728,7 @@ impl PresetRuntime {
     }
 
     /// Install a NAM model on the preset's master FX chain.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn install_master_nam(
         &mut self,
         model_path: impl AsRef<std::path::Path>,

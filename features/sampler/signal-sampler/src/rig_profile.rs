@@ -22,12 +22,16 @@
 //! implements); this layer stays repo-free so the standalone rig runs without
 //! the storage stack.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
 
 use facet::Facet;
 
 use crate::SamplerError;
-use crate::rig::{GuitarRig, ModelId, RigBlock};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::rig::{GuitarRig, ModelId};
+use crate::rig::RigBlock;
 
 /// One patch in a rig profile: a named tone whose chain is either inlined or
 /// **referenced** from a [`RigPreset`](crate::rig_library::RigPreset) scene.
@@ -326,6 +330,7 @@ impl ResolvedRigBlock {
 }
 
 /// Resolve a block path against the profile file's directory when relative.
+#[cfg(not(target_arch = "wasm32"))]
 fn resolve_path(path: &str, base_dir: Option<&Path>) -> PathBuf {
     let p = PathBuf::from(path);
     match base_dir {
@@ -335,6 +340,7 @@ fn resolve_path(path: &str, base_dir: Option<&Path>) -> PathBuf {
 }
 
 /// A [`GuitarRig`] plus the active [`RigProfile`] — the live switcher.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct ProfileRig {
     rig: GuitarRig,
     profile: Option<RigProfile>,
@@ -361,6 +367,7 @@ pub struct ProfileRig {
     input_calibration_dbu: f32,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl ProfileRig {
     pub fn new(rig: GuitarRig) -> Self {
         Self {
@@ -898,6 +905,7 @@ impl ProfileRig {
 }
 
 /// Sentinel stored in `patch_ids` for a patch whose chain failed to build.
+#[cfg(not(target_arch = "wasm32"))]
 const MODEL_UNAVAILABLE: ModelId = ModelId::MAX;
 
 #[cfg(test)]

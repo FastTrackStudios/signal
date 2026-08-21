@@ -21,6 +21,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use signal_plugin_host::HostedPlugin;
 
 use crate::convolver::Convolver;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::nam::NamProcessor;
 
 /// Per-block peak-meter decay (peak-hold). Applied once per audio block so the
@@ -44,6 +45,8 @@ pub enum FxBackend {
     Hosted(HostedPlugin),
     /// Built-in Neural Amp Modeler — works for any block role that wants
     /// neural-net amp/pedal modeling (Amp, Drive, Cabinet, …).
+    /// Native-only: the NAM C++ core doesn't build for wasm32.
+    #[cfg(not(target_arch = "wasm32"))]
     Nam(NamProcessor),
     /// Built-in cabinet impulse-response convolution (a `BlockKind::Native`
     /// realization of a Cabinet block). Mono FIR; see [`crate::convolver`].
@@ -54,6 +57,7 @@ impl std::fmt::Debug for FxBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Hosted(h) => f.debug_tuple("Hosted").field(h).finish(),
+            #[cfg(not(target_arch = "wasm32"))]
             Self::Nam(n) => f.debug_tuple("Nam").field(n).finish(),
             Self::CabIr(c) => f.debug_tuple("CabIr").field(c).finish(),
         }
@@ -65,6 +69,7 @@ impl FxBackend {
     pub fn tag(&self) -> &'static str {
         match self {
             Self::Hosted(_) => "plugin",
+            #[cfg(not(target_arch = "wasm32"))]
             Self::Nam(_) => "nam",
             Self::CabIr(_) => "cabir",
         }
@@ -74,6 +79,7 @@ impl FxBackend {
     pub fn display_name(&self) -> &str {
         match self {
             Self::Hosted(h) => &h.descriptor().name,
+            #[cfg(not(target_arch = "wasm32"))]
             Self::Nam(n) => &n.display_name,
             Self::CabIr(c) => &c.display_name,
         }
@@ -86,6 +92,7 @@ impl FxBackend {
             Self::Hosted(h) => {
                 let _ = h.process_interleaved(inout, &[], &[]);
             }
+            #[cfg(not(target_arch = "wasm32"))]
             Self::Nam(n) => n.process_interleaved(inout),
             Self::CabIr(c) => c.process_interleaved(inout),
         }
@@ -527,6 +534,7 @@ impl DrumMixer {
     /// `.nam` model file from disk and prepares it for this mixer's
     /// sample rate. The load is fast (file IO + on-stack network parse);
     /// no further activation step is needed.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn install_nam(
         &mut self,
         target: FxTarget,
@@ -591,6 +599,7 @@ impl DrumMixer {
 
     /// Set NAM input / output gain (dB) for the slot. No-op for non-NAM
     /// backends. `which = true` ⇒ input gain, `false` ⇒ output gain.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn set_nam_gain(&mut self, target: FxTarget, slot_idx: usize, input: bool, gain_db: f32) {
         if let Some(chain) = self.chain_mut(target) {
             if let Some(slot) = chain.slots.get_mut(slot_idx) {

@@ -18,11 +18,14 @@ use std::sync::Arc;
 use daw::service::handle::DawHandle as _;
 use daw::standalone::Standalone;
 use daw::standalone::metering::Meters;
+#[cfg(not(target_arch = "wasm32"))]
 use daw_audio_io::AudioIoPrefs;
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
-use signal_rig_host::{RigHost, RigProject};
+#[cfg(not(target_arch = "wasm32"))]
+use signal_rig_host::RigHost;
+use signal_rig_host::RigProject;
 
 use crate::MidiMonitor;
 use crate::node_render::{GainCells, RenderNode};
@@ -61,6 +64,7 @@ fn ev_cc(controller: u8, value: u8) -> midicore::MidiEvent {
 /// Block size the keys instrument is prepared for.
 const PREPARE_BLOCK: u32 = 1024;
 const KEYS_PROJECT_NAME: &str = "FTS Keys";
+#[cfg(not(target_arch = "wasm32"))]
 const KEYS_TRACK_NAME: &str = "Keys";
 
 /// A composition-tree preset wrapped as a daw instrument. The renderer runs it
@@ -236,6 +240,10 @@ struct LaneTrack {
 }
 
 /// How the rig hosts its program.
+// wasm32 builds only ever construct `Lanes` (single-tree `open` is a
+// native, device-backed entry) — the variant still participates in every
+// match, so keep it rather than cfg-splitting the enum.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 enum Hosting {
     /// One track, one instrument compiled from the whole tree (the synth
     /// rig's mode, and the fallback for trees that aren't engine/layer
@@ -254,8 +262,13 @@ enum Hosting {
 pub struct KeysRig {
     daw: Standalone,
     /// The shared daw host (project + output engine + transport); drop =
-    /// stop audio.
-    _host: RigHost,
+    /// stop audio. `None` for a headless rig
+    /// ([`open_headless`](Self::open_headless)) — the caller owns rendering.
+    #[cfg(not(target_arch = "wasm32"))]
+    _host: Option<RigHost>,
+    /// The rig project's guid — a headless caller renders it through daw's
+    /// own render path (`ProjectRenderer`).
+    project_guid: String,
     hosting: Hosting,
     meters: Arc<Meters>,
     sample_rate: u32,
@@ -271,6 +284,7 @@ impl KeysRig {
     /// Open a device, build the project, and host `tree` as the playable preset.
     // r[impl keys.rig.composition-tree]
     // r[impl keys.rig.output-only]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn open(prefs: &AudioIoPrefs, tree: &Container) -> eyre::Result<Self> {
         // One instrument track carrying the KeysInstrument, on the shared
         // output-only host (a synth generates, never records).
@@ -294,9 +308,11 @@ impl KeysRig {
         host.play();
         tracing::info!(sample_rate, preset = %tree.name, "keys rig started on daw engine");
 
+        let project_guid = host.project_guid().to_string();
         Ok(Self {
             daw,
-            _host: host,
+            _host: Some(host),
+            project_guid,
             hosting: Hosting::Single { track_guid, fx_guid, cells },
             meters,
             sample_rate,
@@ -312,6 +328,7 @@ impl KeysRig {
     /// fader/mute/solo is a daw track op the renderer resolves natively
     /// (folder-aware solo, folder mute, per-track post-fader meters).
     // r[impl keys.rig.lane-tracks]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn open_lanes(prefs: &AudioIoPrefs, program: &LaneProgram) -> eyre::Result<Self> {
         let project = RigProject::new(KEYS_PROJECT_NAME);
         let lanes = build_lane_tracks(project.daw(), program)?;
@@ -322,9 +339,11 @@ impl KeysRig {
         let daw = host.daw().clone();
 
         let gain = Arc::new(std::sync::atomic::AtomicU32::new(1.0f32.to_bits()));
+        let project_guid = host.project_guid().to_string();
         let mut rig = Self {
             daw,
-            _host: host,
+            _host: Some(host),
+            project_guid,
             hosting: Hosting::Lanes(lanes),
             meters,
             sample_rate,
@@ -333,7 +352,9 @@ impl KeysRig {
             gain,
         };
         rig.install_lane_instruments(program);
-        rig._host.play();
+        if let Some(host) = &rig._host {
+            host.play();
+        }
         tracing::info!(
             sample_rate,
             profile = %program.name,
@@ -342,6 +363,83 @@ impl KeysRig {
             "keys rig started on daw engine (lane tracks)"
         );
         Ok(rig)
+    }
+
+    /// Host `program` as per-layer daw tracks WITHOUT opening any audio
+    /// device — the SAME `Hosting::Lanes` topology as
+    /// [`open_lanes`](Self::open_lanes) (rig folder → engine folders →
+    /// layer tracks, one [`KeysInstrument`] per lane installed through the
+    /// plugin seam), but the caller owns rendering: natively a
+    /// `ProjectRenderer` over [`daw`](Self::daw) +
+    /// [`project_guid`](Self::project_guid); in the browser the AudioWorklet
+    /// (see [`open_headless_on`](Self::open_headless_on)).
+    ///
+    /// Lane packs resolve by spec path as usual; a browser (or any caller
+    /// with no filesystem) installs in-memory packs first via
+    /// [`crate::pack_registry::install`] — `build_sample_source` consults
+    /// the registry before touching disk.
+    pub fn open_headless(sample_rate: u32, program: &LaneProgram) -> eyre::Result<Self> {
+        let project = RigProject::new(KEYS_PROJECT_NAME);
+        Self::open_headless_impl(project, sample_rate, program)
+    }
+
+    /// [`open_headless`](Self::open_headless) on an EXISTING `Standalone` —
+    /// the browser worklet path: the rig project is seeded into the
+    /// worklet's own daw (the one its `WebRenderer` renders), so a project
+    /// select + transport play makes the lanes live.
+    pub fn open_headless_on(
+        daw: &Standalone,
+        sample_rate: u32,
+        program: &LaneProgram,
+    ) -> eyre::Result<Self> {
+        let project = RigProject::on(daw, KEYS_PROJECT_NAME);
+        Self::open_headless_impl(project, sample_rate, program)
+    }
+
+    fn open_headless_impl(
+        project: RigProject,
+        sample_rate: u32,
+        program: &LaneProgram,
+    ) -> eyre::Result<Self> {
+        let lanes = build_lane_tracks(project.daw(), program)?;
+        let track_count = 1 + lanes.engines.len() + lanes.layers.len();
+        let daw = project.daw().clone();
+        let meters = Meters::new(track_count);
+        daw.set_meters(meters.clone());
+
+        let gain = Arc::new(std::sync::atomic::AtomicU32::new(1.0f32.to_bits()));
+        let mut rig = Self {
+            daw,
+            #[cfg(not(target_arch = "wasm32"))]
+            _host: None,
+            project_guid: project.project_guid().to_string(),
+            hosting: Hosting::Lanes(lanes),
+            meters,
+            sample_rate,
+            preset_name: program.name.clone(),
+            midi_monitor: MidiMonitor::default(),
+            gain,
+        };
+        rig.install_lane_instruments(program);
+        tracing::info!(
+            sample_rate,
+            profile = %program.name,
+            engines = program.engines.len(),
+            layers = program.engines.iter().map(|e| e.layers.len()).sum::<usize>(),
+            "keys rig opened headless (lane tracks, no audio device)"
+        );
+        Ok(rig)
+    }
+
+    /// The backing daw handle (cheap to clone) — the headless caller's
+    /// render seam.
+    pub fn daw(&self) -> &Standalone {
+        &self.daw
+    }
+
+    /// The rig project's guid.
+    pub fn project_guid(&self) -> &str {
+        &self.project_guid
     }
 
     /// True when the rig hosts per-layer daw tracks.
@@ -408,7 +506,12 @@ impl KeysRig {
                 .map_err(|e| eyre::eyre!("keys rig: clear tracks failed: {e}"))?;
             let lanes = build_lane_tracks(&self.daw, program)?;
             let track_count = 1 + lanes.engines.len() + lanes.layers.len();
-            self.meters = self._host.install_meters(track_count);
+            // Same as `RigHost::install_meters`, but valid for a headless
+            // rig too: install a freshly-sized bank on the daw; the
+            // renderer reads it per block.
+            let meters = Meters::new(track_count);
+            self.daw.set_meters(meters.clone());
+            self.meters = meters;
             self.hosting = Hosting::Lanes(lanes);
             // The master fader carries over onto the fresh rig track.
             self.set_output_gain(self.output_gain());
@@ -582,6 +685,7 @@ impl KeysRig {
     }
 
     /// Enumerate hardware MIDI input ports.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn midi_input_ports() -> Vec<String> {
         midicore::midir::input_ports()
     }
@@ -591,6 +695,7 @@ impl KeysRig {
     /// build it under a lock and then open ports with the lock released —
     /// opening hardware ports takes seconds and can stall outright while the
     /// PipeWire graph reconfigures, and that stall must not pin a rig mutex.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn midi_sink(
         &self,
     ) -> impl Fn(midicore::TimedEvent) + Send + Clone + 'static {
@@ -605,6 +710,7 @@ impl KeysRig {
 
     /// Open a hardware MIDI keyboard and forward its events into the rig
     /// (monitor tap + live-MIDI sink wired by `midicore::attach`).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn attach_midi(
         &self,
         selection: midicore::PortSelector,

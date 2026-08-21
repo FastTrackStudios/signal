@@ -1708,6 +1708,7 @@ impl SamplerBank {
     /// loaded from disk + prepared at the mixer's sample rate before the
     /// audio thread sees the slot — so the slot is render-ready the
     /// instant `install_nam` returns.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn install_mixer_nam(
         &mut self,
         prefix: &str,
@@ -1724,6 +1725,7 @@ impl SamplerBank {
 
     /// Install a NAM model on the preset's master FX chain (works for
     /// non-drum presets too).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn install_preset_master_nam(
         &mut self,
         prefix: &str,
@@ -1738,6 +1740,7 @@ impl SamplerBank {
 
     /// Set the input or output gain (dB) of a NAM slot. No-op for non-NAM
     /// backends and missing slots.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn set_mixer_nam_gain(
         &mut self,
         prefix: &str,

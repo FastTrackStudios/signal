@@ -21,7 +21,9 @@ jack = ["cpal/jack", "daw-audio-io/jack", "signal-rig-host/jack"]
 
 [dependencies]
 # Shared daw-backed rig host — the one project/track/engine bootstrap every
-# live rig (GuitarRig / SamplerRig / KeysRig) runs on.
+# live rig (GuitarRig / SamplerRig / KeysRig) runs on. Wasm builds get only
+# its topology half (`RigProject`); the engine half is target-gated inside
+# the crate.
 signal-rig-host.workspace = true
 
 # Spec loading
@@ -42,13 +44,10 @@ signal-proto.workspace = true
 keyflow-annotate.workspace = true
 
 # Plugin host (CLAP / VST3) — used to insert hosted plugins into mixer
-# strips and preset master chains. CLAP-only build keeps the dep surface
-# small; flip on `vst3-host` in apps/native to enable .vst3 loading too.
-signal-plugin-host = { workspace = true, features = ["clap-host"] }
-
-# Neural Amp Modeler — backs `FxBackend::Nam` slots. The NAM C++ core is
-# vendored into the bindings crate's build.rs, so no system dep is needed.
-neural-amp-modeler = { workspace = true }
+# strips and preset master chains. Base is the format-agnostic trait
+# surface (wasm-clean); `clap-host` rides the native target table below.
+# Flip on `vst3-host` in apps/native to enable .vst3 loading too.
+signal-plugin-host = { workspace = true }
 
 # Built-in FX — PluginInstance wrappers over the vendored FX DSP cores
 # (features/fx/). Backs `BlockImpl::Native` for EQ / Compressor / … blocks.
@@ -58,23 +57,16 @@ signal-fx = { workspace = true }
 # "City Wurli" native voice on the Tonewheel block. See features/rigs/wurli/.
 openwurli-dsp.workspace = true
 
-# Audio I/O
-cpal        = { workspace = true }
-# Reusable audio I/O from daw — device enumeration + AudioIoPrefs used to drive
-# daw's audio engine (which the live guitar rig now runs ON, see `rig.rs`).
-daw-audio-io = { workspace = true, features = ["monitor"] }
-# Canonical MIDI vocabulary + midir OS backend — the strings rig opens a
-# keyboard (one/all/virtual) via `midicore::midir` and forwards decoded
-# `midicore::MidiEvent`s into the bank track through daw's live-MIDI ring.
-midicore = { workspace = true, features = ["vox", "midir"] }
+# Canonical MIDI vocabulary — the `midir` OS backend rides the native
+# target table below (the browser gets MIDI from WebMIDI via the worklet).
+midicore = { workspace = true, features = ["vox"] }
 # daw facade — the live guitar rig builds a tiny daw project (one input-armed
 # track) and drives daw's `AudioEngine` instead of its own cpal streams. The
 # `PluginInstance` trait (which NAM / cab-IR / hosted blocks implement) is also
-# re-exported through `signal-plugin-host`. `standalone-audio` pulls in the
-# project audio engine; `clap-host` matches signal-plugin-host so the shared
-# CLAP backend links once.
-daw         = { workspace = true, features = ["standalone-audio", "clap-host"] }
-crossbeam-channel = { workspace = true }
+# re-exported through `signal-plugin-host`. Base is `standalone-decode`
+# (standalone backend + render path + wasm live-MIDI queue, no cpal);
+# `standalone-audio`/`clap-host` ride the native target table.
+daw         = { workspace = true, features = ["standalone-decode"] }
 # Decode persisted plugin state chunks (`state_b64`) when a rig "plugin" block
 # restores a hosted CLAP/VST3 plugin's saved parameters.
 base64      = "0.22"
@@ -86,16 +78,41 @@ sha2        = "0.10"
 # The audio-file engine layer — RAM budget, sample cache + .signalpack
 # access (FLAC/Vorbis decode, flacenc/vorbis_rs encode), FLAC seek index,
 # chunked streaming, on-disk stream cache, and SamplerError. Re-exported as
-# `engine::{budget, cache, flac_index, stream, stream_cache}`.
-fts-sample = { workspace = true, features = ["load", "engine"] }
-zstd        = "0.13"
-
-# `fts signal pack` CLI (src/pack_cli.rs) — mounted by fts-cli.
-clap        = { workspace = true }
+# `engine::{budget, cache, flac_index, stream, stream_cache}`. Base is the
+# wasm-clean `engine-core` (open packs from bytes, decode flac/ogg/pcm);
+# the native half (`engine` = mmap, rayon preload, encoders, stream cache)
+# rides the native target table below.
+fts-sample = { workspace = true, features = ["load", "engine-core"] }
 
 # Error handling
 eyre        = { workspace = true }
 tracing     = { workspace = true }
+
+# ── Native-only half ─────────────────────────────────────────────────────────
+# Everything the wasm32 build (headless engine + keys lane machinery inside
+# the browser worklet) must not pull: audio devices, hardware MIDI, the NAM
+# C++ core, dynamic plugin loading, filesystem scans, the pack CLI.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Audio I/O
+cpal        = { workspace = true }
+# Reusable audio I/O from daw — device enumeration + AudioIoPrefs used to drive
+# daw's audio engine (which the live guitar rig now runs ON, see `rig.rs`).
+daw-audio-io = { workspace = true, features = ["monitor"] }
+# midir OS backend — the strings rig opens a keyboard (one/all/virtual) via
+# `midicore::midir` and forwards decoded `midicore::MidiEvent`s into the
+# bank track through daw's live-MIDI ring.
+midicore = { workspace = true, features = ["midir"] }
+# `standalone-audio` pulls in the project audio engine; `clap-host` matches
+# signal-plugin-host so the shared CLAP backend links once.
+daw = { workspace = true, features = ["standalone-audio", "clap-host"] }
+signal-plugin-host = { workspace = true, features = ["clap-host"] }
+# Neural Amp Modeler — backs `FxBackend::Nam` slots. The NAM C++ core is
+# vendored into the bindings crate's build.rs, so no system dep is needed.
+neural-amp-modeler = { workspace = true }
+# The native pack/cache/stream engine half (mmap, rayon preload, encoders).
+fts-sample = { workspace = true, features = ["engine"] }
+# `fts signal pack` CLI (src/pack_cli.rs) — mounted by fts-cli.
+clap        = { workspace = true }
 rayon       = "1"
 walkdir     = "2"
 

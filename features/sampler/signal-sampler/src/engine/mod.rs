@@ -31,7 +31,11 @@
 // seek index, chunked streaming, on-disk stream cache) lives in `fts-sample`
 // (crates/audiocore/fts-sample). Re-exported here so every existing
 // `crate::engine::cache::...` path keeps working unchanged.
-pub use fts_sample::{budget, cache, flac_index, stream, stream_cache};
+pub use fts_sample::{budget, cache, flac_index, stream};
+// The on-disk stream cache is part of fts-sample's native engine half
+// (`engine-native`); the wasm build runs on `engine-core` (packs from bytes).
+#[cfg(not(target_arch = "wasm32"))]
+pub use fts_sample::stream_cache;
 pub mod filter;
 pub mod pitch_shift;
 pub mod rr;
@@ -795,7 +799,16 @@ impl SampleEngine {
         let cache = if let Some(pack) = patch.pack.clone() {
             SampleCache::with_pack(pack)
         } else {
-            SampleCache::with_prepared(patch.prepared_cache_dir.as_deref())
+            // The prepared-cache dir is a native (on-disk) concept —
+            // `engine-native` only. Wasm patches always carry a pack.
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                SampleCache::with_prepared(patch.prepared_cache_dir.as_deref())
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                SampleCache::new()
+            }
         };
 
         let mic_ids: Vec<String> = patch.spec.mics.iter().map(|m| m.id.clone()).collect();
