@@ -327,6 +327,33 @@ class KeysRigProcessor extends AudioWorkletProcessor {
           this.reply(msg, value);
           break;
         }
+        case 'attach_pack_shared': {
+          // W14: bytes in a SharedArrayBuffer the page also gave to the
+          // streamer workers. Identical to attach_pack from this thread's
+          // point of view — a Uint8Array over the buffer, served by
+          // __ftsPackRead — except the SAME bytes are now readable by
+          // every thread, which is what lets the workers do their jobs.
+          let value = true;
+          try {
+            const bytes = new Uint8Array(msg.sab);
+            this.packs.set(msg.id, bytes);
+            this.installPackRead();
+            try {
+              this.renderer.attachPackExternal(msg.key, msg.id, bytes.byteLength);
+            } catch (e) {
+              this.packs.delete(msg.id);
+              throw e;
+            }
+            const prev = this.packIdsByKey.get(msg.key);
+            if (prev !== undefined && prev !== msg.id) this.packs.delete(prev);
+            this.packIdsByKey.set(msg.key, msg.id);
+          } catch (e) {
+            const panic = globalThis.__ftsPanic ?? '';
+            value = String(e) + (panic ? ` :: ${panic}` : '');
+          }
+          this.reply(msg, value);
+          break;
+        }
         case 'pack_segment': {
           // Fire-and-forget: one streamed plan segment for a progressive
           // pack. Auto-creates the sparse store so the page can push

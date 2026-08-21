@@ -17,7 +17,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use js_sys::{Reflect, Uint8Array};
+use js_sys::{Array, Reflect, Uint8Array};
 use signal_packs_proto::PackChunk;
 use signal_packs_proto::packs::PackLibraryClient;
 use wasm_bindgen::prelude::*;
@@ -405,6 +405,54 @@ pub(crate) async fn cached_pack(name: &str, variant: &str) -> Option<js_sys::Arr
         return None;
     }
     read_bytes(&dir, &file).await.ok()
+}
+
+/// Read a cached pack from OPFS **directly into a `SharedArrayBuffer`**,
+/// in chunks, so the whole pack never exists twice.
+///
+/// The obvious version — read the file to an ArrayBuffer, then copy it into
+/// a SAB — holds BOTH buffers at peak. With the Worship set (~2.4 GB) that
+/// doubles to ~4.8 GB and the tab freezes; measured 3.4 GB RSS before the
+/// renderer stopped responding. Reading slice-by-slice into the SAB keeps
+/// peak at the pack itself plus one chunk.
+///
+/// `None` when the page has no `SharedArrayBuffer` (not cross-origin
+/// isolated) or the pack is not cached ready — callers fall back to the
+/// ordinary transfer path.
+pub(crate) async fn cached_pack_shared(name: &str, variant: &str) -> Option<JsValue> {
+    let ctor = js_sys::Reflect::get(&js_sys::global(), &"SharedArrayBuffer".into()).ok()?;
+    let ctor = ctor.dyn_into::<js_sys::Function>().ok()?;
+
+    let row = ledger_get(name, variant).await?;
+    if row.state != "ready" {
+        return None;
+    }
+    let dir = packs_dir().await.ok()?;
+    let name_on_disk = format!("{name}.{variant}.signalpack");
+    let size = file_size(&dir, &name_on_disk).await?;
+    if row.expected_size != 0 && size != row.expected_size {
+        return None;
+    }
+
+    let sab = js_sys::Reflect::construct(&ctor, &Array::of1(&(size as f64).into())).ok()?;
+    let dst = Uint8Array::new(&sab);
+    let handle = file_handle(&dir, &name_on_disk, false).await.ok()?;
+    let file: web_sys::File = JsFuture::from(handle.get_file()).await.ok()?.dyn_into().ok()?;
+
+    // 32 MB at a time: big enough that the per-slice overhead vanishes,
+    // small enough that the transient copy is irrelevant next to the pack.
+    const CHUNK: f64 = 32.0 * 1024.0 * 1024.0;
+    let mut at = 0f64;
+    let total = size as f64;
+    while at < total {
+        let end = (at + CHUNK).min(total);
+        let slice = file.slice_with_f64_and_f64(at, end).ok()?;
+        let buf = JsFuture::from(slice.array_buffer()).await.ok()?;
+        let src = Uint8Array::new(&buf);
+        dst.set(&src, at as u32);
+        at = end;
+    }
+    Some(sab)
 }
 
 /// Stream (or resume) `want` into OPFS, verify, and return the full bytes.

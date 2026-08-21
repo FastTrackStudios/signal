@@ -617,7 +617,45 @@ Latency, honestly: "zero" is not physical — the floor is one render quantum
 never exceeding that floor: no stall, no underrun, no growth under load. The
 underrun counter and `worstHandlerMs` from W12 are how each step gets judged.
 
-### W14 — collapsing the copy path into shared memory (BLOCKED, diagnosed)
+### W14 — SharedArrayBuffer pack transport (SHIPPED) + streamer workers (still blocked)
+
+**Shipped and measured: pack bytes now live in a `SharedArrayBuffer`.**
+`cached_pack_shared` reads the OPFS file straight into a SAB in 32 MB
+slices and `attach_pack_shared` hands that one buffer to the worklet (and
+to the workers, when they are on). Result on the full Worship set: 9/9
+packs ready, worst audio-thread handler 61 ms, zero glitches, and decoded
+PCM residency **426 MB → 54 MB** — shared pack bytes mean far less has to
+be decoded into wasm memory at all.
+
+Two traps, both paid for in frozen tabs:
+
+- **Never read-then-copy into a SAB.** The obvious version (read the pack
+  to an ArrayBuffer, copy into a SAB) holds BOTH at peak: ~4.8 GB on this
+  set, 3.4 GB RSS observed, renderer wedged. Read slice-by-slice into the
+  SAB instead. A pack that was just DOWNLOADED keeps the old transfer path
+  — its bytes are already in hand, and copying them would double again;
+  the next boot picks it up from OPFS as shared.
+- **`StreamedSample::request` must keep the `queued` guard on wasm too.**
+  It is called from `sample()` on every read that misses a chunk —
+  thousands per block per voice — so an unguarded enqueue buries the
+  workers in duplicate jobs and allocates an `Arc` per call. The native
+  arm has always had the guard three lines above; the wasm arm did not.
+
+**The streamer workers are still OFF by default, and that is a measured
+decision.** With them on the tab freezes shortly after they come up, every
+time, no error surfacing; the identical build with them off is healthy.
+Known so far: pack-byte locality is FIXED (that was W14's premise), and a
+worker must init with `thread_stack_size` or it re-runs the module's main
+initialisation — globals, allocator — over the shared heap. Fixing that
+did not fix the freeze.
+
+Prime suspect next: **init order.** Exactly one instance may run main init;
+every other must come up as a thread. `spawn()` currently posts init to
+the workers BEFORE the worklet instantiates, so a worker can start against
+a heap whose allocator was never initialised. Spawn them after the worklet
+reports `ready` and re-measure.
+
+### W14 (superseded notes) — collapsing the copy path into shared memory
 
 The remaining copy is the decoder worker: it opens/decodes zones in its OWN
 wasm heap and ships PCM back over a MessagePort. With shared memory that

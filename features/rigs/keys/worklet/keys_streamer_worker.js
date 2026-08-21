@@ -17,8 +17,35 @@
 // After `ready` the worker parks inside wasm on the streamer queue's futex
 // and never returns — it is a thread, not a request handler.
 
+// Pack bytes this worker can read: id → Uint8Array over a SHARED buffer
+// the page allocated (W14). Before this existed the worker had no way to
+// read pack bytes at all — they lived on the worklet's JS heap — so every
+// job it dequeued failed and the whole streamer path was dead weight.
+const packs = new Map();
+
+// The reader fts-sample calls for External packs. Same contract as the
+// processor's: return a view for a covered range, or null.
+function installPackRead() {
+  if (globalThis.__ftsPackRead) return;
+  globalThis.__ftsPackRead = (id, offset, len) => {
+    const buf = packs.get(id);
+    if (!buf) return null;
+    if (!(offset >= 0) || !(len >= 0) || offset + len > buf.byteLength) return null;
+    // A subarray over a SharedArrayBuffer is a view, not a copy; wasm
+    // copies out of it exactly as it does on the audio thread.
+    return buf.subarray(offset, offset + len);
+  };
+}
+
 self.onmessage = async (e) => {
   const msg = e.data;
+  // Pack shares arrive before AND after init (the page replays them to a
+  // worker spawned later), so handle them regardless of readiness.
+  if (msg?.kind === 'pack_shared') {
+    packs.set(msg.id, new Uint8Array(msg.sab));
+    installPackRead();
+    return;
+  }
   if (msg?.kind !== 'init') return;
   try {
     const glue = await import(msg.glueUrl);
@@ -26,7 +53,20 @@ self.onmessage = async (e) => {
     // worklet's. Without it wasm-bindgen would allocate a fresh memory and
     // the worker would decode into a heap nobody reads.
     const bytes = await (await fetch(msg.wasmUrl)).arrayBuffer();
-    await glue.default({ module_or_path: bytes, memory: msg.memory });
+    // `thread_stack_size` is what makes this a THREAD rather than a second
+    // main. Without it the glue calls `__wbindgen_start(undefined)`, which
+    // runs the module's MAIN initialisation — globals, allocator state —
+    // and every worker doing that over the same shared heap corrupts it.
+    // Symptom: the whole tab freezes shortly after the workers come up,
+    // with no error anywhere. With a stack size the glue allocates a fresh
+    // stack + TLS block for this thread instead.
+    //
+    // Must be a non-zero multiple of 64 KiB (the glue asserts it).
+    await glue.default({
+      module_or_path: bytes,
+      memory: msg.memory,
+      thread_stack_size: 2 * 1024 * 1024,
+    });
 
     if (typeof glue.threadsAvailable === 'function' && !glue.threadsAvailable()) {
       self.postMessage({
@@ -35,6 +75,7 @@ self.onmessage = async (e) => {
       });
       return;
     }
+    installPackRead();
     self.postMessage({ kind: 'ready' });
 
     // The streamer loop. Parking happens HERE rather than in Rust because
