@@ -617,6 +617,40 @@ Latency, honestly: "zero" is not physical — the floor is one render quantum
 never exceeding that floor: no stall, no underrun, no growth under load. The
 underrun counter and `worstHandlerMs` from W12 are how each step gets judged.
 
+**Status (measured, not assumed).** Landed and proven in a real browser:
+cross-origin isolation (`crossOriginIsolated === true`), `SharedArrayBuffer`,
+a shared `WebAssembly.Memory`, the `build-std` + atomics + TLS wasm build,
+and a streamer worker that instantiates over the shared heap and reports
+`ready`. Worst audio-thread handler went 3804 ms → 527 ms and the PCM budget
+came off its ceiling (1535 → 687 MB) once eager zone-opening was capped.
+e2e: audio out passes again; the `realtime` test correctly still FAILS on
+`worstHandlerMs < 20`, which is the item below.
+
+**What remains, and the constraint it has to respect.** The 527 ms is
+`reload_lanes` — building lane instruments and opening packs — and it runs
+on the audio thread because the worklet has no other. Moving it to a control
+worker over the shared heap is the fix, but naively it would only RELOCATE
+the stall: `audio_engine/render/mod.rs` takes a blocking `lock()` on
+`plugin_instances` every block, so a control thread holding that mutex for
+half a second blocks the render just as badly (and on wasm a contended
+`std::sync::Mutex` parks via `memory_atomic_wait32` — blocking the audio
+thread, which is exactly what must never happen).
+
+Two halves, and both are needed:
+
+1. **The renderer must never block on the plugin map** — `try_lock`, and on
+   contention render that block without the plugin stage. Missing one 2.7 ms
+   block of FX is inaudible; blocking the callback is a dropout. This is a
+   change to the SHARED daw renderer, so it affects native too (where the
+   same reasoning holds — the contention window is a map insert).
+2. **Then the control work moves to a worker thread.** The expensive part
+   (`KeysInstrument::new` — compile, pack open, bounded preload) already
+   happens OUTSIDE the lock; only the `insert_plugin_instance` is inside it.
+   So once (1) is true, a control worker can rebuild lanes while the audio
+   thread keeps rendering, contending only for a microsecond-scale insert.
+   This needs the worklet's `rig` reachable from another thread (today it is
+   a `RefCell` in `KeysWorklet`), which is the real work.
+
 Risks to weigh before starting: nightly + `build-std` for the worklet crate
 (the rest of the tree stays stable 1.94); `require-corp` breaks any
 cross-origin asset (we have none); AudioWorklet cannot spawn workers itself,
