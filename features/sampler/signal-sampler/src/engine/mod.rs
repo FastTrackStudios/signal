@@ -32,6 +32,13 @@
 // (crates/audiocore/fts-sample). Re-exported here so every existing
 // `crate::engine::cache::...` path keeps working unchanged.
 pub use fts_sample::{budget, cache, flac_index, stream};
+/// The browser streamer queue (W13) — re-exported so the worklet crate
+/// reaches it through the same `signal_sampler::engine::*` surface as the
+/// rest of the sampler internals. Gated on the TARGET only: `engine-core`
+/// is a feature of fts-sample (this crate always enables it), so testing it
+/// here silently evaluated false and the re-export never existed.
+#[cfg(target_arch = "wasm32")]
+pub use fts_sample::stream_wasm;
 // The on-disk stream cache is part of fts-sample's native engine half
 // (`engine-native`); the wasm build runs on `engine-core` (packs from bytes).
 #[cfg(not(target_arch = "wasm32"))]
@@ -51,6 +58,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::spec::{ArticulationKind, Cc1Layer};
 use crate::{PlayerPatch, VoiceConfig};
@@ -1029,6 +1037,28 @@ impl SampleEngine {
         #[cfg(not(target_arch = "wasm32"))]
         let start = std::time::Instant::now();
         let total = self.patch.total_samples();
+        // On wasm this runs on the AUDIO THREAD (the worklet's message
+        // handler is the render thread), and opening a zone is FAR more
+        // expensive here than natively: an External pack (bytes on the JS
+        // heap, W6) cannot be mmapped, so opening an entry copies its whole
+        // compressed span into wasm memory — measured ~1 MB per zone, not
+        // the ~48 KB a decoded head costs. At 192 zones × 9 lanes that was
+        // 1.5 GB and seconds of stall; the number below is small because
+        // each unit is big. Unbounded, a nine-lane rig spent SECONDS here and
+        // consumed the entire decoded-PCM budget before a note was played.
+        // Bound it to a coverage-first set around the middle of the
+        // keyboard — instantly playable — and let the rest open on demand
+        // through the warm path, off-thread. This is the one door every
+        // caller comes through, which is why the cap lives here rather than
+        // at each call site.
+        #[cfg(target_arch = "wasm32")]
+        let stats = {
+            const WASM_EAGER_ZONES: usize = 24;
+            let paths = self.patch.sample_paths_playable(60);
+            self.cache
+                .preload(paths.iter().take(WASM_EAGER_ZONES).map(|p| p.as_path()))
+        };
+        #[cfg(not(target_arch = "wasm32"))]
         let stats = self
             .cache
             .preload(self.patch.sample_paths().map(|p| p.as_path()));
@@ -1050,11 +1080,11 @@ impl SampleEngine {
         stats
     }
 
-    /// Decode the primary sample needed for a pending note-on on the caller's
-    /// thread. This keeps the audio callback non-blocking while avoiding the
-    /// "first note is silent until background preload reaches it" failure mode.
-    pub fn warm_note_samples(&self, note: u8, velocity: u8) -> PreloadStats {
-        let path = if self.patch.is_zoned() {
+    /// The sample path a note-on for `note`/`velocity` would need (rr 0) —
+    /// the resolve half of [`warm_note_samples`](Self::warm_note_samples),
+    /// with no decode. Cheap: an in-memory zone/map lookup.
+    pub fn resolve_note_sample_path(&self, note: u8, velocity: u8) -> Option<std::path::PathBuf> {
+        if self.patch.is_zoned() {
             self.patch.resolve_zone(note, velocity, 0).map(|z| z.path)
         } else {
             let dynamic = self.short_note_dynamic(velocity);
@@ -1069,7 +1099,81 @@ impl SampleEngine {
                     rr: 0,
                 })
                 .map(|(path, _)| path)
-        };
+        }
+    }
+
+    /// Whether `path` can be played with NO decoding at all.
+    ///
+    /// A STREAMED entry does not count: it holds only a ~1 s head plus an
+    /// index, and every frame past that head decodes an ogg chunk on
+    /// whatever thread reads it. That is fine natively (a streamer thread
+    /// pool fills chunks behind the audio thread) but fatal in an
+    /// AudioWorklet, where the reader IS the audio thread — so on wasm the
+    /// browser rig treats streamed samples as "not resident" and has its
+    /// decoder worker replace them with fully decoded PCM.
+    pub fn is_sample_resident(&self, path: &std::path::Path) -> bool {
+        match self.cache.get_loaded(path) {
+            Some(data) => !(cfg!(target_arch = "wasm32") && data.is_streamed()),
+            None => false,
+        }
+    }
+
+    /// Whether this engine's cache can resolve `path` at all (pack entry /
+    /// prepared entry / already loaded) — the routing test for a decoded
+    /// sample arriving from an out-of-process decoder.
+    pub fn knows_sample_path(&self, path: &std::path::Path) -> bool {
+        self.cache.knows_path(path)
+    }
+
+    /// Insert PCM decoded elsewhere as if this engine had decoded it.
+    /// `charge_past_ceiling: false` REFUSES the insert when it would push
+    /// the process-wide decoded-PCM budget over its limit (background
+    /// coverage fill must stop at the ceiling); `true` inserts regardless
+    /// (a note the player is holding beats the ceiling — the caller sheds
+    /// afterwards, exactly like the warm path).
+    pub fn insert_decoded_sample(
+        &self,
+        path: &std::path::Path,
+        data: Arc<SampleData>,
+        charge_past_ceiling: bool,
+    ) -> bool {
+        // Already fully resident? Nothing to do. A STREAMED entry is NOT
+        // "already there" — replacing it with decoded PCM is the whole
+        // point (see `is_sample_resident`), so it falls through.
+        if let Some(existing) = self.cache.get_loaded(path) {
+            if !existing.is_streamed() {
+                return true;
+            }
+        }
+        if !charge_past_ceiling {
+            let limit = crate::engine::budget::limit_bytes();
+            let used = crate::engine::budget::used_bytes();
+            if limit != u64::MAX && used.saturating_add(data.decoded_bytes() as u64) > limit {
+                return false;
+            }
+        }
+        self.cache.insert_decoded(path.to_owned(), data);
+        true
+    }
+
+    /// Decode `path` on the calling thread and REMOVE it from this cache
+    /// (budget released) — the decoder-worker seam: the PCM's one long-term
+    /// home is the audio-side engine it gets shipped to, so the decoding
+    /// instance stays memory-flat.
+    pub fn decode_sample_take(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<Arc<SampleData>, fts_sample::SamplerError> {
+        let data = self.cache.get(path)?;
+        let _ = self.cache.take_loaded(path);
+        Ok(data)
+    }
+
+    /// Decode the primary sample needed for a pending note-on on the caller's
+    /// thread. This keeps the audio callback non-blocking while avoiding the
+    /// "first note is silent until background preload reaches it" failure mode.
+    pub fn warm_note_samples(&self, note: u8, velocity: u8) -> PreloadStats {
+        let path = self.resolve_note_sample_path(note, velocity);
         let Some(path) = path else {
             return PreloadStats {
                 failed: 1,

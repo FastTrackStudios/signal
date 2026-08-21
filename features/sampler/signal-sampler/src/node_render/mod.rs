@@ -657,6 +657,165 @@ impl RenderNode {
         }
     }
 
+    /// Collect the sample paths a note-on for `note`/`velocity` would need
+    /// across this subtree's **sampler** sources that are NOT resident yet —
+    /// the resolve-only half of [`warm_note_samples`]
+    /// (Self::warm_note_samples), for callers that must never decode on the
+    /// calling thread (the browser worklet's audio thread: it ships these to
+    /// the decoder worker instead). Respects [`Zoned`](RenderNode::Zoned)
+    /// windows exactly like the warm walk.
+    pub fn missing_note_sample_paths(
+        &mut self,
+        note: u8,
+        velocity: u8,
+        out: &mut Vec<std::path::PathBuf>,
+    ) {
+        match self {
+            RenderNode::Leaf { inst: Some(LeafBackend::Source(src)), .. } => {
+                if let Some(sampler) = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                {
+                    let engine = sampler.engine();
+                    if let Some(path) = engine.resolve_note_sample_path(note, velocity) {
+                        if !engine.is_sample_resident(&path) && !out.contains(&path) {
+                            out.push(path);
+                        }
+                    }
+                }
+            }
+            RenderNode::Leaf { .. } => {}
+            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+                v.iter_mut()
+                    .for_each(|n| n.missing_note_sample_paths(note, velocity, out));
+            }
+            RenderNode::Zoned { zone, inner } => {
+                if zone.note_gain(note, velocity) > 0.0 {
+                    inner.missing_note_sample_paths(note, velocity, out);
+                }
+            }
+            RenderNode::Gain { inner, .. }
+            | RenderNode::Modulated { inner, .. }
+            | RenderNode::SendTap { inner, .. }
+            | RenderNode::BusInject { inner, .. } => {
+                inner.missing_note_sample_paths(note, velocity, out)
+            }
+        }
+    }
+
+    /// Insert PCM decoded elsewhere into every **sampler** source of this
+    /// subtree whose cache knows `path` (pack entry / prepared entry).
+    /// Returns whether any leaf accepted it. `charge_past_ceiling` follows
+    /// [`SampleEngine::insert_decoded_sample`]; a past-ceiling insert sheds
+    /// the accepting engine's largest samples back toward the limit, exactly
+    /// like the warm path.
+    pub fn insert_decoded_sample(
+        &mut self,
+        path: &std::path::Path,
+        data: &std::sync::Arc<crate::engine::cache::SampleData>,
+        charge_past_ceiling: bool,
+    ) -> bool {
+        match self {
+            RenderNode::Leaf { inst: Some(LeafBackend::Source(src)), .. } => {
+                let Some(sampler) = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                else {
+                    return false;
+                };
+                let engine = sampler.engine();
+                if !engine.knows_sample_path(path) {
+                    return false;
+                }
+                let accepted =
+                    engine.insert_decoded_sample(path, std::sync::Arc::clone(data), charge_past_ceiling);
+                if accepted && charge_past_ceiling {
+                    // Same shed rule as `warm_note_samples`: correctness put
+                    // the budget past its ceiling; well past it, walk back.
+                    let limit = crate::engine::budget::limit_bytes();
+                    let used = crate::engine::budget::used_bytes();
+                    if limit != u64::MAX && used > limit.saturating_add(limit / 8) {
+                        let over = (used - limit) as usize;
+                        let engine = sampler.engine();
+                        let target = engine.loaded_sample_bytes().saturating_sub(over);
+                        let _ = engine.evict_cache_until_under_budget(target);
+                    }
+                }
+                accepted
+            }
+            RenderNode::Leaf { .. } => false,
+            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+                let mut any = false;
+                for n in v.iter_mut() {
+                    any |= n.insert_decoded_sample(path, data, charge_past_ceiling);
+                }
+                any
+            }
+            RenderNode::Zoned { inner, .. }
+            | RenderNode::Gain { inner, .. }
+            | RenderNode::Modulated { inner, .. }
+            | RenderNode::SendTap { inner, .. }
+            | RenderNode::BusInject { inner, .. } => {
+                inner.insert_decoded_sample(path, data, charge_past_ceiling)
+            }
+        }
+    }
+
+    /// Decode `path` in the first **sampler** source that knows it and take
+    /// the PCM back out of that cache (budget-flat) — the decoder-worker
+    /// seam; see [`SampleEngine::decode_sample_take`].
+    pub fn decode_sample_take(
+        &mut self,
+        path: &std::path::Path,
+    ) -> Option<std::sync::Arc<crate::engine::cache::SampleData>> {
+        match self {
+            RenderNode::Leaf { inst: Some(LeafBackend::Source(src)), .. } => {
+                let sampler = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())?;
+                let engine = sampler.engine();
+                if !engine.knows_sample_path(path) {
+                    return None;
+                }
+                engine.decode_sample_take(path).ok()
+            }
+            RenderNode::Leaf { .. } => None,
+            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+                v.iter_mut().find_map(|n| n.decode_sample_take(path))
+            }
+            RenderNode::Zoned { inner, .. }
+            | RenderNode::Gain { inner, .. }
+            | RenderNode::Modulated { inner, .. }
+            | RenderNode::SendTap { inner, .. }
+            | RenderNode::BusInject { inner, .. } => inner.decode_sample_take(path),
+        }
+    }
+
+    /// Coverage-first sample paths (playable order, middle-out from
+    /// `center`) of every **sampler** source in this subtree — the decoder
+    /// worker's background fill list.
+    pub fn coverage_sample_paths(&mut self, center: u8, out: &mut Vec<std::path::PathBuf>) {
+        match self {
+            RenderNode::Leaf { inst: Some(LeafBackend::Source(src)), .. } => {
+                if let Some(sampler) = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                {
+                    out.extend(sampler.engine().sample_paths_playable(center));
+                }
+            }
+            RenderNode::Leaf { .. } => {}
+            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+                v.iter_mut().for_each(|n| n.coverage_sample_paths(center, out));
+            }
+            RenderNode::Zoned { inner, .. }
+            | RenderNode::Gain { inner, .. }
+            | RenderNode::Modulated { inner, .. }
+            | RenderNode::SendTap { inner, .. }
+            | RenderNode::BusInject { inner, .. } => inner.coverage_sample_paths(center, out),
+        }
+    }
+
     /// Sum the voices currently alive across this subtree's **sampler**
     /// sources (`SamplerInstrument` leaves — synth/percussion backends keep
     /// their own voice vecs and are not counted). A cheap read for

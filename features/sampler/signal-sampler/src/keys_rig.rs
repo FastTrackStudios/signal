@@ -31,6 +31,17 @@ use crate::MidiMonitor;
 use crate::node_render::{GainCells, RenderNode};
 use crate::rig_node::{Container, Role};
 
+/// Whether any sampler block in `tree` plays the library at `spec_path` —
+/// the test for "does this lane care that this pack just arrived?" (see
+/// [`KeysRig::reload_lanes_for_pack`]).
+fn tree_uses_sample(tree: &Container, spec_path: &str) -> bool {
+    use crate::rig_node::RigNode;
+    tree.children.iter().any(|child| match child {
+        RigNode::Block { block } => block.sample == spec_path,
+        RigNode::Container { container } => tree_uses_sample(container, spec_path),
+    })
+}
+
 /// Build a channel-0 `MidiEvent::NoteOn` from raw note/velocity.
 fn ev_note_on(note: u8, vel: u8) -> midicore::MidiEvent {
     use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
@@ -555,6 +566,49 @@ impl KeysRig {
         }
     }
 
+    /// Re-install ONLY the lane instruments whose tree references
+    /// `spec_path` (the key a just-attached pack was installed under).
+    ///
+    /// [`load_lanes`](Self::load_lanes) rebuilds every lane, which means
+    /// opening every attached pack and re-parsing its index. In the browser
+    /// that runs on the AUDIO THREAD (the worklet's message handler), and
+    /// with the nine Worship packs it measured over 500 ms per call — half a
+    /// second of stalled render, repeated after every pack attach and every
+    /// progressive attach. A pack only ever affects the lanes that name it,
+    /// so this rebuilds just those: bounded work, and untouched lanes keep
+    /// playing through it.
+    ///
+    /// Returns how many lanes were re-installed.
+    pub fn reload_lanes_for_pack(
+        &mut self,
+        program: &LaneProgram,
+        spec_path: &str,
+    ) -> usize {
+        let sr = self.sample_rate;
+        let mut done = 0;
+        for engine in &program.engines {
+            for layer in &engine.layers {
+                if !tree_uses_sample(&layer.tree, spec_path) {
+                    continue;
+                }
+                let Hosting::Lanes(lanes) = &mut self.hosting else { return done };
+                let Some(track) = lanes
+                    .layers
+                    .iter_mut()
+                    .find(|t| t.engine == engine.name && t.name == layer.name)
+                else {
+                    continue;
+                };
+                let mut inst = KeysInstrument::new(&layer.tree, sr);
+                track.cells = inst.gain_cells();
+                let _ = inst.prepare(sr as f64, PREPARE_BLOCK);
+                self.daw.insert_plugin_instance(track.fx.clone(), Box::new(inst));
+                done += 1;
+            }
+        }
+        done
+    }
+
     /// Load a lane program. Same engine/layer shape → per-track instrument
     /// swaps (no audio gap). A different shape (profile edit) rebuilds the
     /// track set — a brief gap, on an explicit editing action.
@@ -768,6 +822,94 @@ impl KeysRig {
     }
     pub fn note_off(&self, note: u8) {
         self.dispatch(ev_note_off(note));
+    }
+
+    /// The `(layer, sample path)` pairs a note-on for `note`/`velocity`
+    /// needs that are NOT resident — resolve only, never a decode. The
+    /// browser worklet calls this instead of [`warm_note`](Self::warm_note)
+    /// (whose synchronous decode would starve the audio thread it runs on)
+    /// and ships the list to the decoder worker; the PCM comes back through
+    /// [`insert_decoded`](Self::insert_decoded).
+    pub fn missing_note_samples(&self, note: u8, velocity: u8) -> Vec<(String, std::path::PathBuf)> {
+        let layers: Vec<String> = match &self.hosting {
+            Hosting::Single { .. } => vec![String::new()],
+            Hosting::Lanes(l) => l.layers.iter().map(|t| t.name.clone()).collect(),
+        };
+        let mut out = Vec::new();
+        for layer in &layers {
+            let mut paths = Vec::new();
+            self.edit_lane(layer, |inst| {
+                inst.render_mut().missing_note_sample_paths(note, velocity, &mut paths);
+            });
+            out.extend(paths.into_iter().map(|p| (layer.clone(), p)));
+        }
+        out
+    }
+
+    /// Insert PCM decoded out-of-process into `layer`'s instrument (see
+    /// `RenderNode::insert_decoded_sample`). Returns whether the lane
+    /// accepted it — `false` with `charge_past_ceiling: false` means the
+    /// decoded-PCM budget is full and background fill should pause.
+    pub fn insert_decoded(
+        &self,
+        layer: &str,
+        path: &std::path::Path,
+        data: std::sync::Arc<crate::engine::cache::SampleData>,
+        charge_past_ceiling: bool,
+    ) -> bool {
+        self.edit_lane(layer, |inst| {
+            inst.render_mut().insert_decoded_sample(path, &data, charge_past_ceiling)
+        })
+        .unwrap_or(false)
+    }
+
+    /// Decode `path` in `layer`'s instrument on the calling thread and take
+    /// the PCM out of the decoding cache (budget-flat) — the decoder-worker
+    /// side of the seam.
+    pub fn decode_sample_take(
+        &self,
+        layer: &str,
+        path: &std::path::Path,
+    ) -> Option<std::sync::Arc<crate::engine::cache::SampleData>> {
+        self.edit_lane(layer, |inst| inst.render_mut().decode_sample_take(path))
+            .flatten()
+    }
+
+    /// Every lane's coverage-first sample list (playable order, middle-out
+    /// from `center`), as `(layer, path)` pairs — the decoder worker's
+    /// background fill plan. Lanes are interleaved round-robin so every
+    /// lane becomes playable together instead of one finishing first.
+    pub fn coverage_samples(&self, center: u8) -> Vec<(String, std::path::PathBuf)> {
+        let layers: Vec<String> = match &self.hosting {
+            Hosting::Single { .. } => vec![String::new()],
+            Hosting::Lanes(l) => l.layers.iter().map(|t| t.name.clone()).collect(),
+        };
+        let mut per_lane: Vec<(String, Vec<std::path::PathBuf>)> = layers
+            .iter()
+            .map(|layer| {
+                let mut paths = Vec::new();
+                self.edit_lane(layer, |inst| {
+                    inst.render_mut().coverage_sample_paths(center, &mut paths);
+                });
+                (layer.clone(), paths)
+            })
+            .collect();
+        let mut out = Vec::new();
+        let mut i = 0;
+        loop {
+            let mut any = false;
+            for (layer, paths) in per_lane.iter_mut() {
+                if let Some(p) = paths.get(i) {
+                    out.push((layer.clone(), p.clone()));
+                    any = true;
+                }
+            }
+            if !any {
+                break;
+            }
+            i += 1;
+        }
+        out
     }
 
     /// Voices currently alive across every lane's **sampler** sources

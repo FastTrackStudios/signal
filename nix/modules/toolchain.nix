@@ -28,6 +28,25 @@
       # stencil backend only compiles on macOS-aarch64 (elsewhere phon-jit uses
       # the interpreter and never invokes rustc for stencils).
       rustNightly = pkgs.rust-bin.selectLatestNightlyWith (t: t.minimal);
+      # A nightly WITH rust-src + the wasm target, for the one build that
+      # cannot be done on stable: the browser keys rig's shared-memory
+      # worklet (W13). wasm threads need `-C target-feature=+atomics` AND a
+      # std rebuilt with the same feature — `-Z build-std`, which is nightly
+      # and needs rust-src. Everything else in the tree stays on the stable
+      # 1.94 pin; this toolchain is reached only through `cargo-nightly`
+      # (below), never by being first on PATH.
+      rustNightlyWasm = pkgs.rust-bin.selectLatestNightlyWith (t:
+        t.minimal.override {
+          extensions = [ "rust-src" ];
+          targets = [ "wasm32-unknown-unknown" ];
+        });
+      # `cargo-nightly` — an explicit door to that toolchain. There is no
+      # rustup in this shell, so `cargo +nightly` cannot work; recipes that
+      # need it call this by name (see `just keys-worklet-wasm-threads`).
+      cargoNightly = pkgs.writeShellScriptBin "cargo-nightly" ''
+        export RUSTC="${rustNightlyWasm}/bin/rustc"
+        exec ${rustNightlyWasm}/bin/cargo "$@"
+      '';
     in
     {
       # Rust toolchain — the FTS-wide pin (same as the dissolved
@@ -85,6 +104,10 @@
         pkg-config
         rustPlatform.bindgenHook
         tailwindcss_4
+        # `cargo-nightly` — the ONLY nightly door (wasm threads / build-std;
+        # see the toolchain definition above). Named, not on PATH as `cargo`,
+        # so the stable 1.94 pin still governs every ordinary build.
+        cargoNightly
         # git — cargo shells out to it to fetch every git dependency, and this
         # tree has plenty (architect, task, nice-plug, baseview, the vendor
         # forks). On macOS the system `/usr/bin/git` is an xcrun shim that

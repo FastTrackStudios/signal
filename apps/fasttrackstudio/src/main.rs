@@ -64,6 +64,14 @@ mod web_keys_rig;
 mod web_keys_backend;
 #[cfg(all(feature = "signal", target_arch = "wasm32"))]
 mod web_packs;
+// W12: the decoder worker — sample decode OFF the audio thread (the
+// worklet never decodes; see crates/signal/docs/browser-keys-rig.md).
+#[cfg(all(feature = "signal", target_arch = "wasm32"))]
+mod web_keys_decoder;
+// W13: shared-memory streamer threads — the decoders write chunks straight
+// into the heap the audio thread renders from.
+#[cfg(all(feature = "signal", target_arch = "wasm32"))]
+mod web_keys_threads;
 mod ekit_view;
 mod space_view;
 // The in-process session player (daw-standalone + audio + guide) is

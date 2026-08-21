@@ -94,7 +94,14 @@ web-stage: tailwind
 keys-worklet-wasm out='apps/fasttrackstudio/web-dist/worklet':
     # --max-memory: default wasm linear memory caps at 2 GB — resident pack
     # bytes + decoded-PCM budget + app need the full 4 GB address space.
-    RUSTFLAGS="-C link-arg=--max-memory=4294967296" \
+    #
+    # +simd128: wasm SIMD (stable, and in every browser we target). The rig
+    # renders nine lanes of sampler + FX inside ONE audio thread, so DSP
+    # throughput is the headroom that decides whether it plays clean; the
+    # per-sample loops (gain, mix, filters, interpolation) are exactly what
+    # 128-bit lanes accelerate. Measure `renderLoad()` across this change —
+    # it is the number that says whether the render fits the quantum.
+    RUSTFLAGS="-C link-arg=--max-memory=4294967296 -C target-feature=+simd128" \
     cargo build -p signal-keys-worklet --lib \
         --target wasm32-unknown-unknown --release
     mkdir -p {{out}}
@@ -103,6 +110,55 @@ keys-worklet-wasm out='apps/fasttrackstudio/web-dist/worklet':
         target/wasm32-unknown-unknown/release/signal_keys_worklet.wasm
     cp features/rigs/keys/worklet/keys_processor.js {{out}}/keys_processor.js
     cp features/rigs/keys/worklet/worklet_polyfill.js {{out}}/worklet_polyfill.js
+    cp features/rigs/keys/worklet/keys_decoder_worker.js {{out}}/keys_decoder_worker.js
+    cp features/rigs/keys/worklet/keys_streamer_worker.js {{out}}/keys_streamer_worker.js
+
+# W13: the SHARED-MEMORY worklet build — wasm threads.
+#
+# The rig's audio thread must never decode, and copying PCM to it costs a
+# memcpy per sample. With shared memory the decoder threads write chunks
+# straight into the heap the audio thread reads, which is how the NATIVE
+# engine already works (fts-sample's streamer pool). Requirements:
+#
+#   +atomics,+bulk-memory,+mutable-globals   the thread ABI
+#   --shared-memory --import-memory          one memory across instances
+#   -Z build-std                             std must be rebuilt with atomics
+#                                            (hence nightly — the rest of the
+#                                            tree stays on stable 1.94)
+#
+# The page creates the WebAssembly.Memory and hands it to the worklet and to
+# each decoder worker, so all three instantiate over the SAME heap. Serving
+# it needs cross-origin isolation (EngineHost::cross_origin_isolated).
+#
+# Kept as its OWN recipe until it is proven: `keys-worklet-wasm` (single
+# threaded) stays the default so a toolchain problem here can never take the
+# working rig down with it.
+keys-worklet-wasm-threads out='apps/fasttrackstudio/web-dist/worklet':
+    # The four TLS symbols are exported EXPLICITLY: wasm-bindgen's threading
+    # pass looks up `__wasm_init_tls` (each thread initialises its own TLS
+    # block through it), and LLD garbage-collects all of them when no Rust
+    # code happens to use `#[thread_local]` — which shows up much later as
+    # `failed to prepare module for threading: failed to find
+    # __wasm_init_tls`, long after the Rust build succeeded.
+    RUSTFLAGS="-C target-feature=+atomics,+bulk-memory,+mutable-globals,+simd128 \
+        -C link-arg=--shared-memory \
+        -C link-arg=--import-memory \
+        -C link-arg=--max-memory=4294967296 \
+        -C link-arg=--export=__wasm_init_tls \
+        -C link-arg=--export=__tls_size \
+        -C link-arg=--export=__tls_align \
+        -C link-arg=--export=__tls_base" \
+    cargo-nightly build -p signal-keys-worklet --lib \
+        -Z build-std=std,panic_abort \
+        --target wasm32-unknown-unknown --release
+    mkdir -p {{out}}
+    wasm-bindgen --target web --out-dir {{out}} \
+        --out-name signal_keys_worklet \
+        target/wasm32-unknown-unknown/release/signal_keys_worklet.wasm
+    cp features/rigs/keys/worklet/keys_processor.js {{out}}/keys_processor.js
+    cp features/rigs/keys/worklet/worklet_polyfill.js {{out}}/worklet_polyfill.js
+    cp features/rigs/keys/worklet/keys_decoder_worker.js {{out}}/keys_decoder_worker.js
+    cp features/rigs/keys/worklet/keys_streamer_worker.js {{out}}/keys_streamer_worker.js
 
 # ONE engine binary serving the whole browser keys rig: stage the web
 # bundle + keys worklet (web-stage), then embed it into the release

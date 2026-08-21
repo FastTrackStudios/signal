@@ -74,6 +74,29 @@ fn hint_seconds(v: &str) -> Option<f64> {
     }
 }
 
+/// Decoded-PCM ceiling for the worklet, in MB. The browser has no
+/// environment for `FTS_PRELOAD_BUDGET_MB`, so the choice lives here and
+/// rides the worklet's init message.
+const PCM_BUDGET_KEY: &str = "fts.keys-pcm-budget-mb";
+
+/// Default decoded-PCM ceiling (MB). wasm32 linear memory tops out at 4 GB
+/// and the app shares it; pack BYTES live on the JS heap (attach-by-handle),
+/// so decoded PCM is the main occupant. 1536 doubles the old fixed 768
+/// while leaving real headroom — overshooting does not degrade gracefully,
+/// it TRAPS the instance on a failed allocation.
+const PCM_BUDGET_DEFAULT_MB: u32 = 1536;
+
+/// The stored decoded-PCM ceiling in MB (clamped to something the 4 GB
+/// address space can actually hold).
+fn pcm_budget_mb() -> u32 {
+    web_sys::window()
+        .and_then(|w| w.local_storage().ok().flatten())
+        .and_then(|s| s.get_item(PCM_BUDGET_KEY).ok().flatten())
+        .and_then(|v| v.parse::<u32>().ok())
+        .map(|mb| mb.clamp(384, 3072))
+        .unwrap_or(PCM_BUDGET_DEFAULT_MB)
+}
+
 /// The stored `latencyHint` (validated), defaulting to `low` (W11) — the
 /// rig is a playable instrument first, and `interactive` proved
 /// conservative in the field (32–45 ms of output latency on top of the
@@ -250,6 +273,18 @@ impl Worklet {
             voices: f("voices").unwrap_or(-1.0) as i32,
             base_ms: lat("baseLatency") * 1000.0,
             output_ms: lat("outputLatency") * 1000.0,
+            glitches: f("glitches").unwrap_or(0.0),
+            glitch_frames: f("glitchFrames").unwrap_or(0.0),
+            worst_handler_ms: f("worstHandlerMs").unwrap_or(0.0),
+            worst_handler_kind: Reflect::get(&v, &"worstHandlerKind".into())
+                .ok()
+                .and_then(|x| x.as_string())
+                .unwrap_or_default(),
+            warm_depth: f("warmDepth").unwrap_or(0.0),
+            pcm_inserts: f("pcmInserts").unwrap_or(0.0),
+            pcm_refused: f("pcmRefused").unwrap_or(0.0),
+            pcm_used_mb: f("pcmUsedMb").unwrap_or(0.0),
+            pcm_limit_mb: f("pcmLimitMb").unwrap_or(0.0),
         })
     }
 
@@ -263,15 +298,29 @@ impl Worklet {
     }
 
     /// Resume the AudioContext (the backend's `start`; a no-op while
-    /// already running).
+    /// already running). Resuming after a suspension makes `currentFrame`
+    /// jump, which is NOT an underrun — reset the glitch counters so the
+    /// telemetry only ever counts real dropouts (W12).
     pub(crate) fn resume(&self) {
         let _ = self.ctx.resume();
+        self.fire("reset_audio_stats", &[]);
     }
 
     /// Suspend the AudioContext (the backend's `stop` — audio pauses,
     /// packs and the lane program stay).
     pub(crate) fn suspend(&self) {
         let _ = self.ctx.suspend();
+    }
+
+    /// Whether the AudioContext is not running — which, on a freshly loaded
+    /// page, means the autoplay policy is holding it until a real gesture
+    /// (Reflect: `AudioContextState` is not in this crate's web-sys set).
+    pub(crate) fn is_suspended(&self) -> bool {
+        Reflect::get(self.ctx.as_ref(), &"state".into())
+            .ok()
+            .and_then(|v| v.as_string())
+            .map(|s| s != "running")
+            .unwrap_or(false)
     }
 
     pub(crate) fn all_notes_off(&self) {
@@ -321,8 +370,10 @@ impl Worklet {
 
 /// Create the AudioContext, load the processor module, construct the node
 /// (`entry: 'keys'`), and wait for its `ready`. Must run from a user
-/// gesture (autoplay policy).
-async fn boot_worklet() -> Result<Worklet, String> {
+/// gesture (autoplay policy). `warm_port` is the decoder worker's
+/// `MessageChannel` end (W12) — transferred with the init so warm
+/// requests and PCM flow worklet ⇄ worker directly.
+async fn boot_worklet(warm_port: web_sys::MessagePort) -> Result<Worklet, String> {
     let window = web_sys::window().ok_or("no window")?;
     // The stored latencyHint rides AudioContextOptions (Reflect-set onto
     // the options dict — it is a plain JS object, and the union-typed
@@ -343,18 +394,23 @@ async fn boot_worklet() -> Result<Worklet, String> {
     // silence with everything else working. Any genuine pointer press on the
     // page is a resume opportunity; keep the listener for the page's life
     // (resume() on a running context is a no-op).
+    // Since the rig AUTO-STARTS (no Start button), the boot itself is never
+    // a user gesture, so the context reliably comes up suspended and the
+    // page renders NOTHING until the first interaction — the `AudioNeeded`
+    // banner says so. Listen on every gesture kind a player might produce
+    // (a MIDI key press is not one — only DOM input counts).
     {
         let ctx2 = ctx.clone();
-        let on_pointer = Closure::<dyn FnMut()>::new(move || {
+        let on_gesture = Closure::<dyn FnMut()>::new(move || {
             let _ = ctx2.resume();
         });
         if let Some(doc) = window.document() {
-            let _ = doc.add_event_listener_with_callback(
-                "pointerdown",
-                on_pointer.as_ref().unchecked_ref(),
-            );
+            for ev in ["pointerdown", "mousedown", "touchstart", "keydown", "click"] {
+                let _ = doc
+                    .add_event_listener_with_callback(ev, on_gesture.as_ref().unchecked_ref());
+            }
         }
-        on_pointer.forget();
+        on_gesture.forget();
     }
     // AudioWorklet (and OPFS) exist only in SECURE contexts — https or
     // localhost. Over plain http on a LAN/tailnet IP, `ctx.audioWorklet`
@@ -443,13 +499,28 @@ async fn boot_worklet() -> Result<Worklet, String> {
     .await
     .map_err(|e| format!("wasm bytes: {}", js_str(e)))?;
 
+    // W13: one SHARED WebAssembly.Memory for the worklet and every streamer
+    // worker, so a decoded chunk lands in the heap the audio thread already
+    // reads. `None` = this page cannot host threads (no isolation, or a
+    // single-threaded wasm build), and the worklet inits with its own
+    // memory exactly as before.
+    let shared_memory = crate::web_keys_threads::spawn();
+
     let init = Worklet::obj("init");
     Worklet::set(&init, "wasmBytes", &wasm_bytes);
+    if let Some(mem) = shared_memory.as_ref() {
+        Worklet::set(&init, "memory", mem);
+    }
     Worklet::set(&init, "glueUrl", &WORKLET_GLUE_URL.into());
     Worklet::set(&init, "sampleRate", &f64::from(ctx.sample_rate()).into());
     Worklet::set(&init, "entry", &"keys".into());
-    port.post_message_with_transferable(&init, &Array::of1(&wasm_bytes))
-        .map_err(|e| format!("init post: {}", js_str(e)))?;
+    Worklet::set(&init, "warmPort", warm_port.as_ref());
+    Worklet::set(&init, "pcmBudgetMb", &f64::from(pcm_budget_mb()).into());
+    port.post_message_with_transferable(
+        &init,
+        &Array::of2(&wasm_bytes, warm_port.as_ref()),
+    )
+    .map_err(|e| format!("init post: {}", js_str(e)))?;
     ready_rx
         .await
         .map_err(|_| "worklet never became ready".to_string())?;
@@ -590,7 +661,7 @@ fn lane_tracks(lanes: &[signal_keys_proto::KeysLaneRef]) -> Vec<u32> {
 
 /// One `audio_stats` reading: the processor's render-load window plus the
 /// page-side AudioContext latency figures (W8).
-#[derive(Clone, Copy, PartialEq, Default)]
+#[derive(Clone, PartialEq, Default)]
 struct AudioStats {
     /// Render load 0..1+ — total measured render ms over the window's
     /// AUDIO ms (quanta × quantum-ms). See the processor's stats comment
@@ -608,6 +679,26 @@ struct AudioStats {
     base_ms: f64,
     /// `ctx.outputLatency` in ms (0 where the browser doesn't expose it).
     output_ms: f64,
+    /// Underrun episodes since boot (currentFrame discontinuities in the
+    /// processor) — the W12 realtime-safety proof: 0 while playing.
+    glitches: f64,
+    /// Total frames skipped across those episodes.
+    glitch_frames: f64,
+    /// Worst message-handler duration on the audio thread (ms) and which
+    /// message kind caused it — handlers share the render thread.
+    worst_handler_ms: f64,
+    /// The message kind that produced `worst_handler_ms` — names the
+    /// offender instead of leaving a bare number to guess at.
+    worst_handler_kind: String,
+    /// Pending warm requests in the worklet (samples awaiting the decoder
+    /// worker), plus how many PCM inserts landed / were budget-refused.
+    warm_depth: f64,
+    pcm_inserts: f64,
+    pcm_refused: f64,
+    /// Decoded PCM resident / its ceiling, in MB (limit -1 = unlimited) —
+    /// says whether the budget is what is keeping the rig from sounding.
+    pcm_used_mb: f64,
+    pcm_limit_mb: f64,
 }
 
 impl AudioStats {
@@ -744,6 +835,23 @@ struct HookAudio {
     output_ms: f64,
     #[facet(rename = "latencyMs")]
     latency_ms: f64,
+    glitches: f64,
+    #[facet(rename = "glitchFrames")]
+    glitch_frames: f64,
+    #[facet(rename = "worstHandlerMs")]
+    worst_handler_ms: f64,
+    #[facet(rename = "worstHandlerKind")]
+    worst_handler_kind: String,
+    #[facet(rename = "warmDepth")]
+    warm_depth: f64,
+    #[facet(rename = "pcmInserts")]
+    pcm_inserts: f64,
+    #[facet(rename = "pcmRefused")]
+    pcm_refused: f64,
+    #[facet(rename = "pcmUsedMb")]
+    pcm_used_mb: f64,
+    #[facet(rename = "pcmLimitMb")]
+    pcm_limit_mb: f64,
 }
 
 /// Install `window.__ftsRig = { state, packStates, masterPeak }` once.
@@ -774,7 +882,7 @@ fn install_hook() {
         RIG_HOOK.with(|h| JsValue::from_f64(h.borrow().audio.latency_ms()))
     });
     let audio_stats = Closure::<dyn FnMut() -> JsValue>::new(|| {
-        let a = RIG_HOOK.with(|h| h.borrow().audio);
+        let a = RIG_HOOK.with(|h| h.borrow().audio.clone());
         let row = HookAudio {
             load: a.load,
             worst_ms: a.worst_ms,
@@ -784,6 +892,15 @@ fn install_hook() {
             base_ms: a.base_ms,
             output_ms: a.output_ms,
             latency_ms: a.latency_ms(),
+            glitches: a.glitches,
+            glitch_frames: a.glitch_frames,
+            worst_handler_ms: a.worst_handler_ms,
+            worst_handler_kind: a.worst_handler_kind.clone(),
+            warm_depth: a.warm_depth,
+            pcm_inserts: a.pcm_inserts,
+            pcm_refused: a.pcm_refused,
+            pcm_used_mb: a.pcm_used_mb,
+            pcm_limit_mb: a.pcm_limit_mb,
         };
         JsValue::from_str(&facet_json::to_string(&row).unwrap_or_default())
     });
@@ -921,6 +1038,9 @@ pub fn KeysWebRig() -> Element {
     let lanes = use_signal(Vec::<LaneRow>::new);
     let worklet = use_signal(|| Option::<Worklet>::None);
     let master = use_signal(|| 0.0f32);
+    // The AudioContext is held by the autoplay policy until a real gesture
+    // (see the banner below) — polled by the meter tick.
+    let suspended = use_signal(|| false);
     let midi_inputs = use_signal(Vec::<String>::new);
     // WebMIDI availability text ("" = fine): permission denied / unsupported
     // reads very differently from "no devices plugged in" (W11).
@@ -947,7 +1067,20 @@ pub fn KeysWebRig() -> Element {
         }
         boot.set(Boot::Starting("booting audio worklet…".into()));
         hook_set_state("starting");
-        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, midi_status, astats, clients));
+        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, midi_status, astats, suspended, clients));
+    });
+
+    // Auto-start on mount: a live instrument should be READY when its page
+    // is open, not waiting behind a button. The AudioContext may come up
+    // `suspended` when the load was not a user gesture (autoplay policy);
+    // the pointerdown listener installed in `boot_worklet` resumes it on
+    // the first touch anywhere, so the only cost is that the very first
+    // interaction also un-suspends. (`rig-start` still exists for the
+    // Failed retry path, and the e2e suite clicks it when it is shown.)
+    use_effect(move || {
+        if matches!(*boot.peek(), Boot::Idle) {
+            start.call(());
+        }
     });
 
     // Full re-boot of the audio path (the latency-hint selector's change
@@ -971,7 +1104,7 @@ pub fn KeysWebRig() -> Element {
         lanes.set(Vec::new());
         boot.set(Boot::Starting("restarting audio…".into()));
         hook_set_state("starting");
-        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, midi_status, astats, clients));
+        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, midi_status, astats, suspended, clients));
     });
 
     let boot_running = matches!(boot(), Boot::Running);
@@ -1024,19 +1157,11 @@ pub fn KeysWebRig() -> Element {
                     "flex:1; min-width:0; display:flex; flex-direction:column; gap:16px; padding:20px;"
                 },
                 match boot() {
+                    // Idle is now a BLINK — the mount effect starts the rig
+                    // immediately — so it renders the same quiet line the
+                    // boot does rather than a button nobody gets to press.
                     Boot::Idle => rsx! {
-                        div { style: "display:flex; flex-direction:column; align-items:center; gap:12px; margin:auto; max-width:520px;",
-                            span { style: "font-size:18px; font-weight:700;", "Keys rig — {profile}" }
-                            span { style: "font-size:13px; color:#a1a1aa; text-align:center; max-width:420px;",
-                                "Plays the rig entirely in this browser: packs stream from the engine and cache locally; MIDI from your keyboard (WebMIDI) or the demo player."
-                            }
-                            button {
-                                "data-testid": "rig-start",
-                                style: "padding:10px 26px; border-radius:8px; background:#22c55e; color:#052e16; font-weight:700; font-size:15px; border:none; cursor:pointer;",
-                                onclick: move |_| start.call(()),
-                                "Start"
-                            }
-                        }
+                        div { style: "margin:auto; color:#a1a1aa; font-size:14px;", "starting the rig…" }
                     },
                     Boot::Starting(msg) => rsx! {
                         div { style: "margin:auto; color:#a1a1aa; font-size:14px;", "{msg}" }
@@ -1046,6 +1171,10 @@ pub fn KeysWebRig() -> Element {
                             span { style: "color:#ef4444; font-size:14px; font-weight:600;", "Could not start the rig" }
                             span { style: "color:#a1a1aa; font-size:13px; max-width:480px; text-align:center;", "{msg}" }
                             button {
+                                // Keeps the `rig-start` handle alive for the
+                                // one case a start is still manual: retrying
+                                // after a failed boot.
+                                "data-testid": "rig-start",
                                 style: "padding:6px 18px; border-radius:6px; background:#111113; color:#e4e4e7; border:1px solid #27272a; cursor:pointer;",
                                 onclick: move |_| start.call(()),
                                 "Retry"
@@ -1054,6 +1183,39 @@ pub fn KeysWebRig() -> Element {
                     },
                     Boot::Running => rsx! {
                         document::Style { {SIGNAL_TAILWIND} }
+                        // The rig boots on load, so the AudioContext is
+                        // created WITHOUT a user gesture and the browser
+                        // holds it suspended — the renderer never runs and
+                        // the rig is silent with everything else working.
+                        // Nothing in the page can lift that; only a real
+                        // gesture can. So SAY it, prominently, instead of
+                        // looking broken. Clears itself the moment the meter
+                        // tick sees the context running (any click, key or
+                        // touch anywhere resumes it).
+                        if suspended() {
+                            div {
+                                "data-testid": "audio-blocked",
+                                style: "position:fixed; inset:0; z-index:100; display:flex; \
+                                        align-items:center; justify-content:center; \
+                                        background:rgba(10,10,10,.82); cursor:pointer;",
+                                onclick: move |_| {
+                                    if let Some(w) = worklet.peek().as_ref() {
+                                        w.resume();
+                                    }
+                                },
+                                div {
+                                    style: "display:flex; flex-direction:column; align-items:center; \
+                                            gap:10px; padding:26px 34px; border-radius:12px; \
+                                            background:#111113; border:1px solid #27272a; max-width:420px;",
+                                    span { style: "font-size:16px; font-weight:700; color:#e4e4e7;",
+                                        "Click to enable audio"
+                                    }
+                                    span { style: "font-size:13px; color:#a1a1aa; text-align:center; line-height:1.5;",
+                                        "The rig is loaded and streaming. Browsers only allow sound to start after you interact with the page."
+                                    }
+                                }
+                            }
+                        }
                         // The real remote UI over the in-process clients,
                         // inside the scale-to-fit wrapper (W11): a viewport
                         // narrower than the rig's natural width gets the
@@ -1218,6 +1380,7 @@ async fn boot_rig(
     midi_inputs: Signal<Vec<String>>,
     midi_status: Signal<String>,
     astats: Signal<AudioStats>,
+    suspended: Signal<bool>,
     mut clients: Signal<Option<(KeysRigClient, KeysRigStreamClient)>>,
 ) {
     let fail = |boot: &mut Signal<Boot>, msg: String| {
@@ -1225,8 +1388,14 @@ async fn boot_rig(
         boot.set(Boot::Failed(msg));
     };
 
-    // 1. Audio worklet.
-    let worklet = match boot_worklet().await {
+    // 1. The decoder worker + the audio worklet, wired by one
+    // MessageChannel (W12): warm requests and decoded PCM flow between
+    // them directly — the worklet never decodes on its (audio) thread.
+    let warm_port = match crate::web_keys_decoder::install(48_000.0) {
+        Ok(p) => p,
+        Err(e) => return fail(&mut boot, e),
+    };
+    let worklet = match boot_worklet(warm_port).await {
         Ok(w) => w,
         Err(e) => return fail(&mut boot, e),
     };
@@ -1249,6 +1418,13 @@ async fn boot_rig(
         Ok(v) if v.as_f64().is_some() => {}
         Ok(v) => return fail(&mut boot, format!("open_lanes: {}", js_str(v))),
         Err(e) => return fail(&mut boot, e),
+    }
+    // Mirror the lanes into the decoder worker — it resolves the same
+    // paths the worklet's residency checks will ask it to decode.
+    if let Some(decoder) = crate::web_keys_decoder::current() {
+        if let Err(e) = decoder.open_lanes(&program.program_json).await {
+            tracing::warn!("decoder worker open_lanes: {e}");
+        }
     }
     let tracks = lane_tracks(&program.lanes);
     lanes.set(
@@ -1324,7 +1500,7 @@ async fn boot_rig(
 
     // 5. Meter poll (~10 Hz) + audio-stats poll (2 Hz — the processor's
     // load window only turns over every ~0.7 s anyway).
-    spawn(poll_peaks(worklet.clone(), worklet_out, lanes, master));
+    spawn(poll_peaks(worklet.clone(), worklet_out, lanes, master, suspended));
     spawn(poll_audio_stats(worklet.clone(), worklet_out, astats));
 
     // 6. Stream the packs, lane order. Small packs stream whole (the W6
@@ -1499,7 +1675,25 @@ async fn attach_pack(
         .await;
     match attach {
         Ok(v) if v.as_bool() == Some(true) => {
-            let _ = worklet.rpc("reload_lanes", &[], None).await;
+            // Scoped to the pack that just landed (W12): the whole-program
+            // reload rebuilt all nine lanes ON THE AUDIO THREAD, >500 ms per
+            // attach.
+            let _ = worklet
+                .rpc("reload_lanes", &[("key", key.into())], None)
+                .await;
+            // W12: mirror into the decoder worker — it reads the pack's
+            // whole OPFS file on demand and starts/extends coverage fill.
+            if let Some(decoder) = crate::web_keys_decoder::current() {
+                let (name, variant) = {
+                    let rows = packs.peek();
+                    let row = &rows[i];
+                    (row.name.clone(), row.variant.clone())
+                };
+                let opfs = format!("{name}.{variant}.signalpack");
+                decoder.attach_pack(key, next_whole_id(), &opfs, incoming).await;
+                decoder.reload_lanes().await;
+                // NO background coverage fill (W12): see `DecoderWorker::coverage`.
+            }
             update_row(packs, i, |r| {
                 r.phase = PackPhase::Ready;
                 r.seg_done = r.seg_total.max(1);
@@ -1513,6 +1707,21 @@ async fn attach_pack(
 }
 
 // ── Progressive streaming (W7) ─────────────────────────────────────────────
+
+/// Page-allocated DECODER-WORKER ids for whole packs. Starts at 2^21 so
+/// it collides with neither the processor's whole-buffer counter (from 1)
+/// nor the progressive ids (from 2^20) — worker net-miss reports must map
+/// unambiguously.
+fn next_whole_id() -> u32 {
+    thread_local! {
+        static NEXT: Cell<u32> = const { Cell::new(1 << 21) };
+    }
+    NEXT.with(|c| {
+        let v = c.get();
+        c.set(v + 1);
+        v
+    })
+}
 
 /// Page-allocated worklet pack ids for progressive attaches. Starts at
 /// 2^20 so it can never collide with the processor's own whole-buffer
@@ -1593,6 +1802,24 @@ impl ProgressiveJob {
             self.queue.push_front(idx);
         }
         self.urgent = true;
+    }
+
+    /// The COMMITTED byte ranges of the sparse OPFS file, merged where
+    /// contiguous — what the decoder worker may legitimately read (a hole
+    /// in the sparse file reads as zeros and must never reach a decode).
+    fn committed_ranges(&self) -> Vec<(u64, u64)> {
+        let mut idx: Vec<usize> =
+            (0..self.segments.len()).filter(|&i| self.received[i]).collect();
+        idx.sort_by_key(|&i| self.segments[i].start);
+        let mut out: Vec<(u64, u64)> = Vec::new();
+        for i in idx {
+            let s = &self.segments[i];
+            match out.last_mut() {
+                Some((start, len)) if *start + *len == s.start => *len += s.len,
+                _ => out.push((s.start, s.len)),
+            }
+        }
+        out
     }
 
     fn ledger(&self) -> web_packs::PlanLedger {
@@ -1827,7 +2054,26 @@ async fn start_progressive(
         fail(&mut packs, e);
         return None;
     }
-    let _ = worklet.rpc("reload_lanes", &[], None).await;
+    // Scoped to this pack (W12) — see the note at the whole-pack attach.
+    let _ = worklet
+        .rpc("reload_lanes", &[("key", key.into())], None)
+        .await;
+    // W12: mirror into the decoder worker — same id, the sparse OPFS
+    // file, and the committed ranges it may read (rank-0 was committed
+    // above, so the worker can open the pack immediately).
+    if let Some(decoder) = crate::web_keys_decoder::current() {
+        decoder
+            .attach_pack_progressive(
+                key,
+                job.id,
+                &web_packs::sparse_name(&job.name, &job.variant),
+                job.total,
+                &job.committed_ranges(),
+            )
+            .await;
+        decoder.reload_lanes().await;
+        // NO background coverage fill (W12): see `DecoderWorker::coverage`.
+    }
 
     // Queue the rest in rank order.
     let mut pending: Vec<usize> =
@@ -1868,6 +2114,34 @@ async fn run_progressive_fill(
                 }
             }
         }
+        // W12: the decoder worker's un-serveable ranges (a warm decode hit
+        // bytes OPFS has not committed yet) bump the network queue the
+        // same way — its channel fills asynchronously, so drain every lap.
+        // When the range is already DELIVERED to the worklet but sits
+        // uncommitted in the sparse writer, no fetch will ever satisfy the
+        // worker — force the commit now so the warm retries immediately
+        // instead of after the next 16 MB flush.
+        for (id, start, len) in crate::web_keys_decoder::drain_net_misses() {
+            if let Some(job) = jobs.iter_mut().find(|j| j.id == id) {
+                job.bump_range(start, len);
+                let end = start.saturating_add(len);
+                let waiting_on_commit = job.segments.iter().enumerate().any(|(i, s)| {
+                    job.delivered[i]
+                        && !job.received[i]
+                        && s.start < end
+                        && s.start + s.len > start
+                });
+                if waiting_on_commit && job.writer.commit().await.is_ok() {
+                    for u in job.uncommitted.drain(..) {
+                        job.received[u] = true;
+                    }
+                    web_packs::plan_ledger_put(&job.ledger()).await;
+                    if let Some(decoder) = crate::web_keys_decoder::current() {
+                        decoder.pack_ranges(job.id, &job.committed_ranges());
+                    }
+                }
+            }
+        }
 
         // ── Pick: urgent (miss-bumped) jobs first, else the first open ───
         let ji = jobs
@@ -1881,14 +2155,15 @@ async fn run_progressive_fill(
             }
             break;
         };
-        let (idx, seg, row, name, variant) = {
+        let (idx, seg, row, name, variant, urgent_pick) = {
             let job = &mut jobs[ji];
+            let urgent_pick = job.urgent;
             job.urgent = false;
             let Some(idx) = job.queue.pop_front() else { continue };
             if job.delivered[idx] {
                 continue;
             }
-            (idx, job.segments[idx], job.row, job.name.clone(), job.variant.clone())
+            (idx, job.segments[idx], job.row, job.name.clone(), job.variant.clone(), urgent_pick)
         };
 
         // ── Fetch: establish lazily, one reconnect, then give up ─────────
@@ -1931,13 +2206,23 @@ async fn run_progressive_fill(
         worklet.pack_segment(job.id, seg.start, &bytes);
         job.delivered[idx] = true;
         match job.writer.write_at(seg.start, &bytes).await {
-            Ok(committed) => {
+            Ok(mut committed) => {
                 job.uncommitted.push(idx);
+                // W12: a miss-bumped segment is a note WAITING on the
+                // decoder worker, which reads the sparse file's COMMITTED
+                // bytes — force the commit so the warm retries now instead
+                // of after the next 16 MB.
+                if urgent_pick && !committed && job.writer.commit().await.is_ok() {
+                    committed = true;
+                }
                 if committed {
                     for u in job.uncommitted.drain(..) {
                         job.received[u] = true;
                     }
                     web_packs::plan_ledger_put(&job.ledger()).await;
+                    if let Some(decoder) = crate::web_keys_decoder::current() {
+                        decoder.pack_ranges(job.id, &job.committed_ranges());
+                    }
                 }
             }
             Err(e) => {
@@ -1969,15 +2254,27 @@ async fn finalize_progressive_job(mut job: ProgressiveJob, packs: &mut Signal<Ve
         *r = true;
     }
     web_packs::plan_ledger_put(&job.ledger()).await;
-    let ProgressiveJob { name, variant, total, sha256, row, writer, sample_total, .. } = job;
+    let ProgressiveJob { name, variant, total, sha256, row, writer, sample_total, id, .. } = job;
     let _ = writer.finish().await;
     match web_packs::finalize_progressive(&name, &variant, total, &sha256).await {
-        Ok(()) => update_row(packs, row, |r| {
-            r.bytes = total;
-            r.seg_done = sample_total.max(1);
-            r.seg_total = sample_total.max(1);
-            r.phase = PackPhase::Ready;
-        }),
+        Ok(()) => {
+            // W12: the sparse file was renamed into place — repoint the
+            // decoder worker at the (now whole, fully readable) file.
+            if let Some(decoder) = crate::web_keys_decoder::current() {
+                let key = packs.peek().get(row).map(|r| r.key.clone()).unwrap_or_default();
+                if !key.is_empty() {
+                    let opfs = format!("{name}.{variant}.signalpack");
+                    decoder.attach_pack(&key, id, &opfs, total).await;
+                    // NO background coverage fill (W12): see `DecoderWorker::coverage`.
+                }
+            }
+            update_row(packs, row, |r| {
+                r.bytes = total;
+                r.seg_done = sample_total.max(1);
+                r.seg_total = sample_total.max(1);
+                r.phase = PackPhase::Ready;
+            })
+        }
         Err(e) => update_row(packs, row, |r| r.phase = PackPhase::Failed(e)),
     }
 }
@@ -2102,11 +2399,19 @@ async fn poll_peaks(
     current: Signal<Option<Worklet>>,
     mut lanes: Signal<Vec<LaneRow>>,
     mut master: Signal<f32>,
+    mut suspended: Signal<bool>,
 ) {
     loop {
         architect::platform::sleep(std::time::Duration::from_millis(100)).await;
         if !still_current(&worklet, &current) {
             return;
+        }
+        // Autoplay watch: with no Start button the context starts suspended
+        // and renders NOTHING until a real gesture. Drive the banner off the
+        // live state rather than guessing.
+        let is_susp = worklet.is_suspended();
+        if *suspended.peek() != is_susp {
+            suspended.set(is_susp);
         }
         let Ok(v) = worklet.rpc("track_peaks", &[], None).await else {
             continue;
@@ -2152,9 +2457,10 @@ async fn poll_audio_stats(
         let Some(stats) = worklet.audio_stats().await else {
             continue;
         };
-        astats.set(stats);
+        let voices = stats.voices;
+        astats.set(stats.clone());
         hook_set_audio(stats);
-        crate::web_keys_backend::on_voices(stats.voices);
+        crate::web_keys_backend::on_voices(voices);
     }
 }
 
@@ -2218,6 +2524,74 @@ fn AudioPanel(
                     "data-testid": "audio-latency-tip",
                     style: "font-size:11px; color:#fbbf24; line-height:1.4;",
                     "for lowest latency, launch the browser with --audio-buffer-size=256"
+                }
+            }
+            // W12: the realtime-safety proof — underruns MUST stay 0 while
+            // playing (each one was an audible dropout), and no message
+            // handler may sit on the audio thread for milliseconds.
+            div { style: row_style,
+                span { style: key_style, "underruns" }
+                span {
+                    "data-testid": "audio-glitches",
+                    style: if a.glitches > 0.0 {
+                        "font-size:12px; color:#ef4444; font-weight:700;"
+                    } else {
+                        "font-size:12px; color:#22c55e;"
+                    },
+                    if a.glitches > 0.0 {
+                        "{a.glitches as u64} ({a.glitch_frames as u64} frames)"
+                    } else {
+                        "0"
+                    }
+                }
+            }
+            div { style: row_style,
+                span { style: key_style, "worst handler" }
+                span { style: val_style,
+                    "{a.worst_handler_ms:.0} ms ({a.worst_handler_kind})"
+                }
+            }
+            // The decoded-PCM ceiling: how much of the rig can sound with
+            // no fetch. Raising it trades tab memory for fewer cold notes;
+            // it applies on the next boot (the ceiling is resolved once, so
+            // the selector re-boots the audio path like the latency hint).
+            div { style: row_style,
+                span { style: key_style, "pcm budget" }
+                span { style: val_style,
+                    if a.pcm_limit_mb < 0.0 {
+                        "{a.pcm_used_mb:.0} MB / unlimited"
+                    } else {
+                        "{a.pcm_used_mb:.0} / {a.pcm_limit_mb:.0} MB"
+                    }
+                }
+            }
+            div { style: row_style,
+                span { style: key_style, "budget" }
+                select {
+                    "data-testid": "audio-pcm-budget",
+                    style: "background:#18181b; color:#e4e4e7; border:1px solid #27272a; \
+                            border-radius:5px; padding:2px 6px; font-size:12px;",
+                    disabled: !boot_running,
+                    value: "{pcm_budget_mb()}",
+                    onchange: move |ev| {
+                        let Ok(mb) = ev.value().parse::<u32>() else { return };
+                        if let Some(st) = web_sys::window().and_then(|w| w.local_storage().ok().flatten()) {
+                            let _ = st.set_item(PCM_BUDGET_KEY, &mb.to_string());
+                        }
+                        // Same in-page re-boot as the latency hint: cached
+                        // program + OPFS packs mean no network.
+                        restart.call(());
+                    },
+                    option { value: "768", "768 MB" }
+                    option { value: "1536", "1.5 GB" }
+                    option { value: "2304", "2.25 GB" }
+                    option { value: "3072", "3 GB" }
+                }
+            }
+            div { style: row_style,
+                span { style: key_style, "decoder" }
+                span { style: val_style,
+                    "{a.pcm_inserts as u64} in · {a.warm_depth as u64} pending · {a.pcm_refused as u64} full"
                 }
             }
             div { style: "display:flex; flex-direction:column; gap:3px;",

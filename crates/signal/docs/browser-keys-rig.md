@@ -499,6 +499,130 @@ addenda (use the app's real chrome; hot-plugged controllers never work).
   viewport fit at 1366×768 and 1920×1080 (no horizontal overflow,
   `#keys-fit-inner` starts inside the viewport and fits it).
 
+### W12 — realtime-safe worklet: NOTHING decodes on the audio thread
+
+The field bug: "audio goes silent every time I play a new note." Root
+cause — in an `AudioWorkletGlobalScope` there is only ONE thread: the
+message-port handlers run on the audio rendering thread between quanta.
+Two paths decoded there anyway:
+
+1. `warm_note` on every note-on (W6) — a cold key synchronously
+   ogg-decoded its sample (plus the `__ftsPackRead` JS→wasm copy) across
+   all lanes, stalling `process()` for tens–hundreds of ms. The output
+   underran and every sounding voice dropped.
+2. `preload_samples` ran synchronously in the worklet on every lane
+   reload (rig.rs even said "the caller is the control side of the
+   worklet" — which IS the render thread) — seconds of stall every time a
+   pack turned ready mid-play.
+
+The fix — a **decoder worker**: a second instance of the same
+`signal-keys-worklet` wasm module in a plain module Worker
+(`keys_decoder_worker.js`, staged beside the processor), wired to the
+worklet by ONE `MessageChannel` (`warmPort` in the init — the page main
+thread is not in the warm loop).
+
+- **Worklet (audio side)**: note-ons RESOLVE ONLY —
+  `KeysRig::missing_note_samples` (the resolve half of `warm_note`, zone-
+  filtered walk, no decode) queues `(layer, path)` pairs, drained per
+  quantum by the processor and posted on `warmPort`. Decoded PCM comes
+  back as `pcm` messages → `KeysWorklet::insertPcm` — one bounded memcpy
+  + a map insert (`SampleCache::insert_decoded`, publishing an audio
+  snapshot); the same past-ceiling + shed-largest budget semantics as the
+  old warm (`RenderNode::insert_decoded_sample`). Lane reloads no longer
+  preload at all on wasm.
+- **Worker (decode side)**: mirrors `open_lanes` / `reload_lanes` /
+  attaches, decodes via `KeysWorklet::decodePathPcm` (decode + take —
+  the worker's own cache stays flat), and paces sends on `pcm_ack` (a
+  flood of memcpys between quanta would itself glitch). Pack bytes are
+  NOT resident in the worker: its `__ftsPackRead` misses fetch ranges
+  from the SAME OPFS files the page maintains (whole files freely;
+  sparse files only within page-pushed COMMITTED ranges — an OPFS hole
+  reads as zeros and must never reach a decode), LRU-bounded at 256 MB.
+  Un-serveable ranges surface to the page as `net_miss` → the existing
+  bump-the-network-queue path, plus a FORCED sparse commit when the
+  bytes were delivered-but-uncommitted (else a warm waits for the next
+  16 MB flush). Background coverage fill (`coverage_samples` — playable
+  order, lanes interleaved round-robin) streams PCM in until the budget
+  refuses an insert.
+- **Hard telemetry (the proof)**: the processor counts real underruns
+  via `currentFrame` discontinuities (the browser only calls `process()`
+  for quanta it plays; a jump = an audible dropout), times every message
+  handler (worst ms + kind — handlers share the audio thread), and
+  reports warm-queue depth + PCM inserts/refusals. All of it rides
+  `audio_stats` → the Audio panel (`audio-glitches` testid: green 0 /
+  red count) and `__ftsRig.audioStats()`. The page resets the counters
+  on suspend/resume transitions it causes (`reset_audio_stats`).
+- **e2e**: `realtime: cold-note warms never glitch the audio thread` —
+  sustains a chord, hammers 12 cold extremes across both ends of the
+  keyboard, asserts the chord stays audible through every press,
+  `glitches` delta == 0, `worstHandlerMs` < 20, and `pcmInserts` > 0
+  (the worker really decoded). This test FAILS against the pre-W12 code.
+  The miss-driven progressive test budget went 60 → 90 s (full-suite
+  congestion flaked it within seconds of the wire).
+
+Follow-ups noted: chunked `insertPcm` if worst-quantum telemetry ever
+shows the single memcpy spiking on huge samples; SharedArrayBuffer pack
+stores (COOP/COEP) would let worklet and worker share one byte copy.
+
+### W13 — the unrestricted rig: shared memory, real streamer threads (PLAN)
+
+W12 removed decode from the audio thread by shipping PCM in from a worker,
+but that design is fighting the platform rather than using it, and it has a
+hard ceiling: every sample the rig can play must be FULLY DECODED inside the
+4 GB wasm address space. A 2.4 GB proxy set decodes to far more than that,
+so "a sample library in every slot" is not reachable by raising the budget.
+Nor is it reachable by copying PCM over `postMessage` — every handoff lands
+on the audio thread as a memcpy.
+
+The native engine already solves this exactly the way Kontakt does (DFD):
+samples stay COMPRESSED, each zone keeps a small decoded head resident, and a
+background **streamer thread pool** fills chunks ahead of the playhead. The
+audio thread only ever reads memory. `fts-sample` HAS this
+(`stream.rs`: `StreamedSample`, `wanted` bitmask, `streamer()` pool) — it is
+compiled out on wasm purely because wasm32-unknown-unknown has no threads,
+which is why the wasm arm used to decode inline (the W12 field bug).
+
+So the target is not a new design; it is making the EXISTING design compile
+and run in the browser:
+
+1. **Cross-origin isolation** — serve `Cross-Origin-Opener-Policy:
+   same-origin` + `Cross-Origin-Embedder-Policy: require-corp` from the
+   engine. That unlocks `SharedArrayBuffer`, the precondition for everything
+   below. Needs an `architect::host` change (the web bundle + fallback are
+   served there), so: local `[patch]` to develop, tag, bump. Self-hosted
+   assets only, so `require-corp` costs us nothing.
+2. **Shared wasm memory** — build `signal-keys-worklet` with
+   `+atomics,+bulk-memory,+mutable-globals` and `-Z build-std` (nightly;
+   `fts.rustNightly` already exists in the flake for phon-jit). The PAGE
+   creates the shared `WebAssembly.Memory`; the worklet and N decoder
+   workers instantiate the SAME module over it. Then a worker writes decoded
+   chunks directly into the heap the audio thread reads — no postMessage, no
+   memcpy, no `insertPcmChunk`, no residency dance. The whole W12 warm/PCM
+   protocol collapses into `streamer().enqueue()`.
+3. **Wire the streamer pool to those threads** — `stream.rs`'s
+   `#[cfg(feature = "engine-native")]` arms become "has threads" arms.
+   `request()` sets its wanted bit and wakes a streamer via `Atomics.notify`;
+   chunk fills happen off-thread exactly as they do natively.
+4. **Memory then stops being the constraint**: resident cost is heads +
+   in-flight chunks (tens of MB), not decoded libraries (many GB). Every
+   slot can hold a library because nothing is fully decoded. The PCM budget
+   stays as a cap on the eager path, not as the thing that decides whether a
+   note sounds.
+5. **SIMD** (`+simd128`, stable, no isolation needed) — nine lanes of sampler
+   + FX render in ONE thread, so DSP throughput is the headroom. Landed
+   ahead of the rest since it is a build flag; judge it by `renderLoad()`.
+
+Latency, honestly: "zero" is not physical — the floor is one render quantum
+(128 frames ≈ 2.7 ms) plus the browser's output buffer. What IS achievable is
+never exceeding that floor: no stall, no underrun, no growth under load. The
+underrun counter and `worstHandlerMs` from W12 are how each step gets judged.
+
+Risks to weigh before starting: nightly + `build-std` for the worklet crate
+(the rest of the tree stays stable 1.94); `require-corp` breaks any
+cross-origin asset (we have none); AudioWorklet cannot spawn workers itself,
+so threads are page-spawned and handed in; and wasm32 still caps the SHARED
+memory at 4 GB — fine, because streaming keeps residency small.
+
 ## Open questions / later
 
 - Piano-lane weight on travel links: consider a lower-quality travel

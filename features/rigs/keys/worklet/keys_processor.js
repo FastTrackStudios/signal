@@ -23,9 +23,26 @@
 //   all_notes_off | panic
 //   track_peaks { replyTo }                          → [peak, …] (0 = master)
 //   audio_stats { replyTo }                          → { load, worstMs, quanta,
-//                                                        sampleRate, voices }
+//                                                        sampleRate, voices,
+//                                                        glitches, glitchFrames,
+//                                                        worstHandlerMs,
+//                                                        worstHandlerKind,
+//                                                        warmDepth, pcmInserts,
+//                                                        pcmRefused }
+//   reset_audio_stats                                  (page-caused suspend)
 //   set_track_volume { index, volume } | set_track_mute { index, muted }
 //   play | pause | stop
+//
+// W12 — the decoder-worker port (init.warmPort, a transferred MessagePort
+// wired straight to the page's decoder worker):
+//   out: warm { requests: [{layer, path}, …] }   cold note-on misses
+//   in:  pcm  { layer, path, channels, sampleRate, pcm: Float32Array,
+//               chargePast }                     → insertPcm; replies
+//        pcm_ack { path, layer, accepted, chargePast }
+// The worklet NEVER decodes — message handlers share the audio thread, and
+// a synchronous ogg decode here starved process() (the field bug W12
+// fixed). All decode happens in the worker; only a bounded memcpy lands
+// here, and the glitch counters above prove the budget is respected.
 //
 // Progressive packs (W7 range streaming): the PAGE allocates the id (its
 // ids start at 2^20 so they never collide with this processor's own
@@ -77,7 +94,40 @@ class KeysRigProcessor extends AudioWorkletProcessor {
     this.statLoad = 0;       // last COMPLETED window: render ms / audio ms
     this.statLoadWorstMs = 0;
     this.statTotalQuanta = 0; // monotonic, never reset
-    this.port.onmessage = (e) => this.handleMessage(e.data);
+    // ── Underrun + handler tracing (W12) ──────────────────────────────
+    // `currentFrame` (worklet global) advances by 128 per process() call;
+    // a jump means the browser SKIPPED quanta — the output underran and
+    // the player heard a dropout. This is the hard number that proves (or
+    // disproves) glitch-free playback: it must stay 0 while playing.
+    this.lastFrame = -1;
+    this.glitches = 0;       // discontinuity episodes
+    this.glitchFrames = 0;   // total frames skipped across them
+    // Message handlers share the audio thread — a slow one starves
+    // process() exactly like a slow render. Track the worst offender.
+    this.worstHandlerMs = 0;
+    this.worstHandlerKind = '';
+    // The decoder worker's direct line (init.warmPort): warm requests out,
+    // decoded PCM in — the page main thread never sits in this loop.
+    this.warmPort = null;
+    this.port.onmessage = (e) => this.timedHandle(e.data);
+  }
+
+  // Time every handler with the coarse worklet clock — slow handlers on
+  // this thread ARE audio glitches, so they get first-class telemetry.
+  // Only the synchronous span is measured (handleMessage awaits only in
+  // 'init', whose wasm compile predates playback and would drown the
+  // numbers that matter).
+  timedHandle(msg) {
+    const t0 = Date.now();
+    const done = this.handleMessage(msg);
+    if (msg?.kind !== 'init') {
+      const dt = Date.now() - t0;
+      if (dt > this.worstHandlerMs) {
+        this.worstHandlerMs = dt;
+        this.worstHandlerKind = msg?.kind ?? '?';
+      }
+    }
+    return done;
   }
 
   // Insert one streamed segment into a sparse pack store, keeping `segs`
@@ -93,11 +143,19 @@ class KeysRigProcessor extends AudioWorkletProcessor {
       if (segs[mid].start < start) lo = mid + 1; else hi = mid;
     }
     segs.splice(lo, 0, { start, bytes });
-    // Merge with the previous / next neighbour when contiguous.
+    // Merge with the previous / next neighbour when contiguous — but ONLY
+    // while the result stays small. A merge allocates and copies the joined
+    // buffer, and this runs in a message handler, i.e. ON THE AUDIO THREAD:
+    // with a half-streamed piano the joins grew into the tens of MB and this
+    // handler measured 90 ms (~34 render quanta). Reads stitch across
+    // segments anyway, so an unmerged store costs a little read work instead
+    // of a render stall.
+    const MERGE_CAP = 4 * 1024 * 1024;
     const mergeAt = (i) => {
       const a = segs[i], b = segs[i + 1];
       if (!a || !b) return false;
       if (a.start + a.bytes.byteLength !== b.start) return false;
+      if (a.bytes.byteLength + b.bytes.byteLength > MERGE_CAP) return false;
       const joined = new Uint8Array(a.bytes.byteLength + b.bytes.byteLength);
       joined.set(a.bytes, 0);
       joined.set(b.bytes, a.bytes.byteLength);
@@ -183,9 +241,58 @@ class KeysRigProcessor extends AudioWorkletProcessor {
     try {
       switch (msg.kind) {
         case 'init': {
-          await init(msg.wasmBytes);
+          // With a shared memory (W13) the worklet must instantiate over
+          // THAT heap, not its own — otherwise the streamer workers decode
+          // into memory this thread never reads.
+          await init(msg.memory
+            ? { module_or_path: msg.wasmBytes, memory: msg.memory }
+            : msg.wasmBytes);
           this.renderer = new wasm.KeysWorklet(msg.sampleRate);
+          // BEFORE anything decodes: the page's decoded-PCM ceiling. The
+          // browser has no environment for FTS_PRELOAD_BUDGET_MB, so it
+          // rides the init message.
+          if (msg.pcmBudgetMb && typeof this.renderer.setPcmBudgetMb === 'function') {
+            this.renderer.setPcmBudgetMb(msg.pcmBudgetMb);
+          }
+          // The decoder worker's MessagePort (W12): warm requests flow out,
+          // decoded PCM flows back in — worklet ↔ worker directly.
+          if (msg.warmPort) {
+            this.warmPort = msg.warmPort;
+            this.warmPort.onmessage = (e) => this.timedHandle(e.data);
+          }
           this.port.postMessage({ kind: 'ready' });
+          break;
+        }
+        case 'pcm_chunk': {
+          // One bounded piece of a decoded sample (see insertPcmChunk).
+          // Only the last piece publishes it and gets acked.
+          if (!this.renderer) break;
+          const ok = this.renderer.insertPcmChunk(
+            msg.layer, msg.path, msg.channels, msg.sampleRate,
+            msg.offset, msg.pcm, !!msg.last, !!msg.chargePast,
+          );
+          if (msg.last || !ok) {
+            this.warmPort?.postMessage({
+              kind: 'pcm_ack', path: msg.path, layer: msg.layer,
+              accepted: ok, chargePast: !!msg.chargePast,
+            });
+          }
+          break;
+        }
+        case 'pcm': {
+          // Decoded PCM from the worker: one memcpy into wasm + a map
+          // insert — never a decode. `chargePast` marks a note-driven warm
+          // (beats the budget ceiling; the engine sheds afterwards);
+          // coverage fill sends false and pauses when refused.
+          if (!this.renderer) break;
+          const accepted = this.renderer.insertPcm(
+            msg.layer, msg.path, msg.channels, msg.sampleRate,
+            msg.pcm, !!msg.chargePast,
+          );
+          this.warmPort?.postMessage({
+            kind: 'pcm_ack', path: msg.path, layer: msg.layer,
+            accepted, chargePast: !!msg.chargePast,
+          });
           break;
         }
         case 'attach_pack': {
@@ -274,7 +381,17 @@ class KeysRigProcessor extends AudioWorkletProcessor {
         case 'reload_lanes': {
           let value = true;
           try {
-            this.renderer.reloadLanes();
+            // `key` present → rebuild ONLY the lanes that play that pack.
+            // The whole-program reload measured >500 ms on this (audio)
+            // thread with the full Worship set; scoping it to the pack that
+            // just arrived keeps the stall bounded and leaves every other
+            // lane sounding. Without a key (or if the export is missing) it
+            // falls back to the full reload.
+            if (msg.key && typeof this.renderer.reloadLanesForPack === 'function') {
+              this.renderer.reloadLanesForPack(msg.key);
+            } else {
+              this.renderer.reloadLanes();
+            }
           } catch (e) {
             value = String(e);
           }
@@ -286,6 +403,15 @@ class KeysRigProcessor extends AudioWorkletProcessor {
           this.renderer?.midi(s, d1, d2);
           break;
         }
+        case 'reset_audio_stats':
+          // The page sends this after a context suspend/resume it caused —
+          // the currentFrame jump across a suspension is not an underrun.
+          this.lastFrame = -1;
+          this.glitches = 0;
+          this.glitchFrames = 0;
+          this.worstHandlerMs = 0;
+          this.worstHandlerKind = '';
+          break;
         case 'all_notes_off':
           this.renderer?.allNotesOff();
           break;
@@ -308,12 +434,50 @@ class KeysRigProcessor extends AudioWorkletProcessor {
           } catch (_e) {
             // A trapped wasm instance must not take the stats reply down.
           }
+          let warmDepth = 0;
+          let pcmInserts = 0;
+          let pcmRefused = 0;
+          let pcmUsedMb = 0;
+          let pcmLimitMb = 0;
+          let reloadLanes = 0;
+          let reloadFull = 0;
+          try {
+            if (this.renderer) {
+              if (typeof this.renderer.warmQueueDepth === 'function') {
+                warmDepth = this.renderer.warmQueueDepth();
+              }
+              if (typeof this.renderer.pcmInsertCount === 'function') {
+                pcmInserts = this.renderer.pcmInsertCount();
+                pcmRefused = this.renderer.pcmRefusedCount();
+              }
+              if (typeof this.renderer.pcmUsedMb === 'function') {
+                pcmUsedMb = this.renderer.pcmUsedMb();
+                pcmLimitMb = this.renderer.pcmLimitMb();
+              }
+              if (typeof this.renderer.reloadFullCount === 'function') {
+                reloadLanes = this.renderer.reloadLaneCount();
+                reloadFull = this.renderer.reloadFullCount();
+              }
+            }
+          } catch (_e) { /* trapped wasm must not take the reply down */ }
           this.reply(msg, {
             load: this.statLoad,
             worstMs: this.statLoadWorstMs,
             quanta: this.statTotalQuanta,
             sampleRate,
             voices,
+            // ── W12 realtime-safety proof ──
+            glitches: this.glitches,
+            glitchFrames: this.glitchFrames,
+            worstHandlerMs: this.worstHandlerMs,
+            worstHandlerKind: this.worstHandlerKind,
+            warmDepth,
+            pcmInserts,
+            pcmRefused,
+            pcmUsedMb,
+            pcmLimitMb,
+            reloadLanes,
+            reloadFull,
           });
           break;
         }
@@ -348,12 +512,29 @@ class KeysRigProcessor extends AudioWorkletProcessor {
     if (!this.renderer) {
       return true;
     }
+    // Underrun detection: the browser only calls process() for quanta it
+    // actually plays; a currentFrame jump = skipped quanta = an audible
+    // dropout. (A suspended context resuming also jumps — the page resets
+    // these counters on state transitions it causes.)
+    if (this.lastFrame >= 0) {
+      const skipped = currentFrame - this.lastFrame - 128;
+      if (skipped > 0) {
+        this.glitches += 1;
+        this.glitchFrames += skipped;
+      }
+    }
+    this.lastFrame = currentFrame;
     const out = outputs[0];
     // Time the render with the coarse (~1 ms) worklet clock and aggregate —
     // see the constructor's stats comment for why raw per-call numbers lie.
     const t0 = Date.now();
     this.renderer.render(out[0], out[1] ?? out[0]);
     const dt = Date.now() - t0;
+    // Ship queued warm requests to the decoder worker (cheap boolean per
+    // quantum; the queue only fills on a note-on that found cold samples).
+    if (this.warmPort && this.renderer.hasWarmRequests()) {
+      this.warmPort.postMessage({ kind: 'warm', requests: this.renderer.takeWarmRequests() });
+    }
     this.statRenderMs += dt;
     if (dt > this.statWorstMs) this.statWorstMs = dt;
     this.statQuanta += 1;

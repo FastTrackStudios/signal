@@ -32,6 +32,16 @@ test.afterAll(async () => {
   await context?.close();
 });
 
+// The rig AUTO-STARTS on mount now, so `rig-start` only appears on the
+// failed-boot retry path. Click it if it happens to be there; otherwise
+// the boot is already under way.
+async function ensureStarted(): Promise<void> {
+  const btn = page.getByTestId('rig-start');
+  if (await btn.isVisible().catch(() => false)) {
+    await btn.click();
+  }
+}
+
 async function rigState(): Promise<string | null> {
   return page.evaluate(() => (window as any).__ftsRig?.state() ?? null);
 }
@@ -90,7 +100,7 @@ test('boot: rig starts, streams ALL packs to ready — none deferred', async () 
   // throughput for playability — the all-ready wait gets a bigger budget.
   test.setTimeout(720_000);
   await page.goto('/rigs/keys/worship');
-  await page.getByTestId('rig-start').click();
+  await ensureStarted();
 
   // idle → starting → running → ready. 'running' can be brief; accept
   // either running or ready as proof we got past 'starting'.
@@ -234,9 +244,72 @@ test('audio out: notes and the demo player move the master peak', async () => {
   await page.getByTestId('ssm-button').click();
 });
 
+test('realtime: cold-note warms never glitch the audio thread', async () => {
+  // ── W12, the headline regression test ────────────────────────────────
+  // A cold note used to decode SYNCHRONOUSLY in the worklet's message
+  // handler — which runs on the audio rendering thread — starving
+  // process() and dropping every sounding voice ("goes silent every time
+  // I play a new note"). Decode now lives in the decoder worker; the
+  // processor counts real underruns via currentFrame discontinuities.
+  // While a chord SUSTAINS, hammer notes far outside preload coverage:
+  // the chord must keep sounding and the underrun counter must not move.
+  test.setTimeout(120_000);
+  const stats = async () => JSON.parse(
+    await page.evaluate(() => (window as any).__ftsRig.audioStats()),
+  );
+  const before = await stats();
+
+  // Sustain a chord for the whole hammering phase.
+  await page.evaluate(() => {
+    const rig = (window as any).__ftsRig;
+    rig.noteOn(60, 100); rig.noteOn(64, 100); rig.noteOn(67, 100);
+  });
+  await pollUntil(
+    masterPeak,
+    (p) => typeof p === 'number' && p > 0.001,
+    5_000, 100, 'chord sounding before the cold-note hammering',
+  );
+
+  // Cold extremes, alternating ends of the keyboard, varied velocities
+  // (velocity layers are distinct samples). Each press both queues a warm
+  // for the decoder worker AND must leave the sounding chord untouched.
+  const cold = [21, 103, 23, 105, 25, 99, 27, 101, 30, 107, 33, 97];
+  for (let i = 0; i < cold.length; i += 1) {
+    await page.evaluate(([n, v]) => (window as any).__ftsRig.noteOn(n, v),
+      [cold[i], 40 + ((i * 17) % 80)] as [number, number]);
+    await page.waitForTimeout(150);
+    const p = await masterPeak();
+    // The CHORD keeps sounding through every cold press — this is the
+    // exact field failure mode (silence on each new note).
+    expect(p, `chord audible during cold press ${cold[i]}`).toBeGreaterThan(0.0005);
+    await page.evaluate((n) => (window as any).__ftsRig.noteOff(n), cold[i]);
+  }
+
+  // Give the decoder worker a beat to land its PCM, then read the meters.
+  await page.waitForTimeout(2_000);
+  const after = await stats();
+  expect(after.glitches - before.glitches, 'zero underruns while hammering').toBe(0);
+  // No message handler may sit on the audio thread for long — the decode
+  // is gone; what remains is a bounded PCM memcpy. 20 ms would already be
+  // ~8 quanta; the old decode path measured hundreds.
+  expect(after.worstHandlerMs, 'audio-thread handlers stay bounded').toBeLessThan(20);
+  // The worker actually decoded something for those cold notes.
+  expect(after.pcmInserts, 'decoder worker delivered PCM').toBeGreaterThan(0);
+
+  await page.evaluate(() => {
+    const rig = (window as any).__ftsRig;
+    rig.noteOff(60); rig.noteOff(64); rig.noteOff(67);
+  });
+  await pollUntil(
+    masterPeak,
+    (p) => typeof p === 'number' && p < 0.0005,
+    15_000, 200, 'masterPeak() to decay after the realtime test',
+  );
+});
+
 test('refresh-resume: cached packs return to ready from OPFS, no re-stream', async () => {
   await page.reload();
-  await page.getByTestId('rig-start').click();
+  await ensureStarted();
 
   // Cache hit: the small packs must come back 'ready' fast, with
   // bytes === total from the stored copy rather than re-streaming.

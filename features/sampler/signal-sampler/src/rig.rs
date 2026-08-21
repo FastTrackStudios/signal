@@ -1106,19 +1106,39 @@ pub(crate) fn build_sample_source(
     {
         tracing::warn!(err = %err, "failed to spawn sample block preload thread");
     }
-    // wasm32: no threads in the AudioWorklet scope — preload synchronously
-    // (the pack is already resident bytes; a preload is an index + head
-    // decode, and the caller is the control side of the worklet, not the
-    // render callback).
+    // wasm32: no streamer thread, so this runs synchronously on the caller —
+    // which in the AudioWorklet IS the audio thread. It stays because for a
+    // STREAMING pack a "preload" is a head (~48 KB) plus an index, not a
+    // decoded sample, and it is what puts the zone in the cache at all: the
+    // render DROPS a voice whose sample is not loaded, so skipping this is
+    // not a fast rig, it is a SILENT one (learned the hard way — W12).
+    //
+    // What must never happen here is a full decode. That is the decoder
+    // worker's job (it replaces streamed entries with resident PCM
+    // off-thread); this only opens them.
     #[cfg(target_arch = "wasm32")]
     {
-        let stats = cache.preload(paths.iter().map(|p| p.as_path()));
-        tracing::info!(
+        // BOUNDED, coverage-first. `paths` is already in playable order
+        // (middle-out from middle C), and opening one zone costs a decoded
+        // head — ~12k frames, a couple of hundred KB. Opening ALL of them
+        // for a nine-lane rig measured 3.8 SECONDS on the audio thread and
+        // 1.5 GB resident, i.e. the entire wasm PCM budget consumed before
+        // a note was played. Neither is a browser-shaped cost.
+        //
+        // So open enough to be instantly playable around the middle of the
+        // keyboard and let the rest open on demand: a note whose zone is
+        // not open queues a warm request, which the streamer thread (W13)
+        // services off the audio thread. First press of a far zone lands a
+        // touch late; nothing stalls, and residency stays bounded.
+        const WASM_EAGER_ZONES: usize = 24;
+        let eager = paths.len().min(WASM_EAGER_ZONES);
+        let stats = cache.preload(paths.iter().take(eager).map(|p| p.as_path()));
+        tracing::debug!(
             library = %label,
-            loaded = stats.loaded,
+            opened = stats.loaded,
+            of_total = paths.len(),
             failed = stats.failed,
-            skipped = stats.skipped,
-            "sample block preload complete (synchronous, wasm)"
+            "sample block opened (wasm: bounded head set; streamer opens the rest on demand)"
         );
     }
     // A first-class Sample Soundsource.

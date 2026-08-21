@@ -78,7 +78,12 @@ let pianoName = '';
 test('cold boot: the piano pack turns playable in seconds, bytes << total', async () => {
   test.setTimeout(120_000);
   await page.goto('/rigs/keys/worship');
-  await page.getByTestId('rig-start').click();
+  // The rig auto-starts on mount; `rig-start` now only shows on the
+  // failed-boot retry path, so click it only if it is actually there.
+  const startBtn = page.getByTestId('rig-start');
+  if (await startBtn.isVisible().catch(() => false)) {
+    await startBtn.click();
+  }
 
   // The largest pack must cross the progressive threshold and reach
   // 'playable' within 30 s of the pack list appearing — while holding only
@@ -156,8 +161,11 @@ test('miss-driven: an extreme note starts silent, then its segment jumps the que
   );
 
   // A note far from middle C — its segments are at the BACK of the
-  // musical plan; pressing it reports a read miss, the page bumps that
-  // segment to the queue front, and within 60 s the note sounds.
+  // musical plan; pressing it reports a read miss (W12: via the decoder
+  // worker's net_miss path — decode → OPFS hole → page bump + forced
+  // commit → worker retry), and the note sounds. 90 s: the full-suite
+  // run streams every pack concurrently and the old 60 s budget flaked
+  // within a few seconds of the wire under that congestion.
   const peak = await pollUntil(
     async () => {
       await page.evaluate(() => (window as any).__ftsRig.noteOn(24, 110));
@@ -167,7 +175,7 @@ test('miss-driven: an extreme note starts silent, then its segment jumps the que
       return p;
     },
     (p) => typeof p === 'number' && p > 0.001,
-    60_000, 3000, 'masterPeak() > 0.001 after extreme noteOn(24) (miss-driven fetch)',
+    90_000, 3000, 'masterPeak() > 0.001 after extreme noteOn(24) (miss-driven fetch)',
   );
   expect(peak).toBeGreaterThan(0.001);
 });

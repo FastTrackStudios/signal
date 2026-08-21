@@ -106,6 +106,24 @@ mod web {
         /// `attachPack`) can re-install instruments as a same-shape,
         /// glitch-free per-track swap.
         program: RefCell<Option<LaneProgram>>,
+        /// `(layer, sample path)` pairs a note-on needed but found
+        /// non-resident — drained by the processor (`takeWarmRequests`) and
+        /// shipped to the page's decoder worker. Deduped; bounded (a held
+        /// chord retrying cold keys must not grow this without limit).
+        warm_out: RefCell<Vec<(String, String)>>,
+        /// Partially-received PCM from `insertPcmChunk`, keyed
+        /// `layer\u{1}path` — a sample is published only once its last
+        /// piece lands, so no single audio-thread call copies more than a
+        /// chunk.
+        pending_pcm: RefCell<std::collections::HashMap<String, Vec<f32>>>,
+        /// Monotonic counters for the audio panel: samples inserted via
+        /// `insertPcm`, and inserts refused by the budget ceiling.
+        pcm_inserted: std::cell::Cell<u32>,
+        pcm_refused: std::cell::Cell<u32>,
+        /// Lanes rebuilt by the last scoped reload, and how many times that
+        /// scoping matched NOTHING and fell back to the full rebuild.
+        reload_lanes: std::cell::Cell<u32>,
+        reload_full: std::cell::Cell<u32>,
     }
 
     thread_local! {
@@ -119,6 +137,81 @@ mod web {
     #[wasm_bindgen(js_name = lastPanicMessage)]
     pub fn last_panic_message() -> String {
         LAST_PANIC.with(|p| p.borrow().clone())
+    }
+
+    // ── Streamer threads (W13) ──────────────────────────────────────────
+    //
+    // With shared memory these run in page-spawned Web Workers over the
+    // SAME wasm heap the audio thread renders from, which is what makes
+    // them the browser's version of the native streamer pool: a worker
+    // decodes a chunk straight into memory the audio thread already reads.
+    // No postMessage, no copy, nothing for the audio thread to do.
+
+    /// Whether this build has the thread ABI (shared memory + atomics). The
+    /// page checks it to decide between spawning streamer workers and
+    /// falling back to the single-threaded decoder-worker protocol.
+    #[wasm_bindgen(js_name = threadsAvailable)]
+    pub fn threads_available() -> bool {
+        cfg!(target_feature = "atomics")
+    }
+
+    /// Byte address of the word a streamer worker parks on, and its current
+    /// value. The worker calls `Atomics.wait(i32View, addr/4, value, ms)`
+    /// and then [`streamerDrain`](streamer_drain) — parking lives in JS
+    /// because Rust's wait/notify intrinsics are nightly-only and this code
+    /// is shared with stable native builds (see `stream_wasm`).
+    #[wasm_bindgen(js_name = streamerWakeAddr)]
+    pub fn streamer_wake_addr() -> u32 {
+        #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+        {
+            signal_sampler::engine::stream_wasm::wake_addr()
+        }
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+        0
+    }
+
+    #[wasm_bindgen(js_name = streamerWakeValue)]
+    pub fn streamer_wake_value() -> u32 {
+        #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+        {
+            signal_sampler::engine::stream_wasm::wake_value()
+        }
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+        0
+    }
+
+    /// One non-blocking drain of the streamer queue — the fallback for
+    /// hosts that cannot park (and a test seam). Returns samples filled.
+    #[wasm_bindgen(js_name = streamerDrain)]
+    pub fn streamer_drain() -> u32 {
+        #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+        {
+            signal_sampler::engine::stream_wasm::drain() as u32
+        }
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+        0
+    }
+
+    /// Streamer queue depth / samples dropped because it was full — the
+    /// "are the decoders keeping up?" numbers for the audio panel.
+    #[wasm_bindgen(js_name = streamerDepth)]
+    pub fn streamer_depth() -> u32 {
+        #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+        {
+            signal_sampler::engine::stream_wasm::depth() as u32
+        }
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+        0
+    }
+
+    #[wasm_bindgen(js_name = streamerDropped)]
+    pub fn streamer_dropped() -> u32 {
+        #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+        {
+            signal_sampler::engine::stream_wasm::dropped() as u32
+        }
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+        0
     }
 
     #[wasm_bindgen]
@@ -161,6 +254,31 @@ mod web {
                 renderer: WebRenderer::new(sample_rate),
                 rig: RefCell::new(None),
                 program: RefCell::new(None),
+                warm_out: RefCell::new(Vec::new()),
+                pending_pcm: RefCell::new(std::collections::HashMap::new()),
+                pcm_inserted: std::cell::Cell::new(0),
+                pcm_refused: std::cell::Cell::new(0),
+                reload_lanes: std::cell::Cell::new(0),
+                reload_full: std::cell::Cell::new(0),
+            }
+        }
+
+        /// Resolve what a note-on needs and queue the non-resident paths
+        /// for the decoder worker (deduped, bounded at 64 pending).
+        fn queue_warm_requests(&self, rig: &KeysRig, note: u8, velocity: u8) {
+            let missing = rig.missing_note_samples(note, velocity);
+            if missing.is_empty() {
+                return;
+            }
+            let mut out = self.warm_out.borrow_mut();
+            for (layer, path) in missing {
+                if out.len() >= 64 {
+                    break;
+                }
+                let path = path.to_string_lossy().into_owned();
+                if !out.iter().any(|(l, p)| *l == layer && *p == path) {
+                    out.push((layer, path));
+                }
             }
         }
 
@@ -233,6 +351,54 @@ mod web {
             rig.load_lanes(program).map_err(js_err)
         }
 
+        /// Re-install ONLY the lanes that reference `key` — the bounded
+        /// alternative to `reloadLanes` after a pack attach. Rebuilding all
+        /// nine Worship lanes measured >500 ms ON THE AUDIO THREAD (this
+        /// handler runs there), which stalled the render after every pack
+        /// landed; a pack only affects the lanes that name it. Returns how
+        /// many lanes were rebuilt.
+        #[wasm_bindgen(js_name = reloadLanesForPack)]
+        pub fn reload_lanes_for_pack(&self, key: &str) -> Result<u32, JsValue> {
+            let program = self.program.borrow();
+            let Some(program) = program.as_ref() else {
+                return Err(js_err("no lane program open"));
+            };
+            let mut rig = self.rig.borrow_mut();
+            let Some(rig) = rig.as_mut() else {
+                return Err(js_err("no lane program open"));
+            };
+            let n = rig.reload_lanes_for_pack(program, key);
+            if n == 0 {
+                // No lane claims this pack key. Either the pack genuinely
+                // belongs to no lane, or the key the page attached under is
+                // not spelled the way the lane trees spell it — and in that
+                // second case a scoped reload would leave every instrument
+                // without its samples, i.e. a SILENT rig. Correctness first:
+                // fall back to the full reload (the slow path this scoping
+                // exists to avoid) and record it, so `reloadFull` in the
+                // audio stats says plainly that the fast path never applied.
+                self.reload_full.set(self.reload_full.get().wrapping_add(1));
+                rig.load_lanes(program).map_err(js_err)?;
+            }
+            self.reload_lanes.set(n as u32);
+            Ok(n as u32)
+        }
+
+        /// Lanes rebuilt by the last scoped reload (0 ⇒ the key matched
+        /// nothing and the full reload ran — see `pcmReloadFull`).
+        #[wasm_bindgen(js_name = reloadLaneCount)]
+        pub fn reload_lane_count(&self) -> u32 {
+            self.reload_lanes.get()
+        }
+
+        /// How many times the scoped reload fell back to rebuilding every
+        /// lane. Should be 0; anything else means the pack keys and the lane
+        /// trees disagree about how a library is named.
+        #[wasm_bindgen(js_name = reloadFullCount)]
+        pub fn reload_full_count(&self) -> u32 {
+            self.reload_full.get()
+        }
+
         /// Render one block into the worklet's output channels.
         pub fn render(&self, out_left: &mut [f32], out_right: &mut [f32]) {
             self.renderer.render(out_left, out_right);
@@ -244,13 +410,15 @@ mod web {
         #[wasm_bindgen(js_name = noteOn)]
         pub fn note_on(&self, key: u8, velocity: u8) {
             if let Some(rig) = self.rig.borrow().as_ref() {
-                // Warm BEFORE queueing: decode any budget-skipped sample on
-                // this (control) side, between render quanta — the audio
-                // render drops voices whose samples are not resident. A cold
-                // key's first press may decode audibly late once; after
-                // that it is cached (and the budget may LRU-shed something
-                // else — see `KeysRig::warm_note`).
-                rig.warm_note(key, velocity);
+                // NEVER decode here: in an AudioWorkletGlobalScope this
+                // message handler runs on the audio rendering thread, and a
+                // synchronous ogg decode starves `process()` — every
+                // sounding voice drops out (the W12 field bug). Instead,
+                // resolve what the note needs and queue the misses for the
+                // page's decoder worker; the render drops just THIS voice
+                // until its PCM arrives via `insertPcm`, then the next
+                // press sounds.
+                self.queue_warm_requests(rig, key, velocity);
                 rig.note_on(key, velocity);
             }
         }
@@ -278,11 +446,11 @@ mod web {
 
         /// Raw 3-byte MIDI (e.g. straight from WebMIDI) to every lane.
         pub fn midi(&self, status: u8, data1: u8, data2: u8) {
-            // Note-on (velocity > 0): warm the note's samples before the
-            // event queues — see `noteOn` for why.
+            // Note-on (velocity > 0): queue any missing samples for the
+            // decoder worker — never decode on this thread; see `noteOn`.
             if status & 0xf0 == 0x90 && data2 > 0 {
                 if let Some(rig) = self.rig.borrow().as_ref() {
-                    rig.warm_note(data1, data2);
+                    self.queue_warm_requests(rig, data1, data2);
                 }
             }
             self.renderer.midi_to_all_tracks(status, data1, data2);
@@ -366,6 +534,261 @@ mod web {
                 .as_ref()
                 .map(|rig| rig.active_voices() as u32)
                 .unwrap_or(0)
+        }
+
+        // ── The decoder-worker seam (W12) ────────────────────────────────
+        //
+        // The worklet side NEVER decodes: note-ons queue `(layer, path)`
+        // warm requests (drained below), the page's decoder WORKER — a
+        // second instance of this same wasm module in a plain Worker —
+        // decodes them off-thread and ships raw PCM back in through
+        // `insertPcm`. The worker uses `decodePathPcm`/`coveragePaths` on
+        // ITS instance; the worklet uses the rest on its own.
+
+        /// Whether any warm requests are queued — checked per quantum by
+        /// the processor, so it must stay allocation-free.
+        #[wasm_bindgen(js_name = hasWarmRequests)]
+        pub fn has_warm_requests(&self) -> bool {
+            !self.warm_out.borrow().is_empty()
+        }
+
+        /// Drain the queued warm requests as a JS array of
+        /// `{ layer, path }` objects.
+        #[wasm_bindgen(js_name = takeWarmRequests)]
+        pub fn take_warm_requests(&self) -> js_sys::Array {
+            let out = js_sys::Array::new();
+            for (layer, path) in self.warm_out.borrow_mut().drain(..) {
+                let o = js_sys::Object::new();
+                let _ = js_sys::Reflect::set(&o, &"layer".into(), &layer.into());
+                let _ = js_sys::Reflect::set(&o, &"path".into(), &path.into());
+                out.push(&o);
+            }
+            out
+        }
+
+        /// Number of pending warm requests (diagnostic).
+        #[wasm_bindgen(js_name = warmQueueDepth)]
+        pub fn warm_queue_depth(&self) -> u32 {
+            self.warm_out.borrow().len() as u32
+        }
+
+        /// Insert PCM the decoder worker produced: `pcm` is interleaved
+        /// f32 (`num_frames × channels`). Returns whether the lane accepted
+        /// it — `false` with `charge_past_ceiling: false` means the
+        /// decoded-PCM budget is full (background fill should pause).
+        ///
+        /// Cost on the audio thread: one memcpy of the PCM across the
+        /// wasm-bindgen boundary plus a map insert — no decode. A typical
+        /// entry is 1–10 MB (≲ 1 ms); the worst-quantum stat will show it.
+        #[wasm_bindgen(js_name = insertPcm)]
+        #[allow(clippy::too_many_arguments)]
+        pub fn insert_pcm(
+            &self,
+            layer: &str,
+            path: &str,
+            channels: u16,
+            sample_rate: u32,
+            pcm: &[f32],
+            charge_past_ceiling: bool,
+        ) -> bool {
+            let num_frames = if channels == 0 { 0 } else { pcm.len() / channels as usize };
+            let data = std::sync::Arc::new(
+                signal_sampler::engine::cache::SampleData::from_f32(
+                    pcm.to_vec(),
+                    channels,
+                    sample_rate,
+                    num_frames,
+                ),
+            );
+            let accepted = self
+                .rig
+                .borrow()
+                .as_ref()
+                .map(|rig| {
+                    rig.insert_decoded(
+                        layer,
+                        std::path::Path::new(path),
+                        data,
+                        charge_past_ceiling,
+                    )
+                })
+                .unwrap_or(false);
+            if accepted {
+                self.pcm_inserted.set(self.pcm_inserted.get().wrapping_add(1));
+            } else {
+                self.pcm_refused.set(self.pcm_refused.get().wrapping_add(1));
+            }
+            accepted
+        }
+
+        /// Insert PCM in BOUNDED PIECES. A whole decoded sample can be tens
+        /// of MB, and copying that across the wasm boundary measured 28–34 ms
+        /// on the audio thread — ten-plus render quanta, i.e. the very
+        /// dropout this design exists to prevent. The worker therefore sends
+        /// ~1 MB pieces: each handler call costs a fraction of a quantum,
+        /// they accumulate OFF the render path (a plain Vec grow), and only
+        /// the final piece publishes the sample to the engine.
+        ///
+        /// `offset` is in f32 samples and must match what has accumulated so
+        /// far; a mismatch drops the partial (the worker re-sends).
+        #[wasm_bindgen(js_name = insertPcmChunk)]
+        #[allow(clippy::too_many_arguments)]
+        pub fn insert_pcm_chunk(
+            &self,
+            layer: &str,
+            path: &str,
+            channels: u16,
+            sample_rate: u32,
+            offset: u32,
+            pcm: &[f32],
+            is_last: bool,
+            charge_past_ceiling: bool,
+        ) -> bool {
+            let key = format!("{layer}\u{1}{path}");
+            let mut pending = self.pending_pcm.borrow_mut();
+            let buf = pending.entry(key.clone()).or_default();
+            if buf.len() != offset as usize {
+                // Out of order / a resend after a drop: restart cleanly.
+                if offset != 0 {
+                    pending.remove(&key);
+                    return false;
+                }
+                buf.clear();
+            }
+            buf.extend_from_slice(pcm);
+            if !is_last {
+                return true;
+            }
+            let frames = pending.remove(&key).unwrap_or_default();
+            drop(pending);
+            let num_frames = if channels == 0 { 0 } else { frames.len() / channels as usize };
+            let data = std::sync::Arc::new(
+                signal_sampler::engine::cache::SampleData::from_f32(
+                    frames,
+                    channels,
+                    sample_rate,
+                    num_frames,
+                ),
+            );
+            let accepted = self
+                .rig
+                .borrow()
+                .as_ref()
+                .map(|rig| {
+                    rig.insert_decoded(
+                        layer,
+                        std::path::Path::new(path),
+                        data,
+                        charge_past_ceiling,
+                    )
+                })
+                .unwrap_or(false);
+            if accepted {
+                self.pcm_inserted.set(self.pcm_inserted.get().wrapping_add(1));
+            } else {
+                self.pcm_refused.set(self.pcm_refused.get().wrapping_add(1));
+            }
+            accepted
+        }
+
+        /// Set the decoded-PCM ceiling in MB (0 = unlimited). Must be called
+        /// BEFORE anything decodes — the processor calls it immediately after
+        /// construction, from the page's stored preference. Returns whether
+        /// it took (a later call is ignored; see `budget::set_limit_mb`).
+        #[wasm_bindgen(js_name = setPcmBudgetMb)]
+        pub fn set_pcm_budget_mb(&self, mb: f64) -> bool {
+            signal_sampler::engine::budget::set_limit_mb(mb.max(0.0) as u64)
+        }
+
+        /// Decoded PCM currently resident, in MB — the number that says
+        /// whether the ceiling is the thing limiting how much of the rig can
+        /// sound without a fetch.
+        #[wasm_bindgen(js_name = pcmUsedMb)]
+        pub fn pcm_used_mb(&self) -> f64 {
+            signal_sampler::engine::budget::used_bytes() as f64 / (1024.0 * 1024.0)
+        }
+
+        /// The decoded-PCM ceiling in MB (-1 when unlimited).
+        #[wasm_bindgen(js_name = pcmLimitMb)]
+        pub fn pcm_limit_mb(&self) -> f64 {
+            let limit = signal_sampler::engine::budget::limit_bytes();
+            if limit == u64::MAX {
+                -1.0
+            } else {
+                limit as f64 / (1024.0 * 1024.0)
+            }
+        }
+
+        /// Samples inserted via `insertPcm` since boot (diagnostic).
+        #[wasm_bindgen(js_name = pcmInsertCount)]
+        pub fn pcm_insert_count(&self) -> u32 {
+            self.pcm_inserted.get()
+        }
+
+        /// Inserts refused by the budget ceiling since boot (diagnostic).
+        #[wasm_bindgen(js_name = pcmRefusedCount)]
+        pub fn pcm_refused_count(&self) -> u32 {
+            self.pcm_refused.get()
+        }
+
+        /// DECODER-WORKER SIDE: decode `path` in `layer`'s instrument on
+        /// the calling thread and return `{ channels, sampleRate, frames,
+        /// pcm: Float32Array }` — the PCM is taken back out of this
+        /// instance's cache afterwards, so the worker stays memory-flat.
+        /// Returns `undefined` when the path is unknown or its pack bytes
+        /// are not readable yet (a miss was recorded through
+        /// `__ftsPackRead`; fetch and retry).
+        #[wasm_bindgen(js_name = decodePathPcm)]
+        pub fn decode_path_pcm(&self, layer: &str, path: &str) -> JsValue {
+            let rig = self.rig.borrow();
+            let Some(rig) = rig.as_ref() else {
+                return JsValue::UNDEFINED;
+            };
+            let Some(data) = rig.decode_sample_take(layer, std::path::Path::new(path)) else {
+                return JsValue::UNDEFINED;
+            };
+            // A STREAMED sample decodes through `decode_all`, which stops
+            // early (silently) at the first chunk it cannot read — exactly
+            // what happens when the pack bytes for that span have not been
+            // fetched yet. Shipping that would install a TRUNCATED sample
+            // the rig would then treat as complete forever, so a short
+            // decode is reported as "not ready": the caller drains its read
+            // misses, fetches, and retries.
+            let expected = data.num_frames * data.channels.max(1) as usize;
+            let pcm_f32 = data.to_f32();
+            if expected > 0 && pcm_f32.len() + 64 < expected {
+                return JsValue::UNDEFINED;
+            }
+            let o = js_sys::Object::new();
+            let _ = js_sys::Reflect::set(&o, &"channels".into(), &f64::from(data.channels).into());
+            let _ =
+                js_sys::Reflect::set(&o, &"sampleRate".into(), &f64::from(data.sample_rate).into());
+            let _ =
+                js_sys::Reflect::set(&o, &"frames".into(), &(data.num_frames as f64).into());
+            let pcm = js_sys::Float32Array::from(pcm_f32.as_ref());
+            let _ = js_sys::Reflect::set(&o, &"pcm".into(), &pcm.into());
+            o.into()
+        }
+
+        /// DECODER-WORKER SIDE: every lane's coverage-first sample list
+        /// (playable order, middle-out from `center`, lanes interleaved) as
+        /// a JS array of `{ layer, path }` — the background fill plan.
+        #[wasm_bindgen(js_name = coveragePaths)]
+        pub fn coverage_paths(&self, center: u8) -> js_sys::Array {
+            let out = js_sys::Array::new();
+            if let Some(rig) = self.rig.borrow().as_ref() {
+                for (layer, path) in rig.coverage_samples(center) {
+                    let o = js_sys::Object::new();
+                    let _ = js_sys::Reflect::set(&o, &"layer".into(), &layer.into());
+                    let _ = js_sys::Reflect::set(
+                        &o,
+                        &"path".into(),
+                        &path.to_string_lossy().into_owned().into(),
+                    );
+                    out.push(&o);
+                }
+            }
+            out
         }
     }
 }

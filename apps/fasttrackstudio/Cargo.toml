@@ -388,7 +388,8 @@ web-sys = { version = "0.3", features = [
     "AudioContext", "AudioContextOptions", "BaseAudioContext", "AudioWorklet",
     "AudioWorkletNode",
     "AudioWorkletNodeOptions", "AudioNode", "AudioDestinationNode",
-    "MessagePort", "MessageEvent", "Event", "EventTarget", "Response",
+    "MessagePort", "MessageEvent", "MessageChannel", "Event", "EventTarget", "Response",
+    "Worker", "WorkerOptions", "WorkerType",
     # OPFS pack cache (web_packs.rs).
     "Navigator", "StorageManager", "FileSystemDirectoryHandle",
     "FileSystemFileHandle", "FileSystemGetDirectoryOptions",
