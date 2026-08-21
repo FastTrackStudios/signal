@@ -236,13 +236,19 @@ impl SynthRigBackend {
                 }
             },
             |sel| {
-                // KeysRig isn't Clone (owns the audio engine), so attach
-                // under the lock.
-                let rig = self.inner.rig.lock().unwrap();
-                match rig.as_ref() {
-                    Some(rig) => rig.attach_midi(sel).map(Some),
-                    None => Ok(None),
-                }
+                // Build the sink under the rig lock (cheap clones), then open
+                // the ports with the lock RELEASED — a stalled port open
+                // during a PipeWire graph reconfiguration must not pin the
+                // rig mutex (it wedges status() and the UI). See the keys
+                // backend's twin of this closure.
+                let sink = {
+                    let rig = self.inner.rig.lock().unwrap();
+                    match rig.as_ref() {
+                        Some(rig) => rig.midi_sink(),
+                        None => return Ok(None),
+                    }
+                };
+                midicore::midir::MidiInput::open(sel, sink).map(Some)
             },
             |h| {
                 if let Ok(mut s) = self.inner.state.lock() {

@@ -586,20 +586,30 @@ impl KeysRig {
         midicore::midir::input_ports()
     }
 
+    /// The rig's live-MIDI sink (monitor tap + per-target dispatch), detached
+    /// from `self`: everything it captures is a cheap clone, so a caller can
+    /// build it under a lock and then open ports with the lock released —
+    /// opening hardware ports takes seconds and can stall outright while the
+    /// PipeWire graph reconfigures, and that stall must not pin a rig mutex.
+    pub fn midi_sink(
+        &self,
+    ) -> impl Fn(midicore::TimedEvent) + Send + Clone + 'static {
+        let daw = self.daw.clone();
+        let targets = self.midi_targets();
+        midicore::attach::tap_sink(self.midi_monitor.clone(), move |ev| {
+            for track in &targets {
+                daw.push_live_midi(track, ev.clone());
+            }
+        })
+    }
+
     /// Open a hardware MIDI keyboard and forward its events into the rig
     /// (monitor tap + live-MIDI sink wired by `midicore::attach`).
     pub fn attach_midi(
         &self,
         selection: midicore::PortSelector,
     ) -> eyre::Result<midicore::midir::MidiInput> {
-        let daw = self.daw.clone();
-        let targets = self.midi_targets();
-        let sink = midicore::attach::tap_sink(self.midi_monitor.clone(), move |ev| {
-            for track in &targets {
-                daw.push_live_midi(track, ev.clone());
-            }
-        });
-        midicore::midir::MidiInput::open(selection, sink)
+        midicore::midir::MidiInput::open(selection, self.midi_sink())
     }
 
     pub fn midi_monitor(&self) -> MidiMonitor {
