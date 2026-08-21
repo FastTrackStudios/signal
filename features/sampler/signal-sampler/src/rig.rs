@@ -1130,7 +1130,7 @@ pub(crate) fn build_sample_source(
         // not open queues a warm request, which the streamer thread (W13)
         // services off the audio thread. First press of a far zone lands a
         // touch late; nothing stalls, and residency stays bounded.
-        const WASM_EAGER_ZONES: usize = 24;
+        const WASM_EAGER_ZONES: usize = 2;
         let eager = paths.len().min(WASM_EAGER_ZONES);
         let stats = cache.preload(paths.iter().take(eager).map(|p| p.as_path()));
         tracing::debug!(

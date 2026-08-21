@@ -418,9 +418,14 @@ async function handleMessage(msg) {
         break;
       }
       case 'coverage': {
+        // BOUNDED: `limit` zones from the middle-out list, not the whole
+        // library. Unbounded coverage decoded gigabytes, saturated this
+        // worker and thrashed the audio side's PCM budget.
         const list = renderer.coveragePaths(msg.center ?? 60);
+        const limit = msg.limit ?? 48;
         covQ = [];
         for (const r of list) {
+          if (covQ.length >= limit) break;
           const key = `${r.layer} ${r.path}`;
           if (!delivered.has(key)) covQ.push({ layer: r.layer, path: r.path, chargePast: false });
         }

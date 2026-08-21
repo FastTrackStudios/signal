@@ -269,6 +269,12 @@ async fn async_main() {
             Some(config_dir.join("iroh-endpoint-id")),
         )
         .web(web_bundle())
+        // COOP/COEP — the browser keys rig's audio path needs
+        // SharedArrayBuffer (shared wasm memory + streamer threads, W13),
+        // and the browser only grants it to a cross-origin-isolated page.
+        // Safe here: the engine serves its own bundle and packs, so every
+        // subresource is same-origin.
+        .cross_origin_isolated(true)
         .serve()
         .await;
 }

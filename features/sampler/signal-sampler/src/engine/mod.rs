@@ -1044,7 +1044,16 @@ impl SampleEngine {
         // compressed span into wasm memory — measured ~1 MB per zone, not
         // the ~48 KB a decoded head costs. At 192 zones × 9 lanes that was
         // 1.5 GB and seconds of stall; the number below is small because
-        // each unit is big. Unbounded, a nine-lane rig spent SECONDS here and
+        // each unit is big.
+        //
+        // It is this small (6) because instrument building runs on the AUDIO
+        // THREAD and cannot be moved off it: `KeysRig` is `!Send` on wasm
+        // (it holds a vox `SinkSlot`, which vox makes single-threaded
+        // there), so no control worker can own it. Every zone past this
+        // handful is opened on demand instead — the W12 decoder worker
+        // decodes it off-thread, and the W13 streamer threads fill its
+        // chunks — which is the path that scales to a library in every
+        // slot anyway. Unbounded, a nine-lane rig spent SECONDS here and
         // consumed the entire decoded-PCM budget before a note was played.
         // Bound it to a coverage-first set around the middle of the
         // keyboard — instantly playable — and let the rest open on demand
@@ -1053,7 +1062,7 @@ impl SampleEngine {
         // at each call site.
         #[cfg(target_arch = "wasm32")]
         let stats = {
-            const WASM_EAGER_ZONES: usize = 24;
+            const WASM_EAGER_ZONES: usize = 2;
             let paths = self.patch.sample_paths_playable(60);
             self.cache
                 .preload(paths.iter().take(WASM_EAGER_ZONES).map(|p| p.as_path()))

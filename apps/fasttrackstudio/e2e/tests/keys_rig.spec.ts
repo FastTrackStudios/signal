@@ -257,6 +257,13 @@ test('realtime: cold-note warms never glitch the audio thread', async () => {
   const stats = async () => JSON.parse(
     await page.evaluate(() => (window as any).__ftsRig.audioStats()),
   );
+  // Measure THIS phase, not boot. `worstHandlerMs` is monotonic since the
+  // worklet started, and boot legitimately runs long handlers (building
+  // lane instruments as packs attach — bounded, but tens of ms). What this
+  // test is about is whether PLAYING glitches, so zero the counters and
+  // judge only what follows.
+  await page.evaluate(() => (window as any).__ftsRig.resetAudioStats?.());
+  await page.waitForTimeout(500);
   const before = await stats();
 
   // Sustain a chord for the whole hammering phase.
@@ -289,10 +296,13 @@ test('realtime: cold-note warms never glitch the audio thread', async () => {
   await page.waitForTimeout(2_000);
   const after = await stats();
   expect(after.glitches - before.glitches, 'zero underruns while hammering').toBe(0);
-  // No message handler may sit on the audio thread for long — the decode
-  // is gone; what remains is a bounded PCM memcpy. 20 ms would already be
-  // ~8 quanta; the old decode path measured hundreds.
-  expect(after.worstHandlerMs, 'audio-thread handlers stay bounded').toBeLessThan(20);
+  // No message handler may sit on the audio thread for long WHILE PLAYING —
+  // the decode is gone; what remains is a bounded PCM memcpy (~1 MB
+  // pieces). 20 ms is already ~8 quanta; the old decode path measured
+  // hundreds. Boot-time instrument building is excluded by the reset above
+  // and tracked separately (see browser-keys-rig.md W13).
+  expect(after.worstHandlerMs, 'audio-thread handlers stay bounded while playing')
+    .toBeLessThan(20);
   // The worker actually decoded something for those cold notes.
   expect(after.pcmInserts, 'decoder worker delivered PCM').toBeGreaterThan(0);
 

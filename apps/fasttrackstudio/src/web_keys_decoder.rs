@@ -270,19 +270,17 @@ impl DecoderWorker {
         self.fire(&o);
     }
 
-    /// (Re)start the background coverage fill, middle-out from `center`.
+    /// Pre-warm `limit` zones middle-out from `center`, OFF the audio
+    /// thread. This is how the playable window gets opened now: eager
+    /// opening on the audio thread is capped at a token few (each zone
+    /// costs ~26 ms there — see WASM_EAGER_ZONES), so the worker decodes
+    /// the rest and ships it in. Bounded on purpose: unbounded coverage
+    /// decodes entire libraries and thrashes the PCM budget.
     ///
-    /// NOT called during boot. Since a streamed (ogg proxy) sample counts as
-    /// non-resident, coverage means FULLY decoding every sample of every
-    /// lane — gigabytes of work that saturates the decoder, thrashes the
-    /// decoded-PCM budget (shed → re-warm → shed), and competes with the
-    /// pack streaming the player is waiting on. On-demand warms cover what
-    /// is actually played, which is what a live rig needs. Kept for a future
-    /// idle-time prefetch, which must be paced and budget-aware.
-    #[allow(dead_code)]
-    pub(crate) fn coverage(&self, center: u8) {
+    pub(crate) fn coverage(&self, center: u8, limit: u32) {
         let o = Self::obj("coverage");
         Self::set(&o, "center", &u32::from(center).into());
+        Self::set(&o, "limit", &limit.into());
         self.fire(&o);
     }
 }

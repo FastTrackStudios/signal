@@ -617,6 +617,42 @@ Latency, honestly: "zero" is not physical — the floor is one render quantum
 never exceeding that floor: no stall, no underrun, no growth under load. The
 underrun counter and `worstHandlerMs` from W12 are how each step gets judged.
 
+**DONE — the suite is green (7/7), including the `realtime` test: a chord
+sustained through twelve cold notes at both ends of the keyboard with ZERO
+underruns and no audio-thread handler over 20 ms while playing.**
+
+Final numbers across the whole effort — worst audio-thread handler
+3804 ms → **62 ms** (boot, while packs attach; steady-state playing rebuilds
+nothing), decoded-PCM residency 1535 MB pinned at the ceiling → **426 MB**
+working, all nine packs loaded.
+
+How the last step actually went, since the plan above guessed wrong:
+
+- **The renderer no longer blocks** — `plugin_instances` is taken with
+  `try_lock`; on contention the block renders WITHOUT its plugin stage
+  (dry for one 2.7 ms quantum, inaudible next to an underrun click). This
+  is right for native too: a blocking acquire in an audio callback is a
+  latent dropout on any platform.
+- **The rig cannot move to a control thread at all.** Verified with a
+  compile-time `Send` assertion rather than assumed: `KeysRig` holds a vox
+  `SinkSlot` (`Arc<dyn ChannelSink>`), which vox makes single-threaded on
+  wasm. Step 2 as written above is NOT implementable without changing vox
+  — a vendored crates.io dep, a much larger blast radius.
+- **So the work moved instead of the rig.** Eager zone-opening on the audio
+  thread is down to 2 (each zone costs ~26 ms there), and the DECODER
+  WORKER pre-warms a bounded 48-zone middle-out window off-thread. That is
+  the division of labour the design wanted anyway: the audio thread
+  compiles trees and inserts instruments, the worker decodes.
+- **The realtime test measures the right phase.** `worstHandlerMs` is
+  monotonic since boot, so it was judging PLAYING against BOOT's worst
+  handler. It now zeroes the counters first (`__ftsRig.resetAudioStats()`);
+  the 20 ms bar itself was not relaxed.
+
+Remaining, for whoever picks this up: the 62 ms is boot-time lane building.
+It would still be audible if a pack landed mid-performance. Removing it
+means making `KeysRig` `Send` on wasm — i.e. a vox change — which is a
+project, not a tweak.
+
 **Status (measured, not assumed).** Landed and proven in a real browser:
 cross-origin isolation (`crossOriginIsolated === true`), `SharedArrayBuffer`,
 a shared `WebAssembly.Memory`, the `build-std` + atomics + TLS wasm build,

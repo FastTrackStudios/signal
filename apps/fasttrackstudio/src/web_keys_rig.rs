@@ -323,6 +323,12 @@ impl Worklet {
             .unwrap_or(false)
     }
 
+    /// Zero the processor's underrun + worst-handler counters (a fresh
+    /// measurement window; see the hook's `resetAudioStats`).
+    pub(crate) fn reset_audio_stats(&self) {
+        self.fire("reset_audio_stats", &[]);
+    }
+
     pub(crate) fn all_notes_off(&self) {
         self.fire("all_notes_off", &[]);
     }
@@ -1492,6 +1498,16 @@ async fn boot_rig(
             });
             let _ = Reflect::set(&hook, &"noteOff".into(), note_off.as_ref());
             note_off.forget();
+            // Zero the underrun / worst-handler counters. `worstHandlerMs`
+            // is monotonic since boot, so without this a test of PLAYING is
+            // really judging the worst handler from BOOT (instrument
+            // building) — a different phase with different rules.
+            let wk = worklet.clone();
+            let reset_stats = Closure::<dyn FnMut()>::new(move || {
+                wk.reset_audio_stats();
+            });
+            let _ = Reflect::set(&hook, &"resetAudioStats".into(), reset_stats.as_ref());
+            reset_stats.forget();
         }
     }
 
@@ -1692,7 +1708,9 @@ async fn attach_pack(
                 let opfs = format!("{name}.{variant}.signalpack");
                 decoder.attach_pack(key, next_whole_id(), &opfs, incoming).await;
                 decoder.reload_lanes().await;
-                // NO background coverage fill (W12): see `DecoderWorker::coverage`.
+                // Pre-warm the playable window OFF the audio thread
+                // (bounded — see `DecoderWorker::coverage`).
+                decoder.coverage(60, 48);
             }
             update_row(packs, i, |r| {
                 r.phase = PackPhase::Ready;
@@ -2072,7 +2090,8 @@ async fn start_progressive(
             )
             .await;
         decoder.reload_lanes().await;
-        // NO background coverage fill (W12): see `DecoderWorker::coverage`.
+        // Pre-warm the playable window OFF the audio thread (bounded).
+        decoder.coverage(60, 48);
     }
 
     // Queue the rest in rank order.
@@ -2265,7 +2284,9 @@ async fn finalize_progressive_job(mut job: ProgressiveJob, packs: &mut Signal<Ve
                 if !key.is_empty() {
                     let opfs = format!("{name}.{variant}.signalpack");
                     decoder.attach_pack(&key, id, &opfs, total).await;
-                    // NO background coverage fill (W12): see `DecoderWorker::coverage`.
+                    // Pre-warm the playable window OFF the audio thread
+                // (bounded — see `DecoderWorker::coverage`).
+                decoder.coverage(60, 48);
                 }
             }
             update_row(packs, row, |r| {
