@@ -740,6 +740,32 @@ impl KeysRig {
     pub fn note_on(&self, note: u8, velocity: u8) {
         self.dispatch(ev_note_on(note, velocity));
     }
+
+    /// Decode, on the calling thread, the samples `note`/`velocity` will
+    /// need across every lane's sampler sources — the on-demand half of the
+    /// preload budget: the audio thread DROPS a voice whose sample is not
+    /// resident, so a key outside preload coverage would otherwise stay
+    /// silent forever. Call this BEFORE dispatching the note-on (the browser
+    /// worklet's control side does, between render quanta); the first press
+    /// of a cold key may still decode audibly late once — after that it is
+    /// cached. Cheap no-op when everything the note needs is resident.
+    ///
+    /// Budget interaction: the warm charges the process-wide decoded-PCM
+    /// budget even past its ceiling; well past it, the warmed engine sheds
+    /// its largest decoded samples back toward the limit (see
+    /// `RenderNode::warm_note_samples`).
+    pub fn warm_note(&self, note: u8, velocity: u8) {
+        let layers: Vec<String> = match &self.hosting {
+            // `edit_lane` ignores the layer name in single mode.
+            Hosting::Single { .. } => vec![String::new()],
+            Hosting::Lanes(l) => l.layers.iter().map(|t| t.name.clone()).collect(),
+        };
+        for layer in &layers {
+            self.edit_lane(layer, |inst| {
+                inst.render_mut().warm_note_samples(note, velocity);
+            });
+        }
+    }
     pub fn note_off(&self, note: u8) {
         self.dispatch(ev_note_off(note));
     }

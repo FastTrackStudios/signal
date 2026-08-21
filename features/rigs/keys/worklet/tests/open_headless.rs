@@ -63,6 +63,90 @@ vel_max = 127
     std::fs::read(&pack_path).expect("read pack bytes")
 }
 
+/// The W6 browser seam, proven natively: the pack's bytes stay OUTSIDE the
+/// engine (here: a test-global map standing in for the worklet's JS heap),
+/// reachable only through the pluggable external reader; the registry entry
+/// is `install_external`, exactly what `attachPackExternal` does on wasm.
+/// `warm_note` runs before the note-on, the way the worklet's control side
+/// does for budget-skipped samples.
+#[test]
+fn open_headless_renders_from_external_pack_reader() {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    static PACKS: Mutex<Option<HashMap<u32, Vec<u8>>>> = Mutex::new(None);
+
+    let dir = std::env::temp_dir().join(format!(
+        "keys-worklet-external-{}",
+        std::process::id()
+    ));
+    let bytes = build_tone_pack_bytes(&dir);
+    let len = bytes.len() as u64;
+
+    const ID: u32 = 42;
+    PACKS
+        .lock()
+        .unwrap()
+        .get_or_insert_with(HashMap::new)
+        .insert(ID, bytes);
+    // First install wins process-wide; this test file installs exactly once.
+    signal_sampler::engine::cache::set_external_pack_reader(Box::new(|id, offset, dst| {
+        let packs = PACKS.lock().unwrap();
+        let Some(bytes) = packs.as_ref().and_then(|m| m.get(&id)) else {
+            return false;
+        };
+        let start = offset as usize;
+        let Some(src) = bytes.get(start..start + dst.len()) else {
+            return false;
+        };
+        dst.copy_from_slice(src);
+        true
+    }));
+
+    const PACK_KEY: &str = "test-tone-external.signalpack";
+    signal_sampler::pack_registry::install_external(PACK_KEY, ID, len)
+        .expect("install external pack");
+
+    let program = LaneProgram {
+        name: "External Test".into(),
+        engines: vec![LaneEngine {
+            name: "Keys".into(),
+            layers: vec![LaneLayer {
+                name: "Tone".into(),
+                tree: Container::layer("Tone").sample_block("Tone", PACK_KEY),
+            }],
+        }],
+        tail: None,
+    };
+
+    let rig = KeysRig::open_headless(SR, &program).expect("open_headless");
+    let renderer = ProjectRenderer::new(rig.daw(), rig.project_guid(), SR);
+    renderer.connect_live_midi(64);
+
+    let mut heard = 0.0f32;
+    for _ in 0..600 {
+        // The worklet's note-on path: warm (synchronous decode through the
+        // external reader when cold), then dispatch.
+        rig.warm_note(60, 100);
+        rig.note_on(60, 100);
+        let block = renderer.render_block(0, 512);
+        let rms = (block.samples.iter().map(|s| s * s).sum::<f32>()
+            / block.samples.len() as f32)
+            .sqrt();
+        heard = heard.max(rms);
+        if heard > 1e-3 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(
+        heard > 1e-3,
+        "headless keys rig should render audible output from an EXTERNAL pack, rms={heard}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn open_headless_renders_live_midi_from_pack_bytes() {
     let dir = std::env::temp_dir().join(format!("keys-worklet-headless-{}", std::process::id()));

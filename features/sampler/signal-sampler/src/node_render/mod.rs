@@ -608,6 +608,55 @@ impl RenderNode {
         }
     }
 
+    /// Warm the sample `note`/`velocity` would trigger in each of this
+    /// subtree's **sampler** sources: decode it into the cache on the
+    /// calling (control) thread, so the audio thread never has to drop the
+    /// voice for want of a resident sample. Cheap no-op when it is already
+    /// cached. Respects [`Zoned`](RenderNode::Zoned) windows — a note a
+    /// zone filters out warms nothing behind it.
+    pub fn warm_note_samples(&mut self, note: u8, velocity: u8) {
+        match self {
+            RenderNode::Leaf { inst: Some(LeafBackend::Source(src)), .. } => {
+                if let Some(sampler) = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                {
+                    let _ = sampler.engine().warm_note_samples(note, velocity);
+                    // Warming charges the shared decoded-PCM budget even past
+                    // its ceiling (correctness beats the ceiling for a
+                    // sounding note). Unchecked, on-demand warming grows
+                    // without bound — on wasm that growth ends in a memory
+                    // trap — so once WELL past the limit, shed this engine's
+                    // largest decoded samples back toward it. The freshly
+                    // warmed sample may itself be shed (eviction is
+                    // largest-first); the next press simply warms it again.
+                    let limit = crate::engine::budget::limit_bytes();
+                    let used = crate::engine::budget::used_bytes();
+                    if limit != u64::MAX && used > limit.saturating_add(limit / 8) {
+                        let over = (used - limit) as usize;
+                        let engine = sampler.engine();
+                        let target = engine.loaded_sample_bytes().saturating_sub(over);
+                        let _ = engine.evict_cache_until_under_budget(target);
+                    }
+                }
+            }
+            RenderNode::Leaf { .. } => {}
+            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+                v.iter_mut()
+                    .for_each(|n| n.warm_note_samples(note, velocity));
+            }
+            RenderNode::Zoned { zone, inner } => {
+                if zone.note_gain(note, velocity) > 0.0 {
+                    inner.warm_note_samples(note, velocity);
+                }
+            }
+            RenderNode::Gain { inner, .. }
+            | RenderNode::Modulated { inner, .. }
+            | RenderNode::SendTap { inner, .. }
+            | RenderNode::BusInject { inner, .. } => inner.warm_note_samples(note, velocity),
+        }
+    }
+
     /// The generator kinds of this subtree's **source** leaves, in compile
     /// order — the tree-side view remotes classify layers by (processors
     /// and placeholders are skipped).

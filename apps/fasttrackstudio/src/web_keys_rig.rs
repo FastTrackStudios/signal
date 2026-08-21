@@ -310,10 +310,13 @@ pub(crate) enum PackPhase {
     Streaming,
     Verifying,
     Ready,
-    /// Streamed + cached in OPFS but NOT attached: the worklet's linear
-    /// memory can't take it. Deliberately distinct from `Failed` — the
-    /// bytes are here and correct; only residency is deferred (per-sample
-    /// range streaming is the planned fix, browser-keys-rig.md).
+    /// Streamed + cached in OPFS but NOT attached: the total pack bytes
+    /// held by the worklet would cross the tab-memory sanity cap.
+    /// Deliberately distinct from `Failed` — the bytes are here and
+    /// correct; only residency is deferred. Since W6 (attach-by-handle:
+    /// pack bytes live on the worklet's JS heap, not in wasm linear
+    /// memory) the cap is generous and this state should not occur with
+    /// the stock Worship set.
     Deferred,
     Failed(String),
 }
@@ -325,19 +328,21 @@ impl PackPhase {
             Self::Streaming => "streaming",
             Self::Verifying => "verifying",
             Self::Ready => "ready",
-            Self::Deferred => "deferred (too large for browser memory)",
+            Self::Deferred => "deferred (past the tab-memory sanity cap)",
             Self::Failed(_) => "failed",
         }
     }
 }
 
-/// Resident pack-bytes ceiling inside the worklet's wasm memory. The 4 GB
-/// address space also holds the decoded-PCM budget (768 MB on wasm), the
-/// attach-time transfer copy of the LARGEST pack, and the app itself — and
-/// an allocation failure doesn't error, it TRAPS the instance and takes
-/// every working lane with it. Attaches that would cross this line are
-/// refused page-side and the pack parked as `Deferred`.
-const WASM_PACK_RESIDENT_CAP: u64 = 1_500_000_000;
+/// Total pack-bytes sanity ceiling across every attached pack. Since W6,
+/// packs attach BY HANDLE: the transferred buffers live on the worklet's JS
+/// heap and cost wasm's 4 GB linear memory nothing (only decoded PCM enters
+/// it, bounded by the 768 MB wasm preload budget), so this is no longer a
+/// wasm-address-space guard — it is tab-memory realism. The full Worship
+/// proxy set is ~2.4 GB; 6 GB leaves room for growth while still refusing a
+/// pathological set before the tab OOMs. Past it, a pack parks as
+/// `Deferred` (cached in OPFS, not resident).
+const JS_PACK_RESIDENT_SANITY_CAP: u64 = 6_000_000_000;
 
 /// One pack row in the Soundsource Manager.
 #[derive(Clone, PartialEq)]
@@ -831,8 +836,9 @@ async fn attach_pack(
     i: usize,
     packs: &mut Signal<Vec<PackRow>>,
 ) {
-    // Refuse attaches the wasm memory can't take (see the cap's doc) —
-    // resident = every pack already Ready, plus this one.
+    // Refuse attaches past the tab-memory sanity cap (see the cap's doc) —
+    // resident = every pack already Ready, plus this one. Pack bytes live
+    // on the worklet's JS heap (attach-by-handle), not in wasm memory.
     let incoming = bytes.byte_length() as u64;
     let resident: u64 = packs
         .read()
@@ -840,7 +846,7 @@ async fn attach_pack(
         .filter(|r| r.phase == PackPhase::Ready)
         .map(|r| r.total)
         .sum();
-    if resident + incoming > WASM_PACK_RESIDENT_CAP {
+    if resident + incoming > JS_PACK_RESIDENT_SANITY_CAP {
         update_row(packs, i, |r| r.phase = PackPhase::Deferred);
         return;
     }
@@ -1011,7 +1017,7 @@ fn PackRowView(
         PackPhase::Streaming => ("#fbbf24", format!("{} / {}", mb(row.bytes), mb(row.total))),
         PackPhase::Verifying => ("#38bdf8", "sha256…".into()),
         PackPhase::Ready => ("#22c55e", mb(row.total)),
-        PackPhase::Deferred => ("#a78bfa", "cached — too large for browser memory".into()),
+        PackPhase::Deferred => ("#a78bfa", "cached — past the tab-memory sanity cap".into()),
         PackPhase::Failed(e) => ("#ef4444", e.clone()),
     };
     let name = row.name.clone();

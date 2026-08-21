@@ -29,7 +29,26 @@ class KeysRigProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.renderer = null;
+    // Pack buffers stay HERE, on the worklet's JS heap — outside wasm's
+    // 4 GB linear memory. wasm reads ranges through globalThis.__ftsPackRead
+    // (installed once below); only decoded PCM enters linear memory.
+    this.packs = new Map(); // id → Uint8Array over the transferred ArrayBuffer
+    this.packIdsByKey = new Map(); // spec-path key → id (frees replaced buffers)
+    this.nextPackId = 1;
     this.port.onmessage = (e) => this.handleMessage(e.data);
+  }
+
+  installPackRead() {
+    if (globalThis.__ftsPackRead) return;
+    const packs = this.packs;
+    // (id, offset, len) → Uint8Array subarray (no copy — wasm copies out of
+    // it), or null when the id is unknown or the range is out of bounds.
+    globalThis.__ftsPackRead = (id, offset, len) => {
+      const buf = packs.get(id);
+      if (!buf) return null;
+      if (!(offset >= 0) || !(len >= 0) || offset + len > buf.byteLength) return null;
+      return buf.subarray(offset, offset + len);
+    };
   }
 
   reply(msg, value) {
@@ -50,7 +69,25 @@ class KeysRigProcessor extends AudioWorkletProcessor {
         case 'attach_pack': {
           let value = true;
           try {
-            this.renderer.attachPack(msg.key, new Uint8Array(msg.bytes));
+            // Attach BY HANDLE: the transferred ArrayBuffer never enters
+            // wasm linear memory. Keep it in this.packs and hand wasm only
+            // an id + length; ranged reads come back through __ftsPackRead.
+            const bytes = new Uint8Array(msg.bytes);
+            const id = this.nextPackId++;
+            this.packs.set(id, bytes);
+            this.installPackRead();
+            try {
+              this.renderer.attachPackExternal(msg.key, id, bytes.byteLength);
+            } catch (e) {
+              this.packs.delete(id); // don't strand the buffer on failure
+              throw e;
+            }
+            // A re-attach under the same key replaced the registry entry —
+            // free the superseded buffer (engines already built over it keep
+            // reading it until reload_lanes swaps them; brief overlap only).
+            const prev = this.packIdsByKey.get(msg.key);
+            if (prev !== undefined && prev !== id) this.packs.delete(prev);
+            this.packIdsByKey.set(msg.key, id);
           } catch (e) {
             // A Rust panic traps as a bare 'unreachable' — after it, the
             // whole wasm instance traps, so the hook stashes the message on

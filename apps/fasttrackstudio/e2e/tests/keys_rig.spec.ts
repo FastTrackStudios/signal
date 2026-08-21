@@ -71,7 +71,12 @@ async function pollUntil<T>(
   throw new Error(`timed out (${timeoutMs}ms) waiting for ${label}; last=${JSON.stringify(last)}`);
 }
 
-test('boot: rig starts, streams packs, reaches ready', async () => {
+test('boot: rig starts, streams ALL packs to ready — none deferred', async () => {
+  // W6 (attach-by-handle): every pack in the Worship set attaches — the
+  // bytes live on the worklet's JS heap, so nothing defers on wasm memory.
+  // Dolceola (841 MB) + Clavichord (574 MB) stream from local disk; the
+  // full set is ~2.4 GB, so the ready wait gets a generous budget.
+  test.setTimeout(360_000);
   await page.goto('/rigs/keys/worship');
   await page.getByTestId('rig-start').click();
 
@@ -86,19 +91,20 @@ test('boot: rig starts, streams packs, reaches ready', async () => {
   await pollUntil(
     rigState,
     (s) => s === 'ready',
-    180_000, 1000, "state() to reach 'ready'",
+    300_000, 1000, "state() to reach 'ready'",
   );
 
-  // The three small Worship proxies must be fully resident.
+  // EVERY pack row must be fully resident — none deferred, none failed.
   const states = await pollUntil(
     packStates,
-    (ps) => {
-      const small = smallPacksOf(ps);
-      return small.length === SMALL_PACKS.length && small.every((p) => p.state === 'ready');
-    },
-    180_000, 1000, `packs [${SMALL_PACKS.join(', ')}] to be ready`,
+    (ps) => ps.length > 0 && ps.every((p) => p.state === 'ready'),
+    300_000, 1000, 'ALL packs to be ready',
   );
-  for (const p of smallPacksOf(states)) {
+  // The Worship program references nine packed soundsources (PHAT Bass is
+  // synthesis-mode — no pack); every one must attach.
+  expect(states.length).toBeGreaterThanOrEqual(9);
+  for (const p of states) {
+    expect(p.state, `${p.name} attached (not deferred/failed)`).toBe('ready');
     expect(p.bytes, `${p.name} fully streamed`).toBe(p.total);
   }
 });
@@ -127,6 +133,37 @@ test('audio out: notes and the demo player move the master peak', async () => {
     rig.noteOff(64);
     rig.noteOff(67);
   });
+
+  // Wait for the master to fall back to (near) silence so the next
+  // assertions measure their own notes, not this chord's tail.
+  await pollUntil(
+    masterPeak,
+    (p) => typeof p === 'number' && p < 0.0005,
+    15_000, 200, 'masterPeak() to decay after the chord',
+  );
+
+  // A HIGH note (C7) — outside the middle-out preload coverage the wasm
+  // decoded-PCM budget allows on the big pianos, so this exercises
+  // warm-on-note: the worklet decodes the sample on demand before queueing
+  // the note-on. First press may land a beat late; the retrigger loop
+  // below absorbs that.
+  await page.evaluate(() => (window as any).__ftsRig.noteOn(96, 110));
+  const highPeak = await pollUntil(
+    async () => {
+      // Retrigger — a first press that raced the warm decode plays nothing.
+      await page.evaluate(() => (window as any).__ftsRig.noteOn(96, 110));
+      return masterPeak();
+    },
+    (p) => typeof p === 'number' && p > 0.001,
+    20_000, 500, 'masterPeak() > 0.001 after high noteOn(96) (warm-on-note)',
+  );
+  expect(highPeak).toBeGreaterThan(0.001);
+  await page.evaluate(() => (window as any).__ftsRig.noteOff(96));
+  await pollUntil(
+    masterPeak,
+    (p) => typeof p === 'number' && p < 0.0005,
+    15_000, 200, 'masterPeak() to decay after the high note',
+  );
 
   // Second proof through the UI path: the demo MIDI player in the
   // soundsource popover.

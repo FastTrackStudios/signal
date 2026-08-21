@@ -52,6 +52,48 @@ mod web {
         JsValue::from_str(&e.to_string())
     }
 
+    /// Install fts-sample's process-wide external pack reader, bridged to
+    /// the processor's `globalThis.__ftsPackRead(id, offset, len)` (defined
+    /// once in keys_processor.js over its JS-held pack buffers). The
+    /// closure captures NOTHING (it re-resolves the hook per call), so it
+    /// satisfies the reader's `Send + Sync` bound — the worklet scope is
+    /// single-threaded anyway.
+    fn install_external_reader_once() {
+        use std::sync::Once;
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            signal_sampler::engine::cache::set_external_pack_reader(Box::new(
+                |id, offset, dst| {
+                    use wasm_bindgen::JsCast as _;
+                    let Ok(hook) =
+                        js_sys::Reflect::get(&js_sys::global(), &"__ftsPackRead".into())
+                    else {
+                        return false;
+                    };
+                    let Ok(hook) = hook.dyn_into::<js_sys::Function>() else {
+                        return false;
+                    };
+                    let Ok(value) = hook.call3(
+                        &JsValue::NULL,
+                        &JsValue::from_f64(f64::from(id)),
+                        &JsValue::from_f64(offset as f64),
+                        &JsValue::from_f64(dst.len() as f64),
+                    ) else {
+                        return false;
+                    };
+                    let Ok(bytes) = value.dyn_into::<js_sys::Uint8Array>() else {
+                        return false; // null / undefined: id unknown or range refused
+                    };
+                    if bytes.length() as usize != dst.len() {
+                        return false;
+                    }
+                    bytes.copy_to(dst);
+                    true
+                },
+            ));
+        });
+    }
+
     /// The keys-rig worklet: a [`WebRenderer`] plus (once `openLanes` ran) a
     /// headless [`KeysRig`] seeded into the same `Standalone`. Construct one
     /// per `AudioWorkletProcessor` on the worklet thread; `RefCell` is fine —
@@ -126,9 +168,27 @@ mod web {
         /// trees reference (`sample_block(_, key)`). Call before `openLanes`
         /// for lanes to sound immediately; a pack attached later needs one
         /// `reloadLanes` to reach the running instruments.
+        ///
+        /// This copies the whole pack into wasm linear memory — kept for
+        /// compatibility; the processor now attaches by handle instead
+        /// ([`attach_pack_external`](Self::attach_pack_external)).
         #[wasm_bindgen(js_name = attachPack)]
         pub fn attach_pack(&self, key: &str, bytes: &[u8]) -> Result<(), JsValue> {
             signal_sampler::pack_registry::install(key, bytes.to_vec()).map_err(js_err)
+        }
+
+        /// Install a pack whose BYTES STAY ON THE JS HEAP, outside wasm
+        /// linear memory: the processor keeps the transferred buffer in its
+        /// own `Map` keyed by `id` and serves ranged reads through
+        /// `globalThis.__ftsPackRead(id, offset, len) → Uint8Array | null`.
+        /// This is what lets every Worship pack attach — multi-GB packs cost
+        /// the 4 GB wasm address space nothing; only decoded PCM (bounded by
+        /// the wasm preload budget) lives in linear memory.
+        #[wasm_bindgen(js_name = attachPackExternal)]
+        pub fn attach_pack_external(&self, key: &str, id: u32, len: f64) -> Result<(), JsValue> {
+            install_external_reader_once();
+            signal_sampler::pack_registry::install_external(key, id, len as u64)
+                .map_err(js_err)
         }
 
         /// Build the headless keys rig from a lane-program JSON (see
@@ -184,6 +244,13 @@ mod web {
         #[wasm_bindgen(js_name = noteOn)]
         pub fn note_on(&self, key: u8, velocity: u8) {
             if let Some(rig) = self.rig.borrow().as_ref() {
+                // Warm BEFORE queueing: decode any budget-skipped sample on
+                // this (control) side, between render quanta — the audio
+                // render drops voices whose samples are not resident. A cold
+                // key's first press may decode audibly late once; after
+                // that it is cached (and the budget may LRU-shed something
+                // else — see `KeysRig::warm_note`).
+                rig.warm_note(key, velocity);
                 rig.note_on(key, velocity);
             }
         }
@@ -211,6 +278,13 @@ mod web {
 
         /// Raw 3-byte MIDI (e.g. straight from WebMIDI) to every lane.
         pub fn midi(&self, status: u8, data1: u8, data2: u8) {
+            // Note-on (velocity > 0): warm the note's samples before the
+            // event queues — see `noteOn` for why.
+            if status & 0xf0 == 0x90 && data2 > 0 {
+                if let Some(rig) = self.rig.borrow().as_ref() {
+                    rig.warm_note(data1, data2);
+                }
+            }
             self.renderer.midi_to_all_tracks(status, data1, data2);
         }
 

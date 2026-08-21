@@ -162,6 +162,51 @@ Reuse, don't reinvent:
     button, per-pack rows, and demo player controls; and the JS state hook
     above.
 
+- **W6 — packs out of wasm memory (attach-by-handle) + warm-on-note** —
+  DONE. All NINE Worship packs attach; `PackPhase::Deferred` no longer
+  occurs with the stock set.
+  - **`PackBytes::External { id, len }`** (fts-sample): pack bytes that
+    live OUTSIDE the process, reachable only through a pluggable
+    process-global reader (`cache::set_external_pack_reader`,
+    `Box<dyn Fn(u32, u64, &mut [u8]) -> bool + Send + Sync>` — fts-sample
+    never deps wasm-bindgen). Every pack read goes through
+    `PackBytes::read_range(offset, len) -> Cow<[u8]>` (borrowed for
+    Mapped/Owned, copied through the reader for External); `Deref` panics
+    on External by design, and `Pcm::sample`/`warm`/`StreamedSample::open`
+    carry non-trapping guards. `SignalPcmPack::open_external(id, len)`
+    parses header + index through the reader; audio entries **materialize
+    per entry** at decode time (`load_pack_sample` copies just the entry's
+    span to an Owned buffer, so streaming/mapped windows never see
+    External). Native `Pcm::Mapped`/mmap paths byte-for-byte unchanged.
+  - **Worklet protocol**: `attach_pack` no longer copies bytes into wasm —
+    keys_processor.js keeps the transferred buffer in `this.packs`
+    (id → Uint8Array, JS heap, outside the 4 GB), serves
+    `globalThis.__ftsPackRead(id, offset, len) → subarray|null`, and calls
+    `attachPackExternal(key, id, byteLength)`
+    (`pack_registry::install_external`). The wasm-side reader closure
+    captures nothing (re-resolves the hook per call), so it satisfies
+    `Send + Sync`. A re-attach under the same key frees the superseded
+    buffer. The old byte-copy `attachPack` stays for compatibility.
+  - **Page guard**: the 1.5 GB `WASM_PACK_RESIDENT_CAP` refusal is
+    replaced by a 6 GB `JS_PACK_RESIDENT_SANITY_CAP` (tab-memory realism —
+    pack bytes cost wasm linear memory ~0 now); `Deferred` stays in the
+    enum for pathological sets, relabelled "past the tab-memory sanity
+    cap".
+  - **Warm-on-note**: the decoded-PCM budget (768 MB on wasm) still bounds
+    preload coverage, and the audio render DROPS a voice whose sample is
+    not resident. `KeysRig::warm_note(note, vel)` walks every lane's
+    render tree (`RenderNode::warm_note_samples`, zone-filtered) and
+    decodes the needed sample on the control side; `KeysWorklet::midi`/
+    `noteOn` call it on note-on **before** queueing the event (between
+    render quanta — a cold key's first press may decode audibly late
+    once). Warm charges the budget past its ceiling; well past it
+    (limit + 1/8) the warmed engine sheds largest-first back to the limit.
+  - e2e: the boot test now waits for **all** pack rows `ready` (≥ 9,
+    none deferred/failed, 300 s budget — observed ~1.7 min for the full
+    ~2.4 GB set from local disk); the audio test adds a high C7
+    `noteOn(96)` assertion exercising warm-on-note beyond preload
+    coverage. Suite green 3×, ~2.2 min.
+
 ## Open questions / later
 
 - Piano-lane weight on travel links: consider a lower-quality travel

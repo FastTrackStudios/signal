@@ -281,6 +281,22 @@ pub mod pack_registry {
         Ok(())
     }
 
+    /// Install an EXTERNAL pack under `key`: the pack's bytes stay outside
+    /// this address space (the browser worklet's JS heap), reachable only
+    /// through the process-wide reader installed with
+    /// [`fts_sample::cache::set_external_pack_reader`]. Header + index are
+    /// parsed through that reader here (surfacing a bad pack, or a missing
+    /// reader, at the transfer boundary); audio entries materialize
+    /// per-entry at decode time. Replaces any previous entry.
+    pub fn install_external(key: &str, id: u32, len: u64) -> Result<(), SamplerError> {
+        let pack = SignalPcmPack::open_external(id, len)?;
+        packs()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(key.to_string(), pack);
+        Ok(())
+    }
+
     /// Remove the entry under `key` (already-built engines keep their clone).
     pub fn remove(key: &str) {
         packs()
