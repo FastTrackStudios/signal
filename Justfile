@@ -456,6 +456,14 @@ keys log="/tmp/fts-keys.log":
 keys-tui preset="Nord Stage" midi="all":
     PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-keys --features pipewire --example keys_tui -- --preset "{{preset}}" --midi "{{midi}}"
 
+# Keys rig integration test: open the rig headless, inject MIDI through the
+# ALSA loopback, and assert the rig both saw the events and made sound
+# (midi_recent + master_peak). Needs pipewire + the sample libraries; exits
+# nonzero on a deaf or silent rig.
+keys-test:
+    cargo build --release -p signal-keys --example midi_probe
+    PIPEWIRE_PROPS='{ application.name = FTS-KeysTest }' pw-jack ./target/release/examples/midi_probe
+
 # Play the City Grand physically-modeled piano from a MIDI keyboard.
 # Voice loads its param table from ~/.config/signal/city-grand/table.json
 # (regenerate with `pm sweep` in research/piano-model).
