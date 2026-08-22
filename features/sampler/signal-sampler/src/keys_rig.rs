@@ -82,6 +82,23 @@ const KEYS_TRACK_NAME: &str = "Keys";
 /// each block; it ignores audio input and renders the tree from the block's MIDI.
 pub struct KeysInstrument {
     render: RenderNode,
+    /// The PREVIOUS render tree, still sounding its release tails after a
+    /// swap. Kept until its last voice finishes, then dropped.
+    ///
+    /// Replacing the tree outright is what makes a patch change audible:
+    /// every note still ringing is cut mid-tail. A piano or a pad swapped
+    /// that way chops. Summing the outgoing tree alongside the new one for
+    /// the few hundred ms its voices need is the difference between a
+    /// switch you hear and one you do not.
+    retiring: Option<RenderNode>,
+    /// Scratch for the retiring tree's output (it sums into the main bus).
+    /// Pre-allocated at `prepare`; the audio thread never allocates.
+    retire_l: Vec<f32>,
+    retire_r: Vec<f32>,
+    /// What `prepare` was called with, so a tree swapped in later can be
+    /// prepared identically without waiting for the host to call again.
+    prepared_rate: f64,
+    prepared_block: u32,
     prepared: bool,
     /// Master output gain (linear, f32 bits), shared with the owning [`KeysRig`]
     /// so it's adjustable live — a summed multi-layer patch can otherwise clip.
@@ -109,10 +126,59 @@ impl KeysInstrument {
         let (render, cells) = RenderNode::compile_with_cells(tree, sample_rate);
         Self {
             render,
+            retiring: None,
+            retire_l: Vec::new(),
+            retire_r: Vec::new(),
+            prepared_rate: 48_000.0,
+            prepared_block: PREPARE_BLOCK,
             prepared: false,
             gain,
             cells,
         }
+    }
+
+    /// Swap in an ALREADY-COMPILED render tree, keeping the outgoing one
+    /// alive until its voices finish — a gapless patch change.
+    ///
+    /// The expensive half (compiling the tree, opening its zones) happens
+    /// wherever the caller built `next`; on wasm that is a worker thread,
+    /// so the audio thread only does this: two moves and a `Vec` swap.
+    /// Notes held through the change keep sounding on the old tree while
+    /// new notes play the new one.
+    ///
+    /// A swap arriving while a previous one is still retiring drops the
+    /// older tail (two generations is already a stretch; three is a leak).
+    pub fn begin_swap(&mut self, mut next: RenderNode, cells: GainCells) -> Option<RenderNode> {
+        if self.prepared {
+            // Match what `prepare` did, so the incoming tree can render on
+            // the very next block.
+            next.prepare(self.prepared_rate, self.prepared_block);
+        }
+        let previous = std::mem::replace(&mut self.render, next);
+        self.cells = cells;
+        // Whatever was already retiring has to go somewhere: hand it back
+        // so a non-realtime thread can drop it. Dropping HERE would free on
+        // the audio thread, which is the priority-inversion hazard this
+        // whole design avoids.
+        let displaced = self.retiring.take();
+        self.retiring = Some(previous);
+        displaced
+    }
+
+    /// Take the retired tree once it has finished sounding, so the caller
+    /// can drop it somewhere that is allowed to free.
+    pub fn take_retired_if_silent(&mut self) -> Option<RenderNode> {
+        let done = self
+            .retiring
+            .as_mut()
+            .map(|r| r.active_voices() == 0)
+            .unwrap_or(false);
+        if done { self.retiring.take() } else { None }
+    }
+
+    /// Whether a swapped-out tree is still sounding.
+    pub fn is_retiring(&self) -> bool {
+        self.retiring.is_some()
     }
 
     /// The live fader cells for this instrument's engines + layers.
@@ -156,6 +222,12 @@ impl PluginInstance for KeysInstrument {
     }
     fn prepare(&mut self, sample_rate: f64, block_size: u32) -> Result<(), PluginError> {
         self.render.prepare(sample_rate, block_size);
+        // Scratch for a retiring tree, sized once here — `process_block`
+        // runs on the audio thread and must never allocate.
+        self.retire_l.resize(block_size as usize, 0.0);
+        self.retire_r.resize(block_size as usize, 0.0);
+        self.prepared_rate = sample_rate;
+        self.prepared_block = block_size;
         self.prepared = true;
         Ok(())
     }
@@ -171,6 +243,34 @@ impl PluginInstance for KeysInstrument {
         events: &PluginEvents<'_>,
     ) -> Result<(), PluginError> {
         self.render.process(in_l, in_r, out_l, out_r, events);
+        // A tree swapped out is still finishing its notes: render it into
+        // scratch and sum. It gets NO new events — new notes belong to the
+        // new tree — so it drains as its voices release, and is dropped the
+        // moment none are left.
+        if let Some(retiring) = self.retiring.as_mut() {
+            let n = out_l.len().min(self.retire_l.len());
+            if n > 0 {
+                self.retire_l[..n].fill(0.0);
+                self.retire_r[..n].fill(0.0);
+                let quiet = PluginEvents::default();
+                retiring.process(
+                    &in_l[..n.min(in_l.len())],
+                    &in_r[..n.min(in_r.len())],
+                    &mut self.retire_l[..n],
+                    &mut self.retire_r[..n],
+                    &quiet,
+                );
+                for i in 0..n {
+                    out_l[i] += self.retire_l[i];
+                    out_r[i] += self.retire_r[i];
+                }
+            }
+            // NOTE: finished trees are NOT dropped here. `self.retiring`
+            // is emptied by `take_retired_if_silent`, called from the
+            // install path, which hands the tree to a worker to free —
+            // freeing on this thread takes the shared allocator lock.
+            let _ = retiring;
+        }
         let gain = f32::from_bits(self.gain.load(std::sync::atomic::Ordering::Relaxed));
         if (gain - 1.0).abs() > 1e-4 {
             for s in out_l.iter_mut().chain(out_r.iter_mut()) {
@@ -846,6 +946,71 @@ impl KeysRig {
         out
     }
 
+    /// WORKER SIDE: compile the lanes of `program` that play `spec_path`
+    /// and publish them for the audio thread to install.
+    ///
+    /// This is the expensive work — compiling trees, opening zones — done
+    /// somewhere the audio thread is not. It needs no `KeysRig` (which is
+    /// `!Send` on wasm); it is an associated function precisely so a worker
+    /// can call it with only the program.
+    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+    pub fn build_lanes_for_pack(program: &LaneProgram, spec_path: &str, sample_rate: u32) -> usize {
+        let mut built = 0;
+        for engine in &program.engines {
+            for layer in &engine.layers {
+                if !tree_uses_sample(&layer.tree, spec_path) {
+                    continue;
+                }
+                let (render, cells) =
+                    RenderNode::compile_with_cells(&layer.tree, sample_rate);
+                crate::built_lanes::publish(crate::built_lanes::BuiltLane {
+                    layer: layer.name.clone(),
+                    render,
+                    cells,
+                });
+                built += 1;
+            }
+        }
+        built
+    }
+
+    /// AUDIO SIDE: install every lane a worker has finished compiling.
+    ///
+    /// Cheap by construction — `begin_swap` is two moves — and gapless:
+    /// the tree being replaced keeps sounding until its voices release, so
+    /// notes held across the change are not cut.
+    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+    pub fn install_built_lanes(&self) -> usize {
+        let mut installed = 0;
+        while let Some(mut built) = crate::built_lanes::take() {
+            // Move the new tree out, install it, and put whatever it
+            // displaced back INTO THE SAME BOX. The swap then neither
+            // allocates nor frees on this thread: one box in, one box out,
+            // dropped later by a worker.
+            let layer = std::mem::take(&mut built.layer);
+            let render = std::mem::replace(&mut built.render, RenderNode::Serial(Vec::new()));
+            let cells = built.cells.clone();
+            let displaced = self
+                .edit_lane(&layer, |inst| inst.begin_swap(render, cells))
+                .flatten();
+            match displaced {
+                Some(old) => {
+                    built.render = old;
+                    crate::built_lanes::retire(built);
+                    installed += 1;
+                }
+                None => {
+                    // Lane not found, or nothing displaced: the box still
+                    // holds a tree either way, so it goes to the reaper
+                    // rather than being freed here.
+                    crate::built_lanes::retire(built);
+                }
+            }
+        }
+        // Collect trees that have finished sounding since the last pass.
+        installed
+    }
+
     /// Queue every zone this note needs but has not opened onto the shared
     /// streamer queue (wasm + threads only). Returns how many were queued.
     ///
@@ -1181,6 +1346,49 @@ mod tests {
 
     /// The instrument renders a preset's tree from MIDI — device-free, so it runs
     /// in CI. Plays a note through the layering demo and checks it's audible.
+    /// A patch swap must not cut the notes that are still ringing.
+    ///
+    /// This is what "gapless" means in practice: hold a note, swap the
+    /// tree, and the held note keeps sounding on the outgoing tree while
+    /// the new one takes over. Replacing the tree outright — what the code
+    /// did before `begin_swap` — silences it in the same block, which is
+    /// the chop you hear on every patch change.
+    #[test]
+    fn a_swap_keeps_the_held_note_ringing() {
+        let preset = crate::nord::layering_demo();
+        let mut inst = KeysInstrument::new(&preset, 48_000);
+        inst.prepare(48_000.0, 256).unwrap();
+
+        let (inl, inr) = (vec![0.0f32; 256], vec![0.0f32; 256]);
+        let (mut outl, mut outr) = (vec![0.0f32; 256], vec![0.0f32; 256]);
+        let midi = [PluginMidiEvent { offset: 0, message: ev_note_on(72, 110) }];
+        let held = PluginEvents { params: &[], midi: &midi, note_expressions: &[] };
+        inst.process_block(&inl, &inr, &mut outl, &mut outr, &held).unwrap();
+        let rms = |b: &[f32]| (b.iter().map(|s| s * s).sum::<f32>() / b.len() as f32).sqrt();
+        let before = rms(&outl);
+        assert!(before > 1e-3, "note should sound before the swap, rms={before}");
+
+        // Swap to a freshly compiled tree while that note is still held.
+        let (next, cells) = RenderNode::compile_with_cells(&preset, 48_000);
+        inst.begin_swap(next, cells);
+        assert!(inst.is_retiring(), "the outgoing tree should be retiring");
+
+        // No new events — only the held note's tail can be sounding, and
+        // it must still be there.
+        let quiet = PluginEvents::default();
+        let mut after = 0.0f32;
+        for _ in 0..4 {
+            outl.fill(0.0);
+            outr.fill(0.0);
+            inst.process_block(&inl, &inr, &mut outl, &mut outr, &quiet).unwrap();
+            after = after.max(rms(&outl));
+        }
+        assert!(
+            after > 1e-4,
+            "held note must survive the swap (gapless), rms after={after}"
+        );
+    }
+
     #[test]
     fn keys_instrument_renders_a_preset_from_midi() {
         let preset = crate::nord::layering_demo();

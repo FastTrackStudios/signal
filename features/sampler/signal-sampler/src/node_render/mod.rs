@@ -677,7 +677,11 @@ impl RenderNode {
                     .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
                 {
                     let engine = sampler.engine();
-                    if let Some(path) = engine.resolve_note_sample_path(note, velocity) {
+                    // ALL round-robin candidates, not just rr 0 — playback
+                    // advances the rr counter, so warming one of them
+                    // leaves the others unopened and most presses land on
+                    // an unopened sample.
+                    for path in engine.resolve_note_sample_paths(note, velocity) {
                         if !engine.is_sample_resident(&path) && !out.contains(&path) {
                             out.push(path);
                         }
@@ -723,14 +727,17 @@ impl RenderNode {
                     return 0;
                 };
                 let engine = sampler.engine();
-                let Some(path) = engine.resolve_note_sample_path(note, velocity) else {
-                    return 0;
-                };
-                if engine.is_sample_resident(&path) {
-                    return 0;
+                let cache = engine.cache_handle();
+                let mut queued = 0;
+                // Every round-robin candidate — see the note above.
+                for path in engine.resolve_note_sample_paths(note, velocity) {
+                    if engine.is_sample_resident(&path) {
+                        continue;
+                    }
+                    crate::engine::stream_wasm::enqueue_open(&cache, &path);
+                    queued += 1;
                 }
-                crate::engine::stream_wasm::enqueue_open(&engine.cache_handle(), &path);
-                1
+                queued
             }
             RenderNode::Leaf { .. } => 0,
             RenderNode::Serial(v) | RenderNode::Parallel(v) => {

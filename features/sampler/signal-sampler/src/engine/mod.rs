@@ -32,6 +32,22 @@
 // (crates/audiocore/fts-sample). Re-exported here so every existing
 // `crate::engine::cache::...` path keeps working unchanged.
 pub use fts_sample::{budget, cache, flac_index, stream};
+/// Notes the audio thread dropped for want of a resident sample, process
+/// wide. A live rig must be able to SEE this: the drop is deliberate (the
+/// alternative is decoding on the audio thread) but a player pressing a key
+/// and hearing nothing needs to show up as a number somewhere.
+static NOTES_DROPPED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Record one dropped note (see [`NOTES_DROPPED`]).
+pub fn note_dropped() {
+    NOTES_DROPPED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Notes dropped for want of a resident sample since process start.
+pub fn notes_dropped() -> usize {
+    NOTES_DROPPED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The browser streamer queue (W13) — re-exported so the worklet crate
 /// reaches it through the same `signal_sampler::engine::*` surface as the
 /// rest of the sampler internals. Gated on the TARGET only: `engine-core`
@@ -1092,6 +1108,21 @@ impl SampleEngine {
     /// The sample path a note-on for `note`/`velocity` would need (rr 0) —
     /// the resolve half of [`warm_note_samples`](Self::warm_note_samples),
     /// with no decode. Cheap: an in-memory zone/map lookup.
+    /// EVERY sample a note-on for `note`/`velocity` might use — all the
+    /// round-robin alternatives. Warming must cover all of them: playback
+    /// advances an rr counter, so opening only the rr-0 zone leaves most
+    /// presses asking for a sample nobody opened (the piano's "wrong
+    /// sample / no attack" bug).
+    pub fn resolve_note_sample_paths(&self, note: u8, velocity: u8) -> Vec<std::path::PathBuf> {
+        if self.patch.is_zoned() {
+            let all = self.patch.resolve_zone_candidates(note, velocity);
+            if !all.is_empty() {
+                return all;
+            }
+        }
+        self.resolve_note_sample_path(note, velocity).into_iter().collect()
+    }
+
     pub fn resolve_note_sample_path(&self, note: u8, velocity: u8) -> Option<std::path::PathBuf> {
         if self.patch.is_zoned() {
             self.patch.resolve_zone(note, velocity, 0).map(|z| z.path)

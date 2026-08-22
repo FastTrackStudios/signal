@@ -407,6 +407,15 @@ pub(crate) async fn cached_pack(name: &str, variant: &str) -> Option<js_sys::Arr
     read_bytes(&dir, &file).await.ok()
 }
 
+/// Whether this page has `SharedArrayBuffer` at all (i.e. is cross-origin
+/// isolated). Callers use it to decide whether they still need an
+/// in-memory copy of a pack before reading it back as shared.
+pub(crate) fn shared_buffers_available() -> bool {
+    js_sys::Reflect::get(&js_sys::global(), &"SharedArrayBuffer".into())
+        .map(|v| !v.is_undefined())
+        .unwrap_or(false)
+}
+
 /// Read a cached pack from OPFS **directly into a `SharedArrayBuffer`**,
 /// in chunks, so the whole pack never exists twice.
 ///

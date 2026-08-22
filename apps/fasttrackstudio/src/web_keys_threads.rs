@@ -59,6 +59,11 @@ thread_local! {
     /// A worker's error text, if any came back (module built without
     /// atomics, fetch failure, …). Surfaced in the audio panel.
     static LAST_ERROR: RefCell<String> = const { RefCell::new(String::new()) };
+    /// Lanes the workers have reported COMPILING. The page waits on this
+    /// before trusting the off-thread path: a posted message is not a
+    /// finished build, and treating it as one meant lanes silently never
+    /// got built while the page skipped its fallback.
+    static LANES_BUILT: RefCell<u32> = const { RefCell::new(0) };
     /// Every pack SAB shared so far, replayed to workers spawned later
     /// (a latency-hint re-boot restarts them mid-session).
     static SHARED_PACKS: RefCell<Vec<(u32, JsValue, String)>> =
@@ -91,7 +96,34 @@ thread_local! {
 ///     heap. That is fixed in keys_streamer_worker.js and was NOT the
 ///     whole story.
 ///
-/// Narrowed by isolation, and the picture is now specific:
+/// The remaining blocker is the SHARED ALLOCATOR, and it is fundamental
+/// rather than a wiring mistake.
+///
+/// Once the workers actually did work (compiling lane trees — heavy
+/// allocation in the shared heap), the tab froze again. The audio thread
+/// and the workers share one Rust allocator, so:
+///
+///   * a worker compiling a lane holds the allocator lock for a long time;
+///   * ANY allocation or drop on the audio thread then blocks on that lock
+///     — and in a wasm AudioWorklet, blocking parks the audio thread on a
+///     futex, which stops everything;
+///   * `install_built_lanes` in particular DROPS the retired tree on the
+///     audio thread, which is a deallocation, which takes that same lock.
+///
+/// So the rule "the audio thread must never allocate" is not advisory
+/// here: with shared memory it is a hard requirement, because allocation
+/// is a lock shared with threads doing bulk work. Fixing it properly means
+/// the audio thread never allocating or freeing — retired trees shipped
+/// BACK to a worker to be dropped, scratch pre-allocated, and any
+/// per-block growth removed — or giving the audio thread its own
+/// allocator arena.
+///
+/// Until then the workers stay OFF by default. Everything they enable
+/// (shared pack bytes, off-thread compiles) is built and works in
+/// isolation; it is the coexistence with a realtime thread on one
+/// allocator that is not safe yet.
+///
+/// Earlier narrowing, kept because each step was a real bug:
 ///
 ///   * init ORDER was a real bug and is FIXED — workers must come up only
 ///     after the worklet has run main init ([`create_memory`] /
@@ -200,6 +232,13 @@ pub(crate) fn spawn_over(memory: &JsValue) {
                     .unwrap_or_default();
                 match kind.as_str() {
                     "ready" => READY.with(|r| *r.borrow_mut() += 1),
+                    "lanes_built" => {
+                        let n = Reflect::get(&data, &"count".into())
+                            .ok()
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0) as u32;
+                        LANES_BUILT.with(|c| *c.borrow_mut() += n);
+                    }
                     "error" => {
                         let err = Reflect::get(&data, &"error".into())
                             .ok()
@@ -243,12 +282,43 @@ pub(crate) fn spawn_over(memory: &JsValue) {
 ///
 /// Remembered so a worker spawned later still receives every pack.
 pub(crate) fn share_pack(id: u32, sab: &JsValue, key: &str) {
+    // Only RETAIN when workers can actually use them. The replay list
+    // exists so a worker spawned later still gets every pack; with threads
+    // off nothing will ever read it, and holding a JsValue per pack kept
+    // every SharedArrayBuffer alive for the page's lifetime. A re-boot
+    // (latency hint, PCM budget) then allocated a second full set on top —
+    // ~4.8 GB for the Worship packs, i.e. a dead tab.
+    if !supported() || !enabled() {
+        return;
+    }
     SHARED_PACKS.with(|p| p.borrow_mut().push((id, sab.clone(), key.to_string())));
     WORKERS.with(|w| {
         for worker in w.borrow().iter() {
             let _ = worker.post_message(&pack_msg(id, sab, key));
         }
     });
+}
+
+/// Ask the streamer workers to compile the lanes that play `key`, off the
+/// audio thread. The worklet installs them between quanta
+/// (`installBuiltLanes`) — two moves per lane, and gapless.
+///
+/// Only ONE worker should build a given pack's lanes, or every worker
+/// compiles the same trees and the extras are dropped on the ring. The
+/// first worker gets the job.
+pub(crate) fn build_lanes(program_json: &str, key: &str, sample_rate: f64) -> bool {
+    WORKERS.with(|w| {
+        let workers = w.borrow();
+        let Some(worker) = workers.first() else {
+            return false;
+        };
+        let o = Object::new();
+        let _ = Reflect::set(&o, &"kind".into(), &"build_lanes".into());
+        let _ = Reflect::set(&o, &"program".into(), &program_json.into());
+        let _ = Reflect::set(&o, &"key".into(), &key.into());
+        let _ = Reflect::set(&o, &"sampleRate".into(), &sample_rate.into());
+        worker.post_message(&o).is_ok()
+    })
 }
 
 fn pack_msg(id: u32, sab: &JsValue, key: &str) -> Object {
@@ -260,6 +330,11 @@ fn pack_msg(id: u32, sab: &JsValue, key: &str) -> Object {
     o
 }
 
+/// How many lanes the workers have reported building.
+pub(crate) fn lanes_built() -> u32 {
+    LANES_BUILT.with(|c| *c.borrow())
+}
+
 /// Terminate every streamer worker (a re-boot, or the page going away).
 pub(crate) fn shutdown() {
     WORKERS.with(|w| {
@@ -268,4 +343,9 @@ pub(crate) fn shutdown() {
         }
     });
     READY.with(|r| *r.borrow_mut() = 0);
+    // Release the pack references too. Without this a re-boot kept the OLD
+    // generation of SharedArrayBuffers alive while `cached_pack_shared`
+    // allocated a fresh one per pack — two full copies of a multi-GB set.
+    SHARED_PACKS.with(|p| p.borrow_mut().clear());
+    LANES_BUILT.with(|c| *c.borrow_mut() = 0);
 }

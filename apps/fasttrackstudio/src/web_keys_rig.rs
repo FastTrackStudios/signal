@@ -289,6 +289,13 @@ impl Worklet {
             streamer_dropped: f("streamerDropped").unwrap_or(0.0),
             open_failed: f("openFailed").unwrap_or(0.0),
             open_depth: f("openDepth").unwrap_or(0.0),
+            note_latency_ms: f("noteLatencyMs").unwrap_or(-1.0),
+            note_latency_worst_ms: f("noteLatencyWorstMs").unwrap_or(0.0),
+            note_late: f("noteLate").unwrap_or(0.0),
+            midi_queue_depth: f("midiQueueDepth").unwrap_or(0.0),
+            notes_dropped: f("notesDropped").unwrap_or(0.0),
+            lanes_built: f("lanesBuilt").unwrap_or(0.0),
+            lanes_installed: f("lanesInstalled").unwrap_or(0.0),
             pcm_used_mb: f("pcmUsedMb").unwrap_or(0.0),
             pcm_limit_mb: f("pcmLimitMb").unwrap_or(0.0),
         })
@@ -309,6 +316,9 @@ impl Worklet {
     /// telemetry only ever counts real dropouts (W12).
     pub(crate) fn resume(&self) {
         let _ = self.ctx.resume();
+        // Anything queued while suspended is stale — a note pressed before
+        // the context started must not fire now.
+        self.fire("flush_midi", &[]);
         self.fire("reset_audio_stats", &[]);
     }
 
@@ -734,6 +744,23 @@ struct AudioStats {
     /// climbing means they ran and could not do the work.
     open_failed: f64,
     open_depth: f64,
+    /// Press-to-sound latency, ms: the gap between a note-on arriving and
+    /// the engine actually spawning its voice, measured on the sample
+    /// clock. This is the number that says "it played when I pressed it".
+    note_latency_ms: f64,
+    note_latency_worst_ms: f64,
+    /// Notes that took over 30 ms to sound (or never did).
+    note_late: f64,
+    /// Live-MIDI events waiting on the renderer — persistently above zero
+    /// means pressed notes are queued, and will arrive late in a burst.
+    midi_queue_depth: f64,
+    /// Pressed notes that made NO sound (no resident sample).
+    notes_dropped: f64,
+    /// Lanes compiled OFF the audio thread and installed on it. Built > 0
+    /// with installed climbing is the proof the off-thread path is really
+    /// carrying the work rather than the fallback quietly running.
+    lanes_built: f64,
+    lanes_installed: f64,
     /// Decoded PCM resident / its ceiling, in MB (limit -1 = unlimited) —
     /// says whether the budget is what is keeping the rig from sounding.
     pcm_used_mb: f64,
@@ -899,6 +926,20 @@ struct HookAudio {
     open_failed: f64,
     #[facet(rename = "openDepth")]
     open_depth: f64,
+    #[facet(rename = "noteLatencyMs")]
+    note_latency_ms: f64,
+    #[facet(rename = "noteLatencyWorstMs")]
+    note_latency_worst_ms: f64,
+    #[facet(rename = "noteLate")]
+    note_late: f64,
+    #[facet(rename = "midiQueueDepth")]
+    midi_queue_depth: f64,
+    #[facet(rename = "notesDropped")]
+    notes_dropped: f64,
+    #[facet(rename = "lanesBuilt")]
+    lanes_built: f64,
+    #[facet(rename = "lanesInstalled")]
+    lanes_installed: f64,
     #[facet(rename = "pcmUsedMb")]
     pcm_used_mb: f64,
     #[facet(rename = "pcmLimitMb")]
@@ -956,6 +997,13 @@ fn install_hook() {
             streamer_dropped: a.streamer_dropped,
             open_failed: a.open_failed,
             open_depth: a.open_depth,
+            note_latency_ms: a.note_latency_ms,
+            note_latency_worst_ms: a.note_latency_worst_ms,
+            note_late: a.note_late,
+            midi_queue_depth: a.midi_queue_depth,
+            notes_dropped: a.notes_dropped,
+            lanes_built: a.lanes_built,
+            lanes_installed: a.lanes_installed,
             pcm_used_mb: a.pcm_used_mb,
             pcm_limit_mb: a.pcm_limit_mb,
         };
@@ -1368,32 +1416,56 @@ fn ScaleToFit(children: Element) -> Element {
     use_future(move || async move {
         let mut ev = dioxus::document::eval(
             r#"
+            // Tear down a previous generation first. This eval re-runs on
+            // every in-page re-boot (latency hint, PCM budget), and without
+            // this each one left behind another interval + observer +
+            // listener, all firing into a dead channel.
+            if (window.__ftsFitCleanup) { window.__ftsFitCleanup(); }
+
             const measure = () => {
                 const outer = document.getElementById('keys-fit-outer');
                 const inner = document.getElementById('keys-fit-inner');
                 if (!outer || !inner) return;
-                // scrollWidth reports the unscaled layout, so re-measuring
-                // while scaled stays stable; only genuine content growth
-                // or a viewport change moves it.
-                const natural = inner.scrollWidth;
                 const room = outer.clientWidth;
+                // A measure can land before layout (room 0). Scaling by
+                // room/natural would then be 0 — the Rust side formats
+                // height as outer_h/0 = inf and the rig renders invisible.
+                if (room <= 0) return;
+                // Measure the UNSCALED width honestly: once scaled, the
+                // inner box is pinned to `natural` px, so its scrollWidth
+                // can never report anything SMALLER again. That ratchet
+                // meant closing a panel left the rig shrunk forever. Let it
+                // size to content for the measurement, then restore.
+                const pinned = inner.style.width;
+                inner.style.width = 'max-content';
+                const natural = inner.scrollWidth;
+                inner.style.width = pinned;
+                if (natural <= 0) return;
                 const scale = natural > room + 1 ? room / natural : 1;
                 dioxus.send([scale, natural, outer.clientHeight]);
             };
             window.addEventListener('resize', measure);
             const ro = new ResizeObserver(measure);
+            let armTimer = 0;
             const arm = () => {
                 const outer = document.getElementById('keys-fit-outer');
                 const inner = document.getElementById('keys-fit-inner');
                 if (outer && inner) { ro.observe(outer); ro.observe(inner); measure(); }
-                else { setTimeout(arm, 120); }
+                else { armTimer = setTimeout(arm, 120); }
             };
             arm();
             // Content GROWTH (packs attaching, panels opening) widens
             // scrollWidth without resizing the observed boxes, so a slow
             // safety poll catches what the ResizeObserver cannot. The recv
             // side dedupes, so an unchanged reading costs nothing.
-            setInterval(measure, 1000);
+            const poll = setInterval(measure, 1000);
+            window.__ftsFitCleanup = () => {
+                window.removeEventListener('resize', measure);
+                ro.disconnect();
+                clearInterval(poll);
+                if (armTimer) clearTimeout(armTimer);
+                window.__ftsFitCleanup = null;
+            };
             "#,
         );
         while let Ok(v) = ev.recv::<(f64, f64, f64)>().await {
@@ -1476,6 +1548,7 @@ async fn boot_rig(
         Ok(v) => return fail(&mut boot, format!("open_lanes: {}", js_str(v))),
         Err(e) => return fail(&mut boot, e),
     }
+    LANE_PROGRAM_JSON.with(|p| *p.borrow_mut() = program.program_json.clone());
     // Mirror the lanes into the decoder worker — it resolves the same
     // paths the worklet's residency checks will ask it to decode.
     if let Some(decoder) = crate::web_keys_decoder::current() {
@@ -1563,7 +1636,7 @@ async fn boot_rig(
     }
 
     // 4. WebMIDI in the background.
-    spawn(init_webmidi(worklet.clone(), midi_inputs, midi_status));
+    spawn(init_webmidi(worklet.clone(), worklet_out, midi_inputs, midi_status));
 
     // 5. Meter poll (~10 Hz) + audio-stats poll (2 Hz — the processor's
     // load window only turns over every ~0.7 s anyway).
@@ -1718,7 +1791,47 @@ async fn stream_one_pack(
         }
     };
     match web_packs::ensure_pack(target, &want, &progress).await {
-        Ok(bytes) => attach_pack(worklet, &key, bytes, i, &mut packs).await,
+        Ok(bytes) => {
+            // ONE attach path. `ensure_pack` has just written this pack to
+            // OPFS, so read it straight back as a SharedArrayBuffer rather
+            // than transferring the copy we happen to be holding.
+            //
+            // Two paths here is what produced the last three bugs: a fresh
+            // download and a cached one took DIFFERENT code, so the e2e
+            // suite (always an empty OPFS) exercised one and every real
+            // returning user got the other. Whatever is wrong is now wrong
+            // for both of us, which is the point.
+            // Drop the in-memory copy BEFORE reading the pack back as
+            // shared, or both exist at once — the same 2x peak that froze
+            // the tab when this was written the obvious way. `bytes` is
+            // only needed for the no-SharedArrayBuffer fallback, so probe
+            // for that support first and release it when we don't need it.
+            let shared = if web_packs::shared_buffers_available() {
+                drop(bytes);
+                web_packs::cached_pack_shared(&want.name, &want.variant).await
+            } else {
+                None
+            };
+            match shared {
+                Some(sab) => {
+                    let total = js_sys::Uint8Array::new(&sab).byte_length() as u64;
+                    attach_pack_shared(worklet, &key, sab, total, i, &mut packs).await;
+                }
+                // No SharedArrayBuffer (page not cross-origin isolated), or
+                // the re-read failed: fall back to the bytes we still hold.
+                None => {
+                    if let Some(bytes) =
+                        web_packs::cached_pack(&want.name, &want.variant).await
+                    {
+                        attach_pack(worklet, &key, bytes, i, &mut packs).await;
+                    } else {
+                        update_row(&mut packs, i, |r| {
+                            r.phase = PackPhase::Failed("pack vanished after download".into());
+                        });
+                    }
+                }
+            }
+        }
         Err(e) => update_row(&mut packs, i, |r| r.phase = PackPhase::Failed(e)),
     }
     None
@@ -1752,9 +1865,16 @@ async fn attach_pack_shared(
         .await;
     match attach {
         Ok(v) if v.as_bool() == Some(true) => {
-            let _ = worklet
-                .rpc("reload_lanes", &[("key", key.into())], None)
-                .await;
+            // Off-thread compile when a worker is up (the worklet installs
+            // between quanta); the audio-thread reload otherwise. This is
+            // the CACHED-pack path — the one a returning visit takes — so
+            // leaving it on the audio thread meant the off-thread work
+            // never applied for anyone who had played before.
+            if !reload_lanes_offthread(key).await {
+                let _ = worklet
+                    .rpc("reload_lanes", &[("key", key.into())], None)
+                    .await;
+            }
             // Mirror into the decoder worker exactly as the transfer path
             // does. Missing this made a RETURNING visit silent for cold
             // notes: cached packs take the shared path, the decoder worker
@@ -1825,12 +1945,15 @@ async fn attach_pack(
         .await;
     match attach {
         Ok(v) if v.as_bool() == Some(true) => {
-            // Scoped to the pack that just landed (W12): the whole-program
-            // reload rebuilt all nine lanes ON THE AUDIO THREAD, >500 ms per
-            // attach.
-            let _ = worklet
-                .rpc("reload_lanes", &[("key", key.into())], None)
-                .await;
+            // Compile the affected lanes on a WORKER when one is running
+            // (the worklet installs them between quanta — gapless, and off
+            // the audio thread entirely). Otherwise fall back to the scoped
+            // reload, which does the same work on the audio thread.
+            if !reload_lanes_offthread(key).await {
+                let _ = worklet
+                    .rpc("reload_lanes", &[("key", key.into())], None)
+                    .await;
+            }
             // W12: mirror into the decoder worker — it reads the pack's
             // whole OPFS file on demand and starts/extends coverage fill.
             if let Some(decoder) = crate::web_keys_decoder::current() {
@@ -1859,6 +1982,44 @@ async fn attach_pack(
 }
 
 // ── Progressive streaming (W7) ─────────────────────────────────────────────
+
+/// Ask a streamer worker to compile this pack's lanes off the audio
+/// thread. `false` = no worker available, so the caller must fall back to
+/// the audio-thread reload.
+///
+/// The program JSON is what the worker needs (it has no rig); it is stashed
+/// at boot by `boot_rig`.
+async fn reload_lanes_offthread(key: &str) -> bool {
+    let program = LANE_PROGRAM_JSON.with(|p| p.borrow().clone());
+    if program.is_empty() {
+        return false;
+    }
+    let before = crate::web_keys_threads::lanes_built();
+    if !crate::web_keys_threads::build_lanes(&program, key, 48_000.0) {
+        return false;
+    }
+    // WAIT for the worker to report lanes compiled. Posting a message is
+    // not the same as the work happening: the worker may still be coming
+    // up (it fetches and compiles ~6.6 MB of wasm), and treating "posted"
+    // as "built" meant the page skipped its fallback while nothing was
+    // built at all — lanes with no samples, reported as success.
+    //
+    // A pack whose lanes are all synth (nothing to compile) legitimately
+    // reports 0, so the timeout is short and the fallback is harmless.
+    for _ in 0..40 {
+        if crate::web_keys_threads::lanes_built() > before {
+            return true;
+        }
+        architect::platform::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    false
+}
+
+thread_local! {
+    /// The resolved lane program, kept so a worker can compile lanes from
+    /// it without a round trip to the engine.
+    static LANE_PROGRAM_JSON: RefCell<String> = const { RefCell::new(String::new()) };
+}
 
 /// Page-allocated DECODER-WORKER ids for whole packs. Starts at 2^21 so
 /// it collides with neither the processor's whole-buffer counter (from 1)
@@ -2206,10 +2367,13 @@ async fn start_progressive(
         fail(&mut packs, e);
         return None;
     }
-    // Scoped to this pack (W12) — see the note at the whole-pack attach.
-    let _ = worklet
-        .rpc("reload_lanes", &[("key", key.into())], None)
-        .await;
+    // Off-thread when a worker is up; the scoped audio-thread reload
+    // otherwise. See the note at the whole-pack attach.
+    if !reload_lanes_offthread(key).await {
+        let _ = worklet
+            .rpc("reload_lanes", &[("key", key.into())], None)
+            .await;
+    }
     // W12: mirror into the decoder worker — same id, the sparse OPFS
     // file, and the committed ranges it may read (rank-0 was committed
     // above, so the worker can open the pack immediately).
@@ -2490,6 +2654,7 @@ fn sync_midi_inputs(
 /// the ambiguous "no MIDI devices".
 async fn init_webmidi(
     worklet: Worklet,
+    current: Signal<Option<Worklet>>,
     mut names_out: Signal<Vec<String>>,
     mut status_out: Signal<String>,
 ) {
@@ -2520,8 +2685,11 @@ async fn init_webmidi(
         Rc::new(RefCell::new(std::collections::HashSet::new()));
     let names = sync_midi_inputs(&access, &worklet, &seen);
     crate::web_keys_backend::set_webmidi_inputs(names.clone());
-    hook_set_midi(&names, true);
-    names_out.set(names);
+    // NOTE: `hook_set_midi(.., armed = true)` is deliberately NOT called
+    // here. The hook's whole purpose is to prove the statechange listener
+    // is installed, and it is not installed until below — a test could
+    // satisfy `midiHotplugArmed()` inside that window and prove nothing.
+    names_out.set(names.clone());
 
     // Hot-plug: on any port state change, re-walk the map — new inputs get
     // the handler, gone inputs drop out of the list. The raw JS closure
@@ -2533,8 +2701,18 @@ async fn init_webmidi(
     });
     access.set_onstatechange(Some(onstate.as_ref().unchecked_ref()));
     onstate.forget(); // page-lifetime (keeps the sender alive too)
+    // NOW it is armed.
+    hook_set_midi(&names, true);
     use futures_util::StreamExt as _;
     while rx.next().await.is_some() {
+        // Stop when this worklet is no longer the page's. A re-boot spawns
+        // a fresh `init_webmidi`; without this the OLD task stayed parked
+        // here holding its MIDIAccess, and on every hot-plug re-attached
+        // `onmidimessage` handlers that forward into the CLOSED worklet —
+        // one dead listener chain per restart.
+        if !still_current(&worklet, &current) {
+            return;
+        }
         let names = sync_midi_inputs(&access, &worklet, &seen);
         crate::web_keys_backend::set_webmidi_inputs(names.clone());
         hook_set_midi(&names, true);
@@ -2741,6 +2919,36 @@ fn AudioPanel(
                     option { value: "1536", "1.5 GB" }
                     option { value: "2304", "2.25 GB" }
                     option { value: "3072", "3 GB" }
+                }
+            }
+            // The "did my note play when I pressed it" row — press-to-sound
+            // latency on the sample clock, plus how many were late or
+            // silent. Green under 30 ms.
+            div { style: row_style,
+                span { style: key_style, "note latency" }
+                span {
+                    "data-testid": "audio-note-latency",
+                    style: if a.note_late > 0.0 {
+                        "font-size:12px; color:#ef4444; font-weight:700;"
+                    } else {
+                        "font-size:12px; color:#22c55e;"
+                    },
+                    if a.note_latency_ms < 0.0 {
+                        "— (play a note)"
+                    } else {
+                        "{a.note_latency_ms:.0} ms · worst {a.note_latency_worst_ms:.0} · late {a.note_late as u64}"
+                    }
+                }
+            }
+            div { style: row_style,
+                span { style: key_style, "midi queue" }
+                span {
+                    style: if a.midi_queue_depth > 2.0 {
+                        "font-size:12px; color:#ef4444; font-weight:700;"
+                    } else {
+                        "font-size:12px; color:#a1a1aa;"
+                    },
+                    "{a.midi_queue_depth as u64} queued · {a.notes_dropped as u64} silent"
                 }
             }
             div { style: row_style,

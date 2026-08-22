@@ -100,6 +100,16 @@ class KeysRigProcessor extends AudioWorkletProcessor {
     // the player heard a dropout. This is the hard number that proves (or
     // disproves) glitch-free playback: it must stay 0 while playing.
     this.lastFrame = -1;
+    // Note-on latency measurement (armed on note-on, disarmed once the
+    // voice count rises or the wait times out).
+    this.pendingNoteFrame = -1;
+    this.pendingNoteVoices = 0;
+    this.noteLatencyMs = -1;   // last measured
+    this.noteLatencyWorstMs = 0;
+    this.noteLateCount = 0;    // notes that took longer than LATE_MS
+    // Stale live-MIDI discarded after a rendering gap (see process()).
+    this.staleFlushes = 0;
+    this.staleFlushed = 0;
     this.glitches = 0;       // discontinuity episodes
     this.glitchFrames = 0;   // total frames skipped across them
     // Message handlers share the audio thread — a slow one starves
@@ -231,6 +241,18 @@ class KeysRigProcessor extends AudioWorkletProcessor {
     };
   }
 
+  // Voice count without letting a trapped wasm instance take the render
+  // down; -1 when unavailable.
+  safeVoices() {
+    try {
+      return this.renderer && typeof this.renderer.activeVoices === 'function'
+        ? this.renderer.activeVoices()
+        : 0;
+    } catch (_e) {
+      return 0;
+    }
+  }
+
   reply(msg, value) {
     if (msg.replyTo !== undefined) {
       this.port.postMessage({ replyTo: msg.replyTo, value });
@@ -266,15 +288,26 @@ class KeysRigProcessor extends AudioWorkletProcessor {
         case 'pcm_chunk': {
           // One bounded piece of a decoded sample (see insertPcmChunk).
           // Only the last piece publishes it and gets acked.
-          if (!this.renderer) break;
+          if (!this.renderer) {
+            // Still ack, or the worker waits out its full 5 s timeout for
+            // a sample whose buffers it has already transferred away.
+            this.warmPort?.postMessage({
+              kind: 'pcm_ack', path: msg.path, layer: msg.layer,
+              accepted: false, chargePast: !!msg.chargePast, reason: 'no-renderer',
+            });
+            break;
+          }
           const ok = this.renderer.insertPcmChunk(
             msg.layer, msg.path, msg.channels, msg.sampleRate,
             msg.offset, msg.pcm, !!msg.last, !!msg.chargePast,
           );
           if (msg.last || !ok) {
+            // `reason` distinguishes a BUDGET refusal (coverage should
+            // pause) from a chunk-assembly error (it should not).
             this.warmPort?.postMessage({
               kind: 'pcm_ack', path: msg.path, layer: msg.layer,
               accepted: ok, chargePast: !!msg.chargePast,
+              reason: ok ? 'ok' : (msg.last ? 'budget' : 'chunk'),
             });
           }
           break;
@@ -427,9 +460,24 @@ class KeysRigProcessor extends AudioWorkletProcessor {
         }
         case 'midi': {
           const [s, d1, d2] = msg.bytes;
+          // NOTE-ON LATENCY (the "did it sound when I pressed it?" number).
+          // `currentFrame` is the sample clock, so arrival is timestamped
+          // exactly; `process()` then watches for the voice count to rise
+          // and reports the gap in ms. Only armed while a measurement is
+          // pending, so the per-quantum cost is a boolean the rest of the
+          // time.
+          if ((s & 0xf0) === 0x90 && d2 > 0 && this.pendingNoteFrame < 0) {
+            this.pendingNoteFrame = currentFrame;
+            this.pendingNoteVoices = this.safeVoices();
+          }
           this.renderer?.midi(s, d1, d2);
           break;
         }
+        case 'flush_midi':
+          // Page-driven (a resume): drop what queued while we were away.
+          try { this.renderer?.flushMidiQueue?.(); } catch (_e) {}
+          this.pendingNoteFrame = -1;
+          break;
         case 'reset_audio_stats':
           // The page sends this after a context suspend/resume it caused —
           // the currentFrame jump across a suspension is not an underrun.
@@ -438,6 +486,9 @@ class KeysRigProcessor extends AudioWorkletProcessor {
           this.glitchFrames = 0;
           this.worstHandlerMs = 0;
           this.worstHandlerKind = '';
+          this.noteLatencyWorstMs = 0;
+          this.noteLateCount = 0;
+          this.pendingNoteFrame = -1;
           break;
         case 'all_notes_off':
           this.renderer?.allNotesOff();
@@ -527,6 +578,29 @@ class KeysRigProcessor extends AudioWorkletProcessor {
             pcmLimitMb,
             reloadLanes,
             reloadFull,
+            noteLatencyMs: this.noteLatencyMs,
+            noteLatencyWorstMs: this.noteLatencyWorstMs,
+            noteLate: this.noteLateCount,
+            lanesBuilt: (() => {
+              try { return this.renderer?.lanesBuilt?.() ?? 0; } catch (_e) { return 0; }
+            })(),
+            lanesInstalled: (() => {
+              try { return this.renderer?.lanesInstalled?.() ?? 0; } catch (_e) { return 0; }
+            })(),
+            staleFlushes: this.staleFlushes,
+            staleFlushed: this.staleFlushed,
+            midiQueueDepth: (() => {
+              try {
+                return this.renderer && typeof this.renderer.midiQueueDepth === 'function'
+                  ? this.renderer.midiQueueDepth() : 0;
+              } catch (_e) { return 0; }
+            })(),
+            notesDropped: (() => {
+              try {
+                return this.renderer && typeof this.renderer.notesDropped === 'function'
+                  ? this.renderer.notesDropped() : 0;
+              } catch (_e) { return 0; }
+            })(),
             zonesOpened,
             streamerDepth,
             streamerDropped,
@@ -576,18 +650,63 @@ class KeysRigProcessor extends AudioWorkletProcessor {
       if (skipped > 0) {
         this.glitches += 1;
         this.glitchFrames += skipped;
+        // A BIG gap means rendering was away for a while (context
+        // suspended, tab backgrounded, a long stall). Everything the
+        // player pressed meanwhile is queued, and draining it now fires
+        // seconds-old notes all at once — the "it clears out and then they
+        // all sound" failure. Discard instead: a stale note is worse than
+        // no note on a live instrument.
+        if (skipped > sampleRate * 0.25) {
+          try {
+            const dropped = this.renderer.flushMidiQueue?.() ?? 0;
+            if (dropped > 0) this.staleFlushed += dropped;
+            this.staleFlushes += 1;
+          } catch (_e) { /* never take the render down for this */ }
+          // The measurement in flight belongs to the old timeline.
+          this.pendingNoteFrame = -1;
+        }
       }
     }
     this.lastFrame = currentFrame;
+    // Resolve a pending note-on latency: the voice count rising is the
+    // engine actually sounding it. Give up after ~1 s so a note that was
+    // dropped (no resident sample) does not arm the measurement forever —
+    // it is counted as late instead, which is what the player heard.
+    if (this.pendingNoteFrame >= 0) {
+      const elapsedMs = ((currentFrame - this.pendingNoteFrame) / sampleRate) * 1000;
+      const voices = this.safeVoices();
+      if (voices > this.pendingNoteVoices) {
+        this.noteLatencyMs = elapsedMs;
+        if (elapsedMs > this.noteLatencyWorstMs) this.noteLatencyWorstMs = elapsedMs;
+        if (elapsedMs > 30) this.noteLateCount += 1;
+        this.pendingNoteFrame = -1;
+      } else if (elapsedMs > 1000) {
+        this.noteLateCount += 1;
+        this.noteLatencyWorstMs = Math.max(this.noteLatencyWorstMs, elapsedMs);
+        this.pendingNoteFrame = -1;
+      }
+    }
     const out = outputs[0];
     // Time the render with the coarse (~1 ms) worklet clock and aggregate —
     // see the constructor's stats comment for why raw per-call numbers lie.
     const t0 = Date.now();
     this.renderer.render(out[0], out[1] ?? out[0]);
     const dt = Date.now() - t0;
+    // Install any lane a worker finished compiling. `hasBuiltLanes` is a
+    // single atomic load, so the common case (nothing pending) costs a
+    // boolean; installing is two moves per lane and GAPLESS — the tree it
+    // replaces keeps sounding until its voices release. This is what used
+    // to be a 62 ms `reload_lanes` on this thread.
+    if (this.renderer.hasBuiltLanes && this.renderer.hasBuiltLanes()) {
+      this.renderer.installBuiltLanes();
+    }
     // Ship queued warm requests to the decoder worker (cheap boolean per
     // quantum; the queue only fills on a note-on that found cold samples).
-    if (this.warmPort && this.renderer.hasWarmRequests()) {
+    // Guarded like every other new export: keys_processor.js and the wasm
+    // are staged by SEPARATE build steps, so a stale bundle would otherwise
+    // throw here every quantum — total silence instead of a degraded rig.
+    if (this.warmPort && typeof this.renderer.hasWarmRequests === 'function'
+        && this.renderer.hasWarmRequests()) {
       this.warmPort.postMessage({ kind: 'warm', requests: this.renderer.takeWarmRequests() });
     }
     this.statRenderMs += dt;

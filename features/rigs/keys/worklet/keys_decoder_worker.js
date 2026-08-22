@@ -125,12 +125,19 @@ function cacheRange(id, start, bytes) {
   mergeAt(lo);
   // Evict WHOLE packs' caches oldest-first when past the cap — coarse but
   // simple; a decode re-fetches what it still needs from OPFS.
-  while (rangeCacheBytes > RANGE_CACHE_CAP && rangeCache.size > 1) {
-    const [oldId, oldStore] = rangeCache.entries().next().value;
-    if (oldId === id) break; // never evict the pack being decoded
-    const freed = oldStore.segs.reduce((n, s) => n + s.bytes.byteLength, 0);
-    rangeCache.delete(oldId);
-    rangeCacheBytes -= freed;
+  // Evict oldest-first, SKIPPING the pack being decoded. `break`ing on it
+  // meant that whenever the current pack was the first ever cached — the
+  // common case, since packs attach in lane order and coverage starts on
+  // lane 0 — the loop exited immediately and the cap was never enforced at
+  // all, so this cache grew without bound.
+  if (rangeCacheBytes > RANGE_CACHE_CAP) {
+    for (const [oldId, oldStore] of [...rangeCache.entries()]) {
+      if (rangeCacheBytes <= RANGE_CACHE_CAP || rangeCache.size <= 1) break;
+      if (oldId === id) continue; // never evict the pack being decoded
+      const freed = oldStore.segs.reduce((n, s) => n + s.bytes.byteLength, 0);
+      rangeCache.delete(oldId);
+      rangeCacheBytes -= freed;
+    }
   }
 }
 
@@ -318,6 +325,13 @@ function onWarmMessage(msg) {
       if (resolve) {
         ackWaiters.delete(ackKey);
         resolve(msg);
+      }
+      // Only a BUDGET refusal pauses coverage. A mid-sample chunk error
+      // (offset mismatch) also acks `accepted:false`, once per remaining
+      // chunk — treating those as "budget full" let a single transient
+      // error wipe covQ and stop background fill until the next reload.
+      if (msg.reason && msg.reason !== 'budget') {
+        break;
       }
       if (!msg.accepted && !msg.chargePast) {
         // The decoded-PCM budget is full: stop background fill. Warm

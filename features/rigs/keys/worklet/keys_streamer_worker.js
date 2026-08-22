@@ -22,6 +22,16 @@
 // read pack bytes at all — they lived on the worklet's JS heap — so every
 // job it dequeued failed and the whole streamer path was dead weight.
 const packs = new Map();
+// The wasm glue, kept after init so later messages (build_lanes) can use it.
+let glue = null;
+// Work that arrived BEFORE init finished, replayed once it has.
+//
+// Init is slow — fetch and compile ~6.6 MB of wasm — and the page attaches
+// cached packs immediately after spawning us, so `build_lanes` reliably
+// arrives first. Dropping those requests looked exactly like success from
+// the page's side (the message posted fine) while no lane was ever built:
+// lanesBuilt stayed 0 and the rig had instruments with no samples.
+const deferred = [];
 
 // The reader fts-sample calls for External packs. Same contract as the
 // processor's: return a view for a covered range, or null.
@@ -46,9 +56,25 @@ self.onmessage = async (e) => {
     installPackRead();
     return;
   }
+  // Compile lanes OFF the audio thread and publish them through the
+  // shared heap; the worklet installs them between quanta. This is the
+  // work that used to stall the render for 62 ms per pack attach.
+  if (msg?.kind === 'build_lanes') {
+    if (!glue) {
+      deferred.push(msg);
+      return;
+    }
+    try {
+      const n = glue.buildLanesForPack(msg.program, msg.key, msg.sampleRate ?? 48000);
+      self.postMessage({ kind: 'lanes_built', key: msg.key, count: n });
+    } catch (err) {
+      self.postMessage({ kind: 'error', error: String(err), during: 'build_lanes' });
+    }
+    return;
+  }
   if (msg?.kind !== 'init') return;
   try {
-    const glue = await import(msg.glueUrl);
+    glue = await import(msg.glueUrl);
     // Pass the SHARED memory so this instance maps the same heap as the
     // worklet's. Without it wasm-bindgen would allocate a fresh memory and
     // the worker would decode into a heap nobody reads.
@@ -77,6 +103,16 @@ self.onmessage = async (e) => {
     }
     installPackRead();
     self.postMessage({ kind: 'ready' });
+    // Anything that arrived while we were coming up.
+    for (const pending of deferred.splice(0)) {
+      try {
+        const n = glue.buildLanesForPack(
+          pending.program, pending.key, pending.sampleRate ?? 48000);
+        self.postMessage({ kind: 'lanes_built', key: pending.key, count: n });
+      } catch (err) {
+        self.postMessage({ kind: 'error', error: String(err), during: 'build_lanes(deferred)' });
+      }
+    }
 
     // The streamer loop. Parking happens HERE rather than in Rust because
     // the wasm wait/notify intrinsics are nightly-only and fts-sample
@@ -87,16 +123,33 @@ self.onmessage = async (e) => {
     // short timeout means no notify is ever required: worst case a queued
     // sample waits WAIT_MS before a decoder picks it up, and a chunk is
     // hundreds of ms of audio, so that is far inside the lead time.
+    // The streamer loop must NOT be an endless `for(;;)`: a worker sitting
+    // inside wasm never returns to its event loop, so it can never receive
+    // another message. That is what made `build_lanes` silently do nothing
+    // — the page posted, the message queued forever, and `lanesBuilt`
+    // stayed 0 while everything reported success.
+    //
+    // So: park briefly, drain, then YIELD to the event loop and reschedule.
+    // `Atomics.wait` with a short timeout is legal here (workers may block;
+    // the audio thread may not) and the yield costs one task per tick.
     const WAIT_MS = 4;
     const i32 = new Int32Array(msg.memory.buffer);
     const addr = glue.streamerWakeAddr() >>> 2; // byte address → i32 index
-    for (;;) {
-      const before = glue.streamerWakeValue() | 0;
-      // Returns 'not-equal' immediately when work was queued between the
-      // read and the wait — the standard futex race guard.
-      Atomics.wait(i32, addr, before, WAIT_MS);
-      glue.streamerDrain();
-    }
+    const tick = () => {
+      try {
+        const before = glue.streamerWakeValue() | 0;
+        // Returns 'not-equal' immediately when work was queued between the
+        // read and the wait — the standard futex race guard.
+        Atomics.wait(i32, addr, before, WAIT_MS);
+        glue.streamerDrain();
+      } catch (err) {
+        self.postMessage({ kind: 'error', error: String(err), during: 'streamer' });
+      }
+      // setTimeout(0), not a microtask: a promise chain would starve
+      // message delivery just as badly as the endless loop did.
+      setTimeout(tick, 0);
+    };
+    tick();
   } catch (err) {
     self.postMessage({ kind: 'error', error: String(err) });
   }

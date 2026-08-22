@@ -88,6 +88,10 @@ pub mod document_rt;
 pub mod engine;
 pub mod engine_spec;
 pub mod instrument;
+/// Lane instruments compiled off the audio thread (wasm + threads), handed
+/// over by pointer through the shared heap — see the module docs.
+#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+pub mod built_lanes;
 pub mod keys_rig;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod kit_tracks;
@@ -768,6 +772,29 @@ impl PlayerPatch {
             gain_db: z.gain_db,
             tune_cents: z.tune_cents,
         })
+    }
+
+    /// EVERY zone that could sound for `note`/`velocity` — all the
+    /// round-robin alternatives, not just the one a given rr index lands
+    /// on.
+    ///
+    /// [`resolve_zone`](Self::resolve_zone) picks
+    /// `candidates[rr_idx % candidates.len()]`, so a warm that only
+    /// resolves rr 0 opens ONE of them and leaves the rest unopened. On a
+    /// piano with several round-robins per key that means most presses ask
+    /// for a sample nobody opened — heard as wrong or missing samples.
+    /// Warming needs the whole candidate set.
+    pub fn resolve_zone_candidates(&self, note: u8, velocity: u8) -> Vec<std::path::PathBuf> {
+        if !self.is_zoned() {
+            return Vec::new();
+        }
+        self.spec
+            .zones
+            .iter()
+            .enumerate()
+            .filter(|(_, z)| z.contains(note, velocity))
+            .map(|(i, _)| self.zone_paths[i].clone())
+            .collect()
     }
 
     pub fn legato_delay_expressive(&self, velocity: u8) -> Option<u32> {

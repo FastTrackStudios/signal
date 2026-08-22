@@ -189,7 +189,11 @@ mod web {
     pub fn streamer_drain() -> u32 {
         #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
         {
-            signal_sampler::engine::stream_wasm::drain() as u32
+            // Free what the audio thread retired. It cannot free itself —
+            // the allocator lock is shared with these workers, and the
+            // worklet thread is realtime priority (see `built_lanes`).
+            let reaped = signal_sampler::built_lanes::reap() as u32;
+            signal_sampler::engine::stream_wasm::drain() as u32 + reaped
         }
         #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         0
@@ -595,6 +599,117 @@ mod web {
         #[wasm_bindgen(js_name = isOpen)]
         pub fn is_open(&self) -> bool {
             self.rig.borrow().is_some()
+        }
+
+        /// Live-MIDI events queued but not yet rendered. 0 (or a couple)
+        /// is healthy; a depth that stays up means pressed notes are
+        /// waiting on the renderer and will arrive late.
+        #[wasm_bindgen(js_name = midiQueueDepth)]
+        pub fn midi_queue_depth(&self) -> u32 {
+            self.renderer.standalone().live_midi_depth() as u32
+        }
+
+        /// WORKER SIDE: compile the lanes that play `key`, off the audio
+        /// thread, and publish them for the worklet to install.
+        ///
+        /// This is the 62 ms that used to run in `reload_lanes` ON the
+        /// audio thread. The worker needs no rig — only the program — so
+        /// it takes the program JSON directly.
+        #[cfg(target_feature = "atomics")]
+        #[wasm_bindgen(js_name = buildLanesForPack)]
+        pub fn build_lanes_for_pack(
+            program_json: &str,
+            key: &str,
+            sample_rate: u32,
+        ) -> Result<u32, JsValue> {
+            let program = wire_program_from_json(program_json)
+                .map_err(js_err)?
+                .into_lane_program();
+            Ok(KeysRig::build_lanes_for_pack(&program, key, sample_rate) as u32)
+        }
+
+        /// Single-threaded build: there is no worker to compile on, so the
+        /// caller keeps using `reloadLanesForPack` on the audio thread.
+        #[cfg(not(target_feature = "atomics"))]
+        #[wasm_bindgen(js_name = buildLanesForPack)]
+        pub fn build_lanes_for_pack(
+            _program_json: &str,
+            _key: &str,
+            _sample_rate: u32,
+        ) -> Result<u32, JsValue> {
+            Ok(0)
+        }
+
+        /// AUDIO SIDE: install whatever a worker has finished compiling.
+        /// Cheap (`begin_swap` is two moves) and GAPLESS — the tree being
+        /// replaced keeps sounding until its voices release.
+        #[wasm_bindgen(js_name = installBuiltLanes)]
+        pub fn install_built_lanes(&self) -> u32 {
+            #[cfg(target_feature = "atomics")]
+            {
+                self.rig
+                    .borrow()
+                    .as_ref()
+                    .map(|rig| rig.install_built_lanes() as u32)
+                    .unwrap_or(0)
+            }
+            #[cfg(not(target_feature = "atomics"))]
+            0
+        }
+
+        /// Whether any compiled lane is waiting (a single atomic load, so
+        /// the processor can check it every quantum).
+        #[wasm_bindgen(js_name = hasBuiltLanes)]
+        pub fn has_built_lanes(&self) -> bool {
+            #[cfg(target_feature = "atomics")]
+            {
+                signal_sampler::built_lanes::has_pending()
+            }
+            #[cfg(not(target_feature = "atomics"))]
+            false
+        }
+
+        /// Lanes compiled off-thread / installed, since boot.
+        #[wasm_bindgen(js_name = lanesBuilt)]
+        pub fn lanes_built(&self) -> u32 {
+            #[cfg(target_feature = "atomics")]
+            {
+                signal_sampler::built_lanes::built() as u32
+            }
+            #[cfg(not(target_feature = "atomics"))]
+            0
+        }
+
+        #[wasm_bindgen(js_name = lanesInstalled)]
+        pub fn lanes_installed(&self) -> u32 {
+            #[cfg(target_feature = "atomics")]
+            {
+                signal_sampler::built_lanes::installed() as u32
+            }
+            #[cfg(not(target_feature = "atomics"))]
+            0
+        }
+
+        /// Drop every queued live-MIDI event and silence what is sounding.
+        ///
+        /// Called when the renderer notices it has been away (a big
+        /// `currentFrame` jump): the queue then holds notes the player
+        /// pressed seconds ago, and playing them now is worse than not
+        /// playing them at all. Returns how many were discarded.
+        #[wasm_bindgen(js_name = flushMidiQueue)]
+        pub fn flush_midi_queue(&self) -> u32 {
+            let dropped = self.renderer.standalone().flush_live_midi() as u32;
+            if let Some(rig) = self.rig.borrow().as_ref() {
+                rig.all_notes_off();
+            }
+            dropped
+        }
+
+        /// Notes the audio thread dropped for want of a resident sample —
+        /// pressed keys that made NO sound.
+        #[wasm_bindgen(js_name = notesDropped)]
+        pub fn notes_dropped(&self) -> u32 {
+            signal_sampler::engine::notes_dropped() as u32
         }
 
         /// Voices currently alive across every lane's sampler sources

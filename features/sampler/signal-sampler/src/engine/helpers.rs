@@ -94,6 +94,13 @@ impl SampleEngine {
         }) else {
             self.cache_misses
                 .set(self.cache_misses.get().saturating_add(1));
+            // Process-wide, so a HOST can see it: this is a note the player
+            // pressed that produced NO SOUND — the sample was not resident
+            // and the audio thread skipped the voice. Silent by design (the
+            // alternative is decoding on the audio thread), but invisible
+            // is a different thing from silent, and a live rig needs the
+            // count.
+            crate::engine::note_dropped();
             self.record_cache_miss(&path);
             tracing::debug!(
                 target: "signal_sampler::trigger",
