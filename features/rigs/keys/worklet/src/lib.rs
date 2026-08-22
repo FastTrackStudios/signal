@@ -219,6 +219,30 @@ mod web {
         0
     }
 
+    /// Open jobs a worker dequeued but could not complete, and the open
+    /// ring's depth. `opened == 0 && failed == 0 && depth > 0` means no
+    /// worker is draining at all; failures climbing means they are running
+    /// but cannot do the work.
+    #[wasm_bindgen(js_name = streamerOpenFailed)]
+    pub fn streamer_open_failed() -> u32 {
+        #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+        {
+            signal_sampler::engine::stream_wasm::open_failed() as u32
+        }
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+        0
+    }
+
+    #[wasm_bindgen(js_name = streamerOpenDepth)]
+    pub fn streamer_open_depth() -> u32 {
+        #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+        {
+            signal_sampler::engine::stream_wasm::open_depth() as u32
+        }
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+        0
+    }
+
     #[wasm_bindgen(js_name = streamerDropped)]
     pub fn streamer_dropped() -> u32 {
         #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]

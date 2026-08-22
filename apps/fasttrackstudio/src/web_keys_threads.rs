@@ -59,6 +59,10 @@ thread_local! {
     /// A worker's error text, if any came back (module built without
     /// atomics, fetch failure, …). Surfaced in the audio panel.
     static LAST_ERROR: RefCell<String> = const { RefCell::new(String::new()) };
+    /// Every pack SAB shared so far, replayed to workers spawned later
+    /// (a latency-hint re-boot restarts them mid-session).
+    static SHARED_PACKS: RefCell<Vec<(u32, JsValue, String)>> =
+        const { RefCell::new(Vec::new()) };
 }
 
 /// Whether the streamer workers should run AT ALL.
@@ -73,10 +77,40 @@ thread_local! {
 /// pushed measured render load from ~1.0 to 1.73 and failed the e2e
 /// headroom check.
 ///
-/// Set `fts.keys-threads = "on"` in localStorage to run them anyway (for
-/// developing W14). Once pack bytes live in a SharedArrayBuffer every
-/// thread can read, this flips to on by default and the decoder-worker
-/// copy path retires.
+/// OFF by default — the workers still wedge the tab, and that is measured,
+/// not suspected. With `fts.keys-threads = "on"` the page freezes shortly
+/// after the workers come up, every time, with no error surfacing; with it
+/// off the identical build is healthy (9/9 packs, 61 ms worst handler,
+/// zero glitches). So the SAB pack transport ships and the workers do not.
+///
+/// What is known:
+///   * pack bytes are no longer the blocker — [`share_pack`] gives every
+///     thread the same `SharedArrayBuffer`;
+///   * a worker MUST init with `thread_stack_size` or it re-runs the
+///     module's main initialisation (globals, allocator) over the shared
+///     heap. That is fixed in keys_streamer_worker.js and was NOT the
+///     whole story.
+///
+/// Narrowed by isolation, and the picture is now specific:
+///
+///   * init ORDER was a real bug and is FIXED — workers must come up only
+///     after the worklet has run main init ([`create_memory`] /
+///     [`spawn_over`]). With that, workers alone no longer freeze the tab:
+///     81 opens queued, zero glitches, healthy page.
+///   * `thread_stack_size` was also a real bug and is fixed — without it a
+///     worker re-runs main init over the shared heap.
+///   * What still freezes is the COMBINATION: streamer workers running
+///     while the DECODER worker is also active (the shared-pack path now
+///     mirrors packs to it, which a returning visit needs). Alone, either
+///     is stable; together the tab wedges.
+///
+/// Most likely resource pressure rather than a logic bug: that
+/// configuration holds the SABs (~2.4 GB), the worklet+streamers' shared
+/// heap (~684 MB of decoded PCM), AND the decoder worker's own separate
+/// wasm heap with its own copies. The real resolution is probably not to
+/// run both — the decoder worker exists only because the streamers could
+/// not open zones, so it should RETIRE once they can. That needs
+/// `zonesOpened` to actually climb, which is still unproven.
 fn enabled() -> bool {
     web_sys::window()
         .and_then(|w| w.local_storage().ok().flatten())
@@ -113,7 +147,17 @@ pub(crate) fn last_error() -> String {
 /// page cannot host threads — in which case the caller keeps the
 /// single-threaded path. Workers report `ready` asynchronously; the
 /// returned memory is usable immediately either way.
-pub(crate) fn spawn() -> Option<JsValue> {
+/// Allocate the shared memory the worklet and the workers will both use.
+///
+/// Separate from [`spawn_over`] because ORDER MATTERS: exactly one
+/// instance may run the module's main initialisation (it sets up the
+/// allocator and globals in this heap), and every other instance must come
+/// up as a THREAD against an already-initialised heap. The worklet is the
+/// main instance, so the memory is created here, the worklet instantiates
+/// over it, and only once it reports `ready` do the workers start.
+/// Spawning them earlier let a worker init against a heap with no
+/// allocator — which froze the tab with no error, every time.
+pub(crate) fn create_memory() -> Option<JsValue> {
     if !supported() || !enabled() {
         return None;
     }
@@ -126,11 +170,20 @@ pub(crate) fn spawn() -> Option<JsValue> {
     let _ = Reflect::set(&desc, &"initial".into(), &MEM_INITIAL_PAGES.into());
     let _ = Reflect::set(&desc, &"maximum".into(), &MEM_MAXIMUM_PAGES.into());
     let _ = Reflect::set(&desc, &"shared".into(), &true.into());
-    let memory = js_sys::Reflect::get(&js_sys::global(), &"WebAssembly".into())
+    js_sys::Reflect::get(&js_sys::global(), &"WebAssembly".into())
         .ok()
         .and_then(|wasm_ns| Reflect::get(&wasm_ns, &"Memory".into()).ok())
         .and_then(|ctor| ctor.dyn_into::<js_sys::Function>().ok())
-        .and_then(|ctor| js_sys::Reflect::construct(&ctor, &Array::of1(&desc)).ok())?;
+        .and_then(|ctor| js_sys::Reflect::construct(&ctor, &Array::of1(&desc)).ok())
+}
+
+/// Start the streamer workers over `memory`. Call ONLY after the worklet
+/// has reported `ready` — see [`create_memory`] for why.
+pub(crate) fn spawn_over(memory: &JsValue) {
+    if !supported() || !enabled() {
+        return;
+    }
+    let memory = memory.clone();
 
     let opts = web_sys::WorkerOptions::new();
     opts.set_type(web_sys::WorkerType::Module);
@@ -167,10 +220,44 @@ pub(crate) fn spawn() -> Option<JsValue> {
         let _ = Reflect::set(&init, &"wasmUrl".into(), &WORKLET_WASM_URL.into());
         let _ = Reflect::set(&init, &"memory".into(), &memory);
         if worker.post_message(&init).is_ok() {
+            // Replay the packs already shared — this worker missed them.
+            SHARED_PACKS.with(|p| {
+                for (id, sab, key) in p.borrow().iter() {
+                    let _ = worker.post_message(&pack_msg(*id, sab, key));
+                }
+            });
             WORKERS.with(|w| w.borrow_mut().push(worker));
         }
     }
-    Some(memory)
+}
+
+/// Hand a pack's SHARED bytes to every streamer worker.
+///
+/// This is the W14 unlock. Pack bytes used to live on the worklet's JS
+/// heap, reachable only through a `__ftsPackRead` hook in that scope, so a
+/// worker could not read them and neither of its jobs (chunk fills, zone
+/// opens) could ever complete. A `SharedArrayBuffer` is visible to every
+/// thread at once, costs no wasm linear memory (the 2.4 GB Worship set
+/// would not fit in the 4 GB address space), and is passed by reference —
+/// posting it to N workers copies nothing.
+///
+/// Remembered so a worker spawned later still receives every pack.
+pub(crate) fn share_pack(id: u32, sab: &JsValue, key: &str) {
+    SHARED_PACKS.with(|p| p.borrow_mut().push((id, sab.clone(), key.to_string())));
+    WORKERS.with(|w| {
+        for worker in w.borrow().iter() {
+            let _ = worker.post_message(&pack_msg(id, sab, key));
+        }
+    });
+}
+
+fn pack_msg(id: u32, sab: &JsValue, key: &str) -> Object {
+    let o = Object::new();
+    let _ = Reflect::set(&o, &"kind".into(), &"pack_shared".into());
+    let _ = Reflect::set(&o, &"id".into(), &id.into());
+    let _ = Reflect::set(&o, &"key".into(), &key.into());
+    let _ = Reflect::set(&o, &"sab".into(), sab);
+    o
 }
 
 /// Terminate every streamer worker (a re-boot, or the page going away).

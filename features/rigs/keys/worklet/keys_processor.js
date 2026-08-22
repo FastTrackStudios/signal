@@ -470,6 +470,8 @@ class KeysRigProcessor extends AudioWorkletProcessor {
           let reloadFull = 0;
           let zonesOpened = 0;
           let streamerDepth = 0;
+          let openFailed = 0;
+          let openDepth = 0;
           let streamerDropped = 0;
           let opensQueued = 0;
           try {
@@ -496,6 +498,10 @@ class KeysRigProcessor extends AudioWorkletProcessor {
               zonesOpened = wasm.streamerOpened();
               streamerDepth = wasm.streamerDepth();
               streamerDropped = wasm.streamerDropped();
+              if (typeof wasm.streamerOpenFailed === 'function') {
+                openFailed = wasm.streamerOpenFailed();
+                openDepth = wasm.streamerOpenDepth();
+              }
             }
             // Enqueued BY this thread — separates "nothing was queued"
             // from "queued but nobody drained it".
@@ -524,6 +530,8 @@ class KeysRigProcessor extends AudioWorkletProcessor {
             zonesOpened,
             streamerDepth,
             streamerDropped,
+            openFailed,
+            openDepth,
             opensQueued,
           });
           break;

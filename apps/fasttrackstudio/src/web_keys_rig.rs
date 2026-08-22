@@ -287,6 +287,8 @@ impl Worklet {
             opens_queued: f("opensQueued").unwrap_or(0.0),
             streamer_depth: f("streamerDepth").unwrap_or(0.0),
             streamer_dropped: f("streamerDropped").unwrap_or(0.0),
+            open_failed: f("openFailed").unwrap_or(0.0),
+            open_depth: f("openDepth").unwrap_or(0.0),
             pcm_used_mb: f("pcmUsedMb").unwrap_or(0.0),
             pcm_limit_mb: f("pcmLimitMb").unwrap_or(0.0),
         })
@@ -514,7 +516,11 @@ async fn boot_worklet(warm_port: web_sys::MessagePort) -> Result<Worklet, String
     // reads. `None` = this page cannot host threads (no isolation, or a
     // single-threaded wasm build), and the worklet inits with its own
     // memory exactly as before.
-    let shared_memory = crate::web_keys_threads::spawn();
+    // Shared memory now; workers LATER (after 'ready' below). The worklet
+    // is the instance that runs the module's main initialisation, and a
+    // worker coming up against a heap whose allocator has not been set up
+    // yet freezes the tab silently — see `create_memory`.
+    let shared_memory = crate::web_keys_threads::create_memory();
 
     let init = Worklet::obj("init");
     Worklet::set(&init, "wasmBytes", &wasm_bytes);
@@ -534,6 +540,12 @@ async fn boot_worklet(warm_port: web_sys::MessagePort) -> Result<Worklet, String
     ready_rx
         .await
         .map_err(|_| "worklet never became ready".to_string())?;
+
+    // Main init is done — the shared heap now has an allocator, so the
+    // streamer workers can safely come up as THREADS over it.
+    if let Some(mem) = shared_memory.as_ref() {
+        crate::web_keys_threads::spawn_over(mem);
+    }
 
     Ok(Worklet {
         ctx,
@@ -717,6 +729,11 @@ struct AudioStats {
     opens_queued: f64,
     streamer_depth: f64,
     streamer_dropped: f64,
+    /// Open jobs a worker dequeued but could not complete, and the open
+    /// ring's depth. All-zero means no worker ran at all; failures
+    /// climbing means they ran and could not do the work.
+    open_failed: f64,
+    open_depth: f64,
     /// Decoded PCM resident / its ceiling, in MB (limit -1 = unlimited) —
     /// says whether the budget is what is keeping the rig from sounding.
     pcm_used_mb: f64,
@@ -878,6 +895,10 @@ struct HookAudio {
     streamer_depth: f64,
     #[facet(rename = "streamerDropped")]
     streamer_dropped: f64,
+    #[facet(rename = "openFailed")]
+    open_failed: f64,
+    #[facet(rename = "openDepth")]
+    open_depth: f64,
     #[facet(rename = "pcmUsedMb")]
     pcm_used_mb: f64,
     #[facet(rename = "pcmLimitMb")]
@@ -933,6 +954,8 @@ fn install_hook() {
             opens_queued: a.opens_queued,
             streamer_depth: a.streamer_depth,
             streamer_dropped: a.streamer_dropped,
+            open_failed: a.open_failed,
+            open_depth: a.open_depth,
             pcm_used_mb: a.pcm_used_mb,
             pcm_limit_mb: a.pcm_limit_mb,
         };
@@ -1636,6 +1659,20 @@ async fn stream_one_pack(
 
     // Already cached (either variant)? Attach with no network at all.
     for variant in ["proxy", "full"] {
+        // SHARED path first (W14): read OPFS straight into a
+        // SharedArrayBuffer so every thread can read the pack. Chunked, so
+        // the pack never exists twice — the naive read-then-copy doubled
+        // peak memory and froze the tab on the full Worship set.
+        if let Some(sab) = web_packs::cached_pack_shared(&name, variant).await {
+            let total = js_sys::Uint8Array::new(&sab).byte_length() as u64;
+            update_row(&mut packs, i, |r| {
+                r.variant = variant.to_string();
+                r.total = total;
+                r.bytes = total;
+            });
+            attach_pack_shared(worklet, &key, sab, total, i, &mut packs).await;
+            return None;
+        }
         if let Some(bytes) = web_packs::cached_pack(&name, variant).await {
             let total = bytes.byte_length() as u64;
             update_row(&mut packs, i, |r| {
@@ -1687,6 +1724,70 @@ async fn stream_one_pack(
     None
 }
 
+/// Attach a pack whose bytes live in a `SharedArrayBuffer`: the worklet
+/// AND every streamer worker read the SAME buffer.
+///
+/// This is what W14 was for. Pack bytes used to sit on the worklet's JS
+/// heap, so a streamer worker — sharing the wasm heap but not that one —
+/// could not read a pack at all, and every job it dequeued failed. Shared
+/// bytes cost no wasm linear memory (the 4 GB address space could never
+/// hold 2.4 GB of packs) and pass by reference, so handing them to N
+/// workers copies nothing.
+async fn attach_pack_shared(
+    worklet: &Worklet,
+    key: &str,
+    sab: JsValue,
+    total: u64,
+    i: usize,
+    packs: &mut Signal<Vec<PackRow>>,
+) {
+    let id = next_whole_id();
+    crate::web_keys_threads::share_pack(id, &sab, key);
+    let attach = worklet
+        .rpc(
+            "attach_pack_shared",
+            &[("key", key.into()), ("id", id.into()), ("sab", sab)],
+            None,
+        )
+        .await;
+    match attach {
+        Ok(v) if v.as_bool() == Some(true) => {
+            let _ = worklet
+                .rpc("reload_lanes", &[("key", key.into())], None)
+                .await;
+            // Mirror into the decoder worker exactly as the transfer path
+            // does. Missing this made a RETURNING visit silent for cold
+            // notes: cached packs take the shared path, the decoder worker
+            // never learned about them, and it is still the only thing that
+            // completes a warm (the streamer workers cannot open zones
+            // yet). The e2e suite never caught it because a fresh browser
+            // context has an empty OPFS, so the suite only ever exercises
+            // the download path.
+            if let Some(decoder) = crate::web_keys_decoder::current() {
+                let (name, variant) = {
+                    let rows = packs.peek();
+                    let row = &rows[i];
+                    (row.name.clone(), row.variant.clone())
+                };
+                let opfs = format!("{name}.{variant}.signalpack");
+                decoder.attach_pack(key, next_whole_id(), &opfs, total).await;
+                decoder.reload_lanes().await;
+                decoder.coverage(60, 48);
+            }
+            update_row(packs, i, |r| {
+                r.phase = PackPhase::Ready;
+                r.bytes = total;
+                r.total = total;
+                r.seg_done = r.seg_total.max(1);
+            });
+        }
+        Ok(v) => update_row(packs, i, |r| {
+            r.phase = PackPhase::Failed(format!("attach(shared): {}", js_str(v)));
+        }),
+        Err(e) => update_row(packs, i, |r| r.phase = PackPhase::Failed(e)),
+    }
+}
+
 /// Transfer the pack bytes into the worklet and reload the lanes so the
 /// running instruments pick it up.
 async fn attach_pack(
@@ -1710,6 +1811,11 @@ async fn attach_pack(
         update_row(packs, i, |r| r.phase = PackPhase::Deferred);
         return;
     }
+    // NOTE: no SharedArrayBuffer copy here. Copying an in-hand pack into a
+    // SAB holds BOTH buffers at peak — on the full Worship set that meant
+    // ~4.8 GB and a frozen renderer (3.4 GB RSS observed). A freshly
+    // downloaded pack keeps this transfer path; the NEXT boot reads it back
+    // from OPFS straight into a SAB, chunked, via `cached_pack_shared`.
     let attach = worklet
         .rpc(
             "attach_pack",
