@@ -269,13 +269,12 @@ async fn async_main() {
             Some(config_dir.join("iroh-endpoint-id")),
         )
         .web(web_bundle())
-        // NOTE: cross-origin isolation (COOP/COEP) — which the browser
-        // keys rig needs for SharedArrayBuffer — lives in architect as
-        // `EngineHost::cross_origin_isolated`. It is NOT enabled here yet
-        // because that method is not in the pinned architect revision;
-        // enabling it requires landing the change in architect, tagging,
-        // and bumping the rev. Without it the rig still runs, on the
-        // non-shared pack path (see browser-keys-rig.md W14).
+        // COOP/COEP — the browser keys rig's audio path needs
+        // SharedArrayBuffer (shared wasm memory + streamer threads, W13),
+        // and the browser only grants it to a cross-origin-isolated page.
+        // Safe here: the engine serves its own bundle and packs, so every
+        // subresource is same-origin.
+        .cross_origin_isolated(true)
         .serve()
         .await;
 }
