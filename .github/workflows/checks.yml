@@ -1,31 +1,20 @@
-# FastTrackStudio Checks — the one PR/push gate, on GitHub-hosted
-# runners (public repo = free standard runners). Self-hosted is only
-# needed for REAPER integration (reaper.yml) and deploys (still on the
-# Forgejo runner until THEBATTLESHIP is registered with GitHub).
+# signal — the one PR/push gate.
 #
 # Toolchain comes from the repo flake: every step runs under
-# `nix develop .#ci -c` (rust pin, wasm target, clang env for ring,
-# native headers). `--accept-flake-config` picks up the
-# fasttrackstudio.cachix.org substituter from flake.nix nixConfig —
-# keep it seeded via cache-devshell.yml or the first job of the day
-# pays the full toolchain build.
+# `nix develop .#ci -c`. `--accept-flake-config` picks up the
+# fasttrackstudio.cachix.org substituter from flake.nix nixConfig — keep it
+# seeded via cache-devshell.yml or the first job of the day pays the full
+# toolchain build.
 #
-# CHANGE SELECTION: the `plan` job asks `cargo rail plan` (patched
-# flake build — nix/modules/cargo-rail.nix) which workspace crates the
-# range actually affects, walking cargo's resolved reverse-dependency
-# graph. Gates are crate-membership checks against the plan's execution
-# set; infra changes (.forgejo/**, .github/**? see rail.toml
-# [change-detection].infrastructure) or any rail failure FAIL OPEN.
-#
-# Unlike the old self-hosted layout (one job, sequential steps, shared
-# CARGO_TARGET_DIR), hosted runners are isolated VMs — build, tests,
-# and quality run as PARALLEL jobs, each with its own rust-cache.
+# Deliberately simpler than the monorepo gate it replaces: that one drove
+# `cargo rail plan` to pick affected crates out of a 238-member workspace.
+# These workspaces are small enough to just build.
 
 name: checks
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -37,202 +26,30 @@ env:
   NIX_DEV: nix develop --accept-flake-config .#ci -c
 
 jobs:
-  plan:
-    name: Plan affected crates
+  check:
+    name: Build + test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    outputs:
-      workspace: ${{ steps.filter.outputs.workspace }}
-      signal: ${{ steps.filter.outputs.signal }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # Full history: the plan needs both diff endpoints' ancestry
-          # (cheap — the repo packs to <200 MB).
-          fetch-depth: 0
-      - uses: DeterminateSystems/nix-installer-action@v22
-      - name: Plan affected crates
-        id: filter
-        run: |
-          set -u
-
-          # Fail open: if we cannot compute an honest plan, run everything.
-          run_all() {
-            echo "plan: $1 — running EVERYTHING (fail open)"
-            for o in workspace signal; do
-              echo "$o=true" >> "$GITHUB_OUTPUT"
-            done
-            exit 0
-          }
-
-          [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && run_all "manual dispatch"
-
-          if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
-            base="$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD 2>/dev/null)" \
-              || run_all "no merge-base"
-          else
-            base="${{ github.event.before }}"
-            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
-               || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-              base="$(git rev-parse HEAD~1 2>/dev/null)" || run_all "no parent commit"
-            fi
-          fi
-
-          plan="$(${NIX_DEV} cargo rail plan --quiet --from "$base" --to HEAD -f json)" \
-            || run_all "cargo rail plan failed"
-
-          eval "$(printf '%s' "$plan" | python3 -c '
-          import json, sys
-
-          plan = json.load(sys.stdin)
-
-          infra = bool(plan.get("surfaces", {}).get("infra", {}).get("enabled"))
-          if plan.get("result") != "success":
-              infra = True
-
-          crates = set(plan.get("scope", {}).get("crates", []))
-
-          # Crates the audio/signal steps build or test; rail already
-          # folded reverse deps into `crates`.
-          SIGNAL = {"signal-guitar", "daw-standalone", "neural-amp-modeler",
-                    "architect", "pitch-dsp", "fasttrackstudio"}
-
-          gates = {
-              "workspace": bool(crates),
-              "signal":    bool(crates & SIGNAL),
-          }
-          if infra:
-              gates = {k: True for k in gates}
-              print("infra=true")
-          for k, v in gates.items():
-              print(f"{k}={str(v).lower()}")
-          print(f"n_crates={len(crates)}")
-          ')" || run_all "plan parse failed"
-
-          # Infra surface (toolchain / flake / CI inputs changed) is a
-          # DELIBERATE full run, not a failure — everything's inputs
-          # changed, so everything rebuilds.
-          [ "${infra:-false}" = "true" ] && echo "plan: infra-surface change — full run (all gates on)"
-
-          {
-            echo "workspace=$workspace"
-            echo "signal=$signal"
-          } >> "$GITHUB_OUTPUT"
-          echo "rail plan: $n_crates affected crate(s) — workspace=$workspace signal=$signal"
-
-  build:
-    name: Build (workspace + wasm)
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-    needs: plan
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
-        if: needs.plan.outputs.workspace == 'true'
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
           df -h / | tail -1
       - uses: DeterminateSystems/nix-installer-action@v22
-        if: needs.plan.outputs.workspace == 'true'
       - uses: Swatinem/rust-cache@v2
-        if: needs.plan.outputs.workspace == 'true'
         with:
-          shared-key: build
+          shared-key: check
           cache-on-failure: "true"
       - name: Manifests + lockfile
-        if: needs.plan.outputs.workspace == 'true'
         run: ${NIX_DEV} cargo metadata --locked --format-version 1 > /dev/null
-      # The opposite case to Task's sheets: apps/fasttrackstudio's
-      # tailwind-signal.css IS committed, because main.rs / rig_view.rs /
-      # mobile_view.rs `include_str!` it. That means it can rot silently
-      # when someone adds a class and doesn't rebuild — it was stale by
-      # ~50 classes (966 selectors against the sources' 1015) before this
-      # check existed, so the signal UI was rendering some elements
-      # unstyled.
-      #
-      # This can only run here because `just tailwind` now resolves the
-      # lumen-blocks checkout through `cargo metadata` (the step above
-      # already populated it). It used to scan a hardcoded
-      # /home/cody/.cargo path, which no runner has.
-      - name: Tailwind sheet is current (fasttrackstudio)
-        if: needs.plan.outputs.workspace == 'true'
-        run: ${NIX_DEV} just tailwind-check
+      - name: cargo fmt --check
+        run: ${NIX_DEV} cargo fmt --all --check
       - name: cargo check --workspace
-        if: needs.plan.outputs.workspace == 'true'
         run: ${NIX_DEV} cargo check --workspace
-      # Browser-remote build of THE app. wasm32 target + ring's clang
-      # env come from the flake dev shell.
-      - name: wasm check (fasttrackstudio, signal feature)
-        if: needs.plan.outputs.signal == 'true'
+      - name: wasm check (browser remote)
         run: |
           ${NIX_DEV} cargo check -p fasttrackstudio \
-            --target wasm32-unknown-unknown \
-            --no-default-features --features signal
-
-  tests:
-    name: Tests (audio/signal suites)
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-    needs: plan
-    steps:
-      - uses: actions/checkout@v4
-      - name: Free disk space
-        if: needs.plan.outputs.signal == 'true'
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
-          df -h / | tail -1
-      - uses: DeterminateSystems/nix-installer-action@v22
-        if: needs.plan.outputs.signal == 'true'
-      - uses: Swatinem/rust-cache@v2
-        if: needs.plan.outputs.signal == 'true'
-        with:
-          shared-key: tests
-          cache-on-failure: "true"
-      - name: test signal-guitar
-        if: needs.plan.outputs.signal == 'true'
-        run: ${NIX_DEV} cargo nextest run -p signal-guitar
-      - name: test daw-standalone (audio)
-        if: needs.plan.outputs.signal == 'true'
-        run: ${NIX_DEV} cargo nextest run -p daw-standalone --features audio
-      - name: test neural-amp-modeler (incl. NAM parity)
-        if: needs.plan.outputs.signal == 'true'
-        run: ${NIX_DEV} cargo nextest run -p neural-amp-modeler
-      - name: test architect (iroh)
-        if: needs.plan.outputs.signal == 'true'
-        run: ${NIX_DEV} cargo nextest run -p architect --features iroh
-      - name: test pitch-dsp
-        if: needs.plan.outputs.signal == 'true'
-        run: ${NIX_DEV} cargo nextest run -p pitch-dsp
-
-  # Advisory while the tree isn't lint-clean — visible signal, never
-  # blocks merges. Flip continue-on-error off once the tree is clean.
-  quality:
-    name: Quality (clippy + docs, advisory)
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-    needs: plan
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - name: Free disk space
-        if: needs.plan.outputs.workspace == 'true'
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
-          df -h / | tail -1
-      - uses: DeterminateSystems/nix-installer-action@v22
-        if: needs.plan.outputs.workspace == 'true'
-      - uses: Swatinem/rust-cache@v2
-        if: needs.plan.outputs.workspace == 'true'
-        with:
-          shared-key: quality
-          cache-on-failure: "true"
-      - name: Clippy
-        if: needs.plan.outputs.workspace == 'true'
-        run: |
-          ${NIX_DEV} cargo clippy --workspace \
-            --all-targets -- -D warnings
-      - name: Docs
-        if: needs.plan.outputs.workspace == 'true'
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: ${NIX_DEV} cargo doc --workspace --no-deps
+            --target wasm32-unknown-unknown --no-default-features --features signal
+      - name: cargo nextest
+        run: ${NIX_DEV} cargo nextest run --workspace --no-fail-fast

@@ -206,7 +206,10 @@ fn band_energy(samples: &[f32], config: &Config) -> Vec<(Band, Vec<f32>)> {
         .map(|&band| {
             let (shape, freq) = band.filter();
             let mut filter = Biquad::new(shape, freq, config.sample_rate);
-            let filtered: Vec<f32> = samples.iter().map(|s| filter.tick(f64::from(*s)) as f32).collect();
+            let filtered: Vec<f32> = samples
+                .iter()
+                .map(|s| filter.tick(f64::from(*s)) as f32)
+                .collect();
             let mut frames: Vec<f32> = filtered
                 .chunks(config.hop_size.max(1))
                 .map(|chunk| {
@@ -418,16 +421,8 @@ impl Biquad {
         let alpha = sin / (2.0 * q);
         let a0 = 1.0 + alpha;
         let (b0, b1, b2) = match shape {
-            Shape::LowPass => (
-                (1.0 - cos) / 2.0,
-                1.0 - cos,
-                (1.0 - cos) / 2.0,
-            ),
-            Shape::HighPass => (
-                (1.0 + cos) / 2.0,
-                -(1.0 + cos),
-                (1.0 + cos) / 2.0,
-            ),
+            Shape::LowPass => ((1.0 - cos) / 2.0, 1.0 - cos, (1.0 - cos) / 2.0),
+            Shape::HighPass => ((1.0 + cos) / 2.0, -(1.0 + cos), (1.0 + cos) / 2.0),
             Shape::BandPass => (alpha, 0.0, -alpha),
         };
         Self {
@@ -542,7 +537,10 @@ mod tests {
     /// thing wherever it falls — the thing a live detector cannot do.
     #[test]
     fn strength_is_bounded() {
-        let analysis = analyze(&clicks(&[0.5, 1.0, 1.5], 60.0, 2.5), &Config::for_rate(RATE));
+        let analysis = analyze(
+            &clicks(&[0.5, 1.0, 1.5], 60.0, 2.5),
+            &Config::for_rate(RATE),
+        );
         assert!(!analysis.hits.is_empty());
         for hit in &analysis.hits {
             assert!(
@@ -566,4 +564,3 @@ mod tests {
         assert!((analysis.dynamics_at(99.0) - 1.0).abs() < 1e-6);
     }
 }
-

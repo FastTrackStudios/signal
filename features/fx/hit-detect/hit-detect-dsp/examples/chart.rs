@@ -43,7 +43,10 @@ fn main() -> anyhow::Result<()> {
             hit_detect_dsp::Band::High => 2,
         }] += 1;
     }
-    println!("low {} · mid {} · high {}\n", counts[0], counts[1], counts[2]);
+    println!(
+        "low {} · mid {} · high {}\n",
+        counts[0], counts[1], counts[2]
+    );
 
     println!("strongest 25:");
     let mut strongest: Vec<_> = analysis.hits.iter().collect();
@@ -54,7 +57,11 @@ fn main() -> anyhow::Result<()> {
         let position = match bpm {
             Some(bpm) => {
                 let beats = hit.secs * bpm / 60.0;
-                format!("bar {:>3}.{:<4.2}", (beats / 4.0) as u32 + 1, beats % 4.0 + 1.0)
+                format!(
+                    "bar {:>3}.{:<4.2}",
+                    (beats / 4.0) as u32 + 1,
+                    beats % 4.0 + 1.0
+                )
             }
             None => String::new(),
         };

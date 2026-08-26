@@ -34,7 +34,7 @@ authors = ["FastTrackStudio"]
 # one for fast iteration or a focused `dx serve`; e.g.
 # `cargo run -p fasttrackstudio --no-default-features --features "session,charts"`
 # skips the heavy `signal` rig (nam C++, lucide icons, webkit engine deps).
-default = ["signal", "session", "charts", "builtin-fx"]
+default = ["signal"]
 # signal also force-enables session-ui/desktop: signal-guitar-ui pulls
 # session-ui (default-features off), which only compiles with its dioxus
 # renderer feature on (dock-dioxus needs "web" for its prelude).
@@ -139,38 +139,9 @@ embed-web = ["dep:include_dir"]
 # exclusively in the `cfg(not(target_arch = "wasm32"))` table below, so
 # enabling them here is a no-op on the web build (the same trick the
 # `signal` feature uses for engine mode).
-session = [
-    "dep:session-proto",
-    # Wasm-only collection browser dep (no-op on native — see note above).
-    "dep:collection-proto",
-    "dep:session-ui",
-    "dep:daw-ui",
-    "dep:dawfile-reaper",
-    "dep:keyflow",
-    "dep:keyflow-sync",
-    "dep:session",
-    "dep:session-guide",
-    "dep:daw",
-    "dep:daw-standalone",
-    "dep:architect",
-    "architect/local",
-    # The remote path to the session engine (src/remote.rs, shared with the
-    # signal rig views): vox over a WebSocket or iroh p2p.
-    "architect/iroh",
-    "dep:vox",
-    "dep:vox-core",
-    "dep:vox-websocket",
-    "dep:tokio",
-    "dep:eyre",
-    # Spoken section cues via Chatterbox TTS — auto-enabled with Session (the
-    # guide is core to it). A named sub-feature (below) so the app's guide code
-    # can gate on it; not one of the three domain axes.
-    "tts",
-]
 # Charts: keyflow chart writing (the Charts workspace). Keyflow is also pulled
 # by Session (chart parsing), so this is additive; a charts-only build gets it
 # independently.
-charts = ["dep:keyflow"]
 # Built-in FX DSP (EQ/comp/reverb/…) linked into the in-process standalone
 # render path, so `Effects::add("Reverb")` on a session track instantiates
 # real signal-fx. Deliberately NOT part of `session`: Session coordinates
@@ -178,23 +149,14 @@ charts = ["dep:keyflow"]
 # layer above the session domain. The Signal-side build turns this on; a
 # Session-only build renders without built-in FX and gets them from the
 # Signal engine instead.
-builtin-fx = ["dep:signal-fx"]
 # Chatterbox TTS backend for the guide's spoken cues. Auto-enabled by Session.
 # Models are NEVER downloaded implicitly; TTS only *activates* at runtime when
 # FTS_TTS=1 and a voice wav exists at ~/.config/fts/tts-voice.wav (the flake
 # provides onnxruntime + ORT_DYLIB_PATH). Cached cues keep loading regardless;
 # without it, cues fall back to the synthesized guide samples.
-tts = ["session-guide/tts"]
 
 # Network probe for the engine's SetlistService (the browser remote's wire
 # path, natively): `cargo run -p fasttrackstudio --example setlist_probe`.
-[[example]]
-name = "setlist_probe"
-required-features = ["signal", "session"]
-
-# PackLibrary probe: list a pack host's packs, download one with resume +
-# sha verify. `cargo run -p fasttrackstudio --example pack_probe
-# --no-default-features --features signal-guitar -- ws://127.0.0.1:4040/vox`.
 [[example]]
 name = "pack_probe"
 required-features = ["signal-guitar"]
@@ -254,7 +216,6 @@ signal-packs-proto = { workspace = true, optional = true }
 # The in-process player crates (session facade, daw-standalone, the guide)
 # are native-only and live in the cfg(not wasm) table below.
 session-proto = { workspace = true, optional = true }
-keyflow = { workspace = true, optional = true }
 # Ordered-collection wire contract (song Library / Setlist / …). Only the
 # wasm build uses it (the /{org}/{collection} browser dials the task-server's
 # per-org CollectionService), so the actual optional dep lives in the wasm
@@ -306,7 +267,6 @@ tokio = { workspace = true, optional = true }
 # plus the guide engine — all native-only (audio, threads, filesystem).
 # The wasm build gets only session-proto + session-ui and drives a
 # network engine instead (session_remote_view.rs).
-session = { workspace = true, optional = true }
 # Guide engine: click / count-in / section cues rendered into the audio
 # output through daw-standalone's aux post-render hook. On iOS the
 # session-demo feature drives it with default features (no tts/ONNX) into a
@@ -320,10 +280,6 @@ cpal = { workspace = true, optional = true }
 # (kill(pid,0)) and reaps the engine's process group on exit (engine_main.rs,
 # engines.rs). Unix-only usage is cfg-gated in code.
 libc = { workspace = true }
-# Lyric-sync sidecar (TimingMap) reader for the Lyric Sync workspace. Lean
-# default features only — no onnx/whisper; alignment is produced offline by
-# the `kf` CLI, the app just loads + edits the resulting sidecar.
-keyflow-sync = { workspace = true, optional = true }
 # DAW domain — facade (daw::get / init_from_parts / LayerRouter) + the
 # standalone backend that plays the setlist without REAPER. "audio" is
 # required by daw-standalone's unconditional `sync` module (same
@@ -381,10 +337,6 @@ objc2 = "0.5"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["web", "launch"] }
 session-ui = { workspace = true, features = ["web"], optional = true }
-# The collection browser's wire client (CollectionServiceClient + Collection /
-# CollectionItem / NodeRef). Wasm-only: this surface exists only in the web
-# build. Enabled via the `session` feature's `dep:collection-proto`.
-collection-proto = { workspace = true, features = ["vox"], optional = true }
 # NO daw-ui here: its daw-control backend is not wasm-clean, and the daw
 # panels (Arrangement / Mixer) are native-only workspaces anyway — the
 # session feature's "dep:daw-ui" is a no-op on the web build.
