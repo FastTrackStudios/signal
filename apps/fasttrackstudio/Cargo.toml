@@ -34,7 +34,7 @@ authors = ["FastTrackStudio"]
 # one for fast iteration or a focused `dx serve`; e.g.
 # `cargo run -p fasttrackstudio --no-default-features --features "session,charts"`
 # skips the heavy `signal` rig (nam C++, lucide icons, webkit engine deps).
-default = ["signal", "session", "charts"]
+default = ["signal", "session", "charts", "builtin-fx"]
 # signal also force-enables session-ui/desktop: signal-guitar-ui pulls
 # session-ui (default-features off), which only compiles with its dioxus
 # renderer feature on (dock-dioxus needs "web" for its prelude).
@@ -152,7 +152,6 @@ session = [
     "dep:session-guide",
     "dep:daw",
     "dep:daw-standalone",
-    "dep:signal-fx",
     "dep:architect",
     "architect/local",
     # The remote path to the session engine (src/remote.rs, shared with the
@@ -172,6 +171,14 @@ session = [
 # by Session (chart parsing), so this is additive; a charts-only build gets it
 # independently.
 charts = ["dep:keyflow"]
+# Built-in FX DSP (EQ/comp/reverb/…) linked into the in-process standalone
+# render path, so `Effects::add("Reverb")` on a session track instantiates
+# real signal-fx. Deliberately NOT part of `session`: Session coordinates
+# Signal over the wire rather than linking the engine, and signal-fx sits a
+# layer above the session domain. The Signal-side build turns this on; a
+# Session-only build renders without built-in FX and gets them from the
+# Signal engine instead.
+builtin-fx = ["dep:signal-fx"]
 # Chatterbox TTS backend for the guide's spoken cues. Auto-enabled by Session.
 # Models are NEVER downloaded implicitly; TTS only *activates* at runtime when
 # FTS_TTS=1 and a voice wav exists at ~/.config/fts/tts-voice.wav (the flake

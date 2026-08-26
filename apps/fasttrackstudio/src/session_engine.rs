@@ -428,7 +428,10 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
     let standalone = Standalone::new();
     // Built-in FX (EQ/comp/reverb/…): `Effects::add("Reverb")` on any
     // session track instantiates real signal-fx DSP that the render
-    // path processes in that track's chain.
+    // path processes in that track's chain. Feature-gated — a
+    // Session-only build does not link the engine's DSP (see the
+    // `builtin-fx` note in Cargo.toml) and renders without it.
+    #[cfg(feature = "builtin-fx")]
     standalone.set_fx_factory(std::sync::Arc::new(signal_fx::NativeFxFactory));
     let songs = demo_songs_base();
     let mut song_guids: Vec<String> = Vec::with_capacity(songs.len());

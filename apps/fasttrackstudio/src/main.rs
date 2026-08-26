@@ -70,7 +70,13 @@ mod web_packs;
 mod web_keys_decoder;
 // W13: shared-memory streamer threads — the decoders write chunks straight
 // into the heap the audio thread renders from.
+// Rig surfaces reached from `rig_view` (itself signal-gated): the 4x4 ekit
+// pad grid and the 2D sample-space map. Both use signal-{ekit,space}-proto,
+// which only the `signal` feature pulls in, so they must carry the same gate
+// — without it a session-only build fails to resolve them.
+#[cfg(feature = "signal")]
 mod ekit_view;
+#[cfg(feature = "signal")]
 mod space_view;
 #[cfg(all(feature = "signal", target_arch = "wasm32"))]
 mod web_keys_threads;
