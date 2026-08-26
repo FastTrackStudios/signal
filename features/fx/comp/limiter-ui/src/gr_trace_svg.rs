@@ -137,7 +137,10 @@ mod tests {
     #[test]
     fn gr_area_is_closed_and_has_one_point_per_sample() {
         let d = gr_area_path(&[0.0, 3.0, 6.0], TRACE_W, TRACE_H);
-        assert!(d.starts_with("M 0 0"), "area must start at the top-left: {d}");
+        assert!(
+            d.starts_with("M 0 0"),
+            "area must start at the top-left: {d}"
+        );
         assert!(d.ends_with(" Z"), "area must be closed: {d}");
         // 3 samples + the closing corner along the top edge.
         assert_eq!(d.matches("L ").count(), 4, "{d}");

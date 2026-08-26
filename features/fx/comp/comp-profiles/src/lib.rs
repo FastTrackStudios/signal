@@ -392,7 +392,8 @@ mod tests {
                 .filter(|c| c.profiles.contains(&profile.id()))
                 .count();
             assert_eq!(
-                hits, 1,
+                hits,
+                1,
                 "{} appears in {hits} categories, expected exactly 1",
                 profile.id()
             );
@@ -415,7 +416,10 @@ mod tests {
 
     #[test]
     fn a_profile_resolves_back_to_its_category_and_position() {
-        assert_eq!(category_of("control").map(|(c, _)| CATEGORIES[c].id), Some("main"));
+        assert_eq!(
+            category_of("control").map(|(c, _)| CATEGORIES[c].id),
+            Some("main")
+        );
         assert_eq!(category_of("la2a"), Some((2, 0)));
         assert_eq!(category_of("cl1b"), Some((2, 1)));
         assert_eq!(category_of("dbx160").map(|(_, v)| v), Some(1));

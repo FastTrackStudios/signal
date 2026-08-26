@@ -142,10 +142,7 @@ pub fn profile_control_handle(
     let gesture_ptrs: Vec<ParamPtr> = targets
         .iter()
         .copied()
-        .chain(
-            macro_slot
-                .filter(|_| matches!(control.mapping, ParamMapping::Compound { .. })),
-        )
+        .chain(macro_slot.filter(|_| matches!(control.mapping, ParamMapping::Compound { .. })))
         .collect();
 
     let begin = {

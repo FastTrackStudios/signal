@@ -59,15 +59,15 @@ pub use fts_sample::stream_wasm;
 // (`engine-native`); the wasm build runs on `engine-core` (packs from bytes).
 #[cfg(not(target_arch = "wasm32"))]
 pub use fts_sample::stream_cache;
+mod dispatch;
 pub mod filter;
+mod helpers;
+mod legato;
+mod midi;
 pub mod pitch_shift;
 pub mod rr;
 pub mod trace;
 pub mod voice;
-mod midi;
-mod dispatch;
-mod helpers;
-mod legato;
 
 use std::cell::{Cell, RefCell};
 use std::collections::hash_map::DefaultHasher;
@@ -1120,7 +1120,9 @@ impl SampleEngine {
                 return all;
             }
         }
-        self.resolve_note_sample_path(note, velocity).into_iter().collect()
+        self.resolve_note_sample_path(note, velocity)
+            .into_iter()
+            .collect()
     }
 
     pub fn resolve_note_sample_path(&self, note: u8, velocity: u8) -> Option<std::path::PathBuf> {

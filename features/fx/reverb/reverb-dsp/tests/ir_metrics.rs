@@ -664,10 +664,7 @@ fn dial_in_metrics_are_sane_on_hall() {
     let ir = render_ir(AlgorithmType::Hall, 0);
     let sr = 48000.0;
     let edt_s = edt(&ir.left, &ir.right, sr).expect("EDT reachable");
-    assert!(
-        (0.05..30.0).contains(&edt_s),
-        "EDT out of range: {edt_s} s"
-    );
+    assert!((0.05..30.0).contains(&edt_s), "EDT out of range: {edt_s} s");
     let c80 = clarity_db(&ir.left, &ir.right, 0.080, sr);
     assert!(c80.is_finite());
     assert!(c80 < 20.0, "C80 suspiciously clear for a hall: {c80} dB");

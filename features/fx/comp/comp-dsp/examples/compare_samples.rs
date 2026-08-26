@@ -13,8 +13,8 @@
 //! Example with reference file:
 //!   cargo run --example compare_samples -- ~/pro-c3-reference.wav --threshold 1.0
 
-use comp_dsp::ProC3Compressor;
 use audiocore_dsp::db::linear_to_db;
+use comp_dsp::ProC3Compressor;
 use std::fs::File;
 use std::io::Write;
 

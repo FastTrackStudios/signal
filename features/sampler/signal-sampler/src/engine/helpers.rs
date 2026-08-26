@@ -13,7 +13,9 @@ impl SampleEngine {
             .articulation(artic_id)
             .map(|a| a.rr)
             .unwrap_or(1);
-        self.rr.borrow_mut().next(section, artic_id, dynamic, max_rr)
+        self.rr
+            .borrow_mut()
+            .next(section, artic_id, dynamic, max_rr)
     }
 
     /// Build a `Voice` for a resolved sample, or `None` if the sample can't
@@ -33,7 +35,16 @@ impl SampleEngine {
     ) -> Option<Voice> {
         let rr_idx = self.next_rr(section, artic_id, dynamic);
         self.make_voice_at_rr(
-            artic_id, section, mic, dynamic, note, direction, kind, gain, release_frames, rr_idx,
+            artic_id,
+            section,
+            mic,
+            dynamic,
+            note,
+            direction,
+            kind,
+            gain,
+            release_frames,
+            rr_idx,
         )
     }
 
@@ -170,8 +181,12 @@ impl SampleEngine {
         // Structured trace + live tracing of the actual spawn — the ground
         // truth for "what sounded on this note". Covers the convention-mode
         // path (Keyscape, drums); the zoned path records its own spawns.
-        let rate = 2.0f64.powf(semitone_offset as f64 / 12.0) * (src_sr as f64 / self.sample_rate as f64);
-        let fname = path.file_name().and_then(|s| s.to_str()).unwrap_or_default();
+        let rate =
+            2.0f64.powf(semitone_offset as f64 / 12.0) * (src_sr as f64 / self.sample_rate as f64);
+        let fname = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default();
         // Loud, filterable flag whenever a `rel_2` / `relm` release variant
         // actually sounds — these are the sharp mechanical-click layers the
         // engine is NOT supposed to select (it asks for `rel`/`relsl`). If this

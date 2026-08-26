@@ -116,7 +116,11 @@ fn voice_pairing_does_not_clobber_explicit_variant() {
 
 #[test]
 fn voice_classic_retunes_hall_and_room() {
-    for algo in [AlgorithmType::Hall, AlgorithmType::Room, AlgorithmType::Shimmer] {
+    for algo in [
+        AlgorithmType::Hall,
+        AlgorithmType::Room,
+        AlgorithmType::Shimmer,
+    ] {
         let mut mx = make_chain(algo);
         let mut classic = make_chain(algo);
         classic.voice = ReverbVoice::Classic;
@@ -246,7 +250,11 @@ fn size_index_maps_variants_and_size() {
     let mut plate = make_chain(AlgorithmType::Plate);
     let v_before = plate.variant();
     plate.set_size_index(2);
-    assert_eq!(plate.variant(), v_before, "Plate size must not touch variant");
+    assert_eq!(
+        plate.variant(),
+        v_before,
+        "Plate size must not touch variant"
+    );
     assert!((plate.params.size - 0.8).abs() < 1e-12);
 
     // Size names exist for every engine.

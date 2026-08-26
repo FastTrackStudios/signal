@@ -3,9 +3,7 @@
 //! the async worker path is covered by `chain_reshape_worker_applies`),
 //! feedback recirculates at runtime.
 
-use reverb_dsp::algorithm::{
-    ImpulseDirection, ImpulseParams, ImpulseTail, ReverbAlgorithm,
-};
+use reverb_dsp::algorithm::{ImpulseDirection, ImpulseParams, ImpulseTail, ReverbAlgorithm};
 use reverb_dsp::algorithms::convolution::Convolution;
 use reverb_dsp::chain::ReverbChain;
 use reverb_dsp::ir::ImpulseReshaper;
@@ -70,10 +68,7 @@ fn defaults_are_transparent() {
         let x = if i == 0 { 1.0 } else { 0.0 };
         let (la, _) = a.tick(x, x);
         let (lb, _) = b.tick(x, x);
-        assert!(
-            (la - lb).abs() < 1e-12,
-            "diverged at {i}: {la} vs {lb}"
-        );
+        assert!((la - lb).abs() < 1e-12, "diverged at {i}: {la} vs {lb}");
     }
 }
 
@@ -335,7 +330,10 @@ fn chain_reshape_worker_applies() {
             break;
         }
     }
-    assert!(applied, "reshaped IR never arrived / never truncated the tail");
+    assert!(
+        applied,
+        "reshaped IR never arrived / never truncated the tail"
+    );
 }
 
 #[test]
@@ -417,8 +415,7 @@ fn decay_eq_shortens_band_decay() {
     };
     let n = flat.len().min(dark.len());
     let early_ratio = hf(&dark, 0, n / 6) / hf(&flat, 0, n / 6).max(1e-30);
-    let late_ratio =
-        hf(&dark, n * 2 / 3, n) / hf(&flat, n * 2 / 3, n).max(1e-30);
+    let late_ratio = hf(&dark, n * 2 / 3, n) / hf(&flat, n * 2 / 3, n).max(1e-30);
     assert!(
         late_ratio < early_ratio * 0.5,
         "high band should decay faster, not just be quieter: \

@@ -221,7 +221,8 @@ impl BbdDelay {
 
         // Smooth delay-time (= clock-rate) changes; the sweep itself is
         // what produces the analog pitch-bend character.
-        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
+        self.smoother
+            .set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
@@ -236,8 +237,7 @@ impl BbdDelay {
         if self.lfo_phase >= 1.0 {
             self.lfo_phase -= 1.0;
         }
-        let lfo =
-            ((self.lfo_phase + self.lfo_phase_offset) * std::f64::consts::TAU).sin();
+        let lfo = ((self.lfo_phase + self.lfo_phase_offset) * std::f64::consts::TAU).sin();
         // Smoothed random clock noise.
         self.jitter_state += 0.002 * (self.rng.next_bipolar() - self.jitter_state);
         let jitter = self.jitter_state * self.clock_jitter * 0.01;
@@ -443,7 +443,11 @@ mod tests {
         let start = out.iter().position(|s| s.abs() > thresh).unwrap();
         let end = out.len() - out.iter().rev().position(|s| s.abs() > thresh).unwrap();
         let window = &out[start..end];
-        assert!(window.len() > 200, "burst window too small: {}", window.len());
+        assert!(
+            window.len() > 200,
+            "burst window too small: {}",
+            window.len()
+        );
 
         // Measured frequency of the emitted burst.
         let secs = window.len() as f64 / SR;
@@ -522,7 +526,10 @@ mod tests {
 
         let short = distortion(100.0, 0.7);
         let long = distortion(700.0, 0.7);
-        assert!(short > 1e-6, "loss should degrade even short delays: {short}");
+        assert!(
+            short > 1e-6,
+            "loss should degrade even short delays: {short}"
+        );
         assert!(
             long > short * 1.2,
             "slower clock should degrade more: short={short:.6}, long={long:.6}"
@@ -614,9 +621,8 @@ mod tests {
         let mod_a = render(0.6, 0.0);
         let mod_b = render(0.6, 0.25);
 
-        let diff = |a: &[f64], b: &[f64]| -> f64 {
-            a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum()
-        };
+        let diff =
+            |a: &[f64], b: &[f64]| -> f64 { a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum() };
         assert!(
             diff(&dry_a, &dry_b) < 1e-9,
             "no modulation -> phase offset must not matter (dual mono)"

@@ -108,7 +108,11 @@ impl FxSlot {
                         freq: b.get("frequency").and_then(Value::as_f64).unwrap_or(1000.0) as f32,
                         gain: b.get("gain").and_then(Value::as_f64).unwrap_or(0.0) as f32,
                         q: b.get("Q").and_then(Value::as_f64).unwrap_or(0.707) as f32,
-                        mode: b.get("mode").and_then(Value::as_str).unwrap_or("bell").to_string(),
+                        mode: b
+                            .get("mode")
+                            .and_then(Value::as_str)
+                            .unwrap_or("bell")
+                            .to_string(),
                     })
                     .collect()
             })
@@ -162,35 +166,60 @@ pub struct Mixer {
 /// `Project info:`, `Script state:`); the live mixer lives under
 /// `Script state:`.
 pub fn parse_block(text: &str, banner: &str) -> Result<Value, String> {
-    let start = text.find(banner).ok_or_else(|| format!("no '{banner}' block"))?;
+    let start = text
+        .find(banner)
+        .ok_or_else(|| format!("no '{banner}' block"))?;
     let brace = text[start..].find('{').ok_or("no table after banner")? + start;
-    let mut p = Parser { b: text.as_bytes(), i: brace };
+    let mut p = Parser {
+        b: text.as_bytes(),
+        i: brace,
+    };
     p.value()
 }
 
 /// Parse a whole snapshot and extract its mixer (from the `Script state:` block).
 pub fn parse_mixer(text: &str) -> Result<Mixer, String> {
     let info = parse_block(text, "Script state:")?;
-    let mixer = info.get("audio").and_then(|a| a.get("mixer")).ok_or("no audio.mixer")?;
+    let mixer = info
+        .get("audio")
+        .and_then(|a| a.get("mixer"))
+        .ok_or("no audio.mixer")?;
 
     let mut strips = Vec::new();
     if let Some(arr) = mixer.get("strips").and_then(Value::as_arr) {
         for s in arr {
             strips.push(Strip {
-                name: s.get("name").and_then(Value::as_str).unwrap_or("").trim().to_string(),
+                name: s
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string(),
                 level: s.get("level").and_then(Value::as_f64).unwrap_or(1.0) as f32,
                 pan: s.get("pan").and_then(Value::as_f64).unwrap_or(0.0) as f32,
                 mute: s.get("mute").and_then(Value::as_f64).unwrap_or(0.0) != 0.0,
                 solo: s.get("solo").and_then(Value::as_f64).unwrap_or(0.0) != 0.0,
                 phase: s.get("phase").and_then(Value::as_f64).unwrap_or(0.0) as f32,
-                fx: s.get("fx").and_then(Value::as_arr).map(<[_]>::to_vec).unwrap_or_default(),
-                sends: s.get("sends").and_then(Value::as_arr).map(<[_]>::to_vec).unwrap_or_default(),
+                fx: s
+                    .get("fx")
+                    .and_then(Value::as_arr)
+                    .map(<[_]>::to_vec)
+                    .unwrap_or_default(),
+                sends: s
+                    .get("sends")
+                    .and_then(Value::as_arr)
+                    .map(<[_]>::to_vec)
+                    .unwrap_or_default(),
             });
         }
     }
 
     let mut cables = Vec::new();
-    if let Some(arr) = mixer.get("cables").and_then(|c| c.get("inputs")).and_then(Value::as_arr) {
+    if let Some(arr) = mixer
+        .get("cables")
+        .and_then(|c| c.get("inputs"))
+        .and_then(Value::as_arr)
+    {
         for c in arr {
             let inp = c.get("inputIdx").and_then(Value::as_f64).unwrap_or(0.0) as u32;
             let strip = c.get("stripIdx").and_then(Value::as_f64).unwrap_or(0.0) as u32;
@@ -337,7 +366,8 @@ impl Parser<'_> {
 
     fn number(&mut self) -> Result<Value, String> {
         let start = self.i;
-        while matches!(self.peek(), Some(c) if c.is_ascii_digit() || matches!(c, b'-'|b'+'|b'.'|b'e'|b'E')) {
+        while matches!(self.peek(), Some(c) if c.is_ascii_digit() || matches!(c, b'-'|b'+'|b'.'|b'e'|b'E'))
+        {
             self.i += 1;
         }
         let s = std::str::from_utf8(&self.b[start..self.i]).map_err(|e| e.to_string())?;

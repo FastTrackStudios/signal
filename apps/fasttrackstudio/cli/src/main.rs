@@ -182,10 +182,7 @@ fn signal_engine(addr: Option<String>, foreground: bool) -> Result<()> {
     // Only meaningful on the default port — a custom --addr is the
     // caller saying "bind here", e.g. a second engine next to a live one.
     if addr.is_none() && probe(&SIGNAL_ENGINE) {
-        println!(
-            "signal engine already running — {}",
-            SIGNAL_ENGINE.ws_url()
-        );
+        println!("signal engine already running — {}", SIGNAL_ENGINE.ws_url());
         return Ok(());
     }
 
@@ -218,7 +215,9 @@ fn signal_engine(addr: Option<String>, foreground: bool) -> Result<()> {
     };
     match &spawned.source {
         LaunchSource::Binary(path) => eprintln!("spawned {}", path.display()),
-        LaunchSource::Cargo => eprintln!("no fasttrackstudio binary found — `cargo run --release -p fasttrackstudio -- --engine` (dev fallback)"),
+        LaunchSource::Cargo => eprintln!(
+            "no fasttrackstudio binary found — `cargo run --release -p fasttrackstudio -- --engine` (dev fallback)"
+        ),
     }
 
     if foreground {

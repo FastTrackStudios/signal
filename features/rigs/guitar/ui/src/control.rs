@@ -92,8 +92,7 @@ pub fn ZoomPanel(
     /// `on_power` renders the power button.
     #[props(default)]
     power_on: Option<bool>,
-    #[props(default)]
-    on_power: Option<Callback<()>>,
+    #[props(default)] on_power: Option<Callback<()>>,
 ) -> Element {
     let mut zoomed = use_signal(|| false);
     rsx! {
@@ -170,7 +169,12 @@ fn ParamSlider(block_id: String, p: BlockParam, #[props(default)] fmt_hz: bool) 
 
 /// A stereo vertical meter: two flush bars (L/R) with a shared dB readout.
 #[component]
-fn StereoMeter(label: &'static str, l_db: f32, r_db: f32, #[props(default)] muted: bool) -> Element {
+fn StereoMeter(
+    label: &'static str,
+    l_db: f32,
+    r_db: f32,
+    #[props(default)] muted: bool,
+) -> Element {
     let bar = |db: f32| -> (f32, &'static str) {
         let pct = ((db + 60.0) / 60.0 * 100.0).clamp(0.0, 100.0);
         let color = if muted {
@@ -217,7 +221,9 @@ const VERB_COLORS: [&str; 2] = ["#2dd4bf", "#a78bfa"];
 
 /// Tempo-division labels — `delay::TapDivision` order (Quarter, dotted 8th,
 /// 8th, triplet, 16th, golden ratio, silver ratio, free-running).
-const DIV_LABELS: [&str; 8] = ["1/4", "1/8.", "1/8", "1/4T", "1/16", "Golden", "Silver", "Free"];
+const DIV_LABELS: [&str; 8] = [
+    "1/4", "1/8.", "1/8", "1/4T", "1/16", "Golden", "Silver", "Free",
+];
 
 /// Division → multiple of a quarter note, for the tap visualization
 /// (Free returns 0 → the caller falls back to the block's `time`).
@@ -232,13 +238,26 @@ const MOD_ENGINES: [&str; 5] = ["Cubic", "BBD", "Tape", "Orbit", "Juno"];
 const TREM_MODES: [&str; 3] = ["Mono", "Stereo", "Harmonic"];
 
 const DELAY_ALGOS: [&str; 13] = [
-    "Tape", "Digital", "dBucket", "Lo-Fi", "Shimmer", "Reverse", "Ice",
-    "Rhythm", "Drum", "Oil Can", "MultiTap", "Spectral", "Filter",
+    "Tape", "Digital", "dBucket", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum",
+    "Oil Can", "MultiTap", "Spectral", "Filter",
 ];
 /// `reverb::AlgorithmType::ALL` order.
 const VERB_ALGOS: [&str; 15] = [
-    "Room", "Hall", "Plate", "Spring", "Cloud", "Bloom", "Shimmer", "Chorale",
-    "Magneto", "NonLinear", "Swell", "Reflections", "Velvet", "FreeVerb", "Convolution",
+    "Room",
+    "Hall",
+    "Plate",
+    "Spring",
+    "Cloud",
+    "Bloom",
+    "Shimmer",
+    "Chorale",
+    "Magneto",
+    "NonLinear",
+    "Swell",
+    "Reflections",
+    "Velvet",
+    "FreeVerb",
+    "Convolution",
 ];
 
 /// The gate, tall and slim: the level bar with a draggable threshold and a
@@ -582,7 +601,8 @@ fn PKnob(
     p: BlockParam,
     #[props(default)] fmt: Option<crate::knob::FmtFn>,
     /// Strip-embedded: tiny body, no numeric readout.
-    #[props(default)] tiny: bool,
+    #[props(default)]
+    tiny: bool,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     rsx! {
@@ -946,7 +966,8 @@ fn ModGroupPanel(
     blocks: Vec<LiveBlock>,
     tempo_bpm: u32,
     /// Speed as tempo divisions (Motion) instead of a Hz knob (Modulation).
-    #[props(default)] tempo_divisions: bool,
+    #[props(default)]
+    tempo_divisions: bool,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let members: Vec<LiveBlock> = kinds
@@ -972,9 +993,7 @@ fn ModGroupPanel(
             spawn(async move {
                 let Some(r) = rig else { return };
                 for (i, m) in members.iter().enumerate() {
-                    let _ = r
-                        .set_block_bypass(m.id.clone(), i != next as usize)
-                        .await;
+                    let _ = r.set_block_bypass(m.id.clone(), i != next as usize).await;
                 }
             });
         }
@@ -1002,9 +1021,7 @@ fn ModGroupPanel(
     let cur_div = div_hz
         .iter()
         .enumerate()
-        .min_by(|a, b| {
-            (a.1 - rate).abs().partial_cmp(&(b.1 - rate).abs()).unwrap()
-        })
+        .min_by(|a, b| (a.1 - rate).abs().partial_cmp(&(b.1 - rate).abs()).unwrap())
         .map(|(i, _)| i)
         .unwrap_or(0);
 
@@ -1176,15 +1193,20 @@ fn DriveChunk(
     level: f32,
     engaged: bool,
     /// None → an empty slot (e.g. Amp R until dual-amp lands).
-    #[props(default)] block_id: Option<String>,
+    #[props(default)]
+    block_id: Option<String>,
     /// The wire param the bar writes.
-    #[props(default = "drive")] param: &'static str,
+    #[props(default = "drive")]
+    param: &'static str,
     /// Map bar position 0..1 → param value.
-    #[props(default = (0.0, 1.0))] range: (f32, f32),
+    #[props(default = (0.0, 1.0))]
+    range: (f32, f32),
     /// Amber accent for the amps instead of drive red.
-    #[props(default)] amp_style: bool,
+    #[props(default)]
+    amp_style: bool,
     /// The block preset's NAM options + current selection (quick switch).
-    #[props(default)] options: Vec<String>,
+    #[props(default)]
+    options: Vec<String>,
     #[props(default)] option: u32,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
@@ -1209,7 +1231,9 @@ fn DriveChunk(
             let (rig, block_id) = (rig.clone(), block_id.clone());
             spawn(async move {
                 let Some(el) = el else { return };
-                let Ok(rect) = el.get_client_rect().await else { return };
+                let Ok(rect) = el.get_client_rect().await else {
+                    return;
+                };
                 let frac = (coords.x / rect.width()).clamp(0.0, 1.0) as f32;
                 if let (Some(r), Some(id)) = (rig, block_id) {
                     let v = range.0 + frac * (range.1 - range.0);
@@ -1322,10 +1346,7 @@ fn DriveChunk(
 
 /// The guitar instrument panel — see the module docs for the layout.
 #[component]
-pub fn ControlView(
-    model: PerformanceModel,
-    state: RigViewState,
-) -> Element {
+pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let blocks = state.blocks.cloned();
     let in_db = state.in_peak_db.cloned();
@@ -1342,7 +1363,10 @@ pub fn ControlView(
         .filter(|b| matches!(b.block_type, BlockType::Boost | BlockType::Drive))
         .cloned()
         .collect();
-    let amp_l = blocks.iter().find(|b| b.block_type == BlockType::Amp && b.name.eq_ignore_ascii_case("Amp L")).cloned();
+    let amp_l = blocks
+        .iter()
+        .find(|b| b.block_type == BlockType::Amp && b.name.eq_ignore_ascii_case("Amp L"))
+        .cloned();
     // The amp chunk shows the active patch's preset (the pool preset the
     // patch points at), not the raw block name.
     let amp_preset = model
@@ -1357,7 +1381,6 @@ pub fn ControlView(
 
     let hp = model.headphone.clone();
     let _ = out_db;
-
 
     rsx! {
         div { class: "flex gap-0 h-full min-h-0 overflow-hidden",

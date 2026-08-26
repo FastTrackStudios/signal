@@ -44,7 +44,9 @@ const CATALOG: &[(&str, &str, Ctor)] = &[
     ("signal.fx.vibrato", "Vibrato", |sr| {
         Box::new(NativeMod::vibrato(sr))
     }),
-    ("signal.fx.trem", "Tremolo", |sr| Box::new(NativeTrem::new(sr))),
+    ("signal.fx.trem", "Tremolo", |sr| {
+        Box::new(NativeTrem::new(sr))
+    }),
     ("signal.fx.gain", "Gain", |sr| Box::new(NativeGain::new(sr))),
     ("signal.fx.preamp", "Preamp", |sr| {
         Box::new(NativePreamp::new(sr))

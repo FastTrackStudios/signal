@@ -279,8 +279,7 @@ impl SpectralEngine {
                 } else {
                     let mut best: Option<&SpectralRegion> = None;
                     for r in &self.regions {
-                        if f >= r.lo_hz && f <= r.hi_hz
-                            && best.is_none_or(|b| r.amount > b.amount)
+                        if f >= r.lo_hz && f <= r.hi_hz && best.is_none_or(|b| r.amount > b.amount)
                         {
                             best = Some(r);
                         }
@@ -435,7 +434,10 @@ mod tests {
             sig += inp[i] * inp[i];
         }
         let err_db = 10.0 * (err / sig).log10();
-        assert!(err_db < -30.0, "amount 0 should be near-null: {err_db:.1} dB");
+        assert!(
+            err_db < -30.0,
+            "amount 0 should be near-null: {err_db:.1} dB"
+        );
     }
 
     #[test]

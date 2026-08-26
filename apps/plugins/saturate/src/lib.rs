@@ -272,8 +272,16 @@ mod tests {
                 p.sync_params();
                 p
             };
-            assert_eq!(plugin.pre[0].positive, profile.voicing.positive, "{}", profile.id);
-            assert_eq!(plugin.pre[0].negative, profile.voicing.negative, "{}", profile.id);
+            assert_eq!(
+                plugin.pre[0].positive, profile.voicing.positive,
+                "{}",
+                profile.id
+            );
+            assert_eq!(
+                plugin.pre[0].negative, profile.voicing.negative,
+                "{}",
+                profile.id
+            );
             assert_eq!(
                 plugin.pre[0].positive, plugin.pre[1].positive,
                 "{} voices its two channels differently",

@@ -37,15 +37,14 @@ pub struct PitchParams {
 impl Default for PitchParams {
     fn default() -> Self {
         Self {
-            semitones: IntParam::new(
-                "Semitones",
-                0,
-                IntRange::Linear { min: -24, max: 24 },
-            ),
+            semitones: IntParam::new("Semitones", 0, IntRange::Linear { min: -24, max: 24 }),
             cents: FloatParam::new(
                 "Fine",
                 0.0,
-                FloatRange::Linear { min: -100.0, max: 100.0 },
+                FloatRange::Linear {
+                    min: -100.0,
+                    max: 100.0,
+                },
             )
             .with_unit(" ct")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
@@ -64,7 +63,10 @@ impl Default for PitchParams {
             output_db: FloatParam::new(
                 "Output",
                 0.0,
-                FloatRange::Linear { min: -24.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -192,8 +194,7 @@ impl Plugin for FtsPitch {
 
 impl ClapPlugin for FtsPitch {
     const CLAP_ID: &'static str = "com.fasttrackstudio.pitch";
-    const CLAP_DESCRIPTION: Option<&'static str> =
-        Some("Pitch shifter (PSOLA/WSOLA/granular)");
+    const CLAP_DESCRIPTION: Option<&'static str> = Some("Pitch shifter (PSOLA/WSOLA/granular)");
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[

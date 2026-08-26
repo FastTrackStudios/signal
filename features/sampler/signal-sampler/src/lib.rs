@@ -82,16 +82,16 @@ pub mod api;
 pub mod audio_soundsource;
 pub mod bank;
 pub mod block;
+/// Lane instruments compiled off the audio thread (wasm + threads), handed
+/// over by pointer through the shared heap — see the module docs.
+#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+pub mod built_lanes;
 pub mod convolver;
 pub mod document;
 pub mod document_rt;
 pub mod engine;
 pub mod engine_spec;
 pub mod instrument;
-/// Lane instruments compiled off the audio thread (wasm + threads), handed
-/// over by pointer through the shared heap — see the module docs.
-#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
-pub mod built_lanes;
 pub mod keys_rig;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod kit_tracks;
@@ -105,7 +105,6 @@ pub mod nam;
 pub mod nam_calibrate;
 pub mod native;
 pub mod native_osc;
-pub mod soundsource;
 pub mod node_render;
 pub mod nord;
 #[cfg(not(target_arch = "wasm32"))]
@@ -116,11 +115,11 @@ pub mod pack_rewrite;
 /// The NI Essential Pianos' Color / Dynamic Range controls, as velocity-domain
 /// transforms. See `features/rigs/keys/spec/piano-voice.md`.
 pub mod piano_voice;
+pub mod preset_registry;
+pub mod preset_spec;
 pub mod ref_match;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod report;
-pub mod preset_registry;
-pub mod preset_spec;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod retag;
 pub mod rig;
@@ -135,16 +134,19 @@ pub mod runtime;
 pub mod sample_map;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod sampler_rig;
+pub mod soundsource;
 pub mod spec;
 pub mod stats;
 pub mod styx_edit;
 
+pub use audio_soundsource::AudioSoundsource;
 pub use bank::{PreloadProfile, SamplerBank};
 pub use block::{BlockParams, BlockSpec, SamplerBlock};
 pub use convolver::Convolver;
 pub use document::{
-    DocCc, DocEvent, DocNote, DocumentBusRenderResult, DocumentRenderOptions, DocumentRenderResult,
-    Schedule, ScheduledEvent, TempoPoint, TrackDocument, annotate, line_for_chan,
+    annotate, line_for_chan, DocCc, DocEvent, DocNote, DocumentBusRenderResult,
+    DocumentRenderOptions, DocumentRenderResult, Schedule, ScheduledEvent, TempoPoint,
+    TrackDocument,
 };
 pub use document_rt::{BlockTransport, RealtimeScheduler};
 pub use engine::cache::SignalPcmPack;
@@ -153,6 +155,7 @@ pub use engine::{ArticClass, EmittedMarker, LegatoFireEvent, LineId, PlayMode, S
 pub use engine_spec::{BlockRef, EngineLayerSpec, EngineSpec, FxChainSlot, PortSpec, VoiceConfig};
 pub use instrument::SamplerInstrument;
 pub use keys_rig::{KeysInstrument, KeysRig};
+pub use midicore::MidiMonitor;
 pub use mixer::{
     Bus, BusStrip, ChannelStrip, DirectChannel, DrumMixer, EngineStrip, FxBackend, FxSlotStrip,
     FxTarget, MixerLayout, MixerMeters, Send as MixerSend, SendStrip,
@@ -160,10 +163,8 @@ pub use mixer::{
 pub use module_spec::{ModulePort, ModuleSpec};
 #[cfg(not(target_arch = "wasm32"))]
 pub use nam::NamProcessor;
-pub use audio_soundsource::AudioSoundsource;
 pub use native_osc::{NativeOscillator, OscWave};
-pub use soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
-pub use node_render::{LeafBackend, RenderNode, build_node_backend};
+pub use node_render::{build_node_backend, LeafBackend, RenderNode};
 pub use preset_registry::{PresetRegistry, PresetSource, RegisteredPreset};
 pub use preset_spec::{
     MacroDef, MacroTarget, MasterFxSlot, NoteRoute, PresetEngineRef, PresetModuleRef, PresetSpec,
@@ -186,17 +187,17 @@ pub use runtime::{
     ResolvedEdge,
 };
 pub use sample_map::{SampleKey, SampleMap, SampleQuery};
-pub use midicore::MidiMonitor;
 #[cfg(not(target_arch = "wasm32"))]
 pub use sampler_rig::{BusTrack, InstrumentTrack, SamplerRig};
+pub use soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 // Hardware MIDI input primitives live in `midicore` (the `midir` OS backend);
 // re-export the selector + handle + event types so rig consumers (e.g. the
 // strings TUI) don't need a direct midicore dependency.
 pub use midicore;
-pub use midicore::MidiEvent;
-pub use midicore::PortSelector as MidiSelection;
 #[cfg(not(target_arch = "wasm32"))]
 pub use midicore::midir::MidiInput as MidiInputHandle;
+pub use midicore::MidiEvent;
+pub use midicore::PortSelector as MidiSelection;
 pub use spec::LibrarySpec;
 pub use stats::AudioStatsSnapshot;
 
@@ -247,9 +248,9 @@ pub mod pack {
     }
 }
 
-pub use pack::PackHeader;
 #[cfg(not(target_arch = "wasm32"))]
 pub use pack::read_pack_header;
+pub use pack::PackHeader;
 
 pub mod pack_registry {
     //! In-memory `.signalpack`s, keyed by the spec-path string lanes
@@ -511,7 +512,9 @@ impl PlayerPatch {
 
     /// Build a patch from an ALREADY-OPENED pack, however its bytes arrived
     /// (mmap'd file, in-memory buffer, registry clone).
-    pub fn from_opened_pack(pack: crate::engine::cache::SignalPcmPack) -> Result<Self, SamplerError> {
+    pub fn from_opened_pack(
+        pack: crate::engine::cache::SignalPcmPack,
+    ) -> Result<Self, SamplerError> {
         let mut spec = pack::parse_embedded_spec(&pack)?;
 
         // Stylus / groove libraries: synthesize one zone per groove so the
@@ -712,7 +715,10 @@ impl PlayerPatch {
         let mut by_note: BTreeMap<i32, Vec<std::path::PathBuf>> = BTreeMap::new();
         if self.is_zoned() {
             for (z, p) in self.spec.zones.iter().zip(self.zone_paths.iter()) {
-                by_note.entry(z.root_key as i32).or_default().push(p.clone());
+                by_note
+                    .entry(z.root_key as i32)
+                    .or_default()
+                    .push(p.clone());
             }
         } else {
             for (k, p) in self.map.iter() {

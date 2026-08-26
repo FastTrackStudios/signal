@@ -64,9 +64,7 @@ impl FilterLfoShape {
         match self {
             // Triangles peak mid-cycle; the others at phase 0.
             Self::TrianglePos | Self::TriangleNeg => Some(0.5),
-            Self::SquarePos | Self::SquareNeg | Self::SinePos | Self::SineNeg => {
-                Some(0.0)
-            }
+            Self::SquarePos | Self::SquareNeg | Self::SinePos | Self::SineNeg => Some(0.0),
             _ => None,
         }
     }
@@ -258,7 +256,8 @@ impl FilterDelay {
 
         self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
+        self.smoother
+            .set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
 
         // Attack detector for the one-shot Down/Up sweeps.
         self.attack_env.set_times_ms(3.0, 150.0, sample_rate);

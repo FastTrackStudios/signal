@@ -11,14 +11,17 @@ use std::path::PathBuf;
 
 const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
-const CSS_CONFIG: &str =
-    "features/rigs/orchestra/specs/cinematic-strings.styx";
+const CSS_CONFIG: &str = "features/rigs/orchestra/specs/cinematic-strings.styx";
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
 
 fn rms_db(b: &[f32]) -> f32 {
     let r = (b.iter().map(|x| x * x).sum::<f32>() / b.len() as f32).sqrt();
-    if r > 0.0 { 20.0 * r.log10() } else { -99.0 }
+    if r > 0.0 {
+        20.0 * r.log10()
+    } else {
+        -99.0
+    }
 }
 
 fn main() -> eyre::Result<()> {

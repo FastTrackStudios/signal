@@ -325,7 +325,8 @@ impl LoFiDelay {
         // Decay EQ: tilt filter in feedback path
         self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
+        self.smoother
+            .set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     /// Quantize to simulated bit depth.

@@ -463,8 +463,12 @@ mod tests {
         };
         let short = run(IceSlice::Short);
         let long = run(IceSlice::Long);
-        let diff: f64 =
-            short.iter().zip(&long).map(|(a, b)| (a - b).abs()).sum::<f64>() / 48000.0;
+        let diff: f64 = short
+            .iter()
+            .zip(&long)
+            .map(|(a, b)| (a - b).abs())
+            .sum::<f64>()
+            / 48000.0;
         assert!(diff > 0.005, "slice sizes should differ audibly: {diff}");
     }
 

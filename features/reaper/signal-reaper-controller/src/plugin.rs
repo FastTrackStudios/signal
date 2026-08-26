@@ -3,12 +3,12 @@
 //! Stereo passthrough that controls other FX on the same track.
 
 use std::num::NonZeroU32;
+use std::sync::atomic::{AtomicI32, AtomicU32, AtomicU8, Ordering};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI32, AtomicU8, AtomicU32, Ordering};
 
 use atomic_float::AtomicF32;
 use audiocore_core::prelude::*;
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{fmt, EnvFilter};
 
 use crate::param_queue::{self, ParamQueueConsumer, ParamQueueProducer};
 use signal_proto::ParamWriteRequest;

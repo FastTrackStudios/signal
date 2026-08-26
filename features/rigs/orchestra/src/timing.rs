@@ -23,8 +23,8 @@
 //! 3. **Ears** — the same tempo map drives a session-guide click render
 //!    mixed over the music, so the owner can HEAR the grid.
 
+use signal_sampler::document::{qn_to_sec, DocCc, DocNote, TempoPoint, TrackDocument};
 use signal_sampler::SamplerRig;
-use signal_sampler::document::{DocCc, DocNote, TempoPoint, TrackDocument, qn_to_sec};
 
 // ── Tempo-map helpers ────────────────────────────────────────────────────────
 
@@ -262,9 +262,7 @@ pub fn spectral_flux(audio: &[f32], sr: u32) -> FluxCurve {
         .map(|f| (audio[f * 2] as f64 + audio[f * 2 + 1] as f64) * 0.5)
         .collect();
     let hann: Vec<f64> = (0..FFT_N)
-        .map(|i| {
-            0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / (FFT_N - 1) as f64).cos())
-        })
+        .map(|i| 0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / (FFT_N - 1) as f64).cos()))
         .collect();
     let n_hops = if frames >= FFT_N {
         (frames - FFT_N) / HOP + 1
@@ -302,7 +300,9 @@ impl FluxCurve {
     /// `expected`, refined by parabolic interpolation around the peak bin.
     /// `None` when the window is empty or flat (silence).
     pub fn onset_near(&self, expected: f64, search: f64) -> Option<f64> {
-        let lo = (((expected - search - self.t0) / self.hop_sec).floor().max(0.0)) as usize;
+        let lo = (((expected - search - self.t0) / self.hop_sec)
+            .floor()
+            .max(0.0)) as usize;
         let hi =
             ((((expected + search - self.t0) / self.hop_sec).ceil()) as usize).min(self.v.len());
         if lo + 1 >= hi {
@@ -343,8 +343,7 @@ impl FluxCurve {
     /// the swell: the edge marks where the note starts speaking.
     pub fn leading_edge(&self, expected: f64, pre: f64, post: f64) -> Option<f64> {
         let lo = (((expected - pre - self.t0) / self.hop_sec).floor().max(0.0)) as usize;
-        let hi =
-            ((((expected + post - self.t0) / self.hop_sec).ceil()) as usize).min(self.v.len());
+        let hi = ((((expected + post - self.t0) / self.hop_sec).ceil()) as usize).min(self.v.len());
         if lo + 1 >= hi {
             return None;
         }
@@ -356,8 +355,7 @@ impl FluxCurve {
         for i in lo..hi {
             if self.v[i] >= thresh {
                 let frac = if i > lo && self.v[i] > self.v[i - 1] {
-                    ((thresh - self.v[i - 1]) / (self.v[i] - self.v[i - 1])).clamp(0.0, 1.0)
-                        as f64
+                    ((thresh - self.v[i - 1]) / (self.v[i] - self.v[i - 1])).clamp(0.0, 1.0) as f64
                         - 1.0
                 } else {
                     0.0
@@ -384,8 +382,7 @@ fn goertzel(mono: &[f64], off: usize, n: usize, sr: u32, freq: f64) -> f64 {
     let coeff = 2.0 * w.cos();
     let (mut s1, mut s2) = (0.0f64, 0.0f64);
     for i in 0..n {
-        let hann =
-            0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / (n - 1) as f64).cos());
+        let hann = 0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / (n - 1) as f64).cos());
         let s0 = mono[off + i] * hann + coeff * s1 - s2;
         s2 = s1;
         s1 = s0;
@@ -458,7 +455,10 @@ pub fn pitch_arrival(
     for h in 0..n_hops {
         let center = center0 + h as f64 * HOP_PA as f64 / f64::from(sr);
         let off = ((center * f64::from(sr)) as isize - (N as isize) / 2).max(0) as usize;
-        let e_from: f64 = hf_from.iter().map(|&f| goertzel(&mono, off, N, sr, f)).sum();
+        let e_from: f64 = hf_from
+            .iter()
+            .map(|&f| goertzel(&mono, off, N, sr, f))
+            .sum();
         let e_to: f64 = hf_to.iter().map(|&f| goertzel(&mono, off, N, sr, f)).sum();
         share.push(if e_from + e_to > 0.0 {
             e_to / (e_from + e_to)
@@ -548,7 +548,10 @@ pub fn pitch_share_curve(
     for h in 0..n_hops {
         let center = t0 + h as f64 * hop_sec;
         let off = ((center * f64::from(sr)) as isize - (N as isize) / 2).max(0) as usize;
-        let e_from: f64 = hf_from.iter().map(|&f| goertzel(&mono, off, N, sr, f)).sum();
+        let e_from: f64 = hf_from
+            .iter()
+            .map(|&f| goertzel(&mono, off, N, sr, f))
+            .sum();
         let e_to: f64 = hf_to.iter().map(|&f| goertzel(&mono, off, N, sr, f)).sum();
         v.push(if e_from + e_to > 0.0 {
             (e_to / (e_from + e_to)) as f32
@@ -881,7 +884,12 @@ pub fn timing_corpus() -> Vec<TimingCase> {
 /// plus the Overlap-Delay), so arrivals are EXPECTED to sit late of the
 /// grid by roughly the velocity-zone delay — rendering both paths side by
 /// side makes that difference audible and measurable.
-pub fn render_live_replay(rig: &SamplerRig, id: &str, doc: &TrackDocument, tail_sec: f64) -> Vec<f32> {
+pub fn render_live_replay(
+    rig: &SamplerRig,
+    id: &str,
+    doc: &TrackDocument,
+    tail_sec: f64,
+) -> Vec<f32> {
     let sr = 48_000u32; // matches SamplerRig::new_offline in the harness
     #[derive(Clone, Copy)]
     enum Ev {
@@ -941,7 +949,10 @@ mod tests {
     #[test]
     fn sec_to_qn_inverts_qn_to_sec_across_changes() {
         let tempo = vec![
-            TempoPoint { qn: 0.0, bpm: 120.0 },
+            TempoPoint {
+                qn: 0.0,
+                bpm: 120.0,
+            },
             TempoPoint { qn: 8.0, bpm: 60.0 },
         ];
         for qn in [0.0, 1.0, 7.9, 8.0, 8.1, 20.0] {
@@ -954,7 +965,10 @@ mod tests {
 
     #[test]
     fn click_lands_on_the_tempo_grid() {
-        let tempo = vec![TempoPoint { qn: 0.0, bpm: 120.0 }];
+        let tempo = vec![TempoPoint {
+            qn: 0.0,
+            bpm: 120.0,
+        }];
         let sr = 48_000u32;
         let click = render_click(&tempo, sr as usize * 2, sr, None);
         // First non-zero sample of each burst = the beat positions 0 / 0.5 /
@@ -1006,7 +1020,10 @@ mod tests {
             audio[i * 2 + 1] = s;
         }
         let t = pitch_arrival(&audio, sr, 1.0, 67, 69, 0.3).expect("crossing found");
-        assert!((t - 1.0).abs() < 0.030, "pitch arrival at {t}, expected 1.0");
+        assert!(
+            (t - 1.0).abs() < 0.030,
+            "pitch arrival at {t}, expected 1.0"
+        );
         // Octave (harmonic-colliding) case still resolves.
         let mut audio8 = vec![0.0f32; frames * 2];
         let f3 = midi_to_hz(79);

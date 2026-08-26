@@ -37,11 +37,11 @@ pub mod eq_graph;
 #[cfg(feature = "native")]
 pub const TAILWIND_CSS: &str = include_str!("../assets/tailwind.css");
 #[cfg(feature = "native")]
-pub mod faces;
-#[cfg(feature = "native")]
 pub mod eq_graph_painter;
 #[cfg(feature = "native")]
 pub mod eq_graph_popup;
+#[cfg(feature = "native")]
+pub mod faces;
 #[cfg(feature = "native")]
 pub use fts_plug_ui::param_adapter;
 #[cfg(feature = "native")]

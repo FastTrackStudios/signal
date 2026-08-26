@@ -209,7 +209,11 @@ pub struct HeadphoneState {
 
 impl Default for HeadphoneState {
     fn default() -> Self {
-        Self { volume: 0.8, self_mix: 0.5, main_mute: false }
+        Self {
+            volume: 0.8,
+            self_mix: 0.5,
+            main_mute: false,
+        }
     }
 }
 

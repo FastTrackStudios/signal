@@ -35,22 +35,22 @@ mod engine_watch_session;
 mod engines;
 #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
 mod guide;
-mod prefs;
 /// In-memory log ring (tracing capture + panic hook) — rendered by the
 /// keys Logs tab on the phone, harmless elsewhere.
 #[allow(dead_code)]
 #[cfg(not(target_arch = "wasm32"))]
 mod log_ring;
+mod prefs;
 // The shared "dial the engine" plumbing every remote surface uses (rig
 // views + the browser session player).
-#[cfg(any(feature = "signal", feature = "session", feature = "signal-guitar"))]
-mod remote;
 /// Pack downloads — list + fetch `.signalpack`s from a pack host (the
 /// studio engine or a hosted mirror) over the shared remote plumbing.
 /// (Dead-code allowed: only the iOS keys shell drives it today.)
 #[allow(dead_code)]
 #[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
 mod pack_client;
+#[cfg(any(feature = "signal", feature = "session", feature = "signal-guitar"))]
+mod remote;
 #[cfg(feature = "signal")]
 mod rig_view;
 // Browser keys rig (/rigs/keys/:profile): the keys AudioWorklet + streamed
@@ -70,18 +70,18 @@ mod web_packs;
 mod web_keys_decoder;
 // W13: shared-memory streamer threads — the decoders write chunks straight
 // into the heap the audio thread renders from.
-#[cfg(all(feature = "signal", target_arch = "wasm32"))]
-mod web_keys_threads;
 mod ekit_view;
 mod space_view;
+#[cfg(all(feature = "signal", target_arch = "wasm32"))]
+mod web_keys_threads;
 // The in-process session player (daw-standalone + audio + guide) is
 // native-only; the wasm build is a remote of the network engine instead.
 #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
-mod session_engine;
+mod lyric_sync_view;
 #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
 mod mixer_view;
 #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
-mod lyric_sync_view;
+mod session_engine;
 #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
 mod session_view;
 // Browser flavor of the Session workspace: SetlistService over the shared
@@ -107,16 +107,16 @@ mod updates;
 mod ios_audio;
 #[cfg(all(feature = "signal-guitar", target_os = "ios"))]
 mod ios_orientation;
-#[cfg(all(feature = "signal-guitar", target_os = "ios"))]
-mod rig_engine;
-#[cfg(all(feature = "signal-guitar", target_os = "ios"))]
-mod mobile_view;
 /// The phone keys rig view (Play + pack Library). Compiled on every
 /// native target so the Linux workspace check covers it; only the iOS
 /// shell mounts it.
 #[allow(dead_code)]
 #[cfg(all(feature = "signal-keys-rig", not(target_arch = "wasm32")))]
 mod keys_view;
+#[cfg(all(feature = "signal-guitar", target_os = "ios"))]
+mod mobile_view;
+#[cfg(all(feature = "signal-guitar", target_os = "ios"))]
+mod rig_engine;
 
 fn main() {
     // NVIDIA + Wayland: force the WebKitGTK webview through XWayland before
@@ -260,7 +260,11 @@ fn window_placement() -> WindowPlacement {
     let fullscreen = std::env::var("FTS_WINDOW_FULLSCREEN")
         .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
         .unwrap_or(false);
-    (pair("FTS_WINDOW_POS", ','), pair("FTS_WINDOW_SIZE", 'x'), fullscreen)
+    (
+        pair("FTS_WINDOW_POS", ','),
+        pair("FTS_WINDOW_SIZE", 'x'),
+        fullscreen,
+    )
 }
 
 #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
@@ -507,14 +511,20 @@ fn App() -> Element {
 
     // The workspace crumb carries every other workspace as its menu, so the
     // rail's icons are never the only way to change place.
-    level.crumbs(vec![fts_chrome::Crumb::here(here.label()).with_menu(
-        Workspace::all()
-            .into_iter()
-            .map(|(w, label)| {
-                (label.to_string(), w == here, Callback::new(move |_| go.call(w)))
-            })
-            .collect(),
-    )]);
+    level.crumbs(vec![
+        fts_chrome::Crumb::here(here.label()).with_menu(
+            Workspace::all()
+                .into_iter()
+                .map(|(w, label)| {
+                    (
+                        label.to_string(),
+                        w == here,
+                        Callback::new(move |_| go.call(w)),
+                    )
+                })
+                .collect(),
+        ),
+    ]);
     level.panels(vec![
         fts_chrome::PanelSpec::new("engines", "Engines", fts_chrome::Icon::Engine).width(300),
         fts_chrome::PanelSpec::new("settings", "Settings", fts_chrome::Icon::Settings).width(300),
@@ -699,10 +709,22 @@ fn ResizeHandles() -> Element {
             "right: 0; top: 12px; bottom: 12px; width: 5px; cursor: ew-resize;",
             Dir::East,
         ),
-        ("top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize;", Dir::NorthWest),
-        ("top: 0; right: 0; width: 12px; height: 12px; cursor: nesw-resize;", Dir::NorthEast),
-        ("bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize;", Dir::SouthWest),
-        ("bottom: 0; right: 0; width: 12px; height: 12px; cursor: nwse-resize;", Dir::SouthEast),
+        (
+            "top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize;",
+            Dir::NorthWest,
+        ),
+        (
+            "top: 0; right: 0; width: 12px; height: 12px; cursor: nesw-resize;",
+            Dir::NorthEast,
+        ),
+        (
+            "bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize;",
+            Dir::SouthWest,
+        ),
+        (
+            "bottom: 0; right: 0; width: 12px; height: 12px; cursor: nwse-resize;",
+            Dir::SouthEast,
+        ),
     ];
     rsx! {
         for (pos, dir) in handles.iter().copied() {

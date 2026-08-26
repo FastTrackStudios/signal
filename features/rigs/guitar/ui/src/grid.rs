@@ -9,12 +9,12 @@
 
 use dioxus::prelude::*;
 
-use signal_grid::GridSlot;
 use signal_grid::conversion::template_to_grid_slots;
-use signal_grid_ui::RigGridPanel;
+use signal_grid::GridSlot;
 use signal_grid_ui::dynamic_grid::GridSelection;
-use signal_guitar_proto::LiveBlock;
+use signal_grid_ui::RigGridPanel;
 use signal_guitar_proto::rig::RigClient;
+use signal_guitar_proto::LiveBlock;
 use signal_proto::defaults::guitar::guitar_rig_template;
 
 /// Stable Uuid derived from a block's string id (so the grid keeps a

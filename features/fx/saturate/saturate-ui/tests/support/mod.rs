@@ -57,7 +57,10 @@ impl GuiContextInner for RecordingGuiContext {
         PluginApi::Clap
     }
     unsafe fn raw_begin_set_parameter(&self, param: ParamPtr) {
-        self.log.lock().unwrap().push(Gesture::Begin(ptr_key(param)));
+        self.log
+            .lock()
+            .unwrap()
+            .push(Gesture::Begin(ptr_key(param)));
     }
     unsafe fn raw_set_parameter_normalized(&self, param: ParamPtr, normalized: f32) {
         self.log
@@ -108,7 +111,10 @@ pub struct Fixture {
 ///   `use_param_context()` / all `ctx.begin_set_raw(..)` call sites hit),
 /// - `SatUi`, the params + meters the editor consumes.
 pub fn mount() -> Fixture {
-    mount_sized(saturate_ui::control_view::EDITOR_W, saturate_ui::control_view::EDITOR_H)
+    mount_sized(
+        saturate_ui::control_view::EDITOR_W,
+        saturate_ui::control_view::EDITOR_H,
+    )
 }
 
 /// Mount at an explicit window size — used to check the surface against the
@@ -161,7 +167,9 @@ impl Fixture {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             let _ = self.tester.pump().await;
         }
-        self.tester.advance_time(std::time::Duration::from_millis(16)).await;
+        self.tester
+            .advance_time(std::time::Duration::from_millis(16))
+            .await;
     }
 
     /// Click a rail family by its category id.

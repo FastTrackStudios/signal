@@ -11,13 +11,13 @@
 //! remount fresh.
 
 use dioxus::prelude::*;
-use signal_guitar_proto::audio::AudioSettingsClient;
-use signal_guitar_proto::rig::{RigClient, RigStreamClient};
-use signal_guitar_ui::GuitarRigRemote;
 use signal_bass_proto::bass::{BassRigClient, BassRigStreamClient};
 use signal_bass_ui::BassRigRemote;
 use signal_drums_proto::drum::{DrumRigClient, DrumRigStreamClient};
 use signal_drums_ui::DrumRigRemote;
+use signal_guitar_proto::audio::AudioSettingsClient;
+use signal_guitar_proto::rig::{RigClient, RigStreamClient};
+use signal_guitar_ui::GuitarRigRemote;
 use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
 use signal_keys_ui::KeysRigRemote;
 use signal_synth_proto::synth::{SynthRigClient, SynthRigStreamClient};
@@ -65,8 +65,15 @@ enum RigKind {
 
 impl RigKind {
     /// Every rig, in picker order.
-    const ALL: &'static [RigKind] =
-        &[RigKind::Guitar, RigKind::Bass, RigKind::Drums, RigKind::Keys, RigKind::Synth, RigKind::Ekit, RigKind::Space];
+    const ALL: &'static [RigKind] = &[
+        RigKind::Guitar,
+        RigKind::Bass,
+        RigKind::Drums,
+        RigKind::Keys,
+        RigKind::Synth,
+        RigKind::Ekit,
+        RigKind::Space,
+    ];
 
     /// Stable slug used in prefs + the web URL hash.
     fn slug(self) -> &'static str {
@@ -122,7 +129,10 @@ impl RigKind {
     }
 
     fn from_slug(s: &str) -> Option<RigKind> {
-        RigKind::ALL.iter().copied().find(|k| k.slug().eq_ignore_ascii_case(s))
+        RigKind::ALL
+            .iter()
+            .copied()
+            .find(|k| k.slug().eq_ignore_ascii_case(s))
     }
 }
 
@@ -149,7 +159,9 @@ fn load_last_rig() -> Option<RigKind> {
             }
         }
     }
-    prefs::get("last-rig").as_deref().and_then(RigKind::from_slug)
+    prefs::get("last-rig")
+        .as_deref()
+        .and_then(RigKind::from_slug)
 }
 
 fn store_last_rig(rig: Option<RigKind>) {
@@ -206,7 +218,11 @@ pub fn SignalWorkspace() -> Element {
                 .iter()
                 .copied()
                 .map(|k| {
-                    (k.label().to_string(), k == kind, Callback::new(move |_| pick.call(Some(k))))
+                    (
+                        k.label().to_string(),
+                        k == kind,
+                        Callback::new(move |_| pick.call(Some(k))),
+                    )
                 })
                 .collect(),
         ),

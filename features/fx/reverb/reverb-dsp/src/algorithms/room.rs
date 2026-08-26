@@ -16,9 +16,9 @@
 
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
+use crate::primitives::barr_loop::BarrLoop;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
-use crate::primitives::barr_loop::BarrLoop;
 use crate::primitives::multitap_delay::{MultitapDelay, Tap};
 use crate::primitives::one_pole::Lp1;
 

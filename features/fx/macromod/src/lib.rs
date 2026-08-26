@@ -29,21 +29,20 @@ pub use binding::MacroBinding;
 pub use curation::ParamCuration;
 pub use curve::{CurvePoint, MultiPointCurve};
 pub use daw_target::DawParamTarget;
-pub use easing::{EasingCurve, lerp_eased};
+pub use easing::{lerp_eased, EasingCurve};
 pub use learn::{LearnState, PendingBinding};
 pub use macro_bank::{GroupSelector, MacroBank, MacroGroup, MacroKnob};
 pub use parameter::{BlockParameter, ParameterValue};
 pub use response::ResponseCurve;
 pub use routing::{ModulationRoute, ModulationRouteSet};
 pub use sources::{
-    PatternConfig, PatternPoint,
     EnvelopeConfig, EnvelopeMode, FollowerConfig, FollowerInput, LfoConfig, LfoWaveform,
-    ModulationSource, RandomConfig, RetriggerMode, TempoDiv,
+    ModulationSource, PatternConfig, PatternPoint, RandomConfig, RetriggerMode, TempoDiv,
 };
 pub use target::{ModulationTarget, ParamTarget};
 
 // Runtime engine re-exports
 pub use runtime::{
-    EnvelopeStage, EnvelopeState, FollowerState, LfoState, ModulationOutput, ModulationProcessor,
-    RandomState, TickContext, evaluate_waveform,
+    evaluate_waveform, EnvelopeStage, EnvelopeState, FollowerState, LfoState, ModulationOutput,
+    ModulationProcessor, RandomState, TickContext,
 };

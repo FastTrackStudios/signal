@@ -32,9 +32,18 @@ pub struct BlobView {
 #[derive(Clone, Debug, PartialEq)]
 pub enum BlobEdit {
     /// Set the blob's pitch center (already snapped if snapping is on).
-    SetCenter { index: usize, center_midi: f64 },
-    SetDriftAmount { index: usize, amount: f64 },
-    SetModulationAmount { index: usize, amount: f64 },
+    SetCenter {
+        index: usize,
+        center_midi: f64,
+    },
+    SetDriftAmount {
+        index: usize,
+        amount: f64,
+    },
+    SetModulationAmount {
+        index: usize,
+        amount: f64,
+    },
 }
 
 const H: f64 = 480.0;

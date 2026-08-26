@@ -25,7 +25,7 @@ pub use types::GridSlot;
 
 use interaction::*;
 pub use interaction::{
-    GRID_CONNECTIONS, GridConnection, GridContextMenuEvent, GridSelection, PICKER_CELL,
+    GridConnection, GridContextMenuEvent, GridSelection, GRID_CONNECTIONS, PICKER_CELL,
     PICKER_CLICK_POS,
 };
 

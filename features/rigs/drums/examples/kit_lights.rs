@@ -34,21 +34,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  note {n:>3}  {id}");
     }
 
-    let mut lg = DrumLightGuide::open().ok_or("no keyboard / hidraw permission (run with sudo?)")?;
+    let mut lg =
+        DrumLightGuide::open().ok_or("no keyboard / hidraw permission (run with sudo?)")?;
     lg.set_kit(&pieces);
     println!("\npainted the kit onto the keybed. Playing a groove — watch the keys flash…");
 
     // A simple rock groove in GM drum notes.
     let hats = 42;
     let steps: [&[u8]; 8] = [
-        &[36, 42],       // 1  kick + hat
-        &[42],           // &
-        &[38, 42],       // 2  snare + hat
-        &[42],           // &
-        &[36, 42],       // 3
-        &[36, 42],       // &  double kick
-        &[38, 42],       // 4  snare
-        &[46],           // &  open hat
+        &[36, 42], // 1  kick + hat
+        &[42],     // &
+        &[38, 42], // 2  snare + hat
+        &[42],     // &
+        &[36, 42], // 3
+        &[36, 42], // &  double kick
+        &[38, 42], // 4  snare
+        &[46],     // &  open hat
     ];
     let _ = hats;
     for _bar in 0..8 {

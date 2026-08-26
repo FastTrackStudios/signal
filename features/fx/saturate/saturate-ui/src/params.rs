@@ -25,8 +25,6 @@ pub struct SatUiState {
     pub input_db: AtomicF32,
 }
 
-
-
 /// **Noon is the circuit as designed.**
 ///
 /// Every control here except `drive`, `mix` and `output` is a *trim* around
@@ -143,7 +141,10 @@ impl EmphBandParams {
             gain_db: FloatParam::new(
                 "Emph Gain",
                 0.0,
-                FloatRange::Linear { min: -12.0, max: 12.0 },
+                FloatRange::Linear {
+                    min: -12.0,
+                    max: 12.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -210,15 +211,30 @@ impl Default for SatParams {
             mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
-            output: FloatParam::new("Output", 0.0, FloatRange::Linear { min: -24.0, max: 12.0 })
-                .with_unit(" dB")
-                .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            output: FloatParam::new(
+                "Output",
+                0.0,
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 12.0,
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
 
-            character_a: FloatParam::new("Character A", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            character_a: FloatParam::new(
+                "Character A",
+                0.5,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
-            character_b: FloatParam::new("Character B", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            character_b: FloatParam::new(
+                "Character B",
+                0.5,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
             profile_id: parking_lot::RwLock::new(String::new()),
             editor_form: parking_lot::RwLock::new(String::new()),
@@ -234,8 +250,9 @@ impl SatParams {
     /// index, which is what a pre-id session has.
     pub fn resolved_profile_index(&self) -> usize {
         let id = self.profile_id.read();
-        saturate_profiles::profile_index(&id)
-            .unwrap_or_else(|| (self.profile.value().max(0) as usize).min(saturate_profiles::PROFILES.len() - 1))
+        saturate_profiles::profile_index(&id).unwrap_or_else(|| {
+            (self.profile.value().max(0) as usize).min(saturate_profiles::PROFILES.len() - 1)
+        })
     }
 
     /// The active profile.

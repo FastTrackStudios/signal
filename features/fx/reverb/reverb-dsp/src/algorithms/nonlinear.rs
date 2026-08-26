@@ -3,7 +3,7 @@
 //! Based on Strymon BigSky Non-Linear: applies envelope shaping
 //! to a reverb tail, creating reverse, gated, swell, and ramp effects.
 
-use crate::algorithm::{NlShape, AlgorithmParams, NonLinearParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, NlShape, NonLinearParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use audiocore_dsp::delay_line::DelayLine;
@@ -119,8 +119,7 @@ impl NonLinear {
                 if position < hold {
                     1.0
                 } else if position < hold + KNEE {
-                    0.5 * (1.0
-                        + (std::f64::consts::PI * (position - hold) / KNEE).cos())
+                    0.5 * (1.0 + (std::f64::consts::PI * (position - hold) / KNEE).cos())
                 } else {
                     0.0
                 }

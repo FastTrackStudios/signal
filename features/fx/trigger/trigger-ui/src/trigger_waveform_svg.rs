@@ -175,7 +175,10 @@ mod tests {
         let d = bars_path(&[0.5, 0.0, 1.0], 360.0, 260.0);
         assert_eq!(d.matches("M ").count(), 2, "expected 2 bars: {d}");
         assert_eq!(d.matches('Z').count(), 2, "bars not closed: {d}");
-        assert!(d.starts_with("M 0.0 260.0 L 0.0 130.0"), "first bar wrong: {d}");
+        assert!(
+            d.starts_with("M 0.0 260.0 L 0.0 130.0"),
+            "first bar wrong: {d}"
+        );
         // Full-scale column reaches the top edge.
         assert!(d.contains("L 240.0 0.0"), "full-scale bar missing: {d}");
     }
@@ -186,17 +189,23 @@ mod tests {
         let len = 256usize;
         let head = 1000u64;
         let hits = [
-            (999u64, 0.9f32), // newest block → rightmost column
-            (1000 - 256, 0.5),          // oldest still-visible block → column 0
-            (1000 - 257, 0.5),          // just scrolled out
-            (1200, 1.0),                // future/torn
+            (999u64, 0.9f32),  // newest block → rightmost column
+            (1000 - 256, 0.5), // oldest still-visible block → column 0
+            (1000 - 257, 0.5), // just scrolled out
+            (1200, 1.0),       // future/torn
         ];
         let cols = marker_columns(&hits, head, len, w);
         assert_eq!(cols.len(), 2, "windowing wrong: {cols:?}");
         let step = w / len as f64;
-        assert!((cols[0].0 - (255.5 * step)).abs() < 1e-9, "newest not at right edge");
+        assert!(
+            (cols[0].0 - (255.5 * step)).abs() < 1e-9,
+            "newest not at right edge"
+        );
         assert!((cols[0].1 - 0.9).abs() < 1e-6);
-        assert!((cols[1].0 - (0.5 * step)).abs() < 1e-9, "oldest not at left edge");
+        assert!(
+            (cols[1].0 - (0.5 * step)).abs() < 1e-9,
+            "oldest not at left edge"
+        );
         // Empty window / empty hits.
         assert!(marker_columns(&hits, head, 0, w).is_empty());
         assert!(marker_columns(&[], head, len, w).is_empty());

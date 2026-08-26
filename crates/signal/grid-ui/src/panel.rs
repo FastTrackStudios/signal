@@ -5,11 +5,11 @@
 
 use dioxus::prelude::*;
 
-use crate::inspector::BlockInspectorPanel;
 use crate::dynamic_grid::{
     BlockPickerDropdown, DynamicGridView, GridConnection as DynGridConnection, GridContextMenu,
     GridContextMenuEvent, GridSelection, GridSlot, PICKER_CELL, PICKER_CLICK_POS,
 };
+use crate::inspector::BlockInspectorPanel;
 
 #[derive(Props, Clone, PartialEq)]
 pub struct RigGridPanelProps {
@@ -29,7 +29,8 @@ pub struct RigGridPanelProps {
     pub on_save_block_snapshot_as: Option<EventHandler<(GridSlot, String)>>,
     // Module save callbacks
     #[props(default)]
-    pub on_save_module_preset_as: Option<EventHandler<(Vec<GridSlot>, String, signal_proto::ModuleType)>>,
+    pub on_save_module_preset_as:
+        Option<EventHandler<(Vec<GridSlot>, String, signal_proto::ModuleType)>>,
     #[props(default)]
     pub on_save_module_snapshot: Option<EventHandler<Vec<GridSlot>>>,
     #[props(default)]

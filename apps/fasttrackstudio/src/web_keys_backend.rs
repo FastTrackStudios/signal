@@ -48,14 +48,14 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use architect::dispatch::CurrentThreadDispatcher;
-use architect::{layers, HasDispatcher, Layer, PubSub, Services};
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use midicore_proto::MidiEvent;
 use signal_keys_proto::keys::{
     KeysEvent, KeysRig as KeysRigSvc, KeysRigClient, KeysRigStreamClient, KeysRigStreamSource,
 };
 use signal_keys_proto::{
-    KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel,
-    KeysMacro, KeysMeter, KeysMixer, KeysModule, KeysNode, KeysPerform, KeysPreset, KeysStatus,
+    KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel, KeysMacro,
+    KeysMeter, KeysMixer, KeysModule, KeysNode, KeysPerform, KeysPreset, KeysStatus,
 };
 
 use crate::web_keys_rig::Worklet;
@@ -409,11 +409,8 @@ pub(crate) fn strip_toggle_mute(i: usize) -> bool {
 impl WebKeysBackend {
     /// Establish the two typed clients over the in-process server — the
     /// exact objects `KeysRigRemote` consumes from context.
-    pub(crate) async fn clients(
-        &self,
-    ) -> eyre::Result<(KeysRigClient, KeysRigStreamClient)> {
-        let server =
-            architect::LocalServer::serve(self.clone().into_router(), self.scope.clone());
+    pub(crate) async fn clients(&self) -> eyre::Result<(KeysRigClient, KeysRigStreamClient)> {
+        let server = architect::LocalServer::serve(self.clone().into_router(), self.scope.clone());
         let rig: KeysRigClient = server.establish().await?;
         let stream: KeysRigStreamClient = server.establish().await?;
         Ok((rig, stream))
@@ -482,8 +479,7 @@ impl WebKeysBackend {
         }
         KeysStatus {
             running: s.running,
-            loaded_preset: (!s.program.program_json.is_empty())
-                .then(|| s.profile.clone()),
+            loaded_preset: (!s.program.program_json.is_empty()).then(|| s.profile.clone()),
             master_peak: s.master_peak,
             meters,
             voices: s.voices.max(0) as u32,
@@ -801,7 +797,10 @@ impl KeysRigSvc for WebKeysBackend {
             engine: l.engine.clone(),
             modules: vec![lane_module(l)],
             // One fused module per lane — every module index views slot A.
-            module: { let _ = module; 0 },
+            module: {
+                let _ = module;
+                0
+            },
             patch: l.pack.clone(),
             preset: String::new(),
             gain_db: l.gain_db,
@@ -833,8 +832,7 @@ impl KeysRigSvc for WebKeysBackend {
         let Some(e) = s.engines.iter().find(|e| e.name == engine) else {
             return KeysEngineDetail::default();
         };
-        let lanes: Vec<&LaneStrip> =
-            s.lanes.iter().filter(|l| l.engine == e.name).collect();
+        let lanes: Vec<&LaneStrip> = s.lanes.iter().filter(|l| l.engine == e.name).collect();
         KeysEngineDetail {
             engine: e.name.clone(),
             gain_db: e.gain_db,
@@ -898,8 +896,7 @@ impl KeysRigSvc for WebKeysBackend {
     }
 
     fn set_midi_port(&self, name: String) {
-        self.shared.borrow_mut().midi_port =
-            (!name.is_empty()).then_some(name);
+        self.shared.borrow_mut().midi_port = (!name.is_empty()).then_some(name);
         self.publish_status();
     }
 

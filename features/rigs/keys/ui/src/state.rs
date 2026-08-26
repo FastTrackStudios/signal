@@ -95,7 +95,14 @@ pub fn use_keys_state() -> (KeysViewState, Option<KeysRigClient>) {
     }
 
     (
-        KeysViewState { status, presets, tree, midi, mixer, perform },
+        KeysViewState {
+            status,
+            presets,
+            tree,
+            midi,
+            mixer,
+            perform,
+        },
         rig,
     )
 }

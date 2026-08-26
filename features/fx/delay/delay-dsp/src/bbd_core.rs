@@ -85,35 +85,95 @@ const N_FILT: usize = 5;
 /// Juno-60 chorus input (anti-aliasing) filter, s-plane partial
 /// fractions (rad/s). Nominal cutoff ≈ 9.4 kHz at unity scale.
 const IN_ROOTS: [C; N_FILT] = [
-    C { re: 251_589.0, im: 0.0 },
-    C { re: -130_428.0, im: -4_165.0 },
-    C { re: -130_428.0, im: 4_165.0 },
-    C { re: 4_634.0, im: -22_873.0 },
-    C { re: 4_634.0, im: 22_873.0 },
+    C {
+        re: 251_589.0,
+        im: 0.0,
+    },
+    C {
+        re: -130_428.0,
+        im: -4_165.0,
+    },
+    C {
+        re: -130_428.0,
+        im: 4_165.0,
+    },
+    C {
+        re: 4_634.0,
+        im: -22_873.0,
+    },
+    C {
+        re: 4_634.0,
+        im: 22_873.0,
+    },
 ];
 const IN_POLES: [C; N_FILT] = [
-    C { re: -46_580.0, im: 0.0 },
-    C { re: -55_482.0, im: -25_082.0 },
-    C { re: -55_482.0, im: 25_082.0 },
-    C { re: -26_292.0, im: -59_437.0 },
-    C { re: -26_292.0, im: 59_437.0 },
+    C {
+        re: -46_580.0,
+        im: 0.0,
+    },
+    C {
+        re: -55_482.0,
+        im: -25_082.0,
+    },
+    C {
+        re: -55_482.0,
+        im: 25_082.0,
+    },
+    C {
+        re: -26_292.0,
+        im: -59_437.0,
+    },
+    C {
+        re: -26_292.0,
+        im: 59_437.0,
+    },
 ];
 
 /// Juno-60 chorus output (reconstruction) filter. Nominal cutoff
 /// ≈ 11 kHz at unity scale.
 const OUT_ROOTS: [C; N_FILT] = [
-    C { re: 5_092.0, im: 0.0 },
-    C { re: -11_256.0, im: -99_566.0 },
-    C { re: -11_256.0, im: 99_566.0 },
-    C { re: -13_802.0, im: -24_606.0 },
-    C { re: -13_802.0, im: 24_606.0 },
+    C {
+        re: 5_092.0,
+        im: 0.0,
+    },
+    C {
+        re: -11_256.0,
+        im: -99_566.0,
+    },
+    C {
+        re: -11_256.0,
+        im: 99_566.0,
+    },
+    C {
+        re: -13_802.0,
+        im: -24_606.0,
+    },
+    C {
+        re: -13_802.0,
+        im: 24_606.0,
+    },
 ];
 const OUT_POLES: [C; N_FILT] = [
-    C { re: -176_261.0, im: 0.0 },
-    C { re: -51_468.0, im: -21_437.0 },
-    C { re: -51_468.0, im: 21_437.0 },
-    C { re: -26_276.0, im: -59_699.0 },
-    C { re: -26_276.0, im: 59_699.0 },
+    C {
+        re: -176_261.0,
+        im: 0.0,
+    },
+    C {
+        re: -51_468.0,
+        im: -21_437.0,
+    },
+    C {
+        re: -51_468.0,
+        im: 21_437.0,
+    },
+    C {
+        re: -26_276.0,
+        im: -59_699.0,
+    },
+    C {
+        re: -26_276.0,
+        im: 59_699.0,
+    },
 ];
 
 /// Per-bucket write hook: charge-transfer degradation, noise, etc.
@@ -307,8 +367,8 @@ impl BbdCore {
                 #[allow(clippy::needless_range_loop)] // i spans arrays + self state
                 for i in 0..N_FILT {
                     self.out_arec[i] = self.out_arec[i].mul(self.out_aplus[i]);
-                    out_accum[i] = out_accum[i]
-                        .add(self.out_gp_pbar[i].mul(self.out_arec[i]).scale(delta));
+                    out_accum[i] =
+                        out_accum[i].add(self.out_gp_pbar[i].mul(self.out_arec[i]).scale(delta));
                 }
             }
             self.even_on = !self.even_on;
@@ -374,7 +434,7 @@ mod tests {
     const SR: f64 = 48000.0;
 
     #[test]
-    fn unity_ish_passband_at_high_clock(){
+    fn unity_ish_passband_at_high_clock() {
         // Short delay (fast clock) at unity cutoff scale: a mid-band
         // sine should pass at reasonable level after the delay.
         let mut core = BbdCore::new();
@@ -389,10 +449,7 @@ mod tests {
                 peak = peak.max(y.abs());
             }
         }
-        assert!(
-            (0.2..1.2).contains(&peak),
-            "passband level off: {peak}"
-        );
+        assert!((0.2..1.2).contains(&peak), "passband level off: {peak}");
     }
 
     #[test]

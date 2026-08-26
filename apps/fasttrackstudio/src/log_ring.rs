@@ -23,7 +23,9 @@ pub fn push(line: String) {
 
 /// Newest last.
 pub fn snapshot() -> Vec<String> {
-    RING.lock().map(|r| r.iter().cloned().collect()).unwrap_or_default()
+    RING.lock()
+        .map(|r| r.iter().cloned().collect())
+        .unwrap_or_default()
 }
 
 /// Route panics into the ring (chained onto the default hook), so a
@@ -43,7 +45,9 @@ pub struct RingLayer {
 
 impl RingLayer {
     pub fn new() -> Self {
-        Self { start: std::time::Instant::now() }
+        Self {
+            start: std::time::Instant::now(),
+        }
     }
 }
 

@@ -68,7 +68,10 @@ impl std::str::FromStr for PackRange {
             .split_once('+')
             .ok_or_else(|| format!("range {s:?} is not start+len"))?;
         Ok(PackRange {
-            start: start.trim().parse().map_err(|e| format!("range start: {e}"))?,
+            start: start
+                .trim()
+                .parse()
+                .map_err(|e| format!("range start: {e}"))?,
             len: len.trim().parse().map_err(|e| format!("range len: {e}"))?,
         })
     }

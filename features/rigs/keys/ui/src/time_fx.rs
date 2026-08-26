@@ -294,8 +294,15 @@ pub fn ReverbView(
         PAD + ((t.max(lo) / lo).ln() / (hi / lo).ln()).clamp(0.0, 1.0) * (W - 2.0 * PAD)
     };
     let audible: Vec<&FxLane> = lanes.iter().filter(|l| !l.silent_verb()).collect();
-    const MARKS: &[(f64, &str)] =
-        &[(0.25, "¼s"), (0.5, "½s"), (1.0, "1s"), (2.0, "2s"), (4.0, "4s"), (8.0, "8s"), (16.0, "16s")];
+    const MARKS: &[(f64, &str)] = &[
+        (0.25, "¼s"),
+        (0.5, "½s"),
+        (1.0, "1s"),
+        (2.0, "2s"),
+        (4.0, "4s"),
+        (8.0, "8s"),
+        (16.0, "16s"),
+    ];
 
     rsx! {
         div {

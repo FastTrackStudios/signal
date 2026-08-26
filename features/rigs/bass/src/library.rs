@@ -20,7 +20,7 @@
 use std::path::PathBuf;
 
 use facet::Facet;
-use signal_rig_host::store::{StyxDir, signal_config_dir};
+use signal_rig_host::store::{signal_config_dir, StyxDir};
 
 /// The library directory (`SIGNAL_BASS_DIR` overrides).
 pub fn bass_dir() -> PathBuf {
@@ -109,7 +109,12 @@ impl Default for BassMidiMapDef {
 
 /// Code-built default MIDI map (matches the embedded `midi.styx`).
 pub fn default_midi_map() -> BassMidiMapDef {
-    BassMidiMapDef { program_change: true, prev_cc: 101, next_cc: 102, port: String::new() }
+    BassMidiMapDef {
+        program_change: true,
+        prev_cc: 101,
+        next_cc: 102,
+        port: String::new(),
+    }
 }
 
 /// `last-state.styx` — the rig's last-active position, flushed by the meter
@@ -154,7 +159,11 @@ fn default_presets() -> Vec<BassPresetDef> {
     };
     vec![
         blank("Bass DI"),
-        BassPresetDef { nam: "models/Bass Amp.nam".into(), ir: "irs/Bass Cab.wav".into(), ..blank("Bass") },
+        BassPresetDef {
+            nam: "models/Bass Amp.nam".into(),
+            ir: "irs/Bass Cab.wav".into(),
+            ..blank("Bass")
+        },
         BassPresetDef {
             drive_nam: "models/Synth Bass Drive.nam".into(),
             nam: "models/Bass Amp.nam".into(),
@@ -225,7 +234,9 @@ mod tests {
         let lib = facet_styx::from_str::<BassLib>(DEFAULT_PRESETS).expect("presets.styx parses");
         assert!(lib.presets.iter().any(|p| p.name == "Bass"));
         assert!(lib.presets.iter().any(|p| p.name == "Synth Bass"));
-        assert!(lib.presets.iter().all(|p| p.is_audio() || !p.sample.is_empty() || p.kind.eq_ignore_ascii_case("sample")));
+        assert!(lib.presets.iter().all(|p| p.is_audio()
+            || !p.sample.is_empty()
+            || p.kind.eq_ignore_ascii_case("sample")));
         let map = facet_styx::from_str::<BassMidiMapDef>(DEFAULT_MIDI).expect("midi.styx parses");
         assert!(map.program_change);
         assert_eq!((map.prev_cc, map.next_cc), (101, 102));
@@ -249,7 +260,10 @@ mod tests {
     #[test]
     fn last_state_roundtrips() {
         std::env::set_var("SIGNAL_BASS_DIR", "/tmp/fts-test-bass");
-        let state = BassLastState { active_preset: "Synth Bass".into(), master_trim_db: -3.0 };
+        let state = BassLastState {
+            active_preset: "Synth Bass".into(),
+            master_trim_db: -3.0,
+        };
         BassLibrary::save_last_state(&state);
         let back = BassLibrary::load_last_state().expect("last-state.styx roundtrip");
         assert_eq!(back.active_preset, "Synth Bass");

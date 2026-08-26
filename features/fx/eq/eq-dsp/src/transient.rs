@@ -240,7 +240,10 @@ mod tests {
                 }
             }
         }
-        assert!(click_mask > 0.5, "clicks should read transient: {click_mask}");
+        assert!(
+            click_mask > 0.5,
+            "clicks should read transient: {click_mask}"
+        );
         assert!(tone_mask < 0.2, "held tone should read steady: {tone_mask}");
     }
 
@@ -264,7 +267,10 @@ mod tests {
             }
         }
         let tone_rms = (tone_rms / tone_n as f64).sqrt();
-        assert!(click_peak > 0.3, "clicks must pass the transient solo: {click_peak}");
+        assert!(
+            click_peak > 0.3,
+            "clicks must pass the transient solo: {click_peak}"
+        );
         assert!(
             tone_rms < 0.05,
             "held tone must mostly vanish in transient solo: {tone_rms}"

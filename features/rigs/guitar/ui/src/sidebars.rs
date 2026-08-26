@@ -86,7 +86,10 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
         .collect();
     let mut loose: Vec<(usize, PatchInfo)> = Vec::new();
     for (i, p) in patch_list.iter().enumerate() {
-        match groups.iter_mut().find(|(name, _)| name.eq_ignore_ascii_case(&p.stack)) {
+        match groups
+            .iter_mut()
+            .find(|(name, _)| name.eq_ignore_ascii_case(&p.stack))
+        {
             Some((_, v)) => v.push((i, p.clone())),
             None => loose.push((i, p.clone())),
         }

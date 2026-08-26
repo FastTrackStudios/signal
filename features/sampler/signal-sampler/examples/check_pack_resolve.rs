@@ -14,10 +14,15 @@ use signal_sampler::PlayerPatch;
 use signal_sampler::engine::default_articulation as engine_default;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pack = std::env::args().nth(1).expect("usage: check_pack_resolve <pack>");
+    let pack = std::env::args()
+        .nth(1)
+        .expect("usage: check_pack_resolve <pack>");
     let patch = PlayerPatch::from_pack(Path::new(&pack))?;
     let spec = &patch.spec;
-    println!(">> engine default articulation = {:?}", engine_default(spec));
+    println!(
+        ">> engine default articulation = {:?}",
+        engine_default(spec)
+    );
 
     // ── Zone-mode packs (CSS/CSB per-articulation packs, Omnisphere) ─────────
     // Convention-mode `patch.resolve` never fires for these; the shared CLI
@@ -54,22 +59,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Report coverage for EVERY declared articulation (the engine can select any).
     for art in &spec.articulations {
-        let dyns: Vec<String> =
-            if art.dynamics.is_empty() { vec![String::new()] } else { art.dynamics.clone() };
+        let dyns: Vec<String> = if art.dynamics.is_empty() {
+            vec![String::new()]
+        } else {
+            art.dynamics.clone()
+        };
         let (mut tot, mut hit, mut playable) = (0usize, 0usize, 0usize);
         for n in lo..=hi {
             let mut any = false;
             for d in &dyns {
                 tot += 1;
-                if patch.resolve(&signal_sampler::SampleQuery {
-                    section_id: &section.id,
-                    articulation_id: &art.id,
-                    mic_id: mic,
-                    dynamic: d,
-                    target_note: n,
-                    direction: "",
-                    rr: 0,
-                }).is_some() {
+                if patch
+                    .resolve(&signal_sampler::SampleQuery {
+                        section_id: &section.id,
+                        articulation_id: &art.id,
+                        mic_id: mic,
+                        dynamic: d,
+                        target_note: n,
+                        direction: "",
+                        rr: 0,
+                    })
+                    .is_some()
+                {
                     hit += 1;
                     any = true;
                 }
@@ -78,7 +89,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 playable += 1;
             }
         }
-        println!("  artic '{}': {hit}/{tot} note×dyn, {playable}/{} notes", art.id, (lo..=hi).count());
+        println!(
+            "  artic '{}': {hit}/{tot} note×dyn, {playable}/{} notes",
+            art.id,
+            (lo..=hi).count()
+        );
     }
 
     // Check the first (default) articulation — the one the engine plays by default.
@@ -91,8 +106,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .find(|a| a.id == default_id)
         .ok_or("default articulation missing from spec")?;
-    let dyns: Vec<String> =
-        if art.dynamics.is_empty() { vec![String::new()] } else { art.dynamics.clone() };
+    let dyns: Vec<String> = if art.dynamics.is_empty() {
+        vec![String::new()]
+    } else {
+        art.dynamics.clone()
+    };
 
     let mut total = 0usize;
     let mut hits = 0usize;
@@ -103,7 +121,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut any = false;
         for d in &dyns {
             total += 1;
-            if patch.resolve(&signal_sampler::SampleQuery {
+            if patch
+                .resolve(&signal_sampler::SampleQuery {
                     section_id: &section.id,
                     articulation_id: &art.id,
                     mic_id: mic,
@@ -111,7 +130,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     target_note: n,
                     direction: "",
                     rr: 0,
-                }).is_some() {
+                })
+                .is_some()
+            {
                 any = true;
                 hits += 1;
             }
@@ -134,7 +155,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !miss_notes.is_empty() {
         println!("  notes with NO sample at any dynamic: {miss_notes:?}");
     }
-    println!("{}", if miss_notes.is_empty() { "PASS — every note resolves" } else { "PARTIAL" });
+    println!(
+        "{}",
+        if miss_notes.is_empty() {
+            "PASS — every note resolves"
+        } else {
+            "PARTIAL"
+        }
+    );
     Ok(())
 }
 
@@ -163,6 +191,9 @@ fn note_name_midi(s: &str) -> u8 {
         semis -= 1;
         i += 1;
     }
-    let oct: i32 = std::str::from_utf8(&b[i..]).ok().and_then(|o| o.parse().ok()).unwrap_or(4);
+    let oct: i32 = std::str::from_utf8(&b[i..])
+        .ok()
+        .and_then(|o| o.parse().ok())
+        .unwrap_or(4);
     ((oct + 1) * 12 + semis).clamp(0, 127) as u8
 }

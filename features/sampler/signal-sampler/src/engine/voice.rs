@@ -1181,7 +1181,11 @@ impl Voice {
 /// CPU. The branch is predictable (almost always false) and cheap.
 #[inline(always)]
 fn flush_denormal(x: f32) -> f32 {
-    if x.abs() < 1.0e-30 { 0.0 } else { x }
+    if x.abs() < 1.0e-30 {
+        0.0
+    } else {
+        x
+    }
 }
 
 // ── Voice pool ────────────────────────────────────────────────────────────────
@@ -1312,9 +1316,10 @@ impl VoicePool {
         self.voices.retain(|v| !v.is_done());
 
         if self.voices.len() >= self.max_voices
-            && self.steal_one_for(&voice) == StealOutcome::DropIncoming {
-                return;
-            }
+            && self.steal_one_for(&voice) == StealOutcome::DropIncoming
+        {
+            return;
+        }
         self.voices.push(voice);
     }
 
@@ -1623,7 +1628,11 @@ impl VoicePool {
         for v in &mut self.voices {
             // Solo filter: muted voices render into a discard buffer so their
             // lifecycle (and every soloed note's timing) is unchanged.
-            if self.solo_notes.as_ref().is_some_and(|s| !s.contains(&v.note)) {
+            if self
+                .solo_notes
+                .as_ref()
+                .is_some_and(|s| !s.contains(&v.note))
+            {
                 if self.solo_scratch.len() < len {
                     self.solo_scratch.resize(len, 0.0);
                 }
@@ -1656,7 +1665,11 @@ impl VoicePool {
         let nbuses = outputs.len() / nmics;
         let len = outputs[0].len();
         for v in &mut self.voices {
-            if self.solo_notes.as_ref().is_some_and(|s| !s.contains(&v.note)) {
+            if self
+                .solo_notes
+                .as_ref()
+                .is_some_and(|s| !s.contains(&v.note))
+            {
                 if self.solo_scratch.len() < len {
                     self.solo_scratch.resize(len, 0.0);
                 }
@@ -1855,11 +1868,10 @@ mod tests {
 
         assert_eq!(pool.stolen_count(), 1);
         assert_eq!(pool.active_count(), MAX_VOICES + 1);
-        assert!(
-            pool.voices
-                .iter()
-                .any(|v| matches!(v.state, VoiceState::Releasing { .. }))
-        );
+        assert!(pool
+            .voices
+            .iter()
+            .any(|v| matches!(v.state, VoiceState::Releasing { .. })));
     }
 
     #[test]
@@ -1873,11 +1885,10 @@ mod tests {
         assert_eq!(pool.max_voices(), 2);
         assert_eq!(pool.stolen_count(), 1);
         assert_eq!(pool.active_count(), 3);
-        assert!(
-            pool.voices
-                .iter()
-                .any(|v| matches!(v.state, VoiceState::Releasing { .. }))
-        );
+        assert!(pool
+            .voices
+            .iter()
+            .any(|v| matches!(v.state, VoiceState::Releasing { .. })));
     }
 
     #[test]
@@ -1911,14 +1922,8 @@ mod tests {
             VoiceStealPolicy::parse("same-note-first"),
             VoiceStealPolicy::SameNoteFirst
         );
-        assert_eq!(
-            VoiceStealPolicy::parse("oldest"),
-            VoiceStealPolicy::Oldest
-        );
-        assert_eq!(
-            VoiceStealPolicy::parse("none"),
-            VoiceStealPolicy::DropNew
-        );
+        assert_eq!(VoiceStealPolicy::parse("oldest"), VoiceStealPolicy::Oldest);
+        assert_eq!(VoiceStealPolicy::parse("none"), VoiceStealPolicy::DropNew);
         assert_eq!(
             VoiceStealPolicy::parse(""),
             VoiceStealPolicy::ReleaseFirstQuietest
@@ -1966,7 +1971,6 @@ mod tests {
         assert!(voice.is_done());
     }
 
-
     /// The sustain pedal catches strings whose keys are still down, and only
     /// those. A note the player already let go of is damped — a pedal press
     /// afterwards must not freeze its release tail.
@@ -1988,11 +1992,10 @@ mod tests {
         for v in pool.voices_mut() {
             v.note_off();
         }
-        assert!(
-            pool.voices_mut()
-                .iter()
-                .all(|v| matches!(v.state, VoiceState::Releasing { .. }))
-        );
+        assert!(pool
+            .voices_mut()
+            .iter()
+            .all(|v| matches!(v.state, VoiceState::Releasing { .. })));
 
         // The player is still holding 60 (its key is down); 64 was released.
         let restored = pool.repedal_held(&|n| n == 60);
@@ -2154,7 +2157,7 @@ mod tests {
         let sr = 48_000;
         let data = click_tone(sr, sr as usize / 10, 220.0, 0.5, 0.4); // samples in [0.1, 0.9]
         let declick = sr as usize * 6 / 1000; // 6 ms
-        // Start mid-sample, as a prefired legato transition does (start_offset).
+                                              // Start mid-sample, as a prefired legato transition does (start_offset).
         let mut declicked = Voice::with_rate(Arc::clone(&data), 60, VoiceKind::Legato, 1.0, 1.0, 8)
             .with_sample_window(1000, None)
             .with_attack(declick);
@@ -2223,8 +2226,10 @@ mod tests {
                 [v, -v]
             })
             .collect();
-        let ints: Vec<i32> =
-            pcm.iter().map(|s| (s.clamp(-1.0, 1.0) * 8_388_607.0) as i32).collect();
+        let ints: Vec<i32> = pcm
+            .iter()
+            .map(|s| (s.clamp(-1.0, 1.0) * 8_388_607.0) as i32)
+            .collect();
         let Ok(flac) = crate::engine::cache::encode_flac_i24_for_test(&ints, ch, sr) else {
             return;
         };
@@ -2232,8 +2237,7 @@ mod tests {
         std::fs::write(&tmp, &flac).expect("write");
         let file = std::fs::File::open(&tmp).expect("open");
         let map = Arc::new(unsafe { memmap2::Mmap::map(&file) }.expect("map"));
-        let streamed =
-            StreamedSample::open(map, 0, flac.len(), ch, sr, n).expect("stream");
+        let streamed = StreamedSample::open(map, 0, flac.len(), ch, sr, n).expect("stream");
         let data = Arc::new(SampleData::streamed(streamed));
 
         // Loop the 3rd..5th second — entirely past the head, and longer than

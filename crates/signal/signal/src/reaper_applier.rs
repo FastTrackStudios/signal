@@ -13,16 +13,16 @@
 //! reverb/delay tail rings out naturally, while the new patch plays
 //! immediately on a fresh child track.
 
-use tokio::sync::{Mutex, RwLock};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::daw_compat::TrackHandleCompat;
 use daw::rpc::{Project, TrackHandle};
 use daw::service::TrackRef;
-use signal_live::engine::{DawPatchApplier, DawStateChunk, PatchApplyError, graph_state_chunks};
+use signal_live::engine::{graph_state_chunks, DawPatchApplier, DawStateChunk, PatchApplyError};
 use signal_proto::plugin_block::FxRole;
 use signal_proto::resolve::ResolvedGraph;
 
@@ -43,7 +43,10 @@ struct PreloadedPatchTrack {
 /// The folder rig structure managed by the applier.
 struct FolderRigState {
     /// The "Guitar Rig" folder track.
-    #[allow(dead_code, reason = "kept as the folder-track handle for future folder-level ops (rename/move); not yet read anywhere")]
+    #[allow(
+        dead_code,
+        reason = "kept as the folder-track handle for future folder-level ops (rename/move); not yet read anywhere"
+    )]
     folder_track: TrackHandle,
     /// The "Input: Guitar Rig" track that holds sends to patch tracks.
     input_track: TrackHandle,

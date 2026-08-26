@@ -54,7 +54,10 @@ impl Default for NamParams {
             input_db: FloatParam::new(
                 "Input Gain",
                 0.0,
-                FloatRange::Linear { min: -24.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_smoother(SmoothingStyle::Linear(20.0))
@@ -62,7 +65,10 @@ impl Default for NamParams {
             output_db: FloatParam::new(
                 "Output Gain",
                 0.0,
-                FloatRange::Linear { min: -24.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_smoother(SmoothingStyle::Linear(20.0))

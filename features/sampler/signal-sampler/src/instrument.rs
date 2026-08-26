@@ -72,7 +72,8 @@ impl SamplerInstrument {
                 self.engine.note_on(key.get(), velocity.get());
             }
             MidiEvent::NoteOff { key, velocity, .. } => {
-                self.engine.note_off_with_velocity(key.get(), velocity.get());
+                self.engine
+                    .note_off_with_velocity(key.get(), velocity.get());
             }
             MidiEvent::ControlChange {
                 controller, value, ..
@@ -306,8 +307,8 @@ zones (
     #[test]
     fn apply_midi_maps_every_handled_variant() {
         use midicore::{
-            Channel, ControllerNumber, ControllerValue, KeyNumber, MidiEvent, PitchBend,
-            Pressure, ProgramNumber, Velocity,
+            Channel, ControllerNumber, ControllerValue, KeyNumber, MidiEvent, PitchBend, Pressure,
+            ProgramNumber, Velocity,
         };
         let ch = Channel::new(0);
         let dir = std::env::temp_dir().join(format!("signal-sampler-map-{}", std::process::id()));

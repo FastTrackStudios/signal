@@ -1,11 +1,11 @@
 //! Engine repository — data access for Engine collections and EngineScene variants.
 
 use sea_orm::*;
-use signal_proto::EngineType;
 use signal_proto::engine::{Engine, EngineId, EngineScene, EngineSceneId, LayerSelection};
 use signal_proto::layer::LayerId;
 use signal_proto::metadata::Metadata;
 use signal_proto::overrides::Override;
+use signal_proto::EngineType;
 
 use crate::entity;
 use crate::{DatabaseConnection, StorageError, StorageResult};

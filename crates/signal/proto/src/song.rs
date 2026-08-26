@@ -7,7 +7,7 @@ use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 use crate::metadata::Metadata;
-use crate::override_policy::{FreePolicy, OverridePolicyError, validate_overrides};
+use crate::override_policy::{validate_overrides, FreePolicy, OverridePolicyError};
 use crate::overrides::Override;
 use crate::profile::PatchId;
 use crate::rig::{RigId, RigSceneId};

@@ -50,12 +50,18 @@ impl Default for UnisonParams {
             voices: IntParam::new(
                 "Voices",
                 2,
-                IntRange::Linear { min: 2, max: MAX_VOICES as i32 },
+                IntRange::Linear {
+                    min: 2,
+                    max: MAX_VOICES as i32,
+                },
             ),
             detune: FloatParam::new(
                 "Detune",
                 12.0,
-                FloatRange::Linear { min: 0.0, max: 50.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 50.0,
+                },
             )
             .with_unit(" ct")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
@@ -65,7 +71,10 @@ impl Default for UnisonParams {
             delay_ms: FloatParam::new(
                 "Delay",
                 18.0,
-                FloatRange::Linear { min: 0.0, max: 40.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 40.0,
+                },
             )
             .with_unit(" ms")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
@@ -87,7 +96,10 @@ impl Default for UnisonParams {
             output_db: FloatParam::new(
                 "Output",
                 0.0,
-                FloatRange::Linear { min: -24.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -186,7 +198,8 @@ impl Plugin for FtsUnison {
             self.left[i] = l;
             self.right[i] = r;
         }
-        self.engine.process(&mut self.left[..n], &mut self.right[..n]);
+        self.engine
+            .process(&mut self.left[..n], &mut self.right[..n]);
         for (i, mut frame) in buffer.iter_samples().enumerate() {
             let mut it = frame.iter_mut();
             if let Some(s) = it.next() {

@@ -103,16 +103,19 @@ impl DynBand {
     /// Never call per sample.
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        self.gain_smooth_coeff =
-            1.0 - (-1.0 / (GAIN_SMOOTH_MS * 0.001 * sample_rate)).exp();
+        self.gain_smooth_coeff = 1.0 - (-1.0 / (GAIN_SMOOTH_MS * 0.001 * sample_rate)).exp();
         let shape = match self.params.shape {
             DynShape::Bell => SvfShape::Bell,
             DynShape::LowShelf => SvfShape::LowShelf,
             DynShape::HighShelf => SvfShape::HighShelf,
         };
         self.filter.set_sample_rate(sample_rate);
-        self.filter
-            .set(shape, self.params.freq_hz, self.params.q, self.applied_gain_db);
+        self.filter.set(
+            shape,
+            self.params.freq_hz,
+            self.params.q,
+            self.applied_gain_db,
+        );
         self.side_bp.set_sample_rate(sample_rate);
         // Band-linked trigger: bandpass-ish selectivity via a bell-Q
         // pair of cut filters is overkill — a resonant band-limited
@@ -289,6 +292,9 @@ mod tests {
             b.tick(&mut l, &mut r, side);
             max_gain = max_gain.max(b.live_gain_db());
         }
-        assert!(max_gain > 7.0, "positive range should boost when loud: {max_gain}");
+        assert!(
+            max_gain > 7.0,
+            "positive range should boost when loud: {max_gain}"
+        );
     }
 }

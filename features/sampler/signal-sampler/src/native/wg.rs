@@ -42,7 +42,11 @@ struct Allpass {
 }
 impl Allpass {
     fn new(a: f32) -> Self {
-        Self { a, x1: 0.0, y1: 0.0 }
+        Self {
+            a,
+            x1: 0.0,
+            y1: 0.0,
+        }
     }
     #[inline]
     fn process(&mut self, x: f32) -> f32 {
@@ -116,7 +120,11 @@ struct HammerParams {
 }
 impl Default for HammerParams {
     fn default() -> Self {
-        Self { k_scale: 1.0, p_exp: 2.8, v_scale: 1.0 }
+        Self {
+            k_scale: 1.0,
+            p_exp: 2.8,
+            v_scale: 1.0,
+        }
     }
 }
 
@@ -279,20 +287,33 @@ impl CoupledStrings {
         let n = n_strings.max(1);
         let strings: Vec<StringWaveguide> = (0..n)
             .map(|i| {
-                let frac = if n > 1 { i as f32 / (n as f32 - 1.0) - 0.5 } else { 0.0 };
+                let frac = if n > 1 {
+                    i as f32 / (n as f32 - 1.0) - 0.5
+                } else {
+                    0.0
+                };
                 let f = f0 * 2f32.powf(frac * detune_cents / 1200.0);
                 StringWaveguide::new(f, t60, brightness, b, n_disp, sr)
             })
             .collect();
         let g = 2.0 / (n as f32 + zb.max(0.0));
-        Self { strings, g, outs: vec![0.0; n], skew: 0.15 }
+        Self {
+            strings,
+            g,
+            outs: vec![0.0; n],
+            skew: 0.15,
+        }
     }
 
     fn strike(&mut self, vel01: f32, strike_pos: f32) {
         let n = self.strings.len();
         for (i, s) in self.strings.iter_mut().enumerate() {
             s.strike(vel01, strike_pos);
-            let frac = if n > 1 { i as f32 / (n as f32 - 1.0) - 0.5 } else { 0.0 };
+            let frac = if n > 1 {
+                i as f32 / (n as f32 - 1.0) - 0.5
+            } else {
+                0.0
+            };
             s.scale_exc(1.0 + self.skew * frac);
             let skew = (0.0003 * i as f32 * s.sr) as usize;
             s.delay_exc(skew);
@@ -384,8 +405,20 @@ fn fallback_row(note: u8) -> WgNoteRow {
     WgNoteRow {
         note,
         f0,
-        b: if x < 40.0 { 3.5e-4 - (x - 21.0) * 1.2e-5 } else { 1.1e-4 * 2f32.powf((x - 40.0) / 44.0 * 1.5) },
-        n_disp: if x < 40.0 { 48 } else if x < 60.0 { 24 } else if x < 76.0 { 8 } else { 4 },
+        b: if x < 40.0 {
+            3.5e-4 - (x - 21.0) * 1.2e-5
+        } else {
+            1.1e-4 * 2f32.powf((x - 40.0) / 44.0 * 1.5)
+        },
+        n_disp: if x < 40.0 {
+            48
+        } else if x < 60.0 {
+            24
+        } else if x < 76.0 {
+            8
+        } else {
+            4
+        },
         t60: (64.0 * 2f32.powf(-(x - 21.0) / 26.0)).clamp(4.0, 64.0),
         zb: 600.0,
         brightness: 0.4 + 0.4 * ((x - 21.0) / 87.0),
@@ -470,13 +503,31 @@ impl NativeWaveguide {
             }
         }
         let r = self.row(note);
-        let n_strings = if note < 28 { 1 } else if note < 40 { 2 } else { 3 };
+        let n_strings = if note < 28 {
+            1
+        } else if note < 40 {
+            2
+        } else {
+            3
+        };
         let sr = self.sample_rate as u32;
         let mut cs = CoupledStrings::new(
-            r.f0, r.t60, r.brightness, r.b, r.n_disp, sr, n_strings, r.detune, r.zb,
+            r.f0,
+            r.t60,
+            r.brightness,
+            r.b,
+            r.n_disp,
+            sr,
+            n_strings,
+            r.detune,
+            r.zb,
         );
         cs.skew = r.skew;
-        let h = HammerParams { k_scale: r.hammer_k, p_exp: r.hammer_p, v_scale: r.hammer_v };
+        let h = HammerParams {
+            k_scale: r.hammer_k,
+            p_exp: r.hammer_p,
+            v_scale: r.hammer_v,
+        };
         for s in &mut cs.strings {
             s.hammer = h;
         }
@@ -525,7 +576,9 @@ impl NativeWaveguide {
         match message {
             MidiEvent::NoteOn { key, velocity, .. } => self.note_on(key.get(), velocity.get()),
             MidiEvent::NoteOff { key, .. } => self.note_off(key.get()),
-            MidiEvent::ControlChange { controller, value, .. } => {
+            MidiEvent::ControlChange {
+                controller, value, ..
+            } => {
                 if controller.get() == 64 {
                     self.pedal_change(value.get() >= 64);
                 }
@@ -652,17 +705,30 @@ mod tests {
         let (inl, inr) = (vec![0.0; 512], vec![0.0; 512]);
         let (mut outl, mut outr) = (vec![0.0; 512], vec![0.0; 512]);
         let midi = [note_on(57, 100)];
-        let ev = PluginEvents { params: &[], midi: &midi, note_expressions: &[] };
+        let ev = PluginEvents {
+            params: &[],
+            midi: &midi,
+            note_expressions: &[],
+        };
         // run a few blocks so the hammer pulse circulates
-        m.process_block(&inl, &inr, &mut outl, &mut outr, &ev).unwrap();
-        let ev2 = PluginEvents { params: &[], midi: &[], note_expressions: &[] };
+        m.process_block(&inl, &inr, &mut outl, &mut outr, &ev)
+            .unwrap();
+        let ev2 = PluginEvents {
+            params: &[],
+            midi: &[],
+            note_expressions: &[],
+        };
         let mut energy = 0.0f32;
         for _ in 0..20 {
-            m.process_block(&inl, &inr, &mut outl, &mut outr, &ev2).unwrap();
+            m.process_block(&inl, &inr, &mut outl, &mut outr, &ev2)
+                .unwrap();
             energy += outl.iter().map(|s| s * s).sum::<f32>();
         }
         assert_eq!(m.active_voices(), 1);
-        assert!(energy > 0.5, "waveguide voice should be audible, energy={energy}");
+        assert!(
+            energy > 0.5,
+            "waveguide voice should be audible, energy={energy}"
+        );
     }
 
     #[test]
@@ -673,8 +739,13 @@ mod tests {
         let (inl, inr) = (vec![0.0; 512], vec![0.0; 512]);
         let (mut outl, mut outr) = (vec![0.0; 512], vec![0.0; 512]);
         let on = [note_on(60, 100)];
-        let ev = PluginEvents { params: &[], midi: &on, note_expressions: &[] };
-        m.process_block(&inl, &inr, &mut outl, &mut outr, &ev).unwrap();
+        let ev = PluginEvents {
+            params: &[],
+            midi: &on,
+            note_expressions: &[],
+        };
+        m.process_block(&inl, &inr, &mut outl, &mut outr, &ev)
+            .unwrap();
         use midicore::{Channel, KeyNumber, MidiEvent};
         let off = [PluginMidiEvent {
             offset: 0,
@@ -684,12 +755,22 @@ mod tests {
                 velocity: midicore::Velocity::new(0),
             },
         }];
-        let ev_off = PluginEvents { params: &[], midi: &off, note_expressions: &[] };
-        m.process_block(&inl, &inr, &mut outl, &mut outr, &ev_off).unwrap();
-        let ev2 = PluginEvents { params: &[], midi: &[], note_expressions: &[] };
+        let ev_off = PluginEvents {
+            params: &[],
+            midi: &off,
+            note_expressions: &[],
+        };
+        m.process_block(&inl, &inr, &mut outl, &mut outr, &ev_off)
+            .unwrap();
+        let ev2 = PluginEvents {
+            params: &[],
+            midi: &[],
+            note_expressions: &[],
+        };
         // after ~0.5 s of release the voice should be gone
         for _ in 0..50 {
-            m.process_block(&inl, &inr, &mut outl, &mut outr, &ev2).unwrap();
+            m.process_block(&inl, &inr, &mut outl, &mut outr, &ev2)
+                .unwrap();
         }
         assert_eq!(m.active_voices(), 0, "released voice should die");
     }

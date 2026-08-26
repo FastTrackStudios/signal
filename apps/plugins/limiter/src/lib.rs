@@ -19,8 +19,8 @@
 
 use nice_plug::prelude::*;
 use nice_plug_dioxus::{create_dioxus_editor_with_state, DioxusState};
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use comp::limiter::{sin_clip, GoldenClip};
 use limiter_ui::params::{LimiterParams, LimiterUiState};
@@ -240,8 +240,7 @@ impl Plugin for FtsLimiter {
                     input_peak = input_peak.max(sample.abs());
                     let normalized = *sample as f64 * in_gain * inv_ceiling;
                     *sample =
-                        (ch.tick(normalized, release_coeff, character, true_peak) * ceiling)
-                            as f32;
+                        (ch.tick(normalized, release_coeff, character, true_peak) * ceiling) as f32;
                     output_peak = output_peak.max(sample.abs());
                     min_envelope = min_envelope.min(ch.envelope);
                 }

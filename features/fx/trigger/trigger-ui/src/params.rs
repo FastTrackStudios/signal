@@ -8,8 +8,8 @@
 
 use atomic_float::AtomicF32;
 use audiocore_core::prelude::*;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
 
 /// Samples kept in the waveform history ring (one per processed block —
 /// ~2.7 s at 512-sample blocks / 48 kHz).
@@ -196,14 +196,20 @@ impl Default for TriggerParams {
             threshold_db: FloatParam::new(
                 "Threshold",
                 -30.0,
-                FloatRange::Linear { min: -60.0, max: 0.0 },
+                FloatRange::Linear {
+                    min: -60.0,
+                    max: 0.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             sensitivity_ms: FloatParam::new(
                 "Sensitivity",
                 1.0,
-                FloatRange::Linear { min: 0.0, max: 10.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 10.0,
+                },
             )
             .with_unit(" ms")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -228,14 +234,20 @@ impl Default for TriggerParams {
             sc_hpf_hz: FloatParam::new(
                 "SC HPF",
                 0.0,
-                FloatRange::Linear { min: 0.0, max: 1_000.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 1_000.0,
+                },
             )
             .with_unit(" Hz")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
             sc_lpf_hz: FloatParam::new(
                 "SC LPF",
                 0.0,
-                FloatRange::Linear { min: 0.0, max: 20_000.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 20_000.0,
+                },
             )
             .with_unit(" Hz")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),

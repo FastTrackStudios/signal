@@ -21,13 +21,12 @@
 
 use std::path::PathBuf;
 
-use signal_sampler::SamplerRig;
 use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
+use signal_sampler::SamplerRig;
 
 const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
-const CSS_CONFIG: &str =
-    "features/rigs/orchestra/specs/cinematic-strings.styx";
+const CSS_CONFIG: &str = "features/rigs/orchestra/specs/cinematic-strings.styx";
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
 const SEED: u64 = 0x000D_A11A_5EED_0001;
@@ -263,7 +262,10 @@ fn main() -> eyre::Result<()> {
             4,
             click_sample.exists().then_some(click_sample),
         );
-        write_wav(&PathBuf::from(format!("target/qa_{name}.click.wav")), &click)?;
+        write_wav(
+            &PathBuf::from(format!("target/qa_{name}.click.wav")),
+            &click,
+        )?;
 
         // Boundary marks: note onsets (first = attack, rest = transitions) and
         // phrase-end note-offs. Frames come straight from the notated grid.

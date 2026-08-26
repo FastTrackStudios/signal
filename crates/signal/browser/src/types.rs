@@ -1,9 +1,9 @@
 //! Type definitions for the collection browser.
 
-use signal_proto::SignalChain;
 use signal_proto::metadata::Metadata as MetadataModel;
 use signal_proto::rig::RigType;
 use signal_proto::tagging::{TagCategory, TagSet};
+use signal_proto::SignalChain;
 
 // region: --- Navigation & Sort
 

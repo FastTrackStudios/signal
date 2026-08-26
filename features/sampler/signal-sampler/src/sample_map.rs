@@ -1003,7 +1003,10 @@ mod tests {
         // v01..v19 map across 1..=127, so layers cannot collapse onto one key.
         assert_eq!(body.dynamic, "67", "v10 of 19 lands mid-scale");
         let louder = parse_sample_stem("RR01_SL01 VVEP r06_100 v19").unwrap();
-        assert_ne!(louder.dynamic, body.dynamic, "velocity layers stay distinct");
+        assert_ne!(
+            louder.dynamic, body.dynamic,
+            "velocity layers stay distinct"
+        );
 
         // The releases from the same patch — these are what did get packed.
         let rel = parse_sample_stem("RR01_SL01 VVRFstr04_100-100").expect("release parses");

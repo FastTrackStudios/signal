@@ -44,7 +44,6 @@ pub enum BlockKind {
     Custom(CustomRef),
 }
 
-
 impl BlockKind {
     /// Short identifier for the variant — used in UI tags and log lines.
     pub const fn tag(&self) -> &'static str {
@@ -223,11 +222,23 @@ mod tests {
     #[test]
     fn block_types_classify_as_generators() {
         use crate::block::BlockType as T;
-        assert_eq!(T::Oscillator.soundsource_kind(), Some(SoundsourceKind::Oscillator));
-        assert_eq!(T::Wavetable.soundsource_kind(), Some(SoundsourceKind::Oscillator));
+        assert_eq!(
+            T::Oscillator.soundsource_kind(),
+            Some(SoundsourceKind::Oscillator)
+        );
+        assert_eq!(
+            T::Wavetable.soundsource_kind(),
+            Some(SoundsourceKind::Oscillator)
+        );
         assert_eq!(T::Sampler.soundsource_kind(), Some(SoundsourceKind::Sample));
-        assert_eq!(T::Formant.soundsource_kind(), Some(SoundsourceKind::PhysicalModel));
-        assert_eq!(T::Harmonic.soundsource_kind(), Some(SoundsourceKind::PhysicalModel));
+        assert_eq!(
+            T::Formant.soundsource_kind(),
+            Some(SoundsourceKind::PhysicalModel)
+        );
+        assert_eq!(
+            T::Harmonic.soundsource_kind(),
+            Some(SoundsourceKind::PhysicalModel)
+        );
         assert_eq!(T::Input.soundsource_kind(), Some(SoundsourceKind::Audio));
         // Processors are not generators.
         assert_eq!(T::Amp.soundsource_kind(), None);

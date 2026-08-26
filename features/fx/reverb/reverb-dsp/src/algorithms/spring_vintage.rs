@@ -13,7 +13,7 @@
 //! The 3 springs create a complex interference pattern that's denser
 //! and warmer than the 2-spring Classic tank.
 
-use crate::algorithm::{SpringDwell, SpringParams, AlgorithmParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, ReverbAlgorithm, SpringDwell, SpringParams};
 use crate::primitives::one_pole::Lp1;
 use crate::primitives::spectral_delay::SpectralDelay;
 use audiocore_dsp::dc_blocker::DcBlocker;

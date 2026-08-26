@@ -484,7 +484,6 @@ impl Diffuser {
     }
 }
 
-
 /// NE570/571-style 2:1 compander half (one-pole full-wave-rectifier
 /// averager, τ ≈ 5 ms). The 12-bit era stored COMPRESSED audio; the
 /// expander at playback modulates the quantization-noise floor with

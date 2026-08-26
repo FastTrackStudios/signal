@@ -47,7 +47,7 @@ pub(super) fn shelf_universal_synth_cascade(
     high_shelf: bool,
 ) -> Vec<Coeffs> {
     use crate::proq4_per_section_helpers::{
-        AnalogBiquad, Prototype, proq4_universal_section_synth,
+        proq4_universal_section_synth, AnalogBiquad, Prototype,
     };
 
     // The helper dispatcher uses Pro-Q's internal audio filter type:

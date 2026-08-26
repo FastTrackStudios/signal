@@ -23,7 +23,8 @@
 
 /// Release feed: codeberg releases API for the monorepo.
 /// (Placeholder — releases are not published yet.)
-pub const FEED_URL: &str = "https://codeberg.org/api/v1/repos/FastTrackStudios/FastTrackStudio/releases?limit=1";
+pub const FEED_URL: &str =
+    "https://codeberg.org/api/v1/repos/FastTrackStudios/FastTrackStudio/releases?limit=1";
 
 /// The running app's version (workspace version at build time).
 pub fn current_version() -> &'static str {
@@ -46,13 +47,19 @@ pub enum UpdateStatus {
     UpToDate,
     #[allow(dead_code)]
     Available(UpdateInfo),
-    #[allow(dead_code, reason = "STUB — no code path produces a network failure yet; the network half is deliberately unimplemented")]
+    #[allow(
+        dead_code,
+        reason = "STUB — no code path produces a network failure yet; the network half is deliberately unimplemented"
+    )]
     Failed(String),
 }
 
 /// The update pipeline. One real implementation will exist
 /// ([`CodebergUpdater`]); the trait keeps the UI testable.
-#[allow(dead_code, reason = "STUB trait — download/apply are the not-yet-implemented network/install halves described at the top of this file")]
+#[allow(
+    dead_code,
+    reason = "STUB trait — download/apply are the not-yet-implemented network/install halves described at the top of this file"
+)]
 pub trait Updater {
     /// Query [`FEED_URL`] and compare against [`current_version`].
     fn check_for_updates(&self) -> UpdateStatus;

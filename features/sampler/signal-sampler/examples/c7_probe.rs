@@ -12,8 +12,8 @@
 
 use std::path::Path;
 
-use signal_sampler::SamplerRig;
 use signal_sampler::engine::budget;
+use signal_sampler::SamplerRig;
 
 const PACK: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/\
 Packs/LA Custom C7 Grand.signalpack";
@@ -37,20 +37,26 @@ fn rss_anon_mb() -> f64 {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "warn".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
         )
         .init();
     let sr = 48_000usize;
     let pack = std::env::args().nth(1).unwrap_or_else(|| PACK.to_string());
-    let secs: f64 = std::env::args().nth(2).and_then(|s| s.parse().ok()).unwrap_or(4.0);
+    let secs: f64 = std::env::args()
+        .nth(2)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(4.0);
 
     let rig = SamplerRig::new_offline(sr as u32);
     let t = std::time::Instant::now();
     rig.load_pack(ID, Path::new(&pack))?;
     rig.set_midi_channel(ID, 0);
     rig.set_default_instrument(ID);
-    println!("loaded {pack}\n  in {:?} · anon {:.1} MB", t.elapsed(), rss_anon_mb());
+    println!(
+        "loaded {pack}\n  in {:?} · anon {:.1} MB",
+        t.elapsed(),
+        rss_anon_mb()
+    );
 
     // Let the preloader settle so the first note isn't racing it.
     let mut buf = vec![0.0f32; 512 * 2];

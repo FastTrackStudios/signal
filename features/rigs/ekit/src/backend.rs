@@ -19,10 +19,22 @@ pub const DEFAULT_COLS: u32 = 4;
 /// The classes a fresh 4×4 grid is seeded with (Atlas "Default" layout —
 /// the bottom row is the backbone, upper rows fill out the kit).
 const DEFAULT_LAYOUT: &[&str] = &[
-    "kick", "snare", "hat-closed", "hat-open", // row 1
-    "kick", "clap", "hat-closed", "cymbal", // row 2
-    "tom", "snare", "perc", "cymbal", // row 3
-    "tom", "perc", "fx", "fx", // row 4
+    "kick",
+    "snare",
+    "hat-closed",
+    "hat-open", // row 1
+    "kick",
+    "clap",
+    "hat-closed",
+    "cymbal", // row 2
+    "tom",
+    "snare",
+    "perc",
+    "cymbal", // row 3
+    "tom",
+    "perc",
+    "fx",
+    "fx", // row 4
 ];
 
 struct LoadedSpace {
@@ -86,7 +98,11 @@ impl EkitBackend {
             inner: Arc::new(Inner {
                 rig: Mutex::new(None),
                 space: Mutex::new(None),
-                state: Mutex::new(State { pads, cursors, ..State::default() }),
+                state: Mutex::new(State {
+                    pads,
+                    cursors,
+                    ..State::default()
+                }),
                 events: architect::rig::events_hub(),
                 pump_started: AtomicBool::new(false),
                 roll: std::sync::atomic::AtomicU32::new(0),
@@ -165,20 +181,20 @@ impl EkitBackend {
     fn open_blocking(&self) {
         let mut open_error: Option<String> = None;
         {
-        let mut rig = self.inner.rig.lock().unwrap();
-        if rig.is_some() {
-            return;
-        }
-        match SamplerRig::new() {
-            Ok(r) => {
-                r.set_preload_profile(PreloadProfile::DrumKit);
-                *rig = Some(r);
+            let mut rig = self.inner.rig.lock().unwrap();
+            if rig.is_some() {
+                return;
             }
-            Err(e) => {
-                tracing::error!("ekit: audio open failed: {e}");
-                open_error = Some(e.to_string());
+            match SamplerRig::new() {
+                Ok(r) => {
+                    r.set_preload_profile(PreloadProfile::DrumKit);
+                    *rig = Some(r);
+                }
+                Err(e) => {
+                    tracing::error!("ekit: audio open failed: {e}");
+                    open_error = Some(e.to_string());
+                }
             }
-        }
         }
         if let Some(e) = open_error {
             self.inner.state.lock().unwrap().last_error = e;
@@ -213,8 +229,12 @@ impl EkitBackend {
     /// Install `item_idx` on `pad`, building a one-zone percussion engine
     /// for the resolved audio file.
     fn install(&self, pad_index: u32, item_idx: usize) {
-        let Some(loaded) = self.inner.space.lock().unwrap().clone() else { return };
-        let Some(item) = loaded.space.items.get(item_idx) else { return };
+        let Some(loaded) = self.inner.space.lock().unwrap().clone() else {
+            return;
+        };
+        let Some(item) = loaded.space.items.get(item_idx) else {
+            return;
+        };
         let Some(path) = resolve_audio(&loaded.space, item_idx) else {
             tracing::warn!(path = %item.path, "ekit: no audio for item");
             return;
@@ -274,8 +294,13 @@ impl EkitBackend {
         if candidates.is_empty() {
             return None;
         }
-        let n = self.inner.roll.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let mut x = n.wrapping_mul(2654435761).wrapping_add(salt.wrapping_mul(40503));
+        let n = self
+            .inner
+            .roll
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut x = n
+            .wrapping_mul(2654435761)
+            .wrapping_add(salt.wrapping_mul(40503));
         x ^= x >> 13;
         x = x.wrapping_mul(1274126177);
         x ^= x >> 16;
@@ -299,7 +324,9 @@ fn resolve_audio(space: &Space, idx: usize) -> Option<PathBuf> {
     let mut wavs: Vec<PathBuf> = Vec::new();
     let mut stack = vec![direct];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for e in entries.flatten() {
             let p = e.path();
             if p.is_dir() {
@@ -314,11 +341,10 @@ fn resolve_audio(space: &Space, idx: usize) -> Option<PathBuf> {
         }
     }
     wavs.sort();
-    wavs.into_iter()
-        .max_by_key(|p| {
-            let name = p.to_string_lossy().to_lowercase();
-            (velocity_rank(&name), -(p.components().count() as i64))
-        })
+    wavs.into_iter().max_by_key(|p| {
+        let name = p.to_string_lossy().to_lowercase();
+        (velocity_rank(&name), -(p.components().count() as i64))
+    })
 }
 
 /// Highest `vl<N>` / `v<N>` token in a path — the hardest sampled hit.
@@ -352,7 +378,10 @@ fn install_pad_engine(
     // ONLY its own note — a full-range zone would make one hit fire all 16.
     let note = crate::BASE_NOTE + pad.index as u8;
     let dir = path.parent().ok_or("sample has no parent dir")?;
-    let file = path.file_name().and_then(|s| s.to_str()).ok_or("bad sample name")?;
+    let file = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or("bad sample name")?;
     // A minimal percussion library: one zone, whole keyboard, natural pitch.
     // `category drum` puts the engine in percussion mode, so the pad plays
     // the sample unpitched on whatever note it receives.
@@ -391,10 +420,12 @@ zones (
 impl EkitRig for EkitBackend {
     fn start(&self) {
         let b = self.clone();
-        let _ = std::thread::Builder::new().name("ekit-open".into()).spawn(move || {
-            b.open_blocking();
-            b.publish();
-        });
+        let _ = std::thread::Builder::new()
+            .name("ekit-open".into())
+            .spawn(move || {
+                b.open_blocking();
+                b.publish();
+            });
     }
 
     fn stop(&self) {
@@ -447,10 +478,15 @@ impl EkitRig for EkitBackend {
     }
 
     fn randomize_pad(&self, pad: u32) {
-        let Some(space) = self.inner.space.lock().unwrap().clone() else { return };
+        let Some(space) = self.inner.space.lock().unwrap().clone() else {
+            return;
+        };
         let category = {
             let s = self.inner.state.lock().unwrap();
-            s.pads.get(pad as usize).map(|p| p.category.clone()).unwrap_or_default()
+            s.pads
+                .get(pad as usize)
+                .map(|p| p.category.clone())
+                .unwrap_or_default()
         };
         let candidates = Self::candidates(&space, &category);
         if let Some(idx) = self.pick(&candidates, pad) {
@@ -460,7 +496,9 @@ impl EkitRig for EkitBackend {
     }
 
     fn step_similar(&self, pad: u32, delta: i32) {
-        let Some(space) = self.inner.space.lock().unwrap().clone() else { return };
+        let Some(space) = self.inner.space.lock().unwrap().clone() else {
+            return;
+        };
         let (current, category, cursor) = {
             let s = self.inner.state.lock().unwrap();
             let p = s.pads.get(pad as usize);
@@ -488,7 +526,9 @@ impl EkitRig for EkitBackend {
     }
 
     fn new_kit(&self) {
-        let Some(space) = self.inner.space.lock().unwrap().clone() else { return };
+        let Some(space) = self.inner.space.lock().unwrap().clone() else {
+            return;
+        };
         let pads = self.inner.state.lock().unwrap().pads.clone();
         for p in pads {
             if p.locked {
@@ -545,7 +585,9 @@ impl EkitRig for EkitBackend {
     fn set_pad_param(&self, pad: u32, param: String, value: f32) {
         {
             let mut s = self.inner.state.lock().unwrap();
-            let Some(p) = s.pads.get_mut(pad as usize) else { return };
+            let Some(p) = s.pads.get_mut(pad as usize) else {
+                return;
+            };
             match param.as_str() {
                 "gain_db" => p.gain_db = value.clamp(-60.0, 12.0),
                 "pan" => p.pan = value.clamp(-1.0, 1.0),
@@ -604,7 +646,10 @@ impl EkitBackend {
     fn apply_pad_mix(&self, pad: u32, reinstall: bool) {
         let (p, any_solo) = {
             let s = self.inner.state.lock().unwrap();
-            (s.pads.get(pad as usize).cloned(), s.pads.iter().any(|p| p.soloed))
+            (
+                s.pads.get(pad as usize).cloned(),
+                s.pads.iter().any(|p| p.soloed),
+            )
         };
         let Some(p) = p else { return };
         let id = format!("pad{pad}");

@@ -23,11 +23,11 @@ pub mod types;
 #[cfg(feature = "native")]
 pub use data_fetching::rig_type_to_engine_type;
 pub use grid_conversion::{
-    ParamLookup, engines_to_grid_slots, module_chains_to_grid_slots, signal_chain_to_grid_slots,
+    engines_to_grid_slots, module_chains_to_grid_slots, signal_chain_to_grid_slots, ParamLookup,
 };
 pub use types::{
-    ColumnItem, DetailData, DetailParam, EngineFlowData, FILTER_CATEGORIES, GridSlot,
-    LayerFlowData, ModuleChainData, NavCategory, RIG_TYPES, SortMode,
+    ColumnItem, DetailData, DetailParam, EngineFlowData, GridSlot, LayerFlowData, ModuleChainData,
+    NavCategory, SortMode, FILTER_CATEGORIES, RIG_TYPES,
 };
 
 /// Re-export of the project-wide tagging schema used throughout this crate.

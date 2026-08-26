@@ -73,8 +73,16 @@ impl SpaceBackend {
             .into_iter()
             .find(|d| d.file_stem().and_then(|s| s.to_str()) == Some(name))?;
         let (space, features) = Space::load(&dir).ok()?;
-        let loaded = Arc::new(Loaded { dir, space, features });
-        self.inner.cache.lock().unwrap().insert(name.to_string(), loaded.clone());
+        let loaded = Arc::new(Loaded {
+            dir,
+            space,
+            features,
+        });
+        self.inner
+            .cache
+            .lock()
+            .unwrap()
+            .insert(name.to_string(), loaded.clone());
         Some(loaded)
     }
 
@@ -94,7 +102,9 @@ impl SpaceBackend {
             .filter(|e| e.file_type().is_file())
             .map(|e| e.into_path())
             .filter(|p| {
-                p.extension().and_then(|x| x.to_str()).is_some_and(|x| x.eq_ignore_ascii_case("wav"))
+                p.extension()
+                    .and_then(|x| x.to_str())
+                    .is_some_and(|x| x.eq_ignore_ascii_case("wav"))
             })
             .collect();
         wavs.sort();
@@ -127,7 +137,9 @@ impl SampleSpace for SpaceBackend {
     }
 
     fn map(&self, space: String, filter: SpaceFilter) -> Vec<MapItem> {
-        let Some(l) = self.load(&space) else { return Vec::new() };
+        let Some(l) = self.load(&space) else {
+            return Vec::new();
+        };
         l.space
             .items
             .iter()
@@ -148,7 +160,9 @@ impl SampleSpace for SpaceBackend {
     }
 
     fn similar(&self, space: String, idx: u32, filter: SpaceFilter) -> Vec<SimilarHit> {
-        let Some(l) = self.load(&space) else { return Vec::new() };
+        let Some(l) = self.load(&space) else {
+            return Vec::new();
+        };
         let items = &l.space.items;
         if idx as usize >= items.len() {
             return Vec::new();
@@ -168,7 +182,9 @@ impl SampleSpace for SpaceBackend {
 
     fn audition(&self, space: String, idx: u32) {
         let Some(l) = self.load(&space) else { return };
-        let Some(path) = Self::resolve_audio(&l.space, idx as usize) else { return };
+        let Some(path) = Self::resolve_audio(&l.space, idx as usize) else {
+            return;
+        };
         // Placeholder preview path until a proper engine preview lane lands:
         // a PipeWire client per audition (default sink), previous one killed.
         let mut slot = self.inner.audition.lock().unwrap();
@@ -196,7 +212,11 @@ impl SampleSpace for SpaceBackend {
         if s.save(&l.dir, &l.features).is_ok() {
             self.inner.cache.lock().unwrap().insert(
                 space,
-                Arc::new(Loaded { dir: l.dir.clone(), space: s, features: l.features.clone() }),
+                Arc::new(Loaded {
+                    dir: l.dir.clone(),
+                    space: s,
+                    features: l.features.clone(),
+                }),
             );
             self.inner.events.publish(SpaceEvent::Changed);
         }
@@ -204,37 +224,42 @@ impl SampleSpace for SpaceBackend {
 
     fn build(&self, name: String, root: String, pieces: bool) {
         let b = self.clone();
-        let _ = std::thread::Builder::new().name("space-build".into()).spawn(move || {
-            let root = PathBuf::from(&root);
-            let granularity =
-                if pieces { build::Granularity::Piece } else { build::Granularity::Sample };
-            let dir = Space::space_dir(&root, &name);
-            let previous = Space::load(&dir).ok();
-            let events = b.inner.events.clone();
-            let n2 = name.clone();
-            let report = build::build(
-                &name,
-                &root,
-                granularity,
-                previous.as_ref().map(|(s, f)| (s, f.as_slice())),
-                &move |n, total| {
-                    events.publish(SpaceEvent::Progress(n2.clone(), n as u32, total as u32));
-                },
-            );
-            match report.space.save(&dir, &report.features) {
-                Ok(()) => {
-                    b.inner.cache.lock().unwrap().remove(&name);
-                    tracing::info!(
-                        name,
-                        items = report.space.items.len(),
-                        analyzed = report.analyzed,
-                        "space build done"
-                    );
+        let _ = std::thread::Builder::new()
+            .name("space-build".into())
+            .spawn(move || {
+                let root = PathBuf::from(&root);
+                let granularity = if pieces {
+                    build::Granularity::Piece
+                } else {
+                    build::Granularity::Sample
+                };
+                let dir = Space::space_dir(&root, &name);
+                let previous = Space::load(&dir).ok();
+                let events = b.inner.events.clone();
+                let n2 = name.clone();
+                let report = build::build(
+                    &name,
+                    &root,
+                    granularity,
+                    previous.as_ref().map(|(s, f)| (s, f.as_slice())),
+                    &move |n, total| {
+                        events.publish(SpaceEvent::Progress(n2.clone(), n as u32, total as u32));
+                    },
+                );
+                match report.space.save(&dir, &report.features) {
+                    Ok(()) => {
+                        b.inner.cache.lock().unwrap().remove(&name);
+                        tracing::info!(
+                            name,
+                            items = report.space.items.len(),
+                            analyzed = report.analyzed,
+                            "space build done"
+                        );
+                    }
+                    Err(e) => tracing::error!("space build save failed: {e}"),
                 }
-                Err(e) => tracing::error!("space build save failed: {e}"),
-            }
-            b.inner.events.publish(SpaceEvent::Changed);
-        });
+                b.inner.events.publish(SpaceEvent::Changed);
+            });
     }
 }
 

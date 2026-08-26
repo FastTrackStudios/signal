@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 
 use super::interaction::GridConnection;
-use super::layout::{CELL_GAP, CELL_SIZE, GROUP_PAD, input_port_pos, output_port_pos};
+use super::layout::{input_port_pos, output_port_pos, CELL_GAP, CELL_SIZE, GROUP_PAD};
 use super::types::GridSlot;
 
 // ─────────────────────────────────────────────────────────────────────────────

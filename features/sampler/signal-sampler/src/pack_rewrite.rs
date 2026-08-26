@@ -18,8 +18,8 @@ use std::fs::File;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
-use crate::SamplerError;
 use crate::engine::cache::PackFileHeader;
+use crate::SamplerError;
 
 const SPEC_BEGIN: &str = "# spec_begin\n";
 const SPEC_END: &str = "# spec_end";
@@ -59,8 +59,7 @@ where
     {
         let mut out = BufWriter::new(File::create(&tmp_path)?);
         let new_index_offset = body_offset + body.len();
-        let new_header =
-            header.with_index_span(new_index_offset as u64, new_index.len() as u64);
+        let new_header = header.with_index_span(new_index_offset as u64, new_index.len() as u64);
         out.write_all(new_header.as_bytes())?;
         out.write_all(&body)?;
         out.write_all(&new_index)?;

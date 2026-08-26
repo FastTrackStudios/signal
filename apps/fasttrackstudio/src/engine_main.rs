@@ -17,8 +17,8 @@
 
 use architect::host::{self, EngineHost, WebBundle};
 use architect::rig::RigBackend as _;
-use signal_guitar::proto::rig::Rig as _;
 use signal_guitar::GuitarRigBackend;
+use signal_guitar::proto::rig::Rig as _;
 
 /// Default bind address; override with `SIGNAL_ENGINE_ADDR` (or the legacy
 /// `RIGD_ADDR`, still honored so existing live setups keep working).
@@ -186,10 +186,8 @@ async fn async_main() {
     use signal_rigs_proto::rig_core::prelude::RigCoreService;
     macro_rules! mount_core {
         ($router:expr, $scope:literal, $backend:expr) => {
-            $router.merge_router_scoped(
-                $scope,
-                architect::layers![RigCoreService].provide($backend),
-            )
+            $router
+                .merge_router_scoped($scope, architect::layers![RigCoreService].provide($backend))
         };
     }
     let router = mount_core!(router, "guitar", guitar.clone());

@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn code_and_styx_presets_coexist_and_styx_overrides() {
         let mut reg = PresetRegistry::with_builtins(); // Nord Stage (code)
-        // A styx file named "Nord Stage" overrides the built-in (last wins).
+                                                       // A styx file named "Nord Stage" overrides the built-in (last wins).
         let dir = std::env::temp_dir().join(format!("signal-preg2-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let override_tree = Container::preset("Nord Stage")

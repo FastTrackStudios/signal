@@ -4,7 +4,7 @@
 //! collections and their snapshot variants.
 
 use super::error::OpsError;
-use crate::{SignalApi, SignalController, events};
+use crate::{events, SignalApi, SignalController};
 use signal_proto::engine::{EngineId, EngineSceneId};
 use signal_proto::layer::{LayerId, LayerSnapshotId};
 use signal_proto::resolve::{
@@ -203,18 +203,17 @@ impl<S: SignalApi> BlockPresetOps<S> {
         // Clone out of the lock in its own statement — an if-let scrutinee
         // temporary would hold the guard across the await below.
         let applier = self.0.daw_applier.read().expect("lock poisoned").clone();
-        let applied_to_daw =
-            if let Some(applier) = applier {
-                match applier.apply_graph(&graph, Some(&snapshot_name)).await {
-                    Ok(_) => true,
-                    Err(e) => {
-                        eprintln!("[signal] block preset activate DAW apply failed: {e}");
-                        false
-                    }
+        let applied_to_daw = if let Some(applier) = applier {
+            match applier.apply_graph(&graph, Some(&snapshot_name)).await {
+                Ok(_) => true,
+                Err(e) => {
+                    eprintln!("[signal] block preset activate DAW apply failed: {e}");
+                    false
                 }
-            } else {
-                false
-            };
+            }
+        } else {
+            false
+        };
 
         // Emit event
         self.0.event_bus.emit(events::SignalEvent::PresetActivated {

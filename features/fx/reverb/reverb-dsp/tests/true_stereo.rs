@@ -35,10 +35,25 @@ fn cross_legs_route_left_input_to_right_output() {
     // Expect L at latency+10 (LL) and R at latency+20 (LR); nothing
     // from RL/RR because the right input is silent.
     assert_eq!(peaks.len(), 2, "expected exactly two peaks: {peaks:?}");
-    let (n_l, l0, _) = peaks.iter().find(|(_, l, _)| l.abs() > 0.5).copied().unwrap();
-    let (n_r, _, r0) = peaks.iter().find(|(_, _, r)| r.abs() > 0.5).copied().unwrap();
-    assert!(l0 > 0.9 && r0 > 0.9, "unit taps should come through: {peaks:?}");
-    assert_eq!(n_r - n_l, 10, "LR tap must land 10 samples after LL: {peaks:?}");
+    let (n_l, l0, _) = peaks
+        .iter()
+        .find(|(_, l, _)| l.abs() > 0.5)
+        .copied()
+        .unwrap();
+    let (n_r, _, r0) = peaks
+        .iter()
+        .find(|(_, _, r)| r.abs() > 0.5)
+        .copied()
+        .unwrap();
+    assert!(
+        l0 > 0.9 && r0 > 0.9,
+        "unit taps should come through: {peaks:?}"
+    );
+    assert_eq!(
+        n_r - n_l,
+        10,
+        "LR tap must land 10 samples after LL: {peaks:?}"
+    );
 }
 
 #[test]
@@ -73,7 +88,9 @@ fn reprepare_keeps_cross_in_sync() {
         let mut s = seed;
         (0..4800)
             .map(|i| {
-                s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                s = s
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 let r = ((s >> 33) as f64 / (1u64 << 31) as f64) - 1.0;
                 r * (-3.0 * i as f64 / 4800.0).exp()
             })

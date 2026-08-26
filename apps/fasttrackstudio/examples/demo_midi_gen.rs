@@ -136,7 +136,11 @@ fn main() -> std::io::Result<()> {
         let path = dir.join(format!("{stem}.mid"));
         smf::write(path.to_str().expect("utf-8 path"), &content, PPQ)?;
         let bytes = std::fs::metadata(&path)?.len();
-        println!("{} — {name}: {} notes, {bytes} bytes", path.display(), content.notes.len());
+        println!(
+            "{} — {name}: {} notes, {bytes} bytes",
+            path.display(),
+            content.notes.len()
+        );
     }
     Ok(())
 }
@@ -153,7 +157,11 @@ mod tests {
         for (stem, _, content) in presets() {
             let bytes = smf::encode(&content, PPQ);
             let snap = smf::parse(&bytes, 0).unwrap_or_else(|| panic!("{stem} parses"));
-            assert_eq!(snap.notes.len(), content.notes.len(), "{stem} notes survive");
+            assert_eq!(
+                snap.notes.len(),
+                content.notes.len(),
+                "{stem} notes survive"
+            );
             assert!(snap.length_ppq > 15.0 * 4.0 * 960.0, "{stem} runs ~16 bars");
             // The demo scheduler assumes 960 PPQ.
             assert_eq!(snap.ppq, 960.0, "{stem} PPQ");

@@ -12,7 +12,6 @@
 //! using the original ScaleParam() response curves.
 
 use crate::algorithm::{AlgorithmParams, CloudParams, ReverbAlgorithm};
-use audiocore_dsp::biquad::{Biquad, FilterType};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::lcg_random::random_buffer_cross_seed;
 use crate::primitives::modulated_delay::ModulatedDelay;
@@ -20,6 +19,7 @@ use crate::primitives::multitap_delay::MultitapDelay;
 use crate::primitives::one_pole::{Hp1, Lp1};
 use crate::primitives::response_curves::*;
 use crate::primitives::reverb_line::ReverbLine;
+use audiocore_dsp::biquad::{Biquad, FilterType};
 
 const TOTAL_LINE_COUNT: usize = 12;
 
@@ -850,7 +850,6 @@ impl ReverbAlgorithm for Cloud {
         // Extra B → cross-seed, seeds (character/stereo width)
         self.set_raw_param(param::EQ_CROSS_SEED, params.extra_b);
         self.set_raw_param(param::INPUT_MIX, params.extra_b * 0.8);
-
     }
 
     fn set_cloud_params(&mut self, params: &CloudParams) -> bool {

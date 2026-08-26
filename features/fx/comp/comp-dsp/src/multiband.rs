@@ -162,8 +162,7 @@ impl CompressionBand {
         const HYSTERESIS_WIDTH: f64 = 4.0;
         const DETECTION_THRESHOLD: f64 = 40.0;
 
-        let hysteresis_zone =
-            (DETECTION_THRESHOLD - HYSTERESIS_WIDTH)..=DETECTION_THRESHOLD;
+        let hysteresis_zone = (DETECTION_THRESHOLD - HYSTERESIS_WIDTH)..=DETECTION_THRESHOLD;
         let output_with_hysteresis = if !hysteresis_zone.contains(&band2_output) {
             band2_output
         } else {
@@ -326,7 +325,6 @@ impl MultiBandCompressor {
         // - Processes each band with independent compression
         // - Recombines by summing the 3 processed bands
         // Normalization by 3 prevents clipping from summation
-        
 
         (band0_output + band1_output + band2_output) / 3.0
     }

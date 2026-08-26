@@ -5,6 +5,7 @@
 //! a concrete delay type, enabling runtime style switching.
 
 use crate::bbd_delay::BbdDelay;
+use crate::bbd_delay::BbdVoice;
 use crate::clean_delay::{CleanDelay, DigitalVoice};
 use crate::drum_delay::{DrumDelay, DrumHead, DrumSpacing, HeadPlayback, GOLDEN_HEADS};
 use crate::filter_delay::{FilterDelay, FilterLfoShape, FilterLocation};
@@ -18,7 +19,6 @@ use crate::reverse_delay::ReverseDelay;
 use crate::rhythm_delay::RhythmDelay;
 use crate::shimmer_delay::ShimmerDelay;
 use crate::spectral_delay::{DensityMode, GrainDirection, GrainShape, SpectralDelay};
-use crate::bbd_delay::BbdVoice;
 use crate::tape_delay::{SaturationType, TapeDelay, TapeSpeed, TapeVoice};
 
 /// Available delay styles.
@@ -612,7 +612,11 @@ impl DelayEngine {
                 // held repeats do not decay.
                 d.tone = if self.frozen { 20_000.0 } else { self.bbd_tone };
                 d.clock_jitter = self.bbd_clock_jitter;
-                d.bucket_loss = if self.frozen { 0.0 } else { self.bbd_bucket_loss };
+                d.bucket_loss = if self.frozen {
+                    0.0
+                } else {
+                    self.bbd_bucket_loss
+                };
                 d.lfo_phase_offset = self.bbd_phase_offset;
                 d.voice = if self.voice == 1 {
                     BbdVoice::Classic
@@ -697,7 +701,11 @@ impl DelayEngine {
                 d.heads = self.oilcan_heads;
                 d.wobble = self.oilcan_wobble;
                 d.mod_rate = self.oilcan_mod_rate;
-                d.tone_hz = if self.frozen { 8000.0 } else { self.oilcan_tone };
+                d.tone_hz = if self.frozen {
+                    8000.0
+                } else {
+                    self.oilcan_tone
+                };
                 d.grit = self.oilcan_grit;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);

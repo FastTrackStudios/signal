@@ -50,9 +50,9 @@ fn main() {
 
     // Inject chords into the ALSA loopback (captured by the omni attach) and
     // watch for them coming back through the monitor + the master meter.
-    let mut out = match midicore::midir::MidiOutput::open(
-        midicore::PortSelector::NameContains("Midi Through".into()),
-    ) {
+    let mut out = match midicore::midir::MidiOutput::open(midicore::PortSelector::NameContains(
+        "Midi Through".into(),
+    )) {
         Ok(o) => {
             println!("injecting via {:?}", o.opened);
             Some(o)
@@ -69,7 +69,11 @@ fn main() {
         // so the first chord may land before the rig's port is linked. Ons on
         // even ticks, offs on odd — each chord rings for 500 ms.
         if let Some(o) = out.as_mut() {
-            let (status, vel) = if i % 2 == 0 { (0x90u8, 100u8) } else { (0x80, 64) };
+            let (status, vel) = if i % 2 == 0 {
+                (0x90u8, 100u8)
+            } else {
+                (0x80, 64)
+            };
             for n in [60u8, 64, 67] {
                 let _ = o.send(&[status, n, vel]);
             }
@@ -80,7 +84,12 @@ fn main() {
         events = events.max(recent.len());
         peak = peak.max(s.master_peak);
         if i % 4 == 0 {
-            println!("t={}s midi_recent={} master_peak={:.4}", i / 2, recent.len(), s.master_peak);
+            println!(
+                "t={}s midi_recent={} master_peak={:.4}",
+                i / 2,
+                recent.len(),
+                s.master_peak
+            );
         }
         if events > 0 && peak > 1e-4 {
             break;
@@ -93,7 +102,11 @@ fn main() {
     }
     println!(
         "FAIL: {}",
-        if events == 0 { "no MIDI seen by the rig (attach broken?)" } else { "MIDI seen but master meter never moved" }
+        if events == 0 {
+            "no MIDI seen by the rig (attach broken?)"
+        } else {
+            "MIDI seen but master meter never moved"
+        }
     );
     std::process::exit(1);
 }

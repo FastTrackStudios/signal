@@ -12,7 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_sampler::document::{DocEvent, DocNote, DocumentRenderOptions, TrackDocument, annotate};
+use signal_sampler::document::{annotate, DocEvent, DocNote, DocumentRenderOptions, TrackDocument};
 use signal_sampler::{ArticClass, SamplerRig};
 
 const SR: u32 = 48_000;

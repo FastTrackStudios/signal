@@ -33,7 +33,11 @@ fn defaults_are_bit_transparent() {
         (3000, 6.060_384_060_909_755e-2, -5.617_114_973_418_321e-1),
         (4000, 1.246_689_431_522_149e-2, -6.038_074_718_058_465e-2),
         (5000, -5.518_698_769_813_348e-1, 3.609_453_731_800_272_3e-1),
-        (6000, -3.108_835_884_884_094_7e-1, 1.946_006_050_124_746_4e-1),
+        (
+            6000,
+            -3.108_835_884_884_094_7e-1,
+            1.946_006_050_124_746_4e-1,
+        ),
         (7000, 2.027_685_565_699_985_4e-1, 1.139_684_129_683_064_8e-1),
         (8000, 4.649_203_732_518_243e-1, 9.377_744_615_108_695e-2),
     ];
@@ -227,7 +231,9 @@ fn predelay_modulation_wobbles() {
 #[test]
 fn morph_blends_both_slots() {
     let ir_a: Vec<f64> = (0..8000).map(|i| if i == 0 { 1.0 } else { 0.0 }).collect();
-    let ir_b: Vec<f64> = (0..8000).map(|i| if i == 4000 { 1.0 } else { 0.0 }).collect();
+    let ir_b: Vec<f64> = (0..8000)
+        .map(|i| if i == 4000 { 1.0 } else { 0.0 })
+        .collect();
 
     let run = |morph: f64| -> (f64, f64) {
         let mut c = Convolution::new(SR);
@@ -300,7 +306,10 @@ fn morph_lfo_sweeps() {
         .skip(9600)
         .map(|(a, b)| (a - b).abs())
         .sum();
-    assert!(diff > 1e-3, "LFO-swept morph should differ from static: {diff}");
+    assert!(
+        diff > 1e-3,
+        "LFO-swept morph should differ from static: {diff}"
+    );
 }
 
 /// Wet-gain LFO: amplitude of the tail breathes at the LFO rate.

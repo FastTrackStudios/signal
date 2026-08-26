@@ -69,8 +69,7 @@ fn use_bass_state() -> (BassState, Option<BassRigClient>) {
                 }
             },
             move |ev: BassEvent| {
-                let (mut status, mut presets, mut chain, mut midi) =
-                    (status, presets, chain, midi);
+                let (mut status, mut presets, mut chain, mut midi) = (status, presets, chain, midi);
                 match ev {
                     BassEvent::Status(s) => status.set(s),
                     BassEvent::Library(p) => presets.set(p),
@@ -81,7 +80,15 @@ fn use_bass_state() -> (BassState, Option<BassRigClient>) {
         );
     }
 
-    (BassState { status, presets, chain, midi }, rig)
+    (
+        BassState {
+            status,
+            presets,
+            chain,
+            midi,
+        },
+        rig,
+    )
 }
 
 /// The bass-rig remote view. Mount inside a host that has provided

@@ -107,8 +107,33 @@ pub fn use_rig_state() -> RigViewState {
                 }
             },
             move |ev: RigEvent| {
-                let (mut running, mut in_level, mut out_level, mut in_peak_db, mut out_peak_db, mut stereo_db, mut comp_gr_db, mut spectrum, mut comp_wave, mut perf, mut blocks, mut active_patch) =
-                    (running, in_level, out_level, in_peak_db, out_peak_db, stereo_db, comp_gr_db, spectrum, comp_wave, perf, blocks, active_patch);
+                let (
+                    mut running,
+                    mut in_level,
+                    mut out_level,
+                    mut in_peak_db,
+                    mut out_peak_db,
+                    mut stereo_db,
+                    mut comp_gr_db,
+                    mut spectrum,
+                    mut comp_wave,
+                    mut perf,
+                    mut blocks,
+                    mut active_patch,
+                ) = (
+                    running,
+                    in_level,
+                    out_level,
+                    in_peak_db,
+                    out_peak_db,
+                    stereo_db,
+                    comp_gr_db,
+                    spectrum,
+                    comp_wave,
+                    perf,
+                    blocks,
+                    active_patch,
+                );
                 match ev {
                     RigEvent::Status(s) => {
                         running.set(s.running);
@@ -135,17 +160,10 @@ pub fn use_rig_state() -> RigViewState {
                         let n = bins.len();
                         let mut out = Vec::with_capacity(n);
                         for i in 0..n {
-                            let (a, b, c) = (
-                                bins[i.saturating_sub(1)],
-                                bins[i],
-                                bins[(i + 1).min(n - 1)],
-                            );
+                            let (a, b, c) =
+                                (bins[i.saturating_sub(1)], bins[i], bins[(i + 1).min(n - 1)]);
                             let fresh = (a + 2.0 * b + c) / 4.0;
-                            let fallen = prev
-                                .get(i)
-                                .copied()
-                                .unwrap_or(-90.0)
-                                - 1.3; // per frame at ~30 Hz ≈ 40 dB/s
+                            let fallen = prev.get(i).copied().unwrap_or(-90.0) - 1.3; // per frame at ~30 Hz ≈ 40 dB/s
                             out.push(fresh.max(fallen).max(-90.0));
                         }
                         spectrum.set(out);

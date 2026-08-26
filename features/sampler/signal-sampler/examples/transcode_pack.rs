@@ -11,8 +11,14 @@ use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let input = PathBuf::from(args.next().ok_or("usage: transcode_pack <in> <out> [quality]")?);
-    let out = PathBuf::from(args.next().ok_or("usage: transcode_pack <in> <out> [quality]")?);
+    let input = PathBuf::from(
+        args.next()
+            .ok_or("usage: transcode_pack <in> <out> [quality]")?,
+    );
+    let out = PathBuf::from(
+        args.next()
+            .ok_or("usage: transcode_pack <in> <out> [quality]")?,
+    );
     let quality: f32 = args.next().map(|q| q.parse()).transpose()?.unwrap_or(0.6);
 
     if let Some(parent) = out.parent() {

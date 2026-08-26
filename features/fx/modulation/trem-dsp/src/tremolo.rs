@@ -109,8 +109,7 @@ impl Default for Tremolo {
 // ---------------------------------------------------------------------------
 
 /// Saturation character applied to the tremolo output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AnalogStyle {
     /// No saturation — clean digital.
     #[default]
@@ -128,7 +127,6 @@ pub enum AnalogStyle {
     /// Extreme pumping compression with makeup gain.
     Pump,
 }
-
 
 /// Stateful analog-style processor (Crunch needs a crossover filter).
 pub struct AnalogProcessor {

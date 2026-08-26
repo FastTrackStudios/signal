@@ -8,7 +8,7 @@
 
 use std::time::{Duration, Instant};
 
-use signal_drums::{GM_DRUM_CHANNEL, load_preset_kit};
+use signal_drums::{load_preset_kit, GM_DRUM_CHANNEL};
 use signal_sampler::SamplerRig;
 
 const PRESET: &str = "/run/media/AudioHaven/Signal/Libraries/Drum Kits/\
@@ -66,5 +66,8 @@ fn mm2_metal_monster_plays_on_gm_channel() {
         peak > 1e-3,
         "MM2 kit rendered silence (peak={peak}) — note routing / channel map regressed"
     );
-    eprintln!("MM2 Metal Monster played: {} engines, master peak {peak:.4}", ids.len());
+    eprintln!(
+        "MM2 Metal Monster played: {} engines, master peak {peak:.4}",
+        ids.len()
+    );
 }

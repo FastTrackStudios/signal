@@ -126,9 +126,7 @@ fn amp() -> ModuleTemplate {
 /// The Boost gain block the boost footswitch drives.
 fn utility() -> ModuleTemplate {
     ModuleTemplate::new("Utility", ModuleType::Volume)
-        .with_metadata(
-            TemplateMetadata::new().with_description("Post-amp utilities — boost gain"),
-        )
+        .with_metadata(TemplateMetadata::new().with_description("Post-amp utilities — boost gain"))
         .with_block(BlockTemplate::new("Boost", BlockType::Volume))
 }
 

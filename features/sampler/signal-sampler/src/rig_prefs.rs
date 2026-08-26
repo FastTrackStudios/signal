@@ -105,12 +105,34 @@ impl From<&RigAudioPrefs> for daw_audio_io::AudioIoPrefs {
             phones_routing: p.phones_routing,
             // Zeroed pairs fall back to the live-rig conventions:
             // main → 3-4, phones → 1-2, monitor mix in → 3-4.
-            main_out_l: if p.phones_routing && p.main_out_l == 0 && p.main_out_r == 0 { 2 } else { p.main_out_l },
-            main_out_r: if p.phones_routing && p.main_out_l == 0 && p.main_out_r == 0 { 3 } else { p.main_out_r },
+            main_out_l: if p.phones_routing && p.main_out_l == 0 && p.main_out_r == 0 {
+                2
+            } else {
+                p.main_out_l
+            },
+            main_out_r: if p.phones_routing && p.main_out_l == 0 && p.main_out_r == 0 {
+                3
+            } else {
+                p.main_out_r
+            },
             phones_out_l: p.phones_out_l,
-            phones_out_r: if p.phones_routing && p.phones_out_l == 0 && p.phones_out_r == 0 { 1 } else { p.phones_out_r },
-            phones_mix_in_l: if p.phones_routing && p.phones_mix_in_l == 0 && p.phones_mix_in_r == 0 { 2 } else { p.phones_mix_in_l },
-            phones_mix_in_r: if p.phones_routing && p.phones_mix_in_l == 0 && p.phones_mix_in_r == 0 { 3 } else { p.phones_mix_in_r },
+            phones_out_r: if p.phones_routing && p.phones_out_l == 0 && p.phones_out_r == 0 {
+                1
+            } else {
+                p.phones_out_r
+            },
+            phones_mix_in_l: if p.phones_routing && p.phones_mix_in_l == 0 && p.phones_mix_in_r == 0
+            {
+                2
+            } else {
+                p.phones_mix_in_l
+            },
+            phones_mix_in_r: if p.phones_routing && p.phones_mix_in_l == 0 && p.phones_mix_in_r == 0
+            {
+                3
+            } else {
+                p.phones_mix_in_r
+            },
         }
     }
 }

@@ -507,7 +507,6 @@ fn slot_idx(slot: IrSlot) -> usize {
     }
 }
 
-
 impl Convolution {
     pub fn new(sample_rate: f64) -> Self {
         let mut planner = RealFftPlanner::<f64>::new();
@@ -635,21 +634,14 @@ impl Convolution {
                 self.user_ir_loaded_b = true;
             }
         }
-        self.originals[slot_idx(slot)] =
-            Some((Arc::new(cap_l.to_vec()), Arc::new(cap_r.to_vec())));
+        self.originals[slot_idx(slot)] = Some((Arc::new(cap_l.to_vec()), Arc::new(cap_r.to_vec())));
         self.on_new_r_loaded(slot);
     }
 
     /// True-stereo (4-leg) synchronous load into slot A: LL/RR feed
     /// the direct convolvers, LR/RL the cross pair. Runs FFTs —
     /// background/setup use only.
-    pub fn load_ir_true_stereo(
-        &mut self,
-        ll: &[f64],
-        lr: &[f64],
-        rl: &[f64],
-        rr: &[f64],
-    ) -> bool {
+    pub fn load_ir_true_stereo(&mut self, ll: &[f64], lr: &[f64], rl: &[f64], rr: &[f64]) -> bool {
         let max = (self.sample_rate * MAX_IR_SECONDS) as usize;
         let cap = |x: &[f64]| x[..x.len().min(max)].to_vec();
         let (ll, lr, rl, rr) = (cap(ll), cap(lr), cap(rl), cap(rr));
@@ -667,9 +659,7 @@ impl Convolution {
 
     /// Cross reshape originals for the chain's reshape pump.
     #[allow(clippy::type_complexity)]
-    pub fn cross_reshape_source(
-        &self,
-    ) -> Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)> {
+    pub fn cross_reshape_source(&self) -> Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)> {
         if self.true_stereo {
             self.cross_originals.clone()
         } else {
@@ -856,11 +846,8 @@ impl Convolution {
                     self.conv_r.load_ir(&sr);
                     if self.true_stereo {
                         if let Some((lr, rl)) = self.cross_originals.clone() {
-                            let (slr, srl) = t.apply_pair(
-                                (*lr).clone(),
-                                (*rl).clone(),
-                                self.sample_rate,
-                            );
+                            let (slr, srl) =
+                                t.apply_pair((*lr).clone(), (*rl).clone(), self.sample_rate);
                             self.conv_lr.load_ir(&slr);
                             self.conv_rl.load_ir(&srl);
                         }
@@ -896,8 +883,7 @@ impl Convolution {
 
     fn refresh_motion_rates(&mut self) {
         let rate = self.mod_params.motion_rate.clamp(0.02, 10.0);
-        let depth_samples =
-            self.sm.motion_depth.value() * MOTION_EXCURSION_S * self.sample_rate;
+        let depth_samples = self.sm.motion_depth.value() * MOTION_EXCURSION_S * self.sample_rate;
         for (i, ap) in self.motion.iter_mut().enumerate() {
             ap.set_modulation(rate * MOTION_RATE_MULT[i], depth_samples, self.sample_rate);
         }
@@ -931,8 +917,7 @@ impl Convolution {
         let pd_depth = self.sm.pd_depth.value();
         let want_pd = base_ms > 0.01 || pd_depth.abs() > GATE_EPS;
         if want_pd {
-            let base_samples =
-                ((base_ms * 0.001 * self.sample_rate) as usize).max(1);
+            let base_samples = ((base_ms * 0.001 * self.sample_rate) as usize).max(1);
             let mod_amount = pd_depth * PREDELAY_MOD_S * self.sample_rate;
             self.predelay_l.sample_delay = base_samples;
             self.predelay_r.sample_delay = base_samples;
@@ -969,8 +954,7 @@ impl Convolution {
             let w = damp_depth.abs().min(1.0);
             let base = self.base_damp_cutoff.clamp(200.0, 20000.0);
             let anchored = base.powf(w) * 20000.0_f64.powf(1.0 - w);
-            let swung = anchored
-                * (2.0_f64).powf(DAMP_MOD_OCTAVES * damp_depth * lfo);
+            let swung = anchored * (2.0_f64).powf(DAMP_MOD_OCTAVES * damp_depth * lfo);
             let cutoff = swung.clamp(200.0, 20000.0);
             self.damp_l.set_freq(cutoff, self.sample_rate);
             self.damp_r.set_freq(cutoff, self.sample_rate);
@@ -1087,19 +1071,11 @@ impl ReverbAlgorithm for Convolution {
         true
     }
 
-    fn try_load_ir_true_stereo(
-        &mut self,
-        ll: &[f64],
-        lr: &[f64],
-        rl: &[f64],
-        rr: &[f64],
-    ) -> bool {
+    fn try_load_ir_true_stereo(&mut self, ll: &[f64], lr: &[f64], rl: &[f64], rr: &[f64]) -> bool {
         self.load_ir_true_stereo(ll, lr, rl, rr)
     }
 
-    fn impulse_reshape_cross_source(
-        &self,
-    ) -> Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)> {
+    fn impulse_reshape_cross_source(&self) -> Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)> {
         self.cross_reshape_source()
     }
 
@@ -1108,10 +1084,7 @@ impl ReverbAlgorithm for Convolution {
         true
     }
 
-    fn set_ir_trash_sender(
-        &mut self,
-        tx: crossbeam_channel::Sender<IrTrash>,
-    ) -> bool {
+    fn set_ir_trash_sender(&mut self, tx: crossbeam_channel::Sender<IrTrash>) -> bool {
         self.trash_tx = Some(tx);
         true
     }
@@ -1126,10 +1099,7 @@ impl ReverbAlgorithm for Convolution {
         true
     }
 
-    fn impulse_reshape_source(
-        &mut self,
-        slot: IrSlot,
-    ) -> Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)> {
+    fn impulse_reshape_source(&mut self, slot: IrSlot) -> Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)> {
         let idx = slot_idx(slot);
         if !self.shape_dirty[idx] {
             return None;
@@ -1320,8 +1290,7 @@ impl ReverbAlgorithm for Convolution {
         let out_l = out_l + out_cross_l;
         let out_r = out_r + out_cross_r;
         let (mut wet_l, mut wet_r) = if self.b_engaged {
-            let pos = (self.sm.morph.value() + self.sm.morph_lfo.value() * lfo)
-                .clamp(0.0, 1.0);
+            let pos = (self.sm.morph.value() + self.sm.morph_lfo.value() * lfo).clamp(0.0, 1.0);
             let theta = pos * FRAC_PI_2;
             let (ga, gb) = (theta.cos(), theta.sin());
             (out_l * ga + out_l_b * gb, out_r * ga + out_r_b * gb)

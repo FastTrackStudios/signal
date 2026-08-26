@@ -54,7 +54,10 @@ impl Default for GateParams {
             threshold_db: FloatParam::new(
                 "Threshold",
                 -40.0,
-                FloatRange::Linear { min: -80.0, max: 0.0 },
+                FloatRange::Linear {
+                    min: -80.0,
+                    max: 0.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -72,7 +75,10 @@ impl Default for GateParams {
             hold_ms: FloatParam::new(
                 "Hold",
                 10.0,
-                FloatRange::Linear { min: 0.0, max: 500.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 500.0,
+                },
             )
             .with_unit(" ms")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -90,14 +96,20 @@ impl Default for GateParams {
             range_db: FloatParam::new(
                 "Range",
                 90.0,
-                FloatRange::Linear { min: 0.0, max: 90.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 90.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             hysteresis_db: FloatParam::new(
                 "Hysteresis",
                 4.0,
-                FloatRange::Linear { min: 0.0, max: 12.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 12.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -287,11 +299,7 @@ mod tests {
             let x = amp * (2.0 * core::f64::consts::PI * 440.0 * n as f64 / SR).sin();
             g.process_sample(x);
         }
-        assert!(
-            g.gain() > 0.95,
-            "gate failed to open: gain = {}",
-            g.gain()
-        );
+        assert!(g.gain() > 0.95, "gate failed to open: gain = {}", g.gain());
     }
 
     /// After the signal stops, hold elapses and the gain decays toward the
@@ -309,10 +317,6 @@ mod tests {
         for _ in 0..48_000 {
             g.process_sample(0.0);
         }
-        assert!(
-            g.gain() < 0.01,
-            "gain failed to release: {}",
-            g.gain()
-        );
+        assert!(g.gain() < 0.01, "gain failed to release: {}", g.gain());
     }
 }

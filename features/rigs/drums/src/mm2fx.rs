@@ -33,7 +33,11 @@ pub fn match_strip<'a>(mixer: &'a Mixer, target: &str) -> Option<&'a Strip> {
 
 /// Linear level → dB (MM2 `level` is a linear fader value).
 pub fn level_to_db(level: f32) -> f32 {
-    if level > 0.0 { 20.0 * level.log10() } else { -96.0 }
+    if level > 0.0 {
+        20.0 * level.log10()
+    } else {
+        -96.0
+    }
 }
 
 /// Build a hostable processor for one MM2 FX slot, or `None` if it's bypassed
@@ -65,7 +69,13 @@ pub fn build_instance(slot: &FxSlot, sample_rate: f64) -> Option<Box<dyn PluginI
 
 fn build_eq(slot: &FxSlot, sr: f64) -> NativeEq {
     let mut eq = NativeEq::new(sr);
-    for (i, band) in slot.eq_bands().iter().filter(|b| b.enabled).take(24).enumerate() {
+    for (i, band) in slot
+        .eq_bands()
+        .iter()
+        .filter(|b| b.enabled)
+        .take(24)
+        .enumerate()
+    {
         let n = i + 1; // signal-fx bands are 1-indexed
         eq.set_named(&format!("b{n}_used"), 1.0);
         eq.set_named(&format!("b{n}_on"), 1.0);
@@ -83,8 +93,14 @@ fn build_comp(slot: &FxSlot, sr: f64) -> NativeComp {
         c.set_named("threshold", t.clamp(-60.0, 0.0));
     }
     c.set_named("ratio", mm2_ratio(slot));
-    c.set_named("attack", comp_time_ms(slot, "attack", &FAST_ATTACK, 10.0).clamp(0.1, 200.0));
-    c.set_named("release", comp_time_ms(slot, "release", &MED_RELEASE, 120.0).clamp(5.0, 1000.0));
+    c.set_named(
+        "attack",
+        comp_time_ms(slot, "attack", &FAST_ATTACK, 10.0).clamp(0.1, 200.0),
+    );
+    c.set_named(
+        "release",
+        comp_time_ms(slot, "release", &MED_RELEASE, 120.0).clamp(5.0, 1000.0),
+    );
     c.set_named("knee", knee_db(slot.text("knee")));
     c
 }
@@ -114,7 +130,10 @@ fn build_transient(slot: &FxSlot, sr: f64) -> NativeTransient {
     // MM2 stores attack/sustain already normalized bipolar — same contract
     // as NativeTransient's params.
     t.set_named("attack", slot.num("attack").unwrap_or(0.0).clamp(-1.0, 1.0));
-    t.set_named("sustain", slot.num("sustain").unwrap_or(0.0).clamp(-1.0, 1.0));
+    t.set_named(
+        "sustain",
+        slot.num("sustain").unwrap_or(0.0).clamp(-1.0, 1.0),
+    );
     t.set_named("mix", slot.num("mix").unwrap_or(1.0).clamp(0.0, 1.0));
     if let Some(out) = slot.num("output") {
         t.set_named("output", out.clamp(-24.0, 24.0));
@@ -135,7 +154,10 @@ fn build_drive(slot: &FxSlot, sr: f64) -> NativeSaturate {
         },
     );
     // MM2 drive is 0..1; NativeSaturate drive is dB into the shaper.
-    s.set_named("drive", slot.num("drive").unwrap_or(0.0).clamp(0.0, 1.0) * 24.0);
+    s.set_named(
+        "drive",
+        slot.num("drive").unwrap_or(0.0).clamp(0.0, 1.0) * 24.0,
+    );
     s.set_named("mix", slot.num("mix").unwrap_or(1.0).clamp(0.0, 1.0));
     if let Some(out) = slot.num("output") {
         s.set_named("output", out.clamp(-24.0, 24.0));

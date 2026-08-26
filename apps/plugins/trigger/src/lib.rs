@@ -31,8 +31,8 @@
 
 use nice_plug::prelude::*;
 use nice_plug_dioxus::prelude::*;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use trigger::detector::DetectAlgorithm;
 use trigger::velocity::{VelocityCurve, VelocityMapper};
@@ -168,8 +168,7 @@ impl FtsTrigger {
             return;
         }
 
-        let algorithm_changed =
-            self.synced.map(|s| s.algorithm) != Some(now.algorithm);
+        let algorithm_changed = self.synced.map(|s| s.algorithm) != Some(now.algorithm);
         self.synced = Some(now);
 
         self.chain.threshold_db = now.threshold_db as f64;
@@ -256,10 +255,8 @@ impl Plugin for FtsTrigger {
             sample_rate: self.sample_rate as f64,
             max_buffer_size: buffer_config.max_buffer_size as usize,
         });
-        self.note_len_samples =
-            ((NOTE_LEN_MS * 0.001 * self.sample_rate) as u32).max(1);
-        self.click_step =
-            2.0 * std::f32::consts::PI * CLICK_FREQ_HZ / self.sample_rate;
+        self.note_len_samples = ((NOTE_LEN_MS * 0.001 * self.sample_rate) as u32).max(1);
+        self.click_step = 2.0 * std::f32::consts::PI * CLICK_FREQ_HZ / self.sample_rate;
         true
     }
 
@@ -282,14 +279,13 @@ impl Plugin for FtsTrigger {
         let block_len = buffer.samples() as u32;
         let note = self.params.note.value().clamp(0, 127) as u8;
         let listen = self.params.listen.value();
-        let click_len =
-            ((CLICK_LEN_MS * 0.001 * self.sample_rate) as u32).max(1);
+        let click_len = ((CLICK_LEN_MS * 0.001 * self.sample_rate) as u32).max(1);
         // Confirmation window delay: the detector fires at the END of the
         // detect window, so place the note back at the onset (clamped to the
         // block start when the onset was in the previous block). FFT modes
         // have additional latency, reported to the host instead.
-        let confirm_samples = (self.params.sensitivity_ms.value() * 0.001
-            * self.sample_rate) as u32;
+        let confirm_samples =
+            (self.params.sensitivity_ms.value() * 0.001 * self.sample_rate) as u32;
 
         // ── UI display feed (lock-free, no allocation) ──────────────────
         // Index of THIS block in the editor's scrolling window: the wave
@@ -328,8 +324,7 @@ impl Plugin for FtsTrigger {
 
             if let Some(vel) = self.chain.detect_tick(l, r) {
                 let onset = (i as u32).saturating_sub(confirm_samples);
-                let velocity =
-                    (VelocityMapper::to_midi(vel) as f32 / 127.0).clamp(0.0, 1.0);
+                let velocity = (VelocityMapper::to_midi(vel) as f32 / 127.0).clamp(0.0, 1.0);
                 context.send_event(NoteEvent::NoteOn {
                     timing: onset,
                     voice_id: None,

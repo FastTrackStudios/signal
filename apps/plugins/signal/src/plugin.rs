@@ -22,11 +22,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use nice_plug::prelude::*;
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{fmt, EnvFilter};
 
 use signal_sampler::SamplerBank;
 
-use crate::config::{INSTRUMENT_ID, RigConfig};
+use crate::config::{RigConfig, INSTRUMENT_ID};
 
 const PLUGIN_NAME: &str = "FTS Signal";
 

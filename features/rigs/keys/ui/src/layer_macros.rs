@@ -16,8 +16,8 @@
 use dioxus::prelude::*;
 use signal_keys_proto::{KeysLayerDetail, KeysMacro};
 
-use crate::fader::{Fader, fmt_db};
-use crate::graphs::{Adsr, ModuleCurve, module_color};
+use crate::fader::{fmt_db, Fader};
+use crate::graphs::{module_color, Adsr, ModuleCurve};
 use crate::module_edit::{KnobRow, Panel};
 
 /// Every module as an overlay curve — its envelopes, its filter, its colour.
@@ -75,7 +75,12 @@ pub fn LayerMacros(
     on_open_module: EventHandler<u32>,
 ) -> Element {
     let group = |name: &str| -> Vec<KeysMacro> {
-        detail.layer_macros.iter().filter(|m| m.group == name).cloned().collect()
+        detail
+            .layer_macros
+            .iter()
+            .filter(|m| m.group == name)
+            .cloned()
+            .collect()
     };
     // One spread line per panel: the first spanning macro speaks for it.
     let spread = |name: &str| -> Option<String> {
@@ -85,7 +90,12 @@ pub fn LayerMacros(
             .find(|m| m.group == name && !m.spread.is_empty())
             .map(|m| m.spread.clone())
     };
-    let varies = |name: &str| detail.layer_macros.iter().any(|m| m.group == name && m.bipolar);
+    let varies = |name: &str| {
+        detail
+            .layer_macros
+            .iter()
+            .any(|m| m.group == name && m.bipolar)
+    };
 
     // One spacing scale for the page: 4 inside a label block, 8/12 inside a
     // panel, 16 between panels, 24 between the three bands (modules ·

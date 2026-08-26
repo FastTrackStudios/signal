@@ -25,8 +25,6 @@ pub struct DelayUiState {
     pub input_db: AtomicF32,
 }
 
-
-
 #[derive(Params)]
 pub struct DelayParams {
     /// Which of the seven families' profiles is active, as an index into
@@ -120,7 +118,11 @@ impl Default for DelayParams {
             time_l: FloatParam::new(
                 "Time L",
                 375.0,
-                FloatRange::Skewed { min: 1.0, max: 4000.0, factor: FloatRange::skew_factor(-1.6) },
+                FloatRange::Skewed {
+                    min: 1.0,
+                    max: 4000.0,
+                    factor: FloatRange::skew_factor(-1.6),
+                },
             )
             .with_unit(" ms")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -128,7 +130,11 @@ impl Default for DelayParams {
             time_r: FloatParam::new(
                 "Time R",
                 375.0,
-                FloatRange::Skewed { min: 1.0, max: 4000.0, factor: FloatRange::skew_factor(-1.6) },
+                FloatRange::Skewed {
+                    min: 1.0,
+                    max: 4000.0,
+                    factor: FloatRange::skew_factor(-1.6),
+                },
             )
             .with_unit(" ms")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -156,11 +162,19 @@ impl Default for DelayParams {
             mix: FloatParam::new("Mix", 0.35, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
-            character_a: FloatParam::new("Character A", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            character_a: FloatParam::new(
+                "Character A",
+                0.5,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
-            character_b: FloatParam::new("Character B", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            character_b: FloatParam::new(
+                "Character B",
+                0.5,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
             profile_id: parking_lot::RwLock::new(String::new()),
             editor_form: parking_lot::RwLock::new(String::new()),
@@ -175,8 +189,9 @@ impl DelayParams {
     /// index, which is what a pre-id session has.
     pub fn resolved_profile_index(&self) -> usize {
         let id = self.profile_id.read();
-        delay_profiles::profile_index(&id)
-            .unwrap_or_else(|| (self.profile.value().max(0) as usize).min(delay_profiles::PROFILES.len() - 1))
+        delay_profiles::profile_index(&id).unwrap_or_else(|| {
+            (self.profile.value().max(0) as usize).min(delay_profiles::PROFILES.len() - 1)
+        })
     }
 
     /// The active profile.

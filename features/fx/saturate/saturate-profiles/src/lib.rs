@@ -389,11 +389,36 @@ pub static PROFILES: &[Profile] = &[
 
 /// The rail: warmest mechanism first, least musical last.
 pub static CATEGORIES: &[Category] = &[
-    Category { id: "tube", label: "Tube", badge: "TUBE", profiles: &["triode", "pentode"] },
-    Category { id: "tape", label: "Tape", badge: "TAPE", profiles: &["tape", "tape_hot"] },
-    Category { id: "transformer", label: "Transformer", badge: "XFMR", profiles: &["transformer"] },
-    Category { id: "transistor", label: "Transistor", badge: "SS", profiles: &["transistor", "fuzz"] },
-    Category { id: "digital", label: "Digital", badge: "DIG", profiles: &["clip", "crush"] },
+    Category {
+        id: "tube",
+        label: "Tube",
+        badge: "TUBE",
+        profiles: &["triode", "pentode"],
+    },
+    Category {
+        id: "tape",
+        label: "Tape",
+        badge: "TAPE",
+        profiles: &["tape", "tape_hot"],
+    },
+    Category {
+        id: "transformer",
+        label: "Transformer",
+        badge: "XFMR",
+        profiles: &["transformer"],
+    },
+    Category {
+        id: "transistor",
+        label: "Transistor",
+        badge: "SS",
+        profiles: &["transistor", "fuzz"],
+    },
+    Category {
+        id: "digital",
+        label: "Digital",
+        badge: "DIG",
+        profiles: &["clip", "crush"],
+    },
 ];
 
 /// The panel's knobs, normalised the way the parameters are.
@@ -549,7 +574,11 @@ fn apply_character(
             // comes down. Raising it above full scale would be a control that
             // makes the plugin louder than its input while claiming to be
             // limiting it — and with no makeup to take that back.
-            pre.headroom = if v.digital { room.min(v.headroom) } else { room };
+            pre.headroom = if v.digital {
+                room.min(v.headroom)
+            } else {
+                room
+            };
         }
         Character::SagTime => pre.set_sag_ms(trim_ratio(knob, v.sag_ms, 2.0)),
         Character::Knee => pre.knee = trim(knob, v.knee, 0.0, 1.0),
@@ -740,7 +769,10 @@ mod tests {
     fn only_the_transformer_drives_its_lows_hardest() {
         for profile in PROFILES {
             if profile.id == "transformer" {
-                assert!(profile.voicing.tilt_db < 0.0, "the core must see lows first");
+                assert!(
+                    profile.voicing.tilt_db < 0.0,
+                    "the core must see lows first"
+                );
             } else {
                 assert!(
                     profile.voicing.tilt_db >= 0.0,
@@ -761,9 +793,17 @@ mod tests {
             assert!((0.0..=1.0).contains(&v.sag), "{} sag", profile.id);
             assert!((1.0..=500.0).contains(&v.sag_ms), "{} sag_ms", profile.id);
             assert!((-1.0..=1.0).contains(&v.skew), "{} skew", profile.id);
-            assert!((0.05..=16.0).contains(&v.headroom), "{} headroom", profile.id);
+            assert!(
+                (0.05..=16.0).contains(&v.headroom),
+                "{} headroom",
+                profile.id
+            );
             assert!((0.0..=1.0).contains(&v.knee), "{} knee", profile.id);
-            assert!((0.0..=1.0).contains(&v.crossover), "{} crossover", profile.id);
+            assert!(
+                (0.0..=1.0).contains(&v.crossover),
+                "{} crossover",
+                profile.id
+            );
             assert!(v.drive_scale > 0.0, "{} drive_scale", profile.id);
             assert!(
                 v.tilt_db.abs() <= saturate_dsp::preamp::TILT_MAX_DB,
@@ -804,7 +844,12 @@ mod tests {
         for id in CATEGORIES.iter().find(|c| c.id == "tube").unwrap().profiles {
             assert_eq!(profile_by_id(id).unwrap().curve, SaturationCurve::Tube);
         }
-        for id in CATEGORIES.iter().find(|c| c.id == "digital").unwrap().profiles {
+        for id in CATEGORIES
+            .iter()
+            .find(|c| c.id == "digital")
+            .unwrap()
+            .profiles
+        {
             assert_eq!(profile_by_id(id).unwrap().curve, SaturationCurve::Hard);
         }
     }
@@ -817,7 +862,12 @@ mod tests {
     fn engine(id: &str, controls: Controls) -> (ClassAPreamp, DigitalStage) {
         let mut pre = ClassAPreamp::new(48_000.0);
         let mut digital = DigitalStage::new();
-        apply(profile_by_id(id).unwrap(), &controls, &mut pre, &mut digital);
+        apply(
+            profile_by_id(id).unwrap(),
+            &controls,
+            &mut pre,
+            &mut digital,
+        );
         (pre, digital)
     }
 
@@ -839,7 +889,11 @@ mod tests {
             assert!((pre.skew - v.skew).abs() < 1.0e-5, "{}", profile.id);
             assert!((pre.headroom - v.headroom).abs() < 1.0e-3, "{}", profile.id);
             assert!((pre.knee - v.knee).abs() < 1.0e-5, "{}", profile.id);
-            assert!((pre.crossover - v.crossover).abs() < 1.0e-5, "{}", profile.id);
+            assert!(
+                (pre.crossover - v.crossover).abs() < 1.0e-5,
+                "{}",
+                profile.id
+            );
             assert!((pre.tilt_db() - v.tilt_db).abs() < 1.0e-4, "{}", profile.id);
             if !v.digital {
                 assert!((pre.sag - v.sag).abs() < 1.0e-5, "{}", profile.id);
@@ -866,11 +920,7 @@ mod tests {
                     mix: k,
                 };
                 let (_, digital) = engine(profile.id, controls);
-                assert!(
-                    digital.is_transparent(),
-                    "{} quantises at {k}",
-                    profile.id,
-                );
+                assert!(digital.is_transparent(), "{} quantises at {k}", profile.id,);
             }
         }
     }
@@ -880,11 +930,19 @@ mod tests {
     /// the panel reads in.
     #[test]
     fn the_crusher_runs_clean_clockwise_and_coarse_anticlockwise() {
-        let clean = Controls { character_a: 1.0, character_b: 1.0, ..Default::default() };
+        let clean = Controls {
+            character_a: 1.0,
+            character_b: 1.0,
+            ..Default::default()
+        };
         let (_, digital) = engine("crush", clean);
         assert!(digital.is_transparent(), "fully up must be off");
 
-        let coarse = Controls { character_a: 0.0, character_b: 0.0, ..Default::default() };
+        let coarse = Controls {
+            character_a: 0.0,
+            character_b: 0.0,
+            ..Default::default()
+        };
         let (_, digital) = engine("crush", coarse);
         assert!(digital.bits <= 3.0, "bits: {}", digital.bits);
         assert!(digital.rate >= 16.0, "rate: {}", digital.rate);
@@ -926,7 +984,10 @@ mod tests {
         let h2 = |knob: f32| {
             let (pre, _) = engine(
                 "triode",
-                Controls { character_a: knob, ..Default::default() },
+                Controls {
+                    character_a: knob,
+                    ..Default::default()
+                },
             );
             let mut h = [0.0f32; 4];
             saturate_dsp::preamp::analysis::harmonic_spectrum(&pre, &mut h);

@@ -34,7 +34,7 @@ use std::path::PathBuf;
 
 use baseview::{Event, EventStatus, Window, WindowEvent, WindowHandler, WindowOpenOptions};
 use daw_standalone::audio_engine::plugin_host::{
-    ClapHost, LoadedClapPlugin, gui_api_uses_logical_size,
+    gui_api_uses_logical_size, ClapHost, LoadedClapPlugin,
 };
 use raw_window_handle::HasWindowHandle;
 
@@ -48,7 +48,10 @@ fn resize_to_plugin_size(ctx: &baseview::WindowContext, width: u32, height: u32)
     if gui_api_uses_logical_size() {
         ctx.resize(baseview::dpi::LogicalSize::new(width as f64, height as f64));
     } else {
-        ctx.resize(baseview::dpi::PhysicalSize::new(width as f64, height as f64));
+        ctx.resize(baseview::dpi::PhysicalSize::new(
+            width as f64,
+            height as f64,
+        ));
     }
 }
 
@@ -241,10 +244,7 @@ fn main() -> eyre::Result<()> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--index" => {
-                plugin_index = args
-                    .next()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or_default();
+                plugin_index = args.next().and_then(|v| v.parse().ok()).unwrap_or_default();
             }
             "--note-names" => note_names = true,
             "--probe" => probe = true,
@@ -280,7 +280,11 @@ fn main() -> eyre::Result<()> {
         let (audio_in, audio_out) = plugin.audio_port_count();
         let (note_in, note_out) = plugin.note_port_count();
         let params = plugin.params().len();
-        let unit = if gui_api_uses_logical_size() { "logical" } else { "physical" };
+        let unit = if gui_api_uses_logical_size() {
+            "logical"
+        } else {
+            "physical"
+        };
         let gui = match plugin.probe_gui_size() {
             Ok((w, h)) => format!("{w}x{h} {unit}"),
             Err(e) => format!("none ({e:?})"),
@@ -298,18 +302,20 @@ fn main() -> eyre::Result<()> {
     if note_names {
         let mut plugin = ClapHost::default().load(&bundle, plugin_index)?;
         let names = plugin.note_names();
-        println!(
-            "{} ({})",
-            plugin.descriptor().name,
-            plugin.descriptor().id
-        );
+        println!("{} ({})", plugin.descriptor().name, plugin.descriptor().id);
         if names.is_empty() {
             println!("  no note names (plugin does not implement clap.note-name)");
             return Ok(());
         }
         println!("  {} note names:", names.len());
         for n in names {
-            let wildcard = |v: i32| if v < 0 { "*".to_string() } else { v.to_string() };
+            let wildcard = |v: i32| {
+                if v < 0 {
+                    "*".to_string()
+                } else {
+                    v.to_string()
+                }
+            };
             println!(
                 "    key {:>3}  ch {:>3}  port {:>3}   {}",
                 wildcard(n.key),
@@ -337,64 +343,65 @@ fn main() -> eyre::Result<()> {
     // (platform/macos/window.rs), so this cannot fake a Retina session on the
     // platform that most needs it — a macOS scale-2 repro has to run on an
     // actual Retina display, not over SSH.
-    options.scale = match std::env::var("FTS_HOST_SCALE").ok().and_then(|v| v.parse::<f64>().ok()) {
+    options.scale = match std::env::var("FTS_HOST_SCALE")
+        .ok()
+        .and_then(|v| v.parse::<f64>().ok())
+    {
         Some(scale) if scale > 0.0 => baseview::WindowScalePolicy::ScaleFactor(scale),
         _ => baseview::WindowScalePolicy::SystemScaleFactor,
     };
-    Window::open_blocking(
-        options,
-        move |ctx| {
-            let mut plugin = ClapHost::default()
-                .load(&bundle, plugin_index)
-                .unwrap_or_else(|e| panic!("loading {}: {e:?}", bundle.display()));
+    Window::open_blocking(options, move |ctx| {
+        let mut plugin = ClapHost::default()
+            .load(&bundle, plugin_index)
+            .unwrap_or_else(|e| panic!("loading {}: {e:?}", bundle.display()));
+        eprintln!(
+            "hosting {} ({}) — embedded GUI",
+            plugin.descriptor().name,
+            plugin.descriptor().id
+        );
+        // The scale factor is the whole story behind macOS sizing: the
+        // plugin reports its editor size in logical pixels there, so on a
+        // 2x display the window is twice the pixel size of the same
+        // plugin on Linux. Print it so a wrong-looking window can be
+        // read off the log instead of guessed at.
+        {
+            let size = ctx.size();
             eprintln!(
-                "hosting {} ({}) — embedded GUI",
-                plugin.descriptor().name,
-                plugin.descriptor().id
+                "[host] window: {}x{} logical, {}x{} physical, scale {} — plugin sizes are {}",
+                size.logical.width,
+                size.logical.height,
+                size.physical.width,
+                size.physical.height,
+                size.scale_factor,
+                if gui_api_uses_logical_size() {
+                    "LOGICAL"
+                } else {
+                    "PHYSICAL"
+                },
             );
-            // The scale factor is the whole story behind macOS sizing: the
-            // plugin reports its editor size in logical pixels there, so on a
-            // 2x display the window is twice the pixel size of the same
-            // plugin on Linux. Print it so a wrong-looking window can be
-            // read off the log instead of guessed at.
-            {
-                let size = ctx.size();
-                eprintln!(
-                    "[host] window: {}x{} logical, {}x{} physical, scale {} — plugin sizes are {}",
-                    size.logical.width,
-                    size.logical.height,
-                    size.physical.width,
-                    size.physical.height,
-                    size.scale_factor,
-                    if gui_api_uses_logical_size() { "LOGICAL" } else { "PHYSICAL" },
-                );
-            }
+        }
 
-            let raw = ctx
-                .window_handle()
-                .expect("host window handle")
-                .as_raw();
-            // Let the frame be dragged to a new size — the plugin's response
-            // to that is most of what this host is for.
-            make_window_resizable(&raw);
-            // Size the window before the editor is parented into it, the way a
-            // DAW does — so the editor's first frame is at its real size and
-            // no resize follows to paper over a missing first paint.
-            match plugin.open_gui_embedded(raw, |w, h| {
-                resize_to_plugin_size(&ctx, w, h);
-            }) {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("error: plugin GUI failed to embed: {e:?}");
-                    ctx.request_close();
-                }
+        let raw = ctx.window_handle().expect("host window handle").as_raw();
+        // Let the frame be dragged to a new size — the plugin's response
+        // to that is most of what this host is for.
+        make_window_resizable(&raw);
+        // Size the window before the editor is parented into it, the way a
+        // DAW does — so the editor's first frame is at its real size and
+        // no resize follows to paper over a missing first paint.
+        match plugin.open_gui_embedded(raw, |w, h| {
+            resize_to_plugin_size(&ctx, w, h);
+        }) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("error: plugin GUI failed to embed: {e:?}");
+                ctx.request_close();
             }
+        }
 
-            HostHandler {
-                plugin: RefCell::new(Some(plugin)),
-                window: ctx.clone(),
-            }
-        },
-    );
+        HostHandler {
+            plugin: RefCell::new(Some(plugin)),
+            window: ctx.clone(),
+        }
+    });
     Ok(())
 }

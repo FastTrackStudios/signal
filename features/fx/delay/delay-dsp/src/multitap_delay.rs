@@ -59,9 +59,12 @@ impl TapFilter {
             TapFilter::LowShelf => {
                 bq.set(FilterType::LowShelf { gain_db: 6.0 }, f, 0.707, sample_rate)
             }
-            TapFilter::HighShelf => {
-                bq.set(FilterType::HighShelf { gain_db: 6.0 }, f, 0.707, sample_rate)
-            }
+            TapFilter::HighShelf => bq.set(
+                FilterType::HighShelf { gain_db: 6.0 },
+                f,
+                0.707,
+                sample_rate,
+            ),
         }
     }
 }
@@ -196,16 +199,27 @@ impl TapPreset {
             // 2: quarter pulse, centered. // interpretation
             2 => {
                 for (i, p) in [0.25, 0.5, 0.75, 1.0].iter().enumerate() {
-                    taps[i] = t(*p, 1.0 - i as f64 * 0.15, 0.0, if *p == 1.0 { 1.0 } else { 0.0 });
+                    taps[i] = t(
+                        *p,
+                        1.0 - i as f64 * 0.15,
+                        0.0,
+                        if *p == 1.0 { 1.0 } else { 0.0 },
+                    );
                 }
             }
             // 3: eighth-note drive, alternating narrow pans. // interpretation
-            3 => {
+            3 =>
+            {
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..8 {
                     let p = (i + 1) as f64 / 8.0;
                     let pan = if i % 2 == 0 { -0.4 } else { 0.4 };
-                    taps[i] = t(p, 0.85 - i as f64 * 0.07, pan, if i == 7 { 1.0 } else { 0.0 });
+                    taps[i] = t(
+                        p,
+                        0.85 - i as f64 * 0.07,
+                        pan,
+                        if i == 7 { 1.0 } else { 0.0 },
+                    );
                 }
             }
             // 4: dotted-eighth "U2" figure. // interpretation
@@ -218,7 +232,12 @@ impl TapPreset {
             5 => {
                 for (i, p) in [1.0 / 3.0, 2.0 / 3.0, 1.0].iter().enumerate() {
                     let pan = [-0.7, 0.7, 0.0][i];
-                    taps[i] = t(*p, 0.9 - i as f64 * 0.1, pan, if i == 2 { 1.0 } else { 0.0 });
+                    taps[i] = t(
+                        *p,
+                        0.9 - i as f64 * 0.1,
+                        pan,
+                        if i == 2 { 1.0 } else { 0.0 },
+                    );
                 }
             }
             // 6: gallop (16th-16th-8th). // interpretation
@@ -241,7 +260,12 @@ impl TapPreset {
                 for i in 0..4 {
                     let beat = i as f64 * 0.25;
                     taps[i * 2] = t((beat + 0.1667).min(1.0), 0.7, -0.5, 0.0);
-                    taps[i * 2 + 1] = t((beat + 0.25).min(1.0), 0.9, 0.5, if i == 3 { 1.0 } else { 0.0 });
+                    taps[i * 2 + 1] = t(
+                        (beat + 0.25).min(1.0),
+                        0.9,
+                        0.5,
+                        if i == 3 { 1.0 } else { 0.0 },
+                    );
                 }
             }
             // 9: sparse ambient pair, wide. // interpretation
@@ -259,17 +283,28 @@ impl TapPreset {
             // 11: accelerando bunching toward the beat. // interpretation
             11 => {
                 for (i, p) in [0.5, 0.75, 0.875, 0.9375, 0.96875, 1.0].iter().enumerate() {
-                    taps[i] = t(*p, 0.5 + i as f64 * 0.1, (i as f64 - 2.5) * 0.3, if *p == 1.0 { 1.0 } else { 0.0 });
+                    taps[i] = t(
+                        *p,
+                        0.5 + i as f64 * 0.1,
+                        (i as f64 - 2.5) * 0.3,
+                        if *p == 1.0 { 1.0 } else { 0.0 },
+                    );
                 }
             }
             // 12: decelerando — mirror of 11. // interpretation
             12 => {
                 for (i, p) in [0.03125, 0.0625, 0.125, 0.25, 0.5, 1.0].iter().enumerate() {
-                    taps[i] = t(*p, 1.0 - i as f64 * 0.08, (2.5 - i as f64) * 0.3, if *p == 1.0 { 1.0 } else { 0.0 });
+                    taps[i] = t(
+                        *p,
+                        1.0 - i as f64 * 0.08,
+                        (2.5 - i as f64) * 0.3,
+                        if *p == 1.0 { 1.0 } else { 0.0 },
+                    );
                 }
             }
             // 13: pan sweep L→R across even 16ths. // interpretation
-            13 => {
+            13 =>
+            {
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..8 {
                     let p = (i + 1) as f64 / 8.0;
@@ -298,7 +333,12 @@ impl TapPreset {
                 let positions = [0.06, 0.11, 0.17, 0.25, 0.36, 0.5, 0.71, 1.0];
                 for (i, p) in positions.iter().enumerate() {
                     let pan = [(0.3), (-0.5), (0.7), (-0.2), (0.5), (-0.7), (0.2), (0.0)][i];
-                    taps[i] = t(*p, 0.9 - i as f64 * 0.09, pan, if *p == 1.0 { 1.0 } else { 0.0 });
+                    taps[i] = t(
+                        *p,
+                        0.9 - i as f64 * 0.09,
+                        pan,
+                        if *p == 1.0 { 1.0 } else { 0.0 },
+                    );
                 }
             }
         }
@@ -464,7 +504,8 @@ impl MultiTapDelay {
         }
         self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
+        self.smoother
+            .set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     /// Advance the time smoother + shared mod LFO phase; returns the
@@ -568,7 +609,13 @@ impl MultiTapDelay {
     /// only itself (per-tap filter inside its own loop, so filtered
     /// repeats self-darken). Global hicut/locut shape the line input;
     /// decay tilt is skipped in this mode (see module docs).
-    fn tick_parallel(&mut self, input: f64, ch: usize, stereo: bool, smooth_delay: f64) -> (f64, f64) {
+    fn tick_parallel(
+        &mut self,
+        input: f64,
+        ch: usize,
+        stereo: bool,
+        smooth_delay: f64,
+    ) -> (f64, f64) {
         let max_read = self.parallel_lines[0].len() as f64 - 4.0;
 
         let mut line_input = input;
@@ -769,7 +816,10 @@ mod tests {
         let (input_400, input_520) = run(FeedbackMode::Input);
         let (par_400, par_520) = run(FeedbackMode::Parallel);
 
-        assert!(input_400 > 0.1 && par_400 > 0.1, "both modes emit the 400 ms tap");
+        assert!(
+            input_400 > 0.1 && par_400 > 0.1,
+            "both modes emit the 400 ms tap"
+        );
         assert!(
             input_520 > 0.01,
             "Input mode: A's recirculation must reach B: {input_520}"
@@ -877,7 +927,11 @@ mod tests {
             d.feedback = 0.4;
             d.apply_classic(n);
             assert_eq!(d.grid, TapGrid::Sixteenth, "classic {n} sets 16th grid");
-            assert_eq!(d.feedback_mode, FeedbackMode::Input, "classic {n} sets Input fb");
+            assert_eq!(
+                d.feedback_mode,
+                FeedbackMode::Input,
+                "classic {n} sets Input fb"
+            );
             d.update(SR);
 
             let mut energy = 0.0;

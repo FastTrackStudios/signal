@@ -5,8 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 use signal_proto::{
-    ModulePreset, Preset, engine::Engine, layer::Layer, profile::Profile, rig::Rig,
-    setlist::Setlist, song::Song,
+    engine::Engine, layer::Layer, profile::Profile, rig::Rig, setlist::Setlist, song::Song,
+    ModulePreset, Preset,
 };
 
 use crate::StorageResult;

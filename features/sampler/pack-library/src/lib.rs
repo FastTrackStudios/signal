@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 
 use std::collections::HashMap;
 
-use architect::{Layer, Services, layers};
+use architect::{layers, Layer, Services};
 use signal_packs_proto::packs::PackLibrary;
 use signal_packs_proto::{PackChunk, PackError, PackInfo, PackRange, PackSegment};
 use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _};
@@ -61,8 +61,10 @@ impl PackLibraryBackend {
         let root = root.into();
         let entries = scan(&root);
         tracing::info!(root = %root.display(), packs = entries.len(), "pack library scanned");
-        let backend =
-            Self { entries: Arc::new(Mutex::new(entries)), plans: Arc::new(Mutex::new(HashMap::new())) };
+        let backend = Self {
+            entries: Arc::new(Mutex::new(entries)),
+            plans: Arc::new(Mutex::new(HashMap::new())),
+        };
         backend.spawn_hasher();
         backend
     }
@@ -74,7 +76,10 @@ impl PackLibraryBackend {
 
     fn find(&self, name: &str, variant: &str) -> Option<Entry> {
         let entries = self.entries.lock().ok()?;
-        entries.iter().find(|e| e.info.name == name && e.info.variant == variant).cloned()
+        entries
+            .iter()
+            .find(|e| e.info.name == name && e.info.variant == variant)
+            .cloned()
     }
 
     /// Hash entries without a sha, sidecar-cached (`<pack>.sha256`
@@ -87,40 +92,45 @@ impl PackLibraryBackend {
     /// sha rather than forcing the host to read every drive it owns.
     fn spawn_hasher(&self) {
         let entries = self.entries.clone();
-        let _ = std::thread::Builder::new().name("pack-hasher".into()).spawn(move || {
-            let todo: Vec<Entry> = entries
-                .lock()
-                .map(|e| {
-                    e.iter()
-                        .filter(|e| e.info.sha256.is_empty() && e.info.variant == "proxy")
-                        .cloned()
-                        .collect()
-                })
-                .unwrap_or_default();
-            for entry in todo {
-                match sidecar_or_compute(&entry.path, entry.info.size_bytes) {
-                    Ok(hex) => {
-                        if let Ok(mut entries) = entries.lock() {
-                            if let Some(e) = entries.iter_mut().find(|e| {
-                                e.info.name == entry.info.name
-                                    && e.info.variant == entry.info.variant
-                            }) {
-                                e.info.sha256 = hex;
+        let _ = std::thread::Builder::new()
+            .name("pack-hasher".into())
+            .spawn(move || {
+                let todo: Vec<Entry> = entries
+                    .lock()
+                    .map(|e| {
+                        e.iter()
+                            .filter(|e| e.info.sha256.is_empty() && e.info.variant == "proxy")
+                            .cloned()
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                for entry in todo {
+                    match sidecar_or_compute(&entry.path, entry.info.size_bytes) {
+                        Ok(hex) => {
+                            if let Ok(mut entries) = entries.lock() {
+                                if let Some(e) = entries.iter_mut().find(|e| {
+                                    e.info.name == entry.info.name
+                                        && e.info.variant == entry.info.variant
+                                }) {
+                                    e.info.sha256 = hex;
+                                }
                             }
                         }
-                    }
-                    Err(e) => {
-                        tracing::warn!(pack = %entry.path.display(), "pack hash failed: {e}")
+                        Err(e) => {
+                            tracing::warn!(pack = %entry.path.display(), "pack hash failed: {e}")
+                        }
                     }
                 }
-            }
-        });
+            });
     }
 }
 
 impl PackLibrary for PackLibraryBackend {
     fn packs(&self) -> Vec<PackInfo> {
-        self.entries.lock().map(|e| e.iter().map(|e| e.info.clone()).collect()).unwrap_or_default()
+        self.entries
+            .lock()
+            .map(|e| e.iter().map(|e| e.info.clone()).collect())
+            .unwrap_or_default()
     }
 
     async fn read(
@@ -139,12 +149,16 @@ impl PackLibrary for PackLibraryBackend {
             let (range, pname) = rest.split_once(':').ok_or_else(|| {
                 PackError::InvalidRange("virtual name is not range:<start>+<len>:<name>".into())
             })?;
-            return self.read_range(pname.to_string(), variant, range.to_string(), tx).await;
+            return self
+                .read_range(pname.to_string(), variant, range.to_string(), tx)
+                .await;
         }
         let entry = self.find(&name, &variant).ok_or(PackError::NotFound)?;
         let size = entry.info.size_bytes;
         if start > size {
-            return Err(PackError::InvalidRange(format!("start {start} > size {size}")));
+            return Err(PackError::InvalidRange(format!(
+                "start {start} > size {size}"
+            )));
         }
         let mut file = tokio::fs::File::open(&entry.path)
             .await
@@ -155,11 +169,21 @@ impl PackLibrary for PackLibraryBackend {
         let mut offset = start;
         let mut buf = vec![0u8; CHUNK_BYTES];
         loop {
-            let n = file.read(&mut buf).await.map_err(|e| PackError::Io(e.to_string()))?;
+            let n = file
+                .read(&mut buf)
+                .await
+                .map_err(|e| PackError::Io(e.to_string()))?;
             if n == 0 {
                 return Ok(());
             }
-            if tx.send(PackChunk { offset, bytes: buf[..n].to_vec() }).await.is_err() {
+            if tx
+                .send(PackChunk {
+                    offset,
+                    bytes: buf[..n].to_vec(),
+                })
+                .await
+                .is_err()
+            {
                 // Receiver went away (download cancelled) — not an error.
                 return Ok(());
             }
@@ -202,8 +226,8 @@ impl PackLibrary for PackLibraryBackend {
         let mut offset = range.start;
         let mut buf = vec![0u8; CHUNK_BYTES];
         while offset < end {
-            let want = usize::try_from((end - offset).min(CHUNK_BYTES as u64))
-                .expect("chunk fits usize");
+            let want =
+                usize::try_from((end - offset).min(CHUNK_BYTES as u64)).expect("chunk fits usize");
             let n = file
                 .read(&mut buf[..want])
                 .await
@@ -213,7 +237,14 @@ impl PackLibrary for PackLibraryBackend {
                     "pack truncated at {offset} (wanted {end})"
                 )));
             }
-            if tx.send(PackChunk { offset, bytes: buf[..n].to_vec() }).await.is_err() {
+            if tx
+                .send(PackChunk {
+                    offset,
+                    bytes: buf[..n].to_vec(),
+                })
+                .await
+                .is_err()
+            {
                 // Receiver went away (fetch cancelled) — not an error.
                 return Ok(());
             }
@@ -280,13 +311,22 @@ impl PackLibrary for PackLibraryBackend {
         let bytes = json.as_bytes();
         let len = bytes.len() as u64;
         if start > len {
-            return Err(PackError::InvalidRange(format!("start {start} > plan size {len}")));
+            return Err(PackError::InvalidRange(format!(
+                "start {start} > plan size {len}"
+            )));
         }
         let mut offset = start;
         while offset < len {
             let end = (offset + CHUNK_BYTES as u64).min(len);
             let chunk = bytes[offset as usize..end as usize].to_vec();
-            if tx.send(PackChunk { offset, bytes: chunk }).await.is_err() {
+            if tx
+                .send(PackChunk {
+                    offset,
+                    bytes: chunk,
+                })
+                .await
+                .is_err()
+            {
                 return Ok(()); // receiver went away — not an error
             }
             offset = end;
@@ -308,14 +348,22 @@ impl Services for PackLibraryBackend {
 /// and its lossless twin share a category and differ only by variant.
 fn scan(root: &Path) -> Vec<Entry> {
     let mut entries = Vec::new();
-    for f in walkdir::WalkDir::new(root).follow_links(true).into_iter().flatten() {
+    for f in walkdir::WalkDir::new(root)
+        .follow_links(true)
+        .into_iter()
+        .flatten()
+    {
         let path = f.path();
         if !path.is_file()
-            || path.extension().is_none_or(|e| !e.eq_ignore_ascii_case("signalpack"))
+            || path
+                .extension()
+                .is_none_or(|e| !e.eq_ignore_ascii_case("signalpack"))
         {
             continue;
         }
-        let Some(name) = path.file_stem().and_then(|s| s.to_str()) else { continue };
+        let Some(name) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
         let Some(rel_dir) = path.parent().and_then(|p| p.strip_prefix(root).ok()) else {
             continue;
         };
@@ -338,8 +386,11 @@ fn scan(root: &Path) -> Vec<Entry> {
         });
     }
     entries.sort_by(|a, b| {
-        (&a.info.category, &a.info.name, &a.info.variant)
-            .cmp(&(&b.info.category, &b.info.name, &b.info.variant))
+        (&a.info.category, &a.info.name, &a.info.variant).cmp(&(
+            &b.info.category,
+            &b.info.name,
+            &b.info.variant,
+        ))
     });
     entries
 }

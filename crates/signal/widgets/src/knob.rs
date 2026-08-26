@@ -6,7 +6,7 @@
 
 use dioxus::prelude::*;
 
-use crate::arc::{SENSITIVITY, START_ANGLE, SWEEP, angle_for_value, arc_point, arc_path};
+use crate::arc::{angle_for_value, arc_path, arc_point, SENSITIVITY, START_ANGLE, SWEEP};
 
 /// Knob display size — audio-gui's diameters.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -93,11 +93,14 @@ pub fn Knob(
     on_change: Callback<f32>,
     #[props(default)] size: KnobSize,
     /// Hide the numeric readout (tight strips show label only).
-    #[props(default)] hide_value: bool,
+    #[props(default)]
+    hide_value: bool,
     /// Value formatter override (default `{:.1}`).
-    #[props(default)] fmt: Option<FmtFn>,
+    #[props(default)]
+    fmt: Option<FmtFn>,
     /// Accent color override.
-    #[props(default)] color: Option<String>,
+    #[props(default)]
+    color: Option<String>,
 ) -> Element {
     // Drag state: (start_y, start_normalized) while a drag is live.
     let mut drag = use_signal(|| None::<(f64, f64)>);

@@ -14,10 +14,10 @@
 
 #![allow(dead_code)]
 
-use signal::Signal;
 use signal::builder::BuiltRig;
 use signal::rig::{RigId, RigSceneId};
 use signal::seed_id;
+use signal::Signal;
 
 // ─── Controller bootstrap ───────────────────────────────────────
 
@@ -315,7 +315,12 @@ pub async fn seed_guitar_profiles(signal: &Signal) {
     rock.add_patch(megarig_patch("guitar-rock-lead", "Lead", true, 0.72));
     rock.add_patch(megarig_patch("guitar-rock-ambient", "Ambient", false, 0.40));
     rock.add_patch(megarig_patch("guitar-rock-phaser", "Phaser", false, 0.45));
-    rock.add_patch(megarig_patch("guitar-rock-dly-lead", "DLY Lead", true, 0.70));
+    rock.add_patch(megarig_patch(
+        "guitar-rock-dly-lead",
+        "DLY Lead",
+        true,
+        0.70,
+    ));
     rock.add_patch(megarig_patch("guitar-rock-solo", "Solo", true, 0.78));
     rock.default_patch_id = seed_id("guitar-rock-drive").into();
     signal.profiles().save(rock).await.unwrap();
@@ -332,7 +337,12 @@ pub async fn seed_guitar_profiles(signal: &Signal) {
         false,
         0.50,
     ));
-    all_around.add_patch(megarig_patch("guitar-allaround-drive", "Drive", false, 0.62));
+    all_around.add_patch(megarig_patch(
+        "guitar-allaround-drive",
+        "Drive",
+        false,
+        0.62,
+    ));
     all_around.add_patch(megarig_patch("guitar-allaround-lead", "Lead", true, 0.75));
     all_around.add_patch(megarig_patch("guitar-allaround-funk", "Funk", false, 0.30));
     all_around.add_patch(megarig_patch(
@@ -513,7 +523,11 @@ pub async fn seed_keys_megarig(signal: &Signal) {
             "synth-engine",
             "Synth Engine",
             EngineType::Synth,
-            &["synth-layer-osc", "synth-layer-motion", "synth-layer-texture"],
+            &[
+                "synth-layer-osc",
+                "synth-layer-motion",
+                "synth-layer-texture",
+            ],
             &[
                 ("synth-engine-default", "Default"),
                 ("synth-engine-scene-b", "Scene B"),
@@ -1518,12 +1532,11 @@ fn guitar_engine() -> Engine {
     // overrides in resolution, so an amp-gain override at this level would clobber
     // a patch's own amp-gain (e.g. the worship Solo patch's 0.72). The rig lead
     // scene carries the scene-level override instead.
-    let lead_scene = EngineScene::new(seed_id("guitar-engine-lead"), "Lead").with_layer(
-        LayerSelection::new(
+    let lead_scene =
+        EngineScene::new(seed_id("guitar-engine-lead"), "Lead").with_layer(LayerSelection::new(
             seed_id("guitar-layer-archetype-jm"),
             seed_id("guitar-layer-archetype-jm-lead"),
-        ),
-    );
+        ));
 
     let mut engine = Engine::new(
         seed_id("guitar-engine"),

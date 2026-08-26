@@ -151,18 +151,15 @@ impl OilCanDelay {
             let murk = ((1200.0 - tone) / 900.0).clamp(0.0, 1.0);
             self.lp
                 .set(FilterType::Lowpass, tone, 0.707 + murk * 2.3, sample_rate);
-            self.murk_hp.set(
-                FilterType::Highpass,
-                120.0 + murk * 280.0,
-                0.9,
-                sample_rate,
-            );
+            self.murk_hp
+                .set(FilterType::Highpass, 120.0 + murk * 280.0, 0.9, sample_rate);
             self.murk_active = true;
         }
 
         self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
+        self.smoother
+            .set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     #[inline]
@@ -211,8 +208,7 @@ impl OilCanDelay {
         let short_pos = (smooth_delay * Self::SHORT_RATIO * factor).clamp(1.0, max_read);
         // Disc rotation: identical for both head modes, longer than the
         // first echo.
-        let rotation_pos =
-            (smooth_delay * Self::ROTATION_RATIO * factor).clamp(1.0, max_read);
+        let rotation_pos = (smooth_delay * Self::ROTATION_RATIO * factor).clamp(1.0, max_read);
 
         // Pickup makeup: writes are α-scaled by the partial re-charge,
         // the playback amp brings the first echo back to unity.
@@ -221,8 +217,7 @@ impl OilCanDelay {
             OilCanHeads::Long => self.delay.read_cubic(long_pos) * makeup,
             OilCanHeads::Short => self.delay.read_cubic(short_pos) * makeup,
             OilCanHeads::Both => {
-                (self.delay.read_cubic(long_pos) + self.delay.read_cubic(short_pos) * 0.8)
-                    * makeup
+                (self.delay.read_cubic(long_pos) + self.delay.read_cubic(short_pos) * 0.8) * makeup
                     / 1.4
             }
         };
@@ -323,8 +318,14 @@ mod tests {
         }
         let short = (500.0 * OilCanDelay::SHORT_RATIO * SR / 1000.0) as i64;
         let long = (500.0 * SR / 1000.0) as i64;
-        assert!(hits.iter().any(|&h| (h as i64 - short).abs() < 480), "{hits:?}");
-        assert!(hits.iter().any(|&h| (h as i64 - long).abs() < 480), "{hits:?}");
+        assert!(
+            hits.iter().any(|&h| (h as i64 - short).abs() < 480),
+            "{hits:?}"
+        );
+        assert!(
+            hits.iter().any(|&h| (h as i64 - long).abs() < 480),
+            "{hits:?}"
+        );
     }
 
     #[test]
@@ -428,8 +429,7 @@ mod tests {
             d.update(SR);
             (0..96000)
                 .map(|i| {
-                    let input =
-                        (core::f64::consts::TAU * 90.0 * i as f64 / SR).sin() * 0.5;
+                    let input = (core::f64::consts::TAU * 90.0 * i as f64 / SR).sin() * 0.5;
                     let out = d.tick(input, 0);
                     out * out
                 })
@@ -455,8 +455,7 @@ mod tests {
             d.update(SR);
             (0..48000)
                 .map(|i| {
-                    let input =
-                        (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
+                    let input = (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
                     d.tick(input, 0)
                 })
                 .collect()
@@ -464,11 +463,7 @@ mod tests {
         let slow = run(0.3);
         let fast = run(2.5);
         let ref_energy: f64 = slow.iter().map(|x| x * x).sum();
-        let diff: f64 = slow
-            .iter()
-            .zip(&fast)
-            .map(|(a, b)| (a - b) * (a - b))
-            .sum();
+        let diff: f64 = slow.iter().zip(&fast).map(|(a, b)| (a - b) * (a - b)).sum();
         assert!(
             diff > ref_energy * 0.01,
             "Mod Speed should change the wobble: {diff} vs {ref_energy}"
@@ -509,6 +504,9 @@ mod tests {
             g2 < g1 * 0.8 && g3 < g2 * 0.8,
             "ghost train should decay per revolution: {g1} {g2} {g3}"
         );
-        assert!(g3 > g1 * 0.005, "train should not vanish instantly: {g3} vs {g1}");
+        assert!(
+            g3 > g1 * 0.005,
+            "train should not vanish instantly: {g3} vs {g1}"
+        );
     }
 }

@@ -20,7 +20,7 @@ use reverb_ui::params::{ReverbParams, ReverbUiState};
 use std::sync::Arc;
 
 use audiocore_dsp::{AudioConfig, Processor};
-use reverb::{ReverbChain};
+use reverb::ReverbChain;
 
 const PLUGIN_NAME: &str = "FTS Reverb";
 
@@ -173,9 +173,10 @@ impl Plugin for FtsReverb {
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate as f64;
         // The worker resamples to whatever the host is running at.
-        self.ui_state
-            .sample_rate
-            .store(buffer_config.sample_rate, std::sync::atomic::Ordering::Relaxed);
+        self.ui_state.sample_rate.store(
+            buffer_config.sample_rate,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         let max = (buffer_config.max_buffer_size as usize).max(1);
         self.scratch_l = vec![0.0; max];
         self.scratch_r = vec![0.0; max];
@@ -235,8 +236,9 @@ impl Plugin for FtsReverb {
 
 impl ClapPlugin for FtsReverb {
     const CLAP_ID: &'static str = "com.fasttrackstudio.reverb";
-    const CLAP_DESCRIPTION: Option<&'static str> =
-        Some("Reverb with 15 algorithm engines: rooms, halls, plates, springs, shimmer, convolution");
+    const CLAP_DESCRIPTION: Option<&'static str> = Some(
+        "Reverb with 15 algorithm engines: rooms, halls, plates, springs, shimmer, convolution",
+    );
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[

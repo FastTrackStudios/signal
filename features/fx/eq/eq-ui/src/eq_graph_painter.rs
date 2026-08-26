@@ -15,7 +15,7 @@ use nice_plug_dioxus::widget::{
     ComputedStyles, PaintScene as _, RenderContext, Scene, UiEvent, Widget,
 };
 
-use super::eq_graph_model::{EqBand, EqGraphRenderState, GraphConfig, freq_to_color};
+use super::eq_graph_model::{freq_to_color, EqBand, EqGraphRenderState, GraphConfig};
 use super::eq_graph_response::{calculate_band_response, calculate_combined_response};
 use spectrum_analyzer::ui::{paint_collisions, paint_spectrum_fill, paint_spectrum_line};
 

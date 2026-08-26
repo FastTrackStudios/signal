@@ -6,7 +6,7 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::{Coeffs, eval_sos, mag_db_sos};
+use crate::biquad::{eval_sos, mag_db_sos, Coeffs};
 use crate::zpk::Zpk;
 
 /// Compute magnitude response in dB at the given frequencies.

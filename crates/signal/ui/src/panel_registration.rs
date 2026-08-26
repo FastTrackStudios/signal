@@ -13,8 +13,8 @@ use signal::Signal;
 
 use crate::components::GridSlot;
 use crate::views::{
-    CollectionBrowser, EditorInspectorPanel, EngineParamLookup, RigGridPanel, RigSceneGrid,
-    engines_to_grid_slots, resolve_scene_engines,
+    engines_to_grid_slots, resolve_scene_engines, CollectionBrowser, EditorInspectorPanel,
+    EngineParamLookup, RigGridPanel, RigSceneGrid,
 };
 
 /// Register all signal panels with the renderer registry.

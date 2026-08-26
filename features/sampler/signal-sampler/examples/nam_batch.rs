@@ -83,7 +83,10 @@ fn main() -> Result<(), String> {
     }
 
     println!("\n── summary ──");
-    println!("total: {}   loaded+sound: {ok}   silent: {silent}   failed: {fail}", files.len());
+    println!(
+        "total: {}   loaded+sound: {ok}   silent: {silent}   failed: {fail}",
+        files.len()
+    );
     println!("by architecture:");
     for (a, c) in &by_arch {
         println!("  {a}: {c}");

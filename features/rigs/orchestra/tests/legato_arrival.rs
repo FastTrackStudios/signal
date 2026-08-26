@@ -25,15 +25,15 @@
 //! and a staccato calibration case.
 
 use signal_orchestra::timing::{
-    OnsetKind, TimingCase, pitch_arrival, spectral_flux, timing_corpus,
+    pitch_arrival, spectral_flux, timing_corpus, OnsetKind, TimingCase,
 };
-use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
-use signal_sampler::PlayerPatch;
-use signal_sampler::SamplerRig;
+use signal_orchestra::{load_strings, CSS_CONFIG, CSS_ROOT};
 use signal_sampler::document::{
-    DocEvent, DocumentRenderOptions, MarkerKind, annotate, qn_to_frame,
+    annotate, qn_to_frame, DocEvent, DocumentRenderOptions, MarkerKind,
 };
 use signal_sampler::spec::LibrarySpec;
+use signal_sampler::PlayerPatch;
+use signal_sampler::SamplerRig;
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
@@ -162,7 +162,8 @@ fn assert_schedule_identities(case: &TimingCase, spec: &LibrarySpec) {
             _ => unreachable!(),
         };
         assert_eq!(
-            arrival, grid,
+            arrival,
+            grid,
             "{} note {i} ({:?} {}): {} == grid, err {} frames",
             case.name,
             exp.kind,
@@ -237,9 +238,11 @@ fn schedule_arrivals_land_on_grid_fallback_spec() {
             .events
             .iter()
             .filter(|e| matches!(e.kind, DocEvent::NoteOn { .. }))
-            .zip(case.expected.iter().filter(|e| {
-                matches!(e.kind, OnsetKind::Short | OnsetKind::PhraseStart)
-            }))
+            .zip(
+                case.expected
+                    .iter()
+                    .filter(|e| matches!(e.kind, OnsetKind::Short | OnsetKind::PhraseStart)),
+            )
         {
             if let DocEvent::NoteOn { lead, .. } = ev.kind {
                 let want = match exp.kind {
@@ -521,8 +524,8 @@ fn rendered_arrivals_land_on_grid_with_css() {
                     }
                     let mut acc = 0.0f64;
                     for f in f0..f1 {
-                        let m = (f64::from(res.audio[f * 2]) + f64::from(res.audio[f * 2 + 1]))
-                            * 0.5;
+                        let m =
+                            (f64::from(res.audio[f * 2]) + f64::from(res.audio[f * 2 + 1])) * 0.5;
                         acc += m * m;
                     }
                     (acc / (f1 - f0) as f64).sqrt()
@@ -549,8 +552,7 @@ fn rendered_arrivals_land_on_grid_with_css() {
                 // point with a note. ISOLATED non-octave joins must always
                 // resolve: an unresolvable one there means a lying marker.
                 let octave = prev_pitch.is_some_and(|p| p.abs_diff(exp.pitch) >= 12);
-                if exp.kind == OnsetKind::Legato
-                    && (octave || !case.name.starts_with("intervals_"))
+                if exp.kind == OnsetKind::Legato && (octave || !case.name.starts_with("intervals_"))
                 {
                     eprintln!(
                         "   qn {:5.2} pitch {:3} Legato: pitch-share detector unresolved ({}) — skipped (deterministic arrival exact)",

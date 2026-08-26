@@ -31,7 +31,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-use signal_sampler::engine::cache::{PackCodec, PackSpecSource, create_signal_pack_with};
+use signal_sampler::engine::cache::{create_signal_pack_with, PackCodec, PackSpecSource};
 use signal_sampler::styx_edit::{entry_field, find_list_block, scan, split_entries};
 
 /// Replace a top-level list block's entries with `kept` (verbatim entry texts).
@@ -106,7 +106,9 @@ fn force_mic_default(entry: &str) -> String {
     }
     let mut e = entry.trim_end().to_string();
     // Drop an explicit `default false` if present, then splice before `}`.
-    let e2 = e.replace(", default false", "").replace("default false", "");
+    let e2 = e
+        .replace(", default false", "")
+        .replace("default false", "");
     e = e2;
     match e.rfind('}') {
         Some(pos) => {
@@ -172,7 +174,11 @@ fn parse_groups(text: &str) -> Vec<Group> {
 
 /// Resolve an articulation id to its group: exact id first, else the group
 /// with the longest matching prefix.
-fn group_for<'g>(groups: &'g [Group], exact: &BTreeMap<&str, &'g str>, artic: &str) -> Option<&'g str> {
+fn group_for<'g>(
+    groups: &'g [Group],
+    exact: &BTreeMap<&str, &'g str>,
+    artic: &str,
+) -> Option<&'g str> {
     if let Some(g) = exact.get(artic) {
         return Some(g);
     }
@@ -199,9 +205,11 @@ fn synth_artic_kind(id: &str) -> &'static str {
         "@Sustain"
     } else if id.starts_with("fx") {
         "@OneShot"
-    } else if ["rep", "atk", "stacc", "spicc", "pizz", "pluck", "snap", "marc"]
-        .iter()
-        .any(|t| id.contains(t))
+    } else if [
+        "rep", "atk", "stacc", "spicc", "pizz", "pluck", "snap", "marc",
+    ]
+    .iter()
+    .any(|t| id.contains(t))
     {
         "@Short"
     } else {
@@ -230,8 +238,7 @@ fn parse_zones(spec_text: &str) -> Vec<ZoneRef<'_>> {
                 text,
                 articulation: entry_field(text, "articulation")
                     .unwrap_or_else(|| panic!("zone missing articulation: {text}")),
-                mic: entry_field(text, "mic")
-                    .unwrap_or_else(|| panic!("zone missing mic: {text}")),
+                mic: entry_field(text, "mic").unwrap_or_else(|| panic!("zone missing mic: {text}")),
                 file: entry_field(text, "file")
                     .unwrap_or_else(|| panic!("zone missing file: {text}")),
             }
@@ -280,7 +287,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let groups = parse_groups(&std::fs::read_to_string(&groups_path)?);
     let artic_to_group: BTreeMap<&str, &str> = groups
         .iter()
-        .flat_map(|g| g.articulations.iter().map(|a| (a.as_str(), g.name.as_str())))
+        .flat_map(|g| {
+            g.articulations
+                .iter()
+                .map(|a| (a.as_str(), g.name.as_str()))
+        })
         .collect();
 
     let (config_body, config_meta) = strip_top_level_scalars(&config_text);
@@ -356,7 +367,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let (body, n_sections) = filter_list_block(&config_body, "sections", |e| {
                 entry_field(e, "label").as_deref() == Some(section.as_str())
             });
-            assert!(n_sections == 1, "{pack_name}: section {section:?} not found in engine config");
+            assert!(
+                n_sections == 1,
+                "{pack_name}: section {section:?} not found in engine config"
+            );
             let (body, n_mics) = {
                 let (b, n) = filter_list_block(&body, "mics", |e| {
                     entry_field(e, "id").as_deref() == Some(mic.as_str())
@@ -371,7 +385,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .collect();
                 (format!("{}mics (\n{rebuilt})\n{}", &b[..bs], &b[be..]), n)
             };
-            assert!(n_mics == 1, "{pack_name}: mic {mic:?} not found in engine config");
+            assert!(
+                n_mics == 1,
+                "{pack_name}: mic {mic:?} not found in engine config"
+            );
             // Keep a config articulation when it belongs to THIS group —
             // exact membership or prefix match (Pacific groups declare
             // prefixes; curated config artics like `sus`/`leg` must survive).

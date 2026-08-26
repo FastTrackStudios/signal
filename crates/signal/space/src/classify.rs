@@ -10,7 +10,16 @@
 use crate::analyze::Analysis;
 
 pub const CLASSES: &[&str] = &[
-    "kick", "snare", "clap", "hat-closed", "hat-open", "cymbal", "tom", "perc", "fx", "other",
+    "kick",
+    "snare",
+    "clap",
+    "hat-closed",
+    "hat-open",
+    "cymbal",
+    "tom",
+    "perc",
+    "fx",
+    "other",
 ];
 
 /// Classify one analyzed asset. `name` = lowercase filename (hint source).
@@ -92,10 +101,18 @@ pub fn classify(a: &Analysis, name: &str) -> &'static str {
         return "kick";
     }
     if a.centroid_hz > 3000.0 && top > 0.5 {
-        return if a.decay_ms > 400.0 { "cymbal" } else { "hat-closed" };
+        return if a.decay_ms > 400.0 {
+            "cymbal"
+        } else {
+            "hat-closed"
+        };
     }
     if a.centroid_hz > 1800.0 && a.flatness > 0.25 {
-        return if a.decay_ms > 350.0 { "hat-open" } else { "hat-closed" };
+        return if a.decay_ms > 350.0 {
+            "hat-open"
+        } else {
+            "hat-closed"
+        };
     }
     if body > 0.35 && top > 0.15 && a.flatness > 0.08 {
         return if a.attack_ms > 8.0 { "clap" } else { "snare" };

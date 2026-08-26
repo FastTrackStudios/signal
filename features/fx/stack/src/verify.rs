@@ -77,7 +77,10 @@ pub fn pink_reference(len: usize) -> (Vec<f64>, Vec<f64>) {
         v.iter_mut().for_each(|x| *x *= g);
         v
     }
-    (channel(len, 0x9E37_79B9_7F4A_7C15), channel(len, 0xD1B5_4A32_D192_ED03))
+    (
+        channel(len, 0x9E37_79B9_7F4A_7C15),
+        channel(len, 0xD1B5_4A32_D192_ED03),
+    )
 }
 
 /// Plain RMS of a buffer.
@@ -191,11 +194,8 @@ mod tests {
     fn a_sweep_reports_the_worst_case_and_the_typical_band() {
         // A stage whose gain error grows toward the extremes: ±0.8 dB at the
         // ends, ±0.3 dB inside — passes the spec bounds exactly as intended.
-        let (full, typical) = sweep_deviation_db(
-            |t| Gain(db_to_lin(0.8 * (2.0 * t - 1.0))),
-            11,
-            48_000.0,
-        );
+        let (full, typical) =
+            sweep_deviation_db(|t| Gain(db_to_lin(0.8 * (2.0 * t - 1.0))), 11, 48_000.0);
         assert!(full <= FULL_RANGE_BOUND_DB, "{full}");
         assert!(typical <= TYPICAL_RANGE_BOUND_DB + 0.15, "{typical}");
         assert!(full > typical);

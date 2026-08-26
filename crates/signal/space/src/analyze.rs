@@ -44,12 +44,9 @@ pub struct Analysis {
 pub fn decode_wav_mono(path: &std::path::Path) -> Result<(Vec<f32>, f32), String> {
     // Quality is deliberately the lowest (linear interpolation): fidelity is
     // irrelevant for similarity features and speed matters across 10^5 files.
-    let (mut mono, _) = fts_sample::load_mono_f32(
-        path,
-        Some(ANALYSIS_SR),
-        fts_sample::ResampleQuality::Low,
-    )
-    .map_err(|e| e.to_string())?;
+    let (mut mono, _) =
+        fts_sample::load_mono_f32(path, Some(ANALYSIS_SR), fts_sample::ResampleQuality::Low)
+            .map_err(|e| e.to_string())?;
     let full_dur = mono.len() as f32 / ANALYSIS_SR as f32;
     // Trim leading silence (< -60 dBFS), keep 2 ms pre-roll.
     let thr = 10f32.powf(-60.0 / 20.0);
@@ -111,7 +108,10 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
     for (b, band) in bands.iter_mut().enumerate() {
         let lo = f_lo * (f_hi / f_lo).powf(b as f32 / BANDS as f32);
         let hi = f_lo * (f_hi / f_lo).powf((b + 1) as f32 / BANDS as f32);
-        let (i0, i1) = ((lo / bin_hz) as usize, ((hi / bin_hz) as usize).max((lo / bin_hz) as usize + 1));
+        let (i0, i1) = (
+            (lo / bin_hz) as usize,
+            ((hi / bin_hz) as usize).max((lo / bin_hz) as usize + 1),
+        );
         let mut e = 0.0f32;
         for m in avg_mag.iter().take(i1.min(n_bins)).skip(i0.min(n_bins - 1)) {
             e += m * m;
@@ -157,7 +157,9 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
     let frame = (sr * 0.005) as usize;
     let env: Vec<f32> = mono
         .chunks(frame)
-        .map(|c| (c.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>() / c.len() as f64).sqrt() as f32)
+        .map(|c| {
+            (c.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>() / c.len() as f64).sqrt() as f32
+        })
         .collect();
     let peak_i = env
         .iter()
@@ -174,8 +176,15 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
         .unwrap_or((env.len() - peak_i) as f32 * 5.0);
     // Percussive = energy concentrated right after the peak.
     let total_e: f32 = env.iter().map(|e| e * e).sum();
-    let head_e: f32 = env[peak_i..(peak_i + 20).min(env.len())].iter().map(|e| e * e).sum();
-    let percussiveness = if total_e > 0.0 { (head_e / total_e).clamp(0.0, 1.0) } else { 0.0 };
+    let head_e: f32 = env[peak_i..(peak_i + 20).min(env.len())]
+        .iter()
+        .map(|e| e * e)
+        .sum();
+    let percussiveness = if total_e > 0.0 {
+        (head_e / total_e).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
 
     // ── coarse band-energy split for classification ──
     let mut split = [0.0f32; 3];

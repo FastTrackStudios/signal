@@ -346,7 +346,11 @@ impl ClassAPreamp {
             h
         }
         .max(1.0e-3);
-        let side = if v >= 0.0 { self.positive } else { self.negative };
+        let side = if v >= 0.0 {
+            self.positive
+        } else {
+            self.negative
+        };
         let soft = side.shape(v / scale) * scale;
         if self.knee > 0.0 {
             let hard = (v / h).clamp(-1.0, 1.0) * h;
@@ -603,11 +607,7 @@ mod tests {
             "2nd harmonic springs up with bias: {} dB",
             db(h[1])
         );
-        assert!(
-            db(h[3]) > -60.0,
-            "4th follows: {} dB",
-            db(h[3])
-        );
+        assert!(db(h[3]) > -60.0, "4th follows: {} dB", db(h[3]));
     }
 
     #[test]

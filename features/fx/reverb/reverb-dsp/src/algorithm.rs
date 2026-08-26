@@ -909,13 +909,7 @@ pub trait ReverbAlgorithm: Send {
     /// True-stereo (4-leg) IR load: LL/RR drive the direct convolvers,
     /// LR/RL the cross-feed pair. Slot A only. No-op outside
     /// Convolution.
-    fn try_load_ir_true_stereo(
-        &mut self,
-        ll: &[f64],
-        lr: &[f64],
-        rl: &[f64],
-        rr: &[f64],
-    ) -> bool {
+    fn try_load_ir_true_stereo(&mut self, ll: &[f64], lr: &[f64], rl: &[f64], rr: &[f64]) -> bool {
         let _ = (ll, lr, rl, rr);
         false
     }
@@ -943,18 +937,11 @@ pub trait ReverbAlgorithm: Send {
     /// Attach a disposal channel for buffers displaced by audio-thread
     /// IR swaps (see [`crate::ir::IrTrash`]). Returns false when the
     /// algorithm has no swap path (everything but Convolution).
-    fn set_ir_trash_sender(
-        &mut self,
-        _tx: crossbeam_channel::Sender<crate::ir::IrTrash>,
-    ) -> bool {
+    fn set_ir_trash_sender(&mut self, _tx: crossbeam_channel::Sender<crate::ir::IrTrash>) -> bool {
         false
     }
 
-    fn try_load_prepared_ir_slot(
-        &mut self,
-        pair: crate::ir::PreparedIrPair,
-        slot: IrSlot,
-    ) -> bool {
+    fn try_load_prepared_ir_slot(&mut self, pair: crate::ir::PreparedIrPair, slot: IrSlot) -> bool {
         match slot {
             IrSlot::A => self.try_load_prepared_ir(pair),
             IrSlot::B => false,

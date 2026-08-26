@@ -13,11 +13,11 @@ pub mod timing;
 
 use std::path::Path;
 
-use keyflow_orchestra::{Config, PartOutput, ProfileKind, process_part, score};
-use signal_sampler::SamplerRig;
+use keyflow_orchestra::{process_part, score, Config, PartOutput, ProfileKind};
 use signal_sampler::document::{
     DocCc, DocNote, DocumentRenderOptions, DocumentRenderResult, TempoPoint, TrackDocument,
 };
+use signal_sampler::SamplerRig;
 
 /// Default install root for Cinematic Studio Strings (per-machine; override in
 /// the caller). The A/B examples use this unless a path is passed.
@@ -30,10 +30,7 @@ pub const CSS_ROOT: &str =
 /// envelopes, keyswitch map) lives in this file, not in engine code. Owned
 /// by this crate; resolved relative to the source tree at compile time.
 // r[impl signal.soundsource.declarative]
-pub const CSS_CONFIG: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/specs/cinematic-strings.styx"
-);
+pub const CSS_CONFIG: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/specs/cinematic-strings.styx");
 
 /// Load a CSS strings section (e.g. `"1st Violins"`) into `rig` under `id`,
 /// wired with the engine settings that match a real CSS-in-Kontakt render
@@ -72,11 +69,7 @@ pub fn load_strings(
 /// assigned divisi channels, so `auto_divisi` stays off and channel N maps to
 /// engine line N. `seed` pins every stochastic choice (round-robin) — persist
 /// it to reproduce a render byte-identically.
-pub fn part_to_document(
-    po: &PartOutput,
-    tempos: &[score::TempoPoint],
-    seed: u64,
-) -> TrackDocument {
+pub fn part_to_document(po: &PartOutput, tempos: &[score::TempoPoint], seed: u64) -> TrackDocument {
     TrackDocument {
         version: 1,
         seed,

@@ -4,8 +4,8 @@
 //! plus optional template card selection. Domain-agnostic: the caller
 //! configures labels and placeholders via [`ModalConfig`].
 
-use dioxus::prelude::*;
 use architect_ui::prelude::*;
+use dioxus::prelude::*;
 
 // region: --- Config & Data Types
 

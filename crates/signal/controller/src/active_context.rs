@@ -16,8 +16,7 @@ use signal_proto::{profile::ProfileId, rig::RigId, song::SongId};
 /// - `Profile` → activate the Nth patch
 /// - `Rig` → switch to the Nth scene
 /// - `Song` → jump to the Nth section
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum ActiveContext {
     /// No context active — variation actions are no-ops.
     #[default]
@@ -75,7 +74,6 @@ impl ActiveContext {
         matches!(self, ActiveContext::None)
     }
 }
-
 
 /// Thread-safe wrapper for `ActiveContext`.
 ///

@@ -8,9 +8,7 @@
 //! Input (one-pass shimmer, no laddering), Regenerative (shift inside
 //! the loop → octave ladders), or both summed.
 
-use crate::algorithm::{
-    AlgorithmParams, ReverbAlgorithm, ShimmerFeedbackMode, ShimmerParams,
-};
+use crate::algorithm::{AlgorithmParams, ReverbAlgorithm, ShimmerFeedbackMode, ShimmerParams};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::one_pole::Lp1;
@@ -128,7 +126,11 @@ impl Shimmer {
             self.shifter2_r.set_speed(speed2);
         }
 
-        self.shimmer_amount = self.mx.amount.map(|a| a.clamp(0.0, 1.0)).unwrap_or(self.legacy_amount);
+        self.shimmer_amount = self
+            .mx
+            .amount
+            .map(|a| a.clamp(0.0, 1.0))
+            .unwrap_or(self.legacy_amount);
     }
 }
 

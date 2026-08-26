@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 use signal_proto::tagging::{StructuredTag, TagSet};
-use signal_sampler::{LibrarySpec, read_pack_header};
+use signal_sampler::{read_pack_header, LibrarySpec};
 
 use crate::types::{ColumnItem, DetailData};
 

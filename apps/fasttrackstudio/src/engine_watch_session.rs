@@ -26,11 +26,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use architect::LocalServer;
+use axum::Router;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::sse::{KeepAlive, Sse};
 use axum::routing::{get, post};
-use axum::Router;
 use session_proto::services::setlist_service::SetlistServiceClient;
 use session_proto::setlist::ActiveIndices;
 use session_proto::watch::{WatchChord, WatchSessionState, WatchTrack};
@@ -86,9 +86,15 @@ pub async fn router(local: LocalServer) -> Option<Router> {
             .route("/watch/v1/session/state", get(state_snapshot))
             .route("/watch/v1/session/events", get(events))
             .route("/watch/v1/session/transport/{cmd}", post(transport))
-            .route("/watch/v1/session/section/{song}/{section}", post(seek_section))
+            .route(
+                "/watch/v1/session/section/{song}/{section}",
+                post(seek_section),
+            )
             .route("/watch/v1/session/track/{guid}/{op}", post(track_op))
-            .route("/watch/v1/session/track/{guid}/volume/{v}", post(track_volume))
+            .route(
+                "/watch/v1/session/track/{guid}/volume/{v}",
+                post(track_volume),
+            )
             .with_state(bridge),
     )
 }
@@ -128,12 +134,11 @@ async fn build_song_chart(b: &SessionBridge, song_index: usize) -> Arc<SongChart
                     for measure in &track.measures {
                         // `chords` is the legacy field; newer parses fill
                         // `rhythm_elements` only — read both.
-                        let from_elements = measure.rhythm_elements.iter().filter_map(|e| {
-                            match e {
+                        let from_elements =
+                            measure.rhythm_elements.iter().filter_map(|e| match e {
                                 keyflow::chart::types::RhythmElement::Chord(c) => Some(c),
                                 _ => None,
-                            }
-                        });
+                            });
                         let legacy = measure.chords.iter();
                         let chords: Vec<_> = if measure.rhythm_elements.is_empty() {
                             legacy.collect()
@@ -180,31 +185,36 @@ async fn build_song_chart(b: &SessionBridge, song_index: usize) -> Arc<SongChart
     }
 
     if let Ok(measures) = b.setlist.measures(song_index).await {
-        out.measure_times = measures.iter().map(|m| (m.measure, m.time_seconds)).collect();
+        out.measure_times = measures
+            .iter()
+            .map(|m| (m.measure, m.time_seconds))
+            .collect();
         out.measure_times.sort_by(|a, b| a.0.cmp(&b.0));
     }
 
     // Chart carried no chord tokens (section-outline charts) — fall back to
     // the song's MIDI-detected chords, mapping PPQ → seconds → measure/beat
     // through the measure table (960 PPQ per quarter, song tempo).
-    if out.chords.is_empty() && !out.measure_times.is_empty()
-        && let Ok(song) = b.setlist.song(song_index).await {
-            let bpm = song.tempo.unwrap_or(120.0).max(1.0);
-            for dc in &song.detected_chords {
-                let sec = dc.start_ppq as f64 / 960.0 * 60.0 / bpm;
-                if let Some((measure, frac)) = measure_at(&out, sec) {
-                    out.chords.push(FlatChord {
-                        measure,
-                        beat: (frac * 4.0) as i32,
-                        subdivision: 0,
-                        symbol: dc.symbol.clone(),
-                        section: 0,
-                    });
-                }
+    if out.chords.is_empty()
+        && !out.measure_times.is_empty()
+        && let Ok(song) = b.setlist.song(song_index).await
+    {
+        let bpm = song.tempo.unwrap_or(120.0).max(1.0);
+        for dc in &song.detected_chords {
+            let sec = dc.start_ppq as f64 / 960.0 * 60.0 / bpm;
+            if let Some((measure, frac)) = measure_at(&out, sec) {
+                out.chords.push(FlatChord {
+                    measure,
+                    beat: (frac * 4.0) as i32,
+                    subdivision: 0,
+                    symbol: dc.symbol.clone(),
+                    section: 0,
+                });
             }
-            out.chords
-                .sort_by_key(|c| (c.measure, c.beat, c.subdivision));
         }
+        out.chords
+            .sort_by_key(|c| (c.measure, c.beat, c.subdivision));
+    }
 
     tracing::info!(
         song_index,
@@ -235,16 +245,20 @@ fn measure_at(chart: &SongChart, t: f64) -> Option<(i32, f64)> {
     if times.is_empty() {
         return None;
     }
-    let i = match times.binary_search_by(|(_, start)| {
-        start.partial_cmp(&t).unwrap_or(std::cmp::Ordering::Equal)
-    }) {
+    let i = match times
+        .binary_search_by(|(_, start)| start.partial_cmp(&t).unwrap_or(std::cmp::Ordering::Equal))
+    {
         Ok(i) => i,
         Err(0) => 0,
         Err(i) => i - 1,
     };
     let (measure, start) = times[i];
     let end = times.get(i + 1).map(|(_, s)| *s).unwrap_or(start + 2.0);
-    let frac = if end > start { ((t - start) / (end - start)).clamp(0.0, 1.0) } else { 0.0 };
+    let frac = if end > start {
+        ((t - start) / (end - start)).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     Some((measure, frac))
 }
 
@@ -307,9 +321,15 @@ fn chord_window(chart: &SongChart, t: f64) -> (Vec<WatchChord>, String) {
 /// The mixer via the in-process daw facade (the router the bridge sees has
 /// no track service — see module docs).
 async fn mixer_tracks() -> Vec<WatchTrack> {
-    let Some(daw) = daw::get() else { return Vec::new() };
-    let Ok(project) = daw.current_project().await else { return Vec::new() };
-    let Ok(tracks) = project.tracks().all().await else { return Vec::new() };
+    let Some(daw) = daw::get() else {
+        return Vec::new();
+    };
+    let Ok(project) = daw.current_project().await else {
+        return Vec::new();
+    };
+    let Ok(tracks) = project.tracks().all().await else {
+        return Vec::new();
+    };
     tracks
         .iter()
         .map(|t| WatchTrack {
@@ -333,7 +353,9 @@ async fn build_state(b: &SessionBridge, indices: &ActiveIndices) -> WatchSession
         is_playing: indices.is_playing,
         song_progress: indices.song_progress.unwrap_or(0.0) as f32,
         section_progress: indices.section_progress.unwrap_or(0.0) as f32,
-        revision: b.revision.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        revision: b
+            .revision
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         ..Default::default()
     };
 
@@ -360,13 +382,16 @@ async fn current_indices(b: &SessionBridge) -> ActiveIndices {
     // section queries; the SSE stream corrects it on the next publish.
     let mut indices = ActiveIndices::default();
     if let Ok(setlist) = b.setlist.setlist().await
-        && let Ok(song) = b.setlist.active_song().await {
-            indices.song_index = setlist.songs.iter().position(|s| s.id == song.id);
-            if let Ok(section) = b.setlist.active_section().await {
-                indices.section_index =
-                    song.sections.iter().position(|s| s.section_id == section.section_id);
-            }
+        && let Ok(song) = b.setlist.active_song().await
+    {
+        indices.song_index = setlist.songs.iter().position(|s| s.id == song.id);
+        if let Ok(section) = b.setlist.active_section().await {
+            indices.section_index = song
+                .sections
+                .iter()
+                .position(|s| s.section_id == section.section_id);
         }
+    }
     indices
 }
 
@@ -382,7 +407,10 @@ fn to_json(state: &WatchSessionState) -> String {
     })
 }
 
-async fn transport(State(b): State<SessionBridge>, Path(cmd): Path<String>) -> Result<(), StatusCode> {
+async fn transport(
+    State(b): State<SessionBridge>,
+    Path(cmd): Path<String>,
+) -> Result<(), StatusCode> {
     let r = match cmd.as_str() {
         "play" => b.setlist.play().await,
         "pause" => b.setlist.pause().await,
@@ -422,7 +450,10 @@ where
     Fut: std::future::Future<Output = Result<(), daw::rpc::Error>>,
 {
     let daw = daw::get().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-    let project = daw.current_project().await.map_err(|_| StatusCode::BAD_GATEWAY)?;
+    let project = daw
+        .current_project()
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
     let handle = project
         .tracks()
         .by_guid(guid)
@@ -438,19 +469,30 @@ async fn track_op(
 ) -> Result<(), StatusCode> {
     // Toggles need current state: read the track list first.
     let current = mixer_tracks().await;
-    let track = current.iter().find(|t| t.guid == guid).ok_or(StatusCode::NOT_FOUND)?;
+    let track = current
+        .iter()
+        .find(|t| t.guid == guid)
+        .ok_or(StatusCode::NOT_FOUND)?;
     match op.as_str() {
         "toggle-mute" => {
             let muted = track.muted;
             with_track(&guid, |h| async move {
-                if muted { h.unmute().await } else { h.mute().await }
+                if muted {
+                    h.unmute().await
+                } else {
+                    h.mute().await
+                }
             })
             .await
         }
         "toggle-solo" => {
             let soloed = track.soloed;
             with_track(&guid, |h| async move {
-                if soloed { h.unsolo().await } else { h.solo().await }
+                if soloed {
+                    h.unsolo().await
+                } else {
+                    h.solo().await
+                }
             })
             .await
         }

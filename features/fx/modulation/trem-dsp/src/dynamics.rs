@@ -6,8 +6,7 @@
 use audiocore_dsp::envelope::EnvelopeFollower;
 
 /// Dynamics mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DynMode {
     /// Proportional: mod_amount scales with how far the level is above threshold.
     #[default]
@@ -15,7 +14,6 @@ pub enum DynMode {
     /// Gate: mod_amount is 1.0 above threshold, 0.0 below.
     Gate,
 }
-
 
 /// Envelope follower system that outputs rate and depth modulation amounts
 /// based on input signal level relative to a threshold.

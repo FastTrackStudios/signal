@@ -64,13 +64,9 @@ impl Default for TuneParams {
                     2 => "Minor".to_string(),
                     _ => "Chromatic".to_string(),
                 })),
-            strength: FloatParam::new(
-                "Strength",
-                1.0,
-                FloatRange::Linear { min: 0.0, max: 1.0 },
-            )
-            .with_unit("%")
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            strength: FloatParam::new("Strength", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
             retune_ms: FloatParam::new(
                 "Retune",
                 20.0,
@@ -268,8 +264,9 @@ impl Plugin for FtsTune {
 
 impl ClapPlugin for FtsTune {
     const CLAP_ID: &'static str = "com.fasttrackstudio.tune";
-    const CLAP_DESCRIPTION: Option<&'static str> =
-        Some("Monophonic pitch correction — YIN detection, scale snapping, formant-preserving shift");
+    const CLAP_DESCRIPTION: Option<&'static str> = Some(
+        "Monophonic pitch correction — YIN detection, scale snapping, formant-preserving shift",
+    );
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[

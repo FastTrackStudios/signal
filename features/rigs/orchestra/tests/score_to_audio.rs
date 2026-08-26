@@ -5,17 +5,18 @@
 //! gated on the Cinematic Studio Strings library + config being present on
 //! this machine (same pattern as the A/B examples).
 
-use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings, part_to_document, render_part_offline};
-use signal_sampler::SamplerRig;
+use signal_orchestra::{load_strings, part_to_document, render_part_offline, CSS_CONFIG, CSS_ROOT};
 use signal_sampler::document::{annotate, stage1_annotations};
 use signal_sampler::spec::LibrarySpec;
+use signal_sampler::SamplerRig;
 
 const SR: u32 = 48_000;
 const SEED: u64 = 0x60D0_1234_D0C5_EED0;
 
 fn fixture() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../crates/keyflow/examples/mxl/GOING HOME - Dvorak New World Symphony 1.6 mxml.mxl")
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+        "../../../crates/keyflow/examples/mxl/GOING HOME - Dvorak New World Symphony 1.6 mxml.mxl",
+    )
 }
 
 /// A CSS-shaped spec (legato engine + shorts + CC58 map) for spec-dependent
@@ -96,8 +97,11 @@ fn score_to_schedule_equivalence() {
     assert_eq!(sched.events, again.events);
 
     // ── Annotation equivalence with the mirror pass ──────────────────────
-    let src: Vec<keyflow_orchestra::MidiNote> =
-        po.notes.iter().map(keyflow_orchestra::MidiNote::from).collect();
+    let src: Vec<keyflow_orchestra::MidiNote> = po
+        .notes
+        .iter()
+        .map(keyflow_orchestra::MidiNote::from)
+        .collect();
     let mirror = keyflow_orchestra::mirror::stage1_annotations(&src, &po.ccs, None, &cfg);
     let doc_ann = stage1_annotations(&doc, spec.legato_engine.is_some());
     assert_eq!(mirror.len(), doc_ann.len());
@@ -126,8 +130,15 @@ fn score_to_nonsilent_audio_with_css() {
     let part = violin_part(&score);
 
     let rig = SamplerRig::new_offline_with_cache_budget(SR, Some(8 * 1024 * 1024 * 1024));
-    load_strings(&rig, "strings_1v", "1st Violins", "Mix", CSS_ROOT, CSS_CONFIG)
-        .expect("load CSS 1st Violins");
+    load_strings(
+        &rig,
+        "strings_1v",
+        "1st Violins",
+        "Mix",
+        CSS_ROOT,
+        CSS_CONFIG,
+    )
+    .expect("load CSS 1st Violins");
 
     let res = render_part_offline(
         &rig,

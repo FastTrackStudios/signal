@@ -9,8 +9,8 @@ use lumen_blocks::components::context_menu::{
     ContextMenuItem, ContextMenuLabel, ContextMenuSeparator,
 };
 
-use super::GridSelection;
 use super::types::GridSlot;
+use super::GridSelection;
 
 // ── Props ────────────────────────────────────────────────────────
 
@@ -33,7 +33,8 @@ pub struct GridContextMenuProps {
 
     // Module-level callbacks
     #[props(default)]
-    pub on_save_module_preset_as: Option<EventHandler<(Vec<GridSlot>, String, signal_proto::ModuleType)>>,
+    pub on_save_module_preset_as:
+        Option<EventHandler<(Vec<GridSlot>, String, signal_proto::ModuleType)>>,
     #[props(default)]
     pub on_save_module_snapshot: Option<EventHandler<Vec<GridSlot>>>,
     #[props(default)]

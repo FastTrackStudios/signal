@@ -15,13 +15,13 @@ use dioxus::prelude::*;
 
 use eq_ui::cheatsheet::GUITAR_ELECTRIC;
 use eq_ui::eq_graph_interaction::{
-    GraphMapper, drag_gain_for_shape, filter_type_for_position, nearest_band, wheel_q_for_shape,
+    drag_gain_for_shape, filter_type_for_position, nearest_band, wheel_q_for_shape, GraphMapper,
 };
-use eq_ui::eq_graph_model::{EqBand, EqBandShape, freq_to_color};
+use eq_ui::eq_graph_model::{freq_to_color, EqBand, EqBandShape};
 use eq_ui::eq_graph_svg::{generate_all_eq_curves, generate_freq_labels, generate_grid_elements};
 
-use signal_guitar_proto::LiveBlock;
 use signal_guitar_proto::rig::RigClient;
+use signal_guitar_proto::LiveBlock;
 
 const NUM_BANDS: usize = 24;
 const H: f64 = 270.0; // viewBox height; width follows the panel's aspect
@@ -148,7 +148,8 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
 
     // Pointer → graph coordinates (svg is scaled; measure the element).
     let gw = w;
-    type GraphCoordsFuture = std::pin::Pin<Box<dyn std::future::Future<Output = Option<(f64, f64)>>>>;
+    type GraphCoordsFuture =
+        std::pin::Pin<Box<dyn std::future::Future<Output = Option<(f64, f64)>>>>;
     let to_graph = move |coords: dioxus::html::geometry::ElementPoint,
                          el: Option<std::rc::Rc<MountedData>>|
           -> GraphCoordsFuture {

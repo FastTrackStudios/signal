@@ -169,11 +169,11 @@ fn bell_brickwall_proq4(
     // For slopes 3, 4 (N_LP=2) and 5, 6 (N_LP=3) the structure is correct
     // but a small Q-correction is still undecoded (~10% residual).
     let n_lp = n_sections; // For s=7,8,9 this matches the validated table
-    // {s=3,4: 2}, {s=5,6: 3}, {s=7: 4}, {s=8: 6}, {s=9: 8}.
-    // Slope-5 uses the special exponent x = 1/slope = 1/5 with a
-    // non-Butterworth LP pole at θ = π/5 (vs N=3's π/6).  Slope-3 uses the
-    // unified BW formula but a non-Butterworth LP pole at θ = π/3
-    // (asymptotically, with a small gain-dependent deviation at |g|<12).
+                           // {s=3,4: 2}, {s=5,6: 3}, {s=7: 4}, {s=8: 6}, {s=9: 8}.
+                           // Slope-5 uses the special exponent x = 1/slope = 1/5 with a
+                           // non-Butterworth LP pole at θ = π/5 (vs N=3's π/6).  Slope-3 uses the
+                           // unified BW formula but a non-Butterworth LP pole at θ = π/3
+                           // (asymptotically, with a small gain-dependent deviation at |g|<12).
     let is_slope5 = slope_idx == Some(5);
     let is_slope3 = slope_idx == Some(3);
     let g_pow = if is_slope5 {
@@ -420,7 +420,11 @@ fn bell_brickwall_proq4(
             let sd = disc.sqrt();
             let u1 = (-bq + sd) / (2.0 * aq);
             let u2 = (-bq - sd) / (2.0 * aq);
-            if u1 < u2 { (u1, u2) } else { (u2, u1) }
+            if u1 < u2 {
+                (u1, u2)
+            } else {
+                (u2, u1)
+            }
         } else {
             (-1.0, -1.0)
         };
@@ -1524,7 +1528,11 @@ pub fn bell_bucket_b_section_from_analog(
         let om2 = om * om;
         let num = (b0z - b2z * om2).powi(2) + (b1z * om).powi(2);
         let den = (b0p - b2p * om2).powi(2) + (b1p * om).powi(2);
-        if den > 1e-300 { num / den } else { 0.0 }
+        if den > 1e-300 {
+            num / den
+        } else {
+            0.0
+        }
     };
     let u_pole = h_sq(w_pole);
     let u_zero = h_sq(w_zero);
@@ -1919,7 +1927,11 @@ fn proq4_s2_from_prototype_with_subfreq(
         let w4 = w2 * w2;
         let num = cap_a * w4 + cap_b * w2 + cap_c;
         let den = cap_d * w4 + cap_e * w2 + cap_f;
-        if den.abs() > 1e-300 { num / den } else { 0.0 }
+        if den.abs() > 1e-300 {
+            num / den
+        } else {
+            0.0
+        }
     };
     let u_pole = h_sq(w_pole);
     let u_zero = h_sq(w_zero);
@@ -2522,7 +2534,11 @@ fn bell_brickwall_cascade(
         let sqrt_im = r.sqrt() * (phi * 0.5).sin();
         let s1 = (scaled_re + sqrt_re, scaled_im + sqrt_im);
         let s2 = (scaled_re - sqrt_re, scaled_im - sqrt_im);
-        if s1.1 >= 0.0 { s1 } else { s2 }
+        if s1.1 >= 0.0 {
+            s1
+        } else {
+            s2
+        }
     };
 
     let mut sections = Vec::with_capacity(n);

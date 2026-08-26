@@ -106,28 +106,40 @@ impl Default for GuideParams {
             count_db: FloatParam::new(
                 "Count",
                 0.0,
-                FloatRange::Linear { min: -60.0, max: 6.0 },
+                FloatRange::Linear {
+                    min: -60.0,
+                    max: 6.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             guide_db: FloatParam::new(
                 "Guide",
                 0.0,
-                FloatRange::Linear { min: -60.0, max: 6.0 },
+                FloatRange::Linear {
+                    min: -60.0,
+                    max: 6.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             click_db: FloatParam::new(
                 "Click",
                 0.0,
-                FloatRange::Linear { min: -60.0, max: 6.0 },
+                FloatRange::Linear {
+                    min: -60.0,
+                    max: 6.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             accent_db: FloatParam::new(
                 "Accent",
                 0.0,
-                FloatRange::Linear { min: -60.0, max: 6.0 },
+                FloatRange::Linear {
+                    min: -60.0,
+                    max: 6.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),

@@ -14,12 +14,16 @@ use signal_sampler::{EngineSpec, PresetSpec};
 pub fn scan_engines(root: &Path) -> Vec<LibraryPiece> {
     let mut out = Vec::new();
     collect(root, &mut out);
-    out.sort_by(|a, b| (a.kind.clone(), a.name.to_lowercase()).cmp(&(b.kind.clone(), b.name.to_lowercase())));
+    out.sort_by(|a, b| {
+        (a.kind.clone(), a.name.to_lowercase()).cmp(&(b.kind.clone(), b.name.to_lowercase()))
+    });
     out
 }
 
 fn collect(dir: &Path, out: &mut Vec<LibraryPiece>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
@@ -36,20 +40,31 @@ fn collect(dir: &Path, out: &mut Vec<LibraryPiece>) {
                 }
                 Err(_) => (stem(&path), String::new()),
             };
-            out.push(LibraryPiece { name, path: path.display().to_string(), kind });
+            out.push(LibraryPiece {
+                name,
+                path: path.display().to_string(),
+                kind,
+            });
         }
     }
 }
 
 fn stem(p: &Path) -> String {
-    p.file_stem().and_then(|s| s.to_str()).unwrap_or("engine").to_string()
+    p.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("engine")
+        .to_string()
 }
 
 /// The engine directory of a library root (kits keep engines in `Engines/`;
 /// fall back to the root so a flat library still scans).
 pub fn engines_dir(library_root: &Path) -> PathBuf {
     let e = library_root.join("Engines");
-    if e.is_dir() { e } else { library_root.to_path_buf() }
+    if e.is_dir() {
+        e
+    } else {
+        library_root.to_path_buf()
+    }
 }
 
 /// Canonical piece label for a preset engine-slot id — the MM2 mixer strip
@@ -61,7 +76,13 @@ pub fn slot_label(slot_id: &str) -> String {
     let s = slot_id.to_ascii_lowercase();
     // Which of a pair of same-type pieces: `-b`/`2`/`3` → 2/3, else 1.
     let ord = |s: &str| -> u32 {
-        if s.contains('3') { 3 } else if s.ends_with("-b") || s.contains('2') { 2 } else { 1 }
+        if s.contains('3') {
+            3
+        } else if s.ends_with("-b") || s.contains('2') {
+            2
+        } else {
+            1
+        }
     };
     if s.starts_with("kick") {
         "Kick".into()
@@ -81,10 +102,15 @@ pub fn slot_label(slot_id: &str) -> String {
         "China".into()
     } else if s.starts_with("crash") {
         // crash-l / crash-r / crash-fl / crash-fr
-        if s.contains("fl") { "Crash Far L".into() }
-        else if s.contains("fr") { "Crash Far R".into() }
-        else if s.ends_with('r') || s.contains("-r") { "Crash R".into() }
-        else { "Crash L".into() }
+        if s.contains("fl") {
+            "Crash Far L".into()
+        } else if s.contains("fr") {
+            "Crash Far R".into()
+        } else if s.ends_with('r') || s.contains("-r") {
+            "Crash R".into()
+        } else {
+            "Crash L".into()
+        }
     } else {
         title_case(slot_id)
     }
@@ -102,15 +128,25 @@ fn title_case(s: &str) -> String {
 /// when the current engine's type can't be read.
 pub fn kind_from_slot(slot_id: &str) -> &'static str {
     let s = slot_id.to_ascii_lowercase();
-    if s.contains("kick") { "kick" }
-    else if s.contains("snare") { "snare" }
-    else if s.contains("tom") { "tom" }
-    else if s.contains("hat") || s == "hh" || s == "hats" { "hi-hat" }
-    else if s.contains("ride") { "ride" }
-    else if s.contains("crash") { "crash" }
-    else if s.contains("china") { "china" }
-    else if s.contains("splash") { "splash" }
-    else { "" }
+    if s.contains("kick") {
+        "kick"
+    } else if s.contains("snare") {
+        "snare"
+    } else if s.contains("tom") {
+        "tom"
+    } else if s.contains("hat") || s == "hh" || s == "hats" {
+        "hi-hat"
+    } else if s.contains("ride") {
+        "ride"
+    } else if s.contains("crash") {
+        "crash"
+    } else if s.contains("china") {
+        "china"
+    } else if s.contains("splash") {
+        "splash"
+    } else {
+        ""
+    }
 }
 
 /// Read a preset's engine slots (id + current engine path/name). `preset_dir`
@@ -120,7 +156,11 @@ pub fn preset_slots(spec: &PresetSpec, preset_dir: &Path) -> Vec<(String, PathBu
         .iter()
         .map(|e| {
             let p = PathBuf::from(&e.engine);
-            let abs = if p.is_absolute() { p } else { preset_dir.join(p) };
+            let abs = if p.is_absolute() {
+                p
+            } else {
+                preset_dir.join(p)
+            };
             (e.id.clone(), abs)
         })
         .collect()

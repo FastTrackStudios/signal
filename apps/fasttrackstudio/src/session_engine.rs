@@ -185,7 +185,11 @@ fn seed_praise_media(
     let stems: Vec<StemSpec> = STEMS
         .iter()
         .map(|(name, file, group)| {
-            StemSpec::new(*name, dir.join(file).to_string_lossy().to_string(), Some(group))
+            StemSpec::new(
+                *name,
+                dir.join(file).to_string_lossy().to_string(),
+                Some(group),
+            )
         })
         .collect();
 
@@ -269,7 +273,12 @@ fn seed_globbed_media(
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
             // "Holy Forever - EG 2" → "EG 2"; "01 - Click" → "Click".
-            let name = stem.rsplit(" - ").next().unwrap_or(&stem).trim().to_string();
+            let name = stem
+                .rsplit(" - ")
+                .next()
+                .unwrap_or(&stem)
+                .trim()
+                .to_string();
             let group = group_for(&name);
             StemSpec::new(name, p.to_string_lossy().to_string(), group)
         })
@@ -290,9 +299,15 @@ fn seed_globbed_media(
 
 /// On-disk folder (under `FTS_WORSHIP_STEMS`) for each globbed worship song.
 const WORSHIP_FOLDERS: &[(&str, &str)] = &[
-    ("God, I'm Just Grateful", "God, I_m Just Grateful _ Elevation Worship _ D"),
+    (
+        "God, I'm Just Grateful",
+        "God, I_m Just Grateful _ Elevation Worship _ D",
+    ),
     ("Holy Forever", "Holy Forever _ Bethel Music _ Bb"),
-    ("Thank God I'm Free", "Thank God I_m Free _ Elevation Rhythm _ E"),
+    (
+        "Thank God I'm Free",
+        "Thank God I_m Free _ Elevation Rhythm _ E",
+    ),
     ("Washed", "Washed _ Elevation Rhythm _ B"),
     ("Who Else", "Who Else _ Gateway Worship _ Ab"),
 ];
@@ -313,7 +328,14 @@ fn seed_song_media(standalone: &Standalone, project_guid: &str, name: &str, len:
                 std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default())
                     .join("Downloads/Worship MultiTracks")
             });
-        seed_globbed_media(standalone, project_guid, name, &base.join(folder), start, len)
+        seed_globbed_media(
+            standalone,
+            project_guid,
+            name,
+            &base.join(folder),
+            start,
+            len,
+        )
     } else {
         return;
     };
@@ -336,10 +358,19 @@ fn decorate_seeded_tracks(
     let mut muted = 0usize;
     for t in &report.tracks {
         let color = category_color(t.group.as_deref(), &t.name);
-        let _ = Tracks::set_color(standalone, ctx.clone(), TrackRef::Guid(t.guid.clone()), color);
+        let _ = Tracks::set_color(
+            standalone,
+            ctx.clone(),
+            TrackRef::Guid(t.guid.clone()),
+            color,
+        );
         if is_click_or_guide(t.group.as_deref(), &t.name) {
-            let _ =
-                Tracks::set_muted(standalone, ctx.clone(), TrackRef::Guid(t.guid.clone()), true);
+            let _ = Tracks::set_muted(
+                standalone,
+                ctx.clone(),
+                TrackRef::Guid(t.guid.clone()),
+                true,
+            );
             muted += 1;
         }
     }
@@ -511,7 +542,10 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
     // Dev/verification affordance: FTS_AUTOPLAY=1 starts the transport
     // immediately after the setlist is built (e.g. for headless-ish
     // audio smoke runs).
-    if std::env::var("FTS_AUTOPLAY").map(|v| v == "1").unwrap_or(false) {
+    if std::env::var("FTS_AUTOPLAY")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+    {
         // Demo stamping leaves the edit cursor at the timeline end —
         // rewind to the first song's first measure before rolling.
         if let Err(e) = client.goto_measure(0, 0).await {

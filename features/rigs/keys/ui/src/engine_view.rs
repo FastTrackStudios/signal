@@ -6,7 +6,7 @@ use signal_keys_proto::keys::KeysRigClient;
 use signal_keys_proto::KeysEngineModel;
 
 use crate::control::engine_color;
-use crate::fader::{Fader, fmt_db};
+use crate::fader::{fmt_db, Fader};
 use crate::zoom::{OpenButton, Zoom};
 
 #[component]

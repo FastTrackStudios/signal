@@ -429,7 +429,11 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
                 let cand = fv2_b * PI;
                 // dVar9 = if (wp_clamped <= cand) { if (cand >= π) π else cand } else wp_clamped
                 let mut new_w_eval = if wp_clamped <= cand {
-                    if cand >= PI { PI } else { cand }
+                    if cand >= PI {
+                        PI
+                    } else {
+                        cand
+                    }
                 } else {
                     wp_clamped
                 };
@@ -449,7 +453,11 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
             // dVar_alpha = (fv2 < 0) ? max(sqrt(-fv2/2), 0.5) : 0.5
             let dvar_alpha = if (fv2 as f64) < 0.0 {
                 let s = (fv2 as f64 * -0.5).sqrt();
-                if s <= 0.5 { 0.5 } else { s }
+                if s <= 0.5 {
+                    0.5
+                } else {
+                    s
+                }
             } else {
                 0.5
             };
@@ -604,7 +612,11 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
         let quad_floor = dvar4_floor * dvar4_floor * QUAD_COEF + QUAD_OFFSET;
         // dVar2 = if (smooth_blend ≤ quad_floor) min(quad_floor, π) else smooth_blend
         let new_w_eval = if smooth_blend <= quad_floor {
-            if quad_floor >= PI { PI } else { quad_floor }
+            if quad_floor >= PI {
+                PI
+            } else {
+                quad_floor
+            }
         } else {
             smooth_blend
         };
@@ -791,7 +803,11 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             1.0
         };
         let s = ratio.max(0.0).sqrt();
-        if s <= CONST_0_1 { CONST_0_1 } else { s }
+        if s <= CONST_0_1 {
+            CONST_0_1
+        } else {
+            s
+        }
     } else {
         CONST_0_1 // overwritten later when (section_type != 2) → uses α
     };
@@ -895,7 +911,11 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
                 let cand =
                     (dvar10_v / PI).powf(local_res8 * CONST_3_3) * PI_OVER_5 + FOUR_PI_OVER_5;
                 proto.w_eval = if dvar10_v <= cand {
-                    if cand >= PI { PI } else { cand }
+                    if cand >= PI {
+                        PI
+                    } else {
+                        cand
+                    }
                 } else {
                     dvar10_v
                 };
@@ -926,7 +946,11 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             // Final w_eval (when iv5_local != 0) — bypass to LAB_18010d2d4.
             let cand = (PI / PI).powf(local_res8 * CONST_3_3) * PI_OVER_5 + FOUR_PI_OVER_5;
             proto.w_eval = if dvar4 <= cand {
-                if cand >= PI { PI } else { cand }
+                if cand >= PI {
+                    PI
+                } else {
+                    cand
+                }
             } else {
                 dvar4
             };
@@ -1077,7 +1101,11 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
     let new_w_eval = if proto.proto_0x12_sign == -1 {
         let cand = wp_now * 1.25;
         if zero_eight_five_pi <= cand {
-            if PI <= cand { PI } else { cand }
+            if PI <= cand {
+                PI
+            } else {
+                cand
+            }
         } else {
             zero_eight_five_pi
         }
@@ -1261,7 +1289,11 @@ fn label_d7f9(proto: &mut Prototype, fv11: f64, fv12_f32: f32) {
 
     let cand = proto.wp * 1.80;
     let new_w_eval = if ZERO_EIGHT_THREE_PI <= cand {
-        if PI <= cand { PI } else { cand }
+        if PI <= cand {
+            PI
+        } else {
+            cand
+        }
     } else {
         ZERO_EIGHT_THREE_PI
     };

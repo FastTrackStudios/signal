@@ -50,7 +50,9 @@ fn bar(events: &mut Vec<(f64, u8, u8)>, base_qn: f64, first_bar: bool, jitter: &
     // deterministic per-hit velocity jitter so round-robins + velocity layers
     // both get exercised without needing rng in the example.
     let mut vel = |center: i32| -> u8 {
-        *jitter = jitter.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        *jitter = jitter
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         let j = ((*jitter >> 40) & 0x1f) as i32 - 16; // ±16
         (center + j).clamp(1, 127) as u8
     };
@@ -78,7 +80,9 @@ fn bar(events: &mut Vec<(f64, u8, u8)>, base_qn: f64, first_bar: bool, jitter: &
 /// A tom fill for the last bar (replaces the backbeat second half).
 fn fill(events: &mut Vec<(f64, u8, u8)>, base_qn: f64, jitter: &mut u64) {
     let mut vel = |center: i32| -> u8 {
-        *jitter = jitter.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        *jitter = jitter
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         let j = ((*jitter >> 40) & 0x1f) as i32 - 16;
         (center + j).clamp(1, 127) as u8
     };
@@ -106,8 +110,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .skip(1)
         .find(|a| a != "--")
         .unwrap_or_else(|| "target/mm2_groove.wav".to_string());
-    let bars: usize = std::env::var("SIGNAL_BARS").ok().and_then(|s| s.parse().ok()).unwrap_or(4);
-    let bpm: f64 = std::env::var("SIGNAL_BPM").ok().and_then(|s| s.parse().ok()).unwrap_or(120.0);
+    let bars: usize = std::env::var("SIGNAL_BARS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(4);
+    let bpm: f64 = std::env::var("SIGNAL_BPM")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(120.0);
 
     if !preset.exists() {
         eprintln!("preset not found: {} (set SIGNAL_PRESET)", preset.display());
@@ -123,7 +133,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let t = Instant::now();
     let ids = rig.load_preset("kit", &preset)?;
     rig.set_midi_channel("kit", 0); // rig.note_on dispatches on MIDI channel 0
-    println!("loaded {} engines in {:.0} ms", ids.len(), t.elapsed().as_secs_f64() * 1000.0);
+    println!(
+        "loaded {} engines in {:.0} ms",
+        ids.len(),
+        t.elapsed().as_secs_f64() * 1000.0
+    );
 
     // ── wait for FLAC preload so the offline walk never misses into silence ──
     let start = Instant::now();
@@ -136,7 +150,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             total += tt;
         }
         if total > 0 && loaded >= total {
-            println!("preloaded {loaded} samples in {:.0} ms", start.elapsed().as_secs_f64() * 1000.0);
+            println!(
+                "preloaded {loaded} samples in {:.0} ms",
+                start.elapsed().as_secs_f64() * 1000.0
+            );
             break;
         }
         if start.elapsed() > timeout {
@@ -192,7 +209,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pos += BLK;
     }
 
-    println!("rendered {:.2} s, master peak {peak:.4}", out_buf.len() as f64 / 2.0 / SR as f64);
+    println!(
+        "rendered {:.2} s, master peak {peak:.4}",
+        out_buf.len() as f64 / 2.0 / SR as f64
+    );
     let outp = std::path::Path::new(&out);
     if let Some(dir) = outp.parent() {
         std::fs::create_dir_all(dir).ok();

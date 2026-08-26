@@ -113,7 +113,13 @@ mod tests {
         let in_r = vec![1.0f32; 256];
         let mut out_l = vec![0.0f32; 256];
         let mut out_r = vec![0.0f32; 256];
-        src.render(&in_l, &in_r, &mut out_l, &mut out_r, &PluginEvents::default());
+        src.render(
+            &in_l,
+            &in_r,
+            &mut out_l,
+            &mut out_r,
+            &PluginEvents::default(),
+        );
         assert!(out_l.iter().all(|&s| (s - 1.0).abs() < 1e-6));
         assert!(out_r.iter().all(|&s| (s - 1.0).abs() < 1e-6));
     }
@@ -125,7 +131,13 @@ mod tests {
         let in_r = vec![-1.0f32; 128];
         let mut out_l = vec![9.0f32; 128];
         let mut out_r = vec![9.0f32; 128];
-        src.render(&in_l, &in_r, &mut out_l, &mut out_r, &PluginEvents::default());
+        src.render(
+            &in_l,
+            &in_r,
+            &mut out_l,
+            &mut out_r,
+            &PluginEvents::default(),
+        );
         assert!(out_l.iter().all(|&s| s == 0.0));
         assert!(out_r.iter().all(|&s| s == 0.0));
     }
@@ -139,7 +151,13 @@ mod tests {
         let in_r = vec![1.0f32; 64];
         let mut out_l = vec![0.0f32; 64];
         let mut out_r = vec![0.0f32; 64];
-        src.render(&in_l, &in_r, &mut out_l, &mut out_r, &PluginEvents::default());
+        src.render(
+            &in_l,
+            &in_r,
+            &mut out_l,
+            &mut out_r,
+            &PluginEvents::default(),
+        );
         assert!(out_l.iter().all(|&s| (s - 0.5).abs() < 1e-6));
     }
 }

@@ -24,11 +24,11 @@ use audiocore_core::prelude::*;
 
 use crate::faces::use_face_context;
 use crate::hardware::knob::HardwareKnob;
-use fts_audio_ui::hardware::button::{Lamp, LedBar, LedMeter, LedSelect, PanelButton};
-use crate::hardware::rack::{RackDesign, RackItem};
 use crate::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
+use crate::hardware::rack::{RackDesign, RackItem};
 use crate::hardware::switches::{RatioButtons, ToggleSwitch};
 use crate::hardware::vu::{VuMeter, VuMode};
+use fts_audio_ui::hardware::button::{Lamp, LedBar, LedMeter, LedSelect, PanelButton};
 
 /// Where a knob's legend sits below its centre, in design px.
 ///
@@ -364,7 +364,11 @@ fn fit_cells(cells: usize, avail_w: f64, avail_h: f64) -> CompactFit {
         CompactFlow::Grid
     };
 
-    let mut best = CompactFit { knob_d: 16.0, show_legends: false, flow };
+    let mut best = CompactFit {
+        knob_d: 16.0,
+        show_legends: false,
+        flow,
+    };
     for step in 0..=30 {
         let knob_d = 46.0 - step as f64;
         let box_px = knob_d * KNOB_BOX_RATIO;
@@ -378,9 +382,17 @@ fn fit_cells(cells: usize, avail_w: f64, avail_h: f64) -> CompactFit {
             };
             let rows = cells.div_ceil(cols);
             if cell_w * cols as f64 <= inner_w && cell_h * rows as f64 <= inner_h {
-                return CompactFit { knob_d, show_legends, flow };
+                return CompactFit {
+                    knob_d,
+                    show_legends,
+                    flow,
+                };
             }
-            best = CompactFit { knob_d, show_legends, flow };
+            best = CompactFit {
+                knob_d,
+                show_legends,
+                flow,
+            };
         }
     }
     best

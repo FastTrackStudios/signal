@@ -137,10 +137,29 @@ pub fn ModuleEdit(
     let lfo_slot = use_signal(|| 0u32);
 
     let group = |name: &str| -> Vec<KeysMacro> {
-        detail.macros.iter().filter(|m| m.group == name).cloned().collect()
+        detail
+            .macros
+            .iter()
+            .filter(|m| m.group == name)
+            .cloned()
+            .collect()
     };
-    let val = |id: &str| detail.macros.iter().find(|m| m.id == id).map(|m| m.value).unwrap_or(0.0);
-    let live = |id: &str| detail.macros.iter().find(|m| m.id == id).map(|m| m.live).unwrap_or(false);
+    let val = |id: &str| {
+        detail
+            .macros
+            .iter()
+            .find(|m| m.id == id)
+            .map(|m| m.value)
+            .unwrap_or(0.0)
+    };
+    let live = |id: &str| {
+        detail
+            .macros
+            .iter()
+            .find(|m| m.id == id)
+            .map(|m| m.live)
+            .unwrap_or(false)
+    };
 
     let here = detail.modules.iter().find(|m| m.index == module).cloned();
     let enabled = here.as_ref().map(|m| m.enabled).unwrap_or(true);
@@ -368,13 +387,22 @@ fn LfoShape(shape: f32, depth: f32, accent: String) -> Element {
         let v = match kind {
             0 => (phase * std::f64::consts::TAU).sin(),
             1 => 1.0 - 4.0 * ((phase % 1.0) - 0.5).abs(), // triangle
-            2 => if (phase % 1.0) < 0.5 { 1.0 } else { -1.0 }, // square
-            3 => 2.0 * (phase % 1.0) - 1.0,                    // saw
+            2 => {
+                if (phase % 1.0) < 0.5 {
+                    1.0
+                } else {
+                    -1.0
+                }
+            } // square
+            3 => 2.0 * (phase % 1.0) - 1.0,               // saw
             _ => ((phase * 12.9898).sin() * 43758.545).fract() * 2.0 - 1.0, // random
         };
         let x = PAD + t * (W - 2.0 * PAD);
         let y = H / 2.0 - v * d * (H / 2.0 - PAD);
-        path.push_str(&format!("{} {x:.1} {y:.1} ", if i == 0 { "M" } else { "L" }));
+        path.push_str(&format!(
+            "{} {x:.1} {y:.1} ",
+            if i == 0 { "M" } else { "L" }
+        ));
     }
     rsx! {
         svg {

@@ -7,11 +7,11 @@
 
 use crate::calibration::{CalibrationError, ResponsePoint, ResponseTarget};
 use crate::hardware_eq::{
-    Api550aSettings, PultecEqp1aSettings, SslChannelSettings, build_api_550a_sections,
-    build_pultec_eqp1a_sections, build_ssl_channel_sections,
+    build_api_550a_sections, build_pultec_eqp1a_sections, build_ssl_channel_sections,
+    Api550aSettings, PultecEqp1aSettings, SslChannelSettings,
 };
 use crate::neve_1073::{
-    Neve1073Hpf, Neve1073LowFreq, Neve1073MidFreq, Neve1073Settings, build_neve_1073_sections,
+    build_neve_1073_sections, Neve1073Hpf, Neve1073LowFreq, Neve1073MidFreq, Neve1073Settings,
 };
 
 pub const TARGET_SAMPLE_RATE: f64 = 48_000.0;
@@ -438,21 +438,15 @@ mod tests {
     #[test]
     fn target_suite_covers_first_profile_set() {
         let snapshots = hardware_response_snapshots();
-        assert!(
-            snapshots
-                .iter()
-                .any(|s| s.kind == HardwareTargetKind::PultecEqp1a)
-        );
-        assert!(
-            snapshots
-                .iter()
-                .any(|s| s.kind == HardwareTargetKind::Neve1073)
-        );
-        assert!(
-            snapshots
-                .iter()
-                .any(|s| s.kind == HardwareTargetKind::Api550a)
-        );
+        assert!(snapshots
+            .iter()
+            .any(|s| s.kind == HardwareTargetKind::PultecEqp1a));
+        assert!(snapshots
+            .iter()
+            .any(|s| s.kind == HardwareTargetKind::Neve1073));
+        assert!(snapshots
+            .iter()
+            .any(|s| s.kind == HardwareTargetKind::Api550a));
         assert!(snapshots.iter().any(|s| s.kind == HardwareTargetKind::SslE));
         assert!(snapshots.iter().any(|s| s.kind == HardwareTargetKind::SslG));
     }

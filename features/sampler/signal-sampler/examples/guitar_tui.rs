@@ -21,12 +21,12 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use daw_audio_io::pw::{self, ClockSettings, DeviceLatency};
-use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Gauge, List, ListItem, ListState, Paragraph};
+use ratatui::Frame;
 use signal_sampler::{DeviceInfo, GuitarRig, Library, ProfileRig, RigManager};
 
 fn arg(args: &[String], flag: &str) -> Option<String> {
@@ -327,7 +327,7 @@ fn step_table(cur: u32, table: &[u32], dir: i32) -> u32 {
         .iter()
         .position(|&v| v >= cur)
         .unwrap_or(table.len() - 1) as i32;
-    
+
     table[(idx + dir).clamp(0, table.len() as i32 - 1) as usize]
 }
 

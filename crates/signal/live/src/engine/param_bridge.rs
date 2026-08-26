@@ -21,7 +21,7 @@
 //! let updated = live_params_into_block(block, &live_params);
 //! ```
 
-use signal_proto::{Block, resolve::ResolvedGraph};
+use signal_proto::{resolve::ResolvedGraph, Block};
 
 use super::daw_bridge::DawStateChunk;
 use super::morph::{DawParamValue, DawParameterSnapshot};

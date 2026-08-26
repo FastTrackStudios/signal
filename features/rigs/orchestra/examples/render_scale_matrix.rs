@@ -49,8 +49,18 @@ fn scale_doc(start: u8) -> TrackDocument {
         auto_divisi: false,
         notes,
         ccs: vec![
-            DocCc { qn: 0.0, chan: 0, cc: 58, val: KS_EXPR },
-            DocCc { qn: 0.0, chan: 0, cc: 1, val: 90 },
+            DocCc {
+                qn: 0.0,
+                chan: 0,
+                cc: 58,
+                val: KS_EXPR,
+            },
+            DocCc {
+                qn: 0.0,
+                chan: 0,
+                cc: 1,
+                val: 90,
+            },
         ],
         tempo: vec![TempoPoint { qn: 0.0, bpm: BPM }],
     }
@@ -88,9 +98,12 @@ fn main() -> eyre::Result<()> {
     let mut table = std::fs::File::create(out.join("join-table.txt"))?;
 
     let rig = SamplerRig::new_offline_with_cache_budget(SR, Some(8 * 1024 * 1024 * 1024));
-    load_strings(&rig, ID, "1st Violins", "Mix", CSS_ROOT, CSS_CONFIG).map_err(|e| eyre::eyre!(e))?;
+    load_strings(&rig, ID, "1st Violins", "Mix", CSS_ROOT, CSS_CONFIG)
+        .map_err(|e| eyre::eyre!(e))?;
 
-    let names = ["C4","Db4","D4","Eb4","E4","F4","Gb4","G4","Ab4","A4","Bb4","B4"];
+    let names = [
+        "C4", "Db4", "D4", "Eb4", "E4", "F4", "Gb4", "G4", "Ab4", "A4", "Bb4", "B4",
+    ];
     let mut jobs: Vec<(String, TrackDocument)> = (0u8..12)
         .map(|i| (format!("scale_{}", names[i as usize]), scale_doc(60 + i)))
         .collect();
@@ -100,16 +113,38 @@ fn main() -> eyre::Result<()> {
         for k in 0..13u8 {
             let s = COUNT_IN_QN + f64::from(k);
             let e = s + if k < 12 { 1.02 } else { 1.0 };
-            notes.push(DocNote { start_qn: s, end_qn: e, chan: 0, pitch: start + k, vel: VEL });
+            notes.push(DocNote {
+                start_qn: s,
+                end_qn: e,
+                chan: 0,
+                pitch: start + k,
+                vel: VEL,
+            });
         }
-        jobs.push((format!("chromatic_{nm}"), TrackDocument {
-            version: 1, seed: SEED, auto_divisi: false, notes,
-            ccs: vec![
-                DocCc { qn: 0.0, chan: 0, cc: 58, val: KS_EXPR },
-                DocCc { qn: 0.0, chan: 0, cc: 1, val: 90 },
-            ],
-            tempo: vec![TempoPoint { qn: 0.0, bpm: BPM }],
-        }));
+        jobs.push((
+            format!("chromatic_{nm}"),
+            TrackDocument {
+                version: 1,
+                seed: SEED,
+                auto_divisi: false,
+                notes,
+                ccs: vec![
+                    DocCc {
+                        qn: 0.0,
+                        chan: 0,
+                        cc: 58,
+                        val: KS_EXPR,
+                    },
+                    DocCc {
+                        qn: 0.0,
+                        chan: 0,
+                        cc: 1,
+                        val: 90,
+                    },
+                ],
+                tempo: vec![TempoPoint { qn: 0.0, bpm: BPM }],
+            },
+        ));
     }
     for (name, doc) in jobs {
         let res = rig
@@ -128,13 +163,22 @@ fn main() -> eyre::Result<()> {
         for (i, t) in res.transitions.iter().enumerate() {
             let join_qn = COUNT_IN_QN + (i + 1) as f64;
             let grid = qn_frame(join_qn);
-            let dir = if t.to_note > t.from_note { "up  " } else { "down" };
+            let dir = if t.to_note > t.from_note {
+                "up  "
+            } else {
+                "down"
+            };
             // Emitted arrival for this destination note (first crossing on the line).
             let emitted = res
                 .emitted_markers
                 .iter()
                 .find(|m| m.note == t.to_note && (m.frame as i64 - grid).abs() < (SR as i64 / 2))
-                .map(|m| format!("{:+7.1}ms", (m.frame as i64 - grid) as f64 * 1000.0 / f64::from(SR)))
+                .map(|m| {
+                    format!(
+                        "{:+7.1}ms",
+                        (m.frame as i64 - grid) as f64 * 1000.0 / f64::from(SR)
+                    )
+                })
                 .unwrap_or_else(|| "  (none)".into());
             let line = format!(
                 "  pos {} {:>3}→{:<3} {dir} predicted {:+7.1}ms emitted {emitted}",
@@ -152,7 +196,10 @@ fn main() -> eyre::Result<()> {
             &doc.tempo,
             frames,
             SR,
-            Some(CountIn { start_qn: 0.0, beats: 4 }),
+            Some(CountIn {
+                start_qn: 0.0,
+                beats: 4,
+            }),
         );
         let mixed = mix_click(&res.audio, &click, 0.5, 0.7);
         write_wav(&out.join(format!("{name}_kontakt_click.wav")), &mixed)?;

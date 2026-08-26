@@ -16,8 +16,8 @@
 use std::sync::Arc;
 
 use daw::service::handle::DawHandle as _;
-use daw::standalone::Standalone;
 use daw::standalone::metering::Meters;
+use daw::standalone::Standalone;
 #[cfg(not(target_arch = "wasm32"))]
 use daw_audio_io::AudioIoPrefs;
 use signal_plugin_host::{
@@ -27,9 +27,9 @@ use signal_plugin_host::{
 use signal_rig_host::RigHost;
 use signal_rig_host::RigProject;
 
-use crate::MidiMonitor;
 use crate::node_render::{GainCells, RenderNode};
 use crate::rig_node::{Container, Role};
+use crate::MidiMonitor;
 
 /// Whether any sampler block in `tree` plays the library at `spec_path` —
 /// the test for "does this lane care that this pack just arrived?" (see
@@ -173,7 +173,11 @@ impl KeysInstrument {
             .as_mut()
             .map(|r| r.active_voices() == 0)
             .unwrap_or(false);
-        if done { self.retiring.take() } else { None }
+        if done {
+            self.retiring.take()
+        } else {
+            None
+        }
     }
 
     /// Whether a swapped-out tree is still sounding.
@@ -322,7 +326,12 @@ impl LaneProgram {
     fn shape(&self) -> Vec<(String, Vec<String>)> {
         self.engines
             .iter()
-            .map(|e| (e.name.clone(), e.layers.iter().map(|l| l.name.clone()).collect()))
+            .map(|e| {
+                (
+                    e.name.clone(),
+                    e.layers.iter().map(|l| l.name.clone()).collect(),
+                )
+            })
             .collect()
     }
 }
@@ -505,7 +514,11 @@ impl KeysRig {
             daw,
             _host: Some(host),
             project_guid,
-            hosting: Hosting::Single { track_guid, fx_guid, cells },
+            hosting: Hosting::Single {
+                track_guid,
+                fx_guid,
+                cells,
+            },
             meters,
             sample_rate,
             preset_name: tree.name.clone(),
@@ -643,7 +656,9 @@ impl KeysRig {
     /// per-track swaps under the renderer lock.
     fn install_lane_instruments(&mut self, program: &LaneProgram) {
         let sr = self.sample_rate;
-        let Hosting::Lanes(lanes) = &mut self.hosting else { return };
+        let Hosting::Lanes(lanes) = &mut self.hosting else {
+            return;
+        };
         for engine in &program.engines {
             for layer in &engine.layers {
                 let Some(track) = lanes
@@ -656,7 +671,8 @@ impl KeysRig {
                 let mut inst = KeysInstrument::new(&layer.tree, sr);
                 track.cells = inst.gain_cells();
                 let _ = inst.prepare(sr as f64, PREPARE_BLOCK);
-                self.daw.insert_plugin_instance(track.fx.clone(), Box::new(inst));
+                self.daw
+                    .insert_plugin_instance(track.fx.clone(), Box::new(inst));
             }
         }
         if let (Some(fx), Some(tail)) = (&lanes.tail_fx, &program.tail) {
@@ -679,11 +695,7 @@ impl KeysRig {
     /// playing through it.
     ///
     /// Returns how many lanes were re-installed.
-    pub fn reload_lanes_for_pack(
-        &mut self,
-        program: &LaneProgram,
-        spec_path: &str,
-    ) -> usize {
+    pub fn reload_lanes_for_pack(&mut self, program: &LaneProgram, spec_path: &str) -> usize {
         let sr = self.sample_rate;
         let mut done = 0;
         for engine in &program.engines {
@@ -691,7 +703,9 @@ impl KeysRig {
                 if !tree_uses_sample(&layer.tree, spec_path) {
                     continue;
                 }
-                let Hosting::Lanes(lanes) = &mut self.hosting else { return done };
+                let Hosting::Lanes(lanes) = &mut self.hosting else {
+                    return done;
+                };
                 let Some(track) = lanes
                     .layers
                     .iter_mut()
@@ -702,7 +716,8 @@ impl KeysRig {
                 let mut inst = KeysInstrument::new(&layer.tree, sr);
                 track.cells = inst.gain_cells();
                 let _ = inst.prepare(sr as f64, PREPARE_BLOCK);
-                self.daw.insert_plugin_instance(track.fx.clone(), Box::new(inst));
+                self.daw
+                    .insert_plugin_instance(track.fx.clone(), Box::new(inst));
                 done += 1;
             }
         }
@@ -760,14 +775,20 @@ impl KeysRig {
 
     /// A lane track's guid by mixer address.
     fn lane_guid(&self, role: Role, name: &str) -> Option<&str> {
-        let Hosting::Lanes(l) = &self.hosting else { return None };
+        let Hosting::Lanes(l) = &self.hosting else {
+            return None;
+        };
         match role {
             Role::Engine => l
                 .engines
                 .iter()
                 .find(|(n, _, _)| n == name)
                 .map(|(_, g, _)| g.as_str()),
-            Role::Layer => l.layers.iter().find(|t| t.name == name).map(|t| t.guid.as_str()),
+            Role::Layer => l
+                .layers
+                .iter()
+                .find(|t| t.name == name)
+                .map(|t| t.guid.as_str()),
             _ => None,
         }
     }
@@ -775,7 +796,11 @@ impl KeysRig {
     /// Set a lane's fader (linear; the daw track volume).
     pub fn set_lane_volume(&self, role: Role, name: &str, linear: f32) {
         if let Some(guid) = self.lane_guid(role, name) {
-            let _ = self.daw.current().track(guid).set_volume(linear.max(0.0) as f64);
+            let _ = self
+                .daw
+                .current()
+                .track(guid)
+                .set_volume(linear.max(0.0) as f64);
         }
     }
 
@@ -795,8 +820,13 @@ impl KeysRig {
 
     /// A lane instrument's module cells (module faders stay in-tree).
     pub fn lane_cells(&self, layer: &str) -> Option<GainCells> {
-        let Hosting::Lanes(l) = &self.hosting else { return None };
-        l.layers.iter().find(|t| t.name == layer).map(|t| t.cells.clone())
+        let Hosting::Lanes(l) = &self.hosting else {
+            return None;
+        };
+        l.layers
+            .iter()
+            .find(|t| t.name == layer)
+            .map(|t| t.cells.clone())
     }
 
     /// Run `f` against the live [`KeysInstrument`] hosting `layer` — the
@@ -804,11 +834,7 @@ impl KeysRig {
     /// serialized against the renderer by the host's plugin-map lock. In
     /// single-tree mode the one instrument hosts every layer, so the layer
     /// name only picks the fx slot in lane mode.
-    pub fn edit_lane<R>(
-        &self,
-        layer: &str,
-        f: impl FnOnce(&mut KeysInstrument) -> R,
-    ) -> Option<R> {
+    pub fn edit_lane<R>(&self, layer: &str, f: impl FnOnce(&mut KeysInstrument) -> R) -> Option<R> {
         let fx = match &self.hosting {
             Hosting::Single { fx_guid, .. } => fx_guid.clone(),
             Hosting::Lanes(l) => l
@@ -869,7 +895,8 @@ impl KeysRig {
         // The new program owns new cells — hand them out before it goes live.
         *cells = inst.gain_cells();
         let _ = inst.prepare(sr as f64, PREPARE_BLOCK);
-        self.daw.insert_plugin_instance(fx_guid.clone(), Box::new(inst));
+        self.daw
+            .insert_plugin_instance(fx_guid.clone(), Box::new(inst));
         self.preset_name = tree.name.clone();
     }
 
@@ -930,7 +957,11 @@ impl KeysRig {
     /// (whose synchronous decode would starve the audio thread it runs on)
     /// and ships the list to the decoder worker; the PCM comes back through
     /// [`insert_decoded`](Self::insert_decoded).
-    pub fn missing_note_samples(&self, note: u8, velocity: u8) -> Vec<(String, std::path::PathBuf)> {
+    pub fn missing_note_samples(
+        &self,
+        note: u8,
+        velocity: u8,
+    ) -> Vec<(String, std::path::PathBuf)> {
         let layers: Vec<String> = match &self.hosting {
             Hosting::Single { .. } => vec![String::new()],
             Hosting::Lanes(l) => l.layers.iter().map(|t| t.name.clone()).collect(),
@@ -939,7 +970,8 @@ impl KeysRig {
         for layer in &layers {
             let mut paths = Vec::new();
             self.edit_lane(layer, |inst| {
-                inst.render_mut().missing_note_sample_paths(note, velocity, &mut paths);
+                inst.render_mut()
+                    .missing_note_sample_paths(note, velocity, &mut paths);
             });
             out.extend(paths.into_iter().map(|p| (layer.clone(), p)));
         }
@@ -961,8 +993,7 @@ impl KeysRig {
                 if !tree_uses_sample(&layer.tree, spec_path) {
                     continue;
                 }
-                let (render, cells) =
-                    RenderNode::compile_with_cells(&layer.tree, sample_rate);
+                let (render, cells) = RenderNode::compile_with_cells(&layer.tree, sample_rate);
                 crate::built_lanes::publish(crate::built_lanes::BuiltLane {
                     layer: layer.name.clone(),
                     render,
@@ -1046,7 +1077,8 @@ impl KeysRig {
         charge_past_ceiling: bool,
     ) -> bool {
         self.edit_lane(layer, |inst| {
-            inst.render_mut().insert_decoded_sample(path, &data, charge_past_ceiling)
+            inst.render_mut()
+                .insert_decoded_sample(path, &data, charge_past_ceiling)
         })
         .unwrap_or(false)
     }
@@ -1151,9 +1183,7 @@ impl KeysRig {
     /// opening hardware ports takes seconds and can stall outright while the
     /// PipeWire graph reconfigures, and that stall must not pin a rig mutex.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn midi_sink(
-        &self,
-    ) -> impl Fn(midicore::TimedEvent) + Send + Clone + 'static {
+    pub fn midi_sink(&self) -> impl Fn(midicore::TimedEvent) + Send + Clone + 'static {
         let daw = self.daw.clone();
         let targets = self.midi_targets();
         midicore::attach::tap_sink(self.midi_monitor.clone(), move |ev| {
@@ -1248,7 +1278,11 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
 
     // Meter cells are indexed by project track order.
     let mut meter = 0usize;
-    let rig_name = if program.name.is_empty() { "Keys Rig" } else { &program.name };
+    let rig_name = if program.name.is_empty() {
+        "Keys Rig"
+    } else {
+        &program.name
+    };
     let rig = tree.folder(rig_name).map_err(|e| err("rig folder", e))?;
     let tail_fx = match &program.tail {
         Some(_) => Some(
@@ -1264,7 +1298,9 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
     let mut engines = Vec::new();
     let mut layers = Vec::new();
     for engine in &program.engines {
-        let eng = tree.folder(&engine.name).map_err(|e| err("engine folder", e))?;
+        let eng = tree
+            .folder(&engine.name)
+            .map_err(|e| err("engine folder", e))?;
         engines.push((engine.name.clone(), eng.guid().to_string(), meter));
         meter += 1;
         for layer in &engine.layers {
@@ -1287,7 +1323,12 @@ fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<La
     }
     tree.finish().map_err(|e| err("close rig folder", e))?;
 
-    Ok(LaneHost { rig_guid, tail_fx, engines, layers })
+    Ok(LaneHost {
+        rig_guid,
+        tail_fx,
+        engines,
+        layers,
+    })
 }
 
 #[cfg(test)]
@@ -1309,8 +1350,14 @@ mod tests {
                 LaneEngine {
                     name: "Keys".into(),
                     layers: vec![
-                        LaneLayer { name: "Piano".into(), tree: Container::layer("Piano") },
-                        LaneLayer { name: "Pad".into(), tree: Container::layer("Pad") },
+                        LaneLayer {
+                            name: "Piano".into(),
+                            tree: Container::layer("Piano"),
+                        },
+                        LaneLayer {
+                            name: "Pad".into(),
+                            tree: Container::layer("Pad"),
+                        },
                     ],
                 },
                 LaneEngine {
@@ -1328,7 +1375,10 @@ mod tests {
 
         assert_eq!(lanes.engines.len(), 2);
         assert_eq!(lanes.layers.len(), 3);
-        assert!(lanes.tail_fx.is_some(), "tail chain gets a rig-track fx slot");
+        assert!(
+            lanes.tail_fx.is_some(),
+            "tail chain gets a rig-track fx slot"
+        );
 
         let tracks = <Standalone as Tracks>::all(project.daw(), ProjectContext::Current);
         let names: Vec<&str> = tracks.iter().map(|t| t.name.as_str()).collect();
@@ -1361,12 +1411,23 @@ mod tests {
 
         let (inl, inr) = (vec![0.0f32; 256], vec![0.0f32; 256]);
         let (mut outl, mut outr) = (vec![0.0f32; 256], vec![0.0f32; 256]);
-        let midi = [PluginMidiEvent { offset: 0, message: ev_note_on(72, 110) }];
-        let held = PluginEvents { params: &[], midi: &midi, note_expressions: &[] };
-        inst.process_block(&inl, &inr, &mut outl, &mut outr, &held).unwrap();
+        let midi = [PluginMidiEvent {
+            offset: 0,
+            message: ev_note_on(72, 110),
+        }];
+        let held = PluginEvents {
+            params: &[],
+            midi: &midi,
+            note_expressions: &[],
+        };
+        inst.process_block(&inl, &inr, &mut outl, &mut outr, &held)
+            .unwrap();
         let rms = |b: &[f32]| (b.iter().map(|s| s * s).sum::<f32>() / b.len() as f32).sqrt();
         let before = rms(&outl);
-        assert!(before > 1e-3, "note should sound before the swap, rms={before}");
+        assert!(
+            before > 1e-3,
+            "note should sound before the swap, rms={before}"
+        );
 
         // Swap to a freshly compiled tree while that note is still held.
         let (next, cells) = RenderNode::compile_with_cells(&preset, 48_000);
@@ -1380,7 +1441,8 @@ mod tests {
         for _ in 0..4 {
             outl.fill(0.0);
             outr.fill(0.0);
-            inst.process_block(&inl, &inr, &mut outl, &mut outr, &quiet).unwrap();
+            inst.process_block(&inl, &inr, &mut outl, &mut outr, &quiet)
+                .unwrap();
             after = after.max(rms(&outl));
         }
         assert!(

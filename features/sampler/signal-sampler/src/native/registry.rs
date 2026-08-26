@@ -128,7 +128,16 @@ fn build_eq(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
 
 fn build_comp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = signal_fx::NativeComp::new(sample_rate as f64);
-    for name in ["threshold", "ratio", "attack", "release", "knee", "range", "fold", "style"] {
+    for name in [
+        "threshold",
+        "ratio",
+        "attack",
+        "release",
+        "knee",
+        "range",
+        "fold",
+        "style",
+    ] {
         if let Some(v) = block.param_f32(name) {
             fx.set_named(name, v as f64);
         }

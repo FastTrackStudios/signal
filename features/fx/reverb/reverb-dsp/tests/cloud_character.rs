@@ -40,8 +40,7 @@ fn diffusion_min_is_grainy_max_is_fog() {
         let out = render_impulse(&mut c, (0.25 * SR) as usize);
         let window = &out[(0.01 * SR) as usize..];
         let peak = window.iter().fold(0.0f64, |a, &x| a.max(x.abs()));
-        let rms =
-            (window.iter().map(|x| x * x).sum::<f64>() / window.len() as f64).sqrt();
+        let rms = (window.iter().map(|x| x * x).sum::<f64>() / window.len() as f64).sqrt();
         peak / rms.max(1e-12)
     };
     let grainy = crest(0.0);
@@ -69,9 +68,8 @@ fn mod_law_two_segments_stay_finite_and_distinct() {
     let still = render(0.0);
     let deep = render(0.6);
     let fast = render(1.0);
-    let diff = |a: &[f64], b: &[f64]| -> f64 {
-        a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum()
-    };
+    let diff =
+        |a: &[f64], b: &[f64]| -> f64 { a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum() };
     let ref_e: f64 = still.iter().map(|x| x * x).sum();
     assert!(diff(&still, &deep) > ref_e * 1e-4, "depth segment inert");
     assert!(diff(&deep, &fast) > ref_e * 1e-4, "rate segment inert");

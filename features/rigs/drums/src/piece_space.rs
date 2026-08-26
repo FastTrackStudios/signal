@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 
 use signal_sampler::SamplerRig;
-use signal_space::{Space, SpaceItem, SPACE_VERSION, analyze, knn};
+use signal_space::{analyze, knn, Space, SpaceItem, SPACE_VERSION};
 
 /// The space built under `<library>/Space/pieces.space`.
 pub const PIECE_SPACE: &str = "pieces";
@@ -164,15 +164,18 @@ pub fn similar_to(
         .position(|i| i.path == rel)
         .ok_or_else(|| format!("{rel} not in the piece space"))?;
     let class = space.items[idx].class.clone();
-    Ok(
-        knn::similar(&features, space.dim, idx, limit, |i| space.items[i].class == class)
-            .into_iter()
-            .map(|(i, score)| {
-                (
-                    Path::new(&space.root).join(&space.items[i].path).to_string_lossy().into_owned(),
-                    score,
-                )
-            })
-            .collect(),
-    )
+    Ok(knn::similar(&features, space.dim, idx, limit, |i| {
+        space.items[i].class == class
+    })
+    .into_iter()
+    .map(|(i, score)| {
+        (
+            Path::new(&space.root)
+                .join(&space.items[i].path)
+                .to_string_lossy()
+                .into_owned(),
+            score,
+        )
+    })
+    .collect())
 }

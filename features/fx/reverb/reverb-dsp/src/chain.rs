@@ -6,17 +6,17 @@ use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::{AudioConfig, Processor};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
-use crate::algorithm::{ChamberParams, SpringParams, 
-    AlgorithmParams, AlgorithmType, BloomParams, ChoraleParams, CloudParams,
+use crate::algorithm::{
+    AlgorithmParams, AlgorithmType, BloomParams, ChamberParams, ChoraleParams, CloudParams,
     ConvolutionModParams, HallParams, ImpulseParams, IrSlot, MagnetoParams, NonLinearParams,
-    ReverbAlgorithm, ReverbVoice, ShimmerParams, SwellType,
+    ReverbAlgorithm, ReverbVoice, ShimmerParams, SpringParams, SwellType,
 };
 use crate::algorithms;
 use crate::ir::engine::{ProcessedIr, ReshapeJob};
 use crate::ir::prepared::PreparedIrPair;
 use audiocore_dsp::envelope::EnvelopeFollower;
-use fts_modulation::{EnvFollower, Modulator, TransportInfo};
 use audiocore_dsp::smoothing::ParamSmoother;
+use fts_modulation::{EnvFollower, Modulator, TransportInfo};
 
 use crate::primitives::saturation::Saturator;
 use crate::primitives::tilt_eq::TiltEq;
@@ -608,12 +608,7 @@ impl ReverbChain {
 
     /// Slot-addressed synchronous IR load (slot B feeds the morph's
     /// second convolver). Returns `true` if accepted.
-    pub fn load_convolution_ir_slot(
-        &mut self,
-        left: &[f64],
-        right: &[f64],
-        slot: IrSlot,
-    ) -> bool {
+    pub fn load_convolution_ir_slot(&mut self, left: &[f64], right: &[f64], slot: IrSlot) -> bool {
         let ok = self.algorithm.try_load_ir_slot(left, right, slot);
         if ok {
             self.reset_impulse_after_load();
@@ -662,16 +657,17 @@ impl ReverbChain {
             self.algorithm.set_conv_mod_params(&self.conv_mod, true);
             self.algorithm.set_shimmer_params(&self.shimmer);
             self.algorithm.set_magneto_params(&self.effective_magneto());
-        self.algorithm.set_chamber_params(&self.chamber);
-        self.algorithm.set_spring_params(&self.spring);
-        self.algorithm.set_vintage(
-            self.voice == ReverbVoice::Classic
-                && matches!(
-                    self.algorithm_type,
-                    AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
-                ),
-        );
-            self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
+            self.algorithm.set_chamber_params(&self.chamber);
+            self.algorithm.set_spring_params(&self.spring);
+            self.algorithm.set_vintage(
+                self.voice == ReverbVoice::Classic
+                    && matches!(
+                        self.algorithm_type,
+                        AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
+                    ),
+            );
+            self.algorithm
+                .set_nonlinear_params(&self.effective_nonlinear());
         }
     }
 
@@ -1012,7 +1008,8 @@ impl ReverbChain {
                     AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
                 ),
         );
-        self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
+        self.algorithm
+            .set_nonlinear_params(&self.effective_nonlinear());
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);
         self.algorithm.set_chorale_params(&self.chorale);
@@ -1042,7 +1039,11 @@ impl Processor for ReverbChain {
             f.reset();
         }
         self.swell_env.reset(0.0);
-        self.swell_level = if self.hall.swell_rise > 1e-9 { 0.0 } else { 1.0 };
+        self.swell_level = if self.hall.swell_rise > 1e-9 {
+            0.0
+        } else {
+            1.0
+        };
         self.trem_phase = 0.0;
     }
 
@@ -1056,7 +1057,11 @@ impl Processor for ReverbChain {
             ..PostEqBand::default()
         }; POST_EQ_BANDS];
         self.configure_post_eq();
-        self.swell_level = if self.hall.swell_rise > 1e-9 { 0.0 } else { 1.0 };
+        self.swell_level = if self.hall.swell_rise > 1e-9 {
+            0.0
+        } else {
+            1.0
+        };
 
         let max_predelay = (config.sample_rate * 0.5) as usize;
         self.predelay = DelayLine::new(max_predelay + 1);
@@ -1111,7 +1116,8 @@ impl Processor for ReverbChain {
         self.mix_smoother.set_time_ms(5.0, config.sample_rate);
         self.width_smoother.set_time_ms(5.0, config.sample_rate);
         self.pan_smoother.set_time_ms(5.0, config.sample_rate);
-        self.trem_depth_smoother.set_time_ms(10.0, config.sample_rate);
+        self.trem_depth_smoother
+            .set_time_ms(10.0, config.sample_rate);
         self.decay_smoother.set_time_ms(30.0, config.sample_rate);
         self.damping_smoother.set_time_ms(30.0, config.sample_rate);
         self.tilt_smoother.set_time_ms(30.0, config.sample_rate);
@@ -1148,7 +1154,8 @@ impl Processor for ReverbChain {
                     AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
                 ),
         );
-        self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
+        self.algorithm
+            .set_nonlinear_params(&self.effective_nonlinear());
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);
         self.algorithm.set_chorale_params(&self.chorale);
@@ -1206,11 +1213,16 @@ impl Processor for ReverbChain {
             for ir in [latest_a, latest_b].into_iter().flatten() {
                 loaded |= match (&ir.cross, ir.slot) {
                     // True-stereo loads (slot A only) carry LR/RL legs.
-                    (Some((lr, rl)), IrSlot::A) => self
+                    (Some((lr, rl)), IrSlot::A) => {
+                        self.algorithm
+                            .try_load_ir_true_stereo(&ir.left, lr, rl, &ir.right)
+                            || self
+                                .algorithm
+                                .try_load_ir_slot(&ir.left, &ir.right, ir.slot)
+                    }
+                    _ => self
                         .algorithm
-                        .try_load_ir_true_stereo(&ir.left, lr, rl, &ir.right)
-                        || self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot),
-                    _ => self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot),
+                        .try_load_ir_slot(&ir.left, &ir.right, ir.slot),
                 };
             }
             if loaded {
@@ -1254,14 +1266,14 @@ impl Processor for ReverbChain {
         let mid_on = hall_active && self.hall.mid_db.abs() > 0.01;
         let swell_on = hall_active && self.hall.swell_rise > 1e-9;
         // Rise 0..1 → 50 ms .. ~2 s swell.
-        let swell_rate = 1.0
-            / ((0.05 + self.hall.swell_rise.clamp(0.0, 1.0) * 2.0) * self.sample_rate.max(1.0));
+        let swell_rate =
+            1.0 / ((0.05 + self.hall.swell_rise.clamp(0.0, 1.0) * 2.0) * self.sample_rate.max(1.0));
         self.mix_smoother.set_target(self.mix);
         self.width_smoother.set_target(self.width);
         self.pan_smoother.set_target(self.pan);
         self.trem_depth_smoother.set_target(self.trem_depth);
-        let trem_inc = 2.0 * std::f64::consts::PI * self.trem_rate_hz.clamp(0.1, 12.0)
-            / self.sample_rate;
+        let trem_inc =
+            2.0 * std::f64::consts::PI * self.trem_rate_hz.clamp(0.1, 12.0) / self.sample_rate;
 
         let mut block_start = 0;
         while block_start < n {
@@ -1326,17 +1338,16 @@ impl Processor for ReverbChain {
                 // Freeze: kill input to the algorithm but keep feedback
                 // running. Infinite keeps feeding input into the
                 // sustained wash instead.
-                let (mut alg_in_l, mut alg_in_r) = if self.freeze
-                    && self.infinite_mode == InfiniteMode::Freeze
-                {
-                    (0.0, 0.0)
-                } else if self.predelay_samples > 0 {
-                    self.predelay.write(filt_l);
-                    let delayed = self.predelay.read(self.predelay_samples);
-                    (delayed, filt_r)
-                } else {
-                    (filt_l, filt_r)
-                };
+                let (mut alg_in_l, mut alg_in_r) =
+                    if self.freeze && self.infinite_mode == InfiniteMode::Freeze {
+                        (0.0, 0.0)
+                    } else if self.predelay_samples > 0 {
+                        self.predelay.write(filt_l);
+                        let delayed = self.predelay.read(self.predelay_samples);
+                        (delayed, filt_r)
+                    } else {
+                        (filt_l, filt_r)
+                    };
 
                 // Send pattern: rhythmic gate on the algorithm input.
                 // The modulator's Audio trigger listens to the dry
@@ -1349,7 +1360,10 @@ impl Processor for ReverbChain {
                     };
                     let g = m.tick(&transport, dry_l + dry_r);
                     let phase = m.trigger.phase();
-                    if m.patterns.active().clear_crossed(self.send_prev_phase, phase) {
+                    if m.patterns
+                        .active()
+                        .clear_crossed(self.send_prev_phase, phase)
+                    {
                         self.algorithm.reset();
                     }
                     self.send_prev_phase = phase;
@@ -1426,7 +1440,10 @@ impl Processor for ReverbChain {
                     };
                     let g = m.tick(&transport, dry_l + dry_r);
                     let phase = m.trigger.phase();
-                    if m.patterns.active().clear_crossed(self.wet_prev_phase, phase) {
+                    if m.patterns
+                        .active()
+                        .clear_crossed(self.wet_prev_phase, phase)
+                    {
                         self.algorithm.reset();
                     }
                     self.wet_prev_phase = phase;
@@ -1442,8 +1459,7 @@ impl Processor for ReverbChain {
                 }
 
                 // Advance the chain's transport clock.
-                self.transport_qn +=
-                    self.tempo_bpm.unwrap_or(120.0) / 60.0 / self.sample_rate;
+                self.transport_qn += self.tempo_bpm.unwrap_or(120.0) / 60.0 / self.sample_rate;
 
                 // Wet tremolo (sine, wet path only). Phase advances only
                 // while the ramped depth is non-zero, so depth 0 stays
@@ -2003,7 +2019,12 @@ mod tests {
             let mut c = ReverbChain::new();
             c.set_algorithm(AlgorithmType::Hall);
             c.mix = 1.0;
-            c.post_eq[0] = PostEqBand { shape: 2, freq_hz: 3000.0, gain_db, q: 0.707 };
+            c.post_eq[0] = PostEqBand {
+                shape: 2,
+                freq_hz: 3000.0,
+                gain_db,
+                q: 0.707,
+            };
             c.update(config());
             let n = (SR as usize) * 2;
             let mut l: Vec<f64> = (0..n).map(|i| if i < 32 { 0.5 } else { 0.0 }).collect();

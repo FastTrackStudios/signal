@@ -43,8 +43,8 @@ mod web {
     use wasm_bindgen::prelude::*;
 
     use daw_standalone::audio_engine::web::WebRenderer;
-    use signal_sampler::KeysRig;
     use signal_sampler::keys_rig::LaneProgram;
+    use signal_sampler::KeysRig;
 
     use crate::wire_program_from_json;
 
@@ -62,35 +62,32 @@ mod web {
         use std::sync::Once;
         static ONCE: Once = Once::new();
         ONCE.call_once(|| {
-            signal_sampler::engine::cache::set_external_pack_reader(Box::new(
-                |id, offset, dst| {
-                    use wasm_bindgen::JsCast as _;
-                    let Ok(hook) =
-                        js_sys::Reflect::get(&js_sys::global(), &"__ftsPackRead".into())
-                    else {
-                        return false;
-                    };
-                    let Ok(hook) = hook.dyn_into::<js_sys::Function>() else {
-                        return false;
-                    };
-                    let Ok(value) = hook.call3(
-                        &JsValue::NULL,
-                        &JsValue::from_f64(f64::from(id)),
-                        &JsValue::from_f64(offset as f64),
-                        &JsValue::from_f64(dst.len() as f64),
-                    ) else {
-                        return false;
-                    };
-                    let Ok(bytes) = value.dyn_into::<js_sys::Uint8Array>() else {
-                        return false; // null / undefined: id unknown or range refused
-                    };
-                    if bytes.length() as usize != dst.len() {
-                        return false;
-                    }
-                    bytes.copy_to(dst);
-                    true
-                },
-            ));
+            signal_sampler::engine::cache::set_external_pack_reader(Box::new(|id, offset, dst| {
+                use wasm_bindgen::JsCast as _;
+                let Ok(hook) = js_sys::Reflect::get(&js_sys::global(), &"__ftsPackRead".into())
+                else {
+                    return false;
+                };
+                let Ok(hook) = hook.dyn_into::<js_sys::Function>() else {
+                    return false;
+                };
+                let Ok(value) = hook.call3(
+                    &JsValue::NULL,
+                    &JsValue::from_f64(f64::from(id)),
+                    &JsValue::from_f64(offset as f64),
+                    &JsValue::from_f64(dst.len() as f64),
+                ) else {
+                    return false;
+                };
+                let Ok(bytes) = value.dyn_into::<js_sys::Uint8Array>() else {
+                    return false; // null / undefined: id unknown or range refused
+                };
+                if bytes.length() as usize != dst.len() {
+                    return false;
+                }
+                bytes.copy_to(dst);
+                true
+            }));
         });
     }
 
@@ -383,8 +380,7 @@ mod web {
         #[wasm_bindgen(js_name = attachPackExternal)]
         pub fn attach_pack_external(&self, key: &str, id: u32, len: f64) -> Result<(), JsValue> {
             install_external_reader_once();
-            signal_sampler::pack_registry::install_external(key, id, len as u64)
-                .map_err(js_err)
+            signal_sampler::pack_registry::install_external(key, id, len as u64).map_err(js_err)
         }
 
         /// Build the headless keys rig from a lane-program JSON (see
@@ -395,11 +391,7 @@ mod web {
             let program = wire_program_from_json(program_json)
                 .map_err(js_err)?
                 .into_lane_program();
-            let lanes: u32 = program
-                .engines
-                .iter()
-                .map(|e| e.layers.len() as u32)
-                .sum();
+            let lanes: u32 = program.engines.iter().map(|e| e.layers.len() as u32).sum();
             let rig = KeysRig::open_headless_on(
                 self.renderer.standalone(),
                 self.renderer.output_sample_rate(),
@@ -780,30 +772,28 @@ mod web {
             pcm: &[f32],
             charge_past_ceiling: bool,
         ) -> bool {
-            let num_frames = if channels == 0 { 0 } else { pcm.len() / channels as usize };
-            let data = std::sync::Arc::new(
-                signal_sampler::engine::cache::SampleData::from_f32(
-                    pcm.to_vec(),
-                    channels,
-                    sample_rate,
-                    num_frames,
-                ),
-            );
+            let num_frames = if channels == 0 {
+                0
+            } else {
+                pcm.len() / channels as usize
+            };
+            let data = std::sync::Arc::new(signal_sampler::engine::cache::SampleData::from_f32(
+                pcm.to_vec(),
+                channels,
+                sample_rate,
+                num_frames,
+            ));
             let accepted = self
                 .rig
                 .borrow()
                 .as_ref()
                 .map(|rig| {
-                    rig.insert_decoded(
-                        layer,
-                        std::path::Path::new(path),
-                        data,
-                        charge_past_ceiling,
-                    )
+                    rig.insert_decoded(layer, std::path::Path::new(path), data, charge_past_ceiling)
                 })
                 .unwrap_or(false);
             if accepted {
-                self.pcm_inserted.set(self.pcm_inserted.get().wrapping_add(1));
+                self.pcm_inserted
+                    .set(self.pcm_inserted.get().wrapping_add(1));
             } else {
                 self.pcm_refused.set(self.pcm_refused.get().wrapping_add(1));
             }
@@ -850,30 +840,28 @@ mod web {
             }
             let frames = pending.remove(&key).unwrap_or_default();
             drop(pending);
-            let num_frames = if channels == 0 { 0 } else { frames.len() / channels as usize };
-            let data = std::sync::Arc::new(
-                signal_sampler::engine::cache::SampleData::from_f32(
-                    frames,
-                    channels,
-                    sample_rate,
-                    num_frames,
-                ),
-            );
+            let num_frames = if channels == 0 {
+                0
+            } else {
+                frames.len() / channels as usize
+            };
+            let data = std::sync::Arc::new(signal_sampler::engine::cache::SampleData::from_f32(
+                frames,
+                channels,
+                sample_rate,
+                num_frames,
+            ));
             let accepted = self
                 .rig
                 .borrow()
                 .as_ref()
                 .map(|rig| {
-                    rig.insert_decoded(
-                        layer,
-                        std::path::Path::new(path),
-                        data,
-                        charge_past_ceiling,
-                    )
+                    rig.insert_decoded(layer, std::path::Path::new(path), data, charge_past_ceiling)
                 })
                 .unwrap_or(false);
             if accepted {
-                self.pcm_inserted.set(self.pcm_inserted.get().wrapping_add(1));
+                self.pcm_inserted
+                    .set(self.pcm_inserted.get().wrapping_add(1));
             } else {
                 self.pcm_refused.set(self.pcm_refused.get().wrapping_add(1));
             }
@@ -958,10 +946,12 @@ mod web {
             }
             let o = js_sys::Object::new();
             let _ = js_sys::Reflect::set(&o, &"channels".into(), &f64::from(data.channels).into());
-            let _ =
-                js_sys::Reflect::set(&o, &"sampleRate".into(), &f64::from(data.sample_rate).into());
-            let _ =
-                js_sys::Reflect::set(&o, &"frames".into(), &(data.num_frames as f64).into());
+            let _ = js_sys::Reflect::set(
+                &o,
+                &"sampleRate".into(),
+                &f64::from(data.sample_rate).into(),
+            );
+            let _ = js_sys::Reflect::set(&o, &"frames".into(), &(data.num_frames as f64).into());
             let pcm = js_sys::Float32Array::from(pcm_f32.as_ref());
             let _ = js_sys::Reflect::set(&o, &"pcm".into(), &pcm.into());
             o.into()

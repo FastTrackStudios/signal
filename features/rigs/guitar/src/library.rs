@@ -23,12 +23,11 @@
 use std::path::PathBuf;
 
 use facet::Facet;
-use signal_rig_host::store::{StyxDir, signal_config_dir};
+use signal_rig_host::store::{signal_config_dir, StyxDir};
 
 use crate::profiles::{
+    default_keymap, default_midi_map, default_setlists, drive_presets, song_library, worship_def,
     DrivePresetDef, KeyBindingDef, MidiMapDef, ProfileDef, SetlistDef, SongDef,
-    default_keymap, default_midi_map, default_setlists, drive_presets, song_library,
-    worship_def,
 };
 
 /// The library directory (`SIGNAL_RIG_DIR` overrides).
@@ -190,7 +189,9 @@ impl RigLibrary {
             store.read_or_seed::<ProfileDef>("profile.styx", DEFAULT_PROFILE, worship_def);
         let mut drive_presets = store
             .read_or_seed::<DrivePresetLib>("drive-presets.styx", DEFAULT_DRIVE_PRESETS, || {
-                DrivePresetLib { presets: drive_presets() }
+                DrivePresetLib {
+                    presets: drive_presets(),
+                }
             })
             .presets;
         let songs = store
@@ -218,7 +219,14 @@ impl RigLibrary {
                 store.resolve(&mut option.nam);
             }
         }
-        Self { profile, drive_presets, songs, setlists, midi_map, keymap }
+        Self {
+            profile,
+            drive_presets,
+            songs,
+            setlists,
+            midi_map,
+            keymap,
+        }
     }
 
     pub fn save_profile(profile: &ProfileDef) {
@@ -242,11 +250,21 @@ impl RigLibrary {
     }
 
     pub fn save_songs(songs: &[SongDef]) {
-        store().write("songs.styx", &SongLib { songs: songs.to_vec() });
+        store().write(
+            "songs.styx",
+            &SongLib {
+                songs: songs.to_vec(),
+            },
+        );
     }
 
     pub fn save_setlists(setlists: &[SetlistDef]) {
-        store().write("setlists.styx", &SetlistLib { setlists: setlists.to_vec() });
+        store().write(
+            "setlists.styx",
+            &SetlistLib {
+                setlists: setlists.to_vec(),
+            },
+        );
     }
 
     pub fn save_last_state(state: &LastState) {

@@ -7,7 +7,7 @@ use signal_ekit_proto::ekit::{EkitRigClient, EkitRigStreamClient};
 use signal_ekit_proto::{EkitEvent, EkitStatus, Pad};
 use signal_space_proto::space::SampleSpaceClient;
 
-use crate::remote::{establish, EngineTarget};
+use crate::remote::{EngineTarget, establish};
 
 /// Same palette as the space map, so a pad's colour matches its dot.
 fn class_color(class: &str) -> &'static str {

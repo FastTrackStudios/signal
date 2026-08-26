@@ -39,7 +39,10 @@ enum Mode {
 struct SynthState {
     status: Signal<SynthStatus>,
     presets: Signal<Vec<SynthPreset>>,
-    #[allow(dead_code, reason = "seeded from the rig snapshot but not yet read by any view — module-tree view isn't wired up here yet")]
+    #[allow(
+        dead_code,
+        reason = "seeded from the rig snapshot but not yet read by any view — module-tree view isn't wired up here yet"
+    )]
     tree: Signal<SynthNode>,
     midi: Signal<Vec<MidiEvent>>,
 }
@@ -102,7 +105,15 @@ fn use_synth_state() -> (SynthState, Option<SynthRigClient>) {
         );
     }
 
-    (SynthState { status, presets, tree, midi }, rig)
+    (
+        SynthState {
+            status,
+            presets,
+            tree,
+            midi,
+        },
+        rig,
+    )
 }
 
 /// The synth-rig remote view. Mount inside a host that has provided
@@ -158,12 +169,7 @@ pub fn SynthRigRemote() -> Element {
         .into_iter()
         .map(|(id, label, m)| {
             let mut pick = mode;
-            fts_chrome::ChromeTab::new(
-                id,
-                label,
-                mode() == m,
-                Callback::new(move |_| pick.set(m)),
-            )
+            fts_chrome::ChromeTab::new(id, label, mode() == m, Callback::new(move |_| pick.set(m)))
         })
         .collect(),
     );
@@ -437,10 +443,10 @@ struct LayerEnvExtra {
 /// segment's midpoint.
 struct EnvGeom {
     sec_per_x: f64,
-    xa: f64,  // attack peak x
-    xh: f64,  // hold-end x (start of decay), at peak
-    xc: f64,  // decay corner x (= sustain point)
-    xr: f64,  // release-end x
+    xa: f64, // attack peak x
+    xh: f64, // hold-end x (start of decay), at peak
+    xc: f64, // decay corner x (= sustain point)
+    xr: f64, // release-end x
     ysus: f64,
     y0: f64,
     ytop: f64,
@@ -581,7 +587,13 @@ fn knob_arc(cx: f64, cy: f64, r: f64, a0: f64, a1: f64) -> String {
 /// A transparent range input over the arc handles the drag; `value` is the
 /// normalized 0..1 position and `on_change` fires the new value.
 #[component]
-fn MiniKnob(value: f64, label: String, display: String, color: String, on_change: Callback<f64>) -> Element {
+fn MiniKnob(
+    value: f64,
+    label: String,
+    display: String,
+    color: String,
+    on_change: Callback<f64>,
+) -> Element {
     let (cx, cy, r) = (22.0, 22.0, 18.0);
     let (start, sweep) = (135.0, 270.0);
     let val = value.clamp(0.0, 1.0);
@@ -933,26 +945,35 @@ fn LayerEditView() -> Element {
         f64,
         f64,
     );
-    let begin = use_callback(move |(svg, handle, vb_w, vb_h, sec_per_x, base_x): BeginArgs| {
-        let mut drag = drag;
-        spawn(async move {
-            let Some(el) = svg.peek().clone() else { return };
-            if let Ok(rect) = el.get_client_rect().await {
-                drag.set(Some(Drag {
-                    handle,
-                    ox: rect.origin.x,
-                    oy: rect.origin.y,
-                    w: rect.width(),
-                    h: rect.height(),
-                    vb_w,
-                    vb_h,
-                    sec_per_x,
-                    base_x,
-                }));
-            }
-        });
+    let begin = use_callback(
+        move |(svg, handle, vb_w, vb_h, sec_per_x, base_x): BeginArgs| {
+            let mut drag = drag;
+            spawn(async move {
+                let Some(el) = svg.peek().clone() else { return };
+                if let Ok(rect) = el.get_client_rect().await {
+                    drag.set(Some(Drag {
+                        handle,
+                        ox: rect.origin.x,
+                        oy: rect.origin.y,
+                        w: rect.width(),
+                        h: rect.height(),
+                        vb_w,
+                        vb_h,
+                        sec_per_x,
+                        base_x,
+                    }));
+                }
+            });
+        },
+    );
+    use_context_provider(|| EnvHooks {
+        amp_svg,
+        fenv_svg,
+        begin,
+        edit,
+        extras,
+        sel,
     });
-    use_context_provider(|| EnvHooks { amp_svg, fenv_svg, begin, edit, extras, sel });
 
     let layers = edit.read().clone();
     if layers.is_empty() {
@@ -984,8 +1005,8 @@ fn LayerEditView() -> Element {
     let has_mod = filter.env_depth.abs() > 0.001;
 
     // Cutoff-knob normalized position (log).
-    let cut_norm =
-        ((filter.cutoff_hz as f64).max(FMIN).log10() - FMIN.log10()) / (FMAX.log10() - FMIN.log10());
+    let cut_norm = ((filter.cutoff_hz as f64).max(FMIN).log10() - FMIN.log10())
+        / (FMAX.log10() - FMIN.log10());
 
     rsx! {
         div { style: "display:flex; flex-direction:column; gap:0; flex:1; min-height:0;",
@@ -1244,7 +1265,11 @@ fn EnvBlock(title: String, color: String) -> Element {
     // Selected layer (reactive — re-renders on selection/edit change).
     let li = {
         let ls = edit.read();
-        if ls.is_empty() { 0 } else { hooks.sel.read().min(ls.len() - 1) }
+        if ls.is_empty() {
+            0
+        } else {
+            hooks.sel.read().min(ls.len() - 1)
+        }
     };
     let env = {
         let ls = edit.read();
@@ -1261,16 +1286,30 @@ fn EnvBlock(title: String, color: String) -> Element {
         .unwrap_or_default();
 
     let g = env_geom(&env, &extra);
-    let svg_ref = if is_amp { hooks.amp_svg } else { hooks.fenv_svg };
+    let svg_ref = if is_amp {
+        hooks.amp_svg
+    } else {
+        hooks.fenv_svg
+    };
     let (h_attack, h_hold, h_corner, h_release, h_ap, h_dp, h_rp) = if is_amp {
         (
-            Handle::AmpAttack, Handle::AmpHold, Handle::AmpCorner, Handle::AmpRelease,
-            Handle::AmpAttackPow, Handle::AmpDecayPow, Handle::AmpReleasePow,
+            Handle::AmpAttack,
+            Handle::AmpHold,
+            Handle::AmpCorner,
+            Handle::AmpRelease,
+            Handle::AmpAttackPow,
+            Handle::AmpDecayPow,
+            Handle::AmpReleasePow,
         )
     } else {
         (
-            Handle::FiltAttack, Handle::FiltHold, Handle::FiltCorner, Handle::FiltRelease,
-            Handle::FiltAttackPow, Handle::FiltDecayPow, Handle::FiltReleasePow,
+            Handle::FiltAttack,
+            Handle::FiltHold,
+            Handle::FiltCorner,
+            Handle::FiltRelease,
+            Handle::FiltAttackPow,
+            Handle::FiltDecayPow,
+            Handle::FiltReleasePow,
         )
     };
     let begin = hooks.begin;
@@ -1290,7 +1329,14 @@ fn EnvBlock(title: String, color: String) -> Element {
         let mut edit = edit;
         edit.with_mut(|ls| {
             if let Some(l) = ls.get_mut(li) {
-                f(if is_amp { &mut l.amp_env } else { &mut l.filter_env }, v);
+                f(
+                    if is_amp {
+                        &mut l.amp_env
+                    } else {
+                        &mut l.filter_env
+                    },
+                    v,
+                );
             }
         });
     };
@@ -1304,8 +1350,18 @@ fn EnvBlock(title: String, color: String) -> Element {
     };
 
     // Snapshots for the readouts / knob positions.
-    let (ea, ed, es, er) = (env.attack as f64, env.decay as f64, env.sustain as f64, env.release as f64);
-    let (eh, pap, pdp, prp) = (extra.hold, extra.attack_power, extra.decay_power, extra.release_power);
+    let (ea, ed, es, er) = (
+        env.attack as f64,
+        env.decay as f64,
+        env.sustain as f64,
+        env.release as f64,
+    );
+    let (eh, pap, pdp, prp) = (
+        extra.hold,
+        extra.attack_power,
+        extra.decay_power,
+        extra.release_power,
+    );
 
     rsx! {
         div {
@@ -1427,8 +1483,14 @@ fn EnvBlock(title: String, color: String) -> Element {
 /// arming callback, plus the shared `edit` (A/D/S/R) and `extras` (hold + curve
 /// power) buffers and the current selection — so a graph and its knob row both
 /// mutate one source of truth.
-type BeginEnvDragCallback =
-    Callback<(Signal<Option<std::rc::Rc<MountedData>>>, Handle, f64, f64, f64, f64)>;
+type BeginEnvDragCallback = Callback<(
+    Signal<Option<std::rc::Rc<MountedData>>>,
+    Handle,
+    f64,
+    f64,
+    f64,
+    f64,
+)>;
 
 #[derive(Clone, Copy)]
 struct EnvHooks {
@@ -1452,7 +1514,11 @@ fn layer_btn(selected: bool, active: bool) -> String {
 }
 
 fn preset_btn(loaded: bool) -> String {
-    let (bg, br, fg) = if loaded { ("#0c2733", "#0ea5e9", "#e4e4e7") } else { ("#111113", "#27272a", "#a1a1aa") };
+    let (bg, br, fg) = if loaded {
+        ("#0c2733", "#0ea5e9", "#e4e4e7")
+    } else {
+        ("#111113", "#27272a", "#a1a1aa")
+    };
     format!("display:flex; flex-direction:column; text-align:left; padding:6px 8px; border-radius:6px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:12px; cursor:pointer;")
 }
 
@@ -1571,7 +1637,11 @@ fn MappingView() -> Element {
         sel_src.clone()
     };
 
-    let header_name = if m.name.is_empty() { effective_src.clone() } else { m.name.clone() };
+    let header_name = if m.name.is_empty() {
+        effective_src.clone()
+    } else {
+        m.name.clone()
+    };
     let zones = m.zones.clone();
     let fv = filter();
     let sel = selected_zone();
@@ -1629,12 +1699,21 @@ fn MappingView() -> Element {
         .unwrap_or_default();
 
     // Inspector rows for the selected zone.
-    let dash = |s: &str| if s.is_empty() { "—".to_string() } else { s.to_string() };
+    let dash = |s: &str| {
+        if s.is_empty() {
+            "—".to_string()
+        } else {
+            s.to_string()
+        }
+    };
     let sel_zone = sel.and_then(|i| zones.get(i).cloned());
     let rows: Vec<(&'static str, String)> = match &sel_zone {
         Some(z) => vec![
             ("File", z.file.clone()),
-            ("Key range", format!("{} – {}", note_name(z.key_min), note_name(z.key_max))),
+            (
+                "Key range",
+                format!("{} – {}", note_name(z.key_min), note_name(z.key_max)),
+            ),
             ("Root", note_name(z.root_key)),
             ("Velocity", format!("{} – {}", z.vel_min, z.vel_max)),
             (
@@ -1642,7 +1721,11 @@ fn MappingView() -> Element {
                 format!(
                     "#{}{}",
                     z.rr_index,
-                    if z.rr_mode.is_empty() { String::new() } else { format!(" ({})", z.rr_mode) }
+                    if z.rr_mode.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" ({})", z.rr_mode)
+                    }
                 ),
             ),
             ("Gain", format!("{:+.1} dB", z.gain_db)),
@@ -1831,12 +1914,20 @@ fn MappingView() -> Element {
 }
 
 fn sidebar_btn(active: bool) -> String {
-    let (bg, br, fg) = if active { ("#0c2733", "#0ea5e9", "#e4e4e7") } else { ("transparent", "#1c1c1f", "#a1a1aa") };
+    let (bg, br, fg) = if active {
+        ("#0c2733", "#0ea5e9", "#e4e4e7")
+    } else {
+        ("transparent", "#1c1c1f", "#a1a1aa")
+    };
     format!("display:flex; align-items:center; gap:6px; text-align:left; padding:5px 8px; border-radius:5px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:11px; cursor:pointer;")
 }
 
 fn src_tab(active: bool) -> String {
-    let (bg, br, fg) = if active { ("#0c2733", "#0ea5e9", "#e4e4e7") } else { ("#111113", "#27272a", "#a1a1aa") };
+    let (bg, br, fg) = if active {
+        ("#0c2733", "#0ea5e9", "#e4e4e7")
+    } else {
+        ("#111113", "#27272a", "#a1a1aa")
+    };
     format!("padding:4px 10px; border-radius:5px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:11px; font-weight:600; cursor:pointer;")
 }
 
@@ -2003,8 +2094,9 @@ fn BrowserView() -> Element {
 
     // The detail subject (by id — survives filtering).
     let sel_id = selected();
-    let detail: Option<BrowseItem> =
-        sel_id.as_ref().and_then(|id| items.iter().find(|i| &i.id == id).cloned());
+    let detail: Option<BrowseItem> = sel_id
+        .as_ref()
+        .and_then(|id| items.iter().find(|i| &i.id == id).cloned());
 
     rsx! {
         div { style: "display:flex; gap:0; flex:1; min-height:0;",

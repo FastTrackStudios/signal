@@ -261,9 +261,8 @@ impl ReverbAlgorithm for Hall {
             0.5 * 60.0f64.powf(params.decay)
         };
         let t60_dc = (t60 * params.low_decay_mult.max(0.05)).max(0.05);
-        let hf_ratio = ((0.15 + 0.85 * (1.0 - params.damping))
-            * params.high_decay_mult.max(0.05))
-        .clamp(0.02, 1.5);
+        let hf_ratio = ((0.15 + 0.85 * (1.0 - params.damping)) * params.high_decay_mult.max(0.05))
+            .clamp(0.02, 1.5);
         let t60_ny = (t60 * hf_ratio).max(0.02);
         self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
         self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
@@ -282,10 +281,16 @@ impl ReverbAlgorithm for Hall {
 
         // Artifact-free tail animation: slow orthogonal rotation of the
         // feedback mix (no decay error, no pitch wobble).
-        self.fdn_l
-            .set_rotation(0.4 + params.modulation * 0.8, params.modulation * 0.25, self.sample_rate);
-        self.fdn_r
-            .set_rotation((0.4 + params.modulation * 0.8) * 1.13, params.modulation * 0.25, self.sample_rate);
+        self.fdn_l.set_rotation(
+            0.4 + params.modulation * 0.8,
+            params.modulation * 0.25,
+            self.sample_rate,
+        );
+        self.fdn_r.set_rotation(
+            (0.4 + params.modulation * 0.8) * 1.13,
+            params.modulation * 0.25,
+            self.sample_rate,
+        );
 
         // Diffusion → input diffuser stages and feedback
         let stages = (params.diffusion * 10.0) as usize;

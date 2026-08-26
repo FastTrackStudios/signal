@@ -29,7 +29,6 @@ async fn controller() -> signal::Signal {
     signal
 }
 use signal::{
-    DawParamValue, DawParameterSnapshot, EngineType, MorphEngine,
     engine::{Engine, EngineScene},
     layer::{Layer, LayerSnapshot},
     module_type::ModuleType,
@@ -41,12 +40,13 @@ use signal::{
     seed_id,
     setlist::{Setlist, SetlistEntry},
     song::{Section, Song},
+    DawParamValue, DawParameterSnapshot, EngineType, MorphEngine,
 };
 use signal_controller::events::SignalEvent;
 use signal_live::engine::{
-    MockRigControlService, MockRigEngine, ModuleTarget, ResolvedSlot, RigControlCommand,
-    RigControlEvent, RigControlService, RigEngine, SlotDiff, SlotState, SnapshotTween, TweenState,
-    compute_diff,
+    compute_diff, MockRigControlService, MockRigEngine, ModuleTarget, ResolvedSlot,
+    RigControlCommand, RigControlEvent, RigControlService, RigEngine, SlotDiff, SlotState,
+    SnapshotTween, TweenState,
 };
 use signal_proto::easing::EasingCurve;
 use signal_proto::{ModulePresetId, ModuleSnapshotId};
@@ -384,11 +384,9 @@ fn diff_empty_to_full_scene() {
 
     let diffs = compute_diff(&[], &targets, &no_preload);
     assert_eq!(diffs.len(), 3);
-    assert!(
-        diffs
-            .iter()
-            .all(|d| matches!(d, SlotDiff::LoadAndActivate { .. }))
-    );
+    assert!(diffs
+        .iter()
+        .all(|d| matches!(d, SlotDiff::LoadAndActivate { .. })));
 }
 
 /// Diff same preset + same snapshot = NoChange.
@@ -967,24 +965,20 @@ async fn delete_rig_collection() {
         RigScene::new(seed_id("del-rig-scene"), "Default"),
     );
     signal.rigs().save(rig).await.unwrap();
-    assert!(
-        signal
-            .rigs()
-            .load(seed_id("del-rig"))
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(signal
+        .rigs()
+        .load(seed_id("del-rig"))
+        .await
+        .unwrap()
+        .is_some());
 
     signal.rigs().delete(seed_id("del-rig")).await.unwrap();
-    assert!(
-        signal
-            .rigs()
-            .load(seed_id("del-rig"))
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(signal
+        .rigs()
+        .load(seed_id("del-rig"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 /// Delete a module collection, verify it's gone.
@@ -1021,28 +1015,24 @@ async fn delete_profile() {
         ),
     );
     signal.profiles().save(profile).await.unwrap();
-    assert!(
-        signal
-            .profiles()
-            .load(seed_id("del-profile"))
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(signal
+        .profiles()
+        .load(seed_id("del-profile"))
+        .await
+        .unwrap()
+        .is_some());
 
     signal
         .profiles()
         .delete(seed_id("del-profile"))
         .await
         .unwrap();
-    assert!(
-        signal
-            .profiles()
-            .load(seed_id("del-profile"))
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(signal
+        .profiles()
+        .load(seed_id("del-profile"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 /// Delete a song, verify it's gone.
@@ -1061,24 +1051,20 @@ async fn delete_song() {
         ),
     );
     signal.songs().save(song).await.unwrap();
-    assert!(
-        signal
-            .songs()
-            .load(seed_id("del-song"))
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(signal
+        .songs()
+        .load(seed_id("del-song"))
+        .await
+        .unwrap()
+        .is_some());
 
     signal.songs().delete(seed_id("del-song")).await.unwrap();
-    assert!(
-        signal
-            .songs()
-            .load(seed_id("del-song"))
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(signal
+        .songs()
+        .load(seed_id("del-song"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 /// Delete a setlist, verify it's gone.
@@ -1095,28 +1081,24 @@ async fn delete_setlist() {
     );
     let setlist = Setlist::new(seed_id("del-setlist"), "Deletable Setlist", entry);
     signal.setlists().save(setlist).await.unwrap();
-    assert!(
-        signal
-            .setlists()
-            .load(seed_id("del-setlist"))
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(signal
+        .setlists()
+        .load(seed_id("del-setlist"))
+        .await
+        .unwrap()
+        .is_some());
 
     signal
         .setlists()
         .delete(seed_id("del-setlist"))
         .await
         .unwrap();
-    assert!(
-        signal
-            .setlists()
-            .load(seed_id("del-setlist"))
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(signal
+        .setlists()
+        .load(seed_id("del-setlist"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -1185,28 +1167,24 @@ async fn scene_template_delete() {
         .save(SceneTemplate::new(seed_id("tpl-del"), "Delete Me"))
         .await
         .unwrap();
-    assert!(
-        signal
-            .scene_templates()
-            .load(seed_id("tpl-del"))
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(signal
+        .scene_templates()
+        .load(seed_id("tpl-del"))
+        .await
+        .unwrap()
+        .is_some());
 
     signal
         .scene_templates()
         .delete(seed_id("tpl-del"))
         .await
         .unwrap();
-    assert!(
-        signal
-            .scene_templates()
-            .load(seed_id("tpl-del"))
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(signal
+        .scene_templates()
+        .load(seed_id("tpl-del"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 /// Convert scene template to rig scene.
@@ -1468,10 +1446,12 @@ async fn engine_rapid_scene_switches() {
 async fn resolve_rapid_scene_sequence() {
     let signal = controller().await;
 
-    let scene_ids = [seed_id("keys-megarig-default"),
+    let scene_ids = [
+        seed_id("keys-megarig-default"),
         seed_id("keys-megarig-wide"),
         seed_id("keys-megarig-focus"),
-        seed_id("keys-megarig-air")];
+        seed_id("keys-megarig-air"),
+    ];
 
     let mut prev_engine_count = 0;
     for (i, scene_id) in scene_ids.iter().enumerate() {

@@ -97,7 +97,9 @@ pub use signal_macromod::curation as param_curation;
 pub use signal_macromod::easing;
 pub use signal_macromod::macro_bank;
 pub use signal_macromod::runtime;
-pub use signal_macromod::{BlockParameter, MacroBinding, ParamTarget, ParameterValue, ResponseCurve};
+pub use signal_macromod::{
+    BlockParameter, MacroBinding, ParamTarget, ParameterValue, ResponseCurve,
+};
 
 /// Backward-compatible `modulation` module path.
 pub mod modulation {
@@ -108,8 +110,8 @@ pub mod modulation {
 // ─── Re-exports from ids ────────────────────────────────────────
 
 pub use ids::{
-    IdFactory, ModulePresetId, ModuleSnapshotId, PresetId, RuntimeIdFactory, SEED_UUID_NS,
-    SnapshotId, seed_id,
+    seed_id, IdFactory, ModulePresetId, ModuleSnapshotId, PresetId, RuntimeIdFactory, SnapshotId,
+    SEED_UUID_NS,
 };
 
 // ─── Re-exports from model ──────────────────────────────────────

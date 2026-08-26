@@ -21,12 +21,12 @@ use dioxus::prelude::*;
 use uuid::Uuid;
 
 use super::drag_handler::{
-    CanvasViewMode, DragMode, Selection, calculate_canvas_bounds, calculate_fit, snap_to_grid,
+    calculate_canvas_bounds, calculate_fit, snap_to_grid, CanvasViewMode, DragMode, Selection,
 };
 use super::models::{NodeGraph, NodePosition};
 use super::module_container::ModuleContainer;
 use super::node_block::{NodeBlock, PortDragStart, PortHoverEvent};
-use super::wire::{ResolvedWire, resolve_all_wires};
+use super::wire::{resolve_all_wires, ResolvedWire};
 use super::wire_layer::{WireDraft, WireLayer};
 
 // ── Props ────────────────────────────────────────────────────────────

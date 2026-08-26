@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use signal_proto::catalog::{BlockMetadata, Catalog, SnapshotMetadata};
 use signal_proto::metadata::Metadata;
-use signal_proto::{Block, BlockParameter, BlockType, Preset, Snapshot, seed_id};
+use signal_proto::{seed_id, Block, BlockParameter, BlockType, Preset, Snapshot};
 
 /// Read the catalog from `library_path` and return one `Preset` per NDSP plugin.
 ///

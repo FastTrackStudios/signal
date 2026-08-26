@@ -213,8 +213,8 @@ impl ReverbAlgorithm for Magneto {
 
             // Feedback tap: last head with Even spacing, last TWO
             // heads with Uneven (the manual's spacing side-effect).
-            let takes_fb = i + 1 == n
-                || (self.spacing == MagnetoSpacing::Uneven && n >= 2 && i + 2 == n);
+            let takes_fb =
+                i + 1 == n || (self.spacing == MagnetoSpacing::Uneven && n >= 2 && i + 2 == n);
             if takes_fb {
                 fb_l += diff_l;
                 fb_r += diff_r;

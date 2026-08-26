@@ -117,8 +117,14 @@ const DEMO_BPM: f64 = 74.0;
 /// Bundled demo SMFs: (label, bytes). Regenerate with
 /// `cargo run -p fasttrackstudio --example demo_midi_gen`.
 const DEMO_FILES: [(&str, &[u8]); 3] = [
-    ("Pads (I–V–vi–IV)", include_bytes!("../assets/demo-midi/pads.mid")),
-    ("Piano figure", include_bytes!("../assets/demo-midi/piano.mid")),
+    (
+        "Pads (I–V–vi–IV)",
+        include_bytes!("../assets/demo-midi/pads.mid"),
+    ),
+    (
+        "Piano figure",
+        include_bytes!("../assets/demo-midi/piano.mid"),
+    ),
     ("Arp line", include_bytes!("../assets/demo-midi/arp.mid")),
 ];
 
@@ -380,9 +386,7 @@ impl Worklet {
             Self::set(&o, k, v);
         }
         let posted = match transfer {
-            Some(t) => self
-                .port
-                .post_message_with_transferable(&o, &Array::of1(t)),
+            Some(t) => self.port.post_message_with_transferable(&o, &Array::of1(t)),
             None => self.port.post_message(&o),
         };
         posted.map_err(|e| format!("worklet post: {}", js_str(e)))?;
@@ -428,8 +432,8 @@ async fn boot_worklet(warm_port: web_sys::MessagePort) -> Result<Worklet, String
         });
         if let Some(doc) = window.document() {
             for ev in ["pointerdown", "mousedown", "touchstart", "keydown", "click"] {
-                let _ = doc
-                    .add_event_listener_with_callback(ev, on_gesture.as_ref().unchecked_ref());
+                let _ =
+                    doc.add_event_listener_with_callback(ev, on_gesture.as_ref().unchecked_ref());
             }
         }
         on_gesture.forget();
@@ -478,8 +482,8 @@ async fn boot_worklet(warm_port: web_sys::MessagePort) -> Result<Worklet, String
     *ready.borrow_mut() = Some(ready_tx);
     let p2 = pending.clone();
     let r2 = ready.clone();
-    let onmessage = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(
-        move |ev: web_sys::MessageEvent| {
+    let onmessage =
+        Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |ev: web_sys::MessageEvent| {
             let data = ev.data();
             if let Ok(reply_to) = Reflect::get(&data, &"replyTo".into())
                 && let Some(id) = reply_to.as_f64()
@@ -496,8 +500,7 @@ async fn boot_worklet(warm_port: web_sys::MessagePort) -> Result<Worklet, String
             {
                 let _ = tx.send(());
             }
-        },
-    );
+        });
     port.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
 
     // Fetch the worklet wasm on the main thread (the worklet scope can't
@@ -542,11 +545,8 @@ async fn boot_worklet(warm_port: web_sys::MessagePort) -> Result<Worklet, String
     Worklet::set(&init, "entry", &"keys".into());
     Worklet::set(&init, "warmPort", warm_port.as_ref());
     Worklet::set(&init, "pcmBudgetMb", &f64::from(pcm_budget_mb()).into());
-    port.post_message_with_transferable(
-        &init,
-        &Array::of2(&wasm_bytes, warm_port.as_ref()),
-    )
-    .map_err(|e| format!("init post: {}", js_str(e)))?;
+    port.post_message_with_transferable(&init, &Array::of2(&wasm_bytes, warm_port.as_ref()))
+        .map_err(|e| format!("init post: {}", js_str(e)))?;
     ready_rx
         .await
         .map_err(|_| "worklet never became ready".to_string())?;
@@ -587,7 +587,9 @@ pub(crate) enum PackPhase {
     /// Attached and PLAYABLE (rank-0 landed; the worklet opens the pack
     /// and decodes whatever segments exist) while detail keeps streaming.
     /// `pct` = delivered sample segments / total sample segments.
-    Playable { pct: u8 },
+    Playable {
+        pct: u8,
+    },
     /// Streamed + cached in OPFS but NOT attached: the total pack bytes
     /// held by the worklet would cross the tab-memory sanity cap.
     /// Deliberately distinct from `Failed` — the bytes are here and
@@ -948,7 +950,9 @@ struct HookAudio {
 
 /// Install `window.__ftsRig = { state, packStates, masterPeak }` once.
 fn install_hook() {
-    let Some(window) = web_sys::window() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
     if Reflect::has(&window, &"__ftsRig".into()).unwrap_or(false) {
         return;
     }
@@ -1058,10 +1062,7 @@ fn install_hook() {
 
 // ── Engine plumbing ────────────────────────────────────────────────────────
 
-async fn with_timeout<T>(
-    ms: u64,
-    fut: impl std::future::Future<Output = T>,
-) -> Option<T> {
+async fn with_timeout<T>(ms: u64, fut: impl std::future::Future<Output = T>) -> Option<T> {
     use futures_util::FutureExt as _;
     futures_util::select! {
         v = fut.fuse() => Some(v),
@@ -1172,7 +1173,18 @@ pub fn KeysWebRig() -> Element {
         }
         boot.set(Boot::Starting("booting audio worklet…".into()));
         hook_set_state("starting");
-        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, midi_status, astats, suspended, clients));
+        spawn(boot_rig(
+            boot,
+            packs,
+            lanes,
+            worklet,
+            master,
+            midi_inputs,
+            midi_status,
+            astats,
+            suspended,
+            clients,
+        ));
     });
 
     // Auto-start on mount: a live instrument should be READY when its page
@@ -1209,7 +1221,18 @@ pub fn KeysWebRig() -> Element {
         lanes.set(Vec::new());
         boot.set(Boot::Starting("restarting audio…".into()));
         hook_set_state("starting");
-        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, midi_status, astats, suspended, clients));
+        spawn(boot_rig(
+            boot,
+            packs,
+            lanes,
+            worklet,
+            master,
+            midi_inputs,
+            midi_status,
+            astats,
+            suspended,
+            clients,
+        ));
     });
 
     let boot_running = matches!(boot(), Boot::Running);
@@ -1355,11 +1378,7 @@ pub fn KeysWebRig() -> Element {
 /// hand-rolled top bar. A leaf component so the 10 Hz meter tick
 /// re-renders only this and the TopBar.
 #[component]
-fn KeysChrome(
-    packs: Signal<Vec<PackRow>>,
-    master: Signal<f32>,
-    profile: String,
-) -> Element {
+fn KeysChrome(packs: Signal<Vec<PackRow>>, master: Signal<f32>, profile: String) -> Element {
     // Usable = attached and sounding (ready OR playable-while-filling);
     // the count answers "can I play it?", the Resolution pill answers
     // "am I hearing all of it?".
@@ -1541,7 +1560,11 @@ async fn boot_rig(
     // 3. Open the lanes (the rig renders silence until packs land).
     boot.set(Boot::Starting("opening lanes…".into()));
     match worklet
-        .rpc("open_lanes", &[("program", program.program_json.as_str().into())], None)
+        .rpc(
+            "open_lanes",
+            &[("program", program.program_json.as_str().into())],
+            None,
+        )
         .await
     {
         Ok(v) if v.as_f64().is_some() => {}
@@ -1636,11 +1659,22 @@ async fn boot_rig(
     }
 
     // 4. WebMIDI in the background.
-    spawn(init_webmidi(worklet.clone(), worklet_out, midi_inputs, midi_status));
+    spawn(init_webmidi(
+        worklet.clone(),
+        worklet_out,
+        midi_inputs,
+        midi_status,
+    ));
 
     // 5. Meter poll (~10 Hz) + audio-stats poll (2 Hz — the processor's
     // load window only turns over every ~0.7 s anyway).
-    spawn(poll_peaks(worklet.clone(), worklet_out, lanes, master, suspended));
+    spawn(poll_peaks(
+        worklet.clone(),
+        worklet_out,
+        lanes,
+        master,
+        suspended,
+    ));
     spawn(poll_audio_stats(worklet.clone(), worklet_out, astats));
 
     // 6. Stream the packs, lane order. Small packs stream whole (the W6
@@ -1820,9 +1854,7 @@ async fn stream_one_pack(
                 // No SharedArrayBuffer (page not cross-origin isolated), or
                 // the re-read failed: fall back to the bytes we still hold.
                 None => {
-                    if let Some(bytes) =
-                        web_packs::cached_pack(&want.name, &want.variant).await
-                    {
+                    if let Some(bytes) = web_packs::cached_pack(&want.name, &want.variant).await {
                         attach_pack(worklet, &key, bytes, i, &mut packs).await;
                     } else {
                         update_row(&mut packs, i, |r| {
@@ -1890,7 +1922,9 @@ async fn attach_pack_shared(
                     (row.name.clone(), row.variant.clone())
                 };
                 let opfs = format!("{name}.{variant}.signalpack");
-                decoder.attach_pack(key, next_whole_id(), &opfs, total).await;
+                decoder
+                    .attach_pack(key, next_whole_id(), &opfs, total)
+                    .await;
                 decoder.reload_lanes().await;
                 decoder.coverage(60, 48);
             }
@@ -1963,7 +1997,9 @@ async fn attach_pack(
                     (row.name.clone(), row.variant.clone())
                 };
                 let opfs = format!("{name}.{variant}.signalpack");
-                decoder.attach_pack(key, next_whole_id(), &opfs, incoming).await;
+                decoder
+                    .attach_pack(key, next_whole_id(), &opfs, incoming)
+                    .await;
                 decoder.reload_lanes().await;
                 // Pre-warm the playable window OFF the audio thread
                 // (bounded — see `DecoderWorker::coverage`).
@@ -2102,9 +2138,7 @@ impl ProgressiveJob {
             .segments
             .iter()
             .enumerate()
-            .filter(|(idx, s)| {
-                !self.delivered[*idx] && s.start < end && s.start + s.len > start
-            })
+            .filter(|(idx, s)| !self.delivered[*idx] && s.start < end && s.start + s.len > start)
             .map(|(idx, _)| idx)
             .collect();
         if hit.is_empty() {
@@ -2121,8 +2155,9 @@ impl ProgressiveJob {
     /// contiguous — what the decoder worker may legitimately read (a hole
     /// in the sparse file reads as zeros and must never reach a decode).
     fn committed_ranges(&self) -> Vec<(u64, u64)> {
-        let mut idx: Vec<usize> =
-            (0..self.segments.len()).filter(|&i| self.received[i]).collect();
+        let mut idx: Vec<usize> = (0..self.segments.len())
+            .filter(|&i| self.received[i])
+            .collect();
         idx.sort_by_key(|&i| self.segments[i].start);
         let mut out: Vec<(u64, u64)> = Vec::new();
         for i in idx {
@@ -2213,7 +2248,12 @@ async fn start_progressive(
                     // would fail the whole-file sha — start clean.
                     web_packs::discard_sparse(&want.name, &want.variant).await;
                     let n = segments.len();
-                    (want.size_bytes, want.sha256.clone(), segments, vec![false; n])
+                    (
+                        want.size_bytes,
+                        want.sha256.clone(),
+                        segments,
+                        vec![false; n],
+                    )
                 }
             }
         }
@@ -2393,8 +2433,9 @@ async fn start_progressive(
     }
 
     // Queue the rest in rank order.
-    let mut pending: Vec<usize> =
-        (0..job.segments.len()).filter(|&idx| !job.delivered[idx]).collect();
+    let mut pending: Vec<usize> = (0..job.segments.len())
+        .filter(|&idx| !job.delivered[idx])
+        .collect();
     pending.sort_by_key(|&idx| (job.segments[idx].rank, job.segments[idx].start));
     job.queue = pending.into();
 
@@ -2443,10 +2484,7 @@ async fn run_progressive_fill(
                 job.bump_range(start, len);
                 let end = start.saturating_add(len);
                 let waiting_on_commit = job.segments.iter().enumerate().any(|(i, s)| {
-                    job.delivered[i]
-                        && !job.received[i]
-                        && s.start < end
-                        && s.start + s.len > start
+                    job.delivered[i] && !job.received[i] && s.start < end && s.start + s.len > start
                 });
                 if waiting_on_commit && job.writer.commit().await.is_ok() {
                     for u in job.uncommitted.drain(..) {
@@ -2476,11 +2514,20 @@ async fn run_progressive_fill(
             let job = &mut jobs[ji];
             let urgent_pick = job.urgent;
             job.urgent = false;
-            let Some(idx) = job.queue.pop_front() else { continue };
+            let Some(idx) = job.queue.pop_front() else {
+                continue;
+            };
             if job.delivered[idx] {
                 continue;
             }
-            (idx, job.segments[idx], job.row, job.name.clone(), job.variant.clone(), urgent_pick)
+            (
+                idx,
+                job.segments[idx],
+                job.row,
+                job.name.clone(),
+                job.variant.clone(),
+                urgent_pick,
+            )
         };
 
         // ── Fetch: establish lazily, one reconnect, then give up ─────────
@@ -2571,20 +2618,34 @@ async fn finalize_progressive_job(mut job: ProgressiveJob, packs: &mut Signal<Ve
         *r = true;
     }
     web_packs::plan_ledger_put(&job.ledger()).await;
-    let ProgressiveJob { name, variant, total, sha256, row, writer, sample_total, id, .. } = job;
+    let ProgressiveJob {
+        name,
+        variant,
+        total,
+        sha256,
+        row,
+        writer,
+        sample_total,
+        id,
+        ..
+    } = job;
     let _ = writer.finish().await;
     match web_packs::finalize_progressive(&name, &variant, total, &sha256).await {
         Ok(()) => {
             // W12: the sparse file was renamed into place — repoint the
             // decoder worker at the (now whole, fully readable) file.
             if let Some(decoder) = crate::web_keys_decoder::current() {
-                let key = packs.peek().get(row).map(|r| r.key.clone()).unwrap_or_default();
+                let key = packs
+                    .peek()
+                    .get(row)
+                    .map(|r| r.key.clone())
+                    .unwrap_or_default();
                 if !key.is_empty() {
                     let opfs = format!("{name}.{variant}.signalpack");
                     decoder.attach_pack(&key, id, &opfs, total).await;
                     // Pre-warm the playable window OFF the audio thread
-                // (bounded — see `DecoderWorker::coverage`).
-                decoder.coverage(60, 48);
+                    // (bounded — see `DecoderWorker::coverage`).
+                    decoder.coverage(60, 48);
                 }
             }
             update_row(packs, row, |r| {
@@ -2658,7 +2719,9 @@ async fn init_webmidi(
     mut names_out: Signal<Vec<String>>,
     mut status_out: Signal<String>,
 ) {
-    let Some(window) = web_sys::window() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
     let Ok(promise) = window.navigator().request_midi_access() else {
         status_out.set("WebMIDI is not available in this browser".into());
         hook_set_midi(&[], false);
@@ -2668,8 +2731,7 @@ async fn init_webmidi(
         Ok(a) => a,
         Err(_) => {
             // Rejected: permission denied (or the policy blocks it).
-            status_out
-                .set("MIDI permission blocked — allow it in the address bar".into());
+            status_out.set("MIDI permission blocked — allow it in the address bar".into());
             hook_set_midi(&[], false);
             return;
         }
@@ -2753,7 +2815,10 @@ async fn poll_peaks(
             Ok(a) => a,
             Err(_) => continue,
         };
-        let peaks: Vec<f32> = arr.iter().map(|x| x.as_f64().unwrap_or(0.0) as f32).collect();
+        let peaks: Vec<f32> = arr
+            .iter()
+            .map(|x| x.as_f64().unwrap_or(0.0) as f32)
+            .collect();
         let m = peaks.first().copied().unwrap_or(0.0);
         master.set(m);
         hook_set_peak(f64::from(m));
@@ -2806,11 +2871,7 @@ fn mb(bytes: u64) -> String {
 /// The Audio panel popover (W8): latency visibility + render-load tracing
 /// + the latencyHint selector (whose change re-boots the audio path).
 #[component]
-fn AudioPanel(
-    astats: Signal<AudioStats>,
-    restart: Callback<()>,
-    boot_running: bool,
-) -> Element {
+fn AudioPanel(astats: Signal<AudioStats>, restart: Callback<()>, boot_running: bool) -> Element {
     let a = astats();
     let load_pct = (a.load * 100.0).max(0.0);
     let load_bar_pct = load_pct.min(100.0);
@@ -3030,7 +3091,13 @@ fn SoundsourceManager(
     let rows = packs.read().clone();
     let footprint: u64 = rows
         .iter()
-        .map(|r| if r.phase == PackPhase::Ready { r.total } else { r.bytes })
+        .map(|r| {
+            if r.phase == PackPhase::Ready {
+                r.total
+            } else {
+                r.bytes
+            }
+        })
         .sum();
     let inputs = midi_inputs.read().clone();
     let midi_msg = midi_status.read().clone();
@@ -3097,9 +3164,7 @@ fn PackRowView(
         PackPhase::Verifying => ("#38bdf8", "sha256…".into()),
         PackPhase::Ready => ("#22c55e", mb(row.total)),
         // Amber-green: sounding, still gaining detail.
-        PackPhase::Playable { pct } => {
-            ("#a3e635", format!("playable — loading detail {pct}%"))
-        }
+        PackPhase::Playable { pct } => ("#a3e635", format!("playable — loading detail {pct}%")),
         PackPhase::Deferred => ("#a78bfa", "cached — past the tab-memory sanity cap".into()),
         PackPhase::Failed(e) => ("#ef4444", e.clone()),
     };
@@ -3200,7 +3265,9 @@ fn DemoPlayer(
     let (playing, looping, _) = demo();
 
     let play = move |n: usize, do_loop: bool| {
-        let Some(w) = worklet.peek().clone() else { return };
+        let Some(w) = worklet.peek().clone() else {
+            return;
+        };
         let mut demo = demo;
         let generation = {
             let (_, _, g) = *demo.peek();
@@ -3269,7 +3336,11 @@ fn demo_events(n: usize) -> (Vec<DemoEvent>, f64) {
     for note in &snap.notes {
         events.push(DemoEvent {
             at_ms: note.start_ppq * ms_per_ppq,
-            bytes: [0x90 | (note.channel & 0x0f), note.pitch, note.velocity.max(1)],
+            bytes: [
+                0x90 | (note.channel & 0x0f),
+                note.pitch,
+                note.velocity.max(1),
+            ],
         });
         events.push(DemoEvent {
             at_ms: (note.start_ppq + note.length_ppq) * ms_per_ppq,
@@ -3293,7 +3364,11 @@ fn demo_events(n: usize) -> (Vec<DemoEvent>, f64) {
             ],
         });
     }
-    events.sort_by(|a, b| a.at_ms.partial_cmp(&b.at_ms).unwrap_or(std::cmp::Ordering::Equal));
+    events.sort_by(|a, b| {
+        a.at_ms
+            .partial_cmp(&b.at_ms)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let len_ms = snap.length_ppq * ms_per_ppq;
     (events, len_ms)
 }

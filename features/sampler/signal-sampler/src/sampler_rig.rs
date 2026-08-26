@@ -50,22 +50,20 @@ use std::sync::{Arc, Mutex};
 
 use midicore::MidiMonitor;
 
-use daw::service::{
-    FxChainContext, FxChains, ProjectContext, TrackRef, Tracks,
-};
+use daw::service::{FxChainContext, FxChains, ProjectContext, TrackRef, Tracks};
+use daw::standalone::metering::{linear_to_db, Meters};
 use daw::standalone::Standalone;
-use daw::standalone::metering::{Meters, linear_to_db};
 use daw_audio_io::AudioIoPrefs;
-use signal_rig_host::{RigHost, RigProject};
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
+use signal_rig_host::{RigHost, RigProject};
 
 use crate::bank::{PreloadProfile, SamplerBank};
-use crate::engine::SampleEngine;
 use crate::engine::cache::{EvictStats, PreloadStats};
+use crate::engine::SampleEngine;
 use crate::instrument::SamplerInstrument;
-use crate::mixer::{FX_PREPARE_BLOCK, MixerLayout};
+use crate::mixer::{MixerLayout, FX_PREPARE_BLOCK};
 use crate::stats::AudioStatsSnapshot;
 
 /// Stable identifier for a loaded instrument within the rig (e.g. a piece id
@@ -1709,8 +1707,7 @@ impl SamplerRig {
                 .first()
                 .map(|s| s.id.clone())
                 .unwrap_or_default();
-            let mut mic_ids: Vec<String> =
-                patch.spec.mics.iter().map(|m| m.id.clone()).collect();
+            let mut mic_ids: Vec<String> = patch.spec.mics.iter().map(|m| m.id.clone()).collect();
             if mic_ids.is_empty() {
                 mic_ids.push(String::new());
             }
@@ -1720,7 +1717,12 @@ impl SamplerRig {
             let mut gain_db = 0.0f32;
             let mut pan = 0.0f32;
             let mut transpose = er.transpose as i16;
-            for ov in engine_spec.block.overrides.iter().chain(er.overrides.iter()) {
+            for ov in engine_spec
+                .block
+                .overrides
+                .iter()
+                .chain(er.overrides.iter())
+            {
                 match ov.param.as_str() {
                     "gain_db" | "gain" => gain_db += ov.value,
                     "pan" => pan = ov.value,
@@ -1872,7 +1874,9 @@ impl SamplerRig {
         let Some(state) = self.inner.kit.lock().ok().and_then(|mut k| k.take()) else {
             return Ok(());
         };
-        let Some(daw) = self.inner.daw.as_ref() else { return Ok(()) };
+        let Some(daw) = self.inner.daw.as_ref() else {
+            return Ok(());
+        };
         let mut tables = self
             .inner
             .tracks
@@ -1890,11 +1894,8 @@ impl SamplerRig {
             }
         }
         for (bus_id, guid, _) in &state.buses {
-            let _ = <Standalone as Tracks>::remove(
-                daw,
-                ProjectContext::Current,
-                TrackRef::guid(guid),
-            );
+            let _ =
+                <Standalone as Tracks>::remove(daw, ProjectContext::Current, TrackRef::guid(guid));
             tables.buses.remove(bus_id);
         }
         // Meter indices are compacted on the next load (resize_meters).
@@ -1989,11 +1990,7 @@ impl SamplerRig {
     /// Run `f` over the loaded kit state (strip guids, meter indices,
     /// engines) — the backend's read/inspect seam.
     pub fn with_kit<R>(&self, f: impl FnOnce(&crate::kit_tracks::KitState) -> R) -> Option<R> {
-        self.inner
-            .kit
-            .lock()
-            .ok()
-            .and_then(|k| k.as_ref().map(f))
+        self.inner.kit.lock().ok().and_then(|k| k.as_ref().map(f))
     }
 
     /// The current per-track meter bank (cell indices = the meter indices in
@@ -2010,7 +2007,9 @@ impl SamplerRig {
     /// engines.
     pub fn kit_piece_progress(&self, piece: &str) -> (usize, usize) {
         self.with_kit(|kit| {
-            let Some(p) = kit.piece(piece) else { return (0, 0) };
+            let Some(p) = kit.piece(piece) else {
+                return (0, 0);
+            };
             let mut loaded = 0;
             let mut total = 0;
             for mic in &p.mics {
@@ -2201,9 +2200,9 @@ fn warm_document(
 
 #[cfg(test)]
 mod tests {
-    use daw::service::Routing;
     use super::*;
     use crate::mixer::mic_is_bus;
+    use daw::service::Routing;
 
     /// A 2-piece kit (kick, snare), each with a close mic + an Overhead bus mic.
     fn kit_layout() -> MixerLayout {
@@ -2345,7 +2344,10 @@ zones (
         };
         engine.note_on(60, 100);
         let plain = freq(&mut engine, 14_400); // 300 ms
-        assert!((plain - 220.0).abs() < 4.0, "root note at 220 Hz, got {plain}");
+        assert!(
+            (plain - 220.0).abs() < 4.0,
+            "root note at 220 Hz, got {plain}"
+        );
 
         engine.pitch_bend(16_383); // full up, default ±2 st
         let bent = freq(&mut engine, 14_400);
@@ -2357,7 +2359,10 @@ zones (
 
         engine.pitch_bend(8_192); // back to center
         let back = freq(&mut engine, 14_400);
-        assert!((back - 220.0).abs() < 5.0, "wheel-center returns to pitch, got {back}");
+        assert!(
+            (back - 220.0).abs() < 5.0,
+            "wheel-center returns to pitch, got {back}"
+        );
     }
 
     fn minimal_engine_frames(dir: &std::path::Path, frames: usize) -> SampleEngine {

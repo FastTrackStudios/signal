@@ -25,7 +25,9 @@ use session_proto::services::setlist_service::SetlistServiceStreamClient;
 use session_proto::{ActiveIndices, SetlistEvent, SetlistServiceClient};
 
 async fn establish<C: vox_core::FromVoxLane>(url: &str) -> C {
-    let link = vox_websocket::WsLink::connect(url).await.expect("ws connect");
+    let link = vox_websocket::WsLink::connect(url)
+        .await
+        .expect("ws connect");
     vox_core::initiator_on(link)
         .establish::<C>()
         .await
@@ -101,10 +103,10 @@ fn main() {
 /// verify the transport's musical position maps to a chart cursor tracking
 /// the seek.
 async fn probe_chart(client: &SetlistServiceClient, stream: &SetlistServiceStreamClient) {
+    use keyflow::engraver::fonts::ChartFontBundle;
     use keyflow::engraver::layout::ChartLayoutMode;
     use keyflow::engraver::layout::chart::cursor::{ChartCursor, CursorConfig, CursorStyle};
     use keyflow::engraver::layout::chart::{Breakpoint, ChartLayoutConfig};
-    use keyflow::engraver::fonts::ChartFontBundle;
     use keyflow::engraver::style::MStyle;
 
     let chart = client
@@ -151,7 +153,10 @@ async fn probe_chart(client: &SetlistServiceClient, stream: &SetlistServiceStrea
         let mut serializer = SvgSerializer::new(SvgExportConfig::for_page(0.0, 0.0, w, h));
         serializer.serialize(&layout.scene)
     };
-    assert!(svg.starts_with("<?xml") && svg.contains("<svg "), "svg header");
+    assert!(
+        svg.starts_with("<?xml") && svg.contains("<svg "),
+        "svg header"
+    );
     assert!(svg.contains("viewBox="), "svg viewBox");
     println!("chart svg: {} bytes", svg.len());
 

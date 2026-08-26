@@ -81,7 +81,9 @@ pub fn build_number() -> String {
         if utf8.is_null() {
             return String::new();
         }
-        std::ffi::CStr::from_ptr(utf8).to_string_lossy().into_owned()
+        std::ffi::CStr::from_ptr(utf8)
+            .to_string_lossy()
+            .into_owned()
     }
 }
 

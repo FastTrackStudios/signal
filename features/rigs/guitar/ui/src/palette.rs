@@ -9,8 +9,8 @@
 
 use dioxus::prelude::*;
 
-use signal_guitar_proto::PerformanceModel;
 use signal_guitar_proto::rig::RigClient;
+use signal_guitar_proto::PerformanceModel;
 
 /// What an action does when executed.
 #[derive(Clone, PartialEq)]
@@ -62,7 +62,11 @@ fn arg_prompt(e: &Effect) -> Option<&'static str> {
 }
 
 /// Build the full action list from the live model.
-fn actions(model: &PerformanceModel, patches: &[(usize, String)], presets: &[String]) -> Vec<Action> {
+fn actions(
+    model: &PerformanceModel,
+    patches: &[(usize, String)],
+    presets: &[String],
+) -> Vec<Action> {
     let mut out = Vec::new();
     let cmd = |label: &str, hint: &'static str, effect: Effect| Action {
         label: label.to_string(),
@@ -91,13 +95,25 @@ fn actions(model: &PerformanceModel, patches: &[(usize, String)], presets: &[Str
         out.push(cmd(p, "preset", Effect::PlayPreset(i as u32)));
     }
     for (i, s) in model.songs.iter().enumerate() {
-        out.push(cmd(&format!("{} ({} · {})", s.name, s.key, s.bpm), "song", Effect::SelectSong(i as u32)));
+        out.push(cmd(
+            &format!("{} ({} · {})", s.name, s.key, s.bpm),
+            "song",
+            Effect::SelectSong(i as u32),
+        ));
     }
     for s in model.library_songs.iter() {
-        out.push(cmd(&format!("Add to set: {}", s.name), "setlist", Effect::AddSongToSet(s.name.clone())));
+        out.push(cmd(
+            &format!("Add to set: {}", s.name),
+            "setlist",
+            Effect::AddSongToSet(s.name.clone()),
+        ));
     }
     for (i, s) in model.setlists.iter().enumerate() {
-        out.push(cmd(&format!("Setlist: {s}"), "setlist", Effect::SelectSetlist(i as u32)));
+        out.push(cmd(
+            &format!("Setlist: {s}"),
+            "setlist",
+            Effect::SelectSetlist(i as u32),
+        ));
     }
     out
 }
@@ -112,10 +128,7 @@ fn matches(label: &str, hint: &str, query: &str) -> bool {
 }
 
 #[component]
-pub fn CommandPalette(
-    model: PerformanceModel,
-    open: Signal<bool>,
-) -> Element {
+pub fn CommandPalette(model: PerformanceModel, open: Signal<bool>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut query = use_signal(String::new);
     let mut cursor = use_signal(|| 0usize);
@@ -285,67 +298,67 @@ pub fn CommandPalette(
 /// Run an effect against the rig — shared by the palette and the keymap.
 pub fn execute(r: RigClient, effect: Effect, arg: String) {
     spawn(async move {
-                match effect {
-                    Effect::SelectStack(i) => drop(r.press_stack(i).await),
-                    Effect::NextSong => drop(r.next_song().await),
-                    Effect::PrevSong => drop(r.prev_song().await),
-                    Effect::SelectPatch(i) => drop(r.select_patch(i).await),
-                    Effect::PlayPreset(i) => drop(r.play_preset(i).await),
-                    Effect::SelectSong(i) => drop(r.select_song(i).await),
-                    Effect::SelectSetlist(i) => drop(r.select_setlist(i).await),
-                    Effect::AddSongToSet(name) => {
-                        // Append to whichever setlist is active.
-                        if let Ok(m) = r.perf().await {
-                            drop(r.add_setlist_entry(m.setlist_index, name).await);
-                        }
-                    }
-                    Effect::ToggleFx => drop(r.toggle_fx().await),
-                    Effect::ToggleBoost => drop(r.toggle_boost().await),
-                    Effect::ToggleTuner => drop(r.toggle_tuner().await),
-                    Effect::ToggleMute => drop(r.toggle_main_mute().await),
-                    Effect::TapTempo => drop(r.tap_tempo().await),
-                    Effect::ReloadLibrary => drop(r.reload_library().await),
-                    Effect::SetMode(m) => drop(r.set_perform_mode(m).await),
-                    Effect::NewSong => {
-                        // "Name @ G 74" → key/bpm; plain name = defaults.
-                        let (name, key, bpm) = match arg.split_once('@') {
-                            Some((n, kb)) => {
-                                let mut it = kb.split_whitespace();
-                                let key = it.next().unwrap_or("").to_string();
-                                let bpm = it.next().and_then(|b| b.parse().ok()).unwrap_or(0);
-                                (n.trim().to_string(), key, bpm)
-                            }
-                            None => (arg.trim().to_string(), String::new(), 0),
-                        };
-                        drop(r.add_song(name, key, bpm).await);
-                    }
-                    Effect::NewSetlist => drop(r.add_setlist(arg.trim().to_string()).await),
-                    Effect::NewStack => drop(r.add_stack(arg.trim().to_string()).await),
-                    Effect::NewPatch => {
-                        // Land on the active stack + active preset.
-                        if let (Ok(m), Ok(presets)) = (r.perf().await, r.presets().await) {
-                            let stack = m
-                                .stacks
-                                .iter()
-                                .find(|s| s.is_active)
-                                .map(|s| s.name.clone())
-                                .unwrap_or_default();
-                            let preset = presets
-                                .iter()
-                                .find(|p| p.active)
-                                .map(|p| p.name.clone())
-                                .unwrap_or_default();
-                            drop(r.add_patch(arg.trim().to_string(), stack, preset).await);
-                        }
-                    }
-                    Effect::ImportPreset => {
-                        let name = std::path::Path::new(arg.trim())
-                            .file_stem()
-                            .map(|s| s.to_string_lossy().to_string())
-                            .unwrap_or_else(|| "Imported".to_string());
-                        drop(r.add_preset(name, arg.trim().to_string()).await);
-                    }
+        match effect {
+            Effect::SelectStack(i) => drop(r.press_stack(i).await),
+            Effect::NextSong => drop(r.next_song().await),
+            Effect::PrevSong => drop(r.prev_song().await),
+            Effect::SelectPatch(i) => drop(r.select_patch(i).await),
+            Effect::PlayPreset(i) => drop(r.play_preset(i).await),
+            Effect::SelectSong(i) => drop(r.select_song(i).await),
+            Effect::SelectSetlist(i) => drop(r.select_setlist(i).await),
+            Effect::AddSongToSet(name) => {
+                // Append to whichever setlist is active.
+                if let Ok(m) = r.perf().await {
+                    drop(r.add_setlist_entry(m.setlist_index, name).await);
                 }
+            }
+            Effect::ToggleFx => drop(r.toggle_fx().await),
+            Effect::ToggleBoost => drop(r.toggle_boost().await),
+            Effect::ToggleTuner => drop(r.toggle_tuner().await),
+            Effect::ToggleMute => drop(r.toggle_main_mute().await),
+            Effect::TapTempo => drop(r.tap_tempo().await),
+            Effect::ReloadLibrary => drop(r.reload_library().await),
+            Effect::SetMode(m) => drop(r.set_perform_mode(m).await),
+            Effect::NewSong => {
+                // "Name @ G 74" → key/bpm; plain name = defaults.
+                let (name, key, bpm) = match arg.split_once('@') {
+                    Some((n, kb)) => {
+                        let mut it = kb.split_whitespace();
+                        let key = it.next().unwrap_or("").to_string();
+                        let bpm = it.next().and_then(|b| b.parse().ok()).unwrap_or(0);
+                        (n.trim().to_string(), key, bpm)
+                    }
+                    None => (arg.trim().to_string(), String::new(), 0),
+                };
+                drop(r.add_song(name, key, bpm).await);
+            }
+            Effect::NewSetlist => drop(r.add_setlist(arg.trim().to_string()).await),
+            Effect::NewStack => drop(r.add_stack(arg.trim().to_string()).await),
+            Effect::NewPatch => {
+                // Land on the active stack + active preset.
+                if let (Ok(m), Ok(presets)) = (r.perf().await, r.presets().await) {
+                    let stack = m
+                        .stacks
+                        .iter()
+                        .find(|s| s.is_active)
+                        .map(|s| s.name.clone())
+                        .unwrap_or_default();
+                    let preset = presets
+                        .iter()
+                        .find(|p| p.active)
+                        .map(|p| p.name.clone())
+                        .unwrap_or_default();
+                    drop(r.add_patch(arg.trim().to_string(), stack, preset).await);
+                }
+            }
+            Effect::ImportPreset => {
+                let name = std::path::Path::new(arg.trim())
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "Imported".to_string());
+                drop(r.add_preset(name, arg.trim().to_string()).await);
+            }
+        }
     });
 }
 

@@ -72,7 +72,7 @@
 use std::sync::Arc;
 
 use crate::bank::SamplerBank;
-use crate::document::{DocEvent, Schedule, TempoPoint, dispatch_event, is_trigger};
+use crate::document::{dispatch_event, is_trigger, DocEvent, Schedule, TempoPoint};
 use crate::engine::PlayMode;
 
 /// One block's host-transport snapshot (from the CLAP process context, or a

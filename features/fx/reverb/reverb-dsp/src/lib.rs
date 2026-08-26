@@ -31,11 +31,9 @@ pub mod primitives;
 
 pub use algorithm::{
     AlgorithmParams, AlgorithmType, BloomParams, ChamberColor, ChamberParams, ChoirVoice,
-    ChoraleParams, ChoraleResonance, ChoraleVowel, CloudParams,
-    ConvolutionModParams, HallParams, ImpulseDirection, ImpulseParams, ImpulseTail, IrSlot,
-    MagnetoHeads, MagnetoParams, MagnetoSpacing, NlShape, NonLinearParams, ReverbAlgorithm,
-    ReverbVoice,
-    ShimmerFeedbackMode,
+    ChoraleParams, ChoraleResonance, ChoraleVowel, CloudParams, ConvolutionModParams, HallParams,
+    ImpulseDirection, ImpulseParams, ImpulseTail, IrSlot, MagnetoHeads, MagnetoParams,
+    MagnetoSpacing, NlShape, NonLinearParams, ReverbAlgorithm, ReverbVoice, ShimmerFeedbackMode,
     ShimmerParams, SpringDwell, SpringParams, SwellType,
 };
 pub use chain::{InfiniteMode, ReverbChain};

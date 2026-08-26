@@ -10,7 +10,7 @@ use nice_plug_dioxus::SharedState;
 use std::sync::atomic::Ordering;
 
 use crate::gr_trace_svg::{
-    GR_RANGE_DB, TRACE_H, TRACE_W, gr_area_path, gr_gridlines, waveform_path,
+    gr_area_path, gr_gridlines, waveform_path, GR_RANGE_DB, TRACE_H, TRACE_W,
 };
 use crate::params::LimiterUiState;
 

@@ -344,7 +344,10 @@ mod tests {
         v.dynamic_range = -200;
         let soft = v.apply(20).trim_db;
         let loud = v.apply(120).trim_db;
-        assert!(soft > loud, "soft raised relative to loud ({soft} > {loud})");
+        assert!(
+            soft > loud,
+            "soft raised relative to loud ({soft} > {loud})"
+        );
 
         // Expansion pushes them apart the other way.
         v.dynamic_range = 200;
@@ -454,10 +457,20 @@ mod tests {
     fn resonance_groups_are_named_from_the_ksp_group_table() {
         assert!(PianoVoice::is_resonance_group("Resonance"));
         assert!(PianoVoice::is_resonance_group("SSR"));
-        assert!(PianoVoice::is_resonance_group("resonance"), "case-insensitive");
+        assert!(
+            PianoVoice::is_resonance_group("resonance"),
+            "case-insensitive"
+        );
         // The struck note and its noises are not resonance and must never be
         // pedal-gated — that would silence the piano.
-        for other in ["DryTones", "Release", "Hammer", "Damper", "Pedal", "Stringnoise"] {
+        for other in [
+            "DryTones",
+            "Release",
+            "Hammer",
+            "Damper",
+            "Pedal",
+            "Stringnoise",
+        ] {
             assert!(!PianoVoice::is_resonance_group(other), "{other}");
         }
     }

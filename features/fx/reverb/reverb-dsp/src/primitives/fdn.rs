@@ -409,8 +409,7 @@ impl Fdn {
             for i in 0..n {
                 if self.jitter_count[i] == 0 {
                     // New random drift target, glide over 300–1500 samples.
-                    let interval =
-                        300 + (self.jitter_rng.next_bipolar().abs() * 1200.0) as u32;
+                    let interval = 300 + (self.jitter_rng.next_bipolar().abs() * 1200.0) as u32;
                     let target = self.jitter_rng.next_bipolar() * self.jitter_depth;
                     self.jitter_step[i] = (target - self.jitter_cur[i]) / interval as f64;
                     self.jitter_count[i] = interval;
@@ -454,9 +453,7 @@ impl Fdn {
                 self.rot_phase = (self.rot_phase + self.rot_inc * 16.0).fract();
                 for (k, cs) in self.rot_cs.iter_mut().enumerate() {
                     let theta = self.rot_depth
-                        * (core::f64::consts::TAU
-                            * (self.rot_phase + k as f64 * 0.31))
-                            .sin();
+                        * (core::f64::consts::TAU * (self.rot_phase + k as f64 * 0.31)).sin();
                     *cs = (theta.cos(), theta.sin());
                 }
             }
@@ -474,8 +471,7 @@ impl Fdn {
             // Per-line decay: exact Jot T60 shelf when engaged,
             // otherwise the legacy damping · decay · band-split path.
             let mut sig = if self.t60_mode {
-                let y = self.shelf_g[i] * self.feedback[i]
-                    + self.shelf_p[i] * self.shelf_state[i];
+                let y = self.shelf_g[i] * self.feedback[i] + self.shelf_p[i] * self.shelf_state[i];
                 self.shelf_state[i] = flush(y);
                 y
             } else {

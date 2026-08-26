@@ -186,7 +186,10 @@ mod placement_tests {
         let e_in: f64 = dry[n / 2..].iter().map(|x| x * x).sum();
         let e_out: f64 = l[n / 2..].iter().map(|x| x * x).sum();
         let g = 10.0 * (e_out / e_in).log10();
-        assert!((g - 12.0).abs() < 1.0, "mid band boosts mono content: {g:.1} dB");
+        assert!(
+            (g - 12.0).abs() < 1.0,
+            "mid band boosts mono content: {g:.1} dB"
+        );
     }
 }
 

@@ -39,7 +39,11 @@ where
             path.line_to((x, y));
         }
     }
-    if started { Some(path) } else { None }
+    if started {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 /// Paint a spectrum as a stroked line plus a translucent fill down to `bottom_y`.

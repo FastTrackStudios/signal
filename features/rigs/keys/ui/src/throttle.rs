@@ -77,5 +77,9 @@ pub fn use_throttle(on_change: EventHandler<f32>) -> Throttled {
     let pending = use_signal(|| None::<f32>);
     let inflight = use_signal(|| false);
     let sink = use_hook(|| Callback::new(move |v: f32| on_change.call(v)));
-    Throttled { pending, inflight, sink }
+    Throttled {
+        pending,
+        inflight,
+        sink,
+    }
 }

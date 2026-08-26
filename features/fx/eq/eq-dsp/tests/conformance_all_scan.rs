@@ -5,7 +5,7 @@
 //! to bypass per-filter lookup tables) and for spot-checking lookup
 //! coverage.
 
-use eq_dsp::design::{FilterType, design_filter};
+use eq_dsp::design::{design_filter, FilterType};
 use eq_dsp::response::compute_magnitude_response;
 use std::collections::BTreeMap;
 use std::fs;

@@ -95,7 +95,11 @@ pub fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bo
         .iter()
         .map(|&s| {
             let amp = s.clamp(0.0, 1.0) as f64;
-            if from_bottom { h - amp * h } else { amp * h }
+            if from_bottom {
+                h - amp * h
+            } else {
+                amp * h
+            }
         })
         .collect();
     let baseline = if from_bottom { h } else { 0.0 };
@@ -145,7 +149,14 @@ pub fn transfer_curve_path(threshold_db: f32, ratio: f32, knee_db: f32, w: f64, 
 }
 
 /// Graph position of the live input "ball" riding the transfer curve.
-pub fn transfer_ball(in_db: f32, threshold_db: f32, ratio: f32, knee_db: f32, w: f64, h: f64) -> (f64, f64) {
+pub fn transfer_ball(
+    in_db: f32,
+    threshold_db: f32,
+    ratio: f32,
+    knee_db: f32,
+    w: f64,
+    h: f64,
+) -> (f64, f64) {
     let level = in_db.clamp(-RANGE_DB, 0.0);
     let out = compress_transfer(level, threshold_db, ratio, knee_db) as f64;
     (db_to_x(level as f64, w), db_to_y(out, h))
@@ -197,7 +208,10 @@ mod tests {
         // the hard-knee output, exactly slope·knee/8 below the input.
         let at = compress_transfer(thr, thr, ratio, knee);
         let expected = thr - (1.0 - 1.0 / ratio) * knee / 8.0;
-        assert!((at - expected).abs() < 1e-4, "knee midpoint: {at} vs {expected}");
+        assert!(
+            (at - expected).abs() < 1e-4,
+            "knee midpoint: {at} vs {expected}"
+        );
         // Monotonic non-decreasing across the knee (no dents).
         let mut prev = f32::MIN;
         for i in 0..=100 {

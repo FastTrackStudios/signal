@@ -397,8 +397,7 @@ mod tests {
             d.update(SR);
             (0..48000)
                 .map(|i| {
-                    let input =
-                        (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
+                    let input = (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
                     d.tick(input, 0)
                 })
                 .collect()

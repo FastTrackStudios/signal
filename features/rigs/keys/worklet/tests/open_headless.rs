@@ -5,16 +5,16 @@
 //! anywhere.
 
 use daw_standalone::audio_engine::render::ProjectRenderer;
-use signal_sampler::KeysRig;
 use signal_sampler::keys_rig::{LaneEngine, LaneLayer, LaneProgram};
 use signal_sampler::rig_node::Container;
+use signal_sampler::KeysRig;
 
 const SR: u32 = 48_000;
 
 /// Write a 1-second stereo tone as a wav, pack it (PCM-16) with an embedded
 /// zone spec spanning the whole keyboard, and return the pack's BYTES.
 fn build_tone_pack_bytes(dir: &std::path::Path) -> Vec<u8> {
-    use fts_sample::cache::{PackCodec, PackSpecSource, create_signal_pack_with};
+    use fts_sample::cache::{create_signal_pack_with, PackCodec, PackSpecSource};
 
     std::fs::create_dir_all(dir).expect("tmp dir");
     let wav = dir.join("tone.wav");
@@ -76,10 +76,7 @@ fn open_headless_renders_from_external_pack_reader() {
 
     static PACKS: Mutex<Option<HashMap<u32, Vec<u8>>>> = Mutex::new(None);
 
-    let dir = std::env::temp_dir().join(format!(
-        "keys-worklet-external-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("keys-worklet-external-{}", std::process::id()));
     let bytes = build_tone_pack_bytes(&dir);
     let len = bytes.len() as u64;
 
@@ -130,9 +127,8 @@ fn open_headless_renders_from_external_pack_reader() {
         rig.warm_note(60, 100);
         rig.note_on(60, 100);
         let block = renderer.render_block(0, 512);
-        let rms = (block.samples.iter().map(|s| s * s).sum::<f32>()
-            / block.samples.len() as f32)
-            .sqrt();
+        let rms =
+            (block.samples.iter().map(|s| s * s).sum::<f32>() / block.samples.len() as f32).sqrt();
         heard = heard.max(rms);
         if heard > 1e-3 {
             break;
@@ -183,9 +179,8 @@ fn open_headless_renders_live_midi_from_pack_bytes() {
     for _ in 0..600 {
         rig.note_on(60, 100);
         let block = renderer.render_block(0, 512);
-        let rms = (block.samples.iter().map(|s| s * s).sum::<f32>()
-            / block.samples.len() as f32)
-            .sqrt();
+        let rms =
+            (block.samples.iter().map(|s| s * s).sum::<f32>() / block.samples.len() as f32).sqrt();
         heard = heard.max(rms);
         if heard > 1e-3 {
             break;

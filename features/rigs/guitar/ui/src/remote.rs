@@ -9,9 +9,9 @@
 
 use dioxus::prelude::*;
 
-use signal_guitar_proto::AudioPrefs;
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::RigClient;
+use signal_guitar_proto::AudioPrefs;
 
 use crate::perform::PerformGrid;
 use crate::settings::{AudioSettingsBridge, AudioSettingsModal};
@@ -26,7 +26,10 @@ enum Mode {
     Control,
     /// Full-screen footswitch grid (Preset/Profile/Setlist select this
     /// view AND the grid's perform mode).
-    #[allow(dead_code, reason = "not yet wired to a page switch — reserved for the Preset/Profile/Setlist full-screen perform view")]
+    #[allow(
+        dead_code,
+        reason = "not yet wired to a page switch — reserved for the Preset/Profile/Setlist full-screen perform view"
+    )]
     Perform,
     /// Integration layer (DAW sync, external control) — landing here.
     Session,
@@ -98,16 +101,17 @@ pub fn GuitarRigRemote() -> Element {
         })
     };
 
-    let live_bridge = devices
-        .read()
-        .as_ref()
-        .and_then(|d| d.clone())
-        .map(|d| AudioSettingsBridge {
-            inputs: d.inputs,
-            outputs: d.outputs,
-            prefs: prefs(),
-            on_save: apply,
-        });
+    let live_bridge =
+        devices
+            .read()
+            .as_ref()
+            .and_then(|d| d.clone())
+            .map(|d| AudioSettingsBridge {
+                inputs: d.inputs,
+                outputs: d.outputs,
+                prefs: prefs(),
+                on_save: apply,
+            });
 
     let perf = state.perf;
     let blocks = state.blocks;
@@ -157,56 +161,72 @@ pub fn GuitarRigRemote() -> Element {
                 let r = r.clone();
                 move |i: usize| {
                     let r = r.clone();
-                    spawn(async move { let _ = r.press_stack(i as u32).await; });
+                    spawn(async move {
+                        let _ = r.press_stack(i as u32).await;
+                    });
                 }
             }),
             Callback::new({
                 let r = r.clone();
                 move |_: ()| {
                     let r = r.clone();
-                    spawn(async move { let _ = r.toggle_fx().await; });
+                    spawn(async move {
+                        let _ = r.toggle_fx().await;
+                    });
                 }
             }),
             Callback::new({
                 let r = r.clone();
                 move |_: ()| {
                     let r = r.clone();
-                    spawn(async move { let _ = r.toggle_boost().await; });
+                    spawn(async move {
+                        let _ = r.toggle_boost().await;
+                    });
                 }
             }),
             Callback::new({
                 let r = r.clone();
                 move |_: ()| {
                     let r = r.clone();
-                    spawn(async move { let _ = r.cycle_boost().await; });
+                    spawn(async move {
+                        let _ = r.cycle_boost().await;
+                    });
                 }
             }),
             Callback::new({
                 let r = r.clone();
                 move |_: ()| {
                     let r = r.clone();
-                    spawn(async move { let _ = r.tap_tempo().await; });
+                    spawn(async move {
+                        let _ = r.tap_tempo().await;
+                    });
                 }
             }),
             Callback::new({
                 let r = r.clone();
                 move |_: ()| {
                     let r = r.clone();
-                    spawn(async move { let _ = r.prev_song().await; });
+                    spawn(async move {
+                        let _ = r.prev_song().await;
+                    });
                 }
             }),
             Callback::new({
                 let r = r.clone();
                 move |_: ()| {
                     let r = r.clone();
-                    spawn(async move { let _ = r.next_song().await; });
+                    spawn(async move {
+                        let _ = r.next_song().await;
+                    });
                 }
             }),
             Callback::new({
                 let r = r.clone();
                 move |i: usize| {
                     let r = r.clone();
-                    spawn(async move { let _ = r.select_song(i as u32).await; });
+                    spawn(async move {
+                        let _ = r.select_song(i as u32).await;
+                    });
                 }
             }),
         )

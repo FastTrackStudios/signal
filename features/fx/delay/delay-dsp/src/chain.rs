@@ -464,8 +464,7 @@ impl Processor for DelayChain {
             .set_target(if self.freeze { 1.0 } else { 0.0 });
 
         // Swell trigger detector: fast attack, moderate release.
-        self.swell_env
-            .set_times_ms(5.0, 200.0, config.sample_rate);
+        self.swell_env.set_times_ms(5.0, 200.0, config.sample_rate);
 
         // Repeat-dynamics envelope: track the wet tail level.
         self.repeat_dyn_env
@@ -755,8 +754,8 @@ impl Processor for DelayChain {
             // is included so fresh playing keeps the loop open — only a
             // decaying tail (quiet wet, no input) drops below the knee.
             if self.repeat_dynamics {
-                let loop_level = ((wet_l.abs() + wet_r.abs()) * 0.5)
-                    .max((dry_l.abs() + dry_r.abs()) * 0.5);
+                let loop_level =
+                    ((wet_l.abs() + wet_r.abs()) * 0.5).max((dry_l.abs() + dry_r.abs()) * 0.5);
                 self.repeat_dyn_env.tick(loop_level);
             }
 
@@ -880,7 +879,11 @@ mod tests {
             "Mix step should be smoothed: max_jump={max_jump}"
         );
         // And it must actually settle to fully dry.
-        assert!((l2[4095] - 0.8).abs() < 1e-6, "Should settle dry: {}", l2[4095]);
+        assert!(
+            (l2[4095] - 0.8).abs() < 1e-6,
+            "Should settle dry: {}",
+            l2[4095]
+        );
     }
 
     #[test]
@@ -1522,8 +1525,14 @@ mod tests {
         let r_tap2 = window(&r, 400.0);
         assert!(l_tap1 > 0.1, "hard-L tap on L: {l_tap1}");
         assert!(r_tap2 > 0.1, "hard-R tap on R: {r_tap2}");
-        assert!(r_tap1 < l_tap1 * 1e-6, "hard-L tap must not bleed: {r_tap1}");
-        assert!(l_tap2 < r_tap2 * 1e-6, "hard-R tap must not bleed: {l_tap2}");
+        assert!(
+            r_tap1 < l_tap1 * 1e-6,
+            "hard-L tap must not bleed: {r_tap1}"
+        );
+        assert!(
+            l_tap2 < r_tap2 * 1e-6,
+            "hard-R tap must not bleed: {l_tap2}"
+        );
     }
 
     #[test]

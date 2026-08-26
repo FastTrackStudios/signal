@@ -24,7 +24,11 @@ pub enum Selection {
     /// One lane, by name (its engine comes from the mixer).
     Layer { engine: String, layer: String },
     /// One module inside a lane.
-    Module { engine: String, layer: String, module: u32 },
+    Module {
+        engine: String,
+        layer: String,
+        module: u32,
+    },
 }
 
 impl Selection {

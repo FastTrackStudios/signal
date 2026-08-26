@@ -4,8 +4,8 @@
 //! resolves what each slot needs, computes diffs, and executes transitions
 //! across all slots. It also manages preloading and periodic maintenance.
 
-use signal_proto::ModuleSnapshot;
 use signal_proto::module_type::ModuleType;
+use signal_proto::ModuleSnapshot;
 
 use super::error::EngineError;
 

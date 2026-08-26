@@ -56,12 +56,19 @@ fn commit_band(params: &Arc<SatParams>, ctx: &ParamContext, idx: usize, band: &E
         return;
     };
     let writes: [(nice_plug::prelude::ParamPtr, f32); 4] = [
-        (bp.freq_hz.as_ptr(), bp.freq_hz.preview_normalized(band.frequency)),
-        (bp.gain_db.as_ptr(), bp.gain_db.preview_normalized(band.gain.clamp(-12.0, 12.0))),
+        (
+            bp.freq_hz.as_ptr(),
+            bp.freq_hz.preview_normalized(band.frequency),
+        ),
+        (
+            bp.gain_db.as_ptr(),
+            bp.gain_db.preview_normalized(band.gain.clamp(-12.0, 12.0)),
+        ),
         (bp.q.as_ptr(), bp.q.preview_normalized(band.q)),
         (
             bp.shape.as_ptr(),
-            bp.shape.preview_normalized(shape_to_index(coerce_shape(band.shape))),
+            bp.shape
+                .preview_normalized(shape_to_index(coerce_shape(band.shape))),
         ),
     ];
     for (ptr, normalized) in writes {

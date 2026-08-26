@@ -103,7 +103,10 @@ pub fn layout_rig_engines(engines: &[EngineFlowData]) -> (Vec<FlowBlock>, usize,
 /// Lay out a list of module chains into a single unified grid.
 ///
 /// Returns `(blocks, total_columns, total_lanes)`.
-#[allow(dead_code, reason = "unified multi-chain grid layout, not yet wired to a view — sibling of layout_signal_chain/layout_rig_engines")]
+#[allow(
+    dead_code,
+    reason = "unified multi-chain grid layout, not yet wired to a view — sibling of layout_signal_chain/layout_rig_engines"
+)]
 pub fn layout_module_chains(chains: &[ModuleChainData]) -> (Vec<FlowBlock>, usize, usize) {
     let mut blocks = Vec::new();
     let mut max_lane: usize = 0;

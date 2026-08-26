@@ -54,7 +54,6 @@ pub enum StripKind {
     Bus,
 }
 
-
 /// One mixer strip (channel / send / bus) in the drum mixer.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct MixerStrip {
@@ -148,7 +147,6 @@ pub enum InputMap {
     Ggd,
 }
 
-
 /// Live transport + meter snapshot — the high-rate poll payload.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct DrumStatus {
@@ -177,8 +175,9 @@ pub mod drum {
 
     use facet::Facet;
 
-    use super::{DrumStatus, InputMap, KitInfo, KitSlot, LibraryPiece, MeterSnapshot, MixerStrip,
-        PieceInfo};
+    use super::{
+        DrumStatus, InputMap, KitInfo, KitSlot, LibraryPiece, MeterSnapshot, MixerStrip, PieceInfo,
+    };
 
     /// One live rig change. Every variant carries **full state** (idempotent
     /// re-application) so a late/reconnecting subscriber is correct after the

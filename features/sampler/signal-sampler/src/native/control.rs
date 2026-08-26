@@ -570,27 +570,58 @@ mod tests {
     #[test]
     fn keytrack_is_bipolar_around_middle_c() {
         let mut src = ModSource::midi(MidiMod::KeyTrack);
-        let at = |note: u8| [PluginMidiEvent { offset: 0, message: ev_note_on(note, 100) }];
+        let at = |note: u8| {
+            [PluginMidiEvent {
+                offset: 0,
+                message: ev_note_on(note, 100),
+            }]
+        };
         let mid = at(60);
-        let ev = PluginEvents { params: &[], midi: &mid, note_expressions: &[] };
+        let ev = PluginEvents {
+            params: &[],
+            midi: &mid,
+            note_expressions: &[],
+        };
         assert!(src.tick(&ev, 64).abs() < 1e-3, "note 60 centers at 0");
         let hi = at(108);
-        let ev = PluginEvents { params: &[], midi: &hi, note_expressions: &[] };
+        let ev = PluginEvents {
+            params: &[],
+            midi: &hi,
+            note_expressions: &[],
+        };
         assert!((src.tick(&ev, 64) - 1.0).abs() < 1e-3, "+48 st → +1");
         let lo = at(12);
-        let ev = PluginEvents { params: &[], midi: &lo, note_expressions: &[] };
+        let ev = PluginEvents {
+            params: &[],
+            midi: &lo,
+            note_expressions: &[],
+        };
         assert!((src.tick(&ev, 64) + 1.0).abs() < 1e-3, "-48 st → -1");
     }
 
     #[test]
     fn sustain_source_tracks_cc64_only() {
         let mut src = ModSource::midi(ModSource::midi_by_name("sustain").unwrap());
-        let down = [PluginMidiEvent { offset: 0, message: ev_cc(64, 127) }];
-        let ev = PluginEvents { params: &[], midi: &down, note_expressions: &[] };
+        let down = [PluginMidiEvent {
+            offset: 0,
+            message: ev_cc(64, 127),
+        }];
+        let ev = PluginEvents {
+            params: &[],
+            midi: &down,
+            note_expressions: &[],
+        };
         assert!((src.tick(&ev, 64) - 1.0).abs() < 1e-3);
         // A different CC must not disturb the held value.
-        let other = [PluginMidiEvent { offset: 0, message: ev_cc(11, 0) }];
-        let ev2 = PluginEvents { params: &[], midi: &other, note_expressions: &[] };
+        let other = [PluginMidiEvent {
+            offset: 0,
+            message: ev_cc(11, 0),
+        }];
+        let ev2 = PluginEvents {
+            params: &[],
+            midi: &other,
+            note_expressions: &[],
+        };
         assert!((src.tick(&ev2, 64) - 1.0).abs() < 1e-3);
     }
 }

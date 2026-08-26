@@ -301,11 +301,7 @@ mod tests {
         // Order matters: Magneto(Hall) ≠ Hall(Magneto) sample-wise.
         let (l12, _) = render(&mut make_dual(DualRouting::Series12), 48000);
         let (l21, _) = render(&mut make_dual(DualRouting::Series21), 48000);
-        let diff: f64 = l12
-            .iter()
-            .zip(l21.iter())
-            .map(|(a, b)| (a - b).abs())
-            .sum();
+        let diff: f64 = l12.iter().zip(l21.iter()).map(|(a, b)| (a - b).abs()).sum();
         assert!(diff > 1e-3, "series orders must differ: {diff}");
         for v in l12.iter().chain(l21.iter()) {
             assert!(v.is_finite());
@@ -363,8 +359,12 @@ mod tests {
         d.update(config());
 
         // Distinct custom IRs.
-        let ir_a: Vec<f64> = (0..2400).map(|i| if i % 480 == 0 { 0.5 } else { 0.0 }).collect();
-        let ir_b: Vec<f64> = (0..4800).map(|i| if i % 973 == 0 { 0.4 } else { 0.0 }).collect();
+        let ir_a: Vec<f64> = (0..2400)
+            .map(|i| if i % 480 == 0 { 0.5 } else { 0.0 })
+            .collect();
+        let ir_b: Vec<f64> = (0..4800)
+            .map(|i| if i % 973 == 0 { 0.4 } else { 0.0 })
+            .collect();
         assert!(d.a.load_convolution_ir(&ir_a, &ir_a));
         assert!(d.b.load_convolution_ir(&ir_b, &ir_b));
 
@@ -390,7 +390,11 @@ mod tests {
         assert_eq!(d.b.pan, -0.5);
         assert_eq!(d.b.params.decay, 0.9);
         assert_eq!(d.b.trem_depth, 0.4);
-        assert_eq!(d.b.algorithm_type(), AlgorithmType::Hall, "algorithm untouched");
+        assert_eq!(
+            d.b.algorithm_type(),
+            AlgorithmType::Hall,
+            "algorithm untouched"
+        );
     }
 
     #[test]

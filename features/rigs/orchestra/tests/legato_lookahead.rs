@@ -15,9 +15,9 @@
 //! Gated on the CSS library + config being present (same pattern as
 //! `score_to_audio.rs`).
 
-use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
-use signal_sampler::SamplerRig;
+use signal_orchestra::{load_strings, CSS_CONFIG, CSS_ROOT};
 use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TrackDocument};
+use signal_sampler::SamplerRig;
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
@@ -69,11 +69,7 @@ fn lookahead_prerolls_transitions_and_joins_continuously() {
     let doc = TrackDocument {
         version: 1,
         seed: 0xC55_1E6A70,
-        notes: vec![
-            note(0.0, 1.02, 67),
-            note(1.0, 2.02, 69),
-            note(2.0, 3.0, 66),
-        ],
+        notes: vec![note(0.0, 1.02, 67), note(1.0, 2.02, 69), note(2.0, 3.0, 66)],
         ccs: vec![DocCc {
             qn: 0.0,
             chan: 0,
@@ -132,14 +128,25 @@ fn lookahead_prerolls_transitions_and_joins_continuously() {
         }
         p
     };
-    assert!(phrase_peak > -35.0, "phrase audible (peak {phrase_peak} dB)");
+    assert!(
+        phrase_peak > -35.0,
+        "phrase audible (peak {phrase_peak} dB)"
+    );
     if std::env::var_os("LEGATO_TEST_DEBUG").is_some() {
         for t in &res.transitions {
-            eprintln!("transition: frame {} {}->{}", t.frame, t.from_note, t.to_note);
+            eprintln!(
+                "transition: frame {} {}->{}",
+                t.frame, t.from_note, t.to_note
+            );
         }
         let mut f = 0usize;
         while f + win < 3 * SR as usize + SR as usize {
-            eprintln!("rms {:>7} ({:.2}s): {:6.1} dB", f, f as f32 / SR as f32, rms_db(&res.audio, f, win));
+            eprintln!(
+                "rms {:>7} ({:.2}s): {:6.1} dB",
+                f,
+                f as f32 / SR as f32,
+                rms_db(&res.audio, f, win)
+            );
             f += win;
         }
     }
@@ -223,5 +230,8 @@ fn strict_live_commits_reactively_not_early() {
     );
     // And it sounds.
     let s: f64 = audio.iter().map(|&x| (x as f64) * (x as f64)).sum();
-    assert!((s / audio.len() as f64).sqrt() > 1e-4, "live phrase audible");
+    assert!(
+        (s / audio.len() as f64).sqrt() > 1e-4,
+        "live phrase audible"
+    );
 }

@@ -15,7 +15,9 @@ use signal_sampler::engine::cache::{SampleCache, SignalPcmPack};
 
 /// Anonymous (heap/stack) resident set — the part the process actually owns.
 fn rss_anon_mb() -> f64 {
-    let Ok(status) = std::fs::read_to_string("/proc/self/status") else { return f64::NAN };
+    let Ok(status) = std::fs::read_to_string("/proc/self/status") else {
+        return f64::NAN;
+    };
     status
         .lines()
         .find(|l| l.starts_with("RssAnon:"))
@@ -26,8 +28,13 @@ fn rss_anon_mb() -> f64 {
 }
 
 fn main() -> eyre::Result<()> {
-    let path = std::env::args().nth(1).ok_or_else(|| eyre::eyre!("usage: pack_memory <pack> [count]"))?;
-    let count: usize = std::env::args().nth(2).and_then(|c| c.parse().ok()).unwrap_or(64);
+    let path = std::env::args()
+        .nth(1)
+        .ok_or_else(|| eyre::eyre!("usage: pack_memory <pack> [count]"))?;
+    let count: usize = std::env::args()
+        .nth(2)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(64);
 
     let pack = SignalPcmPack::open(std::path::Path::new(&path))?;
     println!("pack   {} ({})", path, pack.kind_label());
@@ -66,17 +73,35 @@ fn main() -> eyre::Result<()> {
         for p in &paths {
             if let Some(d) = cache.get_loaded(p) {
                 bytes += d.decoded_bytes();
-                if d.is_streamed() { streamed += 1 } else { other += 1 }
+                if d.is_streamed() {
+                    streamed += 1
+                } else {
+                    other += 1
+                }
             }
         }
         (streamed, other, bytes)
     };
     let (streamed, decoded, live_bytes) = live(&cache);
-    println!("loaded  {} failed {} skipped {}", stats.loaded, stats.failed, stats.skipped);
+    println!(
+        "loaded  {} failed {} skipped {}",
+        stats.loaded, stats.failed, stats.skipped
+    );
     println!("mode    {streamed} streamed · {decoded} decoded whole");
-    println!("live    {:.1} MB held by the samples", live_bytes as f64 / 1048576.0);
-    println!("charged {:.1} MB (sampler's own accounting)", (budget::used_bytes() - before_charge) as f64 / 1048576.0);
-    println!("anon    {:.1} MB → {:.1} MB  (Δ {:+.1} MB)", before_anon, rss_anon_mb(), rss_anon_mb() - before_anon);
+    println!(
+        "live    {:.1} MB held by the samples",
+        live_bytes as f64 / 1048576.0
+    );
+    println!(
+        "charged {:.1} MB (sampler's own accounting)",
+        (budget::used_bytes() - before_charge) as f64 / 1048576.0
+    );
+    println!(
+        "anon    {:.1} MB → {:.1} MB  (Δ {:+.1} MB)",
+        before_anon,
+        rss_anon_mb(),
+        rss_anon_mb() - before_anon
+    );
     println!("preload {load_ms:.0} ms · full read {read_ms:.0} ms · checksum {acc:.3}");
     // Streamed samples shed their chunks once nobody is reading them: what is
     // left after a few seconds idle is the steady-state cost of having the

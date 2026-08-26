@@ -26,7 +26,7 @@ use signal_proto::catalog::slugify;
 use signal_proto::metadata::Metadata;
 use signal_proto::module_type::ModuleType;
 use signal_proto::{
-    Block, BlockType, Module, ModulePreset, ModuleSnapshot, Preset, SignalChain, Snapshot, seed_id,
+    seed_id, Block, BlockType, Module, ModulePreset, ModuleSnapshot, Preset, SignalChain, Snapshot,
 };
 
 use crate::sidecar::{self, PresetKind};

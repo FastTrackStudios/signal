@@ -63,7 +63,9 @@ pub fn SessionEventBridge() -> Element {
     // active-song schedule. Fed by the service's `active_indices`
     // `#[subscribe]` hub (architect PubSub), not the setlist-events stream.
     use_future(move || async move {
-        let Some(engine) = session_engine::engine() else { return };
+        let Some(engine) = session_engine::engine() else {
+            return;
+        };
 
         // Consume the `active_indices` `#[subscribe]` stream through the
         // stream client (pumps the vox lane).
@@ -91,7 +93,11 @@ pub fn SessionEventBridge() -> Element {
             let ai = ai.get();
             // Guide follows the active song, reading the current (possibly
             // just-hydrated) song list from the shared setlist signal.
-            feed_guide(&session_ui::SETLIST_STRUCTURE.peek().songs, &mut guide_song, ai.song_index);
+            feed_guide(
+                &session_ui::SETLIST_STRUCTURE.peek().songs,
+                &mut guide_song,
+                ai.song_index,
+            );
             session_ui::apply_active_indices(ai);
         }
         tracing::warn!("active-indices stream ended");
@@ -102,11 +108,7 @@ pub fn SessionEventBridge() -> Element {
 
 /// Hand `songs[index]` to the guide engine when it differs from the song
 /// already scheduled. Cheap here (the rebuild runs on a worker thread).
-fn feed_guide(
-    songs: &[session_proto::Song],
-    scheduled: &mut Option<usize>,
-    index: Option<usize>,
-) {
+fn feed_guide(songs: &[session_proto::Song], scheduled: &mut Option<usize>, index: Option<usize>) {
     let Some(index) = index else { return };
     if *scheduled == Some(index) {
         return;
@@ -263,7 +265,10 @@ fn MetronomePanel() -> Element {
     // the audio stream opens.
     let routing = daw_standalone::audio_engine::MixerRouting::shared();
     let channel_count = routing.channel_count();
-    let pairs: Vec<usize> = (0..channel_count).step_by(2).filter(|&l| l + 1 < channel_count).collect();
+    let pairs: Vec<usize> = (0..channel_count)
+        .step_by(2)
+        .filter(|&l| l + 1 < channel_count)
+        .collect();
     let mut main_l = use_signal(|| routing.main_pair().0);
     let mut guide_l = use_signal(|| routing.guide_pair().0);
     let mut phones_on = use_signal(|| routing.phones_enabled());
@@ -439,7 +444,12 @@ fn OutputPairRow(
 
 /// One labelled toggle row inside the guide-settings popover.
 #[component]
-fn GuideToggleRow(label: String, hint: String, on: bool, onclick: EventHandler<MouseEvent>) -> Element {
+fn GuideToggleRow(
+    label: String,
+    hint: String,
+    on: bool,
+    onclick: EventHandler<MouseEvent>,
+) -> Element {
     let (track, knob_x) = if on {
         ("#16a34a", "18px")
     } else {

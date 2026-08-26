@@ -19,16 +19,16 @@
 //! warming — watch the WARM progress bar.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
-use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Gauge, Paragraph};
+use ratatui::Frame;
 use signal_sampler::{MidiEvent, MidiInputHandle, MidiMonitor, MidiSelection, SamplerRig};
 
 const INSTRUMENT_ID: &str = "strings_1v";
@@ -47,8 +47,7 @@ const CSS_ROOT: &str =
 /// Default descriptive engine-config spec — articulations / keyswitch / CC58 /
 /// legato / dynamics. Loaded alongside the zones so articulation switching
 /// works. Lives in the sibling sample-collector repo.
-const CSS_CONFIG: &str =
-    "features/rigs/orchestra/specs/cinematic-strings.styx";
+const CSS_CONFIG: &str = "features/rigs/orchestra/specs/cinematic-strings.styx";
 
 /// Articulations to cycle with `[` / `]` — the playable subset of 1st Violins.
 /// `NVLeg` (non-vib legato) is the default base; CC2 blends in the vibrato pair

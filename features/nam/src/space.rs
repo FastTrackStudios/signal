@@ -19,7 +19,7 @@
 use std::path::{Path, PathBuf};
 
 use neural_amp_modeler::NamModel;
-use signal_space::{Space, SpaceItem, SPACE_VERSION, knn};
+use signal_space::{knn, Space, SpaceItem, SPACE_VERSION};
 
 /// The space built under `<nam-root>/Space/nam.space`.
 pub const NAM_SPACE: &str = "nam";
@@ -105,7 +105,12 @@ pub fn probe(path: &Path) -> Result<NamProbe, String> {
     let knee = ((low_slope - high_slope).max(0.0) as f32).clamp(0.0, 1.0);
     tracing::debug!(?io, low_slope, high_slope, knee, "nam probe");
 
-    Ok(NamProbe { eq, io, output_db: io[6], knee })
+    Ok(NamProbe {
+        eq,
+        io,
+        output_db: io[6],
+        knee,
+    })
 }
 
 /// Output/input magnitude ratio per log-spaced band, in dB, mean-centered.
@@ -182,7 +187,11 @@ pub fn build(root: &Path) -> Result<(PathBuf, usize, usize), String> {
                 continue;
             }
         };
-        let rel = path.strip_prefix(root).unwrap_or(path).to_string_lossy().into_owned();
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .into_owned();
         items.push(SpaceItem {
             path: rel,
             class: archetype(&p).to_string(),
@@ -227,7 +236,11 @@ pub fn archetype(p: &NamProbe) -> &'static str {
     let dark = p.eq[..6].iter().sum::<f32>() / 6.0;
     match p.knee {
         k if k < 0.10 => {
-            if bright > dark { "clean-bright" } else { "clean-warm" }
+            if bright > dark {
+                "clean-bright"
+            } else {
+                "clean-warm"
+            }
         }
         k if k < 0.30 => "crunch",
         k if k < 0.60 => "hi-gain",
@@ -244,11 +257,19 @@ fn voicing_centroid(p: &NamProbe) -> f32 {
         num += f * w;
         den += w;
     }
-    if den > 0.0 { num / den } else { 0.0 }
+    if den > 0.0 {
+        num / den
+    } else {
+        0.0
+    }
 }
 
 /// Models most similar to `model_path`, best-first.
-pub fn similar_to(root: &Path, model_path: &Path, limit: usize) -> Result<Vec<(String, f32)>, String> {
+pub fn similar_to(
+    root: &Path,
+    model_path: &Path,
+    limit: usize,
+) -> Result<Vec<(String, f32)>, String> {
     let dir = Space::space_dir(root, NAM_SPACE);
     let (space, features) = Space::load(&dir)?;
     let rel = model_path
@@ -269,7 +290,11 @@ pub fn similar_to(root: &Path, model_path: &Path, limit: usize) -> Result<Vec<(S
 
 /// **Partner**: a model that is similar in gain behaviour but deliberately
 /// offset in voicing — the stereo-pair pick, not the closest match.
-pub fn partner_for(root: &Path, model_path: &Path, limit: usize) -> Result<Vec<(String, f32)>, String> {
+pub fn partner_for(
+    root: &Path,
+    model_path: &Path,
+    limit: usize,
+) -> Result<Vec<(String, f32)>, String> {
     let dir = Space::space_dir(root, NAM_SPACE);
     let (space, features) = Space::load(&dir)?;
     let rel = model_path
@@ -289,14 +314,24 @@ pub fn partner_for(root: &Path, model_path: &Path, limit: usize) -> Result<Vec<(
         .map(|i| {
             let r = &features[i * dim..(i + 1) * dim];
             // Gain behaviour (IO curve + knee) should MATCH…
-            let gain_d: f32 = q[EQ_BANDS..].iter().zip(&r[EQ_BANDS..]).map(|(a, b)| (a - b).abs()).sum();
+            let gain_d: f32 = q[EQ_BANDS..]
+                .iter()
+                .zip(&r[EQ_BANDS..])
+                .map(|(a, b)| (a - b).abs())
+                .sum();
             // …while the voicing should differ, but not wildly (a partner is
             // a complement, not a stranger).
-            let voice_d: f32 =
-                q[..EQ_BANDS].iter().zip(&r[..EQ_BANDS]).map(|(a, b)| (a - b).abs()).sum::<f32>()
-                    / EQ_BANDS as f32;
+            let voice_d: f32 = q[..EQ_BANDS]
+                .iter()
+                .zip(&r[..EQ_BANDS])
+                .map(|(a, b)| (a - b).abs())
+                .sum::<f32>()
+                / EQ_BANDS as f32;
             let sweet = 1.0 - (voice_d - 0.35).abs() / 0.35; // peak at ~0.35
-            (space.items[i].path.clone(), sweet.clamp(0.0, 1.0) - gain_d * 0.1)
+            (
+                space.items[i].path.clone(),
+                sweet.clamp(0.0, 1.0) - gain_d * 0.1,
+            )
         })
         .collect();
     scored.sort_by(|a, b| b.1.total_cmp(&a.1));

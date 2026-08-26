@@ -8,12 +8,12 @@
 //!   - Fast density saturation (small volume fills quickly)
 
 use crate::algorithm::{AlgorithmParams, ChamberColor, ChamberParams, ReverbAlgorithm};
-use audiocore_dsp::biquad::{Biquad, FilterType};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::multitap_delay::{MultitapDelay, Tap};
 use crate::primitives::one_pole::Lp1;
+use audiocore_dsp::biquad::{Biquad, FilterType};
 
 const FDN_MOD_AP_COUNT: usize = 8;
 

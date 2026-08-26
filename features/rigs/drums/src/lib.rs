@@ -15,9 +15,9 @@ use signal_sampler::{InstrumentId, PreloadProfile, PresetSpec, SamplerRig};
 mod backend;
 pub mod cradle;
 pub mod library;
-pub mod piece_space;
 mod lightguide;
 pub mod mm2fx;
+pub mod piece_space;
 pub use backend::DrumRigBackend;
 pub use lightguide::DrumLightGuide;
 pub use signal_drums_proto as proto;
@@ -72,7 +72,8 @@ pub fn load_kit_tracks(
     let path = preset.as_ref();
     let spec = PresetSpec::from_file(path).map_err(|e| e.to_string())?;
     let dir = path.parent().unwrap_or(Path::new("")).to_path_buf();
-    rig.load_kit_tracks(id, &spec, &dir).map_err(|e| e.to_string())
+    rig.load_kit_tracks(id, &spec, &dir)
+        .map_err(|e| e.to_string())
 }
 
 /// As [`load_kit_tracks`] from an in-memory spec (the kit-designer swap path).
@@ -83,7 +84,8 @@ pub fn load_kit_tracks_spec(
     dir: &Path,
 ) -> Result<Vec<InstrumentId>, String> {
     rig.set_preload_profile(PreloadProfile::DrumKit);
-    rig.load_kit_tracks(id, spec, dir).map_err(|e| e.to_string())
+    rig.load_kit_tracks(id, spec, dir)
+        .map_err(|e| e.to_string())
 }
 
 pub fn load_preset_kit(
@@ -120,8 +122,15 @@ pub fn load_kit(
     section: &str,
     mic: &str,
 ) -> Result<(), String> {
-    rig.load_instrument_with_config(id, config.as_ref(), zones.as_ref(), root.as_ref(), section, mic)
-        .map_err(|e| e.to_string())?;
+    rig.load_instrument_with_config(
+        id,
+        config.as_ref(),
+        zones.as_ref(),
+        root.as_ref(),
+        section,
+        mic,
+    )
+    .map_err(|e| e.to_string())?;
     rig.set_solo_mic(id, Some(mic.to_string()));
     rig.set_midi_channel(id, GM_DRUM_CHANNEL);
     Ok(())

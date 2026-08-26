@@ -116,8 +116,7 @@ impl Space {
 
 /// Default library roots scanned for built spaces.
 pub const ROOTS_ENV: &str = "SIGNAL_SPACE_ROOTS";
-const DEFAULT_ROOTS: &str =
-    "/run/media/AudioHaven/Sampled:/run/media/AudioHaven/Signal/Libraries";
+const DEFAULT_ROOTS: &str = "/run/media/AudioHaven/Sampled:/run/media/AudioHaven/Signal/Libraries";
 
 /// The configured library roots.
 pub fn space_roots() -> Vec<PathBuf> {
@@ -154,7 +153,9 @@ fn collect_spaces(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
     if depth > MAX_SPACE_DEPTH {
         return;
     }
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for e in entries.flatten() {
         let Ok(ft) = e.file_type() else { continue };
         if !ft.is_dir() {
@@ -212,7 +213,11 @@ mod tests {
             classes.push(classify::classify(&a, "unnamed"));
             feats.extend_from_slice(&a.features);
         }
-        assert_eq!(classes, ["kick", "kick", "hat-closed", "hat-closed"], "{classes:?}");
+        assert_eq!(
+            classes,
+            ["kick", "kick", "hat-closed", "hat-closed"],
+            "{classes:?}"
+        );
         let nn = |i: usize| knn::similar(&feats, analyze::DIM, i, 1, |_| true)[0].0;
         assert_eq!(nn(0), 1);
         assert_eq!(nn(1), 0);

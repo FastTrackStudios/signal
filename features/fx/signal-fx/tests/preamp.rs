@@ -6,7 +6,11 @@ use signal_plugin_host::{PluginEvents, PluginInstance};
 const SR: f64 = 48000.0;
 
 fn no_events() -> PluginEvents<'static> {
-    PluginEvents { params: &[], midi: &[], note_expressions: &[] }
+    PluginEvents {
+        params: &[],
+        midi: &[],
+        note_expressions: &[],
+    }
 }
 
 /// Harmonic energy of `buf` at k×f0.
@@ -35,7 +39,14 @@ fn run_100hz(q_point: f64) -> Vec<f32> {
     let mut out_r = vec![0.0f32; n];
     for (i, chunk) in input.chunks(512).enumerate() {
         let s = i * 512;
-        p.process_block(chunk, chunk, &mut out_l[s..s + chunk.len()], &mut out_r[s..s + chunk.len()], &no_events()).unwrap();
+        p.process_block(
+            chunk,
+            chunk,
+            &mut out_l[s..s + chunk.len()],
+            &mut out_r[s..s + chunk.len()],
+            &no_events(),
+        )
+        .unwrap();
     }
     out_l
 }
@@ -60,7 +71,10 @@ fn q_point_springs_even_harmonics_100hz_demo() {
     let h1 = harmonic(late, 100.0, 1);
     let h2 = harmonic(late, 100.0, 2) / h1;
     let h4 = harmonic(late, 100.0, 4) / h1;
-    assert!(h2 > h2_sym * 20.0, "2nd springs up with bias: {h2:.4} vs {h2_sym:.5}");
+    assert!(
+        h2 > h2_sym * 20.0,
+        "2nd springs up with bias: {h2:.4} vs {h2_sym:.5}"
+    );
     assert!(h4 > 1.0e-3, "4th follows: {h4:.5}");
 
     // DC stays inside the box.

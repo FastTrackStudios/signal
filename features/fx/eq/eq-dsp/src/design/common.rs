@@ -70,7 +70,11 @@ pub(crate) fn cascade_qs(n: usize, user_q: f64) -> Vec<f64> {
         natural_qs.iter().enumerate().fold(
             (0, 0.0_f64),
             |(i, m), (j, &v)| {
-                if v > m { (j, v) } else { (i, m) }
+                if v > m {
+                    (j, v)
+                } else {
+                    (i, m)
+                }
             },
         );
     // Q scaling on the highest-Q (idx_max) section.  Verified linear

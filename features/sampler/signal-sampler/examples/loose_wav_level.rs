@@ -6,15 +6,16 @@
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::path::PathBuf::from(
-        std::env::args().nth(1).ok_or("usage: loose_wav_level <file.wav>")?,
+        std::env::args()
+            .nth(1)
+            .ok_or("usage: loose_wav_level <file.wav>")?,
     );
     let dir = path.parent().unwrap().to_path_buf();
     let file = path.file_name().unwrap().to_string_lossy().into_owned();
 
     // What the decoder itself sees.
     let data = signal_sampler::engine::cache::load_sample(&path)?;
-    let decoded_peak =
-        (0..data.pcm.len()).fold(0.0f32, |a, i| a.max(data.pcm.sample(i).abs()));
+    let decoded_peak = (0..data.pcm.len()).fold(0.0f32, |a, i| a.max(data.pcm.sample(i).abs()));
     println!(
         "decoded peak: {decoded_peak:.4}  ({} frames, {} ch)",
         data.num_frames, data.channels
@@ -38,8 +39,14 @@ zones (
 
     let rig = signal_sampler::SamplerRig::new_offline(48_000);
     rig.load_instrument("t".to_string(), &spec_path, Some(&dir), "main", "default")?;
-    let chan: u8 = std::env::var("CH").ok().and_then(|v| v.parse().ok()).unwrap_or(9);
-    let note: u8 = std::env::var("NOTE").ok().and_then(|v| v.parse().ok()).unwrap_or(36);
+    let chan: u8 = std::env::var("CH")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(9);
+    let note: u8 = std::env::var("NOTE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(36);
     if std::env::var("NO_SET_CH").is_err() {
         rig.set_midi_channel("t".to_string(), chan);
     }
@@ -64,6 +71,9 @@ zones (
     }
     println!("rendered peak: {peak:.5}");
     let ratio = decoded_peak / peak.max(1e-9);
-    println!("decoded / rendered = {ratio:.1}x  ({:.1} dB)", 20.0 * ratio.log10());
+    println!(
+        "decoded / rendered = {ratio:.1}x  ({:.1} dB)",
+        20.0 * ratio.log10()
+    );
     Ok(())
 }

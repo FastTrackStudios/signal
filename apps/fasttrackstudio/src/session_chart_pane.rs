@@ -285,7 +285,8 @@ fn ChartCursorOverlay(layout_key: u64, view_w: f64, view_h: f64) -> Element {
         let setlist = SETLIST_STRUCTURE.read();
         let song = setlist.songs.get(idx)?;
         let duration = song.duration();
-        (duration > 0.0).then(|| song.count_in_seconds.unwrap_or(0.0) + p.clamp(0.0, 1.0) * duration)
+        (duration > 0.0)
+            .then(|| song.count_in_seconds.unwrap_or(0.0) + p.clamp(0.0, 1.0) * duration)
     });
 
     let state = chart_seconds

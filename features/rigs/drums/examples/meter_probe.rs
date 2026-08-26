@@ -14,7 +14,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let kick = spec
         .note_routing
         .iter()
-        .find(|nr| nr.targets.iter().any(|t| t.to_ascii_lowercase().contains("kick")))
+        .find(|nr| {
+            nr.targets
+                .iter()
+                .any(|t| t.to_ascii_lowercase().contains("kick"))
+        })
         .map(|nr| nr.note)
         .or_else(|| spec.note_routing.first().map(|nr| nr.note))
         .unwrap_or(36);
@@ -106,27 +110,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Mute the kick piece → its meter should drop to ~0, others unchanged.
     rig.set_mixer_piece_mute(KIT, notes[kick_i].0, true);
     let muted = hit_all(&rig, &mut buf);
-    println!("\nafter MUTE {}: kick={:.4} (was {:.4}), snare={:.4}",
-        label(kick_i), muted[kick_i], base[kick_i], muted[snare_i]);
+    println!(
+        "\nafter MUTE {}: kick={:.4} (was {:.4}), snare={:.4}",
+        label(kick_i),
+        muted[kick_i],
+        base[kick_i],
+        muted[snare_i]
+    );
     rig.set_mixer_piece_mute(KIT, notes[kick_i].0, false);
 
     // Solo the snare piece → only snare audible.
     rig.set_mixer_piece_solo(KIT, notes[snare_i].0, true);
     let soloed = hit_all(&rig, &mut buf);
-    println!("after SOLO {}: snare={:.4}, kick={:.4} (should be ~0)",
-        label(snare_i), soloed[snare_i], soloed[kick_i]);
+    println!(
+        "after SOLO {}: snare={:.4}, kick={:.4} (should be ~0)",
+        label(snare_i),
+        soloed[snare_i],
+        soloed[kick_i]
+    );
     rig.set_mixer_piece_solo(KIT, notes[snare_i].0, false);
 
     // Fader: pull kick to -18 dB → its meter should shrink ~8x.
     rig.set_mixer_piece_gain_db(KIT, notes[kick_i].0, -18.0);
     let faded = hit_all(&rig, &mut buf);
-    println!("after FADER {} -18dB: kick={:.4} (was {:.4})",
-        label(kick_i), faded[kick_i], base[kick_i]);
+    println!(
+        "after FADER {} -18dB: kick={:.4} (was {:.4})",
+        label(kick_i),
+        faded[kick_i],
+        base[kick_i]
+    );
     rig.set_mixer_piece_gain_db(KIT, notes[kick_i].0, 0.0);
 
     let ok = muted[kick_i] < base[kick_i] * 0.1
         && soloed[kick_i] < soloed[snare_i] * 0.1
         && faded[kick_i] < base[kick_i] * 0.5;
-    println!("\n{}", if ok { "PASS — piece mute/solo/fader all effective" } else { "FAIL — a piece control had no effect" });
+    println!(
+        "\n{}",
+        if ok {
+            "PASS — piece mute/solo/fader all effective"
+        } else {
+            "FAIL — a piece control had no effect"
+        }
+    );
     Ok(())
 }

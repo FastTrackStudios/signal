@@ -46,7 +46,9 @@ impl Ap {
 
     #[inline]
     fn tick(&mut self, x: f64, len: f64) -> f64 {
-        let delayed = self.line.read_linear(len.clamp(1.0, self.line.len() as f64 - 4.0));
+        let delayed = self
+            .line
+            .read_linear(len.clamp(1.0, self.line.len() as f64 - 4.0));
         let v = x - AP_COEFF * delayed;
         self.line.write(v);
         delayed + AP_COEFF * v
@@ -80,10 +82,7 @@ impl BarrLoop {
         let sections = core::array::from_fn(|i| Section {
             delay: DelayLine::new((SECTION_LEN_32K[i] * k) as usize + 8),
             len: (SECTION_LEN_32K[i] * k) as usize,
-            ap: [
-                Ap::new(AP_LEN_32K[i][0] * k),
-                Ap::new(AP_LEN_32K[i][1] * k),
-            ],
+            ap: [Ap::new(AP_LEN_32K[i][0] * k), Ap::new(AP_LEN_32K[i][1] * k)],
             damp: Lp1::new(),
         });
         let mut this = Self {
@@ -113,7 +112,8 @@ impl BarrLoop {
 
     pub fn set_damping(&mut self, cutoff_hz: f64) {
         for s in &mut self.sections {
-            s.damp.set_freq(cutoff_hz.clamp(500.0, 16_000.0), self.sample_rate);
+            s.damp
+                .set_freq(cutoff_hz.clamp(500.0, 16_000.0), self.sample_rate);
         }
     }
 

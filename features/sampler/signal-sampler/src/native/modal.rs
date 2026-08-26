@@ -108,7 +108,10 @@ impl Table {
         }
         let mut notes: Vec<u8> = by_note.keys().copied().collect();
         notes.sort_unstable();
-        tracing::info!("City Grand: loaded {} sampled notes from {path}", notes.len());
+        tracing::info!(
+            "City Grand: loaded {} sampled notes from {path}",
+            notes.len()
+        );
         Some(Self { by_note, notes })
     }
 
@@ -438,7 +441,11 @@ impl SympatheticBank {
             // ring only if undamped (pedal / no-damper zone) AND not being played
             let undamped = (self.pedal || s.note >= 88) && !self.held[s.note as usize];
             let target = if undamped { 1.0 } else { 0.0 };
-            let coef = if target > s.gain { self.up_coef } else { self.down_coef };
+            let coef = if target > s.gain {
+                self.up_coef
+            } else {
+                self.down_coef
+            };
             s.gain += (target - s.gain) * coef;
             if s.gain < 1e-4 {
                 // damped: bleed stored energy so it doesn't resume on re-pedal
@@ -623,7 +630,11 @@ impl NativeModal {
             };
             (-1.0 / (t * sr)).exp()
         };
-        for v in self.voices.iter_mut().filter(|v| v.note == note && !v.releasing) {
+        for v in self
+            .voices
+            .iter_mut()
+            .filter(|v| v.note == note && !v.releasing)
+        {
             v.releasing = true;
             v.rel_mult = rel_mult;
         }
@@ -634,7 +645,9 @@ impl NativeModal {
         match message {
             MidiEvent::NoteOn { key, velocity, .. } => self.note_on(key.get(), velocity.get()),
             MidiEvent::NoteOff { key, .. } => self.note_off(key.get()),
-            MidiEvent::ControlChange { controller, value, .. } => {
+            MidiEvent::ControlChange {
+                controller, value, ..
+            } => {
                 if controller.get() == 64 {
                     if let Some(s) = &mut self.symp {
                         s.pedal = value.get() >= 64;
@@ -821,7 +834,8 @@ mod tests {
             midi: &midi,
             note_expressions: &[],
         };
-        m.process_block(&inl, &inr, &mut outl, &mut outr, &ev).unwrap();
+        m.process_block(&inl, &inr, &mut outl, &mut outr, &ev)
+            .unwrap();
         assert_eq!(m.active_voices(), 1);
         let rms = (outl.iter().map(|s| s * s).sum::<f32>() / 512.0).sqrt();
         assert!(rms > 1e-4, "modal voice should be audible, rms={rms}");

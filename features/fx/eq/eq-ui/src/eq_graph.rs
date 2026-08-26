@@ -20,12 +20,12 @@ use nice_plug_dioxus::prelude::*;
 use nice_plug_dioxus::widget::CustomWidgetAttr;
 
 use super::eq_graph_interaction::{
-    GraphMapper, bands_in_rect, drag_gain_for_shape, filter_type_for_position, nearest_band,
-    wheel_q_for_shape,
+    bands_in_rect, drag_gain_for_shape, filter_type_for_position, nearest_band, wheel_q_for_shape,
+    GraphMapper,
 };
 pub use super::eq_graph_model::{
-    BAND_COLORS, EqBand, EqBandShape, EqGraphRenderState, GraphConfig, InteractionState, MAX_BANDS,
-    StereoMode, get_band_color, get_band_fill_color, q_to_slope_db, slope_db_to_q,
+    get_band_color, get_band_fill_color, q_to_slope_db, slope_db_to_q, EqBand, EqBandShape,
+    EqGraphRenderState, GraphConfig, InteractionState, StereoMode, BAND_COLORS, MAX_BANDS,
 };
 use super::eq_graph_painter::EqGraphWidget;
 use super::eq_graph_popup::{BandContextMenu, BandPopup, EmptyGraphContextMenu};

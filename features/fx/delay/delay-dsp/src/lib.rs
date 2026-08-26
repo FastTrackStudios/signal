@@ -29,18 +29,18 @@ pub mod spectral_delay;
 pub mod tape_delay;
 pub mod tilt;
 
+pub use bbd_delay::BbdVoice;
 pub use chain::{DelayChain, HeadMode, TapDivision};
-pub use dual::{DualDelay, DualRouting};
 pub use drum_delay::{DrumHead, DrumSpacing, HeadPlayback, GOLDEN_HEADS, SILVER_HEADS};
+pub use dual::{DualDelay, DualRouting};
 pub use engine::{DelayEngine, DelayStyle};
 pub use filter_delay::{FilterLfoShape, FilterLocation};
+pub use lofi_delay::LoFiFilterShape;
 pub use modulation::WobbleShape;
 pub use multitap_delay::{FeedbackMode, Tap, TapFilter, TapGrid, TapPreset, MAX_TAPS};
-pub use lofi_delay::LoFiFilterShape;
 pub use oilcan_delay::OilCanHeads;
-pub use spectral_delay::{DensityMode, GrainDirection, GrainShape};
-pub use bbd_delay::BbdVoice;
 pub use pitch_delay::{IceInterval, IceSlice};
+pub use spectral_delay::{DensityMode, GrainDirection, GrainShape};
 pub use tape_delay::{SaturationType, TapeSpeed, TapeVoice};
 
 /// Equal-power pan gains — see [`audiocore_dsp::stereo::pan_equal_power`]

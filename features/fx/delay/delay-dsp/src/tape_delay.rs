@@ -189,7 +189,6 @@ pub struct TapeDelay {
     // sliding like a chorus. Slow tape (long delays) packs fewer cells
     // per host sample → genuinely duller repeats via the record-head
     // AA filter.
-
     tape: Box<[f64]>,
     write_phase: f64,
     prev_write_in: f64,
@@ -243,7 +242,6 @@ impl Default for TapeDelay {
 }
 
 impl TapeDelay {
-
     pub fn new() -> Self {
         Self {
             time_ms: 250.0,
@@ -463,12 +461,20 @@ impl TapeDelay {
         let locut_now = Self::smooth_cutoff(&mut self.locut_smoother, self.locut_freq);
         if self.coeff_refresh == 0 {
             if hicut_now > 0.0 && !self.hicut_smoother.is_settled() {
-                self.hicut
-                    .set(FilterType::Lowpass, hicut_now, self.filter_q, self.sample_rate);
+                self.hicut.set(
+                    FilterType::Lowpass,
+                    hicut_now,
+                    self.filter_q,
+                    self.sample_rate,
+                );
             }
             if locut_now > 0.0 && !self.locut_smoother.is_settled() {
-                self.locut
-                    .set(FilterType::Highpass, locut_now, self.filter_q, self.sample_rate);
+                self.locut.set(
+                    FilterType::Highpass,
+                    locut_now,
+                    self.filter_q,
+                    self.sample_rate,
+                );
             }
             self.coeff_refresh = 16;
         }
@@ -1307,7 +1313,10 @@ mod dtape_parity_tests {
             }
             prev = out;
         }
-        assert!(energy > 1e-3, "should still be reading the stored tone: {energy}");
+        assert!(
+            energy > 1e-3,
+            "should still be reading the stored tone: {energy}"
+        );
         let freq = crossings as f64 / 2.0 / 0.25;
         assert!(
             (60.0..130.0).contains(&freq),

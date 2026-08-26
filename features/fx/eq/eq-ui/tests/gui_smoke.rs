@@ -12,8 +12,8 @@
 
 use dioxus::prelude::*;
 
-use eq_ui::eq_graph_interaction::{GraphMapper, filter_type_for_position, nearest_band};
-use eq_ui::eq_graph_model::{EqBand, EqBandShape, get_band_color};
+use eq_ui::eq_graph_interaction::{filter_type_for_position, nearest_band, GraphMapper};
+use eq_ui::eq_graph_model::{get_band_color, EqBand, EqBandShape};
 use eq_ui::eq_graph_svg::{generate_all_eq_curves, generate_freq_labels, generate_grid_elements};
 
 const W: f64 = 480.0;
@@ -40,8 +40,17 @@ fn band(index: usize, freq: f32, gain: f32, shape: EqBandShape) -> EqBand {
 /// plain Dioxus SVG, exactly like the detached `EqProSurface` does.
 #[component]
 fn EqGraphSvg(bands: Vec<EqBand>) -> Element {
-    let curves =
-        generate_all_eq_curves(&bands, SAMPLE_RATE, MIN_FREQ, MAX_FREQ, DB_RANGE, 0.0, W, H, 128);
+    let curves = generate_all_eq_curves(
+        &bands,
+        SAMPLE_RATE,
+        MIN_FREQ,
+        MAX_FREQ,
+        DB_RANGE,
+        0.0,
+        W,
+        H,
+        128,
+    );
     let grid = generate_grid_elements(0.0, W, H, MIN_FREQ, MAX_FREQ, DB_RANGE);
     let labels = generate_freq_labels(0.0, W, H, MIN_FREQ, MAX_FREQ);
     let mapper = GraphMapper::new(MIN_FREQ, MAX_FREQ, DB_RANGE, W, H, 0.0);
@@ -105,10 +114,19 @@ fn graph_renders_expected_structure() {
     );
     // One per-band curve + one node per used band.
     for idx in 0..2 {
-        assert!(html.contains(&format!("eq-band-{idx}")), "band {idx} curve missing:\n{html}");
-        assert!(html.contains(&format!("eq-node-{idx}")), "band {idx} node missing:\n{html}");
+        assert!(
+            html.contains(&format!("eq-band-{idx}")),
+            "band {idx} curve missing:\n{html}"
+        );
+        assert!(
+            html.contains(&format!("eq-node-{idx}")),
+            "band {idx} node missing:\n{html}"
+        );
     }
-    assert!(!html.contains("eq-band-2"), "phantom band curve rendered:\n{html}");
+    assert!(
+        !html.contains("eq-band-2"),
+        "phantom band curve rendered:\n{html}"
+    );
 }
 
 #[test]
@@ -123,12 +141,28 @@ fn disabled_band_drops_its_curve_but_boosts_still_bend_the_response() {
     assert_ne!(flat, boosted, "boost did not change the rendered response");
     // Bypassed band: node still shown, per-band curve gone, response flat again.
     assert!(boosted.contains("eq-band-0"));
-    assert!(!bypassed.contains("eq-band-0"), "bypassed band still draws a curve");
-    assert!(bypassed.contains("eq-node-0"), "bypassed band lost its node");
+    assert!(
+        !bypassed.contains("eq-band-0"),
+        "bypassed band still draws a curve"
+    );
+    assert!(
+        bypassed.contains("eq-node-0"),
+        "bypassed band lost its node"
+    );
     let combined_of = |html: &str| {
-        html.split(r#"class="eq-combined" d=""#).nth(1).unwrap().split('"').next().unwrap().to_string()
+        html.split(r#"class="eq-combined" d=""#)
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap()
+            .to_string()
     };
-    assert_eq!(combined_of(&flat), combined_of(&bypassed), "bypassed band bent the response");
+    assert_eq!(
+        combined_of(&flat),
+        combined_of(&bypassed),
+        "bypassed band bent the response"
+    );
 }
 
 /// The interaction layer (what pointer events feed in the real editor):
@@ -137,17 +171,34 @@ fn disabled_band_drops_its_curve_but_boosts_still_bend_the_response() {
 #[test]
 fn graph_interaction_hit_test_and_shape_inference() {
     let mapper = GraphMapper::new(MIN_FREQ, MAX_FREQ, DB_RANGE, W, H, 0.0);
-    let bands = vec![band(0, 100.0, 6.0, EqBandShape::Bell), band(1, 5_000.0, 0.0, EqBandShape::Bell)];
+    let bands = vec![
+        band(0, 100.0, 6.0, EqBandShape::Bell),
+        band(1, 5_000.0, 0.0, EqBandShape::Bell),
+    ];
 
     // Click exactly on band 1's node → nearest_band finds it (distance 0).
     let (x, y) = (mapper.freq_to_x(5_000.0), mapper.db_to_y(0.0));
-    assert_eq!(nearest_band(&bands, mapper, x, y, 16.0).map(|(idx, _)| idx), Some(1));
-    // Click far from any node → no hit.
-    assert!(
-        nearest_band(&bands, mapper, mapper.freq_to_x(500.0), mapper.db_to_y(-10.0), 16.0).is_none()
+    assert_eq!(
+        nearest_band(&bands, mapper, x, y, 16.0).map(|(idx, _)| idx),
+        Some(1)
     );
+    // Click far from any node → no hit.
+    assert!(nearest_band(
+        &bands,
+        mapper,
+        mapper.freq_to_x(500.0),
+        mapper.db_to_y(-10.0),
+        16.0
+    )
+    .is_none());
 
     // Double-click near the low edge at 0 dB → a low cut, mid at a boost → a bell.
-    assert_eq!(filter_type_for_position(20.0, 0.0, DB_RANGE), EqBandShape::LowCut);
-    assert_eq!(filter_type_for_position(1_000.0, 6.0, DB_RANGE), EqBandShape::Bell);
+    assert_eq!(
+        filter_type_for_position(20.0, 0.0, DB_RANGE),
+        EqBandShape::LowCut
+    );
+    assert_eq!(
+        filter_type_for_position(1_000.0, 6.0, DB_RANGE),
+        EqBandShape::Bell
+    );
 }

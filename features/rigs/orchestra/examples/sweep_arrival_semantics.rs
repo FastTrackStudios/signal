@@ -22,10 +22,10 @@
 
 use std::path::PathBuf;
 
-use signal_orchestra::timing::{CountIn, mix_click, render_click, timing_corpus};
-use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
-use signal_sampler::SamplerRig;
+use signal_orchestra::timing::{mix_click, render_click, timing_corpus, CountIn};
+use signal_orchestra::{load_strings, CSS_CONFIG, CSS_ROOT};
 use signal_sampler::document::DocumentRenderOptions;
+use signal_sampler::SamplerRig;
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;

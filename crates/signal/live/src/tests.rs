@@ -1,9 +1,9 @@
 use super::*;
-use signal_proto::{ModuleType, seed_id};
+use signal_proto::{seed_id, ModuleType};
 use signal_storage::{
-    BlockRepoLive, Database, EngineRepoLive, LayerRepoLive, ModuleRepoLive, ProfileRepoLive,
-    RackRepoLive, RigRepoLive, SceneTemplateRepoLive, SetlistRepoLive, SongRepoLive,
-    runtime_seed_bundle,
+    runtime_seed_bundle, BlockRepoLive, Database, EngineRepoLive, LayerRepoLive, ModuleRepoLive,
+    ProfileRepoLive, RackRepoLive, RigRepoLive, SceneTemplateRepoLive, SetlistRepoLive,
+    SongRepoLive,
 };
 use std::time::{Duration, Instant};
 

@@ -68,8 +68,7 @@ impl RigConfig {
 
     /// Default config location: `~/.config/signal/plugin/rig.styx`.
     pub fn default_path() -> Option<PathBuf> {
-        std::env::var_os("HOME")
-            .map(|h| PathBuf::from(h).join(".config/signal/plugin/rig.styx"))
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/signal/plugin/rig.styx"))
     }
 
     /// Resolve per the priority in the module docs. `Ok(None)` means "no rig

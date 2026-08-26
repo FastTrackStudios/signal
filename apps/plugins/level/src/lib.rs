@@ -15,9 +15,7 @@
 use nice_plug::prelude::*;
 use std::sync::Arc;
 
-use level::{
-    DeBreathConfig, DeEssConfig, GateConfig, LevelerConfig, RiderConfig, VocalLeveler,
-};
+use level::{DeBreathConfig, DeEssConfig, GateConfig, LevelerConfig, RiderConfig, VocalLeveler};
 
 const PLUGIN_NAME: &str = "FTS Level";
 
@@ -48,7 +46,10 @@ impl Default for LevelParams {
             ride_target: FloatParam::new(
                 "Ride Target",
                 -18.0,
-                FloatRange::Linear { min: -40.0, max: 0.0 },
+                FloatRange::Linear {
+                    min: -40.0,
+                    max: 0.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -62,21 +63,30 @@ impl Default for LevelParams {
             gate_threshold: FloatParam::new(
                 "Gate",
                 -80.0,
-                FloatRange::Linear { min: -80.0, max: 0.0 },
+                FloatRange::Linear {
+                    min: -80.0,
+                    max: 0.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             deess_threshold: FloatParam::new(
                 "De-Ess",
                 0.0,
-                FloatRange::Linear { min: -50.0, max: 0.0 },
+                FloatRange::Linear {
+                    min: -50.0,
+                    max: 0.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             debreath_db: FloatParam::new(
                 "De-Breath",
                 0.0,
-                FloatRange::Linear { min: 0.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),

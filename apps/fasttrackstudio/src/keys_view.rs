@@ -48,7 +48,9 @@ enum DlState {
 /// Keep the screen awake exactly while downloads run (iOS suspends the
 /// app — and its sockets — when the phone locks).
 fn sync_keep_awake(downloads: &HashMap<String, DlState>) {
-    let active = downloads.values().any(|d| matches!(d, DlState::Running { .. }));
+    let active = downloads
+        .values()
+        .any(|d| matches!(d, DlState::Running { .. }));
     #[cfg(target_os = "ios")]
     crate::ios_orientation::set_idle_timer_disabled(active);
     #[cfg(not(target_os = "ios"))]
@@ -427,12 +429,16 @@ fn LibraryPage(downloaded: Vec<String>) -> Element {
         let keys = keys.clone();
         move |info: PackInfo| {
             let name = info.name.clone();
-            downloads
-                .write()
-                .insert(name.clone(), DlState::Running { done: 0, total: info.size_bytes });
+            downloads.write().insert(
+                name.clone(),
+                DlState::Running {
+                    done: 0,
+                    total: info.size_bytes,
+                },
+            );
             sync_keep_awake(&downloads());
-            let dl_source = source()
-                .unwrap_or_else(|| pack_client::PackSource::Vox(EngineTarget::current()));
+            let dl_source =
+                source().unwrap_or_else(|| pack_client::PackSource::Vox(EngineTarget::current()));
             let (mut rx, cancel) =
                 pack_client::start_download(dl_source, info, pack_client::keys_packs_dir());
             cancels.write().insert(name.clone(), cancel);
@@ -441,10 +447,14 @@ fn LibraryPage(downloaded: Vec<String>) -> Element {
                 while let Some(ev) = rx.next().await {
                     match ev {
                         DownloadEvent::Progress { done, total } => {
-                            downloads.write().insert(name.clone(), DlState::Running { done, total });
+                            downloads
+                                .write()
+                                .insert(name.clone(), DlState::Running { done, total });
                         }
                         DownloadEvent::Paused { done, total } => {
-                            downloads.write().insert(name.clone(), DlState::Paused { done, total });
+                            downloads
+                                .write()
+                                .insert(name.clone(), DlState::Paused { done, total });
                         }
                         DownloadEvent::Done(_) => {
                             downloads.write().insert(name.clone(), DlState::Done);

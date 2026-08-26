@@ -21,8 +21,8 @@ use std::path::Path;
 
 use facet::Facet;
 
-use crate::SamplerError;
 use crate::engine_spec::FxChainSlot;
+use crate::SamplerError;
 
 #[derive(Debug, Clone, Facet)]
 pub struct ModuleSpec {

@@ -49,9 +49,9 @@ pub mod variation;
 
 use active_context::ActiveContextState;
 use events::EventBus;
-use signal_live::SignalLive;
 use signal_live::engine::patch_applier::DawPatchApplier;
 use signal_live::engine::rig_scene_applier::RigSceneApplier;
+use signal_live::SignalLive;
 use signal_proto::{
     resolve::{ResolveError, ResolveTarget, ResolvedGraph},
     tagging::{BrowserHit, BrowserIndex, BrowserQuery},

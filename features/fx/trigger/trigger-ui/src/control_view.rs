@@ -9,8 +9,8 @@
 //! widgets (knobs, toggle, segmented, drag provider) come from
 //! [`fts_audio_ui`]; theme + layout primitives from [`architect_ui`].
 
+use architect_ui::prelude::{default_theme_preset, ThemeMode, ThemeProvider, ThemeState};
 use audiocore_core::prelude::*;
-use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
 use fts_audio_ui::prelude::*;
 
 use crate::param_adapter::param_handle;
@@ -42,7 +42,9 @@ fn AppShell() -> Element {
     let _theme = use_init_theme();
 
     let shared = use_context::<SharedState>();
-    let ui = shared.get::<TriggerUiState>().expect("TriggerUiState missing");
+    let ui = shared
+        .get::<TriggerUiState>()
+        .expect("TriggerUiState missing");
     let ctx = use_param_context();
     let params = &ui.params;
 

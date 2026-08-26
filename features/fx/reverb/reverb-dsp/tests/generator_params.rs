@@ -174,8 +174,7 @@ fn bloom_harmonics_adds_octave_partial() {
         assert!(v.is_finite(), "harmonics produced non-finite output");
     }
     let body = (SR * 1.0) as usize..(SR * 2.8) as usize;
-    let ratio =
-        |buf: &[f64]| goertzel(buf, 660.0) / goertzel(buf, 330.0).max(1e-30);
+    let ratio = |buf: &[f64]| goertzel(buf, 660.0) / goertzel(buf, 330.0).max(1e-30);
     let r_on = ratio(&on[body.clone()]);
     let r_off = ratio(&off[body]);
     assert!(
@@ -252,9 +251,8 @@ fn chorale_voice_and_mod_change_the_output() {
         assert!(v.is_finite(), "chorale params produced non-finite output");
     }
 
-    let diff = |a: &[f64], b: &[f64]| -> f64 {
-        a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).sum()
-    };
+    let diff =
+        |a: &[f64], b: &[f64]| -> f64 { a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).sum() };
     let d_voice = diff(&tenor, &baritone);
     let d_mod = diff(&tenor, &modded);
     assert!(d_voice > 1e-3, "Baritone must differ from Tenor: {d_voice}");

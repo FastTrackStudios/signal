@@ -114,11 +114,9 @@ pub fn CompGraph(
     let frame_tick: Signal<u64> = use_signal(|| 0);
     use_hook(|| {
         let updater = dioxus_core::schedule_update();
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(33));
-                updater();
-            }
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_millis(33));
+            updater();
         });
     });
     let _ = *frame_tick.read();

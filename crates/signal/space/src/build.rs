@@ -7,7 +7,7 @@ use std::time::UNIX_EPOCH;
 use rayon::prelude::*;
 
 use crate::analyze::{self, DIM};
-use crate::{Space, SpaceItem, SPACE_VERSION};
+use crate::{SPACE_VERSION, Space, SpaceItem};
 
 /// Progress callback: (analyzed_so_far, total_to_analyze).
 pub type Progress = dyn Fn(usize, usize) + Sync;
@@ -27,19 +27,61 @@ pub enum Granularity {
 /// bucket (articulation, mic, velocity, round-robin) rather than a piece.
 fn is_variant_component(c: &str) -> bool {
     const VARIANTS: &[&str] = &[
-        "hit", "hits", "choke", "chokes", "bow", "bell", "edge", "tip", "open",
-        "closed", "tight", "rimshot", "rim", "crossstick", "cross-stick",
-        "cross stick", "flam", "roll", "ruff", "wires", "wireson", "wiresoff",
-        "oh", "overhead", "overheads", "room", "rooms", "close", "in", "out",
-        "sub", "top", "bottom", "mixed", "mono", "stereo", "samples", "wav",
-        "soft", "medium", "hard", "pedal", "chick", "ching", "1-shot", "oneshot",
-        "tb", "trigger", "snareoff", "snareson",
+        "hit",
+        "hits",
+        "choke",
+        "chokes",
+        "bow",
+        "bell",
+        "edge",
+        "tip",
+        "open",
+        "closed",
+        "tight",
+        "rimshot",
+        "rim",
+        "crossstick",
+        "cross-stick",
+        "cross stick",
+        "flam",
+        "roll",
+        "ruff",
+        "wires",
+        "wireson",
+        "wiresoff",
+        "oh",
+        "overhead",
+        "overheads",
+        "room",
+        "rooms",
+        "close",
+        "in",
+        "out",
+        "sub",
+        "top",
+        "bottom",
+        "mixed",
+        "mono",
+        "stereo",
+        "samples",
+        "wav",
+        "soft",
+        "medium",
+        "hard",
+        "pedal",
+        "chick",
+        "ching",
+        "1-shot",
+        "oneshot",
+        "tb",
+        "trigger",
+        "snareoff",
+        "snareson",
     ];
     // "OH (Overhead)"-style components match on the text before the paren.
     let lc = c.to_lowercase();
     let lc = lc.split(" (").next().unwrap_or(&lc).trim();
-    VARIANTS.contains(&lc)
-        || regex_like_rr_vl(lc)
+    VARIANTS.contains(&lc) || regex_like_rr_vl(lc)
 }
 
 /// rr3 / vl2 / v10 / velocity buckets.
@@ -76,7 +118,11 @@ fn piece_key(rel: &Path) -> String {
             .filter(|t| !is_variant_component(t))
             .collect::<Vec<_>>()
             .join(" ");
-        if cleaned.is_empty() { stem.to_string() } else { cleaned }
+        if cleaned.is_empty() {
+            stem.to_string()
+        } else {
+            cleaned
+        }
     } else {
         dirs.join("/")
     }
@@ -118,7 +164,12 @@ pub fn build(
         })
         .filter_map(|e| {
             let md = e.metadata().ok()?;
-            let mtime = md.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
+            let mtime = md
+                .modified()
+                .ok()?
+                .duration_since(UNIX_EPOCH)
+                .ok()?
+                .as_secs();
             Some((e.into_path(), md.len(), mtime))
         })
         .collect();
@@ -284,9 +335,10 @@ fn build_pieces(
             }
             let total_bytes: u64 = members.iter().map(|m| m.1).sum();
             let max_mtime: u64 = members.iter().map(|m| m.2).max().unwrap_or(0);
-            if let (Some((prev, prev_feats)), Some(&pi)) =
-                (previous, reusable.get(&(key.clone(), total_bytes, max_mtime)))
-            {
+            if let (Some((prev, prev_feats)), Some(&pi)) = (
+                previous,
+                reusable.get(&(key.clone(), total_bytes, max_mtime)),
+            ) {
                 let mut item = prev.items[pi].clone();
                 item.x = 0.0;
                 item.y = 0.0;

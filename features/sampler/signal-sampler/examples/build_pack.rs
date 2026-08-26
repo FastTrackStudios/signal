@@ -14,13 +14,19 @@ use std::path::PathBuf;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     let samples_root = PathBuf::from(
-        args.next().expect("usage: build_pack <samples_root> <output.signalpack>"),
+        args.next()
+            .expect("usage: build_pack <samples_root> <output.signalpack>"),
     );
     let output = PathBuf::from(
-        args.next().expect("usage: build_pack <samples_root> <output.signalpack>"),
+        args.next()
+            .expect("usage: build_pack <samples_root> <output.signalpack>"),
     );
     let spec = samples_root.join("library.styx");
-    assert!(spec.exists(), "no library.styx in {}", samples_root.display());
+    assert!(
+        spec.exists(),
+        "no library.styx in {}",
+        samples_root.display()
+    );
 
     // Collect the audio samples (flat, sorted for a deterministic pack layout).
     let mut paths: Vec<PathBuf> = std::fs::read_dir(&samples_root)?
@@ -29,7 +35,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|p| {
             p.extension()
                 .and_then(|e| e.to_str())
-                .map(|e| matches!(e.to_ascii_lowercase().as_str(), "flac" | "wav" | "aif" | "aiff"))
+                .map(|e| {
+                    matches!(
+                        e.to_ascii_lowercase().as_str(),
+                        "flac" | "wav" | "aif" | "aiff"
+                    )
+                })
                 .unwrap_or(false)
         })
         .collect();
@@ -53,7 +64,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Some source files are undecodable (the original packs skipped these
         // too). Warn loudly but still produce the pack — a partial pack matches
         // the historical builds. Fail only if *nothing* packed.
-        eprintln!("build_pack: WARNING — {} sample(s) skipped (undecodable)", stats.failed);
+        eprintln!(
+            "build_pack: WARNING — {} sample(s) skipped (undecodable)",
+            stats.failed
+        );
     }
     if stats.prepared == 0 {
         return Err("no samples packed".into());

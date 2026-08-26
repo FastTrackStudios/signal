@@ -13,9 +13,9 @@
 //! document side, which normally derives it from the library spec.
 
 use keyflow_orchestra::mirror::stage1_annotations as mirror_annotations;
-use keyflow_orchestra::{Config, MidiNote, detect_profile, process_part};
+use keyflow_orchestra::{detect_profile, process_part, Config, MidiNote};
 use signal_sampler::document::{
-    DocCc, DocNote, TrackDocument, stage1_annotations as doc_annotations,
+    stage1_annotations as doc_annotations, DocCc, DocNote, TrackDocument,
 };
 
 fn corpus_files() -> Vec<std::path::PathBuf> {

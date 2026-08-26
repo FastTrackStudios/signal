@@ -15,15 +15,14 @@
 
 use std::path::PathBuf;
 
-use keyflow_orchestra::{Config, ProfileKind, process_part, score};
-use signal_sampler::SamplerRig;
+use keyflow_orchestra::{process_part, score, Config, ProfileKind};
 use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
+use signal_sampler::SamplerRig;
 
 const DEFAULT_MXL: &str = "/run/media/Development/FastTrackStudio/keyflow/examples/mxl/GOING HOME - Dvorak New World Symphony 1.6 mxml.mxl";
 const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
-const CSS_CONFIG: &str =
-    "features/rigs/orchestra/specs/cinematic-strings.styx";
+const CSS_CONFIG: &str = "features/rigs/orchestra/specs/cinematic-strings.styx";
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
 /// Determinism seed — persisted with a project in real use; fixed here so

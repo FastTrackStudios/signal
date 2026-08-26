@@ -1,6 +1,6 @@
-use crate::NamError;
 use crate::gain_group::GainStageGroup;
 use crate::nam_file::{NamFileEntry, NamFileKind};
+use crate::NamError;
 use serde::{Deserialize, Serialize};
 use signal_proto::tagging::TagCategory;
 use std::collections::HashMap;

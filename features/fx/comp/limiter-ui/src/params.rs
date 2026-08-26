@@ -6,8 +6,8 @@
 
 use audiocore_core::prelude::*;
 use fts_plug_ui::prelude::{PeakMeter, WaveRing};
-use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
+use std::sync::Arc;
 
 /// Audio-thread → UI metering.
 pub struct LimiterUiState {
@@ -73,31 +73,37 @@ impl Default for LimiterParams {
             input_gain: FloatParam::new(
                 "Input",
                 0.0,
-                FloatRange::Linear { min: -12.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: -12.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             ceiling: FloatParam::new(
                 "Ceiling",
                 -0.3,
-                FloatRange::Linear { min: -20.0, max: 0.0 },
+                FloatRange::Linear {
+                    min: -20.0,
+                    max: 0.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             release_ms: FloatParam::new(
                 "Release",
                 100.0,
-                FloatRange::Skewed { min: 5.0, max: 500.0, factor: 0.5 },
+                FloatRange::Skewed {
+                    min: 5.0,
+                    max: 500.0,
+                    factor: 0.5,
+                },
             )
             .with_unit(" ms")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
-            character: FloatParam::new(
-                "Character",
-                0.5,
-                FloatRange::Linear { min: 0.0, max: 1.0 },
-            )
-            .with_value_to_string(formatters::v2s_f32_percentage(0))
-            .with_unit("%"),
+            character: FloatParam::new("Character", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_unit("%"),
             true_peak: BoolParam::new("True Peak", true),
         }
     }

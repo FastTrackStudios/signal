@@ -4,7 +4,7 @@
 //! each library family, calls `SamplerRig::load_pack`, fires note_on, and
 //! asserts the rendered audio buffer has non-zero RMS.
 
-use signal_sampler::{PlayerPatch, SampleEngine, SamplerBank, SamplerRig, read_pack_header};
+use signal_sampler::{read_pack_header, PlayerPatch, SampleEngine, SamplerBank, SamplerRig};
 use std::path::Path;
 
 const SAMPLES: &[(&str, &str, u8)] = &[

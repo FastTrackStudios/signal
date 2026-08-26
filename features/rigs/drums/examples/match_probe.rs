@@ -9,8 +9,12 @@ use signal_sampler::SamplerRig;
 const KIT: &str = "kit";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let kit = std::env::args().nth(1).ok_or("usage: match_probe <kit> <mm2.preset>")?;
-    let mm2 = std::env::args().nth(2).ok_or("usage: match_probe <kit> <mm2.preset>")?;
+    let kit = std::env::args()
+        .nth(1)
+        .ok_or("usage: match_probe <kit> <mm2.preset>")?;
+    let mm2 = std::env::args()
+        .nth(2)
+        .ok_or("usage: match_probe <kit> <mm2.preset>")?;
 
     let rig = SamplerRig::new_offline(48_000);
     signal_drums::load_preset_kit(&rig, KIT, &kit)?;
@@ -22,11 +26,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for ch in &eng.channels {
             total += 1;
             let piece = library::slot_label(&eng.label);
-            let target = if ch.mic_label.is_empty() { piece } else { format!("{} {}", piece, ch.mic_label) };
+            let target = if ch.mic_label.is_empty() {
+                piece
+            } else {
+                format!("{} {}", piece, ch.mic_label)
+            };
             match mm2fx::match_strip(&mixer, &target) {
                 Some(s) => {
                     matched += 1;
-                    println!("  ✓ {:<16} → '{}'  ({} fx)", target, s.name, s.fx_slots().len());
+                    println!(
+                        "  ✓ {:<16} → '{}'  ({} fx)",
+                        target,
+                        s.name,
+                        s.fx_slots().len()
+                    );
                 }
                 None => println!("  ✗ {:<16} (no MM2 strip)", target),
             }
@@ -34,7 +47,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     for bus in &layout.buses {
         match mm2fx::match_strip(&mixer, &bus.label) {
-            Some(s) => println!("  ✓ BUS {:<12} → '{}'  ({} fx)", bus.label, s.name, s.fx_slots().len()),
+            Some(s) => println!(
+                "  ✓ BUS {:<12} → '{}'  ({} fx)",
+                bus.label,
+                s.name,
+                s.fx_slots().len()
+            ),
             None => println!("  ✗ BUS {:<12} (no MM2 strip)", bus.label),
         }
     }

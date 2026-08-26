@@ -14,7 +14,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let preset_path = PathBuf::from(LIB).join("Presets/Metal Monster.signalpreset");
     let dir = preset_path.parent().unwrap().to_path_buf();
     let spec = PresetSpec::from_file(&preset_path)?;
-    let cur_kick = spec.engines.iter().find(|e| e.id == "kick").map(|e| e.engine.clone());
+    let cur_kick = spec
+        .engines
+        .iter()
+        .find(|e| e.id == "kick")
+        .map(|e| e.engine.clone());
     println!("current kick engine: {:?}", cur_kick);
 
     // Find a *different* kick engine in the library (engine_type == "kick").
@@ -27,7 +31,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         if let Ok(es) = EngineSpec::from_file(&p) {
             if es.engine_type.eq_ignore_ascii_case("kick")
-                && !p.file_name().unwrap().to_string_lossy().contains("Tama-Starclassic-Maple")
+                && !p
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .contains("Tama-Starclassic-Maple")
             {
                 alt_kick = Some(p);
                 break;
@@ -80,7 +88,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Verify the swapped engine's name differs from the original.
     let orig_stem = cur_kick
         .as_deref()
-        .map(|s| Path::new(s).file_stem().unwrap().to_string_lossy().to_string())
+        .map(|s| {
+            Path::new(s)
+                .file_stem()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        })
         .unwrap_or_default();
     let new_stem = alt_kick.file_stem().unwrap().to_string_lossy().to_string();
     println!("\n{} vs {}", orig_stem, new_stem);

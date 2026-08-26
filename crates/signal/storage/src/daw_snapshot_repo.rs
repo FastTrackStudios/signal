@@ -42,14 +42,14 @@ pub struct StoredChunkSnapshot {
 pub trait DawSnapshotRepo: Send + Sync + 'static {
     // Parameter snapshots
     async fn list_param_snapshots(&self, owner_id: &str)
-    -> StorageResult<Vec<StoredParamSnapshot>>;
+        -> StorageResult<Vec<StoredParamSnapshot>>;
     async fn save_param_snapshot(&self, snapshot: &StoredParamSnapshot) -> StorageResult<()>;
     async fn delete_param_snapshot(&self, id: &str) -> StorageResult<()>;
     async fn delete_param_snapshots_by_owner(&self, owner_id: &str) -> StorageResult<()>;
 
     // Chunk snapshots
     async fn list_chunk_snapshots(&self, owner_id: &str)
-    -> StorageResult<Vec<StoredChunkSnapshot>>;
+        -> StorageResult<Vec<StoredChunkSnapshot>>;
     async fn save_chunk_snapshot(&self, snapshot: &StoredChunkSnapshot) -> StorageResult<()>;
     async fn delete_chunk_snapshot(&self, id: &str) -> StorageResult<()>;
     async fn delete_chunk_snapshots_by_owner(&self, owner_id: &str) -> StorageResult<()>;

@@ -356,7 +356,11 @@ impl Soundsource for NativeWavetable {
             mk(2, "fm_depth", self.cfg.fm_depth as f64),
             mk(3, "ring_mix", self.cfg.ring_mix as f64),
             // 0.5 center → ±24 semitones.
-            mk(4, "tune", (self.pitch_mult.log2() * 12.0 / 48.0 + 0.5) as f64),
+            mk(
+                4,
+                "tune",
+                (self.pitch_mult.log2() * 12.0 / 48.0 + 0.5) as f64,
+            ),
             // Square pulse width (0.5 symmetric).
             mk(5, "symmetry", self.duty as f64),
             // Harmonia level scale.

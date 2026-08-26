@@ -1,6 +1,6 @@
 use crate::ir::parse_wav_header;
 use crate::nam_file::{
-    NamFileEntry, NamFileKind, infer_tags_from_metadata, kind_from_path, parse_nam_metadata,
+    infer_tags_from_metadata, kind_from_path, parse_nam_metadata, NamFileEntry, NamFileKind,
 };
 use crate::{NamCatalog, NamError};
 use sha2::{Digest, Sha256};

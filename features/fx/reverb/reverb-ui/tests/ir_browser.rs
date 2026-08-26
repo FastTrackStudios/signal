@@ -71,9 +71,11 @@ async fn clicking_an_impulse_records_it_and_hands_it_to_the_loader() -> dioxus_t
     let el = fx.tester.query(by_testid("ir-entry")).immediately()?;
     let (ox, oy) = el.document_origin();
     let (w, h) = el.size();
-    fx.tester.pointer_down(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    fx.tester
+        .pointer_down(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
     let _ = fx.tester.pump().await;
-    fx.tester.pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    fx.tester
+        .pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
     fx.settle().await;
 
     let path = fx.params.ir_path.read().clone();

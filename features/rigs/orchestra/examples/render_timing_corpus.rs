@@ -21,12 +21,12 @@ use std::io::Write as _;
 use std::path::PathBuf;
 
 use signal_orchestra::timing::{
-    CountIn, OnsetKind, mix_click, pitch_arrival, render_click, render_live_replay,
-    spectral_flux, timing_corpus,
+    mix_click, pitch_arrival, render_click, render_live_replay, spectral_flux, timing_corpus,
+    CountIn, OnsetKind,
 };
-use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
+use signal_orchestra::{load_strings, CSS_CONFIG, CSS_ROOT};
+use signal_sampler::document::{qn_to_frame, qn_to_sec, DocumentRenderOptions};
 use signal_sampler::SamplerRig;
-use signal_sampler::document::{DocumentRenderOptions, qn_to_frame, qn_to_sec};
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
@@ -193,6 +193,9 @@ fn main() -> eyre::Result<()> {
             write_wav(&out_dir.join(format!("click_only_{bpm}bpm.wav")), &solo)?;
         }
     }
-    println!("wrote corpus renders + manifest.tsv to {}", out_dir.display());
+    println!(
+        "wrote corpus renders + manifest.tsv to {}",
+        out_dir.display()
+    );
     Ok(())
 }

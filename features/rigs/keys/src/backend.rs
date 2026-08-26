@@ -18,9 +18,8 @@ use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
 use signal_keys_proto::{
-    KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel,
-    KeysMacro, KeysMeter, KeysMixer, KeysNode, KeysPackRef, KeysPerform, KeysPreset, KeysStack,
-    KeysStatus,
+    KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel, KeysMacro,
+    KeysMeter, KeysMixer, KeysNode, KeysPackRef, KeysPerform, KeysPreset, KeysStack, KeysStatus,
 };
 
 use crate::profile::{worship_profile, KeysProfile};
@@ -2200,7 +2199,10 @@ impl KeysRigBackend {
         let Some((profile, index, _lanes)) = self.profile_inputs() else {
             return (Vec::new(), Vec::new());
         };
-        (pack_refs_for(&profile, &index), lane_refs_for(&profile, &index))
+        (
+            pack_refs_for(&profile, &index),
+            lane_refs_for(&profile, &index),
+        )
     }
 
     /// Push every live fader / mute / solo into the running program.

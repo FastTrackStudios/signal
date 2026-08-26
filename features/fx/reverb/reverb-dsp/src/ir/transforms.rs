@@ -281,7 +281,6 @@ fn prepend_zeros(buf: &[f64], n: usize) -> Vec<f64> {
     out
 }
 
-
 /// Time-varying decay EQ: low shelf (band 0) + high shelf (band 1)
 /// whose gains ramp linearly in dB from 0 at the head to the band's
 /// `end_gain_db` at the tail. Coefficients refresh per ~10 ms chunk;

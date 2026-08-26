@@ -6,8 +6,8 @@
 
 use atomic_float::AtomicF32;
 use audiocore_core::prelude::*;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 /// Samples kept in each waveform history ring (one per processed block —
 /// ~2.7 s at 512-sample blocks / 48 kHz).
@@ -96,9 +96,7 @@ pub const STYLE_LABELS: &[&str] = &["Clean", "FET", "VCA", "Opto"];
 /// Character (drive) waveshaper, mirroring `ProC3Compressor::drive_transfer`'s
 /// `character_mode` dispatch: 0 tanh, 1 atan, 2 x/(1+|x|), 3 HF-only,
 /// 4 cubic, 5 hard clip, 6 asymmetric tanh.
-pub const CHARACTER_LABELS: &[&str] = &[
-    "Tape", "Tube", "Trans", "Bright", "Cubic", "Clip", "Asym",
-];
+pub const CHARACTER_LABELS: &[&str] = &["Tape", "Tube", "Trans", "Bright", "Cubic", "Clip", "Asym"];
 
 /// Profile names in `comp_profiles::all_profiles()` order — the order the
 /// `profile` parameter's values are in, so **append only**.
@@ -162,7 +160,6 @@ pub struct CompStageParams {
     pub stereo_link: FloatParam,
 
     // ── Extended surface (appended — never reorder the eight above) ──────
-
     /// Detector/ballistics model — see [`STYLE_LABELS`].
     #[id = "style"]
     pub style: IntParam,
@@ -341,8 +338,7 @@ pub struct ScBandParams {
 pub const SC_SHAPE_LABELS: &[&str] = &["Bell", "Low Shelf", "High Shelf", "Low Cut", "High Cut"];
 
 /// Default sidechain band frequencies — a useful spread, idle at 0 dB.
-pub const SC_DEFAULT_FREQS: [f32; SC_EQ_BANDS] =
-    [80.0, 250.0, 700.0, 1_800.0, 4_500.0, 10_000.0];
+pub const SC_DEFAULT_FREQS: [f32; SC_EQ_BANDS] = [80.0, 250.0, 700.0, 1_800.0, 4_500.0, 10_000.0];
 
 impl ScBandParams {
     fn new(default_freq: f32) -> Self {
@@ -364,7 +360,10 @@ impl ScBandParams {
             gain_db: FloatParam::new(
                 "SC Gain",
                 0.0,
-                FloatRange::Linear { min: -24.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -400,7 +399,10 @@ impl Default for LaneParams {
             gain_db: FloatParam::new(
                 "Lane Gain",
                 0.0,
-                FloatRange::Linear { min: -24.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -542,7 +544,10 @@ impl Default for CompParams {
             output_trim_db: FloatParam::new(
                 "Stack Trim",
                 0.0,
-                FloatRange::Linear { min: -24.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -572,12 +577,18 @@ impl CompStageParams {
             lane: IntParam::new(
                 "Lane",
                 0,
-                IntRange::Linear { min: 0, max: MAX_STAGES as i32 - 1 },
+                IntRange::Linear {
+                    min: 0,
+                    max: MAX_STAGES as i32 - 1,
+                },
             ),
             threshold_db: FloatParam::new(
                 "Threshold",
                 -20.0,
-                FloatRange::Linear { min: -60.0, max: 0.0 },
+                FloatRange::Linear {
+                    min: -60.0,
+                    max: 0.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -617,14 +628,20 @@ impl CompStageParams {
             knee_db: FloatParam::new(
                 "Knee",
                 6.0,
-                FloatRange::Linear { min: 0.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             makeup_db: FloatParam::new(
                 "Makeup",
                 0.0,
-                FloatRange::Linear { min: -24.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -650,7 +667,10 @@ impl CompStageParams {
             input_gain_db: FloatParam::new(
                 "Input",
                 0.0,
-                FloatRange::Linear { min: -24.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -662,13 +682,9 @@ impl CompStageParams {
             )
             .with_unit("%")
             .with_value_to_string(formatters::v2s_f32_percentage(0)),
-            feedback: FloatParam::new(
-                "Feedback",
-                0.0,
-                FloatRange::Linear { min: 0.0, max: 1.0 },
-            )
-            .with_unit("%")
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            feedback: FloatParam::new("Feedback", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
             hold_ms: FloatParam::new(
                 "Hold",
                 0.0,
@@ -697,7 +713,10 @@ impl CompStageParams {
             inertia_decay: FloatParam::new(
                 "Inertia Decay",
                 0.0,
-                FloatRange::Linear { min: 0.0, max: 0.999 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 0.999,
+                },
             )
             .with_unit("%")
             .with_value_to_string(formatters::v2s_f32_percentage(0)),
@@ -725,13 +744,23 @@ impl CompStageParams {
             )
             .with_unit(" Hz")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
-            range_db: FloatParam::new("Range", 60.0, FloatRange::Linear { min: 0.0, max: 60.0 })
-                .with_unit(" dB")
-                .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            range_db: FloatParam::new(
+                "Range",
+                60.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 60.0,
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
             expander_threshold_db: FloatParam::new(
                 "Exp Threshold",
                 -80.0,
-                FloatRange::Linear { min: -80.0, max: 0.0 },
+                FloatRange::Linear {
+                    min: -80.0,
+                    max: 0.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -749,7 +778,10 @@ impl CompStageParams {
             upward_threshold_db: FloatParam::new(
                 "Up Threshold",
                 -60.0,
-                FloatRange::Linear { min: -60.0, max: 0.0 },
+                FloatRange::Linear {
+                    min: -60.0,
+                    max: 0.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -847,7 +879,16 @@ mod tests {
         // in order, unprefixed.
         assert_eq!(
             &ids[..8],
-            &["threshold", "ratio", "attack", "release", "knee", "makeup", "mix", "link"],
+            &[
+                "threshold",
+                "ratio",
+                "attack",
+                "release",
+                "knee",
+                "makeup",
+                "mix",
+                "link"
+            ],
         );
         // Stage 2+ prefixed.
         assert!(ids.contains(&"s2_threshold"));

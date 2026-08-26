@@ -21,13 +21,13 @@ use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
-use architect::{HasDispatcher, Layer, PubSub, Services, layers};
+use architect::{layers, HasDispatcher, Layer, PubSub, Services};
 use midicore::{MidiEvent, MidiMonitor};
 use signal_bass_proto::bass::{BassEvent, BassRig as BassRigSvc, BassRigStreamSource};
 use signal_bass_proto::{BassBlock, BassPreset, BassStatus, PresetKind};
 use signal_proto::block::BlockType;
-use signal_sampler::{GuitarRig, ProfileRig, RigManager, RigPatch, RigProfile};
 use signal_sampler::rig::RigBlock;
+use signal_sampler::{GuitarRig, ProfileRig, RigManager, RigPatch, RigProfile};
 
 use crate::library::{BassLastState, BassLibrary, BassMidiMapDef, BassPresetDef};
 
@@ -133,7 +133,11 @@ impl BassRigBackend {
     fn reattach_midi(&self) {
         let port = {
             let map = self.inner.midi_map.lock_ok();
-            if map.port.is_empty() { None } else { Some(map.port.clone()) }
+            if map.port.is_empty() {
+                None
+            } else {
+                Some(map.port.clone())
+            }
         };
         let inner = self.inner.clone();
         midicore::attach::reattach(
@@ -184,7 +188,9 @@ impl BassRigBackend {
                     tracing::info!("bass rig: program change → preset {}", u8::from(program));
                     BassRigSvc::select_preset(self, u8::from(program) as u32);
                 }
-                MidiEvent::ControlChange { controller, value, .. } => {
+                MidiEvent::ControlChange {
+                    controller, value, ..
+                } => {
                     let (cc, down) = (u8::from(controller) as u32, u8::from(value) > 0);
                     if cc == map.prev_cc {
                         if down && !tick.prev_down {
@@ -248,9 +254,17 @@ impl BassRigBackend {
             Ok(g) => {
                 tracing::info!(
                     "bass rig live: in {} ch{} → out {}",
-                    if mgr.audio.input_device.is_empty() { "default" } else { &mgr.audio.input_device },
+                    if mgr.audio.input_device.is_empty() {
+                        "default"
+                    } else {
+                        &mgr.audio.input_device
+                    },
                     mgr.audio.input_channel + 1,
-                    if mgr.audio.output_device.is_empty() { "default" } else { &mgr.audio.output_device },
+                    if mgr.audio.output_device.is_empty() {
+                        "default"
+                    } else {
+                        &mgr.audio.output_device
+                    },
                 );
                 let mut prig = ProfileRig::new(g);
                 // One loudness authority: preset trims from the library.
@@ -261,7 +275,10 @@ impl BassRigBackend {
                 };
                 match prig.load_profile(profile, None) {
                     Ok(()) => {
-                        tracing::info!("bass profile loaded ({} presets installed)", prig.patches().len())
+                        tracing::info!(
+                            "bass profile loaded ({} presets installed)",
+                            prig.patches().len()
+                        )
                     }
                     Err(e) => tracing::error!("bass profile load failed: {e}"),
                 }
@@ -360,7 +377,9 @@ impl BassRigBackend {
             }
         };
         if !ok {
-            tracing::info!("bass rig: preset '{name}' not available (missing assets / sampled stub)");
+            tracing::info!(
+                "bass rig: preset '{name}' not available (missing assets / sampled stub)"
+            );
             return;
         }
         {
@@ -400,7 +419,8 @@ impl BassRigBackend {
             active
                 .and_then(|name| {
                     order.iter().position(|i| {
-                        defs.get(*i).is_some_and(|d| d.name.eq_ignore_ascii_case(&name))
+                        defs.get(*i)
+                            .is_some_and(|d| d.name.eq_ignore_ascii_case(&name))
                     })
                 })
                 .unwrap_or(0) as i32
@@ -411,9 +431,15 @@ impl BassRigBackend {
 
     /// Publish full state — call after every mutation.
     fn publish_all(&self) {
-        self.inner.events.publish(BassEvent::Status(BassRigSvc::status(self)));
-        self.inner.events.publish(BassEvent::Library(BassRigSvc::presets(self)));
-        self.inner.events.publish(BassEvent::Chain(BassRigSvc::chain(self)));
+        self.inner
+            .events
+            .publish(BassEvent::Status(BassRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(BassEvent::Library(BassRigSvc::presets(self)));
+        self.inner
+            .events
+            .publish(BassEvent::Chain(BassRigSvc::chain(self)));
     }
 }
 
@@ -442,11 +468,12 @@ fn build_profile(defs: &[BassPresetDef]) -> (RigProfile, Vec<bool>) {
             available.push(false);
             continue;
         }
-        let mut patch =
-            RigPatch::new(&def.name).with_trims(def.input_trim_db, def.output_trim_db);
+        let mut patch = RigPatch::new(&def.name).with_trims(def.input_trim_db, def.output_trim_db);
         if !def.drive_nam.is_empty() {
             patch = patch.with_block(
-                RigBlock::of_type(BlockType::Drive).with_nam(&def.drive_nam).named("Drive"),
+                RigBlock::of_type(BlockType::Drive)
+                    .with_nam(&def.drive_nam)
+                    .named("Drive"),
             );
         }
         if !def.nam.is_empty() {
@@ -504,13 +531,19 @@ impl RigBackend for BassRigBackend {
     /// Publish `Status` on the transport edge — including the final
     /// `running: false` event when the rig stops, so remotes see it.
     fn on_running_edge(&self, _running: bool) {
-        self.inner.events.publish(BassEvent::Status(BassRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(BassEvent::Status(BassRigSvc::status(self)));
     }
 
     /// Status + recent MIDI at meter rate while running.
     fn on_running_tick(&self) {
-        self.inner.events.publish(BassEvent::Status(BassRigSvc::status(self)));
-        self.inner.events.publish(BassEvent::Midi(self.inner.monitor.recent()));
+        self.inner
+            .events
+            .publish(BassEvent::Status(BassRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(BassEvent::Midi(self.inner.monitor.recent()));
     }
 
     fn midi_ports(&self) -> Vec<String> {
@@ -534,22 +567,25 @@ impl BassRigSvc for BassRigBackend {
             return;
         }
         let backend = self.clone();
-        let _ = std::thread::Builder::new().name("bass-open".into()).spawn(move || {
-            let opened = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                // Already live with unchanged prefs? No-op instead of a gap.
-                let prefs = format!("{:?}", RigManager::load(AUDIO_RIG_NAME).audio);
-                let live = backend.inner.rig.lock_ok().is_some();
-                if live && backend.inner.open_prefs.lock_ok().as_deref() == Some(prefs.as_str()) {
-                    tracing::info!("bass rig start: already live with unchanged prefs — no-op");
-                    return;
+        let _ = std::thread::Builder::new()
+            .name("bass-open".into())
+            .spawn(move || {
+                let opened = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    // Already live with unchanged prefs? No-op instead of a gap.
+                    let prefs = format!("{:?}", RigManager::load(AUDIO_RIG_NAME).audio);
+                    let live = backend.inner.rig.lock_ok().is_some();
+                    if live && backend.inner.open_prefs.lock_ok().as_deref() == Some(prefs.as_str())
+                    {
+                        tracing::info!("bass rig start: already live with unchanged prefs — no-op");
+                        return;
+                    }
+                    backend.open_blocking();
+                }));
+                backend.inner.opening.store(false, Ordering::SeqCst);
+                if opened.is_err() {
+                    tracing::error!("bass rig open panicked — see the panic logger");
                 }
-                backend.open_blocking();
-            }));
-            backend.inner.opening.store(false, Ordering::SeqCst);
-            if opened.is_err() {
-                tracing::error!("bass rig open panicked — see the panic logger");
-            }
-        });
+            });
     }
 
     fn stop(&self) {
@@ -592,9 +628,15 @@ impl BassRigSvc for BassRigBackend {
             .enumerate()
             .map(|(i, d)| BassPreset {
                 name: d.name.clone(),
-                kind: if d.is_audio() { PresetKind::Audio } else { PresetKind::Sample },
+                kind: if d.is_audio() {
+                    PresetKind::Audio
+                } else {
+                    PresetKind::Sample
+                },
                 available: avail.get(i).copied().unwrap_or(false),
-                active: active.as_deref().is_some_and(|a| a.eq_ignore_ascii_case(&d.name)),
+                active: active
+                    .as_deref()
+                    .is_some_and(|a| a.eq_ignore_ascii_case(&d.name)),
                 summary: summary_of(d),
             })
             .collect()
@@ -619,7 +661,9 @@ impl BassRigSvc for BassRigBackend {
     fn toggle_block_bypass(&self, id: String) {
         let now = {
             let mut blocks = self.inner.blocks.lock_ok();
-            let Some(b) = blocks.iter_mut().find(|b| b.id == id) else { return };
+            let Some(b) = blocks.iter_mut().find(|b| b.id == id) else {
+                return;
+            };
             b.bypassed = !b.bypassed;
             b.bypassed
         };
@@ -629,14 +673,18 @@ impl BassRigSvc for BassRigBackend {
                 prig.set_block_bypass(&id, now);
             }
         }
-        self.inner.events.publish(BassEvent::Chain(BassRigSvc::chain(self)));
+        self.inner
+            .events
+            .publish(BassEvent::Chain(BassRigSvc::chain(self)));
     }
 
     fn set_master_trim(&self, db: f32) {
         *self.inner.master_trim.lock_ok() = db.clamp(-60.0, 12.0);
         self.apply_master_trim();
         self.mark_state_dirty();
-        self.inner.events.publish(BassEvent::Status(BassRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(BassEvent::Status(BassRigSvc::status(self)));
     }
 
     fn midi_ports(&self) -> Vec<String> {
@@ -650,7 +698,9 @@ impl BassRigSvc for BassRigBackend {
             BassLibrary::save_midi_map(&map);
         }
         self.reattach_midi();
-        self.inner.events.publish(BassEvent::Status(BassRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(BassEvent::Status(BassRigSvc::status(self)));
     }
 
     fn midi_recent(&self) -> Vec<MidiEvent> {
@@ -706,7 +756,10 @@ impl signal_rigs_proto::rig_core::RigCore for BassRigBackend {
     fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
         BassRigSvc::presets(self)
             .into_iter()
-            .map(|p| signal_rigs_proto::RigPresetInfo { loaded: p.active, name: p.name })
+            .map(|p| signal_rigs_proto::RigPresetInfo {
+                loaded: p.active,
+                name: p.name,
+            })
             .collect()
     }
     fn load_preset(&self, index: u32) {
@@ -719,7 +772,10 @@ impl signal_rigs_proto::rig_core::RigCore for BassRigBackend {
         BassRigSvc::set_midi_port(self, name);
     }
     fn midi_recent(&self) -> Vec<String> {
-        BassRigSvc::midi_recent(self).iter().map(|e| format!("{e:?}")).collect()
+        BassRigSvc::midi_recent(self)
+            .iter()
+            .map(|e| format!("{e:?}"))
+            .collect()
     }
 }
 

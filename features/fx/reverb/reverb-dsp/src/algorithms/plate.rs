@@ -301,8 +301,7 @@ impl ReverbAlgorithm for Plate {
         // decay_diffusion_1 AP (modulated)
         let fb_a = {
             let low = self.lf_split_a.tick(fb_a);
-            low * (self.decay * self.low_decay_mult).min(0.997)
-                + (fb_a - low) * self.decay
+            low * (self.decay * self.low_decay_mult).min(0.997) + (fb_a - low) * self.decay
         };
         let a_ap1_out = self.tank_a_ap1.tick(x + fb_a);
         // delay_4
@@ -318,8 +317,7 @@ impl ReverbAlgorithm for Plate {
         // ---- Tank B processing ----
         let fb_b = {
             let low = self.lf_split_b.tick(fb_b);
-            low * (self.decay * self.low_decay_mult).min(0.997)
-                + (fb_b - low) * self.decay
+            low * (self.decay * self.low_decay_mult).min(0.997) + (fb_b - low) * self.decay
         };
         let b_ap1_out = self.tank_b_ap1.tick(x + fb_b);
         self.tank_b_delay1.write(b_ap1_out);

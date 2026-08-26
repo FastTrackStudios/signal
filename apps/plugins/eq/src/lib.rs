@@ -4,8 +4,8 @@
 //! frequency response visualization, and per-band filter type selection.
 
 use audiocore_core::prelude::*;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use spectrum_analyzer::dsp::AudioFeed;
 
@@ -124,8 +124,8 @@ impl FtsEq {
                 let slope_val = bp.slope.value();
                 // One canonical slope→order table (eq_dsp::Slope),
                 // clamped per shape.
-                let order = plugin_shape(bp.filter_type.value())
-                    .effective_order(slope_val.max(0) as usize);
+                let order =
+                    plugin_shape(bp.filter_type.value()).effective_order(slope_val.max(0) as usize);
 
                 if band.enabled != enabled
                     || band.filter_type != ft
@@ -387,7 +387,8 @@ impl Plugin for FtsEq {
         }
         self.publish_model_response(model);
 
-        let output_gain = audiocore_dsp::db::db_to_linear(self.params.output_gain_db.value() as f64);
+        let output_gain =
+            audiocore_dsp::db::db_to_linear(self.params.output_gain_db.value() as f64);
         let n = buffer.samples();
 
         // Ensure scratch buffers are large enough

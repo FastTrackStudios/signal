@@ -13,13 +13,15 @@
 //! The rig clients come from `rig_engine.rs` (in-process LocalServer) and
 //! are provided as context, so every shared component works unchanged.
 
-use dioxus::prelude::*;
 #[cfg(feature = "signal-keys-rig")]
 use crate::keys_view;
-use signal_guitar_ui::proto::audio::AudioSettingsClient;
+use dioxus::prelude::*;
 use signal_guitar_ui::proto::AudioPrefs;
+use signal_guitar_ui::proto::audio::AudioSettingsClient;
 use signal_guitar_ui::proto::rig::RigClient;
-use signal_guitar_ui::{use_rig_state, AudioSettingsBridge, AudioSettingsModal, ControlView, PerformGrid};
+use signal_guitar_ui::{
+    AudioSettingsBridge, AudioSettingsModal, ControlView, PerformGrid, use_rig_state,
+};
 
 const SIGNAL_TAILWIND: &str = include_str!("../assets/tailwind-signal.css");
 

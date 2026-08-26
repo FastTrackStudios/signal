@@ -290,12 +290,7 @@ impl LibrarySpec {
             .iter()
             .filter(|c| c.id != artic_id)
             .filter(|c| c.kind == want_kind)
-            .filter(|c| {
-                matches!(
-                    c.kind,
-                    ArticulationKind::Sustain | ArticulationKind::Legato
-                )
-            })
+            .filter(|c| matches!(c.kind, ArticulationKind::Sustain | ArticulationKind::Legato))
             .find(|c| c.is_sordino() == is_sord && c.is_vibrato() != is_vib)
             .map(|c| c.id.clone())
     }
@@ -470,11 +465,7 @@ impl LibrarySpec {
         }
         // Standard-table defaults for the rest.
         for a in &self.articulations {
-            if a.uacc > 0
-                || matches!(
-                    a.kind,
-                    ArticulationKind::Legato | ArticulationKind::Release
-                )
+            if a.uacc > 0 || matches!(a.kind, ArticulationKind::Legato | ArticulationKind::Release)
             {
                 continue;
             }
@@ -733,7 +724,11 @@ impl DynamicsSpec {
             0.0
         } else {
             let x = (c.knee - cc1) as f32 / c.knee as f32;
-            let x = if c.shape > 0.0 && c.shape != 1.0 { x.powf(c.shape) } else { x };
+            let x = if c.shape > 0.0 && c.shape != 1.0 {
+                x.powf(c.shape)
+            } else {
+                x
+            };
             c.floor_db * x
         };
         10f32.powf(db / 20.0)
@@ -823,7 +818,10 @@ pub enum AmpEnvRole {
 /// Family-default amp envelope `(segments, hold)` for an articulation id +
 /// voice role. `None` = no envelope (flat unity — legacy behaviour for
 /// families outside the decoded set).
-pub fn default_amp_env(artic_id: &str, role: AmpEnvRole) -> Option<(&'static [EnvSegmentSpec], bool)> {
+pub fn default_amp_env(
+    artic_id: &str,
+    role: AmpEnvRole,
+) -> Option<(&'static [EnvSegmentSpec], bool)> {
     let id = artic_id.to_ascii_lowercase();
     if role == AmpEnvRole::Release || id.contains("rel") {
         Some((AMP_ENV_RELEASE, false))
@@ -891,7 +889,9 @@ fn parse_stinfo_from_vorbis(body: &[u8]) -> Option<(u32, u32)> {
         o += 4;
         let c = body.get(o..o + clen)?;
         o += clen;
-        let Ok(s) = std::str::from_utf8(c) else { continue };
+        let Ok(s) = std::str::from_utf8(c) else {
+            continue;
+        };
         // Vorbis comment keys are case-insensitive.
         if s.len() >= 7 && s[..7].eq_ignore_ascii_case("STINFO=") {
             let parts: Vec<&str> = s[7..].split_whitespace().collect();
@@ -1038,7 +1038,11 @@ fn zone_from_sfz(
         vel_min: sfz_u8(group, region, "lovel").unwrap_or(0),
         vel_max: sfz_u8(group, region, "hivel").unwrap_or(127),
         rr_index: seq_position.saturating_sub(1),
-        rr_mode: if seq_length > 0 { "cycle".to_string() } else { Default::default() },
+        rr_mode: if seq_length > 0 {
+            "cycle".to_string()
+        } else {
+            Default::default()
+        },
         gain_db: sfz_f32(group, region, "volume").unwrap_or(0.0),
         pan: (sfz_f32(group, region, "pan").unwrap_or(0.0) / 100.0).clamp(-1.0, 1.0),
         tune_cents: tune + transpose,
@@ -1806,7 +1810,11 @@ pub const UACC_STANDARD_TABLE: &[(u8, &str, &[&str])] = &[
     (9, "Long Marcato", &["longmarcato"]),
     (10, "Long Harmonics", &["harmonics", "harmonic", "harm"]),
     (11, "Long Tremolo", &["tremolo", "trem"]),
-    (12, "Long Tremolo Con Sordino", &["tremoloconsord", "tremolomuted"]),
+    (
+        12,
+        "Long Tremolo Con Sordino",
+        &["tremoloconsord", "tremolomuted"],
+    ),
     (13, "Long Tremolo Sul Pont", &["tremolosulpont"]),
     (17, "Long Sul Tasto", &["sultasto"]),
     (18, "Long Sul Pont", &["sulpont"]),
@@ -1818,20 +1826,50 @@ pub const UACC_STANDARD_TABLE: &[(u8, &str, &[&str])] = &[
     (40, "Short", &["staccato", "stac", "short"]),
     (41, "Short Alternative", &["staccatissimo", "staccatiss"]),
     (42, "Very Short", &["spiccato", "spicc"]),
-    (47, "Short Con Sordino", &["shortconsord", "staccatoconsord", "shortmuted"]),
-    (48, "Short Brushed", &["spiccatofeathered", "feathered", "brushed"]),
+    (
+        47,
+        "Short Con Sordino",
+        &["shortconsord", "staccatoconsord", "shortmuted"],
+    ),
+    (
+        48,
+        "Short Brushed",
+        &["spiccatofeathered", "feathered", "brushed"],
+    ),
     (52, "Short Marcato", &["marcato", "marc"]),
     (54, "Short Sforzando", &["sforzando", "sfz"]),
     (55, "Short Bells Up", &["bellsup"]),
     (56, "Pizzicato", &["pizzicato", "pizz"]),
-    (57, "Bartok Pizzicato", &["bartokpizz", "bartokpizzicato", "snappizzicato", "snappizz"]),
+    (
+        57,
+        "Bartok Pizzicato",
+        &["bartokpizz", "bartokpizzicato", "snappizzicato", "snappizz"],
+    ),
     (58, "Col Legno", &["collegno", "clegno"]),
-    (70, "Trill (Minor 2nd)", &["trillminor2nd", "trillm2", "htrills", "halftonetrill", "trill"]),
-    (71, "Trill (Major 2nd)", &["trillmajor2nd", "trillmaj2", "wtrills", "wholetonetrill"]),
+    (
+        70,
+        "Trill (Minor 2nd)",
+        &[
+            "trillminor2nd",
+            "trillm2",
+            "htrills",
+            "halftonetrill",
+            "trill",
+        ],
+    ),
+    (
+        71,
+        "Trill (Major 2nd)",
+        &["trillmajor2nd", "trillmaj2", "wtrills", "wholetonetrill"],
+    ),
     (72, "Trill (Minor 3rd)", &["trillminor3rd", "trillm3"]),
     (73, "Trill (Major 3rd)", &["trillmajor3rd", "trillmaj3"]),
     (74, "Trill (Perfect 4th)", &["trillperfect4th", "trillp4"]),
-    (81, "Tremolo Measured 150", &["tremolomeasured", "meastrem", "measuredtremolo"]),
+    (
+        81,
+        "Tremolo Measured 150",
+        &["tremolomeasured", "meastrem", "measuredtremolo"],
+    ),
     (90, "FX", &["fx"]),
 ];
 
@@ -2342,10 +2380,7 @@ mod tests {
         let leg = spec.articulation("Leg").unwrap();
         assert_eq!(leg.resolve_legato_role(), LegatoRole::Transition);
         assert!(leg.is_vibrato());
-        assert_eq!(
-            spec.vibrato_counterpart("Leg").as_deref(),
-            Some("NVLeg")
-        );
+        assert_eq!(spec.vibrato_counterpart("Leg").as_deref(), Some("NVLeg"));
         assert_eq!(
             spec.articulation("Legzero").unwrap().resolve_legato_role(),
             LegatoRole::Retrigger
@@ -2456,5 +2491,4 @@ mod tests {
             assert!(cur.cc1_expression_gain(c + 1) >= cur.cc1_expression_gain(c));
         }
     }
-
 }

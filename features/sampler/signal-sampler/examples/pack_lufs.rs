@@ -19,9 +19,9 @@
 
 use std::path::Path;
 
-use signal_sampler::SamplerRig;
 use signal_sampler::engine::budget;
 use signal_sampler::loudness::integrated_lufs;
+use signal_sampler::SamplerRig;
 
 /// A mid-register chord, held — what a keys player leans on, and what any
 /// pack can be asked to play.
@@ -31,7 +31,9 @@ const VELOCITY: u8 = 96;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let pack = args.next().ok_or("usage: pack_lufs <pack.signalpack> [target_lufs]")?;
+    let pack = args
+        .next()
+        .ok_or("usage: pack_lufs <pack.signalpack> [target_lufs]")?;
     let target: f64 = args.next().and_then(|s| s.parse().ok()).unwrap_or(-18.0);
     let sr = 48_000usize;
 
@@ -84,10 +86,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let lufs = integrated_lufs(&mono, sr as f64);
     let trim = target - lufs;
-    let name = Path::new(&pack).file_stem().and_then(|s| s.to_str()).unwrap_or("pack");
+    let name = Path::new(&pack)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("pack");
     println!("{name}");
     println!("  integrated  {lufs:>8.2} LUFS");
-    println!("  peak        {:>8.2} dBFS", 20.0 * (peak.max(1e-9) as f64).log10());
+    println!(
+        "  peak        {:>8.2} dBFS",
+        20.0 * (peak.max(1e-9) as f64).log10()
+    );
     println!("  trim to {target:>5.1}  {trim:>+8.2} dB");
     println!("\n  {{name \"{name}\", lufs {lufs:.2}}}");
     Ok(())

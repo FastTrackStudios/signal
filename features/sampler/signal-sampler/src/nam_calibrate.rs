@@ -32,7 +32,7 @@ use std::sync::{Mutex, OnceLock};
 use facet::Facet;
 use sha2::{Digest, Sha256};
 
-use crate::loudness::{SILENCE_LUFS, integrated_lufs};
+use crate::loudness::{integrated_lufs, SILENCE_LUFS};
 use crate::rig_prefs::signal_config_dir;
 use neural_amp_modeler::NamModel;
 
@@ -143,7 +143,7 @@ impl DiReference {
             for i in 0..note_len {
                 let t = i as f64 / sr;
                 let env = (-6.0 * t / note_secs).exp(); // plucked decay
-                // Fundamental + a few decaying harmonics (string-like).
+                                                        // Fundamental + a few decaying harmonics (string-like).
                 let mut s = 0.0;
                 for (h, amp) in [(1.0, 1.0), (2.0, 0.5), (3.0, 0.28), (4.0, 0.14)] {
                     s += amp * (2.0 * core::f64::consts::PI * f0 * h * t).sin();
@@ -259,9 +259,8 @@ impl LoudnessCache {
     }
 
     fn insert(&mut self, model_hash: String, di_id: String, sr: u32, lufs: f64) {
-        self.entries.retain(|e| {
-            !(e.model_hash == model_hash && e.di_id == di_id && e.sample_rate == sr)
-        });
+        self.entries
+            .retain(|e| !(e.model_hash == model_hash && e.di_id == di_id && e.sample_rate == sr));
         self.entries.push(CalibrationEntry {
             model_hash,
             di_id,
@@ -388,7 +387,7 @@ mod tests {
         let w = center_window(&s, 10);
         assert_eq!(w.len(), 10);
         assert_eq!(w[0], 45.0); // (100-10)/2 = 45
-        // Shorter-than-window input is returned whole.
+                                // Shorter-than-window input is returned whole.
         assert_eq!(center_window(&s, 1000).len(), 100);
         assert_eq!(center_window(&s, 0).len(), 100);
     }

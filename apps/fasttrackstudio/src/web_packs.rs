@@ -104,9 +104,7 @@ async fn idb_open() -> Result<web_sys::IdbDatabase, String> {
     let factory = web_sys::window()
         .and_then(|w| w.indexed_db().ok().flatten())
         .ok_or("IndexedDB unavailable")?;
-    let req = factory
-        .open_with_u32("fts-keys-rig", 1)
-        .map_err(js_str)?;
+    let req = factory.open_with_u32("fts-keys-rig", 1).map_err(js_str)?;
     let up_req = req.clone();
     let upgrade = Closure::<dyn FnMut()>::new(move || {
         if let Ok(db) = up_req.result()
@@ -191,10 +189,7 @@ pub(crate) async fn request_persist() {
 
 /// The OPFS `packs/` directory, created on first use.
 async fn packs_dir() -> Result<FileSystemDirectoryHandle, String> {
-    let storage = web_sys::window()
-        .ok_or("no window")?
-        .navigator()
-        .storage();
+    let storage = web_sys::window().ok_or("no window")?.navigator().storage();
     let root = JsFuture::from(storage.get_directory())
         .await
         .map_err(|e| format!("OPFS unavailable: {}", js_str(e)))?;
@@ -310,8 +305,9 @@ impl PartWriter {
         let stream = JsFuture::from(handle.create_writable_with_options(&opts))
             .await
             .map_err(js_str)?;
-        let stream: FileSystemWritableFileStream =
-            stream.dyn_into().map_err(|_| "not a writable".to_string())?;
+        let stream: FileSystemWritableFileStream = stream
+            .dyn_into()
+            .map_err(|_| "not a writable".to_string())?;
         JsFuture::from(stream.seek_with_f64(at as f64).map_err(js_str)?)
             .await
             .map_err(js_str)?;
@@ -319,10 +315,7 @@ impl PartWriter {
     }
 
     async fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
-        let p = self
-            .stream
-            .write_with_u8_array(bytes)
-            .map_err(js_str)?;
+        let p = self.stream.write_with_u8_array(bytes).map_err(js_str)?;
         JsFuture::from(p).await.map_err(js_str)?;
         self.pending += bytes.len() as u64;
         if self.pending >= FLUSH_BYTES {
@@ -350,11 +343,7 @@ impl PartWriter {
 
 /// Rename `from` → `to` in the packs dir: `FileSystemHandle.move()` where
 /// the browser has it (Chromium), else copy + delete.
-async fn rename(
-    dir: &FileSystemDirectoryHandle,
-    from: &str,
-    to: &str,
-) -> Result<(), String> {
+async fn rename(dir: &FileSystemDirectoryHandle, from: &str, to: &str) -> Result<(), String> {
     let handle = file_handle(dir, from, false).await?;
     if let Ok(mv) = Reflect::get(handle.as_ref(), &JsValue::from_str("move"))
         && let Some(mv) = mv.dyn_ref::<js_sys::Function>()
@@ -370,15 +359,12 @@ async fn rename(
     let stream = JsFuture::from(dest.create_writable())
         .await
         .map_err(js_str)?;
-    let stream: FileSystemWritableFileStream =
-        stream.dyn_into().map_err(|_| "not a writable".to_string())?;
-    JsFuture::from(
-        stream
-            .write_with_buffer_source(&bytes)
-            .map_err(js_str)?,
-    )
-    .await
-    .map_err(js_str)?;
+    let stream: FileSystemWritableFileStream = stream
+        .dyn_into()
+        .map_err(|_| "not a writable".to_string())?;
+    JsFuture::from(stream.write_with_buffer_source(&bytes).map_err(js_str)?)
+        .await
+        .map_err(js_str)?;
     JsFuture::from(stream.close()).await.map_err(js_str)?;
     remove_file(dir, from).await;
     Ok(())
@@ -446,7 +432,11 @@ pub(crate) async fn cached_pack_shared(name: &str, variant: &str) -> Option<JsVa
     let sab = js_sys::Reflect::construct(&ctor, &Array::of1(&(size as f64).into())).ok()?;
     let dst = Uint8Array::new(&sab);
     let handle = file_handle(&dir, &name_on_disk, false).await.ok()?;
-    let file: web_sys::File = JsFuture::from(handle.get_file()).await.ok()?.dyn_into().ok()?;
+    let file: web_sys::File = JsFuture::from(handle.get_file())
+        .await
+        .ok()?
+        .dyn_into()
+        .ok()?;
 
     // 32 MB at a time: big enough that the per-slice overhead vanishes,
     // small enough that the transient copy is irrelevant next to the pack.
@@ -480,7 +470,10 @@ pub(crate) async fn ensure_pack(
 
     // Already fully there (e.g. a parallel tab finished it).
     if let Some(bytes) = cached_pack(&want.name, &want.variant).await {
-        on(PackEvent::Progress { bytes: total, total });
+        on(PackEvent::Progress {
+            bytes: total,
+            total,
+        });
         return Ok(bytes);
     }
 
@@ -499,7 +492,10 @@ pub(crate) async fn ensure_pack(
         state: "streaming".into(),
     };
     ledger_put(&row).await;
-    on(PackEvent::Progress { bytes: start, total });
+    on(PackEvent::Progress {
+        bytes: start,
+        total,
+    });
 
     if start < total {
         let client: PackLibraryClient = crate::remote::establish_verbose(target)
@@ -520,7 +516,10 @@ pub(crate) async fn ensure_pack(
                 }
                 writer.write(&chunk.bytes).await?;
                 done += chunk.bytes.len() as u64;
-                on(PackEvent::Progress { bytes: writer.committed, total });
+                on(PackEvent::Progress {
+                    bytes: writer.committed,
+                    total,
+                });
             }
             Ok(())
         };
@@ -535,7 +534,10 @@ pub(crate) async fn ensure_pack(
                 "incomplete: {landed} of {total} bytes (reload to resume)"
             ));
         }
-        on(PackEvent::Progress { bytes: landed, total });
+        on(PackEvent::Progress {
+            bytes: landed,
+            total,
+        });
     }
 
     // Integrity gate, then the rename into place.
@@ -684,7 +686,12 @@ impl SparseWriter {
         let dir = packs_dir().await?;
         let file = sparse_name(name, variant);
         let stream = Self::stream_of(&dir, &file).await?;
-        Ok(SparseWriter { dir, name: file, stream, pending: 0 })
+        Ok(SparseWriter {
+            dir,
+            name: file,
+            stream,
+            pending: 0,
+        })
     }
 
     async fn stream_of(
@@ -757,7 +764,10 @@ pub(crate) async fn fetch_pack_plan(
         while let Ok(Some(chunk)) = rx.recv().await {
             let chunk = chunk.get();
             if chunk.offset != at {
-                return Err(format!("plan chunk gap at {} (expected {at})", chunk.offset));
+                return Err(format!(
+                    "plan chunk gap at {} (expected {at})",
+                    chunk.offset
+                ));
             }
             json_bytes.extend_from_slice(&chunk.bytes);
             at += chunk.bytes.len() as u64;
@@ -798,7 +808,10 @@ pub(crate) async fn read_range_to_vec(
     // dedicated `read_range` method from wasm).
     let (tx, mut rx) = vox::channel::<PackChunk>();
     let call = client.read(
-        format!("range:{}:{name}", signal_packs_proto::PackRange { start, len }),
+        format!(
+            "range:{}:{name}",
+            signal_packs_proto::PackRange { start, len }
+        ),
         variant.to_string(),
         0,
         tx,
@@ -809,7 +822,10 @@ pub(crate) async fn read_range_to_vec(
         while let Ok(Some(chunk)) = rx.recv().await {
             let chunk = chunk.get();
             if chunk.offset != at {
-                return Err(format!("non-contiguous chunk at {} (expected {at})", chunk.offset));
+                return Err(format!(
+                    "non-contiguous chunk at {} (expected {at})",
+                    chunk.offset
+                ));
             }
             out.extend_from_slice(&chunk.bytes);
             at += chunk.bytes.len() as u64;

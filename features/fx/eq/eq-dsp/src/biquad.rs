@@ -1,7 +1,7 @@
 //! ZPK to biquad coefficient conversion matching Pro-Q 4's
 //! `zpk_to_biquad_coefficients` (0x1800fe040).
 
-use crate::zpk::{Complex, Zpk, pair_conjugates};
+use crate::zpk::{pair_conjugates, Complex, Zpk};
 
 /// Biquad coefficients: [a0, a1, a2, b0, b1, b2].
 pub type Coeffs = [f64; 6];

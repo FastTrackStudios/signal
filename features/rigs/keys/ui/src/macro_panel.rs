@@ -25,9 +25,7 @@
 use dioxus::prelude::*;
 use signal_keys_proto::KeysMacro;
 
-use crate::graphs::{
-    ModuleCurve, StackedEnvelopes, StackedFilters, StackedUnison, StackedVibrato,
-};
+use crate::graphs::{ModuleCurve, StackedEnvelopes, StackedFilters, StackedUnison, StackedVibrato};
 use crate::knob::Knob;
 use crate::module_edit::{KnobRow, Panel};
 
@@ -149,7 +147,8 @@ pub fn ShapeCard(
     curves: Vec<ModuleCurve>,
     accent: String,
     /// Graph height. Wide and shallow in the mixer's band; taller in the zoom.
-    #[props(default = 108)] height_px: u32,
+    #[props(default = 108)]
+    height_px: u32,
     on_change: EventHandler<(String, f32)>,
 ) -> Element {
     let (title, group_name) = shape.parts();
@@ -215,7 +214,8 @@ pub fn MacroPanel(
     curves: Vec<ModuleCurve>,
     accent: String,
     /// Graph height inside the shape cards.
-    #[props(default = 108)] height_px: u32,
+    #[props(default = 108)]
+    height_px: u32,
     on_change: EventHandler<(String, f32)>,
 ) -> Element {
     rsx! {

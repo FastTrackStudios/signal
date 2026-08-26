@@ -12,9 +12,9 @@
 
 use crate::hardware::knob::KnobStyle;
 use crate::hardware::panel::{PanelEnds, PanelTexture};
-use crate::hardware::vu_svg::VuScale;
 use crate::hardware::rack::{RackDesign, RackItem, Ring};
 use crate::hardware::vu::{VuFace, VuMode};
+use crate::hardware::vu_svg::VuScale;
 
 /// Panel drawing size shared by every rack face.
 pub const W: f64 = 900.0;
@@ -41,127 +41,168 @@ const ROW: f64 = 152.0;
 /// ∞ down to 0, marked with dots. The ratio buttons are push-in selectors:
 /// the engaged one is the one sitting lower.
 static ITEMS_1176: &[RackItem] = &[
-        // ── The two big knobs, on the centre line ────────────────────────
-        RackItem::Knob {
-            id: "input",
-            legend: "Input",
-            x: 126.0,
-            y: 150.0,
-            d: 84.0,
-            ring: Ring::Dots(&["∞", "48", "36", "30", "24", "18", "12", "6", "0"]),
-            tint: None,
-            style: None,
-        },
-        RackItem::Knob {
-            id: "output",
-            legend: "Output",
-            x: 308.0,
-            y: 150.0,
-            d: 84.0,
-            ring: Ring::Dots(&["∞", "48", "36", "30", "24", "18", "12", "6", "0"]),
-            tint: None,
-            style: None,
-        },
-
-        // ── The trims that live between them ─────────────────────────────
-        RackItem::Text { x: 217.0, y: 74.0, text: "HR", size: 7.0, strong: false },
-        RackItem::Knob {
-            id: "",
-            legend: "",
-            x: 217.0,
-            y: 104.0,
-            d: 20.0,
-            ring: Ring::None,
-            tint: None,
-            style: Some(KnobStyle::MetalFluted),
-        },
-        RackItem::Text { x: 217.0, y: 168.0, text: "Mix", size: 7.0, strong: false },
-        RackItem::Knob {
-            id: "",
-            legend: "",
-            x: 217.0,
-            y: 198.0,
-            d: 20.0,
-            ring: Ring::None,
-            tint: None,
-            style: Some(KnobStyle::MetalFluted),
-        },
-
-        // ── Attack over release, half the size, same centre line ─────────
-        RackItem::Text { x: 480.0, y: 56.0, text: "Attack", size: 8.0, strong: false },
-        RackItem::Knob {
-            id: "attack",
-            legend: "",
-            x: 480.0,
-            y: 100.0,
-            d: 42.0,
-            ring: Ring::Dots(&["1", "2", "3", "4", "5", "6", "7"]),
-            tint: None,
-            style: None,
-        },
-        RackItem::Text { x: 480.0, y: 160.0, text: "Release", size: 8.0, strong: false },
-        RackItem::Knob {
-            id: "release",
-            legend: "",
-            x: 480.0,
-            y: 204.0,
-            d: 42.0,
-            ring: Ring::Dots(&["1", "2", "3", "4", "5", "6", "7"]),
-            tint: None,
-            style: None,
-        },
-
-        // ── Ratio: push-in selectors ─────────────────────────────────────
-        RackItem::Text { x: 566.0, y: 44.0, text: "Ratio", size: 8.0, strong: false },
-        RackItem::Buttons {
-            id: "ratio",
-            legend: "",
-            x: 566.0,
-            y: 150.0,
-            labels: &["4", "8", "12", "20", "All"],
-            // The unit prints 20 at the top and 4 at the bottom; "all
-            // buttons" sits above them as the extreme of the same axis.
-            reverse: true,
-        },
-
-        // ── The meter, in its own paint ──────────────────────────────────
-        RackItem::Region {
-            x: 710.0,
-            y: 150.0,
-            w: 208.0,
-            // Full panel height: the stripe is a painted band across the
-            // whole plate, edge to edge, not an inset block.
-            h: 300.0,
-            color: "#1b5f79",
-        },
-        // The jewel above the frame, on the blue.
-        RackItem::Lamp { x: 710.0, y: 38.0, color: "#e33a2a" },
-        RackItem::Vu {
-            x: 710.0,
-            y: 136.0,
-            w: 182.0,
-            mode: VuMode::GainReduction,
-            legend: "VU",
-        },
-        RackItem::TintedText { x: 710.0, y: 232.0, text: "Limiting Amplifier", size: 12.0, color: "#f0f5f8" },
-        RackItem::TintedText {
-            x: 710.0,
-            y: 254.0,
-            text: "Peak Limiter",
-            size: 8.0,
-            color: "#bcd8e4",
-        },
-
-        // ── Meter source ─────────────────────────────────────────────────
-        RackItem::Text { x: 848.0, y: 44.0, text: "Meter", size: 8.0, strong: false },
-        RackItem::Buttons {
-            id: "",
-            legend: "",
-            x: 848.0,
-            y: 150.0,
-            labels: &["GR", "+8", "+4", "Off"],
-            reverse: false,
-        },
+    // ── The two big knobs, on the centre line ────────────────────────
+    RackItem::Knob {
+        id: "input",
+        legend: "Input",
+        x: 126.0,
+        y: 150.0,
+        d: 84.0,
+        ring: Ring::Dots(&["∞", "48", "36", "30", "24", "18", "12", "6", "0"]),
+        tint: None,
+        style: None,
+    },
+    RackItem::Knob {
+        id: "output",
+        legend: "Output",
+        x: 308.0,
+        y: 150.0,
+        d: 84.0,
+        ring: Ring::Dots(&["∞", "48", "36", "30", "24", "18", "12", "6", "0"]),
+        tint: None,
+        style: None,
+    },
+    // ── The trims that live between them ─────────────────────────────
+    RackItem::Text {
+        x: 217.0,
+        y: 74.0,
+        text: "HR",
+        size: 7.0,
+        strong: false,
+    },
+    RackItem::Knob {
+        id: "",
+        legend: "",
+        x: 217.0,
+        y: 104.0,
+        d: 20.0,
+        ring: Ring::None,
+        tint: None,
+        style: Some(KnobStyle::MetalFluted),
+    },
+    RackItem::Text {
+        x: 217.0,
+        y: 168.0,
+        text: "Mix",
+        size: 7.0,
+        strong: false,
+    },
+    RackItem::Knob {
+        id: "",
+        legend: "",
+        x: 217.0,
+        y: 198.0,
+        d: 20.0,
+        ring: Ring::None,
+        tint: None,
+        style: Some(KnobStyle::MetalFluted),
+    },
+    // ── Attack over release, half the size, same centre line ─────────
+    RackItem::Text {
+        x: 480.0,
+        y: 56.0,
+        text: "Attack",
+        size: 8.0,
+        strong: false,
+    },
+    RackItem::Knob {
+        id: "attack",
+        legend: "",
+        x: 480.0,
+        y: 100.0,
+        d: 42.0,
+        ring: Ring::Dots(&["1", "2", "3", "4", "5", "6", "7"]),
+        tint: None,
+        style: None,
+    },
+    RackItem::Text {
+        x: 480.0,
+        y: 160.0,
+        text: "Release",
+        size: 8.0,
+        strong: false,
+    },
+    RackItem::Knob {
+        id: "release",
+        legend: "",
+        x: 480.0,
+        y: 204.0,
+        d: 42.0,
+        ring: Ring::Dots(&["1", "2", "3", "4", "5", "6", "7"]),
+        tint: None,
+        style: None,
+    },
+    // ── Ratio: push-in selectors ─────────────────────────────────────
+    RackItem::Text {
+        x: 566.0,
+        y: 44.0,
+        text: "Ratio",
+        size: 8.0,
+        strong: false,
+    },
+    RackItem::Buttons {
+        id: "ratio",
+        legend: "",
+        x: 566.0,
+        y: 150.0,
+        labels: &["4", "8", "12", "20", "All"],
+        // The unit prints 20 at the top and 4 at the bottom; "all
+        // buttons" sits above them as the extreme of the same axis.
+        reverse: true,
+    },
+    // ── The meter, in its own paint ──────────────────────────────────
+    RackItem::Region {
+        x: 710.0,
+        y: 150.0,
+        w: 208.0,
+        // Full panel height: the stripe is a painted band across the
+        // whole plate, edge to edge, not an inset block.
+        h: 300.0,
+        color: "#1b5f79",
+    },
+    // The jewel above the frame, on the blue.
+    RackItem::Lamp {
+        x: 710.0,
+        y: 38.0,
+        color: "#e33a2a",
+    },
+    RackItem::Vu {
+        x: 710.0,
+        y: 136.0,
+        w: 182.0,
+        mode: VuMode::GainReduction,
+        legend: "VU",
+    },
+    RackItem::TintedText {
+        x: 710.0,
+        y: 232.0,
+        text: "Limiting Amplifier",
+        size: 12.0,
+        color: "#f0f5f8",
+    },
+    RackItem::TintedText {
+        x: 710.0,
+        y: 254.0,
+        text: "Peak Limiter",
+        size: 8.0,
+        color: "#bcd8e4",
+    },
+    // ── Meter source ─────────────────────────────────────────────────
+    RackItem::Text {
+        x: 848.0,
+        y: 44.0,
+        text: "Meter",
+        size: 8.0,
+        strong: false,
+    },
+    RackItem::Buttons {
+        id: "",
+        legend: "",
+        x: 848.0,
+        y: 150.0,
+        labels: &["GR", "+8", "+4", "Off"],
+        reverse: false,
+    },
 ];
 
 /// One finish of the FET limiter.
@@ -264,11 +305,34 @@ pub static LA2A: RackDesign = RackDesign {
     knob: KnobStyle::Pointer,
     items: &[
         // ── Identity ─────────────────────────────────────────────────────
-        RackItem::Text { x: 168.0, y: 62.0, text: "Model 2A", size: 15.0, strong: true },
-        RackItem::Text { x: 168.0, y: 84.0, text: "Audio", size: 7.5, strong: false },
-        RackItem::Text { x: 296.0, y: 64.0, text: "Leveling Amplifier", size: 8.5, strong: false },
-        RackItem::Text { x: 296.0, y: 82.0, text: "Optical · Tube", size: 8.5, strong: false },
-
+        RackItem::Text {
+            x: 168.0,
+            y: 62.0,
+            text: "Model 2A",
+            size: 15.0,
+            strong: true,
+        },
+        RackItem::Text {
+            x: 168.0,
+            y: 84.0,
+            text: "Audio",
+            size: 7.5,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 296.0,
+            y: 64.0,
+            text: "Leveling Amplifier",
+            size: 8.5,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 296.0,
+            y: 82.0,
+            text: "Optical · Tube",
+            size: 8.5,
+            strong: false,
+        },
         // ── Mode, far left, as the unit has it ───────────────────────────
         RackItem::Switch {
             id: "mode",
@@ -277,7 +341,6 @@ pub static LA2A: RackDesign = RackDesign {
             y: 150.0,
             labels: ["Limit", "Compress"],
         },
-
         // ── Gain ─────────────────────────────────────────────────────────
         RackItem::Knob {
             id: "gain",
@@ -291,7 +354,6 @@ pub static LA2A: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-
         // ── The movement ─────────────────────────────────────────────────
         RackItem::Vu {
             x: 478.0,
@@ -300,7 +362,6 @@ pub static LA2A: RackDesign = RackDesign {
             mode: VuMode::GainReduction,
             legend: "VU",
         },
-
         // ── Peak reduction ───────────────────────────────────────────────
         RackItem::Knob {
             id: "peak_reduction",
@@ -314,11 +375,28 @@ pub static LA2A: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-
         // ── Meter mode + power, top right ────────────────────────────────
-        RackItem::Text { x: 830.0, y: 44.0, text: "Gain Reduction", size: 7.5, strong: false },
-        RackItem::Text { x: 776.0, y: 62.0, text: "Output +10", size: 7.0, strong: false },
-        RackItem::Text { x: 884.0, y: 62.0, text: "Output +4", size: 7.0, strong: false },
+        RackItem::Text {
+            x: 830.0,
+            y: 44.0,
+            text: "Gain Reduction",
+            size: 7.5,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 776.0,
+            y: 62.0,
+            text: "Output +10",
+            size: 7.0,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 884.0,
+            y: 62.0,
+            text: "Output +4",
+            size: 7.0,
+            strong: false,
+        },
         RackItem::Knob {
             id: "",
             legend: "",
@@ -487,10 +565,19 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
             mode: VuMode::GainReduction,
             legend: "VU",
         },
-        RackItem::Lamp { x: 74.0, y: 136.0, color: "#e0483a" },
-
+        RackItem::Lamp {
+            x: 74.0,
+            y: 136.0,
+            color: "#e0483a",
+        },
         // ── One row of controls ──────────────────────────────────────────
-        RackItem::Text { x: 402.0, y: 82.0, text: "Input Gain", size: 7.5, strong: false },
+        RackItem::Text {
+            x: 402.0,
+            y: 82.0,
+            text: "Input Gain",
+            size: 7.5,
+            strong: false,
+        },
         RackItem::Knob {
             id: "input_gain",
             legend: "",
@@ -501,7 +588,13 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-        RackItem::Text { x: 548.0, y: 82.0, text: "Threshold", size: 7.5, strong: false },
+        RackItem::Text {
+            x: 548.0,
+            y: 82.0,
+            text: "Threshold",
+            size: 7.5,
+            strong: false,
+        },
         RackItem::Knob {
             id: "threshold",
             legend: "",
@@ -512,7 +605,13 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-        RackItem::Text { x: 694.0, y: 82.0, text: "Time Constant", size: 7.5, strong: false },
+        RackItem::Text {
+            x: 694.0,
+            y: 82.0,
+            text: "Time Constant",
+            size: 7.5,
+            strong: false,
+        },
         RackItem::Knob {
             id: "time_constant",
             legend: "",
@@ -523,7 +622,13 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-        RackItem::Text { x: 840.0, y: 82.0, text: "Output", size: 7.5, strong: false },
+        RackItem::Text {
+            x: 840.0,
+            y: 82.0,
+            text: "Output",
+            size: 7.5,
+            strong: false,
+        },
         RackItem::Knob {
             id: "output",
             legend: "",
@@ -534,10 +639,21 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-
         // ── Panel marks ──────────────────────────────────────────────────
-        RackItem::Text { x: 620.0, y: 238.0, text: "Tube Limiter", size: 12.0, strong: true },
-        RackItem::Text { x: 620.0, y: 260.0, text: "Variable-Mu", size: 8.0, strong: false },
+        RackItem::Text {
+            x: 620.0,
+            y: 238.0,
+            text: "Tube Limiter",
+            size: 12.0,
+            strong: true,
+        },
+        RackItem::Text {
+            x: 620.0,
+            y: 260.0,
+            text: "Variable-Mu",
+            size: 8.0,
+            strong: false,
+        },
     ],
 };
 
@@ -813,11 +929,37 @@ pub static DBX_160: RackDesign = RackDesign {
     knob: KnobStyle::MetalFluted,
     items: &[
         // ── Threshold, with its over/under lamps ─────────────────────────
-        RackItem::Text { x: 214.0, y: 46.0, text: "Threshold", size: 9.5, strong: true },
-        RackItem::Lamp { x: 168.0, y: 72.0, color: "#e6c235" },
-        RackItem::Text { x: 130.0, y: 72.0, text: "Below", size: 7.0, strong: false },
-        RackItem::Lamp { x: 250.0, y: 72.0, color: "#d8483a" },
-        RackItem::Text { x: 292.0, y: 72.0, text: "Above", size: 7.0, strong: false },
+        RackItem::Text {
+            x: 214.0,
+            y: 46.0,
+            text: "Threshold",
+            size: 9.5,
+            strong: true,
+        },
+        RackItem::Lamp {
+            x: 168.0,
+            y: 72.0,
+            color: "#e6c235",
+        },
+        RackItem::Text {
+            x: 130.0,
+            y: 72.0,
+            text: "Below",
+            size: 7.0,
+            strong: false,
+        },
+        RackItem::Lamp {
+            x: 250.0,
+            y: 72.0,
+            color: "#d8483a",
+        },
+        RackItem::Text {
+            x: 292.0,
+            y: 72.0,
+            text: "Above",
+            size: 7.0,
+            strong: false,
+        },
         RackItem::Knob {
             id: "threshold",
             legend: "Pull / SC",
@@ -828,9 +970,14 @@ pub static DBX_160: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-
         // ── Compression ──────────────────────────────────────────────────
-        RackItem::Text { x: 428.0, y: 46.0, text: "Compression", size: 9.5, strong: true },
+        RackItem::Text {
+            x: 428.0,
+            y: 46.0,
+            text: "Compression",
+            size: 9.5,
+            strong: true,
+        },
         RackItem::Knob {
             id: "compression",
             legend: "",
@@ -841,10 +988,21 @@ pub static DBX_160: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-
         // ── Output gain ──────────────────────────────────────────────────
-        RackItem::Text { x: 604.0, y: 40.0, text: "Output", size: 9.5, strong: true },
-        RackItem::Text { x: 604.0, y: 62.0, text: "Gain", size: 9.5, strong: true },
+        RackItem::Text {
+            x: 604.0,
+            y: 40.0,
+            text: "Output",
+            size: 9.5,
+            strong: true,
+        },
+        RackItem::Text {
+            x: 604.0,
+            y: 62.0,
+            text: "Gain",
+            size: 9.5,
+            strong: true,
+        },
         RackItem::Knob {
             id: "output",
             legend: "",
@@ -855,7 +1013,6 @@ pub static DBX_160: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-
         // ── The switching row ────────────────────────────────────────────
         RackItem::Button {
             id: "",
@@ -897,8 +1054,13 @@ pub static DBX_160: RackDesign = RackDesign {
             led: "",
             style: None,
         },
-        RackItem::Text { x: 496.0, y: 272.0, text: "Meter", size: 8.0, strong: false },
-
+        RackItem::Text {
+            x: 496.0,
+            y: 272.0,
+            text: "Meter",
+            size: 8.0,
+            strong: false,
+        },
         // ── The movement, and the panel's mark ───────────────────────────
         RackItem::Vu {
             x: 790.0,
@@ -907,8 +1069,20 @@ pub static DBX_160: RackDesign = RackDesign {
             mode: VuMode::GainReduction,
             legend: "Decibels",
         },
-        RackItem::Text { x: 790.0, y: 236.0, text: "Compressor", size: 15.0, strong: true },
-        RackItem::Text { x: 790.0, y: 262.0, text: "Compressor / Limiter", size: 8.0, strong: false },
+        RackItem::Text {
+            x: 790.0,
+            y: 236.0,
+            text: "Compressor",
+            size: 15.0,
+            strong: true,
+        },
+        RackItem::Text {
+            x: 790.0,
+            y: 262.0,
+            text: "Compressor / Limiter",
+            size: 8.0,
+            strong: false,
+        },
     ],
 };
 
@@ -948,19 +1122,43 @@ pub static DISTRESSOR: RackDesign = RackDesign {
     knob: KnobStyle::Dial,
     items: &[
         // ── Upper section: what the unit reports ─────────────────────────
-        RackItem::Frame { x: 470.0, y: 96.0, w: 856.0, h: 150.0 },
-        RackItem::Text { x: 168.0, y: 96.0, text: "Hybrid", size: 16.0, strong: true },
-        RackItem::Text { x: 168.0, y: 116.0, text: "Compressor", size: 8.0, strong: false },
-
+        RackItem::Frame {
+            x: 470.0,
+            y: 96.0,
+            w: 856.0,
+            h: 150.0,
+        },
+        RackItem::Text {
+            x: 168.0,
+            y: 96.0,
+            text: "Hybrid",
+            size: 16.0,
+            strong: true,
+        },
+        RackItem::Text {
+            x: 168.0,
+            y: 116.0,
+            text: "Compressor",
+            size: 8.0,
+            strong: false,
+        },
         // Gain reduction: 1 dB at the right, deepest at the left.
         RackItem::LedBar {
             x: 508.0,
             y: 48.0,
-            steps: &[26.0, 23.0, 20.0, 17.0, 14.0, 12.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
+            steps: &[
+                26.0, 23.0, 20.0, 17.0, 14.0, 12.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0,
+                1.0,
+            ],
             pitch: 27.0,
         },
-        RackItem::Text { x: 508.0, y: 86.0, text: "Gain Reduction", size: 8.5, strong: false },
-
+        RackItem::Text {
+            x: 508.0,
+            y: 86.0,
+            text: "Gain Reduction",
+            size: 8.5,
+            strong: false,
+        },
         // Ratio, as the row of lamps it is on the unit — the button beside it
         // steps through them, and so does clicking a lamp.
         RackItem::LedSelect {
@@ -970,7 +1168,13 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             labels: &["1:1", "2:1", "3:1", "4:1", "6:1", "10:1", "20:1", "Nuke"],
             pitch: 54.0,
         },
-        RackItem::Text { x: 476.0, y: 156.0, text: "Ratio", size: 8.5, strong: false },
+        RackItem::Text {
+            x: 476.0,
+            y: 156.0,
+            text: "Ratio",
+            size: 8.5,
+            strong: false,
+        },
         RackItem::Button {
             id: "",
             label: "BY PASS",
@@ -1011,12 +1215,34 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             led: "",
             style: None,
         },
-        RackItem::Text { x: 800.0, y: 156.0, text: "Detector", size: 8.0, strong: false },
-        RackItem::Text { x: 866.0, y: 156.0, text: "Audio", size: 8.0, strong: false },
-
+        RackItem::Text {
+            x: 800.0,
+            y: 156.0,
+            text: "Detector",
+            size: 8.0,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 866.0,
+            y: 156.0,
+            text: "Audio",
+            size: 8.0,
+            strong: false,
+        },
         // ── Lower section: the dials ─────────────────────────────────────
-        RackItem::Frame { x: 470.0, y: 250.0, w: 856.0, h: 150.0 },
-        RackItem::Text { x: 152.0, y: 180.0, text: "Input", size: 9.5, strong: true },
+        RackItem::Frame {
+            x: 470.0,
+            y: 250.0,
+            w: 856.0,
+            h: 150.0,
+        },
+        RackItem::Text {
+            x: 152.0,
+            y: 180.0,
+            text: "Input",
+            size: 9.5,
+            strong: true,
+        },
         RackItem::Knob {
             id: "input",
             legend: "",
@@ -1027,7 +1253,13 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-        RackItem::Text { x: 320.0, y: 180.0, text: "Attack", size: 9.5, strong: true },
+        RackItem::Text {
+            x: 320.0,
+            y: 180.0,
+            text: "Attack",
+            size: 9.5,
+            strong: true,
+        },
         RackItem::Knob {
             id: "attack",
             legend: "",
@@ -1038,7 +1270,13 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-        RackItem::Text { x: 488.0, y: 180.0, text: "Release", size: 9.5, strong: true },
+        RackItem::Text {
+            x: 488.0,
+            y: 180.0,
+            text: "Release",
+            size: 9.5,
+            strong: true,
+        },
         RackItem::Knob {
             id: "release",
             legend: "",
@@ -1049,7 +1287,13 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-        RackItem::Text { x: 656.0, y: 180.0, text: "Output", size: 9.5, strong: true },
+        RackItem::Text {
+            x: 656.0,
+            y: 180.0,
+            text: "Output",
+            size: 9.5,
+            strong: true,
+        },
         RackItem::Knob {
             id: "output",
             legend: "",
@@ -1060,7 +1304,13 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-        RackItem::Text { x: 800.0, y: 186.0, text: "Mix", size: 9.5, strong: true },
+        RackItem::Text {
+            x: 800.0,
+            y: 186.0,
+            text: "Mix",
+            size: 9.5,
+            strong: true,
+        },
         RackItem::Knob {
             id: "mix",
             legend: "",
@@ -1071,9 +1321,27 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             tint: Some("#26282b"),
             style: None,
         },
-        RackItem::Text { x: 772.0, y: 292.0, text: "Dry", size: 7.5, strong: false },
-        RackItem::Text { x: 832.0, y: 292.0, text: "Comp", size: 7.5, strong: false },
-        RackItem::Text { x: 878.0, y: 254.0, text: "", size: 9.0, strong: false },
+        RackItem::Text {
+            x: 772.0,
+            y: 292.0,
+            text: "Dry",
+            size: 7.5,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 832.0,
+            y: 292.0,
+            text: "Comp",
+            size: 7.5,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 878.0,
+            y: 254.0,
+            text: "",
+            size: 9.0,
+            strong: false,
+        },
     ],
 };
 

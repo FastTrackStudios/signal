@@ -225,6 +225,6 @@ fn source_color(source: &ModulationSource) -> &'static str {
         ModulationSource::Macro { .. } => "#EAB308",  // yellow
         ModulationSource::Follower(_) => "#EC4899",   // pink
         ModulationSource::Random(_) => "#14B8A6",     // teal
-        ModulationSource::Pattern(_) => "#7DD3FC",     // sky
+        ModulationSource::Pattern(_) => "#7DD3FC",    // sky
     }
 }

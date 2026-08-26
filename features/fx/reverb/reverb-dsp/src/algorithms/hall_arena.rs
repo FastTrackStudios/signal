@@ -263,9 +263,8 @@ impl ReverbAlgorithm for HallArena {
             1.0 * 40.0f64.powf(params.decay)
         };
         let t60_dc = (t60 * params.low_decay_mult.max(0.05)).max(0.05);
-        let hf_ratio = ((0.15 + 0.85 * (1.0 - params.damping))
-            * params.high_decay_mult.max(0.05))
-        .clamp(0.02, 1.5);
+        let hf_ratio = ((0.15 + 0.85 * (1.0 - params.damping)) * params.high_decay_mult.max(0.05))
+            .clamp(0.02, 1.5);
         let t60_ny = (t60 * hf_ratio).max(0.02);
         self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
         self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
@@ -282,10 +281,16 @@ impl ReverbAlgorithm for HallArena {
 
         // Artifact-free tail animation: slow orthogonal rotation of the
         // feedback mix (no decay error, no pitch wobble).
-        self.fdn_l
-            .set_rotation(0.3 + params.modulation * 0.5, params.modulation * 0.12, self.sample_rate);
-        self.fdn_r
-            .set_rotation((0.3 + params.modulation * 0.5) * 1.13, params.modulation * 0.12, self.sample_rate);
+        self.fdn_l.set_rotation(
+            0.3 + params.modulation * 0.5,
+            params.modulation * 0.12,
+            self.sample_rate,
+        );
+        self.fdn_r.set_rotation(
+            (0.3 + params.modulation * 0.5) * 1.13,
+            params.modulation * 0.12,
+            self.sample_rate,
+        );
 
         // Arena-scale tail animation: random-walk delay jitter
         // (reverbsc-style) — huge but unchorused.

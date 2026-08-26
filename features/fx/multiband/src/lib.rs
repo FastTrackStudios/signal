@@ -155,11 +155,7 @@ impl BandSplitter {
         self.crossovers.clear();
         for &f in sorted[..n].iter() {
             // Skip near-duplicates (< 1/12 octave apart).
-            if self
-                .crossovers
-                .last()
-                .is_some_and(|c| f / c.freq < 1.06)
-            {
+            if self.crossovers.last().is_some_and(|c| f / c.freq < 1.06) {
                 continue;
             }
             self.crossovers.push(Crossover::new(f, self.sample_rate));
@@ -421,14 +417,20 @@ mod tests {
         let dry_low = l.clone();
         mb.process(&mut l, &mut r, |_, _, _| {});
         let low_g = 20.0 * (rms(&l[24_000..]) / rms(&dry_low[24_000..])).log10();
-        assert!(low_g.abs() < 0.2, "low content passes low-band solo: {low_g:+.2}");
+        assert!(
+            low_g.abs() < 0.2,
+            "low content passes low-band solo: {low_g:+.2}"
+        );
 
         let mut l2 = sine(8000.0, 48_000);
         let mut r2 = l2.clone();
         let dry_hi = l2.clone();
         mb.process(&mut l2, &mut r2, |_, _, _| {});
         let hi_g = 20.0 * (rms(&l2[24_000..]) / rms(&dry_hi[24_000..])).log10();
-        assert!(hi_g < -40.0, "high content dies under low-band solo: {hi_g:+.1}");
+        assert!(
+            hi_g < -40.0,
+            "high content dies under low-band solo: {hi_g:+.1}"
+        );
     }
 
     #[test]

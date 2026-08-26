@@ -12,7 +12,7 @@ mod inspector;
 mod knob;
 mod panel;
 
+pub use icons::{block_icon, module_icon};
 pub use inspector::BlockInspectorPanel;
 pub use knob::{Knob, KnobSize};
-pub use icons::{block_icon, module_icon};
 pub use panel::RigGridPanel;

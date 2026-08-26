@@ -55,8 +55,8 @@ use std::sync::Mutex;
 
 use signal_orchestra::timing::{pitch_share_curve, spectral_flux};
 use signal_orchestra::{CSS_CONFIG, CSS_ROOT};
-use signal_sampler::PlayerPatch;
 use signal_sampler::spec::{ArticulationKind, LibrarySpec, ZoneSpec};
+use signal_sampler::PlayerPatch;
 
 /// Longest plausible arrival (ms) — anything later is a measurement error
 /// (mis-tracked pitch, room-noise flux), not a marker.
@@ -184,19 +184,18 @@ fn measure_settle(audio: &[f32], sr: u32, from: u8, to: u8) -> (Option<f64>, Opt
         // shave the first crossing's peak under 0.6 at hop resolution.
         let weak_n = ((0.12 / curve.hop_sec) as usize).max(1);
         let weak_hi = (i + weak_n).min(curve.v.len());
-        let weak_mean = curve.v[i..weak_hi].iter().map(|&v| f64::from(v)).sum::<f64>()
+        let weak_mean = curve.v[i..weak_hi]
+            .iter()
+            .map(|&v| f64::from(v))
+            .sum::<f64>()
             / (weak_hi - i) as f64;
-        let raw_cross = raw_cross
-            || (curve.v[i - 1] < 0.5 && curve.v[i] >= 0.55 && weak_mean >= 0.5);
+        let raw_cross =
+            raw_cross || (curve.v[i - 1] < 0.5 && curve.v[i] >= 0.55 && weak_mean >= 0.5);
         if !raw_cross {
             continue;
         }
         let hi = (i + hold_n).min(sm.len());
-        let mean = curve.v[i..hi]
-            .iter()
-            .map(|&v| f64::from(v))
-            .sum::<f64>()
-            / (hi - i) as f64;
+        let mean = curve.v[i..hi].iter().map(|&v| f64::from(v)).sum::<f64>() / (hi - i) as f64;
         // Reject only SUSTAINED relapses: cumulative time below 0.5 in the
         // hold window. Two failure modes had to be separated:
         //  * FIFTHS null narrowly — dest h2/h4 collide with source h3/h6,
@@ -210,8 +209,7 @@ fn measure_settle(audio: &[f32], sr: u32, from: u8, to: u8) -> (Option<f64>, Opt
         //    keeps feeding the destination bins, and the share spends
         //    ~200 ms+ under 0.5 across the window → rejected, search
         //    advances to the true settle.
-        let below_sec = sm[i..hi].iter().filter(|&&v| v < 0.5).count() as f64
-            * curve.hop_sec;
+        let below_sec = sm[i..hi].iter().filter(|&&v| v < 0.5).count() as f64 * curve.hop_sec;
         // OCTAVES get a stricter grade: their leak-through is structural
         // (every destination harmonic coincides with a source harmonic, so
         // the pruned detector runs on mutually-leaking fundamentals) and a
@@ -232,7 +230,11 @@ fn measure_settle(audio: &[f32], sr: u32, from: u8, to: u8) -> (Option<f64>, Opt
                 "  candidate {:.0} ms: mean {mean:.2}, below-0.5 {:.0} ms -> {}",
                 (curve.t0 + i as f64 * curve.hop_sec) * 1000.0,
                 below_sec * 1000.0,
-                if mean < mean_min || below_sec > below_max { "reject" } else { "ACCEPT" }
+                if mean < mean_min || below_sec > below_max {
+                    "reject"
+                } else {
+                    "ACCEPT"
+                }
             );
         }
         if mean < mean_min || below_sec > below_max {
@@ -256,17 +258,21 @@ fn measure_settle(audio: &[f32], sr: u32, from: u8, to: u8) -> (Option<f64>, Opt
     let t = curve.t0 + ((idx - 1) as f64 + frac) * curve.hop_sec;
     let ms = t * 1000.0;
     if ms > MAX_ARRIVAL_MS {
-        return (Some(ms), Some(format!("settle {ms:.0} ms implausibly late")));
+        return (
+            Some(ms),
+            Some(format!("settle {ms:.0} ms implausibly late")),
+        );
     }
     // Grade: the source must genuinely own the head of the sample (a curve
     // that starts near the plateau is an ambiguous take).
     let pre_n = idx.min(((0.06 / curve.hop_sec) as usize).max(1));
-    let pre_mean =
-        sm[..idx].iter().rev().take(pre_n).sum::<f64>() / pre_n as f64;
+    let pre_mean = sm[..idx].iter().rev().take(pre_n).sum::<f64>() / pre_n as f64;
     if pre_mean > 0.65 {
         return (
             Some(ms),
-            Some(format!("source not dominant before settle (pre share {pre_mean:.2})")),
+            Some(format!(
+                "source not dominant before settle (pre share {pre_mean:.2})"
+            )),
         );
     }
     (Some(ms), None)
@@ -439,9 +445,8 @@ fn rewrite_zones_styx(text: &str, arrivals: &BTreeMap<String, f64>) -> String {
             // Extract this block's file value.
             let file = block.iter().find_map(|l| {
                 let t = l.trim_start();
-                t.strip_prefix("file").map(|rest| {
-                    rest.trim().trim_matches('"').to_string()
-                })
+                t.strip_prefix("file")
+                    .map(|rest| rest.trim().trim_matches('"').to_string())
             });
             // Drop any existing arrival line, then insert the new one (if
             // measured) right after `lead_in_ms` when present, else before
@@ -500,11 +505,10 @@ fn main() -> Result<(), String> {
             other => return Err(format!("unknown arg {other}")),
         }
     }
-    let zones_path =
-        zones.unwrap_or_else(|| root.join("_patches/1st Violins/library.styx"));
+    let zones_path = zones.unwrap_or_else(|| root.join("_patches/1st Violins/library.styx"));
 
-    let patch = PlayerPatch::load_merged(&config, &zones_path, &root)
-        .map_err(|e| format!("load: {e}"))?;
+    let patch =
+        PlayerPatch::load_merged(&config, &zones_path, &root).map_err(|e| format!("load: {e}"))?;
     let spec = &patch.spec;
     eprintln!(
         "measuring {} zones from {}",
@@ -532,8 +536,7 @@ fn main() -> Result<(), String> {
                     (z.root_key.saturating_add(iv), z.root_key)
                 };
                 let dur = audio.len() as f64 / 2.0 / f64::from(sr);
-                let curve =
-                    pitch_share_curve(&audio, sr, from, to, 0.02, SCAN_SEC.min(dur - 0.05));
+                let curve = pitch_share_curve(&audio, sr, from, to, 0.02, SCAN_SEC.min(dur - 0.05));
                 for (i, v) in curve.v.iter().enumerate().step_by(8) {
                     let t = curve.t0 + i as f64 * curve.hop_sec;
                     let bar = "#".repeat((v * 50.0) as usize);
@@ -553,7 +556,16 @@ fn main() -> Result<(), String> {
                     let bar = "#".repeat((v / peak * 50.0) as usize);
                     eprintln!("  {:6.0} ms  {bar}", t * 1000.0);
                 }
-                let (pk, f1) = measure_onset(&audio, sr, true, if class == Class::Retrigger { 0.6 } else { SCAN_SEC });
+                let (pk, f1) = measure_onset(
+                    &audio,
+                    sr,
+                    true,
+                    if class == Class::Retrigger {
+                        0.6
+                    } else {
+                        SCAN_SEC
+                    },
+                );
                 let (edge, f2) = measure_onset(&audio, sr, false, 0.9);
                 eprintln!("  flux-peak {pk:?} ({f1:?}) / flux-edge {edge:?} ({f2:?})");
             }
@@ -646,7 +658,8 @@ fn main() -> Result<(), String> {
     for (file, (class, ms, reason)) in &flagged {
         report.push_str(&format!(
             "  {file} [{class:?}] {} — {reason}\n",
-            ms.map(|m| format!("{m:.0} ms")).unwrap_or_else(|| "-".into())
+            ms.map(|m| format!("{m:.0} ms"))
+                .unwrap_or_else(|| "-".into())
         ));
     }
     print!("{report}");

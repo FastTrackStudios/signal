@@ -286,8 +286,7 @@ impl KitState {
             Some(targets) => {
                 for t in targets {
                     if let Some(p) = self.piece(&t.piece) {
-                        let artic =
-                            (!t.articulation.is_empty()).then_some(t.articulation.as_str());
+                        let artic = (!t.articulation.is_empty()).then_some(t.articulation.as_str());
                         p.note_on(note, velocity, artic);
                     }
                 }

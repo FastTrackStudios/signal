@@ -18,22 +18,22 @@ mod inspector;
 mod rig_grid_panel;
 mod toolbar;
 
-use dioxus::prelude::*;
 use architect_ui::prelude::*;
+use dioxus::prelude::*;
+use signal::{BlockType, ALL_BLOCK_TYPES, ALL_MODULE_TYPES};
 use signal_proto::rig::RigType;
 use signal_proto::tagging::TagSet;
-use signal::{ALL_BLOCK_TYPES, ALL_MODULE_TYPES, BlockType};
 
 use signal_browser::data_fetching::{
     build_param_lookup, fetch_col2, fetch_col3, resolve_layer_detail, resolve_scene_detail,
 };
 use signal_browser::grid_conversion::ParamLookup;
 use signal_browser::types::{
-    ColumnItem, DetailData, DetailParam, NavCategory, RIG_TYPES, SortMode,
+    ColumnItem, DetailData, DetailParam, NavCategory, SortMode, RIG_TYPES,
 };
 
 use detail_panel::{
-    DetailPanel, collect_available_tags, filter_and_sort, find_detail, rig_type_display,
+    collect_available_tags, filter_and_sort, find_detail, rig_type_display, DetailPanel,
 };
 use toolbar::Toolbar;
 
@@ -41,7 +41,7 @@ use toolbar::Toolbar;
 pub use rig_grid_panel::RigGridPanel;
 pub use signal_browser::data_fetching::rig_type_to_engine_type;
 pub use signal_browser::grid_conversion::{
-    ParamLookup as EngineParamLookup, engines_to_grid_slots,
+    engines_to_grid_slots, ParamLookup as EngineParamLookup,
 };
 pub use signal_browser::types::{EngineFlowData, LayerFlowData, ModuleChainData};
 
@@ -155,7 +155,10 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
 
     let mut expanded_folders = use_signal(std::collections::HashSet::<String>::new);
 
-    #[allow(clippy::redundant_closure, reason = "passing `nav` bare instead of `move || nav()` fails to typecheck against use_memo's FnMut + 'static bound on a dioxus Signal")]
+    #[allow(
+        clippy::redundant_closure,
+        reason = "passing `nav` bare instead of `move || nav()` fails to typecheck against use_memo's FnMut + 'static bound on a dioxus Signal"
+    )]
     let nav_memo = use_memo(move || nav());
 
     {

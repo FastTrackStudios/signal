@@ -6,8 +6,8 @@
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::{
-    EngineType,
     layer::{Layer, LayerId, LayerSnapshot, LayerSnapshotId},
+    EngineType,
 };
 
 /// Handle for layer operations.

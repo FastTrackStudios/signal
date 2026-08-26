@@ -177,14 +177,12 @@ pub struct Placed {
 /// static table would eventually place a knob the profile does not wire.
 /// [`modulation_profiles::Voicing::knobs`] is the single source for that.
 pub fn placed_controls(profile_id: &str) -> Vec<Placed> {
-    let profile = modulation_profiles::profile_by_id(profile_id)
-        .unwrap_or(&modulation_profiles::PROFILES[0]);
+    let profile =
+        modulation_profiles::profile_by_id(profile_id).unwrap_or(&modulation_profiles::PROFILES[0]);
     let legends = knob_legends(profile_id);
 
-    let mut controls: Vec<(&'static str, String)> = vec![
-        ("rate", "Rate".to_string()),
-        ("depth", "Depth".to_string()),
-    ];
+    let mut controls: Vec<(&'static str, String)> =
+        vec![("rate", "Rate".to_string()), ("depth", "Depth".to_string())];
     for (i, knob) in profile.voicing.knobs.iter().enumerate() {
         if knob.role == Character::None {
             continue;
@@ -514,7 +512,12 @@ mod tests {
         for profile in PROFILES {
             for spec in placed_controls(profile.id) {
                 let y = 206.0 + spec.d * 0.92 + 10.0;
-                assert!(y + 6.0 <= H, "{}'s {} legend falls off", profile.id, spec.param);
+                assert!(
+                    y + 6.0 <= H,
+                    "{}'s {} legend falls off",
+                    profile.id,
+                    spec.param
+                );
             }
         }
     }

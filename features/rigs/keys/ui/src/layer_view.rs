@@ -76,7 +76,11 @@ pub fn LayerView(
 
     let d = detail.read().clone();
     let accent = engine_color(&d.engine).to_string();
-    let patch = if d.patch.is_empty() { "empty lane".to_string() } else { d.patch.clone() };
+    let patch = if d.patch.is_empty() {
+        "empty lane".to_string()
+    } else {
+        d.patch.clone()
+    };
     // The back target: up one level, to this lane's engine.
     let back_to = d.engine.clone();
 
@@ -134,7 +138,11 @@ pub fn LayerView(
                 format!("{} — {}", m.slot, m.patch)
             };
             let mut pick = module;
-            (label, m.index == d.module, Callback::new(move |_| pick.set(idx)))
+            (
+                label,
+                m.index == d.module,
+                Callback::new(move |_| pick.set(idx)),
+            )
         })
         .collect();
     let module_label = d
@@ -175,7 +183,11 @@ pub fn LayerView(
             Callback::new(move |_| page.set(Page::Edit)),
         ),
     ]);
-    level.status(vec![fts_chrome::StatusItem::pill(patch.clone(), accent.clone(), "#101821")]);
+    level.status(vec![fts_chrome::StatusItem::pill(
+        patch.clone(),
+        accent.clone(),
+        "#101821",
+    )]);
 
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex;",

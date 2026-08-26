@@ -14,17 +14,15 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
-use architect::{HasDispatcher, Layer, PubSub, Services, layers};
+use architect::{layers, HasDispatcher, Layer, PubSub, Services};
 use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys::KeysRig;
 use signal_sampler::rig_node::{Container, RigNode, Role};
 use signal_synth::omni_import::{
-    OmniPatch, SoundsourceIndex, load_patch_file, parse_patch, patch_to_container,
+    load_patch_file, parse_patch, patch_to_container, OmniPatch, SoundsourceIndex,
 };
-use signal_synth_proto::synth::{
-    SynthEvent, SynthRig as SynthRigSvc, SynthRigStreamSource,
-};
+use signal_synth_proto::synth::{SynthEvent, SynthRig as SynthRigSvc, SynthRigStreamSource};
 use signal_synth_proto::{
     BrowseItem, SynthArticulation, SynthEnvelope, SynthFilter, SynthGlobals, SynthLayer,
     SynthMapping, SynthMic, SynthModRoute, SynthNode, SynthPreset, SynthStatus, SynthZone,
@@ -39,8 +37,7 @@ const PATCHES_ROOT: &str =
 /// Root of the built `.signalpack` soundsource library the BROWSE view scans —
 /// the same root [`SoundsourceIndex::scan_default`] overlays. Override with
 /// `FTS_OMNISPHERE_PACKS`.
-const OMNISPHERE_PACKS_ROOT: &str =
-    "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
+const OMNISPHERE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
 
 /// Substring of the preset selected on first open — "American Obesity" (a
 /// Live Keyboardist pad built on the OB-8 PWM Big Strings + Prophet 5 Classic
@@ -166,15 +163,29 @@ impl SynthRigBackend {
                 return true;
             }
         }
-        let idx = self.inner.state.lock().ok().and_then(|s| s.loaded).unwrap_or(0);
-        let Some(tree) = self.program_for(idx) else { return false };
+        let idx = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.loaded)
+            .unwrap_or(0);
+        let Some(tree) = self.program_for(idx) else {
+            return false;
+        };
         let prefs = AudioIoPrefs {
             output_device: String::new(),
             sample_rate: 0,
             buffer_size: 256,
             ..Default::default()
         };
-        let volume = self.inner.state.lock().ok().map(|s| s.volume).unwrap_or(DEFAULT_VOLUME);
+        let volume = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .map(|s| s.volume)
+            .unwrap_or(DEFAULT_VOLUME);
         match KeysRig::open(&prefs, &tree) {
             Ok(r) => {
                 r.set_output_gain(volume); // pad the hot summed output
@@ -206,7 +217,9 @@ impl SynthRigBackend {
     }
 
     fn do_load_preset(&self, index: usize) {
-        let Some(tree) = self.program_for(index) else { return };
+        let Some(tree) = self.program_for(index) else {
+            return;
+        };
         if !self.ensure_open() {
             return;
         }
@@ -226,7 +239,12 @@ impl SynthRigBackend {
     }
 
     fn reattach_midi(&self) {
-        let port = self.inner.state.lock().ok().and_then(|s| s.midi_port.clone());
+        let port = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.midi_port.clone());
         midicore::attach::reattach(
             "synth rig",
             port.as_deref(),
@@ -259,11 +277,16 @@ impl SynthRigBackend {
     }
 
     fn publish_all(&self) {
-        self.inner.events.publish(SynthEvent::Library(SynthRigSvc::presets(self)));
-        self.inner.events.publish(SynthEvent::Tree(SynthRigSvc::tree(self)));
-        self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Library(SynthRigSvc::presets(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Tree(SynthRigSvc::tree(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
     }
-
 }
 
 // r[impl primitives.architect.rig-backend]
@@ -284,13 +307,21 @@ impl RigBackend for SynthRigBackend {
     }
 
     fn on_running_edge(&self, _running: bool) {
-        self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
-        self.inner.events.publish(SynthEvent::Tree(SynthRigSvc::tree(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Tree(SynthRigSvc::tree(self)));
     }
 
     fn on_running_tick(&self) {
-        self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
-        self.inner.events.publish(SynthEvent::Midi(SynthRigSvc::midi_recent(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Midi(SynthRigSvc::midi_recent(self)));
     }
 }
 
@@ -315,15 +346,25 @@ impl SynthRigSvc for SynthRigBackend {
         if let Ok(mut rig) = self.inner.rig.lock() {
             *rig = None;
         }
-        self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
     }
 
     fn status(&self) -> SynthStatus {
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
         let s = self.inner.state.lock().unwrap();
-        let loaded_preset = s.loaded.and_then(|i| s.presets.get(i)).map(|p| p.name.clone());
+        let loaded_preset = s
+            .loaded
+            .and_then(|i| s.presets.get(i))
+            .map(|p| p.name.clone());
         let master_peak = if running {
-            self.inner.rig.lock().ok().and_then(|r| r.as_ref().map(|r| r.output_peak())).unwrap_or(0.0)
+            self.inner
+                .rig
+                .lock()
+                .ok()
+                .and_then(|r| r.as_ref().map(|r| r.output_peak()))
+                .unwrap_or(0.0)
         } else {
             0.0
         };
@@ -338,7 +379,11 @@ impl SynthRigSvc for SynthRigBackend {
     }
 
     fn presets(&self) -> Vec<SynthPreset> {
-        self.inner.state.lock().map(|s| s.presets.clone()).unwrap_or_default()
+        self.inner
+            .state
+            .lock()
+            .map(|s| s.presets.clone())
+            .unwrap_or_default()
     }
 
     fn browse(&self) -> Vec<BrowseItem> {
@@ -384,7 +429,9 @@ impl SynthRigSvc for SynthRigBackend {
             s.midi_port = if name.is_empty() { None } else { Some(name) };
         }
         self.reattach_midi();
-        self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
     }
 
     fn set_volume(&self, gain_milli: u32) {
@@ -397,7 +444,9 @@ impl SynthRigSvc for SynthRigBackend {
                 rig.set_output_gain(gain);
             }
         }
-        self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
     }
 
     fn midi_recent(&self) -> Vec<MidiEvent> {
@@ -443,7 +492,9 @@ impl SynthRigSvc for SynthRigBackend {
                     .or_else(|| self.inner.index.find(&soundsource).map(|p| p.to_path_buf()))
             }
         };
-        let Some(path) = path else { return SynthMapping::default() };
+        let Some(path) = path else {
+            return SynthMapping::default();
+        };
         match spec_of(&path) {
             Some(spec) => project_mapping(&spec, &soundsource),
             None => SynthMapping::default(),
@@ -462,7 +513,9 @@ impl SynthRigSvc for SynthRigBackend {
         if path.extension().is_some_and(|e| e == "mlt_omn") {
             return Vec::new();
         }
-        let Ok(xml) = std::fs::read_to_string(&path) else { return Vec::new() };
+        let Ok(xml) = std::fs::read_to_string(&path) else {
+            return Vec::new();
+        };
         match parse_patch(&xml) {
             Ok(patch) => project_layers(&patch),
             Err(_) => Vec::new(),
@@ -483,7 +536,13 @@ impl SynthRigSvc for SynthRigBackend {
         }
         // Rebuild the loaded tree with the new macros folded in + re-host
         // (glitch-free re-insert). Cheap: XML parse + tree build, no re-decode.
-        let idx = self.inner.state.lock().ok().and_then(|s| s.loaded).unwrap_or(0);
+        let idx = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.loaded)
+            .unwrap_or(0);
         if let Some(tree) = self.program_for(idx) {
             if let Ok(mut rig) = self.inner.rig.lock() {
                 if let Some(rig) = rig.as_mut() {
@@ -494,7 +553,9 @@ impl SynthRigSvc for SynthRigBackend {
                 s.tree = Some(tree);
             }
         }
-        self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
     }
 }
 
@@ -567,7 +628,11 @@ impl Services for SynthRigBackend {
 
 fn note_ev(note: u8, velocity: u8) -> MidiEvent {
     use midicore::{Channel, KeyNumber, Velocity};
-    MidiEvent::NoteOn { channel: Channel::new(0), key: KeyNumber::new(note), velocity: Velocity::new(velocity) }
+    MidiEvent::NoteOn {
+        channel: Channel::new(0),
+        key: KeyNumber::new(note),
+        velocity: Velocity::new(velocity),
+    }
 }
 
 /// Recursively scan the Omnisphere patch library for `.prt_omn` / `.mlt_omn`
@@ -579,7 +644,9 @@ fn scan_patches() -> (Vec<SynthPreset>, Vec<PathBuf>) {
     let mut found: Vec<(String, String, PathBuf)> = Vec::new();
     let mut stack = vec![PathBuf::from(&root)];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for e in entries.flatten() {
             let p = e.path();
             let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
@@ -588,8 +655,15 @@ fn scan_patches() -> (Vec<SynthPreset>, Vec<PathBuf>) {
             }
             if p.is_dir() {
                 stack.push(p);
-            } else if p.extension().is_some_and(|x| x == "prt_omn" || x == "mlt_omn") {
-                let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+            } else if p
+                .extension()
+                .is_some_and(|x| x == "prt_omn" || x == "mlt_omn")
+            {
+                let stem = p
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
                 if stem.is_empty() {
                     continue;
                 }
@@ -607,7 +681,11 @@ fn scan_patches() -> (Vec<SynthPreset>, Vec<PathBuf>) {
     let mut presets = Vec::with_capacity(found.len());
     let mut paths = Vec::with_capacity(found.len());
     for (name, kind, path) in found {
-        presets.push(SynthPreset { name, kind, loaded: false });
+        presets.push(SynthPreset {
+            name,
+            kind,
+            loaded: false,
+        });
         paths.push(path);
     }
     (presets, paths)
@@ -643,12 +721,19 @@ fn project_browse_item(e: &signal_browser::pack_registry::PackEntry) -> BrowseIt
 }
 
 fn slug(s: &str) -> String {
-    s.to_ascii_lowercase().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+    s.to_ascii_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
 }
 
 /// Convert a composition [`Container`] into a wire [`SynthNode`] tree.
 fn node_of(c: &Container, parent: &str) -> SynthNode {
-    let id = if parent.is_empty() { slug(&c.name) } else { format!("{parent}/{}", slug(&c.name)) };
+    let id = if parent.is_empty() {
+        slug(&c.name)
+    } else {
+        format!("{parent}/{}", slug(&c.name))
+    };
     let mut children = Vec::new();
     let mut any_live = false;
     for n in &c.children {
@@ -665,7 +750,13 @@ fn node_of(c: &Container, parent: &str) -> SynthNode {
         any_live |= child.live;
         children.push(child);
     }
-    SynthNode { id, label: c.name.clone(), role: role_tag(c.role), live: any_live, children }
+    SynthNode {
+        id,
+        label: c.name.clone(),
+        role: role_tag(c.role),
+        live: any_live,
+        children,
+    }
 }
 
 fn role_tag(role: Role) -> String {
@@ -688,7 +779,12 @@ fn project_layers(patch: &signal_synth::omni_import::OmniPatch) -> Vec<SynthLaye
 
     let env = |e: Option<(f32, f32, f32, f32)>| {
         let (a, d, s, r) = e.unwrap_or((0.0, 0.0, 1.0, 0.0));
-        SynthEnvelope { attack: a, decay: d, sustain: s, release: r }
+        SynthEnvelope {
+            attack: a,
+            decay: d,
+            sustain: s,
+            release: r,
+        }
     };
 
     patch
@@ -756,7 +852,10 @@ fn sample_blocks(c: &Container, out: &mut Vec<(String, PathBuf)>) {
     for n in &c.children {
         match n {
             RigNode::Block { block } if !block.sample.is_empty() => {
-                out.push((block.display_name().to_string(), PathBuf::from(&block.sample)));
+                out.push((
+                    block.display_name().to_string(),
+                    PathBuf::from(&block.sample),
+                ));
             }
             RigNode::Container { container } => sample_blocks(container, out),
             _ => {}
@@ -767,7 +866,10 @@ fn sample_blocks(c: &Container, out: &mut Vec<(String, PathBuf)>) {
 /// Read a soundsource's `LibrarySpec` from its `.signalpack` (header only, no
 /// audio decode) or raw `library.styx`.
 fn spec_of(path: &std::path::Path) -> Option<signal_sampler::LibrarySpec> {
-    if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("signalpack")) {
+    if path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"))
+    {
         signal_sampler::read_pack_header(path).ok().map(|h| h.spec)
     } else {
         signal_sampler::LibrarySpec::from_file(path).ok()
@@ -835,7 +937,11 @@ fn project_mapping(spec: &signal_sampler::LibrarySpec, name: &str) -> SynthMappi
     groups.sort();
     groups.dedup();
     SynthMapping {
-        name: if name.is_empty() { spec.name.clone() } else { name.to_string() },
+        name: if name.is_empty() {
+            spec.name.clone()
+        } else {
+            name.to_string()
+        },
         vendor: spec.vendor.clone(),
         zones,
         mics,
@@ -858,7 +964,10 @@ impl signal_rigs_proto::rig_core::RigCore for SynthRigBackend {
     fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
         SynthRigSvc::presets(self)
             .into_iter()
-            .map(|p| signal_rigs_proto::RigPresetInfo { name: p.name, loaded: p.loaded })
+            .map(|p| signal_rigs_proto::RigPresetInfo {
+                name: p.name,
+                loaded: p.loaded,
+            })
             .collect()
     }
     fn load_preset(&self, index: u32) {
@@ -871,7 +980,10 @@ impl signal_rigs_proto::rig_core::RigCore for SynthRigBackend {
         SynthRigSvc::set_midi_port(self, name);
     }
     fn midi_recent(&self) -> Vec<String> {
-        SynthRigSvc::midi_recent(self).iter().map(|e| format!("{e:?}")).collect()
+        SynthRigSvc::midi_recent(self)
+            .iter()
+            .map(|e| format!("{e:?}"))
+            .collect()
     }
 }
 
@@ -890,22 +1002,19 @@ mod tests {
     fn ob8_pack_sustains_at_pitch() {
         use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 
-        let pack = std::env::var("FTS_OMNISPHERE_PACKS")
-            .unwrap_or_else(|_| {
-                "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs".into()
-            })
-            + "/Synth Classic/OB-8 PWM Big Strings.signalpack";
+        let pack = std::env::var("FTS_OMNISPHERE_PACKS").unwrap_or_else(|_| {
+            "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs".into()
+        }) + "/Synth Classic/OB-8 PWM Big Strings.signalpack";
         if !std::path::Path::new(&pack).exists() {
             eprintln!("skipping: {pack} not built");
             return;
         }
 
         // Bare soundsource — no filter/amp/FX, just the sample block.
-        let tree = Container::preset("probe").add(
-            Container::engine("e").add(
+        let tree =
+            Container::preset("probe").add(Container::engine("e").add(
                 Container::layer("A").add(Container::module("src").sample_block("Source", pack)),
-            ),
-        );
+            ));
         let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);
         rn.prepare(48_000.0, 512);
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
@@ -1008,7 +1117,9 @@ mod tests {
         );
         assert_eq!(m.zones.len(), 85, "OB-8 has one zone per key (85)");
         assert!(
-            m.zones.iter().all(|z| z.key_min <= z.key_max && z.root_key >= z.key_min),
+            m.zones
+                .iter()
+                .all(|z| z.key_min <= z.key_max && z.root_key >= z.key_min),
             "zones have sane key ranges"
         );
         // Loops are library-state-dependent (only packs rebuilt with the STINFO
@@ -1029,7 +1140,10 @@ mod tests {
         let b = SynthRigBackend::new();
         let layers = b.layers();
         eprintln!("{} layers", layers.len());
-        let a = layers.iter().find(|l| l.name == "Layer A").expect("Layer A");
+        let a = layers
+            .iter()
+            .find(|l| l.name == "Layer A")
+            .expect("Layer A");
         eprintln!(
             "Layer A: src={:?} level={:.2} filter[0]={} {:.0}Hz res={:.2} envd={:.2} | amp {:?} filt {:?} | {} routes",
             a.source, a.level, a.filters[0].name, a.filters[0].cutoff_hz, a.filters[0].resonance,
@@ -1040,7 +1154,9 @@ mod tests {
         assert!(a.filters[0].cutoff_hz > 0.0, "filter cutoff in Hz");
         // American Obesity: Filter Env + Wheel route the filter cutoff.
         assert!(
-            a.routes.iter().any(|r| r.source.contains("Wheel") || r.source.contains("Env")),
+            a.routes
+                .iter()
+                .any(|r| r.source.contains("Wheel") || r.source.contains("Env")),
             "Layer A carries its mod routes, got {:?}",
             a.routes
         );
@@ -1053,7 +1169,13 @@ mod tests {
     #[ignore = "requires the factory Omnisphere library"]
     fn globals_shift_the_filter_cutoff() {
         let b = SynthRigBackend::new();
-        let idx = b.inner.state.lock().unwrap().loaded.expect("default preset");
+        let idx = b
+            .inner
+            .state
+            .lock()
+            .unwrap()
+            .loaded
+            .expect("default preset");
         let t0 = b.program_for(idx).expect("import (neutral)");
         let c0 = find_block(&t0, "Modified")
             .and_then(|f| f.param_f32("cutoff"))
@@ -1071,7 +1193,9 @@ mod tests {
     fn find_block(c: &Container, name: &str) -> Option<signal_sampler::rig::RigBlock> {
         for n in &c.children {
             match n {
-                RigNode::Block { block } if block.display_name() == name => return Some(block.clone()),
+                RigNode::Block { block } if block.display_name() == name => {
+                    return Some(block.clone())
+                }
                 RigNode::Container { container } => {
                     if let Some(b) = find_block(container, name) {
                         return Some(b);

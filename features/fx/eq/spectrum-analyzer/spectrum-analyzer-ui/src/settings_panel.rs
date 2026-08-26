@@ -4,8 +4,8 @@
 //! through `on_change`. The caller (eq-ui) owns the `Analyzer` and pushes changes
 //! into it via [`spectrum_analyzer_dsp::Analyzer::set_settings`].
 
-use audiocore_core::prelude::*;
 use architect_ui::prelude::{SegmentedControl, SegmentedControlSize, Switch};
+use audiocore_core::prelude::*;
 
 use spectrum_analyzer_dsp::{AnalyzerSettings, Range, Resolution, Speed};
 

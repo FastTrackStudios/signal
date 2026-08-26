@@ -12,12 +12,12 @@
 
 use std::path::Path;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use crate::SamplerError;
 use crate::engine::trace::{RenderTrace, TraceKind};
 use crate::engine::{EmittedMarker, LegatoFireEvent};
 use crate::spec::ZoneSpec;
+use crate::SamplerError;
 
 /// Min/max peak pairs over `block`-frame windows of an interleaved buffer,
 /// mixed to mono (same shape as daw-proto's `TakePeakData`; reused by the
@@ -94,8 +94,7 @@ fn voice_json(
     let mut wraps: Vec<u64> = Vec::new();
     if v.loop_end > v.loop_start && v.rate > 0.0 {
         let horizon = end_frame.unwrap_or(total_frames);
-        let first = spawn_frame as f64
-            + (v.loop_end.saturating_sub(v.start_frame)) as f64 / v.rate;
+        let first = spawn_frame as f64 + (v.loop_end.saturating_sub(v.start_frame)) as f64 / v.rate;
         let period = (v.loop_end - v.loop_start) as f64 / v.rate;
         let mut t = first;
         while t < horizon as f64 && wraps.len() < MAX_WRAPS {
@@ -163,16 +162,36 @@ pub fn render_report_json(
                 if v.gain.abs() < 0.004 && !v.voice_kind.contains("Sustain") {
                     continue;
                 }
-                voices.push(voice_json(e.frame, e.line, v, ends.get(&v.voice_id).copied(), frames));
+                voices.push(voice_json(
+                    e.frame,
+                    e.line,
+                    v,
+                    ends.get(&v.voice_id).copied(),
+                    frames,
+                ));
             }
             TraceKind::NoteOff { note } => {
-                events.push(json!({"frame": e.frame, "line": e.line, "kind": "noteoff", "note": note}));
+                events.push(
+                    json!({"frame": e.frame, "line": e.line, "kind": "noteoff", "note": note}),
+                );
             }
-            TraceKind::Transition { from, to, portamento } => {
-                events.push(json!({"frame": e.frame, "line": e.line, "kind": "transition",
-                    "from": from, "to": to, "portamento": portamento}));
+            TraceKind::Transition {
+                from,
+                to,
+                portamento,
+            } => {
+                events.push(
+                    json!({"frame": e.frame, "line": e.line, "kind": "transition",
+                    "from": from, "to": to, "portamento": portamento}),
+                );
             }
-            TraceKind::SampleMiss { note, articulation, dynamic, rr, reason } => {
+            TraceKind::SampleMiss {
+                note,
+                articulation,
+                dynamic,
+                rr,
+                reason,
+            } => {
                 events.push(json!({"frame": e.frame, "line": e.line, "kind": "miss",
                     "note": note, "articulation": articulation, "dynamic": dynamic,
                     "rr": rr, "reason": format!("{reason:?}")}));
@@ -186,7 +205,9 @@ pub fn render_report_json(
             "portamento": f.portamento, "arrival": f.arrival}));
     }
     for (frame, kind, note, line) in &sources.markers {
-        events.push(json!({"frame": frame, "line": line, "kind": "marker", "mk": kind, "note": note}));
+        events.push(
+            json!({"frame": frame, "line": line, "kind": "marker", "mk": kind, "note": note}),
+        );
     }
     for m in &sources.emitted {
         events.push(json!({"frame": m.frame, "line": m.line, "kind": "emitted", "note": m.note}));
@@ -322,7 +343,11 @@ pub fn click_track(
             }
             None => {
                 // Synth fallback: fast-decaying tone (higher on the downbeat).
-                let (freq, a) = if downbeat { (1500.0f32, 0.6) } else { (1000.0f32, 0.4) };
+                let (freq, a) = if downbeat {
+                    (1500.0f32, 0.6)
+                } else {
+                    (1000.0f32, 0.4)
+                };
                 let click_len = (sample_rate as f64 * 0.035) as usize;
                 for i in 0..click_len {
                     let f = start + i;

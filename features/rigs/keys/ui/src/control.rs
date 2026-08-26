@@ -27,8 +27,8 @@ use crate::graphs::{Adsr, ModuleCurve};
 use crate::selection::Selection;
 use signal_ui::components::Piano;
 
-use crate::fader::{EdgeFader, Fader, fmt_db};
-use crate::meter::{EdgeMeter, peak_of};
+use crate::fader::{fmt_db, EdgeFader, Fader};
+use crate::meter::{peak_of, EdgeMeter};
 use crate::zoom::{OpenButton, Zoom};
 
 /// Accent per engine — the same color language the Perform strip uses.
@@ -142,7 +142,10 @@ enum MacroScope {
     /// The whole rig — every module under every engine.
     Rig,
     Engine(String),
-    Layer { engine: String, layer: String },
+    Layer {
+        engine: String,
+        layer: String,
+    },
 }
 
 impl MacroScope {
@@ -151,7 +154,10 @@ impl MacroScope {
             Selection::None => MacroScope::Rig,
             Selection::Engine(engine) => MacroScope::Engine(engine.clone()),
             Selection::Layer { engine, layer } | Selection::Module { engine, layer, .. } => {
-                MacroScope::Layer { engine: engine.clone(), layer: layer.clone() }
+                MacroScope::Layer {
+                    engine: engine.clone(),
+                    layer: layer.clone(),
+                }
             }
         }
     }
@@ -218,7 +224,9 @@ fn rig_time_fx(mixer: &KeysMixer, scope: &MacroScope) -> Vec<crate::time_fx::FxL
     for engine in mixer.engines.iter() {
         let color = engine_color(&engine.name).to_string();
         for layer in engine.layers.iter() {
-            let Some(m) = layer.modules.iter().find(|m| m.live) else { continue };
+            let Some(m) = layer.modules.iter().find(|m| m.live) else {
+                continue;
+            };
             lanes.push(crate::time_fx::FxLane {
                 label: layer.name.clone(),
                 color: color.clone(),
@@ -347,13 +355,21 @@ fn MacroBand() -> Element {
     let curves = state
         .map(|s| rig_curves(&s.mixer.read(), &scope))
         .unwrap_or_default();
-    let fx_lanes = state.map(|s| rig_time_fx(&s.mixer.read(), &scope)).unwrap_or_default();
+    let fx_lanes = state
+        .map(|s| rig_time_fx(&s.mixer.read(), &scope))
+        .unwrap_or_default();
     // The time-domain groups get their own knobs beside their pictures; the
     // macro panel below still holds everything else.
-    let dly_macros: Vec<KeysMacro> =
-        items.iter().filter(|m| m.group == "Delay").cloned().collect();
-    let amb_macros: Vec<KeysMacro> =
-        items.iter().filter(|m| m.group == "Ambience").cloned().collect();
+    let dly_macros: Vec<KeysMacro> = items
+        .iter()
+        .filter(|m| m.group == "Delay")
+        .cloned()
+        .collect();
+    let amb_macros: Vec<KeysMacro> = items
+        .iter()
+        .filter(|m| m.group == "Ambience")
+        .cloned()
+        .collect();
 
     rsx! {
         div {
@@ -439,17 +455,24 @@ fn KeyboardStrip(
         .flat_map(|e| {
             let color = engine_color(&e.name).to_string();
             let engine = e.name.clone();
-            e.layers.iter().filter(|l| l.live && !l.muted).map(move |l| {
-                let lo = (l.key_lo as u8).clamp(LO, HI);
-                let hi = (l.key_hi as u8).clamp(LO, HI);
-                (
-                    lane_letter(&l.name, &engine),
-                    if l.patch.is_empty() { l.name.clone() } else { l.patch.clone() },
-                    color.clone(),
-                    white_fraction(lo, false),
-                    white_fraction(hi, true),
-                )
-            })
+            e.layers
+                .iter()
+                .filter(|l| l.live && !l.muted)
+                .map(move |l| {
+                    let lo = (l.key_lo as u8).clamp(LO, HI);
+                    let hi = (l.key_hi as u8).clamp(LO, HI);
+                    (
+                        lane_letter(&l.name, &engine),
+                        if l.patch.is_empty() {
+                            l.name.clone()
+                        } else {
+                            l.patch.clone()
+                        },
+                        color.clone(),
+                        white_fraction(lo, false),
+                        white_fraction(hi, true),
+                    )
+                })
         })
         .collect();
 
@@ -546,8 +569,7 @@ fn EngineStrip(
     /// can only be moved relative to its siblings.
     #[props(default)]
     order: Vec<String>,
-    #[props(default)]
-    index: usize,
+    #[props(default)] index: usize,
 ) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let mut zoom = crate::zoom::use_zoom();
@@ -574,7 +596,9 @@ fn EngineStrip(
             }
             order.swap(index, to);
             spawn(async move {
-                if let Some(r) = rig { let _ = r.set_engine_order(order).await; }
+                if let Some(r) = rig {
+                    let _ = r.set_engine_order(order).await;
+                }
             });
         }
     };
@@ -712,7 +736,6 @@ fn EngineStrip(
     }
 }
 
-
 /// **A drone engine's controls** — the card-embedded panel that replaces
 /// playing it.
 ///
@@ -722,8 +745,9 @@ fn EngineStrip(
 /// parameters a pad player actually reaches for as they land.
 #[component]
 fn DroneKeys(engine: String, drone: signal_keys_proto::KeysDrone) -> Element {
-    const KEYS: [&str; 12] =
-        ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
+    const KEYS: [&str; 12] = [
+        "C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B",
+    ];
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let accent = engine_color(&engine).to_string();
     let playing = drone.playing;
@@ -886,10 +910,17 @@ fn LayerStrip(layer: KeysLayerModel, accent: String) -> Element {
         &*selection.read(),
         Selection::Layer { layer: l, .. } | Selection::Module { layer: l, .. } if *l == layer.name
     );
-    let pick = Selection::Layer { engine: layer.engine.clone(), layer: layer.name.clone() };
+    let pick = Selection::Layer {
+        engine: layer.engine.clone(),
+        layer: layer.name.clone(),
+    };
     let open_lane = layer.name.clone();
     let dbl_lane = layer.name.clone();
-    let patch_label = if layer.patch.is_empty() { "empty".to_string() } else { layer.patch.clone() };
+    let patch_label = if layer.patch.is_empty() {
+        "empty".to_string()
+    } else {
+        layer.patch.clone()
+    };
     let letter = lane_letter(&layer.name, &layer.engine);
     let split = if layer.key_lo == 0 && layer.key_hi == 127 {
         String::new()

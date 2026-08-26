@@ -372,11 +372,7 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
 
     // Store the Guitar Input track's GUID so the scene timer can find it
     rig_folder
-        .set_ext_state(
-            "fts_signal",
-            "input_track_guid",
-            rig_input.guid(),
-        )
+        .set_ext_state("fts_signal", "input_track_guid", rig_input.guid())
         .await?;
 
     let total_sections: usize = SETLIST.iter().map(|s| s.sections.len()).sum();

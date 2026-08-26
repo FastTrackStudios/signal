@@ -2,7 +2,7 @@
 //! as the guitar rig's knob (150 px per sweep), sized for dense panels.
 
 use dioxus::prelude::*;
-use signal_widgets::arc::{SENSITIVITY, START_ANGLE, SWEEP, arc_path, arc_point};
+use signal_widgets::arc::{arc_path, arc_point, SENSITIVITY, START_ANGLE, SWEEP};
 
 /// Format a macro value for its unit.
 pub fn fmt_value(value: f32, unit: &str) -> String {
@@ -32,18 +32,21 @@ pub fn Knob(
     /// A **bipolar offset** knob: the fill runs from the centre detent, which
     /// is where the modules' own settings live (Omnisphere's Global Controls
     /// behave this way once the layers disagree).
-    #[props(default = false)] bipolar: bool,
+    #[props(default = false)]
+    bipolar: bool,
     #[props(default = "#38bdf8".to_string())] accent: String,
     /// **Inline row** instead of a stacked tile: label left, dial in the
     /// middle, value right. The band's thin columns read as a list that way —
     /// a label under a dial wastes the height they don't have and the width
     /// they do.
-    #[props(default = false)] inline: bool,
+    #[props(default = false)]
+    inline: bool,
     /// **Logarithmic travel.** A cutoff sweeping 20 Hz – 20 kHz linearly puts
     /// everything below 2 kHz in the first tenth of the knob: the useful half
     /// of a filter is unusable. On a log taper each octave gets equal travel,
     /// which is how the ear hears it and how the value is dialled.
-    #[props(default = false)] log: bool,
+    #[props(default = false)]
+    log: bool,
     on_change: EventHandler<f32>,
 ) -> Element {
     let mut drag = use_signal(|| None::<(f64, f32)>);
@@ -69,7 +72,11 @@ pub fn Knob(
     let track = arc_path(cx, cy, r, START_ANGLE, START_ANGLE + SWEEP);
     let centre = START_ANGLE + SWEEP / 2.0;
     let fill = if bipolar {
-        let (from, to) = if end >= centre { (centre, end) } else { (end, centre) };
+        let (from, to) = if end >= centre {
+            (centre, end)
+        } else {
+            (end, centre)
+        };
         arc_path(cx, cy, r, from, (to).max(from + 0.1))
     } else {
         arc_path(cx, cy, r, START_ANGLE, end.max(START_ANGLE + 0.1))
@@ -79,7 +86,11 @@ pub fn Knob(
     let (dx2, dy2) = arc_point(cx, cy, r + 3.0, centre);
     let (ix, iy) = arc_point(cx, cy, r - 5.0, end);
     let (bx, by) = arc_point(cx, cy, 5.0, end);
-    let color = if live { accent.clone() } else { "#52525b".to_string() };
+    let color = if live {
+        accent.clone()
+    } else {
+        "#52525b".to_string()
+    };
 
     let root_style = if inline {
         "display: flex; flex-direction: row; align-items: center; gap: 8px; \

@@ -74,7 +74,12 @@ impl Default for SynthParams {
     fn default() -> Self {
         Self {
             amp: AdsrParams::default(),
-            filter: AdsrParams { attack_s: 0.005, decay_s: 0.3, sustain: 0.7, release_s: 0.2 },
+            filter: AdsrParams {
+                attack_s: 0.005,
+                decay_s: 0.3,
+                sustain: 0.7,
+                release_s: 0.2,
+            },
             cutoff_norm: 1.0,
             resonance: 0.0,
             filter_env_depth: 0.0,
@@ -268,7 +273,9 @@ impl NativeOscillator {
                 self.bend_st = norm.clamp(-1.0, 1.0) * self.params.bend_range_st;
             }
             // Mod wheel: vibrato depth.
-            MidiEvent::ControlChange { controller, value, .. } if controller.get() == 1 => {
+            MidiEvent::ControlChange {
+                controller, value, ..
+            } if controller.get() == 1 => {
                 self.wheel = value.get() as f32 / 127.0;
             }
             _ => {}
@@ -361,20 +368,52 @@ impl Soundsource for NativeOscillator {
     fn params(&self) -> Vec<PluginParamInfo> {
         let p = &self.params;
         vec![
-            Self::info(P_AMP_ATTACK, "amp_attack", (p.amp.attack_s / MAX_SEG_S) as f64),
+            Self::info(
+                P_AMP_ATTACK,
+                "amp_attack",
+                (p.amp.attack_s / MAX_SEG_S) as f64,
+            ),
             Self::info(P_AMP_DECAY, "amp_decay", (p.amp.decay_s / MAX_SEG_S) as f64),
             Self::info(P_AMP_SUSTAIN, "amp_sustain", p.amp.sustain as f64),
-            Self::info(P_AMP_RELEASE, "amp_release", (p.amp.release_s / MAX_SEG_S) as f64),
-            Self::info(P_FLT_ATTACK, "filter_attack", (p.filter.attack_s / MAX_SEG_S) as f64),
-            Self::info(P_FLT_DECAY, "filter_decay", (p.filter.decay_s / MAX_SEG_S) as f64),
+            Self::info(
+                P_AMP_RELEASE,
+                "amp_release",
+                (p.amp.release_s / MAX_SEG_S) as f64,
+            ),
+            Self::info(
+                P_FLT_ATTACK,
+                "filter_attack",
+                (p.filter.attack_s / MAX_SEG_S) as f64,
+            ),
+            Self::info(
+                P_FLT_DECAY,
+                "filter_decay",
+                (p.filter.decay_s / MAX_SEG_S) as f64,
+            ),
             Self::info(P_FLT_SUSTAIN, "filter_sustain", p.filter.sustain as f64),
-            Self::info(P_FLT_RELEASE, "filter_release", (p.filter.release_s / MAX_SEG_S) as f64),
+            Self::info(
+                P_FLT_RELEASE,
+                "filter_release",
+                (p.filter.release_s / MAX_SEG_S) as f64,
+            ),
             Self::info(P_CUTOFF, "cutoff", p.cutoff_norm as f64),
             Self::info(P_RESONANCE, "resonance", p.resonance as f64),
-            Self::info(P_ENV_AMT, "env_amt", ((p.filter_env_depth + 1.0) / 2.0) as f64),
-            Self::info(P_BEND_RANGE, "bend_range", (p.bend_range_st / MAX_BEND_ST) as f64),
+            Self::info(
+                P_ENV_AMT,
+                "env_amt",
+                ((p.filter_env_depth + 1.0) / 2.0) as f64,
+            ),
+            Self::info(
+                P_BEND_RANGE,
+                "bend_range",
+                (p.bend_range_st / MAX_BEND_ST) as f64,
+            ),
             Self::info(P_VIB_RATE, "vib_rate", (p.vib_rate_hz / MAX_VIB_HZ) as f64),
-            Self::info(P_VIB_DEPTH, "vib_depth", (p.vib_depth_st / MAX_VIB_ST) as f64),
+            Self::info(
+                P_VIB_DEPTH,
+                "vib_depth",
+                (p.vib_depth_st / MAX_VIB_ST) as f64,
+            ),
         ]
     }
 
@@ -532,7 +571,11 @@ mod tests {
     fn run(osc: &mut NativeOscillator, midi: &[PluginMidiEvent], frames: usize) -> Vec<f32> {
         let mut l = vec![0.0f32; frames];
         let mut r = vec![0.0f32; frames];
-        let ev = PluginEvents { params: &[], midi, note_expressions: &[] };
+        let ev = PluginEvents {
+            params: &[],
+            midi,
+            note_expressions: &[],
+        };
         osc.render(&[], &[], &mut l, &mut r, &ev);
         l
     }
@@ -543,7 +586,9 @@ mod tests {
 
     /// Dominant frequency estimate by zero crossings.
     fn zero_crossings(s: &[f32]) -> usize {
-        s.windows(2).filter(|w| (w[0] <= 0.0) != (w[1] <= 0.0)).count()
+        s.windows(2)
+            .filter(|w| (w[0] <= 0.0) != (w[1] <= 0.0))
+            .count()
     }
 
     #[test]
@@ -575,7 +620,11 @@ mod tests {
             let midi = [note_on(69, 100)];
             let mut l = vec![0.0f32; 2400];
             let mut r = vec![0.0f32; 2400];
-            let ev = PluginEvents { params: &params, midi: &midi, note_expressions: &[] };
+            let ev = PluginEvents {
+                params: &params,
+                midi: &midi,
+                note_expressions: &[],
+            };
             osc.render(&[], &[], &mut l, &mut r, &ev);
             rms(&l)
         };
@@ -595,7 +644,11 @@ mod tests {
         let mut osc = NativeOscillator::new(48_000);
         // Long release so the released note audibly overlaps the new one.
         let params = [(P_AMP_RELEASE, 0.25)]; // 2 s release
-        let ev = PluginEvents { params: &params, midi: &[], note_expressions: &[] };
+        let ev = PluginEvents {
+            params: &params,
+            midi: &[],
+            note_expressions: &[],
+        };
         let (mut l, mut r) = (vec![0.0f32; 8], vec![0.0f32; 8]);
         osc.render(&[], &[], &mut l, &mut r, &ev);
 
@@ -617,7 +670,11 @@ mod tests {
             let midi = [note_on(93, 110)]; // A6, 1760 Hz — lots to remove
             let mut l = vec![0.0f32; 9600];
             let mut r = vec![0.0f32; 9600];
-            let ev = PluginEvents { params: &params, midi: &midi, note_expressions: &[] };
+            let ev = PluginEvents {
+                params: &params,
+                midi: &midi,
+                note_expressions: &[],
+            };
             osc.render(&[], &[], &mut l, &mut r, &ev);
             rms(&l)
         };
@@ -668,7 +725,10 @@ mod tests {
                 freqs.push(zero_crossings(&w) as f32 / 2.0 * 20.0);
             }
             let mean = freqs.iter().sum::<f32>() / freqs.len() as f32;
-            freqs.iter().map(|f| (f - mean).abs()).fold(0.0f32, f32::max)
+            freqs
+                .iter()
+                .map(|f| (f - mean).abs())
+                .fold(0.0f32, f32::max)
         };
         let still = wobble(false);
         let vibrato = wobble(true);

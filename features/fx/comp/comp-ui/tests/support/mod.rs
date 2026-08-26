@@ -15,8 +15,8 @@ use std::sync::{Arc, Mutex};
 
 use dioxus_test::{by_testid, render, DocumentTester};
 
-use comp_ui::params::{CompParams, CompUiState};
 use comp_ui::control_view::App;
+use comp_ui::params::{CompParams, CompUiState};
 
 use nice_plug_dioxus::{ParamContext, SharedState};
 
@@ -57,7 +57,10 @@ impl GuiContextInner for RecordingGuiContext {
         PluginApi::Clap
     }
     unsafe fn raw_begin_set_parameter(&self, param: ParamPtr) {
-        self.log.lock().unwrap().push(Gesture::Begin(ptr_key(param)));
+        self.log
+            .lock()
+            .unwrap()
+            .push(Gesture::Begin(ptr_key(param)));
     }
     unsafe fn raw_set_parameter_normalized(&self, param: ParamPtr, normalized: f32) {
         self.log
@@ -182,7 +185,9 @@ impl Fixture {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             let _ = self.tester.pump().await;
         }
-        self.tester.advance_time(std::time::Duration::from_millis(16)).await;
+        self.tester
+            .advance_time(std::time::Duration::from_millis(16))
+            .await;
     }
 
     /// Rendered height of the graph.
@@ -225,10 +230,14 @@ impl Fixture {
         let i = html
             .find("transfer-curve")
             .expect("transfer-curve path missing from graph DOM");
-        let tag_start = html[..i].rfind('<').expect("malformed html around transfer-curve");
+        let tag_start = html[..i]
+            .rfind('<')
+            .expect("malformed html around transfer-curve");
         let tag_end = i + html[i..].find('>').expect("unclosed transfer-curve tag");
         let tag = &html[tag_start..tag_end];
-        let di = tag.find(" d=\"").expect("transfer-curve path has no d attribute");
+        let di = tag
+            .find(" d=\"")
+            .expect("transfer-curve path has no d attribute");
         let rest = &tag[di + 4..];
         rest[..rest.find('"').expect("unterminated d attribute")].to_string()
     }

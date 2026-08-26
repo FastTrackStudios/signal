@@ -7,7 +7,9 @@ const SR: f64 = 48000.0;
 const N: usize = 144_000;
 
 fn sine(freq: f64, amp: f64, n: usize) -> Vec<f32> {
-    (0..n).map(|i| (amp * (core::f64::consts::TAU * freq * i as f64 / SR).sin()) as f32).collect()
+    (0..n)
+        .map(|i| (amp * (core::f64::consts::TAU * freq * i as f64 / SR).sin()) as f32)
+        .collect()
 }
 
 fn tone(buf: &[f32], freq: f64) -> f64 {
@@ -42,7 +44,11 @@ fn run(t: &mut NativeTune, input: &[f32], block: usize, midi_at: Option<(usize, 
             chunk,
             &mut ol[s..s + chunk.len()],
             &mut or[s..s + chunk.len()],
-            &PluginEvents { params: &[], midi: &midi_events, note_expressions: &[] },
+            &PluginEvents {
+                params: &[],
+                midi: &midi_events,
+                note_expressions: &[],
+            },
         )
         .unwrap();
     }
@@ -65,7 +71,10 @@ fn corrects_a_sharp_a_to_pitch() {
     );
     // Readback drives the tuner UI.
     let detected = t.param_value(signal_fx::TUNE_DETECTED_MIDI_ID).unwrap();
-    assert!((detected - 69.47).abs() < 0.2, "detected ≈ A4+47c: {detected:.2}");
+    assert!(
+        (detected - 69.47).abs() < 0.2,
+        "detected ≈ A4+47c: {detected:.2}"
+    );
 }
 
 #[test]

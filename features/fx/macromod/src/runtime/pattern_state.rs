@@ -5,8 +5,8 @@
 //! changes (cheap hash compare), so `tick` stays allocation-free at
 //! control rate.
 
-use crate::sources::pattern::PatternConfig;
 use crate::sources::lfo::RetriggerMode;
+use crate::sources::pattern::PatternConfig;
 
 /// Runtime state for a single Pattern source instance.
 #[derive(Debug, Clone)]
@@ -104,6 +104,9 @@ mod tests {
         }
         s.phase = 0.5;
         let after = s.tick(0.0, &config, 120.0);
-        assert!(before <= 1.0 && after > 0.9, "evaluator should rebuild: {after}");
+        assert!(
+            before <= 1.0 && after > 0.9,
+            "evaluator should rebuild: {after}"
+        );
     }
 }

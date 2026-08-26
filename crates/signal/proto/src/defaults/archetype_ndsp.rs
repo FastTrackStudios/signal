@@ -2008,12 +2008,11 @@ mod tests {
         for def in defs {
             def.validate().unwrap();
             assert!(def.modules.iter().any(|m| !m.blocks.is_empty()));
-            assert!(
-                def.all_blocks()
-                    .iter()
-                    .flat_map(|b| b.params.iter())
-                    .all(|p| !p.name.starts_with("MIDI CC "))
-            );
+            assert!(def
+                .all_blocks()
+                .iter()
+                .flat_map(|b| b.params.iter())
+                .all(|p| !p.name.starts_with("MIDI CC ")));
         }
     }
 }

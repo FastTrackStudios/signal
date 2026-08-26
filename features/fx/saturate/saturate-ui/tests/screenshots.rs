@@ -80,8 +80,10 @@ async fn emphasis_strip_open() {
         .expect("emphasis toggle");
     let (ox, oy) = el.document_origin();
     let (bw, bh) = el.size();
-    fx.tester.pointer_down(ox + bw as f64 / 2.0, oy + bh as f64 / 2.0);
-    fx.tester.pointer_up(ox + bw as f64 / 2.0, oy + bh as f64 / 2.0);
+    fx.tester
+        .pointer_down(ox + bw as f64 / 2.0, oy + bh as f64 / 2.0);
+    fx.tester
+        .pointer_up(ox + bw as f64 / 2.0, oy + bh as f64 / 2.0);
     fx.settle().await;
     shot(&fx, "emphasis-strip-open");
 }

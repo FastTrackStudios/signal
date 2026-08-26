@@ -27,8 +27,8 @@
 //! corpus in `tests/annotation_parity.rs`.
 
 use keyflow_annotate::{
-    CcTimeline, EPS, EdgeParams, LineNote, annotate_line, annotate_line_with,
-    default_blocks_rebow, ks_is_marcato,
+    annotate_line, annotate_line_with, default_blocks_rebow, ks_is_marcato, CcTimeline, EdgeParams,
+    LineNote, EPS,
 };
 
 use crate::engine::{ArticClass, LineId};
@@ -209,7 +209,12 @@ pub enum DocEvent {
     /// mic / dynamic layer. Falls back to `short_note_timing.pre_delay_ms`
     /// for shorts and `0` (trigger == tick) for sustains when the library
     /// carries no measurements — the historical behaviour.
-    NoteOn { note: u8, vel: u8, rr: u32, lead: u32 },
+    NoteOn {
+        note: u8,
+        vel: u8,
+        rr: u32,
+        lead: u32,
+    },
     /// Note-off (fires the release tail; `rr` pins its round-robin).
     NoteOff { note: u8, rr: u32 },
     /// CC pass-through.
@@ -395,10 +400,7 @@ fn kind_for_selector(
 /// concrete articulation (not a mode/toggle band). Mirrors [`kind_for_ks`]
 /// but keeps the identity — the per-note arrival pre-roll needs the actual
 /// zone articulation ids, not just the kind.
-fn artic_for_ks(
-    spec: &LibrarySpec,
-    ks_val: Option<u8>,
-) -> Option<&crate::spec::ArticulationSpec> {
+fn artic_for_ks(spec: &LibrarySpec, ks_val: Option<u8>) -> Option<&crate::spec::ArticulationSpec> {
     let val = ks_val?;
     let label = spec.keyswitch.as_ref()?.cc58_function(val)?;
     spec.articulations
@@ -441,12 +443,9 @@ fn default_sustain_artic(spec: &LibrarySpec) -> Option<&crate::spec::Articulatio
         .iter()
         .find(|a| a.kind == ArticulationKind::Sustain)
         .or_else(|| {
-            spec.articulations.iter().find(|a| {
-                !matches!(
-                    a.kind,
-                    ArticulationKind::Release | ArticulationKind::Legato
-                )
-            })
+            spec.articulations
+                .iter()
+                .find(|a| !matches!(a.kind, ArticulationKind::Release | ArticulationKind::Legato))
         })
 }
 
@@ -825,10 +824,7 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 // A sustain plays BOTH CC2 vibrato sides — the pre-roll must
                 // bound both articulations' zones.
                 if n.is_sustain_like() {
-                    if let Some(pair) = ids
-                        .first()
-                        .and_then(|id| spec.vibrato_counterpart(id))
-                    {
+                    if let Some(pair) = ids.first().and_then(|id| spec.vibrato_counterpart(id)) {
                         ids.push(pair);
                     }
                 }
@@ -1514,7 +1510,12 @@ fn walk_schedule(
     // The document has been played out — live dispatch resumes under the
     // strict zero-latency policy (see PlayMode).
     bank.set_play_mode(id, crate::engine::PlayMode::StrictLive);
-    (transitions, reactive_fallbacks, reconstructed_events, emitted)
+    (
+        transitions,
+        reactive_fallbacks,
+        reconstructed_events,
+        emitted,
+    )
 }
 
 /// Walk a [`Schedule`] through a bank instrument, rendering block-sized
@@ -1925,21 +1926,48 @@ legato_engine {
                 .expect("prefire")
         };
         let tick = qn_to_frame(&[], 2.0, SR) as u64;
-        let cc58 = |v: u8| vec![DocCc { qn: 0.0, chan: 0, cc: 58, val: v }];
+        let cc58 = |v: u8| {
+            vec![DocCc {
+                qn: 0.0,
+                chan: 0,
+                cc: 58,
+                val: v,
+            }]
+        };
 
         // DOCUMENT DEFAULT (no CC58) = Expressive: vel 30 → 333, vel 90 → 250.
         // Velocity — not a keyswitch — drives the slow/medium/fast zone.
         let (f, l) = lead_of(vec![], 30);
-        assert_eq!(l, ms_to_frames_i64(333, SR) as u32, "EX slow = 333 ms (document default)");
+        assert_eq!(
+            l,
+            ms_to_frames_i64(333, SR) as u32,
+            "EX slow = 333 ms (document default)"
+        );
         assert_eq!(f + l as u64, tick, "arrival on the tick");
-        assert_eq!(lead_of(vec![], 90).1, ms_to_frames_i64(250, SR) as u32, "EX medium = 250 ms");
+        assert_eq!(
+            lead_of(vec![], 90).1,
+            ms_to_frames_i64(250, SR) as u32,
+            "EX medium = 250 ms"
+        );
         // An Expressive keyswitch (CC58 8) is a no-op vs the default.
-        assert_eq!(lead_of(cc58(8), 30).1, ms_to_frames_i64(333, SR) as u32, "EX keyswitch = still 333");
+        assert_eq!(
+            lead_of(cc58(8), 30).1,
+            ms_to_frames_i64(333, SR) as u32,
+            "EX keyswitch = still 333"
+        );
 
         // An explicit Low-Latency keyswitch (CC58 2, in 0-5) overrides to the
         // Low-Latency table: vel 30 → 150, vel 90 → 100.
-        assert_eq!(lead_of(cc58(2), 30).1, ms_to_frames_i64(150, SR) as u32, "LL keyswitch soft = 150 ms");
-        assert_eq!(lead_of(cc58(2), 90).1, ms_to_frames_i64(100, SR) as u32, "LL keyswitch loud = 100 ms");
+        assert_eq!(
+            lead_of(cc58(2), 30).1,
+            ms_to_frames_i64(150, SR) as u32,
+            "LL keyswitch soft = 150 ms"
+        );
+        assert_eq!(
+            lead_of(cc58(2), 90).1,
+            ms_to_frames_i64(100, SR) as u32,
+            "LL keyswitch loud = 100 ms"
+        );
 
         // Fast passage (0.1 QN = 50 ms IOI, far below the 333 ms delay) → the
         // room clamp forces fire-on-tick.
@@ -1973,17 +2001,16 @@ legato_engine {
             thresholds_ms: vec![10.0, 2000.0],
             anchors_ms: vec![ms, ms],
         };
-        spec.legato_engine.as_mut().unwrap().overlap_delay =
-            Some(crate::spec::OverlapDelaySpec {
-                low_latency: crate::spec::OverlapDelayCurveSpec {
-                    soft: flat(50.0),
-                    loud: flat(0.0),
-                },
-                expressive: crate::spec::OverlapDelayCurveSpec {
-                    soft: flat(90.0),
-                    loud: flat(0.0),
-                },
-            });
+        spec.legato_engine.as_mut().unwrap().overlap_delay = Some(crate::spec::OverlapDelaySpec {
+            low_latency: crate::spec::OverlapDelayCurveSpec {
+                soft: flat(50.0),
+                loud: flat(0.0),
+            },
+            expressive: crate::spec::OverlapDelayCurveSpec {
+                soft: flat(90.0),
+                loud: flat(0.0),
+            },
+        });
         let cfg = spec.legato_cfg();
         // Low-latency soft (vel 30) → authored 50 ms; loud (vel 90) → 0 ms.
         assert_eq!(cfg.overlap_delay_ms(80.0, 30, false), 50);

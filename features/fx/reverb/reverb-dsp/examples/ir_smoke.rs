@@ -41,7 +41,10 @@ fn main() {
                     if e > 1e-6 {
                         last_above_60 = i;
                     }
-                    assert!(l.is_finite() && r.is_finite(), "NaN at sample {i} in {path}");
+                    assert!(
+                        l.is_finite() && r.is_finite(),
+                        "NaN at sample {i} in {path}"
+                    );
                 }
 
                 println!(

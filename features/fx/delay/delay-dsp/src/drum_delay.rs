@@ -193,7 +193,8 @@ impl DrumDelay {
 
         self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
+        self.smoother
+            .set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     /// Advance the time smoother + motor wobble; returns the smoothed

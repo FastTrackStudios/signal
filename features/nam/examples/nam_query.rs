@@ -4,7 +4,8 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     let root = std::path::PathBuf::from(
-        args.next().ok_or("usage: nam_query <nam-root> <substr> [k]")?,
+        args.next()
+            .ok_or("usage: nam_query <nam-root> <substr> [k]")?,
     );
     let needle = args.next().unwrap_or_default().to_lowercase();
     let k: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or(6);

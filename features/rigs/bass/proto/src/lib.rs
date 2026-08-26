@@ -33,7 +33,6 @@ pub enum PresetKind {
     Sample,
 }
 
-
 /// One preset in the bass library — a complete tone the rig can switch to.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct BassPreset {

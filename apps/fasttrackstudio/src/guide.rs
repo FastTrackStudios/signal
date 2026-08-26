@@ -122,9 +122,13 @@ pub fn set_click_sound(index: usize) {
     CLICK_SOUND.store(index as u8, Ordering::Relaxed);
     let sound = CLICK_SOUNDS[index].1;
     let Some(shared) = GUIDE.get() else { return };
-    let Ok(mut engine) = shared.engine.lock() else { return };
+    let Ok(mut engine) = shared.engine.lock() else {
+        return;
+    };
     let dir = config_dir().join("guide-samples/Click");
-    engine.bank_mut().load_click(&dir, sound, shared.sample_rate);
+    engine
+        .bank_mut()
+        .load_click(&dir, sound, shared.sample_rate);
     // Fill any subdivision the chosen sound is missing with a synth tick.
     engine.bank_mut().synthesize_defaults(shared.sample_rate);
     tracing::info!("guide: click sound -> {}", CLICK_SOUNDS[index].0);
@@ -144,7 +148,9 @@ pub fn set_cues_enabled(on: bool) {
 /// this to seed the initial state, e.g. cues-off).
 fn apply_bus_config() {
     let Some(shared) = GUIDE.get() else { return };
-    let Ok(mut engine) = shared.engine.lock() else { return };
+    let Ok(mut engine) = shared.engine.lock() else {
+        return;
+    };
     let click = CLICK_ON.load(Ordering::Relaxed);
     engine.config.enable_beat = click;
     engine.config.enable_measure_accent = click;
@@ -318,22 +324,22 @@ fn rebuild_schedule() {
     let cue_bank = CueBank::new(config_dir().join("tts-cache"), tts_voice_id());
     let mut temp = SampleBank::default();
     {
-        let uncached = texts
-            .iter()
-            .any(|t| !cue_bank.cache_path(t).exists());
+        let uncached = texts.iter().any(|t| !cue_bank.cache_path(t).exists());
         let mut tts = if uncached { load_tts() } else { None };
-        let loaded = cue_bank.preload_into(
-            &mut temp,
-            &texts,
-            shared.sample_rate,
-            tts.as_deref_mut(),
-        );
+        let loaded =
+            cue_bank.preload_into(&mut temp, &texts, shared.sample_rate, tts.as_deref_mut());
         if !loaded.is_empty() {
-            tracing::info!("guide: {} TTS cue(s) ready for '{}'", loaded.len(), song.name);
+            tracing::info!(
+                "guide: {} TTS cue(s) ready for '{}'",
+                loaded.len(),
+                song.name
+            );
         }
     }
 
-    let Ok(mut engine) = shared.engine.lock() else { return };
+    let Ok(mut engine) = shared.engine.lock() else {
+        return;
+    };
     // Spoken count-in numbers → the count bank (index 0 = "one"). A real
     // recorded count wav (`Counts/English Female - N.wav`, already loaded)
     // wins; TTS fills the rest; the synth tick is the last resort.

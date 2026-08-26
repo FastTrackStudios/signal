@@ -35,7 +35,11 @@ async fn open_eq(fx: &mut Fixture) {
 async fn the_eq_strip_opens_below_the_panel() -> dioxus_test::Result<()> {
     let mut fx = mount();
     // Closed by default; the panel is up.
-    assert!(fx.tester.query(by_testid("emphasis-view")).immediately().is_err());
+    assert!(fx
+        .tester
+        .query(by_testid("emphasis-view"))
+        .immediately()
+        .is_err());
     let panel = fx.tester.query(by_testid("hardware-panel")).immediately()?;
     let (_, panel_h_before) = panel.size();
 
@@ -45,7 +49,10 @@ async fn the_eq_strip_opens_below_the_panel() -> dioxus_test::Result<()> {
     // panel — the panel is still mounted (not hidden).
     let strip = fx.tester.query(by_testid("emphasis-view")).immediately()?;
     let (strip_w, strip_h) = strip.size();
-    assert!(strip_w > 300.0 && strip_h > 150.0, "sidecar collapsed: {strip_w}x{strip_h}");
+    assert!(
+        strip_w > 300.0 && strip_h > 150.0,
+        "sidecar collapsed: {strip_w}x{strip_h}"
+    );
     let panel = fx.tester.query(by_testid("hardware-panel")).immediately()?;
     let (ox_panel, _) = panel.document_origin();
     let (ox_strip, _) = strip.document_origin();

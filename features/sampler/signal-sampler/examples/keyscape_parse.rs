@@ -20,18 +20,25 @@ fn main() {
     let mut notes: BTreeMap<String, std::collections::BTreeSet<u8>> = BTreeMap::new();
 
     for entry in walk(Path::new(&dir)) {
-        let Some(stem) = entry.file_stem().and_then(|s| s.to_str()) else { continue };
+        let Some(stem) = entry.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
         if entry.extension().and_then(|e| e.to_str()) != Some("flac") {
             continue;
         }
         total += 1;
         match parse_sample_stem(stem) {
             Some(k) => {
-                let e = by_artic.entry((k.articulation.clone(), k.direction.clone())).or_insert((0, 255, 0));
+                let e = by_artic
+                    .entry((k.articulation.clone(), k.direction.clone()))
+                    .or_insert((0, 255, 0));
                 e.0 += 1;
                 e.1 = e.1.min(k.note);
                 e.2 = e.2.max(k.note);
-                notes.entry(k.articulation.clone()).or_default().insert(k.note);
+                notes
+                    .entry(k.articulation.clone())
+                    .or_default()
+                    .insert(k.note);
             }
             None => {
                 if unparsed.len() < 20 {
@@ -42,10 +49,16 @@ fn main() {
     }
 
     println!("{total} samples\n");
-    println!("{:<28} {:<8} {:>6} {:>10} {:>10}", "articulation", "dir", "count", "note range", "#notes");
+    println!(
+        "{:<28} {:<8} {:>6} {:>10} {:>10}",
+        "articulation", "dir", "count", "note range", "#notes"
+    );
     for ((artic, dir), (count, lo, hi)) in &by_artic {
         let nn = notes.get(artic).map(|s| s.len()).unwrap_or(0);
-        println!("{:<28} {:<8} {:>6} {:>4}..{:<4} {:>10}", artic, dir, count, lo, hi, nn);
+        println!(
+            "{:<28} {:<8} {:>6} {:>4}..{:<4} {:>10}",
+            artic, dir, count, lo, hi, nn
+        );
     }
     let parsed: usize = by_artic.values().map(|(c, ..)| *c).sum();
     println!("\nparsed {parsed}/{total}; unparsed {}", total - parsed);

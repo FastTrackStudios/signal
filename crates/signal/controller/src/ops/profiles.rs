@@ -182,18 +182,17 @@ impl<S: SignalApi> ProfileOps<S> {
             .map(|p| p.name.as_str());
         // Clone out of the lock in its own statement (guard-across-await).
         let applier = self.0.daw_applier.read().expect("lock poisoned").clone();
-        let applied_to_daw =
-            if let Some(applier) = applier {
-                match applier.apply_graph(&graph, patch_name).await {
-                    Ok(_) => true,
-                    Err(e) => {
-                        eprintln!("[signal] activate_patch DAW apply failed: {e}");
-                        false
-                    }
+        let applied_to_daw = if let Some(applier) = applier {
+            match applier.apply_graph(&graph, patch_name).await {
+                Ok(_) => true,
+                Err(e) => {
+                    eprintln!("[signal] activate_patch DAW apply failed: {e}");
+                    false
                 }
-            } else {
-                false
-            };
+            }
+        } else {
+            false
+        };
 
         self.0.event_bus.emit(events::SignalEvent::PatchActivated {
             profile_id: profile_id.to_string(),

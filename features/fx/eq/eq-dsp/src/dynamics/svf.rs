@@ -213,6 +213,9 @@ mod tests {
         b.set(SvfShape::Bell, 500.0, 2.0, 7.5);
         let ga = magnitude_at(&mut a, 500.0);
         let gb = magnitude_at(&mut b, 500.0);
-        assert!((ga - gb).abs() < 1e-6, "cheap path must match: {ga} vs {gb}");
+        assert!(
+            (ga - gb).abs() < 1e-6,
+            "cheap path must match: {ga} vs {gb}"
+        );
     }
 }

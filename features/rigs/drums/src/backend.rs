@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
-use architect::{HasDispatcher, Layer, PubSub, Services, layers};
+use architect::{layers, HasDispatcher, Layer, PubSub, Services};
 use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMonitor, Velocity};
 use signal_drums_proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
 use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
@@ -127,7 +127,10 @@ impl KitMix {
             mix.pieces.push(PieceStrip {
                 id: piece.id.clone(),
                 label: crate::library::slot_label(&piece.id),
-                state: StripState { muted: piece.muted, ..StripState::default() },
+                state: StripState {
+                    muted: piece.muted,
+                    ..StripState::default()
+                },
             });
             for mic in &piece.mics {
                 match &mic.bus {
@@ -216,13 +219,20 @@ impl DrumRigBackend {
             .unwrap_or_else(|_| PathBuf::from(DEFAULT_LIBRARY));
         let library = crate::library::scan_engines(&crate::library::engines_dir(&library_dir));
         let mixes = scan_mixes(&library_dir.join("Mixes"));
-        tracing::info!(pieces = library.len(), mixes = mixes.len(), "drum rig: scanned library");
+        tracing::info!(
+            pieces = library.len(),
+            mixes = mixes.len(),
+            "drum rig: scanned library"
+        );
         let backend = Self {
             inner: Arc::new(Inner {
                 rig: Mutex::new(None),
                 // Default the hardware input to the FTS drum map (our e-kit
                 // layout → the loaded kit), not raw Direct.
-                state: Mutex::new(State { input_map: InputMap::Fts, ..State::default() }),
+                state: Mutex::new(State {
+                    input_map: InputMap::Fts,
+                    ..State::default()
+                }),
                 events: architect::rig::events_hub(),
                 library_dir,
                 monitor: MidiMonitor::new(),
@@ -346,7 +356,9 @@ impl DrumRigBackend {
     /// The `.signalpreset` path of the currently-loaded kit, if any.
     fn current_preset_path(&self) -> Option<PathBuf> {
         let s = self.inner.state.lock().ok()?;
-        s.loaded.and_then(|i| s.kits.get(i)).map(|k| PathBuf::from(&k.path))
+        s.loaded
+            .and_then(|i| s.kits.get(i))
+            .map(|k| PathBuf::from(&k.path))
     }
 
     /// Swap one slot's engine to `engine_path` and reload the kit. The preset's
@@ -354,8 +366,12 @@ impl DrumRigBackend {
     /// that slot differs — so pads/lights keep working; the mic set (hence the
     /// mixer strips) may change with the new engine, so we republish the mixer.
     fn do_swap_piece(&self, slot_id: String, engine_path: String) {
-        let Some(path) = self.current_preset_path() else { return };
-        let Ok(mut spec) = PresetSpec::from_file(&path) else { return };
+        let Some(path) = self.current_preset_path() else {
+            return;
+        };
+        let Ok(mut spec) = PresetSpec::from_file(&path) else {
+            return;
+        };
         let dir = path.parent().unwrap_or(Path::new("")).to_path_buf();
         let mut found = false;
         for e in spec.engines.iter_mut() {
@@ -375,7 +391,11 @@ impl DrumRigBackend {
                 Ok(ids) => {
                     let abs = {
                         let p = PathBuf::from(&engine_path);
-                        if p.is_absolute() { p } else { dir.join(p) }
+                        if p.is_absolute() {
+                            p
+                        } else {
+                            dir.join(p)
+                        }
                     };
                     if let Ok(mut s) = self.inner.state.lock() {
                         s.piece_ids = ids;
@@ -485,18 +505,23 @@ impl DrumRigBackend {
             (
                 s.mix.channels.clone(),
                 s.mix.buses.clone(),
-                s.mix.pieces.iter().map(|p| p.label.clone()).collect::<Vec<_>>(),
+                s.mix
+                    .pieces
+                    .iter()
+                    .map(|p| p.label.clone())
+                    .collect::<Vec<_>>(),
             )
         };
-        let add_fx = |track: &str, label: &str, plugin: Box<dyn signal_plugin_host::PluginInstance>| {
-            let Ok(slot) = project.track(track).add_fx_slot(label) else {
-                return false;
+        let add_fx =
+            |track: &str, label: &str, plugin: Box<dyn signal_plugin_host::PluginInstance>| {
+                let Ok(slot) = project.track(track).add_fx_slot(label) else {
+                    return false;
+                };
+                let mut boxed = plugin;
+                let _ = signal_plugin_host::PluginInstance::prepare(boxed.as_mut(), sr, 1024);
+                daw.insert_plugin_instance(slot.into_guid(), boxed);
+                true
             };
-            let mut boxed = plugin;
-            let _ = signal_plugin_host::PluginInstance::prepare(boxed.as_mut(), sr, 1024);
-            daw.insert_plugin_instance(slot.into_guid(), boxed);
-            true
-        };
         for (ci, ch) in channels.iter().enumerate() {
             let piece = piece_labels.get(ch.piece).cloned().unwrap_or_default();
             let target = if ch.mic.is_empty() {
@@ -504,7 +529,9 @@ impl DrumRigBackend {
             } else {
                 format!("{} {}", piece, ch.mic)
             };
-            let Some(strip) = crate::mm2fx::match_strip(mixer, &target) else { continue };
+            let Some(strip) = crate::mm2fx::match_strip(mixer, &target) else {
+                continue;
+            };
             let db = crate::mm2fx::level_to_db(strip.level);
             if let Ok(mut st) = self.inner.state.lock() {
                 if let Some(c) = st.mix.channels.get_mut(ci) {
@@ -520,7 +547,9 @@ impl DrumRigBackend {
             }
         }
         for (bi, bus) in buses.iter().enumerate() {
-            let Some(strip) = crate::mm2fx::match_strip(mixer, &bus.label) else { continue };
+            let Some(strip) = crate::mm2fx::match_strip(mixer, &bus.label) else {
+                continue;
+            };
             let db = crate::mm2fx::level_to_db(strip.level);
             if let Ok(mut st) = self.inner.state.lock() {
                 if let Some(b) = st.mix.buses.get_mut(bi) {
@@ -539,7 +568,11 @@ impl DrumRigBackend {
             tracing::warn!("mm2 import: Master Bus FX not applied (no daw master fx chain yet)");
         }
         self.apply_kit_mixer();
-        tracing::info!(fx_applied, strips = mixer.strips.len(), "mm2 import: applied mix");
+        tracing::info!(
+            fx_applied,
+            strips = mixer.strips.len(),
+            "mm2 import: applied mix"
+        );
     }
 
     /// Rebuild the strip model from the freshly loaded kit's tracks.
@@ -575,14 +608,22 @@ impl DrumRigBackend {
         let mix = &s.mix;
         let vol = |db: f32| db_to_linear(db) as f64;
         for ch in &mix.channels {
-            let piece = mix.pieces.get(ch.piece).map(|p| p.state).unwrap_or_default();
+            let piece = mix
+                .pieces
+                .get(ch.piece)
+                .map(|p| p.state)
+                .unwrap_or_default();
             let track = project.track(&ch.track);
             let _ = track.set_volume(vol(piece.gain_db + ch.state.gain_db));
             let _ = track.set_muted(piece.muted || ch.state.muted);
             let _ = track.set_soloed(piece.soloed || ch.state.soloed);
         }
         for snd in &mix.sends {
-            let piece = mix.pieces.get(snd.piece).map(|p| p.state).unwrap_or_default();
+            let piece = mix
+                .pieces
+                .get(snd.piece)
+                .map(|p| p.state)
+                .unwrap_or_default();
             let track = project.track(&snd.track);
             let _ = track.set_volume(vol(piece.gain_db));
             let _ = track.set_muted(piece.muted || snd.muted);
@@ -599,7 +640,11 @@ impl DrumRigBackend {
             let sender_solo = mix.sends.iter().any(|snd| {
                 snd.bus == bi
                     && (snd.soloed
-                        || mix.pieces.get(snd.piece).map(|p| p.state.soloed).unwrap_or(false))
+                        || mix
+                            .pieces
+                            .get(snd.piece)
+                            .map(|p| p.state.soloed)
+                            .unwrap_or(false))
             });
             let track = project.track(&bus.track);
             let _ = track.set_volume(vol(bus.state.gain_db));
@@ -675,11 +720,21 @@ impl DrumRigBackend {
 
     // ── event publishing ──
     fn publish_all(&self) {
-        self.inner.events.publish(DrumEvent::Library(DrumRig::kits(self)));
-        self.inner.events.publish(DrumEvent::Kit(DrumRig::pieces(self)));
-        self.inner.events.publish(DrumEvent::Design(DrumRig::kit_slots(self)));
-        self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
-        self.inner.events.publish(DrumEvent::Status(DrumRig::status(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Library(DrumRig::kits(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Kit(DrumRig::pieces(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Design(DrumRig::kit_slots(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Mixer(DrumRig::mixer(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Status(DrumRig::status(self)));
     }
 
     /// Open the Light Guide (if a keyboard is attached) and paint the current
@@ -687,7 +742,10 @@ impl DrumRigBackend {
     fn paint_light_guide(&self) {
         let pieces: Vec<(u8, String)> = {
             let s = self.inner.state.lock().unwrap();
-            s.pieces.iter().map(|p| (p.note as u8, p.id.clone())).collect()
+            s.pieces
+                .iter()
+                .map(|p| (p.note as u8, p.id.clone()))
+                .collect()
         };
         if let Ok(mut l) = self.inner.light.lock() {
             if l.is_none() {
@@ -736,18 +794,28 @@ impl RigBackend for DrumRigBackend {
         // into the omni stream without touching the UI.
         tracing::info!(?ports, "drum rig: MIDI ports changed — re-attaching");
         self.reattach_midi();
-        self.inner.events.publish(DrumEvent::Status(DrumRig::status(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Status(DrumRig::status(self)));
     }
 
     fn on_running_edge(&self, _running: bool) {
         // Transport transitions are rare — full Status + Mixer only on the edge.
-        self.inner.events.publish(DrumEvent::Status(DrumRig::status(self)));
-        self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Status(DrumRig::status(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Mixer(DrumRig::mixer(self)));
     }
 
     fn on_running_tick(&self) {
-        self.inner.events.publish(DrumEvent::Meters(DrumRig::meters(self)));
-        self.inner.events.publish(DrumEvent::Midi(DrumRig::midi_recent(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Meters(DrumRig::meters(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Midi(DrumRig::midi_recent(self)));
     }
 }
 
@@ -769,7 +837,9 @@ impl DrumRig for DrumRigBackend {
         if let Ok(mut rig) = self.inner.rig.lock() {
             *rig = None;
         }
-        self.inner.events.publish(DrumEvent::Status(DrumRig::status(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Status(DrumRig::status(self)));
     }
 
     fn status(&self) -> DrumStatus {
@@ -785,7 +855,10 @@ impl DrumRig for DrumRigBackend {
                 // master has no meter cell of its own yet.
                 let meters = rig.meters_bank();
                 let peak = |idx: usize| {
-                    meters.cell(idx).map(|c| c.peak(0).max(c.peak(1))).unwrap_or(0.0)
+                    meters
+                        .cell(idx)
+                        .map(|c| c.peak(0).max(c.peak(1)))
+                        .unwrap_or(0.0)
                 };
                 for ch in &s.mix.channels {
                     master_peak = master_peak.max(peak(ch.meter));
@@ -801,7 +874,11 @@ impl DrumRig for DrumRigBackend {
                 }
             }
         }
-        let preload = if total_n > 0 { loaded_n as f32 / total_n as f32 } else { 1.0 };
+        let preload = if total_n > 0 {
+            loaded_n as f32 / total_n as f32
+        } else {
+            1.0
+        };
         DrumStatus {
             running,
             loaded_kit,
@@ -814,7 +891,11 @@ impl DrumRig for DrumRigBackend {
     }
 
     fn kits(&self) -> Vec<KitInfo> {
-        self.inner.state.lock().map(|s| s.kits.clone()).unwrap_or_default()
+        self.inner
+            .state
+            .lock()
+            .map(|s| s.kits.clone())
+            .unwrap_or_default()
     }
 
     fn load_kit(&self, index: u32) {
@@ -825,7 +906,12 @@ impl DrumRig for DrumRigBackend {
     }
 
     fn pieces(&self) -> Vec<PieceInfo> {
-        let mut pieces = self.inner.state.lock().map(|s| s.pieces.clone()).unwrap_or_default();
+        let mut pieces = self
+            .inner
+            .state
+            .lock()
+            .map(|s| s.pieces.clone())
+            .unwrap_or_default();
         // Freshen preload counts.
         if let Ok(rig) = self.inner.rig.lock() {
             if let Some(rig) = rig.as_ref() {
@@ -842,15 +928,23 @@ impl DrumRig for DrumRigBackend {
     fn kit_slots(&self) -> Vec<signal_drums_proto::KitSlot> {
         // Source of truth = the engines actually loaded (reflects swaps), not
         // the on-disk preset file.
-        let engines = self.inner.state.lock().map(|s| s.engines.clone()).unwrap_or_default();
+        let engines = self
+            .inner
+            .state
+            .lock()
+            .map(|s| s.engines.clone())
+            .unwrap_or_default();
         engines
             .into_iter()
             .map(|(id, abs)| {
                 let abs_str = abs.display().to_string();
                 let lib = self.inner.library.iter().find(|p| p.path == abs_str);
-                let current_name = lib
-                    .map(|p| p.name.clone())
-                    .unwrap_or_else(|| abs.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string());
+                let current_name = lib.map(|p| p.name.clone()).unwrap_or_else(|| {
+                    abs.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string()
+                });
                 let kind = lib
                     .map(|p| p.kind.clone())
                     .filter(|k| !k.is_empty())
@@ -880,15 +974,18 @@ impl DrumRig for DrumRigBackend {
     fn similar_pieces(&self, slot_id: String) -> Vec<signal_drums_proto::LibraryPiece> {
         let current = {
             let s = self.inner.state.lock().unwrap();
-            s.engines.iter().find(|(id, _)| *id == slot_id).map(|(_, p)| p.clone())
+            s.engines
+                .iter()
+                .find(|(id, _)| *id == slot_id)
+                .map(|(_, p)| p.clone())
         };
-        let Some(current) = current else { return Vec::new() };
+        let Some(current) = current else {
+            return Vec::new();
+        };
         match crate::piece_space::similar_to(&self.inner.library_dir, &current, 12) {
             Ok(hits) => hits
                 .into_iter()
-                .filter_map(|(path, _)| {
-                    self.inner.library.iter().find(|p| p.path == path).cloned()
-                })
+                .filter_map(|(path, _)| self.inner.library.iter().find(|p| p.path == path).cloned())
                 .collect(),
             Err(e) => {
                 tracing::debug!("similar_pieces: {e}");
@@ -915,7 +1012,12 @@ impl DrumRig for DrumRigBackend {
     }
 
     fn import_mm2_mix(&self, name: String) {
-        let mix_path = self.inner.mixes.iter().find(|(n, _)| *n == name).map(|(_, p)| p.clone());
+        let mix_path = self
+            .inner
+            .mixes
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, p)| p.clone());
         let Some(mix_path) = mix_path else {
             tracing::warn!(name, "mm2 import: no such mix");
             return;
@@ -958,9 +1060,17 @@ impl DrumRig for DrumRigBackend {
         let channel = Channel::new(GM_DRUM_CHANNEL);
         let key = KeyNumber::new(note);
         let ev = if velocity > 0 {
-            MidiEvent::NoteOn { channel, key, velocity: Velocity::new(velocity) }
+            MidiEvent::NoteOn {
+                channel,
+                key,
+                velocity: Velocity::new(velocity),
+            }
         } else {
-            MidiEvent::NoteOff { channel, key, velocity: Velocity::new(0) }
+            MidiEvent::NoteOff {
+                channel,
+                key,
+                velocity: Velocity::new(0),
+            }
         };
         self.inner.monitor.record(&ev);
         if velocity > 0 {
@@ -975,11 +1085,17 @@ impl DrumRig for DrumRigBackend {
     fn mixer(&self) -> Vec<MixerStrip> {
         let meters = {
             let rig = self.inner.rig.lock().unwrap();
-            let Some(rig) = rig.as_ref() else { return Vec::new() };
+            let Some(rig) = rig.as_ref() else {
+                return Vec::new();
+            };
             rig.meters_bank()
         };
-        let peak =
-            |idx: usize| meters.cell(idx).map(|c| c.peak(0).max(c.peak(1))).unwrap_or(0.0);
+        let peak = |idx: usize| {
+            meters
+                .cell(idx)
+                .map(|c| c.peak(0).max(c.peak(1)))
+                .unwrap_or(0.0)
+        };
         let s = self.inner.state.lock().unwrap();
         let mix = &s.mix;
         let mut strips = Vec::new();
@@ -1008,7 +1124,12 @@ impl DrumRig for DrumRigBackend {
                 .iter()
                 .filter(|c| c.piece == pi)
                 .map(|c| c.meter)
-                .chain(mix.sends.iter().filter(|sd| sd.piece == pi).map(|sd| sd.meter))
+                .chain(
+                    mix.sends
+                        .iter()
+                        .filter(|sd| sd.piece == pi)
+                        .map(|sd| sd.meter),
+                )
                 .map(peak)
                 .fold(0.0f32, f32::max);
             strips.push(MixerStrip {
@@ -1022,11 +1143,20 @@ impl DrumRig for DrumRigBackend {
                 peak: piece_peak,
                 sends,
             });
-            for (ci, ch) in mix.channels.iter().enumerate().filter(|(_, c)| c.piece == pi) {
+            for (ci, ch) in mix
+                .channels
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| c.piece == pi)
+            {
                 strips.push(MixerStrip {
                     kind: StripKind::Channel,
                     idx: ci as u32,
-                    label: if ch.mic.is_empty() { piece.label.clone() } else { ch.mic.clone() },
+                    label: if ch.mic.is_empty() {
+                        piece.label.clone()
+                    } else {
+                        ch.mic.clone()
+                    },
                     group: piece.label.clone(),
                     gain_db: ch.state.gain_db,
                     muted: ch.state.muted,
@@ -1055,11 +1185,17 @@ impl DrumRig for DrumRigBackend {
     fn meters(&self) -> signal_drums_proto::MeterSnapshot {
         let (meters, voices) = {
             let rig = self.inner.rig.lock().unwrap();
-            let Some(rig) = rig.as_ref() else { return Default::default() };
+            let Some(rig) = rig.as_ref() else {
+                return Default::default();
+            };
             (rig.meters_bank(), rig.kit_voices() as u32)
         };
-        let peak =
-            |idx: usize| meters.cell(idx).map(|c| c.peak(0).max(c.peak(1))).unwrap_or(0.0);
+        let peak = |idx: usize| {
+            meters
+                .cell(idx)
+                .map(|c| c.peak(0).max(c.peak(1)))
+                .unwrap_or(0.0)
+        };
         let s = self.inner.state.lock().unwrap();
         let mix = &s.mix;
         // Positionally aligned with `mixer()`: per piece [piece, channels…],
@@ -1072,7 +1208,12 @@ impl DrumRig for DrumRigBackend {
                 .iter()
                 .filter(|c| c.piece == pi)
                 .map(|c| c.meter)
-                .chain(mix.sends.iter().filter(|sd| sd.piece == pi).map(|sd| sd.meter))
+                .chain(
+                    mix.sends
+                        .iter()
+                        .filter(|sd| sd.piece == pi)
+                        .map(|sd| sd.meter),
+                )
                 .map(peak)
                 .fold(0.0f32, f32::max);
             strips.push(piece_peak);
@@ -1087,7 +1228,11 @@ impl DrumRig for DrumRigBackend {
             master = master.max(p);
             strips.push(p);
         }
-        signal_drums_proto::MeterSnapshot { master, strips, voices }
+        signal_drums_proto::MeterSnapshot {
+            master,
+            strips,
+            voices,
+        }
     }
 
     fn set_piece_gain(&self, idx: u32, db: f32) {
@@ -1107,7 +1252,9 @@ impl DrumRig for DrumRigBackend {
             }
         }
         self.apply_kit_mixer();
-        self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Mixer(DrumRig::mixer(self)));
     }
     fn set_piece_solo(&self, idx: u32, soloed: bool) {
         if let Ok(mut s) = self.inner.state.lock() {
@@ -1116,7 +1263,9 @@ impl DrumRig for DrumRigBackend {
             }
         }
         self.apply_kit_mixer();
-        self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Mixer(DrumRig::mixer(self)));
     }
     fn set_bus_solo(&self, idx: u32, soloed: bool) {
         if let Ok(mut s) = self.inner.state.lock() {
@@ -1125,7 +1274,9 @@ impl DrumRig for DrumRigBackend {
             }
         }
         self.apply_kit_mixer();
-        self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Mixer(DrumRig::mixer(self)));
     }
     fn set_send_level(&self, idx: u32, db: f32) {
         // Continuous — no Mixer echo (see set_piece_gain).
@@ -1186,7 +1337,9 @@ impl DrumRig for DrumRigBackend {
             s.midi_port = if name.is_empty() { None } else { Some(name) };
         }
         self.reattach_midi();
-        self.inner.events.publish(DrumEvent::Status(DrumRig::status(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Status(DrumRig::status(self)));
     }
 
     fn set_input_map(&self, map: InputMap) {
@@ -1194,7 +1347,9 @@ impl DrumRig for DrumRigBackend {
             s.input_map = map;
         }
         self.reattach_midi();
-        self.inner.events.publish(DrumEvent::Status(DrumRig::status(self)));
+        self.inner
+            .events
+            .publish(DrumEvent::Status(DrumRig::status(self)));
     }
 
     fn midi_recent(&self) -> Vec<MidiEvent> {
@@ -1216,7 +1371,10 @@ impl signal_rigs_proto::rig_core::RigCore for DrumRigBackend {
     fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
         DrumRig::kits(self)
             .into_iter()
-            .map(|k| signal_rigs_proto::RigPresetInfo { name: k.name, loaded: k.loaded })
+            .map(|k| signal_rigs_proto::RigPresetInfo {
+                name: k.name,
+                loaded: k.loaded,
+            })
             .collect()
     }
     fn load_preset(&self, index: u32) {
@@ -1229,7 +1387,10 @@ impl signal_rigs_proto::rig_core::RigCore for DrumRigBackend {
         DrumRig::set_midi_port(self, name);
     }
     fn midi_recent(&self) -> Vec<String> {
-        DrumRig::midi_recent(self).iter().map(|e| format!("{e:?}")).collect()
+        DrumRig::midi_recent(self)
+            .iter()
+            .map(|e| format!("{e:?}"))
+            .collect()
     }
 }
 
@@ -1254,7 +1415,10 @@ impl Services for DrumRigBackend {
 /// (drops apostrophes, hyphens, spaces) so "80's Meet Now-ies" == "80s Meet
 /// Now-ies".
 fn norm_name(s: &str) -> String {
-    s.chars().filter(|c| c.is_ascii_alphanumeric()).map(|c| c.to_ascii_lowercase()).collect()
+    s.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
 }
 
 /// Collect `.preset` (MM2 Cradle) mix files under `dir` as `(name, path)`.
@@ -1264,7 +1428,11 @@ fn scan_mixes(dir: &Path) -> Vec<(String, PathBuf)> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) == Some("preset") {
-                let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("mix").to_string();
+                let name = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("mix")
+                    .to_string();
                 out.push((name, path));
             }
         }
@@ -1275,7 +1443,9 @@ fn scan_mixes(dir: &Path) -> Vec<(String, PathBuf)> {
 
 /// Recursively collect `.signalpreset` files as [`KitInfo`].
 fn collect_presets(dir: &Path, out: &mut Vec<KitInfo>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
@@ -1286,16 +1456,25 @@ fn collect_presets(dir: &Path, out: &mut Vec<KitInfo>) {
                 .ok()
                 .filter(|n| !n.is_empty())
                 .unwrap_or_else(|| {
-                    path.file_stem().and_then(|s| s.to_str()).unwrap_or("kit").to_string()
+                    path.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("kit")
+                        .to_string()
                 });
-            out.push(KitInfo { name, path: path.display().to_string(), loaded: false });
+            out.push(KitInfo {
+                name,
+                path: path.display().to_string(),
+                loaded: false,
+            });
         }
     }
 }
 
 /// Read `(slot_id, abs engine path)` for each engine in a preset file.
 fn engines_from_preset(path: &Path) -> Vec<(String, PathBuf)> {
-    let Ok(spec) = PresetSpec::from_file(path) else { return Vec::new() };
+    let Ok(spec) = PresetSpec::from_file(path) else {
+        return Vec::new();
+    };
     let dir = path.parent().unwrap_or(Path::new(""));
     crate::library::preset_slots(&spec, dir)
 }
@@ -1305,7 +1484,10 @@ fn pieces_from_preset(path: &Path, ids: &[String]) -> Vec<PieceInfo> {
     let Ok(spec) = PresetSpec::from_file(path) else {
         return ids
             .iter()
-            .map(|id| PieceInfo { id: id.clone(), ..Default::default() })
+            .map(|id| PieceInfo {
+                id: id.clone(),
+                ..Default::default()
+            })
             .collect();
     };
     // engine id → first routed note.

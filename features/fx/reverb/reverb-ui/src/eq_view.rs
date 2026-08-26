@@ -132,7 +132,11 @@ pub fn ReverbEqSidecar(frame: u64) -> Element {
 #[component]
 pub fn ReverbEqView(mode_is_decay: bool, frame: u64) -> Element {
     let _ = frame;
-    let mode = if mode_is_decay { EqViewMode::Decay } else { EqViewMode::Post };
+    let mode = if mode_is_decay {
+        EqViewMode::Decay
+    } else {
+        EqViewMode::Post
+    };
     let shared = use_context::<nice_plug_dioxus::SharedState>();
     let ui = shared
         .get::<crate::control_view::ReverbUi>()

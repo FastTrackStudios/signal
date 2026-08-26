@@ -304,8 +304,7 @@ impl CleanDelay {
                 // read head turns that fixed floor into the era's
                 // signal-tracking breathing.
                 let compressed = self.comp_env.compress(x);
-                let noisy =
-                    compressed + self.noise.next_bipolar() * (1.5 / 2048.0);
+                let noisy = compressed + self.noise.next_bipolar() * (1.5 / 2048.0);
                 self.twelve_lp.tick(quantize_12bit(noisy), ch)
             }
             DigitalVoice::Classic => {
@@ -497,8 +496,7 @@ mod tests {
                 d.update(SR);
                 (0..9600)
                     .map(|i| {
-                        let input =
-                            (core::f64::consts::TAU * freq * i as f64 / SR).sin() * 0.7;
+                        let input = (core::f64::consts::TAU * freq * i as f64 / SR).sin() * 0.7;
                         d.tick(input, 0)
                     })
                     .collect()
@@ -595,8 +593,7 @@ mod tests {
             d.update(SR);
             (0..48000)
                 .map(|i| {
-                    let input =
-                        (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
+                    let input = (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
                     d.tick(input, 0)
                 })
                 .collect()
@@ -630,8 +627,7 @@ mod tests {
             d.update(SR);
 
             for i in 0..96000 {
-                let input =
-                    (core::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+                let input = (core::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
                 let out = d.tick(input, 0);
                 assert!(out.is_finite(), "NaN at sample {i} voice {vi}");
                 assert!(out.abs() < 10.0, "Runaway at {i} voice {vi}: {out}");

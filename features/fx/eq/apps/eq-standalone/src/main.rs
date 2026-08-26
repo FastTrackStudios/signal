@@ -17,15 +17,15 @@
 
 use std::any::Any;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 mod pipewire_capture;
 
+use audiocore_core::prelude::Param;
 use dioxus_native::launch_cfg;
 use dioxus_native::prelude::{document, rsx};
 use eq_ui::params::{EqUiState, FtsEqParams, NUM_BANDS, SPECTRUM_BINS};
-use audiocore_core::prelude::Param;
 use nice_plug::context::gui::{GuiContext, GuiContextInner};
 use nice_plug::prelude::*;
 use nice_plug_dioxus::{ParamContext, SharedState};

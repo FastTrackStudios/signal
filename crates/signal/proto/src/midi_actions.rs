@@ -24,7 +24,7 @@
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
-use crate::actions::{NEXT_SONG, PREVIOUS_SONG, switch_to_variation_action};
+use crate::actions::{switch_to_variation_action, NEXT_SONG, PREVIOUS_SONG};
 
 // ── Trigger types ─────────────────────────────────────────────────────────────
 
@@ -168,14 +168,8 @@ impl MidiActionMap {
         }
 
         // Navigation: CH1 CC 109 = Previous Song, CC 110 = Next Song
-        map.add(
-            MidiActionTrigger::cc_ch(0, 109),
-            PREVIOUS_SONG.id,
-        );
-        map.add(
-            MidiActionTrigger::cc_ch(0, 110),
-            NEXT_SONG.id,
-        );
+        map.add(MidiActionTrigger::cc_ch(0, 109), PREVIOUS_SONG.id);
+        map.add(MidiActionTrigger::cc_ch(0, 110), NEXT_SONG.id);
 
         map
     }

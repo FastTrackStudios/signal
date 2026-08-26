@@ -72,11 +72,24 @@ pub struct SpaceDesign {
 /// Five knobs under the centrepiece, one row, evenly spaced. Families differ
 /// in which two they make big — a hall is chosen by decay and size, a plate by
 /// tone, a spring by how hard you hit it.
-const fn knob(param: &'static str, legend: &'static str, x: f64, d: f64, style: KnobStyle) -> KnobSpec {
+const fn knob(
+    param: &'static str,
+    legend: &'static str,
+    x: f64,
+    d: f64,
+    style: KnobStyle,
+) -> KnobSpec {
     // The row sits high enough that the biggest knob's box *and* its legend
     // clear the bottom edge: a knob's box is ~1.8x its diameter, so a 66px
     // knob reaches 60px below this line and its legend another 20 after that.
-    KnobSpec { param, legend, x, y: 206.0, d, style }
+    KnobSpec {
+        param,
+        legend,
+        x,
+        y: 206.0,
+        d,
+        style,
+    }
 }
 
 const HALL_KNOBS: &[KnobSpec] = &[
@@ -285,7 +298,14 @@ pub fn extras_for(profile_id: &str) -> &'static [KnobSpec] {
     const fn extra(param: &'static str, legend: &'static str) -> KnobSpec {
         // Top right, beside the centrepiece — the control you reach for after
         // choosing the space, not while choosing it.
-        KnobSpec { param, legend, x: 800.0, y: 74.0, d: 38.0, style: KnobStyle::Metal }
+        KnobSpec {
+            param,
+            legend,
+            x: 800.0,
+            y: 74.0,
+            d: 38.0,
+            style: KnobStyle::Metal,
+        }
     }
     static SHIMMER: &[KnobSpec] = &[extra("shimmer_interval", "Interval")];
     static SPRINGS: &[KnobSpec] = &[extra("springs", "Springs")];
@@ -377,8 +397,8 @@ pub fn SpaceFace(
 ) -> Element {
     let _ = frame;
     let design = design_for(&profile_id);
-    let profile = reverb_profiles::profile_by_id(&profile_id)
-        .unwrap_or(&reverb_profiles::PROFILES[0]);
+    let profile =
+        reverb_profiles::profile_by_id(&profile_id).unwrap_or(&reverb_profiles::PROFILES[0]);
     let scale = fts_audio_ui::hardware::panel::panel_scale(W, H, crate::control_view::RAIL_W);
 
     // The picture is drawn from the controls, so it moves with them.
@@ -901,9 +921,24 @@ mod tests {
     #[test]
     fn every_placed_control_is_one_the_editor_binds() {
         const BOUND: &[&str] = &[
-            "decay", "size", "predelay", "damping", "tone", "width", "mix",
-            "diffusion", "modulation", "bass", "character_a", "character_b",
-            "shimmer_interval", "springs", "harmonics", "singers", "regen", "chop",
+            "decay",
+            "size",
+            "predelay",
+            "damping",
+            "tone",
+            "width",
+            "mix",
+            "diffusion",
+            "modulation",
+            "bass",
+            "character_a",
+            "character_b",
+            "shimmer_interval",
+            "springs",
+            "harmonics",
+            "singers",
+            "regen",
+            "chop",
         ];
         for profile in reverb_profiles::PROFILES {
             for spec in extras_for(profile.id) {

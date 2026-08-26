@@ -228,8 +228,9 @@ impl ProC3Compressor {
         };
         self.smoothed_output_gain_db =
             self.smooth_parameter(self.smoothed_output_gain_db, self.output_gain_db);
-        let output_gain =
-            audiocore_dsp::db::db_to_linear(self.smoothed_output_gain_db + self.auto_makeup_db[channel]);
+        let output_gain = audiocore_dsp::db::db_to_linear(
+            self.smoothed_output_gain_db + self.auto_makeup_db[channel],
+        );
         output *= output_gain;
         output = self.apply_drive(output, channel);
 

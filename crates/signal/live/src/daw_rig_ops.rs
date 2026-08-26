@@ -14,18 +14,18 @@
 
 use daw::rpc::Project;
 use signal_proto::{
-    ALL_BLOCK_TYPES, BlockType, ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId,
     rig::{Rig, RigSceneId},
     rig_template::{EngineTemplate, FxSendTemplate, LayerTemplate, RigTemplate},
+    BlockType, ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId, ALL_BLOCK_TYPES,
 };
 use signal_storage::{
     BlockRepo, EngineRepo, LayerRepo, ModuleRepo, ProfileRepo, RackRepo, RigRepo,
     SceneTemplateRepo, SetlistRepo, SongRepo,
 };
 
-use crate::SignalLive;
 use crate::daw_block_ops::{LoadBlockResult, LoadModuleResult};
-use crate::daw_rig_builder::{RigInstance, instantiate_rig};
+use crate::daw_rig_builder::{instantiate_rig, RigInstance};
+use crate::SignalLive;
 
 // ─── Result types ────────────────────────────────────────────────
 

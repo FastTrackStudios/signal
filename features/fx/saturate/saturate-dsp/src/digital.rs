@@ -181,7 +181,10 @@ mod tests {
             }
             worst
         };
-        assert!(err(3.0) > err(8.0) * 4.0, "3-bit must be much coarser than 8");
+        assert!(
+            err(3.0) > err(8.0) * 4.0,
+            "3-bit must be much coarser than 8"
+        );
     }
 
     #[test]

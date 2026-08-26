@@ -190,9 +190,7 @@ impl IrEngine {
                             PreparedIr::build_with_planner(rl, &mut planner),
                         ))
                     });
-                    let cross_raw = ir
-                        .cross
-                        .map(|(lr, rl)| (Arc::new(lr), Arc::new(rl)));
+                    let cross_raw = ir.cross.map(|(lr, rl)| (Arc::new(lr), Arc::new(rl)));
                     let pair = PreparedIrPair {
                         left: PreparedIr::build_with_planner(&ir.left, &mut planner),
                         right: PreparedIr::build_with_planner(&ir.right, &mut planner),

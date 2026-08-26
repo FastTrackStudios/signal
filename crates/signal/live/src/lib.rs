@@ -112,15 +112,10 @@ mod song_service;
 #[cfg(test)]
 mod tests;
 
-use tokio::sync::RwLock;
 use signal_proto::{
-    ALL_BLOCK_TYPES, Block, BlockParameterOverride, BlockService, BlockType, BrowserService,
-    EngineService, LayerService, ModuleBlockSource, ModulePreset, ModulePresetId, ModuleSnapshot,
-    ModuleSnapshotId, Preset, PresetId, ProfileService, RackService, ResolveService, RigService,
-    SceneTemplateService, SetlistService, SignalServiceError, Snapshot, SnapshotId, SongService,
     engine::{Engine, EngineId, EngineScene, EngineSceneId},
     layer::{Layer, LayerId, LayerSnapshot, LayerSnapshotId},
-    override_policy::{FreePolicy, ScenePolicy, SnapshotPolicy, validate_overrides},
+    override_policy::{validate_overrides, FreePolicy, ScenePolicy, SnapshotPolicy},
     overrides::{NodeOverrideOp, NodePathSegment},
     profile::{Patch, PatchId, PatchTarget, Profile, ProfileId},
     rack::{Rack, RackId},
@@ -133,9 +128,14 @@ use signal_proto::{
     setlist::{Setlist, SetlistEntry, SetlistEntryId, SetlistId},
     song::{Section, SectionId, Song, SongId},
     tagging::{
-        BrowserEntityKind, BrowserEntry, BrowserHit, BrowserIndex, BrowserNodeId, BrowserQuery,
-        StructuredTag, TagCategory, TagSet, TagWeights, infer_tags_from_name,
+        infer_tags_from_name, BrowserEntityKind, BrowserEntry, BrowserHit, BrowserIndex,
+        BrowserNodeId, BrowserQuery, StructuredTag, TagCategory, TagSet, TagWeights,
     },
+    Block, BlockParameterOverride, BlockService, BlockType, BrowserService, EngineService,
+    LayerService, ModuleBlockSource, ModulePreset, ModulePresetId, ModuleSnapshot,
+    ModuleSnapshotId, Preset, PresetId, ProfileService, RackService, ResolveService, RigService,
+    SceneTemplateService, SetlistService, SignalServiceError, Snapshot, SnapshotId, SongService,
+    ALL_BLOCK_TYPES,
 };
 use signal_storage::{
     BlockRepo, BlockRepoLive, DatabaseConnection, EngineRepo, EngineRepoLive, LayerRepo,
@@ -145,6 +145,7 @@ use signal_storage::{
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 // region: --- ServiceCache
 

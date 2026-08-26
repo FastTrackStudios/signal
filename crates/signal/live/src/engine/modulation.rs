@@ -172,8 +172,8 @@ impl ModulationRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use signal_macromod::sources::ModulationSource;
     use signal_macromod::sources::lfo::{LfoConfig, LfoWaveform};
+    use signal_macromod::sources::ModulationSource;
 
     fn lfo_route(id: &str, target: ParamTarget, amount: f32) -> ModulationRoute {
         ModulationRoute::new(

@@ -3,8 +3,8 @@
 //! Renders tags, description, and notes from domain entities that implement
 //! the `HasMetadata` trait. Used by collection cards, editors, and browsers.
 
-use dioxus::prelude::*;
 use architect_ui::prelude::*;
+use dioxus::prelude::*;
 
 /// Displays metadata (tags, description, notes) for any entity.
 ///

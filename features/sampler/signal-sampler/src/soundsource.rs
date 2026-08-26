@@ -175,7 +175,11 @@ impl PluginInstance for SoundsourceLeaf {
     }
 
     fn param_value(&mut self, id: u32) -> Option<f64> {
-        self.source.params().into_iter().find(|p| p.id == id).map(|p| p.default)
+        self.source
+            .params()
+            .into_iter()
+            .find(|p| p.id == id)
+            .map(|p| p.default)
     }
 
     fn value_to_text(&mut self, _id: u32, _value: f64) -> Option<String> {
@@ -236,8 +240,14 @@ mod tests {
         let in_r = vec![-0.25f32; n];
         let mut out_l = vec![0.0f32; n];
         let mut out_r = vec![0.0f32; n];
-        leaf.process_block(&in_l, &in_r, &mut out_l, &mut out_r, &PluginEvents::default())
-            .unwrap();
+        leaf.process_block(
+            &in_l,
+            &in_r,
+            &mut out_l,
+            &mut out_r,
+            &PluginEvents::default(),
+        )
+        .unwrap();
         assert!(out_l.iter().all(|&s| (s - 0.5).abs() < 1e-6));
         assert!(out_r.iter().all(|&s| (s + 0.25).abs() < 1e-6));
     }

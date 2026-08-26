@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 use signal_space_proto::space::SampleSpaceClient;
 use signal_space_proto::{MapItem, SpaceFilter, SpaceInfo};
 
-use crate::remote::{establish, EngineTarget};
+use crate::remote::{EngineTarget, establish};
 
 const CLASS_COLORS: &[(&str, &str)] = &[
     ("kick", "#e05252"),
@@ -61,7 +61,11 @@ pub fn SpaceView() -> Element {
                 .filter(|c| !off.contains(c))
                 .collect()
         };
-        SpaceFilter { classes, text: text_filter(), ..Default::default() }
+        SpaceFilter {
+            classes,
+            text: text_filter(),
+            ..Default::default()
+        }
     };
 
     // Space list on connect.
@@ -70,9 +74,10 @@ pub fn SpaceView() -> Element {
             spawn(async move {
                 let list = c.spaces().await.unwrap_or_default();
                 if active.peek().is_empty()
-                    && let Some(first) = list.first() {
-                        active.set(first.name.clone());
-                    }
+                    && let Some(first) = list.first()
+                {
+                    active.set(first.name.clone());
+                }
                 spaces.set(list);
             });
         }

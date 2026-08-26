@@ -20,8 +20,7 @@ use crate::remote::EngineTarget;
 
 /// The hosted pack mirror — plain HTTPS with Range resume, the backup
 /// when no vox pack host (p2p or LAN) is reachable.
-const MIRROR_BASE_URL: &str =
-    "https://fasttrackstudio.app/org/fasttrackstudios/media/packs";
+const MIRROR_BASE_URL: &str = "https://fasttrackstudio.app/org/fasttrackstudios/media/packs";
 
 /// Where a download comes from: a vox pack host (studio engine over
 /// iroh/ws) or the HTTPS mirror.
@@ -44,10 +43,16 @@ impl PackSource {
 #[derive(Clone, Debug)]
 pub(crate) enum DownloadEvent {
     /// Bytes on disk so far (monotonic; starts at the resume point).
-    Progress { done: u64, total: u64 },
+    Progress {
+        done: u64,
+        total: u64,
+    },
     /// Paused by the user — the `.part` file stays; a new
     /// [`start_download`] resumes from it.
-    Paused { done: u64, total: u64 },
+    Paused {
+        done: u64,
+        total: u64,
+    },
     Done(PathBuf),
     Failed(String),
 }
@@ -109,10 +114,12 @@ pub(crate) fn fetch_packs(
         };
         // Iroh discovery + relay + hole-punch can take a while on a cold
         // path, but never forever — bound it so the UI gets a real answer.
-        let result = match tokio::time::timeout(std::time::Duration::from_secs(30), attempt).await
-        {
+        let result = match tokio::time::timeout(std::time::Duration::from_secs(30), attempt).await {
             Ok(r) => r,
-            Err(_) => Err(format!("pack host timed out after 30s ({})", target.label())),
+            Err(_) => Err(format!(
+                "pack host timed out after 30s ({})",
+                target.label()
+            )),
         };
         let _ = tx.send(result);
     });
@@ -121,8 +128,8 @@ pub(crate) fn fetch_packs(
 
 /// List the HTTPS mirror's packs. Resolves to `Err` with the reason on
 /// any network/parse failure.
-pub(crate) fn fetch_mirror_packs(
-) -> futures_channel::oneshot::Receiver<Result<Vec<PackInfo>, String>> {
+pub(crate) fn fetch_mirror_packs()
+-> futures_channel::oneshot::Receiver<Result<Vec<PackInfo>, String>> {
     let (tx, rx) = futures_channel::oneshot::channel();
     runtime().spawn(async move {
         let attempt = async {
@@ -138,8 +145,7 @@ pub(crate) fn fetch_mirror_packs(
                 facet_json::from_str(&body).map_err(|e| format!("mirror index: {e}"))?;
             Ok(index.packs)
         };
-        let result = match tokio::time::timeout(std::time::Duration::from_secs(20), attempt).await
-        {
+        let result = match tokio::time::timeout(std::time::Duration::from_secs(20), attempt).await {
             Ok(r) => r,
             Err(_) => Err("mirror timed out after 20s".into()),
         };
@@ -165,16 +171,18 @@ pub(crate) fn start_download(
     let cancel_flag = cancel.clone();
     // One transfer per pack, ever — a duplicate reports and bails
     // without touching the .part.
-    if !in_flight().lock().map(|mut s| s.insert(info.name.clone())).unwrap_or(false) {
+    if !in_flight()
+        .lock()
+        .map(|mut s| s.insert(info.name.clone()))
+        .unwrap_or(false)
+    {
         let _ = tx.unbounded_send(DownloadEvent::Failed("already downloading".into()));
         return (rx, cancel);
     }
     runtime().spawn(async move {
         let _guard = scopeguard(info.name.clone());
         let result = match &source {
-            PackSource::Vox(target) => {
-                download(target, &info, &dest_dir, &tx, &cancel_flag).await
-            }
+            PackSource::Vox(target) => download(target, &info, &dest_dir, &tx, &cancel_flag).await,
             PackSource::Mirror => mirror_download(&info, &dest_dir, &tx, &cancel_flag).await,
         };
         match result {
@@ -182,11 +190,10 @@ pub(crate) fn start_download(
                 let _ = tx.unbounded_send(DownloadEvent::Done(path));
             }
             Err(e) if e == PAUSED => {
-                let done = std::fs::metadata(
-                    dest_dir.join(format!("{}.signalpack.part", info.name)),
-                )
-                .map(|m| m.len())
-                .unwrap_or(0);
+                let done =
+                    std::fs::metadata(dest_dir.join(format!("{}.signalpack.part", info.name)))
+                        .map(|m| m.len())
+                        .unwrap_or(0);
                 let _ = tx.unbounded_send(DownloadEvent::Paused {
                     done,
                     total: info.size_bytes,
@@ -228,11 +235,21 @@ fn prepare(dest_dir: &Path, info: &PackInfo) -> Result<Result<Prepared, PathBuf>
         .append(true)
         .open(&part)
         .map_err(|e| format!("open {part:?}: {e}"))?;
-    Ok(Ok(Prepared { final_path, part, file, start }))
+    Ok(Ok(Prepared {
+        final_path,
+        part,
+        file,
+        start,
+    }))
 }
 
 /// Completeness + integrity gate, then the atomic rename into place.
-fn finish(prep_part: &Path, final_path: &Path, info: &PackInfo, done: u64) -> Result<PathBuf, String> {
+fn finish(
+    prep_part: &Path,
+    final_path: &Path,
+    info: &PackInfo,
+    done: u64,
+) -> Result<PathBuf, String> {
     if done != info.size_bytes {
         return Err(format!(
             "incomplete: {done} of {} bytes (rerun to resume)",
@@ -257,7 +274,12 @@ async fn download(
     events: &futures_channel::mpsc::UnboundedSender<DownloadEvent>,
     cancel: &std::sync::atomic::AtomicBool,
 ) -> Result<PathBuf, String> {
-    let Prepared { final_path, part, mut file, start } = match prepare(dest_dir, info)? {
+    let Prepared {
+        final_path,
+        part,
+        mut file,
+        start,
+    } = match prepare(dest_dir, info)? {
         Ok(p) => p,
         Err(done_path) => return Ok(done_path),
     };
@@ -283,7 +305,8 @@ async fn download(
                     chunk.offset, done
                 ));
             }
-            file.write_all(&chunk.bytes).map_err(|e| format!("write: {e}"))?;
+            file.write_all(&chunk.bytes)
+                .map_err(|e| format!("write: {e}"))?;
             done += chunk.bytes.len() as u64;
             let _ = events.unbounded_send(DownloadEvent::Progress { done, total });
         }
@@ -313,12 +336,20 @@ async fn mirror_download(
     events: &futures_channel::mpsc::UnboundedSender<DownloadEvent>,
     cancel: &std::sync::atomic::AtomicBool,
 ) -> Result<PathBuf, String> {
-    let Prepared { final_path, part, mut file, start } = match prepare(dest_dir, info)? {
+    let Prepared {
+        final_path,
+        part,
+        mut file,
+        start,
+    } = match prepare(dest_dir, info)? {
         Ok(p) => p,
         Err(done_path) => return Ok(done_path),
     };
     let client = reqwest::Client::new();
-    let url = format!("{MIRROR_BASE_URL}/{}.signalpack", info.name.replace(' ', "%20"));
+    let url = format!(
+        "{MIRROR_BASE_URL}/{}.signalpack",
+        info.name.replace(' ', "%20")
+    );
     let total = info.size_bytes;
     let mut done = start;
     while done < total {
@@ -335,7 +366,10 @@ async fn mirror_download(
         if resp.status() != reqwest::StatusCode::PARTIAL_CONTENT {
             return Err(format!("mirror: HTTP {} (expected 206)", resp.status()));
         }
-        let bytes = resp.bytes().await.map_err(|e| format!("mirror read: {e}"))?;
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| format!("mirror read: {e}"))?;
         if bytes.is_empty() {
             return Err("mirror: empty range response".into());
         }

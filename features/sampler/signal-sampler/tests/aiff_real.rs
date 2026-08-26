@@ -23,10 +23,7 @@ fn decode_real_stylus_loop() {
     assert!(data.num_frames > 0);
     assert_eq!(data.len(), data.num_frames * data.channels as usize);
     let pcm = data.to_f32();
-    let peak = pcm
-        .iter()
-        .copied()
-        .fold(0.0_f32, |a, b| a.max(b.abs()));
+    let peak = pcm.iter().copied().fold(0.0_f32, |a, b| a.max(b.abs()));
     assert!(
         peak > 0.0 && peak <= 1.0,
         "expected non-silent in-range PCM, peak={peak}"

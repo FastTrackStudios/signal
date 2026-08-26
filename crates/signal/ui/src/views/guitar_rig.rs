@@ -13,20 +13,21 @@
 
 use dioxus::prelude::*;
 use lumen_blocks::components::button::{Button, ButtonVariant};
-use lumen_blocks::components::dropdown::{Dropdown, DropdownContent, DropdownItem, DropdownTrigger};
+use lumen_blocks::components::dropdown::{
+    Dropdown, DropdownContent, DropdownItem, DropdownTrigger,
+};
 
-use signal_proto::defaults::guitar::guitar_rig_template;
 use signal::{BlockType, Preset, Signal};
 use signal_browser::grid_conversion::template_to_grid_slots;
+use signal_proto::defaults::guitar::guitar_rig_template;
 
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::{RigClient, RigEvent, RigStreamClient};
-use signal_guitar_ui::{MeterPair, PerformGrid, meter_level};
+use signal_guitar_ui::{meter_level, MeterPair, PerformGrid};
 
 use crate::components::{block_color, BlockColor, GridSelection, GridSlot};
 use crate::views::{
-    AudioPrefs, AudioSettingsBridge, AudioSettingsModal, LiveBlock, PerformanceModel,
-    RigGridPanel,
+    AudioPrefs, AudioSettingsBridge, AudioSettingsModal, LiveBlock, PerformanceModel, RigGridPanel,
 };
 
 /// Stable Uuid derived from a block's string id (so the grid keeps a consistent
@@ -175,16 +176,17 @@ pub fn GuitarRigView() -> Element {
     // A per-render bridge carrying the *current* shared prefs + device lists,
     // handed to the modal + quick picker so their edits round-trip through
     // `apply`.
-    let live_bridge = devices
-        .read()
-        .as_ref()
-        .and_then(|d| d.clone())
-        .map(|d| AudioSettingsBridge {
-            inputs: d.inputs,
-            outputs: d.outputs,
-            prefs: prefs(),
-            on_save: apply,
-        });
+    let live_bridge =
+        devices
+            .read()
+            .as_ref()
+            .and_then(|d| d.clone())
+            .map(|d| AudioSettingsBridge {
+                inputs: d.inputs,
+                outputs: d.outputs,
+                prefs: prefs(),
+                on_save: apply,
+            });
 
     let mut running = use_signal(|| false);
     let mut in_level = use_signal(|| 0.0f64);

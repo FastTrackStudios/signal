@@ -15,13 +15,12 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 
-use signal_sampler::SamplerRig;
 use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
+use signal_sampler::SamplerRig;
 
 const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
-const CSS_CONFIG: &str =
-    "features/rigs/orchestra/specs/cinematic-strings.styx";
+const CSS_CONFIG: &str = "features/rigs/orchestra/specs/cinematic-strings.styx";
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
 
@@ -42,7 +41,7 @@ fn read_vlq(d: &[u8], p: &mut usize) -> u32 {
 fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
     let div = u16::from_be_bytes([d[12], d[13]]) as f64; // ticks/quarter
     let mut us_per_q = 500_000.0f64; // default 120 BPM
-    // Locate MTrk.
+                                     // Locate MTrk.
     let mut p = 14;
     while &d[p..p + 4] != b"MTrk" {
         let len = u32::from_be_bytes([d[p + 4], d[p + 5], d[p + 6], d[p + 7]]) as usize;

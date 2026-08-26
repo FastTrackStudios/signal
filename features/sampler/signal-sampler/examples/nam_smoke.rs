@@ -16,7 +16,9 @@ fn db(x: f32) -> f32 {
 }
 
 fn main() -> Result<(), String> {
-    let path = std::env::args().nth(1).ok_or("usage: nam_smoke <model.nam>")?;
+    let path = std::env::args()
+        .nth(1)
+        .ok_or("usage: nam_smoke <model.nam>")?;
     let sr = 48_000.0;
     let block = 256usize;
 

@@ -307,13 +307,16 @@ fn sin64(x: f64) -> f64 {
     r * (1.0
         + r2 * (-1.0 / 6.0
             + r2 * (1.0 / 120.0
-                + r2 * (-1.0 / 5040.0
-                    + r2 * (1.0 / 362_880.0 + r2 * (-1.0 / 39_916_800.0))))))
+                + r2 * (-1.0 / 5040.0 + r2 * (1.0 / 362_880.0 + r2 * (-1.0 / 39_916_800.0))))))
 }
 
 fn floor64(x: f64) -> f64 {
     let t = x as i64 as f64;
-    if x < t { t - 1.0 } else { t }
+    if x < t {
+        t - 1.0
+    } else {
+        t
+    }
 }
 
 /// 10^x via the crate's exp2: 10^x = 2^(x·log2 10).
@@ -330,8 +333,7 @@ fn log10_64(x: f64) -> f64 {
     // ln(m) = 2 atanh((m−1)/(m+1)), m ∈ [1,2): 5 series terms suffice.
     let t = (mant - 1.0) / (mant + 1.0);
     let t2 = t * t;
-    let ln_m =
-        2.0 * t * (1.0 + t2 * (1.0 / 3.0 + t2 * (1.0 / 5.0 + t2 * (1.0 / 7.0 + t2 / 9.0))));
+    let ln_m = 2.0 * t * (1.0 + t2 * (1.0 / 3.0 + t2 * (1.0 / 5.0 + t2 * (1.0 / 7.0 + t2 / 9.0))));
     (exp as f64 + ln_m / core::f64::consts::LN_2) * core::f64::consts::LOG10_2
 }
 
@@ -344,7 +346,12 @@ mod tests {
     fn bands(list: &[(EmphShape, f32, f32, f32)]) -> [EmphBand; BANDS] {
         let mut out = [EmphBand::default(); BANDS];
         for (i, &(shape, f, g, q)) in list.iter().enumerate() {
-            out[i] = EmphBand { shape, freq_hz: f, gain_db: g, q };
+            out[i] = EmphBand {
+                shape,
+                freq_hz: f,
+                gain_db: g,
+                q,
+            };
         }
         out
     }
@@ -413,9 +420,7 @@ mod tests {
     fn sigma_gain_tracks_broad_boosts() {
         let mut eq = EmphasisEq::new(48_000.0);
         // +6 dB everywhere (a wide tilt-ish boost) must push sigma toward 2×.
-        eq.set_bands(&bands(&[
-            (EmphShape::LowShelf, 20_000.0, 6.0, 0.5),
-        ]));
+        eq.set_bands(&bands(&[(EmphShape::LowShelf, 20_000.0, 6.0, 0.5)]));
         let g = eq.sigma_gain();
         assert!(g > 1.5, "broad +6 dB shelf reads sigma gain {g}");
     }

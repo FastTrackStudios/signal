@@ -28,7 +28,9 @@ fn main() {
          import Foundation\n\n",
     );
     for (name, body) in &structs {
-        out.push_str(&format!("public struct {name}: Codable, Equatable, Sendable {{\n"));
+        out.push_str(&format!(
+            "public struct {name}: Codable, Equatable, Sendable {{\n"
+        ));
         for (field, ty) in body {
             out.push_str(&format!("    public var {}: {ty}\n", camel(field)));
         }
@@ -62,7 +64,10 @@ type StructBody = Vec<(String, String)>;
 /// Recursively collect every user struct reachable from `shape`.
 fn collect(shape: &'static Shape, out: &mut BTreeMap<String, StructBody>) {
     let Type::User(UserType::Struct(st)) = &shape.ty else {
-        panic!("gen_watch_swift: expected a struct shape, got {}", shape.type_identifier);
+        panic!(
+            "gen_watch_swift: expected a struct shape, got {}",
+            shape.type_identifier
+        );
     };
     if out.contains_key(shape.type_identifier) {
         return;

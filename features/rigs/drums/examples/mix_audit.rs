@@ -9,13 +9,21 @@ use std::path::PathBuf;
 use signal_drums::{cradle, mm2fx};
 
 fn norm(s: &str) -> String {
-    s.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_lowercase()
+    s.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_lowercase()
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let lib = std::env::args().nth(1).map(PathBuf::from).unwrap_or_else(|| {
-        PathBuf::from("/run/media/AudioHaven/Signal/Libraries/Drum Kits/GGD Modern and Massive 2")
-    });
+    let lib = std::env::args()
+        .nth(1)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(
+                "/run/media/AudioHaven/Signal/Libraries/Drum Kits/GGD Modern and Massive 2",
+            )
+        });
     let kits: Vec<String> = std::fs::read_dir(lib.join("Presets"))?
         .flatten()
         .filter_map(|e| {

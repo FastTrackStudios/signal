@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use signal_proto::BlockType;
 
-use super::grid_model::{BlockWidget, GRID_COLS, GRID_ROWS, GridBlock, GridJack, SignalFlowGrid};
+use super::grid_model::{BlockWidget, GridBlock, GridJack, SignalFlowGrid, GRID_COLS, GRID_ROWS};
 
 use audio_controls::widgets::{CompressorGraph, CompressorParams, GateGraph, GateParams, Knob};
 // EqBand/EqBandShape/EqGraph moved to audiocore-gui in the newer daw stack.

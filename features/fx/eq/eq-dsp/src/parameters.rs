@@ -340,7 +340,7 @@ mod tests {
     #[test]
     fn test_type_10_frequency_bounds() {
         let result = transform_type_10_band_shelf(0.5, 0.0, -1, 0, 0.0); // mode -1 = simple path
-        // Frequency should be within bounds
+                                                                         // Frequency should be within bounds
         assert!(result.frequency >= NINE_PI_OVER_10);
         assert!(result.frequency <= PI);
     }

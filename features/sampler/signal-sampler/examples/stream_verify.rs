@@ -14,16 +14,24 @@
 use std::path::Path;
 
 use signal_sampler::engine::cache::{SampleCache, SignalPcmPack};
-use signal_sampler::engine::stream::{CHUNK_FRAMES, HEAD_FRAMES, StreamedSample};
+use signal_sampler::engine::stream::{StreamedSample, CHUNK_FRAMES, HEAD_FRAMES};
 
 fn main() -> eyre::Result<()> {
-    let pack_path = std::env::args().nth(1).ok_or_else(|| eyre::eyre!("usage: stream_verify <pack> [entries]"))?;
-    let count: usize = std::env::args().nth(2).and_then(|c| c.parse().ok()).unwrap_or(4);
+    let pack_path = std::env::args()
+        .nth(1)
+        .ok_or_else(|| eyre::eyre!("usage: stream_verify <pack> [entries]"))?;
+    let count: usize = std::env::args()
+        .nth(2)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(4);
 
     let pack = SignalPcmPack::open(Path::new(&pack_path))?;
     println!("pack {} ({})", pack_path, pack.kind_label());
 
-    let mut entries: Vec<_> = pack.entries_iter().map(|(p, e)| (p.clone(), e.clone())).collect();
+    let mut entries: Vec<_> = pack
+        .entries_iter()
+        .map(|(p, e)| (p.clone(), e.clone()))
+        .collect();
     entries.sort_by(|a, b| a.0.cmp(&b.0));
     entries.truncate(count);
 
@@ -45,7 +53,10 @@ fn main() -> eyre::Result<()> {
             entry.sample_rate(),
             entry.num_frames(),
         ) else {
-            println!("  {:<50} NOT INDEXABLE (falls back to whole decode)", short(path));
+            println!(
+                "  {:<50} NOT INDEXABLE (falls back to whole decode)",
+                short(path)
+            );
             continue;
         };
 
@@ -107,5 +118,7 @@ fn region(frame: usize) -> String {
 }
 
 fn short(p: &Path) -> String {
-    p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+    p.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }

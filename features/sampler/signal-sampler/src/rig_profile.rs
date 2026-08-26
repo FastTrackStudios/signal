@@ -28,10 +28,10 @@ use std::path::PathBuf;
 
 use facet::Facet;
 
-use crate::SamplerError;
+use crate::rig::RigBlock;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::rig::{GuitarRig, ModelId};
-use crate::rig::RigBlock;
+use crate::SamplerError;
 
 /// One patch in a rig profile: a named tone whose chain is either inlined or
 /// **referenced** from a [`RigPreset`](crate::rig_library::RigPreset) scene.

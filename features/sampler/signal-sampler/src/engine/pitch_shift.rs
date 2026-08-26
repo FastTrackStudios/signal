@@ -175,7 +175,11 @@ mod tests {
                 last = Some(i);
             }
         }
-        if n == 0 { 0.0 } else { sum / n as f64 }
+        if n == 0 {
+            0.0
+        } else {
+            sum / n as f64
+        }
     }
 
     #[test]

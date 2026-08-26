@@ -8,13 +8,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use dioxus::prelude::*;
 use architect_ui::prelude::{default_theme_preset, ThemeMode, ThemeProvider, ThemeState};
+use dioxus::prelude::*;
 use fts_audio_ui::prelude::*;
 use fts_audio_ui::shell::{PluginShell, RailButton, ShellItem};
 use nice_plug::editor::dpi::LogicalSize;
-use nice_plug::prelude::Param;
 use nice_plug::editor::ResizeHint;
+use nice_plug::prelude::Param;
 use nice_plug_dioxus::prelude::use_param_context;
 
 use crate::faces::ModFace;
@@ -155,7 +155,9 @@ pub fn App() -> Element {
             // which one is showing — clicking cycles them, and nothing else
             // on the rail admits that.
             let at = if index == active_category {
-                modulation_profiles::category_of(profile.id).map(|(_, v)| v).unwrap_or(0)
+                modulation_profiles::category_of(profile.id)
+                    .map(|(_, v)| v)
+                    .unwrap_or(0)
             } else {
                 0
             };
@@ -263,7 +265,11 @@ mod tests {
                 "{}'s badge {badge:?} does not fit a 48px rail",
                 profile.id,
             );
-            assert_ne!(badge, "MOD", "{} fell through to the default badge", profile.id);
+            assert_ne!(
+                badge, "MOD",
+                "{} fell through to the default badge",
+                profile.id
+            );
         }
     }
 

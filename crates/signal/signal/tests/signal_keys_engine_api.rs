@@ -14,14 +14,13 @@ mod fixtures;
 
 use fixtures::*;
 use signal::{
-    EngineType,
     engine::{Engine, EngineScene, LayerSelection},
     layer::{BlockRef, Layer, LayerRef, LayerSnapshot, ModuleRef},
     overrides::{NodeOverrideOp, NodePath, Override},
     profile::{Patch, PatchTarget, Profile},
     resolve::ResolveTarget,
     rig::{EngineSelection, Rig, RigScene, RigType},
-    seed_id,
+    seed_id, EngineType,
 };
 
 /// Bootstrap an in-memory controller pre-seeded with the Keys megarig.
@@ -405,7 +404,7 @@ async fn layer_with_multiple_ref_types() {
 
     let mut alt_snap = LayerSnapshot::new(seed_id("mixed-refs-alt"), "Alt");
     alt_snap.module_refs = vec![
-        ModuleRef::new(seed_id("time-parallel")).with_variant(seed_id("time-parallel-ambient")),
+        ModuleRef::new(seed_id("time-parallel")).with_variant(seed_id("time-parallel-ambient"))
     ];
     alt_snap.block_refs = vec![BlockRef::new(seed_id("jm-comp"))];
 
@@ -554,27 +553,23 @@ async fn delete_layer() {
     );
     signal.layers().save(layer).await.unwrap();
 
-    assert!(
-        signal
-            .layers()
-            .load(seed_id("ephemeral-layer"))
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(signal
+        .layers()
+        .load(seed_id("ephemeral-layer"))
+        .await
+        .unwrap()
+        .is_some());
     signal
         .layers()
         .delete(seed_id("ephemeral-layer"))
         .await
         .unwrap();
-    assert!(
-        signal
-            .layers()
-            .load(seed_id("ephemeral-layer"))
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(signal
+        .layers()
+        .load(seed_id("ephemeral-layer"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 // ═════════════════════════════════════════════════════════════

@@ -146,8 +146,9 @@ mod tests {
     fn test_validate_valid_bank() {
         let mut bank = signal_macromod::MacroBank::default();
         let mut knob = MacroKnob::new("drive", "Drive");
-        knob.bindings
-            .push(signal_macromod::MacroBinding::from_ids("eq", "low", 0.0, 1.0));
+        knob.bindings.push(signal_macromod::MacroBinding::from_ids(
+            "eq", "low", 0.0, 1.0,
+        ));
         bank.add(knob);
 
         let result = validate_macro_bank(&bank);
@@ -158,8 +159,9 @@ mod tests {
     fn test_validate_rejects_empty_knob_id() {
         let mut bank = signal_macromod::MacroBank::default();
         let mut knob = MacroKnob::new("", "Empty ID");
-        knob.bindings
-            .push(signal_macromod::MacroBinding::from_ids("eq", "low", 0.0, 1.0));
+        knob.bindings.push(signal_macromod::MacroBinding::from_ids(
+            "eq", "low", 0.0, 1.0,
+        ));
         bank.add(knob);
 
         let result = validate_macro_bank(&bank);

@@ -13,9 +13,9 @@ use std::sync::Arc;
 
 use atomic_float::AtomicF32;
 use crossbeam_channel::Sender;
+use nice_plug::prelude::*;
 use parking_lot::Mutex;
 use reverb_dsp::ir::PreparedIrPair;
-use nice_plug::prelude::*;
 
 /// Live values the editor reads and the audio thread writes, plus the
 /// editor's side of IR loading.
@@ -66,7 +66,11 @@ impl ReverbUiState {
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_else(|| path.display().to_string());
             let sample_rate = state.sample_rate.load(Ordering::Relaxed) as f64;
-            let sample_rate = if sample_rate > 0.0 { sample_rate } else { 48_000.0 };
+            let sample_rate = if sample_rate > 0.0 {
+                sample_rate
+            } else {
+                48_000.0
+            };
 
             match reverb_dsp::ir::IrAsset::load(&path, sample_rate) {
                 Ok(asset) => {
@@ -74,7 +78,11 @@ impl ReverbUiState {
                     // its own image, which is most of why you record a space
                     // in stereo in the first place.
                     let left = asset.channels[0].clone();
-                    let right = asset.channels.get(1).cloned().unwrap_or_else(|| left.clone());
+                    let right = asset
+                        .channels
+                        .get(1)
+                        .cloned()
+                        .unwrap_or_else(|| left.clone());
                     let pair = PreparedIrPair::build(&left, &right);
                     let sent = state
                         .ir_tx
@@ -179,7 +187,6 @@ pub struct ReverbParams {
     // genuinely that engine's own — a shimmer's interval in semitones, how
     // many springs are in the tank. The coarse pair gets you an amount; these
     // get you the thing itself.
-
     /// Shimmer's first voice, in semitones. The engine's own control: the
     /// coarse `extra_b` mapping only offers octave-up, fifth and octave-down.
     #[id = "shimint"]
@@ -271,7 +278,10 @@ impl PostBandParams {
             gain_db: FloatParam::new(
                 "Post Gain",
                 0.0,
-                FloatRange::Linear { min: -24.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
@@ -322,11 +332,12 @@ impl DecayBandParams {
             rate_db: FloatParam::new(
                 "Decay Rate",
                 0.0,
-                FloatRange::Linear { min: -12.0, max: 12.0 },
+                FloatRange::Linear {
+                    min: -12.0,
+                    max: 12.0,
+                },
             )
-            .with_value_to_string(Arc::new(|v| {
-                format!("{:.2}×", 10.0f32.powf(v / 20.0))
-            })),
+            .with_value_to_string(Arc::new(|v| format!("{:.2}×", 10.0f32.powf(v / 20.0)))),
             q: band_q_param("Decay Q"),
         }
     }
@@ -425,22 +436,37 @@ impl Default for ReverbParams {
             diffusion: FloatParam::new("Diffusion", 0.7, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
-            modulation: FloatParam::new("Modulation", 0.2, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            modulation: FloatParam::new(
+                "Modulation",
+                0.2,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
             bass: FloatParam::new("Bass", 1.0, FloatRange::Linear { min: 0.0, max: 2.0 })
                 .with_value_to_string(formatters::v2s_f32_rounded(2)),
 
-            character_a: FloatParam::new("Character A", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            character_a: FloatParam::new(
+                "Character A",
+                0.5,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
-            character_b: FloatParam::new("Character B", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            character_b: FloatParam::new(
+                "Character B",
+                0.5,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
             shimmer_interval: FloatParam::new(
                 "Interval",
                 12.0,
-                FloatRange::Linear { min: -12.0, max: 12.0 },
+                FloatRange::Linear {
+                    min: -12.0,
+                    max: 12.0,
+                },
             )
             .with_unit(" st")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
@@ -475,8 +501,9 @@ impl ReverbParams {
     /// index, which is what a pre-id session has.
     pub fn resolved_profile_index(&self) -> usize {
         let id = self.profile_id.read();
-        reverb_profiles::profile_index(&id)
-            .unwrap_or_else(|| (self.profile.value().max(0) as usize).min(reverb_profiles::PROFILES.len() - 1))
+        reverb_profiles::profile_index(&id).unwrap_or_else(|| {
+            (self.profile.value().max(0) as usize).min(reverb_profiles::PROFILES.len() - 1)
+        })
     }
 
     /// The active profile.

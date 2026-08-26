@@ -107,18 +107,21 @@ impl ModEngine {
     pub(super) fn find_leaf(&self, module: &str, leaf: &str) -> Option<usize> {
         let module = module.to_lowercase();
         let leaf = leaf.to_lowercase();
-        (0..self.leaf_names.len()).find(|&i| {
-            self.leaf_names[i] == leaf && self.leaf_paths[i].contains(&module)
-        })
+        (0..self.leaf_names.len())
+            .find(|&i| self.leaf_names[i] == leaf && self.leaf_paths[i].contains(&module))
     }
 
     /// Set a leaf parameter live (normalized 0..1). The value persists in
     /// the overlay: it seeds the leaf's writes every block and becomes the
     /// base any modulation routes on that parameter add onto.
     pub fn set_leaf_param(&mut self, module: &str, leaf: &str, param: &str, value: f64) -> bool {
-        let Some(idx) = self.find_leaf(module, leaf) else { return false };
+        let Some(idx) = self.find_leaf(module, leaf) else {
+            return false;
+        };
         let pkey = param.to_lowercase();
-        let Some(p) = self.leaf_params[idx].iter().find(|p| p.name.to_lowercase() == pkey)
+        let Some(p) = self.leaf_params[idx]
+            .iter()
+            .find(|p| p.name.to_lowercase() == pkey)
         else {
             return false;
         };
@@ -157,7 +160,9 @@ impl ModEngine {
         param: &str,
         depth: f32,
     ) -> bool {
-        let Some(leaf_idx) = self.find_leaf(module, leaf) else { return false };
+        let Some(leaf_idx) = self.find_leaf(module, leaf) else {
+            return false;
+        };
         let pkey = param.to_lowercase();
         let Some(p) = self.leaf_params[leaf_idx]
             .iter()
@@ -399,7 +404,13 @@ mod tests {
     use super::*;
 
     fn route(source: usize, leaf: usize, param: u32, base: f64, depth: f32) -> CompiledRoute {
-        CompiledRoute { source, leaf, param, base, depth }
+        CompiledRoute {
+            source,
+            leaf,
+            param,
+            base,
+            depth,
+        }
     }
 
     #[test]
@@ -444,10 +455,7 @@ mod tests {
 
     #[test]
     fn distinct_params_stay_separate() {
-        let routes = vec![
-            route(0, 0, 1, 0.1, 0.2),
-            route(0, 0, 2, 0.3, 0.2),
-        ];
+        let routes = vec![route(0, 0, 1, 0.1, 0.2), route(0, 0, 2, 0.3, 0.2)];
         let values = [1.0f32];
         let mut writes = vec![Vec::new()];
         let overlay: Vec<Vec<(u32, f64)>> = vec![Vec::new(); writes.len()];

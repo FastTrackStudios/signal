@@ -15,7 +15,7 @@
 
 mod backend;
 
-pub use backend::{EkitBackend, DEFAULT_COLS, DEFAULT_ROWS};
+pub use backend::{DEFAULT_COLS, DEFAULT_ROWS, EkitBackend};
 pub use signal_ekit_proto as proto;
 
 /// MIDI note of pad 0 — GM kick, so a stock drum map lines up.

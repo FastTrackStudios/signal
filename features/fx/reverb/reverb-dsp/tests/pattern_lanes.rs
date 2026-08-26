@@ -29,9 +29,11 @@ fn hold_point(x: f64, y: f64) -> Point {
 /// A half-open gate pattern: 1 for the first half of the cycle, 0 after.
 fn gate_modulator(sync_index: usize) -> Box<Modulator> {
     let mut m = Box::new(Modulator::new());
-    m.patterns
-        .active_mut()
-        .set_points(vec![hold_point(0.0, 1.0), hold_point(0.5, 0.0), hold_point(1.0, 0.0)]);
+    m.patterns.active_mut().set_points(vec![
+        hold_point(0.0, 1.0),
+        hold_point(0.5, 0.0),
+        hold_point(1.0, 0.0),
+    ]);
     m.trigger.sync_index = sync_index;
     m
 }
@@ -80,12 +82,15 @@ fn send_lane_gates_the_reverb_input() {
         let mut c = make();
         c.set_send_modulator(Some(gate_modulator(SYNC_1_BEAT)));
         let cyc = 24_000usize;
-        let note_start = if note_at_closed_half { cyc / 2 + 2000 } else { 2000 };
+        let note_start = if note_at_closed_half {
+            cyc / 2 + 2000
+        } else {
+            2000
+        };
         let n = cyc * 3;
         let mut l = vec![0.0f64; n];
         for i in 0..2000 {
-            l[note_start + i] =
-                (core::f64::consts::TAU * 400.0 * i as f64 / SR).sin() * 0.6;
+            l[note_start + i] = (core::f64::consts::TAU * 400.0 * i as f64 / SR).sin() * 0.6;
         }
         let mut r = l.clone();
         c.process(&mut l, &mut r);

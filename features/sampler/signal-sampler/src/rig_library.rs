@@ -37,9 +37,9 @@ use std::path::{Path, PathBuf};
 
 use facet::Facet;
 
-use crate::SamplerError;
 use crate::rig::RigBlock;
 use crate::rig_profile::{RigPatch, RigProfile, RigStack};
+use crate::SamplerError;
 
 /// A **Scene** — one named variant (snapshot) of a [`RigPreset`]: an ordered FX
 /// chain plus scene-level trims. For an ML "full rig" capture a scene's chain is

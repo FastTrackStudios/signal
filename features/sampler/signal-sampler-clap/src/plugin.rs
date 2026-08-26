@@ -35,14 +35,14 @@ use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwapOption;
 use audiocore_core::prelude::*;
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{fmt, EnvFilter};
 
 use signal_sampler::spec::LibrarySpec;
 use signal_sampler::{
-    BlockTransport, RealtimeScheduler, SamplerBank, Schedule, TrackDocument, annotate,
+    annotate, BlockTransport, RealtimeScheduler, SamplerBank, Schedule, TrackDocument,
 };
 
-use crate::config::{INSTRUMENT_ID, PatchConfig};
+use crate::config::{PatchConfig, INSTRUMENT_ID};
 
 const PLUGIN_NAME: &str = "Signal Sampler";
 

@@ -65,7 +65,9 @@ fn silence_never_fires() {
 fn sub_threshold_noise_never_fires() {
     let mut det = detector();
     // A steady tone well under the -30 dB threshold (~-46 dBFS).
-    let buf: Vec<f64> = (0..24_000).map(|i| 0.005 * (i as f64 * 0.05).sin()).collect();
+    let buf: Vec<f64> = (0..24_000)
+        .map(|i| 0.005 * (i as f64 * 0.05).sin())
+        .collect();
     assert!(collect_hits(&mut det, &buf).is_empty());
 }
 

@@ -45,7 +45,11 @@ pub fn lane_gain(lane: &LaneMix, group_muted: bool, any_solo: bool) -> f32 {
 /// The linear gain a group (engine / bus) fader contributes: its fader when
 /// unmuted, silence when muted.
 pub fn group_gain(gain_db: f32, muted: bool) -> f32 {
-    if muted { 0.0 } else { db_to_linear(gain_db) }
+    if muted {
+        0.0
+    } else {
+        db_to_linear(gain_db)
+    }
 }
 
 #[cfg(test)]
@@ -53,7 +57,12 @@ mod tests {
     use super::*;
 
     fn lane(gain_db: f32) -> LaneMix {
-        LaneMix { gain_db, muted: false, soloed: false, live: true }
+        LaneMix {
+            gain_db,
+            muted: false,
+            soloed: false,
+            live: true,
+        }
     }
 
     #[test]
@@ -80,7 +89,13 @@ mod tests {
 
     #[test]
     fn any_solo_scans_the_set() {
-        let lanes = [lane(0.0), LaneMix { soloed: true, ..lane(0.0) }];
+        let lanes = [
+            lane(0.0),
+            LaneMix {
+                soloed: true,
+                ..lane(0.0)
+            },
+        ];
         assert!(any_solo(lanes.iter()));
         assert!(!any_solo([lane(0.0)].iter()));
     }

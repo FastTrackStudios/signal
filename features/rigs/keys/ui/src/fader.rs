@@ -46,7 +46,8 @@ pub fn EdgeFader(
     db: f32,
     #[props(default = 9)] width_px: u32,
     /// Matches the card's corner radius so the edge is the outline.
-    #[props(default = 12)] radius_px: u32,
+    #[props(default = 12)]
+    radius_px: u32,
     #[props(default = "#38bdf8".to_string())] accent: String,
     #[props(default = false)] dimmed: bool,
     on_change: EventHandler<f32>,

@@ -7,15 +7,14 @@
 
 use architect::rig::RigBackend as _;
 use architect::{LocalServer, Scope};
-use signal_guitar::GuitarRigBackend;
 use signal_guitar::proto::rig::{RigClient, RigEvent, RigStreamClient};
+use signal_guitar::GuitarRigBackend;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -34,7 +33,10 @@ async fn main() {
     eprintln!(
         "profile: {:?}, stacks: {:?}",
         perf.profile_name,
-        perf.stacks.iter().map(|s| s.name.clone()).collect::<Vec<_>>()
+        perf.stacks
+            .iter()
+            .map(|s| s.name.clone())
+            .collect::<Vec<_>>()
     );
     eprintln!("chain: {} blocks", rig.chain().await.expect("chain").len());
 
@@ -55,7 +57,10 @@ async fn main() {
         .expect("stream open");
     let mut n_status = 0u32;
     let _ = first.map(|ev| {
-        assert!(matches!(ev, RigEvent::Status(_)), "expected meter event first");
+        assert!(
+            matches!(ev, RigEvent::Status(_)),
+            "expected meter event first"
+        );
         n_status += 1;
     });
 
@@ -72,7 +77,12 @@ async fn main() {
             RigEvent::Status(_) => n_status += 1,
             RigEvent::Perf(p) => {
                 n_perf += 1;
-                let active: Vec<_> = p.stacks.iter().filter(|s| s.is_active).map(|s| s.name.clone()).collect();
+                let active: Vec<_> = p
+                    .stacks
+                    .iter()
+                    .filter(|s| s.is_active)
+                    .map(|s| s.name.clone())
+                    .collect();
                 eprintln!("perf event: active stack(s) {active:?}");
             }
             RigEvent::Chain(c) => {
@@ -114,15 +124,26 @@ async fn main() {
     // engaging if off.
     let boost_db = |perf: signal_guitar::proto::PerformanceModel| perf.boost_db;
     rig.toggle_boost().await.expect("boost on");
-    assert_eq!(boost_db(rig.perf().await.unwrap()), 1.0, "tap engages at +1");
+    assert_eq!(
+        boost_db(rig.perf().await.unwrap()),
+        1.0,
+        "tap engages at +1"
+    );
     rig.toggle_boost().await.expect("boost off");
     assert_eq!(boost_db(rig.perf().await.unwrap()), 0.0, "tap disengages");
     rig.cycle_boost().await.expect("hold engages");
-    assert_eq!(boost_db(rig.perf().await.unwrap()), 1.0, "hold from off engages at remembered level");
+    assert_eq!(
+        boost_db(rig.perf().await.unwrap()),
+        1.0,
+        "hold from off engages at remembered level"
+    );
     for expected in [2.0f32, 3.0, -1.0, 1.0] {
         rig.cycle_boost().await.expect("cycle boost");
         let db = boost_db(rig.perf().await.unwrap());
-        assert!((db - expected).abs() < 0.01, "expected {expected} dB, got {db}");
+        assert!(
+            (db - expected).abs() < 0.01,
+            "expected {expected} dB, got {db}"
+        );
     }
     rig.toggle_boost().await.expect("boost off");
     eprintln!("boost tap/hold verified (on/off + rotate +1/+2/+3/−1)");
@@ -133,9 +154,15 @@ async fn main() {
 
     // Global FX (time) bypass round-trip.
     rig.toggle_fx().await.expect("fx off");
-    assert!(rig.perf().await.expect("perf").fx_bypass, "FX bypass should engage");
+    assert!(
+        rig.perf().await.expect("perf").fx_bypass,
+        "FX bypass should engage"
+    );
     rig.toggle_fx().await.expect("fx on");
-    assert!(!rig.perf().await.expect("perf").fx_bypass, "FX bypass should release");
+    assert!(
+        !rig.perf().await.expect("perf").fx_bypass,
+        "FX bypass should release"
+    );
 
     subscription.abort(); // unsubscribe
     rig.stop().await.expect("stop");

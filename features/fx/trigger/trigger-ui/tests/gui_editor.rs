@@ -85,7 +85,10 @@ mod support {
             PluginApi::Clap
         }
         unsafe fn raw_begin_set_parameter(&self, param: ParamPtr) {
-            self.log.lock().unwrap().push(Gesture::Begin(ptr_key(param)));
+            self.log
+                .lock()
+                .unwrap()
+                .push(Gesture::Begin(ptr_key(param)));
         }
         unsafe fn raw_set_parameter_normalized(&self, param: ParamPtr, normalized: f32) {
             self.log
@@ -160,7 +163,12 @@ mod support {
             .with_root_context(SharedState::new(ui_state.clone()))
             .build();
 
-        Fixture { tester, params, _ui_state: ui_state, log }
+        Fixture {
+            tester,
+            params,
+            _ui_state: ui_state,
+            log,
+        }
     }
 
     impl Fixture {
@@ -215,10 +223,21 @@ async fn editor_mounts_headless_with_waveform_and_controls() -> dioxus_test::Res
         "Vel Max",
         "Listen",
     ] {
-        assert!(html.contains(name), "control label {name:?} missing from DOM");
+        assert!(
+            html.contains(name),
+            "control label {name:?} missing from DOM"
+        );
     }
     // Segmented select options.
-    for opt in ["Peak Env", "SuperFlux", "Mod KL", "Linear", "Log", "Exp", "Fixed"] {
+    for opt in [
+        "Peak Env",
+        "SuperFlux",
+        "Mod KL",
+        "Linear",
+        "Log",
+        "Exp",
+        "Fixed",
+    ] {
         assert!(html.contains(opt), "select option {opt:?} missing from DOM");
     }
     // Note stepper shows the default note number.
@@ -259,12 +278,24 @@ async fn editor_mounts_headless_with_waveform_and_controls() -> dioxus_test::Res
 
     // Waveform chrome: seeded peak bars, threshold line, dB scale, readout.
     let graph = fx.graph_html();
-    assert!(graph.contains("wave-bars"), "peak-bar path missing from graph");
-    assert!(graph.contains("threshold-line"), "threshold line missing from graph");
+    assert!(
+        graph.contains("wave-bars"),
+        "peak-bar path missing from graph"
+    );
+    assert!(
+        graph.contains("threshold-line"),
+        "threshold line missing from graph"
+    );
     for db_label in ["-6", "-12", "-24", "-48"] {
-        assert!(graph.contains(db_label), "dB scale label {db_label:?} missing");
+        assert!(
+            graph.contains(db_label),
+            "dB scale label {db_label:?} missing"
+        );
     }
-    assert!(graph.contains("Threshold"), "threshold readout missing from graph");
+    assert!(
+        graph.contains("Threshold"),
+        "threshold readout missing from graph"
+    );
     // Default threshold value is rendered (readout + grab chip).
     fx.tester
         .query(by_testid("trigger-graph"))
@@ -283,7 +314,10 @@ async fn dragging_threshold_line_lowers_threshold_to_pointer_db() -> dioxus_test
     let tp = &fx.params.threshold_db;
     let key = ptr_key(tp.as_ptr());
     let before = tp.value();
-    assert!((before - (-30.0)).abs() < 1e-4, "default threshold: {before}");
+    assert!(
+        (before - (-30.0)).abs() < 1e-4,
+        "default threshold: {before}"
+    );
 
     let (gx, gy) = fx.graph_origin();
     let ty = db_to_y(before as f64, GRAPH_H); // 130 px for −30 dB
@@ -300,7 +334,10 @@ async fn dragging_threshold_line_lowers_threshold_to_pointer_db() -> dioxus_test
 
     // 45 px down on the 60 dB / GRAPH_H px scale.
     let after = tp.value();
-    assert!(after < before, "drag down did not lower threshold: {before} → {after}");
+    assert!(
+        after < before,
+        "drag down did not lower threshold: {before} → {after}"
+    );
     let expected = -(((ty + 45.0) / GRAPH_H) * 60.0) as f32;
     assert!(
         (after - expected).abs() < 0.5,
@@ -310,8 +347,14 @@ async fn dragging_threshold_line_lowers_threshold_to_pointer_db() -> dioxus_test
     // Real host gestures: begin, one set per move (monotonically falling —
     // every step moved down), end.
     let log = fx.log.lock().unwrap();
-    let begins = log.iter().filter(|g| matches!(g, Gesture::Begin(k) if *k == key)).count();
-    let ends = log.iter().filter(|g| matches!(g, Gesture::End(k) if *k == key)).count();
+    let begins = log
+        .iter()
+        .filter(|g| matches!(g, Gesture::Begin(k) if *k == key))
+        .count();
+    let ends = log
+        .iter()
+        .filter(|g| matches!(g, Gesture::End(k) if *k == key))
+        .count();
     let sets: Vec<f32> = log
         .iter()
         .filter_map(|g| match g {
@@ -321,7 +364,11 @@ async fn dragging_threshold_line_lowers_threshold_to_pointer_db() -> dioxus_test
         .collect();
     assert!(begins >= 1, "no begin gesture for threshold: {log:?}");
     assert!(ends >= 1, "no end gesture for threshold: {log:?}");
-    assert!(sets.len() >= 3, "expected ≥3 set gestures, got {}", sets.len());
+    assert!(
+        sets.len() >= 3,
+        "expected ≥3 set gestures, got {}",
+        sets.len()
+    );
     assert!(
         sets.windows(2).all(|w| w[1] <= w[0]),
         "threshold sets not monotonically falling: {sets:?}"
@@ -364,7 +411,10 @@ async fn clicking_without_dragging_changes_nothing() -> dioxus_test::Result<()> 
 
     assert_eq!(tp.value(), before, "click alone moved the threshold");
     let log = fx.log.lock().unwrap();
-    let sets = log.iter().filter(|g| matches!(g, Gesture::Set(k, _) if *k == key)).count();
+    let sets = log
+        .iter()
+        .filter(|g| matches!(g, Gesture::Set(k, _) if *k == key))
+        .count();
     assert_eq!(sets, 0, "click without drag recorded value sets: {log:?}");
     Ok(())
 }

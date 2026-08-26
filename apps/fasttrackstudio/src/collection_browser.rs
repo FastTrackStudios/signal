@@ -24,8 +24,8 @@ use crate::remote::{EngineTarget, establish};
 /// the `task-server-ws-url` pref, default `ws://127.0.0.1:18080`. Any
 /// trailing `/vox` or `/` is stripped so the per-org path composes cleanly.
 fn task_server_base() -> String {
-    let raw = prefs::get("task-server-ws-url")
-        .unwrap_or_else(|| "ws://127.0.0.1:18080".to_string());
+    let raw =
+        prefs::get("task-server-ws-url").unwrap_or_else(|| "ws://127.0.0.1:18080".to_string());
     let trimmed = raw.trim();
     let trimmed = trimmed.strip_suffix("/vox").unwrap_or(trimmed);
     trimmed.trim_end_matches('/').to_string()

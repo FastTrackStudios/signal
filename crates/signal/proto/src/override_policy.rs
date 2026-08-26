@@ -106,8 +106,8 @@ pub fn validate_overrides<P: OverridePolicy>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ParameterValue;
     use crate::overrides::NodeOverrideOp;
+    use crate::ParameterValue;
 
     #[test]
     fn snapshot_allows_only_parameter_set() {

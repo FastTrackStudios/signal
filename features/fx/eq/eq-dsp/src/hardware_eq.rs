@@ -6,7 +6,7 @@
 
 use crate::biquad::Coeffs;
 use crate::calibration::{
-    CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget, fit_response,
+    fit_response, CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget,
 };
 use crate::design::{self, FilterType};
 use crate::neve_1073::apply_gain_compensated_arctan;
@@ -113,7 +113,6 @@ impl CalibrationParameters for HardwareEqCalibration {
             // Out-of-range indices clamp to the last scalar — a panic
 
             // here would abort the audio host on a bad automation index.
-
             _ => CalibratedScalar::new(self.ssl_g_skirt_factor, 0.0, 0.14, self.ssl_g_skirt_step),
         }
     }

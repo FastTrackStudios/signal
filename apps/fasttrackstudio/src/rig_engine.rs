@@ -14,9 +14,9 @@
 use std::sync::{Arc, OnceLock};
 
 use architect::rig::RigBackend as _;
+use signal_guitar::GuitarRigBackend;
 use signal_guitar::proto::audio::AudioSettingsClient;
 use signal_guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
-use signal_guitar::GuitarRigBackend;
 #[cfg(feature = "signal-keys-rig")]
 use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
 

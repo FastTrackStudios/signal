@@ -117,9 +117,7 @@ impl CloudsDiffuser {
         let scale = sample_rate / 32_000.0;
         let delays = core::array::from_fn(|i| base_32k[i] * scale);
         Self {
-            lines: core::array::from_fn(|i| {
-                DelayLine::new((base_32k[i] * scale) as usize + 8)
-            }),
+            lines: core::array::from_fn(|i| DelayLine::new((base_32k[i] * scale) as usize + 8)),
             delays,
         }
     }
@@ -271,7 +269,8 @@ impl SpectralDelay {
         }
         self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
+        self.smoother
+            .set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
 
         // Fixed regen voicing: gentle -1.5 dB shelf above ~4 kHz.
         self.disp_shelf.set(
@@ -304,7 +303,11 @@ impl SpectralDelay {
         let octave_up = rand01(&mut self.rng) < self.octave;
         // Stretch: RANDOM per-grain time-stretch (0..stretch of half-speed).
         let stretch_amt = rand01(&mut self.rng) * self.stretch;
-        let speed = if octave_up { 2.0 } else { 1.0 - stretch_amt * 0.5 };
+        let speed = if octave_up {
+            2.0
+        } else {
+            1.0 - stretch_amt * 0.5
+        };
 
         // Direction: reverse grains drift backward through the buffer
         // (offset grows by 1 + speed instead of shrinking).
@@ -441,9 +444,7 @@ impl SpectralDelay {
             self.spawn_grain(smooth_delay, interval);
             self.spawn_countdown = match self.density {
                 DensityMode::Synced(_) => interval,
-                DensityMode::FreeHz(_) => {
-                    interval * (1.0 + self.rng.next_bipolar() * 0.5)
-                }
+                DensityMode::FreeHz(_) => interval * (1.0 + self.rng.next_bipolar() * 0.5),
             };
         }
 
@@ -502,10 +503,7 @@ impl SpectralDelay {
 
         // Feedback from a plain (non-granular) tap so regeneration stays
         // rhythmically anchored.
-        let mut fb = self
-            .delay
-            .read_cubic(smooth_delay.clamp(1.0, max_read))
-            * self.feedback;
+        let mut fb = self.delay.read_cubic(smooth_delay.clamp(1.0, max_read)) * self.feedback;
 
         // Spectral signature in the regen path: two first-order
         // allpasses (phase dispersion) + a gentle high shelf, so

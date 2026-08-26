@@ -165,7 +165,10 @@ fn fast_repeats_each_retrigger() {
         .into_iter()
         .filter(|v| is_body(v.voice_kind))
         .count();
-    assert_eq!(bodies, 8, "8 fast strikes should spawn 8 bodies, got {bodies}");
+    assert_eq!(
+        bodies, 8,
+        "8 fast strikes should spawn 8 bodies, got {bodies}"
+    );
 }
 
 /// A note-off with release info fires a release tail — after the body sounded.
@@ -212,7 +215,10 @@ fn release_tail_tracks_strike_velocity_not_note_off() {
 
     let soft = release_gain(20);
     let firm = release_gain(110);
-    assert!(soft > 0.0 && firm > 0.0, "both strikes should fire a release ({soft}, {firm})");
+    assert!(
+        soft > 0.0 && firm > 0.0,
+        "both strikes should fire a release ({soft}, {firm})"
+    );
     assert!(
         firm > soft * 4.0,
         "release must track strike velocity: soft(v20)={soft:.4} vs firm(v110)={firm:.4} \
@@ -238,8 +244,8 @@ fn heavy_pedal_passage_never_steals_a_ringing_note() {
     // ~two octaves of playable range, struck fast and repeatedly at varied
     // velocity — a realistic dense pedalled passage.
     let range: [u8; 25] = [
-        48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 71, 69, 67, 65, 64, 62, 60,
-        59, 57, 55,
+        48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 71, 69, 67, 65, 64, 62, 60, 59,
+        57, 55,
     ];
     let mut note_ons = 0usize;
     for round in 0..16 {

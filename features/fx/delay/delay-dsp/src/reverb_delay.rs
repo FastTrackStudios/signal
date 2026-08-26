@@ -165,8 +165,7 @@ impl ReverbDelay {
         // the travel latches infinite (freeze pins feedback to 1.0).
         let decay = self.feedback.clamp(0.0, 1.0);
         self.infinite = decay >= 0.97;
-        let rt60 =
-            Self::MIN_RT60_S * (Self::MAX_RT60_S / Self::MIN_RT60_S).powf(decay);
+        let rt60 = Self::MIN_RT60_S * (Self::MAX_RT60_S / Self::MIN_RT60_S).powf(decay);
         let mean_len_s = self.line_len.iter().sum::<f64>() / 4.0 / sample_rate;
         self.line_g = if self.infinite {
             1.0
@@ -244,7 +243,7 @@ impl ReverbDelay {
         let mut damped = outs;
         if !self.damp_open {
             #[allow(clippy::needless_range_loop)] // i spans parallel arrays + self
-        for i in 0..4 {
+            for i in 0..4 {
                 damped[i] = self.damp[i].tick(damped[i]);
             }
         }
@@ -382,7 +381,9 @@ mod tests {
             d.feedback = 0.4;
             d.update(SR);
             let out = impulse_response(&mut d, 96000);
-            out.iter().position(|x| x.abs() > 1e-4).unwrap_or(usize::MAX)
+            out.iter()
+                .position(|x| x.abs() > 1e-4)
+                .unwrap_or(usize::MAX)
         };
         let near = onset(2.0);
         let far = onset(400.0);
@@ -452,8 +453,7 @@ mod tests {
             d.update(SR);
             (0..24000)
                 .map(|i| {
-                    let input =
-                        (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.8;
+                    let input = (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.8;
                     d.tick(input, 0)
                 })
                 .collect()

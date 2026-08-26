@@ -3,8 +3,8 @@
 //! Designed for the Editor tab's right panel — shows detailed block info,
 //! interactive parameter sliders, morph point controls, and snapshot management.
 
-use dioxus::prelude::*;
 use architect_ui::prelude::*;
+use dioxus::prelude::*;
 
 use crate::components::dynamic_grid::{GridSelection, GridSlot};
 

@@ -4,8 +4,8 @@
 //! slot management without any DAW interaction. Useful for UI development
 //! and unit tests.
 
-use signal_proto::ModuleSnapshot;
 use signal_proto::module_type::ModuleType;
+use signal_proto::ModuleSnapshot;
 use std::collections::HashMap;
 use std::sync::Mutex;
 

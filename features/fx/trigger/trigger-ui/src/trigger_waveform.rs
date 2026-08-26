@@ -49,7 +49,9 @@ const THRESHOLD_GRAB_PX: f64 = 16.0;
 #[component]
 pub fn TriggerWaveform() -> Element {
     let shared = use_context::<SharedState>();
-    let ui = shared.get::<TriggerUiState>().expect("TriggerUiState missing");
+    let ui = shared
+        .get::<TriggerUiState>()
+        .expect("TriggerUiState missing");
     let ctx = use_param_context();
     let params = ui.params.clone();
 
@@ -61,11 +63,9 @@ pub fn TriggerWaveform() -> Element {
     let frame_tick: Signal<u64> = use_signal(|| 0);
     use_hook(|| {
         let updater = dioxus_core::schedule_update();
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(33));
-                updater();
-            }
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_millis(33));
+            updater();
         });
     });
     let _ = *frame_tick.read();

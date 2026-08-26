@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 use uuid::Uuid;
 
 use super::models::NodePosition;
-use super::wire::{ResolvedWire, WirePath, wire_path_d};
+use super::wire::{wire_path_d, ResolvedWire, WirePath};
 
 /// Transient state for a wire being dragged from a port but not yet connected.
 #[derive(Debug, Clone, PartialEq)]

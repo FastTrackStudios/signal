@@ -7,12 +7,14 @@
 //! cargo run --release -p signal-ekit --example pad_probe -- <space-name>
 //! ```
 
-use signal_ekit::proto::ekit::EkitRig;
 use signal_ekit::EkitBackend;
+use signal_ekit::proto::ekit::EkitRig;
 
 fn main() {
     tracing_subscriber::fmt().with_env_filter("warn").init();
-    let space = std::env::args().nth(1).unwrap_or_else(|| "luke-pieces".into());
+    let space = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "luke-pieces".into());
 
     let b = EkitBackend::new_offline(48_000);
     EkitRig::set_space(&b, space.clone());
@@ -50,7 +52,10 @@ fn main() {
     EkitRig::morph_kit(&b, 1);
     let after: Vec<String> = EkitRig::pads(&b).iter().map(|p| p.path.clone()).collect();
     let changed = before.iter().zip(&after).filter(|(a, b)| a != b).count();
-    println!("morph_kit(+1): {changed}/{} pads moved to a neighbour", before.len());
+    println!(
+        "morph_kit(+1): {changed}/{} pads moved to a neighbour",
+        before.len()
+    );
 
     if audible == 0 {
         eprintln!("FAIL — no pad produced audio");

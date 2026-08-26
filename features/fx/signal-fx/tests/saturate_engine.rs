@@ -7,7 +7,11 @@ const SR: f64 = 48000.0;
 const N: usize = 96_000;
 
 fn no_events() -> PluginEvents<'static> {
-    PluginEvents { params: &[], midi: &[], note_expressions: &[] }
+    PluginEvents {
+        params: &[],
+        midi: &[],
+        note_expressions: &[],
+    }
 }
 
 fn process(sat: &mut NativeSaturate, input_l: &[f32], input_r: &[f32]) -> (Vec<f32>, Vec<f32>) {
@@ -16,8 +20,14 @@ fn process(sat: &mut NativeSaturate, input_l: &[f32], input_r: &[f32]) -> (Vec<f
     let (mut ol, mut or) = (vec![0.0f32; n], vec![0.0f32; n]);
     for (i, chunk) in input_l.chunks(512).enumerate() {
         let s = i * 512;
-        sat.process_block(chunk, &input_r[s..s + chunk.len()],
-            &mut ol[s..s + chunk.len()], &mut or[s..s + chunk.len()], &no_events()).unwrap();
+        sat.process_block(
+            chunk,
+            &input_r[s..s + chunk.len()],
+            &mut ol[s..s + chunk.len()],
+            &mut or[s..s + chunk.len()],
+            &no_events(),
+        )
+        .unwrap();
     }
     (ol, or)
 }
@@ -37,7 +47,9 @@ fn tone(buf: &[f32], freq: f64) -> f64 {
 }
 
 fn sine(freq: f64, amp: f64) -> Vec<f32> {
-    (0..N).map(|i| (amp * (core::f64::consts::TAU * freq * i as f64 / SR).sin()) as f32).collect()
+    (0..N)
+        .map(|i| (amp * (core::f64::consts::TAU * freq * i as f64 / SR).sin()) as f32)
+        .collect()
 }
 
 #[test]
@@ -75,7 +87,10 @@ fn auto_gain_holds_loudness_under_drive() {
     let input = sine(500.0, 0.4);
     let (l, _) = process(&mut s, &input, &input);
     let g = 20.0 * (rms(&l[N / 2..]) / rms(&input[N / 2..])).log10();
-    assert!(g.abs() < 3.0, "auto gain holds loudness within 3 dB: {g:+.1}");
+    assert!(
+        g.abs() < 3.0,
+        "auto gain holds loudness within 3 dB: {g:+.1}"
+    );
 }
 
 #[test]
@@ -84,11 +99,13 @@ fn lf_protect_keeps_bass_clean() {
     // intermodulates; with lf_protect at 120 Hz the 60 Hz fundamental
     // passes clean (unshapen) while the 3 kHz still distorts.
     let mk_input = || -> Vec<f32> {
-        (0..N).map(|i| {
-            let a = 0.6 * (core::f64::consts::TAU * 60.0 * i as f64 / SR).sin();
-            let b = 0.2 * (core::f64::consts::TAU * 3000.0 * i as f64 / SR).sin();
-            (a + b) as f32
-        }).collect()
+        (0..N)
+            .map(|i| {
+                let a = 0.6 * (core::f64::consts::TAU * 60.0 * i as f64 / SR).sin();
+                let b = 0.2 * (core::f64::consts::TAU * 3000.0 * i as f64 / SR).sin();
+                (a + b) as f32
+            })
+            .collect()
     };
     let run = |lf: f64| -> (f64, f64) {
         let mut s = NativeSaturate::new(SR);
@@ -126,7 +143,10 @@ fn delta_listen_and_harmonics_readback() {
     // Delta carries mostly harmonics: H2 (1 kHz) energy must rival the
     // residual fundamental leakage.
     let late = &l[N / 2..];
-    assert!(tone(late, 1000.0) > 1.0e-4, "delta carries the 2nd harmonic");
+    assert!(
+        tone(late, 1000.0) > 1.0e-4,
+        "delta carries the 2nd harmonic"
+    );
     // Readback contract mirrors the preamp.
     let h2 = s.param_value(SATURATE_HARMONIC_BASE + 1).unwrap();
     assert!(h2 > 0.01, "harmonic readback alive: {h2:.4}");
@@ -257,6 +277,12 @@ fn tape_model_voices_the_top_and_bottom() {
     let bump = g_at(60.0);
     let mid = g_at(1000.0);
     let top = g_at(16_000.0);
-    assert!(bump > mid + 1.0, "head bump lifts the lows: {bump:+.1} vs {mid:+.1}");
-    assert!(top < mid - 1.5, "HF loss shades the top: {top:+.1} vs {mid:+.1}");
+    assert!(
+        bump > mid + 1.0,
+        "head bump lifts the lows: {bump:+.1} vs {mid:+.1}"
+    );
+    assert!(
+        top < mid - 1.5,
+        "HF loss shades the top: {top:+.1} vs {mid:+.1}"
+    );
 }

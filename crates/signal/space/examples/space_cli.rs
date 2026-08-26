@@ -8,7 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_space::{build, knn, Space};
+use signal_space::{Space, build, knn};
 
 fn main() {
     tracing_subscriber_init();
@@ -37,7 +37,10 @@ fn main() {
                 previous.as_ref().map(|(s, f)| (s, f.as_slice())),
                 &|n, total| eprintln!("  analyzed {n}/{total}"),
             );
-            report.space.save(&dir, &report.features).expect("save space");
+            report
+                .space
+                .save(&dir, &report.features)
+                .expect("save space");
             println!(
                 "built {:?}: {} items ({} analyzed, {} reused, {} failed) in {:.1}s → {}",
                 name,
@@ -59,8 +62,14 @@ fn main() {
             audit(&space);
         }
         Some("similar") => {
-            let dir = PathBuf::from(args.get(1).expect("usage: similar <space-dir> <substr> [k]"));
-            let pat = args.get(2).expect("usage: similar <space-dir> <substr> [k]").to_lowercase();
+            let dir = PathBuf::from(
+                args.get(1)
+                    .expect("usage: similar <space-dir> <substr> [k]"),
+            );
+            let pat = args
+                .get(2)
+                .expect("usage: similar <space-dir> <substr> [k]")
+                .to_lowercase();
             let k: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(8);
             let (space, feats) = Space::load(&dir).expect("load space");
             let idx = space
@@ -69,7 +78,10 @@ fn main() {
                 .position(|i| i.path.to_lowercase().contains(&pat))
                 .expect("no item matches substring");
             let q = &space.items[idx];
-            println!("query: [{}] {} ({:.0} Hz, {:.2}s)", q.class, q.path, q.centroid_hz, q.duration_s);
+            println!(
+                "query: [{}] {} ({:.0} Hz, {:.2}s)",
+                q.class, q.path, q.centroid_hz, q.duration_s
+            );
             for (i, score) in knn::similar(&feats, space.dim, idx, k, |_| true) {
                 let it = &space.items[i];
                 println!("  {score:.3}  [{}] {}", it.class, it.path);

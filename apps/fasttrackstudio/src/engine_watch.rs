@@ -27,14 +27,14 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use architect::LocalServer;
+use axum::Router;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::{get, post};
-use axum::Router;
+use signal_guitar_proto::PerformanceModel;
 use signal_guitar_proto::rig::{RigClient, RigEvent, RigStreamClient};
 use signal_guitar_proto::watch::WatchState;
-use signal_guitar_proto::PerformanceModel;
 
 /// Shared bridge state: one command client + the local server each SSE
 /// subscriber establishes its own stream client from.

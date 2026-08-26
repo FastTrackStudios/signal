@@ -65,12 +65,12 @@ struct Unit {
 
 fn main() -> eyre::Result<()> {
     let mut args = std::env::args().skip(1);
-    let css_path = args
-        .next()
-        .unwrap_or_else(|| "/run/media/Development/FastTrackStudio-legacy/signal/css_ab_css.wav".into());
-    let ours_path = args
-        .next()
-        .unwrap_or_else(|| "/run/media/Development/FastTrackStudio-legacy/signal/css_ab_ours.wav".into());
+    let css_path = args.next().unwrap_or_else(|| {
+        "/run/media/Development/FastTrackStudio-legacy/signal/css_ab_css.wav".into()
+    });
+    let ours_path = args.next().unwrap_or_else(|| {
+        "/run/media/Development/FastTrackStudio-legacy/signal/css_ab_ours.wav".into()
+    });
     let manifest_path = args.next().unwrap_or_else(|| {
         "/run/media/Development/FastTrackStudio-wt-020bc328-orchestral-violin-1-perfect-render-css/css_ab_manifest.tsv".into()
     });
@@ -159,7 +159,15 @@ fn main() -> eyre::Result<()> {
 
     println!(
         "{:<26} {:>7} {:>9} {:>9} {:>9} {:>10} {:>10} {:>10} {:>9}",
-        "unit", "lt_off", "K-pitch", "K-e25", "K-e50", "K-true50", "ourMarker", "delta", "ours-live"
+        "unit",
+        "lt_off",
+        "K-pitch",
+        "K-e25",
+        "K-e50",
+        "K-true50",
+        "ourMarker",
+        "delta",
+        "ours-live"
     );
     let mut deltas_by_class: std::collections::BTreeMap<String, Vec<f64>> = Default::default();
     for u in units
@@ -174,9 +182,23 @@ fn main() -> eyre::Result<()> {
         }
         // Mode + velocity → lt_offset (IOI here is 500 ms — OD ≈ 0).
         let (expressive, vel) = if u.desc.starts_with("EX") {
-            (true, u.desc.rsplit("vel").next().and_then(|v| v.parse().ok()).unwrap_or(85))
+            (
+                true,
+                u.desc
+                    .rsplit("vel")
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(85),
+            )
         } else if u.desc.starts_with("LL") {
-            (false, u.desc.rsplit("vel").next().and_then(|v| v.parse().ok()).unwrap_or(85))
+            (
+                false,
+                u.desc
+                    .rsplit("vel")
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(85),
+            )
         } else {
             (false, 85) // LEG-INT units: vel85, LL mode (CC58=2)
         };
@@ -184,8 +206,8 @@ fn main() -> eyre::Result<()> {
 
         // Ensemble on the ISOLATED Kontakt unit.
         let expected = noteon + g + 0.225;
-        let k_pitch = pitch_arrival(&css, sr, expected, from, to, 0.375)
-            .map(|t| (t - g - noteon) * 1000.0);
+        let k_pitch =
+            pitch_arrival(&css, sr, expected, from, to, 0.375).map(|t| (t - g - noteon) * 1000.0);
         let (w0, w1) = (noteon + g - 0.15, noteon + g + 0.65);
         let curve = dest_energy_curve(&css, sr, from, to, w0, w1);
         let n = curve.v.len();
@@ -217,8 +239,8 @@ fn main() -> eyre::Result<()> {
             .map(|(f, m)| (f, f64::from(m)))
             .unwrap_or(("?".into(), 0.0));
         let delta = k_true50.map(|t| our_marker - t);
-        let arr_ours =
-            pitch_arrival(&ours, sr, noteon + 0.225, from, to, 0.375).map(|t| (t - noteon) * 1000.0);
+        let arr_ours = pitch_arrival(&ours, sr, noteon + 0.225, from, to, 0.375)
+            .map(|t| (t - noteon) * 1000.0);
         if let Some(d) = delta {
             let class = if u.category == "LEG-VEL" {
                 format!("vel({})", if expressive { "EX" } else { "LL" })
@@ -245,8 +267,10 @@ fn main() -> eyre::Result<()> {
             zone.rsplit('/').next().unwrap_or("")
         );
     }
-    println!("
-delta = ourMarker − Kontakt-true (positive = our marker sits DEEPER than perception):");
+    println!(
+        "
+delta = ourMarker − Kontakt-true (positive = our marker sits DEEPER than perception):"
+    );
     for (class, mut v) in deltas_by_class {
         v.sort_by(|a, b| a.total_cmp(b));
         let median = v[v.len() / 2];

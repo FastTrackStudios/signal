@@ -4,14 +4,14 @@
 //! filtered through formant resonances to create vocal/choral textures.
 //! Combines shimmer architecture with a formant filter bank.
 
-use crate::algorithm::{ChoraleVowel, AlgorithmParams, ChoirVoice, ChoraleParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, ChoirVoice, ChoraleParams, ChoraleVowel, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::one_pole::Lp1;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::one_pole::OnePoleHp;
 use audiocore_dsp::grain_pitch::GrainPitchShifter;
+use audiocore_dsp::one_pole::OnePoleHp;
 
 /// Vowel formant frequencies for "ah", "ee", "oh", "oo"
 /// Measured tenor vowel formants (Csound's appendix tables — F, dB
@@ -76,7 +76,7 @@ pub struct Chorale {
     // // interpretation: "more Mod = more distinct singers" — we
     // decorrelate the two channel voices' pitch + formant centers.
     rng: u32,
-    rand_speed: [f64; 2],  // smoothed speed offset per channel
+    rand_speed: [f64; 2],   // smoothed speed offset per channel
     rand_formant: [f64; 2], // smoothed formant-scale offset per channel
     rand_target_speed: [f64; 2],
     rand_target_formant: [f64; 2],
@@ -263,8 +263,7 @@ impl Chorale {
         // One-pole toward the targets (smooth, click-free).
         for ch in 0..2 {
             self.rand_speed[ch] += (self.rand_target_speed[ch] - self.rand_speed[ch]) * 0.08;
-            self.rand_formant[ch] +=
-                (self.rand_target_formant[ch] - self.rand_formant[ch]) * 0.08;
+            self.rand_formant[ch] += (self.rand_target_formant[ch] - self.rand_formant[ch]) * 0.08;
         }
 
         self.shifter_l.set_speed(2.0 * (1.0 + self.rand_speed[0]));

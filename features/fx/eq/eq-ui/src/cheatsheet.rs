@@ -48,7 +48,12 @@ pub struct EqZone {
 }
 
 const fn z(lo_hz: f32, hi_hz: f32, role: &'static str, dir: ZoneDir) -> EqZone {
-    EqZone { lo_hz, hi_hz, role, dir }
+    EqZone {
+        lo_hz,
+        hi_hz,
+        role,
+        dir,
+    }
 }
 
 /// A named EQ profile: the zones to show plus the track-name keywords that select
@@ -68,7 +73,15 @@ use ZoneDir::*;
 
 pub const KICK_ACOUSTIC: InstrumentProfile = InstrumentProfile {
     name: "Kick (Acoustic)",
-    aliases: &["kick in", "kick out", "kick", "kik", "bass drum", "bassdrum", "bd"],
+    aliases: &[
+        "kick in",
+        "kick out",
+        "kick",
+        "kik",
+        "bass drum",
+        "bassdrum",
+        "bd",
+    ],
     zones: &[
         z(40.0, 60.0, "rumble", Sweet),
         z(60.0, 145.0, "body / weight", Boost),
@@ -130,7 +143,19 @@ pub const TOMS: InstrumentProfile = InstrumentProfile {
 
 pub const CYMBALS: InstrumentProfile = InstrumentProfile {
     name: "Cymbals / OH",
-    aliases: &["overhead", "overheads", "cymbal", "cymbals", "hihat", "hi-hat", "hat", "hh", "ride", "crash", "oh"],
+    aliases: &[
+        "overhead",
+        "overheads",
+        "cymbal",
+        "cymbals",
+        "hihat",
+        "hi-hat",
+        "hat",
+        "hh",
+        "ride",
+        "crash",
+        "oh",
+    ],
     zones: &[
         z(200.0, 400.0, "clank / gong", Cut),
         z(6000.0, 15000.0, "brightness / air", Boost),
@@ -153,7 +178,15 @@ pub const BASS: InstrumentProfile = InstrumentProfile {
 
 pub const GUITAR_ELECTRIC: InstrumentProfile = InstrumentProfile {
     name: "Electric Guitar",
-    aliases: &["electric guitar", "elec gtr", "egtr", "e gtr", "el gtr", "guitar", "gtr"],
+    aliases: &[
+        "electric guitar",
+        "elec gtr",
+        "egtr",
+        "e gtr",
+        "el gtr",
+        "guitar",
+        "gtr",
+    ],
     zones: &[
         z(150.0, 300.0, "body / thickness", Sweet),
         z(300.0, 1000.0, "character / power", Sweet),
@@ -165,7 +198,14 @@ pub const GUITAR_ELECTRIC: InstrumentProfile = InstrumentProfile {
 
 pub const GUITAR_ACOUSTIC: InstrumentProfile = InstrumentProfile {
     name: "Acoustic Guitar",
-    aliases: &["acoustic guitar", "acoustic gtr", "ac gtr", "acgtr", "acoustic", "acou gtr"],
+    aliases: &[
+        "acoustic guitar",
+        "acoustic gtr",
+        "ac gtr",
+        "acgtr",
+        "acoustic",
+        "acou gtr",
+    ],
     zones: &[
         z(80.0, 400.0, "body / wood", Sweet),
         z(200.0, 400.0, "wood (excess)", Cut),
@@ -178,7 +218,16 @@ pub const GUITAR_ACOUSTIC: InstrumentProfile = InstrumentProfile {
 
 pub const PIANO: InstrumentProfile = InstrumentProfile {
     name: "Piano",
-    aliases: &["grand piano", "electric piano", "epiano", "e piano", "rhodes", "keys", "piano", "pno"],
+    aliases: &[
+        "grand piano",
+        "electric piano",
+        "epiano",
+        "e piano",
+        "rhodes",
+        "keys",
+        "piano",
+        "pno",
+    ],
     zones: &[
         z(50.0, 250.0, "boom / warmth", Sweet),
         z(250.0, 500.0, "mud", Cut),
@@ -204,7 +253,16 @@ pub const STRINGS: InstrumentProfile = InstrumentProfile {
 
 pub const BRASS: InstrumentProfile = InstrumentProfile {
     name: "Brass",
-    aliases: &["brass", "trumpet", "trombone", "sax", "saxophone", "horn", "horns", "tuba"],
+    aliases: &[
+        "brass",
+        "trumpet",
+        "trombone",
+        "sax",
+        "saxophone",
+        "horn",
+        "horns",
+        "tuba",
+    ],
     zones: &[
         z(200.0, 500.0, "fullness / mud", Cut),
         z(1000.0, 2000.0, "squawk / harsh", Cut),
@@ -241,7 +299,16 @@ pub const SYNTH_LEAD: InstrumentProfile = InstrumentProfile {
 
 pub const VOCAL_LEAD: InstrumentProfile = InstrumentProfile {
     name: "Lead Vocal",
-    aliases: &["lead vocal", "lead vox", "lead voc", "main vocal", "vocal", "vox", "vocals", "voc"],
+    aliases: &[
+        "lead vocal",
+        "lead vox",
+        "lead voc",
+        "main vocal",
+        "vocal",
+        "vox",
+        "vocals",
+        "voc",
+    ],
     zones: &[
         z(200.0, 500.0, "mud", Cut),
         z(800.0, 1500.0, "honk / nasal", Cut),
@@ -254,7 +321,15 @@ pub const VOCAL_LEAD: InstrumentProfile = InstrumentProfile {
 
 pub const VOCAL_BACKING: InstrumentProfile = InstrumentProfile {
     name: "Backing Vocal",
-    aliases: &["backing vocal", "background vocal", "backing vox", "bgv", "bv", "harmony", "harm"],
+    aliases: &[
+        "backing vocal",
+        "background vocal",
+        "backing vox",
+        "bgv",
+        "bv",
+        "harmony",
+        "harm",
+    ],
     zones: &[
         z(200.0, 500.0, "mud", Cut),
         z(800.0, 1500.0, "honk", Cut),
@@ -266,7 +341,9 @@ pub const VOCAL_BACKING: InstrumentProfile = InstrumentProfile {
 
 pub const FX_IMPACT: InstrumentProfile = InstrumentProfile {
     name: "FX / Impact",
-    aliases: &["impact", "boom", "fx", "riser", "sweep", "whoosh", "laser", "noise"],
+    aliases: &[
+        "impact", "boom", "fx", "riser", "sweep", "whoosh", "laser", "noise",
+    ],
     zones: &[
         z(100.0, 400.0, "mud", Cut),
         z(2000.0, 4000.0, "impact / bite", Boost),
@@ -375,7 +452,9 @@ pub struct StaticTrackProvider {
 
 impl StaticTrackProvider {
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: Some(name.into()) }
+        Self {
+            name: Some(name.into()),
+        }
     }
 
     /// No track (overlay "Auto" resolves to off).
@@ -387,7 +466,11 @@ impl StaticTrackProvider {
     /// testing overlays in the standalone without a host
     /// (`FTS_EQ_TRACK_NAME="Kick In" cargo run -p eq-standalone`).
     pub fn from_env() -> Self {
-        Self { name: std::env::var("FTS_EQ_TRACK_NAME").ok().filter(|s| !s.is_empty()) }
+        Self {
+            name: std::env::var("FTS_EQ_TRACK_NAME")
+                .ok()
+                .filter(|s| !s.is_empty()),
+        }
     }
 }
 
@@ -426,15 +509,60 @@ pub struct EarBand {
 /// 250 Hz–4 kHz map to vowels (ooh/oh/ah/a/ee); 63/125 to felt haptics;
 /// 8 k/16 k to sibilance quality.
 pub const EAR_BANDS: &[EarBand] = &[
-    EarBand { center_hz: 63.0,    cue: "haptic · abdomen", too_much: "boom / rumble",    too_little: "no weight" },
-    EarBand { center_hz: 125.0,   cue: "haptic · chest",   too_much: "boomy / tubby",    too_little: "thin" },
-    EarBand { center_hz: 250.0,   cue: "ooh",              too_much: "muddy / boxy",     too_little: "thin, cold" },
-    EarBand { center_hz: 500.0,   cue: "oh",               too_much: "boxy / cardboard", too_little: "hollow" },
-    EarBand { center_hz: 1000.0,  cue: "ah",               too_much: "nasal / honky",    too_little: "no presence" },
-    EarBand { center_hz: 2000.0,  cue: "a",                too_much: "harsh / edgy",     too_little: "dull, no attack" },
-    EarBand { center_hz: 4000.0,  cue: "ee",               too_much: "harsh / piercing", too_little: "distant, no bite" },
-    EarBand { center_hz: 8000.0,  cue: "s · sibilance",    too_much: "sibilant / brittle", too_little: "dull, no air" },
-    EarBand { center_hz: 16000.0, cue: "s+t · sharp",      too_much: "hissy / harsh",    too_little: "dark, no sparkle" },
+    EarBand {
+        center_hz: 63.0,
+        cue: "haptic · abdomen",
+        too_much: "boom / rumble",
+        too_little: "no weight",
+    },
+    EarBand {
+        center_hz: 125.0,
+        cue: "haptic · chest",
+        too_much: "boomy / tubby",
+        too_little: "thin",
+    },
+    EarBand {
+        center_hz: 250.0,
+        cue: "ooh",
+        too_much: "muddy / boxy",
+        too_little: "thin, cold",
+    },
+    EarBand {
+        center_hz: 500.0,
+        cue: "oh",
+        too_much: "boxy / cardboard",
+        too_little: "hollow",
+    },
+    EarBand {
+        center_hz: 1000.0,
+        cue: "ah",
+        too_much: "nasal / honky",
+        too_little: "no presence",
+    },
+    EarBand {
+        center_hz: 2000.0,
+        cue: "a",
+        too_much: "harsh / edgy",
+        too_little: "dull, no attack",
+    },
+    EarBand {
+        center_hz: 4000.0,
+        cue: "ee",
+        too_much: "harsh / piercing",
+        too_little: "distant, no bite",
+    },
+    EarBand {
+        center_hz: 8000.0,
+        cue: "s · sibilance",
+        too_much: "sibilant / brittle",
+        too_little: "dull, no air",
+    },
+    EarBand {
+        center_hz: 16000.0,
+        cue: "s+t · sharp",
+        too_much: "hissy / harsh",
+        too_little: "dark, no sparkle",
+    },
 ];
 
 /// The ISO octave band a frequency falls in (within ±half an octave of a center),
@@ -468,17 +596,83 @@ pub struct FreqRange {
 
 /// Ten consensus frequency ranges spanning the spectrum, low → high.
 pub const FREQ_RANGES: &[FreqRange] = &[
-    FreqRange { lo_hz: 20.0,    hi_hz: 40.0,    name: "rumble",     too_much: "rumble",   too_little: "no weight" },
-    FreqRange { lo_hz: 40.0,    hi_hz: 100.0,   name: "bass",       too_much: "boomy",    too_little: "weak" },
-    FreqRange { lo_hz: 100.0,   hi_hz: 250.0,   name: "warmth",     too_much: "muddy",    too_little: "thin" },
-    FreqRange { lo_hz: 250.0,   hi_hz: 500.0,   name: "low mids",   too_much: "muddy",    too_little: "no body" },
-    FreqRange { lo_hz: 500.0,   hi_hz: 1000.0,  name: "boxiness",   too_much: "boxy",     too_little: "hollow" },
-    FreqRange { lo_hz: 1000.0,  hi_hz: 2000.0,  name: "nasal",      too_much: "nasal",    too_little: "no presence" },
-    FreqRange { lo_hz: 2000.0,  hi_hz: 3000.0,  name: "crunch",     too_much: "crunch",   too_little: "dull" },
-    FreqRange { lo_hz: 3000.0,  hi_hz: 4000.0,  name: "presence",   too_much: "presence", too_little: "veiled" },
-    FreqRange { lo_hz: 4000.0,  hi_hz: 6000.0,  name: "pierce",     too_much: "pierce",   too_little: "no bite" },
-    FreqRange { lo_hz: 6000.0,  hi_hz: 10000.0, name: "sibilance",  too_much: "sibilant", too_little: "muffled" },
-    FreqRange { lo_hz: 10000.0, hi_hz: 20000.0, name: "air",        too_much: "brittle",  too_little: "dark" },
+    FreqRange {
+        lo_hz: 20.0,
+        hi_hz: 40.0,
+        name: "rumble",
+        too_much: "rumble",
+        too_little: "no weight",
+    },
+    FreqRange {
+        lo_hz: 40.0,
+        hi_hz: 100.0,
+        name: "bass",
+        too_much: "boomy",
+        too_little: "weak",
+    },
+    FreqRange {
+        lo_hz: 100.0,
+        hi_hz: 250.0,
+        name: "warmth",
+        too_much: "muddy",
+        too_little: "thin",
+    },
+    FreqRange {
+        lo_hz: 250.0,
+        hi_hz: 500.0,
+        name: "low mids",
+        too_much: "muddy",
+        too_little: "no body",
+    },
+    FreqRange {
+        lo_hz: 500.0,
+        hi_hz: 1000.0,
+        name: "boxiness",
+        too_much: "boxy",
+        too_little: "hollow",
+    },
+    FreqRange {
+        lo_hz: 1000.0,
+        hi_hz: 2000.0,
+        name: "nasal",
+        too_much: "nasal",
+        too_little: "no presence",
+    },
+    FreqRange {
+        lo_hz: 2000.0,
+        hi_hz: 3000.0,
+        name: "crunch",
+        too_much: "crunch",
+        too_little: "dull",
+    },
+    FreqRange {
+        lo_hz: 3000.0,
+        hi_hz: 4000.0,
+        name: "presence",
+        too_much: "presence",
+        too_little: "veiled",
+    },
+    FreqRange {
+        lo_hz: 4000.0,
+        hi_hz: 6000.0,
+        name: "pierce",
+        too_much: "pierce",
+        too_little: "no bite",
+    },
+    FreqRange {
+        lo_hz: 6000.0,
+        hi_hz: 10000.0,
+        name: "sibilance",
+        too_much: "sibilant",
+        too_little: "muffled",
+    },
+    FreqRange {
+        lo_hz: 10000.0,
+        hi_hz: 20000.0,
+        name: "air",
+        too_much: "brittle",
+        too_little: "dark",
+    },
 ];
 
 /// The descriptor range a frequency falls in.

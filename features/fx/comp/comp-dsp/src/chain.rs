@@ -385,15 +385,28 @@ mod tests {
         assert_eq!(run(Some([SidechainBand::default(); SC_EQ_BANDS])), plain);
         // A deep low-frequency cut stops the 60 Hz tone from triggering.
         let mut cut = [SidechainBand::default(); SC_EQ_BANDS];
-        cut[0] = SidechainBand { shape: 3, freq_hz: 1_000.0, gain_db: 0.0, q: 0.707 };
+        cut[0] = SidechainBand {
+            shape: 3,
+            freq_hz: 1_000.0,
+            gain_db: 0.0,
+            q: 0.707,
+        };
         assert!(
             run(Some(cut)) < plain * 0.5,
             "a sidechain low cut must stop LF from triggering"
         );
         // Boosting the band makes it trigger HARDER.
         let mut boost = [SidechainBand::default(); SC_EQ_BANDS];
-        boost[0] = SidechainBand { shape: 0, freq_hz: 60.0, gain_db: 12.0, q: 1.0 };
-        assert!(run(Some(boost)) > plain, "a sidechain boost must trigger harder");
+        boost[0] = SidechainBand {
+            shape: 0,
+            freq_hz: 60.0,
+            gain_db: 12.0,
+            q: 1.0,
+        };
+        assert!(
+            run(Some(boost)) > plain,
+            "a sidechain boost must trigger harder"
+        );
     }
 
     #[test]

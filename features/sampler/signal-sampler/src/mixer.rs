@@ -15,8 +15,8 @@
 //! scratch buffers); this module holds the routing config, the bus + master
 //! accumulators, and the lock-free peak meters.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 use signal_plugin_host::HostedPlugin;
 
@@ -408,8 +408,12 @@ impl DrumMixer {
             }
         }
 
-        let meters =
-            Arc::new(MixerMeters::new(pieces.len(), channels.len(), sends.len(), buses.len()));
+        let meters = Arc::new(MixerMeters::new(
+            pieces.len(),
+            channels.len(),
+            sends.len(),
+            buses.len(),
+        ));
         Self {
             pieces,
             channels,

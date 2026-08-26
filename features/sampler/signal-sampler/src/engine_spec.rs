@@ -37,8 +37,8 @@ use std::path::Path;
 
 use facet::Facet;
 
-use crate::SamplerError;
 use crate::block::ParamOverride;
+use crate::SamplerError;
 
 /// Parsed `.signalengine` file. The Engine type discriminator (`Kick`,
 /// `Snare`, `Piano`, …) lives in `engine_type`; the Engine runtime

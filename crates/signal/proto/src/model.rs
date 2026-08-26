@@ -12,12 +12,12 @@
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
-use crate::BlockType;
 use crate::ids::{ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId};
 use crate::metadata;
 use crate::module_type::ModuleType;
 use crate::signal_chain::SignalChain;
 use crate::traits;
+use crate::BlockType;
 use signal_macromod::ParameterValue;
 
 // ─── EngineType ────────────────────────────────────────────────

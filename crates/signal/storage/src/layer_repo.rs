@@ -1,12 +1,12 @@
 //! Layer repository — data access for Layer collections and LayerSnapshot variants.
 
 use sea_orm::*;
-use signal_proto::EngineType;
 use signal_proto::layer::{
     BlockRef, Layer, LayerId, LayerRef, LayerSnapshot, LayerSnapshotId, ModuleRef, PluginRef,
 };
 use signal_proto::metadata::Metadata;
 use signal_proto::overrides::Override;
+use signal_proto::EngineType;
 
 use crate::entity;
 use crate::{DatabaseConnection, StorageError, StorageResult};

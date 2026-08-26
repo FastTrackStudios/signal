@@ -12,8 +12,8 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use crate::block::{BlockSpec, ParamOverride, SamplerBlock};
 use crate::engine::cache::{EvictStats, PreloadStats, SampleCache};
@@ -41,8 +41,7 @@ const PERFORMANCE_PRELOAD_SAMPLES: usize = 512;
 /// everything else streams in as it is played. Ask for `Performance` or
 /// `Full` explicitly when one instrument is the whole job — an offline
 /// render, a bounce, a single-patch session.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PreloadProfile {
     #[default]
     FastAudition,
@@ -52,7 +51,6 @@ pub enum PreloadProfile {
     PianoCenterOut,
     OrchestralArticulation,
 }
-
 
 impl PreloadProfile {
     pub fn from_name(name: &str) -> Option<Self> {
@@ -121,7 +119,11 @@ struct PendingPreload {
 
 pub(crate) fn resolve_relative(path_str: &str, base_dir: &Path) -> PathBuf {
     let p = PathBuf::from(path_str);
-    if p.is_absolute() { p } else { base_dir.join(p) }
+    if p.is_absolute() {
+        p
+    } else {
+        base_dir.join(p)
+    }
 }
 
 /// Map an instrument tag to a drum-kit preload priority. Lower values are

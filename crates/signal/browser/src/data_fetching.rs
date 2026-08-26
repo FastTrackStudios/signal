@@ -3,14 +3,14 @@
 //! Each `fetch_col*` function queries the `Signal` for the
 //! appropriate domain entities and maps them into `ColumnItem` rows.
 
-use signal::Signal;
 use signal::layer::Layer;
 use signal::rig::RigType;
 use signal::tagging::{StructuredTag, TagCategory, TagSet};
 use signal::traits::HasMetadata;
+use signal::Signal;
 use signal::{
-    ALL_BLOCK_TYPES, BlockType, ModuleBlock, ModuleBlockSource, ModulePreset, Preset, SignalChain,
-    SignalNode,
+    BlockType, ModuleBlock, ModuleBlockSource, ModulePreset, Preset, SignalChain, SignalNode,
+    ALL_BLOCK_TYPES,
 };
 use std::collections::HashMap;
 

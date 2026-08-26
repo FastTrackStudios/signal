@@ -3,9 +3,7 @@
 use architect_ui::prelude::{Button, ButtonSize, ButtonVariant, Select, SelectContent, SelectItem};
 use nice_plug_dioxus::prelude::*;
 
-use super::eq_graph_model::{
-    EqBand, EqBandShape, MAX_BANDS, StereoMode, q_to_slope_db,
-};
+use super::eq_graph_model::{q_to_slope_db, EqBand, EqBandShape, StereoMode, MAX_BANDS};
 
 fn shape_to_int(s: EqBandShape) -> i32 {
     match s {

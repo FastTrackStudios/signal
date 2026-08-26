@@ -17,10 +17,10 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use signal_sampler::document::{DocumentRenderOptions, render_schedule};
+use signal_sampler::document::{render_schedule, DocumentRenderOptions};
 use signal_sampler::{
-    BlockTransport, DocNote, PlayMode, RealtimeScheduler, SamplerBank, Schedule, TrackDocument,
-    annotate,
+    annotate, BlockTransport, DocNote, PlayMode, RealtimeScheduler, SamplerBank, Schedule,
+    TrackDocument,
 };
 
 const SR: u32 = 48_000;

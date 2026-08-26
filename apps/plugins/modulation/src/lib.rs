@@ -323,7 +323,10 @@ mod tests {
             EngineType::Orbit,
             EngineType::Juno,
         ] {
-            assert!(reached.contains(&engine), "{engine:?} unreachable from the shell");
+            assert!(
+                reached.contains(&engine),
+                "{engine:?} unreachable from the shell"
+            );
         }
     }
 

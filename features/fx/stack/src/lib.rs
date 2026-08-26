@@ -304,7 +304,11 @@ impl<S: Stage> Stack<S> {
     fn lane_active(&self, idx: usize) -> bool {
         let any_solo = self.lanes.iter().any(|l| l.solo);
         let lane = &self.lanes[idx];
-        if any_solo { lane.solo } else { !lane.mute }
+        if any_solo {
+            lane.solo
+        } else {
+            !lane.mute
+        }
     }
 
     /// Process one block in place (`fx.stack.process`): every lane gets the
@@ -385,7 +389,10 @@ mod tests {
     }
     impl Delayed {
         fn new(n: usize) -> Self {
-            Self { line: vec![0.0; n], n }
+            Self {
+                line: vec![0.0; n],
+                n,
+            }
         }
     }
     impl Stage for Delayed {
@@ -459,7 +466,10 @@ mod tests {
         let (dl, _) = ramp(64);
         stack.process(&mut l, &mut r);
         for i in 0..64 {
-            assert!((l[i] - dl[i]).abs() < 1e-12, "coherent sum not unity at {i}");
+            assert!(
+                (l[i] - dl[i]).abs() < 1e-12,
+                "coherent sum not unity at {i}"
+            );
         }
     }
 
@@ -543,7 +553,11 @@ mod tests {
         let mut l = vec![1.0; 512];
         let mut r = vec![1.0; 512];
         stack.process(&mut l, &mut r);
-        assert!(l[0] < 0.02, "fade did not start near the wet value: {}", l[0]);
+        assert!(
+            l[0] < 0.02,
+            "fade did not start near the wet value: {}",
+            l[0]
+        );
         assert!(l[511] > 0.9, "fade did not reach dry: {}", l[511]);
         for w in l.windows(2) {
             assert!((w[1] - w[0]).abs() < 0.01, "click in the bypass fade");

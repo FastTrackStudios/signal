@@ -7,8 +7,8 @@ use atomic_float::AtomicF32;
 use audiocore_core::prelude::*;
 use parking_lot::Mutex;
 use spectrum_analyzer::dsp::{Analyzer, AudioFeed};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 /// Process-global source of unique analyzer instance ids (used for cross-instance
 /// spectrum sharing).

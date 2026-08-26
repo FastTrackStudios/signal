@@ -20,7 +20,6 @@ use fts_audio_ui::ParamHandle;
 pub const W: f64 = 960.0;
 pub const H: f64 = 300.0;
 
-
 /// What a panel draws in the middle: the thing that makes it that delay.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Centrepiece {
@@ -67,8 +66,21 @@ pub struct EchoDesign {
 
 /// The control row. Eight across, on the line that leaves room for the
 /// biggest knob's box *and* its legend above the bottom edge.
-const fn knob(param: &'static str, legend: &'static str, x: f64, d: f64, style: KnobStyle) -> KnobSpec {
-    KnobSpec { param, legend, x, y: 206.0, d, style }
+const fn knob(
+    param: &'static str,
+    legend: &'static str,
+    x: f64,
+    d: f64,
+    style: KnobStyle,
+) -> KnobSpec {
+    KnobSpec {
+        param,
+        legend,
+        x,
+        y: 206.0,
+        d,
+        style,
+    }
 }
 
 /// Time, feedback and mix are on every delay ever made, so they are in the
@@ -436,7 +448,7 @@ fn CentreView(
                     }
                 }
             }
-        },
+        }
 
         // The chip and its bucket line: charge handed down the chain, one
         // stage at a time, losing a little at every step.
@@ -466,7 +478,7 @@ fn CentreView(
                     }
                 }
             }
-        },
+        }
 
         // Repeats climbing an interval at a time. The staircase is the effect
         // drawn literally, which is the clearest it can be put.
@@ -514,7 +526,7 @@ fn CentreView(
                     }
                 }
             }
-        },
+        }
 
         // A repeat that stopped being one: the envelope runs backwards and
         // smears out as it goes.
@@ -580,7 +592,12 @@ mod tests {
         for design in [&DIGITAL, &TAPE, &ANALOG, &PITCH, &RHYTHMIC, &SPECIAL] {
             for spec in design.knobs {
                 let legend_y = spec.y + spec.d * 0.92 + 10.0;
-                assert!(legend_y + 6.0 <= H, "{}'s {} legend falls off", design.family, spec.param);
+                assert!(
+                    legend_y + 6.0 <= H,
+                    "{}'s {} legend falls off",
+                    design.family,
+                    spec.param
+                );
             }
         }
     }
@@ -588,8 +605,17 @@ mod tests {
     #[test]
     fn every_placed_control_is_one_the_editor_binds() {
         const BOUND: &[&str] = &[
-            "time_l", "time_r", "feedback", "tone", "drive", "wow", "flutter",
-            "duck", "mix", "character_a", "character_b",
+            "time_l",
+            "time_r",
+            "feedback",
+            "tone",
+            "drive",
+            "wow",
+            "flutter",
+            "duck",
+            "mix",
+            "character_a",
+            "character_b",
         ];
         for design in [&DIGITAL, &TAPE, &ANALOG, &PITCH, &RHYTHMIC, &SPECIAL] {
             for spec in design.knobs {
@@ -622,7 +648,12 @@ mod tests {
     fn every_profile_names_its_engine_controls() {
         for profile in delay_profiles::PROFILES {
             let (a, b) = character_legends(profile.id);
-            assert_ne!((a, b), ("Character", "Colour"), "{} has placeholders", profile.id);
+            assert_ne!(
+                (a, b),
+                ("Character", "Colour"),
+                "{} has placeholders",
+                profile.id
+            );
         }
     }
 
@@ -630,7 +661,11 @@ mod tests {
     fn every_family_has_a_panel_and_every_panel_a_family() {
         for category in delay_profiles::CATEGORIES {
             for id in category.profiles {
-                assert_eq!(design_for(id).family, category.id, "{id} draws the wrong panel");
+                assert_eq!(
+                    design_for(id).family,
+                    category.id,
+                    "{id} draws the wrong panel"
+                );
             }
         }
     }

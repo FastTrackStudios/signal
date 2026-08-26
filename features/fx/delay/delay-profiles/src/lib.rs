@@ -62,7 +62,8 @@ pub static PROFILES: &[Profile] = &[
         id: "filter",
         name: "Filtered",
         style: DelayStyle::Filter,
-        voice: "The same repeat with tone controls inside the loop — each pass darker than the last.",
+        voice:
+            "The same repeat with tone controls inside the loop — each pass darker than the last.",
     },
     // ── Tape: a medium, with all that implies ────────────────────────────
     Profile {
@@ -95,7 +96,8 @@ pub static PROFILES: &[Profile] = &[
         id: "pitch",
         name: "Pitch",
         style: DelayStyle::Pitch,
-        voice: "Each repeat shifted — a fifth up, an octave down, or something that does not settle.",
+        voice:
+            "Each repeat shifted — a fifth up, an octave down, or something that does not settle.",
     },
     Profile {
         id: "shimmer",
@@ -286,10 +288,7 @@ mod tests {
                 .filter(|p| p.style == style)
                 .map(|p| p.id)
                 .collect();
-            assert!(
-                offering.len() <= 1,
-                "{style:?} is offered as {offering:?}",
-            );
+            assert!(offering.len() <= 1, "{style:?} is offered as {offering:?}",);
         }
     }
 

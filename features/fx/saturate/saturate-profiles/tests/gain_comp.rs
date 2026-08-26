@@ -22,7 +22,13 @@ struct SatStage {
 
 impl SatStage {
     fn new(profile_id: &str, drive: f32) -> Self {
-        Self::with_controls(profile_id, Controls { drive, ..Controls::default() })
+        Self::with_controls(
+            profile_id,
+            Controls {
+                drive,
+                ..Controls::default()
+            },
+        )
     }
 
     fn with_controls(profile_id: &str, controls: Controls) -> Self {
@@ -30,7 +36,11 @@ impl SatStage {
         let mut pre = ClassAPreamp::new(48_000.0);
         let mut digital = DigitalStage::default();
         apply(profile, &controls, &mut pre, &mut digital);
-        Self { pre, digital, emph: None }
+        Self {
+            pre,
+            digital,
+            emph: None,
+        }
     }
 
     /// Same, with an emphasis EQ around the stage — the plugin's wet path
@@ -51,8 +61,20 @@ impl SatStage {
             e.set_bands(&bands);
         }
         pre.set_emphasis_sigma_gain(emph[0].sigma_gain());
-        apply(profile, &Controls { drive, ..Controls::default() }, &mut pre, &mut digital);
-        Self { pre, digital, emph: Some(emph) }
+        apply(
+            profile,
+            &Controls {
+                drive,
+                ..Controls::default()
+            },
+            &mut pre,
+            &mut digital,
+        );
+        Self {
+            pre,
+            digital,
+            emph: Some(emph),
+        }
     }
 }
 
@@ -90,9 +112,24 @@ impl Stage for SatStage {
 fn an_emphasis_curve_stays_loudness_neutral() {
     use saturate_dsp::emphasis::{EmphBand, EmphShape};
     let mut bands: [EmphBand; saturate_dsp::emphasis::BANDS] = Default::default();
-    bands[0] = EmphBand { shape: EmphShape::LowShelf, freq_hz: 150.0, gain_db: -6.0, q: 0.8 };
-    bands[1] = EmphBand { shape: EmphShape::Bell, freq_hz: 3_000.0, gain_db: 9.0, q: 1.2 };
-    bands[2] = EmphBand { shape: EmphShape::HighShelf, freq_hz: 8_000.0, gain_db: 6.0, q: 0.7 };
+    bands[0] = EmphBand {
+        shape: EmphShape::LowShelf,
+        freq_hz: 150.0,
+        gain_db: -6.0,
+        q: 0.8,
+    };
+    bands[1] = EmphBand {
+        shape: EmphShape::Bell,
+        freq_hz: 3_000.0,
+        gain_db: 9.0,
+        q: 1.2,
+    };
+    bands[2] = EmphBand {
+        shape: EmphShape::HighShelf,
+        freq_hz: 8_000.0,
+        gain_db: 6.0,
+        q: 0.7,
+    };
 
     for id in ["triode", "tape", "transistor"] {
         for drive in [0.0f32, 0.5, 1.0] {
@@ -111,7 +148,15 @@ fn an_emphasis_curve_stays_loudness_neutral() {
 #[test]
 #[ignore]
 fn deviation_table() {
-    for id in ["triode", "pentode", "tape", "tape_hot", "transformer", "transistor", "fuzz"] {
+    for id in [
+        "triode",
+        "pentode",
+        "tape",
+        "tape_hot",
+        "transformer",
+        "transistor",
+        "fuzz",
+    ] {
         let devs: Vec<String> = (0..9)
             .map(|p| {
                 let t = p as f32 / 8.0;
@@ -126,7 +171,11 @@ fn deviation_table() {
                 let t = p as f32 / 8.0;
                 let mut s = SatStage::with_controls(
                     id,
-                    Controls { drive: t, sag: 0.0, ..Controls::default() },
+                    Controls {
+                        drive: t,
+                        sag: 0.0,
+                        ..Controls::default()
+                    },
                 );
                 format!("{:+.2}", verify::level_deviation_db(&mut s, 48_000.0))
             })
@@ -147,11 +196,8 @@ fn analogue_profiles_hold_the_reference_bound_across_drive() {
         "transistor",
         "fuzz",
     ] {
-        let (full, typical) = verify::sweep_deviation_db(
-            |t| SatStage::new(id, t as f32),
-            9,
-            48_000.0,
-        );
+        let (full, typical) =
+            verify::sweep_deviation_db(|t| SatStage::new(id, t as f32), 9, 48_000.0);
         assert!(
             full <= FULL_RANGE_BOUND_DB,
             "{id}: worst full-range deviation {full:.2} dB exceeds ±{FULL_RANGE_BOUND_DB} dB"

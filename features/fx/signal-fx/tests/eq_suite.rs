@@ -32,7 +32,11 @@ fn run(plugin: &mut dyn PluginInstance, input: &[f32]) -> Vec<f32> {
 }
 
 fn rms(buf: &[f32]) -> f64 {
-    (buf.iter().map(|&x| f64::from(x) * f64::from(x)).sum::<f64>() / buf.len() as f64).sqrt()
+    (buf.iter()
+        .map(|&x| f64::from(x) * f64::from(x))
+        .sum::<f64>()
+        / buf.len() as f64)
+        .sqrt()
 }
 
 fn sine(freq: f64, amp: f64, n: usize) -> Vec<f32> {
@@ -117,7 +121,10 @@ fn spectral_band_toggle_suppresses_resonance_in_range_only() {
     eq.set_named("b1_q", 1.0);
     eq.set_named("b1_dyn_range", -24.0);
     eq.set_named("b1_spectral", 1.0);
-    assert!(eq.spectral_engaged(), "spectral toggle must engage the engine");
+    assert!(
+        eq.spectral_engaged(),
+        "spectral toggle must engage the engine"
+    );
 
     let mut seed = 5u64;
     let input: Vec<f32> = (0..N)
@@ -166,7 +173,10 @@ fn transient_mode_null_and_stream_routing() {
     for i in 0..input.len() {
         max_err = max_err.max((f64::from(out[i]) - f64::from(input[i])).abs());
     }
-    assert!(max_err < 1.0e-4, "flat transient mode must null: {max_err:e}");
+    assert!(
+        max_err < 1.0e-4,
+        "flat transient mode must null: {max_err:e}"
+    );
 
     // Steady stream cut 30 dB: tone drops, clicks survive.
     let mut eq2 = NativeEq::new(SR);
@@ -174,10 +184,16 @@ fn transient_mode_null_and_stream_routing() {
     eq2.set_named("steady_gain", -30.0);
     let out2 = run(&mut eq2, &input);
     let tone_idx: Vec<usize> = (24_000..48_000).filter(|i| i % 12000 > 6000).collect();
-    let t_in = (tone_idx.iter().map(|&i| f64::from(input[i]).powi(2)).sum::<f64>()
+    let t_in = (tone_idx
+        .iter()
+        .map(|&i| f64::from(input[i]).powi(2))
+        .sum::<f64>()
         / tone_idx.len() as f64)
         .sqrt();
-    let t_out = (tone_idx.iter().map(|&i| f64::from(out2[i]).powi(2)).sum::<f64>()
+    let t_out = (tone_idx
+        .iter()
+        .map(|&i| f64::from(out2[i]).powi(2))
+        .sum::<f64>()
         / tone_idx.len() as f64)
         .sqrt();
     let tone_g = 20.0 * (t_out / t_in).log10();
@@ -199,7 +215,10 @@ fn transient_mode_null_and_stream_routing() {
     eq3.set_named("b1_gain", 6.0);
     eq3.set_named("b1_stream", 2.0); // steady only
     let out3 = run(&mut eq3, &input);
-    let t3 = (tone_idx.iter().map(|&i| f64::from(out3[i]).powi(2)).sum::<f64>()
+    let t3 = (tone_idx
+        .iter()
+        .map(|&i| f64::from(out3[i]).powi(2))
+        .sum::<f64>()
         / tone_idx.len() as f64)
         .sqrt();
     let tone_boost = 20.0 * (t3 / t_in).log10();
@@ -364,7 +383,10 @@ fn mid_placement_dynamic_band_ducks_center_only() {
     let mid_g = 10.0 * (mid_e(&out_l, &out_r) / mid_e(&in_l, &in_r)).log10();
     let side_g = 10.0 * (side_e(&out_l, &out_r) / side_e(&in_l, &in_r)).log10();
     assert!(mid_g < -6.0, "loud center should duck: {mid_g:+.1} dB");
-    assert!(side_g.abs() < 1.0, "side content untouched: {side_g:+.2} dB");
+    assert!(
+        side_g.abs() < 1.0,
+        "side content untouched: {side_g:+.2} dB"
+    );
 }
 
 #[test]
@@ -385,7 +407,10 @@ fn cut_slopes_audit_and_zero_slope_bypass() {
     };
     // LowCut (canonical 3): slope 0 must be bit-flat (bypass).
     let bypass = run_cut(3.0, 0.0, 200.0);
-    assert!(bypass.abs() < 0.01, "0 dB/oct low cut = bypass: {bypass:+.3} dB");
+    assert!(
+        bypass.abs() < 0.01,
+        "0 dB/oct low cut = bypass: {bypass:+.3} dB"
+    );
     // NOTE: slope index 1 (6 dB/oct, order 1) currently designs to
     // passthrough — the odd-order-1 HP path gap is tracked in #73.
     // Probe half an octave below the cutoff so even 96 dB/oct stays
@@ -427,7 +452,10 @@ fn listen_solo_isolates_the_band_region() {
     };
     let in_band = run_probe(2000.0);
     let below = run_probe(200.0);
-    assert!(in_band > -2.0, "in-region content passes solo: {in_band:+.1} dB");
+    assert!(
+        in_band > -2.0,
+        "in-region content passes solo: {in_band:+.1} dB"
+    );
     assert!(
         below < in_band - 20.0,
         "out-of-region content vanishes: {below:+.1} dB"
@@ -453,7 +481,10 @@ fn listen_delta_hears_only_the_change() {
     };
     let changed = run_probe(1000.0);
     let unchanged = run_probe(6000.0);
-    assert!(changed > -8.0, "delta carries the boosted region: {changed:+.1} dB");
+    assert!(
+        changed > -8.0,
+        "delta carries the boosted region: {changed:+.1} dB"
+    );
     // Far out-of-band the bell's real skirt is tiny but nonzero — the
     // delta must sit well below the in-band delta (here it IS the
     // skirt, ~-22 dB: physically correct, not leakage).
@@ -498,7 +529,10 @@ fn listen_delta_reveals_spectral_action() {
         }
         (re * re + im * im) / buf.len() as f64
     };
-    let total_e: f64 = out[N / 2..].iter().map(|&x| f64::from(x) * f64::from(x)).sum::<f64>()
+    let total_e: f64 = out[N / 2..]
+        .iter()
+        .map(|&x| f64::from(x) * f64::from(x))
+        .sum::<f64>()
         / (N / 2) as f64;
     let res_e = tone_e(&out[N / 2..]);
     assert!(

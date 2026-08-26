@@ -27,7 +27,7 @@ use signal_keys_proto::keys::KeysRigClient;
 use signal_keys_proto::KeysPreset;
 
 use crate::control::engine_color;
-use crate::selection::{Selection, use_selection};
+use crate::selection::{use_selection, Selection};
 use crate::state::KeysViewState;
 
 /// How many rows the list draws before it asks you to narrow it. The library
@@ -81,7 +81,11 @@ pub fn Browser(state: KeysViewState) -> Element {
 
     let sel = selection.read().clone();
     let engine = sel.engine().map(|e| e.to_string());
-    let accent = engine.as_deref().map(engine_color).unwrap_or("#94a3b8").to_string();
+    let accent = engine
+        .as_deref()
+        .map(engine_color)
+        .unwrap_or("#94a3b8")
+        .to_string();
     let loadable = !matches!(sel, Selection::None);
 
     // Leaving the level closes whatever variation list was open under it.
@@ -142,12 +146,7 @@ pub fn Browser(state: KeysViewState) -> Element {
 }
 
 /// Load a variation of `index` (or its default, when `variant` is `None`).
-fn load_variant(
-    rig: Option<KeysRigClient>,
-    sel: Selection,
-    index: usize,
-    variant: Option<usize>,
-) {
+fn load_variant(rig: Option<KeysRigClient>, sel: Selection, index: usize, variant: Option<usize>) {
     let Some(n) = variant else {
         load_into(rig, sel, index);
         return;
@@ -160,7 +159,9 @@ fn load_variant(
     let module = sel.module();
     spawn(async move {
         if let Some(r) = rig {
-            let _ = r.set_layer_variant(layer, module, index as u32, n as u32).await;
+            let _ = r
+                .set_layer_variant(layer, module, index as u32, n as u32)
+                .await;
         }
     });
 }
@@ -176,7 +177,9 @@ fn load_into(rig: Option<KeysRigClient>, sel: Selection, index: usize) {
             }
             // A lane, or one module of it.
             Selection::Layer { layer, .. } | Selection::Module { layer, .. } => {
-                let _ = r.set_layer_patch(layer.clone(), sel.module(), index as u32).await;
+                let _ = r
+                    .set_layer_patch(layer.clone(), sel.module(), index as u32)
+                    .await;
             }
             Selection::None => {}
         }
@@ -280,9 +283,7 @@ fn LibraryList(
             _ => true,
         })
         .filter(|(_, p)| {
-            q.is_empty()
-                || p.name.to_lowercase().contains(&q)
-                || p.kind.to_lowercase().contains(&q)
+            q.is_empty() || p.name.to_lowercase().contains(&q) || p.kind.to_lowercase().contains(&q)
         })
         .take(MAX_ROWS * 4)
         .map(|(i, p)| (i, column_item(i, p), p.variants.len()))
@@ -291,9 +292,11 @@ fn LibraryList(
         SortMode::Name => hits.sort_by(|a, b| a.1.name.cmp(&b.1.name)),
         SortMode::NameDesc => hits.sort_by(|a, b| b.1.name.cmp(&a.1.name)),
         SortMode::Variants => hits.sort_by(|a, b| b.2.cmp(&a.2).then(a.1.name.cmp(&b.1.name))),
-        SortMode::BlockType => {
-            hits.sort_by(|a, b| a.1.subtitle.cmp(&b.1.subtitle).then(a.1.name.cmp(&b.1.name)))
-        }
+        SortMode::BlockType => hits.sort_by(|a, b| {
+            a.1.subtitle
+                .cmp(&b.1.subtitle)
+                .then(a.1.name.cmp(&b.1.name))
+        }),
     }
     let truncated = hits.len() > MAX_ROWS;
     hits.truncate(MAX_ROWS);

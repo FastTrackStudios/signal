@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex};
 use dioxus_test::{by_testid, render, DocumentTester};
 
 use limiter_ui::control_view::App;
-use limiter_ui::gr_trace_svg::{GR_RANGE_DB, TRACE_H, TRACE_W, gr_area_path, gr_to_y};
+use limiter_ui::gr_trace_svg::{gr_area_path, gr_to_y, GR_RANGE_DB, TRACE_H, TRACE_W};
 use limiter_ui::params::{LimiterParams, LimiterUiState};
 
 use audiocore_core::prelude::Param;
@@ -69,7 +69,10 @@ mod support {
             PluginApi::Clap
         }
         unsafe fn raw_begin_set_parameter(&self, param: ParamPtr) {
-            self.log.lock().unwrap().push(Gesture::Begin(ptr_key(param)));
+            self.log
+                .lock()
+                .unwrap()
+                .push(Gesture::Begin(ptr_key(param)));
         }
         unsafe fn raw_set_parameter_normalized(&self, param: ParamPtr, normalized: f32) {
             self.log
@@ -131,7 +134,12 @@ mod support {
             .with_root_context(SharedState::new(ui.clone()))
             .build();
 
-        Fixture { tester, params, ui, log }
+        Fixture {
+            tester,
+            params,
+            ui,
+            log,
+        }
     }
 
     impl Fixture {
@@ -182,11 +190,18 @@ async fn editor_mounts_headless_with_controls_and_meters() -> dioxus_test::Resul
         let (w, h) = fx.tester.query(by_testid(id)).immediately()?.size();
         assert!(w > 40.0 && h > 30.0, "{id} collapsed to {w}x{h}px");
     }
-    for id in ["knob-ingain", "knob-release", "knob-ceiling", "knob-character"] {
+    for id in [
+        "knob-ingain",
+        "knob-release",
+        "knob-ceiling",
+        "knob-character",
+    ] {
         let (w, h) = fx.tester.query(by_testid(id)).immediately()?.size();
         assert!(w > 20.0 && h > 20.0, "{id} collapsed to {w}x{h}px");
     }
-    fx.tester.query(by_testid("toggle-truepeak")).immediately()?;
+    fx.tester
+        .query(by_testid("toggle-truepeak"))
+        .immediately()?;
     Ok(())
 }
 
@@ -266,7 +281,10 @@ async fn dragging_ceiling_lowers_the_parameter() -> dioxus_test::Result<()> {
     let _ = fx.tester.pump().await;
 
     let after = cp.value();
-    assert!(after < before, "drag down did not lower ceiling: {before} -> {after}");
+    assert!(
+        after < before,
+        "drag down did not lower ceiling: {before} -> {after}"
+    );
     // 30 px at 150 px per sweep over the linear -20..0 dB range = -4 dB.
     let expected = before - (30.0 / 150.0) * 20.0;
     assert!(
@@ -275,8 +293,12 @@ async fn dragging_ceiling_lowers_the_parameter() -> dioxus_test::Result<()> {
     );
 
     let log = fx.log.lock().unwrap();
-    assert!(log.iter().any(|g| matches!(g, Gesture::Begin(k) if *k == key)));
-    assert!(log.iter().any(|g| matches!(g, Gesture::End(k) if *k == key)));
+    assert!(log
+        .iter()
+        .any(|g| matches!(g, Gesture::Begin(k) if *k == key)));
+    assert!(log
+        .iter()
+        .any(|g| matches!(g, Gesture::End(k) if *k == key)));
     Ok(())
 }
 
@@ -286,15 +308,24 @@ async fn true_peak_toggle_flips_its_parameter() -> dioxus_test::Result<()> {
     let fx = mount();
     let before = fx.params.true_peak.value();
 
-    let el = fx.tester.query(by_testid("toggle-truepeak")).immediately()?;
+    let el = fx
+        .tester
+        .query(by_testid("toggle-truepeak"))
+        .immediately()?;
     let (ox, oy) = el.document_origin();
     let (w, h) = el.size();
-    fx.tester.pointer_down(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    fx.tester
+        .pointer_down(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
     let _ = fx.tester.pump().await;
-    fx.tester.pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    fx.tester
+        .pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
     let _ = fx.tester.pump().await;
 
-    assert_ne!(fx.params.true_peak.value(), before, "True Peak did not toggle");
+    assert_ne!(
+        fx.params.true_peak.value(),
+        before,
+        "True Peak did not toggle"
+    );
     Ok(())
 }
 
@@ -322,9 +353,17 @@ async fn surface_survives_the_declared_minimum_size() -> dioxus_test::Result<()>
             limiter_ui::control_view::MIN_EDITOR_H,
         );
     }
-    for id in ["knob-ingain", "knob-release", "knob-ceiling", "knob-character"] {
+    for id in [
+        "knob-ingain",
+        "knob-release",
+        "knob-ceiling",
+        "knob-character",
+    ] {
         let (w, h) = fx.tester.query(by_testid(id)).immediately()?.size();
-        assert!(w > 20.0 && h > 20.0, "{id} collapsed to {w}x{h}px at the minimum");
+        assert!(
+            w > 20.0 && h > 20.0,
+            "{id} collapsed to {w}x{h}px at the minimum"
+        );
     }
     Ok(())
 }

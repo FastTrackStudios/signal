@@ -38,9 +38,9 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 #[cfg(not(target_arch = "wasm32"))]
-use std::sync::Arc;
-#[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Arc;
 
 use signal_proto::block::{BlockCategory, BlockType};
 
@@ -49,21 +49,21 @@ use facet::Facet;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::service::{FxChainContext, FxChains, FxParams, ProjectContext, TrackRef, Tracks};
 #[cfg(not(target_arch = "wasm32"))]
-use daw::standalone::Standalone;
+use daw::standalone::metering::{linear_to_db, Meters};
 #[cfg(not(target_arch = "wasm32"))]
-use daw::standalone::metering::{Meters, linear_to_db};
+use daw::standalone::Standalone;
 #[cfg(not(target_arch = "wasm32"))]
 use daw_audio_io::duplex::EngineStats;
 // The shared daw-backed host: project seeding, track/FX-slot reservation, the
 // realtime engine (native duplex `pw_filter` on Linux with the `pipewire`
 // feature, cpal fallback elsewhere), meters, transport.
-#[cfg(not(target_arch = "wasm32"))]
-use signal_rig_host::{DuplexRigHost, RigProject};
 use signal_plugin_host::PluginInstance;
 #[cfg(not(target_arch = "wasm32"))]
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginParamInfo,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use signal_rig_host::{DuplexRigHost, RigProject};
 
 use crate::convolver::Convolver;
 use crate::mixer::FX_PREPARE_BLOCK;
@@ -360,7 +360,10 @@ impl RigBlock {
 
     /// A build-time parameter's raw string value, if present.
     pub fn param_str(&self, name: &str) -> Option<String> {
-        self.params.iter().find(|p| p.name == name).map(|p| p.value.clone())
+        self.params
+            .iter()
+            .find(|p| p.name == name)
+            .map(|p| p.value.clone())
     }
 
     /// A build-time parameter as `f32`, if present and numeric.
@@ -638,7 +641,9 @@ impl InputMeterShared {
 /// alive, no instrument plugged in.
 #[cfg(not(target_arch = "wasm32"))]
 fn load_fake_di() -> Option<Vec<f32>> {
-    let path = std::env::var("SIGNAL_FAKE_DI").ok().filter(|p| !p.is_empty())?;
+    let path = std::env::var("SIGNAL_FAKE_DI")
+        .ok()
+        .filter(|p| !p.is_empty())?;
     let (mono, _) = fts_sample::load_mono_f32(
         std::path::Path::new(&path),
         None,
@@ -647,7 +652,10 @@ fn load_fake_di() -> Option<Vec<f32>> {
     .map_err(|e| tracing::warn!("fake DI: {e}"))
     .ok()?;
     (!mono.is_empty()).then(|| {
-        tracing::info!("fake DI active: {path} ({:.1}s loop)", mono.len() as f32 / 48_000.0);
+        tracing::info!(
+            "fake DI active: {path} ({:.1}s loop)",
+            mono.len() as f32 / 48_000.0
+        );
         mono
     })
 }
@@ -872,35 +880,35 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
         return Err("NAM blocks are not available in the browser build".into());
         #[cfg(not(target_arch = "wasm32"))]
         {
-        let mut nam = NamProcessor::load(&block.nam, sample_rate as f64, MAX_BLOCK)?;
-        nam.input_gain_db = block.input_trim_db;
-        nam.output_gain_db = block.output_trim_db;
-        if let Some(exp) = nam.expected_sample_rate() {
-            if (exp - sample_rate as f64).abs() > 1.0 {
-                tracing::warn!(
-                    model = %nam.display_name,
-                    expected_sample_rate = exp,
-                    rig_sample_rate = sample_rate,
-                    "NAM model trained at a different sample rate — voicing/pitch will be off"
-                );
+            let mut nam = NamProcessor::load(&block.nam, sample_rate as f64, MAX_BLOCK)?;
+            nam.input_gain_db = block.input_trim_db;
+            nam.output_gain_db = block.output_trim_db;
+            if let Some(exp) = nam.expected_sample_rate() {
+                if (exp - sample_rate as f64).abs() > 1.0 {
+                    tracing::warn!(
+                        model = %nam.display_name,
+                        expected_sample_rate = exp,
+                        rig_sample_rate = sample_rate,
+                        "NAM model trained at a different sample rate — voicing/pitch will be off"
+                    );
+                }
             }
-        }
-        // Measure loudness ourselves (cache-first) so level-matching is reliable
-        // even when the model has no/incorrect `loudness` metadata; fall back to
-        // the declared value only if measurement produced silence.
-        let loud = nam.measured_loudness(MAX_BLOCK).or_else(|| nam.loudness());
-        let exp_sr = nam.expected_sample_rate();
-        let input_level_dbu = nam.input_level();
-        let output_level_dbu = nam.output_level();
-        let dn = nam.display_name.clone();
-        Ok(BuiltBlock {
-            boxed: Box::new(nam),
-            display_name: dn,
-            loudness: loud,
-            expected_sr: exp_sr,
-            input_level_dbu,
-            output_level_dbu,
-        })
+            // Measure loudness ourselves (cache-first) so level-matching is reliable
+            // even when the model has no/incorrect `loudness` metadata; fall back to
+            // the declared value only if measurement produced silence.
+            let loud = nam.measured_loudness(MAX_BLOCK).or_else(|| nam.loudness());
+            let exp_sr = nam.expected_sample_rate();
+            let input_level_dbu = nam.input_level();
+            let output_level_dbu = nam.output_level();
+            let dn = nam.display_name.clone();
+            Ok(BuiltBlock {
+                boxed: Box::new(nam),
+                display_name: dn,
+                loudness: loud,
+                expected_sr: exp_sr,
+                input_level_dbu,
+                output_level_dbu,
+            })
         }
     } else if block.is_cab_ir() {
         let conv = Convolver::load(&block.ir)?;
@@ -915,29 +923,29 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
         ));
         #[cfg(not(target_arch = "wasm32"))]
         {
-        // Hosted CLAP/VST3: go through daw's own plugin loader, which returns a
-        // `Box<dyn PluginInstance>` ready to drop straight into the FX chain —
-        // no signal-side re-wrapping needed (the renderer drives it directly).
-        let mut plugin = daw::plugin::load_plugin(&block.plugin)
-            .map_err(|e| format!("load plugin {}: {e}", block.plugin))?
-            .ok_or_else(|| format!("not a recognized CLAP/VST3 plugin: {}", block.plugin))?;
-        plugin
-            .prepare(sample_rate as f64, FX_PREPARE_BLOCK)
-            .map_err(|e| format!("prepare plugin {}: {e}", block.plugin))?;
-        if let Some(state) = &block.state_b64 {
-            match base64_decode(state) {
-                Ok(bytes) => {
-                    if let Err(e) = plugin.load_state(&bytes) {
-                        tracing::warn!(plugin = %block.plugin, error = %e, "failed to restore plugin state");
+            // Hosted CLAP/VST3: go through daw's own plugin loader, which returns a
+            // `Box<dyn PluginInstance>` ready to drop straight into the FX chain —
+            // no signal-side re-wrapping needed (the renderer drives it directly).
+            let mut plugin = daw::plugin::load_plugin(&block.plugin)
+                .map_err(|e| format!("load plugin {}: {e}", block.plugin))?
+                .ok_or_else(|| format!("not a recognized CLAP/VST3 plugin: {}", block.plugin))?;
+            plugin
+                .prepare(sample_rate as f64, FX_PREPARE_BLOCK)
+                .map_err(|e| format!("prepare plugin {}: {e}", block.plugin))?;
+            if let Some(state) = &block.state_b64 {
+                match base64_decode(state) {
+                    Ok(bytes) => {
+                        if let Err(e) = plugin.load_state(&bytes) {
+                            tracing::warn!(plugin = %block.plugin, error = %e, "failed to restore plugin state");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(plugin = %block.plugin, error = %e, "invalid base64 plugin state");
                     }
                 }
-                Err(e) => {
-                    tracing::warn!(plugin = %block.plugin, error = %e, "invalid base64 plugin state");
-                }
             }
-        }
-        let dn = plugin.descriptor().name;
-        Ok(BuiltBlock::plain(plugin, format!("{dn} (plugin)")))
+            let dn = plugin.descriptor().name;
+            Ok(BuiltBlock::plain(plugin, format!("{dn} (plugin)")))
         }
     } else if block.is_sample() {
         // Sample library → the Sample Soundsource, wrapped in the generic

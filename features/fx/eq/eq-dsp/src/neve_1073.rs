@@ -6,7 +6,7 @@
 
 use crate::biquad::Coeffs;
 use crate::calibration::{
-    CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget, fit_response,
+    fit_response, CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget,
 };
 use crate::design::{self, FilterType};
 use crate::response::compute_magnitude_response;
@@ -245,7 +245,6 @@ impl CalibrationParameters for Neve1073Calibration {
             // Out-of-range indices clamp to the last scalar — a panic
 
             // here would abort the audio host on a bad automation index.
-
             _ => CalibratedScalar::new(
                 self.high_presence_gain_factor,
                 -0.5,

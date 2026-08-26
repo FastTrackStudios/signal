@@ -221,7 +221,10 @@ pub struct StackDef {
 /// pointing into it (several share a preset — the override system will
 /// carry their differences), five footswitch stacks.
 pub fn worship_def() -> ProfileDef {
-    let preset = |name: &str, nam: String| PresetDef { name: name.to_string(), nam };
+    let preset = |name: &str, nam: String| PresetDef {
+        name: name.to_string(),
+        nam,
+    };
     let stack = |name: &str, patches: &[&str]| StackDef {
         name: name.to_string(),
         patches: patches.iter().map(|p| p.to_string()).collect(),
@@ -239,17 +242,39 @@ pub fn worship_def() -> ProfileDef {
     };
     let time_param = |block: &str, param: &str, v: f32| OverrideDef::set("Time", block, param, v);
     let drives = vec![
-        DriveSlotDef { block: "Drive 1".to_string(), preset: "King of Tone".to_string(), option: 0 },
-        DriveSlotDef { block: "Drive 2".to_string(), preset: "JHS Morning Glory".to_string(), option: 1 },
+        DriveSlotDef {
+            block: "Drive 1".to_string(),
+            preset: "King of Tone".to_string(),
+            option: 0,
+        },
+        DriveSlotDef {
+            block: "Drive 2".to_string(),
+            preset: "JHS Morning Glory".to_string(),
+            option: 1,
+        },
     ];
     ProfileDef {
         drives,
         name: "Worship".to_string(),
         presets: vec![
-            preset("Fender Clean", format!("{FENDER_DIR}/Fender DRRI _ Clean _ SM57 + Royer R-121 + Room _ Full Rig.nam")),
-            preset("Fender DI", format!("{FENDER_DIR}/Fender DRRI _ Clean _ DI Capture (No Cab).nam")),
-            preset("AA Crunch", format!("{CUSTOM_DIR}/Vibrato Verb AA Crunch.nam")),
-            preset("AA Drive", format!("{CUSTOM_DIR}/Vibrato Verb AA Driven.nam")),
+            preset(
+                "Fender Clean",
+                format!(
+                    "{FENDER_DIR}/Fender DRRI _ Clean _ SM57 + Royer R-121 + Room _ Full Rig.nam"
+                ),
+            ),
+            preset(
+                "Fender DI",
+                format!("{FENDER_DIR}/Fender DRRI _ Clean _ DI Capture (No Cab).nam"),
+            ),
+            preset(
+                "AA Crunch",
+                format!("{CUSTOM_DIR}/Vibrato Verb AA Crunch.nam"),
+            ),
+            preset(
+                "AA Drive",
+                format!("{CUSTOM_DIR}/Vibrato Verb AA Driven.nam"),
+            ),
             preset("Arena Lead", format!("{CUSTOM_DIR}/Vib Arena Lead LT.nam")),
             preset("AC30 Clean", AC30_MODEL.to_string()),
         ],
@@ -323,7 +348,10 @@ pub fn worship_def() -> ProfileDef {
             stack("Crunch", &["Crunch", "Crunch Edge"]),
             stack("Drive", &["Drive", "Drive Edge"]),
             stack("Lead", &["Lead", "Lead POG"]),
-            stack("Ambient", &["Ambient", "Ambient Swells", "Ambient Delay Craze"]),
+            stack(
+                "Ambient",
+                &["Ambient", "Ambient Swells", "Ambient Delay Craze"],
+            ),
         ],
     }
 }
@@ -360,10 +388,18 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
     // comments in the module docs (names match the guitar-rig-template slots).
     let amp = |name: &str, path: String| {
         RigPatch::new(name)
-            .with_block(on_fx(BlockType::Compressor, "Compressor", &[("threshold", "-40")]))
+            .with_block(on_fx(
+                BlockType::Compressor,
+                "Compressor",
+                &[("threshold", "-40")],
+            ))
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.
-            .with_block(on_fx(BlockType::Volume, "Volume Pedal", &[("gain_db", "0")]))
+            .with_block(on_fx(
+                BlockType::Volume,
+                "Volume Pedal",
+                &[("gain_db", "0")],
+            ))
             // The drive board — four pedals into the amp, all off until
             // engaged from the control surface (DSP lands with drive-dsp;
             // placeholders keep the blocks addressable + level-staged).
@@ -382,11 +418,22 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 BlockType::Eq,
                 "Amp EQ",
                 &[
-                    ("b1_used", "1"), ("b1_on", "1"), ("b1_freq", "80"), ("b1_shape", "3"),
-                    ("b2_used", "1"), ("b2_on", "1"), ("b2_freq", "212"),
-                    ("b3_used", "1"), ("b3_on", "1"), ("b3_freq", "560"),
-                    ("b4_used", "1"), ("b4_on", "1"), ("b4_freq", "1400"),
-                    ("b5_used", "1"), ("b5_on", "1"), ("b5_freq", "5500"),
+                    ("b1_used", "1"),
+                    ("b1_on", "1"),
+                    ("b1_freq", "80"),
+                    ("b1_shape", "3"),
+                    ("b2_used", "1"),
+                    ("b2_on", "1"),
+                    ("b2_freq", "212"),
+                    ("b3_used", "1"),
+                    ("b3_on", "1"),
+                    ("b3_freq", "560"),
+                    ("b4_used", "1"),
+                    ("b4_on", "1"),
+                    ("b4_freq", "1400"),
+                    ("b5_used", "1"),
+                    ("b5_on", "1"),
+                    ("b5_freq", "5500"),
                 ],
             ))
             // Boost gain block the footswitch drives (0 dB until engaged).
@@ -399,10 +446,39 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             .with_block(off(BlockType::Vibrato, "Vibrato"))
             .with_block(off(BlockType::Rotary, "Rotary"))
             // Time module — subtle pair on, extreme pair bypassed.
-            .with_block(on_fx(BlockType::Delay, "DLY 1", &[("mix", "0.2"), ("style", "0"), ("time", "350"), ("feedback", "0.28"), ("tap_div_l", "0"), ("tap_div_r", "0")]))
-            .with_block(off_fx(BlockType::Delay, "DLY 2", &[("mix", "0.10"), ("time", "600"), ("feedback", "0.62"), ("tap_div_l", "1"), ("tap_div_r", "1")]))
-            .with_block(on_fx(BlockType::Reverb, "VERB 1", &[("mix", "0.08"), ("decay", "0.42"), ("size", "0.45")]))
-            .with_block(off_fx(BlockType::Reverb, "VERB 2", &[("mix", "0.10"), ("decay", "0.85"), ("size", "0.92")]))
+            .with_block(on_fx(
+                BlockType::Delay,
+                "DLY 1",
+                &[
+                    ("mix", "0.2"),
+                    ("style", "0"),
+                    ("time", "350"),
+                    ("feedback", "0.28"),
+                    ("tap_div_l", "0"),
+                    ("tap_div_r", "0"),
+                ],
+            ))
+            .with_block(off_fx(
+                BlockType::Delay,
+                "DLY 2",
+                &[
+                    ("mix", "0.10"),
+                    ("time", "600"),
+                    ("feedback", "0.62"),
+                    ("tap_div_l", "1"),
+                    ("tap_div_r", "1"),
+                ],
+            ))
+            .with_block(on_fx(
+                BlockType::Reverb,
+                "VERB 1",
+                &[("mix", "0.08"), ("decay", "0.42"), ("size", "0.45")],
+            ))
+            .with_block(off_fx(
+                BlockType::Reverb,
+                "VERB 2",
+                &[("mix", "0.10"), ("decay", "0.85"), ("size", "0.92")],
+            ))
     };
     let nam_of = |preset: &str| {
         def.presets
@@ -536,7 +612,11 @@ pub fn song_library() -> Vec<SongDef> {
 /// The default setlists — XR + CYA, dated.
 pub fn default_setlists() -> Vec<SetlistDef> {
     fn entry(song: &str) -> SetlistEntryDef {
-        SetlistEntryDef { song: song.to_string(), key: String::new(), bpm: 0 }
+        SetlistEntryDef {
+            song: song.to_string(),
+            key: String::new(),
+            bpm: 0,
+        }
     }
     vec![
         SetlistDef {
@@ -577,7 +657,12 @@ pub struct DirectCcDef {
 pub fn default_midi_map() -> MidiMapDef {
     MidiMapDef {
         tap_ccs: vec![101, 102, 103, 104, 105],
-        direct: (0..5).map(|i| DirectCcDef { cc: 106 + i, slot: i }).collect(),
+        direct: (0..5)
+            .map(|i| DirectCcDef {
+                cc: 106 + i,
+                slot: i,
+            })
+            .collect(),
     }
 }
 

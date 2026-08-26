@@ -17,11 +17,11 @@
 //! Panel drawings are wide and short, so a face asks the host for a shorter
 //! editor — see [`crate::faces::preferred_editor_size`].
 
-use fts_audio_ui::hardware::panel::{PanelEnds, PanelTexture};
-use fts_audio_ui::hardware::vu_svg::VuScale;
 use fts_audio_ui::hardware::knob::KnobStyle;
+use fts_audio_ui::hardware::panel::{PanelEnds, PanelTexture};
 use fts_audio_ui::hardware::rack::{FilterGlyph, RackDesign, RackItem, Ring};
 use fts_audio_ui::hardware::vu::VuFace;
+use fts_audio_ui::hardware::vu_svg::VuScale;
 
 /// Panel drawing size shared by the EQ faces. Taller than the compressor's
 /// because these units are 2–3U and carry two rows of controls; the ratio is
@@ -79,7 +79,11 @@ pub static PULTEC: RackDesign = RackDesign {
     knob: KnobStyle::Daka,
     items: &[
         // ── Top row: the two bands' boost and atten ──────────────────────
-        RackItem::Readout { id: "low_boost", x: 214.0, y: 22.0 },
+        RackItem::Readout {
+            id: "low_boost",
+            x: 214.0,
+            y: 22.0,
+        },
         RackItem::Knob {
             id: "low_boost",
             legend: "Boost",
@@ -90,7 +94,11 @@ pub static PULTEC: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-        RackItem::Readout { id: "low_atten", x: 349.0, y: 22.0 },
+        RackItem::Readout {
+            id: "low_atten",
+            x: 349.0,
+            y: 22.0,
+        },
         RackItem::Knob {
             id: "low_atten",
             legend: "Atten",
@@ -101,7 +109,11 @@ pub static PULTEC: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-        RackItem::Readout { id: "high_boost", x: 553.0, y: 22.0 },
+        RackItem::Readout {
+            id: "high_boost",
+            x: 553.0,
+            y: 22.0,
+        },
         RackItem::Knob {
             id: "high_boost",
             legend: "Boost",
@@ -112,7 +124,11 @@ pub static PULTEC: RackDesign = RackDesign {
             tint: None,
             style: None,
         },
-        RackItem::Readout { id: "high_atten", x: 688.0, y: 22.0 },
+        RackItem::Readout {
+            id: "high_atten",
+            x: 688.0,
+            y: 22.0,
+        },
         RackItem::Knob {
             id: "high_atten",
             legend: "Atten",
@@ -143,7 +159,11 @@ pub static PULTEC: RackDesign = RackDesign {
             y: 222.0,
             labels: &["20", "30", "60", "100"],
         },
-        RackItem::Readout { id: "bandwidth", x: 447.0, y: 176.0 },
+        RackItem::Readout {
+            id: "bandwidth",
+            x: 447.0,
+            y: 176.0,
+        },
         RackItem::Knob {
             id: "bandwidth",
             legend: "Bandwidth",
@@ -191,7 +211,11 @@ pub static PULTEC: RackDesign = RackDesign {
             tint: None,
             style: Some(KnobStyle::Pointer),
         },
-        RackItem::Readout { id: "trim", x: 810.0, y: 196.0 },
+        RackItem::Readout {
+            id: "trim",
+            x: 810.0,
+            y: 196.0,
+        },
         RackItem::Knob {
             id: "trim",
             legend: "Output",
@@ -262,8 +286,20 @@ pub static SSL: RackDesign = RackDesign {
     knob: KnobStyle::Collet,
     items: &[
         // ── Filters ──────────────────────────────────────────────────────
-        RackItem::Text { x: 66.0, y: 22.0, text: "Analog", size: 9.0, strong: false },
-        RackItem::Text { x: 46.0, y: 118.0, text: "Off", size: 8.0, strong: false },
+        RackItem::Text {
+            x: 66.0,
+            y: 22.0,
+            text: "Analog",
+            size: 9.0,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 46.0,
+            y: 118.0,
+            text: "Off",
+            size: 8.0,
+            strong: false,
+        },
         RackItem::Button {
             id: "",
             label: "ON",
@@ -274,7 +310,13 @@ pub static SSL: RackDesign = RackDesign {
             led: "#43d17a",
             style: None,
         },
-        RackItem::Text { x: 128.0, y: 24.0, text: "HP", size: 11.0, strong: true },
+        RackItem::Text {
+            x: 128.0,
+            y: 24.0,
+            text: "HP",
+            size: 11.0,
+            strong: true,
+        },
         RackItem::Button {
             id: "",
             label: "FLTR IN",
@@ -305,10 +347,19 @@ pub static SSL: RackDesign = RackDesign {
             tint: Some("#d8d4c6"),
             style: None,
         },
-        RackItem::Divider { x: 218.0, y: 140.0, h: 236.0 },
-
+        RackItem::Divider {
+            x: 218.0,
+            y: 140.0,
+            h: 236.0,
+        },
         // ── LF ───────────────────────────────────────────────────────────
-        RackItem::Text { x: 268.0, y: 24.0, text: "LF", size: 11.0, strong: true },
+        RackItem::Text {
+            x: 268.0,
+            y: 24.0,
+            text: "LF",
+            size: 11.0,
+            strong: true,
+        },
         RackItem::Knob {
             id: "lf_gain",
             legend: "",
@@ -329,10 +380,19 @@ pub static SSL: RackDesign = RackDesign {
             tint: Some("#2b2d31"),
             style: None,
         },
-        RackItem::Divider { x: 340.0, y: 140.0, h: 236.0 },
-
+        RackItem::Divider {
+            x: 340.0,
+            y: 140.0,
+            h: 236.0,
+        },
         // ── LMF ──────────────────────────────────────────────────────────
-        RackItem::Text { x: 392.0, y: 24.0, text: "LMF", size: 11.0, strong: true },
+        RackItem::Text {
+            x: 392.0,
+            y: 24.0,
+            text: "LMF",
+            size: 11.0,
+            strong: true,
+        },
         RackItem::Knob {
             id: "lmf_gain",
             legend: "",
@@ -373,10 +433,19 @@ pub static SSL: RackDesign = RackDesign {
             tint: Some("#2b7fc0"),
             style: None,
         },
-        RackItem::Divider { x: 516.0, y: 140.0, h: 236.0 },
-
+        RackItem::Divider {
+            x: 516.0,
+            y: 140.0,
+            h: 236.0,
+        },
         // ── HMF ──────────────────────────────────────────────────────────
-        RackItem::Text { x: 578.0, y: 24.0, text: "HMF", size: 11.0, strong: true },
+        RackItem::Text {
+            x: 578.0,
+            y: 24.0,
+            text: "HMF",
+            size: 11.0,
+            strong: true,
+        },
         RackItem::Button {
             id: "",
             label: "×3",
@@ -417,10 +486,19 @@ pub static SSL: RackDesign = RackDesign {
             tint: Some("#2c8f5a"),
             style: None,
         },
-        RackItem::Divider { x: 702.0, y: 140.0, h: 236.0 },
-
+        RackItem::Divider {
+            x: 702.0,
+            y: 140.0,
+            h: 236.0,
+        },
         // ── HF ───────────────────────────────────────────────────────────
-        RackItem::Text { x: 742.0, y: 24.0, text: "HF", size: 11.0, strong: true },
+        RackItem::Text {
+            x: 742.0,
+            y: 24.0,
+            text: "HF",
+            size: 11.0,
+            strong: true,
+        },
         RackItem::Knob {
             id: "hf_gain",
             legend: "",
@@ -441,8 +519,11 @@ pub static SSL: RackDesign = RackDesign {
             tint: Some("#a8438f"),
             style: None,
         },
-        RackItem::Divider { x: 800.0, y: 140.0, h: 236.0 },
-
+        RackItem::Divider {
+            x: 800.0,
+            y: 140.0,
+            h: 236.0,
+        },
         // ── Switching + output ───────────────────────────────────────────
         RackItem::Button {
             id: "eq_in",
@@ -484,15 +565,60 @@ pub static SSL: RackDesign = RackDesign {
             tint: Some("#d8d4c6"),
             style: None,
         },
-        RackItem::Text { x: 978.0, y: 48.0, text: "0", size: 7.0, strong: false },
-        RackItem::Text { x: 978.0, y: 84.0, text: "-10", size: 7.0, strong: false },
-        RackItem::Text { x: 978.0, y: 132.0, text: "-20", size: 7.0, strong: false },
-        RackItem::Text { x: 978.0, y: 186.0, text: "-30", size: 7.0, strong: false },
-        RackItem::Text { x: 978.0, y: 222.0, text: "-40", size: 7.0, strong: false },
-        RackItem::LedMeter { x: 1006.0, y: 132.0, h: 190.0, right: false },
-        RackItem::LedMeter { x: 1032.0, y: 132.0, h: 190.0, right: true },
-
-        RackItem::Text { x: 520.0, y: 268.0, text: "Console", size: 9.0, strong: false },
+        RackItem::Text {
+            x: 978.0,
+            y: 48.0,
+            text: "0",
+            size: 7.0,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 978.0,
+            y: 84.0,
+            text: "-10",
+            size: 7.0,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 978.0,
+            y: 132.0,
+            text: "-20",
+            size: 7.0,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 978.0,
+            y: 186.0,
+            text: "-30",
+            size: 7.0,
+            strong: false,
+        },
+        RackItem::Text {
+            x: 978.0,
+            y: 222.0,
+            text: "-40",
+            size: 7.0,
+            strong: false,
+        },
+        RackItem::LedMeter {
+            x: 1006.0,
+            y: 132.0,
+            h: 190.0,
+            right: false,
+        },
+        RackItem::LedMeter {
+            x: 1032.0,
+            y: 132.0,
+            h: 190.0,
+            right: true,
+        },
+        RackItem::Text {
+            x: 520.0,
+            y: 268.0,
+            text: "Console",
+            size: 9.0,
+            strong: false,
+        },
     ],
 };
 
@@ -739,8 +865,20 @@ pub static NEVE_1073: RackDesign = RackDesign {
         },
         // The cap's direction, printed where the module prints it: the inner
         // knob boosts one way and cuts the other.
-        RackItem::Text { x: 452.0, y: 104.0, text: "+", size: 11.0, strong: true },
-        RackItem::Text { x: 556.0, y: 104.0, text: "−", size: 11.0, strong: true },
+        RackItem::Text {
+            x: 452.0,
+            y: 104.0,
+            text: "+",
+            size: 11.0,
+            strong: true,
+        },
+        RackItem::Text {
+            x: 556.0,
+            y: 104.0,
+            text: "−",
+            size: 11.0,
+            strong: true,
+        },
         // ── Low shelf: the same pair ─────────────────────────────────────
         RackItem::Glyph {
             x: 686.0,
@@ -758,8 +896,20 @@ pub static NEVE_1073: RackDesign = RackDesign {
             ring: Ring::Dots(&["Off", "35", "60", "110", "220"]),
             tint: Some("#7f858c"),
         },
-        RackItem::Text { x: 634.0, y: 104.0, text: "+", size: 11.0, strong: true },
-        RackItem::Text { x: 738.0, y: 104.0, text: "−", size: 11.0, strong: true },
+        RackItem::Text {
+            x: 634.0,
+            y: 104.0,
+            text: "+",
+            size: 11.0,
+            strong: true,
+        },
+        RackItem::Text {
+            x: 738.0,
+            y: 104.0,
+            text: "−",
+            size: 11.0,
+            strong: true,
+        },
         // ── High pass: the blue one ──────────────────────────────────────
         RackItem::Glyph {
             x: 868.0,
@@ -849,7 +999,9 @@ mod tests {
                 | RackItem::Lever { id, .. }
                 | RackItem::Button { id, .. } => vec![*id],
                 // One placement, two controls.
-                RackItem::Concentric { outer_id, inner_id, .. } => vec![*outer_id, *inner_id],
+                RackItem::Concentric {
+                    outer_id, inner_id, ..
+                } => vec![*outer_id, *inner_id],
                 _ => Vec::new(),
             })
             .filter(|id| !id.is_empty())
@@ -902,7 +1054,11 @@ mod tests {
     fn the_unwired_controls_are_the_ones_we_know_about() {
         // SSL: ANALOG, FLTR IN, ÷3, ×3, phase, and the two mid-band Q knobs.
         assert_eq!(unwired_count(design_for(4).unwrap()), 7);
-        assert_eq!(unwired_count(design_for(5).unwrap()), 7, "E and G share a panel");
+        assert_eq!(
+            unwired_count(design_for(5).unwrap()),
+            7,
+            "E and G share a panel"
+        );
         // Every other model is fully wired.
         for model in [1, 2, 3] {
             assert_eq!(
@@ -932,8 +1088,7 @@ mod tests {
             };
             for item in design.items {
                 let (x, half) = match item {
-                    RackItem::Knob { x, d, .. }
-                    | RackItem::Concentric { x, d, .. } => (*x, *d),
+                    RackItem::Knob { x, d, .. } | RackItem::Concentric { x, d, .. } => (*x, *d),
                     RackItem::Buttons { x, .. } => (*x, 45.0),
                     RackItem::Switch { x, .. } => (*x, 55.0),
                     _ => continue,
@@ -962,20 +1117,22 @@ mod tests {
         let mut pairs = Vec::new();
         for item in NEVE_1073.items {
             match item {
-                RackItem::Knob { id, style, tint, .. } => {
-                    match style.unwrap_or(NEVE_1073.knob) {
-                        KnobStyle::Marconi => {
-                            assert!(
-                                tint.is_some(),
-                                "{id} is a wing knob with no colour — the wing IS the colour",
-                            );
-                            wings.push(*id);
-                        }
-                        KnobStyle::Neve => collars.push(*id),
-                        other => panic!("{id} wears {other:?}, which is not 1073 kit"),
+                RackItem::Knob {
+                    id, style, tint, ..
+                } => match style.unwrap_or(NEVE_1073.knob) {
+                    KnobStyle::Marconi => {
+                        assert!(
+                            tint.is_some(),
+                            "{id} is a wing knob with no colour — the wing IS the colour",
+                        );
+                        wings.push(*id);
                     }
-                }
-                RackItem::Concentric { outer_id, inner_id, .. } => {
+                    KnobStyle::Neve => collars.push(*id),
+                    other => panic!("{id} wears {other:?}, which is not 1073 kit"),
+                },
+                RackItem::Concentric {
+                    outer_id, inner_id, ..
+                } => {
                     pairs.push((*outer_id, *inner_id));
                 }
                 _ => {}

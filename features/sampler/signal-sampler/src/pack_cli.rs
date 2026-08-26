@@ -11,11 +11,11 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
-use eyre::{Context, Result, bail};
+use eyre::{bail, Context, Result};
 
 use crate::engine::cache::{
-    PackCodec, PackSpecSource, SampleCache, SignalPcmPack, create_signal_pack_with,
-    extract_signal_pack, load_sample, transcode_signal_pack,
+    create_signal_pack_with, extract_signal_pack, load_sample, transcode_signal_pack, PackCodec,
+    PackSpecSource, SampleCache, SignalPcmPack,
 };
 use crate::pack_rewrite::{read_embedded_spec, rewrite_embedded_spec};
 use crate::spec::LibrarySpec;
@@ -406,7 +406,14 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
                     wav_root,
                     dry_run,
                 },
-        } => zones_append_missing(&target, &from_tsv, &section, flat, wav_root.as_deref(), dry_run),
+        } => zones_append_missing(
+            &target,
+            &from_tsv,
+            &section,
+            flat,
+            wav_root.as_deref(),
+            dry_run,
+        ),
         Cmd::Zones {
             command:
                 ZonesCmd::Set {
@@ -508,8 +515,20 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
             midi,
             label,
         } => render_report(
-            &pack, &notes, cc1, cc2, &out, wav, tail, bpm, beats_per_bar, pure, None, audio_in,
-            midi, label,
+            &pack,
+            &notes,
+            cc1,
+            cc2,
+            &out,
+            wav,
+            tail,
+            bpm,
+            beats_per_bar,
+            pure,
+            None,
+            audio_in,
+            midi,
+            label,
         ),
         Cmd::RenderCompare {
             pack,
@@ -523,11 +542,23 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
             pure,
             velocities,
         } => render_compare(
-            &pack, &notes, cc1, cc2, &out, tail, bpm, beats_per_bar, pure, &velocities,
+            &pack,
+            &notes,
+            cc1,
+            cc2,
+            &out,
+            tail,
+            bpm,
+            beats_per_bar,
+            pure,
+            &velocities,
         ),
         Cmd::Extract { pack, out_dir } => {
             let stats = extract_signal_pack(&pack, &out_dir)?;
-            println!("extracted {} sample(s) ({} failed)", stats.prepared, stats.failed);
+            println!(
+                "extracted {} sample(s) ({} failed)",
+                stats.prepared, stats.failed
+            );
             Ok(())
         }
         Cmd::Build {
@@ -576,7 +607,11 @@ fn parse_codec(name: &str, quality: f32) -> Result<PackCodec> {
 fn inspect(pack_path: &Path, json: bool) -> Result<()> {
     let pack = SignalPcmPack::open(pack_path)?;
     let spec = crate::pack::read_pack_header(pack_path)?.spec;
-    let looped = spec.zones.iter().filter(|z| z.loop_end > z.loop_start).count();
+    let looped = spec
+        .zones
+        .iter()
+        .filter(|z| z.loop_end > z.loop_start)
+        .count();
 
     // Per-articulation zone stats.
     let mut artics: BTreeMap<&str, (usize, u8, u8)> = BTreeMap::new();
@@ -612,8 +647,15 @@ fn inspect(pack_path: &Path, json: bool) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&v)?);
     } else {
         println!("pack     {}", pack_path.display());
-        println!("kind     {}  ({:.1} MB)", pack.kind_label(), size as f64 / 1e6);
-        println!("name     {}  [{} · {}]", spec.name, spec.vendor, spec.version);
+        println!(
+            "kind     {}  ({:.1} MB)",
+            pack.kind_label(),
+            size as f64 / 1e6
+        );
+        println!(
+            "name     {}  [{} · {}]",
+            spec.name, spec.vendor, spec.version
+        );
         println!(
             "entries  {}   zones {}   looped {}",
             pack.entry_count(),
@@ -622,7 +664,10 @@ fn inspect(pack_path: &Path, json: bool) -> Result<()> {
         );
         println!(
             "sections {:?}   mics {:?}",
-            spec.sections.iter().map(|s| s.label.as_str()).collect::<Vec<_>>(),
+            spec.sections
+                .iter()
+                .map(|s| s.label.as_str())
+                .collect::<Vec<_>>(),
             spec.mics.iter().map(|m| m.id.as_str()).collect::<Vec<_>>()
         );
         for (id, (n, lo, hi)) in &artics {
@@ -655,7 +700,10 @@ enum Target {
 impl Target {
     fn open(path: &Path) -> Result<(Self, String)> {
         if path.extension().and_then(|e| e.to_str()) == Some("styx") {
-            Ok((Target::Styx(path.to_owned()), std::fs::read_to_string(path)?))
+            Ok((
+                Target::Styx(path.to_owned()),
+                std::fs::read_to_string(path)?,
+            ))
         } else {
             Ok((Target::Pack(path.to_owned()), read_embedded_spec(path)?))
         }
@@ -867,7 +915,8 @@ fn zones_normalize_pacific(target: &Path, dry_run: bool) -> Result<()> {
         match parse_pacific_id(&id)? {
             PacificId::Legato(family, dir, interval) => {
                 *stats.entry(format!("{family} (legato)")).or_default() += 1;
-                let mut b = styx_edit::set_entry_field(block, "articulation", &format!("{family:?}"));
+                let mut b =
+                    styx_edit::set_entry_field(block, "articulation", &format!("{family:?}"));
                 b = styx_edit::set_entry_field(&b, "direction", &format!("{dir:?}"));
                 b = styx_edit::set_entry_field(&b, "interval", &interval.to_string());
                 b = styx_edit::set_entry_field(&b, "rr_index", "0");
@@ -875,7 +924,8 @@ fn zones_normalize_pacific(target: &Path, dry_run: bool) -> Result<()> {
             }
             PacificId::RoundRobin(family, rr, vel) => {
                 *stats.entry(format!("{family} (rr)")).or_default() += 1;
-                let mut b = styx_edit::set_entry_field(block, "articulation", &format!("{family:?}"));
+                let mut b =
+                    styx_edit::set_entry_field(block, "articulation", &format!("{family:?}"));
                 b = styx_edit::set_entry_field(&b, "rr_index", &rr.saturating_sub(1).to_string());
                 if let Some(code) = vel {
                     let (lo, hi) = vel_band(&family, code);
@@ -1028,7 +1078,11 @@ fn load_tsv_zones(
             key_min: key_lo.clamp(0, 127) as u8,
             key_max: key_hi.clamp(0, 127) as u8,
             root_key: root.clamp(0, 127) as u8,
-            tune_cents: if tune > 0.0 { 1200.0 * tune.log2() } else { 0.0 },
+            tune_cents: if tune > 0.0 {
+                1200.0 * tune.log2()
+            } else {
+                0.0
+            },
             rr_index,
             mic,
             articulation: artic,
@@ -1070,7 +1124,11 @@ fn emit_zone_block(z: &TsvZone) -> String {
     f("articulation", format!("{:?}", z.articulation));
     f("dynamic", format!("{:?}", z.dynamic));
     f("gain_db", "0.000".into());
-    let cents = if z.tune_cents.abs() < 1e-2 { 0.0 } else { z.tune_cents };
+    let cents = if z.tune_cents.abs() < 1e-2 {
+        0.0
+    } else {
+        z.tune_cents
+    };
     f("tune_cents", format!("{cents:.3}"));
     if let Some(d) = &z.direction {
         f("direction", format!("{d:?}"));
@@ -1219,7 +1277,9 @@ fn load_loop_map(tsv: &Path, section_label: &str) -> Result<BTreeMap<String, (u6
         if le <= ls || le == 0 {
             continue;
         }
-        let Some(sample) = f.get(c_sample) else { continue };
+        let Some(sample) = f.get(c_sample) else {
+            continue;
+        };
         let base = sample.rsplit('/').next().unwrap_or(sample);
         let stem = base
             .strip_suffix(".ncw")
@@ -1258,7 +1318,11 @@ fn loops_inject(
     dry_run: bool,
 ) -> Result<()> {
     let loops = load_loop_map(from_tsv, section)?;
-    println!("{section}: {} looped file(s) mapped from {}", loops.len(), from_tsv.display());
+    println!(
+        "{section}: {} looped file(s) mapped from {}",
+        loops.len(),
+        from_tsv.display()
+    );
 
     let (tgt, spec_text) = Target::open(target)?;
     let mut unmatched = loops.clone();
@@ -1267,8 +1331,8 @@ fn loops_inject(
         let file = styx_edit::entry_field(block, "file")?;
         let &(ls, le) = loops.get(&file)?;
         unmatched.remove(&file);
-        let existing_ls = styx_edit::entry_field(block, "loop_start")
-            .and_then(|v| v.parse::<u64>().ok());
+        let existing_ls =
+            styx_edit::entry_field(block, "loop_start").and_then(|v| v.parse::<u64>().ok());
         if let Some(els) = existing_ls {
             already += 1;
             if check {
@@ -1359,7 +1423,10 @@ pub fn run_check(pack_path: &Path, src_root: Option<&Path>) -> Result<bool> {
             last = k;
         }
         if missing.is_empty() {
-            println!("  artic {artic:<16} keys {lo}..={hi} covered ({} keys)", keys.len());
+            println!(
+                "  artic {artic:<16} keys {lo}..={hi} covered ({} keys)",
+                keys.len()
+            );
         } else {
             gaps += 1;
             println!("  artic {artic:<16} keys {lo}..={hi} — GAPS beyond tolerance: {missing:?}");
@@ -1422,7 +1489,11 @@ pub fn run_check(pack_path: &Path, src_root: Option<&Path>) -> Result<bool> {
         }
     }
 
-    let looped = spec.zones.iter().filter(|z| z.loop_end > z.loop_start).count();
+    let looped = spec
+        .zones
+        .iter()
+        .filter(|z| z.loop_end > z.loop_start)
+        .count();
     println!("  looped zones: {looped}");
 
     let pass = gaps == 0 && missing_files.is_empty() && decode_fail == 0;
@@ -1431,7 +1502,11 @@ pub fn run_check(pack_path: &Path, src_root: Option<&Path>) -> Result<bool> {
 }
 
 fn correlation(a: &[f32], b: &[f32]) -> f64 {
-    let dot: f64 = a.iter().zip(b.iter()).map(|(x, y)| (*x as f64) * (*y as f64)).sum();
+    let dot: f64 = a
+        .iter()
+        .zip(b.iter())
+        .map(|(x, y)| (*x as f64) * (*y as f64))
+        .sum();
     let na: f64 = a.iter().map(|x| (*x as f64).powi(2)).sum();
     let nb: f64 = b.iter().map(|x| (*x as f64).powi(2)).sum();
     dot / (na.sqrt() * nb.sqrt()).max(f64::EPSILON)
@@ -1553,8 +1628,6 @@ fn resample(src: &[f32], ratio: f64, out_len: usize) -> Vec<f32> {
         .collect()
 }
 
-
-
 /// Sweep a whole reference render note by note — see [`Cmd::MatchRef::sweep`].
 ///
 /// The MIDI that produced the reference gives every note's NOMINAL onset. For
@@ -1581,7 +1654,10 @@ fn match_ref_sweep(
 ) -> Result<()> {
     let (notes, _ccs, _bpm) = parse_smf(midi)?;
     let patch = crate::PlayerPatch::from_pack(pack_path)?;
-    let pack = patch.pack.clone().ok_or_else(|| eyre::eyre!("not a pack"))?;
+    let pack = patch
+        .pack
+        .clone()
+        .ok_or_else(|| eyre::eyre!("not a pack"))?;
     let cache = SampleCache::with_pack(pack);
 
     let refd = crate::engine::cache::load_sample(reference)
@@ -1827,24 +1903,24 @@ fn match_ref_sweep(
                 if edge {
                     "ED"
                 } else {
-                match (&expect[ni], key.2.is_empty()) {
-                    // A transition was expected: direction and interval must
-                    // both match the step.
-                    (Some((dir, iv)), false) => {
-                        if key.2.eq_ignore_ascii_case(dir) && key.3 == *iv {
+                    match (&expect[ni], key.2.is_empty()) {
+                        // A transition was expected: direction and interval must
+                        // both match the step.
+                        (Some((dir, iv)), false) => {
+                            if key.2.eq_ignore_ascii_case(dir) && key.3 == *iv {
+                                agreed.push(drift);
+                                "OK"
+                            } else {
+                                "xx"
+                            }
+                        }
+                        // A phrase start was expected: a body, not a transition.
+                        (None, true) => {
                             agreed.push(drift);
                             "OK"
-                        } else {
-                            "xx"
                         }
+                        _ => "xx",
                     }
-                    // A phrase start was expected: a body, not a transition.
-                    (None, true) => {
-                        agreed.push(drift);
-                        "OK"
-                    }
-                    _ => "xx",
-                }
                 }
             };
             println!(
@@ -1893,9 +1969,8 @@ fn match_ref_sweep(
     sorted.sort_by(f64::total_cmp);
     let median = sorted[sorted.len() / 2];
     let mean = agreed.iter().sum::<f64>() / agreed.len() as f64;
-    let spread = (agreed.iter().map(|d| (d - mean).powi(2)).sum::<f64>()
-        / agreed.len() as f64)
-        .sqrt();
+    let spread =
+        (agreed.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / agreed.len() as f64).sqrt();
     println!(
         "\n  {}/{} notes agreed with the MIDI ({} clipped at a scan edge, excluded)\n  drift  median {:+.1} ms   mean {:+.1} ms   sd {:.1} ms",
         agreed.len(),
@@ -1928,7 +2003,10 @@ fn match_ref_self_test(
     mic: Option<String>,
 ) -> Result<()> {
     let patch = crate::PlayerPatch::from_pack(pack_path)?;
-    let pack = patch.pack.clone().ok_or_else(|| eyre::eyre!("not a pack"))?;
+    let pack = patch
+        .pack
+        .clone()
+        .ok_or_else(|| eyre::eyre!("not a pack"))?;
     let cache = SampleCache::with_pack(pack);
 
     // One group: the dynamic layers of a single zone family.
@@ -1975,9 +2053,7 @@ fn match_ref_self_test(
     if truth == 0 || wlen == 0 {
         bail!("samples too short for a {window_ms} ms window");
     }
-    let gains: Vec<f32> = (0..members.len())
-        .map(|i| 0.8 / (1.0 + i as f32))
-        .collect();
+    let gains: Vec<f32> = (0..members.len()).map(|i| 0.8 / (1.0 + i as f32)).collect();
 
     println!(
         "self-test on {} root {} rr {} — {} layer(s), truth offset {:.1} ms\n",
@@ -2051,10 +2127,7 @@ fn match_ref_self_test(
                 .zip(&gains)
                 .map(|(m, g)| g * m[truth + i])
                 .sum();
-            let b: f32 = members
-                .iter()
-                .map(|m| 0.5 * m[second + i])
-                .sum();
+            let b: f32 = members.iter().map(|m| 0.5 * m[second + i]).sum();
             a + b
         })
         .collect();
@@ -2111,7 +2184,10 @@ fn match_ref(
     top: usize,
 ) -> Result<()> {
     let patch = crate::PlayerPatch::from_pack(pack_path)?;
-    let pack = patch.pack.clone().ok_or_else(|| eyre::eyre!("not a pack"))?;
+    let pack = patch
+        .pack
+        .clone()
+        .ok_or_else(|| eyre::eyre!("not a pack"))?;
     let cache = SampleCache::with_pack(pack);
     let note_set = notes.as_deref().map(parse_note_set).transpose()?;
 
@@ -2206,34 +2282,38 @@ fn match_ref(
                 ]
             };
             for (fill, members) in variants {
-            let refs: Vec<&[f32]> = members.iter().map(|m| m.as_slice()).collect();
-            let Some(fit) = crate::ref_match::best_fit(window, &refs, scan, 48, 24) else {
-                continue;
-            };
-            let mut layers: Vec<(String, f32)> = decoded
-                .iter()
-                .zip(&fit.gains)
-                .map(|((label, _), g)| {
-                    (
-                        label.clone(),
-                        if *g > 0.0 { 20.0 * g.log10() } else { f32::NEG_INFINITY },
-                    )
-                })
-                .collect();
-            layers.sort_by(|a, b| b.1.total_cmp(&a.1));
-            hits.push(GroupHit {
-                articulation: key.0.clone(),
-                root_key: key.1,
-                direction: key.2.clone(),
-                interval: key.3,
-                rr_index: key.4,
-                shift,
-                fill: fill.to_string(),
-                layers,
-                offset_frames: fit.offset,
-                sample_rate: sr,
-                explained: fit.explained,
-            });
+                let refs: Vec<&[f32]> = members.iter().map(|m| m.as_slice()).collect();
+                let Some(fit) = crate::ref_match::best_fit(window, &refs, scan, 48, 24) else {
+                    continue;
+                };
+                let mut layers: Vec<(String, f32)> = decoded
+                    .iter()
+                    .zip(&fit.gains)
+                    .map(|((label, _), g)| {
+                        (
+                            label.clone(),
+                            if *g > 0.0 {
+                                20.0 * g.log10()
+                            } else {
+                                f32::NEG_INFINITY
+                            },
+                        )
+                    })
+                    .collect();
+                layers.sort_by(|a, b| b.1.total_cmp(&a.1));
+                hits.push(GroupHit {
+                    articulation: key.0.clone(),
+                    root_key: key.1,
+                    direction: key.2.clone(),
+                    interval: key.3,
+                    rr_index: key.4,
+                    shift,
+                    fill: fill.to_string(),
+                    layers,
+                    offset_frames: fit.offset,
+                    sample_rate: sr,
+                    explained: fit.explained,
+                });
             }
         }
     }
@@ -2296,7 +2376,10 @@ fn inspect_samples(
     out: &Path,
 ) -> Result<()> {
     let patch = crate::PlayerPatch::from_pack(pack_path)?;
-    let pack = patch.pack.clone().ok_or_else(|| eyre::eyre!("not a pack"))?;
+    let pack = patch
+        .pack
+        .clone()
+        .ok_or_else(|| eyre::eyre!("not a pack"))?;
     let cache = SampleCache::with_pack(pack);
     let note_set = notes.as_deref().map(parse_note_set).transpose()?;
 
@@ -2418,7 +2501,8 @@ fn parse_smf(path: &Path) -> Result<Smf> {
                     i += 1;
                     let n = vlq(&d, &mut i) as usize;
                     if meta == 0x51 && n == 3 {
-                        let us = u32::from(d[i]) << 16 | u32::from(d[i + 1]) << 8 | u32::from(d[i + 2]);
+                        let us =
+                            u32::from(d[i]) << 16 | u32::from(d[i + 1]) << 8 | u32::from(d[i + 2]);
                         bpm = 60_000_000.0 / f64::from(us);
                     }
                     i += n;
@@ -2573,12 +2657,19 @@ fn render_report(
             }
             w.finalize()?;
         }
-        let audio_href = wav_path.file_name().map(|f| f.to_string_lossy().into_owned());
+        let audio_href = wav_path
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned());
         let click_href = match bpm {
             Some(b) => {
                 let cs = std::path::Path::new(crate::report::DEFAULT_CLICK_SAMPLE);
-                let click =
-                    crate::report::click_track(audio.len() / 2, sr, b, beats_per_bar, cs.exists().then_some(cs));
+                let click = crate::report::click_track(
+                    audio.len() / 2,
+                    sr,
+                    b,
+                    beats_per_bar,
+                    cs.exists().then_some(cs),
+                );
                 let stem = wav_path.file_stem().unwrap_or_default().to_string_lossy();
                 let mut mixed = audio.clone();
                 for (m, c) in mixed.iter_mut().zip(click.iter()) {
@@ -2587,9 +2678,16 @@ fn render_report(
                 let fname = format!("{stem}.click.wav");
                 let mut w = hound::WavWriter::create(
                     wav_path.with_file_name(&fname),
-                    hound::WavSpec { channels: 2, sample_rate: sr, bits_per_sample: 32, sample_format: hound::SampleFormat::Float },
+                    hound::WavSpec {
+                        channels: 2,
+                        sample_rate: sr,
+                        bits_per_sample: 32,
+                        sample_format: hound::SampleFormat::Float,
+                    },
                 )?;
-                for s in &mixed { w.write_sample(*s)?; }
+                for s in &mixed {
+                    w.write_sample(*s)?;
+                }
                 w.finalize()?;
                 Some(fname)
             }
@@ -2614,7 +2712,11 @@ fn render_report(
         );
         let data_json = crate::report::render_report_json(&name, &audio, 2, sr, &sources);
         crate::report::write_report_html(out, &data_json)?;
-        println!("wrote {} (external audio {})", out.display(), audio_path.display());
+        println!(
+            "wrote {} (external audio {})",
+            out.display(),
+            audio_path.display()
+        );
         return Ok(());
     }
 
@@ -2655,7 +2757,8 @@ fn render_report(
     let bpm_v = bpm.unwrap_or(120.0);
 
     let render_pass = |solo: Option<std::collections::BTreeSet<u8>>| -> Result<PassOut> {
-        let rig = crate::SamplerRig::new_offline_with_cache_budget(SR, Some(8 * 1024 * 1024 * 1024));
+        let rig =
+            crate::SamplerRig::new_offline_with_cache_budget(SR, Some(8 * 1024 * 1024 * 1024));
         rig.load_pack(ID, pack_path)?;
         // note_on dispatches on MIDI channel 0 — an unmapped instrument is
         // silent (the MM2 trap).
@@ -2692,8 +2795,18 @@ fn render_report(
                 // initial values (sweeps replay exactly).
                 ccs: {
                     let mut v = vec![
-                        DocCc { qn: 0.0, chan: 0, cc: 1, val: cc1 },
-                        DocCc { qn: 0.0, chan: 0, cc: 2, val: cc2 },
+                        DocCc {
+                            qn: 0.0,
+                            chan: 0,
+                            cc: 1,
+                            val: cc1,
+                        },
+                        DocCc {
+                            qn: 0.0,
+                            chan: 0,
+                            cc: 2,
+                            val: cc2,
+                        },
                     ];
                     v.extend(midi_ccs.iter().map(|&(sec, cc, val)| DocCc {
                         qn: sec_to_qn(sec),
@@ -2704,7 +2817,10 @@ fn render_report(
                     v
                 },
                 notes: notes_doc,
-                tempo: vec![TempoPoint { qn: 0.0, bpm: bpm_v }],
+                tempo: vec![TempoPoint {
+                    qn: 0.0,
+                    bpm: bpm_v,
+                }],
             };
             let res = rig
                 .render_offline_document(ID, &doc, &DocumentRenderOptions::default())
@@ -2733,7 +2849,14 @@ fn render_report(
             for m in &mut emitted {
                 m.frame -= base;
             }
-            Ok((res.audio, trace, fires, markers, emitted, res.reactive_fallbacks))
+            Ok((
+                res.audio,
+                trace,
+                fires,
+                markers,
+                emitted,
+                res.reactive_fallbacks,
+            ))
         }
     };
 
@@ -2756,7 +2879,9 @@ fn render_report(
     let (audio, trace, fires, markers, emitted, reactive_fallbacks) = render_pass(None)?;
     let wav_path = wav.unwrap_or_else(|| out.with_extension("wav"));
     write_wav(&wav_path, &audio)?;
-    let audio_href = wav_path.file_name().map(|f| f.to_string_lossy().into_owned());
+    let audio_href = wav_path
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned());
 
     // Per-note solo stems, one WAV per distinct scripted note.
     let mut distinct: Vec<u8> = script.iter().map(|n| n.note).collect();
@@ -2768,8 +2893,7 @@ fn render_report(
         .unwrap_or_else(|| "render".into());
     let mut stems = Vec::new();
     for note in &distinct {
-        let (stem_audio, _, _, _, _, _) =
-            render_pass(Some(std::iter::once(*note).collect()))?;
+        let (stem_audio, _, _, _, _, _) = render_pass(Some(std::iter::once(*note).collect()))?;
         let fname = format!("{stem_base}.n{note}.wav");
         write_wav(&wav_path.with_file_name(&fname), &stem_audio)?;
         stems.push((*note, note_name(*note), fname));
@@ -2966,7 +3090,12 @@ fn build(samples_root: &Path, out: &Path, codec: &str, quality: f32) -> Result<(
         .filter(|p| {
             p.extension()
                 .and_then(|e| e.to_str())
-                .map(|e| matches!(e.to_ascii_lowercase().as_str(), "flac" | "wav" | "aif" | "aiff"))
+                .map(|e| {
+                    matches!(
+                        e.to_ascii_lowercase().as_str(),
+                        "flac" | "wav" | "aif" | "aiff"
+                    )
+                })
                 .unwrap_or(false)
         })
         .collect();
@@ -2978,7 +3107,12 @@ fn build(samples_root: &Path, out: &Path, codec: &str, quality: f32) -> Result<(
         paths.iter().map(PathBuf::as_path),
         codec,
     )?;
-    println!("built {} — {} packed, {} failed", out.display(), stats.prepared, stats.failed);
+    println!(
+        "built {} — {} packed, {} failed",
+        out.display(),
+        stats.prepared,
+        stats.failed
+    );
     if stats.prepared == 0 {
         bail!("no samples packed");
     }

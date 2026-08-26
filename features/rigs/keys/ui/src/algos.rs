@@ -18,8 +18,21 @@ pub const DELAY_ALGOS: [&str; 13] = [
 
 /// `reverb::AlgorithmType::ALL` order.
 pub const VERB_ALGOS: [&str; 15] = [
-    "Room", "Hall", "Plate", "Spring", "Cloud", "Bloom", "Shimmer", "Chorale", "Magneto",
-    "NonLinear", "Swell", "Reflections", "Velvet", "FreeVerb", "Convolution",
+    "Room",
+    "Hall",
+    "Plate",
+    "Spring",
+    "Cloud",
+    "Bloom",
+    "Shimmer",
+    "Chorale",
+    "Magneto",
+    "NonLinear",
+    "Swell",
+    "Reflections",
+    "Velvet",
+    "FreeVerb",
+    "Convolution",
 ];
 
 /// The current algorithm, as a title that opens a grid.

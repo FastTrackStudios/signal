@@ -6,14 +6,12 @@
 use dioxus::prelude::*;
 
 /// Slider orientation.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[derive(Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum SliderOrientation {
     #[default]
     Horizontal,
     Vertical,
 }
-
 
 /// A styled range slider.
 #[derive(Props, Clone, PartialEq)]

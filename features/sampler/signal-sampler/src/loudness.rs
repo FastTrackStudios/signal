@@ -217,7 +217,10 @@ mod tests {
         assert_eq!(integrated_lufs(&[], sr), SILENCE_LUFS);
         assert_eq!(integrated_lufs(&vec![0.0; 48_000], sr), SILENCE_LUFS);
         // 100 ms < one 400 ms block.
-        assert_eq!(integrated_lufs(&sine(1000.0, 0.5, 0.1, sr), sr), SILENCE_LUFS);
+        assert_eq!(
+            integrated_lufs(&sine(1000.0, 0.5, 0.1, sr), sr),
+            SILENCE_LUFS
+        );
     }
 
     /// Works at a non-48k rate too (coefficients are SR-parametrised): the same

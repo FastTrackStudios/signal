@@ -65,7 +65,8 @@ pub fn EnvelopeGraph(
     #[props(default = "#38bdf8".to_string())] accent: String,
     #[props(default = true)] live: bool,
     /// Drop the card chrome — the graph is inside a `Panel`.
-    #[props(default = false)] flat: bool,
+    #[props(default = false)]
+    flat: bool,
     /// `(macro-id-suffix, value)` — "attack" | "decay" | "sustain" | "release".
     on_change: EventHandler<(&'static str, f32)>,
 ) -> Element {
@@ -88,7 +89,11 @@ pub fn EnvelopeGraph(
         "M {PAD:.1} {y0:.1} L {xa:.1} {ytop:.1} L {xd:.1} {sus_y:.1} L {xs:.1} {sus_y:.1} L {xr:.1} {y0:.1}"
     );
     let fill = format!("{path} L {PAD:.1} {y0:.1} Z");
-    let stroke = if live { accent.clone() } else { "#52525b".to_string() };
+    let stroke = if live {
+        accent.clone()
+    } else {
+        "#52525b".to_string()
+    };
     let box_style = chrome(flat, 10);
 
     rsx! {
@@ -203,13 +208,18 @@ pub fn FilterCurve(
     #[props(default = true)] live: bool,
     /// Drop the card chrome and the duplicated title — the graph is inside a
     /// `Panel` that already says "Filter"; only the readout is kept.
-    #[props(default = false)] flat: bool,
+    #[props(default = false)]
+    flat: bool,
     /// `("cutoff" | "reso", value)`.
     on_change: EventHandler<(&'static str, f32)>,
 ) -> Element {
     // (pointer x, pointer y, cutoff, resonance) at grab.
     let mut dragging = use_signal(|| None::<(f64, f64)>);
-    let stroke = if live { accent.clone() } else { "#52525b".to_string() };
+    let stroke = if live {
+        accent.clone()
+    } else {
+        "#52525b".to_string()
+    };
 
     // Log axis 20 Hz … 20 kHz. `fn` items (not closures) so the drag shield's
     // `move` handler doesn't try to borrow locals.
@@ -319,7 +329,9 @@ pub fn FilterCurve(
 /// A module's colour on the layer overlays. Stable by slot index, so module A
 /// is the same colour everywhere it appears.
 pub fn module_color(index: u32) -> &'static str {
-    const PALETTE: &[&str] = &["#38bdf8", "#f472b6", "#fbbf24", "#4ade80", "#a78bfa", "#fb7185"];
+    const PALETTE: &[&str] = &[
+        "#38bdf8", "#f472b6", "#fbbf24", "#4ade80", "#a78bfa", "#fb7185",
+    ];
     PALETTE[(index as usize) % PALETTE.len()]
 }
 
@@ -384,10 +396,12 @@ pub fn StackedEnvelopes(
     #[props(default = 260)] height_px: u32,
     /// `true` draws the amp envelopes, `false` the filter envelopes. The
     /// Filter card wants only its own; a combined view passes both.
-    #[props(default = true)] amp: bool,
+    #[props(default = true)]
+    amp: bool,
     #[props(default = false)] both: bool,
     /// Drop the card chrome and header — the caption above owns the title.
-    #[props(default = false)] flat: bool,
+    #[props(default = false)]
+    flat: bool,
 ) -> Element {
     let h = height_px as f64;
     let box_style = chrome(flat, 10);
@@ -666,7 +680,8 @@ pub fn StackedFilters(
     curves: Vec<ModuleCurve>,
     #[props(default = 260)] height_px: u32,
     /// Drop the card chrome and header — the `Panel` owns the title.
-    #[props(default = false)] flat: bool,
+    #[props(default = false)]
+    flat: bool,
 ) -> Element {
     let h = height_px as f64;
     let box_style = chrome(flat, 10);

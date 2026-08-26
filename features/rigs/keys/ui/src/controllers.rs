@@ -31,7 +31,12 @@ impl Default for Controllers {
     fn default() -> Self {
         // Expression rests open: a rig with no expression pedal attached is
         // at full volume, not silent.
-        Self { bend: 0.0, modulation: 0.0, sustain: 0.0, expression: 1.0 }
+        Self {
+            bend: 0.0,
+            modulation: 0.0,
+            sustain: 0.0,
+            expression: 1.0,
+        }
     }
 }
 
@@ -46,7 +51,9 @@ impl Controllers {
                     // 14-bit, centre 8192.
                     c.bend = ((bend.get() as f32) - 8192.0) / 8192.0;
                 }
-                MidiEvent::ControlChange { controller, value, .. } => {
+                MidiEvent::ControlChange {
+                    controller, value, ..
+                } => {
                     let v = value.get() as f32 / 127.0;
                     match controller.get() {
                         1 => c.modulation = v,

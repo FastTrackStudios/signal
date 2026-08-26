@@ -9,15 +9,20 @@ use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
 use signal_drums_proto::drum::{DrumEvent, DrumRigClient, DrumRigStreamClient};
-use signal_drums_proto::{DrumStatus, InputMap, KitInfo, KitSlot, LibraryPiece, MeterSnapshot,
-    MixerStrip, PieceInfo, StripKind};
+use signal_drums_proto::{
+    DrumStatus, InputMap, KitInfo, KitSlot, LibraryPiece, MeterSnapshot, MixerStrip, PieceInfo,
+    StripKind,
+};
 use signal_ui::components::Piano;
 
 /// Live drum-rig view-state: seeded once, then folded from the event stream.
 #[derive(Clone, Copy)]
 struct DrumState {
     status: Signal<DrumStatus>,
-    #[allow(dead_code, reason = "seeded from the rig snapshot but not yet read by any view — kit picker UI isn't wired up here yet")]
+    #[allow(
+        dead_code,
+        reason = "seeded from the rig snapshot but not yet read by any view — kit picker UI isn't wired up here yet"
+    )]
     kits: Signal<Vec<KitInfo>>,
     pieces: Signal<Vec<PieceInfo>>,
     mixer: Signal<Vec<MixerStrip>>,
@@ -119,7 +124,21 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
         );
     }
 
-    (DrumState { status, kits, pieces, mixer, meters, slots, library, mixes, ports, midi }, rig)
+    (
+        DrumState {
+            status,
+            kits,
+            pieces,
+            mixer,
+            meters,
+            slots,
+            library,
+            mixes,
+            ports,
+            midi,
+        },
+        rig,
+    )
 }
 
 /// The drum-rig remote view. Mount inside a host that has provided
@@ -167,9 +186,7 @@ pub fn DrumRigRemote() -> Element {
     };
     // Most-recently-played key and the sample it maps to, for the readout.
     let last_played: Option<(u8, Option<String>)> = midi.iter().rev().find_map(|e| match e {
-        MidiEvent::NoteOn { key, .. } => {
-            Some((key.get(), piece_labels.get(&key.get()).cloned()))
-        }
+        MidiEvent::NoteOn { key, .. } => Some((key.get(), piece_labels.get(&key.get()).cloned())),
         _ => None,
     });
     let master_pct = (meters.master.clamp(0.0, 1.0) * 100.0) as u32;
@@ -510,16 +527,30 @@ pub fn DrumRigRemote() -> Element {
 }
 
 fn meter_color(peak: f32) -> &'static str {
-    if peak > 0.95 { "#ef4444" } else if peak > 0.7 { "#eab308" } else { "#22c55e" }
+    if peak > 0.95 {
+        "#ef4444"
+    } else if peak > 0.7 {
+        "#eab308"
+    } else {
+        "#22c55e"
+    }
 }
 
 fn transport_btn(running: bool) -> String {
-    let (bg, br) = if running { ("#3f1d1d", "#7f1d1d") } else { ("#14321e", "#166534") };
+    let (bg, br) = if running {
+        ("#3f1d1d", "#7f1d1d")
+    } else {
+        ("#14321e", "#166534")
+    };
     format!("padding:4px 12px; border-radius:6px; background:{bg}; color:#e4e4e7; border:1px solid {br}; font-size:12px; cursor:pointer;")
 }
 
 fn kit_btn(loaded: bool) -> String {
-    let (bg, br, fg) = if loaded { ("#1e293b", "#3b82f6", "#e4e4e7") } else { ("#111113", "#27272a", "#a1a1aa") };
+    let (bg, br, fg) = if loaded {
+        ("#1e293b", "#3b82f6", "#e4e4e7")
+    } else {
+        ("#111113", "#27272a", "#a1a1aa")
+    };
     format!("text-align:left; padding:6px 8px; border-radius:6px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:12px; cursor:pointer;")
 }
 
@@ -530,7 +561,11 @@ fn pad_btn(ready: bool) -> String {
 }
 
 fn mute_btn(muted: bool) -> String {
-    let (bg, fg) = if muted { ("#7f1d1d", "#fecaca") } else { ("#18181b", "#71717a") };
+    let (bg, fg) = if muted {
+        ("#7f1d1d", "#fecaca")
+    } else {
+        ("#18181b", "#71717a")
+    };
     format!("width:20px; height:18px; border-radius:4px; background:{bg}; color:{fg}; border:1px solid #27272a; font-size:10px; cursor:pointer;")
 }
 
@@ -538,8 +573,19 @@ fn mute_btn(muted: bool) -> String {
 /// current instrument). Flashes when its MIDI note is held; triggers on click.
 /// (Fallback layout; a realistic diagram can come later.)
 #[component]
-fn DrumKit(slots: Vec<KitSlot>, notes: Vec<(String, u32)>, lit: Vec<u8>, on_hit: EventHandler<u32>) -> Element {
-    let note_of = |id: &str| notes.iter().find(|(i, _)| i == id).map(|(_, n)| *n).unwrap_or(0);
+fn DrumKit(
+    slots: Vec<KitSlot>,
+    notes: Vec<(String, u32)>,
+    lit: Vec<u8>,
+    on_hit: EventHandler<u32>,
+) -> Element {
+    let note_of = |id: &str| {
+        notes
+            .iter()
+            .find(|(i, _)| i == id)
+            .map(|(_, n)| *n)
+            .unwrap_or(0)
+    };
     rsx! {
         div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",
             for slot in slots.iter() {
@@ -579,30 +625,52 @@ fn instrument_short(name: &str) -> String {
 /// and piano-key labels so a kit reads at a glance.
 fn piece_icon(id: &str) -> &'static str {
     let s = id.to_ascii_lowercase();
-    if s.contains("kick") { "🦶" }
-    else if s.contains("snare") { "🥁" }
-    else if s.contains("hh") || s.contains("hat") { "🎩" }
-    else if s.contains("tom") { "🪘" }
-    else if s.contains("ride") { "🛎" }
-    else if s.contains("crash") { "💥" }
-    else if s.contains("china") { "🥢" }
-    else if s.contains("splash") { "💦" }
-    else if s.contains("overhead") || s.contains("oh") { "🎙" }
-    else if s.contains("room") { "🏠" }
-    else { "🥁" }
+    if s.contains("kick") {
+        "🦶"
+    } else if s.contains("snare") {
+        "🥁"
+    } else if s.contains("hh") || s.contains("hat") {
+        "🎩"
+    } else if s.contains("tom") {
+        "🪘"
+    } else if s.contains("ride") {
+        "🛎"
+    } else if s.contains("crash") {
+        "💥"
+    } else if s.contains("china") {
+        "🥢"
+    } else if s.contains("splash") {
+        "💦"
+    } else if s.contains("overhead") || s.contains("oh") {
+        "🎙"
+    } else if s.contains("room") {
+        "🏠"
+    } else {
+        "🥁"
+    }
 }
 
 /// Short 2-3 char abbreviation for a bus label (send row is tight on space).
 fn bus_abbr(label: &str) -> String {
     let l = label.to_ascii_lowercase();
-    if l.contains("overhead") || l == "oh" { "OH".into() }
-    else if l.contains("room close") { "RmC".into() }
-    else if l.contains("room far") { "RmF".into() }
-    else if l.contains("room") { "Rm".into() }
-    else { label.chars().take(3).collect() }
+    if l.contains("overhead") || l == "oh" {
+        "OH".into()
+    } else if l.contains("room close") {
+        "RmC".into()
+    } else if l.contains("room far") {
+        "RmF".into()
+    } else if l.contains("room") {
+        "Rm".into()
+    } else {
+        label.chars().take(3).collect()
+    }
 }
 
 fn solo_btn(soloed: bool) -> String {
-    let (bg, fg) = if soloed { ("#78560f", "#fde68a") } else { ("#18181b", "#71717a") };
+    let (bg, fg) = if soloed {
+        ("#78560f", "#fde68a")
+    } else {
+        ("#18181b", "#71717a")
+    };
     format!("width:20px; height:18px; border-radius:4px; background:{bg}; color:{fg}; border:1px solid #27272a; font-size:10px; cursor:pointer;")
 }

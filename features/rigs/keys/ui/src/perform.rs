@@ -6,8 +6,8 @@
 //! are instant — the mixer's live cells, no audio gap.
 
 use dioxus::prelude::*;
-use signal_keys_proto::KeysPerform;
 use signal_keys_proto::keys::KeysRigClient;
+use signal_keys_proto::KeysPerform;
 
 /// Per-stack color — the worship set's shape, left to right: intimate →
 /// full → intimate again.

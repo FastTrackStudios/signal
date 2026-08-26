@@ -12,8 +12,8 @@
 //! Gapless switching: `load()` → `activate()` → old Active becomes Tailing →
 //! `cleanup_tails()` reclaims silent instances.
 
-use signal_proto::ModuleSnapshot;
 use signal_proto::module_type::ModuleType;
+use signal_proto::ModuleSnapshot;
 
 use super::error::EngineError;
 use super::target::ModuleTarget;

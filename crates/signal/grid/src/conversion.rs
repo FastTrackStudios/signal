@@ -23,7 +23,10 @@ pub type ParamLookup = HashMap<(String, String), Vec<(String, f32)>>;
 /// 2. For `PresetSnapshot` sources, look up in the pre-resolved map.
 /// 3. For `PresetDefault` sources, look up with snapshot_id = "default".
 /// 4. Apply any overrides on top.
-fn extract_block_params(mb: &signal_proto::ModuleBlock, lookup: &ParamLookup) -> Vec<(String, f32)> {
+fn extract_block_params(
+    mb: &signal_proto::ModuleBlock,
+    lookup: &ParamLookup,
+) -> Vec<(String, f32)> {
     let mut params: Vec<(String, f32)> = match mb.source() {
         signal_proto::ModuleBlockSource::Inline { block } => block
             .parameters()

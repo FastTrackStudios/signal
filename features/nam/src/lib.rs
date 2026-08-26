@@ -54,8 +54,8 @@ pub use pack::{FileOverride, PackCategory, PackDefinition};
 pub use resolve::{nam_root_from_env, resolve_path, resolve_path_unchecked};
 pub use scanner::{apply_packs, merge_into_catalog, scan_directory, sha256_hex};
 pub use vst_chunk::{
-    NamVstChunk, create_default_chunk, decode_chunk, encode_chunk, extract_state_base64,
-    first_base64_segment, rebuild_chunk_with_state, rebuild_clap_chunk_with_state, rewrite_paths,
+    create_default_chunk, decode_chunk, encode_chunk, extract_state_base64, first_base64_segment,
+    rebuild_chunk_with_state, rebuild_clap_chunk_with_state, rewrite_paths, NamVstChunk,
 };
 
 /// Errors that can occur in nam-manager operations.

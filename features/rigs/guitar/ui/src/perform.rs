@@ -11,8 +11,8 @@
 
 use std::time::Duration;
 
-use dioxus::prelude::*;
 use dioxus::dioxus_core::Task;
+use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::LiveBlock;
@@ -146,16 +146,31 @@ pub fn PerformGrid(
         use signal_proto::block::BlockType as B;
         matches!(
             b.block_type,
-            B::Compressor | B::Drive | B::Boost | B::Delay | B::Reverb
-                | B::Chorus | B::Flanger | B::Phaser | B::Trem | B::Vibrato | B::Rotary
+            B::Compressor
+                | B::Drive
+                | B::Boost
+                | B::Delay
+                | B::Reverb
+                | B::Chorus
+                | B::Flanger
+                | B::Phaser
+                | B::Trem
+                | B::Vibrato
+                | B::Rotary
         )
     };
-    let pedals: Vec<LiveBlock> = chain_blocks.iter().filter(|b| pedal_types(b)).cloned().collect();
+    let pedals: Vec<LiveBlock> = chain_blocks
+        .iter()
+        .filter(|b| pedal_types(b))
+        .cloned()
+        .collect();
     let _set_mode = {
         let rig = rig.clone();
         move |m: u32| {
             if let Some(r) = rig.clone() {
-                spawn(async move { let _ = r.set_perform_mode(m).await; });
+                spawn(async move {
+                    let _ = r.set_perform_mode(m).await;
+                });
             }
         }
     };

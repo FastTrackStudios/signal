@@ -9,7 +9,10 @@ use signal_sampler::engine::stream::StreamedSample;
 fn main() -> eyre::Result<()> {
     let pack_path = std::env::args().nth(1).expect("usage: stream_debug <pack>");
     let pack = SignalPcmPack::open(Path::new(&pack_path))?;
-    let mut entries: Vec<_> = pack.entries_iter().map(|(p, e)| (p.clone(), e.clone())).collect();
+    let mut entries: Vec<_> = pack
+        .entries_iter()
+        .map(|(p, e)| (p.clone(), e.clone()))
+        .collect();
     entries.sort_by(|a, b| a.0.cmp(&b.0));
     let (path, entry) = entries.into_iter().next().expect("an entry");
     println!(

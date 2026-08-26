@@ -129,7 +129,10 @@ fn shimmer_dual_shift_two_goertzel_peaks() {
     let down_dual = goertzel(&dual, 220.0);
 
     // Voice 1 (octave up) present in both.
-    assert!(up_single > 1e-12 && up_dual > 1e-12, "octave-up voice missing");
+    assert!(
+        up_single > 1e-12 && up_dual > 1e-12,
+        "octave-up voice missing"
+    );
     // Voice 2 (octave down) only meaningful in dual mode.
     assert!(
         down_dual > down_single * 4.0,
@@ -267,7 +270,10 @@ fn nonlinear_chop_modulates_decay() {
             checked += 1;
         }
     }
-    assert!(checked > 1000, "too little signal to verify chop ({checked})");
+    assert!(
+        checked > 1000,
+        "too little signal to verify chop ({checked})"
+    );
     // And the troughs actually silence the decay.
     let trough = (SR / 16.0) as usize; // half period at 8 Hz
     assert!(chopped[trough].abs() < flat[trough].abs() * 1e-3 + 1e-12);
@@ -286,9 +292,9 @@ fn nonlinear_gate_speed_shortens_hold() {
     };
 
     let env_len = (0.1 + 0.5 * 1.9) * SR; // matches size mapping
-    // Window between the fast hold point (0.5) and the slow one (0.9):
-    // slow (speed 1) is still at full level there, fast (speed 0) has
-    // released.
+                                          // Window between the fast hold point (0.5) and the slow one (0.9):
+                                          // slow (speed 1) is still at full level there, fast (speed 0) has
+                                          // released.
     let w0 = (env_len * 0.62) as usize;
     let w1 = (env_len * 0.85) as usize;
 

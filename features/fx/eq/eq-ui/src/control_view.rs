@@ -10,15 +10,15 @@ use std::sync::atomic::Ordering;
 use audiocore_core::prelude::*;
 // The concrete `GuiContext` is not in nice-plug's prelude (which carries the
 // `GuiContextInner` trait); upstream's own backends import it directly too.
+use architect_ui::prelude::{
+    default_theme_preset, Button, ButtonSize, ButtonVariant, Card, CardContent, CardHeader,
+    CardTitle, SegmentedControl, SegmentedControlSize, Select, SelectContent, SelectItem, Switch,
+    TabContent, TabList, TabTrigger, Tabs, ThemeMode, ThemeProvider, ThemeState,
+};
+use fts_audio_ui::prelude::*;
 use nice_plug::context::gui::GuiContext;
 use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::editor::ResizeHint;
-use architect_ui::prelude::{
-    Button, ButtonSize, ButtonVariant, Card, CardContent, CardHeader, CardTitle, SegmentedControl,
-    SegmentedControlSize, Select, SelectContent, SelectItem, Switch, TabContent, TabList,
-    TabTrigger, Tabs, ThemeMode, ThemeProvider, ThemeState, default_theme_preset,
-};
-use fts_audio_ui::prelude::*;
 
 use crate::eq_graph::{EqBand, EqBandShape, EqGraph, OverlayChoice};
 
@@ -37,10 +37,7 @@ pub const EDITOR_H: u32 = 720;
 /// preset into a window that never arrives. A 520px height floor collapsed
 /// 1U and 2U onto the same box.
 fn bounds() -> ((u32, u32), (u32, u32)) {
-    fts_audio_ui::EditorForm::size_bounds(
-        fts_audio_ui::shell::RAIL_W,
-        (EDITOR_W, EDITOR_H),
-    )
+    fts_audio_ui::EditorForm::size_bounds(fts_audio_ui::shell::RAIL_W, (EDITOR_W, EDITOR_H))
 }
 
 pub fn min_editor_size() -> (f32, f32) {

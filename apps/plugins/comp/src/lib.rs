@@ -18,8 +18,8 @@
 //! without a circular dep.
 
 use audiocore_core::prelude::*;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use comp::CompChain;
 use comp_ui::params::{CompParams, CompStageParams, CompUiState, MAX_STAGES};
@@ -87,16 +87,15 @@ impl CompStage {
 
         // The stage's sidecar: the 6-band sidechain EQ on the detector key
         // (`fx.embed-eq.one-surface`). Change-detected inside.
-        self.chain
-            .set_sidechain_eq(std::array::from_fn(|i| {
-                let b = &p.sc_eq[i];
-                comp::chain::SidechainBand {
-                    shape: b.shape.value().max(0) as u32,
-                    freq_hz: b.freq_hz.value() as f64,
-                    gain_db: b.gain_db.value() as f64,
-                    q: b.q.value() as f64,
-                }
-            }));
+        self.chain.set_sidechain_eq(std::array::from_fn(|i| {
+            let b = &p.sc_eq[i];
+            comp::chain::SidechainBand {
+                shape: b.shape.value().max(0) as u32,
+                freq_hz: b.freq_hz.value() as f64,
+                gain_db: b.gain_db.value() as f64,
+                q: b.q.value() as f64,
+            }
+        }));
 
         // Chain-level params: the sidechain setters early-out on an unchanged
         // frequency; `set_lookahead` only reallocates when the sample count
@@ -260,8 +259,8 @@ impl Plugin for FtsComp {
         }
         // Worst case each lane could compensate: every stage on one lane at
         // full lookahead.
-        let max_latency = (MAX_LOOKAHEAD_MS / 1000.0 * self.sample_rate).ceil() as usize
-            * MAX_STAGES;
+        let max_latency =
+            (MAX_LOOKAHEAD_MS / 1000.0 * self.sample_rate).ceil() as usize * MAX_STAGES;
         self.pool
             .prepare(buffer_config.max_buffer_size as usize, max_latency);
         self.buf_l = vec![0.0; buffer_config.max_buffer_size as usize];
@@ -304,7 +303,8 @@ impl Plugin for FtsComp {
             }
         }
 
-        self.pool.process(&mut self.buf_l[..n], &mut self.buf_r[..n]);
+        self.pool
+            .process(&mut self.buf_l[..n], &mut self.buf_r[..n]);
 
         let mut output_peak: f32 = 0.0;
         {
@@ -337,7 +337,9 @@ impl Plugin for FtsComp {
             .stage(focused)
             .map(|s| s.chain.comp.gain_reduction_db() as f32)
             .unwrap_or(0.0);
-        self.ui_state.gain_reduction_db.store(gr_db, Ordering::Relaxed);
+        self.ui_state
+            .gain_reduction_db
+            .store(gr_db, Ordering::Relaxed);
 
         // Graph history rings: one input peak + one GR value per block —
         // lock-free stores, no allocation on the audio thread.
@@ -351,7 +353,11 @@ impl Plugin for FtsComp {
             -100.0
         };
         self.ui_state.input_peak_db.store(
-            if in_db > prev_in { in_db } else { prev_in - 0.3 },
+            if in_db > prev_in {
+                in_db
+            } else {
+                prev_in - 0.3
+            },
             Ordering::Relaxed,
         );
 
@@ -362,7 +368,11 @@ impl Plugin for FtsComp {
             -100.0
         };
         self.ui_state.output_peak_db.store(
-            if out_db > prev_out { out_db } else { prev_out - 0.3 },
+            if out_db > prev_out {
+                out_db
+            } else {
+                prev_out - 0.3
+            },
             Ordering::Relaxed,
         );
 
@@ -379,9 +389,8 @@ impl Plugin for FtsComp {
 
 impl ClapPlugin for FtsComp {
     const CLAP_ID: &'static str = "com.fasttrackstudio.comp";
-    const CLAP_DESCRIPTION: Option<&'static str> = Some(
-        "Compressor stack: up to eight stacked compressor stages in serial/parallel lanes",
-    );
+    const CLAP_DESCRIPTION: Option<&'static str> =
+        Some("Compressor stack: up to eight stacked compressor stages in serial/parallel lanes");
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[

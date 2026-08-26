@@ -12,8 +12,7 @@ use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
 async fn main() -> eyre::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
     let url = std::env::args()
@@ -29,7 +28,9 @@ async fn main() -> eyre::Result<()> {
         .map_err(|e| eyre::eyre!("KeysRig handshake: {e:?}"))?;
     println!("KeysRig established ✓");
 
-    let link2 = vox_websocket::WsLink::connect(&url).await.map_err(|e| eyre::eyre!("ws2: {e:?}"))?;
+    let link2 = vox_websocket::WsLink::connect(&url)
+        .await
+        .map_err(|e| eyre::eyre!("ws2: {e:?}"))?;
     let _stream: KeysRigStreamClient = vox_core::initiator_on(link2)
         .establish()
         .await
@@ -41,13 +42,20 @@ async fn main() -> eyre::Result<()> {
         rig.start().await.map_err(|e| eyre::eyre!("start: {e:?}"))?;
         println!("start() returned ✓");
     }
-    let status = rig.status().await.map_err(|e| eyre::eyre!("status: {e:?}"))?;
+    let status = rig
+        .status()
+        .await
+        .map_err(|e| eyre::eyre!("status: {e:?}"))?;
     println!(
         "running={} patch={:?} midi={:?} err={:?}",
         status.running, status.loaded_preset, status.midi_port, status.last_error
     );
     let mixer = rig.mixer().await.map_err(|e| eyre::eyre!("mixer: {e:?}"))?;
-    println!("profile {} — {} engines", mixer.profile, mixer.engines.len());
+    println!(
+        "profile {} — {} engines",
+        mixer.profile,
+        mixer.engines.len()
+    );
     for e in &mixer.engines {
         let lanes: Vec<String> = e
             .layers
@@ -57,7 +65,10 @@ async fn main() -> eyre::Result<()> {
         println!("  {:<6} {}", e.name, lanes.join(" · "));
     }
     let t0 = std::time::Instant::now();
-    let presets = rig.presets().await.map_err(|e| eyre::eyre!("presets: {e:?}"))?;
+    let presets = rig
+        .presets()
+        .await
+        .map_err(|e| eyre::eyre!("presets: {e:?}"))?;
     println!("presets: {} in {:?}", presets.len(), t0.elapsed());
     // Optional: load a module preset by name onto Pad module A, the way the
     // layer browser does — `keys_probe <url> "American Obesity"`.
@@ -66,7 +77,10 @@ async fn main() -> eyre::Result<()> {
             .iter()
             .position(|p| p.name.eq_ignore_ascii_case(&want))
             .ok_or_else(|| eyre::eyre!("no preset named {want:?}"))?;
-        println!("loading #{hit} {:?} ({}) → Pad module A", presets[hit].name, presets[hit].kind);
+        println!(
+            "loading #{hit} {:?} ({}) → Pad module A",
+            presets[hit].name, presets[hit].kind
+        );
         rig.set_layer_patch("Pad".into(), 0, hit as u32)
             .await
             .map_err(|e| eyre::eyre!("set_layer_patch: {e:?}"))?;
@@ -89,12 +103,21 @@ async fn main() -> eyre::Result<()> {
             .map_err(|e| eyre::eyre!("layer_detail: {e:?}"))?;
         let m = d.modules.iter().find(|m| m.index == slot);
         let show = |id: &str| {
-            d.macros.iter().find(|x| x.id == id).map(|x| x.value).unwrap_or(f32::NAN)
+            d.macros
+                .iter()
+                .find(|x| x.id == id)
+                .map(|x| x.value)
+                .unwrap_or(f32::NAN)
         };
         println!(
             "  Pad module {} → {:<30} {:+.1} dB  cutoff={:.0} reso={:.2} uni={:.0} A/D/S/R={:.0}/{:.0}/{:.2}/{:.0}",
-            m.map(|m| m.slot.clone()).unwrap_or_else(|| slot.to_string()),
-            if d.patch.is_empty() { "—".into() } else { d.patch.clone() },
+            m.map(|m| m.slot.clone())
+                .unwrap_or_else(|| slot.to_string()),
+            if d.patch.is_empty() {
+                "—".into()
+            } else {
+                d.patch.clone()
+            },
             m.map(|m| m.gain_db).unwrap_or(0.0),
             show("filter.cutoff"),
             show("filter.reso"),
@@ -106,7 +129,11 @@ async fn main() -> eyre::Result<()> {
         );
         println!(
             "        preset={:<28} lfo1={:.2}Hz d={:.2} sh={:.0}  fenv_amt={:.2}",
-            if d.preset.is_empty() { "—".into() } else { d.preset.clone() },
+            if d.preset.is_empty() {
+                "—".into()
+            } else {
+                d.preset.clone()
+            },
             show("lfo1.rate"),
             show("lfo1.depth"),
             show("lfo1.shape"),
@@ -139,10 +166,20 @@ async fn main() -> eyre::Result<()> {
             rig.set_layer_global("Pad".into(), "l.filter.cutoff".into(), v)
                 .await
                 .map_err(|e| eyre::eyre!("set_layer_global: {e:?}"))?;
-            let d = rig.layer_detail("Pad".into(), 0).await.map_err(|e| eyre::eyre!("{e:?}"))?;
-            let cut = d.layer_macros.iter().find(|m| m.id == "l.filter.cutoff").unwrap();
-            let each: Vec<String> =
-                d.modules.iter().map(|m| format!("{}={:.0}", m.slot, m.cutoff_hz)).collect();
+            let d = rig
+                .layer_detail("Pad".into(), 0)
+                .await
+                .map_err(|e| eyre::eyre!("{e:?}"))?;
+            let cut = d
+                .layer_macros
+                .iter()
+                .find(|m| m.id == "l.filter.cutoff")
+                .unwrap();
+            let each: Vec<String> = d
+                .modules
+                .iter()
+                .map(|m| format!("{}={:.0}", m.slot, m.cutoff_hz))
+                .collect();
             println!(
                 "  cutoff {v:+.2} → bipolar={} spread={:<22} {}",
                 cut.bipolar,

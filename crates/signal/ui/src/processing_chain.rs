@@ -8,8 +8,8 @@
 //! Moved here from the retired `signal-audio` crate (whose real I/O —
 //! hardware MIDI input — now lives in `midicore`).
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 /// Shared processing-chain state.
 ///

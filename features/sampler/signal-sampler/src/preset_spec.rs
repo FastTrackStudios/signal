@@ -35,8 +35,8 @@ use std::path::Path;
 
 use facet::Facet;
 
-use crate::SamplerError;
 use crate::block::ParamOverride;
+use crate::SamplerError;
 
 #[derive(Debug, Clone, Facet)]
 pub struct PresetSpec {

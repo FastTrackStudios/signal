@@ -802,7 +802,11 @@ pub fn apply(
             wah.filter_r.mode = filter;
             wah.base_position = 0.3;
             wah.sensitivity = 0.5;
-            wah.pattern_amount = if source == WahSource::Envelope { 0.0 } else { 0.5 };
+            wah.pattern_amount = if source == WahSource::Envelope {
+                0.0
+            } else {
+                0.5
+            };
             wah.filter_l.q = 6.0;
             wah.filter_r.q = 6.0;
             wah.filter_l.stages = 2;
@@ -1208,7 +1212,10 @@ mod tests {
             let mut buf = [0.0f64; 128];
             let mut raw = [0.0f64; 128];
             let profile = profile_by_id("cubic").unwrap();
-            let controls = Controls { depth, ..Default::default() };
+            let controls = Controls {
+                depth,
+                ..Default::default()
+            };
             shape(profile, &controls, &mut buf);
             // Normalised output always fills the box, so measure the RAW
             // excursion the engine chose rather than the drawing.
@@ -1247,7 +1254,10 @@ mod tests {
             // The envelope wah is the one honest exception; it has its own test.
             if matches!(
                 profile.voicing.circuit,
-                Circuit::Wah { source: WahSource::Envelope, .. }
+                Circuit::Wah {
+                    source: WahSource::Envelope,
+                    ..
+                }
             ) {
                 continue;
             }
@@ -1332,18 +1342,20 @@ mod tests {
                     Character::Groove => t.groove as f32,
                     Character::Feel => t.feel as f32,
                     Character::Accent => t.accent as f32,
-                    Character::Analog => {
-                        ANALOG_STYLES.iter().position(|s| *s == t.analog_l.style).unwrap() as f32
-                    }
+                    Character::Analog => ANALOG_STYLES
+                        .iter()
+                        .position(|s| *s == t.analog_l.style)
+                        .unwrap() as f32,
                     Character::Crossover => t.tremolo_l.crossover_freq as f32,
                     Character::Position => w.base_position as f32,
                     Character::Resonance => w.filter_l.q as f32,
                     Character::Sensitivity => w.sensitivity as f32,
                     Character::Stages => w.filter_l.stages as f32,
                     Character::Pattern => w.pattern_amount as f32,
-                    Character::Shape => {
-                        WAH_SHAPES.iter().position(|s| *s == w.filter_l.mode).unwrap() as f32
-                    }
+                    Character::Shape => WAH_SHAPES
+                        .iter()
+                        .position(|s| *s == w.filter_l.mode)
+                        .unwrap() as f32,
                 };
                 let tol = (knob.at_noon.abs() * 0.02).max(0.01);
                 assert!(
@@ -1366,7 +1378,13 @@ mod tests {
             knobs: [1.0, 1.0, 1.0, 1.0],
             ..Default::default()
         };
-        apply(profile_by_id("flanger").unwrap(), &hot, &mut c, &mut t, &mut w);
+        apply(
+            profile_by_id("flanger").unwrap(),
+            &hot,
+            &mut c,
+            &mut t,
+            &mut w,
+        );
         assert!(c.feedback > 0.5, "the flanger should be fed back");
 
         apply(
@@ -1387,7 +1405,10 @@ mod tests {
             let (mut c, mut t, mut w) = engines();
             apply(
                 profile_by_id("vibrato").unwrap(),
-                &Controls { mix, ..Default::default() },
+                &Controls {
+                    mix,
+                    ..Default::default()
+                },
                 &mut c,
                 &mut t,
                 &mut w,
@@ -1416,14 +1437,26 @@ mod tests {
                     &mut w,
                 );
                 let id = profile.id;
-                assert!((1..=4).contains(&c.num_voices), "{id} voices {}", c.num_voices);
+                assert!(
+                    (1..=4).contains(&c.num_voices),
+                    "{id} voices {}",
+                    c.num_voices
+                );
                 assert!((0.0..=1.0).contains(&c.color), "{id} colour {}", c.color);
-                assert!((0.0..1.0).contains(&c.feedback), "{id} feedback {}", c.feedback);
+                assert!(
+                    (0.0..1.0).contains(&c.feedback),
+                    "{id} feedback {}",
+                    c.feedback
+                );
                 assert!((0.0..=1.0).contains(&c.width), "{id} width {}", c.width);
                 assert!((-1.0..=1.0).contains(&t.groove), "{id} groove {}", t.groove);
                 assert!((-1.0..=1.0).contains(&t.feel), "{id} feel {}", t.feel);
                 assert!((-1.0..=1.0).contains(&t.accent), "{id} accent {}", t.accent);
-                assert!((1.0..=20.0).contains(&w.filter_l.q), "{id} q {}", w.filter_l.q);
+                assert!(
+                    (1.0..=20.0).contains(&w.filter_l.q),
+                    "{id} q {}",
+                    w.filter_l.q
+                );
                 assert!((1..=4).contains(&w.filter_l.stages), "{id} stages");
                 assert!(
                     (0.0..=1.0).contains(&w.base_position),
@@ -1447,7 +1480,10 @@ mod tests {
             let (mut c, mut t, mut w) = engines();
             apply(
                 profile_by_id("trem_opto").unwrap(),
-                &Controls { knobs: [0.5, 0.5, 0.5, v], ..Default::default() },
+                &Controls {
+                    knobs: [0.5, 0.5, 0.5, v],
+                    ..Default::default()
+                },
                 &mut c,
                 &mut t,
                 &mut w,
@@ -1458,7 +1494,10 @@ mod tests {
             let (mut c, mut t, mut w) = engines();
             apply(
                 profile_by_id("wah_auto").unwrap(),
-                &Controls { knobs: [0.5, 0.5, 0.5, v], ..Default::default() },
+                &Controls {
+                    knobs: [0.5, 0.5, 0.5, v],
+                    ..Default::default()
+                },
                 &mut c,
                 &mut t,
                 &mut w,

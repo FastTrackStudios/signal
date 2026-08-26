@@ -81,7 +81,11 @@ pub fn eval_mag_sq(poly: &MagSqPoly, w: f64) -> f64 {
     let w4 = w2 * w2;
     let num = w4 * poly.num_w4 + w2 * poly.num_w2 + poly.num_w0;
     let den = w4 * poly.den_w4 + w2 * poly.den_w2 + poly.den_w0;
-    if den.abs() > 1e-30 { num / den } else { 1.0 }
+    if den.abs() > 1e-30 {
+        num / den
+    } else {
+        1.0
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════

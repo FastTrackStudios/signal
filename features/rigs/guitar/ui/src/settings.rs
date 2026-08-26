@@ -6,7 +6,9 @@
 
 use dioxus::prelude::*;
 use lumen_blocks::components::button::{Button, ButtonVariant};
-use lumen_blocks::components::dropdown::{Dropdown, DropdownContent, DropdownItem, DropdownTrigger};
+use lumen_blocks::components::dropdown::{
+    Dropdown, DropdownContent, DropdownItem, DropdownTrigger,
+};
 
 use signal_guitar_proto::{AudioDevice, AudioPrefs};
 

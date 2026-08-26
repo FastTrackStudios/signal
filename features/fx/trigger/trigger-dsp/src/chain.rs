@@ -4,9 +4,9 @@
 //! - Audio path: Input → dry signal preserved → mix with sample playback
 //! - Sidechain path: Input → HPF/LPF → detector → velocity → sampler trigger
 
+use audiocore_dsp::{AudioConfig, Processor};
 use eq_dsp::band::Band;
 use eq_dsp::FilterType;
-use audiocore_dsp::{AudioConfig, Processor};
 
 use crate::detector::{DetectMode, TriggerDetector};
 use crate::sampler::{MixMode, Sampler};

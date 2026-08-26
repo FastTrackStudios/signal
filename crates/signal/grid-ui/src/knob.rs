@@ -7,15 +7,13 @@ use dioxus::prelude::*;
 use std::f64::consts::PI;
 
 /// Knob display size.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[derive(Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum KnobSize {
     Small,
     #[default]
     Medium,
     Large,
 }
-
 
 impl KnobSize {
     fn diameter(self) -> u32 {

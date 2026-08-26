@@ -7,8 +7,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path: PathBuf = std::env::args().nth(1).expect("pack path arg").into();
     let h = signal_sampler::read_pack_header(&path)?;
     let s = &h.spec;
-    println!("name={} category={:?} instrument={:?}", s.name, s.category, s.instrument);
-    println!("mics: {:?}", s.mics.iter().map(|m| (&m.id, &m.kind, m.default)).collect::<Vec<_>>());
+    println!(
+        "name={} category={:?} instrument={:?}",
+        s.name, s.category, s.instrument
+    );
+    println!(
+        "mics: {:?}",
+        s.mics
+            .iter()
+            .map(|m| (&m.id, &m.kind, m.default))
+            .collect::<Vec<_>>()
+    );
     println!("zones: {}", s.zones.len());
     // key range histogram
     let mut keys: BTreeMap<(u8, u8), usize> = BTreeMap::new();
@@ -24,14 +33,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         *roots.entry(z.root_key).or_default() += 1;
     }
     println!("\nkey ranges (min,max)->count:");
-    for (k, c) in &keys { println!("  {:?} x{c}", k); }
+    for (k, c) in &keys {
+        println!("  {:?} x{c}", k);
+    }
     println!("\nvel ranges (min,max)->count:");
-    for (k, c) in &vels { println!("  {:?} x{c}", k); }
+    for (k, c) in &vels {
+        println!("  {:?} x{c}", k);
+    }
     println!("\narticulations:");
-    for (a, c) in &artics { println!("  {:?} x{c}", a); }
+    for (a, c) in &artics {
+        println!("  {:?} x{c}", a);
+    }
     println!("\nmic tags:");
-    for (m, c) in &mics { println!("  {:?} x{c}", m); }
+    for (m, c) in &mics {
+        println!("  {:?} x{c}", m);
+    }
     println!("\nroot keys:");
-    for (r, c) in &roots { println!("  {r} x{c}"); }
+    for (r, c) in &roots {
+        println!("  {r} x{c}");
+    }
     Ok(())
 }

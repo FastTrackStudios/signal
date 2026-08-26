@@ -42,7 +42,11 @@ fn pluck_pattern(n: usize) -> Vec<f64> {
             let t = i as f64 / SR;
             let env = (-t * 9.0).exp();
             let tone = (2.0 * std::f64::consts::PI * f * t).sin();
-            let attack_noise = if i < 96 { rng() * 0.2 * (1.0 - i as f64 / 96.0) } else { 0.0 };
+            let attack_noise = if i < 96 {
+                rng() * 0.2 * (1.0 - i as f64 / 96.0)
+            } else {
+                0.0
+            };
             out[start + i] += (tone * 0.5 + attack_noise) * env * 0.6;
         }
         start += interval;

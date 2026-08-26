@@ -8,9 +8,9 @@
 use std::collections::HashMap;
 
 use crate::routing::ModulationRoute;
-use crate::sources::ModulationSource;
 use crate::sources::follower::FollowerConfig;
 use crate::sources::random::RandomConfig;
+use crate::sources::ModulationSource;
 use crate::target::ParamTarget;
 
 use super::envelope_state::EnvelopeState;

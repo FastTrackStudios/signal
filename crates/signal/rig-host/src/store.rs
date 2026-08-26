@@ -128,7 +128,9 @@ mod tests {
     }
 
     fn tmp_store(tag: &str) -> StyxDir {
-        StyxDir::new(std::env::temp_dir().join(format!("fts-rig-store-{tag}-{}", std::process::id())))
+        StyxDir::new(
+            std::env::temp_dir().join(format!("fts-rig-store-{tag}-{}", std::process::id())),
+        )
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use crate::NamError;
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 
 /// Decoded NAM VST3 plugin state.
 ///

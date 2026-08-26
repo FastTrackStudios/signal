@@ -263,7 +263,11 @@ pub fn generate_freq_labels(
     labels
 }
 
-pub fn generate_db_labels(padding: f64, graph_height: f64, db_range: f64) -> Vec<(f64, f64, String)> {
+pub fn generate_db_labels(
+    padding: f64,
+    graph_height: f64,
+    db_range: f64,
+) -> Vec<(f64, f64, String)> {
     let mut labels = Vec::new();
     let x = padding - 10.0;
 

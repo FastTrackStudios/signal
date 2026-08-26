@@ -1,7 +1,7 @@
 //! Block / module inspector panel for the collection browser detail pane.
 
-use dioxus::prelude::*;
 use architect_ui::prelude::*;
+use dioxus::prelude::*;
 
 use crate::dynamic_grid::{GridSelection, GridSlot};
 use crate::knob::{Knob, KnobSize};

@@ -6,9 +6,9 @@
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::{
-    EngineType,
     engine::{Engine, EngineId, EngineScene, EngineSceneId},
     layer::LayerId,
+    EngineType,
 };
 
 /// Handle for engine operations.

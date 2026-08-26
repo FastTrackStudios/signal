@@ -22,7 +22,7 @@
 //! Each trip around the feedback loop applies dispersion again, making
 //! successive echoes progressively more "chirpy" and diffuse.
 
-use crate::algorithm::{SpringDwell, SpringParams, AlgorithmParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, ReverbAlgorithm, SpringDwell, SpringParams};
 use crate::primitives::one_pole::Lp1;
 use crate::primitives::spectral_delay::SpectralDelay;
 use audiocore_dsp::dc_blocker::DcBlocker;

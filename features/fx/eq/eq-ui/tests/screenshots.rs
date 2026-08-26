@@ -194,7 +194,12 @@ async fn shot_every_editor_form() {
     for form in fts_audio_ui::EDITOR_FORMS {
         let (w, h) = eq_ui::faces::editor_size_for(1, *form);
         let params = Arc::new(FtsEqParams::default());
-        unsafe { params.model.as_ptr()._internal_set_normalized_value(1.0 / 5.0) };
+        unsafe {
+            params
+                .model
+                .as_ptr()
+                ._internal_set_normalized_value(1.0 / 5.0)
+        };
         eq_ui::faces::store_model_id(&params, 1);
         eq_ui::faces::store_form(&params, *form);
         let mut fx = mount_with(params, w, h);

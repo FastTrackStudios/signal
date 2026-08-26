@@ -13,19 +13,20 @@
 
 use std::io::Write as _;
 
-use signal_packs_proto::packs::PackLibraryClient;
 use signal_packs_proto::PackChunk;
+use signal_packs_proto::packs::PackLibraryClient;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "warn".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
         )
         .init();
     let mut args = std::env::args().skip(1);
-    let url = args.next().unwrap_or_else(|| "ws://127.0.0.1:4040/vox".into());
+    let url = args
+        .next()
+        .unwrap_or_else(|| "ws://127.0.0.1:4040/vox".into());
     let want = args.next();
     let dest = args.next().map(std::path::PathBuf::from);
 
@@ -44,7 +45,10 @@ async fn main() -> eyre::Result<()> {
             .map_err(|e| eyre::eyre!("vox handshake: {e:?}"))?
     } else {
         use architect::iroh_link::iroh;
-        let id: iroh::EndpointId = url.trim().parse().map_err(|e| eyre::eyre!("bad iroh id: {e:?}"))?;
+        let id: iroh::EndpointId = url
+            .trim()
+            .parse()
+            .map_err(|e| eyre::eyre!("bad iroh id: {e:?}"))?;
         let ep = architect::iroh_link::bind_endpoint(iroh::SecretKey::generate())
             .await
             .map_err(|e| eyre::eyre!("iroh bind: {e:?}"))?;
@@ -60,9 +64,11 @@ async fn main() -> eyre::Result<()> {
 
     // `planfirst:<name>` — call pack_plan as the FIRST method on this
     // fresh connection (the browser's call pattern), before packs().
-    if let Some(pname) = std::env::args().nth(2).as_deref().and_then(|w| {
-        w.strip_prefix("planfirst:").map(str::to_string)
-    }) {
+    if let Some(pname) = std::env::args()
+        .nth(2)
+        .as_deref()
+        .and_then(|w| w.strip_prefix("planfirst:").map(str::to_string))
+    {
         let (ptx, mut prx) = vox::channel::<PackChunk>();
         let plan_call = client.pack_plan(pname.clone(), "proxy".to_string(), 0, ptx);
         let mut json_bytes = Vec::new();
@@ -76,12 +82,17 @@ async fn main() -> eyre::Result<()> {
         println!(
             "pack_plan as FIRST call: {} bytes of json, {} segments",
             json_bytes.len(),
-            String::from_utf8_lossy(&json_bytes).matches("\"start\"").count()
+            String::from_utf8_lossy(&json_bytes)
+                .matches("\"start\"")
+                .count()
         );
         return Ok(());
     }
 
-    let packs = client.packs().await.map_err(|e| eyre::eyre!("packs: {e:?}"))?;
+    let packs = client
+        .packs()
+        .await
+        .map_err(|e| eyre::eyre!("packs: {e:?}"))?;
     println!("{} packs on {url}:", packs.len());
     for p in &packs {
         println!(
@@ -90,7 +101,11 @@ async fn main() -> eyre::Result<()> {
             p.category,
             p.name,
             p.size_bytes as f64 / 1e9,
-            if p.sha256.is_empty() { "<pending>" } else { &p.sha256[..16] },
+            if p.sha256.is_empty() {
+                "<pending>"
+            } else {
+                &p.sha256[..16]
+            },
         );
     }
 
@@ -112,7 +127,11 @@ async fn main() -> eyre::Result<()> {
         let json = String::from_utf8(json_bytes)?;
         eyre::ensure!(!json.trim().is_empty(), "empty plan for {pname:?}");
         let segment_count = json.matches("\"start\"").count();
-        println!("plan for {pname}: {} bytes of json, {} segments", json.len(), segment_count);
+        println!(
+            "plan for {pname}: {} bytes of json, {} segments",
+            json.len(),
+            segment_count
+        );
         println!("  head: {}", &json[..json.len().min(200)]);
         // Rank-0 header segment is always [0, 64) — probe read_range on it.
         let (tx, mut rx) = vox::channel::<PackChunk>();
@@ -145,8 +164,14 @@ async fn main() -> eyre::Result<()> {
     let part = dest.join(format!("{}.signalpack.part", info.name));
     let final_path = dest.join(format!("{}.signalpack", info.name));
     let start = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
-    println!("downloading [{}] {} from byte {start}…", info.variant, info.name);
-    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&part)?;
+    println!(
+        "downloading [{}] {} from byte {start}…",
+        info.variant, info.name
+    );
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&part)?;
 
     let (tx, mut rx) = vox::channel::<PackChunk>();
     let read_call = client.read(info.name.clone(), info.variant.clone(), start, tx);
@@ -189,7 +214,11 @@ async fn main() -> eyre::Result<()> {
             hasher.update(&buf[..n]);
         }
         let hex = format!("{:x}", hasher.finalize());
-        eyre::ensure!(hex == info.sha256, "sha256 mismatch: {hex} != {}", info.sha256);
+        eyre::ensure!(
+            hex == info.sha256,
+            "sha256 mismatch: {hex} != {}",
+            info.sha256
+        );
         println!("sha256 verified ✓");
     }
     std::fs::rename(&part, &final_path)?;

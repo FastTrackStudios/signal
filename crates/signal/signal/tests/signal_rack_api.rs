@@ -9,11 +9,11 @@
 mod fixtures;
 
 use signal::{
-    BlockType, bootstrap_in_memory_controller_async,
+    bootstrap_in_memory_controller_async,
     fx_send::{FxSend, FxSendBus, FxSendBusId, FxSendCategory, FxSendId},
     rack::{Rack, RackId, RackSlot},
     rig::{Rig, RigId, RigScene},
-    seed_id,
+    seed_id, BlockType,
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────

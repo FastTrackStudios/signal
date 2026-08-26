@@ -89,13 +89,23 @@ pub fn plan_pack(pack: &SignalPcmPack, total: u64) -> PackPlanOut {
     // ── Assemble + assign dense rank ordinals ────────────────────────────
     let mut segments: Vec<PlanSegment> = rank0
         .into_iter()
-        .map(|(start, len, label)| PlanSegment { start, len, rank: 0, label: label.into() })
+        .map(|(start, len, label)| PlanSegment {
+            start,
+            len,
+            rank: 0,
+            label: label.into(),
+        })
         .collect();
     for (ordinal, (_, start, len, label)) in entries.into_iter().enumerate() {
         if len == 0 {
             continue;
         }
-        segments.push(PlanSegment { start, len, rank: ordinal as u32 + 1, label });
+        segments.push(PlanSegment {
+            start,
+            len,
+            rank: ordinal as u32 + 1,
+            label,
+        });
     }
 
     fill_gaps(&mut segments, total);
@@ -108,7 +118,10 @@ pub fn plan_pack(pack: &SignalPcmPack, total: u64) -> PackPlanOut {
 /// double-fetching.
 fn fill_gaps(segments: &mut Vec<PlanSegment>, total: u64) {
     let max_rank = segments.iter().map(|s| s.rank).max().unwrap_or(0);
-    let mut spans: Vec<(u64, u64)> = segments.iter().map(|s| (s.start, s.start + s.len)).collect();
+    let mut spans: Vec<(u64, u64)> = segments
+        .iter()
+        .map(|s| (s.start, s.start + s.len))
+        .collect();
     spans.sort_unstable();
     let mut gaps: Vec<(u64, u64)> = Vec::new();
     let mut at = 0u64;
@@ -146,13 +159,18 @@ struct MusicalRank {
 }
 
 impl MusicalRank {
-    const UNKNOWN: MusicalRank =
-        MusicalRank { unknown: 1, vel_layer_dist: 0, note_dist: 0, rr: 0 };
+    const UNKNOWN: MusicalRank = MusicalRank {
+        unknown: 1,
+        vel_layer_dist: 0,
+        note_dist: 0,
+        rr: 0,
+    };
 }
 
 /// Canonical dynamic-label order for convention-mode ranking.
-const DYNAMIC_ORDER: [&str; 10] =
-    ["pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff"];
+const DYNAMIC_ORDER: [&str; 10] = [
+    "pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff",
+];
 
 /// Index of `dynamic` on the canonical scale; unknown labels land in the
 /// middle (so they neither jump the queue nor sink).
@@ -189,8 +207,7 @@ impl EntryRanking {
     /// bands across all zones, ordered by band midpoint; each entry takes
     /// the best (minimum) rank over the zones that reference it.
     fn from_zones(pack: &SignalPcmPack, spec: &crate::LibrarySpec) -> Self {
-        let mut bands: Vec<(u8, u8)> =
-            spec.zones.iter().map(|z| (z.vel_min, z.vel_max)).collect();
+        let mut bands: Vec<(u8, u8)> = spec.zones.iter().map(|z| (z.vel_min, z.vel_max)).collect();
         bands.sort_unstable_by_key(|(lo, hi)| (u16::from(*lo) + u16::from(*hi), *lo));
         bands.dedup();
         let middle = (bands.len().saturating_sub(1) / 2) as i64;
@@ -219,7 +236,11 @@ impl EntryRanking {
                 .and_modify(|r: &mut MusicalRank| *r = (*r).min(rank))
                 .or_insert(rank);
         }
-        Self { by_path, dynamics: Vec::new(), zone_mode: true }
+        Self {
+            by_path,
+            dynamics: Vec::new(),
+            zone_mode: true,
+        }
     }
 
     /// Convention mode: rank from the filename's parsed
@@ -233,12 +254,20 @@ impl EntryRanking {
             .collect();
         dynamics.sort_by_key(|d| canonical_dynamic_index(d));
         dynamics.dedup();
-        Self { by_path: std::collections::HashMap::new(), dynamics, zone_mode: false }
+        Self {
+            by_path: std::collections::HashMap::new(),
+            dynamics,
+            zone_mode: false,
+        }
     }
 
     fn rank_of(&self, path: &Path) -> MusicalRank {
         if self.zone_mode {
-            return self.by_path.get(path).copied().unwrap_or(MusicalRank::UNKNOWN);
+            return self
+                .by_path
+                .get(path)
+                .copied()
+                .unwrap_or(MusicalRank::UNKNOWN);
         }
         let Some(key) = path.file_stem().and_then(|s| s.to_str()) else {
             return MusicalRank::UNKNOWN;
@@ -301,8 +330,16 @@ mod tests {
         let samples = dir.join("samples");
         std::fs::create_dir_all(&samples).expect("samples dir");
         let files = [
-            "n24_lo.wav", "n24_mid.wav", "n24_hi.wav", "n60_lo.wav", "n60_mid.wav",
-            "n60_mid_rr1.wav", "n60_hi.wav", "n96_lo.wav", "n96_mid.wav", "n96_hi.wav",
+            "n24_lo.wav",
+            "n24_mid.wav",
+            "n24_hi.wav",
+            "n60_lo.wav",
+            "n60_mid.wav",
+            "n60_mid_rr1.wav",
+            "n60_hi.wav",
+            "n96_lo.wav",
+            "n96_mid.wav",
+            "n96_hi.wav",
         ];
         for (i, f) in files.iter().enumerate() {
             write_wav(&samples.join(f), 256 + i * 32);
@@ -325,11 +362,13 @@ mod tests {
         spec.push_str(")\n");
 
         let pack_path = dir.join("plan-test.signalpack");
-        let paths: Vec<std::path::PathBuf> =
-            files.iter().map(|f| samples.join(f)).collect();
+        let paths: Vec<std::path::PathBuf> = files.iter().map(|f| samples.join(f)).collect();
         create_signal_pack_with(
             &pack_path,
-            PackSpecSource::Text { text: &spec, format: "styx" },
+            PackSpecSource::Text {
+                text: &spec,
+                format: "styx",
+            },
             &samples,
             paths.iter().map(|p| p.as_path()),
             PackCodec::OggVorbis { quality: 0.4 },
@@ -352,12 +391,16 @@ mod tests {
         let pack = SignalPcmPack::open(&pack_path).expect("open");
         let (index_start, index_len) = pack.index_span();
 
-        let rank0: Vec<&PlanSegment> =
-            plan.segments.iter().filter(|s| s.rank == 0).collect();
+        let rank0: Vec<&PlanSegment> = plan.segments.iter().filter(|s| s.rank == 0).collect();
         assert_eq!(rank0.len(), 2, "header + index");
-        assert!(rank0.iter().any(|s| s.start == 0 && s.len == 64), "the 64-byte header");
         assert!(
-            rank0.iter().any(|s| s.start == index_start && s.len == index_len),
+            rank0.iter().any(|s| s.start == 0 && s.len == 64),
+            "the 64-byte header"
+        );
+        assert!(
+            rank0
+                .iter()
+                .any(|s| s.start == index_start && s.len == index_len),
             "the index span ({index_start}+{index_len}) — got {rank0:?}"
         );
 
@@ -409,8 +452,11 @@ mod tests {
         let total = std::fs::metadata(&pack_path).expect("meta").len();
         assert_eq!(plan.total, total);
 
-        let mut spans: Vec<(u64, u64)> =
-            plan.segments.iter().map(|s| (s.start, s.start + s.len)).collect();
+        let mut spans: Vec<(u64, u64)> = plan
+            .segments
+            .iter()
+            .map(|s| (s.start, s.start + s.len))
+            .collect();
         spans.sort_unstable();
         let mut at = 0u64;
         for (start, end) in spans {

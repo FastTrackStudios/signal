@@ -136,12 +136,14 @@ impl<S: Stage> StagePool<S> {
             .collect();
         Self {
             slots,
-            lanes: (0..n).map(|_| PoolLane {
-                ctl: LaneCtl::default(),
-                scratch_l: Vec::new(),
-                scratch_r: Vec::new(),
-                delay: LaneAlign::new(1),
-            }).collect(),
+            lanes: (0..n)
+                .map(|_| PoolLane {
+                    ctl: LaneCtl::default(),
+                    scratch_l: Vec::new(),
+                    scratch_r: Vec::new(),
+                    delay: LaneAlign::new(1),
+                })
+                .collect(),
             sum_mode: SumMode::default(),
             output_trim: 1.0,
             fade_l: Vec::new(),
@@ -250,8 +252,8 @@ impl<S: Stage> StagePool<S> {
         if !self.lane_populated(l) {
             return false;
         }
-        let any_solo = (0..self.lanes.len())
-            .any(|k| self.lane_populated(k) && self.lanes[k].ctl.solo);
+        let any_solo =
+            (0..self.lanes.len()).any(|k| self.lane_populated(k) && self.lanes[k].ctl.solo);
         if any_solo {
             self.lanes[l].ctl.solo
         } else {
@@ -400,7 +402,14 @@ mod tests {
     fn lane_gain_mute_and_solo() {
         let mut p = pool(&[1.0, 3.0]);
         p.set_slot(1, true, true, 1);
-        p.set_lane(1, LaneCtl { gain: 1.0, mute: false, solo: true });
+        p.set_lane(
+            1,
+            LaneCtl {
+                gain: 1.0,
+                mute: false,
+                solo: true,
+            },
+        );
         let mut l = vec![1.0; 16];
         let mut r = vec![1.0; 16];
         p.process(&mut l, &mut r);

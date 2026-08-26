@@ -20,8 +20,6 @@ use fts_audio_ui::ParamHandle;
 pub const W: f64 = 960.0;
 pub const H: f64 = 300.0;
 
-
-
 /// What a panel draws around its transfer curve — the circuit itself.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Circuit {
@@ -63,8 +61,21 @@ pub struct SatDesign {
     pub knobs: &'static [KnobSpec],
 }
 
-const fn knob(param: &'static str, legend: &'static str, x: f64, d: f64, style: KnobStyle) -> KnobSpec {
-    KnobSpec { param, legend, x, y: 206.0, d, style }
+const fn knob(
+    param: &'static str,
+    legend: &'static str,
+    x: f64,
+    d: f64,
+    style: KnobStyle,
+) -> KnobSpec {
+    KnobSpec {
+        param,
+        legend,
+        x,
+        y: 206.0,
+        d,
+        style,
+    }
 }
 
 /// Drive, mix and output are on all five — a saturator without them is not
@@ -194,7 +205,9 @@ pub static DIGITAL: SatDesign = SatDesign {
 };
 
 pub fn design_for(profile_id: &str) -> &'static SatDesign {
-    match saturate_profiles::category_of(profile_id).map(|(c, _)| saturate_profiles::CATEGORIES[c].id) {
+    match saturate_profiles::category_of(profile_id)
+        .map(|(c, _)| saturate_profiles::CATEGORIES[c].id)
+    {
         Some("tube") => &TUBE,
         Some("tape") => &TAPE,
         Some("transformer") => &TRANSFORMER,
@@ -331,7 +344,6 @@ pub fn SatFace(
     }
 }
 
-
 /// The transfer curve, live, with the circuit drawn around it.
 ///
 /// This is the honest picture of a saturator, and it is honest because it is
@@ -365,8 +377,8 @@ fn CurveView(
     let glow = (0.35 + drive * 0.5).min(0.95) * lift.min(1.5);
     let body = accent.clone();
 
-    let profile = saturate_profiles::profile_by_id(&profile_id)
-        .unwrap_or(&saturate_profiles::PROFILES[0]);
+    let profile =
+        saturate_profiles::profile_by_id(&profile_id).unwrap_or(&saturate_profiles::PROFILES[0]);
     let mut pre = saturate_dsp::preamp::ClassAPreamp::new(48_000.0);
     let mut quantiser = saturate_dsp::digital::DigitalStage::new();
     saturate_profiles::apply(profile, &controls, &mut pre, &mut quantiser);
@@ -389,7 +401,12 @@ fn CurveView(
         let shaped = pre.transfer(x as f32) * makeup;
         let y = (quantiser.process(0, shaped) as f64).clamp(-1.0, 1.0);
         let (px, py) = (cx + x * half * 2.0, cy - y * half);
-        path.push_str(&format!("{}{:.1} {:.1}", if i == 0 { "M " } else { " L " }, px, py));
+        path.push_str(&format!(
+            "{}{:.1} {:.1}",
+            if i == 0 { "M " } else { " L " },
+            px,
+            py
+        ));
     }
     // The corner markers on the solid-state panel sit where the curve gives
     // up, which is the drive it takes to reach the rail.
@@ -506,7 +523,9 @@ mod tests {
                 assert!(
                     spec.x - half >= EAR && spec.x + half <= W - EAR,
                     "{}'s {} at x={} runs under an ear",
-                    design.family, spec.param, spec.x,
+                    design.family,
+                    spec.param,
+                    spec.x,
                 );
             }
         }
@@ -517,7 +536,12 @@ mod tests {
         for design in ALL {
             for spec in design.knobs {
                 let y = spec.y + spec.d * 0.92 + 10.0;
-                assert!(y + 6.0 <= H, "{}'s {} legend falls off", design.family, spec.param);
+                assert!(
+                    y + 6.0 <= H,
+                    "{}'s {} legend falls off",
+                    design.family,
+                    spec.param
+                );
             }
         }
     }
@@ -525,11 +549,23 @@ mod tests {
     #[test]
     fn every_placed_control_is_one_the_editor_binds() {
         const BOUND: &[&str] = &[
-            "drive", "bias", "sag", "tilt", "mix", "output", "character_a", "character_b",
+            "drive",
+            "bias",
+            "sag",
+            "tilt",
+            "mix",
+            "output",
+            "character_a",
+            "character_b",
         ];
         for design in ALL {
             for spec in design.knobs {
-                assert!(BOUND.contains(&spec.param), "{} places {:?}", design.family, spec.param);
+                assert!(
+                    BOUND.contains(&spec.param),
+                    "{} places {:?}",
+                    design.family,
+                    spec.param
+                );
             }
         }
     }
@@ -640,7 +676,12 @@ mod tests {
     fn every_profile_names_its_circuit_controls() {
         for profile in saturate_profiles::PROFILES {
             let (a, b) = character_legends(profile.id);
-            assert_ne!((a, b), ("Character", "Colour"), "{} has placeholders", profile.id);
+            assert_ne!(
+                (a, b),
+                ("Character", "Colour"),
+                "{} has placeholders",
+                profile.id
+            );
         }
     }
 
@@ -648,7 +689,11 @@ mod tests {
     fn every_family_has_a_panel() {
         for category in saturate_profiles::CATEGORIES {
             for id in category.profiles {
-                assert_eq!(design_for(id).family, category.id, "{id} draws the wrong panel");
+                assert_eq!(
+                    design_for(id).family,
+                    category.id,
+                    "{id} draws the wrong panel"
+                );
             }
         }
     }

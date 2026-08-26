@@ -103,7 +103,11 @@ pub fn project_2d(data: &[f32], count: usize, dim: usize) -> Vec<(f32, f32)> {
             .perplexity(perplexity)
             .epochs(750)
             .barnes_hut(0.5, |a, b| {
-                a.iter().zip(b.iter()).map(|(x, y)| (x - y) * (x - y)).sum::<f32>().sqrt()
+                a.iter()
+                    .zip(b.iter())
+                    .map(|(x, y)| (x - y) * (x - y))
+                    .sum::<f32>()
+                    .sqrt()
             });
         let emb = tsne.embedding();
         emb.chunks_exact(2).map(|c| (c[0], c[1])).collect()

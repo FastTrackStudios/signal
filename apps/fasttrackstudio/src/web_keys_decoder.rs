@@ -89,15 +89,14 @@ pub(crate) fn install(sample_rate: f64) -> Result<web_sys::MessagePort, String> 
 
     let pending: Pending = Rc::new(RefCell::new(HashMap::new()));
     let p2 = pending.clone();
-    let onmessage = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(
-        move |ev: web_sys::MessageEvent| {
+    let onmessage =
+        Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |ev: web_sys::MessageEvent| {
             let data = ev.data();
             if let Ok(reply_to) = Reflect::get(&data, &"replyTo".into())
                 && let Some(id) = reply_to.as_f64()
             {
                 if let Some(tx) = p2.borrow_mut().remove(&(id as u32)) {
-                    let value =
-                        Reflect::get(&data, &"value".into()).unwrap_or(JsValue::UNDEFINED);
+                    let value = Reflect::get(&data, &"value".into()).unwrap_or(JsValue::UNDEFINED);
                     let _ = tx.send(value);
                 }
                 return;
@@ -121,11 +120,13 @@ pub(crate) fn install(sample_rate: f64) -> Result<web_sys::MessagePort, String> 
                                 let start = Reflect::get(&r, &"start".into())
                                     .ok()
                                     .and_then(|v| v.as_f64())
-                                    .unwrap_or(0.0) as u64;
+                                    .unwrap_or(0.0)
+                                    as u64;
                                 let len = Reflect::get(&r, &"len".into())
                                     .ok()
                                     .and_then(|v| v.as_f64())
-                                    .unwrap_or(0.0) as u64;
+                                    .unwrap_or(0.0)
+                                    as u64;
                                 if m.len() < 256 {
                                     m.push((id, start, len));
                                 }
@@ -146,8 +147,7 @@ pub(crate) fn install(sample_rate: f64) -> Result<web_sys::MessagePort, String> 
                 }
                 _ => {}
             }
-        },
-    );
+        });
     worker.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
 
     let handle = DecoderWorker {

@@ -22,7 +22,6 @@ pub use factory::NativeFxFactory;
 
 // ── Param helpers ──────────────────────────────────────────────────────────
 
-
 /// One controllable parameter: stable id, display name, range, default.
 struct ParamSpec {
     id: u32,
@@ -467,7 +466,11 @@ impl NativeEq {
                 // Auto keeps the relative default (+4 dB prominence);
                 // manual threshold maps the −80..0 knob into a 0..12 dB
                 // prominence window.
-                threshold_db: if auto { 4.0 } else { (thr + 80.0) * 12.0 / 80.0 },
+                threshold_db: if auto {
+                    4.0
+                } else {
+                    (thr + 80.0) * 12.0 / 80.0
+                },
             });
         }
         self.spectral.set_regions(&self.spectral_regions);
@@ -577,7 +580,9 @@ impl NativeEq {
                 i if (EQ_DYN_THR_BASE..EQ_DYN_THR_BASE + 24).contains(&i) => (EQ_DYN_THR_BASE, 2),
                 i if (EQ_DYN_ATK_BASE..EQ_DYN_ATK_BASE + 24).contains(&i) => (EQ_DYN_ATK_BASE, 3),
                 i if (EQ_DYN_REL_BASE..EQ_DYN_REL_BASE + 24).contains(&i) => (EQ_DYN_REL_BASE, 4),
-                i if (EQ_DYN_AUTO_BASE..EQ_DYN_AUTO_BASE + 24).contains(&i) => (EQ_DYN_AUTO_BASE, 5),
+                i if (EQ_DYN_AUTO_BASE..EQ_DYN_AUTO_BASE + 24).contains(&i) => {
+                    (EQ_DYN_AUTO_BASE, 5)
+                }
                 i if (EQ_DYN_RELATIVE_BASE..EQ_DYN_RELATIVE_BASE + 24).contains(&i) => {
                     (EQ_DYN_RELATIVE_BASE, 6)
                 }
@@ -629,8 +634,7 @@ impl NativeEq {
 
     /// Live dynamic gain of a band in dB (the yellow bar).
     pub fn live_dyn_gain_db(&self, band: usize) -> Option<f64> {
-        (band < EQ_BANDS && self.dyn_active[band])
-            .then(|| self.dyn_bands[band].live_gain_db())
+        (band < EQ_BANDS && self.dyn_active[band]).then(|| self.dyn_bands[band].live_gain_db())
     }
 }
 
@@ -870,17 +874,51 @@ impl PluginInstance for NativeEq {
     }
 }
 
-
-
 // ── Class-A Preamp ─────────────────────────────────────────────────────────
 
 const PREAMP_PARAMS: &[ParamSpec] = &[
-    ParamSpec { id: 0, name: "drive", min: 0.0, max: 24.0, default: 6.0 },
-    ParamSpec { id: 1, name: "q_point", min: -1.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 2, name: "pos_shaper", min: 0.0, max: 5.0, default: 3.0 },
-    ParamSpec { id: 3, name: "neg_shaper", min: 0.0, max: 5.0, default: 3.0 },
-    ParamSpec { id: 4, name: "mix", min: 0.0, max: 1.0, default: 1.0 },
-    ParamSpec { id: 5, name: "output", min: -24.0, max: 24.0, default: 0.0 },
+    ParamSpec {
+        id: 0,
+        name: "drive",
+        min: 0.0,
+        max: 24.0,
+        default: 6.0,
+    },
+    ParamSpec {
+        id: 1,
+        name: "q_point",
+        min: -1.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 2,
+        name: "pos_shaper",
+        min: 0.0,
+        max: 5.0,
+        default: 3.0,
+    },
+    ParamSpec {
+        id: 3,
+        name: "neg_shaper",
+        min: 0.0,
+        max: 5.0,
+        default: 3.0,
+    },
+    ParamSpec {
+        id: 4,
+        name: "mix",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 5,
+        name: "output",
+        min: -24.0,
+        max: 24.0,
+        default: 0.0,
+    },
 ];
 
 /// Harmonic readback ids: `h1`..`h8` (ids 100..107) return the
@@ -1019,34 +1057,111 @@ impl PluginInstance for NativePreamp {
     }
 }
 
-
 // ── FTS-Saturate: the full distortion engine ──────────────────────────────
 
 const SATURATE_PARAMS: &[ParamSpec] = &[
-    ParamSpec { id: 0, name: "drive", min: 0.0, max: 36.0, default: 6.0 },
-    ParamSpec { id: 1, name: "q_point", min: -1.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 2, name: "pos_shaper", min: 0.0, max: 5.0, default: 3.0 },
-    ParamSpec { id: 3, name: "neg_shaper", min: 0.0, max: 5.0, default: 3.0 },
+    ParamSpec {
+        id: 0,
+        name: "drive",
+        min: 0.0,
+        max: 36.0,
+        default: 6.0,
+    },
+    ParamSpec {
+        id: 1,
+        name: "q_point",
+        min: -1.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 2,
+        name: "pos_shaper",
+        min: 0.0,
+        max: 5.0,
+        default: 3.0,
+    },
+    ParamSpec {
+        id: 3,
+        name: "neg_shaper",
+        min: 0.0,
+        max: 5.0,
+        default: 3.0,
+    },
     // Pre-emphasis tilt (dB at the top vs bottom of the spectrum),
     // inverted exactly on the way out — tape/console style: drive the
     // highs harder without changing the tone balance.
-    ParamSpec { id: 4, name: "emphasis", min: -12.0, max: 12.0, default: 0.0 },
+    ParamSpec {
+        id: 4,
+        name: "emphasis",
+        min: -12.0,
+        max: 12.0,
+        default: 0.0,
+    },
     // LF protection: highpass BEFORE the shaper (kills bass-driven
     // intermodulation), re-summed after so the low end stays intact.
-    ParamSpec { id: 5, name: "lf_protect", min: 0.0, max: 500.0, default: 0.0 },
+    ParamSpec {
+        id: 5,
+        name: "lf_protect",
+        min: 0.0,
+        max: 500.0,
+        default: 0.0,
+    },
     // 0 = 1x, 1 = 2x, 2 = 4x, 3 = 8x.
-    ParamSpec { id: 6, name: "oversample", min: 0.0, max: 3.0, default: 1.0 },
-    ParamSpec { id: 7, name: "auto_gain", min: 0.0, max: 1.0, default: 1.0 },
-    ParamSpec { id: 8, name: "mix", min: 0.0, max: 1.0, default: 1.0 },
-    ParamSpec { id: 9, name: "output", min: -24.0, max: 24.0, default: 0.0 },
+    ParamSpec {
+        id: 6,
+        name: "oversample",
+        min: 0.0,
+        max: 3.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 7,
+        name: "auto_gain",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 8,
+        name: "mix",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 9,
+        name: "output",
+        min: -24.0,
+        max: 24.0,
+        default: 0.0,
+    },
     // 0 off / 1 delta (hear only the added distortion).
-    ParamSpec { id: 10, name: "listen", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 10,
+        name: "listen",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // Top-level algorithm: 0 Custom, 1 Preamp (class-A), 2 Tube,
     // 3 Tape, 4 Transformer, 5 Console, 6 Fuzz. Selecting a model
     // configures shapers/bias/sag/voicing; further tweaks = Custom.
-    ParamSpec { id: 11, name: "model", min: 0.0, max: 6.0, default: 1.0 },
+    ParamSpec {
+        id: 11,
+        name: "model",
+        min: 0.0,
+        max: 6.0,
+        default: 1.0,
+    },
     // Bias sag (tube bloom): program level pulls the Q point.
-    ParamSpec { id: 12, name: "sag", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 12,
+        name: "sag",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
 ];
 
 /// Harmonic readback ids `h1`..`h8` — same contract as the preamp.
@@ -1177,13 +1292,31 @@ impl NativeSaturate {
         let sr = self.sample_rate;
         let e = self.emphasis_db;
         // Tilt via complementary shelves at 700 Hz, mirrored on exit.
-        self.emph_lo.set(SatFilterType::LowShelf { gain_db: -e * 0.5 }, 700.0, 0.5, sr);
-        self.emph_hi.set(SatFilterType::HighShelf { gain_db: e * 0.5 }, 700.0, 0.5, sr);
-        self.deemph_lo.set(SatFilterType::LowShelf { gain_db: e * 0.5 }, 700.0, 0.5, sr);
-        self.deemph_hi.set(SatFilterType::HighShelf { gain_db: -e * 0.5 }, 700.0, 0.5, sr);
+        self.emph_lo.set(
+            SatFilterType::LowShelf { gain_db: -e * 0.5 },
+            700.0,
+            0.5,
+            sr,
+        );
+        self.emph_hi.set(
+            SatFilterType::HighShelf { gain_db: e * 0.5 },
+            700.0,
+            0.5,
+            sr,
+        );
+        self.deemph_lo
+            .set(SatFilterType::LowShelf { gain_db: e * 0.5 }, 700.0, 0.5, sr);
+        self.deemph_hi.set(
+            SatFilterType::HighShelf { gain_db: -e * 0.5 },
+            700.0,
+            0.5,
+            sr,
+        );
         if self.lf_hz > 1.0 {
-            self.lf_split.set(SatFilterType::Highpass, self.lf_hz, 0.707, sr);
-            self.lf_low.set(SatFilterType::Lowpass, self.lf_hz, 0.707, sr);
+            self.lf_split
+                .set(SatFilterType::Highpass, self.lf_hz, 0.707, sr);
+            self.lf_low
+                .set(SatFilterType::Lowpass, self.lf_hz, 0.707, sr);
         }
     }
 
@@ -1257,9 +1390,7 @@ impl NativeSaturate {
                 // Same band in both chains; gain INVERTED in the mirror
                 // (gain-less shapes — cuts/notches — mirror as-is and
                 // are documented as uncompensated pre-filters).
-                for (chain, invert) in
-                    [(&mut self.emph_eq, false), (&mut self.deemph_eq, true)]
-                {
+                for (chain, invert) in [(&mut self.emph_eq, false), (&mut self.deemph_eq, true)] {
                     if let Some(b) = chain.band_mut(band) {
                         match field {
                             0 | 1 => b.enabled = used && on,
@@ -1296,13 +1427,10 @@ impl NativeSaturate {
             2 => (S::Tube, S::Tube, 0.15, 0.6, 0.0),
             // Tape: tanh-family compression, head bump + HF loss.
             3 => {
-                self.voice_bump.set(
-                    SatFilterType::Peak { gain_db: 2.5 },
-                    60.0,
-                    0.8,
-                    sr,
-                );
-                self.voice_hf.set(SatFilterType::Lowpass, 14_000.0, 0.707, sr);
+                self.voice_bump
+                    .set(SatFilterType::Peak { gain_db: 2.5 }, 60.0, 0.8, sr);
+                self.voice_hf
+                    .set(SatFilterType::Lowpass, 14_000.0, 0.707, sr);
                 self.voice_on = (true, true);
                 (S::Transformer, S::Transformer, 0.0, 0.2, 0.0)
             }
@@ -1488,7 +1616,9 @@ impl PluginInstance for NativeSaturate {
         }
         // RMS-matching auto gain (slewed).
         if self.auto_gain {
-            let target = (self.in_ms.max(1.0e-12) / self.out_ms.max(1.0e-12)).sqrt().clamp(0.1, 10.0);
+            let target = (self.in_ms.max(1.0e-12) / self.out_ms.max(1.0e-12))
+                .sqrt()
+                .clamp(0.1, 10.0);
             for i in 0..n {
                 self.agc_gain += (target - self.agc_gain) * 0.0005;
                 l[i] *= self.agc_gain;
@@ -1522,10 +1652,7 @@ impl PluginInstance for NativeSaturate {
                 yr += self.dry_r[i];
             }
             let (dl, dr) = (f64::from(in_l[i]), f64::from(in_r[i]));
-            let (mut fl, mut fr) = (
-                dl + (yl - dl) * self.mix,
-                dr + (yr - dr) * self.mix,
-            );
+            let (mut fl, mut fr) = (dl + (yl - dl) * self.mix, dr + (yr - dr) * self.mix);
             if self.listen_delta {
                 fl -= dl;
                 fr -= dr;
@@ -1540,27 +1667,80 @@ impl PluginInstance for NativeSaturate {
     }
 }
 
-
 // ── Tune (autotune / pitch correction) ────────────────────────────────────
 
 const TUNE_PARAMS: &[ParamSpec] = &[
     // Key root pitch class (0 = C .. 11 = B).
-    ParamSpec { id: 0, name: "key", min: 0.0, max: 11.0, default: 0.0 },
+    ParamSpec {
+        id: 0,
+        name: "key",
+        min: 0.0,
+        max: 11.0,
+        default: 0.0,
+    },
     // 0 Chromatic, 1 Major, 2 Minor.
-    ParamSpec { id: 1, name: "scale", min: 0.0, max: 2.0, default: 0.0 },
+    ParamSpec {
+        id: 1,
+        name: "scale",
+        min: 0.0,
+        max: 2.0,
+        default: 0.0,
+    },
     // 0 = hard-tune jump; buffer-size-INDEPENDENT slew.
-    ParamSpec { id: 2, name: "retune_ms", min: 0.0, max: 400.0, default: 40.0 },
-    ParamSpec { id: 3, name: "strength", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec {
+        id: 2,
+        name: "retune_ms",
+        min: 0.0,
+        max: 400.0,
+        default: 40.0,
+    },
+    ParamSpec {
+        id: 3,
+        name: "strength",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
     // Flex-tune: only correct within this many cents of a target
     // (0 = always correct).
-    ParamSpec { id: 4, name: "flex_cents", min: 0.0, max: 200.0, default: 0.0 },
-    ParamSpec { id: 5, name: "a4_hz", min: 415.0, max: 466.0, default: 440.0 },
-    ParamSpec { id: 6, name: "mix", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec {
+        id: 4,
+        name: "flex_cents",
+        min: 0.0,
+        max: 200.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 5,
+        name: "a4_hz",
+        min: 415.0,
+        max: 466.0,
+        default: 440.0,
+    },
+    ParamSpec {
+        id: 6,
+        name: "mix",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
     // 0 Scale, 1 MIDI latch (last note persists), 2 MIDI gate
     // (correct only while a note is held).
-    ParamSpec { id: 7, name: "midi_mode", min: 0.0, max: 2.0, default: 0.0 },
+    ParamSpec {
+        id: 7,
+        name: "midi_mode",
+        min: 0.0,
+        max: 2.0,
+        default: 0.0,
+    },
     // Note-boundary hysteresis (stops target chatter).
-    ParamSpec { id: 8, name: "hysteresis_cents", min: 0.0, max: 60.0, default: 15.0 },
+    ParamSpec {
+        id: 8,
+        name: "hysteresis_cents",
+        min: 0.0,
+        max: 60.0,
+        default: 15.0,
+    },
 ];
 
 /// Per-pitch-class bypass toggles (`pc_bypass_0`..`pc_bypass_11`, C..B):
@@ -1693,7 +1873,10 @@ impl NativeTune {
             self.set(id, value);
             return;
         }
-        if let Some(pc) = name.strip_prefix("pc_bypass_").and_then(|s| s.parse::<u32>().ok()) {
+        if let Some(pc) = name
+            .strip_prefix("pc_bypass_")
+            .and_then(|s| s.parse::<u32>().ok())
+        {
             if pc < 12 {
                 self.set(TUNE_PC_BYPASS_BASE + pc, value);
             }
@@ -1854,8 +2037,7 @@ impl PluginInstance for NativeTune {
                 if let Some(target) = self.target_for(midi) {
                     self.prev_target = Some(target);
                     self.cents_off = (midi - target) * 100.0;
-                    let flex_ok = self.flex_cents <= 0.0
-                        || self.cents_off.abs() <= self.flex_cents;
+                    let flex_ok = self.flex_cents <= 0.0 || self.cents_off.abs() <= self.flex_cents;
                     // MIDI gate with no note held → no correction.
                     let gated = self.midi_mode == 2 && self.held.is_empty();
                     if flex_ok && !gated {
@@ -1991,14 +2173,62 @@ pub mod sidechain {
 }
 
 const COMP_PARAMS: &[ParamSpec] = &[
-    ParamSpec { id: 0, name: "threshold", min: -60.0, max: 0.0, default: -18.0 },
-    ParamSpec { id: 1, name: "ratio", min: 1.0, max: 20.0, default: 4.0 },
-    ParamSpec { id: 2, name: "attack", min: 0.1, max: 200.0, default: 10.0 },
-    ParamSpec { id: 3, name: "release", min: 5.0, max: 1000.0, default: 120.0 },
-    ParamSpec { id: 4, name: "knee", min: 0.0, max: 24.0, default: 6.0 },
-    ParamSpec { id: 5, name: "range", min: 0.0, max: 60.0, default: 60.0 },
-    ParamSpec { id: 6, name: "fold", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 7, name: "style", min: 0.0, max: 4.0, default: 0.0 },
+    ParamSpec {
+        id: 0,
+        name: "threshold",
+        min: -60.0,
+        max: 0.0,
+        default: -18.0,
+    },
+    ParamSpec {
+        id: 1,
+        name: "ratio",
+        min: 1.0,
+        max: 20.0,
+        default: 4.0,
+    },
+    ParamSpec {
+        id: 2,
+        name: "attack",
+        min: 0.1,
+        max: 200.0,
+        default: 10.0,
+    },
+    ParamSpec {
+        id: 3,
+        name: "release",
+        min: 5.0,
+        max: 1000.0,
+        default: 120.0,
+    },
+    ParamSpec {
+        id: 4,
+        name: "knee",
+        min: 0.0,
+        max: 24.0,
+        default: 6.0,
+    },
+    ParamSpec {
+        id: 5,
+        name: "range",
+        min: 0.0,
+        max: 60.0,
+        default: 60.0,
+    },
+    ParamSpec {
+        id: 6,
+        name: "fold",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 7,
+        name: "style",
+        min: 0.0,
+        max: 4.0,
+        default: 0.0,
+    },
 ];
 
 /// Native Compressor block — wraps [`comp::ProC3Compressor`] (ProC3-style).
@@ -2117,25 +2347,115 @@ impl PluginInstance for NativeComp {
 
 const LEVEL_PARAMS: &[ParamSpec] = &[
     // Gate.
-    ParamSpec { id: 0, name: "gate_threshold", min: -80.0, max: 0.0, default: -45.0 },
-    ParamSpec { id: 1, name: "gate_range", min: -80.0, max: 0.0, default: -80.0 },
-    ParamSpec { id: 2, name: "gate_attack", min: 0.1, max: 200.0, default: 1.0 },
-    ParamSpec { id: 3, name: "gate_release", min: 5.0, max: 1000.0, default: 120.0 },
+    ParamSpec {
+        id: 0,
+        name: "gate_threshold",
+        min: -80.0,
+        max: 0.0,
+        default: -45.0,
+    },
+    ParamSpec {
+        id: 1,
+        name: "gate_range",
+        min: -80.0,
+        max: 0.0,
+        default: -80.0,
+    },
+    ParamSpec {
+        id: 2,
+        name: "gate_attack",
+        min: 0.1,
+        max: 200.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 3,
+        name: "gate_release",
+        min: 5.0,
+        max: 1000.0,
+        default: 120.0,
+    },
     // De-breath.
-    ParamSpec { id: 4, name: "debreath_reduction", min: 0.0, max: 40.0, default: 12.0 },
-    ParamSpec { id: 5, name: "debreath_max_level", min: -60.0, max: 0.0, default: -28.0 },
+    ParamSpec {
+        id: 4,
+        name: "debreath_reduction",
+        min: 0.0,
+        max: 40.0,
+        default: 12.0,
+    },
+    ParamSpec {
+        id: 5,
+        name: "debreath_max_level",
+        min: -60.0,
+        max: 0.0,
+        default: -28.0,
+    },
     // Rider.
-    ParamSpec { id: 6, name: "ride_target", min: -40.0, max: 0.0, default: -18.0 },
-    ParamSpec { id: 7, name: "ride_amount", min: 0.0, max: 1.0, default: 1.0 },
-    ParamSpec { id: 8, name: "ride_max_gain", min: 0.0, max: 24.0, default: 12.0 },
-    ParamSpec { id: 9, name: "ride_max_cut", min: 0.0, max: 24.0, default: 18.0 },
+    ParamSpec {
+        id: 6,
+        name: "ride_target",
+        min: -40.0,
+        max: 0.0,
+        default: -18.0,
+    },
+    ParamSpec {
+        id: 7,
+        name: "ride_amount",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 8,
+        name: "ride_max_gain",
+        min: 0.0,
+        max: 24.0,
+        default: 12.0,
+    },
+    ParamSpec {
+        id: 9,
+        name: "ride_max_cut",
+        min: 0.0,
+        max: 24.0,
+        default: 18.0,
+    },
     // De-ess.
-    ParamSpec { id: 10, name: "deess_freq", min: 2000.0, max: 12000.0, default: 6500.0 },
-    ParamSpec { id: 11, name: "deess_threshold", min: -60.0, max: 0.0, default: -30.0 },
-    ParamSpec { id: 12, name: "deess_ratio", min: 1.0, max: 20.0, default: 4.0 },
-    ParamSpec { id: 13, name: "deess_range", min: 0.0, max: 40.0, default: 12.0 },
+    ParamSpec {
+        id: 10,
+        name: "deess_freq",
+        min: 2000.0,
+        max: 12000.0,
+        default: 6500.0,
+    },
+    ParamSpec {
+        id: 11,
+        name: "deess_threshold",
+        min: -60.0,
+        max: 0.0,
+        default: -30.0,
+    },
+    ParamSpec {
+        id: 12,
+        name: "deess_ratio",
+        min: 1.0,
+        max: 20.0,
+        default: 4.0,
+    },
+    ParamSpec {
+        id: 13,
+        name: "deess_range",
+        min: 0.0,
+        max: 40.0,
+        default: 12.0,
+    },
     // Shared adaptive silence floor.
-    ParamSpec { id: 14, name: "silence", min: -90.0, max: -20.0, default: -45.0 },
+    ParamSpec {
+        id: 14,
+        name: "silence",
+        min: -90.0,
+        max: -20.0,
+        default: -45.0,
+    },
 ];
 
 /// Native Leveler block — wraps [`level_dsp::VocalLeveler`], the realtime vocal
@@ -2278,115 +2598,463 @@ impl PluginInstance for NativeLevel {
 // ── Reverb ─────────────────────────────────────────────────────────────────
 
 const REVERB_PARAMS: &[ParamSpec] = &[
-    ParamSpec { id: 0, name: "mix", min: 0.0, max: 1.0, default: 0.08 },
-    ParamSpec { id: 1, name: "decay", min: 0.0, max: 1.0, default: 0.45 },
-    ParamSpec { id: 2, name: "size", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec {
+        id: 0,
+        name: "mix",
+        min: 0.0,
+        max: 1.0,
+        default: 0.08,
+    },
+    ParamSpec {
+        id: 1,
+        name: "decay",
+        min: 0.0,
+        max: 1.0,
+        default: 0.45,
+    },
+    ParamSpec {
+        id: 2,
+        name: "size",
+        min: 0.0,
+        max: 1.0,
+        default: 0.5,
+    },
     // BigSky MX dual-reverb block: routing (0 Single / 1 Series 1>2 /
     // 2 Series 2>1 / 3 Parallel / 4 Split / 5 Split Swap) + reverb B.
     // Ids 0-2 keep addressing reverb A.
-    ParamSpec { id: 3, name: "routing", min: 0.0, max: 5.0, default: 0.0 },
-    ParamSpec { id: 4, name: "algo_b", min: 0.0, max: 14.0, default: 2.0 },
-    ParamSpec { id: 5, name: "decay_b", min: 0.0, max: 1.0, default: 0.45 },
-    ParamSpec { id: 6, name: "mix_b", min: 0.0, max: 1.0, default: 0.08 },
+    ParamSpec {
+        id: 3,
+        name: "routing",
+        min: 0.0,
+        max: 5.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 4,
+        name: "algo_b",
+        min: 0.0,
+        max: 14.0,
+        default: 2.0,
+    },
+    ParamSpec {
+        id: 5,
+        name: "decay_b",
+        min: 0.0,
+        max: 1.0,
+        default: 0.45,
+    },
+    ParamSpec {
+        id: 6,
+        name: "mix_b",
+        min: 0.0,
+        max: 1.0,
+        default: 0.08,
+    },
     // Per-slot wet pan (-1..+1) and wet tremolo (shared A knob set).
-    ParamSpec { id: 7, name: "pan_a", min: -1.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 8, name: "pan_b", min: -1.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 9, name: "trem_rate", min: 0.1, max: 12.0, default: 4.0 },
-    ParamSpec { id: 10, name: "trem_depth", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 7,
+        name: "pan_a",
+        min: -1.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 8,
+        name: "pan_b",
+        min: -1.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 9,
+        name: "trem_rate",
+        min: 0.1,
+        max: 12.0,
+        default: 4.0,
+    },
+    ParamSpec {
+        id: 10,
+        name: "trem_depth",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // BigSky MX Impulse live params (chain A; active with the
     // Convolution algorithm). tail: 0 = Envelope, 1 = Gate;
     // direction: 0 = Forward, 1 = Reverse.
-    ParamSpec { id: 11, name: "imp_decay", min: 0.01, max: 1.0, default: 1.0 },
-    ParamSpec { id: 12, name: "imp_tail", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 13, name: "imp_attack", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 14, name: "imp_stretch", min: 0.25, max: 4.0, default: 1.0 },
-    ParamSpec { id: 15, name: "imp_direction", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 16, name: "imp_feedback", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 11,
+        name: "imp_decay",
+        min: 0.01,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 12,
+        name: "imp_tail",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 13,
+        name: "imp_attack",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 14,
+        name: "imp_stretch",
+        min: 0.25,
+        max: 4.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 15,
+        name: "imp_direction",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 16,
+        name: "imp_feedback",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // BigSky MX Shimmer (chain A): two shift voices in semitones,
     // shared amount, feedback mode (0 Input / 1 Regenerative /
     // 2 Input+Regen). shim_voice2: 0 = single voice, 1 = dual.
-    ParamSpec { id: 17, name: "shim_shift1", min: -12.0, max: 12.0, default: 12.0 },
-    ParamSpec { id: 18, name: "shim_shift2", min: -12.0, max: 12.0, default: 7.0 },
-    ParamSpec { id: 19, name: "shim_voice2", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 20, name: "shim_amount", min: 0.0, max: 1.0, default: 0.35 },
-    ParamSpec { id: 21, name: "shim_fb_mode", min: 0.0, max: 2.0, default: 1.0 },
+    ParamSpec {
+        id: 17,
+        name: "shim_shift1",
+        min: -12.0,
+        max: 12.0,
+        default: 12.0,
+    },
+    ParamSpec {
+        id: 18,
+        name: "shim_shift2",
+        min: -12.0,
+        max: 12.0,
+        default: 7.0,
+    },
+    ParamSpec {
+        id: 19,
+        name: "shim_voice2",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 20,
+        name: "shim_amount",
+        min: 0.0,
+        max: 1.0,
+        default: 0.35,
+    },
+    ParamSpec {
+        id: 21,
+        name: "shim_fb_mode",
+        min: 0.0,
+        max: 2.0,
+        default: 1.0,
+    },
     // BigSky MX Magneto: taps alternate hard L/R.
-    ParamSpec { id: 22, name: "mag_ping_pong", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 22,
+        name: "mag_ping_pong",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // BigSky MX NonLinear: Chop trem on the decay, explicit gate speed,
     // separate Late reverb stage.
-    ParamSpec { id: 23, name: "nl_chop_rate", min: 0.1, max: 15.0, default: 4.0 },
-    ParamSpec { id: 24, name: "nl_chop_depth", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 25, name: "nl_gate_speed", min: 0.0, max: 1.0, default: 1.0 },
-    ParamSpec { id: 26, name: "nl_late_speed", min: 0.0, max: 1.0, default: 0.5 },
-    ParamSpec { id: 27, name: "nl_late_decay", min: 0.0, max: 1.0, default: 0.5 },
-    ParamSpec { id: 28, name: "nl_late_level", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 23,
+        name: "nl_chop_rate",
+        min: 0.1,
+        max: 15.0,
+        default: 4.0,
+    },
+    ParamSpec {
+        id: 24,
+        name: "nl_chop_depth",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 25,
+        name: "nl_gate_speed",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 26,
+        name: "nl_late_speed",
+        min: 0.0,
+        max: 1.0,
+        default: 0.5,
+    },
+    ParamSpec {
+        id: 27,
+        name: "nl_late_decay",
+        min: 0.0,
+        max: 1.0,
+        default: 0.5,
+    },
+    ParamSpec {
+        id: 28,
+        name: "nl_late_level",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // BigSky MX input-analysis generators: Cloud Ensemble (pitch-tracked
     // synthetic string layer), Bloom Harmonics (overtone generator on
     // the trail), Chorale Choir level / Voice (0 Tenor / 1 Soprano) /
     // Mod (per-voice randomization). cho_voice: 0 Tenor / 1 Baritone.
-    ParamSpec { id: 29, name: "cloud_ensemble", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 30, name: "bloom_harmonics", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 31, name: "cho_choir", min: 0.0, max: 1.0, default: 0.3 },
-    ParamSpec { id: 32, name: "cho_voice", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 33, name: "cho_mod", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 29,
+        name: "cloud_ensemble",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 30,
+        name: "bloom_harmonics",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 31,
+        name: "cho_choir",
+        min: 0.0,
+        max: 1.0,
+        default: 0.3,
+    },
+    ParamSpec {
+        id: 32,
+        name: "cho_voice",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 33,
+        name: "cho_mod",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // BigSky MX voices + Hall extras + named-size select (chain A).
     // voice: 0 MX / 1 Classic. hall_swell_type: 0 wet / 1 wet+dry.
     // size_sel maps named sizes (Hall Concert/Arena, Room Studio/Club,
     // else Small/Medium/Large) — applies when set.
-    ParamSpec { id: 34, name: "voice", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 35, name: "hall_mid", min: -6.0, max: 6.0, default: 0.0 },
-    ParamSpec { id: 36, name: "hall_swell_rise", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 37, name: "hall_swell_type", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 38, name: "size_sel", min: 0.0, max: 2.0, default: 0.0 },
+    ParamSpec {
+        id: 34,
+        name: "voice",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 35,
+        name: "hall_mid",
+        min: -6.0,
+        max: 6.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 36,
+        name: "hall_swell_rise",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 37,
+        name: "hall_swell_type",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 38,
+        name: "size_sel",
+        min: 0.0,
+        max: 2.0,
+        default: 0.0,
+    },
     // Chain-A tone/space controls (kept from the control-surface work,
     // renumbered above the MX block).
     // Algorithm index (see reverb::AlgorithmType::ALL).
-    ParamSpec { id: 39, name: "algorithm", min: 0.0, max: 14.0, default: 1.0 },
-    ParamSpec { id: 40, name: "modulation", min: 0.0, max: 1.0, default: 0.2 },
+    ParamSpec {
+        id: 39,
+        name: "algorithm",
+        min: 0.0,
+        max: 14.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 40,
+        name: "modulation",
+        min: 0.0,
+        max: 1.0,
+        default: 0.2,
+    },
     // High-frequency damping — the low-pass character control.
-    ParamSpec { id: 41, name: "damping", min: 0.0, max: 1.0, default: 0.3 },
+    ParamSpec {
+        id: 41,
+        name: "damping",
+        min: 0.0,
+        max: 1.0,
+        default: 0.3,
+    },
     // Tone tilt (−1 dark … +1 bright) — the high-pass-ish control.
-    ParamSpec { id: 42, name: "tone", min: -1.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 43, name: "predelay", min: 0.0, max: 200.0, default: 0.0 },
+    ParamSpec {
+        id: 42,
+        name: "tone",
+        min: -1.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 43,
+        name: "predelay",
+        min: 0.0,
+        max: 200.0,
+        default: 0.0,
+    },
     // INFINITE footswitch: engage (0/1) + per-preset mode
     // (0 Freeze / 1 Infinite / 2 Off). Latch-vs-momentary is the
     // footswitch controller's concern; `freeze` covers both.
-    ParamSpec { id: 44, name: "freeze", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 45, name: "inf_mode", min: 0.0, max: 2.0, default: 0.0 },
+    ParamSpec {
+        id: 44,
+        name: "freeze",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 45,
+        name: "inf_mode",
+        min: 0.0,
+        max: 2.0,
+        default: 0.0,
+    },
     // Chamber Color (0 Neutral / 1 Clear / 2 Smooth / 3 Crisp / 4 Deep).
-    ParamSpec { id: 46, name: "chamber_color", min: 0.0, max: 4.0, default: 0.0 },
+    ParamSpec {
+        id: 46,
+        name: "chamber_color",
+        min: 0.0,
+        max: 4.0,
+        default: 0.0,
+    },
     // Magneto: head count menu (0 One / 1 Two / 2 Three / 3 Four /
     // 4 Six) + spacing (0 Even / 1 Uneven). With Magneto active the
     // pedal remaps predelay -> engine feedback and decay -> last-head
     // time; the chain handles that from the existing decay/predelay ids.
-    ParamSpec { id: 47, name: "mag_heads", min: 0.0, max: 4.0, default: 3.0 },
-    ParamSpec { id: 48, name: "mag_spacing", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 47,
+        name: "mag_heads",
+        min: 0.0,
+        max: 4.0,
+        default: 3.0,
+    },
+    ParamSpec {
+        id: 48,
+        name: "mag_spacing",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // NonLinear Shape (manual order: 0 Swoosh / 1 Reverse / 2 Ramp /
     // 3 Gate / 4 Gauss / 5 Bounce). With NonLinear active the pedal
     // remaps decay -> nonlinear-window time and predelay -> generator
     // feedback; the chain handles both from the existing ids.
-    ParamSpec { id: 49, name: "nl_shape", min: 0.0, max: 5.0, default: 0.0 },
+    ParamSpec {
+        id: 49,
+        name: "nl_shape",
+        min: 0.0,
+        max: 5.0,
+        default: 0.0,
+    },
     // Spring: Dwell drive stage (0 Clean / 1 Combo / 2 Tube /
     // 3 Overdrive) + Number of Springs (0 One / 1 Two / 2 Three).
-    ParamSpec { id: 50, name: "spring_dwell", min: 0.0, max: 3.0, default: 0.0 },
-    ParamSpec { id: 51, name: "spring_num", min: 0.0, max: 2.0, default: 1.0 },
+    ParamSpec {
+        id: 50,
+        name: "spring_dwell",
+        min: 0.0,
+        max: 3.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 51,
+        name: "spring_num",
+        min: 0.0,
+        max: 2.0,
+        default: 1.0,
+    },
     // Common per-reverb params the MX menu carries on most engines:
     // Diffusion (ER softening/density) and Low End (low-frequency
     // content + decay profile; 0.5 = neutral, above = lows ring longer
     // / "larger spaces", below = lows tamed).
-    ParamSpec { id: 52, name: "diffusion", min: 0.0, max: 1.0, default: 0.5 },
-    ParamSpec { id: 53, name: "low_end", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec {
+        id: 52,
+        name: "diffusion",
+        min: 0.0,
+        max: 1.0,
+        default: 0.5,
+    },
+    ParamSpec {
+        id: 53,
+        name: "low_end",
+        min: 0.0,
+        max: 1.0,
+        default: 0.5,
+    },
     // Chorale: vowel program (0 AAHHOO / 1 AAHH / 2 AAHHOH / 3 OH /
     // 4 OOOHOH / 5 OOO / 6 Random) + Resonance (0 Mild / 1 Medium /
     // 2 High).
-    ParamSpec { id: 54, name: "cho_vowel", min: 0.0, max: 6.0, default: 1.0 },
-    ParamSpec { id: 55, name: "cho_resonance", min: 0.0, max: 2.0, default: 0.0 },
+    ParamSpec {
+        id: 54,
+        name: "cho_vowel",
+        min: 0.0,
+        max: 6.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 55,
+        name: "cho_resonance",
+        min: 0.0,
+        max: 2.0,
+        default: 0.0,
+    },
     // Impulse Decay EQ: frequency-dependent decay shaping (end-of-tail
     // band gains in dB at ~250 Hz / ~4 kHz; negative shortens that
     // band's decay, positive stretches it). FTS extra beyond the MX
     // surface.
-    ParamSpec { id: 56, name: "imp_decay_lo", min: -24.0, max: 12.0, default: 0.0 },
-    ParamSpec { id: 57, name: "imp_decay_hi", min: -24.0, max: 12.0, default: 0.0 },
+    ParamSpec {
+        id: 56,
+        name: "imp_decay_lo",
+        min: -24.0,
+        max: 12.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 57,
+        name: "imp_decay_hi",
+        min: -24.0,
+        max: 12.0,
+        default: 0.0,
+    },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -2439,18 +3107,12 @@ impl NativeReverb {
         // Ids < 100: chain A + the dual block. Ids 100+: the same
         // chain-scoped param on chain B (`r2_*` names, id − 100).
         match id {
-            3 => {
-                self.rev.routing =
-                    reverb::DualRouting::from_index(v.round().max(0.0) as usize)
-            }
+            3 => self.rev.routing = reverb::DualRouting::from_index(v.round().max(0.0) as usize),
             // Legacy dual block (kept for preset compat; equivalent to
             // r2_algorithm / r2_decay / r2_mix / r2_pan).
-            4 => self
-                .rev
-                .b
-                .set_algorithm(reverb::AlgorithmType::from_index(
-                    v.round().max(0.0) as usize,
-                )),
+            4 => self.rev.b.set_algorithm(reverb::AlgorithmType::from_index(
+                v.round().max(0.0) as usize
+            )),
             5 => {
                 self.rev.b.params.decay = v;
                 self.rev.b.update_params();
@@ -2612,7 +3274,9 @@ impl NativeReverb {
                 c.set_size_index(v.round().max(0.0) as usize);
             }
             39 => {
-                c.set_algorithm(reverb::AlgorithmType::from_index(v.round().max(0.0) as usize));
+                c.set_algorithm(reverb::AlgorithmType::from_index(
+                    v.round().max(0.0) as usize
+                ));
                 c.update_params();
             }
             40 => {
@@ -2844,110 +3508,476 @@ impl PluginInstance for NativeReverb {
 // ── Delay ──────────────────────────────────────────────────────────────────
 
 const DELAY_PARAMS: &[ParamSpec] = &[
-    ParamSpec { id: 0, name: "mix", min: 0.0, max: 1.0, default: 0.08 },
+    ParamSpec {
+        id: 0,
+        name: "mix",
+        min: 0.0,
+        max: 1.0,
+        default: 0.08,
+    },
     // 2 ms floor: the Lo-Fi machine is spec'd down to 2 ms (chorus/flange/
     // realtime-lofi use); every style re-clamps to its own range anyway.
-    ParamSpec { id: 1, name: "time", min: 2.0, max: 2500.0, default: 400.0 },
-    ParamSpec { id: 2, name: "feedback", min: 0.0, max: 0.95, default: 0.30 },
+    ParamSpec {
+        id: 1,
+        name: "time",
+        min: 2.0,
+        max: 2500.0,
+        default: 400.0,
+    },
+    ParamSpec {
+        id: 2,
+        name: "feedback",
+        min: 0.0,
+        max: 0.95,
+        default: 0.30,
+    },
     // TimeLine MX parity params (style index: see delay::DelayStyle).
-    ParamSpec { id: 3, name: "style", min: 0.0, max: 13.0, default: 1.0 },
-    ParamSpec { id: 4, name: "swell", min: 0.0, max: 4.0, default: 0.0 },
-    ParamSpec { id: 5, name: "freeze", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 6, name: "tempo_bpm", min: 0.0, max: 300.0, default: 0.0 },
-    ParamSpec { id: 7, name: "tap_div", min: 0.0, max: 7.0, default: 7.0 },
-    ParamSpec { id: 8, name: "high_pass", min: 0.0, max: 900.0, default: 0.0 },
-    ParamSpec { id: 9, name: "repeat_dyn", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 3,
+        name: "style",
+        min: 0.0,
+        max: 13.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 4,
+        name: "swell",
+        min: 0.0,
+        max: 4.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 5,
+        name: "freeze",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 6,
+        name: "tempo_bpm",
+        min: 0.0,
+        max: 300.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 7,
+        name: "tap_div",
+        min: 0.0,
+        max: 7.0,
+        default: 7.0,
+    },
+    ParamSpec {
+        id: 8,
+        name: "high_pass",
+        min: 0.0,
+        max: 900.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 9,
+        name: "repeat_dyn",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // Machine voice (0 = MX, 1 = Classic; Digital deep pass adds more).
-    ParamSpec { id: 10, name: "voice", min: 0.0, max: 3.0, default: 0.0 },
+    ParamSpec {
+        id: 10,
+        name: "voice",
+        min: 0.0,
+        max: 3.0,
+        default: 0.0,
+    },
     // dTape / dBucket character macros.
-    ParamSpec { id: 11, name: "tape_age", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 12, name: "crinkle", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 13, name: "bucket_loss", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 11,
+        name: "tape_age",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 12,
+        name: "crinkle",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 13,
+        name: "bucket_loss",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // Ice (Pitch style): MX interval menu index (30 = Free), slice
     // (0 short / 1 medium / 2 long / 3 free grain), dry<->ice blend.
-    ParamSpec { id: 14, name: "interval", min: 0.0, max: 30.0, default: 30.0 },
-    ParamSpec { id: 15, name: "slice", min: 0.0, max: 3.0, default: 3.0 },
-    ParamSpec { id: 16, name: "blend", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec {
+        id: 14,
+        name: "interval",
+        min: 0.0,
+        max: 30.0,
+        default: 30.0,
+    },
+    ParamSpec {
+        id: 15,
+        name: "slice",
+        min: 0.0,
+        max: 3.0,
+        default: 3.0,
+    },
+    ParamSpec {
+        id: 16,
+        name: "blend",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
     // Dual 1+2 (TimeLine MX): routing (0 Single / 1 Series 1>2 /
     // 2 Series 2>1 / 3 Parallel / 4 Split / 5 Split Swap) + delay B.
     // Ids 0-16 keep addressing delay A.
-    ParamSpec { id: 17, name: "routing", min: 0.0, max: 5.0, default: 0.0 },
-    ParamSpec { id: 18, name: "style_b", min: 0.0, max: 13.0, default: 1.0 },
-    ParamSpec { id: 19, name: "time_b", min: 2.0, max: 2500.0, default: 300.0 },
-    ParamSpec { id: 20, name: "feedback_b", min: 0.0, max: 0.95, default: 0.30 },
-    ParamSpec { id: 21, name: "mix_b", min: 0.0, max: 1.0, default: 0.08 },
+    ParamSpec {
+        id: 17,
+        name: "routing",
+        min: 0.0,
+        max: 5.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 18,
+        name: "style_b",
+        min: 0.0,
+        max: 13.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 19,
+        name: "time_b",
+        min: 2.0,
+        max: 2500.0,
+        default: 300.0,
+    },
+    ParamSpec {
+        id: 20,
+        name: "feedback_b",
+        min: 0.0,
+        max: 0.95,
+        default: 0.30,
+    },
+    ParamSpec {
+        id: 21,
+        name: "mix_b",
+        min: 0.0,
+        max: 1.0,
+        default: 0.08,
+    },
     // Spectral machine (grain_shape: 0 Soft/1 Swell/2 SoftPluck/
     // 3 Pluck/4 Bounce; direction: 0 Fwd/1 Rev/2 Both; density = the
     // MX 15-step synced menu index (CC 0-14, 1/1 .. 1/32 of the repeat
     // incl. off-grid ratios); density_ms >= 6 switches to free
     // 6-250 ms).
-    ParamSpec { id: 22, name: "grain_shape", min: 0.0, max: 4.0, default: 0.0 },
-    ParamSpec { id: 23, name: "direction", min: 0.0, max: 2.0, default: 0.0 },
-    ParamSpec { id: 24, name: "density", min: 0.0, max: 14.0, default: 9.0 },
-    ParamSpec { id: 25, name: "density_ms", min: 0.0, max: 250.0, default: 0.0 },
-    ParamSpec { id: 26, name: "spread", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 27, name: "stretch", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 28, name: "octave", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 22,
+        name: "grain_shape",
+        min: 0.0,
+        max: 4.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 23,
+        name: "direction",
+        min: 0.0,
+        max: 2.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 24,
+        name: "density",
+        min: 0.0,
+        max: 14.0,
+        default: 9.0,
+    },
+    ParamSpec {
+        id: 25,
+        name: "density_ms",
+        min: 0.0,
+        max: 250.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 26,
+        name: "spread",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 27,
+        name: "stretch",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 28,
+        name: "octave",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // Lo-Fi machine (filter_shape: 0 Off .. 8 Intercom; grit rides the
     // shared "drive" engine field via id 29). sample_rate is the MX
     // 21-step menu index: 0 = 750 Hz ... 20 = 96 kHz, geometrically
     // spaced (the manual gives endpoints + step count), converted to a
     // divisor against the host rate.
-    ParamSpec { id: 29, name: "grit", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 30, name: "bit_depth", min: 4.0, max: 32.0, default: 12.0 },
-    ParamSpec { id: 31, name: "sample_rate", min: 0.0, max: 20.0, default: 11.0 },
-    ParamSpec { id: 32, name: "lofi_mix", min: 0.0, max: 1.0, default: 1.0 },
-    ParamSpec { id: 33, name: "vinyl", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 34, name: "filter_shape", min: 0.0, max: 8.0, default: 0.0 },
+    ParamSpec {
+        id: 29,
+        name: "grit",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 30,
+        name: "bit_depth",
+        min: 4.0,
+        max: 32.0,
+        default: 12.0,
+    },
+    ParamSpec {
+        id: 31,
+        name: "sample_rate",
+        min: 0.0,
+        max: 20.0,
+        default: 11.0,
+    },
+    ParamSpec {
+        id: 32,
+        name: "lofi_mix",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 33,
+        name: "vinyl",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 34,
+        name: "filter_shape",
+        min: 0.0,
+        max: 8.0,
+        default: 0.0,
+    },
     // Per-line tap divisions + line pan (the rig's delay surface
     // addresses these by name; id 7 "tap_div" still sets both lines at
     // once). pan: one knob places BOTH lines (-1 hard L .. +1 hard R,
     // 0 = centered); the engine's own default keeps the classic
     // hard-L/R split until the param is touched.
-    ParamSpec { id: 35, name: "tap_div_l", min: 0.0, max: 7.0, default: 7.0 },
-    ParamSpec { id: 36, name: "tap_div_r", min: 0.0, max: 7.0, default: 7.0 },
-    ParamSpec { id: 37, name: "pan", min: -1.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 35,
+        name: "tap_div_l",
+        min: 0.0,
+        max: 7.0,
+        default: 7.0,
+    },
+    ParamSpec {
+        id: 36,
+        name: "tap_div_r",
+        min: 0.0,
+        max: 7.0,
+        default: 7.0,
+    },
+    ParamSpec {
+        id: 37,
+        name: "pan",
+        min: -1.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // Common Mod Speed/Depth (TimeLine PARAM-menu mod): one knob pair
     // drives whichever machine is active (each engine keeps per-machine
     // fields; the Reverb machine routes these to its wet tremolo).
-    ParamSpec { id: 38, name: "mod_rate", min: 0.05, max: 8.0, default: 0.6 },
-    ParamSpec { id: 39, name: "mod_depth", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 38,
+        name: "mod_rate",
+        min: 0.05,
+        max: 8.0,
+        default: 0.6,
+    },
+    ParamSpec {
+        id: 39,
+        name: "mod_depth",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // Reverse machine: Smear (diffusion on the reversed audio).
-    ParamSpec { id: 40, name: "rev_smear", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 40,
+        name: "rev_smear",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // Digital Classic voice: morphing FILTER (0 full-bw -> 1 tape).
-    ParamSpec { id: 41, name: "dig_morph", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec {
+        id: 41,
+        name: "dig_morph",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
     // Ducking (TimeLine Duck Sens 0-18, Duck Release 0.05-1.00 s).
-    ParamSpec { id: 42, name: "duck_sens", min: 0.0, max: 18.0, default: 0.0 },
-    ParamSpec { id: 43, name: "duck_release", min: 0.05, max: 1.0, default: 0.2 },
+    ParamSpec {
+        id: 42,
+        name: "duck_sens",
+        min: 0.0,
+        max: 18.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 43,
+        name: "duck_release",
+        min: 0.05,
+        max: 1.0,
+        default: 0.2,
+    },
     // Drum machine: head spacing (0 Even / 1 Triplet / 2 Golden /
     // 3 Silver) + Lo Cut.
-    ParamSpec { id: 44, name: "drum_spacing", min: 0.0, max: 3.0, default: 2.0 },
-    ParamSpec { id: 45, name: "drum_locut", min: 0.0, max: 1.0, default: 0.2 },
+    ParamSpec {
+        id: 44,
+        name: "drum_spacing",
+        min: 0.0,
+        max: 3.0,
+        default: 2.0,
+    },
+    ParamSpec {
+        id: 45,
+        name: "drum_locut",
+        min: 0.0,
+        max: 1.0,
+        default: 0.2,
+    },
     // Oil Can: head mode (0 Long / 1 Short / 2 Both).
-    ParamSpec { id: 46, name: "oilcan_heads", min: 0.0, max: 2.0, default: 0.0 },
+    ParamSpec {
+        id: 46,
+        name: "oilcan_heads",
+        min: 0.0,
+        max: 2.0,
+        default: 0.0,
+    },
     // Per-delay wet output level (TimeLine Output Level).
-    ParamSpec { id: 47, name: "output_level", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec {
+        id: 47,
+        name: "output_level",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
     // Filter machine (swept filter + trem on repeats).
-    ParamSpec { id: 48, name: "flt_shape", min: 0.0, max: 10.0, default: 0.0 },
-    ParamSpec { id: 49, name: "flt_speed", min: 0.03125, max: 32.0, default: 1.0 },
-    ParamSpec { id: 50, name: "flt_depth", min: 0.0, max: 1.0, default: 0.5 },
-    ParamSpec { id: 51, name: "flt_center", min: 100.0, max: 8000.0, default: 1200.0 },
-    ParamSpec { id: 52, name: "flt_q", min: 0.5, max: 10.0, default: 2.0 },
-    ParamSpec { id: 53, name: "flt_location", min: 0.0, max: 1.0, default: 1.0 },
-    ParamSpec { id: 54, name: "flt_trem_depth", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 55, name: "flt_trem_speed", min: 0.03125, max: 32.0, default: 1.0 },
+    ParamSpec {
+        id: 48,
+        name: "flt_shape",
+        min: 0.0,
+        max: 10.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 49,
+        name: "flt_speed",
+        min: 0.03125,
+        max: 32.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 50,
+        name: "flt_depth",
+        min: 0.0,
+        max: 1.0,
+        default: 0.5,
+    },
+    ParamSpec {
+        id: 51,
+        name: "flt_center",
+        min: 100.0,
+        max: 8000.0,
+        default: 1200.0,
+    },
+    ParamSpec {
+        id: 52,
+        name: "flt_q",
+        min: 0.5,
+        max: 10.0,
+        default: 2.0,
+    },
+    ParamSpec {
+        id: 53,
+        name: "flt_location",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 54,
+        name: "flt_trem_depth",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 55,
+        name: "flt_trem_speed",
+        min: 0.03125,
+        max: 32.0,
+        default: 1.0,
+    },
     // MultiTap: Classic pattern recall (0 = custom, 1-16 = Classic n),
     // feedback topology (0 Input / 1 Parallel), step grid
     // (0 16th / 1 Triplet / 2 Off-256).
-    ParamSpec { id: 56, name: "mtap_pattern", min: 0.0, max: 16.0, default: 0.0 },
-    ParamSpec { id: 57, name: "mtap_fb_mode", min: 0.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 58, name: "mtap_grid", min: 0.0, max: 2.0, default: 0.0 },
+    ParamSpec {
+        id: 56,
+        name: "mtap_pattern",
+        min: 0.0,
+        max: 16.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 57,
+        name: "mtap_fb_mode",
+        min: 0.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 58,
+        name: "mtap_grid",
+        min: 0.0,
+        max: 2.0,
+        default: 0.0,
+    },
     // Filter-machine tremolo waveform (manual list: 0 Triangle /
     // 1 Square / 2 Sine / 3 Ramp / 4 Saw).
-    ParamSpec { id: 59, name: "flt_trem_shape", min: 0.0, max: 4.0, default: 2.0 },
+    ParamSpec {
+        id: 59,
+        name: "flt_trem_shape",
+        min: 0.0,
+        max: 4.0,
+        default: 2.0,
+    },
     // Spectral post-granular diffusion (FTS voicing extra beyond the
     // hardware surface — Clouds allpass-chain crossfade on the cloud).
-    ParamSpec { id: 60, name: "spec_diffusion", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec {
+        id: 60,
+        name: "spec_diffusion",
+        min: 0.0,
+        max: 1.0,
+        default: 0.5,
+    },
 ];
 
 /// Native Delay block — wraps [`delay::DualDelay`] (two full chains +
@@ -3060,9 +4090,7 @@ impl NativeDelay {
                 a.delay_l.pitch_blend = v;
                 a.delay_r.pitch_blend = v;
             }
-            17 => {
-                self.dly.routing = delay::DualRouting::from_index(v.round().max(0.0) as usize)
-            }
+            17 => self.dly.routing = delay::DualRouting::from_index(v.round().max(0.0) as usize),
             18 => self
                 .dly
                 .b
@@ -3410,11 +4438,35 @@ use modulation::chorus::chain::ChorusChain;
 use modulation::chorus::engine::EffectType;
 
 const MOD_PARAMS: &[ParamSpec] = &[
-    ParamSpec { id: 0, name: "mix", min: 0.0, max: 1.0, default: 0.4 },
-    ParamSpec { id: 1, name: "depth", min: 0.0, max: 1.0, default: 0.4 },
-    ParamSpec { id: 2, name: "rate", min: 0.05, max: 10.0, default: 1.0 },
+    ParamSpec {
+        id: 0,
+        name: "mix",
+        min: 0.0,
+        max: 1.0,
+        default: 0.4,
+    },
+    ParamSpec {
+        id: 1,
+        name: "depth",
+        min: 0.0,
+        max: 1.0,
+        default: 0.4,
+    },
+    ParamSpec {
+        id: 2,
+        name: "rate",
+        min: 0.05,
+        max: 10.0,
+        default: 1.0,
+    },
     // Engine (algorithm): 0 Cubic / 1 BBD / 2 Tape / 3 Orbit / 4 Juno.
-    ParamSpec { id: 3, name: "engine", min: 0.0, max: 4.0, default: 0.0 },
+    ParamSpec {
+        id: 3,
+        name: "engine",
+        min: 0.0,
+        max: 4.0,
+        default: 0.0,
+    },
 ];
 
 /// Native modulation block — wraps [`ChorusChain`], selecting Chorus / Flanger /
@@ -3442,7 +4494,11 @@ impl NativeMod {
         let mut ch = ChorusChain::new();
         ch.effect_type = effect;
         // Vibrato is pitch-only (fully wet); chorus/flanger blend.
-        ch.mix = if matches!(effect, EffectType::Vibrato) { 1.0 } else { 0.4 };
+        ch.mix = if matches!(effect, EffectType::Vibrato) {
+            1.0
+        } else {
+            0.4
+        };
         ch.depth = 0.4;
         ch.rate_hz = rate;
         Self {
@@ -3547,12 +4603,36 @@ use modulation::trem::chain::TremChain;
 use modulation::trem::tremolo::TremMode;
 
 const TREM_PARAMS: &[ParamSpec] = &[
-    ParamSpec { id: 0, name: "depth", min: 0.0, max: 1.0, default: 0.5 },
-    ParamSpec { id: 1, name: "mix", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec {
+        id: 0,
+        name: "depth",
+        min: 0.0,
+        max: 1.0,
+        default: 0.5,
+    },
+    ParamSpec {
+        id: 1,
+        name: "mix",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
     // Free-running LFO rate (the trigger engine's free mode).
-    ParamSpec { id: 2, name: "rate", min: 0.05, max: 12.0, default: 4.0 },
+    ParamSpec {
+        id: 2,
+        name: "rate",
+        min: 0.05,
+        max: 12.0,
+        default: 4.0,
+    },
     // Mode (algorithm): 0 Mono / 1 Stereo / 2 Harmonic.
-    ParamSpec { id: 3, name: "mode", min: 0.0, max: 2.0, default: 1.0 },
+    ParamSpec {
+        id: 3,
+        name: "mode",
+        min: 0.0,
+        max: 2.0,
+        default: 1.0,
+    },
 ];
 
 /// Native Tremolo block — wraps [`TremChain`] (amplitude modulation).
@@ -3588,7 +4668,8 @@ impl NativeTrem {
             1 => self.tr.mix = v.clamp(0.0, 1.0),
             2 => {
                 // Free-running rate: force the trigger engine out of sync.
-                self.tr.modulator.trigger.mode = modulation::trem::fts_modulation::trigger::TriggerMode::Free;
+                self.tr.modulator.trigger.mode =
+                    modulation::trem::fts_modulation::trigger::TriggerMode::Free;
                 self.tr.modulator.trigger.sync_index = 0;
                 self.tr.modulator.trigger.rate_hz = v.max(0.01);
             }
@@ -3681,7 +4762,10 @@ pub struct NativePassthrough {
 
 impl NativePassthrough {
     pub fn new(label: &'static str) -> Self {
-        Self { label, prepared: false }
+        Self {
+            label,
+            prepared: false,
+        }
     }
     pub fn set_named(&mut self, _name: &str, _value: f64) {}
 }
@@ -3744,7 +4828,13 @@ fn descriptor(id: &str, name: &str) -> PluginDescriptor {
 
 // ── Gain (Volume / Boost utility) ──────────────────────────────────────────
 
-const GAIN_PARAMS: &[ParamSpec] = &[ParamSpec { id: 0, name: "gain_db", min: -24.0, max: 24.0, default: 0.0 }];
+const GAIN_PARAMS: &[ParamSpec] = &[ParamSpec {
+    id: 0,
+    name: "gain_db",
+    min: -24.0,
+    max: 24.0,
+    default: 0.0,
+}];
 
 /// Native gain block — a clean dB trim (the "Boost" utility). Gain changes
 /// glide over ~10 ms so footswitch boosts never click.
@@ -3757,7 +4847,12 @@ pub struct NativeGain {
 
 impl NativeGain {
     pub fn new(_sample_rate: f64) -> Self {
-        Self { target: 1.0, current: 1.0, coeff: 0.0, prepared: false }
+        Self {
+            target: 1.0,
+            current: 1.0,
+            coeff: 0.0,
+            prepared: false,
+        }
     }
 
     fn set(&mut self, id: u32, v: f64) {
@@ -3831,9 +4926,27 @@ impl PluginInstance for NativeGain {
 // ── Gate ────────────────────────────────────────────────────────────────────
 
 const GATE_PARAMS: &[ParamSpec] = &[
-    ParamSpec { id: 0, name: "threshold", min: -90.0, max: 0.0, default: -50.0 },
-    ParamSpec { id: 1, name: "attack", min: 0.1, max: 50.0, default: 1.0 },
-    ParamSpec { id: 2, name: "release", min: 5.0, max: 500.0, default: 120.0 },
+    ParamSpec {
+        id: 0,
+        name: "threshold",
+        min: -90.0,
+        max: 0.0,
+        default: -50.0,
+    },
+    ParamSpec {
+        id: 1,
+        name: "attack",
+        min: 0.1,
+        max: 50.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 2,
+        name: "release",
+        min: 5.0,
+        max: 500.0,
+        default: 120.0,
+    },
 ];
 
 /// Native noise gate — peak-follower downward gate. Opens fast (attack),
@@ -3949,9 +5062,17 @@ impl PluginInstance for NativeGate {
             let r = in_r.get(i).copied().unwrap_or(0.0);
             let peak = di.unwrap_or_else(|| l.abs().max(r.abs()) as f64);
             // Peak follower: instant rise, ~30 ms fall.
-            self.env = if peak > self.env { peak } else { peak + (self.env - peak) * self.env_coeff };
+            self.env = if peak > self.env {
+                peak
+            } else {
+                peak + (self.env - peak) * self.env_coeff
+            };
             let target = if self.env >= self.threshold { 1.0 } else { 0.0 };
-            let coeff = if target > self.gain { self.attack_coeff } else { self.release_coeff };
+            let coeff = if target > self.gain {
+                self.attack_coeff
+            } else {
+                self.release_coeff
+            };
             self.gain = target + (self.gain - target) * coeff;
             out_l[i] = l * self.gain as f32;
             out_r[i] = r * self.gain as f32;
@@ -3967,10 +5088,34 @@ impl PluginInstance for NativeGate {
 
 const TRANSIENT_PARAMS: &[ParamSpec] = &[
     // Bipolar, normalized: +1 = full attack boost, -1 = full attack cut.
-    ParamSpec { id: 0, name: "attack", min: -1.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 1, name: "sustain", min: -1.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 2, name: "mix", min: 0.0, max: 1.0, default: 1.0 },
-    ParamSpec { id: 3, name: "output", min: -24.0, max: 24.0, default: 0.0 },
+    ParamSpec {
+        id: 0,
+        name: "attack",
+        min: -1.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 1,
+        name: "sustain",
+        min: -1.0,
+        max: 1.0,
+        default: 0.0,
+    },
+    ParamSpec {
+        id: 2,
+        name: "mix",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamSpec {
+        id: 3,
+        name: "output",
+        min: -24.0,
+        max: 24.0,
+        default: 0.0,
+    },
 ];
 
 /// Attack gain span at |attack| = 1 (dB). SPL-style designers ride ±15 dB.
@@ -4104,18 +5249,35 @@ impl PluginInstance for NativeTransient {
             let peak = (l.abs().max(r.abs()) as f64).max(1e-8);
             // Attack pair — different rise, shared fall.
             let up = |env: f64, a: f64| peak + (env - peak) * a;
-            self.env_fast =
-                if peak > self.env_fast { up(self.env_fast, self.a_fast) } else { peak + (self.env_fast - peak) * self.a_rel };
-            self.env_slow =
-                if peak > self.env_slow { up(self.env_slow, self.a_slow) } else { peak + (self.env_slow - peak) * self.a_rel };
+            self.env_fast = if peak > self.env_fast {
+                up(self.env_fast, self.a_fast)
+            } else {
+                peak + (self.env_fast - peak) * self.a_rel
+            };
+            self.env_slow = if peak > self.env_slow {
+                up(self.env_slow, self.a_slow)
+            } else {
+                peak + (self.env_slow - peak) * self.a_rel
+            };
             // Sustain pair — instant rise, different fall.
-            self.env_short = if peak > self.env_short { peak } else { peak + (self.env_short - peak) * self.r_short };
-            self.env_long = if peak > self.env_long { peak } else { peak + (self.env_long - peak) * self.r_long };
+            self.env_short = if peak > self.env_short {
+                peak
+            } else {
+                peak + (self.env_short - peak) * self.r_short
+            };
+            self.env_long = if peak > self.env_long {
+                peak
+            } else {
+                peak + (self.env_long - peak) * self.r_long
+            };
             // Ratios in dB (level-independent): >0 only during the hit /
             // the tail respectively; clamp keeps pathological ratios sane.
-            let attack_amt = (self.env_fast / self.env_slow.max(1e-8)).ln() * (20.0 / core::f64::consts::LN_10);
-            let sustain_amt = (self.env_long / self.env_short.max(1e-8)).ln() * (20.0 / core::f64::consts::LN_10);
-            let gain_db = atk_db * (attack_amt.clamp(0.0, 12.0) / 12.0) + sus_db * (sustain_amt.clamp(0.0, 24.0) / 24.0);
+            let attack_amt =
+                (self.env_fast / self.env_slow.max(1e-8)).ln() * (20.0 / core::f64::consts::LN_10);
+            let sustain_amt =
+                (self.env_long / self.env_short.max(1e-8)).ln() * (20.0 / core::f64::consts::LN_10);
+            let gain_db = atk_db * (attack_amt.clamp(0.0, 12.0) / 12.0)
+                + sus_db * (sustain_amt.clamp(0.0, 24.0) / 24.0);
             let wet = 10f64.powf(gain_db / 20.0) * self.output_gain;
             let g = (1.0 - self.mix) + self.mix * wet;
             out_l[i] = l * g as f32;
@@ -4140,7 +5302,11 @@ mod transient_tests {
         let input: Vec<f32> = (0..n)
             .map(|i| {
                 let x = (i as f32 * 0.7).sin();
-                if i < sr * 5 / 1000 { x } else { x * 0.15 }
+                if i < sr * 5 / 1000 {
+                    x
+                } else {
+                    x * 0.15
+                }
             })
             .collect();
         let mut out_l = vec![0.0f32; n];
@@ -4150,13 +5316,15 @@ mod transient_tests {
             .chunks(256)
             .zip(out_l.chunks_mut(256).zip(out_r.chunks_mut(256)))
         {
-            t.process_block(block_in, block_in, bl, br, &events).unwrap();
+            t.process_block(block_in, block_in, bl, br, &events)
+                .unwrap();
         }
-        let head = out_l[..sr / 100].iter().fold(0.0f32, |a, &s| a.max(s.abs()));
+        let head = out_l[..sr / 100]
+            .iter()
+            .fold(0.0f32, |a, &s| a.max(s.abs()));
         let tail = &out_l[sr / 10..];
-        let rms = (tail.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>()
-            / tail.len() as f64)
-            .sqrt();
+        let rms =
+            (tail.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>() / tail.len() as f64).sqrt();
         (head, rms)
     }
 
@@ -4178,7 +5346,10 @@ mod transient_tests {
         assert!((head0 - 1.0).abs() < 0.02, "neutral head {head0}");
         assert!(head_up > head0 * 1.25, "attack boost: {head_up} vs {head0}");
         assert!(head_dn < head0 * 0.8, "attack cut: {head_dn} vs {head0}");
-        assert!(tail_up > tail0 * 1.25, "sustain boost: {tail_up} vs {tail0}");
+        assert!(
+            tail_up > tail0 * 1.25,
+            "sustain boost: {tail_up} vs {tail0}"
+        );
         assert!(tail_dn < tail0 * 0.8, "sustain cut: {tail_dn} vs {tail0}");
         for v in [head0, head_up, head_dn] {
             assert!(v.is_finite());
@@ -4226,7 +5397,15 @@ mod param_table_tests {
                 "delay param {name:?} missing from DELAY_PARAMS"
             );
         }
-        for name in ["mix", "decay", "size", "algorithm", "modulation", "damping", "tone"] {
+        for name in [
+            "mix",
+            "decay",
+            "size",
+            "algorithm",
+            "modulation",
+            "damping",
+            "tone",
+        ] {
             assert!(
                 param_id(REVERB_PARAMS, name).is_some(),
                 "reverb param {name:?} missing from REVERB_PARAMS"

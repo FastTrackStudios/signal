@@ -5,7 +5,7 @@ use signal_proto::metadata::Metadata as MetadataModel;
 
 use super::rig_grid_panel::RigGridPanel;
 use signal_browser::grid_conversion::{
-    ParamLookup, engines_to_grid_slots, module_chains_to_grid_slots, signal_chain_to_grid_slots,
+    engines_to_grid_slots, module_chains_to_grid_slots, signal_chain_to_grid_slots, ParamLookup,
 };
 use signal_browser::types::{ColumnItem, DetailData, DetailParam, SortMode};
 

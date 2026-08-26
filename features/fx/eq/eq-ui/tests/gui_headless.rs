@@ -7,7 +7,7 @@
 //! plain `cargo test -p eq-ui`.
 
 use dioxus::prelude::*;
-use dioxus_test::{Result, matchers::inner_html, render};
+use dioxus_test::{matchers::inner_html, render, Result};
 use test_that::prelude::*;
 
 use eq_ui::eq_graph_model::{EqBand, EqBandShape};
@@ -44,8 +44,17 @@ fn ToggleableGraph() -> Element {
         enabled: band_enabled(),
         ..bell(0, 400.0, 12.0)
     }];
-    let curves =
-        generate_all_eq_curves(&bands, SAMPLE_RATE, MIN_FREQ, MAX_FREQ, DB_RANGE, 0.0, W, H, 128);
+    let curves = generate_all_eq_curves(
+        &bands,
+        SAMPLE_RATE,
+        MIN_FREQ,
+        MAX_FREQ,
+        DB_RANGE,
+        0.0,
+        W,
+        H,
+        128,
+    );
     let path_count = curves.band_curves.len();
 
     rsx! {

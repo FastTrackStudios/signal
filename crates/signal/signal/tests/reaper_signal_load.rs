@@ -13,7 +13,7 @@
 use std::time::Duration;
 
 use daw::test::reaper_test;
-use signal::{BlockType, ModulePresetId, ModuleType, PresetId, seed_id};
+use signal::{seed_id, BlockType, ModulePresetId, ModuleType, PresetId};
 use signal_proto::plugin_block::TrackRole;
 
 /// Small sleep to let REAPER/CLAP process changes.

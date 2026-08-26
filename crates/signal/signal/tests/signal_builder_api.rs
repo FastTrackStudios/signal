@@ -12,8 +12,8 @@ mod fixtures;
 
 use fixtures::*;
 use signal::{
-    EngineType, block::BlockType, builder::RigBuilder, profile::PatchId, resolve::ResolveTarget,
-    rig::RigType,
+    block::BlockType, builder::RigBuilder, profile::PatchId, resolve::ResolveTarget, rig::RigType,
+    EngineType,
 };
 
 // ═════════════════════════════════════════════════════════════

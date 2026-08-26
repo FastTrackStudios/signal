@@ -15,7 +15,7 @@ use eyre::{Result, WrapErr};
 use tracing::debug;
 
 use crate::types::{DiscoveredPlugin, ImportedPresetCollection, ImportedSnapshot};
-use registry::{FABFILTER_PLUGINS, FabFilterPluginEntry, FfpFormat};
+use registry::{FabFilterPluginEntry, FfpFormat, FABFILTER_PLUGINS};
 
 /// Default location for FabFilter presets on macOS.
 const DEFAULT_PRESETS_ROOT: &str = "~/Documents/FabFilter/Presets";

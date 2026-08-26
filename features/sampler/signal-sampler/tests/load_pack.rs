@@ -4,7 +4,7 @@
 //! Skipped (with a printed reason) when the AudioHaven sample tree isn't
 //! mounted, mirroring the `aiff_real.rs` skip pattern.
 
-use signal_sampler::{SamplerBank, read_pack_header};
+use signal_sampler::{read_pack_header, SamplerBank};
 use std::path::Path;
 
 const STYLUS_DEFAULT_PACK: &str = "/run/media/AudioHaven/Sampled/Drum Kits/Stylus RMX-fresh/Stylus RMX/Core Library/Default/_ Please Select a Directory/library.signalpack";

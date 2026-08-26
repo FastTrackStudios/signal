@@ -132,9 +132,16 @@ impl Default for ModParams {
             mix: FloatParam::new("Mix", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
-            output: FloatParam::new("Output", 0.0, FloatRange::Linear { min: -24.0, max: 12.0 })
-                .with_unit(" dB")
-                .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            output: FloatParam::new(
+                "Output",
+                0.0,
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 12.0,
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
 
             knob_a: knob("Knob A"),
             knob_b: knob("Knob B"),
@@ -161,8 +168,7 @@ impl ModParams {
     pub fn resolved_profile_index(&self) -> usize {
         let id = self.profile_id.read();
         modulation_profiles::profile_index(&id).unwrap_or_else(|| {
-            (self.profile.value().max(0) as usize)
-                .min(modulation_profiles::PROFILES.len() - 1)
+            (self.profile.value().max(0) as usize).min(modulation_profiles::PROFILES.len() - 1)
         })
     }
 

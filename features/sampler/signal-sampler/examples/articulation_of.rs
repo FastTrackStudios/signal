@@ -16,7 +16,9 @@ fn main() {
     for line in stdin.lock().lines() {
         let line = line.unwrap_or_default();
         let stem = line.trim_end();
-        let art = parse_sample_stem(stem).map(|k| k.articulation).unwrap_or_default();
+        let art = parse_sample_stem(stem)
+            .map(|k| k.articulation)
+            .unwrap_or_default();
         let _ = writeln!(out, "{art}");
     }
 }

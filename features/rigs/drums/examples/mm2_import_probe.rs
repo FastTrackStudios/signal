@@ -11,7 +11,9 @@ const PRESET: &str = "/run/media/AudioHaven/Signal/Libraries/Drum Kits/\
 GGD Modern and Massive 2/Presets/Metal Monster.signalpreset";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mm2_path = std::env::args().nth(1).ok_or("usage: mm2_import_probe <MM2.preset>")?;
+    let mm2_path = std::env::args()
+        .nth(1)
+        .ok_or("usage: mm2_import_probe <MM2.preset>")?;
     let sr = 48_000;
     let rig = SamplerRig::new_offline(sr);
     signal_drums::load_preset_kit(&rig, KIT, PRESET)?;
@@ -62,9 +64,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .strips
         .iter()
         .find(|s| s.name.eq_ignore_ascii_case("Kick In 1"))
-        .or_else(|| mixer.strips.iter().find(|s| s.name.to_lowercase().contains("kick")))
+        .or_else(|| {
+            mixer
+                .strips
+                .iter()
+                .find(|s| s.name.to_lowercase().contains("kick"))
+        })
         .ok_or("no kick strip in MM2 preset")?;
-    println!("MM2 kick strip '{}': {} fx slots", kick_strip.name, kick_strip.fx_slots().len());
+    println!(
+        "MM2 kick strip '{}': {} fx slots",
+        kick_strip.name,
+        kick_strip.fx_slots().len()
+    );
 
     let mut installed = 0;
     for fx in kick_strip.fx_slots() {
@@ -87,7 +98,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (g_pk, _) = hit_kick(&rig, &mut buf);
     println!("kick w/ piece -20dB: peak {g_pk:.4} (was {fx_pk:.4})");
     let gain_works = g_pk < fx_pk * 0.3;
-    println!("gain plumbing: {}", if gain_works { "OK" } else { "BROKEN" });
+    println!(
+        "gain plumbing: {}",
+        if gain_works { "OK" } else { "BROKEN" }
+    );
 
     let changed = (fx_pk - base_pk).abs() > 0.005 || (fx_rms - base_rms).abs() > 1e-4;
     println!(

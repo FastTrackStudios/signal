@@ -4,7 +4,6 @@
 use super::*;
 
 impl SampleEngine {
-
     /// Make `line` the active line for the current dispatch: line-scoped
     /// state (mono note, press order, pending countdown) and the CC1/CC2
     /// mirrors now refer to it. Out-of-range ids clamp into the pool.
@@ -229,9 +228,8 @@ impl SampleEngine {
             // Within the zone's range, or within pitch-shift tolerance of its
             // recorded key (whole-tone grid → even notes warm their neighbour).
             let in_range = note >= z.key_min && note <= z.key_max;
-            let near =
-                (z.root_key as i32 - note as i32).unsigned_abs() as u8
-                    <= self.patch.spec.performance.zone_pitch_tolerance;
+            let near = (z.root_key as i32 - note as i32).unsigned_abs() as u8
+                <= self.patch.spec.performance.zone_pitch_tolerance;
             if !in_range && !near {
                 continue;
             }

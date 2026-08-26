@@ -91,7 +91,10 @@ mod support {
             PluginApi::Clap
         }
         unsafe fn raw_begin_set_parameter(&self, param: ParamPtr) {
-            self.log.lock().unwrap().push(Gesture::Begin(ptr_key(param)));
+            self.log
+                .lock()
+                .unwrap()
+                .push(Gesture::Begin(ptr_key(param)));
         }
         unsafe fn raw_set_parameter_normalized(&self, param: ParamPtr, normalized: f32) {
             self.log
@@ -162,7 +165,11 @@ mod support {
             .with_root_context(track)
             .build();
 
-        Fixture { tester, params, log }
+        Fixture {
+            tester,
+            params,
+            log,
+        }
     }
 
     impl Fixture {
@@ -315,7 +322,10 @@ async fn editor_mounts_headless_graph_only() -> dioxus_test::Result<()> {
 
     // Chrome is parked: no header title, no inspector.
     let html = fx.tester.query(":root").immediately()?.inner_html();
-    assert!(!html.contains("Inspector"), "inspector chrome leaked into the graph-only editor");
+    assert!(
+        !html.contains("Inspector"),
+        "inspector chrome leaked into the graph-only editor"
+    );
     Ok(())
 }
 
@@ -358,8 +368,14 @@ async fn dragging_a_band_node_changes_frequency_and_gain() -> dioxus_test::Resul
 
     let freq_before = bp.freq_hz.value();
     let gain_before = bp.gain_db.value();
-    assert!((freq_before - 400.0).abs() < 1.0, "band 1 default freq: {freq_before}");
-    assert!(gain_before.abs() < 1e-6, "band 1 default gain: {gain_before}");
+    assert!(
+        (freq_before - 400.0).abs() < 1.0,
+        "band 1 default freq: {freq_before}"
+    );
+    assert!(
+        gain_before.abs() < 1e-6,
+        "band 1 default gain: {gain_before}"
+    );
 
     let (sx, sy) = fx.band_point(0);
     let (dx, dy) = (40.0, -30.0);
@@ -408,9 +424,18 @@ async fn dragging_a_band_node_changes_frequency_and_gain() -> dioxus_test::Resul
     // least one set per drag step, and end.
     let log = fx.log.lock().unwrap();
     for (name, key) in [("freq", freq_key), ("gain", gain_key)] {
-        let begins = log.iter().filter(|g| matches!(g, Gesture::Begin(k) if *k == key)).count();
-        let sets = log.iter().filter(|g| matches!(g, Gesture::Set(k, _) if *k == key)).count();
-        let ends = log.iter().filter(|g| matches!(g, Gesture::End(k) if *k == key)).count();
+        let begins = log
+            .iter()
+            .filter(|g| matches!(g, Gesture::Begin(k) if *k == key))
+            .count();
+        let sets = log
+            .iter()
+            .filter(|g| matches!(g, Gesture::Set(k, _) if *k == key))
+            .count();
+        let ends = log
+            .iter()
+            .filter(|g| matches!(g, Gesture::End(k) if *k == key))
+            .count();
         assert!(begins >= 1, "no begin gesture for {name}");
         assert!(sets >= 4, "expected ≥4 set gestures for {name}, got {sets}");
         assert!(ends >= 1, "no end gesture for {name}");
@@ -455,12 +480,17 @@ async fn hovering_a_band_opens_a_panel_with_real_layout() -> dioxus_test::Result
     let fx = mount();
     let (x, y) = fx.band_point(1);
 
-    assert!(fx.panel().is_none(), "panel showing before any pointer input");
+    assert!(
+        fx.panel().is_none(),
+        "panel showing before any pointer input"
+    );
 
     fx.tester.pointer_move(x, y, false);
     fx.settle().await;
 
-    let panel = fx.panel().expect("hovering a band node did not open its panel");
+    let panel = fx
+        .panel()
+        .expect("hovering a band node did not open its panel");
     let (w, h) = panel.size();
     assert!(w > 100.0 && h > 20.0, "panel collapsed to {w}x{h}");
     Ok(())
@@ -496,7 +526,10 @@ async fn panel_survives_the_pointer_trip_from_node_to_panel() -> dioxus_test::Re
     for (dx, dy) in [(-40.0, -8.0), (40.0, -8.0), (40.0, 8.0), (-40.0, 8.0)] {
         fx.tester.pointer_move(cx + dx, cy + dy, false);
         fx.settle().await;
-        assert!(fx.panel().is_some(), "panel closed while the pointer moved inside it");
+        assert!(
+            fx.panel().is_some(),
+            "panel closed while the pointer moved inside it"
+        );
     }
     Ok(())
 }
@@ -578,7 +611,8 @@ async fn panel_solo_control_is_clickable() -> dioxus_test::Result<()> {
     );
     let log = fx.log.lock().unwrap();
     assert!(
-        log.iter().any(|g| matches!(g, Gesture::Set(k, v) if *k == solo_key && *v > 0.5)),
+        log.iter()
+            .any(|g| matches!(g, Gesture::Set(k, v) if *k == solo_key && *v > 0.5)),
         "no host automation gesture for solo: {log:?}",
     );
     Ok(())
@@ -620,7 +654,10 @@ async fn selected_band_keeps_its_panel_when_the_pointer_leaves() -> dioxus_test:
     let (ox, oy) = fx.graph_origin();
 
     fx.tap(node.0, node.1).await;
-    assert!(fx.panel().is_some(), "clicking a band did not open its panel");
+    assert!(
+        fx.panel().is_some(),
+        "clicking a band did not open its panel"
+    );
 
     // Far corner of the graph, well outside any band's focus radius, with
     // enough wall-clock time for the fade timer to have fired several times.
@@ -647,7 +684,10 @@ async fn clicking_empty_graph_dismisses_the_selected_panel() -> dioxus_test::Res
     let (ox, oy) = fx.graph_origin();
 
     fx.tap(node.0, node.1).await;
-    assert!(fx.panel().is_some(), "clicking a band did not open its panel");
+    assert!(
+        fx.panel().is_some(),
+        "clicking a band did not open its panel"
+    );
 
     fx.tap(ox + 760.0, oy + 330.0).await;
     // The fade path still needs a move event to run.
@@ -691,7 +731,6 @@ async fn hovered_only_panel_still_fades_after_the_pointer_leaves() -> dioxus_tes
     Ok(())
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────
 // Hardware faces
 //
@@ -721,8 +760,7 @@ async fn mount_model(model: i32) -> support::Fixture {
 /// wrong on a faceplate, and it is invisible in a code review — hence a
 /// structural assertion rather than an eyeball.
 #[tokio::test]
-async fn a_pultec_knobs_highlight_is_not_inside_the_rotating_group()
--> dioxus_test::Result<()> {
+async fn a_pultec_knobs_highlight_is_not_inside_the_rotating_group() -> dioxus_test::Result<()> {
     let fx = mount_model(1).await;
 
     // The light exists…
@@ -782,8 +820,7 @@ async fn a_pultec_frequency_lever_can_be_dragged() -> dioxus_test::Result<()> {
 /// lever one position — the way you use one without aiming. The drag support
 /// above must not have eaten that.
 #[tokio::test]
-async fn clicking_a_pultec_lever_still_advances_one_position()
--> dioxus_test::Result<()> {
+async fn clicking_a_pultec_lever_still_advances_one_position() -> dioxus_test::Result<()> {
     let fx = mount_model(1).await;
 
     let index = |fx: &support::Fixture| -> usize {

@@ -96,11 +96,7 @@ impl Plugin for FtsMeter {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
-        create_dioxus_editor_with_state(
-            self.editor_state.clone(),
-            self.shared.clone(),
-            editor::App,
-        )
+        create_dioxus_editor_with_state(self.editor_state.clone(), self.shared.clone(), editor::App)
     }
 
     fn activate(
