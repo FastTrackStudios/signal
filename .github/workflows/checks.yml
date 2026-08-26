@@ -43,7 +43,6 @@ jobs:
     timeout-minutes: 30
     outputs:
       workspace: ${{ steps.filter.outputs.workspace }}
-      patchbay: ${{ steps.filter.outputs.patchbay }}
       signal: ${{ steps.filter.outputs.signal }}
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +59,7 @@ jobs:
           # Fail open: if we cannot compute an honest plan, run everything.
           run_all() {
             echo "plan: $1 — running EVERYTHING (fail open)"
-            for o in workspace patchbay signal; do
+            for o in workspace signal; do
               echo "$o=true" >> "$GITHUB_OUTPUT"
             done
             exit 0
@@ -93,17 +92,13 @@ jobs:
 
           crates = set(plan.get("scope", {}).get("crates", []))
 
-          # Patchbay is a leaf domain: a patchbay-only change gets its
-          # cheap targeted check instead of the full pipeline.
-          PATCHBAY = {"patchbay", "patchbay-proto", "patchbay-ui", "fts-patchbay"}
           # Crates the audio/signal steps build or test; rail already
           # folded reverse deps into `crates`.
           SIGNAL = {"signal-guitar", "daw-standalone", "neural-amp-modeler",
                     "architect", "pitch-dsp", "fasttrackstudio"}
 
           gates = {
-              "workspace": bool(crates - PATCHBAY),
-              "patchbay":  bool(crates & PATCHBAY),
+              "workspace": bool(crates),
               "signal":    bool(crates & SIGNAL),
           }
           if infra:
@@ -121,10 +116,9 @@ jobs:
 
           {
             echo "workspace=$workspace"
-            echo "patchbay=$patchbay"
             echo "signal=$signal"
           } >> "$GITHUB_OUTPUT"
-          echo "rail plan: $n_crates affected crate(s) — workspace=$workspace patchbay=$patchbay signal=$signal"
+          echo "rail plan: $n_crates affected crate(s) — workspace=$workspace signal=$signal"
 
   build:
     name: Build (workspace + wasm)
@@ -134,19 +128,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
-        if: needs.plan.outputs.workspace == 'true' || needs.plan.outputs.patchbay == 'true'
+        if: needs.plan.outputs.workspace == 'true'
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
           df -h / | tail -1
       - uses: DeterminateSystems/nix-installer-action@v22
-        if: needs.plan.outputs.workspace == 'true' || needs.plan.outputs.patchbay == 'true'
+        if: needs.plan.outputs.workspace == 'true'
       - uses: Swatinem/rust-cache@v2
-        if: needs.plan.outputs.workspace == 'true' || needs.plan.outputs.patchbay == 'true'
+        if: needs.plan.outputs.workspace == 'true'
         with:
           shared-key: build
           cache-on-failure: "true"
       - name: Manifests + lockfile
-        if: needs.plan.outputs.workspace == 'true' || needs.plan.outputs.patchbay == 'true'
+        if: needs.plan.outputs.workspace == 'true'
         run: ${NIX_DEV} cargo metadata --locked --format-version 1 > /dev/null
       # The opposite case to Task's sheets: apps/fasttrackstudio's
       # tailwind-signal.css IS committed, because main.rs / rig_view.rs /
@@ -166,13 +160,6 @@ jobs:
       - name: cargo check --workspace
         if: needs.plan.outputs.workspace == 'true'
         run: ${NIX_DEV} cargo check --workspace
-      # Patchbay is excluded from the full-workspace gate (leaf domain);
-      # a patchbay-only change still gets its own compile check.
-      - name: cargo check patchbay (patchbay-only change)
-        if: needs.plan.outputs.patchbay == 'true' && needs.plan.outputs.workspace != 'true'
-        run: |
-          ${NIX_DEV} cargo check \
-            -p patchbay -p patchbay-proto -p patchbay-ui -p fts-patchbay
       # Browser-remote build of THE app. wasm32 target + ring's clang
       # env come from the flake dev shell.
       - name: wasm check (fasttrackstudio, signal feature)
