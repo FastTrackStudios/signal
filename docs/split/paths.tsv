@@ -9,8 +9,6 @@ daw	features/align
 daw	features/audio
 daw	features/daw-ui
 daw	features/dawfile
-daw	features/dynamic-template/color-palette
-daw	features/dynamic-template/music-catalog
 daw	features/expression-editor
 daw	features/fx/level/level-dsp
 daw	features/fx/pitch/pitch-dsp
@@ -38,8 +36,6 @@ daw	features/standalone
 daw	features/surfaces
 daw	features/sync
 daw	libs
-patchbay	apps/patchbay
-patchbay	crates/patchbay
 session	crates/keyflow/cli
 session	crates/keyflow/keyflow
 session	crates/keyflow/keyflow-annotate
@@ -57,10 +53,7 @@ session	crates/keyflow/keyflow-ui
 session	crates/keyflow/tree-sitter-keyflow
 session	crates/session
 session	features/chord-tool
-session	features/dynamic-template/dynamic-template
-session	features/dynamic-template/dynamic-template-extension
-session	features/dynamic-template/dynamic-template-proto
-session	features/dynamic-template/tests
+session	features/dynamic-template
 session	features/engraver
 session	features/guide
 session	features/reaper/session-extension

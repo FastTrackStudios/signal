@@ -105,6 +105,17 @@ alongside the daw backend, so it belongs above all of them.
 Five changes must land in the monorepo *before* any history is rewritten,
 so that each new repo's first commit already builds.
 
+**Status: all five are done** (`fa91d77c1`, `f6b86e71b`, `deefb359c`,
+`cf4a18142`), except item 4, which was replaced by a better approach —
+see the note under it. The graph now reports **zero upward edges of any
+kind**:
+
+```
+daw 93   session 30   signal 108   shell 7   =  238
+HARD upward edges: 0    OPTIONAL: 0    DEV: 0
+keyflow: 15 session / 2 daw
+```
+
 1. **Commit the pending `cargo fmt --all`.** The working tree holds a
    verified-mechanical reformat of 1000 files (byte-identical to
    `rustfmt(HEAD)`). Commit it as one `style:` commit, record its sha in
@@ -124,12 +135,26 @@ so that each new repo's first commit already builds.
    `keyflow-text` (→ session). Either inline the fixture the test needs
    or move that test to `keyflow-text`.
 
-4. **Split `apps/fasttrackstudio` into two binaries.** Today one crate
-   with `signal` / `session` / `full` / `tts` features. The `signal`
-   feature set becomes the Signal app (signal repo, carrying `--engine`
-   and the embedded web remote); the `session` feature set becomes the
-   Session app (session repo). `full` has no successor — it was the mode
-   that linked both, and that is exactly what the split forbids.
+4. ~~**Split `apps/fasttrackstudio` into two binaries** up front.~~
+   **Superseded — do this *after* the rewrite, not before.**
+
+   The app is one crate with `signal` / `session` / `charts` features.
+   Rather than refactor it into two crates in the monorepo first, let
+   `filter-repo` copy `apps/fasttrackstudio` into **both** the signal
+   and session repos, then delete the unwanted half in each. A path may
+   be claimed by more than one repo, so both halves keep full history —
+   which a pre-split refactor would not give (one half would trace back
+   to a move commit). It is also the less risky order: no large
+   refactor is landed on a tree that four rewrites are about to read.
+
+   What the halves become: the `signal` feature set is the Signal app
+   (carrying `--engine` and the embedded web remote); the `session`
+   feature set is the Session app. The combined default build has no
+   successor — it linked both, which is exactly what the split forbids.
+
+   The three build configurations are already verified green
+   independently (`default`, `--features session`, `--features signal`),
+   so each half is known to stand on its own before the split begins.
 
 5. **Delete the in-tree copies of already-extracted repos.** An audit of
    every FastTrackStudios repo checked out alongside this one found
