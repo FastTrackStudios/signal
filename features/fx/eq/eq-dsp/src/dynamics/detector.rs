@@ -105,21 +105,26 @@ pub const AUTO_FULL_RANGE_AT_DB: f64 = -40.0;
 /// fraction, and a tracking weight below 1.
 ///
 /// The headroom only bites on deep bands: it is subtracted from the range and
-/// floored at zero, so anything at or under 7 dB of range rests with its
+/// floored at zero, so anything at or under 6 dB of range rests with its
 /// threshold on the learned median.
 ///
-/// **Fitted on the library, not on the trajectories.** After the detector's
-/// bandwidth was corrected the nine recorded trajectories prefer 5 or 6 dB
-/// (0.60 and 0.61 worst, against 0.74 at 7) — and the library disagrees, as it
-/// has every time the two have been put against each other here:
+/// **Fitted across level, not at one level.** It was 7 for a long time, which
+/// is the optimum if the library is only ever measured on noise at
+/// -18.8 dBFS. Measured at -30 as well, that setting is the worst of the
+/// three — the whole library, presets at 2 dB or worse:
 ///
 /// ```text
-///   headroom   presets under 1 dB   moved better / worse
-///        5.0            122               19 / 36
-///        7.0            129                 —
-///        8.0            126                8 / 26
+///   headroom   -18.8 dBFS   -30 dBFS   under 1 dB (both)
+///        5.0        6           11           240
+///        6.0        4           17           238
+///        7.0        4           23           237
 /// ```
-pub const AUTO_HEADROOM_DB: f64 = 7.0;
+///
+/// 6 keeps everything 7 had at the reference level and takes six presets out
+/// of the tail at -30. 5 is better still on both totals and costs four presets
+/// at the reference, which is where the "95% under 1 dB" bar is read; if that
+/// bar is ever retired in favour of a multi-level one, 5 is the answer.
+pub const AUTO_HEADROOM_DB: f64 = 6.0;
 
 /// How much of the settled threshold follows the programme, 0..1.
 ///

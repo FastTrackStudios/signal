@@ -298,11 +298,18 @@ fn main() {
     let bytes = std::fs::read(&preset_path).expect("read preset");
     let older = bytes.len() > 4 && matches!(&bytes[..4], b"FQ2p" | b"FQ3p");
     let floats: Vec<f32> = if older {
-        // A Pro-Q 2 or 3 preset has a different, shorter band record, and
-        // converting it here would mean guessing at FabFilter's own mapping —
-        // any difference would then read as a DSP error. So the plugin does
-        // the conversion: it loads the old file, and the state it hands back
-        // is a Pro-Q 4 one.
+        // A Pro-Q 2 or 3 preset has a different, shorter band record (334
+        // floats against 576), and converting it here would mean guessing at
+        // FabFilter's own mapping — any difference would then read as a DSP
+        // error rather than an import one. The idea was to let the plugin do
+        // the conversion and read the modernised state back.
+        //
+        // **It does not work.** Pro-Q 4 reads .ffp files through its own
+        // loader, not through the VST3 state interface, and `load_state`
+        // refuses an FQ3p blob outright. The 87 Pro-Q 3 and 27 Pro-Q 2 presets
+        // in the library are therefore out of reach until someone writes the
+        // conversion, and what that would measure is the conversion. Left here
+        // so the attempt is on the record and fails loudly.
         if plugin.load_state(&bytes).is_err() {
             eprintln!("{preset_path}: the plugin would not load this preset");
             std::process::exit(1);
