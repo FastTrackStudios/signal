@@ -172,6 +172,22 @@ impl Fixture {
             .await;
     }
 
+    /// Press and release on the centre of an element by testid.
+    pub async fn tap(&mut self, testid: &str) {
+        let el = self
+            .tester
+            .query(by_testid(testid))
+            .immediately()
+            .unwrap_or_else(|e| panic!("{testid} not in DOM: {e:?}"));
+        let (ox, oy) = el.document_origin();
+        let (w, h) = el.size();
+        let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+        self.tester.pointer_down(x, y);
+        let _ = self.tester.pump().await;
+        self.tester.pointer_up(x, y);
+        self.settle().await;
+    }
+
     /// Click a rail family by its category id.
     pub async fn click_family(&mut self, id: &str) {
         let el = self

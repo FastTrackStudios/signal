@@ -1525,3 +1525,29 @@ async fn chips_focus_and_remove_stages() -> dioxus_test::Result<()> {
     );
     Ok(())
 }
+
+/// The preset strip is mounted in the top rail, and browsing opens the list.
+///
+/// The library itself lives on disk and is usually empty in a test run, so
+/// this asserts the surfaces exist and respond — not what is in them. The
+/// browsing rules are covered in `preset-browser`, the panel in
+/// `preset-browser-ui`; what only this mount can answer is whether the
+/// compressor editor actually carries them.
+#[tokio::test]
+async fn the_top_rail_carries_the_preset_strip() -> dioxus_test::Result<()> {
+    let mut fx = mount();
+    let _ = fx.tester.pump().await;
+
+    fx.tester.query(by_testid("preset-bar-name")).immediately()?;
+    assert!(
+        fx.tester
+            .query(by_testid("comp-presets"))
+            .immediately()
+            .is_err(),
+        "the browser stays shut until asked for",
+    );
+
+    tap_testid(&mut fx, "preset-bar-browse").await;
+    fx.tester.query(by_testid("comp-presets")).immediately()?;
+    Ok(())
+}

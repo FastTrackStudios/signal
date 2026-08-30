@@ -214,6 +214,13 @@ pub static PROFILES: &[Profile] = &[
         variant: 0,
         voice: "The Schroeder box everyone started with. Plain, cheap, and honest.",
     },
+    Profile {
+        id: "random",
+        name: "Random",
+        algorithm: AlgorithmType::Random,
+        variant: 0,
+        voice: "Delay lines that wander. Never repeats, so it never rings or beats.",
+    },
 ];
 
 /// The rail, in order.
@@ -233,6 +240,12 @@ pub static CATEGORIES: &[Category] = &[
         label: "Hall",
         badge: "HALL",
         profiles: &["hall_concert", "hall_cathedral", "hall_arena"],
+    },
+    Category {
+        id: "random",
+        label: "Random",
+        badge: "RAND",
+        profiles: &["random"],
     },
     Category {
         id: "plate",

@@ -18,9 +18,56 @@ pub enum AlgorithmType {
     Velvet,
     FreeVerb,
     Convolution,
+    /// A diffuse space whose delay lines random-walk — Valhalla's
+    /// "Random Space" / "Smooth Random" / "Chaotic" family.
+    Random,
 }
 
 impl AlgorithmType {
+    /// The wet-bus trim, in dB, that puts this algorithm at the same output
+    /// level as every other one.
+    ///
+    /// The engines were written at different times against different
+    /// references and never shared a level. Measured at a matched T60 of 2 s
+    /// they spanned **47 dB** — Bloom at -23 dB against Velvet at +32 — so
+    /// changing algorithm was a volume change first and a character change
+    /// second, and no preset library could carry a level across engines.
+    ///
+    /// Each constant is the negative of that algorithm's measured wet energy
+    /// (in dB relative to unity) for a unit impulse at T60 = 2 s, so a
+    /// calibrated engine returns unity energy there and the whole set lands
+    /// together. Unity is an arbitrary but fixed anchor; matching an outside
+    /// reference is then a single global offset rather than sixteen.
+    ///
+    /// Re-derive with `cargo run -p signal-analyzer --example wet_level`,
+    /// which prints the measurement these come from.
+    /// `algorithms_share_one_output_level` in `tests/stability.rs` fails if a
+    /// change to an engine invalidates its constant.
+    pub fn wet_calibration_db(self) -> f64 {
+        match self {
+            Self::Room => -3.03,
+            Self::Hall => 0.47,
+            Self::Plate => 8.82,
+            Self::Spring => 5.93,
+            Self::Cloud => -2.25,
+            Self::Bloom => 22.84,
+            Self::Shimmer => -0.58,
+            Self::Chorale => -0.50,
+            Self::Magneto => 6.36,
+            Self::NonLinear => 16.72,
+            // Swell renders silence at every setting — a defect of its own,
+            // which a trim cannot repair and should not paper over.
+            Self::Swell => 0.0,
+            Self::Reflections => 5.81,
+            Self::Velvet => -24.23,
+            Self::FreeVerb => 5.62,
+            // Convolution's level is whatever the loaded IR carries; the
+            // constant is the measurement for the built-in default.
+            Self::Convolution => -4.92,
+            Self::Random => -3.91,
+        }
+    }
+
     pub const ALL: &'static [AlgorithmType] = &[
         Self::Room,
         Self::Hall,
@@ -37,6 +84,7 @@ impl AlgorithmType {
         Self::Velvet,
         Self::FreeVerb,
         Self::Convolution,
+        Self::Random,
     ];
 
     pub fn name(self) -> &'static str {
@@ -56,6 +104,7 @@ impl AlgorithmType {
             Self::Velvet => "Velvet",
             Self::FreeVerb => "FreeVerb",
             Self::Convolution => "Convolution",
+            Self::Random => "Random",
         }
     }
 
@@ -169,18 +218,36 @@ pub struct AlgorithmParams {
 }
 
 /// Number of Decay Rate EQ bands.
-pub const DECAY_BANDS: usize = 6;
+///
+/// Eight, one per octave the analyzer measures (62.5 Hz … 8 kHz). Six forced
+/// the fitter to cover the outermost two octaves with a single shelf each, so
+/// an error at 62.5 Hz could only be corrected by also moving 125 Hz. Giving
+/// every measured band its own curve is what lets a fit actually converge.
+pub const DECAY_BANDS: usize = 8;
+
+/// Shortest decay-time multiplier a band may ask for (a tenth of the space's
+/// own decay).
+pub const DECAY_RATE_MIN: f64 = 0.1;
+/// Longest decay-time multiplier a band may ask for.
+pub const DECAY_RATE_MAX: f64 = 4.0;
 
 /// One Decay Rate EQ band: a curve of decay-TIME multipliers over frequency
 /// (`fx.reverb.decay-eq`). `rate` 1.0 = the space's natural decay; 4.0 =
-/// four times longer at this band; 0.25 = a quarter (Pro-R 2's 25 %–400 %).
+/// four times longer at this band; [`DECAY_RATE_MIN`] a tenth.
+///
+/// The cut range goes further than Pro-R 2's 25 %–400 %, deliberately. That
+/// is a product limit, not a property of the engine, and matching a real
+/// space needs more: fitting our chamber to a Valhalla reference drove both
+/// shelves hard against a 0.25x floor and still could not darken the tail
+/// enough. Cuts are also the safe direction — the loop-runaway guard in
+/// `Fdn::set_decay_curve` exists to bound boosts.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DecayBand {
     /// 0 = Bell, 1 = Low Shelf, 2 = High Shelf (a Notch is a Bell with a
     /// small `rate` and high `q`).
     pub shape: u32,
     pub freq_hz: f64,
-    /// Decay-time multiplier, 0.25..=4.0.
+    /// Decay-time multiplier, [`DECAY_RATE_MIN`]..=[`DECAY_RATE_MAX`].
     pub rate: f64,
     pub q: f64,
 }
@@ -206,30 +273,34 @@ impl DecayBand {
     /// (20·log10(rate) shaped by the band's curve — the same bell/shelf
     /// magnitude the EQ display draws).
     pub fn rate_db_at(&self, freq: f64) -> f64 {
-        let peak_db = 20.0 * self.rate.clamp(0.25, 4.0).log10();
+        let peak_db = 20.0 * self.rate.clamp(DECAY_RATE_MIN, DECAY_RATE_MAX).log10();
+        peak_db * self.shape_weight_at(freq)
+    }
+
+    /// How much of the band's peak this frequency receives, 0..=1.
+    ///
+    /// Separated from [`Self::rate_db_at`] so a caller can weight some *other*
+    /// gain by the band's curve — the loop-stability check needs the combined
+    /// response of every band at a frequency, which is the peak gains scaled
+    /// by their shapes and summed, not the peaks themselves.
+    pub fn shape_weight_at(&self, freq: f64) -> f64 {
         let f0 = self.freq_hz.max(10.0);
         let q = self.q.clamp(0.1, 18.0);
         // Analog-prototype magnitudes — display-and-collapse grade.
         let w = freq / f0;
         match self.shape {
-            1 => {
-                // Low shelf: full below f0, none far above.
-                let t = 1.0 / (1.0 + (w * q * 1.414).powi(2));
-                peak_db * t
-            }
-            2 => {
-                // High shelf: full above f0.
-                let t = 1.0 - 1.0 / (1.0 + (w / (q * 1.414).recip()).powi(2));
-                let t = t.clamp(0.0, 1.0);
-                peak_db * t
-            }
+            // Low shelf: full below f0, none far above.
+            1 => 1.0 / (1.0 + (w * q * 1.414).powi(2)),
+            // High shelf: full above f0.
+            2 => (1.0 - 1.0 / (1.0 + (w / (q * 1.414).recip()).powi(2))).clamp(0.0, 1.0),
+            // Bell.
             _ => {
-                // Bell.
                 let bw = w - 1.0 / w.max(1e-9);
-                peak_db / (1.0 + (bw * q).powi(2))
+                1.0 / (1.0 + (bw * q).powi(2))
             }
         }
     }
+
 }
 
 /// The whole curve's decay-rate multiplier at `freq` (bands sum in rate-dB,
@@ -240,7 +311,7 @@ pub fn decay_rate_at(bands: &[DecayBand; DECAY_BANDS], freq: f64) -> f64 {
         .filter(|b| b.is_active())
         .map(|b| b.rate_db_at(freq))
         .sum();
-    10.0f64.powf(db / 20.0).clamp(0.25, 4.0)
+    10.0f64.powf(db / 20.0).clamp(DECAY_RATE_MIN, DECAY_RATE_MAX)
 }
 
 /// Collapse the curve to the legacy low/high multiplier pair, for engines
@@ -1047,3 +1118,546 @@ pub trait ReverbAlgorithm: Send {
         false
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Decay-time mapping
+// ═══════════════════════════════════════════════════════════════════
+
+/// The `decay` value at or above which an engine holds indefinitely.
+pub const FREEZE_DECAY: f64 = 0.999;
+
+/// The T60 used to mean "hold forever".
+pub const INFINITE_T60: f64 = 1.0e6;
+
+/// Map the normalized `decay` control (0–1) onto a reverberation time in
+/// seconds, logarithmically between `min_s` and `max_s`.
+///
+/// Every engine should route its decay through this rather than inventing a
+/// feedback gain. A raw gain is not a time: it makes `decay` mean something
+/// different in each algorithm, it cannot express a target RT60, and it caps
+/// the reachable tail at whatever the gain range happens to allow. Measuring
+/// the engines against reference reverbs showed exactly that — Hall (which
+/// already used an exact-T60 model) landed within a factor of two of its
+/// reference, while Room, which set a gain directly, could not produce a tail
+/// longer than 1.7 s and its Chamber variant was stuck near 0.18 s.
+///
+/// Logarithmic because reverberation time is perceived that way: the step
+/// from 0.2 s to 0.4 s is as large a change as 2 s to 4 s.
+///
+/// `decay >= FREEZE_DECAY` returns [`INFINITE_T60`].
+pub fn decay_to_t60(decay: f64, min_s: f64, max_s: f64) -> f64 {
+    if decay >= FREEZE_DECAY {
+        return INFINITE_T60;
+    }
+    let min_s = min_s.max(0.01);
+    let max_s = max_s.max(min_s * 1.001);
+    min_s * (max_s / min_s).powf(decay.clamp(0.0, 1.0))
+}
+
+/// Split a midband T60 into the DC and Nyquist targets `Fdn::set_t60` wants.
+///
+/// The low/high decay multipliers scale their end of the shelf directly, and
+/// damping shortens the top. Note that this means a tilt also moves the
+/// *overall* decay — taming the lows really does shorten the tail, which is
+/// the intended behaviour. Callers that need a specific midband time despite
+/// a tilt should pre-compensate; [`tilt_midband_factor`] is that factor, and
+/// `ReverbChain::set_decay_seconds` applies it.
+///
+/// Shared so every engine derives its shelf the same way.
+pub fn t60_shelf_targets(
+    t60: f64,
+    low_decay_mult: f64,
+    high_decay_mult: f64,
+    damping: f64,
+) -> (f64, f64) {
+    let t60_dc = (t60 * low_decay_mult.max(0.05)).max(0.05);
+    let hf_ratio = ((0.15 + 0.85 * (1.0 - damping)) * high_decay_mult.max(0.05)).clamp(0.02, 1.5);
+    let t60_ny = (t60 * hf_ratio).max(0.02);
+    (t60_dc, t60_ny)
+}
+
+/// How much a decay tilt moves the midband, as a multiple of the requested
+/// T60.
+///
+/// The shelf runs between the DC and Nyquist targets, so the midband lands at
+/// their geometric mean. Asking for 2.5 s while also taming the lows to 0.5x
+/// otherwise yields about 1.36 s — dividing the request by this factor puts
+/// the midband back where it was asked for, without changing what a tilt
+/// means for anyone setting the raw `decay` control.
+///
+/// Damping is deliberately excluded: absorption genuinely shortens a tail, so
+/// a damped space is *meant* to decay faster and compensating for it would
+/// fight the control. Only the explicit tilt multipliers are corrected.
+pub fn tilt_midband_factor(low_decay_mult: f64, high_decay_mult: f64) -> f64 {
+    let lo = low_decay_mult.max(0.05);
+    let hi = high_decay_mult.max(0.05);
+    (lo * hi).sqrt().max(1e-6)
+}
+
+/// The reverberation-time range each engine's `decay` control spans.
+///
+/// The floors are ordered by the size of the space, not by what a meter can
+/// resolve. A studio room reaches shorter than a hall because a small room
+/// *is* shorter — inverting that (as a first pass at these numbers did, by
+/// reading floors off what the analyzer could still fit) makes a room ring
+/// longer than a hall at the bottom of the range, which is nonsense and which
+/// `dual::tests::split_isolates_channels` rightly rejects.
+///
+/// The spread matters beyond plausibility: callers use it to decide whether an
+/// engine suits a request. A preset named for a big space is often a short one
+/// — "PALACE-1982 Room Mics" wants 0.29 s, well under any hall's floor — and
+/// `signal-import` reads these ranges to route such a preset to a smaller
+/// engine rather than let the request clamp.
+///
+/// One table so the range is queryable from outside the engine — which is
+/// what lets a caller ask for a *time* ([`AlgorithmType::t60_range`] +
+/// [`t60_to_decay`]) instead of guessing at a normalized control. Each
+/// engine reads its own entry, so these are the single source of truth
+/// rather than a parallel copy.
+pub const ROOM_T60: (f64, f64) = (0.12, 6.0);
+/// Chambers ring longer than rooms and shorter than halls.
+///
+/// The ceiling has headroom on purpose. A real chamber preset asked for 5.2 s
+/// in its low band; against a 6 s ceiling that sits at decay 0.96, close
+/// enough to freeze that damping and the tilt compensation could not get
+/// there, and the fit stalled with the low bands short.
+pub const ROOM_CHAMBER_T60: (f64, f64) = (0.2, 12.0);
+/// A treated studio room — deliberately short.
+pub const ROOM_STUDIO_T60: (f64, f64) = (0.08, 2.0);
+pub const HALL_T60: (f64, f64) = (0.4, 30.0);
+pub const HALL_CATHEDRAL_T60: (f64, f64) = (0.6, 40.0);
+pub const HALL_ARENA_T60: (f64, f64) = (0.8, 40.0);
+/// Random spaces span room-to-large-hall lengths.
+pub const RANDOM_T60: (f64, f64) = (0.15, 25.0);
+/// The plate tank.
+///
+/// The floor is a round trip and a half, not an arbitrary minimum: the
+/// Dattorro loop takes [`PLATE_LOOP_SECONDS`], so a request much below that
+/// decays inside a single pass. The tank stops recirculating, the tail is
+/// whatever the diffusers happen to give, and its low end collapses — a
+/// "Slappy Tom Plate" asking for 0.8 s came out with its 125 Hz band decaying
+/// faster than its 500 Hz one, which is not a plate at all. Shorter requests
+/// are better served by another engine, and `signal-import` routes them there.
+pub const PLATE_T60: (f64, f64) = (1.05, 30.0);
+
+/// Dattorro tank round-trip time, in seconds.
+///
+/// The published delay lengths sum to 21589 samples at the reference 29761 Hz,
+/// and every length scales with the sample rate, so the loop takes the same
+/// 0.725 s whatever rate it runs at.
+pub const PLATE_LOOP_SECONDS: f64 = 21589.0 / 29761.0;
+/// Times the tank gain is applied per round trip (twice per tank, two tanks).
+pub const PLATE_DECAY_APPLICATIONS: f64 = 4.0;
+
+/// The Dattorro tank gain that yields `t60_s`.
+///
+/// A tank sets a per-loop *gain*, not a time, which is why the plate had no
+/// decay-time model and `decay_time` was a silent no-op on it: a translated
+/// preset could not be tuned to the right length at all. The conversion is
+/// exact — losing 60 dB over `t60_s` at `applications` multiplications per
+/// `loop_seconds` round trip means each multiplication is
+/// `10^(-3·loop/(applications·t60))`.
+pub fn dattorro_gain_for_t60(t60_s: f64, loop_seconds: f64, applications: f64) -> f64 {
+    let t60 = t60_s.max(0.01);
+    let exponent = -3.0 * loop_seconds / (applications.max(1.0) * t60);
+    // Below 0.997 the tank always decays; the floor keeps a very short
+    // request from collapsing the tank to silence.
+    10.0f64.powf(exponent).clamp(0.02, 0.997)
+}
+
+impl AlgorithmType {
+    /// Whether this engine realizes the Decay Rate EQ exactly, in its own
+    /// feedback path (`Fdn::set_decay_curve`).
+    ///
+    /// Engines that do must NOT also have the curve collapsed onto the legacy
+    /// `low_decay_mult` / `high_decay_mult` pair — that would apply it twice,
+    /// once per-frequency and once as a broadband multiplier on the T60
+    /// shelf. The broadband half wins: a 300 Hz low shelf at 0.5x measured as
+    /// halving the decay at 4 kHz as well, which is the opposite of what a
+    /// shelf is for.
+    ///
+    /// This is a property of the engine, not a hardcoded list at the call
+    /// site, so wiring `set_decay_curve` into another engine means updating
+    /// one place rather than silently double-applying.
+    pub fn realizes_decay_curve(self) -> bool {
+        matches!(self, Self::Hall | Self::Room | Self::Random)
+    }
+
+    /// The `(min, max)` reverberation time in seconds that this engine's
+    /// `decay` control spans, for a given variant.
+    ///
+    /// `None` for engines that do not model decay as a time — the plate tank
+    /// and the character engines set a feedback coefficient directly, so
+    /// there is no honest time to report.
+    pub fn t60_range(self, variant: usize) -> Option<(f64, f64)> {
+        match (self, variant) {
+            (Self::Room, 1) => Some(ROOM_CHAMBER_T60),
+            (Self::Room, 2) => Some(ROOM_STUDIO_T60),
+            (Self::Room, _) => Some(ROOM_T60),
+            (Self::Hall, 1) => Some(HALL_CATHEDRAL_T60),
+            (Self::Hall, 2) => Some(HALL_ARENA_T60),
+            (Self::Hall, _) => Some(HALL_T60),
+            (Self::Random, _) => Some(RANDOM_T60),
+            // Only the base Dattorro tank is converted; the Lexicon and
+            // Progenitor variants keep their own gain mapping.
+            (Self::Plate, 0) => Some(PLATE_T60),
+            _ => None,
+        }
+    }
+}
+
+/// Inverse of [`decay_to_t60`]: the `decay` control that yields `t60_s`.
+///
+/// Clamps to `0..1`, so a time outside the engine's reach saturates at its
+/// nearest end rather than producing an out-of-range control value. Callers
+/// that need to know they were clamped should compare against
+/// [`AlgorithmType::t60_range`] first.
+pub fn t60_to_decay(t60_s: f64, min_s: f64, max_s: f64) -> f64 {
+    let min_s = min_s.max(0.01);
+    let max_s = max_s.max(min_s * 1.001);
+    let t = t60_s.clamp(min_s, max_s);
+    (t / min_s).ln() / (max_s / min_s).ln()
+}
+
+#[cfg(test)]
+mod decay_time_tests {
+    use super::*;
+
+    #[test]
+    fn spans_the_requested_range_logarithmically() {
+        assert!((decay_to_t60(0.0, 0.2, 20.0) - 0.2).abs() < 1e-9);
+        // The top of the *range* is approached just below the freeze
+        // threshold; decay = 1.0 itself means hold forever.
+        // 0.2·100^0.9989 = 19.90 — within 1% of the top of the range.
+        assert!((decay_to_t60(0.9989, 0.2, 20.0) - 20.0).abs() / 20.0 < 0.01);
+        // Midpoint is the geometric mean, not the arithmetic one.
+        let mid = decay_to_t60(0.5, 0.2, 20.0);
+        assert!((mid - 2.0).abs() < 1e-9, "got {mid}");
+    }
+
+    #[test]
+    fn equal_steps_give_equal_ratios() {
+        let a = decay_to_t60(0.25, 0.1, 10.0);
+        let b = decay_to_t60(0.5, 0.1, 10.0);
+        let c = decay_to_t60(0.75, 0.1, 10.0);
+        assert!(((b / a) - (c / b)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn freezes_at_the_top() {
+        assert_eq!(decay_to_t60(0.999, 0.2, 8.0), INFINITE_T60);
+        assert_eq!(decay_to_t60(1.5, 0.2, 8.0), INFINITE_T60);
+    }
+
+    #[test]
+    fn clamps_out_of_range_and_degenerate_inputs() {
+        assert!((decay_to_t60(-1.0, 0.2, 8.0) - 0.2).abs() < 1e-9);
+        // A max below the min must not invert or produce NaN.
+        let t = decay_to_t60(0.5, 4.0, 1.0);
+        assert!(t.is_finite() && t >= 4.0, "got {t}");
+        assert!(decay_to_t60(0.5, 0.0, 8.0).is_finite());
+    }
+
+    #[test]
+    fn decay_and_t60_round_trip() {
+        for &(lo, hi) in &[ROOM_T60, ROOM_CHAMBER_T60, HALL_T60, HALL_ARENA_T60] {
+            for d in [0.0, 0.1, 0.35, 0.5, 0.75, 0.9] {
+                let t = decay_to_t60(d, lo, hi);
+                let back = t60_to_decay(t, lo, hi);
+                assert!((back - d).abs() < 1e-9, "{d} -> {t} -> {back}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_time_outside_the_range_saturates_rather_than_escaping_0_1() {
+        let (lo, hi) = ROOM_STUDIO_T60;
+        assert_eq!(t60_to_decay(0.001, lo, hi), 0.0);
+        assert_eq!(t60_to_decay(600.0, lo, hi), 1.0);
+    }
+
+    #[test]
+    fn the_tank_gain_inverts_its_own_decay_formula() {
+        // Losing 60 dB over t60 at four multiplications per round trip.
+        for t60 in [0.5, 2.0, 8.0, 25.0] {
+            let g = dattorro_gain_for_t60(t60, PLATE_LOOP_SECONDS, PLATE_DECAY_APPLICATIONS);
+            // Recover the time the gain implies and check it round-trips.
+            let db_per_loop = 20.0 * PLATE_DECAY_APPLICATIONS * g.log10();
+            let implied = PLATE_LOOP_SECONDS * -60.0 / db_per_loop;
+            assert!(
+                (implied - t60).abs() / t60 < 0.01,
+                "{t60} s -> gain {g} -> {implied} s"
+            );
+        }
+    }
+
+    #[test]
+    fn the_tank_gain_stays_stable_for_extreme_requests() {
+        // However long the request, the tank must still decay.
+        let g = dattorro_gain_for_t60(1.0e6, PLATE_LOOP_SECONDS, PLATE_DECAY_APPLICATIONS);
+        assert!(g < 1.0, "a tank gain of 1.0 or more never decays: {g}");
+        // And a very short one must not collapse it to silence.
+        assert!(dattorro_gain_for_t60(0.001, PLATE_LOOP_SECONDS, PLATE_DECAY_APPLICATIONS) > 0.0);
+    }
+
+    #[test]
+    fn variants_report_their_own_ranges() {
+        assert_eq!(AlgorithmType::Room.t60_range(1), Some(ROOM_CHAMBER_T60));
+        assert_eq!(AlgorithmType::Room.t60_range(0), Some(ROOM_T60));
+        assert_eq!(AlgorithmType::Hall.t60_range(1), Some(HALL_CATHEDRAL_T60));
+        // A chamber must actually reach the ~2.5 s a real one rings for —
+        // the old feedback-gain model topped out near 0.18 s.
+        let (lo, hi) = ROOM_CHAMBER_T60;
+        assert!(lo < 2.5 && hi > 2.5);
+        // The Dattorro tank is converted; its heritage variants are not.
+        assert_eq!(AlgorithmType::Plate.t60_range(0), Some(PLATE_T60));
+        assert_eq!(AlgorithmType::Plate.t60_range(1), None);
+        // Engines with no time model say so instead of inventing one.
+        assert_eq!(AlgorithmType::Velvet.t60_range(0), None);
+        assert_eq!(AlgorithmType::Cloud.t60_range(0), None);
+    }
+
+    #[test]
+    fn neutral_multipliers_leave_the_midband_alone() {
+        let (dc, ny) = t60_shelf_targets(2.0, 1.0, 1.0, 0.0);
+        assert!((dc - 2.0).abs() < 1e-9);
+        assert!((ny - 2.0).abs() < 1e-9);
+        assert!((tilt_midband_factor(1.0, 1.0) - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_tilt_shortens_the_tail_and_the_factor_says_by_how_much() {
+        // Taming the lows genuinely shortens the tail — that behaviour is
+        // relied on. What the factor provides is a way to ask for a midband
+        // time *despite* a tilt.
+        let (dc, ny) = t60_shelf_targets(2.5, 0.5, 1.0, 0.0);
+        assert!(dc < 2.5, "tamed lows must actually decay faster");
+        let midband = (dc * ny).sqrt();
+        assert!(midband < 2.5);
+
+        let factor = tilt_midband_factor(0.5, 1.0);
+        assert!((midband - 2.5 * factor * (0.15f64 + 0.85).sqrt()).abs() < 1e-9);
+
+        // Pre-compensating restores the requested midband.
+        let (dc2, ny2) = t60_shelf_targets(2.5 / factor, 0.5, 1.0, 0.0);
+        assert!(((dc2 * ny2).sqrt() - 2.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn damping_still_shortens_the_tail() {
+        // Absorption is physical: a damped space really does decay faster,
+        // so damping must NOT be normalized away like the tilt controls.
+        let (_, ny_open) = t60_shelf_targets(2.0, 1.0, 1.0, 0.0);
+        let (_, ny_damped) = t60_shelf_targets(2.0, 1.0, 1.0, 1.0);
+        assert!(ny_damped < ny_open);
+    }
+
+    #[test]
+    fn shelf_targets_stay_positive_for_extreme_multipliers() {
+        let (dc, ny) = t60_shelf_targets(0.05, 0.0, 0.0, 1.0);
+        assert!(dc > 0.0 && ny > 0.0);
+        let (dc2, ny2) = t60_shelf_targets(30.0, 2.0, 0.05, 0.0);
+        assert!(dc2.is_finite() && ny2.is_finite() && ny2 > 0.0);
+    }
+}
+
+#[cfg(test)]
+mod decay_eq_filter_probe {
+    use audiocore_dsp::biquad::{Biquad, FilterType};
+
+    /// Magnitude of a biquad by running a sine through it.
+    fn mag_at(mut bq: Biquad, f: f64, sr: f64) -> f64 {
+        let n = 48_000;
+        let mut peak = 0.0f64;
+        for i in 0..n {
+            let x = (std::f64::consts::TAU * f * i as f64 / sr).sin();
+            let y = bq.tick(x, 0);
+            if i > n / 2 {
+                peak = peak.max(y.abs());
+            }
+        }
+        peak
+    }
+
+    #[test]
+    fn low_shelf_is_unity_well_above_its_corner() {
+        let sr = 48_000.0;
+        let mut bq = Biquad::default();
+        bq.set(FilterType::LowShelf { gain_db: -6.0 }, 300.0, 0.707, sr);
+        let at_dc = 20.0 * mag_at(bq, 40.0, sr).log10();
+        let mut bq2 = Biquad::default();
+        bq2.set(FilterType::LowShelf { gain_db: -6.0 }, 300.0, 0.707, sr);
+        let at_hf = 20.0 * mag_at(bq2, 4000.0, sr).log10();
+        assert!((at_dc + 6.0).abs() < 1.0, "40 Hz should be -6 dB, got {at_dc}");
+        assert!(at_hf.abs() < 0.5, "4 kHz should be unity, got {at_hf}");
+    }
+}
+
+#[cfg(test)]
+mod decay_eq_localization {
+    use crate::algorithm::{DecayBand, DECAY_BANDS};
+    use crate::primitives::fdn::{Fdn, MixMatrix};
+
+    const SR: f64 = 48_000.0;
+
+    /// Drive a windowed sine burst into a bare FDN, then measure how fast the
+    /// tail at that frequency decays, as dB per second.
+    fn decay_db_per_s(bands: [DecayBand; DECAY_BANDS], probe_hz: f64) -> f64 {
+        decay_db_per_s_with(bands, probe_hz, 0.0)
+    }
+
+    fn decay_db_per_s_with(
+        bands: [DecayBand; DECAY_BANDS],
+        probe_hz: f64,
+        loop_allpass: f64,
+    ) -> f64 {
+        let delays = [787usize, 967, 1153, 1373, 1607, 1861, 2129, 2411];
+        let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
+        fdn.set_damping(10_000.0, SR);
+        if loop_allpass != 0.0 {
+            fdn.set_loop_allpass(loop_allpass);
+        }
+        fdn.set_t60(2.5, 2.5, SR);
+        fdn.set_decay_curve(2.5, &bands, SR);
+
+        let drive = (SR * 0.2) as usize;
+        let total = (SR * 4.0) as usize;
+        let mut out = Vec::with_capacity(total);
+        for i in 0..total {
+            let x = if i < drive {
+                let env = (std::f64::consts::PI * i as f64 / drive as f64).sin();
+                (std::f64::consts::TAU * probe_hz * i as f64 / SR).sin() * env
+            } else {
+                0.0
+            };
+            out.push(fdn.tick(x));
+        }
+
+        // Energy in two windows well after the drive stops.
+        let win = (SR * 0.4) as usize;
+        let a0 = drive + (SR * 0.3) as usize;
+        let b0 = a0 + (SR * 1.0) as usize;
+        let energy = |start: usize| -> f64 {
+            out[start..(start + win).min(out.len())]
+                .iter()
+                .map(|x| x * x)
+                .sum::<f64>()
+                .max(1e-300)
+        };
+        // dB drop over 1 second.
+        10.0 * (energy(b0) / energy(a0)).log10()
+    }
+
+    fn low_shelf(freq: f64, rate: f64) -> [DecayBand; DECAY_BANDS] {
+        let mut b = [DecayBand::default(); DECAY_BANDS];
+        b[0] = DecayBand {
+            shape: 1,
+            freq_hz: freq,
+            rate,
+            q: 0.707,
+        };
+        b
+    }
+
+    fn boost_band(idx: usize, freq: f64, rate: f64) -> DecayBand {
+        let _ = idx;
+        DecayBand {
+            shape: 0,
+            freq_hz: freq,
+            rate,
+            q: 1.4,
+        }
+    }
+
+    /// Boosting several *separated* bands must not scale them down the way
+    /// boosting the same total at one frequency does.
+    ///
+    /// The loop-stability guard bounds the combined loop gain at each
+    /// frequency. Summing every band's peak instead treats bands an octave
+    /// apart as though they stacked, and scales a wide curve back to a
+    /// fraction of what it asked for — which is why a bass-tilted chamber
+    /// could not be matched at any length.
+    #[test]
+    fn separated_boosts_are_not_scaled_like_stacked_ones() {
+        let mut spread = [DecayBand::default(); DECAY_BANDS];
+        spread[0] = boost_band(0, 125.0, 3.0);
+        spread[1] = boost_band(1, 500.0, 3.0);
+        spread[2] = boost_band(2, 2000.0, 3.0);
+
+        let mut single = [DecayBand::default(); DECAY_BANDS];
+        single[0] = boost_band(0, 500.0, 3.0);
+
+        // The 500 Hz band asks for the same lift in both curves, so it should
+        // achieve close to the same decay in both — its neighbours are far
+        // enough away not to compete for headroom.
+        let alone = decay_db_per_s(single, 500.0);
+        let with_neighbours = decay_db_per_s(spread, 500.0);
+        assert!(
+            (alone - with_neighbours).abs() < 4.0,
+            "a boost should not be throttled by distant bands: \
+alone {alone:.1} dB/s, with neighbours {with_neighbours:.1} dB/s"
+        );
+
+        // And it must actually lengthen the tail relative to flat.
+        let flat = [DecayBand::default(); DECAY_BANDS];
+        assert!(
+            with_neighbours > decay_db_per_s(flat, 500.0) + 2.0,
+            "a 3x boost should slow the decay"
+        );
+    }
+
+    /// The guard still has to bite when bands genuinely overlap.
+    #[test]
+    fn stacked_boosts_are_still_bounded() {
+        let mut stacked = [DecayBand::default(); DECAY_BANDS];
+        for i in 0..4 {
+            stacked[i] = boost_band(i, 500.0, 4.0);
+        }
+        // Four maximum boosts on the same frequency: the loop must stay
+        // stable, i.e. the tail must still decay rather than run away.
+        let slope = decay_db_per_s(stacked, 500.0);
+        assert!(
+            slope < 0.0 && slope.is_finite(),
+            "overlapping maximum boosts must not destabilize the loop: {slope} dB/s"
+        );
+    }
+
+    /// With an in-loop allpass engaged — the diffusion the Room engines now
+    /// use — the shelf must STILL localize.
+    #[test]
+    fn a_low_shelf_localizes_with_an_in_loop_allpass_too() {
+        let flat = [DecayBand::default(); DECAY_BANDS];
+        let hf_flat = decay_db_per_s_with(flat, 4000.0, 0.7);
+        let hf_cut = decay_db_per_s_with(low_shelf(300.0, 0.5), 4000.0, 0.7);
+        assert!(
+            (hf_cut - hf_flat).abs() < 3.0,
+            "4 kHz should be untouched by a 300 Hz low shelf even with an \
+in-loop allpass: {hf_flat:.1} -> {hf_cut:.1} dB/s"
+        );
+    }
+
+    /// A low shelf must change the decay BELOW its corner and leave the top
+    /// alone. Measured at the FDN level, with no diffusers, modulated
+    /// allpasses or output stage in the way.
+    #[test]
+    fn a_low_shelf_does_not_change_the_decay_far_above_its_corner() {
+        let flat = [DecayBand::default(); DECAY_BANDS];
+
+        let lf_flat = decay_db_per_s(flat, 125.0);
+        let lf_cut = decay_db_per_s(low_shelf(300.0, 0.5), 125.0);
+        let hf_flat = decay_db_per_s(flat, 4000.0);
+        let hf_cut = decay_db_per_s(low_shelf(300.0, 0.5), 4000.0);
+
+        // Below the corner the tail must die faster (a more negative slope).
+        assert!(
+            lf_cut < lf_flat - 5.0,
+            "125 Hz should decay faster with a 0.5x low shelf: {lf_flat:.1} -> {lf_cut:.1} dB/s"
+        );
+        // Nearly four octaves above it, nothing should change.
+        assert!(
+            (hf_cut - hf_flat).abs() < 3.0,
+            "4 kHz should be untouched by a 300 Hz low shelf: {hf_flat:.1} -> {hf_cut:.1} dB/s"
+        );
+    }
+}
+

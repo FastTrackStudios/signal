@@ -14,7 +14,7 @@
 //!   - Less modulation (less chorus in tail)
 //!   - Faster density buildup
 
-use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, ROOM_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::barr_loop::BarrLoop;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -334,10 +334,47 @@ impl ReverbAlgorithm for Room {
             self.setup_mod_allpass(params.modulation);
         }
 
-        // Decay (0.0 → ~0.2s, 1.0 → ~5s) — rooms decay faster than halls
-        let decay_gain = 0.3 + params.decay * 0.65; // 0.3 to 0.95
-        self.fdn_l.set_decay(decay_gain);
-        self.fdn_r.set_decay(decay_gain);
+        // In-loop allpasses and a slow rotation of the feedback mix — the
+        // density Hall has always had and this engine did not. It did not
+        // matter while the old feedback-gain model capped the tail short:
+        // once a real room can actually ring for seconds, the sparse modal
+        // structure sings, and an isolated mode stands ~36 dB above its
+        // neighbours. Diffusing inside the loop builds density with every
+        // recirculation instead of only at the input diffuser.
+        self.fdn_l.set_loop_allpass(0.6);
+        self.fdn_r.set_loop_allpass(0.6);
+        self.fdn_l.set_rotation(
+            0.3 + params.modulation * 0.6,
+            0.04 + params.modulation * 0.16,
+            self.sample_rate,
+        );
+        self.fdn_r.set_rotation(
+            (0.3 + params.modulation * 0.6) * 1.11,
+            0.04 + params.modulation * 0.16,
+            self.sample_rate,
+        );
+
+        // Exact per-line T60 decay (Jot shelf), the same model Hall uses.
+        // This replaced a raw feedback gain, which is not a time: it capped
+        // the reachable tail well short of a real room, from a tight booth to a large live space and made
+        // `decay` mean something different here than in every other engine.
+        // Range covers a real room, from a tight booth to a large live space.
+        let t60 = decay_to_t60(params.decay, ROOM_T60.0, ROOM_T60.1);
+        let (t60_dc, t60_ny) = t60_shelf_targets(
+            t60,
+            params.low_decay_mult,
+            params.high_decay_mult,
+            params.damping,
+        );
+        self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
+        self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
+
+        // Decay Rate EQ, realized in the feedback path — layered over the
+        // shelf. Flat bands cost nothing.
+        self.fdn_l
+            .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
+        self.fdn_r
+            .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
 
         // Damping → FDN feedback LP frequency
         // Rooms have more HF absorption than halls (soft furnishings, carpet)

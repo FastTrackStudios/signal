@@ -202,12 +202,21 @@ impl Fdn {
         for d in &mut self.damping {
             d.set_freq(freq_hz, sample_rate);
         }
-        // Re-tune the in-loop DC blockers while we have the sample rate:
-        // a 10 Hz corner settles ~3x faster after the onset burst than
-        // the default ~4 Hz pole (less infrasonic relaxation drift in
-        // short-room IRs) and still sits below audibility.
+        // Re-tune the in-loop DC blockers while we have the sample rate.
+        //
+        // The corner has to be far lower than audibility suggests, because
+        // this filter sits INSIDE the feedback loop and its attenuation
+        // compounds once per recirculation. A 10 Hz corner costs only 0.11 dB
+        // at 62 Hz — inaudible in isolation — but a 3 s tail on ~10 ms delay
+        // lines recirculates nearly 300 times, so the bottom octave arrives
+        // some 30 dB down on the rest of the spectrum. That showed up as our
+        // 62 Hz band decaying *shorter* than 125 Hz even with the Decay Rate
+        // EQ boosting it as hard as it could.
+        //
+        // 3 Hz costs 0.018 dB a pass, about 5 dB over the same tail, and still
+        // blocks the subsonic offset that long feedback paths accumulate.
         for dc in &mut self.dc_blockers {
-            dc.set_cutoff(10.0, sample_rate);
+            dc.set_cutoff(3.0, sample_rate);
         }
     }
 
@@ -231,7 +240,12 @@ impl Fdn {
         let t_dc = t60_dc.max(0.01);
         let t_ny = t60_nyq.max(0.01);
         for i in 0..self.num_lines {
-            let mi = self.delay_samples[i] as f64;
+            // The loop length is the delay line PLUS any in-loop allpass:
+            // that allpass sits inside the feedback path, so it lengthens
+            // every recirculation. Ignoring it makes the tail run long —
+            // measurably so, ~1.16x for Hall's 0.6 coefficient and ~2x for
+            // the Room engines once they were given the same diffusion.
+            let mi = (self.delay_samples[i] + self.loop_ap_len[i]) as f64;
             let r0 = 10.0f64.powf(-3.0 * mi / (sample_rate * t_dc));
             let rp = 10.0f64.powf(-3.0 * mi / (sample_rate * t_ny));
             self.shelf_p[i] = (r0 - rp) / (r0 + rp);
@@ -281,23 +295,52 @@ impl Fdn {
             let gmid_db = -60.0 * mi / (sample_rate * t60);
             // First pass: per-band target gains at this line.
             let mut gains = [0.0f64; crate::algorithm::DECAY_BANDS];
-            let mut boost_sum = 0.0f64;
+
             for (b, band) in bands.iter().enumerate() {
                 self.decay_eq_on[b] = band.is_active();
                 if !band.is_active() {
                     continue;
                 }
-                let r = band.rate.clamp(0.25, 4.0);
+                let r = band.rate.clamp(
+                    crate::algorithm::DECAY_RATE_MIN,
+                    crate::algorithm::DECAY_RATE_MAX,
+                );
                 let g = gmid_db * (1.0 / r - 1.0);
                 gains[b] = g;
-                if g > 0.0 {
-                    boost_sum += g;
-                }
             }
-            // Keep ≥5 % of the base attenuation however boosts overlap.
+            // Keep >=5 % of the base attenuation however boosts overlap.
+            //
+            // The constraint is on the loop gain at each FREQUENCY, so what
+            // matters is the largest combined boost anywhere in the spectrum —
+            // not the sum of every band's peak. Summing peaks treats bands an
+            // octave apart as though they stacked, which they do not: a curve
+            // lifting six separate bands got scaled down to a fraction of what
+            // it asked for, and a bass-heavy chamber could not be matched at
+            // any length because its low bands were pinned at the ceiling.
+            //
+            // Evaluating the real response over a log grid costs a few hundred
+            // multiplies per parameter change, off the audio thread.
             let headroom = -gmid_db * 0.95;
-            let scale = if boost_sum > headroom && boost_sum > 0.0 {
-                headroom / boost_sum
+            let mut peak_boost = 0.0f64;
+            const PROBE_POINTS: usize = 48;
+            let f_lo = 20.0f64;
+            let f_hi = (sample_rate * 0.45).max(f_lo * 2.0);
+            let ratio = (f_hi / f_lo).powf(1.0 / (PROBE_POINTS - 1) as f64);
+            let mut f = f_lo;
+            for _ in 0..PROBE_POINTS {
+                let mut total = 0.0f64;
+                for (b, band) in bands.iter().enumerate() {
+                    if band.is_active() && gains[b] > 0.0 {
+                        total += gains[b] * band.shape_weight_at(f);
+                    }
+                }
+                if total > peak_boost {
+                    peak_boost = total;
+                }
+                f *= ratio;
+            }
+            let scale = if peak_boost > headroom && peak_boost > 0.0 {
+                headroom / peak_boost
             } else {
                 1.0
             };
