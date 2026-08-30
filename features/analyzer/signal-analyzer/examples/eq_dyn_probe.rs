@@ -256,6 +256,9 @@ fn main() {
         ("b1_dyn_atk", 50.0),
         ("b1_dyn_rel", 50.0),
         ("b1_dyn_auto", if auto { 1.0 } else { 0.0 }),
+        ("character", num("--character", 0.0)),
+        ("output_gain", num("--outlevel", 0.0) * 36.0),
+        ("gain_scale", num("--gainscale", 1.0)),
     ] {
         ours.set_named(n, v);
     }
@@ -316,6 +319,46 @@ fn main() {
         report("attack, from the step at 0.3 s", 0.3, &[1.0, 3.0, 10.0, 30.0, 100.0, 300.0, 600.0], &mut worst);
         report("release, from the step at 1.0 s", 1.0, &[1.0, 3.0, 10.0, 30.0, 100.0, 300.0, 600.0], &mut worst);
         println!("\nworst difference {worst:.2} dB");
+        return;
+    }
+
+    // `--harmonics` reads the distortion Character adds.
+    //
+    // Character is the one Pro-Q feature modelled only by its gain. On a tone
+    // it IS only a gain — flat at every level — but a tone puts all its energy
+    // in one bin, so what the shaper does lands in the harmonics and never in
+    // the fundamental. This reads them directly: one sine, the level swept,
+    // the output measured at the fundamental and the next four harmonics.
+    if std::env::args().any(|a| a == "--harmonics") {
+        let f0 = freq;
+        println!("  Character {} at {f0:.0} Hz", num("--character", 0.0));
+        println!(
+            "  {:>8} {:>9} {:>9} {:>9} {:>9}",
+            "in dBFS", "fund", "fund ours", "2nd", "2nd ours"
+        );
+        let frames = (SR * SECONDS) as usize;
+        for level_db in [-36.0f64, -30.0, -24.0, -18.0, -12.0, -6.0, -3.0, -1.0] {
+            let amp = 10.0f64.powf(level_db / 20.0);
+            let input = tone(f0, amp, frames);
+            let cut = input.len() / 2;
+            let a = render_plugin(&mut plugin, &input);
+            let b = render_native(&mut ours, &input);
+            if a.len() < input.len() || b.len() < input.len() {
+                break;
+            }
+            let dry = power_at(&input[cut..], f0);
+            let db = |buf: &[f32], hz: f64| {
+                10.0 * (power_at(&buf[cut..], hz) / dry).max(1.0e-30).log10()
+            };
+            println!(
+                "  {level_db:>8.0} {:>9.2} {:>9.2} {:>9.2} {:>9.2}",
+                db(&a, f0),
+                db(&b, f0),
+                db(&a, f0 * 2.0),
+                db(&b, f0 * 2.0)
+            );
+        }
+        println!("\n  dB relative to the input's fundamental.");
         return;
     }
 

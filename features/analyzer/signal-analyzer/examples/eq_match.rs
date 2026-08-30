@@ -100,12 +100,34 @@ fn stimulus(frames: usize, amplitude: f64) -> (Vec<f32>, Vec<f32>) {
     // too.
     let tonal = std::env::args().any(|a| a == "--tonal");
     let partials: [f64; 6] = [110.0, 275.0, 700.0, 1650.0, 3900.0, 9200.0];
+    // The side carries the SAME resonances, a third of a turn out of phase.
+    //
+    // Put them in the mid alone and the side's spectrum at those frequencies
+    // is noise 36 dB down inside the band being read, so the side transfer
+    // function there measures whatever asymmetry leaks out of either engine
+    // rather than anything either engine is doing: on "Kick - IN 01" every
+    // band read 10 to 14 dB out at 100 Hz, including a bell at 12 kHz. Give
+    // them different frequencies instead and each component is starved where
+    // the other one is fed, which only moves the problem.
     let mut phase = [0.0f64; 6];
+    let mut side_phase = [2.1f64; 6];
+    // Normalise so `--tonal` sits at the SAME level as flat noise. Six
+    // partials at 1.6x the noise amplitude raise the RMS by 13.8 dB, which put
+    // the tonal sweep at -5 dBFS with peaks near full scale — so it was
+    // measuring how each engine behaves when driven hard as much as it was
+    // measuring the spectrum, and Character's saturation with it. One variable
+    // per probe: the tonal run differs from the flat one in spectrum only.
+    let scale = if tonal {
+        // variance = a^2/3 (noise) + 6 * (1.6 a)^2 / 2 (partials)
+        (1.0f64 / 3.0) / (1.0 / 3.0 + 6.0 * 1.6 * 1.6 / 2.0)
+    } else {
+        1.0
+    }
+    .sqrt();
+    let amplitude = amplitude * scale;
     let (mut left, mut right) = (Vec::with_capacity(frames), Vec::with_capacity(frames));
     for _ in 0..frames {
-        // The centre carries the partials — programme material's tonal content
-        // sits in the middle of the image, and putting it in the side would
-        // make the two halves equally unlike anything real.
+        // Both halves carry resonances, on different frequencies.
         let mut mid = amplitude * rng.next();
         if tonal {
             for (k, f) in partials.iter().enumerate() {
@@ -113,7 +135,13 @@ fn stimulus(frames: usize, amplitude: f64) -> (Vec<f32>, Vec<f32>) {
                 phase[k] += std::f64::consts::TAU * f / SR;
             }
         }
-        let side = if mono { 0.0 } else { amplitude * side_rng.next() };
+        let mut side = if mono { 0.0 } else { amplitude * side_rng.next() };
+        if tonal && !mono {
+            for (k, f) in partials.iter().enumerate() {
+                side += amplitude * 1.6 * side_phase[k].sin();
+                side_phase[k] += std::f64::consts::TAU * f / SR;
+            }
+        }
         left.push((mid + side) as f32);
         right.push((mid - side) as f32);
     }
@@ -257,9 +285,34 @@ fn main() {
         std::process::exit(2);
     };
 
+    let mut plugin = match HostedPlugin::load(&plugin_path) {
+        Ok(Some(p)) => p,
+        _ => {
+            eprintln!("{plugin_path}: could not load");
+            std::process::exit(1);
+        }
+    };
+    plugin.prepare(SR, BLOCK as u32).expect("prepare");
+
     // ── Translate ──────────────────────────────────────────────────────
     let bytes = std::fs::read(&preset_path).expect("read preset");
-    let floats: Vec<f32> = if signal_import::fabfilter::parser::is_text_format(&bytes) {
+    let older = bytes.len() > 4 && matches!(&bytes[..4], b"FQ2p" | b"FQ3p");
+    let floats: Vec<f32> = if older {
+        // A Pro-Q 2 or 3 preset has a different, shorter band record, and
+        // converting it here would mean guessing at FabFilter's own mapping —
+        // any difference would then read as a DSP error. So the plugin does
+        // the conversion: it loads the old file, and the state it hands back
+        // is a Pro-Q 4 one.
+        if plugin.load_state(&bytes).is_err() {
+            eprintln!("{preset_path}: the plugin would not load this preset");
+            std::process::exit(1);
+        }
+        let blob = plugin.save_state().expect("save_state");
+        let count = u32::from_le_bytes(blob[16..20].try_into().unwrap()) as usize;
+        (0..count)
+            .map(|i| f32::from_le_bytes(blob[20 + i * 4..24 + i * 4].try_into().unwrap()))
+            .collect()
+    } else if signal_import::fabfilter::parser::is_text_format(&bytes) {
         let text = String::from_utf8_lossy(&bytes);
         signal_import::fabfilter::parser::parse_ffp_text(&text)
             .expect("parse")
@@ -338,15 +391,6 @@ fn main() {
     }
 
     // ── Reference ──────────────────────────────────────────────────────
-    let mut plugin = match HostedPlugin::load(&plugin_path) {
-        Ok(Some(p)) => p,
-        _ => {
-            eprintln!("{plugin_path}: could not load");
-            std::process::exit(1);
-        }
-    };
-    plugin.prepare(SR, BLOCK as u32).expect("prepare");
-
     // Splice the preset into the plugin's own state container — Pro-Q refuses
     // host writes to several band parameters, so this is the only way to put a
     // preset in front of it.
@@ -402,7 +446,11 @@ fn main() {
 
     // ── Measure ────────────────────────────────────────────────────────
     let frames = (WARMUP_FRAMES + FRAMES + 2) * FFT / 2 + FFT;
-    let (in_l, in_r) = stimulus(frames, 0.2);
+    // `--level` in dBFS RMS of each of mid and side. The default is what the
+    // library has always been measured at; a second level is the cheapest way
+    // to find a preset whose agreement is an accident of one loudness.
+    let level_db = arg("--level").and_then(|v| v.parse::<f64>().ok()).unwrap_or(-18.8);
+    let (in_l, in_r) = stimulus(frames, 10.0f64.powf(level_db / 20.0) * 3.0f64.sqrt());
     let (ref_l, ref_r) = render_reference(&mut plugin, &in_l, &in_r);
     let (our_l, our_r) = render_native(&params, &in_l, &in_r);
 

@@ -136,11 +136,18 @@ fn main() {
     };
     let jobs: usize = arg("--jobs").and_then(|v| v.parse().ok()).unwrap_or(8);
     let limit: usize = arg("--limit").and_then(|v| v.parse().ok()).unwrap_or(usize::MAX);
-    let extra: Vec<String> = if std::env::args().any(|a| a == "--tonal") {
-        vec!["--tonal".into()]
-    } else {
-        Vec::new()
-    };
+    // Anything after `--` is handed to every `eq_match` run, so a whole-library
+    // sweep can be taken at a different level or on a different stimulus
+    // without teaching this program about either.
+    let argv: Vec<String> = std::env::args().collect();
+    let mut extra: Vec<String> = argv
+        .iter()
+        .position(|a| a == "--")
+        .map(|i| argv[i + 1..].to_vec())
+        .unwrap_or_default();
+    if argv.iter().any(|a| a == "--tonal") {
+        extra.push("--tonal".into());
+    }
 
     let binary = std::env::current_exe()
         .ok()

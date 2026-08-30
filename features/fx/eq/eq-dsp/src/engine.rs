@@ -193,6 +193,7 @@ pub struct FtsEq {
     output_gain_db: f64,
     /// Pro-Q's Character: 0 Clean, 1 Subtle, 2 Warm.
     character: u32,
+    character_shaper: [CharacterShaper; 2],
     /// Output Pan, -1..1, and whether it balances mid against side rather
     /// than left against right.
     output_pan: f64,
@@ -258,8 +259,8 @@ fn band_envelope(shape: crate::slope::FilterShape, f0: f64, q: f64, hz: f64) -> 
 /// The level Pro-Q's Character modes sit at, in dB.
 ///
 /// Character introduces "vintage non-linearities and warmth", and measured
-/// with a flat band and a tone swept from -60 to -3 dBFS the linear part of it
-/// is a **fixed gain**, the same at every level and every frequency:
+/// with a flat band and a tone swept from -60 to -3 dBFS the fundamental only
+/// ever moves by a fixed gain, the same at every level and every frequency:
 ///
 /// ```text
 ///   Clean   0.00 dB
@@ -267,11 +268,80 @@ fn band_envelope(shape: crate::slope::FilterShape, f0: f64, q: f64, hz: f64) -> 
 ///   Warm   +0.55
 /// ```
 ///
-/// The non-linear part is real but small: on noise, which has peaks a tone
-/// does not, Warm reads +0.44 dB at -18 dBFS rising to +1.44 at -3, as
-/// distortion products fill in the spectrum. That is not modelled — 26 of the
-/// 171 factory presets set Character, and at the level the library is measured
-/// at the gain accounts for all but a tenth of a decibel of it.
+/// What the shaper does lands in the harmonics — see [`CharacterShaper`].
+/// How much second harmonic Warm generates, as the coefficient of a squarer.
+///
+/// Measured by feeding a sine and reading the output at the fundamental and
+/// the next four harmonics. Warm produces **only a second harmonic**, and its
+/// level tracks the input one-for-one over 35 dB:
+///
+/// ```text
+///   in dBFS     -36     -30     -24     -18     -12      -6      -1
+///   2nd      -61.87  -55.88  -49.88  -43.88  -37.88  -31.88  -26.88
+///   3rd     -108.84 -118.78 -123.30 -146.25 -136.31 -142.06 -145.13
+/// ```
+///
+/// A second harmonic proportional to the square of the input, with nothing
+/// above it, is a squarer and nothing else. (Subtle generates no harmonics at
+/// all — it is a hundredth of a decibel of gain and no more.)
+const CHARACTER_SQUARE: f64 = 0.0739;
+
+/// The low shelf the squarer's input is driven through: gain at DC, and the
+/// corner it returns to unity above.
+///
+/// The distortion is stronger at the bottom. Reading the second harmonic at
+/// -18 dBFS across frequency, and halving it to get the drive:
+///
+/// ```text
+///      Hz       60     100     500    3000    8000
+///   Pro-Q   -39.53  -39.37  -43.88  -45.91  -45.98
+///    ours   -39.12  -39.46  -43.67  -45.84  -45.92
+/// ```
+///
+/// Flat below about 100 Hz and flat again above 3 kHz, which is a shelf. The
+/// two constants were fitted together against that row; the worst miss is 0.4
+/// dB on a harmonic forty decibels down.
+const CHARACTER_DRIVE_DB: f64 = 3.6;
+const CHARACTER_DRIVE_HZ: f64 = 280.0;
+
+/// Warm's waveshaper: a second-harmonic generator with a low-emphasised drive.
+#[derive(Debug, Clone, Copy, Default)]
+struct CharacterShaper {
+    /// One-pole state for the drive shelf, and its coefficient.
+    lp: f64,
+    lp_coeff: f64,
+    /// Shelf lift, `10^(drive/20) - 1`.
+    lift: f64,
+    /// DC blocker — a squarer puts as much energy at zero hertz as it does at
+    /// the second harmonic, and that has nowhere useful to go.
+    dc_x1: f64,
+    dc_y1: f64,
+    dc_r: f64,
+}
+
+impl CharacterShaper {
+    fn update(&mut self, sample_rate: f64) {
+        self.lp_coeff =
+            1.0 - (-core::f64::consts::TAU * CHARACTER_DRIVE_HZ / sample_rate).exp();
+        self.lift = 10.0f64.powf(CHARACTER_DRIVE_DB / 20.0) - 1.0;
+        self.dc_r = 1.0 - core::f64::consts::TAU * 5.0 / sample_rate;
+        self.lp = 0.0;
+        self.dc_x1 = 0.0;
+        self.dc_y1 = 0.0;
+    }
+
+    #[inline]
+    fn tick(&mut self, x: f64) -> f64 {
+        self.lp += (x - self.lp) * self.lp_coeff;
+        let drive = x + self.lift * self.lp;
+        let second = CHARACTER_SQUARE * drive * drive;
+        let blocked = second - self.dc_x1 + self.dc_r * self.dc_y1;
+        self.dc_x1 = second;
+        self.dc_y1 = blocked;
+        x + blocked
+    }
+}
+
 #[inline]
 fn character_gain_db(mode: u32) -> f64 {
     match mode {
@@ -340,6 +410,7 @@ impl FtsEq {
             qs: [0.707; EQ_BANDS],
             output_gain_db: 0.0,
             character: 0,
+            character_shaper: [CharacterShaper::default(); 2],
             output_pan: 0.0,
             output_pan_mid_side: false,
             auto_gain: false,
@@ -691,6 +762,9 @@ impl FtsEq {
     /// Only its **gain** is modelled — see [`character_gain_db`].
     pub fn set_character(&mut self, mode: u32) {
         self.character = mode.min(2);
+        for sh in &mut self.character_shaper {
+            sh.update(self.sample_rate);
+        }
     }
 
     /// The static chain's magnitude at `hz`, in dB.
@@ -786,6 +860,9 @@ impl FtsEq {
     }
     pub fn prepare(&mut self, sample_rate: f64, block_size: u32) {
         self.sample_rate = sample_rate.max(1.0);
+        for sh in &mut self.character_shaper {
+            sh.update(self.sample_rate);
+        }
         self.eq.set_sample_rate(self.sample_rate);
         self.eq.reset();
         self.eq_b.set_sample_rate(self.sample_rate);
@@ -849,6 +926,8 @@ impl FtsEq {
         let dyn_bands = &mut self.dyn_bands;
         let dyn_active = &self.dyn_active;
         let dyn_modulated = &self.dyn_modulated;
+        let character = self.character;
+        let character_shaper = &mut self.character_shaper;
         let pan = self.output_pan;
         let pan_mid_side = self.output_pan_mid_side;
         let dyn_modulated_gain = &mut self.dyn_modulated_gain;
@@ -966,6 +1045,17 @@ impl FtsEq {
                         let (sl, sr) = spectral.tick(l[i], r[i]);
                         l[i] = sl;
                         r[i] = sr;
+                    }
+                }
+                // Character's waveshaper sits at the OUTPUT — its own makeup
+                // is already in `out_gain`. Placed at the input instead, where
+                // the EQ would then shape its harmonics, it measures worse on
+                // programme material: "Production Ready Vocals" 1.49 dB to
+                // 1.81, "Kick - IN 01" 1.65 to 1.82.
+                if character == 2 {
+                    for i in 0..l.len() {
+                        l[i] = character_shaper[0].tick(l[i]);
+                        r[i] = character_shaper[1].tick(r[i]);
                     }
                 }
                 if (out_gain - 1.0).abs() > 1.0e-9 {
