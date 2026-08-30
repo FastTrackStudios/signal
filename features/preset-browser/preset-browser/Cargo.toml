@@ -1,0 +1,13 @@
+[package]
+name = "preset-browser"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+description = "Headless preset library and browsing model shared by the FTS plugin UIs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

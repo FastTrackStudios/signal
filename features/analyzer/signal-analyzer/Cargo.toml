@@ -1,0 +1,27 @@
+[package]
+name = "signal-analyzer"
+version.workspace = true
+edition = "2021"          # matches the rest of the signal domain crates
+license.workspace = true
+description = "Measure FTS FX against reference plugins — signal generation, metrics, and A/B comparison"
+
+[dependencies]
+realfft.workspace = true
+serde.workspace = true
+
+# The library itself hosts no plugins — callers hand it rendered buffers.
+# The render bridge (examples/) needs the hosts and our own FX, so those are
+# dev-only: `cargo test -p signal-analyzer` still runs with nothing installed.
+[dev-dependencies]
+signal-plugin-host = { workspace = true, features = ["clap-host", "vst3-host"] }
+signal-fx.workspace = true
+reverb-dsp.workspace = true
+audiocore-dsp.workspace = true
+signal-import.workspace = true
+# Reference-render caching and result files: a tuning run is expensive and its
+# output IS the preset, so both are worth keeping.
+hound = "3.5"
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -12,3 +12,15 @@ eyre.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+base64.workspace = true
+# For `AlgorithmType::t60_range` only — the translator has to know what
+# reverberation times an engine can actually be asked for, so it does not
+# route a 0.3 s preset to an engine whose floor is a second. Data, not DSP.
+reverb-dsp.workspace = true
+eq-dsp.workspace = true
+
+[dev-dependencies]
+# The translation is only worth anything if the engine on the other side acts
+# on it, so `tests/proq4_dynamics.rs` drives real audio through `NativeEq`.
+signal-fx.workspace = true
+signal-plugin-host.workspace = true

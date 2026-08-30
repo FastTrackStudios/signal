@@ -38,7 +38,10 @@ pub(super) fn mzt_highpass_simple_cascade(
         6 => s6::cascade(freq_hz, q, sample_rate),
         7 => s7::cascade(freq_hz, q, sample_rate),
         16 => s9::cascade(freq_hz, q, sample_rate),
-        _ if n >= 4 => s8::cascade(freq_hz, q, sample_rate),
+        // Six sections is twelve poles — 72 dB/oct. Order 8 (48 dB/oct) used
+        // to land here too and came out a whole slope step too steep; it
+        // belongs on the plain four-section Butterworth cascade below.
+        _ if n >= 6 => s8::cascade(freq_hz, q, sample_rate),
         _ => cascade_qs(n, q)
             .into_iter()
             .rev()

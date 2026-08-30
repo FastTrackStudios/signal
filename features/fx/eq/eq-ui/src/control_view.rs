@@ -153,6 +153,22 @@ fn AppShell() -> Element {
     let ctx = use_param_context();
     let params = &ui.params;
 
+    // Presets. The side rail selects the model; the strip along the top
+    // selects the preset — the same split every FTS editor uses.
+    let mut preset_browser = use_signal(preset_browser::PresetBrowser::default);
+    let preset_note = use_signal(String::new);
+    let mut preset_open = use_signal(|| false);
+    let mut presets_loaded = use_signal(|| false);
+    if !*presets_loaded.read() {
+        presets_loaded.set(true);
+        let (library, note) = crate::preset_view::load_library();
+        preset_browser.set(library);
+        let mut n = preset_note;
+        n.set(note);
+    }
+    let preset_handles = crate::preset_view::preset_handles(params, &ctx);
+    let browsing = *preset_open.read();
+
     // Cheat-sheet overlay track source. If the host shell already injected a
     // provider (the standalone injects a `StaticTrackProvider` for env-based
     // testing), leave it; otherwise back it with the host `GuiContext` so the
@@ -381,6 +397,41 @@ fn AppShell() -> Element {
                         crate::faces::store_model_id(&params_for_id, next);
                     }
                 },
+
+            preset_browser_ui::PresetBar {
+                browser: preset_browser,
+                browsing,
+                accent: "#8aa4ff".to_string(),
+                on_browse: move |_| preset_open.toggle(),
+                on_apply: {
+                    let handles = preset_handles.clone();
+                    move |p: Vec<(String, f64)>| {
+                        crate::preset_view::apply(&p, &handles, preset_note)
+                    }
+                },
+            }
+
+            // The browser overlays the right-hand side rather than resizing
+            // the editor: the EQ curve is a blitz custom widget and its box is
+            // load-bearing, so nothing here moves when the list opens.
+            if browsing {
+                div {
+                    // No z-index: blitz hoists a z-indexed child into a
+                    // stacking context whose hit area only materialises after
+                    // a real paint, so the panel would render on top and take
+                    // no clicks. Document order stacks it instead.
+                    style: "position:absolute; top:26px; right:0; bottom:0; width:340px; \
+                            border-left:1px solid rgba(148,163,184,0.3); \
+                            background:var(--background);",
+                    crate::preset_view::EqPresetSidecar {
+                        browser: preset_browser,
+                        note: preset_note,
+                        handles: preset_handles.clone(),
+                        ink: "#e8e6ef".to_string(),
+                        accent: "#8aa4ff".to_string(),
+                    }
+                }
+            }
 
             if let Some(design) = crate::faces::design_for_model(current_model) {
                 // A hardware model swaps the whole surface for that unit's
@@ -1538,20 +1589,27 @@ fn format_freq(freq: f32) -> String {
     }
 }
 
-fn slope_label(idx: i32) -> &'static str {
-    match idx {
-        0 => "0 dB/oct",
-        1 => "6 dB/oct",
-        2 => "12 dB/oct",
-        3 => "18 dB/oct",
-        4 => "24 dB/oct",
-        5 => "30 dB/oct",
-        6 => "36 dB/oct",
-        7 => "48 dB/oct",
-        8 => "72 dB/oct",
-        9 => "96 dB/oct",
-        10 => "Brickwall",
-        _ => "12 dB/oct",
+/// The slope readout.
+///
+/// Continuous below 36 dB/oct, because the parameter is: a band can sit at
+/// 15.2 dB/oct, and printing that as "12 dB/oct" would make the panel disagree
+/// with what the filter is doing. Above 36 the settings are discrete steps
+/// rather than a range.
+fn slope_label(slope: f32) -> String {
+    if slope <= 6.0 {
+        let db = slope * 6.0;
+        if (db - db.round()).abs() < 0.05 {
+            format!("{db:.0} dB/oct")
+        } else {
+            format!("{db:.1} dB/oct")
+        }
+    } else {
+        match slope.round() as i32 {
+            7 => "48 dB/oct".to_string(),
+            8 => "72 dB/oct".to_string(),
+            9 => "96 dB/oct".to_string(),
+            _ => "Brickwall".to_string(),
+        }
     }
 }
 

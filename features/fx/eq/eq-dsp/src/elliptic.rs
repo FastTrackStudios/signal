@@ -149,6 +149,83 @@ pub fn elliptic_asn(y: f64, k: f64) -> f64 {
     u
 }
 
+/// Jacobi sn, cn and dn together, for real `u` and modulus `k`.
+///
+/// The AGM descent that [`elliptic_sn`] runs already produces the amplitude
+/// `phi`; all three functions fall straight out of it, and taking them from
+/// one descent keeps them consistent with each other. Deriving `cn` as
+/// `sqrt(1 - sn^2)` instead loses its sign, which matters here — the elliptic
+/// prototype evaluates `cd` at arguments past `K` where `cn` is negative.
+pub fn elliptic_sncndn(u: f64, k: f64) -> (f64, f64, f64) {
+    if k.abs() < TOL {
+        return (u.sin(), u.cos(), 1.0);
+    }
+    if (k.abs() - 1.0).abs() < TOL {
+        let t = u.tanh();
+        let sech = 1.0 / u.cosh();
+        return (t, sech, sech);
+    }
+
+    let m = k * k;
+    let mut a_seq = Vec::with_capacity(MAX_ITER);
+    let mut c_seq = Vec::with_capacity(MAX_ITER);
+    let mut a = 1.0;
+    let mut b = (1.0 - m).sqrt();
+    a_seq.push(a);
+    c_seq.push(k.abs());
+
+    let mut n = 0;
+    for _ in 0..MAX_ITER {
+        let a_next = (a + b) * 0.5;
+        let c_next = (a - b) * 0.5;
+        let b_next = (a * b).sqrt();
+        n += 1;
+        a_seq.push(a_next);
+        c_seq.push(c_next);
+        if c_next.abs() < TOL {
+            a = a_next;
+            break;
+        }
+        a = a_next;
+        b = b_next;
+    }
+
+    let mut phi = (1u64 << n) as f64 * a * u;
+    for i in (1..=n).rev() {
+        phi = (phi + (c_seq[i] / a_seq[i] * phi.sin()).asin()) * 0.5;
+    }
+    let sn = phi.sin();
+    let cn = phi.cos();
+    // dn is strictly positive for real u, so the square root is unambiguous.
+    let dn = (1.0 - m * sn * sn).max(0.0).sqrt();
+    (sn, cn, dn)
+}
+
+/// Solve the elliptic degree equation: the modulus `k` for which an order-`n`
+/// elliptic filter with modulus ratio `k1` has its transition band.
+///
+/// `k = omega_p / omega_s`, so a smaller `k1` (deeper stopband, flatter
+/// passband) or a lower order both push `k` down and the transition wider.
+///
+/// Solved through the nome rather than by iteration: `q1 = exp(-pi K'/K)` at
+/// `k1`, then `q = q1^(1/n)`, then `k` back out of `q` by the theta-series
+/// ratio. The series converge geometrically in `q`, which is tiny for any
+/// stopband worth having, so four terms are already at machine precision.
+pub fn ellipdeg(n: usize, k1: f64) -> f64 {
+    let k1 = k1.clamp(1e-300, 1.0 - 1e-15);
+    let big_k = elliptic_k_complete(k1 * k1);
+    let big_kp = elliptic_k_complete(1.0 - k1 * k1);
+    let q1 = (-PI * big_kp / big_k).exp();
+    let q = q1.powf(1.0 / n as f64);
+
+    let (mut num, mut den) = (1.0f64, 1.0f64);
+    for m in 1..=8u32 {
+        num += q.powi((m * (m + 1)) as i32);
+        den += 2.0 * q.powi((m * m) as i32);
+    }
+    4.0 * q.sqrt() * (num / den).powi(2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

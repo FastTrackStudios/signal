@@ -77,6 +77,11 @@ impl EqChain {
     ///
     /// Each sample passes through all bands in series (left then right).
     /// True when at least one band would touch the signal.
+    /// The whole chain's magnitude response at `hz`, in dB.
+    pub fn magnitude_db(&self, hz: f64, sample_rate: f64) -> f64 {
+        self.bands.iter().map(|b| b.magnitude_db(hz, sample_rate)).sum()
+    }
+
     pub fn has_active_bands(&self) -> bool {
         self.bands.iter().any(|b| !b.is_idle())
     }
@@ -98,7 +103,14 @@ impl EqChain {
                         right[i] = band.tick(right[i], 1);
                     }
                     Placement::Left => left[i] = band.tick(left[i], 0),
-                    Placement::Right => right[i] = band.tick(right[i], 1),
+                    // Channel slot 0, not 1. A Right band only ever sees one
+                    // channel, and `Band::tick` advances its enable ramp on
+                    // slot 0 alone — driven on slot 1 the ramp never left
+                    // zero, so **every static Right-placement band in the
+                    // library was silently inert**. Its own filter state has
+                    // nowhere else to live either, so slot 0 is where it
+                    // belongs.
+                    Placement::Right => right[i] = band.tick(right[i], 0),
                     Placement::Mid => {
                         let m = 0.5 * (left[i] + right[i]);
                         let s = 0.5 * (left[i] - right[i]);
@@ -130,6 +142,45 @@ mod placement_tests {
     use super::*;
     use crate::band::Placement;
     use crate::design::FilterType;
+
+    /// A Right-placement band actually processes.
+    ///
+    /// It used to be driven on channel slot 1, where `Band::tick` never
+    /// advances its enable ramp — so the band stayed permanently crossfaded
+    /// out and did nothing at all, while the identical band on the Left
+    /// worked. Four static bands in the Pro-Q factory library sit on Right,
+    /// and all four were inert.
+    #[test]
+    fn a_right_band_is_not_silently_bypassed() {
+        let sr = 48_000.0;
+        let mut chain = EqChain::new();
+        chain.set_sample_rate(sr);
+        let idx = chain.add_band();
+        if let Some(b) = chain.band_mut(idx) {
+            b.filter_type = FilterType::Highpass;
+            b.freq_hz = 1000.0;
+            b.order = 4;
+            b.placement = Placement::Right;
+            b.enabled = true;
+        }
+        chain.update_band(idx);
+
+        // A 100 Hz tone, two octaves under a 24 dB/oct high pass: the right
+        // channel should lose most of it and the left none of it.
+        let n = 4800;
+        let (mut l, mut r) = (vec![0.0f64; n], vec![0.0f64; n]);
+        for i in 0..n {
+            let x = (core::f64::consts::TAU * 100.0 * i as f64 / sr).sin();
+            l[i] = x;
+            r[i] = x;
+        }
+        chain.process(&mut l, &mut r);
+        let rms = |v: &[f64]| (v[n / 2..].iter().map(|x| x * x).sum::<f64>()
+            / (n / 2) as f64).sqrt();
+        let (lrms, rrms) = (rms(&l), rms(&r));
+        assert!((lrms - 0.7071).abs() < 0.02, "left must pass untouched ({lrms:.3})");
+        assert!(rrms < 0.1, "right must be cut ({rrms:.3})");
+    }
 
     #[test]
     fn side_band_leaves_mono_untouched() {

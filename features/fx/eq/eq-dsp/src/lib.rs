@@ -39,6 +39,7 @@ pub mod delay;
 pub mod design;
 pub mod dynamics;
 pub mod elliptic;
+pub mod engine;
 pub mod hardware_eq;
 pub mod hardware_targets;
 pub mod neve_1073;

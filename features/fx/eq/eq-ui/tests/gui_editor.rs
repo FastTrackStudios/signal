@@ -1031,3 +1031,31 @@ async fn the_range_selector_is_on_the_graph_and_sets_the_param() -> dioxus_test:
     );
     Ok(())
 }
+
+/// The preset strip is mounted in the top rail, and browsing opens the list.
+///
+/// The library lives on disk and is usually empty in a test run, so this
+/// asserts the surfaces exist and respond, not what is in them — the browsing
+/// rules are covered in `preset-browser` and the panel in `preset-browser-ui`.
+/// What only this mount can answer is whether the EQ editor carries them, and
+/// whether the Browse control is actually reachable: a z-indexed overlay
+/// renders on top in blitz but takes no clicks headlessly.
+#[tokio::test]
+async fn the_top_rail_carries_the_preset_strip() -> dioxus_test::Result<()> {
+    let mut fx = mount();
+    let _ = fx.tester.pump().await;
+
+    fx.tester.query(dioxus_test::by_testid("preset-bar-name")).immediately()?;
+    assert!(
+        fx.tester.query(dioxus_test::by_testid("eq-presets")).immediately().is_err(),
+        "the browser stays shut until asked for",
+    );
+
+    let browse = fx.tester.query(dioxus_test::by_testid("preset-bar-browse")).immediately()?;
+    let (ox, oy) = browse.document_origin();
+    let (w, h) = browse.size();
+    fx.tap(ox + w as f64 / 2.0, oy + h as f64 / 2.0).await;
+
+    fx.tester.query(dioxus_test::by_testid("eq-presets")).immediately()?;
+    Ok(())
+}

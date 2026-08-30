@@ -41,6 +41,15 @@ impl Tdf2Section {
         self.c4 = coeffs[2] * a0_inv; // a2/a0
     }
 
+    /// The normalised coefficients, `[b0, b1, b2, a1, a2]` with `a0 = 1`.
+    ///
+    /// Wanted for evaluating the cascade's response without redesigning it —
+    /// the auto-gain compensation has to know what curve the chain is
+    /// currently applying.
+    pub fn coeffs(&self) -> [f64; 5] {
+        [self.c0, self.c1, self.c2, self.c3, self.c4]
+    }
+
     /// Process one sample through the biquad (TDF2).
     #[inline]
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
@@ -107,6 +116,11 @@ impl Df1Section {
         self.b2 = coeffs[5] * a0_inv;
         self.a1 = coeffs[1] * a0_inv;
         self.a2 = coeffs[2] * a0_inv;
+    }
+
+    /// The normalised coefficients, `[b0, b1, b2, a1, a2]` with `a0 = 1`.
+    pub fn coeffs(&self) -> [f64; 5] {
+        [self.b0, self.b1, self.b2, self.a1, self.a2]
     }
 
     /// Process one sample through the biquad (Direct Form I).

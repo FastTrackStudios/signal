@@ -4,7 +4,10 @@
 //! extracts metadata from text-format presets, and produces
 //! `ImportedPresetCollection` values ready for the orchestrator.
 
+pub mod ffbs;
 pub mod parser;
+pub mod proq4;
+pub mod pror2;
 pub mod registry;
 pub mod rig_presets;
 pub mod tags;

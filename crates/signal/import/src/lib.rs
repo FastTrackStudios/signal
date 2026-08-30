@@ -34,11 +34,13 @@
 //!
 //! - [`fabfilter`] -- FabFilter Pro-Q, Pro-R, Saturn, etc. preset parsing and tag mapping
 //! - [`rfxchain`] -- REAPER `.RfxChain` file parsing
+//! - [`valhalla`] -- ValhallaVintageVerb / ValhallaRoom project state -> FTS reverb
 
 pub mod fabfilter;
 pub mod library_writer;
 pub mod rfxchain;
 pub mod types;
+pub mod valhalla;
 
 use std::path::Path;
 

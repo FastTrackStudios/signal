@@ -36,6 +36,15 @@ pub enum Slope {
     Brickwall,
 }
 
+/// The `order` value that means "Brickwall", not a pole count.
+///
+/// Brickwall is an elliptic design of order 12 (see
+/// `design::brickwall`), so no real order can stand for it: the design
+/// dispatcher has to be told which family to build, not how many poles to
+/// build it from. A value no slope's pole count can collide with says that
+/// unambiguously.
+pub const BRICKWALL_ORDER: usize = 1000;
+
 impl Slope {
     /// Pro-Q internal slope index (0..=9). `Brickwall` returns `None`.
     pub fn pro_q_index(self) -> Option<usize> {
@@ -127,8 +136,14 @@ impl Slope {
 
     /// CANONICAL filter order (pole count) for this slope — replaces
     /// the three divergent tables that lived in the plugin shell and
-    /// the conformance tests. Brickwall currently maps to the maximum
-    /// IIR order (a dedicated brickwall path is tracked in issue #73).
+    /// the conformance tests.
+    ///
+    /// Brickwall is the exception: it is not a pole count at all, it is a
+    /// different *design*, so it returns [`BRICKWALL_ORDER`] as a sentinel
+    /// that `design_filter` routes on. It used to return 16 — the same as
+    /// 96 dB/oct — which made the plugin's steepest setting and its
+    /// second-steepest identical filters, 65 dB apart from the plugin an
+    /// eighth of an octave past the corner.
     pub fn order(self) -> usize {
         match self {
             Slope::Db0 => 0,
@@ -141,7 +156,7 @@ impl Slope {
             Slope::Db48 => 8,
             Slope::Db72 => 12,
             Slope::Db96 => 16,
-            Slope::Brickwall => 16,
+            Slope::Brickwall => BRICKWALL_ORDER,
         }
     }
 
@@ -342,9 +357,11 @@ mod tests {
         // Cuts honor low slopes; 0 dB/oct on a cut = bypass (order 0).
         assert_eq!(FilterShape::LowCut.effective_order(0), 0);
         assert_eq!(FilterShape::LowCut.effective_order(1), 1);
-        // Brickwall only for cuts; others cap at Db96.
+        // Brickwall only for cuts; others cap at Db96 (order 16). A cut gets
+        // the sentinel instead, because Brickwall is an elliptic design and
+        // not a pole count — see [`BRICKWALL_ORDER`].
         assert_eq!(FilterShape::Bell.effective_order(10), 16);
-        assert_eq!(FilterShape::LowCut.effective_order(10), 16);
+        assert_eq!(FilterShape::LowCut.effective_order(10), BRICKWALL_ORDER);
     }
 
     #[test]
