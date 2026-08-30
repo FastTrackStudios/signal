@@ -103,9 +103,15 @@ SIGN_ID="$(security find-identity -v -p codesigning "$KEYCHAIN" \
 [ -n "$SIGN_ID" ] || { echo "ERROR: distribution identity still missing after import." >&2; exit 1; }
 echo "=== distribution identity: $SIGN_ID (keychain: $KEYCHAIN) ==="
 
-echo "=== App Store provisioning profile ==="
+# Provisioning-profile name. Defaults to one derived from the bundle id so
+# each product gets its OWN profile: mint-dev-profile.rb deletes same-named
+# profiles before creating, so a single shared name means every build revokes
+# the previously-built app's profile.
+PROFILE_NAME="${PROFILE_NAME:-FTS ${DX_BUNDLE_ID##*.} App Store}"
+
+echo "=== App Store provisioning profile ($PROFILE_NAME) ==="
 PROFILE="$(PROFILE_TYPE=IOS_APP_STORE CERT_TYPE=DISTRIBUTION \
-    ruby "$SCRIPT_DIR/mint-dev-profile.rb" - "$DX_BUNDLE_ID" | awk -F= '/PROFILE_PATH=/{print $2}')"
+    ruby "$SCRIPT_DIR/mint-dev-profile.rb" - "$DX_BUNDLE_ID" "$PROFILE_NAME" | awk -F= '/PROFILE_PATH=/{print $2}')"
 echo "profile: $PROFILE"
 
 echo "=== building release ==="
@@ -339,7 +345,7 @@ WORK="$(mktemp -d)"
 TMP_DIRS+=("$WORK")
 mkdir -p "$WORK/Payload"
 cp -R "$APP" "$WORK/Payload/"
-IPA="$WORK/FastTrackStudio.ipa"
+IPA="$WORK/${DX_PACKAGE}.ipa"
 # ditto (not zip) — preserves the _CodeSignature/CodeResources symlink that
 # altool requires; a plain zip breaks it.
 ( cd "$WORK" && ditto -c -k --sequesterRsrc --keepParent Payload "$IPA" )

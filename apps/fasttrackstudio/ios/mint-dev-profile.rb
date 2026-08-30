@@ -28,7 +28,11 @@ BUNDLE_ID = ARGV[1] || "app.fasttrackstudio"
 PROFILE_TYPE = ENV["PROFILE_TYPE"] || "IOS_APP_DEVELOPMENT"
 CERT_TYPE = ENV["CERT_TYPE"] || "DEVELOPMENT"
 APP_STORE = PROFILE_TYPE == "IOS_APP_STORE"
-PROFILE_NAME = ARGV[2] || (APP_STORE ? "FTS App Store" : "FTS Dev")
+# Profile name. MUST be unique per app: the script deletes any profile with
+# the same name before creating, so five products sharing one name means each
+# build silently revokes the previous app's profile.
+PROFILE_NAME = ARGV[2] || ENV["PROFILE_NAME"] ||
+               (APP_STORE ? "FTS App Store" : "FTS Dev")
 
 KEY_ID = ENV.fetch("ASC_KEY_ID")
 ISSUER_ID = ENV.fetch("ASC_ISSUER_ID")
@@ -106,9 +110,13 @@ bundle = api(:get, "/v1/bundleIds?filter[identifier]=#{BUNDLE_ID}&limit=200")["d
   .find { |b| b["attributes"]["identifier"] == BUNDLE_ID }
 if bundle.nil?
   puts "creating bundle id #{BUNDLE_ID}"
+  # Derive the display name from the identifier. Hardcoding "FastTrackStudio"
+  # made every auto-created bundle id share one name, which is confusing in
+  # the portal once there are five products.
+  bundle_name = BUNDLE_ID.split(".").last.capitalize
   bundle = api(:post, "/v1/bundleIds", {
     data: { type: "bundleIds", attributes: {
-      identifier: BUNDLE_ID, name: "FastTrackStudio", platform: "IOS"
+      identifier: BUNDLE_ID, name: bundle_name, platform: "IOS"
     } }
   })["data"]
 end

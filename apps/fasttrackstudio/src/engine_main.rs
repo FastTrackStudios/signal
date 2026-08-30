@@ -130,7 +130,7 @@ pub fn run() {
     // traces/logs/metrics when OTEL_EXPORTER_OTLP_ENDPOINT is set
     // (http/protobuf → the local collector on :4318). Both guards must live
     // for the whole process — dropping them flushes and stops the exporters.
-    let (_sentry, _otel) = architect_telemetry::init_tracing_full("fts-engine", "info");
+    let (_sentry, _otel) = architect_telemetry::init_tracing_full("signal-engine", "info");
     // Log every panic loudly (thread name + backtrace). Panics stay
     // unwinding — control-plane panics are caught and survived (the rig's
     // meter pump self-heals; audio keeps playing) — but none die silently.

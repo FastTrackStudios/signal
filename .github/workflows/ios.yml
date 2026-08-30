@@ -93,6 +93,25 @@ jobs:
           # but compile the icon catalog with the beta's actool — 26.6's actool
           # can't produce Assets.car on macOS 27 (simulator-SDK mismatch).
           ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
+          # ── Telemetry ────────────────────────────────────────────────
+          # Baked at build time via option_env! in architect-telemetry: a
+          # shipped app has nobody to set env vars for it, and the exporter
+          # is built at process start -- before sign-in -- so a session
+          # token cannot be the credential. Both empty => the app is
+          # telemetry-free, which is the local-first default.
+          TASK_OTLP_ENDPOINT: ${{ vars.TASK_OTLP_ENDPOINT }}
+          TASK_OTLP_TOKEN: ${{ secrets.TASK_OTLP_TOKEN }}
+          TASK_SENTRY_DSN: ${{ secrets.TASK_SENTRY_DSN }}
+          # ── Signal product identity ──────────────────────────────────
+          # Bundle id must match apps/fasttrackstudio/Dioxus.toml.
+          DX_BUNDLE_ID: app.fasttrackstudio.signal
+          # Home-screen name. Without this the device shows the dx-derived
+          # bundle name; the crate is still called `fasttrackstudio` even
+          # though the product shipping from it is Signal.
+          APP_DISPLAY_NAME: Signal
+          # Own profile, or each product's build revokes the last one's.
+          PROFILE_NAME: FTS Signal App Store
+          ICONS_DIR: ${{ github.workspace }}/apps/fasttrackstudio/ios/Assets.xcassets
         run: |
           set -euo pipefail
           export PATH="/nix/var/nix/profiles/default/bin:$PATH"

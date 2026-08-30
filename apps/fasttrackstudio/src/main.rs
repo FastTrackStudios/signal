@@ -168,7 +168,7 @@ fn main() {
     {
         use tracing_subscriber::layer::SubscriberExt as _;
         use tracing_subscriber::util::SubscriberInitExt as _;
-        if let Some(guard) = architect_telemetry::init("fts-app") {
+        if let Some(guard) = architect_telemetry::init("signal") {
             std::mem::forget(guard);
         }
         let registry = tracing_subscriber::registry()
@@ -179,7 +179,7 @@ fn main() {
             .with(tracing_subscriber::fmt::layer())
             .with(log_ring::RingLayer::new())
             .with(architect_telemetry::tracing_layer());
-        match architect_telemetry::otel::init("fts-app") {
+        match architect_telemetry::otel::init("signal") {
             Some((otel_guard, layers)) => {
                 registry.with(layers).init();
                 std::mem::forget(otel_guard);
