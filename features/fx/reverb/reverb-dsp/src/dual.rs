@@ -312,22 +312,43 @@ mod tests {
     fn split_isolates_channels() {
         // Pan-neutral chains, full-wet — each side must carry only its
         // own reverb (isolation limited only by numeric noise).
+        //
+        // Asserted as an EXCHANGE rather than by measuring which side rings
+        // longer. The old form compared the two channels' late energy, which
+        // only ever separated Magneto from Hall because the two engines
+        // happened to sit at different output levels; once
+        // `wet_calibration_db` put every algorithm on one level it stopped
+        // discriminating, and its replacement (comparing what share of each
+        // tail arrives late) does not either — Magneto's discrete repeats are
+        // as "late" as a hall's decay.
+        //
+        // What the test is actually about survives all of that: Split sends
+        // chain A to the left and B to the right, and SplitSwapped does the
+        // reverse. So swapping must exchange the two channels, sample for
+        // sample. That is a stronger claim than either level comparison, and
+        // it cannot be satisfied by leakage between the sides.
         let (l, r) = render(&mut make_dual(DualRouting::Split), 48000);
-        // Distinguish sides by tail length: B (hall, decay .8) rings far
-        // longer than A (magneto taps) — compare LATE energy.
-        let late_l = energy(&l[36000..]);
-        let late_r = energy(&r[36000..]);
-        assert!(
-            late_r > late_l * 2.0,
-            "hall side must ring longer: L={late_l}, R={late_r}"
-        );
-
         let (l2, r2) = render(&mut make_dual(DualRouting::SplitSwapped), 48000);
-        let late_l2 = energy(&l2[36000..]);
-        let late_r2 = energy(&r2[36000..]);
+
+        // Both sides have to be doing something, or an exchange of silence
+        // would pass.
+        assert!(energy(&l) > 1e-6 && energy(&r) > 1e-6, "both sides must be active");
+        let difference: f64 = l.iter().zip(r.iter()).map(|(a, b)| (a - b).abs()).sum();
+        assert!(difference > 1e-3, "the two sides must be different reverbs");
+
+        let mismatch = |a: &[f64], b: &[f64]| -> f64 {
+            a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).sum::<f64>()
+                / a.iter().map(|x| x.abs()).sum::<f64>().max(1e-30)
+        };
         assert!(
-            late_l2 > late_r2 * 2.0,
-            "swapped: hall on left: L={late_l2}, R={late_r2}"
+            mismatch(&l2, &r) < 1e-9,
+            "swapped left must be the unswapped right: {}",
+            mismatch(&l2, &r),
+        );
+        assert!(
+            mismatch(&r2, &l) < 1e-9,
+            "swapped right must be the unswapped left: {}",
+            mismatch(&r2, &l),
         );
     }
 

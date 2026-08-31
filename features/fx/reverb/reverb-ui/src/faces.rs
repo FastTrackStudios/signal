@@ -157,6 +157,20 @@ const AMBIENT_KNOBS: &[KnobSpec] = &[
     knob("mix", "Mix", 872.0, 52.0, KnobStyle::Marconi),
 ];
 
+/// Random puts its two defining controls on the face: how much the lines
+/// wander, and how densely the wash is built. Everything else is the usual
+/// space row.
+const RANDOM_KNOBS: &[KnobSpec] = &[
+    knob("decay", "Decay", 118.0, 62.0, KnobStyle::Marconi),
+    knob("size", "Size", 230.0, 62.0, KnobStyle::Marconi),
+    knob("predelay", "Onset", 340.0, 44.0, KnobStyle::Marconi),
+    knob("damping", "Air", 450.0, 44.0, KnobStyle::Marconi),
+    knob("character_a", "Drift", 560.0, 48.0, KnobStyle::Marconi),
+    knob("character_b", "Density", 670.0, 48.0, KnobStyle::Marconi),
+    knob("modulation", "Motion", 780.0, 44.0, KnobStyle::Marconi),
+    knob("mix", "Mix", 872.0, 52.0, KnobStyle::Marconi),
+];
+
 const SPECIAL_KNOBS: &[KnobSpec] = &[
     knob("decay", "Decay", 118.0, 58.0, KnobStyle::SilverTop),
     knob("size", "Size", 230.0, 58.0, KnobStyle::SilverTop),
@@ -269,6 +283,21 @@ pub static AMBIENT: SpaceDesign = SpaceDesign {
     knobs: AMBIENT_KNOBS,
 };
 
+/// Random: a wash that never settles. Cooler and less lit than Ambient,
+/// because the point is motion rather than bloom.
+pub static RANDOM: SpaceDesign = SpaceDesign {
+    family: "random",
+    paint: "linear-gradient(178deg, #1b2733 0%, #152029 50%, #0e161d 100%)",
+    ink: "#dfeaf2",
+    dim_ink: "#8ea3b3",
+    chrome: "#89a0b0",
+    accent: "#4fb8c9",
+    ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
+    centre: Centrepiece::Halo,
+    knobs: RANDOM_KNOBS,
+};
+
 /// Special: black, lamps, and no pretence of being a room.
 pub static SPECIAL: SpaceDesign = SpaceDesign {
     family: "special",
@@ -344,6 +373,9 @@ pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
         "bloom" => ("Stages", "Harmonics"),
         "swell" => ("Rise", "Hold"),
         "velvet" => ("Density", "Softness"),
+        // What the engine actually is: how far the lines wander, and how
+        // densely the wash is built.
+        "random" => ("Drift", "Density"),
         "spring_classic" | "spring_vintage" => ("Drip", "Tank"),
         // Halls and plates take the pair as reflection shaping; the IR takes
         // it as how the recorded tail is re-shaped on the way out.
@@ -370,6 +402,7 @@ pub fn design_for(profile_id: &str) -> &'static SpaceDesign {
         Some("room") => &ROOM,
         Some("spring") => &SPRING,
         Some("ambient") => &AMBIENT,
+        Some("random") => &RANDOM,
         _ => &SPECIAL,
     }
 }
@@ -399,7 +432,7 @@ pub fn SpaceFace(
     let design = design_for(&profile_id);
     let profile =
         reverb_profiles::profile_by_id(&profile_id).unwrap_or(&reverb_profiles::PROFILES[0]);
-    let scale = fts_audio_ui::hardware::panel::panel_scale(W, H, crate::control_view::RAIL_W);
+    let scale = fts_audio_ui::hardware::panel::panel_scale(W, H, fts_audio_ui::shell::RAIL_W);
 
     // The picture is drawn from the controls, so it moves with them.
     let value = |name: &str| {
@@ -512,8 +545,19 @@ pub fn SpaceFace(
 /// Clicking a name does not load anything here. It leaves the path on the
 /// shared state and the plugin's worker does the decoding — see
 /// [`ReverbUiState::request_ir`](crate::params::ReverbUiState::request_ir).
+/// The body is native-only: it scans a directory. There is no filesystem to
+/// browse in a wasm build, so rather than gate the component away (and with it
+/// every call site inside an `rsx!`, which cannot take a `cfg`), the component
+/// stays and renders nothing off-native.
 #[component]
 fn IrBrowser(ink: String, accent: String) -> Element {
+    #[cfg(not(feature = "native"))]
+    {
+        let _ = (ink, accent);
+        return rsx! {};
+    }
+    #[cfg(feature = "native")]
+    {
     let shared = use_context::<nice_plug_dioxus::SharedState>();
     let ui = shared
         .get::<crate::control_view::ReverbUi>()
@@ -618,6 +662,7 @@ fn IrBrowser(ink: String, accent: String) -> Element {
                 }
             }
         }
+    }
     }
 }
 

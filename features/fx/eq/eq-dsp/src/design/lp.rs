@@ -30,7 +30,14 @@ pub(super) fn mzt_lowpass_simple_cascade(
         sections.push(cut_odd_tail_lowpass(freq_hz, sample_rate));
         return sections;
     }
-    if order == 7 {
+    // Order 8 — Pro-Q slope index 7, 48 dB/oct, four sections.
+    //
+    // This arm used to test `order == 7`, which no slope produces, so every
+    // 48 dB/oct cut fell through to the six-section slope-8 design below and
+    // came out at 72. Measured on a 2 kHz high cut: an octave up the plugin is
+    // 48.74 dB down and this was 72.53, and the gap kept growing — 73 dB by
+    // 16 kHz.
+    if order == 8 {
         return cascade_qs(4, q)
             .into_iter()
             .rev()
@@ -50,8 +57,9 @@ pub(super) fn mzt_lowpass_simple_cascade(
     }
     // LP slope=8 mirrors HP: 6 sections with N=12 Butterworth distribution,
     // sec0 scaled by Q_user (clamped at 40).  Per probe verification, LP
-    // also emits 6 sections at slope=8 (same as HP).
-    if n >= 4 {
+    // also emits 6 sections at slope=8 (same as HP). Six sections is TWELVE
+    // poles, so this is the 72 dB/oct setting — order 12, not order 8.
+    if n >= 6 {
         return lp_slope8_cascade(freq_hz, q, sample_rate);
     }
     cascade_qs(n, q)

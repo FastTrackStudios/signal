@@ -57,6 +57,7 @@ pub struct ChainParamSurface {
     /// known, overrides `predelay_ms` (e.g. 0.25 = a 16th note).
     pub predelay_sync_beats: Option<f64>,
     pub mix: f64,
+    pub wet_gain_db: f64,
     pub width: f64,
     pub pan: f64,
     pub trem_rate_hz: f64,
@@ -252,6 +253,14 @@ pub struct ReverbChain {
     pub predelay_sync_beats: Option<f64>,
     /// Dry/wet mix (0.0 = fully dry, 1.0 = fully wet).
     pub mix: f64,
+    /// Wet-bus output trim in dB (-36 .. +36, 0 = unity).
+    ///
+    /// Separate from `mix` on purpose: `mix` sets how much wet you hear
+    /// against the dry, this sets how loud the wet bus itself is. A preset
+    /// translated from another reverb needs the second one — its balance is
+    /// already described by its own mix, and what does not carry across is the
+    /// absolute level the engine puts out.
+    pub wet_gain_db: f64,
     /// Stereo width (0.0 = mono, 1.0 = normal, 2.0 = extra wide).
     pub width: f64,
     /// Wet-output pan (-1 left .. +1 right, 0 = centered). Equal-power,
@@ -453,6 +462,7 @@ impl ReverbChain {
             predelay_ms: 0.0,
             predelay_sync_beats: None,
             mix: 0.5,
+            wet_gain_db: 0.0,
             width: 1.0,
             pan: 0.0,
             trem_rate_hz: 4.0,
@@ -671,6 +681,42 @@ impl ReverbChain {
         }
     }
 
+    /// Set decay by target reverberation time, in seconds.
+    ///
+    /// Maps through the active engine's own T60 range
+    /// ([`AlgorithmType::t60_range`]), so the same request produces the same
+    /// tail whichever algorithm is selected — which the raw `decay` control
+    /// does not, because each engine spans a different range.
+    ///
+    /// Returns the normalized decay actually applied. `None` if the active
+    /// engine has no time model (the plate tank and the character engines set
+    /// a feedback coefficient directly), leaving `decay` untouched — callers
+    /// should fall back to setting `decay` themselves.
+    ///
+    /// A time outside the engine's reach saturates at the nearest end rather
+    /// than being refused.
+    pub fn set_decay_seconds(&mut self, t60_s: f64) -> Option<f64> {
+        let (lo, hi) = self.algorithm_type.t60_range(self.variant)?;
+        // A decay tilt moves the midband, so ask the engine for a
+        // correspondingly longer (or shorter) time to land on the requested
+        // one. Without this, "2.5 seconds with tamed lows" quietly became
+        // 1.36 seconds.
+        let compensated = t60_s
+            / crate::algorithm::tilt_midband_factor(
+                self.params.low_decay_mult,
+                self.params.high_decay_mult,
+            );
+        let decay = crate::algorithm::t60_to_decay(compensated, lo, hi);
+        self.params.decay = decay;
+        self.update_params();
+        Some(decay)
+    }
+
+    /// The reverberation-time range the active engine's `decay` spans.
+    pub fn decay_seconds_range(&self) -> Option<(f64, f64)> {
+        self.algorithm_type.t60_range(self.variant)
+    }
+
     /// Set just the variant for the current algorithm type.
     pub fn set_variant(&mut self, variant: usize) {
         self.set_algorithm_variant(self.algorithm_type, variant);
@@ -705,6 +751,7 @@ impl ReverbChain {
             predelay_ms: self.predelay_ms,
             predelay_sync_beats: self.predelay_sync_beats,
             mix: self.mix,
+            wet_gain_db: self.wet_gain_db,
             width: self.width,
             pan: self.pan,
             trem_rate_hz: self.trem_rate_hz,
@@ -744,6 +791,7 @@ impl ReverbChain {
         self.predelay_ms = s.predelay_ms;
         self.predelay_sync_beats = s.predelay_sync_beats;
         self.mix = s.mix;
+        self.wet_gain_db = s.wet_gain_db;
         self.width = s.width;
         self.pan = s.pan;
         self.trem_rate_hz = s.trem_rate_hz;
@@ -816,9 +864,10 @@ impl ReverbChain {
             p.decay = 1.0;
         }
         // Engines without a per-frequency feedback path collapse the Decay
-        // Rate EQ onto the legacy low/high multiplier pair (the Hall family
-        // realizes the full curve in its FDN — `fx.reverb.decay-eq`).
-        if !matches!(self.algorithm_type, AlgorithmType::Hall) {
+        // Rate EQ onto the legacy low/high multiplier pair. Engines that DO
+        // realize the curve exactly must be left alone, or it lands twice —
+        // see `AlgorithmType::realizes_decay_curve`.
+        if !self.algorithm_type.realizes_decay_curve() {
             let (lo, hi) = crate::algorithm::decay_bands_collapsed(&p.decay_bands);
             if (lo - 1.0).abs() > 0.005 || (hi - 1.0).abs() > 0.005 {
                 p.low_decay_mult = (p.low_decay_mult * lo).clamp(0.05, 4.0);
@@ -1164,6 +1213,14 @@ impl Processor for ReverbChain {
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
         let n = left.len().min(right.len());
 
+        // The wet bus's level: this algorithm's calibration constant, so
+        // every engine sits at the same output for the same decay, plus the
+        // user's trim. Both are per-block, not per-sample — neither changes
+        // inside a buffer.
+        let wet_gain = audiocore_dsp::db::db_to_linear(
+            self.wet_gain_db.clamp(-36.0, 36.0) + self.algorithm_type.wet_calibration_db(),
+        );
+
         // Prepared (pre-FFT'd) IRs — preferred path. No FFT cost here.
         // Applied in arrival order: swaps are cheap (buffer moves) and
         // the reshape worker already debounces bursts, so ordering
@@ -1485,6 +1542,14 @@ impl Processor for ReverbChain {
                 if swell_on && self.hall.swell_type == SwellType::Wet {
                     final_l *= self.swell_level;
                     final_r *= self.swell_level;
+                }
+
+                // Wet-bus level: the algorithm's calibration (so every
+                // engine puts out the same level for the same decay) and the
+                // user's own trim on top of it.
+                if (wet_gain - 1.0).abs() > 1e-9 {
+                    final_l *= wet_gain;
+                    final_r *= wet_gain;
                 }
 
                 // Mix
@@ -1957,27 +2022,117 @@ mod tests {
         );
     }
 
+    /// A Decay Rate EQ shelf must change the decay only in its own region.
+    ///
+    /// Measured through the whole chain, because the bare FDN already proves
+    /// the filter and the feedback path get this right — if a shelf leaks
+    /// broadband it is something above the FDN doing it, and this is where
+    /// that shows up.
+    fn shelf_decay_db_per_s(
+        bands: [crate::algorithm::DecayBand; crate::algorithm::DECAY_BANDS],
+        probe_hz: f64,
+    ) -> f64 {
+        let mut c = ReverbChain::new();
+        c.set_algorithm_variant(AlgorithmType::Room, 1); // chamber
+        c.mix = 1.0;
+        c.params.size = 0.5;
+        c.params.decay_bands = bands;
+        c.update(config());
+        c.set_decay_seconds(2.5);
+
+        let drive = (SR * 0.2) as usize;
+        let total = (SR * 4.0) as usize;
+        let mut l: Vec<f64> = (0..total)
+            .map(|i| {
+                if i < drive {
+                    let env = (PI * i as f64 / drive as f64).sin();
+                    (2.0 * PI * probe_hz * i as f64 / SR).sin() * env
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let mut r = l.clone();
+        c.process(&mut l, &mut r);
+
+        let win = (SR * 0.4) as usize;
+        let a0 = drive + (SR * 0.3) as usize;
+        let b0 = a0 + (SR * 1.0) as usize;
+        let energy = |start: usize| -> f64 {
+            l[start..(start + win).min(l.len())]
+                .iter()
+                .map(|x| x * x)
+                .sum::<f64>()
+                .max(1e-300)
+        };
+        10.0 * (energy(b0) / energy(a0)).log10()
+    }
+
+    #[test]
+    fn a_decay_shelf_localizes_through_the_whole_chain() {
+        use crate::algorithm::{DecayBand, DECAY_BANDS};
+        let flat = [DecayBand::default(); DECAY_BANDS];
+        let mut cut = flat;
+        cut[0] = DecayBand {
+            shape: 1,
+            freq_hz: 300.0,
+            rate: 0.5,
+            q: 0.707,
+        };
+
+        let lf_flat = shelf_decay_db_per_s(flat, 125.0);
+        let lf_cut = shelf_decay_db_per_s(cut, 125.0);
+        let hf_flat = shelf_decay_db_per_s(flat, 4000.0);
+        let hf_cut = shelf_decay_db_per_s(cut, 4000.0);
+
+        assert!(
+            lf_cut < lf_flat - 3.0,
+            "125 Hz must decay faster with a 0.5x low shelf: {lf_flat:.1} -> {lf_cut:.1} dB/s"
+        );
+        assert!(
+            (hf_cut - hf_flat).abs() < 3.0,
+            "4 kHz must be untouched by a 300 Hz low shelf: {hf_flat:.1} -> {hf_cut:.1} dB/s"
+        );
+    }
+
     #[test]
     fn multi_band_decay_changes_low_energy() {
-        // Excite a long sine at 100 Hz on a Hall reverb. Compare tail
-        // energy with low_decay_mult = 0.3 (kills lows) vs 1.0.
+        // Excite 100 Hz on a Hall reverb, then STOP, and compare the energy
+        // left in the decaying tail with low_decay_mult = 0.3 (kills lows)
+        // against 1.0.
+        //
+        // The excitation has to stop. Driving the sine for the whole buffer
+        // and reading its end measures the reverb's steady-state gain at
+        // 100 Hz, not how fast it decays — two different things, and the
+        // shelf's tonal correction moves the former in the opposite
+        // direction to the latter. With the input running throughout, the
+        // two cases landed within 2% of each other and the comparison could
+        // sit either side of zero.
         let make = |low_mult: f64| -> f64 {
             let mut c = ReverbChain::new();
             c.set_algorithm(AlgorithmType::Hall);
             c.mix = 1.0;
-            c.params.decay = 0.9;
+            c.params.decay = 0.5;
             c.params.low_decay_mult = low_mult;
             c.params.high_decay_mult = 1.0;
             c.params.band_crossover_hz = 400.0;
             c.update(config());
-            let n = (SR as usize) * 2;
+
+            let n = (SR as usize) * 3;
+            let drive = (SR as usize) / 2; // 0.5 s of excitation, then silence
             let mut l: Vec<f64> = (0..n)
-                .map(|i| (2.0 * PI * 100.0 * i as f64 / SR).sin() * 0.4)
+                .map(|i| {
+                    if i < drive {
+                        (2.0 * PI * 100.0 * i as f64 / SR).sin() * 0.4
+                    } else {
+                        0.0
+                    }
+                })
                 .collect();
             let mut r = l.clone();
             c.process(&mut l, &mut r);
-            // Measure tail after input stops contributing (start from end)
-            l[(n - 4800)..].iter().map(|x| x * x).sum::<f64>()
+            // Energy in the last second — pure tail, well after the input.
+            l[(n - SR as usize)..].iter().map(|x| x * x).sum::<f64>()
         };
         let low_kept = make(1.0);
         let low_cut = make(0.3);

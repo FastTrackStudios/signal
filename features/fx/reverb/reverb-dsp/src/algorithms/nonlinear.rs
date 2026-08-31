@@ -8,6 +8,13 @@ use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use audiocore_dsp::delay_line::DelayLine;
 
+/// How much of unity the regeneration loop is allowed to reach.
+///
+/// The gain bound it scales against is an upper bound on the tank's peak
+/// response, so this is headroom on top of a conservative figure; it exists so
+/// the loop is contractive rather than merely marginal.
+const REGEN_MARGIN: f64 = 0.9;
+
 /// Envelope shape for the reverb tail.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EnvelopeShape {
@@ -49,6 +56,11 @@ pub struct NonLinear {
     late_env: f64,
     /// PRE-DELAY remap: shaped output recirculated into the generator.
     nl_fb_state: f64,
+    /// The main tank's per-line decay coefficient, kept because the
+    /// regeneration loop closes around it — see `regeneration_gain`.
+    fdn_decay: f64,
+    /// The late tank's, for the same reason.
+    late_fdn_decay: f64,
     /// Swoosh voicing: a lowpass whose cutoff RISES through the window
     /// (dark → bright as the backward swell builds — the tap-bank
     /// per-tap filter idea mapped onto our envelope reader).
@@ -75,6 +87,8 @@ impl NonLinear {
             late_fdn: Self::make_late_fdn(sample_rate),
             late_env: 0.0,
             nl_fb_state: 0.0,
+            fdn_decay: 0.7,
+            late_fdn_decay: 0.7,
             swoosh_lp: crate::primitives::one_pole::Lp1::new(),
             swoosh_countdown: 0,
             sample_rate,
@@ -103,6 +117,32 @@ impl NonLinear {
 
     /// Compute envelope gain for current position.
     #[inline]
+    /// The regeneration feedback coefficient, scaled so the loop cannot
+    /// regenerate.
+    ///
+    /// PRE-DELAY feeds the shaped output back into the generator's input, and
+    /// that loop closes around an FDN. An FDN is not a unity-gain block: with
+    /// a per-line decay of `g` its peak magnitude response is bounded by
+    /// `1/(1 - g)`, which at the shipped range of `g` (0.7 .. 0.98) is 3.3 to
+    /// 50. Taking the raw knob as the loop coefficient therefore asks for a
+    /// loop gain of up to 45, and the loop duly self-oscillates — it was only
+    /// ever bounded by the hard clamp on the feedback state, which does not
+    /// make a loop stable, it makes it an oscillator that never overflows.
+    ///
+    /// So the knob is scaled by the reciprocal of the path's gain bound,
+    /// leaving [`REGEN_MARGIN`] of headroom. The knob still spans "no repeats"
+    /// to "as much regeneration as this tank can carry", which is what it
+    /// means to a player; what it can no longer do is exceed unity.
+    #[inline]
+    fn regeneration_gain(&self) -> f64 {
+        // Both tanks are in the loop: the main one always, the late one in
+        // proportion to how much of it is blended into the output.
+        let main = 1.0 / (1.0 - self.fdn_decay).max(1e-3);
+        let late = self.mx.late_level.clamp(0.0, 1.0) / (1.0 - self.late_fdn_decay).max(1e-3);
+        let path_gain = (main + late).max(1.0);
+        self.mx.feedback.clamp(0.0, 1.0) * REGEN_MARGIN / path_gain
+    }
+
     fn envelope_gain(&self, position: f64) -> f64 {
         match self.shape {
             EnvelopeShape::Reverse => {
@@ -211,15 +251,16 @@ impl ReverbAlgorithm for NonLinear {
         self.fdn.set_damping_coeff(damp_coeff);
 
         // Decay (internal reverb)
-        self.fdn.set_decay(0.7 + params.decay * 0.28);
+        self.fdn_decay = 0.7 + params.decay * 0.28;
+        self.fdn.set_decay(self.fdn_decay);
     }
 
     fn set_nonlinear_params(&mut self, params: &NonLinearParams) -> bool {
         self.mx = *params;
         // late_decay 0..1 → late tank decay 0.7..0.98 (same span as the
         // shared decay mapping).
-        self.late_fdn
-            .set_decay(0.7 + params.late_decay.clamp(0.0, 1.0) * 0.28);
+        self.late_fdn_decay = 0.7 + params.late_decay.clamp(0.0, 1.0) * 0.28;
+        self.late_fdn.set_decay(self.late_fdn_decay);
         true
     }
 
@@ -227,7 +268,7 @@ impl ReverbAlgorithm for NonLinear {
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         // PRE-DELAY remap: shaped nonlinear output feeds back into the
         // generator input (before the late stage) — repeating shapes.
-        let fb = self.mx.feedback.clamp(0.0, 1.0) * 0.9;
+        let fb = self.regeneration_gain();
         let input = (left + right) * 0.5 + self.nl_fb_state * fb;
 
         // Generate dense reverb
@@ -293,6 +334,9 @@ impl ReverbAlgorithm for NonLinear {
         }
 
         self.env_write_count = self.env_write_count.wrapping_add(1);
+        // A safety net against denormal/NaN pathology, NOT the thing that
+        // keeps the loop bounded — `regeneration_gain` does that. A clamp
+        // reached in normal operation would mean the bound is wrong.
         self.nl_fb_state = ((out_l + out_r) * 0.5).clamp(-2.0, 2.0);
 
         (out_l, out_r)

@@ -71,18 +71,31 @@ pub fn editor_size_for(_profile_index: usize, form: fts_audio_ui::EditorForm) ->
 /// panel keeps its size).
 pub const EQ_SIDECAR_W: u32 = 560;
 
+/// The preset browser opens as its own narrower column, on the same principle
+/// as the EQ pair: the panel keeps its box and the window grows rightward.
+pub const PRESET_SIDECAR_W: u32 = 340;
+
 /// The editor size with the EQ sidecar open, capped at the resize bounds.
 pub fn editor_size_with_eq(
     profile_index: usize,
     form: fts_audio_ui::EditorForm,
     eq_open: bool,
 ) -> (u32, u32) {
+    editor_size_with_sidecars(profile_index, form, eq_open, false)
+}
+
+/// The editor size with any combination of sidecars open, capped at the
+/// resize bounds.
+pub fn editor_size_with_sidecars(
+    profile_index: usize,
+    form: fts_audio_ui::EditorForm,
+    eq_open: bool,
+    preset_open: bool,
+) -> (u32, u32) {
     let (w, h) = editor_size_for(profile_index, form);
-    if eq_open {
-        ((w + EQ_SIDECAR_W).min(max_editor_size().0 as u32), h)
-    } else {
-        (w, h)
-    }
+    let extra = if eq_open { EQ_SIDECAR_W } else { 0 }
+        + if preset_open { PRESET_SIDECAR_W } else { 0 };
+    ((w + extra).min(max_editor_size().0 as u32), h)
 }
 
 /// Root editor component. Takes no props — the plugin puts [`ReverbUi`] in
@@ -118,14 +131,34 @@ pub fn App() -> Element {
     let mut eq_view = use_signal(|| false);
     let eq_open = *eq_view.read();
 
+    // The preset browser, on the same footing: local UI state, its own column.
+    let mut preset_view = use_signal(|| false);
+    let preset_open = *preset_view.read();
+
+    // One browser behind both preset surfaces — the strip at the top and the
+    // sidecar show the same selection, because they are the same thing seen
+    // two ways. Scanned once per mount: walking a directory is not something
+    // to do sixty times a second.
+    let mut preset_browser = use_signal(preset_browser::PresetBrowser::default);
+    let preset_note = use_signal(String::new);
+    let mut presets_loaded = use_signal(|| false);
+    if !*presets_loaded.read() {
+        presets_loaded.set(true);
+        let (library, note) = crate::preset_view::load_library();
+        preset_browser.set(library);
+        let mut n = preset_note;
+        n.set(note);
+    }
+
     // Profile / form / EQ-strip change → ask the host to resize. A plain
     // Cell rather than an effect: the profile lives in a plugin param, not a
     // signal, so comparing here also catches the host automating it.
     #[allow(clippy::type_complexity)]
-    let last: std::rc::Rc<std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm, bool)>>> =
-        use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
-    if last.get() != Some((profile_index, form, eq_open)) {
-        last.set(Some((profile_index, form, eq_open)));
+    let last: std::rc::Rc<
+        std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm, bool, bool)>>,
+    > = use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
+    if last.get() != Some((profile_index, form, eq_open, preset_open)) {
+        last.set(Some((profile_index, form, eq_open, preset_open)));
         // Keep the automatable index in step with the persisted id.
         if params.profile.value().max(0) as usize != profile_index {
             let ptr = params.profile.as_ptr();
@@ -140,7 +173,7 @@ pub fn App() -> Element {
             ctx.end_set_raw(ptr);
         }
         if let Some(state) = try_consume_context::<Arc<nice_plug_dioxus::DioxusState>>() {
-            let (w, h) = editor_size_with_eq(profile_index, form, eq_open);
+            let (w, h) = editor_size_with_sidecars(profile_index, form, eq_open, preset_open);
             if state.size() != (w, h) {
                 state.request_resize(w, h);
             }
@@ -149,7 +182,7 @@ pub fn App() -> Element {
 
     // The face's box: the window minus the EQ sidecar when it is open.
     let (win_w, win_h) = fts_audio_ui::hardware::panel::window_logical_size().unwrap_or({
-        let (w, h) = editor_size_with_eq(profile_index, form, eq_open);
+        let (w, h) = editor_size_with_sidecars(profile_index, form, eq_open, preset_open);
         (w as f64, h as f64)
     });
     let sidecar_w = if eq_open {
@@ -157,7 +190,12 @@ pub fn App() -> Element {
     } else {
         0.0
     };
-    let face_w = (win_w - sidecar_w).max(240.0);
+    let preset_w = if preset_open {
+        (PRESET_SIDECAR_W as f64).min(win_w * 0.35)
+    } else {
+        0.0
+    };
+    let face_w = (win_w - sidecar_w - preset_w).max(240.0);
 
     // Every control the faces can bind, by name.
     let handles: HashMap<String, ParamHandle> = [
@@ -220,6 +258,7 @@ pub fn App() -> Element {
     let accent = design.accent.to_string();
     let accent_for_form = accent.clone();
     let accent_for_eq = accent.clone();
+    let accent_for_presets = accent.clone();
 
     rsx! {
         // The embedded EQ surface's DOM parts (band popup, menus) style
@@ -264,6 +303,14 @@ pub fn App() -> Element {
                         on_click: move |_| eq_view.toggle(),
                     }
                     RailButton {
+                        testid: "preset-view-cycle".to_string(),
+                        label: "PRE".to_string(),
+                        title: "Preset browser".to_string(),
+                        active: preset_open,
+                        accent: accent_for_presets.clone(),
+                        on_click: move |_| preset_view.toggle(),
+                    }
+                    RailButton {
                         testid: "form-cycle".to_string(),
                         label: form.badge().to_string(),
                         title: format!("Editor size — {} (click to cycle)", form.label()),
@@ -283,7 +330,27 @@ pub fn App() -> Element {
                 // face swaps a whole subtree, and blitz's mutator wants a
                 // stable, keyed node to land on.
                 div {
-                    style: "position:absolute; inset:0; display:flex; overflow:hidden;",
+                    style: "position:absolute; inset:0; display:flex; flex-direction:column; \
+                            overflow:hidden;",
+
+                    // Always visible: what is loaded, and how to move off it.
+                    // The side rail selects the space; this selects the preset.
+                    preset_browser_ui::PresetBar {
+                        browser: preset_browser,
+                        browsing: preset_open,
+                        ink: design.ink.to_string(),
+                        accent: design.accent.to_string(),
+                        on_browse: move |_| preset_view.toggle(),
+                        on_apply: {
+                            let handles = handles.clone();
+                            move |p: Vec<(String, f64)>| {
+                                crate::preset_view::apply(&p, &handles, preset_note)
+                            }
+                        },
+                    }
+
+                    div {
+                    style: "flex:1; display:flex; overflow:hidden; min-height:0;",
                     div {
                         style: format!(
                             "position:relative; flex:none; width:{face_w}px; overflow:hidden;"
@@ -314,6 +381,27 @@ pub fn App() -> Element {
                                 }
                             }
                         }
+                    }
+                    if preset_open {
+                        div {
+                            style: format!(
+                                "position:relative; flex:none; width:{preset_w}px; \
+                                 overflow:hidden; \
+                                 border-left:1px solid var(--border, rgba(148,163,184,0.3)); \
+                                 background:var(--background);"
+                            ),
+                            for key in ["preset-sidecar"] {
+                                crate::preset_view::ReverbPresetSidecar {
+                                    key: "{key}",
+                                    browser: preset_browser,
+                                    note: preset_note,
+                                    handles: handles.clone(),
+                                    ink: design.ink.to_string(),
+                                    accent: design.accent.to_string(),
+                                }
+                            }
+                        }
+                    }
                     }
                 }
             }
@@ -363,6 +451,7 @@ pub fn profile_badge(profile_id: &str) -> String {
         "nonlinear" => "NL",
         "reflections" => "REF",
         "freeverb" => "FRV",
+        "random" => "RND",
         _ => "RVB",
     }
     .to_string()

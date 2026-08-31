@@ -15,16 +15,18 @@ use eq_dsp::hardware_eq::{
 use eq_dsp::neve_1073::{
     Neve1073Hpf, Neve1073LowFreq, Neve1073MidFreq, Neve1073Model, Neve1073Settings,
 };
-use eq_dsp::{EqChain, FilterType};
 use eq_ui::params::{EqUiState, FtsEqParams, NUM_BANDS, SPECTRUM_BINS};
 
 // ── Plugin ──────────────────────────────────────────────────────────
 
-struct FtsEq {
+struct FtsEqPlugin {
     params: Arc<FtsEqParams>,
     ui_state: Arc<EqUiState>,
     editor_state: Arc<DioxusState>,
-    chain: EqChain,
+    /// The one FTS EQ engine — the same one the rig plays through. It used to
+    /// be a bare `EqChain` here, which is why this plugin could not sound a
+    /// dynamic or spectral band at all.
+    engine: eq_dsp::engine::FtsEq,
     neve_1073: Neve1073Model,
     hardware_eq: HardwareEqModel,
     sample_rate: f64,
@@ -37,15 +39,11 @@ struct FtsEq {
     post_mono: Vec<f32>,
 }
 
-impl Default for FtsEq {
+impl Default for FtsEqPlugin {
     fn default() -> Self {
         let params = Arc::new(FtsEqParams::default());
         let ui_state = Arc::new(EqUiState::new(params.clone()));
-        let mut chain = EqChain::new();
-        // Pre-allocate all 24 bands
-        for _ in 0..NUM_BANDS {
-            chain.add_band();
-        }
+        let engine = eq_dsp::engine::FtsEq::new(48000.0);
         Self {
             params,
             ui_state,
@@ -53,7 +51,7 @@ impl Default for FtsEq {
                 (eq_ui::control_view::EDITOR_W, eq_ui::control_view::EDITOR_H)
             })
             .with_resize_hint(eq_ui::control_view::resize_hint()),
-            chain,
+            engine,
             neve_1073: Neve1073Model::new(48000.0, Neve1073Settings::default()),
             hardware_eq: HardwareEqModel::new(
                 48000.0,
@@ -69,81 +67,91 @@ impl Default for FtsEq {
     }
 }
 
-/// Map slope index (0–10) to filter order for eq-dsp.
-/// Pro-Q 4 slopes: 0,6,12,18,24,30,36,48,72,96 dB/oct + Brickwall.
-/// Each 6 dB/oct = 1 pole (order 1).
-/// Plugin-persisted shape index → canonical [`eq_dsp::slope::FilterShape`].
-///
-/// NOTE the plugin's persisted order predates the canonical table and
-/// differs at 2/3 (LowCut/HighShelf swapped). It stays frozen so saved
-/// presets keep meaning; everything downstream goes through canonical.
-fn plugin_shape(shape: i32) -> eq_dsp::slope::FilterShape {
-    use eq_dsp::slope::FilterShape as F;
-    match shape {
-        0 => F::Bell,
-        1 => F::LowShelf,
-        2 => F::LowCut,
-        3 => F::HighShelf,
-        4 => F::HighCut,
-        5 => F::Notch,
-        6 => F::BandPass,
-        7 => F::TiltShelf,
-        8 => F::FlatTilt,
-        9 => F::AllPass,
-        _ => F::Bell,
-    }
-}
+// NOTE the `type` parameter is a **canonical** shape index — `sync_params`
+// hands it straight to `BandConfig.shape`, which the engine reads through
+// `FilterShape::from_canonical_index`. There used to be a `plugin_shape`
+// table here claiming the persisted order swapped Low Cut and High Shelf,
+// and a `shape_to_filter_type` built on it; neither was ever called, so the
+// swap they described never reached the audio path. They are gone rather
+// than fixed: a dead table asserting a false invariant is how a converter
+// ends up translating every high shelf into a high-pass.
 
-/// Map EqBandShape integer to eq-dsp-v2 FilterType (via canonical).
-fn shape_to_filter_type(shape: i32) -> FilterType {
-    plugin_shape(shape).to_filter_type()
-}
-
-impl FtsEq {
-    /// Sync nih-plug params → eq-dsp-v2 bands.
+impl FtsEqPlugin {
+    /// Sync nih-plug params → the shared engine.
+    ///
+    /// Everything a band can be now crosses in one shot: the static curve, the
+    /// dynamics and the stereo placement. Sending the whole config each time
+    /// rather than diffing field by field is what lets a preset land as one
+    /// coherent band instead of a partial one — the engine does its own
+    /// comparison downstream.
     fn sync_params(&mut self) {
-        // Check if any band has solo active
+        // Solo: while any band is soloed the rest are muted.
         let any_solo = (0..NUM_BANDS).any(|i| self.params.bands[i].solo.value() > 0.5);
+        let scale = self.params.gain_scale.value() as f64 / 100.0;
 
         for i in 0..NUM_BANDS {
             let bp = &self.params.bands[i];
-            if let Some(band) = self.chain.band_mut(i) {
-                let band_enabled = bp.enabled.value() > 0.5;
-                let is_solo = bp.solo.value() > 0.5;
-                let enabled = if any_solo {
-                    band_enabled && is_solo
-                } else {
-                    band_enabled
-                };
-                let ft = shape_to_filter_type(bp.filter_type.value());
-                let freq = bp.freq_hz.value() as f64;
-                let scale = self.params.gain_scale.value() as f64 / 100.0;
-                let gain = bp.gain_db.value() as f64 * scale;
-                // Pro-Q 4 convention: display Q=1.0 = Butterworth (filter Q = 1/√2).
-                let q = bp.q.value() as f64 * std::f64::consts::FRAC_1_SQRT_2;
-                let slope_val = bp.slope.value();
-                // One canonical slope→order table (eq_dsp::Slope),
-                // clamped per shape.
-                let order =
-                    plugin_shape(bp.filter_type.value()).effective_order(slope_val.max(0) as usize);
+            let band_enabled = bp.enabled.value() > 0.5;
+            let enabled = if any_solo {
+                band_enabled && bp.solo.value() > 0.5
+            } else {
+                band_enabled
+            };
 
-                if band.enabled != enabled
-                    || band.filter_type != ft
-                    || (band.freq_hz - freq).abs() > 0.01
-                    || (band.gain_db - gain).abs() > 0.01
-                    || (band.q - q).abs() > 0.001
-                    || band.order != order
-                {
-                    band.enabled = enabled;
-                    band.filter_type = ft;
-                    band.freq_hz = freq;
-                    band.gain_db = gain;
-                    band.q = q;
-                    band.order = order;
-                    self.chain.update_band(i);
-                }
-            }
+            self.engine.set_band(
+                i,
+                eq_dsp::engine::BandConfig {
+                    // The plugin has no separate "used" flag — a band it
+                    // carries is a band that exists, and `enabled` says
+                    // whether it sounds.
+                    used: true,
+                    enabled,
+                    freq_hz: bp.freq_hz.value() as f64,
+                    gain_db: bp.gain_db.value() as f64,
+                    // Pro-Q 4 convention: display Q=1.0 = Butterworth.
+                    q: bp.q.value() as f64 * std::f64::consts::FRAC_1_SQRT_2,
+                    shape: bp.filter_type.value().max(0) as u32,
+                    slope: bp.slope.value().max(0.0) as f64,
+                    placement: eq_dsp::band::Placement::from_index(
+                        bp.placement.value().max(0) as u32,
+                    ),
+                    stream: 0,
+                },
+            );
+            self.engine.set_band_dynamics(
+                i,
+                eq_dsp::engine::BandDynamics {
+                    range_db: bp.dyn_range_db.value() as f64,
+                    threshold_db: bp.dyn_threshold_db.value() as f64,
+                    attack_pct: bp.dyn_attack.value() as f64,
+                    release_pct: bp.dyn_release.value() as f64,
+                    auto: bp.dyn_auto.value() > 0.5,
+                    relative: false,
+                    spectral: bp.spectral.value() > 0.5,
+                    spectral_density: bp.spectral_density.value() as f64,
+                    spectral_tilt: bp.spectral_tilt.value() > 0.5,
+                    side_filtered: bp.side_filtered.value() > 0.5,
+                    side_lo_hz: bp.side_lo_hz.value() as f64,
+                    side_hi_hz: bp.side_hi_hz.value() as f64,
+                },
+            );
         }
+
+        // The gain macro scales bands and dynamic ranges together, inside the
+        // engine, so the two cannot drift apart.
+        self.engine.set_gain_scale(scale);
+
+        // The instance globals. Each of these is an audible part of a Pro-Q
+        // preset that used to stop at the translator: Character is a squarer
+        // rather than a trim, Auto Gain moves the whole output, and the pan
+        // is either L/R or M/S depending on its mode.
+        self.engine.set_auto_gain(self.params.auto_gain.value() > 0.5);
+        self.engine
+            .set_character(self.params.character.value().max(0) as u32);
+        self.engine.set_output_pan(
+            self.params.output_pan.value() as f64,
+            self.params.output_pan_mid_side.value() > 0.5,
+        );
     }
 
     fn sync_neve_1073(&mut self) {
@@ -306,7 +314,7 @@ fn api_high_freq(value: i32) -> f64 {
         .unwrap_or(10000.0)
 }
 
-impl Plugin for FtsEq {
+impl Plugin for FtsEqPlugin {
     const NAME: &'static str = "FTS EQ";
     const VENDOR: &'static str = "FastTrackStudio";
     const URL: &'static str = "";
@@ -348,7 +356,8 @@ impl Plugin for FtsEq {
             .sample_rate
             .store(buffer_config.sample_rate, Ordering::Relaxed);
 
-        self.chain.set_sample_rate(self.sample_rate);
+        self.engine
+            .prepare(self.sample_rate, buffer_config.max_buffer_size);
         self.neve_1073.set_sample_rate(self.sample_rate);
         self.hardware_eq.set_sample_rate(self.sample_rate);
         self.ui_state
@@ -364,7 +373,7 @@ impl Plugin for FtsEq {
     }
 
     fn reset(&mut self) {
-        self.chain.reset();
+        self.engine.deactivate();
         self.neve_1073.reset();
         self.hardware_eq.reset();
     }
@@ -421,7 +430,7 @@ impl Plugin for FtsEq {
             self.hardware_eq
                 .process(&mut self.left_buf[..n], &mut self.right_buf[..n]);
         } else {
-            self.chain
+            self.engine
                 .process(&mut self.left_buf[..n], &mut self.right_buf[..n]);
         }
 
@@ -481,7 +490,7 @@ impl Plugin for FtsEq {
     }
 }
 
-impl ClapPlugin for FtsEq {
+impl ClapPlugin for FtsEqPlugin {
     const CLAP_ID: &'static str = "com.fasttrackstudio.eq";
     const CLAP_DESCRIPTION: Option<&'static str> = Some("24-band parametric EQ");
     const CLAP_MANUAL_URL: Option<&'static str> = None;
@@ -493,11 +502,11 @@ impl ClapPlugin for FtsEq {
     ];
 }
 
-impl Vst3Plugin for FtsEq {
+impl Vst3Plugin for FtsEqPlugin {
     const VST3_CLASS_ID: [u8; 16] = *b"FtsEqPlugin00001";
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
         &[Vst3SubCategory::Fx, Vst3SubCategory::Eq];
 }
 
-nice_export_clap!(FtsEq);
-nice_export_vst3!(FtsEq);
+nice_export_clap!(FtsEqPlugin);
+nice_export_vst3!(FtsEqPlugin);

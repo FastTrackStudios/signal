@@ -125,6 +125,12 @@ pub fn App() -> Element {
 
 /// Inner shell component — runs after the ThemeProvider context is in scope
 /// so themed primitives can resolve their tokens.
+/// The height of the preset strip across the top of the editor.
+///
+/// The same band every FTS editor reserves, so the strip sits in the same
+/// place whichever plugin you are looking at.
+const PRESET_BAR_H: f64 = 26.0;
+
 #[component]
 fn AppShell() -> Element {
     let _theme = use_init_theme();
@@ -195,6 +201,24 @@ fn AppShell() -> Element {
     // when the session has one, the index otherwise. See
     // `CompStageParams::profile_id`.
     let stage = params.stage(focused_stage);
+
+    // Presets. The side rail selects the unit; the strip along the top
+    // selects the preset — the same split every FTS editor uses. A preset is
+    // one compressor, so it writes the FOCUSED stage.
+    let mut preset_browser = use_signal(preset_browser::PresetBrowser::default);
+    let preset_note = use_signal(String::new);
+    let mut preset_open = use_signal(|| false);
+    let mut presets_loaded = use_signal(|| false);
+    if !*presets_loaded.read() {
+        presets_loaded.set(true);
+        let (library, note) = crate::preset_view::load_library();
+        preset_browser.set(library);
+        let mut n = preset_note;
+        n.set(note);
+    }
+    let preset_handles = crate::preset_view::preset_handles(stage, &ctx);
+    let browsing = *preset_open.read();
+
     let profile_idx = stage.resolved_profile_index();
     let profile_id = profile_id_for_index(profile_idx);
     let skin = profile_skin(profile_id);
@@ -247,12 +271,15 @@ fn AppShell() -> Element {
         let (w, h) = crate::faces::stack_editor_size_rows(params, &rows, form, sidecar_mask);
         (w as f64, h as f64)
     });
+    // The preset strip takes a fixed band off the top; the rows get what is
+    // left, so nothing is hidden behind it.
+    let rows_h = (win_h - PRESET_BAR_H).max(1.0);
     let (mut row_heights, preferred_total) =
         crate::faces::stack_row_heights(params, &rows, win_w, sidecar_mask);
     // The window may be a different height than preferred (host clamp, user
     // resize): scale the rows to what is actually there.
-    if preferred_total > 1.0 && (win_h - preferred_total).abs() > 1.0 {
-        let k = win_h / preferred_total;
+    if preferred_total > 1.0 && (rows_h - preferred_total).abs() > 1.0 {
+        let k = rows_h / preferred_total;
         for h in &mut row_heights {
             *h *= k;
         }
@@ -401,8 +428,11 @@ fn AppShell() -> Element {
                     // whole rack is visible at once (`fx.stack.strip`), each
                     // row scaled to its share of the window.
                     div {
-                        style: "position:absolute; inset:0; display:flex; \
-                                flex-direction:column; overflow:hidden;",
+                        style: format!(
+                            "position:absolute; top:{PRESET_BAR_H}px; left:0; right:0; \
+                             bottom:0; display:flex; flex-direction:column; \
+                             overflow:hidden;"
+                        ),
                         for (row_idx, si) in rows.iter().copied().enumerate() {
                             StageRow {
                                 key: "{si}-{params.stage(si).resolved_profile_index()}",
@@ -424,6 +454,57 @@ fn AppShell() -> Element {
                     // earlier sibling would lose its clicks to the rows'
                     // surfaces regardless of z-index.
                     crate::stack_strip::StackStrip { frame: frame_counter }
+
+                    // Mounted LAST, with the strip and for the same reason:
+                    // blitz hit-tests in document order, so a bar declared
+                    // before the rows would render on top of them and still
+                    // lose every click to the surface underneath it.
+                    div {
+                        "data-testid": "preset-bar-band",
+                        // No z-index: blitz hoists a z-indexed child into a
+                        // stacking context whose hit area only materialises
+                        // after a real paint, so it would render on top and
+                        // still take no clicks (see `stack_strip`). Document
+                        // order does the stacking — the band is declared last.
+                        style: format!(
+                            "position:absolute; top:0; left:0; right:0; \
+                             height:{PRESET_BAR_H}px;"
+                        ),
+                        preset_browser_ui::PresetBar {
+                        browser: preset_browser,
+                        browsing,
+                        accent: skin.accent.to_string(),
+                        on_browse: move |_| preset_open.toggle(),
+                        on_apply: {
+                            let handles = preset_handles.clone();
+                            move |p: Vec<(String, f64)>| {
+                                crate::preset_view::apply(&p, &handles, preset_note)
+                            }
+                        },
+                    }
+                    }
+
+                    // The browser overlays the right-hand side rather than
+                    // resizing the editor: the stack's rows are sized from the
+                    // window, so narrowing the column would reflow every face
+                    // just to look at a list.
+                    if browsing {
+                        div {
+                            style: format!(
+                                "position:absolute; top:{PRESET_BAR_H}px; right:0; \
+                                 bottom:0; width:340px; \
+                                 border-left:1px solid rgba(148,163,184,0.3); \
+                                 background:var(--background);"
+                            ),
+                            crate::preset_view::CompPresetSidecar {
+                                browser: preset_browser,
+                                note: preset_note,
+                                handles: preset_handles.clone(),
+                                ink: "#e8e6ef".to_string(),
+                                accent: skin.accent.to_string(),
+                            }
+                        }
+                    }
                 }
             }
         }

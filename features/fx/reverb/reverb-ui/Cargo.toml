@@ -19,6 +19,10 @@ native = [
     # EqGraph (fx.embed-eq.one-surface).
     "dep:eq-ui",
     "eq-ui/native",
+    # The shared preset browser — the same panel the EQ and compressor
+    # editors mount.
+    "dep:preset-browser",
+    "dep:preset-browser-ui",
 ]
 
 [dependencies]
@@ -30,6 +34,8 @@ nice-plug-dioxus = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 eq-ui = { workspace = true, optional = true }
+preset-browser = { workspace = true, optional = true }
+preset-browser-ui = { workspace = true, optional = true }
 reverb-profiles = { workspace = true }
 reverb-dsp = { workspace = true }
 crossbeam-channel = { workspace = true }
@@ -41,6 +47,10 @@ required-features = ["native"]
 
 [[test]]
 name = "ir_browser"
+required-features = ["native"]
+
+[[test]]
+name = "presets"
 required-features = ["native"]
 
 [dev-dependencies]

@@ -1,0 +1,22 @@
+[package]
+name = "preset-browser-ui"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+description = "The shared preset browser panel for the FTS plugin editors"
+
+[dependencies]
+preset-browser = { workspace = true }
+dioxus = { workspace = true }
+# For `apply_to_handles`: writing a preset through the host's automation is
+# the same problem in every plugin, so it lives here rather than in three.
+fts-audio-ui = { workspace = true }
+
+[dev-dependencies]
+dioxus = { workspace = true }
+# Vendored dioxus-test harness — the same one eq-ui and reverb-ui use.
+dioxus-test = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

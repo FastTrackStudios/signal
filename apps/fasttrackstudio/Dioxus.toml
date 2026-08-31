@@ -3,10 +3,13 @@
 # feature selection is via cargo features (see Cargo.toml).
 [application]
 
-# App bundle identity (iOS CFBundleIdentifier / TestFlight App ID). The
-# flagship id — this binary is the whole FastTrackStudio app (rig today,
-# session/charts to follow), not the rig alone. Watch app is a separate
-# record (app.fasttrackstudio.watch).
+# App bundle identity (iOS CFBundleIdentifier / TestFlight App ID).
+#
+# This binary ships as SIGNAL — the rig, the engine, the sampler. It is NOT
+# the old `app.fasttrackstudio` record: that id belongs to the original
+# combined app and stays where it is. Signal is its own App Store record
+# (6806677673) under its own id, matching the one-id-per-product convention
+# Task established (app.fasttrackstudio.task).
 [bundle]
-identifier = "app.fasttrackstudio"
+identifier = "app.fasttrackstudio.signal"
 publisher = "FastTrackStudio"

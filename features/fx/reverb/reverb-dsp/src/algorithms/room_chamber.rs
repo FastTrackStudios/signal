@@ -7,7 +7,7 @@
 //!   - Bright, present character
 //!   - Fast density saturation (small volume fills quickly)
 
-use crate::algorithm::{AlgorithmParams, ChamberColor, ChamberParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, ChamberColor, ChamberParams, ROOM_CHAMBER_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
@@ -80,11 +80,16 @@ impl RoomChamber {
     }
 
     fn make_fdn(sample_rate: f64, size: f64, offset: bool) -> Fdn {
-        // Very short delays — small chamber
+        // Prime-ish delays, roughly half a hall's. The originals (251..811,
+        // then scaled down again by a 0.25 default size) gave so few, so
+        // widely-spaced modes that any long tail rang on individual ones —
+        // inaudible while a feedback-gain model capped the decay near 0.18 s,
+        // but the first thing you hear once a chamber can actually sustain
+        // for seconds. Modal density scales with total loop length.
         let base = if !offset {
-            [251, 317, 389, 467, 547, 631, 719, 811]
+            [787, 967, 1153, 1373, 1607, 1861, 2129, 2411]
         } else {
-            [269, 337, 409, 487, 569, 653, 743, 839]
+            [821, 1013, 1201, 1427, 1663, 1913, 2203, 2477]
         };
         let scale = sample_rate / 48000.0 * size.max(0.05);
         let delays: Vec<usize> = base
@@ -333,10 +338,47 @@ impl ReverbAlgorithm for RoomChamber {
             self.setup_mod_allpass(params.modulation);
         }
 
-        // Decay — chambers decay quickly
-        let decay_gain = 0.25 + params.decay * 0.6; // 0.25 to 0.85
-        self.fdn_l.set_decay(decay_gain);
-        self.fdn_r.set_decay(decay_gain);
+        // In-loop allpasses and a slow rotation of the feedback mix — the
+        // density Hall has always had and this engine did not. It did not
+        // matter while the old feedback-gain model capped the tail short:
+        // once an echo chamber can actually ring for seconds, the sparse modal
+        // structure sings, and an isolated mode stands ~36 dB above its
+        // neighbours. Diffusing inside the loop builds density with every
+        // recirculation instead of only at the input diffuser.
+        self.fdn_l.set_loop_allpass(0.7);
+        self.fdn_r.set_loop_allpass(0.7);
+        self.fdn_l.set_rotation(
+            0.3 + params.modulation * 0.6,
+            0.04 + params.modulation * 0.16,
+            self.sample_rate,
+        );
+        self.fdn_r.set_rotation(
+            (0.3 + params.modulation * 0.6) * 1.11,
+            0.04 + params.modulation * 0.16,
+            self.sample_rate,
+        );
+
+        // Exact per-line T60 decay (Jot shelf), the same model Hall uses.
+        // This replaced a raw feedback gain, which is not a time: it capped
+        // the reachable tail well short of an echo chamber and made
+        // `decay` mean something different here than in every other engine.
+        // Range covers an echo chamber — longer than a room, shorter than a hall.
+        let t60 = decay_to_t60(params.decay, ROOM_CHAMBER_T60.0, ROOM_CHAMBER_T60.1);
+        let (t60_dc, t60_ny) = t60_shelf_targets(
+            t60,
+            params.low_decay_mult,
+            params.high_decay_mult,
+            params.damping,
+        );
+        self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
+        self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
+
+        // Decay Rate EQ, realized in the feedback path — layered over the
+        // shelf. Flat bands cost nothing.
+        self.fdn_l
+            .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
+        self.fdn_r
+            .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
 
         // Damping — hard surfaces = bright
         let damp_freq = 2000.0 + (1.0 - params.damping) * 14000.0;

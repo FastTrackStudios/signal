@@ -9,6 +9,7 @@ resolver = "3"
 
 members = [
     "apps/fasttrackstudio",
+    "apps/fts-convert",
     "apps/plugins/comp",
     "apps/plugins/delay",
     "apps/plugins/eq",
@@ -44,6 +45,9 @@ members = [
     "crates/signal/storage",
     "crates/signal/ui",
     "crates/signal/widgets",
+    "features/analyzer/signal-analyzer",
+    "features/preset-browser/preset-browser",
+    "features/preset-browser/preset-browser-ui",
     "features/fx/comp/comp",
     "features/fx/comp/comp-dsp",
     "features/fx/comp/comp-profiles",
@@ -304,6 +308,7 @@ signal-controller = { path = "crates/signal/controller" }
 signal-live = { path = "crates/signal/live" }
 signal-storage = { path = "crates/signal/storage" }
 signal-import = { path = "crates/signal/import" }
+fts-convert = { path = "apps/fts-convert" }
 signal-daw-bridge = { path = "crates/signal/daw-bridge" }
 signal-rig-host = { path = "crates/signal/rig-host" }
 signal-rigs-proto = { path = "crates/signal/rigs-proto" }
@@ -398,6 +403,9 @@ fx-stack = { path = "features/fx/stack" }
 pattern-ui = { path = "features/fx/modulation/pattern-ui" }
 trem-dsp = { path = "features/fx/modulation/trem-dsp" }
 wah-dsp = { path = "features/fx/modulation/wah-dsp" }
+preset-browser = { path = "features/preset-browser/preset-browser" }
+preset-browser-ui = { path = "features/preset-browser/preset-browser-ui" }
+signal-analyzer = { path = "features/analyzer/signal-analyzer" }
 signal-fx = { path = "features/fx/signal-fx" }
 
 # ── Facet reflection + vox RPC — the rc.5 fleet pins ──────────────────

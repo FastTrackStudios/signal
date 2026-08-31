@@ -24,6 +24,10 @@ native = [
     "dep:futures-timer",
     "dep:atomic_float",
     "spectrum-analyzer/ui",
+    # The shared preset browser — the same surfaces the reverb and compressor
+    # editors mount.
+    "dep:preset-browser",
+    "dep:preset-browser-ui",
 ]
 # Tests that need a real GPU adapter (`render_screenshot`). Off by default
 # so headless CI can run `cargo test -p eq-ui` without a Vulkan-capable
@@ -40,6 +44,12 @@ nice-plug-dioxus = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
 parking_lot = "0.12"
 eq-profiles = { path = "../eq-profiles", optional = true }
+# Not dev-only: the editor modules use `rsx!` / `Signal` directly rather than
+# picking dioxus up from another crate's prelude, which is what the rest of
+# the suite does and what makes the imports say where things come from.
+dioxus = { workspace = true }
+preset-browser = { workspace = true, optional = true }
+preset-browser-ui = { workspace = true, optional = true }
 spectrum-analyzer = { workspace = true }
 # 60Hz redraw tick driver. We use futures-timer (not tokio::time) because
 # dioxus_native doesn't bring up a tokio runtime by default, so

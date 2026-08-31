@@ -20,7 +20,9 @@ use crate::shelf_zpk;
 mod allpass;
 mod bandpass;
 mod bell;
+mod brickwall;
 mod common;
+pub mod fractional;
 mod hp;
 mod lp;
 mod notch;
@@ -92,15 +94,24 @@ pub fn design_filter(
 
     match filter_type {
         FilterType::Lowpass => {
-            // slope=0 (Db0) is bypass per FabFilter docs; conformance maps it to order=1.
+            if order == crate::slope::BRICKWALL_ORDER {
+                return brickwall::brickwall_cascade(freq_hz, sample_rate, false);
+            }
+            // Order 1 is 6 dB/oct, not bypass — `Slope::Db0` is order ZERO and
+            // `Band::update` short-circuits that before it gets here. Returning
+            // a pass-through for order 1 meant the shallowest cut Pro-Q offers
+            // did nothing at all.
             if order == 1 {
-                return vec![biquad::PASSTHROUGH];
+                return vec![fractional::first_order_cut(freq_hz, sample_rate, false)];
             }
             mzt_lowpass_simple_cascade(n, freq_hz, q, sample_rate, order)
         }
         FilterType::Highpass => {
+            if order == crate::slope::BRICKWALL_ORDER {
+                return brickwall::brickwall_cascade(freq_hz, sample_rate, true);
+            }
             if order == 1 {
-                return vec![biquad::PASSTHROUGH];
+                return vec![fractional::first_order_cut(freq_hz, sample_rate, true)];
             }
             mzt_highpass_simple_cascade(n, freq_hz, q, sample_rate, order)
         }

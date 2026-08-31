@@ -21,6 +21,8 @@
 // ── Portable core (no plugin framework; compiles for wasm) ──
 pub mod comp_graph_svg;
 pub mod profile_view;
+#[cfg(feature = "native")]
+pub mod preset_view;
 
 /// The hardware-faceplate kit — VU movements, pointer knobs, panel switches,
 /// panel chrome — lives in `fts-audio-ui` now that the EQ wears faceplates

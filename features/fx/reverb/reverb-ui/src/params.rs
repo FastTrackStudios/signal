@@ -381,9 +381,25 @@ fn band_q_param(name: &'static str) -> FloatParam {
     .with_value_to_string(formatters::v2s_f32_rounded(2))
 }
 
-/// Default band frequencies for both embedded EQs — a useful spread, idle
-/// until moved.
-pub const EQ_DEFAULT_FREQS: [f32; 6] = [80.0, 250.0, 700.0, 1_800.0, 4_500.0, 10_000.0];
+/// Default frequency for band `i` of `count` — a useful spread, idle until
+/// moved.
+///
+/// Computed rather than tabulated because the two embedded EQs no longer have
+/// the same number of bands: the Post EQ has six and the Decay Rate EQ now has
+/// eight, one per octave the analyzer measures. A fixed table silently had to
+/// match both, and stopped doing so the moment one of them changed — the
+/// decay array indexed straight off the end of it.
+///
+/// Log-spaced from 80 Hz to 10 kHz, because that is how the spacing is heard.
+pub fn eq_default_freq(i: usize, count: usize) -> f32 {
+    const LOW_HZ: f32 = 80.0;
+    const HIGH_HZ: f32 = 10_000.0;
+    if count <= 1 {
+        return LOW_HZ;
+    }
+    let t = (i.min(count - 1)) as f32 / (count - 1) as f32;
+    LOW_HZ * (HIGH_HZ / LOW_HZ).powf(t)
+}
 
 impl Default for ReverbParams {
     fn default() -> Self {
@@ -488,8 +504,12 @@ impl Default for ReverbParams {
             ir_path: parking_lot::RwLock::new(String::new()),
             profile_id: parking_lot::RwLock::new(String::new()),
             editor_form: parking_lot::RwLock::new(String::new()),
-            post_eq: std::array::from_fn(|i| PostBandParams::new(EQ_DEFAULT_FREQS[i])),
-            decay_eq: std::array::from_fn(|i| DecayBandParams::new(EQ_DEFAULT_FREQS[i])),
+            post_eq: std::array::from_fn(|i| {
+                PostBandParams::new(eq_default_freq(i, reverb_dsp::chain::POST_EQ_BANDS))
+            }),
+            decay_eq: std::array::from_fn(|i| {
+                DecayBandParams::new(eq_default_freq(i, reverb_dsp::algorithm::DECAY_BANDS))
+            }),
         }
     }
 }
@@ -532,6 +552,28 @@ impl ReverbParams {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn band_defaults_cover_every_band_of_either_eq() {
+        // The two EQs have different band counts, and a default frequency has
+        // to exist for each without either array running off a shared table.
+        for count in [
+            reverb_dsp::chain::POST_EQ_BANDS,
+            reverb_dsp::algorithm::DECAY_BANDS,
+        ] {
+            let freqs: Vec<f32> = (0..count).map(|i| eq_default_freq(i, count)).collect();
+            assert_eq!(freqs.len(), count);
+            assert!((freqs[0] - 80.0).abs() < 0.01, "starts at 80 Hz");
+            assert!((freqs[count - 1] - 10_000.0).abs() < 1.0, "ends at 10 kHz");
+            assert!(
+                freqs.windows(2).all(|w| w[1] > w[0]),
+                "and rises across the range"
+            );
+        }
+        // Degenerate counts must not divide by zero.
+        assert_eq!(eq_default_freq(0, 1), 80.0);
+        assert_eq!(eq_default_freq(9, 1), 80.0);
+    }
 
     #[test]
     fn a_session_restores_from_the_id_and_not_the_number() {

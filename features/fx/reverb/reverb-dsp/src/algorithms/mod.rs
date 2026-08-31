@@ -13,6 +13,7 @@ pub mod nonlinear;
 pub mod plate;
 pub mod plate_lexicon;
 pub mod plate_progenitor;
+pub mod random;
 pub mod reflections;
 pub mod room;
 pub mod room_chamber;
@@ -51,6 +52,7 @@ pub fn create(
             1 => Box::new(spring_vintage::SpringVintage::new(sample_rate)),
             _ => Box::new(spring::Spring::new(sample_rate)),
         },
+        AlgorithmType::Random => Box::new(random::Random::new(sample_rate)),
         AlgorithmType::Cloud => Box::new(cloud::Cloud::new(sample_rate)),
         AlgorithmType::Bloom => Box::new(bloom::Bloom::new(sample_rate)),
         AlgorithmType::Shimmer => Box::new(shimmer::Shimmer::new(sample_rate)),

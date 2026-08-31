@@ -8,7 +8,7 @@
 //!   - Moderate HF damping (air absorption over distance)
 //!   - Wide stereo field (surround-like from distant surfaces)
 
-use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, HALL_ARENA_T60, ReverbAlgorithm, decay_to_t60};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
@@ -257,11 +257,12 @@ impl ReverbAlgorithm for HallArena {
         // midband T60, the Low End multiplier stretches/tames the DC
         // target and damping + the high multiplier set the Nyquist
         // target. decay pinned at 1.0 (freeze) holds ~forever.
-        let t60 = if params.decay >= 0.999 {
-            1.0e6
-        } else {
-            1.0 * 40.0f64.powf(params.decay)
-        };
+        // In-loop allpasses (zita-style ±): hall density builds with
+        // every recirculation instead of only at the input diffuser.
+        self.fdn_l.set_loop_allpass(0.6);
+        self.fdn_r.set_loop_allpass(0.6);
+
+        let t60 = decay_to_t60(params.decay, HALL_ARENA_T60.0, HALL_ARENA_T60.1);
         let t60_dc = (t60 * params.low_decay_mult.max(0.05)).max(0.05);
         let hf_ratio = ((0.15 + 0.85 * (1.0 - params.damping)) * params.high_decay_mult.max(0.05))
             .clamp(0.02, 1.5);
@@ -273,11 +274,6 @@ impl ReverbAlgorithm for HallArena {
             .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
         self.fdn_r
             .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
-
-        // In-loop allpasses (zita-style ±): hall density builds with
-        // every recirculation instead of only at the input diffuser.
-        self.fdn_l.set_loop_allpass(0.6);
-        self.fdn_r.set_loop_allpass(0.6);
 
         // Artifact-free tail animation: slow orthogonal rotation of the
         // feedback mix (no decay error, no pitch wobble).

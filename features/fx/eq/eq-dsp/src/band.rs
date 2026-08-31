@@ -12,7 +12,14 @@ use crate::section::{Df1Section, Tdf2Section};
 pub const MAX_ORDER: usize = 16;
 
 /// Maximum number of cascaded 2nd-order sections.
-const MAX_SECTIONS: usize = MAX_ORDER / 2 + 1; // +1 for odd-order 1st-order section
+/// Biquads a band can hold.
+///
+/// The integer design needs `MAX_ORDER / 2` plus one more for an odd order's
+/// first-order tail. A fractional slope adds its ladder on top of that, so the
+/// budget has to cover both — otherwise the steepest bands silently drop
+/// sections at the `min(MAX_SECTIONS)` clamp below and come out shallower than
+/// they were asked to be.
+const MAX_SECTIONS: usize = MAX_ORDER / 2 + 1 + design::fractional::SECTION_COUNT;
 
 /// A single EQ band with variable order, using the pro ZPK design pipeline.
 /// Which part of the stereo image a band processes.
@@ -46,6 +53,14 @@ pub struct Band {
     pub gain_db: f64,
     pub q: f64,
     pub order: usize,
+    /// Slope beyond `order`, in poles, 0..1.
+    ///
+    /// Pro-Q's slope control is continuous, so a band can sit between two
+    /// orders — 7.5 or 15.25 dB/oct. The integer part is `order`; this is the
+    /// remainder, realized by a pole-zero ladder (see
+    /// [`crate::design::fractional`]). Zero for every band that lands on an
+    /// integer, which is most of them.
+    pub fractional_order: f64,
     pub enabled: bool,
     /// Stereo placement: which part of the image this band filters.
     pub placement: Placement,
@@ -72,6 +87,7 @@ impl Band {
             gain_db: 0.0,
             q: 0.707,
             order: 2,
+            fractional_order: 0.0,
             enabled: true,
             gain_q_interaction: 0.0,
             placement: Placement::default(),
@@ -93,20 +109,38 @@ impl Band {
             return;
         }
 
-        let order = self.order.clamp(0, MAX_ORDER);
+        // Brickwall's order is a sentinel, not a pole count — clamping it to
+        // MAX_ORDER turns it back into the 96 dB/oct cascade it is meant to
+        // replace, which is exactly the bug this design was written to fix.
+        let order = if self.order == crate::slope::BRICKWALL_ORDER {
+            self.order
+        } else {
+            self.order.clamp(0, MAX_ORDER)
+        };
 
         self.output_gain = 1.0;
 
-        // Pro-Q 4 applies gain as flat output for Notch and Bandpass
-        if matches!(self.filter_type, FilterType::Notch | FilterType::Bandpass)
-            && self.gain_db.abs() > 0.001
-        {
-            self.num_sections = 0;
-            self.output_gain = 10.0_f64.powf(self.gain_db / 20.0);
-            return;
-        }
+        // A Notch's gain field does nothing at all in the plugin, exactly as a
+        // Bandpass's does not. Both used to take this path — a flat output
+        // trim and no filter built — and Bandpass was fixed when it was
+        // measured; the Notch case was left because it had not been. Measured
+        // now, at 1 kHz Q 4, the plugin gives the *identical* curve at -6 dB
+        // and at +6:
+        //
+        // ```text
+        //      Hz    Pro-Q -6   Pro-Q +6    ours (either)
+        //     794       -1.97      -1.97           -/+6.00
+        //     891       -5.23      -5.23           -/+6.00
+        //    1000     -126.26    -126.26           -/+6.00
+        // ```
+        //
+        // So the gain is ignored and the notch is built, which is what the
+        // rest of this function now does for every shape.
 
-        if order == 0 {
+        // Order zero with a fractional remainder is a slope shallower than
+        // 6 dB/oct: no integer design at all, just the ladder.
+        let fractional_only = order == 0 && self.fractional_order > 1.0e-6;
+        if order == 0 && !fractional_only {
             self.num_sections = 0;
             return;
         }
@@ -135,14 +169,45 @@ impl Band {
         };
 
         // Use pro design pipeline: analog prototype -> ZPK -> biquad sections
-        let sos = design::design_filter(
-            self.filter_type,
-            self.freq_hz,
-            effective_q,
-            effective_gain,
-            sample_rate,
-            order,
-        );
+        let sos = if fractional_only {
+            Vec::new()
+        } else {
+            design::design_filter(
+                self.filter_type,
+                self.freq_hz,
+                effective_q,
+                effective_gain,
+                sample_rate,
+                order,
+            )
+        };
+
+        // A fractional slope adds a ladder on top of the integer design —
+        // but ONLY for the two shapes whose slope is a one-sided roll-off
+        // into a stop band.
+        //
+        // A shelf settles at a finite gain and a bell returns to unity on both
+        // sides; for those, "slope" is the steepness of a *bounded* transition,
+        // so a ladder that keeps falling for four octaves does not steepen
+        // them, it tilts them. Applied to bells and shelves this cost 98 dB on
+        // one preset — a 2.45-slope bell at 2.2 kHz picked up a high-cut that
+        // was never asked for. Those shapes take the nearest integer order
+        // instead, which is what the caller hands over.
+        let mut sos = sos;
+        if self.fractional_order > 1.0e-6 {
+            if let Some(high_pass) = match self.filter_type {
+                FilterType::Highpass => Some(true),
+                FilterType::Lowpass => Some(false),
+                _ => None,
+            } {
+                sos.extend(design::fractional::sections(
+                    self.freq_hz,
+                    self.fractional_order,
+                    sample_rate,
+                    high_pass,
+                ));
+            }
+        }
 
         self.num_sections = sos.len().min(MAX_SECTIONS);
         // Use DF1 for Peak filters (binary-exact processing form)
@@ -158,6 +223,41 @@ impl Band {
                 self.sections[i].set_coeffs(coeffs);
             }
         }
+    }
+
+    /// The band's magnitude response at `hz`, in dB.
+    ///
+    /// Read off the coefficients the band is actually running, so it costs no
+    /// redesign and cannot drift from what the audio hears. A disabled band
+    /// contributes nothing.
+    pub fn magnitude_db(&self, hz: f64, sample_rate: f64) -> f64 {
+        if !self.enabled || self.num_sections == 0 {
+            return if self.enabled {
+                20.0 * self.output_gain.max(1.0e-12).log10()
+            } else {
+                0.0
+            };
+        }
+        let w = core::f64::consts::TAU * hz / sample_rate;
+        let (cw, sw) = (w.cos(), w.sin());
+        let (c2w, s2w) = ((2.0 * w).cos(), (2.0 * w).sin());
+        let mut db = 20.0 * self.output_gain.max(1.0e-12).log10();
+        for i in 0..self.num_sections {
+            let [b0, b1, b2, a1, a2] = if self.use_df1 {
+                self.df1_sections[i].coeffs()
+            } else {
+                self.sections[i].coeffs()
+            };
+            // H(e^jw) with z^-1 = cos w - j sin w.
+            let num_re = b0 + b1 * cw + b2 * c2w;
+            let num_im = -(b1 * sw + b2 * s2w);
+            let den_re = 1.0 + a1 * cw + a2 * c2w;
+            let den_im = -(a1 * sw + a2 * s2w);
+            let num = (num_re * num_re + num_im * num_im).max(1.0e-30);
+            let den = (den_re * den_re + den_im * den_im).max(1.0e-30);
+            db += 10.0 * (num / den).log10();
+        }
+        db
     }
 
     /// Process a single sample through all cascaded sections.
@@ -296,20 +396,81 @@ mod tests {
         );
     }
 
+    /// A bandpass keeps filtering when it carries gain.
+    ///
+    /// This test used to assert the opposite — that gain on a bandpass set
+    /// `num_sections = 0` and became a flat output trim. Measured against
+    /// Pro-Q 4, that is not what the plugin does: a bandpass at Q 2.5 peaks
+    /// near 0 dB at its centre and is over 100 dB down two octaves away, while
+    /// the flat-trim path produced a level line across the whole spectrum. On
+    /// "Band Pass Narrow" the difference was 97 dB of mean error, which fell
+    /// to 0.01 dB once the filter was built. A bandpass has a unity passband,
+    /// so its gain field is not an output trim.
+    ///
+    /// Notch keeps the old behaviour: it has not been measured the same way,
+    /// and it is a different filter.
     #[test]
-    fn bandpass_gain_applied_as_output() {
+    fn bandpass_with_gain_still_filters() {
         let mut band = Band::new();
         band.filter_type = FilterType::Bandpass;
+        band.freq_hz = 1000.0;
+        band.q = 2.5;
+        band.gain_db = 6.0;
+        band.order = 2;
+        band.update(48000.0);
+
+        assert!(
+            band.num_sections > 0,
+            "a bandpass with gain must still build its filter",
+        );
+        assert!(
+            (band.output_gain - 1.0).abs() < 1e-10,
+            "and must not become a flat trim (output_gain {})",
+            band.output_gain,
+        );
+    }
+
+    /// A Notch's gain field is inert, exactly as a Bandpass's is.
+    ///
+    /// Measured against the plugin at 1 kHz Q 4: the response at -6 dB and at
+    /// +6 dB is the same curve to the second decimal, and it is a notch, not
+    /// a trim. This used to build no filter at all and apply the gain as a
+    /// flat output scale.
+    #[test]
+    fn notch_gain_is_ignored() {
+        let mut band = Band::new();
+        band.filter_type = FilterType::Notch;
         band.gain_db = 6.0;
         band.update(48000.0);
 
-        // With gain on bandpass, num_sections should be 0 and output_gain set
-        assert_eq!(band.num_sections, 0);
-        let expected_gain = 10.0_f64.powf(6.0 / 20.0);
+        assert!(band.num_sections > 0, "the notch must still be built");
         assert!(
-            (band.output_gain - expected_gain).abs() < 1e-10,
-            "Output gain should be ~{expected_gain}, got {}",
+            (band.output_gain - 1.0).abs() < 1e-12,
+            "no output trim, got {}",
             band.output_gain
         );
+
+        let mut plain = Band::new();
+        plain.filter_type = FilterType::Notch;
+        plain.gain_db = 0.0;
+        plain.update(48000.0);
+        assert_eq!(
+            band.num_sections, plain.num_sections,
+            "gain must not change how the filter is built",
+        );
+
+        // And it is a notch: a run of the band's own frequency comes out
+        // essentially silent whatever the gain field says.
+        let sr = 48_000.0;
+        let mut rms = 0.0f64;
+        for i in 0..(sr as usize) {
+            let x = (core::f64::consts::TAU * band.freq_hz * i as f64 / sr).sin();
+            let y = band.tick(x, 0);
+            if i > sr as usize / 2 {
+                rms += y * y;
+            }
+        }
+        let db = 10.0 * (rms / (sr / 2.0)).max(1e-30).log10();
+        assert!(db < -60.0, "the band's own frequency should be notched out, got {db:.1} dB");
     }
 }

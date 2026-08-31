@@ -59,3 +59,66 @@ pub fn core_param_ptr(params: &CompStageParams, core_name: &str) -> Option<Param
         _ => return None,
     })
 }
+
+/// Every core parameter name this plugin exposes.
+///
+/// Kept beside [`core_param_ptr`] so the two cannot drift: a preset browser
+/// needs to enumerate what it can write, and deriving that list by guessing
+/// at the match arms is how it goes stale. `multiband_amount` is deliberately
+/// absent — the stage exists in the engine but has no UI, and a name that
+/// resolves to `None` would only be reported as unmatched.
+pub const CORE_PARAM_NAMES: &[&str] = &[
+    "threshold_db",
+    "ratio",
+    "attack_ms",
+    "release_ms",
+    "knee_db",
+    "auto_makeup",
+    "feedback",
+    "channel_link",
+    "detector_rms_mix",
+    "inertia",
+    "inertia_decay",
+    "ceiling",
+    "drive",
+    "character_mode",
+    "fold",
+    "input_gain_db",
+    "output_gain_db",
+    "sidechain_freq",
+    "sidechain_lowpass_freq",
+    "range_db",
+    "expander_threshold_db",
+    "expander_ratio",
+    "upward_threshold_db",
+    "upward_ratio",
+    "hold_ms",
+    "lookahead_ms",
+    "style",
+    "profile",
+];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every listed name has to resolve, or the list is lying about what the
+    /// plugin can write.
+    #[test]
+    fn every_listed_core_param_resolves() {
+        let params = CompStageParams::default();
+        for name in CORE_PARAM_NAMES {
+            assert!(
+                core_param_ptr(&params, name).is_some(),
+                "{name} is listed but does not resolve",
+            );
+        }
+    }
+
+    #[test]
+    fn an_unexposed_param_is_absent_from_the_list() {
+        let params = CompStageParams::default();
+        assert!(core_param_ptr(&params, "multiband_amount").is_none());
+        assert!(!CORE_PARAM_NAMES.contains(&"multiband_amount"));
+    }
+}
