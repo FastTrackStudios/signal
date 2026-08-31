@@ -29,6 +29,7 @@ use std::fmt::Write as _;
 
 pub mod chunk;
 pub mod convert;
+pub mod fts_comp;
 pub mod fts_eq;
 
 /// One node of the project tree: either a literal line or a nested block.

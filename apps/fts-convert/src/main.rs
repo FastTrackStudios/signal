@@ -1,8 +1,8 @@
 //! `fts-convert` — swap third-party plugins in a REAPER project for FTS ones.
 //!
-//! Today it does Pro-Q 4 → FTS EQ. The shape is deliberately general, because
-//! the next one is Pro-C 3 → FTS Comp and the only part that changes is
-//! decode/translate: the project surgery and the report are shared.
+//! Pro-Q 4 becomes FTS EQ and Pro-C 3 becomes FTS Comp. Adding a third is a
+//! decode-and-translate arm in `signal_import::rpp::convert`; the project
+//! surgery, the report and the verification below are shared.
 //!
 //! ```sh
 //! fts-convert song.rpp                    # writes song.fts.rpp, keeps the original
@@ -15,7 +15,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_import::rpp::{convert, fts_eq, Document};
+use signal_import::rpp::{convert, Document};
 
 mod verify;
 
@@ -67,9 +67,10 @@ fn usage() {
     println!(
         "fts-convert <project.rpp>... [--in-place] [--dry-run] [--quiet]\n\
          \n\
-         Replaces every FabFilter Pro-Q 4 instance with FTS EQ, carrying the\n\
-         preset across. Everything else in the project is left byte for byte\n\
-         as it was — FX order, bypass state and the rest of the chain included.\n\
+         Replaces every FabFilter Pro-Q 4 with FTS EQ and every Pro-C 3 with\n\
+         FTS Comp, carrying the preset across. Everything else in the project\n\
+         is left byte for byte as it was — FX order, bypass state and the rest\n\
+         of the chain included.\n\
          \n\
            --in-place   rewrite the project, saving the original alongside it\n\
                         as <name>.rpp.bak (the default writes <name>.fts.rpp)\n\
@@ -109,45 +110,41 @@ fn run(
 
     println!("\n{}", input.display());
     if report.is_empty() {
-        println!("  no Pro-Q 4 instances ({} other plugins left alone)", report.untouched_fx);
+        println!(
+            "  nothing to convert ({} other plugins left alone)",
+            report.untouched_fx
+        );
         return true;
     }
 
-    // Open the plugins once for the whole project — loading a bridged plugin
-    // costs seconds and a session has dozens of instances.
+    // The rig bridges each plugin pair the first time it meets one, and
+    // keeps them for the whole project.
     let mut rig = match verifying {
         false => None,
-        true => match verify::Rig::open(&verify::default_reference(), &verify::default_ours()) {
-            Ok(rig) => Some(rig),
-            Err(e) => {
-                println!("  (not verifying: {e})");
-                None
-            }
-        },
+        true => Some(verify::Rig::new()),
     };
 
     let mut worst_seen = 0.0f64;
     if !quiet || rig.is_some() {
         for c in &report.converted {
             let preset = c.preset.as_deref().unwrap_or("—");
-            let bands = c.source.active_bands().count();
             let verdict = match rig.as_mut() {
                 None => String::new(),
                 Some(rig) => {
-                    let ours = fts_eq::state_bytes(&c.params);
                     if curves_for == Some(c.track.as_str()) {
-                        if let Some(back) = rig.readback(&ours) {
-                            let path = format!("/tmp/fts-readback-{}.json", c.track);
-                            let _ = std::fs::write(&path, &back[8.min(back.len())..]);
-                            println!("  readback written to {path}");
-                        }
-                        let native =
-                            signal_import::fabfilter::proq4::to_native_eq_params(&c.source);
-                        if let Some((pq, plug, eng, hz)) =
-                            rig.curves(&c.source_state, &ours, &native)
+                        if let Some((pq, plug, eng, hz)) = c
+                            .native_params
+                            .as_ref()
+                            .and_then(|n| rig.curves(c.family, &c.source_state, &c.our_state, n))
                         {
                             println!("\n  {} — mid response, dB", c.track);
-                            println!("  {:>8} {:>9} {:>9} {:>9}", "Hz", "Pro-Q", "plugin", "engine");
+                            println!(
+                                "  {:>8} {:>9} {:>9} {:>9}",
+                                "Hz",
+                                c.family.source_name(),
+                                "plugin",
+                                "engine"
+                            );
                             for i in 0..hz.len() {
                                 println!(
                                     "  {:>8.0} {:>9.2} {:>9.2} {:>9.2}",
@@ -157,19 +154,19 @@ fn run(
                             println!();
                         }
                     }
-                    let engine = engine_too.then(|| {
-                        rig.compare_engine(
-                            &c.source_state,
-                            &signal_import::fabfilter::proq4::to_native_eq_params(&c.source),
-                        )
-                    });
-                    match rig.compare(&c.source_state, &ours) {
+                    // The engine column, where the family has one — it is
+                    // what says whether a gap is in the translation or in the
+                    // DSP under it.
+                    let engine = match (engine_too, c.native_params.as_ref()) {
+                        (true, Some(native)) => rig
+                            .compare_engine(c.family, &c.source_state, native)
+                            .map(|d| format!(" | engine {:>5.2}", d.mean_db))
+                            .unwrap_or_default(),
+                        _ => String::new(),
+                    };
+                    match rig.compare(c.family, &c.source_state, &c.our_state) {
                         Some(d) => {
                             worst_seen = worst_seen.max(d.mean_db);
-                            let engine = match engine.flatten() {
-                                Some(e) => format!(" | engine {:>5.2}", e.mean_db),
-                                None => String::new(),
-                            };
                             format!(
                                 "  {:>5.2} dB mean, {:>5.2} at {:.0} Hz {}{engine}",
                                 d.mean_db,
@@ -178,20 +175,23 @@ fn run(
                                 if d.worst_in_side { "(side)" } else { "(mid)" }
                             )
                         }
-                        None => "  could not render".to_string(),
+                        // Either plugin declining to process is reported as
+                        // that, not as an infinite error.
+                        None => "  not measurable (one side was silent)".to_string(),
                     }
                 }
             };
             println!(
-                "  {:<24} fx {:<3} {:<5} {:<24} {bands:>2} bands{verdict}",
-                truncate(&c.track, 24),
+                "  {:<20} fx {:<3} {:<8} {:<22} {:<24}{verdict}",
+                truncate(&c.track, 20),
                 c.slot,
-                match c.hosted {
-                    convert::Hosted::Vst3 => "VST3",
-                    convert::Hosted::Clap => "CLAP",
-                },
-                truncate(preset, 24),
+                c.family.source_name(),
+                truncate(preset, 22),
+                truncate(&c.summary, 24),
             );
+            for missing in &c.unmapped {
+                println!("      ! {missing} does not cross");
+            }
         }
     }
     for s in &report.skipped {

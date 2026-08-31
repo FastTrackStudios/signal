@@ -597,7 +597,10 @@ impl CompStageParams {
                 4.0,
                 FloatRange::Skewed {
                     min: 1.0,
-                    max: 20.0,
+                    // Pro-C 3 reaches 100:1, which is how it limits. Capped
+                    // at 20 every limiting preset came through as a 20:1
+                    // compressor.
+                    max: 100.0,
                     factor: FloatRange::skew_factor(-1.5),
                 },
             )
@@ -630,7 +633,9 @@ impl CompStageParams {
                 6.0,
                 FloatRange::Linear {
                     min: 0.0,
-                    max: 24.0,
+                    // Pro-C 3's knee reaches 72 dB and its factory library
+                    // uses the whole span.
+                    max: 72.0,
                 },
             )
             .with_unit(" dB")
@@ -639,8 +644,10 @@ impl CompStageParams {
                 "Makeup",
                 0.0,
                 FloatRange::Linear {
-                    min: -24.0,
-                    max: 24.0,
+                    // Pro-C 3's output trim spans 36 dB either way — the
+                    // same 36 dB per unit Pro-Q's Output Level uses.
+                    min: -36.0,
+                    max: 36.0,
                 },
             )
             .with_unit(" dB")
@@ -668,8 +675,9 @@ impl CompStageParams {
                 "Input",
                 0.0,
                 FloatRange::Linear {
-                    min: -24.0,
-                    max: 24.0,
+                    // As the output trim: Pro-C's input fader is ±36 dB.
+                    min: -36.0,
+                    max: 36.0,
                 },
             )
             .with_unit(" dB")

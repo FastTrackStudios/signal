@@ -1,4 +1,9 @@
-//! Replacing FabFilter Pro-Q instances in a REAPER project with FTS EQ.
+//! Replacing FabFilter plugins in a REAPER project with FTS ones.
+//!
+//! Pro-Q 4 becomes FTS EQ and Pro-C 3 becomes FTS Comp. What differs between
+//! the two is only which bytes mean what — everything below, the project
+//! surgery and the report, is shared, and a third plugin is a [`Family`] arm
+//! rather than a second copy of this file.
 //!
 //! The rule the whole module is built around: **a block we do not convert is
 //! not touched.** Rewriting is per-`<VST>`/`<CLAP>` block, in place, leaving
@@ -23,40 +28,81 @@
 //! preset is the point), but every FX chain that holds an envelope is named
 //! in [`Report::automated_chains`] so a run cannot quietly leave one behind.
 
-use crate::fabfilter::{ffbs, proq4};
-use crate::rpp::{chunk, fts_eq, split_fields, unquote, Block, Document, Node};
+use crate::fabfilter::{ffbs, proc3, proq4};
+use crate::rpp::{chunk, fts_comp, fts_eq, split_fields, unquote, Block, Document, Node};
 
-/// How a Pro-Q instance was hosted in the project.
+/// Which FabFilter plugin an instance is, and therefore what it becomes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Family {
+    ProQ4,
+    ProC3,
+}
+
+impl Family {
+    /// The FTS plugin that replaces it: `(clap id, name, vendor)`.
+    pub fn target(self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            Family::ProQ4 => (fts_eq::CLAP_ID, fts_eq::NAME, fts_eq::VENDOR),
+            Family::ProC3 => (fts_comp::CLAP_ID, fts_comp::NAME, fts_comp::VENDOR),
+        }
+    }
+
+    pub fn source_name(self) -> &'static str {
+        match self {
+            Family::ProQ4 => "Pro-Q 4",
+            Family::ProC3 => "Pro-C 3",
+        }
+    }
+}
+
+/// How an instance was hosted in the project.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Hosted {
     Vst3,
     Clap,
 }
 
-/// What happened to one Pro-Q instance.
+/// What happened to one converted instance.
+///
+/// Everything here is plugin-agnostic on purpose. A caller reporting or
+/// verifying a conversion should not have to know which FabFilter plugin it
+/// came from, and the moment it does, adding a third means editing the
+/// caller too.
 #[derive(Debug, Clone)]
 pub struct Converted {
     /// The track the instance sits on, as named in the project.
     pub track: String,
     /// Its position in that track's FX chain, counting from 1 and counting
-    /// every plugin, not just the Pro-Q ones — so it lines up with what
+    /// every plugin, not only the converted ones — so it lines up with what
     /// REAPER shows.
     pub slot: usize,
+    pub family: Family,
     pub hosted: Hosted,
-    /// The preset name Pro-Q had stored, when it had one.
+    /// The preset name the plugin had stored, when it had one.
     pub preset: Option<String>,
-    /// The decoded instance, kept so the caller can verify it against the
-    /// real plugin without decoding the project a second time.
-    pub source: proq4::ProQ4,
-    /// The exact bytes the original plugin was holding. Kept for the same
-    /// reason: verification has to load the real Pro-Q with the real state,
-    /// not with a re-encoding of our reading of it.
+    /// The exact bytes the original plugin was holding — verification has to
+    /// load the real plugin with the real state, not with a re-encoding of
+    /// our reading of it.
     pub source_state: Vec<u8>,
-    /// The parameters written into the FTS EQ block.
-    pub params: std::collections::BTreeMap<String, fts_eq::ParamValue>,
+    /// The bytes written into the replacement block.
+    pub our_state: Vec<u8>,
+    /// One line describing what the preset does, for the report.
+    pub summary: String,
+    /// What the source carries that the target has no control for. Empty is
+    /// the good case; anything here is something a mix engineer should be
+    /// told rather than left to discover.
+    pub unmapped: Vec<String>,
+    /// The engine-facing parameter list, where one exists.
+    ///
+    /// Only the equalizer has it: `signal-fx` exposes the whole EQ engine and
+    /// eight of the compressor's twenty-nine controls, so a compressor
+    /// comparison against the engine would measure the facade rather than the
+    /// DSP. Callers use it to render an engine column beside the plugin's,
+    /// which is what says whether a gap is in the translation or in the DSP.
+    pub native_params: Option<Vec<(String, f64)>>,
 }
 
-/// A Pro-Q instance that was left alone, and why.
+/// An instance that was left alone, and why.
 #[derive(Debug, Clone)]
 pub struct Skipped {
     pub track: String,
@@ -68,7 +114,7 @@ pub struct Skipped {
 pub struct Report {
     pub converted: Vec<Converted>,
     pub skipped: Vec<Skipped>,
-    /// FX blocks that were not Pro-Q at all, counted so a run can say how
+    /// FX blocks that were nothing we convert, counted so a run can say how
     /// much of the project it looked at.
     pub untouched_fx: usize,
     /// Tracks where a converted chain also carries parameter automation.
@@ -83,7 +129,7 @@ impl Report {
     }
 }
 
-/// Rewrite every Pro-Q 4 instance in `doc` as FTS EQ, in place.
+/// Rewrite every recognised FabFilter instance in `doc`, in place.
 pub fn convert(doc: &mut Document) -> Report {
     let mut report = Report::default();
     let mut nodes = std::mem::take(&mut doc.nodes);
@@ -110,7 +156,7 @@ fn walk(nodes: &mut [Node], track: &str, automated: bool, report: &mut Report) {
                     slot += 1;
                     match try_convert(b, &current, slot) {
                         Some(Ok(done)) => {
-                            *b = fts_eq_block(b.indent(), &done.params, b);
+                            *b = replacement(b.indent(), done.family, &done.our_state, b);
                             report.converted.push(done);
                             if automated && !report.automated_chains.contains(&current) {
                                 report.automated_chains.push(current.clone());
@@ -149,7 +195,7 @@ fn track_name(line: &str) -> Option<String> {
 
 /// `None` when the block is not Pro-Q at all.
 fn try_convert(block: &Block, track: &str, slot: usize) -> Option<Result<Converted, Skipped>> {
-    let hosted = pro_q_kind(block)?;
+    let (family, hosted) = recognise(block)?;
     let refuse = |reason: String| {
         Err(Skipped {
             track: track.to_string(),
@@ -178,49 +224,96 @@ fn try_convert(block: &Block, track: &str, slot: usize) -> Option<Result<Convert
         Ok(f) => f,
         Err(e) => return Some(refuse(format!("its state is not a FabFilter blob: {e}"))),
     };
-    let source = match proq4::decode(&ffbs) {
-        Ok(p) => p,
-        Err(e) => return Some(refuse(format!("could not read the preset: {e}"))),
+
+    // The only plugin-specific step. Everything either side of it — reading
+    // the block, framing the replacement, reporting — is shared.
+    let (our_state, preset, summary, unmapped, native_params) = match family {
+        Family::ProQ4 => match proq4::decode(&ffbs) {
+            Err(e) => return Some(refuse(format!("could not read the preset: {e}"))),
+            Ok(eq) => (
+                fts_eq::clap_state(&eq),
+                eq.preset_name.clone(),
+                format!("{} bands", eq.active_bands().count()),
+                Vec::new(),
+                Some(proq4::to_native_eq_params(&eq)),
+            ),
+        },
+        Family::ProC3 => match proc3::decode(&ffbs) {
+            Err(e) => return Some(refuse(format!("could not read the preset: {e}"))),
+            Ok(comp) => {
+                let summary = if comp.is_transparent() {
+                    "passing through".to_string()
+                } else {
+                    format!(
+                        "{:.1}:1 at {:.0} dB, {:.0}/{:.0} ms",
+                        comp.ratio, comp.threshold_db, comp.attack_ms, comp.release_ms
+                    )
+                };
+                (
+                    fts_comp::clap_state(&comp),
+                    comp.preset_name.clone(),
+                    summary,
+                    fts_comp::unmapped(&comp),
+                    None,
+                )
+            }
+        },
     };
 
-    let params = fts_eq::plugin_params(&proq4::to_native_eq_params(&source));
-    let preset = source.preset_name.clone().filter(|s| !s.is_empty());
     Some(Ok(Converted {
         track: track.to_string(),
         slot,
+        family,
         hosted,
-        preset,
-        source,
+        preset: preset.filter(|s| !s.is_empty()),
         source_state: state,
-        params,
+        our_state,
+        summary,
+        unmapped,
+        native_params,
     }))
 }
 
-/// Is this FX block a Pro-Q 4?
+/// Which plugin is this FX block, if it is one we replace?
 ///
 /// Matched on both the CLAP id and the display name, because the two formats
-/// name the plugin differently and a user can rename neither.
-fn pro_q_kind(block: &Block) -> Option<Hosted> {
+/// name a plugin differently and a user can rename neither. The version
+/// number is part of the match on purpose: Pro-Q 2 and 3 store a different
+/// parameter vector entirely, and taking one for a 4 would produce a
+/// confident, wrong conversion rather than a refusal.
+fn recognise(block: &Block) -> Option<(Family, Hosted)> {
     let fields = split_fields(&block.header);
     let display = fields.get(1).map(|f| unquote(f)).unwrap_or_default();
+    let id = fields.get(2).map(|f| unquote(f)).unwrap_or_default();
+
+    let family = if display.contains("Pro-Q 4") || id.eq_ignore_ascii_case("com.FabFilter.Pro-Q.4")
+    {
+        Family::ProQ4
+    } else if display.contains("Pro-C 3") || id.eq_ignore_ascii_case("com.FabFilter.Pro-C.3") {
+        Family::ProC3
+    } else {
+        return None;
+    };
+
     match block.token() {
-        "VST" if display.contains("Pro-Q 4") => Some(Hosted::Vst3),
-        "CLAP" => {
-            let id = fields.get(2).map(|f| unquote(f)).unwrap_or_default();
-            (id.eq_ignore_ascii_case("com.FabFilter.Pro-Q.4") || display.contains("Pro-Q 4"))
-                .then_some(Hosted::Clap)
-        }
+        // A VST3 block's third field is a filename, not an id, so only the
+        // display name can speak for it.
+        "VST" if display.contains(family.source_name()) => Some((family, Hosted::Vst3)),
+        "CLAP" => Some((family, Hosted::Clap)),
         _ => None,
     }
 }
 
 /// Build the replacement `<CLAP>` block at the same depth as the original.
-fn fts_eq_block(
-    indent: &str,
-    params: &std::collections::BTreeMap<String, fts_eq::ParamValue>,
-    original: &Block,
-) -> Block {
+///
+/// CLAP whatever the original was: a REAPER VST3 block's header line carries
+/// an id hash and a class UID that would have to be reproduced byte-exactly,
+/// where a CLAP block names its plugin by id string, which we know at compile
+/// time. Both formats of every FTS plugin install side by side, so nothing is
+/// lost by choosing the one that cannot be got subtly wrong.
+fn replacement(indent: &str, family: Family, state_bytes: &[u8], original: &Block) -> Block {
     let inner = format!("{indent}  ");
+    let (clap_id, name, vendor) = family.target();
     // Carry the original's editor geometry when it had one, so the FX window
     // opens roughly where the user left it.
     let cfg = original
@@ -234,7 +327,7 @@ fn fts_eq_block(
 
     let state = Block {
         header: format!("{inner}<STATE"),
-        children: chunk::encode_clap_state(&fts_eq::state_bytes(params))
+        children: chunk::encode_clap_state(state_bytes)
             .into_iter()
             .map(|l| Node::Line(format!("{inner}  {l}")))
             .collect(),
@@ -242,12 +335,7 @@ fn fts_eq_block(
     };
 
     Block {
-        header: format!(
-            "{indent}<CLAP \"CLAP: {} ({})\" {} \"\"",
-            fts_eq::NAME,
-            fts_eq::VENDOR,
-            fts_eq::CLAP_ID
-        ),
+        header: format!("{indent}<CLAP \"CLAP: {name} ({vendor})\" {clap_id} \"\""),
         children: vec![Node::Line(format!("{inner}{cfg}")), Node::Block(state)],
         footer: format!("{indent}>"),
     }
@@ -260,15 +348,58 @@ mod tests {
     const FIXTURE: &str = include_str!("../../tests/fixtures/pro-c.RTrackTemplate");
 
     #[test]
-    fn a_project_with_no_pro_q_comes_back_unchanged() {
-        // The fixture holds a Pro-C and two JUCE plugins. Nothing in it is a
-        // Pro-Q, so the converter must be a no-op down to the byte — this is
-        // the guard against a rewrite that reflows the file it was handed.
+    fn a_pro_c_is_recognised_too() {
+        // The fixture is a real REAPER track template holding a Pro-C 3
+        // between two JUCE plugins, so this also proves the recogniser reads
+        // an id off a header line REAPER actually wrote.
+        let doc = Document::parse(FIXTURE);
+        let found: Vec<_> = doc
+            .walk()
+            .into_iter()
+            .filter_map(|b| recognise(b.block))
+            .collect();
+        assert_eq!(found, vec![(Family::ProC3, Hosted::Clap)]);
+    }
+
+    #[test]
+    fn plugins_we_do_not_convert_are_left_alone() {
+        // The two JUCE VST3s in the fixture are nothing to do with us, and
+        // the file must come back byte for byte — the guard against a rewrite
+        // that reflows what it was handed.
         let mut doc = Document::parse(FIXTURE);
+        let before = doc.render();
         let report = convert(&mut doc);
-        assert!(report.is_empty(), "{report:?}");
-        assert_eq!(report.untouched_fx, 3);
-        assert_eq!(doc.render(), FIXTURE);
+        assert_eq!(report.untouched_fx, 2, "the two JUCE plugins");
+        // The Pro-C is recognised, so it is either converted or refused; what
+        // must not happen is the rest of the file moving.
+        let unchanged: String = strip_fx(&doc.render());
+        assert_eq!(unchanged, strip_fx(&before));
+    }
+
+    /// The document with every FX block's body removed, so two versions can
+    /// be compared on everything except the parts a conversion rewrites.
+    fn strip_fx(text: &str) -> String {
+        let mut out = String::new();
+        let mut depth = 0usize;
+        for line in text.lines() {
+            let t = line.trim_start();
+            if depth == 0 && (t.starts_with("<VST ") || t.starts_with("<CLAP ")) {
+                depth = 1;
+                out.push_str("<<FX>>\n");
+                continue;
+            }
+            if depth > 0 {
+                if t.starts_with('<') {
+                    depth += 1;
+                } else if t == ">" {
+                    depth -= 1;
+                }
+                continue;
+            }
+            out.push_str(line);
+            out.push('\n');
+        }
+        out
     }
 
     #[test]
@@ -278,7 +409,7 @@ mod tests {
             children: vec![],
             footer: "    >".into(),
         };
-        assert_eq!(pro_q_kind(&b), Some(Hosted::Clap));
+        assert_eq!(recognise(&b), Some((Family::ProQ4, Hosted::Clap)));
     }
 
     #[test]
@@ -288,7 +419,7 @@ mod tests {
             children: vec![],
             footer: "    >".into(),
         };
-        assert_eq!(pro_q_kind(&b), Some(Hosted::Vst3));
+        assert_eq!(recognise(&b), Some((Family::ProQ4, Hosted::Vst3)));
     }
 
     #[test]
@@ -300,7 +431,7 @@ mod tests {
             children: vec![],
             footer: "    >".into(),
         };
-        assert_eq!(pro_q_kind(&b), None);
+        assert_eq!(recognise(&b), None);
     }
 
     #[test]

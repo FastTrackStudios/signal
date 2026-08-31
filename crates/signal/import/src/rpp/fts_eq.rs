@@ -51,6 +51,7 @@ pub const VERSION: &str = "0.1.0";
 pub enum ParamValue {
     F32(f32),
     I32(i32),
+    Bool(bool),
 }
 
 impl ParamValue {
@@ -58,6 +59,7 @@ impl ParamValue {
         match self {
             ParamValue::F32(v) => serde_json::json!({ "f32": v }),
             ParamValue::I32(v) => serde_json::json!({ "i32": v }),
+            ParamValue::Bool(v) => serde_json::json!({ "bool": v }),
         }
     }
 }
@@ -203,8 +205,15 @@ pub fn clap_state(eq: &ProQ4) -> Vec<u8> {
 
 /// The same, from an already-translated parameter list.
 pub fn state_bytes(params: &BTreeMap<String, ParamValue>) -> Vec<u8> {
+    encode_state(VERSION, params)
+}
+
+/// nih-plug's state framing, for any FTS plugin: a little-endian `u64`
+/// length, then the JSON. The prefix is the plugin's own — a REAPER `<STATE>`
+/// block holds exactly what the plugin wrote and nothing more.
+pub fn encode_state(version: &str, params: &BTreeMap<String, ParamValue>) -> Vec<u8> {
     let doc = serde_json::json!({
-        "version": VERSION,
+        "version": version,
         "params": params
             .iter()
             .map(|(k, v)| (k.clone(), v.to_json()))

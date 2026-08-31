@@ -6,6 +6,7 @@
 
 pub mod ffbs;
 pub mod parser;
+pub mod proc3;
 pub mod proq4;
 pub mod pror2;
 pub mod registry;
