@@ -18,6 +18,7 @@ base64.workspace = true
 # route a 0.3 s preset to an engine whose floor is a second. Data, not DSP.
 reverb-dsp.workspace = true
 eq-dsp.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 # The translation is only worth anything if the engine on the other side acts

@@ -18,6 +18,10 @@ signal-fx.workspace = true
 reverb-dsp.workspace = true
 audiocore-dsp.workspace = true
 signal-import.workspace = true
+# `examples/eq_bundle_check` configures the engine directly and compares it
+# with the installed bundle, which is how a plugin-side fault is told from a
+# DSP one.
+eq-dsp.workspace = true
 # Reference-render caching and result files: a tuning run is expensive and its
 # output IS the preset, so both are worth keeping.
 hound = "3.5"

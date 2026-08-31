@@ -15,7 +15,6 @@ use eq_dsp::hardware_eq::{
 use eq_dsp::neve_1073::{
     Neve1073Hpf, Neve1073LowFreq, Neve1073MidFreq, Neve1073Model, Neve1073Settings,
 };
-use eq_dsp::{EqChain, FilterType};
 use eq_ui::params::{EqUiState, FtsEqParams, NUM_BANDS, SPECTRUM_BINS};
 
 // ── Plugin ──────────────────────────────────────────────────────────
@@ -68,35 +67,14 @@ impl Default for FtsEqPlugin {
     }
 }
 
-/// Map slope index (0–10) to filter order for eq-dsp.
-/// Pro-Q 4 slopes: 0,6,12,18,24,30,36,48,72,96 dB/oct + Brickwall.
-/// Each 6 dB/oct = 1 pole (order 1).
-/// Plugin-persisted shape index → canonical [`eq_dsp::slope::FilterShape`].
-///
-/// NOTE the plugin's persisted order predates the canonical table and
-/// differs at 2/3 (LowCut/HighShelf swapped). It stays frozen so saved
-/// presets keep meaning; everything downstream goes through canonical.
-fn plugin_shape(shape: i32) -> eq_dsp::slope::FilterShape {
-    use eq_dsp::slope::FilterShape as F;
-    match shape {
-        0 => F::Bell,
-        1 => F::LowShelf,
-        2 => F::LowCut,
-        3 => F::HighShelf,
-        4 => F::HighCut,
-        5 => F::Notch,
-        6 => F::BandPass,
-        7 => F::TiltShelf,
-        8 => F::FlatTilt,
-        9 => F::AllPass,
-        _ => F::Bell,
-    }
-}
-
-/// Map EqBandShape integer to eq-dsp-v2 FilterType (via canonical).
-fn shape_to_filter_type(shape: i32) -> FilterType {
-    plugin_shape(shape).to_filter_type()
-}
+// NOTE the `type` parameter is a **canonical** shape index — `sync_params`
+// hands it straight to `BandConfig.shape`, which the engine reads through
+// `FilterShape::from_canonical_index`. There used to be a `plugin_shape`
+// table here claiming the persisted order swapped Low Cut and High Shelf,
+// and a `shape_to_filter_type` built on it; neither was ever called, so the
+// swap they described never reached the audio path. They are gone rather
+// than fixed: a dead table asserting a false invariant is how a converter
+// ends up translating every high shelf into a high-pass.
 
 impl FtsEqPlugin {
     /// Sync nih-plug params → the shared engine.
@@ -162,6 +140,18 @@ impl FtsEqPlugin {
         // The gain macro scales bands and dynamic ranges together, inside the
         // engine, so the two cannot drift apart.
         self.engine.set_gain_scale(scale);
+
+        // The instance globals. Each of these is an audible part of a Pro-Q
+        // preset that used to stop at the translator: Character is a squarer
+        // rather than a trim, Auto Gain moves the whole output, and the pan
+        // is either L/R or M/S depending on its mode.
+        self.engine.set_auto_gain(self.params.auto_gain.value() > 0.5);
+        self.engine
+            .set_character(self.params.character.value().max(0) as u32);
+        self.engine.set_output_pan(
+            self.params.output_pan.value() as f64,
+            self.params.output_pan_mid_side.value() > 0.5,
+        );
     }
 
     fn sync_neve_1073(&mut self) {

@@ -38,6 +38,7 @@
 
 pub mod fabfilter;
 pub mod library_writer;
+pub mod rpp;
 pub mod rfxchain;
 pub mod types;
 pub mod valhalla;

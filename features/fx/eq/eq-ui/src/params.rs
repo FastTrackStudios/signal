@@ -203,7 +203,7 @@ impl BandParams {
             filter_type: IntParam::new(
                 format!("B{} Type", idx + 1),
                 default_type,
-                IntRange::Linear { min: 0, max: 9 },
+                IntRange::Linear { min: 0, max: 12 },
             )
             // The engine's canonical order (`eq_dsp::slope::FilterShape`),
             // which is NOT Pro-Q's: 2 and 3 are the other way round there.
@@ -256,8 +256,11 @@ impl BandParams {
                 format!("B{} Q", idx + 1),
                 1.0,
                 FloatRange::Skewed {
-                    min: 0.1,
-                    max: 18.0,
+                    // Pro-Q's Q runs 0.025 to 40 and this parameter carries
+                    // √2 times it, so anything narrower silently rounds a
+                    // surgical notch off into a wide dip on load.
+                    min: 0.025,
+                    max: 60.0,
                     factor: FloatRange::skew_factor(-2.0),
                 },
             )
@@ -321,7 +324,8 @@ impl BandParams {
             dyn_threshold_db: FloatParam::new(
                 format!("B{} Dyn Threshold", idx + 1),
                 -18.0,
-                FloatRange::Linear { min: -60.0, max: 0.0 },
+                // Pro-Q's threshold reaches -90 dB.
+                FloatRange::Linear { min: -90.0, max: 0.0 },
             )
             .with_unit(" dB")
             .with_step_size(0.1),
@@ -508,6 +512,30 @@ pub struct FtsEqParams {
     #[id = "gain_scale"]
     pub gain_scale: FloatParam,
 
+    /// Ride the output so a boost-heavy curve does not simply get louder.
+    ///
+    /// Pro-Q calls this Auto Gain, and ten of its factory presets ship with
+    /// it on. It was not reachable here at all, so those presets landed
+    /// several dB hot — the curve was right and the level was not.
+    #[id = "auto_gain"]
+    pub auto_gain: FloatParam,
+
+    /// Output stage colour — Pro-Q's Character: 0 Clean, 1 Subtle, 2 Warm.
+    ///
+    /// Not a gain trim — it is a squarer, adding a level-dependent second
+    /// harmonic, so it has to cross as its own control rather than be folded
+    /// into the output trim.
+    #[id = "character"]
+    pub character: IntParam,
+
+    /// Output pan, -1 hard left to +1 hard right.
+    #[id = "output_pan"]
+    pub output_pan: FloatParam,
+
+    /// Read [`Self::output_pan`] as mid/side balance rather than left/right.
+    #[id = "output_pan_mode"]
+    pub output_pan_mid_side: FloatParam,
+
     /// Hidden tuning param for coefficient optimization (set via CLAP API).
     #[id = "tune_peak_q_comp"]
     pub tune_peak_q_comp: FloatParam,
@@ -650,8 +678,10 @@ impl Default for FtsEqParams {
                 "Output",
                 0.0,
                 FloatRange::Linear {
-                    min: -24.0,
-                    max: 24.0,
+                    // Pro-Q's Output Level knob spans 36 dB either way, and
+                    // 68 of its 171 factory presets carry one.
+                    min: -36.0,
+                    max: 36.0,
                 },
             )
             .with_unit(" dB")
@@ -680,6 +710,25 @@ impl Default for FtsEqParams {
             )
             .with_unit("%")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
+
+            auto_gain: FloatParam::new("Auto Gain", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 }),
+
+            character: IntParam::new("Character", 0, IntRange::Linear { min: 0, max: 2 }),
+
+            output_pan: FloatParam::new(
+                "Output Pan",
+                0.0,
+                FloatRange::Linear {
+                    min: -1.0,
+                    max: 1.0,
+                },
+            ),
+
+            output_pan_mid_side: FloatParam::new(
+                "Pan Mode",
+                0.0,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            ),
 
             tune_peak_q_comp: FloatParam::new(
                 "Tune: Peak Q Comp",

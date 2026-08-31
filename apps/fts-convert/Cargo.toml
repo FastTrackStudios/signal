@@ -1,0 +1,24 @@
+[package]
+name = "fts-convert"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+description = "Replace third-party plugin instances in a REAPER project with FTS equivalents"
+
+[[bin]]
+name = "fts-convert"
+path = "src/main.rs"
+
+[dependencies]
+signal-import.workspace = true
+
+# `--verify` renders the original and the replacement through the real
+# plugins and compares them. It is on by default because the alternative is
+# a converter whose output nobody has listened to.
+signal-plugin-host = { workspace = true, features = ["clap-host"] }
+signal-analyzer.workspace = true
+# `--engine-too` renders the translated parameters through the EQ engine
+# directly, beside the plugin. When the two columns disagree the fault is in
+# this converter's parameter mapping; when they agree it is in the engine,
+# which is measured elsewhere.
+signal-fx.workspace = true

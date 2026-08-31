@@ -5585,6 +5585,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fts-convert"
+version = "0.1.0"
+dependencies = [
+ "signal-analyzer",
+ "signal-fx",
+ "signal-import",
+ "signal-plugin-host",
+]
+
+[[package]]
 name = "fts-modulation"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
@@ -13491,6 +13501,7 @@ name = "signal-analyzer"
 version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
+ "eq-dsp",
  "hound",
  "realfft",
  "reverb-dsp",
@@ -13805,6 +13816,7 @@ dependencies = [
  "signal-fx",
  "signal-plugin-host",
  "signal-proto",
+ "thiserror 2.0.18",
  "tracing",
  "uuid",
 ]

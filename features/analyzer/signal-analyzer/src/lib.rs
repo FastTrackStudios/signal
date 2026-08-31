@@ -70,6 +70,7 @@
 pub mod compare;
 pub mod decay;
 pub mod filters;
+pub mod eq_transfer;
 pub mod generators;
 pub mod loudness;
 pub mod null;
