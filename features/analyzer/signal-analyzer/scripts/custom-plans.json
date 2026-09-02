@@ -1,0 +1,102 @@
+{
+  "_why": [
+    "Per-plugin overrides, merged onto the plan derived from a scan.",
+    "",
+    "The scan probes every control from the unit's default state, and for a",
+    "passive EQ that state is *flat* \u2014 which is to say idle. A flat EQ passes",
+    "audio through its amplifier without asking it to do anything, so it",
+    "measures clean and every control shows a 1.0x THD span. The Hitsville EQ",
+    "read 0.00000% flat and 30.90% with its seven bands and output gain at",
+    "+8 dB. Nothing about the scan could have found that: the saturation is",
+    "not on any single control, it is in the unit being *worked*.",
+    "",
+    "So these entries say how to put a unit under load before measuring it.",
+    "'engage' pins are applied for the level sweep; 'engage_axes' are then",
+    "swept one at a time, because how far a band is pushed is the drive."
+  ],
+  "UADx Hitsville EQ": {
+    "why": "Seven bands at +-8 dB plus an output Gain. Flat it is silent-clean; boosted it reaches 30.9% THD, odd-dominant.",
+    "engage": {
+      "1-50": 1.0,
+      "2-130": 1.0,
+      "3-320": 1.0,
+      "4-800": 1.0,
+      "5-2000": 1.0,
+      "6-5000": 1.0,
+      "7-12500": 1.0,
+      "Gain": 1.0
+    },
+    "engage_axes": [
+      "1-50",
+      "4-800",
+      "7-12500",
+      "Gain"
+    ]
+  },
+  "UADx Hitsville EQ Mastering": {
+    "why": "Seven bands as L<n>-Gain, each 0..+8 dB and boost-only, paired with an L<n>-Dip/Pk switch that decides whether that gain is a peak or a dip. Boosting the gains while the bands sit on Dip drives the signal DOWN: the first attempt measured 0.006% engaged against 0.0196% flat, less distortion for more knob. Both halves have to be set.",
+    "engage_suffix_max": [
+      "-Gain",
+      "-Dip/Pk"
+    ],
+    "engage_axes": [
+      "L4-Gain",
+      "L5-Gain",
+      "L3-Gain"
+    ]
+  },
+  "UADx Pultec EQP-1A": {
+    "why": "The famous move is boosting and attenuating the low band at once. Both curves run through the output amplifier, which is what saturates.",
+    "engage": {
+      "LF Boost": 1.0,
+      "HF Boost": 1.0,
+      "Output": 1.0,
+      "Enable": 1.0
+    },
+    "engage_axes": [
+      "LF Boost",
+      "HF Boost",
+      "Output"
+    ]
+  },
+  "UADx Pultec MEQ-5": {
+    "why": "Midrange Pultec: the two peaks and the dip all feed the same output stage.",
+    "engage": {
+      "LM Peak": 1.0,
+      "HM Peak": 1.0,
+      "Output": 1.0,
+      "Enable": 1.0
+    },
+    "engage_axes": [
+      "LM Peak",
+      "HM Peak",
+      "Output"
+    ]
+  },
+  "UADx Pultec HLF-3C": {
+    "why": "Filters only, no boost and no output amplifier to push. Engaging it changes the response, not the distortion. Measured flat and expected to stay clean; the entry exists to record that this was checked rather than missed.",
+    "engage": {
+      "Enable": 1.0
+    }
+  },
+  "UADx Manley Massive Passive": {
+    "why": "Passive EQ with an active make-up amplifier: the bands attenuate and the amplifier makes it back up, so boosting the bands is what drives it.",
+    "engage_suffix_max": [
+      "Gain"
+    ],
+    "engage_prefix_on": [
+      "Ch1",
+      "Ch2"
+    ]
+  },
+  "UADx Manley Massive Passive MST": {
+    "why": "Mastering version of the same circuit.",
+    "engage_suffix_max": [
+      "Gain"
+    ],
+    "engage_prefix_on": [
+      "Ch1",
+      "Ch2"
+    ]
+  }
+}

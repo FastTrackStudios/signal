@@ -41,11 +41,11 @@ SSL Native Bus Compressor 2|SSL Native Bus Compressor 2|
 uaudio_pultec_eqp-1a|UADx Pultec EQP-1A|--first 12
 uaudio_pultec_meq-5|UADx Pultec MEQ-5|--first 12
 uaudio_pultec_hlf-3c|UADx Pultec HLF-3C|--first 12
-uaudio_manley_massive_passive|UADx Manley Massive Passive|--first 16
-uaudio_manley_massive_passive_m|UADx Manley Massive Passive MST|--first 16
+uaudio_manley_massive_passive|UADx Manley Massive Passive|--first 40
+uaudio_manley_massive_passive_m|UADx Manley Massive Passive MST|--first 40
 uaudio_neve_1073|UADx Neve 1073|--first 12
 uaudio_hitsville_eq|UADx Hitsville EQ|--first 12
-uaudio_hitsville_eq_mastering|UADx Hitsville EQ Mastering|--first 12
+uaudio_hitsville_eq_mastering|UADx Hitsville EQ Mastering|--first 24
 uaudio_avalon_vt-737sp|UADx Avalon VT-737sp|--first 16
 uaudio_api_vision_channel_strip|UADx API Vision Channel Strip|--first 16
 uaudio_century_channel_strip|UADx Century Channel Strip|--first 16

@@ -264,6 +264,47 @@ crashes or renders silence, check `audio_port_count()` before anything else.
 older than its artifact and skip the rebuild — you then measure stale code.
 `touch` the sources after syncing to voyager.
 
+## Analog EQs — a flat EQ is idle, not clean
+
+The scan probes from a unit's default state, and a passive EQ's default is
+*flat*. Flat, it passes audio through its amplifier without asking anything
+of it, so it measures clean and every control shows a 1.0x THD span. Nothing
+in a scan can find what the unit does under load, because the saturation is
+not on any one control — it is in the unit being **worked**.
+
+    Hitsville EQ, 1 kHz, flat                    0.00000% THD
+    Hitsville EQ, 7 bands + Gain at +8 dB       30.90%    THD, odd-dominant
+
+That is the entire difference between "this plugin has no modelled
+saturation" and "we measured it asleep". Both Pultecs, both Hitsville EQs
+and both Massive Passives read clean until engaged.
+
+`custom-plans.json` says how to put a unit under load. Entries are resolved
+against the scan's real parameter list, and anything that fails to resolve is
+**reported, not silently skipped** — the first version guessed prefixes
+`L4-`..`L7-` for the Hitsville Mastering, which has only `L1-`..`L3-`, and
+the warning is what caught it.
+
+    engage              controls to pin so the unit is working
+    engage_axes         then swept one at a time: how hard a band is
+                        pushed IS the drive on a passive EQ
+    engage_prefix_max   pin every control with this prefix to maximum
+    engage_suffix_max   ...or suffix, e.g. every "*Gain" band
+    engage_prefix_on    turn every "<prefix>...Enable" on
+
+An engaged plan measures a **flat baseline beside** the engaged sweep, so
+the difference the engage state makes is visible rather than assumed.
+
+Match entries on the plugin's *reported* name, allowing a prefix. UADx
+appends a category to several — the archive directory is `UADx Pultec
+EQP-1A` while the plugin reports `UADx Pultec EQP-1A EQ` — and an exact
+lookup silently found nothing for every Pultec and both Massive Passives,
+so the overrides were written and never applied.
+
+Also check `--first N` covers the real controls. The Hitsville Mastering
+needs 24 and the Massive Passive 40; at 12 and 16 the later bands were never
+scanned, so no override could name them.
+
 ## Analog EQs
 
 The same tools apply, with the emphasis moved: for a Pultec or a Manley the

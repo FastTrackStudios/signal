@@ -49,7 +49,31 @@ def main():
     pins = ";".join(f"{p['name']}={p['value']}" for p in plan.get("pins", []))
 
     jobs = []
-    if plan.get("kind") == "level" or not plan.get("drive"):
+    engage = plan.get("engage") or []
+    engage_set = ";".join(f"{e['name']}={e['value']}" for e in engage)
+
+    if engage:
+        # Under load, swept by level: how the unit saturates as it is hit
+        # harder while actually being asked to do something.
+        jobs.append(("engaged-level", [
+            "--set", engage_set, "--freqs", CORE_FREQS,
+            "--levels", "-36,-30,-24,-18,-12,-9,-6,-3,-1,0",
+        ], 10 * 3))
+        # And the flat baseline beside it, so the difference the engage state
+        # makes is visible rather than assumed.
+        jobs.append(("flat-level", [
+            "--freqs", CORE_FREQS, "--levels", "-24,-12,-6,-3,0",
+        ], 5 * 3))
+        # Each band swept on its own: how far a band is pushed *is* the drive
+        # on a passive EQ, so this is that unit's drive axis.
+        for axis in plan.get("engage_axes") or []:
+            safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in axis)
+            jobs.append((f"engage-{safe}", [
+                "--set", engage_set, "--drive-param", axis, "--drive-steps", "6",
+                "--freqs", "1000", "--levels", "-12,-6,-3,0",
+            ], 6 * 4 + 17))
+
+    if not engage and (plan.get("kind") == "level" or not plan.get("drive")):
         # No drive control: sweep how hard the unit is hit instead, finely and
         # over a wide range, since that is the only axis left.
         jobs.append(("level", [

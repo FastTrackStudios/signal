@@ -134,6 +134,66 @@ def main():
     # that will actually find something.
     kind = "drive" if drive else "level"
 
+    # ── Custom overrides ────────────────────────────────────────────────
+    #
+    # Some units cannot be characterised from their default state because
+    # their default state is idle. Everything below is resolved against the
+    # scan's actual parameter list, so an override that names a control the
+    # plugin does not have is reported rather than silently ignored.
+    here = os.path.dirname(os.path.abspath(__file__))
+    custom_all = {}
+    custom_path = os.path.join(here, "custom-plans.json")
+    if os.path.exists(custom_path):
+        custom_all = json.load(open(custom_path))
+    # Match on the plugin's reported name, allowing the entry to be a prefix
+    # of it. UADx appends a category to several: the archive directory is
+    # "UADx Pultec EQP-1A" while the plugin reports "UADx Pultec EQP-1A EQ",
+    # and an exact-match lookup silently found nothing for every Pultec and
+    # both Massive Passives — the overrides were written and never applied.
+    reported = scan["plugin_name"]
+    custom = custom_all.get(reported)
+    if custom is None:
+        hits = [k for k in custom_all
+                if not k.startswith("_") and (reported.startswith(k) or k.startswith(reported))]
+        custom = custom_all[max(hits, key=len)] if hits else {}
+
+    engage, engage_axes, unresolved = [], [], []
+    if custom:
+        names = [p["name"] for p in params]
+
+        def add(name, value):
+            if name in by_name:
+                engage.append({"name": name, "value": value})
+            else:
+                unresolved.append(name)
+
+        for name, value in (custom.get("engage") or {}).items():
+            # A literal value of 1.0 means "this control's maximum", which is
+            # what every UADx parameter's range already is.
+            add(name, by_name[name]["max"] if name in by_name else value)
+        for prefix in (custom.get("engage_prefix_max") or []):
+            hit = [n for n in names if n.startswith(prefix)]
+            if not hit:
+                unresolved.append(prefix + "*")
+            for n in hit:
+                engage.append({"name": n, "value": by_name[n]["max"]})
+        for suffix in (custom.get("engage_suffix_max") or []):
+            hit = [n for n in names if n.endswith(suffix) and not is_switch(n)]
+            if not hit:
+                unresolved.append("*" + suffix)
+            for n in hit:
+                engage.append({"name": n, "value": by_name[n]["max"]})
+        for prefix in (custom.get("engage_prefix_on") or []):
+            # Band enables: turn each on, which is its maximum state.
+            hit = [n for n in names if n.startswith(prefix) and n.endswith("Enable")]
+            for n in hit:
+                engage.append({"name": n, "value": by_name[n]["max"]})
+
+        engage_axes = [n for n in (custom.get("engage_axes") or []) if n in by_name]
+        unresolved += [n for n in (custom.get("engage_axes") or []) if n not in by_name]
+        for prefix in (custom.get("engage_axes_prefix") or []):
+            engage_axes += [n for n in names if n.startswith(prefix)]
+
     plan = {
         "plugin_name": scan["plugin_name"],
         "plugin_path": scan["plugin_path"],
@@ -144,9 +204,17 @@ def main():
         "second_axis": second,
         "modes": modes,
         "pins": pins,
+        "engage": engage,
+        "engage_axes": engage_axes,
+        "engage_why": custom.get("why"),
+        "engage_unresolved": unresolved,
         "note": None,
     }
-    if drive is None:
+    if engage:
+        # With an engage state there is always something to measure, whatever
+        # the scan found from the unit's idle default.
+        plan["kind"] = "engaged"
+    if drive is None and not engage:
         best = max((p.get("thd_max_percent") or 0.0) for p in params) if params else 0.0
         plan["note"] = (
             f"No control drives this unit's distortion (best any control reached "
@@ -161,8 +229,10 @@ def main():
         os.makedirs(os.path.dirname(out), exist_ok=True)
         open(out, "w").write(text)
         n_states = sum(len(m["states"]) for m in plan["modes"])
-        print(f"{plan['plugin_name']}: drive={drive} second={second} "
-              f"modes={len(modes)} ({n_states} states) -> {out}")
+        extra = f" engage={len(engage)} axes={len(engage_axes)}" if engage else ""
+        warn = f"  UNRESOLVED: {unresolved}" if unresolved else ""
+        print(f"{plan['plugin_name']}: kind={plan['kind']} drive={drive} second={second} "
+              f"modes={len(modes)} ({n_states} states){extra} -> {out}{warn}")
     else:
         print(text)
     return 0
