@@ -475,3 +475,126 @@ Mix=1
         assert!(threshold.daw_name.is_none());
     }
 }
+
+/// A binary-format `.ffp` preset: a signature, a version, and a flat vector of
+/// values with **no names attached**.
+///
+/// Pro-C 2 ships its factory library this way, and Pro-C 3 does not — which
+/// breaks the convenience the text format hands over. A text `.ffp` names its
+/// parameters, so a preset folder alone is enough to label a plugin's state
+/// vector; a binary one names nothing, and the labels have to come from the
+/// plugin's own parameter list instead.
+///
+/// Binding those values back to parameters is therefore **positional**, and
+/// that is safe here for the same reason it is safe for a plugin's saved
+/// state: this file was written by the installed build, in the order that
+/// build publishes its parameters. It is decoding a *text* preset positionally
+/// that is unsafe, because those outlive the layout that wrote them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FfpBinary {
+    /// The four-character signature, e.g. `FC2p`.
+    pub signature: String,
+    pub version: u32,
+    /// Parameter values in the plugin's own parameter order.
+    pub values: Vec<f64>,
+}
+
+/// Parse a binary-format `.ffp` file.
+///
+/// Layout, confirmed against Pro-C 2's factory library — a 196-byte preset is
+/// a 12-byte header and 46 floats, exactly the parameter count the plugin
+/// reports:
+///
+/// ```text
+/// [signature: 4 ASCII bytes]["FC2p"]
+/// [version:   u32 LE]
+/// [count:     u32 LE]
+/// [values:    f32 LE × count]
+/// ```
+pub fn parse_ffp_binary(bytes: &[u8]) -> eyre::Result<FfpBinary> {
+    if bytes.len() < 12 {
+        eyre::bail!("too short to be a binary .ffp: {} bytes", bytes.len());
+    }
+    let signature = String::from_utf8_lossy(&bytes[0..4]).to_string();
+    if !signature.chars().all(|c| c.is_ascii_graphic()) {
+        eyre::bail!("not a binary .ffp: signature is not printable");
+    }
+    let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+    let count = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+
+    let want = 12 + count * 4;
+    if bytes.len() < want {
+        eyre::bail!("{signature}: header claims {count} values, but the file holds {} bytes", bytes.len());
+    }
+    // A file longer than its header claims is a layout this parser does not
+    // know, not a preset with padding — say so rather than reading a prefix.
+    if bytes.len() > want {
+        eyre::bail!("{signature}: {count} values need {want} bytes, file is {}", bytes.len());
+    }
+
+    let values = bytes[12..want]
+        .chunks_exact(4)
+        .map(|c| f32::from_le_bytes(c.try_into().unwrap()) as f64)
+        .collect();
+
+    Ok(FfpBinary { signature, version, values })
+}
+
+#[cfg(test)]
+mod binary_tests {
+    use super::*;
+
+    fn build(sig: &[u8; 4], version: u32, values: &[f32]) -> Vec<u8> {
+        let mut v = sig.to_vec();
+        v.extend_from_slice(&version.to_le_bytes());
+        v.extend_from_slice(&(values.len() as u32).to_le_bytes());
+        for f in values {
+            v.extend_from_slice(&f.to_le_bytes());
+        }
+        v
+    }
+
+    #[test]
+    fn reads_a_proc2_shaped_preset() {
+        let raw = build(b"FC2p", 2, &[4.0, -11.0, 0.26, 12.0]);
+        let p = parse_ffp_binary(&raw).unwrap();
+        assert_eq!(p.signature, "FC2p");
+        assert_eq!(p.version, 2);
+        assert_eq!(p.values, vec![4.0, -11.0, 0.26f32 as f64, 12.0]);
+    }
+
+    #[test]
+    fn a_real_proc2_preset_is_twelve_bytes_plus_46_floats() {
+        // The size relation that identified the format: 196 bytes = 12 + 46×4,
+        // and 46 is exactly what the plugin reports.
+        let raw = build(b"FC2p", 2, &vec![0.0f32; 46]);
+        assert_eq!(raw.len(), 196);
+        assert_eq!(parse_ffp_binary(&raw).unwrap().values.len(), 46);
+    }
+
+    #[test]
+    fn a_truncated_or_overlong_file_is_refused_rather_than_half_read() {
+        let mut short = build(b"FC2p", 2, &[1.0, 2.0]);
+        short.truncate(16);
+        assert!(parse_ffp_binary(&short).is_err());
+
+        let mut long = build(b"FC2p", 2, &[1.0, 2.0]);
+        long.push(0);
+        assert!(parse_ffp_binary(&long).is_err());
+    }
+
+    #[test]
+    fn text_presets_are_not_mistaken_for_binary_ones() {
+        let text = b"[Preset]\nSignature=FC3p\n";
+        assert!(is_text_format(text));
+        // '[Pre' is printable, so the signature check passes and the length
+        // check is what rejects it — either way it must not parse as binary.
+        assert!(parse_ffp_binary(text).is_err());
+    }
+
+    #[test]
+    fn rejects_a_file_that_is_not_a_preset_at_all() {
+        assert!(parse_ffp_binary(&[0u8; 32]).is_err());
+        assert!(parse_ffp_binary(b"ab").is_err());
+    }
+}
