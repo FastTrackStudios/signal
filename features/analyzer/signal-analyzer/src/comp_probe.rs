@@ -358,6 +358,96 @@ pub fn compare_gain_curves(reference: &[f32], test: &[f32]) -> GainComparison {
     compare_gain_curves_with(reference, test, 0.6)
 }
 
+// ---------------------------------------------------------------------------
+// Reading time constants back out
+// ---------------------------------------------------------------------------
+
+/// Attack and release, measured off a captured gain curve.
+///
+/// Times are to 63% of the way to the value the curve **actually reaches**
+/// within its half-cycle — not to the asymptote it would reach given longer.
+/// For an attack that completes, the two are the same and this is the time
+/// constant. For a release that does not, it reads short: a 150 ms release
+/// measured across a 240 ms window comes back as 98 ms, because it is only
+/// 80% of the way there when the window ends.
+///
+/// That is deliberate. Recovering the true constant needs a curve fit and an
+/// assumption that the envelope is exponential, which is exactly what these
+/// units are interesting for not being. The bias is identical on both sides
+/// of a comparison — our DSP and the plugin are measured the same way through
+/// the same stimulus — so it cancels where it matters, and the settled depth
+/// and 90% time come back alongside so a non-exponential shape is visible
+/// rather than hidden behind one number.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Timing {
+    /// Gain at the end of the loud half — how deep it settled, in dB.
+    pub settled_db: f64,
+    /// Gain at the end of the quiet half, which is where release ends up.
+    pub released_db: f64,
+    /// Time from the level step to 63% of the settled reduction, in ms.
+    pub attack_ms: f64,
+    /// ...and to 90%, which says whether the approach is exponential.
+    pub attack_90_ms: f64,
+    /// Time from the level dropping to 63% of the recovery, in ms.
+    pub release_ms: f64,
+    pub release_90_ms: f64,
+}
+
+/// Extract timings from one frequency's gain curve.
+///
+/// `spec` supplies the cycle geometry, `row_ms` the time each row covers.
+/// The first cycle is skipped: it starts from an un-compressed state that no
+/// later cycle repeats, so including it measures the capture's start-up.
+pub fn fit_timing(curve: &[f32], spec: &PulseSpec, row_ms: f64) -> Option<Timing> {
+    let high_rows = (spec.time_high_ms as f64 / row_ms).round() as usize;
+    let low_rows = (spec.time_low_ms as f64 / row_ms).round() as usize;
+    let cycle = high_rows + low_rows;
+    if cycle == 0 || curve.len() < cycle * 2 {
+        return None;
+    }
+    // Second cycle: settled behaviour, not the capture's first transient.
+    let start = cycle;
+    let loud = &curve[start..start + high_rows];
+    let quiet = &curve[start + high_rows..(start + cycle).min(curve.len())];
+    if loud.len() < 4 || quiet.len() < 4 {
+        return None;
+    }
+
+    // Settled values: the last fifth of each half, by which point a sane
+    // time constant has arrived.
+    let tail = |v: &[f32]| {
+        let from = v.len() * 4 / 5;
+        v[from..].iter().map(|x| *x as f64).sum::<f64>() / (v.len() - from).max(1) as f64
+    };
+    let settled = tail(loud);
+    let released = tail(quiet);
+
+    // Where the curve starts each half — the value it is leaving.
+    let from_attack = *curve.get(start.saturating_sub(1))? as f64;
+    let from_release = settled;
+
+    let cross = |v: &[f32], from: f64, to: f64, frac: f64| -> f64 {
+        let target = from + (to - from) * frac;
+        let rising = to > from;
+        for (i, x) in v.iter().enumerate() {
+            let x = *x as f64;
+            if (rising && x >= target) || (!rising && x <= target) {
+                return i as f64 * row_ms;
+            }
+        }
+        v.len() as f64 * row_ms
+    };
+
+    Some(Timing {
+        settled_db: settled,
+        released_db: released,
+        attack_ms: cross(loud, from_attack, settled, 0.63),
+        attack_90_ms: cross(loud, from_attack, settled, 0.90),
+        release_ms: cross(quiet, from_release, released, 0.63),
+        release_90_ms: cross(quiet, from_release, released, 0.90),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -485,6 +575,87 @@ mod tests {
         let deeper: Vec<f32> = reference.iter().map(|v| v - 3.0).collect();
         let level = compare_gain_curves(&reference, &deeper);
         assert!((level.settled_diff_db - 3.0).abs() < 0.01, "{level:?}");
+    }
+
+    /// Build a gain curve with a known exponential attack and release.
+    ///
+    /// Each half continues from where the previous one left off, which is what
+    /// a real compressor does — its envelope is never reset at a corner. A
+    /// generator that restarts each attack from 0 dB produces a curve no
+    /// compressor makes, and measuring it says the fit is wrong when it is the
+    /// signal that is.
+    fn synthetic_curve(spec: &PulseSpec, row_ms: f64, depth: f64, atk_ms: f64, rel_ms: f64) -> Vec<f32> {
+        let high = (spec.time_high_ms as f64 / row_ms).round() as usize;
+        let low = (spec.time_low_ms as f64 / row_ms).round() as usize;
+        let mut out = Vec::new();
+        let mut level = 0.0f64;
+        for _ in 0..4 {
+            for i in 0..high {
+                let t = (i + 1) as f64 * row_ms;
+                out.push((depth + (level - depth) * (-t / atk_ms).exp()) as f32);
+            }
+            level = *out.last().unwrap() as f64;
+            for i in 0..low {
+                let t = (i + 1) as f64 * row_ms;
+                out.push((level * (-t / rel_ms).exp()) as f32);
+            }
+            level = *out.last().unwrap() as f64;
+        }
+        out
+    }
+
+    #[test]
+    fn timing_recovers_a_known_attack_and_release() {
+        let spec = PulseSpec::default();
+        let row = 1.0;
+        // -12 dB of reduction, 20 ms attack, 150 ms release.
+        let curve = synthetic_curve(&spec, row, -12.0, 20.0, 150.0);
+        let t = fit_timing(&curve, &spec, row).expect("timing");
+        assert!((t.settled_db + 12.0).abs() < 0.5, "settled {:.2}", t.settled_db);
+        assert!((t.attack_ms - 20.0).abs() < 3.0, "attack {:.1} ms", t.attack_ms);
+        // 98 ms, not 150: the release is only 80% complete when the quiet
+        // half ends, so 63% of the distance actually travelled is reached
+        // sooner than one true time constant. See `fit_timing`.
+        assert!(
+            (t.release_ms - 98.0).abs() < 8.0,
+            "release {:.1} ms — expected the truncated-window value near 98",
+            t.release_ms
+        );
+        // 90% is about 2.3 time constants for an exponential.
+        assert!(t.attack_90_ms > t.attack_ms, "{t:?}");
+    }
+
+    #[test]
+    fn a_faster_attack_measures_faster() {
+        let spec = PulseSpec::default();
+        let mut previous = f64::INFINITY;
+        for atk in [80.0, 40.0, 20.0, 10.0, 5.0] {
+            let c = synthetic_curve(&spec, 1.0, -10.0, atk, 200.0);
+            let t = fit_timing(&c, &spec, 1.0).expect("timing");
+            assert!(t.attack_ms < previous, "{atk} ms gave {:.1}", t.attack_ms);
+            previous = t.attack_ms;
+        }
+    }
+
+    #[test]
+    fn a_slower_release_still_measures_slower() {
+        // The absolute number is biased by the window; the ordering is not,
+        // and ordering is what a fit is driven by.
+        let spec = PulseSpec::default();
+        let mut previous = 0.0;
+        for rel in [20.0, 50.0, 100.0, 200.0, 400.0] {
+            let c = synthetic_curve(&spec, 1.0, -10.0, 5.0, rel);
+            let t = fit_timing(&c, &spec, 1.0).expect("timing");
+            assert!(t.release_ms > previous, "{rel} ms gave {:.1}", t.release_ms);
+            previous = t.release_ms;
+        }
+    }
+
+    #[test]
+    fn a_curve_too_short_to_hold_two_cycles_is_none() {
+        let spec = PulseSpec::default();
+        assert!(fit_timing(&[0.0; 8], &spec, 1.0).is_none());
+        assert!(fit_timing(&[], &spec, 1.0).is_none());
     }
 
     #[test]

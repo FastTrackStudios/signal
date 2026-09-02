@@ -587,6 +587,38 @@ fn main() {
 
                     let mut errors = Vec::new();
                     for scenario in group {
+                        // A fresh instance per scenario.
+                        //
+                        // Reusing one across a group means every scenario
+                        // inherits whatever the last one left behind, and
+                        // some plugins do not come back from a parameter
+                        // write. The UADx 1176 made it visible: with attack
+                        // OFF in both, one release setting measured +6 dB of
+                        // gain and another -48 dB, which no compressor does —
+                        // it was the previous scenario showing through.
+                        //
+                        // The bundle is cached process-wide, so this costs
+                        // about 2 ms against seconds of rendering.
+                        // Under the same lock the first load takes: the
+                        // reload is now inside the worker threads, and ten of
+                        // them instantiating at once crashed the run after
+                        // nine scenarios.
+                        let _guard = load_lock.lock().unwrap();
+                        plugin = match HostedPlugin::load(&plugin_path) {
+                            Ok(Some(mut p)) => match p.prepare(sample_rate, BLOCK as u32) {
+                                Ok(()) => p,
+                                Err(e) => {
+                                    errors.push(format!("{}: prepare: {e:?}", scenario.name));
+                                    continue;
+                                }
+                            },
+                            other => {
+                                errors.push(format!("{}: reload: {other:?}", scenario.name));
+                                continue;
+                            }
+                        };
+                        drop(_guard);
+
                         let curves = run_scenario(
                             &mut plugin, scenario, &spec, &freqs, sample_rate, row, latency,
                         );
