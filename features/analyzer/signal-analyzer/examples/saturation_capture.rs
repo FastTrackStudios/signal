@@ -535,6 +535,30 @@ fn main() {
         })
         .collect();
 
+    // Did anything we pinned actually take effect?
+    //
+    // A capture where the output is bit-identical to the input is not a
+    // measurement of a transparent setting — far more often it is a setting
+    // that never reached the processor. Soundtoys' Decapitator does this:
+    // its edit controller acknowledges `Style = E` (value_to_text returns the
+    // new style) while the processor passes audio through untouched, and it
+    // never recovers. Ten of its eighteen jobs archived a tidy 0.0000% before
+    // this check existed.
+    let passthrough = !tone_rows.is_empty()
+        && tone_rows.iter().all(|t| {
+            t["thd_percent"].as_f64().map(|v| v < 1e-9).unwrap_or(false)
+                && t["gain_db"].as_f64().map(|v| v.abs() < 1e-6).unwrap_or(false)
+        });
+    if passthrough && !pinned.is_empty() {
+        eprintln!(
+            "   WARNING: output is bit-identical to input at every level and frequency, \
+             with {} control(s) pinned. Either this setting is genuinely transparent, or \
+             it never reached the processor — check that the plugin responds to it at all \
+             before treating this as data.",
+            pinned.len()
+        );
+    }
+
     let report = serde_json::json!({
         "plugin_path": path,
         "plugin_name": descriptor.name,
@@ -542,6 +566,7 @@ fn main() {
         "sample_rate": sample_rate,
         "harmonics": n_harmonics,
         "pinned": pinned.iter().map(|(id, n, v)| serde_json::json!({"id": id, "name": n, "value": v})).collect::<Vec<_>>(),
+        "passthrough": passthrough,
         "release_param": release.as_ref().map(|(_, n, _, _)| n.clone()),
         "tones": tone_rows,
         "sweeps": sweep_rows,

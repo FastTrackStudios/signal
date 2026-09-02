@@ -86,7 +86,14 @@ echo "$FLEET" | while IFS='|' read -r file name sel; do
   # hung one. The plugin's own logging is dropped so the progress lines stay
   # readable.
   # shellcheck disable=SC2086
-  $BIN --plugin "$VST/$file.vst3" $sel --out "$out/scan.json" 2>&1 \
+  # FORCE has to reach param_scan too. Without --no-resume it happily
+  # resumes from its own per-control checkpoint and returns the cached
+  # result instantly — a "forced" re-scan of 37 units that re-measured
+  # nothing and reported success.
+  RESUME=""
+  [ -n "$FORCE" ] && RESUME="--no-resume"
+  # shellcheck disable=SC2086
+  $BIN --plugin "$VST/$file.vst3" $sel $RESUME --out "$out/scan.json" 2>&1 \
       | tee "$out/scan.log" \
       | grep --line-buffered -E "^  \[|^scanned" | sed 's/^/  /'
   if [ -f "$out/scan.json" ]; then

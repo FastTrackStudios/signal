@@ -121,12 +121,6 @@ def main():
         if p["kind"] == "discrete" and len(p["states"]) >= 2 and not is_switch(p["name"])
     ]
 
-    # Modes to measure as a cross product rather than one at a time. Only
-    # where the interaction is the point — Decapitator's Punish applies to
-    # each of its five styles, so five styles and a button is ten sounds, not
-    # seven measurements.
-    cross = [c for c in (custom.get("cross") or []) if all(
-        any(m["name"] == n for m in modes) for n in c)]
 
     # Pins: anything that would confound every measurement if left at a
     # surprising default. Mix must be fully wet or the saturation is measured
@@ -168,6 +162,13 @@ def main():
         hits = [k for k in custom_all
                 if not k.startswith("_") and (reported.startswith(k) or k.startswith(reported))]
         custom = custom_all[max(hits, key=len)] if hits else {}
+
+    # Modes to measure as a cross product rather than one at a time. Only
+    # where the interaction is the point — Decapitator's Punish applies to
+    # each of its five styles, so five styles and a button is ten sounds, not
+    # seven measurements.
+    cross = [c for c in (custom.get("cross") or []) if all(
+        any(m["name"] == n for m in modes) for n in c)]
 
     engage, engage_axes, unresolved = [], [], []
     if custom:
