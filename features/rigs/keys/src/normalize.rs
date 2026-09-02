@@ -82,11 +82,21 @@ const BUILT_IN: &[(&str, f64)] = &[
     // trim so the ratio its author recorded survives. Measuring the
     // resonance separately would boost quiet-by-design sympathetic strings
     // up to the level of struck notes.
-    ("The Grandeur", -44.56),
-    ("The Maverick", -44.42),
-    ("The Gentleman", -44.99),
-    ("The Giant", -30.17),
-    ("Double Felt Grand", -47.83),
+    //
+    // PROVISIONAL: these are the `pack_lufs` measurements with +13 dB added.
+    // The measurement renders through `SamplerRig::new_offline` — a bare pack
+    // — while the rig plays through the composition tree, and the two do not
+    // agree: applied raw, the derived trims put a SINGLE note at ~4.0 peak
+    // where nothing may exceed 1.0. +13 dB is the offset that lands a 20-note
+    // chord just under full scale, measured on this rig; it is a calibration
+    // stopgap, not a result. The real fix is for `pack_lufs` to measure
+    // through the same chain the rig plays through, at which point these go
+    // back to being raw measurements.
+    ("The Grandeur", -31.56),      // measured -44.56
+    ("The Maverick", -31.42),      // measured -44.42
+    ("The Gentleman", -31.99),     // measured -44.99
+    ("The Giant", -17.17),         // measured -30.17
+    ("Double Felt Grand", -34.83), // measured -47.83
 ];
 
 /// The instrument a pack belongs to: `"The Grandeur - Resonance"` →
