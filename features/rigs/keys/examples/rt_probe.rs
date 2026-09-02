@@ -137,6 +137,7 @@ fn main() {
     // failing to keep up with a player.
     std::thread::sleep(Duration::from_secs(2));
     let baseline = KeysRigSvc::status(&backend).rt.xruns;
+    let over_baseline = KeysRigSvc::status(&backend).rt.over_budget;
     let faults0 = major_faults();
     let minor0 = minor_faults();
     // Measure the PLAY window, not the open: installing a preset and filling
@@ -223,6 +224,7 @@ fn main() {
         }
     }
     let xruns = s.rt.xruns.saturating_sub(baseline);
+    let over = s.rt.over_budget.saturating_sub(over_baseline);
     println!("page faults while playing: major={faults} minor={minor}");
     println!(
         "per-chord voices: {}",
@@ -255,17 +257,20 @@ fn main() {
     };
 
     println!(
-        "RESULT peak={peak:.4} xruns={xruns} ({:.1}/s) block={} budget={budget_ms:.2}ms \
-         render_peak={:.2}ms (open_peak={open_peak:.2}ms)",
-        xruns as f64 / played.max(0.001),
+        "RESULT peak={peak:.4} xruns={xruns} over_budget={over} ({:.1}/s) block={} \
+         budget={budget_ms:.2}ms render_peak={:.2}ms (open_peak={open_peak:.2}ms)",
+        over as f64 / played.max(0.001),
         s.rt.block_frames,
         s.rt.peak_render_ms,
     );
 
     let audible = peak > 1e-4;
-    // A handful over several seconds is a scheduling hiccup on a desktop; a
-    // rate is what a player hears. The rig this was written against did ~66/s.
-    let steady = xruns as f64 / played.max(0.001) < 1.0;
+    // Count OVER-BUDGET blocks, not the graph's xrun field: the latter reads
+    // the driver's clock on a follower node and sat at 0 through a window in
+    // which PipeWire counted 112 xruns on this very node. A handful over
+    // several seconds is a scheduling hiccup on a desktop; a rate is what a
+    // player hears as clicks and pops.
+    let steady = over as f64 / played.max(0.001) < 1.0;
     let in_budget = budget_ms <= 0.0 || s.rt.peak_render_ms < budget_ms;
 
     if !audible {
@@ -274,7 +279,10 @@ fn main() {
         println!("      pw-link -l | grep -A2 FTS-Keys");
     }
     if !steady {
-        println!("FAIL: {xruns} xruns while playing — the callback is missing its deadline.");
+        println!(
+            "FAIL: {over} blocks overran their deadline while playing (graph xruns: {xruns}) \
+             — that is what clicks and pops are."
+        );
     }
     if !in_budget {
         println!(

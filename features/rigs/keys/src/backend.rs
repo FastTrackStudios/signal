@@ -2906,6 +2906,7 @@ impl KeysRigSvc for KeysRigBackend {
                     let (last_ms, peak_ms) = st.render_ms();
                     signal_keys_proto::KeysRealtime {
                         xruns: st.xruns.load(Relaxed),
+                        over_budget: st.over_budget.load(Relaxed),
                         block_frames: st.block_frames.load(Relaxed),
                         peak_render_ms: peak_ms as f32,
                         render_ms: last_ms as f32,

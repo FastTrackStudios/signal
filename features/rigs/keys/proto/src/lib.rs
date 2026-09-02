@@ -350,11 +350,21 @@ pub struct KeysStatus {
 /// What the audio callback is actually doing, per block.
 #[derive(Clone, Debug, Default, PartialEq, Facet)]
 pub struct KeysRealtime {
-    /// Blocks the graph reported as an xrun since the engine opened. The
-    /// number that matters: anything climbing during play is a dropout the
-    /// player can hear.
+    /// Blocks the graph reported as an xrun since the engine opened.
+    ///
+    /// Unreliable on a follower node — it reads the DRIVER's clock and has
+    /// been measured at 0 while PipeWire counted 112 xruns on the same node
+    /// in the same window. Read [`over_budget`](Self::over_budget) to know
+    /// whether WE caused a dropout.
     #[facet(default)]
     pub xruns: u64,
+    /// Blocks whose render overran the block's own realtime budget.
+    ///
+    /// The honest dropout count: a callback that misses its deadline has made
+    /// the next block late, which is the click a player hears. Measured from
+    /// our own render timing, so it cannot be silent about our own overruns.
+    #[facet(default)]
+    pub over_budget: u64,
     /// Block size the callback is running at, frames.
     #[facet(default)]
     pub block_frames: u32,
