@@ -1819,7 +1819,13 @@ impl SampleEngine {
         // CSS-style sustains ship no loop points but have a slow ~0.8s natural
         // attack pre-roll that CSS skips (Kontakt sample-start) for a fast attack.
         // Start such bodies at the loud steady region so onsets aren't sluggish.
-        let synth_loop = is_sustain_layer
+        // Opt-in only: see `sustain_starts_at_plateau`. "No loop points" is
+        // not evidence that an instrument wants its attack skipped — the NI
+        // pianos have none either, and skipping a piano's attack removes the
+        // hammer and the core of the tone while leaving a plausible-sounding
+        // note behind.
+        let synth_loop = self.patch.spec.performance.sustain_starts_at_plateau
+            && is_sustain_layer
             && loop_end <= loop_start
             && playback_mode.is_empty()
             && !alternating

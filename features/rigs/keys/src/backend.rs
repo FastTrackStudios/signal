@@ -1393,7 +1393,14 @@ impl State {
                     // the band when a player asks for one, and a drone that
                     // switched itself on at boot would be a fault, not a
                     // feature.
-                    muted: is_drone(&engine.name),
+                    //
+                    // Aux and Pad start muted too, TEMPORARILY, so the piano
+                    // can be judged on its own while the keys rig is being
+                    // worked on — a pad under everything hides exactly the
+                    // attack detail you need to hear. Unmute them in the
+                    // mixer; this only decides where the faders START.
+                    muted: is_drone(&engine.name)
+                        || matches!(engine.name.as_str(), "Aux" | "Pad"),
                     ..EngineState::default()
                 },
             );

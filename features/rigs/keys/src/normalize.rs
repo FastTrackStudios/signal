@@ -39,10 +39,13 @@ use facet::Facet;
 /// (four modules summing) without the master clipping.
 const DEFAULT_TARGET_LUFS: f64 = -18.0;
 
-/// No pack is trimmed further than this. Measured, the Keyscape C7 Grand sits
-/// 19.7 dB under the Omnisphere pads — so the ceiling has to clear that, while
-/// still stopping a bad measurement from blowing up a service.
-const MAX_TRIM_DB: f32 = 24.0;
+/// No pack is trimmed further than this. It has to clear the largest HONEST
+/// trim in the book or the ceiling silently becomes the level: Double Felt
+/// Grand measures −47.83 LUFS and needs +29.8 dB, and the NI pianos +26.6.
+/// At the old 24 dB ceiling those three were still 3–6 dB under everything
+/// else and no amount of correct measurement could fix it. Kept finite so a
+/// bad measurement cannot blow up a service.
+const MAX_TRIM_DB: f32 = 32.0;
 
 /// One pack's level.
 #[derive(Debug, Clone, PartialEq, Default, Facet)]
@@ -68,7 +71,36 @@ const BUILT_IN: &[(&str, f64)] = &[
     ("Rhodes - LA Custom", -27.99),
     ("OB-8 PWM Big Strings", -17.07),
     ("Microcosm Pad 1", -39.58),
+    // The NI pianos, which the Worship profile puts on Keys 1. Unmeasured
+    // they got 0 dB and played ~27 dB under the pads — audible only if you
+    // knew to listen for it, and reported (correctly) as "the piano is
+    // REALLY quiet". They are mastered far lower than the Keyscape pianos,
+    // which is why they need more trim than anything else here.
+    //
+    // Keyed by INSTRUMENT, not by pack: the measurement is of the main body
+    // (`<Instrument> - Piano`), and the resonance pack inherits the same
+    // trim so the ratio its author recorded survives. Measuring the
+    // resonance separately would boost quiet-by-design sympathetic strings
+    // up to the level of struck notes.
+    ("The Grandeur", -44.56),
+    ("The Maverick", -44.42),
+    ("The Gentleman", -44.99),
+    ("The Giant", -30.17),
+    ("Double Felt Grand", -47.83),
 ];
+
+/// The instrument a pack belongs to: `"The Grandeur - Resonance"` →
+/// `"The Grandeur"`.
+///
+/// The builders name multi-pack libraries `<Instrument> - <Pack>`, so the
+/// suffix is what separates a body from its resonance or release layers. A
+/// name with no ` - ` is its own instrument.
+fn instrument_of(pack: &str) -> &str {
+    match pack.rfind(" - ") {
+        Some(i) => &pack[..i],
+        None => pack,
+    }
+}
 
 /// The level book.
 #[derive(Debug, Clone, PartialEq, Facet)]
@@ -135,18 +167,35 @@ impl PackLevels {
 
     /// Trim for one pack, in dB. The file wins where it has an entry; the
     /// shipped measurements cover the rest; anything unmeasured is left alone.
+    ///
+    /// Falls back from the pack name to its **instrument**, so every pack of a
+    /// multi-pack instrument shares ONE trim. That is the whole point: a
+    /// library split into `<Instrument> - Piano` and `<Instrument> - Resonance`
+    /// has authored the ratio between them, and the resonance pack is quiet
+    /// *on purpose*. Measure and trim it separately and it gets boosted onto
+    /// the same target as the main body — the sympathetic strings come up to
+    /// the level of the notes, which is not what anyone recorded. One trim per
+    /// instrument moves them together and leaves the ratio alone.
     fn trim_for(&self, name: &str) -> f32 {
-        let trim = match self.packs.iter().find(|p| p.name == name) {
-            Some(entry) => match (entry.trim_db, entry.lufs) {
-                (Some(t), _) => t,
-                (None, Some(lufs)) => (self.target_lufs - lufs) as f32,
-                (None, None) => 0.0,
-            },
-            None => match BUILT_IN.iter().find(|(pack, _)| *pack == name) {
-                Some((_, lufs)) => (self.target_lufs - lufs) as f32,
-                None => 0.0,
-            },
+        let instrument = instrument_of(name);
+        let lookup = |key: &str| -> Option<f32> {
+            if let Some(entry) = self.packs.iter().find(|p| p.name == key) {
+                return match (entry.trim_db, entry.lufs) {
+                    (Some(t), _) => Some(t),
+                    (None, Some(lufs)) => Some((self.target_lufs - lufs) as f32),
+                    (None, None) => None,
+                };
+            }
+            BUILT_IN
+                .iter()
+                .find(|(pack, _)| *pack == key)
+                .map(|(_, lufs)| (self.target_lufs - lufs) as f32)
         };
+        // Exact pack name first: a single-pack library, or a deliberate
+        // per-pack override, must still win over the instrument default.
+        let trim = lookup(name)
+            .or_else(|| (instrument != name).then(|| lookup(instrument)).flatten())
+            .unwrap_or(0.0);
         trim.clamp(-MAX_TRIM_DB, MAX_TRIM_DB)
     }
 }
@@ -188,6 +237,54 @@ pub fn trim_db(pack: &str) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn instrument_is_the_name_before_the_pack_suffix() {
+        assert_eq!(instrument_of("The Grandeur - Resonance"), "The Grandeur");
+        assert_eq!(instrument_of("The Grandeur - Piano"), "The Grandeur");
+        // A single-pack library is its own instrument, suffix or not.
+        assert_eq!(instrument_of("Double Felt Grand"), "Double Felt Grand");
+        assert_eq!(instrument_of("Rhodes - LA Custom"), "Rhodes");
+    }
+
+    /// The reason this exists: a resonance pack is quiet ON PURPOSE, and must
+    /// move with its body rather than be normalised onto the same target.
+    #[test]
+    fn every_pack_of_an_instrument_shares_one_trim() {
+        let levels = PackLevels {
+            target_lufs: -18.0,
+            packs: vec![PackLevel {
+                name: "The Grandeur".into(),
+                lufs: Some(-40.0),
+                trim_db: None,
+            }],
+        };
+        assert_eq!(levels.trim_for("The Grandeur - Piano"), 22.0);
+        assert_eq!(levels.trim_for("The Grandeur - Resonance"), 22.0);
+    }
+
+    /// An entry for the exact pack still wins — a deliberate per-pack override
+    /// has to beat the instrument default.
+    #[test]
+    fn an_exact_pack_entry_overrides_its_instrument() {
+        let levels = PackLevels {
+            target_lufs: -18.0,
+            packs: vec![
+                PackLevel {
+                    name: "The Grandeur".into(),
+                    lufs: Some(-40.0),
+                    trim_db: None,
+                },
+                PackLevel {
+                    name: "The Grandeur - Resonance".into(),
+                    trim_db: Some(-3.0),
+                    lufs: None,
+                },
+            ],
+        };
+        assert_eq!(levels.trim_for("The Grandeur - Piano"), 22.0);
+        assert_eq!(levels.trim_for("The Grandeur - Resonance"), -3.0);
+    }
 
     #[test]
     fn trim_is_derived_from_loudness_and_clamped() {

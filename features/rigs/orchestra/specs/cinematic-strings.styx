@@ -78,6 +78,12 @@ performance {
     sustain_makeup_db    5.0   // looped-plateau → Kontakt-render level offset (A/B calibrated)
     master_tune_cents    9.0   // tune=1.00521 on every playable group (CSS_GROUP_MOD.md §1)
     loop_xfade_ms        150   // synth-loop seam crossfade
+    // CSS sustains ship no loop points and open with a slow ~0.8 s bow
+    // swell that the vendor instrument skips via Kontakt sample-start.
+    // Starting the body at its steady plateau is what makes onsets prompt
+    // here. Opt-in, because on a struck instrument it removes the attack —
+    // see `sustain_starts_at_plateau`.
+    sustain_starts_at_plateau true
     zone_pitch_tolerance 2     // whole-tone grid → shift ±1..2 to fill
     release_gain         1.0   // release groups ship 0 dB static; the amp env shapes the tail
     attack_ms            198   // "Arco attack" $mmirg=30/127 under Kontakt's cubic law

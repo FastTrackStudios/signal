@@ -237,9 +237,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for e in fresh {
                     match &e.kind {
                         TraceKind::VoiceSpawn(v) => println!(
-                            "   spawn kind={} note={} root={} rate={:.4} gain={:.3} artic={} dyn={} mic={} dir={} rr={}",
+                            "   spawn kind={} note={} root={} rate={:.4} gain={:.3} artic={} dyn={} mic={} rr={} start_frame={} loop={}..{}",
                             v.voice_kind, v.note, v.root_key, v.rate, v.gain,
-                            v.articulation, v.dynamic, v.mic, v.direction, v.rr
+                            v.articulation, v.dynamic, v.mic, v.rr,
+                            v.start_frame, v.loop_start, v.loop_end
                         ),
                         TraceKind::SampleMiss { note, articulation, dynamic, rr, reason } => println!(
                             "   MISS note={note} artic={articulation} dyn={dynamic} rr={rr} reason={reason:?}"

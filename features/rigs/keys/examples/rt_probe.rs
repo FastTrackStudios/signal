@@ -206,6 +206,22 @@ fn main() {
     let minor = minor_faults().saturating_sub(minor0);
 
     let s = KeysRigSvc::status(&backend);
+    // Per-lane peaks: which lanes actually made sound. A rig can be audible
+    // overall while the lane you care about contributes nothing — "the piano
+    // is only resonance" is that, and the master meter cannot show it.
+    {
+        let mut lanes: Vec<(String, f32)> = s
+            .meters
+            .iter()
+            .map(|m| (format!("{}/{}", m.kind, m.name), m.peak))
+            .collect();
+        lanes.sort_by(|a, b| b.1.total_cmp(&a.1));
+        println!("lane peaks (loudest first):");
+        for (name, peak) in lanes.iter().take(14) {
+            let bar = "#".repeat(((peak * 40.0) as usize).min(40));
+            println!("  {peak:.4}  {bar:<40}  {name}");
+        }
+    }
     let xruns = s.rt.xruns.saturating_sub(baseline);
     println!("page faults while playing: major={faults} minor={minor}");
     println!(

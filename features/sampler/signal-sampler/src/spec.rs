@@ -513,8 +513,34 @@ pub struct PerformanceSpec {
     /// Output makeup (dB) applied to looping sustain-layer voices — the flat
     /// level offset between a looped-plateau playback and the vendor
     /// instrument's rendered level (CSS: +6 dB, see the A/B calibration).
-    #[facet(default = 6.0f32)]
+    /// Default 0: a library plays at the level it was mastered at unless it
+    /// says otherwise.
+    ///
+    /// This used to default to 6.0 — CSS's looped-plateau→Kontakt-render
+    /// offset — which meant every library that does not author a
+    /// `performance` block inherited one library's A/B calibration. Generated
+    /// packs (the NI pianos, the Keyscape extractions) write no such block, so
+    /// they were all running +6 dB into the pack-level normalisation that is
+    /// supposed to be the single place level is decided. Every spec that
+    /// actually cares sets its own value.
+    #[facet(default)]
     pub sustain_makeup_db: f32,
+    /// Whether a sustain body with NO loop points should start at its steady
+    /// PLATEAU instead of at the recorded attack.
+    ///
+    /// Off by default, because for almost every instrument the attack IS the
+    /// sound. It exists for CSS-style bowed sustains, which ship no loop
+    /// points and carry a slow ~0.8 s bow swell that the source library skips
+    /// via Kontakt sample-start — starting those at the plateau is what makes
+    /// their onsets prompt.
+    ///
+    /// Applied to a struck instrument it is a disaster and an oddly subtle
+    /// one: the note still sounds, at the right pitch, from the right sample,
+    /// but a piano played from a sixth of the way in has no hammer and no
+    /// core tone. It reads as "the wrong samples are loaded". The NI pianos
+    /// have no loop points either, so they took this path by accident.
+    #[facet(default)]
+    pub sustain_starts_at_plateau: bool,
     /// Global master tune in cents, applied on top of the per-note transpose.
     /// CSS ships `tune=1.00521` ≈ +9.0 cents on every playable group; other
     /// libraries stay at 0.
@@ -562,7 +588,8 @@ impl Default for PerformanceSpec {
     fn default() -> Self {
         Self {
             sustain_noteoff_ms: 400,
-            sustain_makeup_db: 6.0,
+            sustain_makeup_db: 0.0,
+            sustain_starts_at_plateau: false,
             master_tune_cents: 0.0,
             loop_xfade_ms: 150,
             zone_pitch_tolerance: 2,
