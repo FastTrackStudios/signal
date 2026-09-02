@@ -377,6 +377,16 @@ pub struct KeysRealtime {
     /// Most recent block's render time, milliseconds.
     #[facet(default)]
     pub render_ms: f32,
+    /// MEAN render time per block since the engine opened, milliseconds.
+    ///
+    /// The number to optimise against. Worst-case moves by milliseconds when
+    /// something else on the machine preempts one block, which says nothing
+    /// about whether the DSP got cheaper.
+    #[facet(default)]
+    pub mean_render_ms: f32,
+    /// Blocks rendered — the denominator behind the mean.
+    #[facet(default)]
+    pub blocks: u64,
 }
 
 // ── Browser lane program (the worklet boot payload) ─────────────────────────

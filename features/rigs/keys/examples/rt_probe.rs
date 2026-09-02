@@ -138,6 +138,12 @@ fn main() {
     std::thread::sleep(Duration::from_secs(2));
     let baseline = KeysRigSvc::status(&backend).rt.xruns;
     let over_baseline = KeysRigSvc::status(&backend).rt.over_budget;
+    // Mean over the PLAY window only: the open phase renders silence and
+    // would drag the average down until it meant nothing.
+    let (mean_blocks0, mean_total0) = {
+        let r = KeysRigSvc::status(&backend).rt;
+        (r.blocks, r.mean_render_ms as f64 * r.blocks as f64)
+    };
     let faults0 = major_faults();
     let minor0 = minor_faults();
     // Measure the PLAY window, not the open: installing a preset and filling
@@ -225,6 +231,12 @@ fn main() {
     }
     let xruns = s.rt.xruns.saturating_sub(baseline);
     let over = s.rt.over_budget.saturating_sub(over_baseline);
+    let play_blocks = s.rt.blocks.saturating_sub(mean_blocks0);
+    let play_mean = if play_blocks > 0 {
+        (s.rt.mean_render_ms as f64 * s.rt.blocks as f64 - mean_total0) / play_blocks as f64
+    } else {
+        0.0
+    };
     println!("page faults while playing: major={faults} minor={minor}");
     println!(
         "per-chord voices: {}",
@@ -258,9 +270,11 @@ fn main() {
 
     println!(
         "RESULT peak={peak:.4} xruns={xruns} over_budget={over} ({:.1}/s) block={} \
-         budget={budget_ms:.2}ms render_peak={:.2}ms (open_peak={open_peak:.2}ms)",
+         budget={budget_ms:.2}ms mean={play_mean:.3}ms ({:.1}% of budget) \
+         render_peak={:.2}ms (open_peak={open_peak:.2}ms)",
         over as f64 / played.max(0.001),
         s.rt.block_frames,
+        100.0 * play_mean / budget_ms.max(0.001) as f64,
         s.rt.peak_render_ms,
     );
 

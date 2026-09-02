@@ -677,9 +677,19 @@ impl SampleEngine {
             let fade = ms_to_frames(if fresh_vz == 3 { 180 } else { 230 }, self.sample_rate);
             self.sustain_fade_in = Some((mute, fade, fade, 0));
         }
-        self.spawn_sustain_layers(&nv_id, false, nv_scale, &direction, note, rr);
+        if nv_scale > 0.0 || self.cc_driven_layers() {
+            self.spawn_sustain_layers(&nv_id, false, nv_scale, &direction, note, rr);
+        }
         if let Some(vib_id) = vib_id {
-            self.spawn_sustain_layers(&vib_id, true, vb_scale, &direction, note, rr);
+            // A layer at gain 0 costs a full voice render every block and can
+            // never be heard. CSS still needs it: CC2 can sweep the vibrato
+            // side up under a held note, and `update_sustain_gains` can only
+            // ramp a voice that exists. A velocity-layered library has no such
+            // control — nothing will ever raise this voice — so spawning it is
+            // pure waste, and on a piano it is HALF the voices.
+            if vb_scale > 0.0 || self.cc_driven_layers() {
+                self.spawn_sustain_layers(&vib_id, true, vb_scale, &direction, note, rr);
+            }
         }
         if fresh_vz >= 2 {
             self.sustain_fade_in = None;
@@ -825,6 +835,17 @@ impl SampleEngine {
     /// gained by the current CC1 crossfade. Holding all layers — even the silent
     /// ones — is what lets a held note swell the full dynamic range as CC1 moves
     /// (`update_sustain_gains` re-levels them live), the way CSS does.
+    /// Whether a CC can raise a layer that is currently silent.
+    ///
+    /// True for libraries that authored a legato engine (the Cinematic Studio
+    /// family), where CC1 crossfades dynamics and CC2 the vibrato pair, so a
+    /// gain-0 voice is a voice waiting to be swept in. False elsewhere: a
+    /// velocity-layered instrument picks its layer when the key is struck and
+    /// nothing afterwards changes it.
+    pub(crate) fn cc_driven_layers(&self) -> bool {
+        self.patch.spec.legato_engine.is_some()
+    }
+
     pub(crate) fn spawn_sustain_layers(
         &mut self,
         artic: &str,
