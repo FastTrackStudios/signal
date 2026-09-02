@@ -895,10 +895,13 @@ impl Voice {
     fn read_interp(&self, pos: f64) -> (f32, f32) {
         let idx = pos as usize;
         let frac = (pos - idx as f64) as f32;
-        let (l0, r0) = self.data.frame(idx);
-        let (l1, r1) = self
+        // One call, not two: for a streamed sample this resolves the chunk
+        // once for both frames instead of taking four arc-swap guards per
+        // output frame — the difference between a chord costing 5 ms and
+        // costing hundreds.
+        let ((l0, r0), (l1, r1)) = self
             .data
-            .frame((idx + 1).min(self.end_frame.saturating_sub(1)));
+            .frame_pair(idx, self.end_frame.saturating_sub(1));
         (l0 + (l1 - l0) * frac, r0 + (r1 - r0) * frac)
     }
 

@@ -2908,12 +2908,25 @@ impl KeysRigSvc for KeysRigBackend {
         } else {
             Default::default()
         };
+        // `KeysRig::active_voices` has existed all along; the status reported
+        // a hardcoded 0, which made the one number that explains a render
+        // spike invisible to every UI and every test.
+        let voices = if running {
+            self.inner
+                .rig
+                .lock()
+                .ok()
+                .and_then(|r| r.as_ref().map(|r| r.active_voices() as u32))
+                .unwrap_or(0)
+        } else {
+            0
+        };
         KeysStatus {
             running,
             loaded_preset,
             master_peak,
             meters,
-            voices: 0,
+            voices,
             midi_port: s.midi_port.clone(),
             last_error: s.last_error.clone(),
             rt,
