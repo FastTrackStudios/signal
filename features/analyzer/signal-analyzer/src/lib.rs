@@ -68,10 +68,15 @@
 //! vacuously is worse than no metric.
 
 pub mod compare;
+pub mod comp_probe;
+pub mod param_grid;
+pub mod swept_sine;
+pub mod transfer_curve;
 pub mod decay;
 pub mod filters;
 pub mod eq_transfer;
 pub mod generators;
+pub mod harmonics;
 pub mod loudness;
 pub mod null;
 

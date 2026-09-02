@@ -14,6 +14,15 @@ out, and what goes wrong.
 
 ## 0. What the machine needs
 
+Measurements are archived at **`/run/media/AudioHaven/Plugin Analysis`**, one
+directory per plugin — `artifacts/` for the small text answers to "what are
+its parameters", `captures/` for the bulk binary answer to "what does it do".
+Its `README.md` documents the capture format and how to decode one. The data
+is not in git (5,678 Pro-C scenarios are 559 MB) but the script that produces
+it is, which is the arrangement the legacy `fts-analyzer` got half right: its
+captures were also kept out of git, but with nothing runnable behind them, so
+when they were lost the measurement was gone and the licence had since lapsed.
+
 - The plugin **installed and authorised**. Not negotiable and not
   work-around-able: every unit in §2 comes from asking the plugin, and an
   unauthorised plugin either refuses to load or renders silence. This is
@@ -51,6 +60,19 @@ A `.ffp` text preset lists the same values, in the same order the plugin
 publishes its parameters, under readable names. Confirm the three counts
 agree — preset keys, `load_plugin`'s parameter count, and the `N` in the
 `FFBS` header of a real instance — and the field table is done.
+
+**But only some plugins ship text presets.** Pro-Q 4 and Pro-C 3 do; Pro-C 2
+does not, and its whole factory library is *binary* `.ffp` — a four-byte
+signature, a `u32` version, a `u32` count, then that many `f32`. A Pro-C 2
+preset is 196 bytes because 12 + 46×4 = 196, and 46 is exactly the parameter
+count the plugin reports. `parse_ffp_binary` reads them.
+
+So the free-names shortcut is not always available, and when it is not, the
+names come from `load_plugin`'s parameter list instead and the binding is
+**positional**. That is safe for a binary preset for the same reason it is
+safe for a plugin's saved state: the installed build wrote it, in the order
+that build publishes its parameters. The rule below is about *text* presets,
+which outlive the layout that wrote them.
 
 The survey prints two things worth reading closely.
 
@@ -164,6 +186,39 @@ attached is one nobody can later check.
 
 ---
 
+### Measuring a control rather than a preset
+
+Factory presets move every control at once, which validates a conversion but
+is poor material for *fitting* one — nothing in the data separates what attack
+did from what release did. For that, sweep one axis at a time on a lattice:
+
+```sh
+cargo run --release -p signal-analyzer --example comp_capture -- \
+    --plugin "…/FabFilter Pro-C 2.clap" \
+    --sweep "Attack=0..1:14;Release=0..1:14" \
+    --out captures/proc2-timing
+```
+
+That is the 196-scenario grid the Pro-C 3 modelling used, as one string.
+`scripts/capture-proc.sh` runs the full matrix — timing, static curve, knee,
+range, hold, auto-release, and all of those again per detector style — for
+one plugin, which is 2,168 scenarios for Pro-C 2 and 3,280 for Pro-C 3, in
+two and four and a half minutes respectively.
+
+**Pin what you are not sweeping.** Pro-C's Auto Gain defaults to *on* and
+adds makeup that moves with threshold and ratio, so a threshold sweep with it
+enabled measures compression plus automatic makeup — a curve that looks
+completely reasonable and is not the one being modelled. `--set "Auto Gain=0"`
+holds it off, `--set` may be repeated, and everything pinned is recorded in
+the capture's metadata alongside every other parameter's resting value. The
+default 18 dB knee is the same trap in miniature: it spreads the threshold
+corner across a third of the sweep being used to find it.
+Scenarios are named from the plugin's own display text — `atk-0.005ms_rel-10.00ms`,
+not `atk-0.0000_rel-0.0000` — so the output is readable without a decoder, and
+axis names are resolved against the plugin rather than hard-coded ids (Pro-C 2's
+attack is id 5 where Pro-C 3's is id 7; a file of raw ids silently measures the
+wrong control on the other version).
+
 ## 4. Parity — does the replacement sound the same
 
 Translation being *plausible* is not the same as it being *right*. Three
@@ -253,20 +308,44 @@ grows down the list.
 
 ## 6. Known blockers
 
-**Pro-C renders silence through `signal-plugin-host`.** At its own default,
-with no state loaded, where Pro-Q 4 through the identical path renders
-correctly. `HostedPlugin::process_interleaved` gives a plugin one stereo
-input and nothing else, and Pro-C declares a side-chain bus it never
-receives; that is the likely cause and it is **not settled**. Fixing it means
-aux-bus support in `daw::plugin::PluginInstance`, which lives in the
-[daw](https://github.com/FastTrackStudios/daw) repo — a cross-repo change
-needing a tag bump here.
+**Resolved (2026-09-02): Pro-C rendered silence because the host handed it
+fewer audio ports than it declared.** The hypothesis recorded here — that
+`HostedPlugin::process_interleaved` gives a plugin one stereo input while
+Pro-C declares a side-chain bus it never receives — was correct, and it has
+now been root-caused and fixed.
 
-Until then a compressor conversion can be *built* and unit-tested but not
-*heard*, and `fts-convert` reports "not measurable (one side was silent)"
-rather than an infinite error. Do not read that as a translation failure.
+`LoadedClapPlugin::process_block` built its port list as
+`AudioPorts::with_capacity(2, 1)` and passed exactly **one** input
+`AudioPortBuffer`. Pro-C declares **two** input ports. A plugin indexes the
+array it was promised, not the one it got, so it read past the end — the
+crash address on macOS decoded to the ASCII of its own `"Side Chain"` port
+name. Being undefined behaviour, it presented differently on each platform,
+which is why it read for months as two unrelated faults:
 
----
+| platform | symptom |
+|---|---|
+| macOS, native CLAP | `SIGSEGV` roughly two runs in three |
+| Linux, via yabridge | silence, reliably |
+
+The fix supplies one buffer per declared port: the main bus as before, then
+silent `is_constant: true` channels for each auxiliary input and scratch
+buffers for each auxiliary output, all allocated at `prepare` so nothing
+allocates on the hot path. The constant flag is load-bearing rather than
+cosmetic — a compressor reading a constant-zero side chain can take its "no
+external input" path instead of detecting on digital black.
+
+It lives in [daw](https://github.com/FastTrackStudios/daw), so landing it is
+a tag bump here. Until then it is carried as a local `[patch]` against a
+worktree of the pinned commit — **never commit that block**.
+
+**An unauthorised plugin also renders silence, and looks nothing like it.**
+Worth knowing because it confounded the above for a long time: `value_to_text`
+is a pure query and keeps answering correctly on an unauthorised plugin, so
+§1 and §2 complete perfectly and produce *correct* tables while §4 measures
+nothing. Two symptoms, two unrelated causes, one appearance. Before believing
+either, render the plugin's own default through
+[`comp_capture`](#8-what-already-exists) and check it is not silent — that is
+one command and it separates them.
 
 ## 7. Runbook: Pro-C 2 on a machine that has it
 
@@ -333,6 +412,9 @@ not cover. (The one already on this machine,
 | `signal-analyzer` / `plugin_params` | what a stored value means, as a table or a curve |
 | `signal-analyzer` / `eq_bundle_check` | does the installed EQ bundle match the engine |
 | `signal-analyzer` / `comp_bundle_check` | do the two compressors pass audio, and at what level |
+| `signal-analyzer` / `comp_capture` | a compressor's gain across time × level × frequency, per preset (`--presets`) or per parameter grid (`--sweep`) |
+| `signal-plugin-host` / `pool_stress` | how many instances of a plugin this host can run at once, and at what realtime factor |
+| `signal-analyzer` / `scripts/capture-proc.sh` | the whole Pro-C measurement matrix — 5,678 scenarios in about six minutes, written to the archive |
 | `signal-analyzer` / `eq_match`, `eq_sweep` | one preset, and a whole library, against the plugin |
 | `fts-convert --verify --engine-too` | every instance in a project, both columns |
 
