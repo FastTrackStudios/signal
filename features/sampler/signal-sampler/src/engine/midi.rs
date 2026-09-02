@@ -1818,7 +1818,7 @@ impl SampleEngine {
             // Search the body only — keep clear of the recorded end-swell /
             // bow-off in the final ~15%, which would otherwise skew the peak.
             let search_hi = (num_frames as f32 * 0.85) as usize;
-            steady_loop_region(data.as_ref(), num_frames / 12, search_hi, min_len).unwrap_or_else(
+            steady_loop_region_cached(&data, num_frames / 12, search_hi, min_len).unwrap_or_else(
                 || {
                     let lo = num_frames / 6;
                     (lo, ((num_frames as f32 * 0.55) as usize).max(lo + 2))

@@ -60,14 +60,39 @@ fn proc_stat_field(idx: usize) -> u64 {
 
 use signal_keys_proto::keys::KeysRig as KeysRigSvc;
 
-/// Chords and a fast run — enough simultaneous voice starts to expose the
-/// note-on spike, which is where the reported glitching lives.
+/// Chord shapes, stacked into octaves by [`voicing`] to reach the target note
+/// count — enough simultaneous voice starts to expose the note-on spike,
+/// which is where the reported glitching lives.
 const CHORDS: [&[u8]; 4] = [
     &[60, 64, 67, 72],
     &[57, 60, 64, 69],
     &[53, 57, 60, 65],
     &[55, 59, 62, 67],
 ];
+
+/// Notes played at once by default.
+///
+/// Twenty, not four: ten fingers with an octave doubler engaged is an
+/// ordinary way to play this rig, and an arpeggiator can beat it. A rig that
+/// only keeps its deadline for a four-note chord is not playable.
+const DEFAULT_NOTES: usize = 20;
+
+/// `base` stacked upward in octaves until `want` notes are in range.
+fn voicing(base: &[u8], want: usize) -> Vec<u8> {
+    let mut out = Vec::with_capacity(want);
+    for oct in 0..5i16 {
+        for &n in base {
+            if out.len() >= want {
+                return out;
+            }
+            let v = n as i16 + 12 * oct;
+            if (21..=108).contains(&v) {
+                out.push(v as u8);
+            }
+        }
+    }
+    out
+}
 const RUN: [u8; 8] = [60, 62, 64, 65, 67, 69, 71, 72];
 
 fn main() {
@@ -125,7 +150,8 @@ fn main() {
     let max_notes: usize = std::env::var("FTS_RT_NOTES")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(usize::MAX);
+        .unwrap_or(DEFAULT_NOTES);
+    println!("notes per chord: {max_notes}");
 
     let mut peak = 0.0f32;
     // Worst render per chord, so the spike can be located in time: a big
@@ -137,14 +163,15 @@ fn main() {
     // so a chord that drops thousands of notes is doing thousands of
     // allocations inside one callback.
     let mut per_chord_drops: Vec<usize> = Vec::new();
-    /// Voices alive at the end of each chord — the number that says whether a
-    /// render spike is "too much audio to mix" or something else entirely.
+    // Voices alive at the end of each chord — the number that says whether a
+    // render spike is "too much audio to mix" or something else entirely.
     let mut per_chord_voices: Vec<u32> = Vec::new();
     let mut drops_prev = signal_sampler::engine::notes_dropped();
     let started = Instant::now();
     for (i, chord) in CHORDS.iter().cycle().take(12).enumerate() {
         KeysRigSvc::reset_rt_peak(&backend);
-        for &n in chord.iter().take(max_notes) {
+        let notes = voicing(chord, max_notes);
+        for &n in &notes {
             KeysRigSvc::trigger(&backend, n as u32, 100);
         }
         std::thread::sleep(Duration::from_millis(400));
@@ -159,7 +186,7 @@ fn main() {
         // voices pile up and measure the wrong thing entirely — render time
         // that climbs because nothing was ever let go is a property of the
         // test, not of the rig.
-        for &n in chord.iter().take(max_notes) {
+        for &n in &notes {
             KeysRigSvc::trigger(&backend, n as u32, 0);
         }
         std::thread::sleep(Duration::from_millis(150));

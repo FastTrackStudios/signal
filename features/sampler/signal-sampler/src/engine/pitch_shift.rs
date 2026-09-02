@@ -22,6 +22,23 @@
 use std::f64::consts::PI;
 
 const BUFFER_SIZE: usize = 8192;
+
+/// Grid points in the crossfade table. At 4096 the linear-interpolation error
+/// is below 1e-6 — inaudible in a gain window, and far cheaper than `sin`.
+const CROSSFADE_N: usize = 4096;
+
+/// `sin²(πφ)` sampled on `[0, 1]`, built once.
+fn crossfade_table() -> &'static [f64; CROSSFADE_N + 1] {
+    static TABLE: std::sync::OnceLock<Box<[f64; CROSSFADE_N + 1]>> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut t = Box::new([0.0f64; CROSSFADE_N + 1]);
+        for (i, v) in t.iter_mut().enumerate() {
+            let s = (PI * i as f64 / CROSSFADE_N as f64).sin();
+            *v = s * s;
+        }
+        t
+    })
+}
 /// Cubic interpolation needs 2 samples on each side.
 const MARGIN: f64 = 4.0;
 const SWEEP_LEN: f64 = (BUFFER_SIZE as f64) - MARGIN * 2.0;
@@ -120,10 +137,22 @@ impl PitchShifter {
         ((a0 * frac + a1) * frac + a2) * frac + a3
     }
 
+    /// The `sin²(πφ)` crossfade window, read from a table.
+    ///
+    /// This runs once per sample per head. `f64::sin` is ~30 ns, which is
+    /// nothing until a 20-note chord has a few hundred voices ticking two
+    /// heads each — it measured ~5% of the whole audio thread. The table is
+    /// linearly interpolated and both heads read the SAME curve, so the pair
+    /// stays complementary (`sin²(πφ) + sin²(π(φ+½)) = 1`) exactly as before.
     #[inline]
     fn crossfade(phase: f64) -> f64 {
-        let s = (PI * phase).sin();
-        s * s
+        let table = crossfade_table();
+        let x = phase.clamp(0.0, 1.0) * CROSSFADE_N as f64;
+        let i = x as usize;
+        let frac = x - i as f64;
+        let a = table[i.min(CROSSFADE_N)];
+        let b = table[(i + 1).min(CROSSFADE_N)];
+        a + (b - a) * frac
     }
 
     #[inline]
