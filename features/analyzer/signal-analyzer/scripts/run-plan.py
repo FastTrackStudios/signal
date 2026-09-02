@@ -49,6 +49,13 @@ def main():
     pins = ";".join(f"{p['name']}={p['value']}" for p in plan.get("pins", []))
 
     jobs = []
+    if plan.get("kind") == "level" or not plan.get("drive"):
+        # No drive control: sweep how hard the unit is hit instead, finely and
+        # over a wide range, since that is the only axis left.
+        jobs.append(("level", [
+            "--freqs", CORE_FREQS,
+            "--levels", "-48,-42,-36,-30,-24,-18,-12,-9,-6,-3,-1,0",
+        ], 12 * 3))
     if plan.get("drive"):
         jobs.append(("drive", [
             "--drive-param", plan["drive"], "--drive-steps", str(DRIVE_STEPS),

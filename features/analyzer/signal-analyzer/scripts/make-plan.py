@@ -36,6 +36,32 @@ SWITCH_WORDS = ("bypass", "power", "meter", "mix", "blend", "dry", "wet")
 # Filters change measured THD by removing harmonics rather than by making
 # them, so they are never a drive axis however well they rank.
 FILTER_WORDS = ("filter", "cut", "hpf", "lpf", "sc ", "s/c", "sidechain")
+# Routing and mode switches. `Path Select` on the Ampex ATR-102 scored
+# 776,231x by switching the tape path in and out — the largest span in the
+# whole fleet, and not a drive control. Its actual drive, `L Rec Level`,
+# ranked below it at 58x.
+ROUTING_WORDS = ("select", "enable", "path", "link", "auto", "cal", "phase",
+                 "polarity", "midi cc")
+
+# A drive control has to actually make distortion, not merely a large *ratio*
+# of it. The Hitsville EQ ranked a frequency-band selector first on a 4.1x
+# span between 0.00003% and 0.00014% THD — a ratio of two noise-floor
+# readings — and 138 capture jobs were spent measuring silence before this
+# floor existed.
+MIN_DRIVE_THD_PERCENT = 0.01
+# ...and it has to *change* the distortion. The Manley Massive Passive clears
+# the floor above (0.061% THD) while every one of its controls has a span of
+# exactly 1.0x, because its bands sit disabled at default and nothing it
+# offers alters the signal. Distortion that is present but immovable is a
+# constant, not an axis.
+MIN_DRIVE_SPAN = 1.5
+# ...and a drive control moves the *level*, because that is what driving
+# something means. This is what separates a drive from a mode, and it does it
+# without matching on names: the Studer A800's `IPS` and `Path Select` both
+# scored a 991,390x THD span by having one near-silent state, but move the
+# gain by 0.5 and 0.3 dB respectively, against `Bias` at 39.1 dB. The
+# Fairchild's `Bal` is the same story at 0.2 dB.
+MIN_DRIVE_GAIN_SPAN_DB = 3.0
 
 def is_switch(name):
     n = name.lower()
@@ -44,6 +70,10 @@ def is_switch(name):
 def is_filter(name):
     n = name.lower()
     return any(w in n for w in FILTER_WORDS)
+
+def is_routing(name):
+    n = name.lower()
+    return any(w in n for w in ROUTING_WORDS)
 
 def main():
     if len(sys.argv) < 2:
@@ -55,12 +85,22 @@ def main():
     by_name = {p["name"]: p for p in params}
 
     def usable_drive(p):
-        if is_switch(p["name"]) or is_filter(p["name"]):
+        if is_switch(p["name"]) or is_filter(p["name"]) or is_routing(p["name"]):
             return False
         if p["kind"] == "discrete" and len(p["states"]) <= 2:
             return False
+        if (p.get("thd_max_percent") or 0.0) < MIN_DRIVE_THD_PERCENT:
+            return False
+        if (p.get("thd_span_ratio") or 0.0) < MIN_DRIVE_SPAN:
+            return False
+        gain_span = (p.get("gain_max_db") or 0.0) - (p.get("gain_min_db") or 0.0)
+        if gain_span < MIN_DRIVE_GAIN_SPAN_DB:
+            return False
         return p.get("thd_span_ratio") is not None
 
+    # Ranked by span — how far a control moves the distortion — which is the
+    # right question once the gates above have removed the controls that earn
+    # a large span without driving anything.
     ranked = sorted(
         (p for p in params if usable_drive(p)),
         key=lambda p: p["thd_span_ratio"],
@@ -87,21 +127,32 @@ def main():
         elif "bypass" in n and p.get("default", 0.0) != 0.0:
             pins.append({"name": p["name"], "value": p["min"], "why": "not bypassed"})
 
+    # Units where no control drives the nonlinearity are not un-measurable —
+    # their saturation is driven by how hard they are *hit*. A passive EQ has
+    # no drive knob at all; its output amplifier saturates on level. So those
+    # get a level sweep instead of a drive sweep, which is the measurement
+    # that will actually find something.
+    kind = "drive" if drive else "level"
+
     plan = {
         "plugin_name": scan["plugin_name"],
         "plugin_path": scan["plugin_path"],
+        "kind": kind,
         "drive": drive,
         "drive_span_ratio": ranked[0]["thd_span_ratio"] if ranked else None,
+        "drive_max_thd_percent": ranked[0]["thd_max_percent"] if ranked else None,
         "second_axis": second,
         "modes": modes,
         "pins": pins,
         "note": None,
     }
-    if drive is None or (ranked and ranked[0]["thd_span_ratio"] < 1.5):
+    if drive is None:
+        best = max((p.get("thd_max_percent") or 0.0) for p in params) if params else 0.0
         plan["note"] = (
-            "No control moves this unit's distortion. Either it has no modelled "
-            "saturation, or its saturation is level-driven and the input-level "
-            "axis alone will find it — measure levels, not parameters."
+            f"No control drives this unit's distortion (best any control reached "
+            f"was {best:.5f}% THD at the scan's probe level). Measuring a level "
+            f"sweep instead: if the saturation is level-driven, as a passive EQ's "
+            f"output stage is, that is what finds it."
         )
 
     out = sys.argv[sys.argv.index("--out") + 1] if "--out" in sys.argv else None
