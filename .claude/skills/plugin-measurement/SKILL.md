@@ -279,6 +279,23 @@ That is the entire difference between "this plugin has no modelled
 saturation" and "we measured it asleep". Both Pultecs, both Hitsville EQs
 and both Massive Passives read clean until engaged.
 
+**A saturation *mode* has to be switched on, not just fed harder.** This is
+the same trap one level up, and it is easy to miss because the capture looks
+complete either way. Pro-Q 4 defaults to `Character = Clean`, which is
+bit-transparent under 30 dB of boost, so a level sweep that pins the band
+boost but leaves Character alone measures 0.00018% at every level — a
+perfectly tidy flat line describing the unit not saturating. Pin the mode on
+in `engage` *and* keep it in `engage_axes`, so the level sweep runs
+saturating while all the modes still get compared:
+
+    Pro-Q 4, band 1 +30 dB, Character = Warm
+      -36 dBFS -> gain +30.35 dB, THD  8.69%, odd -33.4
+        0 dBFS -> gain  +1.51 dB, THD 42.23%, odd  -7.5
+
+The output ceilings around +1.5 dBFS from -12 upward: a soft clipper, and
+the shape a waveshaper is fitted to. With Character left at Clean, every one
+of those rows reads 0.00018%.
+
 `custom-plans.json` says how to put a unit under load. Entries are resolved
 against the scan's real parameter list, and anything that fails to resolve is
 **reported, not silently skipped** — the first version guessed prefixes

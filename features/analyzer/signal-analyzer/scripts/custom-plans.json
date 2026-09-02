@@ -100,12 +100,13 @@
     ]
   },
   "Pro-Q": {
-    "why": "The VST3 reports itself as 'Pro-Q', not 'FabFilter Pro-Q 4' \u2014 this key must match the reported name. A flat Pro-Q 4 is a null: bands default to unused, and Character defaults to Clean, which is bit-transparent (0.00000% THD at +30 dB of boost). Engage band 1 at 1 kHz with +30 dB so there is something for the output stage to work on, then sweep Character. Clean/Subtle/Warm read 0%, 41.95% and 42.23% THD; Subtle and Warm share their odd content exactly and differ by 25 dB of even order, which is the second harmonic the EQ model already tries to reproduce.",
+    "why": "The VST3 reports itself as 'Pro-Q', not 'FabFilter Pro-Q 4' \u2014 this key must match the reported name. A flat Pro-Q 4 is a null twice over: bands default to unused, and Character defaults to Clean, which is bit-transparent even under 30 dB of boost (0.00000% THD). So the engage state has to switch the saturation ON as well as give it something to work on \u2014 with Character left at Clean the level sweep measured 0.00018%, i.e. the unit not saturating, across every level. Character is pinned to Warm for the level sweep and still swept as an axis, so all three modes are covered.",
     "engage": {
       "Band 1 Used": 1.0,
       "Band 1 Enabled": 1.0,
       "Band 1 Frequency": 9.966,
-      "Band 1 Gain": 30.0
+      "Band 1 Gain": 30.0,
+      "Character": 2.0
     },
     "engage_axes": [
       "Character"
