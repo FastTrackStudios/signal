@@ -1919,8 +1919,20 @@ impl SampleEngine {
             // envelope here. Connected sustains keep the authored attack.
             if self.legato_sustain {
                 self.attack_frames
-            } else {
+            } else if start_offset > 0 {
+                // Mid-sample entry starts at a non-zero sample value and WILL
+                // click without a ramp — which is the only thing the declick
+                // is for; see `SUSTAIN_DECLICK_MS`, "starts mid-sample at full
+                // level".
                 ms_to_frames(crate::engine::SUSTAIN_DECLICK_MS.max(20), self.sample_rate)
+            } else {
+                // True sample start: the recording begins at silence, so there
+                // is nothing to declick and the ramp only destroys the onset.
+                // Applying it unconditionally put a >=20 ms fade-in on every
+                // fresh note — inaudible on a bow, fatal on a hammer, whose
+                // whole transient lives in the first few milliseconds. It is
+                // what "the piano fades in and has no attack" was.
+                0
             }
         } else if start_offset > 0 {
             // Deep mid-sample entry (skipped-swell Low-Latency prefire): fade
