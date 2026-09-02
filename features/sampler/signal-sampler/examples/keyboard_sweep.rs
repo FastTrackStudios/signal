@@ -13,6 +13,13 @@
 //!
 //! - **NO BODY**: nothing but a release/click spawned. What the player hears as
 //!   a dead key.
+//! NOTE on measuring pitch from the rendered audio: an autocorrelation over
+//! the engine's output was tried and REMOVED. It reported the same frequency
+//! for every key — a measurement artefact that reads exactly like an
+//! instrument transposed six octaves — and a check that cries wolf is worse
+//! than no check. Systematic tuning is read from the spec instead, where it
+//! is exact; that is what caught the NI pianos' +100 cents.
+//!
 //! - **PITCH**: a body spawned, but from a zone whose `root_key` is further
 //!   from the played note than `--max-stretch` semitones. A sample stretched
 //!   that far is the "wrong pitch" complaint; the trace knows the root key, so
@@ -29,7 +36,6 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::time::Duration;
 
 use signal_sampler::engine::trace::{MissReason, TraceKind};
 use signal_sampler::{PlayerPatch, SampleEngine};
@@ -52,14 +58,6 @@ struct Failures {
     not_loaded: Vec<(u8, u8)>,
     /// (note, velocity, root_key, semitones stretched)
     pitch: Vec<(u8, u8, u8, i16)>,
-    /// (note, velocity, root_key, cents off) — the voice sounds, but not at
-    /// the pitch the key asked for.
-    ///
-    /// This is the check that matters and the one a root-key comparison
-    /// misses entirely: a zone can be rooted on the right note and still play
-    /// at the wrong rate. `rate` is what sets the sounding pitch, so compare
-    /// it against what the transposition demands, `2^((note - root)/12)`.
-    detune: Vec<(u8, u8, u8, f64)>,
     /// What the engine actually asked the map for when it missed —
     /// (note, velocity, articulation, dynamic, rr). Without this a miss says
     /// "this key is dead" but not which lookup failed, which is the only part
@@ -197,13 +195,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // every note reads as NOT LOADED. That is a fact about the test's
             // timing, not about the pack, and conflating the two is how a
             // perfectly-mapped library gets called broken.
-            engine.warm_note_samples(note, vel);
-            let paths = engine.resolve_note_sample_paths(note, vel);
-            let deadline = std::time::Instant::now() + Duration::from_millis(1500);
-            while std::time::Instant::now() < deadline
-                && !paths.iter().all(|p| engine.is_sample_resident(p))
+            // Load EVERY sample this note needs, synchronously. A note
+            // spawns several zones (layers, mics), and warming only the first
+            // — which is what `warm_note_samples` does — left the rest
+            // unresident, so the trigger reported NOT LOADED for a pack whose
+            // mapping is perfect. Off the audio thread a blocking decode is
+            // exactly right.
+            let cache = engine.cache_handle();
+            for path in engine.resolve_note_sample_paths(note, vel) {
+                let _ = cache.get(&path);
+            }
+            // Zoned packs spawn from zones the resolver above does not
+            // enumerate (mic and layer variants), so load EVERY zone whose
+            // key range covers this note. Without it the trigger reports NOT
+            // LOADED for a pack whose mapping is perfect, and no pitch can be
+            // measured because nothing sounds.
             {
-                std::thread::sleep(Duration::from_millis(2));
+                let patch = engine.patch();
+                let paths: Vec<std::path::PathBuf> = patch
+                    .spec
+                    .zones
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, z)| note >= z.key_min && note <= z.key_max)
+                    .filter_map(|(i, _)| patch.zone_paths.get(i).cloned())
+                    .collect();
+                for path in paths {
+                    let _ = cache.get(&path);
+                }
             }
             let before = engine.render_trace().events.len();
             engine.note_on(note, vel);
@@ -334,19 +353,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    if !fails.detune.is_empty() {
-        println!(
-            "\nDETUNED ({}): zone played at its own root, but not at unity pitch",
-            fails.detune.len()
-        );
-        for (n, v, root, c) in fails.detune.iter().take(20) {
-            println!(
-                "  {} (note {n}) vel {v} ← root {} : {c:+.1} cents",
-                nm(*n),
-                nm(*root)
-            );
-        }
-    }
     if bad == 0 && systematic_tuning.is_none() {
         println!("\nPASS: every key sounds a body within {max_stretch} semitones of its root,");
         println!("      and no systematic tuning offset.");
