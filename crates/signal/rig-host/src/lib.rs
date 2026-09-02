@@ -213,6 +213,39 @@ impl RigProject {
         self.start_with::<AudioEngine>(&io)
     }
 
+    /// Open the output-only engine on the **native** backend — the PipeWire
+    /// `pw_filter` engine on Linux, the cpal engine elsewhere.
+    ///
+    /// Prefer this to [`start_output`](Self::start_output) for any instrument
+    /// that has to keep up with a player. cpal's node lands in the graph as an
+    /// `async` stream serviced from the main loop, and it xruns under a load
+    /// its own average says it can carry: measured on the keys rig at a 5.3 ms
+    /// budget, ~0.6 ms mean render time and ~66 xruns per SECOND, while the
+    /// guitar rig's `pw_filter` node in the same process took zero. The native
+    /// backend runs the callback on the realtime data loop instead, and is the
+    /// only path that reports [`stats`](RigHost::stats) — an instrument whose
+    /// xruns nobody can see is an instrument nobody can fix.
+    ///
+    /// `want_input` is forced off; the backend still opens one (unused)
+    /// capture port, which costs nothing.
+    ///
+    /// `node_name` is the graph node this engine registers as, and it must be
+    /// unique in the process: the backend's linker finds the ports to wire to
+    /// the device BY NAME, so two engines sharing one leaves the second node
+    /// unlinked and silent — a rig whose UI and MIDI are perfect and whose
+    /// meters never move.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn start_output_native(
+        self,
+        prefs: &AudioIoPrefs,
+        node_name: &str,
+    ) -> eyre::Result<DuplexRigHost> {
+        let mut io = prefs.clone();
+        io.want_input = false;
+        io.node_name = node_name.to_string();
+        self.start_with::<DuplexEngine>(&io)
+    }
+
     /// Open the duplex (live input → FX chain → output) engine — the native
     /// PipeWire `pw_filter` engine on Linux with the `pipewire` feature, the
     /// cpal engine elsewhere. `want_input` is forced on.

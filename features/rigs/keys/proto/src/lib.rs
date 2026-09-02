@@ -338,6 +338,35 @@ pub struct KeysStatus {
     /// The last audio-open / preset-load failure, if the engine isn't
     /// running because of one (surfaced by phone UIs with no log access).
     pub last_error: Option<String>,
+    /// Realtime health of the audio callback. A rig can be "running", audible
+    /// on the meters, and still unplayable because it misses its deadline
+    /// several times a second — that is invisible without these, and it is
+    /// what "the keys rig glitches" actually means. Zero when the backend
+    /// does not report them.
+    #[facet(default)]
+    pub rt: KeysRealtime,
+}
+
+/// What the audio callback is actually doing, per block.
+#[derive(Clone, Debug, Default, PartialEq, Facet)]
+pub struct KeysRealtime {
+    /// Blocks the graph reported as an xrun since the engine opened. The
+    /// number that matters: anything climbing during play is a dropout the
+    /// player can hear.
+    #[facet(default)]
+    pub xruns: u64,
+    /// Block size the callback is running at, frames.
+    #[facet(default)]
+    pub block_frames: u32,
+    /// Worst render time seen since the last reset, milliseconds. Compare
+    /// against the block budget (`block_frames / sample_rate`): over it means
+    /// a guaranteed dropout, and a mean well under it with xruns anyway means
+    /// the spike is elsewhere (a lock, an allocation, disk).
+    #[facet(default)]
+    pub peak_render_ms: f32,
+    /// Most recent block's render time, milliseconds.
+    #[facet(default)]
+    pub render_ms: f32,
 }
 
 // ── Browser lane program (the worklet boot payload) ─────────────────────────
@@ -530,6 +559,13 @@ pub mod keys {
         fn capture_stack(&self, index: u32);
         /// Trigger a note from the UI (velocity 0 = note-off).
         fn trigger(&self, note: u32, velocity: u32);
+
+        /// Clear the worst-case render time in [`KeysRealtime`], so the next
+        /// reading measures a fresh window. The meter equivalent of a peak
+        /// reset — without it the number is "worst since the engine opened",
+        /// which is dominated by the first blocks after a preset install and
+        /// says nothing about how the rig is behaving now.
+        fn reset_rt_peak(&self);
         /// Pitch wheel (14-bit raw, 8192 = center) — for remotes with an
         /// on-screen wheel; hardware wheels ride the MIDI stream directly.
         fn pitch_bend(&self, raw: u32);

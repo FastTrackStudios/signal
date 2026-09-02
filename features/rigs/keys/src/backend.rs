@@ -2888,6 +2888,26 @@ impl KeysRigSvc for KeysRigBackend {
         } else {
             (0.0, Vec::new())
         };
+        let rt = if running {
+            self.inner
+                .rig
+                .lock()
+                .ok()
+                .and_then(|r| r.as_ref().and_then(|r| r.engine_stats()))
+                .map(|st| {
+                    use std::sync::atomic::Ordering::Relaxed;
+                    let (last_ms, peak_ms) = st.render_ms();
+                    signal_keys_proto::KeysRealtime {
+                        xruns: st.xruns.load(Relaxed),
+                        block_frames: st.block_frames.load(Relaxed),
+                        peak_render_ms: peak_ms as f32,
+                        render_ms: last_ms as f32,
+                    }
+                })
+                .unwrap_or_default()
+        } else {
+            Default::default()
+        };
         KeysStatus {
             running,
             loaded_preset,
@@ -2896,6 +2916,7 @@ impl KeysRigSvc for KeysRigBackend {
             voices: 0,
             midi_port: s.midi_port.clone(),
             last_error: s.last_error.clone(),
+            rt,
         }
     }
 
@@ -2991,6 +3012,14 @@ impl KeysRigSvc for KeysRigBackend {
                 } else {
                     rig.note_off(note);
                 }
+            }
+        }
+    }
+
+    fn reset_rt_peak(&self) {
+        if let Ok(r) = self.inner.rig.lock() {
+            if let Some(st) = r.as_ref().and_then(|r| r.engine_stats()) {
+                st.reset_peak();
             }
         }
     }

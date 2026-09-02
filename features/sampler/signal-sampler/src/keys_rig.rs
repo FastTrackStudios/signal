@@ -24,7 +24,7 @@ use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
 #[cfg(not(target_arch = "wasm32"))]
-use signal_rig_host::RigHost;
+use signal_rig_host::DuplexRigHost;
 use signal_rig_host::RigProject;
 
 use crate::node_render::{GainCells, RenderNode};
@@ -74,6 +74,11 @@ fn ev_cc(controller: u8, value: u8) -> midicore::MidiEvent {
 
 /// Block size the keys instrument is prepared for.
 const PREPARE_BLOCK: u32 = 1024;
+
+/// The keys rig's PipeWire graph node name. Distinct from the guitar rig's,
+/// because the audio backend's linker matches ports by name and the engine
+/// process runs both.
+const KEYS_NODE_NAME: &str = "FTS-Keys";
 const KEYS_PROJECT_NAME: &str = "FTS Keys";
 #[cfg(not(target_arch = "wasm32"))]
 const KEYS_TRACK_NAME: &str = "Keys";
@@ -466,7 +471,7 @@ pub struct KeysRig {
     /// stop audio. `None` for a headless rig
     /// ([`open_headless`](Self::open_headless)) — the caller owns rendering.
     #[cfg(not(target_arch = "wasm32"))]
-    _host: Option<RigHost>,
+    _host: Option<DuplexRigHost>,
     /// The rig project's guid — a headless caller renders it through daw's
     /// own render path (`ProjectRenderer`).
     project_guid: String,
@@ -482,6 +487,17 @@ pub struct KeysRig {
 }
 
 impl KeysRig {
+    /// Realtime health of the audio callback (xruns, render time, block size)
+    /// — `None` when the backend does not measure it.
+    ///
+    /// Only the native engine reports this, which is half the reason to be on
+    /// it: cpal gave no way to see that the rig was missing its deadline dozens
+    /// of times a second while its average load read a comfortable 20%.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn engine_stats(&self) -> Option<std::sync::Arc<daw_audio_io::duplex::EngineStats>> {
+        self._host.as_ref().and_then(|h| h.stats())
+    }
+
     /// Open a device, build the project, and host `tree` as the playable preset.
     // r[impl keys.rig.composition-tree]
     // r[impl keys.rig.output-only]
@@ -492,7 +508,7 @@ impl KeysRig {
         let project = RigProject::new(KEYS_PROJECT_NAME);
         let track_guid = project.add_track(KEYS_TRACK_NAME)?;
         let fx_guid = project.add_fx_slot(&track_guid, "keys")?;
-        let host = project.start_output(prefs)?;
+        let host = project.start_output_native(prefs, KEYS_NODE_NAME)?;
         let sample_rate = host.sample_rate();
         let meters = host.install_meters(1);
         let daw = host.daw().clone();
@@ -538,7 +554,7 @@ impl KeysRig {
         let project = RigProject::new(KEYS_PROJECT_NAME);
         let lanes = build_lane_tracks(project.daw(), program)?;
         let track_count = 1 + lanes.engines.len() + lanes.layers.len();
-        let host = project.start_output(prefs)?;
+        let host = project.start_output_native(prefs, KEYS_NODE_NAME)?;
         let sample_rate = host.sample_rate();
         let meters = host.install_meters(track_count);
         let daw = host.daw().clone();
