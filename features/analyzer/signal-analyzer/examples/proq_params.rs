@@ -17,14 +17,16 @@
 //!     --plugin ... --param "Band 1 Threshold" --steps 20
 //! ```
 
-use signal_plugin_host::{HostedPlugin, PluginInstance};
+use signal_plugin_host::HostedPlugin;
 
 const SAMPLE_RATE: f64 = 48_000.0;
 const BLOCK: usize = 256;
 
 fn arg(name: &str) -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
-    args.iter().position(|a| a == name).and_then(|i| args.get(i + 1).cloned())
+    args.iter()
+        .position(|a| a == name)
+        .and_then(|i| args.get(i + 1).cloned())
 }
 
 fn main() {
@@ -65,7 +67,11 @@ fn main() {
     if let Some(out) = arg("--dump-state") {
         match plugin.save_state() {
             Ok(bytes) => {
-                println!("state: {} bytes, first 32: {:02x?}", bytes.len(), &bytes[..32.min(bytes.len())]);
+                println!(
+                    "state: {} bytes, first 32: {:02x?}",
+                    bytes.len(),
+                    &bytes[..32.min(bytes.len())]
+                );
                 std::fs::write(&out, &bytes).expect("write state");
                 println!("wrote {out}");
             }
@@ -85,7 +91,9 @@ fn main() {
                 .map(|(_, v)| *v as f32)
                 .collect()
         } else {
-            signal_import::fabfilter::ffbs::parse(&bytes).expect("parse").params
+            signal_import::fabfilter::ffbs::parse(&bytes)
+                .expect("parse")
+                .params
         };
         // The plugin's state is not a bare FFBS blob: it is `DAW3` + a
         // length, then FFBS, then a metadata trailer naming the preset. Rather
@@ -100,7 +108,10 @@ fn main() {
         let count = u32::from_le_bytes(blob[16..20].try_into().unwrap()) as usize;
         let n = count.min(floats.len());
         if n != count {
-            println!("preset carries {} floats against the plugin's {count}", floats.len());
+            println!(
+                "preset carries {} floats against the plugin's {count}",
+                floats.len()
+            );
         }
         for (i, v) in floats.iter().take(n).enumerate() {
             let at = 20 + i * 4;
@@ -112,7 +123,9 @@ fn main() {
         // of the plugin and read back what it calls it — which is how a stored
         // number's real unit gets established rather than guessed.
         for a in std::env::args() {
-            let Some((idx, value)) = a.split_once('=') else { continue };
+            let Some((idx, value)) = a.split_once('=') else {
+                continue;
+            };
             let (Ok(idx), Ok(value)) = (idx.parse::<usize>(), value.parse::<f32>()) else {
                 continue;
             };
@@ -180,8 +193,12 @@ fn main() {
     // `--set` runs any number of `Name=value` writes first, which is how the
     // band gets switched on before the parameter under test is swept.
     for a in std::env::args() {
-        let Some((name, value)) = a.split_once('=') else { continue };
-        let Ok(value) = value.parse::<f64>() else { continue };
+        let Some((name, value)) = a.split_once('=') else {
+            continue;
+        };
+        let Ok(value) = value.parse::<f64>() else {
+            continue;
+        };
         let Some(target) = params.iter().find(|p| p.name.eq_ignore_ascii_case(name)) else {
             continue;
         };
@@ -197,7 +214,10 @@ fn main() {
 
     let steps: usize = arg("--steps").and_then(|s| s.parse().ok()).unwrap_or(20);
     let mut scratch = vec![0.0f32; BLOCK * 2];
-    println!("\n{} — {steps} steps over [{:.4} .. {:.4}]", info.name, info.min, info.max);
+    println!(
+        "\n{} — {steps} steps over [{:.4} .. {:.4}]",
+        info.name, info.min, info.max
+    );
     for k in 0..=steps {
         let v = info.min + (info.max - info.min) * (k as f64 / steps as f64);
         plugin.set_param(info.id, v);

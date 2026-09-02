@@ -29,7 +29,9 @@ const STRIDE: usize = 23;
 
 fn arg(name: &str) -> Option<String> {
     let a: Vec<String> = std::env::args().collect();
-    a.iter().position(|x| x == name).and_then(|i| a.get(i + 1).cloned())
+    a.iter()
+        .position(|x| x == name)
+        .and_then(|i| a.get(i + 1).cloned())
 }
 fn num(name: &str, d: f64) -> f64 {
     arg(name).and_then(|v| v.parse().ok()).unwrap_or(d)
@@ -152,7 +154,8 @@ fn render_native(eq: &mut NativeEq, input: &[f32]) -> Vec<f32> {
         let n = BLOCK.min(input.len() - pos);
         let l = &input[pos..pos + n];
         let (mut ol, mut or) = (vec![0.0f32; n], vec![0.0f32; n]);
-        eq.process_block(l, l, &mut ol, &mut or, &ev).expect("process");
+        eq.process_block(l, l, &mut ol, &mut or, &ev)
+            .expect("process");
         out.extend_from_slice(&ol);
         pos += n;
     }
@@ -209,6 +212,9 @@ fn measure(
 /// If the plugin's Auto adapts to the programme, every measurement is a
 /// measurement of its history as much as of its settings — so the history has
 /// to be made explicit before anything is read off it.
+// Not called by the probe as it currently runs, but it documents how the
+// analyser's history has to be primed before a reading means anything.
+#[allow(dead_code)]
 fn settle(plugin: &mut HostedPlugin, ours: &mut NativeEq, input: &[f32], seconds: f64) {
     let want = (SR * seconds) as usize;
     let mut done = 0;
@@ -247,7 +253,10 @@ fn main() {
         shape: 0.0,
     };
 
-    println!("band under test: bell 130 Hz Q 1.26, {:+} dB, range {:+}, auto", probe.gain, probe.range);
+    println!(
+        "band under test: bell 130 Hz Q 1.26, {:+} dB, range {:+}, auto",
+        probe.gain, probe.range
+    );
     println!("noise at {:.1} dBFS RMS\n", 20.0 * rms.log10());
 
     // ── 0. Is Auto time-varying? ────────────────────────────────────────
@@ -302,7 +311,10 @@ fn main() {
                     "  range {:+.1} dB, noise at {:.1} dBFS RMS  (0 dB = fully engaged)",
                     range, level_db
                 );
-                println!("  {:<10} {:>9} {:>9} {:>9}", "elapsed", "Pro-Q", "ours", "diff");
+                println!(
+                    "  {:<10} {:>9} {:>9} {:>9}",
+                    "elapsed", "Pro-Q", "ours", "diff"
+                );
 
                 let chunk = stimulus(level, &[], (SR * 1.0) as usize);
                 let cut = chunk.len() * 3 / 4;
@@ -351,8 +363,7 @@ fn main() {
         if let Some(out) = arg("--json") {
             let _ = std::fs::write(
                 &out,
-                serde_json::to_string_pretty(&serde_json::json!({ "trajectories": runs }))
-                    .unwrap(),
+                serde_json::to_string_pretty(&serde_json::json!({ "trajectories": runs })).unwrap(),
             );
             println!("  wrote {out}\n");
         }
@@ -362,22 +373,35 @@ fn main() {
     }
 
     println!("── 1. does other PROGRAMME content change it? ──");
-    println!("  {:<34} {:>9} {:>9} {:>9}", "context", "Pro-Q", "ours", "diff");
+    println!(
+        "  {:<34} {:>9} {:>9} {:>9}",
+        "context", "Pro-Q", "ours", "diff"
+    );
     for (label, ctx) in [
         ("noise only", &[][..]),
         ("+ 5 kHz tone at -6 dBFS", &[(5000.0, 0.5)][..]),
         ("+ 50 Hz tone at -6 dBFS", &[(50.0, 0.5)][..]),
-        ("+ tones at 50/400/5k", &[(50.0, 0.3), (400.0, 0.3), (5000.0, 0.3)][..]),
+        (
+            "+ tones at 50/400/5k",
+            &[(50.0, 0.3), (400.0, 0.3), (5000.0, 0.3)][..],
+        ),
     ] {
         let (a, b) = measure(&mut plugin, &[probe], ctx, rms, probe.freq);
         println!("  {label:<34} {a:>9.2} {b:>9.2} {:>9.2}", b - a);
     }
 
     println!("\n── 1b. how does that dependence vary with the content? ──");
-    println!("  {:<34} {:>9} {:>9} {:>9}", "context tone", "Pro-Q", "ours", "diff");
+    println!(
+        "  {:<34} {:>9} {:>9} {:>9}",
+        "context tone", "Pro-Q", "ours", "diff"
+    );
     for hz in [50.0f64, 130.0, 300.0, 1000.0, 5000.0, 15000.0] {
         let (a, b) = measure(&mut plugin, &[probe], &[(hz, 0.5)], rms, probe.freq);
-        println!("  {:<34} {a:>9.2} {b:>9.2} {:>9.2}", format!("{hz:.0} Hz at -6 dBFS"), b - a);
+        println!(
+            "  {:<34} {a:>9.2} {b:>9.2} {:>9.2}",
+            format!("{hz:.0} Hz at -6 dBFS"),
+            b - a
+        );
     }
     for amp_db in [-30.0f64, -24.0, -18.0, -12.0, -6.0] {
         let amp = 10.0f64.powf(amp_db / 20.0);
@@ -393,18 +417,49 @@ fn main() {
     println!("  Same noise, same Q, same range — only the band's frequency moves.");
     println!("  In-band noise energy rises with frequency at constant Q, so an");
     println!("  unweighted detector should expand MORE the higher it sits.");
-    println!("  {:<34} {:>9} {:>9} {:>9}", "band frequency", "Pro-Q", "ours", "diff");
+    println!(
+        "  {:<34} {:>9} {:>9} {:>9}",
+        "band frequency", "Pro-Q", "ours", "diff"
+    );
     for hz in [60.0f64, 130.0, 300.0, 1000.0, 3000.0, 8000.0] {
         let b = Band { freq: hz, ..probe };
         let (a, o) = measure(&mut plugin, &[b], &[], rms, hz);
-        println!("  {:<34} {a:>9.2} {o:>9.2} {:>9.2}", format!("{hz:.0} Hz"), o - a);
+        println!(
+            "  {:<34} {a:>9.2} {o:>9.2} {:>9.2}",
+            format!("{hz:.0} Hz"),
+            o - a
+        );
     }
 
     println!("\n── 2. do other BANDS change it? ──");
-    println!("  {:<34} {:>9} {:>9} {:>9}", "instance", "Pro-Q", "ours", "diff");
-    let wide_cut = Band { freq: 400.0, q: 0.5, gain: -4.0, range: 4.0, auto: true, shape: 0.0 };
-    let hi_shelf = Band { freq: 6000.0, q: 0.3, gain: 5.0, range: -9.0, auto: true, shape: 1.0 };
-    let static_boost = Band { freq: 2000.0, q: 1.0, gain: 6.0, range: 0.0, auto: false, shape: 0.0 };
+    println!(
+        "  {:<34} {:>9} {:>9} {:>9}",
+        "instance", "Pro-Q", "ours", "diff"
+    );
+    let wide_cut = Band {
+        freq: 400.0,
+        q: 0.5,
+        gain: -4.0,
+        range: 4.0,
+        auto: true,
+        shape: 0.0,
+    };
+    let hi_shelf = Band {
+        freq: 6000.0,
+        q: 0.3,
+        gain: 5.0,
+        range: -9.0,
+        auto: true,
+        shape: 1.0,
+    };
+    let static_boost = Band {
+        freq: 2000.0,
+        q: 1.0,
+        gain: 6.0,
+        range: 0.0,
+        auto: false,
+        shape: 0.0,
+    };
     for (label, bands) in [
         ("the band alone", vec![probe]),
         ("+ a static +6 dB bell at 2 kHz", vec![probe, static_boost]),

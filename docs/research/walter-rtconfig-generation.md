@@ -303,7 +303,7 @@ are **not** a hardcoded imitation of a REAPER layout — they are a WALTER host.
 
 Two consumers, and they are different in kind:
 
-- `apps/fasttrackstudio/src/mixer_view.rs:278` — `MixerControlPanel` in the app.
+- `apps/desktop/src/mixer_view.rs:278` — `MixerControlPanel` in the app.
   This is the one the Dioxus rewrite replaces.
 - `features/reaper/fts-themer-ui/src/preview.rs:30-38` — `DawWorkspace` under a
   theme rebuilt live from `.ReaperTheme` + `rtconfig.txt` *text*, with no

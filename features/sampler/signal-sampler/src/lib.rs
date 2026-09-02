@@ -195,7 +195,7 @@ pub use soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 // strings TUI) don't need a direct midicore dependency.
 pub use midicore;
 #[cfg(not(target_arch = "wasm32"))]
-pub use midicore::midir::MidiInput as MidiInputHandle;
+pub use midicore::pipewire::MidiInput as MidiInputHandle;
 pub use midicore::MidiEvent;
 pub use midicore::PortSelector as MidiSelection;
 pub use spec::LibrarySpec;

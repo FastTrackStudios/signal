@@ -125,7 +125,7 @@ keyflow: 15 session / 2 daw
    `filter-repo` carries the ignore-revs file into every repo.
 
 2. **Drop `signal-fx` from the app's `session` feature.**
-   `apps/fasttrackstudio/Cargo.toml` line ~142. It is the app-level form
+   `apps/desktop/Cargo.toml` line ~142. It is the app-level form
    of the same inversion: the Session app must not link the engine's FX.
    Under the agreed architecture, Session gets FX from the Signal process
    over WS. Without this, the Session app cannot ship from the session
@@ -135,12 +135,12 @@ keyflow: 15 session / 2 daw
    `keyflow-text` (→ session). Either inline the fixture the test needs
    or move that test to `keyflow-text`.
 
-4. ~~**Split `apps/fasttrackstudio` into two binaries** up front.~~
+4. ~~**Split `apps/desktop` into two binaries** up front.~~
    **Superseded — do this *after* the rewrite, not before.**
 
    The app is one crate with `signal` / `session` / `charts` features.
    Rather than refactor it into two crates in the monorepo first, let
-   `filter-repo` copy `apps/fasttrackstudio` into **both** the signal
+   `filter-repo` copy `apps/desktop` into **both** the signal
    and session repos, then delete the unwanted half in each. A path may
    be claimed by more than one repo, so both halves keep full history —
    which a pre-split refactor would not give (one half would trace back

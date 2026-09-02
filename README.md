@@ -27,7 +27,7 @@ features/fx/         the DSP — eq, comp, reverb, delay, saturate,
 features/nam/        neural amp modeler
 features/plugin-host/  hosting third-party plugins
 apps/plugins/        the CLAP/VST3 cdylibs
-apps/fasttrackstudio/  the Signal app + `--engine` + browser remote
+apps/desktop/  the Signal app + `--engine` + browser remote
 ```
 
 ## Build
@@ -35,7 +35,7 @@ apps/fasttrackstudio/  the Signal app + `--engine` + browser remote
 ```bash
 nix develop
 cargo check --workspace
-cargo build -p fasttrackstudio          # the app; --engine is headless
+cargo build -p signal-desktop          # the app; --engine is headless
 ```
 
 ## Licence

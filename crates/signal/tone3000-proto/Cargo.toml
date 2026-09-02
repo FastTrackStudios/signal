@@ -1,0 +1,19 @@
+[package]
+name = "signal-tone3000-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "TONE3000 wire contract — sign-in, tone picking, model download with progress"
+
+[lints]
+workspace = true
+
+[features]
+default = ["vox"]
+vox = ["dep:vox", "architect/vox"]
+
+[dependencies]
+architect = { workspace = true }
+vox = { workspace = true, optional = true }
+facet = { workspace = true }

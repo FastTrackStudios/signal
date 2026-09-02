@@ -201,6 +201,9 @@ fn solve(mut g: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
             if f == 0.0 {
                 continue;
             }
+            // Row `r` is updated from row `col`: two rows of the same
+            // matrix, so the index is what keeps the borrows apart.
+            #[allow(clippy::needless_range_loop)]
             for c in col..n {
                 g[r][c] -= f * g[col][c];
             }

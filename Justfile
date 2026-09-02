@@ -7,12 +7,12 @@ default:
 
 # ── Tailwind (app UI sheet) ──────────────────────────────────────────────
 # The single compiled sheet (assets/tailwind-signal.css) is inlined by
-# BOTH apps/fasttrackstudio/src/rig_view.rs (signal UI) and
+# BOTH apps/desktop/src/rig_view.rs (signal UI) and
 # src/main.rs SessionChrome (session UI) via include_str!; rebuild it
 # whenever UI-crate class usage changes. input.css @source globs scan the
 # signal/session UI crates + libs/ui + libs/dock.
 
-# Point apps/fasttrackstudio/.lumen-blocks at the lumen-blocks checkout
+# Point apps/desktop/.lumen-blocks at the lumen-blocks checkout
 # cargo actually resolved.
 #
 # input.css used to reach into $CARGO_HOME with a hardcoded /home/cody path
@@ -26,15 +26,32 @@ _lumen-link:
     set -euo pipefail
     dir=$(cargo metadata --locked --format-version 1 2>/dev/null \
         | python3 -c 'import json,sys,os; print(next(os.path.dirname(p["manifest_path"]) for p in json.load(sys.stdin)["packages"] if p["name"]=="lumen-blocks"))')
-    ln -sfn "$dir" apps/fasttrackstudio/.lumen-blocks
+    ln -sfn "$dir" apps/desktop/.lumen-blocks
+
+# Pull the canonical FTS design tokens out of architect-ui.
+#
+# The sheet lives in the architect repo, and a git dep has no stable path on
+# disk — the old `@import "../../libs/ui/assets/fts-theme.css"` pointed at a
+# directory that left in the split, so `just tailwind` (and every recipe that
+# depends on it) failed outright. `cargo metadata` knows where the pinned
+# revision is checked out, so ask it rather than hard-coding a hash path or
+# re-forking the sheet. Output is gitignored: it is a build input, and a
+# committed copy is exactly the fork this replaced.
+theme-vendor:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src=$(cargo metadata --format-version 1 \
+        | python3 -c "import sys,json,os; print(os.path.dirname(next(p['manifest_path'] for p in json.load(sys.stdin)['packages'] if p['name']=='architect-ui')))")
+    cp "$src/assets/fts-theme.css" apps/desktop/.fts-theme-canonical.css
+    echo "vendored canonical theme from $src"
 
 # Build Tailwind CSS (v4)
-tailwind: _lumen-link
-    cd apps/fasttrackstudio && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --minify
+tailwind: _lumen-link theme-vendor
+    cd apps/desktop && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --minify
 
 # Watch Tailwind CSS for changes
-tailwind-watch: _lumen-link
-    cd apps/fasttrackstudio && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --watch --minify
+tailwind-watch: _lumen-link theme-vendor
+    cd apps/desktop && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --watch --minify
 
 # Fail if the committed sheet isn't what the sources produce.
 #
@@ -45,7 +62,7 @@ tailwind-watch: _lumen-link
 tailwind-check: tailwind
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! git diff --quiet -- apps/fasttrackstudio/assets/tailwind-signal.css; then
+    if ! git diff --quiet -- apps/desktop/assets/tailwind-signal.css; then
         echo "tailwind-signal.css is out of date — run 'just tailwind' and commit the result" >&2
         exit 1
     fi
@@ -59,24 +76,57 @@ tailwind-check: tailwind
 #
 # NOTE: needs `libpipewire` on PKG_CONFIG_PATH for `--features pipewire`.
 
+# Release rather than dev because the rig plays audio in-process now, and a
+# debug build xruns — the same reason `just keys` builds release. dx rebuilds
+# and relaunches on a source change; that is a slow loop at this opt level, so
+# reach for `just desktop-run` when you only want to launch the thing.
+#
+# Depends on `tailwind` because the sheet is inlined with include_str! at
+# compile time: an edited class with a stale assets/tailwind-signal.css simply
+# does not exist in the binary.
+#
+# Run the Signal desktop app (release) through dx, with its file watcher
+#
+# No `pw-jack`: nothing here speaks JACK any more. Audio goes through
+# daw-audio-io's native PipeWire duplex, and MIDI through midicore's native
+# PipeWire backend (one `Signal` graph node) — the shim only ever added a
+# translation layer and, on the MIDI side, one graph node per port.
+desktop: tailwind
+    cd apps/desktop && PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
+        dx serve --release --platform desktop
+
+alias d := desktop
+
+# No watcher and no rebuild-on-change, and the app needs no dx asset pipeline
+# (every sheet is include_str!'d, per the inline-styles rule).
+#
+# Launch the release app directly — the fast path
+desktop-run: tailwind
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p signal-desktop
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
+    RUST_LOG="${RUST_LOG:-info,vox_core=warn,schema_deser=off}" \
+        ./target/release/signal-desktop
+
 # The signal engine — the headless rig core (serves the vox router on
-# ws://:4040/vox): the fasttrackstudio binary in --engine mode. `rigd`
+# ws://:4040/vox): the signal-desktop binary in --engine mode. `rigd`
 # kept as an alias for muscle memory.
 signal-engine:
-    cargo run --release -p fasttrackstudio -- --engine
+    cargo run --release -p signal-desktop -- --engine
 
 alias rigd := signal-engine
 
 # Stage the fts web bundle (the browser remote) for embedding: tailwind →
 # dx web build (signal rigs + the session setlist remote) →
-# apps/fasttrackstudio/web-dist/, which `cargo build -p fasttrackstudio
+# apps/desktop/web-dist/, which `cargo build -p signal-desktop
 # --features embed-web` compiles into the binary (include_dir). On wasm the
 # session feature is only the wire surface (session-proto clients +
 # session-ui); the player itself runs in the engine. web-dist/ is gitignored.
 web-stage: tailwind
-    cd apps/fasttrackstudio && dx build --platform web --release --no-default-features --features signal,session
-    rm -rf apps/fasttrackstudio/web-dist
-    cp -r target/dx/fasttrackstudio/release/web/public apps/fasttrackstudio/web-dist
+    cd apps/desktop && dx build --platform web --release --no-default-features --features signal
+    rm -rf apps/desktop/web-dist
+    cp -r target/dx/signal-desktop/release/web/public apps/desktop/web-dist
     just keys-worklet-wasm
 
 # Stage the browser keys rig's AudioWorklet bundle (W4 of
@@ -91,7 +141,7 @@ web-stage: tailwind
 #   /worklet/signal_keys_worklet_bg.wasm
 # wasm-bindgen-cli comes from the dev shell, pinned to the workspace
 # wasm-bindgen version (same as task-worklet-wasm).
-keys-worklet-wasm out='apps/fasttrackstudio/web-dist/worklet':
+keys-worklet-wasm out='apps/desktop/web-dist/worklet':
     # --max-memory: default wasm linear memory caps at 2 GB — resident pack
     # bytes + decoded-PCM budget + app need the full 4 GB address space.
     #
@@ -133,7 +183,7 @@ keys-worklet-wasm out='apps/fasttrackstudio/web-dist/worklet':
 # Kept as its OWN recipe until it is proven: `keys-worklet-wasm` (single
 # threaded) stays the default so a toolchain problem here can never take the
 # working rig down with it.
-keys-worklet-wasm-threads out='apps/fasttrackstudio/web-dist/worklet':
+keys-worklet-wasm-threads out='apps/desktop/web-dist/worklet':
     # The four TLS symbols are exported EXPLICITLY: wasm-bindgen's threading
     # pass looks up `__wasm_init_tls` (each thread initialises its own TLS
     # block through it), and LLD garbage-collects all of them when no Rust
@@ -164,21 +214,21 @@ keys-worklet-wasm-threads out='apps/fasttrackstudio/web-dist/worklet':
 # bundle + keys worklet (web-stage), then embed it into the release
 # binary. Order matters — embed-web include_dir!s web-dist/ at compile
 # time, so staging runs first. Then:
-#   target/release/fasttrackstudio --engine     (binds 0.0.0.0:4040)
+#   target/release/signal-desktop --engine     (binds 0.0.0.0:4040)
 # and open http://<host>:4040/rigs/keys/worship (tailnet-reachable).
 keys-web: web-stage
-    cargo build --release -p fasttrackstudio --features embed-web
+    cargo build --release -p signal-desktop --features embed-web
 
 # Playwright end-to-end suite for the browser keys rig (W5): spawns its
 # own engine on a scratch port (SIGNAL_ENGINE_ADDR) and proves the rig
-# makes SOUND in real chromium. Expects target/release/fasttrackstudio
+# makes SOUND in real chromium. Expects target/release/signal-desktop
 # to exist — build it with `just keys-web` first. Needs the real pack
 # library (or FTS_PACK_LIBRARY pointing at one with the Worship proxies).
 keys-web-e2e:
-    cd apps/fasttrackstudio/e2e && npm install --no-fund --no-audit && npx playwright test
+    cd apps/desktop/e2e && npm install --no-fund --no-audit && npx playwright test
 
 # Build the RELEASE binary (web bundle EMBEDDED) and deploy the ONE
-# artifact to ~/.local/lib/fts/fasttrackstudio behind the signal-engine
+# artifact to ~/.local/lib/fts/signal-desktop behind the signal-engine
 # systemd user unit. The unit is installed but NOT enabled: the desktop
 # app (or `systemctl --user start signal-engine`) is the on/off switch;
 # while running, systemd restarts crashes in ~1s; an explicit stop is
@@ -188,15 +238,23 @@ keys-web-e2e:
 rig-install: web-stage
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release -p fasttrackstudio --features embed-web
+    cargo build --release -p signal-desktop --features embed-web
     install -d ~/.local/lib/fts
-    install -m 755 target/release/fasttrackstudio ~/.local/lib/fts/fasttrackstudio.new
-    mv -T ~/.local/lib/fts/fasttrackstudio.new ~/.local/lib/fts/fasttrackstudio
+    install -m 755 target/release/signal-desktop ~/.local/lib/fts/signal-desktop.new
+    mv -T ~/.local/lib/fts/signal-desktop.new ~/.local/lib/fts/signal-desktop
     # The pre-consolidation artifacts (signal-engine binary + signal-web
     # bundle) are superseded; leave any existing ones in place until the
     # new unit is confirmed, then clean by hand if desired.
+    # No launcher prefix any more. Hardware MIDI used to be midir on the
+    # pipewire-jack backend, which meant the unit had to start under
+    # `pw-jack` (PipeWire's JACK shim on LD_LIBRARY_PATH) or enumerate zero
+    # ports. MIDI is now midicore's native PipeWire backend and audio is
+    # daw-audio-io's native PipeWire duplex, so the engine talks to PipeWire
+    # directly and the shim — along with the PATH resolution dance the user
+    # manager needed for it — is gone.
     install -d ~/.config/systemd/user
-    install -m 644 apps/fasttrackstudio/systemd/signal-engine.service ~/.config/systemd/user/
+    sed "s|@LAUNCH@||" apps/desktop/systemd/signal-engine.service \
+        > ~/.config/systemd/user/signal-engine.service
     systemctl --user daemon-reload
     systemctl --user try-restart signal-engine
     if systemctl --user is-active --quiet signal-engine; then
@@ -207,28 +265,28 @@ rig-install: web-stage
     fi
 
 # Full install on this machine: everything rig-install does (release
-# binary + embedded web UI + systemd unit) PLUS the `fts` CLI, PATH
-# symlinks in ~/.local/bin, and desktop integration (launcher entry +
-# icon) — FastTrackStudio shows up in the app menu like any other app.
+# binary + embedded web UI + systemd unit) PLUS the PATH symlink in
+# ~/.local/bin and desktop integration (launcher entry + icon) — Signal
+# shows up in the app menu like any other app.
+#
+# The `fts` CLI is no longer built here: it left with the repo split, and
+# this recipe was calling `cargo build -p fts-cli` for a package that is
+# not a member of this workspace.
 install: rig-install
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release -p fts-cli
-    install -m 755 target/release/fts ~/.local/lib/fts/fts.new
-    mv -T ~/.local/lib/fts/fts.new ~/.local/lib/fts/fts
     install -d ~/.local/bin
-    ln -sf ~/.local/lib/fts/fasttrackstudio ~/.local/bin/fasttrackstudio
-    ln -sf ~/.local/lib/fts/fts ~/.local/bin/fts
+    ln -sf ~/.local/lib/fts/signal-desktop ~/.local/bin/signal-desktop
     install -d ~/.local/share/icons/hicolor/scalable/apps
-    install -m 644 apps/fasttrackstudio/assets/icon.svg \
-        ~/.local/share/icons/hicolor/scalable/apps/fasttrackstudio.svg
+    install -m 644 apps/desktop/assets/icon.svg \
+        ~/.local/share/icons/hicolor/scalable/apps/signal-desktop.svg
     install -d ~/.local/share/applications
-    sed "s|@BIN@|$HOME/.local/lib/fts/fasttrackstudio|" \
-        apps/fasttrackstudio/assets/fasttrackstudio.desktop \
-        > ~/.local/share/applications/fasttrackstudio.desktop
+    sed -e "s|@LAUNCH@||" -e "s|@BIN@|$HOME/.local/lib/fts/signal-desktop|" \
+        apps/desktop/assets/signal-desktop.desktop \
+        > ~/.local/share/applications/signal-desktop.desktop
     update-desktop-database ~/.local/share/applications 2>/dev/null || true
     gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
-    echo "installed: fasttrackstudio + fts in ~/.local/bin, launcher entry ready"
+    echo "installed: signal-desktop in ~/.local/bin, launcher entry ready"
 
 # Remove everything `just install` put on this machine: stop + remove
 # the systemd unit, binaries, symlinks, launcher entry, and icon.
@@ -241,10 +299,13 @@ uninstall:
     systemctl --user disable signal-engine 2>/dev/null || true
     rm -f ~/.config/systemd/user/signal-engine.service
     systemctl --user daemon-reload
-    rm -f ~/.local/bin/fasttrackstudio ~/.local/bin/fts
-    rm -rf ~/.local/lib/fts
-    rm -f ~/.local/share/applications/fasttrackstudio.desktop
-    rm -f ~/.local/share/icons/hicolor/scalable/apps/fasttrackstudio.svg
+    # ~/.local/lib/fts is shared with the other FTS products (task,
+    # patchbay, the fts CLI). Remove only what this repo installed —
+    # `rm -rf` on the directory took their binaries with it.
+    rm -f ~/.local/bin/signal-desktop
+    rm -f ~/.local/lib/fts/signal-desktop
+    rm -f ~/.local/share/applications/signal-desktop.desktop
+    rm -f ~/.local/share/icons/hicolor/scalable/apps/signal-desktop.svg
     update-desktop-database ~/.local/share/applications 2>/dev/null || true
     gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
     echo "uninstalled (user data in ~/.config/fts and ~/.config/signal kept)"
@@ -252,7 +313,7 @@ uninstall:
 # ── Release packaging ────────────────────────────────────────────────────
 # Assemble the distributable release artifacts into dist/ (what a
 # codeberg release carries, and what fts-installer downloads):
-#   fasttrackstudio-v<ver>-x86_64-linux.tar.gz   app + fts CLI + systemd
+#   signal-desktop-v<ver>-x86_64-linux.tar.gz   app + fts CLI + systemd
 #       unit + desktop/icon templates + install.sh/uninstall.sh + VERSION
 #   fts-installer-x86_64-linux                    standalone installer
 #   SHA256SUMS                                    covers both
@@ -262,17 +323,17 @@ uninstall:
 release-package: web-stage
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release -p fasttrackstudio --features embed-web
+    cargo build --release -p signal-desktop --features embed-web
     cargo build --release -p fts-cli
     cargo build --release -p fts-installer
     cargo build --release -p fts-extensions
-    version="$(cargo pkgid -p fasttrackstudio | sed 's/.*[#@]//')"
+    version="$(cargo pkgid -p signal-desktop | sed 's/.*[#@]//')"
     plat=x86_64-linux
     if command -v patchelf >/dev/null; then PATCHELF=(patchelf); else PATCHELF=(nix shell nixpkgs#patchelf -c patchelf); fi
     stage="$(mktemp -d)"; trap 'rm -rf "$stage"' EXIT
-    cp target/release/fasttrackstudio target/release/fts "$stage"/
+    cp target/release/signal-desktop target/release/fts "$stage"/
     cp target/release/fts-installer "$stage/fts-installer-$plat"
-    for b in fasttrackstudio fts "fts-installer-$plat"; do
+    for b in signal-desktop fts "fts-installer-$plat"; do
         "${PATCHELF[@]}" --set-interpreter /lib64/ld-linux-x86-64.so.2 --remove-rpath "$stage/$b"
         strip "$stage/$b"
     done
@@ -282,16 +343,16 @@ release-package: web-stage
     cp target/release/libreaper_fts_extensions.so "$stage/reaper_fts_extensions.so"
     "${PATCHELF[@]}" --remove-rpath "$stage/reaper_fts_extensions.so"
     strip "$stage/reaper_fts_extensions.so"
-    cp apps/fasttrackstudio/systemd/signal-engine.service "$stage"/
-    cp apps/fasttrackstudio/assets/fasttrackstudio.desktop "$stage"/
-    cp apps/fasttrackstudio/assets/icon.svg "$stage/icon.svg"
+    cp apps/desktop/systemd/signal-engine.service "$stage"/
+    cp apps/desktop/assets/signal-desktop.desktop "$stage"/
+    cp apps/desktop/assets/icon.svg "$stage/icon.svg"
     install -m 755 apps/installer/scripts/install.sh apps/installer/scripts/uninstall.sh "$stage"/
     printf '%s\n' "$version" > "$stage/VERSION"
     mkdir -p dist
-    tarball="fasttrackstudio-v$version-$plat.tar.gz"
+    tarball="signal-desktop-v$version-$plat.tar.gz"
     tar -czf "dist/$tarball" -C "$stage" \
-        fasttrackstudio fts reaper_fts_extensions.so \
-        signal-engine.service fasttrackstudio.desktop \
+        signal-desktop fts reaper_fts_extensions.so \
+        signal-engine.service signal-desktop.desktop \
         icon.svg install.sh uninstall.sh VERSION
     mv "$stage/fts-installer-$plat" dist/
     (cd dist && sha256sum "$tarball" "fts-installer-$plat" > SHA256SUMS)
@@ -436,7 +497,7 @@ plugins-list:
 # Package the plugin bundles as a single release tarball in dist/
 # (fts-plugins-v<version>-<platform>.tar.gz + SHA256SUMS entry). The macOS
 # release artifact is NOT this — it's the signed+notarized .zip built by
-# apps/fasttrackstudio/ios/deploy-macos-plugins.sh, since Apple only accepts
+# apps/desktop/ios/deploy-macos-plugins.sh, since Apple only accepts
 # zip/pkg/dmg for notarization.
 plugins-package: plugins-bundle
     #!/usr/bin/env bash
@@ -495,26 +556,25 @@ guitar: (rig "Guitar Rig")
 # Open the default drums rig (needs `just rig-setup "Drum Rig" ...` first)
 drums: (rig "Drum Rig")
 
-# Built then run separately, under `pw-jack`, for one reason: midir's MIDI
-# backend on Linux is JACK-over-pipewire-jack, but the dev shell links the real
-# libjack2, so the binary looks for a `jackd` that is not running and hardware
-# MIDI silently never attaches. `pw-jack` points it at PipeWire's shim instead.
-# Wrapping only the run keeps that LD_LIBRARY_PATH off the build toolchain.
-# (The real fix is the flake shipping pipewire.jack rather than libjack2; when
-# that lands, drop the wrapper.) --release is REQUIRED for real-time audio.
+# Built then run separately. This used to go through `pw-jack`: midir's MIDI
+# backend on Linux was JACK-over-pipewire-jack, and the dev shell links the
+# real libjack2, so the binary looked for a `jackd` that is not running and
+# hardware MIDI silently never attached. midicore now talks to PipeWire
+# directly, so there is nothing to wrap.
+# --release is REQUIRED for real-time audio.
 #
 # Open the FTS desktop app straight to the keys rig (Worship profile, loaded)
 keys log="/tmp/fts-keys.log":
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release -p fasttrackstudio --features signal-keys-rig
+    cargo build --release -p signal-desktop --features signal-keys-rig
     echo "logging to {{log}}"
     # The engine is a child with inherited stdio, so one tee captures the app
     # AND the engine it spawns — which is where the rig actually lives, and so
     # where anything worth debugging gets logged.
     PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
     RUST_LOG="${RUST_LOG:-info,signal_keys=debug,signal_sampler=debug,vox_core=warn,schema_deser=off}" \
-        pw-jack ./target/release/fasttrackstudio --keys 2>&1 | tee "{{log}}"
+        ./target/release/signal-desktop --keys 2>&1 | tee "{{log}}"
 
 # A terminal surface over the composition-tree presets, no GUI. This was
 # `just keys` before the app grew a keys mode.
@@ -529,14 +589,15 @@ keys-tui preset="Nord Stage" midi="all":
 # nonzero on a deaf or silent rig.
 keys-test:
     cargo build --release -p signal-keys --example midi_probe
-    PIPEWIRE_PROPS='{ application.name = FTS-KeysTest }' pw-jack ./target/release/examples/midi_probe
+    PIPEWIRE_PROPS='{ application.name = FTS-KeysTest }' ./target/release/examples/midi_probe
 
 # Play the City Grand physically-modeled piano from a MIDI keyboard.
 # Voice loads its param table from ~/.config/signal/city-grand/table.json
 # (regenerate with `pm sweep` in research/piano-model).
-# NOTE: --midi targets ONE port by name (substring). Do NOT use "all" here —
-# it allocates an ALSA sequencer queue per port (~24 on this rig) and blows
-# past ALSA's ~32-queue limit. `just piano <name>` picks a different keyboard.
+# NOTE: --midi targets ONE port by name (substring). "all" used to be a trap —
+# midir allocated an ALSA sequencer queue per port (~24 on this rig), past
+# ALSA's ~32-queue limit — but the native PipeWire backend opens ONE node
+# however many devices are linked. `just piano <name>` picks a keyboard.
 piano midi="KONTROL":
     PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-keys --features pipewire --example keys_tui -- --preset "City Grand" --midi "{{midi}}"
 
@@ -596,12 +657,12 @@ docs-deploy:
 # Dev installs symlink the build + live-editable config into REAPER's
 # resource dir; release packaging copies the .so into the tarball.
 #
-# Recipes live in the `reaper` module (reaper.just):
-#   just reaper install     build + symlink the .so and config into $REAPER_HOME
-#   just reaper build       build the release cdylib
-#   just reaper uninstall   remove the symlink
-#   just reaper log         tail the live extension log
-mod reaper 'features/reaper/reaper.just'
+# The `reaper` module (reaper.just) that held the install/build/uninstall/log
+# recipes did not come across in the August 2026 split — the file it pointed
+# at has never existed in this repo, which made `just` refuse to parse the
+# whole Justfile and took every other recipe down with it. Build the
+# extension directly until the recipes are rewritten here:
+#   cargo build --release -p signal-reaper-controller
 
 # The UI snapshot regression gate (ui-snapshot) moved to the architect
 # repo with architect-ui in the August 2026 split. Run it there:

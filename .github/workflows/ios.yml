@@ -24,7 +24,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "apps/fasttrackstudio/**"
+      - "apps/desktop/**"
       - "features/rigs/**"
       - "features/fx/**"
       - "features/nam/**"
@@ -103,7 +103,7 @@ jobs:
           TASK_OTLP_TOKEN: ${{ secrets.TASK_OTLP_TOKEN }}
           TASK_SENTRY_DSN: ${{ secrets.TASK_SENTRY_DSN }}
           # ── Signal product identity ──────────────────────────────────
-          # Bundle id must match apps/fasttrackstudio/Dioxus.toml.
+          # Bundle id must match apps/desktop/Dioxus.toml.
           DX_BUNDLE_ID: app.fasttrackstudio.signal
           # Home-screen name. Without this the device shows the dx-derived
           # bundle name; the crate is still called `fasttrackstudio` even
@@ -111,12 +111,12 @@ jobs:
           APP_DISPLAY_NAME: Signal
           # Own profile, or each product's build revokes the last one's.
           PROFILE_NAME: FTS Signal App Store
-          ICONS_DIR: ${{ github.workspace }}/apps/fasttrackstudio/ios/Assets.xcassets
+          ICONS_DIR: ${{ github.workspace }}/apps/desktop/ios/Assets.xcassets
         run: |
           set -euo pipefail
           export PATH="/nix/var/nix/profiles/default/bin:$PATH"
           export NIX=/nix/var/nix/profiles/default/bin/nix
-          bash apps/fasttrackstudio/ios/deploy-testflight.sh
+          bash apps/desktop/ios/deploy-testflight.sh
 
       - name: Summary
         if: always()

@@ -81,7 +81,7 @@ Reuse, don't reinvent:
 - **W4** — staging/serving. DONE — ONE engine binary serves the whole rig:
   - `just keys-worklet-wasm` (Justfile): release wasm build of
     `signal-keys-worklet` + `wasm-bindgen --target web --out-name
-    signal_keys_worklet` into `apps/fasttrackstudio/web-dist/worklet/`,
+    signal_keys_worklet` into `apps/desktop/web-dist/worklet/`,
     plus daw-standalone's `examples/web_worklet/processor.js` copied
     verbatim as `keys_processor.js` (it is already keys-aware — `entry:
     'keys'` + the keys message kinds — and the glue URL arrives in the
@@ -112,7 +112,7 @@ Reuse, don't reinvent:
 
 - **W5 — Playwright end-to-end test** — DONE (+ interactive browser-tools
   verification during development):
-  - Lives at `apps/fasttrackstudio/e2e/` (`@playwright/test` ~1.59, pinned
+  - Lives at `apps/desktop/e2e/` (`@playwright/test` ~1.59, pinned
     to the chromium-1217 revision the flake's `PLAYWRIGHT_BROWSERS_PATH`
     nix store carries). Run: `just keys-web-e2e` (expects
     `target/release/fasttrackstudio` to exist — `just keys-web` builds it;
@@ -153,7 +153,7 @@ Reuse, don't reinvent:
     states (streaming / ready) as visual artifacts.
   - Also covers refresh-resume: reload mid-download, assert the ledger
     resumes from the stored offset rather than restarting.
-  - Lives in `apps/fasttrackstudio/e2e/` (package.json + playwright
+  - Lives in `apps/desktop/e2e/` (package.json + playwright
     config); its own `just` target (e.g. `just keys-web-e2e`) that builds
     web-stage + the worklet, starts the engine on a scratch port, runs
     playwright, tears down. CI job is separate from the cargo gates (needs
@@ -348,7 +348,7 @@ Reuse, don't reinvent:
     establishes the two typed clients, and the page provides them in
     context precisely as `rig_view.rs` does over the network. The UI
     cannot tell it isn't remote.
-  - **`WebKeysBackend`** (apps/fasttrackstudio/src/web_keys_backend.rs):
+  - **`WebKeysBackend`** (apps/desktop/src/web_keys_backend.rs):
     state page-side, audio in the worklet. Real: status (peaks/voices/ctx
     state), mixer (engines/lanes from the lane program; gains, mutes,
     solos with native solo semantics, master trim — dB → linear onto the

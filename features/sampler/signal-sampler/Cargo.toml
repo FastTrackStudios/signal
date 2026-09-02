@@ -101,7 +101,7 @@ daw-audio-io = { workspace = true, features = ["monitor"] }
 # midir OS backend — the strings rig opens a keyboard (one/all/virtual) via
 # `midicore::midir` and forwards decoded `midicore::MidiEvent`s into the
 # bank track through daw's live-MIDI ring.
-midicore = { workspace = true, features = ["midir"] }
+midicore = { workspace = true, features = ["midir", "pipewire"] }
 # `standalone-audio` pulls in the project audio engine; `clap-host` matches
 # signal-plugin-host so the shared CLAP backend links once.
 daw = { workspace = true, features = ["standalone-audio", "clap-host"] }

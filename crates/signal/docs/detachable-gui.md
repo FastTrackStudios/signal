@@ -117,7 +117,7 @@ features/signal/
    dioxus wasm) mounts `GuitarRigRemote` from the new feature-scoped
    `features/rigs/guitar/ui/` crate (`signal-guitar-ui` — wasm-clean rig
    components + `use_rig_state`, shared with the desktop shell). Run:
-   `cargo run -p fasttrackstudio -- --engine` then `cd apps/fasttrackstudio && dx serve --platform web --no-default-features --features signal`.
+   `cargo run -p signal-desktop -- --engine` then `cd apps/desktop && dx serve --platform web --no-default-features --features signal`.
    The Edit mode mounts the real graph (`signal-guitar-ui::RigGraph` →
    `signal_grid_ui::RigGridPanel`) with the live chain resolved onto the
    guitar-rig template canvas; param edits round-trip over the Rig service.

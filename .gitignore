@@ -10,7 +10,7 @@ node_modules/
 .claude/worktrees/
 
 # Staged web bundle embedded into the native binary (just rig-install)
-apps/fasttrackstudio/web-dist/
+apps/desktop/web-dist/
 apps/patchbay/web-dist/
 
 # graphify knowledge graph — regenerable via `just graph`, machine-local.
@@ -23,7 +23,7 @@ result-*
 
 # Symlink to the resolved lumen-blocks checkout, created by `just tailwind`
 # so Tailwind scans the pinned revision instead of every cached one.
-apps/fasttrackstudio/.lumen-blocks
+apps/desktop/.lumen-blocks
 
 # local reference checkouts (upstream scripts we port from)
 .reference/

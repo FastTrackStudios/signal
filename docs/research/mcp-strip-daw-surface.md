@@ -11,7 +11,7 @@ what does a strip subscribe to for the values that change continuously?
 **Method.** Read against the source in this tree — `crates/daw/proto` (the
 service traits), `crates/daw/control` (the async facade), and the two backends
 `features/reaper/daw-reaper` and `features/standalone/daw-standalone` — plus the
-one existing consumer, `apps/fasttrackstudio/src/mixer_view.rs`. Every claim
+one existing consumer, `apps/desktop/src/mixer_view.rs`. Every claim
 below cites the file and line it came from.
 
 **Headline.** The strip is in far better shape than the map assumed. Eleven of
@@ -139,7 +139,7 @@ break the index alignment that makes the current frame cheap.
 ### Fader drag — local optimistic signal, write-through on change
 
 The in-flight value is owned **locally by the UI**, not by the service. The
-existing mixer establishes the pattern (`apps/fasttrackstudio/src/mixer_view.rs`):
+existing mixer establishes the pattern (`apps/desktop/src/mixer_view.rs`):
 
 - `TrackView` holds `fader: Signal<f32>` (`features/daw-ui/daw-ui/src/panels/model.rs:132`).
   The drag mutates that signal; the strip renders from it immediately, so the

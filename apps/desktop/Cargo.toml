@@ -1,0 +1,362 @@
+[package]
+name = "signal-desktop"
+version = "0.0.2-alpha"
+edition = "2024"
+license = "GPL-3.0-or-later"
+authors = ["FastTrackStudio"]
+
+# THE app. One binary over three domain axes — all on by default; drop any one
+# for fast iteration or a focused `dx serve`:
+#
+#   --features signal    the live guitar/drums rig (control surface, perform grid)
+#   --features session   setlists / songs / the DAW performance surface (mixer,
+#                        arrangement, lyric sync) + the guide engine
+#   --features charts    keyflow chart writing (the Charts workspace)
+#
+# Default = all three. Example fast-iteration builds:
+#   cargo run -p signal-desktop --no-default-features --features "session,charts"
+#   cargo run -p signal-desktop --no-default-features --features "charts"
+#
+# The rig is signal-side; setlists/daw/guide are session-side; chart writing is
+# charts-side; the shell (navigation, palette, theming) is shared. The signal domain stays a headless engine reached
+# over vox (this app is a remote, like the web remotes). The session
+# domain is embedded IN-PROCESS: a daw-standalone backend (memory-link
+# bootstrap) makes the setlist DATA the app can PLAY — transport over
+# songs/sections without REAPER.
+#
+# `fasttrackstudio --engine` runs the HEADLESS signal engine instead of
+# the GUI (src/engine_main.rs, the former apps/signal-engine): rig core +
+# vox router on ws://:4040/vox (+iroh), serving the web remote — embedded
+# into the binary with `--features embed-web`.
+
+[[bin]]
+name = "signal-desktop"
+path = "src/main.rs"
+
+[features]
+# Three domain axes — Signal, Session, Charts — all on by default. Drop any
+# one for fast iteration or a focused `dx serve`; e.g.
+# `cargo run -p signal-desktop --no-default-features --features "session,charts"`
+# skips the heavy `signal` rig (nam C++, lucide icons, webkit engine deps).
+default = ["signal"]
+# signal also force-enables session-ui/desktop: signal-guitar-ui pulls
+# session-ui (default-features off), which only compiles with its dioxus
+# renderer feature on (dock-dioxus needs "web" for its prelude).
+# The guitar rig alone — what the iPhone build ships: the in-process rig
+# engine (rig_engine.rs) + the mobile shell (mobile_view.rs). Kept separate
+# from `signal` because the drums/keys/synth rig UIs pull signal-ui's
+# Vello/baseview surfaces, which don't build for iOS.
+signal-guitar = [
+    "dep:signal-guitar-proto",
+    "dep:signal-guitar-ui",
+    # Pack downloads (pack_client.rs) — list + fetch .signalpacks from a
+    # pack host (the studio engine / a hosted mirror) over ws or iroh.
+    "dep:signal-packs-proto",
+    "dep:session-ui",
+    "dep:vox-core",
+    "dep:vox-websocket",
+    "dep:architect",
+    "architect/iroh",
+    # In-process serving (rig_engine.rs, the watch bridge).
+    "architect/local",
+    # The engine core (native-only tables; no-op on web).
+    "dep:signal-guitar",
+    "dep:tokio",
+    "dep:vox",
+    "dep:facet-json",
+    "dep:futures-util",
+    # Pack downloads (pack_client.rs): progress channels + sha256 verify,
+    # plus the HTTPS mirror fallback (reqwest ranged GETs, facet-json index).
+    "dep:futures-channel",
+    "dep:sha2",
+    "dep:reqwest",
+    "dep:facet",
+    "dep:eyre",
+]
+# The keys rig on the phone: the in-process sampler engine (signal-keys →
+# signal-sampler over CoreAudio, MIDI via midir/CoreMIDI) + the wire types
+# for the mobile keys view + pack downloads. iOS-clean by construction: the
+# phone view speaks signal-keys-proto directly and never pulls
+# signal-keys-ui (whose signal-ui Vello/baseview surfaces don't build for
+# iOS). Packs stream in via pack_client.rs and land in
+# Documents/FastTrackStudio/Packs/Keys.
+signal-keys-rig = [
+    "signal-guitar",
+    "dep:signal-keys",
+    "dep:signal-keys-proto",
+]
+signal = [
+    "signal-guitar",
+    "dep:signal-bass-proto",
+    "dep:signal-bass-ui",
+    "dep:signal-drums-proto",
+    "dep:signal-drums-ui",
+    "dep:signal-keys-proto",
+    "dep:signal-keys-ui",
+    "dep:midicore-proto",
+    "dep:signal-synth-proto",
+    "dep:signal-synth-ui",
+    # The embedded rig remote (rig_view.rs) — vox over a native WebSocket —
+    # and the engine supervisor (engines.rs).
+    "dep:engine-launcher",
+    # The headless engine itself (`fasttrackstudio --engine`,
+    # engine_main.rs — the former apps/signal-engine). These optional
+    # deps only exist in the not(wasm32) target table, so enabling them
+    # here is a no-op on the web build.
+    "dep:signal-bass",
+    "dep:signal-drums",
+    "dep:signal-keys",
+    "dep:signal-synth-rig",
+    "dep:signal-sampler",
+    # Pack distribution: the engine serves its .signalpack library
+    # (native-only dep — no-op on the web build, same trick as above).
+    "dep:signal-pack-library",
+    "dep:signal-space",
+    "dep:signal-space-proto",
+    "dep:signal-ekit",
+    "dep:signal-ekit-proto",
+    "dep:axum",
+    "dep:tower-http",
+]
+# Embed the staged web bundle (`web-dist/`, copied from the dx web build
+# by `just rig-install`) into the native binary — engine mode then serves
+# the browser remote from memory, ONE deployable artifact. Off by default
+# so a plain `cargo build -p signal-desktop` needs no staged dir.
+embed-web = ["dep:include_dir"]
+# Session on the web build is a REMOTE: the wasm target compiles only the
+# wire surface (session-proto's SetlistService clients + session-ui) and
+# talks to the network engine's SetlistService over the shared `/vox` link
+# (src/session_remote_view.rs). The in-process player (session facade,
+# daw-standalone, the guide) is native-only — those optional deps live
+# exclusively in the `cfg(not(target_arch = "wasm32"))` table below, so
+# enabling them here is a no-op on the web build (the same trick the
+# `signal` feature uses for engine mode).
+# Charts: keyflow chart writing (the Charts workspace). Keyflow is also pulled
+# by Session (chart parsing), so this is additive; a charts-only build gets it
+# independently.
+# Built-in FX DSP (EQ/comp/reverb/…) linked into the in-process standalone
+# render path, so `Effects::add("Reverb")` on a session track instantiates
+# real signal-fx. Deliberately NOT part of `session`: Session coordinates
+# Signal over the wire rather than linking the engine, and signal-fx sits a
+# layer above the session domain. The Signal-side build turns this on; a
+# Session-only build renders without built-in FX and gets them from the
+# Signal engine instead.
+# Chatterbox TTS backend for the guide's spoken cues. Auto-enabled by Session.
+# Models are NEVER downloaded implicitly; TTS only *activates* at runtime when
+# FTS_TTS=1 and a voice wav exists at ~/.config/fts/tts-voice.wav (the flake
+# provides onnxruntime + ORT_DYLIB_PATH). Cached cues keep loading regardless;
+# without it, cues fall back to the synthesized guide samples.
+
+# Network probe for the engine's SetlistService (the browser remote's wire
+# path, natively): `cargo run -p signal-desktop --example setlist_probe`.
+[[example]]
+name = "pack_probe"
+required-features = ["signal-guitar"]
+
+# Minimal cross-machine iroh transport check (raw framed echo, no vox).
+[[example]]
+name = "iroh_echo"
+required-features = ["signal-guitar"]
+
+# Author the browser keys rig's bundled demo SMFs (assets/demo-midi/*.mid)
+# with daw-proto's codec. `test = true` so its #[test] (parse the committed
+# assets back) runs under `cargo test -p signal-desktop --example
+# demo_midi_gen --no-default-features` without building the whole app.
+[[example]]
+name = "demo_midi_gen"
+test = true
+
+# KeysRig service probe (the browser remote's establish, verbosely).
+[[example]]
+name = "keys_probe"
+required-features = ["signal"]
+
+[dependencies]
+utils.workspace = true
+# Sample-space + Electronic Kit WIRE CONTRACTS (#77). Wasm-clean — the
+# browser remote renders the map and the pad grid from these; their
+# backends (signal-space / signal-ekit) stay native-only below.
+signal-space-proto = { workspace = true, optional = true }
+signal-ekit-proto = { workspace = true, optional = true }
+signal-rigs-proto.workspace = true
+# Standard-MIDI-file codec (daw-proto's `midi::smf`) — the browser keys
+# rig's demo MIDI player parses the bundled .mid presets with it, and the
+# `demo_midi_gen` example authors them. Wasm-clean, deliberately
+# unconditional so the example builds with --no-default-features.
+daw-proto.workspace = true
+tracing.workspace = true
+
+# Signal domain (the rig)
+signal-guitar-proto = { workspace = true, optional = true }
+fts-chrome.workspace = true
+signal-guitar-ui = { workspace = true, optional = true }
+signal-bass-proto = { workspace = true, optional = true }
+signal-bass-ui = { workspace = true, optional = true }
+signal-drums-proto = { workspace = true, optional = true }
+signal-drums-ui = { workspace = true, optional = true }
+signal-keys-proto = { workspace = true, optional = true }
+signal-keys-ui = { workspace = true, optional = true }
+# MidiEvent — the in-tab keys backend (web_keys_backend.rs) decodes the raw
+# 3-byte messages it forwards into the monitor's wire events.
+midicore-proto = { workspace = true, optional = true }
+signal-synth-proto = { workspace = true, optional = true }
+signal-synth-ui = { workspace = true, optional = true }
+signal-packs-proto = { workspace = true, optional = true }
+
+# Session domain, wire surface — the SetlistService types + generated
+# clients (session-proto) compile everywhere, including the wasm remote.
+# The in-process player crates (session facade, daw-standalone, the guide)
+# are native-only and live in the cfg(not wasm) table below.
+# Ordered-collection wire contract (song Library / Setlist / …). Only the
+# wasm build uses it (the /{org}/{collection} browser dials the task-server's
+# per-org CollectionService), so the actual optional dep lives in the wasm
+# target table below; `dep:collection-proto` in the `session` feature is a
+# no-op on native (dep absent there) — the same trick daw-standalone uses.
+
+# Service framework — the root workspace's architect + vox (patched to the
+# sibling ../architect checkout at the root) so the whole graph shares one
+# architect + one vox.
+architect = { workspace = true, features = ["vox", "platform"], optional = true }
+vox = { workspace = true, optional = true }
+vox-core = { workspace = true, optional = true }
+vox-websocket = { workspace = true, optional = true }
+
+eyre = { workspace = true, optional = true }
+
+# The same app on every surface: the desktop binary gets the dioxus
+# desktop renderer; the web build (dx build --platform web) is the SAME
+# UI served over the network — no desktop-only pages. Native extras:
+# the engine supervisor (child processes), file prefs, iroh key file.
+# The dioxus renderer splits by platform: desktop (wry window chrome) vs
+# mobile (the same wry renderer with iOS launch glue, in the ios table
+# further down).
+[target.'cfg(not(any(target_arch = "wasm32", target_os = "ios")))'.dependencies]
+dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tracing-subscriber.workspace = true
+# Telemetry: fmt console logs + optional Sentry + OTLP export (traces,
+# logs, metrics). Doubly opt-in — the `otel` cargo feature carries the
+# dependency weight, and at runtime nothing exports unless
+# OTEL_EXPORTER_OTLP_ENDPOINT is set (http/protobuf, port 4318).
+architect-telemetry = { workspace = true, features = ["otel"] }
+session-ui = { workspace = true, features = ["desktop"], optional = true }
+# The real DAW panels (MixerPanel / ArrangementView) — self-contained,
+# wired to the in-process daw facade. `web` = the dioxus (WebView) renderer
+# the desktop app uses.
+# REAPER-project (.rpp) export for the "Open in REAPER" button — the
+# standalone project round-trips through dawfile. Native-only.
+# Engine supervisor (spawn/stop/probe the engine) — shared with fts-cli.
+engine-launcher = { workspace = true, optional = true }
+# Async runtime: session's in-process engine AND engine mode's server.
+tokio = { workspace = true, optional = true }
+
+# ── Session domain, in-process player (feature `session`, native only) ──
+# The session facade + the daw-standalone backend that PLAYS the setlist,
+# plus the guide engine — all native-only (audio, threads, filesystem).
+# The wasm build gets only session-proto + session-ui and drives a
+# network engine instead (session_remote_view.rs).
+# Guide engine: click / count-in / section cues rendered into the audio
+# output through daw-standalone's aux post-render hook. On iOS the
+# session-demo feature drives it with default features (no tts/ONNX) into a
+# small cpal stream instead.
+# Session-demo audio out (iOS): a small cpal output stream for the click,
+# independent of the rig's engine.
+# Engine supervision: the desktop app's watchdog polls its supervisor pid
+# (kill(pid,0)) and reaps the engine's process group on exit (engine_main.rs,
+# engines.rs). Unix-only usage is cfg-gated in code.
+libc = { workspace = true }
+# DAW domain — facade (daw::get / init_from_parts / LayerRouter) + the
+# standalone backend that plays the setlist without REAPER. "audio" is
+# required by daw-standalone's unconditional `sync` module (same
+# workaround session's dev-deps carry) and drives real cpal output.
+# Built-in FX (EQ/comp/reverb/…) for session mixer tracks — installed as
+# the standalone backend's FxFactory in session_engine.rs.
+signal-fx = { workspace = true, optional = true }
+
+# ── Engine mode (`--engine`, feature `signal`) — the former
+#    apps/signal-engine, native only ─────────────────────────────────────
+signal-guitar = { workspace = true, optional = true }
+signal-bass = { workspace = true, optional = true }
+signal-drums = { workspace = true, optional = true }
+signal-keys = { workspace = true, optional = true }
+signal-synth-rig = { workspace = true, optional = true }
+signal-sampler = { workspace = true, optional = true }
+signal-pack-library = { workspace = true, optional = true }
+signal-space = { workspace = true, optional = true }
+signal-ekit = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
+# Watch bridge (engine_watch.rs): facet-json for the WatchState wire form,
+# futures-util for the SSE stream adapter.
+facet-json = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
+futures-channel = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+# HTTPS pack-mirror fallback (rustls — no system TLS needed on iOS).
+reqwest = { workspace = true, optional = true }
+facet = { workspace = true, optional = true }
+# Engine mode serves the vox router over axum ws (+ iroh, from the
+# `signal` feature). Native-only extra features on the same architect dep.
+# `host` = the engine-binary bootstrap (architect::host) — runtime + tracing +
+# panic logger + /health + /vox + iroh + SPA fallback. Native-only (server-axum
+# isn't wasm-legal), so it lives on this cfg(not wasm) dep line, NOT the shared
+# `signal` feature which the wasm browser build also enables.
+architect = { workspace = true, features = ["server-axum", "host"], optional = true }
+# The staged web bundle, embedded (feature `embed-web`).
+include_dir = { workspace = true, optional = true }
+
+# The native PipeWire duplex backend is Linux-only (cpal's pipewire host);
+# on macOS/other platforms the sampler core falls back to plain cpal
+# (CoreAudio), keeping engine mode buildable on darwin (voyager).
+# ── iPhone (dx build --platform ios) — the in-process rig + phone shell ──
+[target.'cfg(target_os = "ios")'.dependencies]
+dioxus = { workspace = true, default-features = true, features = ["mobile", "launch"] }
+# AVAudioSession bootstrap (ios_audio.rs) — four dynamic objc calls.
+objc2 = "0.5"
+
+# PipeWire (audio + MIDI) is the Linux DEFAULT via target-gated deps inside
+# daw-audio-io and the rig crates themselves — no per-app feature plumbing.
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+dioxus = { workspace = true, default-features = true, features = ["web", "launch"] }
+session-ui = { workspace = true, features = ["web"], optional = true }
+# NO daw-ui here: its daw-control backend is not wasm-clean, and the daw
+# panels (Arrangement / Mixer) are native-only workspaces anyway — the
+# session feature's "dep:daw-ui" is a no-op on the web build.
+web-sys = { version = "0.3", features = [
+    "Window", "Storage", "Location",
+    # ── Browser keys rig (/rigs/keys/:profile — web_keys_rig.rs) ──
+    # AudioWorklet boot + the main-thread ↔ worklet message port.
+    "AudioContext", "AudioContextOptions", "BaseAudioContext", "AudioWorklet",
+    "AudioWorkletNode",
+    "AudioWorkletNodeOptions", "AudioNode", "AudioDestinationNode",
+    "MessagePort", "MessageEvent", "MessageChannel", "Event", "EventTarget", "Response",
+    "Worker", "WorkerOptions", "WorkerType",
+    # OPFS pack cache (web_packs.rs).
+    "Navigator", "StorageManager", "FileSystemDirectoryHandle",
+    "FileSystemFileHandle", "FileSystemGetDirectoryOptions",
+    "FileSystemGetFileOptions", "FileSystemCreateWritableOptions",
+    "FileSystemWritableFileStream", "File", "Blob",
+    # IndexedDB download ledger + lane-program cache.
+    "IdbFactory", "IdbOpenDbRequest", "IdbDatabase", "IdbObjectStore",
+    "IdbTransaction", "IdbTransactionMode", "IdbRequest",
+    # WebMIDI input.
+    "MidiAccess", "MidiInput", "MidiInputMap", "MidiMessageEvent",
+    "MidiOptions", "MidiPort",
+] }
+# The keys-rig page's async browser plumbing: js promises, transferable
+# pack bytes, oneshot replies from the worklet port, sha256 verify of
+# streamed packs, and the facet-json ledger/cache rows in IndexedDB.
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+futures-channel = { workspace = true }
+futures-util = { workspace = true }
+sha2 = { workspace = true }
+facet = { workspace = true }
+facet-json = { workspace = true }
+# Chart pane: @font-face data URIs for the engraver's embedded fonts.
+base64 = { workspace = true }
+# getrandom 0.3 (transitive via iroh) needs its js backend on wasm32.
+getrandom = { version = "0.3", features = ["wasm_js"] }

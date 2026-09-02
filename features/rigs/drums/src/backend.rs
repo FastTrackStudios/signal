@@ -293,7 +293,7 @@ impl DrumRigBackend {
         if let Some(idx) = idx {
             self.do_load_kit(idx);
         }
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
         self.paint_light_guide(); // opens the keyboard's Light Guide, paints the kit
         self.publish_all();
     }
@@ -348,7 +348,7 @@ impl DrumRigBackend {
             s.pieces = pieces;
             s.engines = engines;
         }
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
         self.paint_light_guide();
         self.publish_all();
     }
@@ -485,7 +485,7 @@ impl DrumRigBackend {
             s.pieces = pieces;
             s.engines = engines;
         }
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
         self.paint_light_guide();
         self.publish_all();
     }
@@ -653,14 +653,16 @@ impl DrumRigBackend {
         }
     }
 
-    fn reattach_midi(&self) {
+    fn reattach_midi(&self, trigger: signal_rig_host::midi::AttachTrigger) {
         let (port, map) = {
             let s = self.inner.state.lock().unwrap();
             (s.midi_port.clone(), s.input_map)
         };
-        midicore::attach::reattach(
-            "drum rig",
+        signal_rig_host::midi::reattach_instrumented(
+            "drums",
+            trigger,
             port.as_deref(),
+            midicore::pipewire::input_ports().len(),
             || {
                 if let Ok(mut s) = self.inner.state.lock() {
                     s.midi_handle = None;
@@ -793,7 +795,7 @@ impl RigBackend for DrumRigBackend {
         // A device plugged in after the rig started (e.g. the mioXM) is merged
         // into the omni stream without touching the UI.
         tracing::info!(?ports, "drum rig: MIDI ports changed — re-attaching");
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortsChanged);
         self.inner
             .events
             .publish(DrumEvent::Status(DrumRig::status(self)));
@@ -1336,7 +1338,7 @@ impl DrumRig for DrumRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.midi_port = if name.is_empty() { None } else { Some(name) };
         }
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortSelected);
         self.inner
             .events
             .publish(DrumEvent::Status(DrumRig::status(self)));
@@ -1346,7 +1348,7 @@ impl DrumRig for DrumRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.input_map = map;
         }
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortSelected);
         self.inner
             .events
             .publish(DrumEvent::Status(DrumRig::status(self)));

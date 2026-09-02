@@ -28,7 +28,9 @@ const SECONDS: f64 = 1.5;
 
 fn arg(name: &str) -> Option<String> {
     let a: Vec<String> = std::env::args().collect();
-    a.iter().position(|x| x == name).and_then(|i| a.get(i + 1).cloned())
+    a.iter()
+        .position(|x| x == name)
+        .and_then(|i| a.get(i + 1).cloned())
 }
 fn num(name: &str, default: f64) -> f64 {
     arg(name).and_then(|v| v.parse().ok()).unwrap_or(default)
@@ -65,7 +67,9 @@ fn phase_at(buf: &[f32], freq: f64) -> f64 {
 
 fn tone(freq: f64, amplitude: f64, frames: usize) -> Vec<f32> {
     let inc = std::f64::consts::TAU * freq / SR;
-    (0..frames).map(|i| (amplitude * (inc * i as f64).sin()) as f32).collect()
+    (0..frames)
+        .map(|i| (amplitude * (inc * i as f64).sin()) as f32)
+        .collect()
 }
 
 /// Band-limited noise at a chosen RMS, for probing the detector's response to
@@ -131,13 +135,17 @@ fn proq_state(
     p[9] = range_db as f32;
     p[10] = 1.0; // Dynamics enabled
     p[11] = if auto { 1.0 } else { 0.0 };
-    p[12] = if auto { 1.0 } else { proq_threshold(threshold_db) };
+    p[12] = if auto {
+        1.0
+    } else {
+        proq_threshold(threshold_db)
+    };
     p[13] = 50.0; // Attack %
     p[14] = 50.0; // Release %
-    // Instance-wide globals. Pro-Q 4 adds Character (0 Clean, 1 Subtle,
-    // 2 Warm — "vintage non-linearities") and keeps Pro-Q 3's Processing Mode
-    // (0 zero latency, 1 Natural Phase, 2 linear phase). Neither had ever been
-    // measured here, and 26 and 29 of the 171 factory presets set them.
+                  // Instance-wide globals. Pro-Q 4 adds Character (0 Clean, 1 Subtle,
+                  // 2 Warm — "vintage non-linearities") and keeps Pro-Q 3's Processing Mode
+                  // (0 zero latency, 1 Natural Phase, 2 linear phase). Neither had ever been
+                  // measured here, and 26 and 29 of the 171 factory presets set them.
     p[552] = num("--mode", 0.0) as f32;
     p[554] = num("--character", 0.0) as f32;
     // Output Level is NOT stored in dB — see the mapping measured with this.
@@ -178,7 +186,8 @@ fn render_native(eq: &mut NativeEq, input: &[f32]) -> Vec<f32> {
         let n = BLOCK.min(input.len() - pos);
         let l = &input[pos..pos + n];
         let (mut ol, mut or) = (vec![0.0f32; n], vec![0.0f32; n]);
-        eq.process_block(l, l, &mut ol, &mut or, &events).expect("process");
+        eq.process_block(l, l, &mut ol, &mut or, &events)
+            .expect("process");
         out.extend_from_slice(&ol);
         pos += n;
     }
@@ -231,7 +240,15 @@ fn main() {
     // shapes below had never been seen at their real steepness.
     let slope = num("--slope", 2.0);
     let floats = proq_state(
-        freq, q, range, threshold, auto, proq_shape, static_gain, proq_place, slope,
+        freq,
+        q,
+        range,
+        threshold,
+        auto,
+        proq_shape,
+        static_gain,
+        proq_place,
+        slope,
     );
     let mut blob = plugin.save_state().expect("save_state");
     let count = u32::from_le_bytes(blob[16..20].try_into().unwrap()) as usize;
@@ -266,12 +283,20 @@ fn main() {
 
     println!(
         "one bell at {freq:.0} Hz, Q {q}, range {range:+} dB, threshold {}{}\n",
-        if auto { "auto".to_string() } else { format!("{threshold:+} dB") },
+        if auto {
+            "auto".to_string()
+        } else {
+            format!("{threshold:+} dB")
+        },
         if auto { "" } else { "" }
     );
     println!(
         "  stimulus: {}",
-        if use_noise { "band-limited noise" } else { "tone at the band" }
+        if use_noise {
+            "band-limited noise"
+        } else {
+            "tone at the band"
+        }
     );
     println!("  in dBFS     Pro-Q       ours       diff");
 
@@ -298,7 +323,7 @@ fn main() {
         let win = (SR * 0.010) as usize;
         println!("  ms after step   Pro-Q       ours       diff   (attack)");
         let mut worst = 0.0f64;
-        let mut report = |label: &str, base: f64, offsets: &[f64], worst: &mut f64| {
+        let report = |label: &str, base: f64, offsets: &[f64], worst: &mut f64| {
             println!("  --- {label} ---");
             for off in offsets {
                 let start = ((base + off / 1000.0) * SR) as usize;
@@ -316,8 +341,18 @@ fn main() {
                 println!("  {off:>10.0}    {ra:>8.2}   {rb:>8.2}   {d:>8.2}");
             }
         };
-        report("attack, from the step at 0.3 s", 0.3, &[1.0, 3.0, 10.0, 30.0, 100.0, 300.0, 600.0], &mut worst);
-        report("release, from the step at 1.0 s", 1.0, &[1.0, 3.0, 10.0, 30.0, 100.0, 300.0, 600.0], &mut worst);
+        report(
+            "attack, from the step at 0.3 s",
+            0.3,
+            &[1.0, 3.0, 10.0, 30.0, 100.0, 300.0, 600.0],
+            &mut worst,
+        );
+        report(
+            "release, from the step at 1.0 s",
+            1.0,
+            &[1.0, 3.0, 10.0, 30.0, 100.0, 300.0, 600.0],
+            &mut worst,
+        );
         println!("\nworst difference {worst:.2} dB");
         return;
     }
@@ -427,7 +462,9 @@ fn main() {
 
     let frames = (SR * SECONDS) as usize;
     let mut worst = 0.0f64;
-    for level_db in [-60.0, -54.0, -48.0, -42.0, -36.0, -30.0, -24.0, -18.0, -12.0, -6.0, -3.0] {
+    for level_db in [
+        -60.0, -54.0, -48.0, -42.0, -36.0, -30.0, -24.0, -18.0, -12.0, -6.0, -3.0,
+    ] {
         let amp = 10.0f64.powf(level_db / 20.0);
         let input = if use_noise {
             noise(amp, frames)

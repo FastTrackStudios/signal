@@ -61,9 +61,10 @@ struct TapTracker {
 pub struct MeterPump {
     /// The open MIDI capture (all input ports merged); `None` until a port
     /// exists. Reopened by the hot-plug scan.
-    midi: Option<midicore::midir::MidiStream>,
-    /// Input-port names at the last hot-plug scan — a change reopens.
-    midi_ports: Vec<String>,
+    /// Drain-style subscription to the shared process-wide MIDI hub. The
+    /// rig no longer opens its own 23 OS clients; the hub opens each port
+    /// once for the whole app and this pump drains its share.
+    midi: Option<signal_rig_host::midi_hub::MidiDrain>,
     tick: u64,
     /// Footswitch tap/hold/edge state (the shared gesture engine).
     switches: FootswitchEngine,
@@ -73,7 +74,6 @@ impl Default for MeterPump {
     fn default() -> Self {
         Self {
             midi: None,
-            midi_ports: Vec::new(),
             tick: 0,
             // 5 gesture switches + 5 direct slots, holds at the 500 ms
             // pedalboard convention (mirrors the UI's hold threshold).
@@ -213,7 +213,15 @@ impl GuitarRigBackend {
         // `rescan_stream` drops the old stream's OS clients BEFORE opening
         // anew (the ALSA-seq queue-exhaustion invariant).
         if pump.tick == 1 || pump.tick.is_multiple_of(60) {
-            midicore::attach::rescan_stream(&mut pump.midi, &mut pump.midi_ports);
+            // Subscribe once, then let the hub own re-opening. The pump used
+            // to call `rescan_stream`, which reopened all 23 ports whenever
+            // the ordered port list differed — an unstable enumeration order
+            // alone was enough to trigger it.
+            let hub = signal_rig_host::midi_hub::hub();
+            if pump.midi.is_none() {
+                pump.midi = Some(hub.subscribe_drain("guitar", None));
+            }
+            hub.rescan();
         }
         // Flush pending auto-saves (live edits + position) about once a second.
         if pump.tick.is_multiple_of(30) {

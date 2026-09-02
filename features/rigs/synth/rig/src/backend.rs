@@ -57,7 +57,9 @@ struct State {
     /// The loaded composition tree (for the control-view structure).
     tree: Option<Container>,
     midi_port: Option<String>,
-    midi_handle: Option<signal_sampler::MidiInputHandle>,
+    /// Subscription to the shared process-wide MIDI hub — see
+    /// `signal_rig_host::midi_hub`. Dropping it detaches this rig only.
+    midi_handle: Option<signal_rig_host::midi_hub::Subscription>,
     /// Master output gain (linear), applied to the rig on open + live changes.
     volume: f32,
     /// Live global controls (Omnisphere-style macros over the loaded patch).
@@ -197,7 +199,7 @@ impl SynthRigBackend {
                 // caller of ensure_open needs one — attaching here makes
                 // this THE single open path, so a rig can never end up
                 // audible-but-deaf.
-                self.reattach_midi();
+                self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
                 if let Ok(mut s) = self.inner.state.lock() {
                     if s.loaded.is_none() {
                         s.loaded = Some(idx);
@@ -238,41 +240,37 @@ impl SynthRigBackend {
         self.publish_all();
     }
 
-    fn reattach_midi(&self) {
+    fn reattach_midi(&self, trigger: signal_rig_host::midi::AttachTrigger) {
         let port = self
             .inner
             .state
             .lock()
             .ok()
             .and_then(|s| s.midi_port.clone());
-        midicore::attach::reattach(
-            "synth rig",
-            port.as_deref(),
-            || {
-                if let Ok(mut s) = self.inner.state.lock() {
-                    s.midi_handle = None;
-                }
-            },
-            |sel| {
-                // Build the sink under the rig lock (cheap clones), then open
-                // the ports with the lock RELEASED — a stalled port open
-                // during a PipeWire graph reconfiguration must not pin the
-                // rig mutex (it wedges status() and the UI). See the keys
-                // backend's twin of this closure.
-                let sink = {
-                    let rig = self.inner.rig.lock().unwrap();
-                    match rig.as_ref() {
-                        Some(rig) => rig.midi_sink(),
-                        None => return Ok(None),
-                    }
-                };
-                midicore::midir::MidiInput::open(sel, sink).map(Some)
-            },
-            |h| {
-                if let Ok(mut s) = self.inner.state.lock() {
-                    s.midi_handle = Some(h);
-                }
-            },
+        // Build the sink under the rig lock (cheap clones) and release it
+        // before touching the hub: a stalled port open during a PipeWire
+        // graph reconfiguration must not pin the rig mutex (it wedges
+        // status() and the UI).
+        let sink = {
+            let rig = self.inner.rig.lock().unwrap();
+            match rig.as_ref() {
+                Some(rig) => rig.midi_sink(),
+                None => return,
+            }
+        };
+        let hub = signal_rig_host::midi_hub::hub();
+        let sub = hub.subscribe("synth", port.clone(), sink);
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.midi_handle = Some(sub);
+        }
+        let reopened = hub.rescan();
+        tracing::info!(
+            midi.rig = "synth",
+            midi.trigger = trigger.as_str(),
+            midi.selector = if port.is_some() { "named" } else { "omni" },
+            midi.ports_seen = hub.ports().len(),
+            midi.hub_reopened = reopened,
+            "midi attach"
         );
     }
 
@@ -428,7 +426,7 @@ impl SynthRigSvc for SynthRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.midi_port = if name.is_empty() { None } else { Some(name) };
         }
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortSelected);
         self.inner
             .events
             .publish(SynthEvent::Status(SynthRigSvc::status(self)));

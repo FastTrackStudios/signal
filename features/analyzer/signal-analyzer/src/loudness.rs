@@ -110,7 +110,7 @@ pub fn compare_loudness(
             centre_hz,
             reference_db: r,
             candidate_db: c,
-            difference_db: (r.is_finite() && c.is_finite()).then(|| c - r),
+            difference_db: (r.is_finite() && c.is_finite()).then_some(c - r),
         })
         .collect();
 
@@ -118,7 +118,9 @@ pub fn compare_loudness(
         .iter()
         .filter_map(|b| b.difference_db)
         .map(f64::abs)
-        .fold(None, |acc: Option<f64>, d| Some(acc.map_or(d, |a| a.max(d))));
+        .fold(None, |acc: Option<f64>, d| {
+            Some(acc.map_or(d, |a| a.max(d)))
+        });
 
     LoudnessComparison {
         reference_lufs,

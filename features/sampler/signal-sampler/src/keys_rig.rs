@@ -1174,7 +1174,7 @@ impl KeysRig {
     /// Enumerate hardware MIDI input ports.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn midi_input_ports() -> Vec<String> {
-        midicore::midir::input_ports()
+        midicore::pipewire::input_ports()
     }
 
     /// The rig's live-MIDI sink (monitor tap + per-target dispatch), detached
@@ -1199,8 +1199,8 @@ impl KeysRig {
     pub fn attach_midi(
         &self,
         selection: midicore::PortSelector,
-    ) -> eyre::Result<midicore::midir::MidiInput> {
-        midicore::midir::MidiInput::open(selection, self.midi_sink())
+    ) -> eyre::Result<midicore::pipewire::MidiInput> {
+        midicore::pipewire::MidiInput::open(selection, self.midi_sink())
     }
 
     pub fn midi_monitor(&self) -> MidiMonitor {

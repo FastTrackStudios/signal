@@ -25,7 +25,7 @@ use signal_keys_proto::{
 use crate::profile::{worship_profile, KeysProfile};
 use signal_rig_host::mixer::{self as rig_mixer, db_to_linear};
 use signal_sampler::rig_node::{RigNode, Role};
-use signal_sampler::{Container, MidiInputHandle};
+use signal_sampler::{Container};
 
 use crate::KeysRig;
 
@@ -46,7 +46,9 @@ struct State {
     /// The loaded composition tree (for the control-view structure).
     tree: Option<Container>,
     midi_port: Option<String>,
-    midi_handle: Option<MidiInputHandle>,
+    /// The rig's subscription to the shared process-wide MIDI hub. Dropping
+    /// it detaches this rig only; the hardware ports stay open for the others.
+    midi_handle: Option<signal_rig_host::midi_hub::Subscription>,
     /// The last audio-open failure, for UIs with no log access (phones).
     last_error: Option<String>,
     /// The active profile — the engine/layer mixer shape + its stacks.
@@ -2629,7 +2631,7 @@ impl KeysRigBackend {
                 // caller of ensure_open (start, preset load, rebuild) needs
                 // one — attaching here makes this THE single open path, so a
                 // rig can never end up audible-but-deaf.
-                self.reattach_midi();
+                self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
                 if let Ok(mut s) = self.inner.state.lock() {
                     if s.loaded.is_none() {
                         s.loaded = Some(idx);
@@ -2702,43 +2704,55 @@ impl KeysRigBackend {
         self.publish_all();
     }
 
-    fn reattach_midi(&self) {
+    /// Point this rig at the shared MIDI hub.
+    ///
+    /// The rig no longer opens hardware itself: the hub holds one connection
+    /// per port for the whole process and fans events out. Subscribing is
+    /// cheap and synchronous — the expensive part (opening ports) happens
+    /// once, in `rescan`, however many rigs are listening.
+    fn reattach_midi(&self, trigger: signal_rig_host::midi::AttachTrigger) {
         let port = self
             .inner
             .state
             .lock()
             .ok()
             .and_then(|s| s.midi_port.clone());
-        midicore::attach::reattach(
-            "keys rig",
-            port.as_deref(),
-            || {
-                if let Ok(mut s) = self.inner.state.lock() {
-                    s.midi_handle = None;
-                }
-            },
-            |sel| {
-                // Build the sink under the rig lock (cheap clones), then open
-                // the ports with the lock RELEASED: opening hardware ports
-                // takes seconds and can stall outright while the PipeWire
-                // graph reconfigures (the rig's own audio open triggers one),
-                // and a stalled open holding this mutex wedges status() and
-                // with it the whole UI.
-                let sink = {
-                    let rig = self.inner.rig.lock().unwrap();
-                    match rig.as_ref() {
-                        Some(rig) => rig.midi_sink(),
-                        None => return Ok(None),
-                    }
-                };
-                midicore::midir::MidiInput::open(sel, sink).map(Some)
-            },
-            |h| {
-                if let Ok(mut s) = self.inner.state.lock() {
-                    s.midi_handle = Some(h);
-                }
-            },
+
+        // Build the sink under the rig lock (cheap clones) and release the
+        // lock before touching the hub, so a slow port open can never wedge
+        // status() and with it the whole UI.
+        let sink = {
+            let rig = self.inner.rig.lock().unwrap();
+            match rig.as_ref() {
+                Some(rig) => rig.midi_sink(),
+                None => return, // Not running — nothing to feed.
+            }
+        };
+
+        let hub = signal_rig_host::midi_hub::hub();
+        let sub = hub.subscribe("keys", port.clone(), sink);
+        if let Ok(mut s) = self.inner.state.lock() {
+            // Replacing the old subscription drops it, detaching the previous
+            // sink — the rig must not be fed through a stale one after a
+            // preset rebuild replaced its tracks.
+            s.midi_handle = Some(sub);
+        }
+        let reopened = hub.rescan();
+
+        tracing::info!(
+            midi.rig = "keys",
+            midi.trigger = trigger.as_str(),
+            midi.selector = if port.is_some() { "named" } else { "omni" },
+            midi.ports_seen = hub.ports().len(),
+            midi.hub_reopened = reopened,
+            "midi attach"
         );
+        if hub.ports().is_empty() {
+            tracing::warn!(
+                midi.rig = "keys",
+                "MIDI hub has no ports open — the rig is running but cannot be played"
+            );
+        }
     }
 
     fn publish_all(&self) {
@@ -2805,7 +2819,7 @@ impl RigBackend for KeysRigBackend {
         // A keyboard plugged in after the rig started is merged into the
         // omni stream without touching the UI.
         tracing::info!(?ports, "keys rig: MIDI ports changed — re-attaching");
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortsChanged);
         self.inner
             .events
             .publish(KeysEvent::Status(KeysRigSvc::status(self)));
@@ -3005,7 +3019,7 @@ impl KeysRigSvc for KeysRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.midi_port = if name.is_empty() { None } else { Some(name) };
         }
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortSelected);
         self.inner
             .events
             .publish(KeysEvent::Status(KeysRigSvc::status(self)));

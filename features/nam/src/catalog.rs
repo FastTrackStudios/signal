@@ -162,6 +162,7 @@ mod tests {
         catalog.entries.insert(
             "abc123".into(),
             NamFileEntry {
+                provenance: None,
                 hash: "abc123".into(),
                 kind: NamFileKind::AmpModel,
                 relative_path: "amps/test.nam".into(),
@@ -200,6 +201,7 @@ mod tests {
         catalog.entries.insert(
             "amp1".into(),
             NamFileEntry {
+                provenance: None,
                 hash: "amp1".into(),
                 kind: NamFileKind::AmpModel,
                 relative_path: "amps/a.nam".into(),
@@ -223,6 +225,7 @@ mod tests {
         catalog.entries.insert(
             "ir1".into(),
             NamFileEntry {
+                provenance: None,
                 hash: "ir1".into(),
                 kind: NamFileKind::ImpulseResponse,
                 relative_path: "ir/b.wav".into(),
@@ -246,5 +249,81 @@ mod tests {
 
         assert_eq!(catalog.amp_models().len(), 1);
         assert_eq!(catalog.impulse_responses().len(), 1);
+    }
+
+    /// A minimal entry, so the provenance tests state only what they are about.
+    fn sample_entry(hash: &str, filename: &str) -> NamFileEntry {
+        NamFileEntry {
+            provenance: None,
+            hash: hash.into(),
+            kind: NamFileKind::AmpModel,
+            relative_path: format!("amps/{filename}"),
+            filename: filename.into(),
+            nam_version: None,
+            architecture: None,
+            sample_rate: None,
+            gain: None,
+            loudness: None,
+            gear_type: None,
+            gear_make: None,
+            gear_model: None,
+            tone_type: None,
+            modeled_by: None,
+            ir_channels: None,
+            ir_sample_rate: None,
+            ir_duration_ms: None,
+            tags: Default::default(),
+        }
+    }
+
+    /// A catalog written before provenance existed must still load. The field
+    /// is `serde(default)` precisely so an upgrade does not strand a user's
+    /// existing `nam/catalog.json` — this pins that.
+    ///
+    /// The legacy document is derived by serializing a current catalog and
+    /// deleting the key, rather than hand-written: a literal fixture would
+    /// drift out of date the next time an unrelated field is added, and would
+    /// then be testing nothing.
+    #[test]
+    fn a_catalog_without_provenance_still_loads() {
+        let mut catalog = NamCatalog::new();
+        catalog.entries.insert("abc123".into(), sample_entry("abc123", "old.nam"));
+
+        let mut doc: serde_json::Value =
+            serde_json::to_value(&catalog).expect("serialize current catalog");
+        let entry = doc["entries"]["abc123"].as_object_mut().expect("entry object");
+        assert!(entry.remove("provenance").is_some(), "field was there to remove");
+
+        let legacy: NamCatalog =
+            serde_json::from_value(doc).expect("a catalog with no provenance key still loads");
+        let back = legacy.entries.get("abc123").expect("entry survived");
+        assert_eq!(back.filename, "old.nam");
+        assert!(back.provenance.is_none(), "absent provenance reads as None");
+    }
+
+    /// Provenance survives the round trip it exists for: the attribution terms
+    /// are only met if creator and licence are still there next session.
+    #[test]
+    fn provenance_round_trips() {
+        use crate::nam_file::Provenance;
+        let mut catalog = NamCatalog::new();
+        let mut entry = sample_entry("h", "t.nam");
+        entry.provenance = Some(Provenance {
+            source: "tone3000".into(),
+            tone_id: Some("1234".into()),
+            model_id: Some("5678".into()),
+            tone_url: Some("https://www.tone3000.com/tones/1234".into()),
+            creator: Some("someone".into()),
+            creator_url: Some("https://www.tone3000.com/users/someone".into()),
+            license: Some("cc-by".into()),
+        });
+        catalog.entries.insert("h".into(), entry);
+
+        let json = serde_json::to_string(&catalog).expect("serialize");
+        let back: NamCatalog = serde_json::from_str(&json).expect("deserialize");
+        let p = back.entries["h"].provenance.as_ref().expect("provenance kept");
+        assert_eq!(p.creator.as_deref(), Some("someone"));
+        assert_eq!(p.license.as_deref(), Some("cc-by"));
+        assert_eq!(p.tone_url.as_deref(), Some("https://www.tone3000.com/tones/1234"));
     }
 }

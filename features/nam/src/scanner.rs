@@ -59,6 +59,9 @@ fn scan_file(path: &Path, nam_root: &Path, kind: NamFileKind) -> Result<NamFileE
     let mut entry = NamFileEntry {
         hash,
         kind,
+        // A scanned file is just a file on disk: whatever brought it here left
+        // no record. A downloader sets this when it writes the entry.
+        provenance: None,
         relative_path,
         filename: filename.clone(),
         nam_version: None,

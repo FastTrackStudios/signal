@@ -42,4 +42,4 @@ tracing-subscriber.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 # Hardware MIDI as a routable PipeWire graph node (midir on the
 # pipewire-jack backend) — the Linux default, matching the audio host.
-midicore = { workspace = true, features = ["vox", "midir", "midir-pipewire"] }
+midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }

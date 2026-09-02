@@ -25,6 +25,8 @@ signal-sampler.workspace = true
 # Filesystem-direct pack discovery + tagging for the BROWSE view (scan_packs).
 signal-browser = { workspace = true, features = ["native"] }
 daw-audio-io = { workspace = true, features = ["monitor"] }
+# Shared cross-rig utilities — here for the instrumented MIDI attach.
+signal-rig-host.workspace = true
 midicore = { workspace = true, features = ["vox", "midir"] }
 # The wire contract this crate's headless backend implements (SynthRig service)
 # + the architect Layer/Services/PubSub machinery to serve it as a vox remote.
@@ -41,4 +43,4 @@ daw.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 # Hardware MIDI as a routable PipeWire graph node (midir on the
 # pipewire-jack backend) — the Linux default, matching the audio host.
-midicore = { workspace = true, features = ["vox", "midir", "midir-pipewire"] }
+midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }

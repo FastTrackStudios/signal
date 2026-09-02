@@ -1,15 +1,15 @@
 # The Dioxus desktop GUI, built as an ordinary crane package —
-# `nix run .#fasttrackstudio`. Not the notarized/bundled
-# .app release artifact (that's still apps/fasttrackstudio/ios/deploy-macos.sh
+# `nix run .#signal-desktop`. Not the notarized/bundled
+# .app release artifact (that's still apps/desktop/ios/deploy-macos.sh
 # via `dx build` for now); this is a plain native binary for local dev/rig
 # use (cargoArtifacts = null — the workspace
 # is too large/build.rs-heavy for crane's dummy-src deps split).
 #
 # `desktop`/`launch` are ordinary cargo features on non-wasm/non-ios targets
-# (see apps/fasttrackstudio/Cargo.toml), so no
+# (see apps/desktop/Cargo.toml), so no
 # `dx` involvement is needed to produce a runnable binary — dx is only for
 # the wasm/mobile/.app-bundle pipelines. `embed-web` is deliberately NOT
-# enabled here yet: it needs apps/fasttrackstudio/web-dist staged into the
+# enabled here yet: it needs apps/desktop/web-dist staged into the
 # source before compiling (a separate `fts-web-dist` bundle, not built yet).
 { ... }:
 {
@@ -29,18 +29,18 @@
         nativeBuildInputs = config.fts.nativeBuildInputs ++ [ pkgs.python3 ];
       };
 
-      fasttrackstudio = config.fts.craneLib.buildPackage (config.fts.commonArgs // guiArgs // {
-        pname = "fasttrackstudio";
+      signal-desktop = config.fts.craneLib.buildPackage (config.fts.commonArgs // guiArgs // {
+        pname = "signal-desktop";
         version = "0.0.2-alpha";
         cargoArtifacts = null;
-        cargoExtraArgs = "--package fasttrackstudio";
+        cargoExtraArgs = "--package signal-desktop";
         doCheck = false;
-        meta.mainProgram = "fasttrackstudio";
+        meta.mainProgram = "signal-desktop";
       });
 
       # task-desktop moved to the task repo with the August 2026 split.
     in
     {
-      packages = { inherit fasttrackstudio; };
+      packages = { inherit signal-desktop; };
     };
 }

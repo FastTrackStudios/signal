@@ -260,10 +260,9 @@ impl DynBand {
                     // Mud Control and Magic" a 20 Hz high shelf with an 8 dB
                     // range applied 7.7 dB in the plugin and 2.1 here, because
                     // a band around 20 Hz hears almost nothing.
-                    DynShape::HighShelf => (
-                        (self.params.freq_hz / ratio).max(10.0),
-                        sample_rate * 0.45,
-                    ),
+                    DynShape::HighShelf => {
+                        ((self.params.freq_hz / ratio).max(10.0), sample_rate * 0.45)
+                    }
                     DynShape::LowShelf => {
                         (10.0, (self.params.freq_hz * ratio).min(sample_rate * 0.45))
                     }
@@ -558,7 +557,7 @@ mod tests {
         b.update(SR);
         let level = 10.0f64.powf(-18.8 / 20.0);
         let mut rng = 0x51DE_0042u64;
-        let mut at = |b: &mut DynBand, seconds: usize, rng: &mut u64| {
+        let at = |b: &mut DynBand, seconds: usize, rng: &mut u64| {
             for _ in 0..(seconds * SR as usize) {
                 *rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
                 let u = ((*rng >> 33) as f64 / (1u64 << 31) as f64) - 1.0;

@@ -39,7 +39,9 @@ const BLOCK: usize = 512;
 
 fn arg(name: &str) -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
-    args.iter().position(|a| a == name).and_then(|i| args.get(i + 1).cloned())
+    args.iter()
+        .position(|a| a == name)
+        .and_then(|i| args.get(i + 1).cloned())
 }
 
 /// Where a preset's cached reference render lives, if caching is on.
@@ -58,7 +60,10 @@ fn main() {
     // lets the work continue when the plugin is unavailable".
     if let Some(preset_path) = arg("--preset") {
         if let Some(cached) = cache_path_for(&preset_path).and_then(|p| read_wav(&p)) {
-            println!("reference: from cache ({} samples, no plugin needed)", cached.len());
+            println!(
+                "reference: from cache ({} samples, no plugin needed)",
+                cached.len()
+            );
             run_comparison(None, &preset_path, Some(cached));
             return;
         }
@@ -177,13 +182,14 @@ fn write_wav(path: &Path, samples: &[f32]) -> std::io::Result<()> {
         bits_per_sample: 32,
         sample_format: hound::SampleFormat::Float,
     };
-    let mut w = hound::WavWriter::create(path, spec)
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    let mut w =
+        hound::WavWriter::create(path, spec).map_err(|e| std::io::Error::other(e.to_string()))?;
     for &x in samples {
         w.write_sample(x)
             .map_err(|e| std::io::Error::other(e.to_string()))?;
     }
-    w.finalize().map_err(|e| std::io::Error::other(e.to_string()))
+    w.finalize()
+        .map_err(|e| std::io::Error::other(e.to_string()))
 }
 
 /// Read a render written by [`write_wav`].
@@ -385,30 +391,35 @@ fn run_comparison(
     let longest = decay::reverb_time_per_band(&probe_ir, SAMPLE_RATE, DecayFit::T20)
         .iter()
         .filter_map(|(_, rt)| *rt)
-        .fold(None, |acc: Option<f64>, v| Some(acc.map_or(v, |a: f64| a.max(v))))
+        .fold(None, |acc: Option<f64>, v| {
+            Some(acc.map_or(v, |a: f64| a.max(v)))
+        })
         .or_else(|| decay::reverb_time_best_effort(&probe_ir, SAMPLE_RATE, DecayFit::T20))
         .unwrap_or(PROBE_SECONDS / TAIL_HEADROOM);
     let seconds = (longest * TAIL_HEADROOM).clamp(PROBE_SECONDS, MAX_SECONDS);
     let frames = (seconds * SAMPLE_RATE) as usize;
 
     if std::env::args().any(|a| a == "--debug-state") {
-      if let Some(reference) = reference.as_deref_mut() {
-        for want in ["mix", "bypass", "decay", "size"] {
-            if let Some(info) = reference
-                .params()
-                .into_iter()
-                .find(|p| p.name.eq_ignore_ascii_case(want))
-            {
-                let v = reference.param_value(info.id).unwrap_or(f64::NAN);
-                let t = reference.value_to_text(info.id, v).unwrap_or_default();
-                println!("debug    : {:<8} id={} value={v:.4} text={t}", info.name, info.id);
+        if let Some(reference) = reference.as_deref_mut() {
+            for want in ["mix", "bypass", "decay", "size"] {
+                if let Some(info) = reference
+                    .params()
+                    .into_iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(want))
+                {
+                    let v = reference.param_value(info.id).unwrap_or(f64::NAN);
+                    let t = reference.value_to_text(info.id, v).unwrap_or_default();
+                    println!(
+                        "debug    : {:<8} id={} value={v:.4} text={t}",
+                        info.name, info.id
+                    );
+                }
             }
+            println!("debug    : latency {} frames", reference.latency());
         }
-        println!("debug    : latency {} frames", reference.latency());
-      }
     }
 
-    let reference_ir = match (&cached, reference.as_deref_mut()) {
+    let reference_ir = match (&cached, reference) {
         // A cached render is already whatever length it was captured at.
         (Some(_), _) => probe_ir,
         (None, Some(plugin)) if frames > probe_frames => render_reference(plugin, frames),
@@ -423,9 +434,7 @@ fn run_comparison(
         }
     }
     let frames = reference_ir.len();
-    println!(
-        "window   : {seconds:.1} s (longest reference band {longest:.2} s)"
-    );
+    println!("window   : {seconds:.1} s (longest reference band {longest:.2} s)");
 
     let mut params = valhalla::to_native_reverb_params(&patch);
     let mut native_ir = render_native(&params, frames);
@@ -453,8 +462,10 @@ fn run_comparison(
         // a comparison.
         let reference_band_table =
             decay::reverb_time_per_band(&reference_ir, SAMPLE_RATE, DecayFit::T20);
-        let reference_bands: Vec<f64> =
-            reference_band_table.iter().filter_map(|(_, rt)| *rt).collect();
+        let reference_bands: Vec<f64> = reference_band_table
+            .iter()
+            .filter_map(|(_, rt)| *rt)
+            .collect();
         let band_target = (!reference_bands.is_empty()).then(|| {
             let log_sum: f64 = reference_bands.iter().map(|v| v.ln()).sum();
             (log_sum / reference_bands.len() as f64).exp()
@@ -469,7 +480,9 @@ fn run_comparison(
         let longest_band = reference_bands
             .iter()
             .copied()
-            .fold(None, |acc: Option<f64>, v| Some(acc.map_or(v, |a| a.max(v))));
+            .fold(None, |acc: Option<f64>, v| {
+                Some(acc.map_or(v, |a| a.max(v)))
+            });
         let overall = decay::reverb_time_best_effort(&reference_ir, SAMPLE_RATE, DecayFit::T20);
         // Try both length targets and keep whichever fits better. Neither wins
         // everywhere: the band mean rescued a bass-heavy chamber and three
@@ -478,19 +491,16 @@ fn run_comparison(
         // removes the guess.
         // `(target, measured the same way)` — the length loop has to compare
         // like with like, or it chases a number it is not steering.
-        let candidates: Vec<(f64, bool)> = [
-            (band_target, true),
-            (overall, false),
-            (longest_band, true),
-        ]
-            .into_iter()
-            .filter_map(|(t, by_band)| t.map(|t| (t, by_band)))
-            .fold(Vec::new(), |mut acc: Vec<(f64, bool)>, c| {
-                if !acc.iter().any(|(x, _)| (x - c.0).abs() < 1e-6) {
-                    acc.push(c);
-                }
-                acc
-            });
+        let candidates: Vec<(f64, bool)> =
+            [(band_target, true), (overall, false), (longest_band, true)]
+                .into_iter()
+                .filter_map(|(t, by_band)| t.map(|t| (t, by_band)))
+                .fold(Vec::new(), |mut acc: Vec<(f64, bool)>, c| {
+                    if !acc.iter().any(|(x, _)| (x - c.0).abs() < 1e-6) {
+                        acc.push(c);
+                    }
+                    acc
+                });
         match candidates.first().copied() {
             Some(_) => {
                 // Two nested loops. The inner one sets the overall length:
@@ -574,135 +584,144 @@ fn run_comparison(
                 let mut best: Option<(f64, Vec<(String, f64)>, Vec<f32>)> = None;
 
                 'candidates: for (target, by_band) in candidates.iter().copied() {
-                let mut rates = [1.0f64; BAND_PLAN.len()];
-                let mut request = target;
-                let mut stalled = 0usize;
-                let mut last_error = f64::INFINITY;
-                params.retain(|(n, _)| !n.starts_with("dband") && n != "decay_time");
-                for round in 1..=ROUNDS {
-                    // --- length ---
-                    for _ in 0..LEN_PASSES {
-                        params.retain(|(n, _)| n != "decay_time");
-                        params.push(("decay_time".to_string(), request));
-                        native_ir = render_native(&params, frames);
-                        let got = if by_band {
-                            let ours =
-                                decay::reverb_time_per_band(&native_ir, SAMPLE_RATE, DecayFit::T20);
-                            let measured: Vec<f64> =
-                                ours.iter().filter_map(|(_, rt)| *rt).collect();
-                            if measured.is_empty() {
-                                decay::reverb_time_best_effort(&native_ir, SAMPLE_RATE, DecayFit::T20)
+                    let mut rates = [1.0f64; BAND_PLAN.len()];
+                    let mut request = target;
+                    let mut stalled = 0usize;
+                    let mut last_error = f64::INFINITY;
+                    params.retain(|(n, _)| !n.starts_with("dband") && n != "decay_time");
+                    for round in 1..=ROUNDS {
+                        // --- length ---
+                        for _ in 0..LEN_PASSES {
+                            params.retain(|(n, _)| n != "decay_time");
+                            params.push(("decay_time".to_string(), request));
+                            native_ir = render_native(&params, frames);
+                            let got = if by_band {
+                                let ours = decay::reverb_time_per_band(
+                                    &native_ir,
+                                    SAMPLE_RATE,
+                                    DecayFit::T20,
+                                );
+                                let measured: Vec<f64> =
+                                    ours.iter().filter_map(|(_, rt)| *rt).collect();
+                                if measured.is_empty() {
+                                    decay::reverb_time_best_effort(
+                                        &native_ir,
+                                        SAMPLE_RATE,
+                                        DecayFit::T20,
+                                    )
+                                } else {
+                                    let log_sum: f64 = measured.iter().map(|v| v.ln()).sum();
+                                    Some((log_sum / measured.len() as f64).exp())
+                                }
                             } else {
-                                let log_sum: f64 = measured.iter().map(|v| v.ln()).sum();
-                                Some((log_sum / measured.len() as f64).exp())
+                                decay::reverb_time_best_effort(
+                                    &native_ir,
+                                    SAMPLE_RATE,
+                                    DecayFit::T20,
+                                )
+                            };
+                            let Some(got) = got else {
+                                break;
+                            };
+                            if (got - target).abs() / target <= LEN_TOLERANCE {
+                                break;
                             }
-                        } else {
-                            decay::reverb_time_best_effort(&native_ir, SAMPLE_RATE, DecayFit::T20)
-                        };
-                        let Some(got) = got else {
-                            break;
-                        };
-                        if (got - target).abs() / target <= LEN_TOLERANCE {
-                            break;
+                            // Bounded around the target. On a very short
+                            // reference — a 0.17 s room, where only one octave is
+                            // measurable at all — the ratio step is noisy enough
+                            // to walk the request into the tens of seconds, which
+                            // is not a correction, it is a runaway. Eight-fold either way
+                            // leaves room for a genuine large correction.
+                            request = (request * target / got)
+                                .clamp(target * 0.125, target * 8.0)
+                                .clamp(0.05, 60.0);
                         }
-                        // Bounded around the target. On a very short
-                        // reference — a 0.17 s room, where only one octave is
-                        // measurable at all — the ratio step is noisy enough
-                        // to walk the request into the tens of seconds, which
-                        // is not a correction, it is a runaway. Eight-fold either way
-                        // leaves room for a genuine large correction.
-                        request = (request * target / got)
-                            .clamp(target * 0.125, target * 8.0)
-                            .clamp(0.05, 60.0);
-                    }
 
-                    // --- colour ---
-                    let cmp = decay::compare_decay_against(
-                        &reference_band_table,
-                        &native_ir,
-                        SAMPLE_RATE,
-                        DecayFit::T20,
-                    );
-                    let worst = cmp
-                        .worst_ratio_error
-                        .map(|e| format!("{e:.3}"))
-                        .unwrap_or_else(|| "n/a".into());
-                    println!(
+                        // --- colour ---
+                        let cmp = decay::compare_decay_against(
+                            &reference_band_table,
+                            &native_ir,
+                            SAMPLE_RATE,
+                            DecayFit::T20,
+                        );
+                        let worst = cmp
+                            .worst_ratio_error
+                            .map(|e| format!("{e:.3}"))
+                            .unwrap_or_else(|| "n/a".into());
+                        println!(
                         "tuned    : target {target:.3} s  round {round}  length {request:.3} s  worst band error {worst}"
                     );
-                    if let Some(e) = cmp.worst_ratio_error {
-                        if best.as_ref().is_none_or(|(b, _, _)| e < *b) {
-                            best = Some((e, params.clone(), native_ir.clone()));
-                            stalled = 0;
-                        } else if e > last_error - IMPROVEMENT {
-                            stalled += 1;
+                        if let Some(e) = cmp.worst_ratio_error {
+                            if best.as_ref().is_none_or(|(b, _, _)| e < *b) {
+                                best = Some((e, params.clone(), native_ir.clone()));
+                                stalled = 0;
+                            } else if e > last_error - IMPROVEMENT {
+                                stalled += 1;
+                            }
+                            last_error = e;
+                            if e <= good_enough {
+                                break 'candidates;
+                            }
+                            if stalled >= STALL_ROUNDS {
+                                break;
+                            }
                         }
-                        last_error = e;
-                        if e <= good_enough {
-                            break 'candidates;
+
+                        // Our band rings long (ratio > 1) -> ask for less there.
+                        // Averaged over the octaves each band is responsible for.
+                        for (slot, (centre, _corner, _shape)) in BAND_PLAN.iter().enumerate() {
+                            let responsible: Vec<f64> = cmp
+                                .bands
+                                .iter()
+                                .filter(|b| (b.centre_hz - centre).abs() < 1.0)
+                                .filter_map(|b| b.ratio)
+                                .collect();
+                            if responsible.is_empty() {
+                                // Nothing to compare this octave against, so no
+                                // correction is justified — and leaving whatever
+                                // value it drifted to earlier is worse than
+                                // neutral. A shelf stuck at 0.1x on an octave the
+                                // reference cannot measure still bleeds into its
+                                // neighbours, which is how a passing 4 kHz band
+                                // got dragged under by an uncorrectable 8 kHz one.
+                                rates[slot] = 1.0;
+                                continue;
+                            }
+                            let mean = responsible.iter().sum::<f64>() / responsible.len() as f64;
+                            if mean > 0.0 {
+                                rates[slot] = (rates[slot] / mean.powf(RELAXATION)).clamp(0.1, 4.0);
+                            }
                         }
-                        if stalled >= STALL_ROUNDS {
-                            break;
+
+                        // Normalize the curve to unit geometric mean, so the
+                        // bands carry SHAPE only and `decay_time` carries the
+                        // length. Without this the two fight: every band cut also
+                        // shortens the whole tail, the length loop compensates by
+                        // asking for more, and the pair walks off together — a
+                        // 2.7 s reference ended up requesting 21.6 s with every
+                        // band pinned near its floor, which is the same reverb
+                        // described twice over.
+                        let log_mean =
+                            rates.iter().map(|r| r.ln()).sum::<f64>() / rates.len() as f64;
+                        let norm = log_mean.exp();
+                        if norm.is_finite() && norm > 0.0 {
+                            for r in rates.iter_mut() {
+                                *r = (*r / norm).clamp(0.1, 4.0);
+                            }
+                        }
+
+                        params.retain(|(n, _)| !n.starts_with("dband"));
+                        for (slot, (_centre, corner, shape)) in BAND_PLAN.iter().enumerate() {
+                            if (rates[slot] - 1.0).abs() <= 0.01 {
+                                continue; // a 1.0x band would spend a slot doing nothing
+                            }
+                            let n = slot + 1;
+                            params.push((format!("dband{n}_shape"), *shape));
+                            params.push((format!("dband{n}_freq"), *corner));
+                            params.push((format!("dband{n}_rate"), rates[slot]));
+                            params.push((format!("dband{n}_q"), BAND_Q));
                         }
                     }
-
-                    // Our band rings long (ratio > 1) -> ask for less there.
-                    // Averaged over the octaves each band is responsible for.
-                    for (slot, (centre, _corner, _shape)) in BAND_PLAN.iter().enumerate() {
-                        let responsible: Vec<f64> = cmp
-                            .bands
-                            .iter()
-                            .filter(|b| (b.centre_hz - centre).abs() < 1.0)
-                            .filter_map(|b| b.ratio)
-                            .collect();
-                        if responsible.is_empty() {
-                            // Nothing to compare this octave against, so no
-                            // correction is justified — and leaving whatever
-                            // value it drifted to earlier is worse than
-                            // neutral. A shelf stuck at 0.1x on an octave the
-                            // reference cannot measure still bleeds into its
-                            // neighbours, which is how a passing 4 kHz band
-                            // got dragged under by an uncorrectable 8 kHz one.
-                            rates[slot] = 1.0;
-                            continue;
-                        }
-                        let mean =
-                            responsible.iter().sum::<f64>() / responsible.len() as f64;
-                        if mean > 0.0 {
-                            rates[slot] =
-                                (rates[slot] / mean.powf(RELAXATION)).clamp(0.1, 4.0);
-                        }
-                    }
-
-                    // Normalize the curve to unit geometric mean, so the
-                    // bands carry SHAPE only and `decay_time` carries the
-                    // length. Without this the two fight: every band cut also
-                    // shortens the whole tail, the length loop compensates by
-                    // asking for more, and the pair walks off together — a
-                    // 2.7 s reference ended up requesting 21.6 s with every
-                    // band pinned near its floor, which is the same reverb
-                    // described twice over.
-                    let log_mean = rates.iter().map(|r| r.ln()).sum::<f64>() / rates.len() as f64;
-                    let norm = log_mean.exp();
-                    if norm.is_finite() && norm > 0.0 {
-                        for r in rates.iter_mut() {
-                            *r = (*r / norm).clamp(0.1, 4.0);
-                        }
-                    }
-
-                    params.retain(|(n, _)| !n.starts_with("dband"));
-                    for (slot, (_centre, corner, shape)) in BAND_PLAN.iter().enumerate() {
-                        if (rates[slot] - 1.0).abs() <= 0.01 {
-                            continue; // a 1.0x band would spend a slot doing nothing
-                        }
-                        let n = slot + 1;
-                        params.push((format!("dband{n}_shape"), *shape));
-                        params.push((format!("dband{n}_freq"), *corner));
-                        params.push((format!("dband{n}_rate"), rates[slot]));
-                        params.push((format!("dband{n}_q"), BAND_Q));
-                    }
-                }
-
                 }
 
                 match best {
@@ -881,7 +900,10 @@ fn run_comparison(
         }
     }
 
-    println!("\nverdict: {}", if result.passed() { "MATCH" } else { "MISMATCH" });
+    println!(
+        "\nverdict: {}",
+        if result.passed() { "MATCH" } else { "MISMATCH" }
+    );
     for r in &result.results {
         println!(
             "  {:?}: {} (measured {:?}, threshold {})",

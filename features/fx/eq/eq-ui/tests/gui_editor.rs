@@ -1042,20 +1042,30 @@ async fn the_range_selector_is_on_the_graph_and_sets_the_param() -> dioxus_test:
 /// renders on top in blitz but takes no clicks headlessly.
 #[tokio::test]
 async fn the_top_rail_carries_the_preset_strip() -> dioxus_test::Result<()> {
-    let mut fx = mount();
+    let fx = mount();
     let _ = fx.tester.pump().await;
 
-    fx.tester.query(dioxus_test::by_testid("preset-bar-name")).immediately()?;
+    fx.tester
+        .query(dioxus_test::by_testid("preset-bar-name"))
+        .immediately()?;
     assert!(
-        fx.tester.query(dioxus_test::by_testid("eq-presets")).immediately().is_err(),
+        fx.tester
+            .query(dioxus_test::by_testid("eq-presets"))
+            .immediately()
+            .is_err(),
         "the browser stays shut until asked for",
     );
 
-    let browse = fx.tester.query(dioxus_test::by_testid("preset-bar-browse")).immediately()?;
+    let browse = fx
+        .tester
+        .query(dioxus_test::by_testid("preset-bar-browse"))
+        .immediately()?;
     let (ox, oy) = browse.document_origin();
     let (w, h) = browse.size();
     fx.tap(ox + w as f64 / 2.0, oy + h as f64 / 2.0).await;
 
-    fx.tester.query(dioxus_test::by_testid("eq-presets")).immediately()?;
+    fx.tester
+        .query(dioxus_test::by_testid("eq-presets"))
+        .immediately()?;
     Ok(())
 }

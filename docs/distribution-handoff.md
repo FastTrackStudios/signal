@@ -46,7 +46,7 @@ would fix this permanently — not yet done.
 
 ## 3. The pipelines (parametrized, one script per platform)
 
-Both live at `apps/fasttrackstudio/ios/` and are **product-agnostic** via env.
+Both live at `apps/desktop/ios/` and are **product-agnostic** via env.
 
 **`deploy-testflight.sh`** (iOS → TestFlight). FTS is the default; for Task:
 ```
@@ -56,7 +56,7 @@ ICONS_DIR=$HOME/fts/apps/task/mobile/ios/Assets.xcassets MARKETING_VER=0.0.1 \
 KEYCHAIN=fts-build.keychain KEYCHAIN_PW=fts-build \
 ACTOOL_DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
 NIX=/nix/var/nix/profiles/default/bin/nix \
-bash apps/fasttrackstudio/ios/deploy-testflight.sh
+bash apps/desktop/ios/deploy-testflight.sh
 ```
 `DX_TAILWIND` compiles Tailwind → `assets/tailwind.css` before the build (the
 Task mobile sheet was a stub → no CSS; fixed). `SKIP_BUILD=1` reuses the .app.
@@ -89,13 +89,13 @@ to starcommand (the server + served web app); the self-host artifact.
 
 ## 5. CI
 
-- `ios.yml` — push to main touching `apps/fasttrackstudio/**` etc. → airlock
+- `ios.yml` — push to main touching `apps/desktop/**` etc. → airlock
   runs deploy-testflight.sh → TestFlight. (Only wired for FTS; not Task yet.)
 - `release-binaries.yml` — on release publish → macOS dmg (airlock, EMBED_WEB=0)
   + Linux deb (nix-host). **BUG/TODO: it fires on EVERY release and always
   builds FastTrackStudio**, so publishing `task-v*` wrongly builds FTS artifacts
   (currently cancelled by hand). Gate it on `fts-v*` tags, add a Task variant.
-- Merges touching `apps/fasttrackstudio/**` re-trigger ios.yml and contend with
+- Merges touching `apps/desktop/**` re-trigger ios.yml and contend with
   manual airlock builds — cancel the redundant run when doing manual work.
 - Tag convention: `fts-v*` and `task-v*` (two products, one repo for now).
 
@@ -129,8 +129,8 @@ KEYCHAIN=fts-build.keychain KEYCHAIN_PW=fts-build \
 NIX=/nix/var/nix/profiles/default/bin/nix \
 ACTOOL_DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
 WATCH_XCODE_DIR=/Applications/Xcode-beta.app/Contents/Developer \
-WATCH_APP=apps/fasttrackstudio/watchos MARKETING_VER=0.0.1 \
-bash apps/fasttrackstudio/ios/deploy-testflight.sh
+WATCH_APP=apps/desktop/watchos MARKETING_VER=0.0.1 \
+bash apps/desktop/ios/deploy-testflight.sh
 ```
 Remaining FTS check: confirm the app offers to install on the paired watch after
 installing the TestFlight build (device step). Then do §7.6 (Task watch).
@@ -152,7 +152,7 @@ Also: the watchOS **device** platform must be installed for the chosen watch
 Xcode (`xcodebuild -downloadPlatform watchOS`) — 27 beta had it, 26.6 needed the
 download (~4 GB).
 
-**Done:** `apps/fasttrackstudio/watchos/FTSWatch` (SwiftUI: perform/chords/
+**Done:** `apps/desktop/watchos/FTSWatch` (SwiftUI: perform/chords/
 session/settings) is converted from standalone (`WKWatchOnly`) to an **embedded
 companion** (`WKCompanionAppBundleIdentifier: app.fasttrackstudio` in
 project.yml). Tooling exists: `nix run nixpkgs#xcodegen`, `xcodebuild` (26.6).
@@ -167,7 +167,7 @@ TestFlight offers the watch app on the paired watch and updates it each build.
    IOS_APP_STORE; confirm the profile type covers watchOS, or use the right
    platform). Bundle id must be registered (it is).
 2. **Build the watch app**: `nix run nixpkgs#xcodegen` in
-   `apps/fasttrackstudio/watchos/` → `xcodebuild archive` for a **generic
+   `apps/desktop/watchos/` → `xcodebuild archive` for a **generic
    watchOS device**, **Manual** signing with the **Apple Distribution** cert +
    that profile (project.yml is currently `CODE_SIGN_STYLE: Automatic` +
    `-allowProvisioningUpdates` — switch to Manual for the headless App Store

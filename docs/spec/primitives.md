@@ -129,14 +129,14 @@ map for implementers, not part of the contract.
 
 **architect (extend, then collapse consumers):**
 - router→acceptor helper — collapses the identical closure at
-  `apps/fasttrackstudio/src/engine_main.rs:165` & `:205`,
-  `apps/fasttrackstudio/cli/src/session_engine.rs:41`,
+  `apps/desktop/src/engine_main.rs:165` & `:205`,
+  `apps/desktop/cli/src/session_engine.rs:41`,
   `apps/task/server/src/lib.rs:1257` & `:1712`, and architect's own
   `libs/architect/architect/src/local.rs:60` & `:139`.
 - vox axum route — collapses `vox_handler` (`engine_main.rs:162`), `ws_handler`
   (`fts-cli/session_engine.rs:37`), and the two task-server copies.
 - `serve_iroh` (`engine_main.rs:179`) and the client-side identity bootstrap
-  (`apps/fasttrackstudio/src/rig_view.rs:104`) → one iroh serve/dial helper.
+  (`apps/desktop/src/rig_view.rs:104`) → one iroh serve/dial helper.
 - engine-host helper — folds the tokio-runtime (4+ copies), tracing (5 copies),
   panic hook, `/health` + bind (4 copies) into one assembler.
 - SPA web serving — `engine_main.rs:41-160` (`WebBundle`/`web_bundle`/

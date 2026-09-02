@@ -12,6 +12,37 @@ pub enum NamFileKind {
     ImpulseResponse,
 }
 
+/// Where a library file came from, and the terms it carries.
+///
+/// A locally scanned file has none of this — it is just a file on disk. A file
+/// fetched from an online library does, and for TONE3000 specifically the API
+/// terms *require* that we keep it: creator names, licences and metadata may
+/// not be stripped or altered, and the tone must remain linkable back to its
+/// page. So provenance travels with the catalog entry rather than being
+/// resolved on demand — the entry outlives any session, and the obligation
+/// outlives the download.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Provenance {
+    /// The library this came from — `"tone3000"` today.
+    pub source: String,
+    /// The tone (a capture, which may hold several models) on that source.
+    pub tone_id: Option<String>,
+    /// The specific model file within the tone.
+    pub model_id: Option<String>,
+    /// Human page for the tone — what an attribution link points at.
+    pub tone_url: Option<String>,
+    /// Who made the capture, as the source names them. Distinct from the
+    /// `.nam` file's own `modeled_by`: that is self-reported by whoever
+    /// trained the model, this is the account that published it.
+    pub creator: Option<String>,
+    /// The creator's profile page.
+    pub creator_url: Option<String>,
+    /// Licence identifier as the source states it (`t3k`, `cc-by`, `cc0`, …).
+    /// Kept verbatim rather than parsed into an enum — an unknown licence must
+    /// survive a round trip intact, not be dropped for not matching.
+    pub license: Option<String>,
+}
+
 /// One entry per file in the library. Content-addressable by SHA-256 hash.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NamFileEntry {
@@ -42,6 +73,11 @@ pub struct NamFileEntry {
 
     // -- User-assigned tags --
     pub tags: TagSet,
+
+    /// Where this file came from, when it did not come from the local disk.
+    /// `default` so catalogs written before provenance existed still load.
+    #[serde(default)]
+    pub provenance: Option<Provenance>,
 }
 
 /// Metadata extracted from a `.nam` file's JSON (everything except weights).

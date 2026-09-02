@@ -1676,8 +1676,8 @@ fn match_ref_sweep(
         lead * 1000.0
     );
     println!(
-        "  {:>7}  {:>4}  {:>9}  {:>9}  {:>7}  {:<22} {}",
-        "nominal", "note", "actual", "drift", "share", "played", "gains"
+        "  {:>7}  {:>4}  {:>9}  {:>9}  {:>7}  {:<22} gains",
+        "nominal", "note", "actual", "drift", "share", "played"
     );
 
     // What the MIDI says each note IS: a step from the note before it on the
@@ -2328,8 +2328,8 @@ fn match_ref(
         groups.len()
     );
     println!(
-        "  {:>8}  {:>9}  {:>9}  {:<10} {:>2}  {:<26} {}",
-        "explained", "offset", "onset", "artic", "rr", "root", "layer gains"
+        "  {:>8}  {:>9}  {:>9}  {:<10} {:>2}  {:<26} layer gains",
+        "explained", "offset", "onset", "artic", "rr", "root"
     );
     for h in hits.iter().take(top) {
         let off_ms = h.offset_frames as f64 / f64::from(h.sample_rate) * 1000.0;

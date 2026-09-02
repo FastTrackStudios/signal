@@ -49,7 +49,7 @@ jobs:
         run: ${NIX_DEV} cargo check --workspace
       - name: wasm check (browser remote)
         run: |
-          ${NIX_DEV} cargo check -p fasttrackstudio \
+          ${NIX_DEV} cargo check -p signal-desktop \
             --target wasm32-unknown-unknown --no-default-features --features signal
       - name: cargo nextest
         run: ${NIX_DEV} cargo nextest run --workspace --no-fail-fast

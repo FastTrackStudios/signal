@@ -1,17 +1,20 @@
 # FastTrackStudio — Repo Instructions
 
-**This repo is the audio/music product.** It was split into four repos in
-August 2026; Task, the framework, and the third-party forks now live
-elsewhere:
+**This repo is the SIGNAL product** — the signal-chain / rig / plugin
+domain, and the Signal desktop + iOS app built from `apps/desktop`. It was
+split out in August 2026; Task, the framework, the third-party forks, and
+the daw/session/keyflow domains all live elsewhere now.
 
 | repo | holds | consumed as |
 |---|---|---|
-| **fasttrackstudio** (here) | signal, daw, session, keyflow, patchbay, fx, sampler, reaper, the app, the site | — |
+| **signal** (here) | the signal domain (`crates/signal/*`), fx, sampler, nam, rigs, plugin-host, the reaper signal extension, and `apps/desktop` (the Signal app + its headless engine) | — |
+| [daw](https://github.com/FastTrackStudios/daw) | the daw domain, `fts-chrome`, `engine-launcher`, `daw-proto` | git dep, tag `v0.0.2` |
+| [session](https://github.com/FastTrackStudios/session) | setlists, songs, the guide | git dep, tag `v0.0.2` |
 | [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui`, `architect-story-*`, `architect-telemetry` | git dep, tag `v0.1.1` |
 | [task](https://github.com/FastTrackStudios/task) | the Task product + the Editor stack | git dep, `branch = "main"` (repin to a tag) |
 | [vendor](https://github.com/FastTrackStudios/vendor) | `phon`, `phon-jit`, `styx-format` forks (pinned rc.5) | `[patch.crates-io]`, tag `v0.1.0` |
 
-One root Cargo workspace (249 members), one lockfile, one `target/`, one
+One root Cargo workspace (115 members), one lockfile, one `target/`, one
 flake. Intra-repo dependencies are path deps in root
 `[workspace.dependencies]`, consumed as `x.workspace = true`. Cross-repo
 dependencies are **git deps pinned to a tag**.
@@ -53,10 +56,12 @@ libs/      infra libraries — dock, nice-plug, utils,
            did NOT move to architect-ui, plus a vendored copy of
            fts-theme.css that Tailwind builds @import),
            vendor/ (dioxus-test, facet-swift, world)
-apps/      fasttrackstudio (THE app: desktop GUI = signal / session /
-           full / tts; `fasttrackstudio --engine` = the headless signal
-           engine; the dx web build is the browser remote, embeddable in
-           the binary via feature embed-web),
+apps/      desktop (signal-desktop — THE app: the Signal desktop GUI;
+           `signal-desktop --engine` = the headless signal engine; the dx
+           web build is the browser remote, embeddable in the binary via
+           feature embed-web. Renamed from `fasttrackstudio` in Aug 2026
+           when the app became Signal-only; the iOS app builds from this
+           same crate),
            daw-cli, keyflow-cli, installer, plugins/, extensions/,
            site (fts-site — fasttrackstudio.app website, dioxus web),
            docs-site (docs.fasttrackstudio.app — dodeca + kf docs, NOT a
@@ -130,9 +135,9 @@ Everything builds from the repo root (one workspace):
 
 ```bash
 cargo check --workspace                          # the whole tree
-cargo build -p fasttrackstudio                   # THE app (GUI; `--engine` = headless signal engine)
+cargo build -p signal-desktop                   # THE app (GUI; `--engine` = headless signal engine)
 cargo build -p fts-cli                           # the unified `fts` CLI (fts daw / fts kf / fts signal engine / fts status)
-cargo check -p fasttrackstudio --target wasm32-unknown-unknown --no-default-features --features signal  # browser remote (web build)
+cargo check -p signal-desktop --target wasm32-unknown-unknown --no-default-features --features signal  # browser remote (web build)
 ```
 
 Dev shell: `nix develop` (or direnv `use flake`) — root `flake.nix`
@@ -166,12 +171,12 @@ build-time change, or when the dev disk fills up. The short version:
   and background `cargo rail` runs on this 32-core box will invalidate
   an A/B silently.
 
-Live rig: `cargo build -p fasttrackstudio` from the repo root →
-`target/debug/fasttrackstudio --engine` (ws://:4040/vox); browser remote
+Live rig: `cargo build -p signal-desktop` from the repo root →
+`target/debug/signal-desktop --engine` (ws://:4040/vox); browser remote
 = the fts web build (`just web-stage` stages it to
-apps/fasttrackstudio/web-dist/, embedded by `--features embed-web`),
+apps/desktop/web-dist/, embedded by `--features embed-web`),
 config in `~/.config/signal/rig/*.styx`. Deployed: `just rig-install` →
-ONE binary at `~/.local/lib/fts/fasttrackstudio` behind the
+ONE binary at `~/.local/lib/fts/signal-desktop` behind the
 `signal-engine` systemd user unit.
 
 ## Signal domain rules (from the dissolved signal/CLAUDE.md)
@@ -179,14 +184,14 @@ ONE binary at `~/.local/lib/fts/fasttrackstudio` behind the
 Signal is the signal-chain / plugin-management domain: `crates/signal/*`
 (facade `signal` + proto/ui/live/storage/controller/import/browser/grid/
 grid-ui/daw-bridge), `features/{fx,rigs,sampler,nam,plugin-host}`,
-`features/reaper/signal-*`, the engine mode of `apps/fasttrackstudio`. The `signal`
+`features/reaper/signal-*`, the engine mode of `apps/desktop`. The `signal`
 facade is the only public API surface: apps depend on `signal`,
 `signal-ui`, or `signal-sampler`, never on the internal domain crates.
 Docs: `crates/signal/docs/` (DESIGN.md, DOMAIN.md).
 
 **Detachable GUI (STRICT)**: the rig core is 100% headless; every GUI is
 a vox remote via architect (`signal-guitar-proto` is the wire contract;
-`fasttrackstudio --engine` serves the router; browser/desktop/tablet UIs are clients).
+`signal-desktop --engine` serves the router; browser/desktop/tablet UIs are clients).
 
 **GUI rendering** — signal UI must render identically standalone, as a
 VST3/CLAP plugin, and embedded in REAPER, so all contexts share one
@@ -201,7 +206,7 @@ pipeline: `nice-plug-dioxus` → Blitz (Vello + wgpu) → baseview:
   (embed via `include_str!()`).
 - Components must render correctly without Tailwind — explicit style
   values for layout-critical properties; Tailwind classes are additive
-  only (built via `just tailwind` → `apps/fasttrackstudio/assets/tailwind-signal.css`).
+  only (built via `just tailwind` → `apps/desktop/assets/tailwind-signal.css`).
 - Root `App` components take no props (context via `use_context_provider`)
   so the same component works standalone and as a plugin editor.
 
@@ -261,7 +266,7 @@ queue is refilled.)
 ## Phase 2
 
 1. ~~Root workspace: merge domain workspaces into one root Cargo.toml.~~
-   DONE — all waves complete; apps/fasttrackstudio, FastTrackStudio and
+   DONE — all waves complete; apps/desktop, FastTrackStudio and
    Plugins dissolved in the finale wave (legacy remnants parked in
 2. Feature-gate heavy backends (reaper, standalone-audio) so cold builds
    only compile what's used.

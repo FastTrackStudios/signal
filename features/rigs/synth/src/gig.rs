@@ -193,7 +193,7 @@ mod tests {
     /// The forward direction of JUCE's encoding, so the decoder is tested
     /// against the algorithm it claims to invert rather than against itself.
     fn juce_base64_encode(data: &[u8]) -> String {
-        let num_chars = ((data.len() * 8) + 5) / 6;
+        let num_chars = (data.len() * 8).div_ceil(6);
         let mut s = format!("{}.", data.len());
         for i in 0..num_chars {
             let mut v = 0u32;

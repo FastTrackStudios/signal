@@ -42,7 +42,7 @@ export PATH="/nix/var/nix/profiles/default/bin:$PATH"
 cd ~/fts && nix develop -c bash -c '
   mkdir -p $HOME/bin-ios; ln -sf /usr/bin/xcrun $HOME/bin-ios/xcrun
   export PATH="$HOME/bin-ios:$PATH"; unset DEVELOPER_DIR SDKROOT
-  cargo check --target aarch64-apple-ios -p fasttrackstudio \
+  cargo check --target aarch64-apple-ios -p signal-desktop \
     --no-default-features --features signal-guitar,signal-keys-rig'
 ```
 
@@ -59,7 +59,7 @@ ssh rat@airlock.local 'export PATH="/nix/var/nix/profiles/default/bin:$PATH"; \
   export KEYCHAIN=fts-build.keychain KEYCHAIN_PW=fts-build \
          MARKETING_VER=0.0.1 \
          ACTOOL_DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer; \
-  cd ~/fts && bash apps/fasttrackstudio/ios/deploy-testflight.sh 2>&1 | tail -4'
+  cd ~/fts && bash apps/desktop/ios/deploy-testflight.sh 2>&1 | tail -4'
 ```
 
 - Prints `build <unix-time>` — that number IS the TestFlight build id;
@@ -106,5 +106,5 @@ do not touch.
 ## Related
 
 Pack distribution architecture: `crates/signal/docs/pack-distribution.md`.
-Device deploy without TestFlight: `apps/fasttrackstudio/ios/deploy-iphone.sh`.
-Simulator/dev build: `apps/fasttrackstudio/ios/build-ios.sh`.
+Device deploy without TestFlight: `apps/desktop/ios/deploy-iphone.sh`.
+Simulator/dev build: `apps/desktop/ios/build-ios.sh`.

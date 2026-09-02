@@ -220,7 +220,8 @@ pub fn decode(state: &FfbsState) -> Result<ProR2, ProR2Error> {
 
     let decay_eq = (0..field::EQ_BANDS)
         .map(|i| {
-            let b = &p[field::DECAY_EQ_BASE + i * field::DECAY_EQ_STRIDE..][..field::DECAY_EQ_STRIDE];
+            let b =
+                &p[field::DECAY_EQ_BASE + i * field::DECAY_EQ_STRIDE..][..field::DECAY_EQ_STRIDE];
             DecayEqBand {
                 used: b[0] != 0.0,
                 enabled: b[1] != 0.0,
@@ -302,7 +303,10 @@ pub fn to_native_reverb_params(r: &ProR2) -> Vec<(String, f64)> {
     set("modulation", (r.character as f64).clamp(0.0, 1.0));
 
     // Thickness is -1..1 around neutral; low_end is 0..1 around 0.5.
-    set("low_end", ((r.thickness as f64) * 0.5 + 0.5).clamp(0.0, 1.0));
+    set(
+        "low_end",
+        ((r.thickness as f64) * 0.5 + 0.5).clamp(0.0, 1.0),
+    );
 
     out
 }
@@ -399,7 +403,8 @@ mod tests {
             field::DECAY_EQ_BASE + field::EQ_BANDS * field::DECAY_EQ_STRIDE,
             field::POST_EQ_BASE
         );
-        assert!(field::POST_EQ_BASE + field::EQ_BANDS * field::POST_EQ_STRIDE <= PARAM_COUNT);
+        const _: () =
+            assert!(field::POST_EQ_BASE + field::EQ_BANDS * field::POST_EQ_STRIDE <= PARAM_COUNT);
     }
 
     #[test]
@@ -473,6 +478,9 @@ mod tests {
             params: vec![0.0; 20],
             metadata: Default::default(),
         };
-        assert_eq!(decode(&st), Err(ProR2Error::UnexpectedParamCount { got: 20 }));
+        assert_eq!(
+            decode(&st),
+            Err(ProR2Error::UnexpectedParamCount { got: 20 })
+        );
     }
 }

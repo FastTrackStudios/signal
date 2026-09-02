@@ -166,11 +166,11 @@ unreliable"* — the failure is total and deterministic, not flaky.
 `features/daw-ui/daw-ui/src/test_panels.rs:35–58` `include_str!`s a full
 64 KB Tailwind sheet plus the architect-ui theme sheet and mounts them with
 `document::Style { … }` inside a Blitz-rendered REAPER panel. Same
-pattern in `apps/fasttrackstudio/src/rig_view.rs:29`/`:384` and
+pattern in `apps/desktop/src/rig_view.rs:29`/`:384` and
 `mobile_view.rs:24`/`:59` for the signal UI. `Justfile:31–52` builds the
-sheet (`just tailwind` → `apps/fasttrackstudio/assets/tailwind-signal.css`)
+sheet (`just tailwind` → `apps/desktop/assets/tailwind-signal.css`)
 and `just tailwind-check` fails CI if the committed sheet drifts from
-what the `@source` globs produce — and `apps/fasttrackstudio/input.css`
+what the `@source` globs produce — and `apps/desktop/input.css`
 *already lists* `../../features/daw-ui/daw-ui/src/**/*.rs` as a scanned
 source.
 
@@ -265,7 +265,7 @@ WALTER layout, so the HTML strip is a reference, not an export artefact.
 
 Mechanism: compile with `just tailwind`, mount with
 `document::Style { {include_str!("…/tailwind-signal.css")} }`.
-`apps/fasttrackstudio/input.css` already scans `daw-ui`; add any new
+`apps/desktop/input.css` already scans `daw-ui`; add any new
 crate to its `@source` list and `just tailwind-check` keeps it honest.
 
 ### Inside the `<svg>` — presentation attributes, computed in Rust
@@ -323,7 +323,7 @@ fill duplication becomes a real maintenance cost.
    three shipping crates already use, and does not mention the SVG
    boundary, which is the rule that actually matters.
 2. **Add `features/daw-ui/daw-theme-art/src/**/*.rs` to
-   `apps/fasttrackstudio/input.css`'s `@source` list** when the panels
+   `apps/desktop/input.css`'s `@source` list** when the panels
    move to Tailwind, so `just tailwind-check` covers them.
 3. **usvg version skew.** The exporter pins resvg 0.45 → usvg 0.45.1;
    blitz-dom pulls usvg 0.46.0. Same architecture and the same
@@ -351,7 +351,7 @@ In-tree (branch `worktree-reaper-theme` for the `daw-theme-art` paths):
 - `features/daw-ui/daw-theme-art/src/strip.rs` — the HTML mixer, never rasterised
 - `features/daw-ui/daw-ui/src/test_panels.rs` — Tailwind under Blitz in REAPER, today
 - `features/daw-ui/daw-ui/src/panels/` — 117 inline `style:`, 2 `class:`
-- `apps/fasttrackstudio/src/rig_view.rs`, `mobile_view.rs`, `input.css`, `Justfile`
+- `apps/desktop/src/rig_view.rs`, `mobile_view.rs`, `input.css`, `Justfile`
 - `libs/ui/docs/blitz-diagnosis.md`, `libs/ui/ui-snapshot/tests/pixel_probes.rs`
 - skill `reaper-theme-vectors` — exporter constraints (strokes, clip-path, `<defs>`, sprite cells, markers)
 

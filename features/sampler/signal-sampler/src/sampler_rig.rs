@@ -1054,14 +1054,14 @@ impl SamplerRig {
     /// List available hardware MIDI input port names — for a device picker.
     /// All device enumeration lives in `midicore::midir`; signal only forwards.
     pub fn midi_input_ports() -> Vec<String> {
-        midicore::midir::input_ports()
+        midicore::pipewire::input_ports()
     }
 
     /// Open a hardware MIDI keyboard and forward its events into this rig's bank
     /// track (live mode only). `selection` chooses one named device, **all**
     /// devices merged, or a REAPER-style **virtual** port.
     ///
-    /// The returned [`midicore::midir::MidiInput`] owns the open connection(s) —
+    /// The returned [`midicore::pipewire::MidiInput`] owns the open connection(s) —
     /// hold it for as long as you want MIDI, drop it to stop. All MIDI primitive
     /// logic (enumeration, selection, byte parsing) lives in `midicore`; signal
     /// just wires the source to daw's live-MIDI ring with full fidelity
@@ -1069,7 +1069,7 @@ impl SamplerRig {
     pub fn attach_midi(
         &self,
         selection: midicore::PortSelector,
-    ) -> eyre::Result<midicore::midir::MidiInput> {
+    ) -> eyre::Result<midicore::pipewire::MidiInput> {
         let (daw, track) = match (self.inner.daw.as_ref(), self.inner.bank_track.as_ref()) {
             (Some(d), Some(t)) => (d.clone(), t.clone()),
             _ => eyre::bail!("attach_midi requires a live rig with a bank track (not offline)"),
@@ -1079,7 +1079,7 @@ impl SamplerRig {
         let sink = midicore::attach::tap_sink(self.inner.midi_monitor.clone(), move |ev| {
             daw.push_live_midi(&track, ev);
         });
-        midicore::midir::MidiInput::open(selection, sink)
+        midicore::pipewire::MidiInput::open(selection, sink)
     }
 
     /// Like [`attach_midi`](Self::attach_midi), but runs every incoming event
@@ -1096,7 +1096,7 @@ impl SamplerRig {
         &self,
         selection: midicore::PortSelector,
         transform: F,
-    ) -> eyre::Result<midicore::midir::MidiInput>
+    ) -> eyre::Result<midicore::pipewire::MidiInput>
     where
         F: FnMut(midicore::MidiEvent) -> Vec<midicore::MidiEvent> + Send + 'static,
     {
@@ -1113,7 +1113,7 @@ impl SamplerRig {
                 daw.push_live_midi(&track, ev);
             },
         );
-        midicore::midir::MidiInput::open(selection, sink)
+        midicore::pipewire::MidiInput::open(selection, sink)
     }
 
     /// The live MIDI monitor — a rolling log + total count of messages reaching
@@ -2042,7 +2042,7 @@ impl SamplerRig {
         &self,
         selection: midicore::PortSelector,
         transform: F,
-    ) -> eyre::Result<midicore::midir::MidiInput>
+    ) -> eyre::Result<midicore::pipewire::MidiInput>
     where
         F: FnMut(midicore::MidiEvent) -> Vec<midicore::MidiEvent> + Send + 'static,
     {
@@ -2052,7 +2052,7 @@ impl SamplerRig {
             transform,
             move |ev| rig.kit_dispatch(&ev),
         );
-        midicore::midir::MidiInput::open(selection, sink)
+        midicore::pipewire::MidiInput::open(selection, sink)
     }
 
     fn tracks_for(&self, id: &str) -> Vec<String> {

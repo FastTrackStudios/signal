@@ -70,6 +70,7 @@ mod tests {
         catalog.entries.insert(
             "abc".into(),
             NamFileEntry {
+                provenance: None,
                 hash: "abc".into(),
                 kind: NamFileKind::AmpModel,
                 relative_path: "amps/test.nam".into(),
@@ -109,6 +110,7 @@ mod tests {
         catalog.entries.insert(
             "xyz".into(),
             NamFileEntry {
+                provenance: None,
                 hash: "xyz".into(),
                 kind: NamFileKind::AmpModel,
                 relative_path: "amps/ghost.nam".into(),

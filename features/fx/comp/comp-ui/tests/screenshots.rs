@@ -61,7 +61,7 @@ fn mount_design() -> Fixture {
 #[tokio::test]
 async fn shot_stack_of_three() {
     use nice_plug::prelude::Param;
-    let (w, base_h) = comp_ui::faces::preferred_editor_size(0);
+    let (_w, base_h) = comp_ui::faces::preferred_editor_size(0);
     let params = std::sync::Arc::new(comp_ui::params::CompParams::default());
     unsafe {
         let set_int = |p: &nice_plug::prelude::IntParam, v: i32| {

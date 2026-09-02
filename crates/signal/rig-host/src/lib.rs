@@ -51,6 +51,14 @@ use daw_audio_io::AudioIoPrefs;
 
 pub mod gestures;
 pub mod lock;
+/// Instrumented MIDI attach — the one wide event every rig emits when it
+/// (re)attaches hardware MIDI. Native only: it wraps the midir backend.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod midi;
+/// The process-wide shared MIDI input — one set of OS clients fanned out to
+/// every rig, instead of each rig opening its own.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod midi_hub;
 pub mod mixer;
 pub mod store;
 

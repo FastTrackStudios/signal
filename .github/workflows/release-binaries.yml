@@ -79,7 +79,7 @@ jobs:
           nix develop --accept-flake-config . -c bash -c '
             set -euo pipefail
             just web-stage
-            cd apps/fasttrackstudio
+            cd apps/desktop
             dx bundle --platform linux --package-types deb --release --features embed-web
           '
           out="$(find target/dx/fasttrackstudio -name '*.deb' | head -1)"
@@ -174,10 +174,10 @@ jobs:
           # Version from the tag (strip a leading v): 0.1.0 from v0.1.0.
           tag="${{ github.event.release.tag_name || inputs.tag }}"
           export MARKETING_VER="${tag#v}"
-          bash apps/fasttrackstudio/ios/deploy-macos.sh
+          bash apps/desktop/ios/deploy-macos.sh
           echo "artifact=$(ls -t target/FastTrackStudio-*-macos.dmg | head -1)" >> "$GITHUB_ENV"
       - name: Verify it's a genuine universal build
-        run: bash apps/fasttrackstudio/ios/verify-macos-universal.sh app "$artifact"
+        run: bash apps/desktop/ios/verify-macos-universal.sh app "$artifact"
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -207,10 +207,10 @@ jobs:
           set -euo pipefail
           export PATH="/nix/var/nix/profiles/default/bin:$PATH"
           export NIX=/nix/var/nix/profiles/default/bin/nix
-          bash apps/fasttrackstudio/ios/deploy-macos-plugins.sh
+          bash apps/desktop/ios/deploy-macos-plugins.sh
           echo "artifact=$(ls -t target/fts-plugins-*-macos.zip | head -1)" >> "$GITHUB_ENV"
       - name: Verify it's a genuine universal build
-        run: bash apps/fasttrackstudio/ios/verify-macos-universal.sh plugins "$artifact"
+        run: bash apps/desktop/ios/verify-macos-universal.sh plugins "$artifact"
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -252,7 +252,7 @@ jobs:
           export NIX=/nix/var/nix/profiles/default/bin/nix
           tag="${{ github.event.release.tag_name || inputs.tag }}"
           export MARKETING_VER="${tag#v}"
-          bash apps/fasttrackstudio/ios/deploy-macos-pkg.sh
+          bash apps/desktop/ios/deploy-macos-pkg.sh
           echo "pkg=$(ls -t target/FastTrackStudio-*-macos.pkg | head -1)" >> "$GITHUB_ENV"
           echo "choices=$(ls -t target/FastTrackStudio-*-macos-choices.xml | head -1)" >> "$GITHUB_ENV"
       - name: Verify the installer is signed, notarized and universal
@@ -264,7 +264,7 @@ jobs:
           spctl --assess --type install -vv "$pkg"
           xcrun stapler validate "$pkg"
           # The payloads are what actually has to be universal.
-          bash apps/fasttrackstudio/ios/verify-macos-universal.sh plugins \
+          bash apps/desktop/ios/verify-macos-universal.sh plugins \
             "$(ls -t target/fts-plugins-*-macos.zip | head -1)"
       - name: Upload to the release
         env:
@@ -302,7 +302,7 @@ jobs:
           export NIX=/nix/var/nix/profiles/default/bin/nix
           tag="${{ github.event.release.tag_name || inputs.tag }}"
           export MARKETING_VER="${tag#v}"
-          bash apps/fasttrackstudio/ios/deploy-macos-pkg.sh
+          bash apps/desktop/ios/deploy-macos-pkg.sh
           echo "pkg=$(ls -t target/Task-*-macos.pkg | head -1)" >> "$GITHUB_ENV"
           echo "choices=$(ls -t target/Task-*-macos-choices.xml | head -1)" >> "$GITHUB_ENV"
       - name: Verify signed + notarized

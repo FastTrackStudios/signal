@@ -64,7 +64,9 @@ struct Inner {
     /// Everything the hardware sent, for the UI monitor.
     monitor: MidiMonitor,
     /// The open MIDI input (reattached by `midicore::attach`).
-    midi_handle: Mutex<Option<midicore::midir::MidiInput>>,
+    /// Subscription to the shared process-wide MIDI hub. Dropping it
+    /// detaches this rig only; the ports stay open for the other rigs.
+    midi_handle: Mutex<Option<signal_rig_host::midi_hub::Subscription>>,
     /// Control events queued by the MIDI sink, drained by the pump tick
     /// (service calls must not run on the midir callback thread).
     control_q: Mutex<Vec<MidiEvent>>,
@@ -120,7 +122,7 @@ impl BassRigBackend {
             }),
         };
         backend.spawn_meter_pump("bass-meter-pump");
-        backend.reattach_midi();
+        backend.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
         backend
     }
 
@@ -130,7 +132,13 @@ impl BassRigBackend {
     /// drop-before-open via [`midicore::attach::reattach`], monitor tap +
     /// control-queue forward via [`midicore::attach::tap_sink`]. Preset
     /// switching works even while audio is stopped (selection is state).
-    fn reattach_midi(&self) {
+    /// Point this rig at the shared MIDI hub rather than opening hardware.
+    ///
+    /// Every rig used to open its own omni set — five rigs times 23 ports is
+    /// ~115 OS clients on the same hardware, which destabilised enumeration
+    /// badly enough to kill the engine. The hub opens each port once for the
+    /// process and fans events out.
+    fn reattach_midi(&self, trigger: signal_rig_host::midi::AttachTrigger) {
         let port = {
             let map = self.inner.midi_map.lock_ok();
             if map.port.is_empty() {
@@ -140,26 +148,25 @@ impl BassRigBackend {
             }
         };
         let inner = self.inner.clone();
-        midicore::attach::reattach(
-            "bass rig",
-            port.as_deref(),
-            || {
-                *self.inner.midi_handle.lock_ok() = None;
-            },
-            |sel| {
-                let sink = midicore::attach::tap_sink(self.inner.monitor.clone(), move |ev| {
-                    if matches!(
-                        ev,
-                        MidiEvent::ProgramChange { .. } | MidiEvent::ControlChange { .. }
-                    ) {
-                        inner.control_q.lock_ok().push(ev);
-                    }
-                });
-                midicore::midir::MidiInput::open(sel, sink).map(Some)
-            },
-            |h| {
-                *self.inner.midi_handle.lock_ok() = Some(h);
-            },
+        let sink = midicore::attach::tap_sink(self.inner.monitor.clone(), move |ev| {
+            if matches!(
+                ev,
+                MidiEvent::ProgramChange { .. } | MidiEvent::ControlChange { .. }
+            ) {
+                inner.control_q.lock_ok().push(ev);
+            }
+        });
+
+        let hub = signal_rig_host::midi_hub::hub();
+        *self.inner.midi_handle.lock_ok() = Some(hub.subscribe("bass", port.clone(), sink));
+        let reopened = hub.rescan();
+        tracing::info!(
+            midi.rig = "bass",
+            midi.trigger = trigger.as_str(),
+            midi.selector = if port.is_some() { "named" } else { "omni" },
+            midi.ports_seen = hub.ports().len(),
+            midi.hub_reopened = reopened,
+            "midi attach"
         );
     }
 
@@ -172,9 +179,9 @@ impl BassRigBackend {
         // only fires while running, so re-try a missing handle here.
         if tick.tick.is_multiple_of(60)
             && self.inner.midi_handle.lock_ok().is_none()
-            && !midicore::midir::input_ports().is_empty()
+            && !midicore::pipewire::input_ports().is_empty()
         {
-            self.reattach_midi();
+            self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortsChanged);
         }
         // Flush the pending last-state save about once a second.
         if tick.tick.is_multiple_of(30) && self.inner.state_dirty.swap(false, Ordering::Relaxed) {
@@ -547,12 +554,12 @@ impl RigBackend for BassRigBackend {
     }
 
     fn midi_ports(&self) -> Vec<String> {
-        midicore::midir::input_ports()
+        midicore::pipewire::input_ports()
     }
 
     fn on_midi_ports_changed(&self, ports: &[String]) {
         tracing::info!(?ports, "bass rig: MIDI ports changed — re-attaching");
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortsChanged);
     }
 }
 
@@ -688,7 +695,7 @@ impl BassRigSvc for BassRigBackend {
     }
 
     fn midi_ports(&self) -> Vec<String> {
-        midicore::midir::input_ports()
+        midicore::pipewire::input_ports()
     }
 
     fn set_midi_port(&self, name: String) {
@@ -697,7 +704,7 @@ impl BassRigSvc for BassRigBackend {
             map.port = name;
             BassLibrary::save_midi_map(&map);
         }
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortSelected);
         self.inner
             .events
             .publish(BassEvent::Status(BassRigSvc::status(self)));
@@ -734,7 +741,7 @@ impl BassRigSvc for BassRigBackend {
                 *self.inner.available.lock_ok() = available;
             }
         }
-        self.reattach_midi();
+        self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
         self.resync_blocks();
         self.apply_master_trim();
         self.publish_all();

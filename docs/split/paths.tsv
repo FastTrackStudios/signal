@@ -59,7 +59,7 @@ session	features/guide
 session	features/reaper/session-extension
 session	features/song
 shell	apps/extensions
-shell	apps/fasttrackstudio
+shell	apps/desktop
 shell	apps/installer
 shell	apps/site
 signal	apps/plugins

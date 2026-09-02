@@ -39,7 +39,9 @@ const SPECTRAL_TILT_BASE: usize = 576;
 
 fn arg(name: &str) -> Option<String> {
     let a: Vec<String> = std::env::args().collect();
-    a.iter().position(|x| x == name).and_then(|i| a.get(i + 1).cloned())
+    a.iter()
+        .position(|x| x == name)
+        .and_then(|i| a.get(i + 1).cloned())
 }
 fn num(name: &str, d: f64) -> f64 {
     arg(name).and_then(|v| v.parse().ok()).unwrap_or(d)
@@ -80,7 +82,11 @@ fn stimulus(freq: f64, frames: usize) -> Vec<f32> {
             // engages on flat noise too — that is what its threshold learning
             // means — and the shape it applies is only visible without a
             // resonance dominating the picture.
-            let v = if flat { 0.20 * n } else { 0.06 * n + 0.30 * phase.sin() };
+            let v = if flat {
+                0.20 * n
+            } else {
+                0.06 * n + 0.30 * phase.sin()
+            };
             phase += inc;
             v as f32
         })
@@ -138,7 +144,8 @@ fn render_native(eq: &mut NativeEq, input: &[f32]) -> Vec<f32> {
         let n = BLOCK.min(input.len() - pos);
         let l = &input[pos..pos + n];
         let (mut ol, mut or) = (vec![0.0f32; n], vec![0.0f32; n]);
-        eq.process_block(l, l, &mut ol, &mut or, &ev).expect("process");
+        eq.process_block(l, l, &mut ol, &mut or, &ev)
+            .expect("process");
         out.extend_from_slice(&ol);
         pos += n;
     }
@@ -185,7 +192,7 @@ fn main() {
 
     let mut blob = plugin.save_state().expect("save_state");
     let count = u32::from_le_bytes(blob[16..20].try_into().unwrap()) as usize;
-    let mut put = |blob: &mut Vec<u8>, i: usize, v: f32| {
+    let put = |blob: &mut Vec<u8>, i: usize, v: f32| {
         if i < count {
             let at = 20 + i * 4;
             blob[at..at + 4].copy_from_slice(&v.to_le_bytes());
@@ -193,23 +200,23 @@ fn main() {
     };
     // Band 1, spectral.
     for (i, v) in [
-        (0usize, 1.0f32),                       // Used
-        (1, 1.0),                               // Enabled
-        (2, freq.log2() as f32),                // Frequency
-        (3, num("--gain", 0.0) as f32),         // Gain
-        (4, proq_q(q)),                         // Q
-        (5, num("--band-shape", 0.0) as f32),   // Pro-Q shape: 0 Bell, 3 High Shelf
-        (6, num("--slope", 2.0) as f32),        // slope
-        (7, 2.0),                               // Stereo
-        (8, 1.0),                               // All speakers except LFE
-        (9, range as f32),                      // Dynamic Range
-        (10, 1.0),                              // Dynamics Enabled
-        (11, if auto { 1.0 } else { 0.0 }),     // Dynamics Auto
+        (0usize, 1.0f32),                     // Used
+        (1, 1.0),                             // Enabled
+        (2, freq.log2() as f32),              // Frequency
+        (3, num("--gain", 0.0) as f32),       // Gain
+        (4, proq_q(q)),                       // Q
+        (5, num("--band-shape", 0.0) as f32), // Pro-Q shape: 0 Bell, 3 High Shelf
+        (6, num("--slope", 2.0) as f32),      // slope
+        (7, 2.0),                             // Stereo
+        (8, 1.0),                             // All speakers except LFE
+        (9, range as f32),                    // Dynamic Range
+        (10, 1.0),                            // Dynamics Enabled
+        (11, if auto { 1.0 } else { 0.0 }),   // Dynamics Auto
         (12, if auto { 1.0 } else { proq_threshold(threshold) }),
-        (13, 50.0),                             // Attack
-        (14, 50.0),                             // Release
-        (20, 1.0),                              // Spectral Enabled
-        (21, density as f32),                   // Spectral Density
+        (13, 50.0),           // Attack
+        (14, 50.0),           // Release
+        (20, 1.0),            // Spectral Enabled
+        (21, density as f32), // Spectral Density
     ] {
         put(&mut blob, i, v);
     }
@@ -228,11 +235,14 @@ fn main() {
         ("b1_freq", freq),
         ("b1_gain", num("--gain", 0.0)),
         ("b1_q", q),
-        ("b1_shape", match num("--band-shape", 0.0) as i32 {
-            2 => 3.0,
-            3 => 2.0,
-            other => other as f64,
-        }),
+        (
+            "b1_shape",
+            match num("--band-shape", 0.0) as i32 {
+                2 => 3.0,
+                3 => 2.0,
+                other => other as f64,
+            },
+        ),
         ("b1_slope", num("--slope", 2.0)),
         ("b1_dyn_range", range),
         ("b1_dyn_thr", threshold),
@@ -259,7 +269,11 @@ fn main() {
     println!(
         "spectral bell {freq:.0} Hz Q {q}, range {range:+} dB, \
          threshold {}, density {density}{}\n",
-        if auto { "auto".into() } else { format!("{threshold:+}") },
+        if auto {
+            "auto".into()
+        } else {
+            format!("{threshold:+}")
+        },
         if tilt { ", tilt" } else { "" }
     );
     println!("  off Hz      Hz     Pro-Q       ours       diff");
@@ -279,7 +293,11 @@ fn main() {
                 let ra = at(&si, &sa, hz);
                 let rb = at(&si, &sb, hz);
                 worst = worst.max((rb - ra).abs());
-                println!("  {:>+6.0}  {hz:>7.0}  {ra:>9.2}  {rb:>9.2}  {:>9.2}", hz - freq, rb - ra);
+                println!(
+                    "  {:>+6.0}  {hz:>7.0}  {ra:>9.2}  {rb:>9.2}  {:>9.2}",
+                    hz - freq,
+                    rb - ra
+                );
             }
             hz *= 2.0f64.powf(1.0 / 4.0);
         }
@@ -287,7 +305,9 @@ fn main() {
         return;
     }
     let mut offsets: Vec<f64> = vec![-2.0, -1.0, -0.5, -0.25, -1.0 / 6.0];
-    for hz_off in [-160.0f64, -109.0, -60.0, -30.0, 0.0, 30.0, 60.0, 109.0, 160.0] {
+    for hz_off in [
+        -160.0f64, -109.0, -60.0, -30.0, 0.0, 30.0, 60.0, 109.0, 160.0,
+    ] {
         let hz = freq + hz_off;
         if hz > 20.0 {
             offsets.push((hz / freq).log2());

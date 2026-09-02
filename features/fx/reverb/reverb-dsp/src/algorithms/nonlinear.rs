@@ -133,7 +133,6 @@ impl NonLinear {
     /// leaving [`REGEN_MARGIN`] of headroom. The knob still spans "no repeats"
     /// to "as much regeneration as this tank can carry", which is what it
     /// means to a player; what it can no longer do is exceed unity.
-    #[inline]
     fn regeneration_gain(&self) -> f64 {
         // Both tanks are in the loop: the main one always, the late one in
         // proportion to how much of it is blended into the output.

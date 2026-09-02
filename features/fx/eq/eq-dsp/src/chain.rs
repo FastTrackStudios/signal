@@ -79,7 +79,10 @@ impl EqChain {
     /// True when at least one band would touch the signal.
     /// The whole chain's magnitude response at `hz`, in dB.
     pub fn magnitude_db(&self, hz: f64, sample_rate: f64) -> f64 {
-        self.bands.iter().map(|b| b.magnitude_db(hz, sample_rate)).sum()
+        self.bands
+            .iter()
+            .map(|b| b.magnitude_db(hz, sample_rate))
+            .sum()
     }
 
     pub fn has_active_bands(&self) -> bool {
@@ -175,10 +178,16 @@ mod placement_tests {
             r[i] = x;
         }
         chain.process(&mut l, &mut r);
-        let rms = |v: &[f64]| (v[n / 2..].iter().map(|x| x * x).sum::<f64>()
-            / (n / 2) as f64).sqrt();
+        let rms =
+            |v: &[f64]| (v[n / 2..].iter().map(|x| x * x).sum::<f64>() / (n / 2) as f64).sqrt();
         let (lrms, rrms) = (rms(&l), rms(&r));
-        assert!((lrms - 0.7071).abs() < 0.02, "left must pass untouched ({lrms:.3})");
+        // A unit sine's RMS is 1/√2 — spelled as the constant so the number
+        // is the identity rather than a rounded literal.
+        let unit_sine_rms = core::f64::consts::FRAC_1_SQRT_2;
+        assert!(
+            (lrms - unit_sine_rms).abs() < 0.02,
+            "left must pass untouched ({lrms:.3})"
+        );
         assert!(rrms < 0.1, "right must be cut ({rrms:.3})");
     }
 

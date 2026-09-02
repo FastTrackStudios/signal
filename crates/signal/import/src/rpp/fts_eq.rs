@@ -136,10 +136,7 @@ pub fn plugin_params(native: &[(String, f64)]) -> BTreeMap<String, ParamValue> {
                 "on" => used.entry(n).or_insert((true, true)).1 = v >= 0.5,
                 "freq" => drop(out.insert(id("freq"), F32(v as f32))),
                 "gain" => drop(out.insert(id("gain"), F32(v as f32))),
-                "q" => drop(out.insert(
-                    id("q"),
-                    F32((v * std::f64::consts::SQRT_2) as f32),
-                )),
+                "q" => drop(out.insert(id("q"), F32((v * std::f64::consts::SQRT_2) as f32))),
                 "shape" => drop(out.insert(id("type"), I32(v.round() as i32))),
                 "slope" => drop(out.insert(id("slope"), F32(v as f32))),
                 "placement" => drop(out.insert(id("place"), I32(v.round() as i32))),
@@ -160,13 +157,23 @@ pub fn plugin_params(native: &[(String, f64)]) -> BTreeMap<String, ParamValue> {
         }
         match name.as_str() {
             // A fraction in the engine, a percentage on the dial.
-            "gain_scale" => drop(out.insert("gain_scale".into(), F32((v * 100.0) as f32))),
-            "output_gain" => drop(out.insert("output_gain".into(), F32(v as f32))),
-            "auto_gain" => drop(out.insert("auto_gain".into(), F32(v as f32))),
-            "character" => drop(out.insert("character".into(), I32(v.round() as i32))),
-            "output_pan" => drop(out.insert("output_pan".into(), F32(v as f32))),
+            "gain_scale" => {
+                out.insert("gain_scale".into(), F32((v * 100.0) as f32));
+            }
+            "output_gain" => {
+                out.insert("output_gain".into(), F32(v as f32));
+            }
+            "auto_gain" => {
+                out.insert("auto_gain".into(), F32(v as f32));
+            }
+            "character" => {
+                out.insert("character".into(), I32(v.round() as i32));
+            }
+            "output_pan" => {
+                out.insert("output_pan".into(), F32(v as f32));
+            }
             "output_pan_mode" => {
-                drop(out.insert("output_pan_mode".into(), F32(v as f32)))
+                out.insert("output_pan_mode".into(), F32(v as f32));
             }
             _ => {}
         }
@@ -174,7 +181,10 @@ pub fn plugin_params(native: &[(String, f64)]) -> BTreeMap<String, ParamValue> {
 
     for (n, (is_used, is_on)) in used {
         let on = is_used && is_on;
-        out.insert(format!("on_{n}"), ParamValue::F32(if on { 1.0 } else { 0.0 }));
+        out.insert(
+            format!("on_{n}"),
+            ParamValue::F32(if on { 1.0 } else { 0.0 }),
+        );
         if !on {
             // A dead slot goes all the way back to neutral, so it cannot
             // sound if something later switches it on.
@@ -292,7 +302,11 @@ mod tests {
             ("b7_gain", 6.0),
         ]));
         assert_eq!(p["on_7"], ParamValue::F32(0.0));
-        assert_eq!(p["gain_7"], ParamValue::F32(0.0), "a dead slot is silent, not stale");
+        assert_eq!(
+            p["gain_7"],
+            ParamValue::F32(0.0),
+            "a dead slot is silent, not stale"
+        );
     }
 
     #[test]

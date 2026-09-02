@@ -3,7 +3,7 @@
 //!
 //! ```bash
 //! cargo run -p signal-guitar-proto --example gen_watch_swift \
-//!     > apps/fasttrackstudio/watchos/FTSWatch/Generated/WatchState.generated.swift
+//!     > apps/desktop/watchos/FTSWatch/Generated/WatchState.generated.swift
 //! ```
 //!
 //! The walker covers exactly what the watch DTOs use — structs of
@@ -24,7 +24,7 @@ fn main() {
         "// GENERATED — do not edit. Mirrors the facet shapes in\n\
          // features/rigs/guitar/proto/src/watch.rs (the `/watch/v1` wire DTOs).\n\
          // Regenerate: cargo run -p signal-guitar-proto --example gen_watch_swift\n\
-         //   > apps/fasttrackstudio/watchos/FTSWatch/Generated/WatchState.generated.swift\n\n\
+         //   > apps/desktop/watchos/FTSWatch/Generated/WatchState.generated.swift\n\n\
          import Foundation\n\n",
     );
     for (name, body) in &structs {

@@ -222,6 +222,7 @@ mod tests {
 
     fn make_entry(hash: &str, filename: &str, gain: Option<f64>) -> NamFileEntry {
         NamFileEntry {
+            provenance: None,
             hash: hash.into(),
             kind: NamFileKind::AmpModel,
             relative_path: format!("amps/{}", filename),

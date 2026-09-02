@@ -33,8 +33,8 @@
 //! infinite error.
 
 use signal_analyzer::eq_transfer::{self, Difference, Stimulus};
-use signal_import::rpp::convert::Family;
 use signal_fx::NativeEq;
+use signal_import::rpp::convert::Family;
 use signal_plugin_host::{HostedPlugin, PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;
@@ -44,6 +44,12 @@ const LEVEL_DBFS: f64 = -18.8;
 
 /// A loaded pair of plugins, kept across instances — loading a bridged plugin
 /// costs seconds and a project has dozens of instances.
+/// What `curves` returns, in order: the reference plugin's response, our
+/// converted state rendered through the same plugin, our native engine's
+/// response, and the band centres all three are sampled at. Every response is
+/// in dB relative to the dry signal.
+pub type Curves = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>);
+
 pub struct Rig {
     /// One pair per family, opened lazily — a project full of equalizers
     /// should not pay to bridge a compressor it never meets.
@@ -203,7 +209,7 @@ impl Rig {
         reference_state: &[u8],
         our_state: &[u8],
         native_params: &[(String, f64)],
-    ) -> Option<(Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>)> {
+    ) -> Option<Curves> {
         let centres = eq_transfer::band_centres();
         let i = self.pair(family).ok()?;
         let (a, b) = {
@@ -243,13 +249,22 @@ fn render_engine(params: &[(String, f64)], left: &[f32], right: &[f32]) -> (Vec<
     }
     eq.prepare(SR, BLOCK as u32).expect("prepare");
     let events = PluginEvents::default();
-    let (mut ol, mut or) = (Vec::with_capacity(left.len()), Vec::with_capacity(left.len()));
+    let (mut ol, mut or) = (
+        Vec::with_capacity(left.len()),
+        Vec::with_capacity(left.len()),
+    );
     let mut pos = 0;
     while pos < left.len() {
         let n = BLOCK.min(left.len() - pos);
         let (mut l, mut r) = (vec![0.0f32; n], vec![0.0f32; n]);
-        eq.process_block(&left[pos..pos + n], &right[pos..pos + n], &mut l, &mut r, &events)
-            .expect("process");
+        eq.process_block(
+            &left[pos..pos + n],
+            &right[pos..pos + n],
+            &mut l,
+            &mut r,
+            &events,
+        )
+        .expect("process");
         ol.extend_from_slice(&l);
         or.extend_from_slice(&r);
         pos += n;
@@ -258,7 +273,10 @@ fn render_engine(params: &[(String, f64)], left: &[f32], right: &[f32]) -> (Vec<
 }
 
 fn render(plugin: &mut HostedPlugin, left: &[f32], right: &[f32]) -> Option<(Vec<f32>, Vec<f32>)> {
-    let (mut ol, mut or) = (Vec::with_capacity(left.len()), Vec::with_capacity(left.len()));
+    let (mut ol, mut or) = (
+        Vec::with_capacity(left.len()),
+        Vec::with_capacity(left.len()),
+    );
     let mut pos = 0;
     while pos < left.len() {
         let n = BLOCK.min(left.len() - pos);

@@ -6,7 +6,7 @@
 //! These shapes are the source of truth for the Swift side: the
 //! `gen_watch_swift` example reflects them through facet and emits the
 //! matching `Codable` structs into the watch app
-//! (`apps/fasttrackstudio/watchos/`). Change a field here → re-run the
+//! (`apps/desktop/watchos/`). Change a field here → re-run the
 //! generator → Swift follows.
 
 use facet::Facet;

@@ -24,7 +24,7 @@ daw = { workspace = true }
 tracing = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-midicore = { workspace = true, features = ["vox", "midir", "midir-pipewire"] }
+midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }

@@ -57,6 +57,10 @@ impl ValhallaPlugin {
     /// because the exact index formula is not pinned down (both plugins
     /// report their first two slots under one name) and nearest-value
     /// matching does not depend on it.
+    // The tables spell every entry as `index / (count - 1)` so the encoding is
+    // readable down the column; that makes the last row `n / n`, which is the
+    // value 1.0 written the same way as its neighbours rather than a mistake.
+    #[allow(clippy::eq_op)]
     pub fn modes(self) -> &'static [(f64, &'static str)] {
         match self {
             Self::VintageVerb => &[
@@ -167,6 +171,10 @@ impl ValhallaState {
 ///
 /// Valhalla stores enum selectors as `index / (count - 1)`, so recovering the
 /// index is a scale-and-round. Values outside `0..1` clamp.
+// Exercised by this module's tests but not yet called by the importer
+// itself — the encoding it documents is still being wired in. Kept
+// rather than deleted so the decoding knowledge and its coverage stay.
+#[allow(dead_code)]
 fn nearest_step(v: f64, count: usize) -> usize {
     if count <= 1 {
         return 0;
@@ -273,7 +281,9 @@ pub fn parse_xml(xml: &str) -> Option<ValhallaState> {
 }
 
 /// Convenience: decode a REAPER `<VST>` body straight to a parsed patch.
-pub fn parse_vst_chunk_lines<'a>(lines: impl IntoIterator<Item = &'a str>) -> Option<ValhallaState> {
+pub fn parse_vst_chunk_lines<'a>(
+    lines: impl IntoIterator<Item = &'a str>,
+) -> Option<ValhallaState> {
     let chunk = decode_vst_chunk_lines(lines);
     parse_xml(&extract_xml(&chunk)?)
 }
@@ -325,11 +335,13 @@ fn interp_log(table: &[f64], x: f64) -> f64 {
 /// FTS `DecayBand` rate spans.
 const VVV_BASS_MULT: [f64; 9] = [0.25, 0.28, 0.40, 0.63, 1.00, 1.51, 2.17, 3.00, 4.00];
 /// `BassXover` → Hz.
-const VVV_BASS_XOVER_HZ: [f64; 9] =
-    [100.0, 100.0, 140.0, 290.0, 700.0, 1580.0, 3190.0, 5870.0, 10000.0];
+const VVV_BASS_XOVER_HZ: [f64; 9] = [
+    100.0, 100.0, 140.0, 290.0, 700.0, 1580.0, 3190.0, 5870.0, 10000.0,
+];
 /// `HighFreq` → Hz.
-const VVV_HIGH_FREQ_HZ: [f64; 9] =
-    [100.0, 620.0, 1850.0, 3660.0, 6000.0, 8830.0, 12110.0, 15840.0, 20000.0];
+const VVV_HIGH_FREQ_HZ: [f64; 9] = [
+    100.0, 620.0, 1850.0, 3660.0, 6000.0, 8830.0, 12110.0, 15840.0, 20000.0,
+];
 
 /// `HighShelf` → decay-time multiplier.
 ///
@@ -338,6 +350,10 @@ const VVV_HIGH_FREQ_HZ: [f64; 9] =
 /// shortens that band's decay, so it maps onto a rate multiplier: 0 dB leaves
 /// the tail alone, and the full −24 dB takes it to a quarter — the bottom of
 /// the `DecayBand` range.
+// Exercised by this module's tests but not yet called by the importer
+// itself — the encoding it documents is still being wired in. Kept
+// rather than deleted so the decoding knowledge and its coverage stay.
+#[allow(dead_code)]
 fn vintageverb_high_shelf_rate(high_shelf: f64) -> f64 {
     let gain_db = -24.0 + 24.0 * high_shelf.clamp(0.0, 1.0);
     4.0f64.powf(gain_db / 24.0)
@@ -378,6 +394,9 @@ pub fn vintageverb_high_freq_hz(high_freq: f64) -> f64 {
 ///
 /// The remaining genuine gap is Palace itself: arena is the nearest existing
 /// space, not the same one. See `spec/project-state-formats.md`.
+// Only the tests call the no-substitution form today; the importer always
+// goes through `algorithm_and_variant_for`.
+#[allow(dead_code)]
 fn algorithm_and_variant(mode: &str) -> (f64, f64) {
     algorithm_and_variant_for(mode, None)
 }
@@ -478,7 +497,9 @@ pub fn to_native_reverb_params(v: &ValhallaState) -> Vec<(String, f64)> {
         let (algorithm, variant) = algorithm_and_variant_for(mode, want);
         set("algorithm", algorithm);
         set("variant", variant);
-        chosen = Some(reverb_dsp::algorithm::AlgorithmType::from_index(algorithm as usize));
+        chosen = Some(reverb_dsp::algorithm::AlgorithmType::from_index(
+            algorithm as usize,
+        ));
     }
 
     if let Some(mix) = v.num_any(&["Mix", "mix"]) {
@@ -697,7 +718,10 @@ mod tests {
         ] {
             let got = vintageverb_decay_seconds(control);
             let err = (got - seconds).abs() / seconds.max(0.2);
-            assert!(err < 0.05, "decay {control}: expected {seconds}s, got {got}s");
+            assert!(
+                err < 0.05,
+                "decay {control}: expected {seconds}s, got {got}s"
+            );
         }
     }
 
@@ -709,8 +733,14 @@ mod tests {
             assert!(t > prev, "must increase at {i}");
             prev = t;
         }
-        assert_eq!(vintageverb_decay_seconds(-1.0), vintageverb_decay_seconds(0.0));
-        assert_eq!(vintageverb_decay_seconds(2.0), vintageverb_decay_seconds(1.0));
+        assert_eq!(
+            vintageverb_decay_seconds(-1.0),
+            vintageverb_decay_seconds(0.0)
+        );
+        assert_eq!(
+            vintageverb_decay_seconds(2.0),
+            vintageverb_decay_seconds(1.0)
+        );
     }
 
     #[test]
@@ -750,7 +780,13 @@ mod tests {
         // These were previously flattened onto plain Room/Hall because
         // NativeReverb had no variant selector. room_chamber and
         // hall_cathedral existed the whole time.
-        for name in ["Chamber", "Chaotic Chamber", "Chamber1979", "Large Chamber", "Dark Chamber"] {
+        for name in [
+            "Chamber",
+            "Chaotic Chamber",
+            "Chamber1979",
+            "Large Chamber",
+            "Dark Chamber",
+        ] {
             assert_eq!(algorithm_and_variant(name), (0.0, 1.0), "{name}");
         }
         for name in ["Cathedral", "Sanctuary"] {
@@ -794,8 +830,14 @@ mod tests {
         // The Dattorro loop takes ~0.73 s, so a plate much below that decays
         // inside a single pass and stops being a plate. A long one keeps the
         // tank.
-        assert_eq!(algorithm_and_variant_for("Smooth Plate", Some(4.0)), (2.0, 0.0));
-        assert_eq!(algorithm_and_variant_for("Smooth Plate", Some(0.4)), (0.0, 2.0));
+        assert_eq!(
+            algorithm_and_variant_for("Smooth Plate", Some(4.0)),
+            (2.0, 0.0)
+        );
+        assert_eq!(
+            algorithm_and_variant_for("Smooth Plate", Some(0.4)),
+            (0.0, 2.0)
+        );
     }
 
     #[test]
@@ -890,8 +932,9 @@ mod tests {
         assert!((get("predelay").unwrap() - 1.6).abs() < 0.01);
 
         // A predelay past the NativeReverb ceiling clamps rather than wrapping.
-        let hot = parse_xml(&SNARE_ROOM.replace(r#"predelay="0.0015999999595806""#, r#"predelay="0.9""#))
-            .unwrap();
+        let hot =
+            parse_xml(&SNARE_ROOM.replace(r#"predelay="0.0015999999595806""#, r#"predelay="0.9""#))
+                .unwrap();
         let hp = to_native_reverb_params(&hot);
         assert_eq!(
             hp.iter().find(|(n, _)| n == "predelay").map(|(_, v)| *v),
@@ -907,7 +950,10 @@ mod tests {
         let xml = extract_xml(&chunk).unwrap();
         assert!(xml.starts_with("<ValhallaVintageVerb"));
         assert!(xml.ends_with("/>"));
-        assert_eq!(parse_xml(&xml).unwrap().preset_name.as_deref(), Some("Kick Room"));
+        assert_eq!(
+            parse_xml(&xml).unwrap().preset_name.as_deref(),
+            Some("Kick Room")
+        );
     }
 
     /// A real factory `.vpreset` file: XML declaration, attributes wrapped
@@ -962,7 +1008,10 @@ mod tests {
     fn engines_that_remap_predelay_are_not_sent_one() {
         // Nonlin is VintageVerb mode 15 of 25 — the slot the NL- presets use.
         let nl = KICK_ROOM
-            .replace(r#"ReverbMode="0.4583333432674408""#, r#"ReverbMode="0.625""#)
+            .replace(
+                r#"ReverbMode="0.4583333432674408""#,
+                r#"ReverbMode="0.625""#,
+            )
             .replace(r#"PreDelay="0.1488498598337173""#, r#"PreDelay="0.5""#);
         let patch = parse_xml(&nl).expect("parses");
         let params = to_native_reverb_params(&patch);
@@ -992,4 +1041,3 @@ mod tests {
         );
     }
 }
-

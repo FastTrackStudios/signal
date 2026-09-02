@@ -386,6 +386,9 @@ fn dynamics(samples: &[f32], config: &Config) -> Vec<f32> {
 }
 
 /// Filter shapes this crate needs.
+// LowPass/BandPass/HighPass is the filter vocabulary; the shared postfix is
+// the point, not a naming slip.
+#[allow(clippy::enum_variant_names)]
 #[derive(Clone, Copy)]
 enum Shape {
     LowPass,

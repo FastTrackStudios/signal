@@ -300,7 +300,6 @@ impl DecayBand {
             }
         }
     }
-
 }
 
 /// The whole curve's decay-rate multiplier at `freq` (bands sum in rate-dB,
@@ -311,7 +310,9 @@ pub fn decay_rate_at(bands: &[DecayBand; DECAY_BANDS], freq: f64) -> f64 {
         .filter(|b| b.is_active())
         .map(|b| b.rate_db_at(freq))
         .sum();
-    10.0f64.powf(db / 20.0).clamp(DECAY_RATE_MIN, DECAY_RATE_MAX)
+    10.0f64
+        .powf(db / 20.0)
+        .clamp(DECAY_RATE_MIN, DECAY_RATE_MAX)
 }
 
 /// Collapse the curve to the legacy low/high multiplier pair, for engines
@@ -1488,7 +1489,10 @@ mod decay_eq_filter_probe {
         let mut bq2 = Biquad::default();
         bq2.set(FilterType::LowShelf { gain_db: -6.0 }, 300.0, 0.707, sr);
         let at_hf = 20.0 * mag_at(bq2, 4000.0, sr).log10();
-        assert!((at_dc + 6.0).abs() < 1.0, "40 Hz should be -6 dB, got {at_dc}");
+        assert!(
+            (at_dc + 6.0).abs() < 1.0,
+            "40 Hz should be -6 dB, got {at_dc}"
+        );
         assert!(at_hf.abs() < 0.5, "4 kHz should be unity, got {at_hf}");
     }
 }
@@ -1610,8 +1614,8 @@ alone {alone:.1} dB/s, with neighbours {with_neighbours:.1} dB/s"
     #[test]
     fn stacked_boosts_are_still_bounded() {
         let mut stacked = [DecayBand::default(); DECAY_BANDS];
-        for i in 0..4 {
-            stacked[i] = boost_band(i, 500.0, 4.0);
+        for (i, slot) in stacked.iter_mut().take(4).enumerate() {
+            *slot = boost_band(i, 500.0, 4.0);
         }
         // Four maximum boosts on the same frequency: the loop must stay
         // stable, i.e. the tail must still decay rather than run away.
@@ -1660,4 +1664,3 @@ in-loop allpass: {hf_flat:.1} -> {hf_cut:.1} dB/s"
         );
     }
 }
-

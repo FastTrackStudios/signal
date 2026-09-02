@@ -28,9 +28,9 @@ loss.
 - Proto lives at `crates/signal/space/proto` = crate `signal-space-proto`,
   module `space::`, trait `SampleSpace` (+ generated `SampleSpaceClient`,
   `Service`, `StreamService`, `SampleSpaceStreamSource`).
-- Engine mount: `apps/fasttrackstudio/src/engine_main.rs`, after the
+- Engine mount: `apps/desktop/src/engine_main.rs`, after the
   pack-library block. `SIGNAL_SPACE_ROOTS` (colon-separated) selects roots.
-- App view: `apps/fasttrackstudio/src/space_view.rs`, reached via
+- App view: `apps/desktop/src/space_view.rs`, reached via
   `RigKind::Space` ("Samples") in `rig_view.rs`.
 
 ## Integration state (IMPORTANT)
