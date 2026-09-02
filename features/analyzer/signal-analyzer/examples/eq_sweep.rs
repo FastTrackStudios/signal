@@ -61,7 +61,13 @@ fn collect_presets(root: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// Run one preset and parse the summary line out of `eq_match`'s report.
-fn run_one(binary: &Path, plugin: &str, preset: &Path, extra: &[String]) -> Outcome {
+fn run_one(
+    binary: &Path,
+    plugin: &str,
+    preset: &Path,
+    extra: &[String],
+    curves: Option<&Path>,
+) -> Outcome {
     let name = preset
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
@@ -70,6 +76,22 @@ fn run_one(binary: &Path, plugin: &str, preset: &Path, extra: &[String]) -> Outc
 
     let mut cmd = Command::new(binary);
     cmd.arg("--plugin").arg(plugin).arg("--preset").arg(preset);
+    // Keep each preset's measured curves, not just the summary line.
+    //
+    // `eq_match --json` has always written the plugin's own response per band
+    // as `reference_db` — it has to, to compare against it — and the sweep
+    // threw it away, keeping only the error. So the one artefact worth
+    // archiving, what Pro-Q 4 actually *does* on each of its 171 factory
+    // presets, was computed 171 times and discarded every time. That is the
+    // measurement a model gets fitted to; the error figure is only a verdict
+    // on the fit we had that day.
+    if let Some(dir) = curves {
+        let safe: String = name
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .collect();
+        cmd.arg("--json").arg(dir.join(format!("{safe}.json")));
+    }
     for e in extra {
         cmd.arg(e);
     }
@@ -130,10 +152,17 @@ fn main() {
     let (Some(plugin), Some(presets)) = (arg("--plugin"), arg("--presets")) else {
         eprintln!(
             "usage: eq_sweep --plugin <path> --presets <dir> [--jobs n] [--limit n] \
-             [--json out] [--baseline in] [--tonal]"
+             [--json out] [--curves dir] [--baseline in] [--tonal]"
         );
         std::process::exit(2);
     };
+    // Where to keep each preset's measured curves. Created up front so a
+    // worker cannot race another creating it.
+    let curves: Option<PathBuf> = arg("--curves").map(PathBuf::from);
+    if let Some(dir) = &curves {
+        std::fs::create_dir_all(dir).expect("create --curves directory");
+    }
+
     let jobs: usize = arg("--jobs").and_then(|v| v.parse().ok()).unwrap_or(8);
     let limit: usize = arg("--limit").and_then(|v| v.parse().ok()).unwrap_or(usize::MAX);
     // Anything after `--` is handed to every `eq_match` run, so a whole-library
@@ -178,10 +207,11 @@ fn main() {
             let (files, next, done, results) =
                 (files.clone(), next.clone(), done.clone(), results.clone());
             let (plugin, binary, extra) = (plugin.clone(), binary.clone(), extra.clone());
+            let curves_ref = curves.as_deref();
             scope.spawn(move || loop {
                 let i = next.fetch_add(1, Ordering::SeqCst);
                 let Some(preset) = files.get(i) else { return };
-                let outcome = run_one(&binary, &plugin, preset, &extra);
+                let outcome = run_one(&binary, &plugin, preset, &extra, curves_ref);
                 let n = done.fetch_add(1, Ordering::SeqCst) + 1;
                 println!(
                     "  [{n:>3}/{}] {:<44} {}",

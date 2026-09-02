@@ -24,6 +24,7 @@ FLEET_START=$(date +%s)
 # SSL exposes 12, all real, so it needs no restriction.
 # plugin file | display name | selector args
 FLEET='
+FabFilter Pro-Q 4|FabFilter Pro-Q 4|--ids 550-562
 uaudio_ua_1176ln_rev_e|UADx 1176LN Rev E|--first 8
 uaudio_ua_1176_rev_a|UADx 1176 Rev A|--first 8
 uaudio_ua_1176ae|UADx 1176AE|--first 8

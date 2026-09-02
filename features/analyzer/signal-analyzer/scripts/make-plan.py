@@ -162,15 +162,23 @@ def main():
         names = [p["name"] for p in params]
 
         def add(name, value):
-            if name in by_name:
-                engage.append({"name": name, "value": value})
-            else:
-                unresolved.append(name)
+            engage.append({"name": name, "value": value})
 
         for name, value in (custom.get("engage") or {}).items():
-            # A literal value of 1.0 means "this control's maximum", which is
-            # what every UADx parameter's range already is.
-            add(name, by_name[name]["max"] if name in by_name else value)
+            if name in by_name:
+                # A bare 1.0 means "this control's maximum", which for most
+                # UADx parameters is the same number.
+                add(name, by_name[name]["max"] if value == 1.0 else value)
+            elif isinstance(value, (int, float)):
+                # Not in the scan, but carrying an explicit value. That is
+                # legitimate: a scan covers a slice of the parameter surface
+                # (Pro-Q 4 exposes 600 controls and the scan reads 40), while
+                # an engage state may need to reach outside it — Pro-Q 4's
+                # Character sits at id 554 and its bands at 0. The capture
+                # resolves names against the plugin, not against the scan.
+                add(name, value)
+            else:
+                unresolved.append(name)
         for prefix in (custom.get("engage_prefix_max") or []):
             hit = [n for n in names if n.startswith(prefix)]
             if not hit:

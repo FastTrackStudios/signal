@@ -98,5 +98,18 @@
       "Ch1",
       "Ch2"
     ]
+  },
+  "Pro-Q": {
+    "why": "The VST3 reports itself as 'Pro-Q', not 'FabFilter Pro-Q 4' \u2014 this key must match the reported name. A flat Pro-Q 4 is a null: bands default to unused, and Character defaults to Clean, which is bit-transparent (0.00000% THD at +30 dB of boost). Engage band 1 at 1 kHz with +30 dB so there is something for the output stage to work on, then sweep Character. Clean/Subtle/Warm read 0%, 41.95% and 42.23% THD; Subtle and Warm share their odd content exactly and differ by 25 dB of even order, which is the second harmonic the EQ model already tries to reproduce.",
+    "engage": {
+      "Band 1 Used": 1.0,
+      "Band 1 Enabled": 1.0,
+      "Band 1 Frequency": 9.966,
+      "Band 1 Gain": 30.0
+    },
+    "engage_axes": [
+      "Character"
+    ],
+    "note": "Measure with the VST3. The CLAP build renders silence through eq_match's preset path."
   }
 }
