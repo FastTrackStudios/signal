@@ -1472,7 +1472,11 @@ impl SampleEngine {
         note: u8,
         rr: usize,
     ) -> Option<usize> {
+        // Zones whose velocity band contains the played velocity, kept apart
+        // from the rest so a band miss can fall back rather than go silent.
         let mut matches: Vec<usize> = Vec::new();
+        let mut off_band: Vec<usize> = Vec::new();
+        let velocity = self.last_velocity;
         // Nearest single-key zone when no zone spans the note: CSS records a
         // whole-tone grid (every other semitone) and pitch-shifts ±1 to fill,
         // and the extracted zones are single-key (key_min == key_max), so even
@@ -1500,7 +1504,21 @@ impl SampleEngine {
                 }
             }
             if note >= z.key_min && note <= z.key_max {
-                matches.push(i);
+                // VELOCITY-BANDED zones pick by how hard the key was struck.
+                //
+                // Without this the dynamic layer was chosen by round-robin
+                // across every band, so an NI piano — 28 velocity layers per
+                // key — played an arbitrary one, very often the `pp` sample,
+                // at any velocity. That is a piano with no hammer, no core
+                // tone and no dynamics: "it plays samples but sounds nothing
+                // like a piano". CSS is untouched, because its sustain zones
+                // span the full range and select by CC1 dynamic LABEL, so
+                // every candidate is in band and this changes nothing.
+                if velocity >= z.vel_min && velocity <= z.vel_max {
+                    matches.push(i);
+                } else {
+                    off_band.push(i);
+                }
             } else {
                 let dist = (z.root_key as i32 - note as i32).unsigned_abs() as u8;
                 if nearest.is_none_or(|(d, _)| dist < d) {
@@ -1510,6 +1528,22 @@ impl SampleEngine {
         }
         if !matches.is_empty() {
             return Some(matches[rr % matches.len()]);
+        }
+        // The key is covered but no band claims this velocity (a library with
+        // gaps in its velocity map). Sounding the nearest band beats silence.
+        if !off_band.is_empty() {
+            let nearest = off_band
+                .iter()
+                .min_by_key(|&&i| {
+                    let z = &self.patch.spec.zones[i];
+                    let lo = z.vel_min as i32 - velocity as i32;
+                    let hi = velocity as i32 - z.vel_max as i32;
+                    lo.max(hi).max(0)
+                })
+                .copied();
+            if nearest.is_some() {
+                return nearest;
+            }
         }
         // No exact zone — use the nearest recorded pitch within range and let
         // spawn_zone_voice pitch-shift it (note - root_key semitones).
