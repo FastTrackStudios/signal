@@ -1002,7 +1002,7 @@ dependencies = [
 [[package]]
 name = "audio-controls"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "dioxus",
  "wasm-bindgen",
@@ -1012,7 +1012,7 @@ dependencies = [
 [[package]]
 name = "audiocore-core"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "anyhow",
  "atomic_float",
@@ -1026,12 +1026,12 @@ dependencies = [
 [[package]]
 name = "audiocore-dsp"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 
 [[package]]
 name = "audiocore-gui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "nice-plug",
  "nice-plug-dioxus",
@@ -3114,13 +3114,28 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
 dependencies = [
  "architect",
- "daw-control",
- "daw-module",
- "daw-proto",
- "daw-reaper",
+ "daw-control 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "daw-module 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "daw-reaper 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "facet",
+ "tokio",
+ "vox",
+]
+
+[[package]]
+name = "daw"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "architect",
+ "daw-control 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "daw-module 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "daw-reaper 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "daw-standalone",
  "daw-test-macro",
- "dawfile-reaper",
+ "dawfile-reaper 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "eyre",
  "facet",
  "libc",
@@ -3133,7 +3148,7 @@ dependencies = [
 [[package]]
 name = "daw-audio-io"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "cpal",
  "facet",
@@ -3159,12 +3174,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "daw-audio-sync"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "bincode",
+ "reaper-low",
+ "reaper-medium",
+ "serde",
+ "socket2 0.5.10",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "daw-control"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
 dependencies = [
  "architect",
- "daw-proto",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "eyre",
+ "facet",
+ "facet-json",
+ "futures",
+ "serde",
+ "serde_json",
+ "tracing",
+ "vox",
+ "vox-types",
+]
+
+[[package]]
+name = "daw-control"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "architect",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "eyre",
  "facet",
  "facet-json",
@@ -3179,14 +3227,14 @@ dependencies = [
 [[package]]
 name = "daw-extension-runtime"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "architect",
  "crossbeam-channel",
- "daw-control",
- "daw-module",
- "daw-proto",
- "daw-reaper",
+ "daw-control 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "daw-module 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "daw-reaper 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "eyre",
  "reaper-high",
  "reaper-low",
@@ -3206,6 +3254,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "daw-module"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "daw-proto"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
@@ -3213,7 +3270,20 @@ dependencies = [
  "architect",
  "facet",
  "futures",
- "midicore",
+ "midicore 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "vox",
+ "vox-types",
+]
+
+[[package]]
+name = "daw-proto"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "architect",
+ "facet",
+ "futures",
+ "midicore 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "vox",
  "vox-types",
 ]
@@ -3227,14 +3297,47 @@ dependencies = [
  "base64 0.22.1",
  "camino",
  "crossbeam-channel",
- "daw-audio-sync",
- "daw-control",
- "daw-proto",
- "dawfile-aaf",
- "dawfile-ableton",
- "dawfile-dawproject",
- "dawfile-protools",
- "dawfile-reaper",
+ "daw-audio-sync 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "daw-control 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "dawfile-aaf 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "dawfile-ableton 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "dawfile-dawproject 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "dawfile-protools 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "dawfile-reaper 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "display-info",
+ "enumflags2",
+ "eyre",
+ "facet-json",
+ "libloading 0.8.9",
+ "reaper-high",
+ "reaper-low",
+ "reaper-medium",
+ "swell-ui",
+ "tokio",
+ "tracing",
+ "uuid",
+ "vox",
+ "vox-stream",
+]
+
+[[package]]
+name = "daw-reaper"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "architect",
+ "base64 0.22.1",
+ "camino",
+ "crossbeam-channel",
+ "daw-audio-sync 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "daw-control 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "dawfile-aaf 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "dawfile-ableton 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "dawfile-dawproject 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "dawfile-protools 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "dawfile-reaper 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "display-info",
  "enumflags2",
  "eyre",
@@ -3254,7 +3357,7 @@ dependencies = [
 [[package]]
 name = "daw-standalone"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "architect",
  "base64 0.22.1",
@@ -3262,10 +3365,10 @@ dependencies = [
  "clack-host",
  "cpal",
  "daw-audio-io",
- "daw-control",
- "daw-proto",
+ "daw-control 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "eyre",
- "fts-sample",
+ "fts-sample 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "gloo-timers",
  "js-sys",
  "libloading 0.8.9",
@@ -3284,7 +3387,7 @@ dependencies = [
 [[package]]
 name = "daw-test-macro"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3294,7 +3397,7 @@ dependencies = [
 [[package]]
 name = "daw-theme"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "facet",
  "facet-styx",
@@ -3303,7 +3406,7 @@ dependencies = [
 [[package]]
 name = "daw-theme-art"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "daw-theme",
  "dioxus",
@@ -3312,16 +3415,16 @@ dependencies = [
 [[package]]
 name = "daw-ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "architect",
- "daw-control",
- "daw-proto",
+ "daw-control 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "daw-theme",
  "daw-theme-art",
  "dioxus",
- "dock-dioxus",
- "dock-proto",
+ "dock-dioxus 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "dock-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "eyre",
  "futures-timer",
  "input",
@@ -3338,7 +3441,17 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
 dependencies = [
  "cfb 0.10.0",
- "daw-proto",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "dawfile-aaf"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "cfb 0.10.0",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "thiserror 2.0.18",
 ]
 
@@ -3347,7 +3460,19 @@ name = "dawfile-ableton"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
 dependencies = [
- "daw-proto",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "flate2",
+ "quick-xml 0.37.5",
+ "roxmltree 0.20.0",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "dawfile-ableton"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "flate2",
  "quick-xml 0.37.5",
  "roxmltree 0.20.0",
@@ -3359,7 +3484,18 @@ name = "dawfile-dawproject"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
 dependencies = [
- "daw-proto",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "roxmltree 0.20.0",
+ "thiserror 2.0.18",
+ "zip",
+]
+
+[[package]]
+name = "dawfile-dawproject"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "roxmltree 0.20.0",
  "thiserror 2.0.18",
  "zip",
@@ -3370,7 +3506,16 @@ name = "dawfile-protools"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
 dependencies = [
- "daw-proto",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "dawfile-protools"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "thiserror 2.0.18",
 ]
 
@@ -3380,7 +3525,20 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
 dependencies = [
  "base64 0.22.1",
- "daw-proto",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "nom 8.0.0",
+ "rayon",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "dawfile-reaper"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "base64 0.22.1",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "nom 8.0.0",
  "rayon",
  "serde",
@@ -4285,7 +4443,7 @@ dependencies = [
 [[package]]
 name = "dioxus-test"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "anyrender",
  "anyrender_vello_cpu",
@@ -4452,7 +4610,21 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
 dependencies = [
  "dioxus",
- "dock-proto",
+ "dock-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "dock-dioxus"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "dioxus",
+ "dock-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "serde",
  "serde_json",
  "tokio",
@@ -4464,6 +4636,16 @@ dependencies = [
 name = "dock-proto"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+dependencies = [
+ "facet",
+ "facet-json",
+ "uuid",
+]
+
+[[package]]
+name = "dock-proto"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "facet",
  "facet-json",
@@ -4541,9 +4723,9 @@ dependencies = [
  "anyhow",
  "architect",
  "color-palette",
- "daw",
- "daw-proto",
- "daw-reaper",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "daw-reaper 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
  "dynamic-template-proto",
  "eyre",
  "facet",
@@ -4561,7 +4743,7 @@ name = "dynamic-template-proto"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/session?tag=v0.0.2#ebaeb4727b5c073c37a56062752eb4f9d34d70b8"
 dependencies = [
- "daw-proto",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
  "facet",
  "thiserror 2.0.18",
  "vox",
@@ -4627,7 +4809,7 @@ dependencies = [
 [[package]]
 name = "engine-launcher"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "libc",
 ]
@@ -5183,12 +5365,12 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "cpal",
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "daw-audio-io",
- "daw-proto",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "daw-standalone",
  "daw-ui",
- "dawfile-reaper",
+ "dawfile-reaper 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "dioxus",
  "engine-launcher",
  "eyre",
@@ -5201,7 +5383,7 @@ dependencies = [
  "include_dir",
  "js-sys",
  "libc",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "objc2 0.5.2",
  "reqwest 0.12.28",
  "session-guide",
@@ -5236,7 +5418,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
- "utils",
+ "utils 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "vox",
  "vox-core",
  "vox-websocket",
@@ -5552,7 +5734,7 @@ dependencies = [
 [[package]]
 name = "fts-audio-ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "anyrender",
  "architect-ui",
@@ -5567,7 +5749,7 @@ dependencies = [
 [[package]]
 name = "fts-chrome"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "dioxus",
 ]
@@ -5597,7 +5779,7 @@ dependencies = [
 [[package]]
 name = "fts-modulation"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "audiocore-dsp",
 ]
@@ -5605,7 +5787,7 @@ dependencies = [
 [[package]]
 name = "fts-plug-ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "architect-ui",
  "atomic_float",
@@ -5627,6 +5809,17 @@ dependencies = [
 name = "fts-sample"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+dependencies = [
+ "crossbeam-channel",
+ "symphonium",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
+name = "fts-sample"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "arc-swap",
  "claxon",
@@ -6627,7 +6820,7 @@ dependencies = [
  "anyhow",
  "approx",
  "eq-dsp",
- "fts-sample",
+ "fts-sample 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "trigger-dsp",
 ]
 
@@ -7266,7 +7459,7 @@ dependencies = [
 [[package]]
 name = "input"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "serde",
  "serde_json",
@@ -7277,7 +7470,7 @@ dependencies = [
 [[package]]
 name = "input-dioxus"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "architect-ui",
  "dioxus",
@@ -7786,8 +7979,8 @@ source = "git+https://github.com/FastTrackStudios/session?tag=v0.0.2#ebaeb4727b5
 dependencies = [
  "color-eyre",
  "colored",
- "daw-module",
- "daw-proto",
+ "daw-module 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
  "derive_more 1.0.0",
  "engraver",
  "facet",
@@ -7828,7 +8021,7 @@ source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe
 dependencies = [
  "architect",
  "color-palette",
- "daw-proto",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
  "facet",
  "helgoboss-midi",
  "keyflow-syntax",
@@ -7916,11 +8109,11 @@ checksum = "a4933f3f57a8e9d9da04db23fb153356ecaf00cbd14aee46279c33dc80925c37"
 [[package]]
 name = "kontrol"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "eyre",
  "hidapi",
- "midicore",
+ "midicore 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "rusb",
  "tracing",
 ]
@@ -7999,7 +8192,7 @@ dependencies = [
 [[package]]
 name = "level-dsp"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "audiocore-dsp",
 ]
@@ -8671,7 +8864,7 @@ dependencies = [
 [[package]]
 name = "meter-dsp"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "atomic_float",
  "parking_lot",
@@ -8693,7 +8886,7 @@ dependencies = [
 [[package]]
 name = "meter-ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "meter-dsp",
  "nice-plug",
@@ -8712,20 +8905,28 @@ name = "midicore"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
 dependencies = [
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+]
+
+[[package]]
+name = "midicore"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
  "eyre",
  "midicore-midir",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "tracing",
 ]
 
 [[package]]
 name = "midicore-midir"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "crossbeam-channel",
  "eyre",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "midir",
  "tracing",
 ]
@@ -8742,12 +8943,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "midicore-proto"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
+dependencies = [
+ "architect",
+ "facet",
+ "vox",
+ "vox-types",
+]
+
+[[package]]
 name = "midicore-ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "dioxus",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
 ]
 
 [[package]]
@@ -11047,7 +11259,7 @@ dependencies = [
 [[package]]
 name = "pitch-dsp"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "audiocore-dsp",
  "serde",
@@ -12079,7 +12291,7 @@ dependencies = [
 [[package]]
 name = "reaper-launcher"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -13369,7 +13581,7 @@ name = "session-guide"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/session?tag=v0.0.2#ebaeb4727b5c073c37a56062752eb4f9d34d70b8"
 dependencies = [
- "fts-sample",
+ "fts-sample 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
  "hound",
  "session-proto",
  "sha2 0.10.9",
@@ -13383,13 +13595,13 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/session?tag=v0.0.2#ebaeb4727b5c073c37a56062752eb4f9d34d70b8"
 dependencies = [
  "architect",
- "daw-proto",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
  "eyre",
  "facet",
  "keyflow",
  "serde",
  "thiserror 2.0.18",
- "utils",
+ "utils 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
  "uuid",
  "vox",
  "vox-types",
@@ -13401,10 +13613,10 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/session?tag=v0.0.2#ebaeb4727b5c073c37a56062752eb4f9d34d70b8"
 dependencies = [
  "architect-ui",
- "daw-proto",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
  "dioxus",
- "dock-dioxus",
- "dock-proto",
+ "dock-dioxus 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
+ "dock-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.2)",
  "dynamic-template",
  "eyre",
  "keyflow",
@@ -13479,7 +13691,7 @@ name = "signal"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "eyre",
  "futures",
  "serde_json",
@@ -13492,7 +13704,7 @@ dependencies = [
  "signal-proto",
  "signal-storage",
  "tokio",
- "utils",
+ "utils 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "uuid",
 ]
 
@@ -13519,7 +13731,7 @@ dependencies = [
  "architect",
  "facet",
  "facet-styx",
- "midicore",
+ "midicore 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "signal-bass-proto",
  "signal-proto",
  "signal-rig-host",
@@ -13535,7 +13747,7 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "facet",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "signal-proto",
  "vox",
 ]
@@ -13547,7 +13759,7 @@ dependencies = [
  "architect",
  "dioxus",
  "fts-chrome",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "midicore-ui",
  "signal-bass-proto",
 ]
@@ -13582,7 +13794,7 @@ dependencies = [
 name = "signal-daw-bridge"
 version = "0.1.0"
 dependencies = [
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "serde",
  "signal-import",
  "signal-proto",
@@ -13593,9 +13805,9 @@ name = "signal-drums"
 version = "0.1.0"
 dependencies = [
  "architect",
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "kontrol",
- "midicore",
+ "midicore 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "signal-drums-proto",
  "signal-fx",
  "signal-plugin-host",
@@ -13613,7 +13825,7 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "facet",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "vox",
 ]
 
@@ -13623,7 +13835,7 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "dioxus",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "midicore-ui",
  "signal-drums-proto",
  "signal-ui",
@@ -13634,8 +13846,8 @@ name = "signal-ekit"
 version = "0.1.0"
 dependencies = [
  "architect",
- "daw",
- "midicore",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "midicore 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "signal-ekit-proto",
  "signal-rigs-proto",
  "signal-sampler",
@@ -13666,7 +13878,7 @@ dependencies = [
 name = "signal-extension"
 version = "0.1.0"
 dependencies = [
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "daw-extension-runtime",
  "eyre",
  "fragile",
@@ -13686,13 +13898,13 @@ version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
  "comp",
- "daw",
- "daw-proto",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "delay",
  "eq",
- "fts-sample",
+ "fts-sample 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "level-dsp",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "modulation",
  "pitch-dsp",
  "reverb",
@@ -13731,7 +13943,7 @@ dependencies = [
  "architect",
  "facet",
  "facet-styx",
- "midicore",
+ "midicore 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "signal-fx",
  "signal-guitar-proto",
  "signal-proto",
@@ -13827,14 +14039,14 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "architect-telemetry",
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "daw-audio-io",
  "eyre",
  "facet",
  "facet-json",
  "facet-styx",
  "libc",
- "midicore",
+ "midicore 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "ratatui",
  "signal-keys-proto",
  "signal-plugin-host",
@@ -13854,7 +14066,7 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "facet",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "vox",
 ]
 
@@ -13865,7 +14077,7 @@ dependencies = [
  "architect",
  "dioxus",
  "fts-chrome",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "midicore-ui",
  "signal-browser",
  "signal-keys-proto",
@@ -13881,7 +14093,7 @@ dependencies = [
  "eyre",
  "facet",
  "facet-json",
- "fts-sample",
+ "fts-sample 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "hound",
  "js-sys",
  "signal-sampler",
@@ -13894,7 +14106,7 @@ name = "signal-live"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "eyre",
  "futures",
  "serde",
@@ -13923,7 +14135,7 @@ name = "signal-nam"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "fts-sample",
+ "fts-sample 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "neural-amp-modeler",
  "regex",
  "serde",
@@ -13995,7 +14207,7 @@ dependencies = [
 name = "signal-plugin-host"
 version = "0.1.0"
 dependencies = [
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "hound",
 ]
 
@@ -14010,7 +14222,7 @@ dependencies = [
  "serde_json",
  "signal-macromod",
  "thiserror 2.0.18",
- "utils",
+ "utils 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "uuid",
  "vox",
 ]
@@ -14022,7 +14234,7 @@ dependencies = [
  "atomic_float",
  "audiocore-core",
  "crossbeam-channel",
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "daw-extension-runtime",
  "eyre",
  "nice-plug",
@@ -14038,7 +14250,7 @@ dependencies = [
 name = "signal-rig-host"
 version = "0.1.0"
 dependencies = [
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "daw-audio-io",
  "eyre",
  "facet",
@@ -14062,19 +14274,19 @@ dependencies = [
  "base64 0.22.1",
  "clap",
  "cpal",
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "daw-audio-io",
  "eyre",
  "facet",
  "facet-styx",
  "facet-toml",
- "fts-sample",
+ "fts-sample 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "hound",
  "keyflow-annotate",
  "keyflow-orchestra",
  "libc",
  "memmap2",
- "midicore",
+ "midicore 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "neural-amp-modeler",
  "openwurli-dsp",
  "ratatui",
@@ -14117,7 +14329,7 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "bhtsne",
- "fts-sample",
+ "fts-sample 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "rayon",
  "realfft",
  "serde",
@@ -14150,7 +14362,7 @@ dependencies = [
  "signal-proto",
  "thiserror 2.0.18",
  "tokio",
- "utils",
+ "utils 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "uuid",
 ]
 
@@ -14158,7 +14370,7 @@ dependencies = [
 name = "signal-synth"
 version = "0.1.0"
 dependencies = [
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "facet-styx",
  "flate2",
  "signal-plugin-host",
@@ -14176,7 +14388,7 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "facet",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "vox",
 ]
 
@@ -14185,9 +14397,9 @@ name = "signal-synth-rig"
 version = "0.1.0"
 dependencies = [
  "architect",
- "daw",
+ "daw 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "daw-audio-io",
- "midicore",
+ "midicore 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "signal-browser",
  "signal-keys",
  "signal-plugin-host",
@@ -14205,7 +14417,7 @@ dependencies = [
  "architect",
  "dioxus",
  "fts-chrome",
- "midicore-proto",
+ "midicore-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "midicore-ui",
  "signal-proto",
  "signal-synth-proto",
@@ -14222,12 +14434,12 @@ dependencies = [
  "audio-controls",
  "audiocore-gui",
  "dioxus",
- "dock-dioxus",
- "dock-proto",
+ "dock-dioxus 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
+ "dock-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "fts-modulation",
  "getrandom 0.3.4",
  "lumen-blocks",
- "midicore",
+ "midicore 0.1.0 (git+https://github.com/FastTrackStudios/daw?tag=v0.0.5)",
  "nice-plug-dioxus",
  "pattern-ui",
  "signal",
@@ -16481,7 +16693,7 @@ dependencies = [
 [[package]]
 name = "tune-dsp"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "pitch-dsp",
  "realfft",
@@ -16832,6 +17044,18 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 name = "utils"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.2#f9017749e1d32fe15c83ce79e1eb632030f4ff8f"
+dependencies = [
+ "facet",
+ "facet-styx",
+ "serde",
+ "uuid",
+ "web-sys",
+]
+
+[[package]]
+name = "utils"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.5#561e40865d080b6607d7bb08478da8d1d0da85ef"
 dependencies = [
  "facet",
  "facet-styx",
