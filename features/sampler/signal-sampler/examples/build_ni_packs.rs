@@ -163,8 +163,14 @@ fn read_zones(tsv: &Path, spec: &NiPianoSpec) -> Result<Vec<Zone>, String> {
             vel_lo: num(c_vlo)?.clamp(0, 127) as u8,
             vel_hi: num(c_vhi)?.clamp(0, 127) as u8,
             root: num(c_root)?.clamp(0, 127) as u8,
-            // Kontakt stores tune in semitones; the spec wants cents.
-            tune_cents: get(c_tune)?.trim().parse::<f32>().unwrap_or(0.0) * 100.0,
+            // The extraction's `tune` is a pitch RATIO (1.0 = unity), not
+            // semitones — 3350 of The Grandeur's 3358 zones read exactly `1`,
+            // and the rest sit just above it (1.0046, 1.0054…). Reading it as
+            // semitones and multiplying by 100 put +100 cents on every zone of
+            // every NI piano, so the whole instrument played a semitone sharp:
+            // a real pitch bug, and an invisible one, because the zone roots
+            // were all correct and the tuning rides `rate` on the zoned path.
+            tune_cents: ratio_to_cents(get(c_tune)?.trim().parse::<f32>().unwrap_or(1.0)),
             loop_start: num(c_ls)?,
             loop_end: num(c_le)?,
             group: spec.classify(&sample).to_string(),
@@ -327,6 +333,18 @@ fn parse_args() -> Args {
     a.full_root = PathBuf::from(&pos[2]);
     a.proxy_root = PathBuf::from(&pos[3]);
     a
+}
+
+/// A pitch ratio as cents. `1.0` (unity) is 0 cents.
+///
+/// Guards a non-positive ratio, which `log2` would send to NaN/-inf and which
+/// would then silently detune or mute a zone.
+fn ratio_to_cents(ratio: f32) -> f32 {
+    if ratio > 0.0 {
+        1200.0 * ratio.log2()
+    } else {
+        0.0
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
