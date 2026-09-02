@@ -120,6 +120,28 @@ fn main() {
 
     println!("{path}\n  setting {pname} = {value}");
 
+    // Does the plugin recover? Set the target, render, set the parameter back
+    // to its default, render again. If the second render works the plugin is
+    // responsive and is declining the value; if it stays silent the plugin
+    // has been wedged by the write and no later write reaches it.
+    {
+        let mut p = HostedPlugin::load(&path).ok().flatten().expect("load");
+        p.prepare(SR, BLOCK as u32).unwrap();
+        let id = id_of(&pname);
+        let default = p.params().iter().find(|q| q.id == id).map(|q| q.default).unwrap_or(0.0);
+        for (n, v) in &also {
+            p.set_param(id_of(n), *v);
+        }
+        p.set_param(id, value);
+        let (a_thd, a_gain) = measure(&mut p, 1000.0);
+        p.set_param(id, default);
+        let (b_thd, b_gain) = measure(&mut p, 1000.0);
+        println!(
+            "  {:<38} at {value}: THD {a_thd:>7.4}% gain {a_gain:>6.2}  |  back at {default}: THD {b_thd:>7.4}% gain {b_gain:>6.2}",
+            "set target, then set back"
+        );
+    }
+
     // A fifth route, which is not an ordering but a different mechanism:
     // set the value, save the plugin's state, and load that state into a
     // fresh instance. VST3 parameters that are not automatable cannot be
