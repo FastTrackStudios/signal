@@ -22,6 +22,10 @@ signal-import.workspace = true
 # with the installed bundle, which is how a plugin-side fault is told from a
 # DSP one.
 eq-dsp.workspace = true
+# `comp_match` drives our own compressor through the same stimulus the
+# captures were taken with, which is the only way to know whether the DSP
+# reproduces them.
+comp-dsp.workspace = true
 # Reference-render caching and result files: a tuning run is expensive and its
 # output IS the preset, so both are worth keeping.
 hound = "3.5"

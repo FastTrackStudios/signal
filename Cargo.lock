@@ -13713,6 +13713,7 @@ name = "signal-analyzer"
 version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
+ "comp-dsp",
  "eq-dsp",
  "hound",
  "realfft",

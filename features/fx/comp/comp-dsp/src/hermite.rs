@@ -48,7 +48,7 @@ impl HermiteCubicSmoother {
     /// Active smoothing algorithm:
     /// 1. Read GR history (4 most recent smoothed results)
     /// 2. Detect change: threshold = gr_inst * 0.001, compare with history
-    /// 3. Route: Hermite cubic if change detected, sqrt(gr_inst) if steady state
+    /// 3. Route: Hermite cubic if change detected, the requested gain if steady
     /// 4. Update history for next sample
     #[allow(clippy::too_many_arguments)]
     pub fn process(
@@ -78,10 +78,20 @@ impl HermiteCubicSmoother {
             || (gr_inst - hist2).abs() >= threshold
             || (gr_inst - hist3).abs() >= threshold;
 
-        // Step 4: Route to algorithm
-        // Smooth in dB domain for better frequency response matching
-        let gr_instant_sqrt = gr_inst.sqrt();
-        let gr_instant_db = audiocore_dsp::db::linear_to_db(gr_instant_sqrt.max(1e-10));
+        // Step 4: Route to algorithm, smoothing in the dB domain.
+        //
+        // The gain goes in as it is. An earlier version took its square root
+        // first — `linear_to_db(sqrt(g))` is `10·log10(g)`, which is exactly
+        // half the reduction — while smoothing it against a history that had
+        // no square root, so the two were not even in the same domain. The
+        // steady-state branch then returned the square root outright.
+        //
+        // Measured against FabFilter Pro-C 3 this applied almost exactly half
+        // the gain reduction the plugin did: -22.20 dB against -43.79 at
+        // 100:1, -19.74 against -40.33 at 8.36:1. The error scaled as
+        // `N·(1 - 1/ratio)` with N ≈ 10 dB across every ratio, which is what
+        // a constant halving of the dB looks like from the outside.
+        let gr_instant_db = audiocore_dsp::db::linear_to_db(gr_inst.max(1e-10));
         let hist0_db = audiocore_dsp::db::linear_to_db(hist0.max(1e-10));
 
         let result = if has_change {
@@ -98,8 +108,8 @@ impl HermiteCubicSmoother {
             let smoothed_db = coeff * hist0_db + (1.0 - coeff) * gr_instant_db;
             audiocore_dsp::db::db_to_linear(smoothed_db)
         } else {
-            // Steady state: just return sqrt
-            gr_instant_sqrt
+            // Steady state: the requested gain, unchanged.
+            gr_inst
         };
 
         // Step 5: Shift history and add new result
@@ -130,6 +140,38 @@ impl HermiteCubicSmoother {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn steady_state_applies_the_requested_gain_not_its_square_root() {
+        // The regression this exists for: the smoother returned sqrt(g) in
+        // steady state, which halves the reduction in dB. -12 dB of gain
+        // reduction came out as -6.
+        let mut h = HermiteCubicSmoother::new(StateFuncHypothesis::Identity);
+        let target = audiocore_dsp::db::db_to_linear(-12.0);
+        let mut out = 0.0;
+        for _ in 0..4096 {
+            out = h.process(target, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0);
+        }
+        let db = audiocore_dsp::db::linear_to_db(out);
+        assert!(
+            (db + 12.0).abs() < 0.1,
+            "asked for -12 dB, settled at {db:.2} dB"
+        );
+    }
+
+    #[test]
+    fn a_range_of_reductions_all_settle_where_asked() {
+        for want in [-1.0, -6.0, -12.0, -24.0, -40.0] {
+            let mut h = HermiteCubicSmoother::new(StateFuncHypothesis::Identity);
+            let target = audiocore_dsp::db::db_to_linear(want);
+            let mut out = 0.0;
+            for _ in 0..8192 {
+                out = h.process(target, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0);
+            }
+            let db = audiocore_dsp::db::linear_to_db(out);
+            assert!((db - want).abs() < 0.2, "asked {want} dB, settled {db:.2} dB");
+        }
+    }
 
     #[test]
     fn test_hermite_identity_hypothesis() {
