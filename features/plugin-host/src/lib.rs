@@ -34,6 +34,9 @@ pub use daw::plugin::{
 /// Catalog entry type for [`FxFactory::installed`] implementors.
 pub use daw::service::fx::InstalledFx;
 
+mod pool;
+pub use pool::PluginPool;
+
 /// One pending parameter write from the UI thread, drained at the top of
 /// the next audio block.
 #[derive(Clone, Copy, Debug)]
