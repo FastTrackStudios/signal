@@ -102,6 +102,25 @@ def main():
                 "--set", setting, "--freqs", "1000", "--levels", MODE_LEVELS,
             ], 4))
 
+    # Cross-product jobs: every combination of the named modes, with the drive
+    # swept inside each. This is where a unit whose modes interact gets
+    # measured properly.
+    for combo in plan.get("cross") or []:
+        modes_by_name = {m["name"]: m for m in plan.get("modes", [])}
+        lists = [[(n, st) for st in modes_by_name[n]["states"]] for n in combo if n in modes_by_name]
+        if not lists:
+            continue
+        import itertools
+        for point in itertools.product(*lists):
+            label = "x".join(
+                "".join(c if c.isalnum() or c in "-_" else "_" for c in st["text"])[:12]
+                for _, st in point)
+            setting = ";".join(f"{n}={st['value']}" for n, st in point)
+            extra = ["--set", setting, "--freqs", "1000", "--levels", MODE_LEVELS]
+            if plan.get("drive"):
+                extra += ["--drive-param", plan["drive"], "--drive-steps", "5"]
+            jobs.append((f"cross-{label}", extra, 5 * 4 + 17))
+
     todo = [(n, a, w) for (n, a, w) in jobs
             if not os.path.exists(os.path.join(out_root, n, "saturation.json"))]
     done_already = len(jobs) - len(todo)

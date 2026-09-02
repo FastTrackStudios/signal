@@ -112,5 +112,17 @@
       "Character"
     ],
     "note": "Measure with the VST3. The CLAP build renders silence through eq_match's preset path."
+  },
+  "Decapitator": {
+    "why": "Five styles (A, E, N, T, P) and a Punish button that applies to every one of them, so the unit has ten voices and measuring styles and Punish separately would describe seven. Drive is the axis inside each: 3.18% THD at zero to 23.51% at full, with 11 dB of gain span.",
+    "cross": [
+      [
+        "Style",
+        "Punish"
+      ]
+    ]
+  },
+  "Devil-Loc Deluxe": {
+    "why": "Crush and Crunch are both continuous, so they are handled as drive and second axis rather than as a cross product \u2014 Crunch reaches 27.7% THD against Crush at 3.3%. A cross needs discrete modes."
   }
 }

@@ -109,12 +109,24 @@ def main():
     drive = ranked[0]["name"] if ranked else None
     second = ranked[1]["name"] if len(ranked) > 1 and ranked[1]["thd_span_ratio"] > 3.0 else None
 
+    # Modes include two-state controls. They are excluded from the *drive*
+    # ranking, because a drive axis needs a continuum, but a two-state control
+    # is very often the most interesting thing a unit has: Decapitator's
+    # `Punish` is a button, and it is half of what people reach for the plugin
+    # for. Switches that merely turn the unit off are still excluded.
     modes = [
         {"name": p["name"],
          "states": [{"value": s["value"], "text": s["text"]} for s in p["states"]]}
         for p in params
-        if p["kind"] == "discrete" and len(p["states"]) > 2 and not is_switch(p["name"])
+        if p["kind"] == "discrete" and len(p["states"]) >= 2 and not is_switch(p["name"])
     ]
+
+    # Modes to measure as a cross product rather than one at a time. Only
+    # where the interaction is the point — Decapitator's Punish applies to
+    # each of its five styles, so five styles and a button is ten sounds, not
+    # seven measurements.
+    cross = [c for c in (custom.get("cross") or []) if all(
+        any(m["name"] == n for m in modes) for n in c)]
 
     # Pins: anything that would confound every measurement if left at a
     # surprising default. Mix must be fully wet or the saturation is measured
@@ -211,6 +223,7 @@ def main():
         "drive_max_thd_percent": ranked[0]["thd_max_percent"] if ranked else None,
         "second_axis": second,
         "modes": modes,
+        "cross": cross,
         "pins": pins,
         "engage": engage,
         "engage_axes": engage_axes,

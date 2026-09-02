@@ -25,6 +25,10 @@ FLEET_START=$(date +%s)
 # plugin file | display name | selector args
 FLEET='
 FabFilter Pro-Q 4|FabFilter Pro-Q 4|--ids 550-562
+FabFilter Pro-C 3|FabFilter Pro-C 3|--first 20
+Soundtoys/Decapitator|Soundtoys Decapitator|--first 8
+Soundtoys/Devil-Loc_Deluxe|Soundtoys Devil-Loc Deluxe|--first 6
+Spicerack|Process Audio Spicerack|
 uaudio_ua_1176ln_rev_e|UADx 1176LN Rev E|--first 8
 uaudio_ua_1176_rev_a|UADx 1176 Rev A|--first 8
 uaudio_ua_1176ae|UADx 1176AE|--first 8

@@ -122,16 +122,33 @@ fn main() {
     let freq: f64 = num("--freq", 1000.0);
     let level: f64 = num("--level", -12.0);
 
-    let mut plugin = match HostedPlugin::load(&path) {
-        Ok(Some(mut p)) => {
-            p.prepare(sample_rate, BLOCK as u32).expect("prepare");
-            p
-        }
-        other => {
-            eprintln!("{path}: could not load ({other:?})");
-            std::process::exit(1);
+    // Every parameter is measured on a **fresh instance**.
+    //
+    // Restoring the swept parameter to its default is not enough, because a
+    // plugin can be left somewhere a parameter write does not bring it back
+    // from. Soundtoys' Decapitator does exactly this: after its Bypass and
+    // Style sweeps it sits in passthrough — 0.0 dB gain, 0.0000% THD — for
+    // every remaining control, so Drive, Punish, Tone and Mix all reported
+    // "does nothing" on a saturator whose Drive demonstrably goes from 3.18%
+    // to 35.19% THD. Nothing in the output says the measurement is void; it
+    // is a clean table of zeroes.
+    //
+    // A fresh instance costs about 2 ms (the bundle is cached process-wide
+    // after the first load), against ~2 s of rendering per parameter. There
+    // is no reason to carry state across a sweep for that.
+    let load = |path: &str| -> HostedPlugin {
+        match HostedPlugin::load(path) {
+            Ok(Some(mut p)) => {
+                p.prepare(sample_rate, BLOCK as u32).expect("prepare");
+                p
+            }
+            other => {
+                eprintln!("{path}: could not load ({other:?})");
+                std::process::exit(1);
+            }
         }
     };
+    let mut plugin = load(&path);
     let descriptor = plugin.descriptor().clone();
     let all = plugin.params();
 
@@ -285,6 +302,9 @@ fn main() {
             use std::io::IsTerminal;
             std::io::stderr().is_terminal()
         };
+        // Fresh instance for this parameter — see `load` above.
+        plugin = load(&path);
+
         let mut points: Vec<Point> = Vec::new();
         for (k, v) in pl.settings.iter().enumerate() {
             if !interactive {
@@ -316,14 +336,6 @@ fn main() {
             points.push(measure(&mut plugin, p.id, *v, freq, level, sample_rate));
             points_done += 1;
         }
-        // Restore the parameter's **default**, not its current value.
-        // `param_value` reports where the parameter is *now*, which after a
-        // sweep is wherever the sweep left it — restoring that leaves the
-        // control at its extreme. Doing this to `Bypass` first left the
-        // plugin bypassed for every subsequent control, and the whole scan
-        // came back reading 0.0000% THD and 0.0 dB gain: a completely clean
-        // set of numbers describing nothing.
-        plugin.set_param(p.id, p.default);
 
         let usable: Vec<&Point> = points.iter().filter(|q| q.usable && q.thd > 0.0).collect();
         let (thd_lo, thd_hi) = usable.iter().fold((f64::INFINITY, 0.0f64), |(lo, hi), q| {
