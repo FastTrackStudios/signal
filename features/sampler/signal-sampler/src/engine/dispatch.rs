@@ -1027,7 +1027,27 @@ impl SampleEngine {
 
         // Continuous loudness sweep on top of the (short) timbre crossfade.
         let expr = self.cc1_expression(self.cc1);
+        // Only for articulations that actually HAVE a CC1 dynamic crossfade,
+        // i.e. more than one recorded dynamic layer.
+        //
+        // This re-levels every sustain voice each block with a 120 ms ramp
+        // (`CC1_RAMP_MS`, Kontakt's per-modulator smoothing decoded from CSS).
+        // On a bowed sustain that lag is the point. On a struck instrument it
+        // lands on the note-on: the voice is re-ramped from its spawn gain
+        // over 120 ms, which measured as ~35 ms of silence followed by a slow
+        // rise — a piano with no hammer. A velocity-layered library has no CC1
+        // crossfade to run: its dynamics are chosen by which zone was struck,
+        // and the gain it spawned with is already correct.
+        let has_cc1_dynamics = self
+            .patch
+            .spec
+            .articulation(&self.articulation)
+            .map(|a| a.dynamics.len() > 1)
+            .unwrap_or(false);
         for v in self.voices.voices_mut() {
+            if !has_cc1_dynamics {
+                break;
+            }
             if v.line != cur_line {
                 continue;
             }

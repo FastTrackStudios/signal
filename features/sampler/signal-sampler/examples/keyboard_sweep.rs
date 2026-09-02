@@ -65,6 +65,31 @@ struct Failures {
     asked: Vec<(u8, u8, String, String, usize)>,
 }
 
+/// Minimal 16-bit stereo WAV writer — enough to listen to and measure.
+fn write_wav(path: &str, interleaved: &[f32], sr: u32) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::Write;
+    let n = interleaved.len();
+    let data_len = (n * 2) as u32;
+    let mut f = std::io::BufWriter::new(std::fs::File::create(path)?);
+    f.write_all(b"RIFF")?;
+    f.write_all(&(36 + data_len).to_le_bytes())?;
+    f.write_all(b"WAVEfmt ")?;
+    f.write_all(&16u32.to_le_bytes())?;
+    f.write_all(&1u16.to_le_bytes())?; // PCM
+    f.write_all(&2u16.to_le_bytes())?; // stereo
+    f.write_all(&sr.to_le_bytes())?;
+    f.write_all(&(sr * 4).to_le_bytes())?;
+    f.write_all(&4u16.to_le_bytes())?;
+    f.write_all(&16u16.to_le_bytes())?;
+    f.write_all(b"data")?;
+    f.write_all(&data_len.to_le_bytes())?;
+    for s in interleaved {
+        let v = (s.clamp(-1.0, 1.0) * 32767.0) as i16;
+        f.write_all(&v.to_le_bytes())?;
+    }
+    Ok(())
+}
+
 fn arg(name: &str) -> Option<String> {
     let mut it = std::env::args().skip_while(|a| a != name);
     it.next()?;
@@ -87,6 +112,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // `--note N` dumps every trace event for one key instead of sweeping —
     // the "why is THIS key dead" view.
     let only: Option<u8> = arg("--note").and_then(|v| v.parse().ok());
+    // `--wav <path>` renders the single `--note` through the engine and writes
+    // it, so what the engine PRODUCES can be listened to and measured beside
+    // the source sample instead of reasoned about.
+    let wav_out = arg("--wav");
 
     let patch = PlayerPatch::from_pack(Path::new(&pack))?;
     // The section and mic MUST come from the spec. Passing empty strings
@@ -228,6 +257,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             engine.note_on(note, vel);
             out.fill(0.0);
             engine.render(&mut out);
+            if let Some(path) = wav_out.as_deref() {
+                // 4 s held, then release, so the attack, body and tail are all
+                // in the file.
+                let mut pcm: Vec<f32> = out.clone();
+                let mut blk = vec![0.0f32; 4096 * 2];
+                for i in 0..(SR as usize * 4 / 4096) {
+                    if i == (SR as usize * 3 / 4096) {
+                        engine.note_off(note);
+                    }
+                    blk.fill(0.0);
+                    engine.render(&mut blk);
+                    pcm.extend_from_slice(&blk);
+                }
+                write_wav(path, &pcm, SR)?;
+                println!("wrote {path} ({} frames)", pcm.len() / 2);
+            }
             engine.note_off(note);
 
             let trace = engine.render_trace();

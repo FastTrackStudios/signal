@@ -654,7 +654,17 @@ impl SampleEngine {
         // full-gain stacked ornament doubled the same pitch for ~2.5 s — the
         // audible "phasy overlap". The attack sample is bounded: it rings its
         // attack (~300 ms) then fades over the re-bow retire time (~550 ms).
-        let fresh_vz = if !self.legato_sustain {
+        // ONLY for libraries that authored a legato engine — i.e. the ones
+        // that actually ship the attack ornament this compensates for.
+        //
+        // The swap mutes the body for 40 ms and fades it in over 180-230 ms
+        // BECAUSE a separate attack sample is sounding over that window. A
+        // library without those zones gets the mute and the fade and nothing
+        // on top: 40 ms of silence, then a slow rise. On a piano that removes
+        // the hammer and most of the note's identity — measured on The
+        // Grandeur as a first non-zero sample 1940 frames (40 ms) after
+        // note-on against 1 frame in the source recording.
+        let fresh_vz = if !self.legato_sustain && self.patch.spec.legato_engine.is_some() {
             self.patch
                 .spec
                 .legato_cfg()
@@ -1623,6 +1633,19 @@ impl SampleEngine {
         };
         let line = self.cur_line as u8;
         let path = self.patch.zone_paths[idx].clone();
+        // Which zone actually sounded, and for which velocity — the question
+        // "why did it play THAT sample" needs answering from a running rig,
+        // not just a test harness.
+        tracing::debug!(
+            target: "signal_sampler::trigger",
+            note,
+            velocity = self.last_velocity,
+            zone = idx,
+            vel_min = self.patch.spec.zones[idx].vel_min,
+            vel_max = self.patch.spec.zones[idx].vel_max,
+            file = %path.file_name().and_then(|s| s.to_str()).unwrap_or_default(),
+            "zoned spawn"
+        );
 
         let Some(data) = self.cache.get_loaded(&path) else {
             self.cache_misses
