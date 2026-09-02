@@ -29,6 +29,7 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::Duration;
 
 use signal_sampler::engine::trace::{MissReason, TraceKind};
 use signal_sampler::{PlayerPatch, SampleEngine};
@@ -110,16 +111,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut systematic_tuning: Option<(i32, f64)> = None;
     let mut engine = SampleEngine::new(patch, SR, section.clone(), mic.clone());
-    // Preload first: an unloaded sample is a streaming problem, and mixing it
-    // in with mapping problems is how a pack gets blamed for the engine's
-    // behaviour (and vice versa).
-    let stats = engine.preload_samples();
+    // Deliberately NO bulk preload. `warm_note_samples` below loads exactly
+    // what each note needs, right before it is played, so the RAM budget can
+    // never run out mid-sweep and turn "the budget filled" into "these keys
+    // are unmapped". Those are different faults with different fixes, and a
+    // bulk preload of a multi-GB library conflates them: it exhausts the
+    // 4 GB ceiling partway through the keyboard and every note after that
+    // reads as dead.
     engine.set_trace_enabled(true);
-    println!(
-        "pack: {pack}\npreloaded {} samples, {:.1} MB",
-        stats.loaded,
-        stats.bytes as f64 / 1e6
-    );
+    println!("pack: {pack}");
     // A constant pitch error across the whole keyboard is almost always a
     // per-articulation transpose, so show them before the sweep.
     {
@@ -163,6 +163,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     println!("section={section:?} mic={mic:?}");
+    // Whether the pack streams decides whether preload warms every zone's
+    // HEAD (cheap, whole keyboard resident) or decodes whole samples until
+    // the RAM budget runs out (and leaves the rest of the keyboard dead).
+    println!(
+        "streamable: {}   preload budget: {} MB",
+        engine.cache_handle().is_streamable(),
+        signal_sampler::engine::budget::limit_bytes() / (1024 * 1024)
+    );
     println!("sweeping notes {lo}..={hi} at velocities {vels:?}, max stretch {max_stretch} st\n");
 
     if let Some((cents, share)) = systematic_tuning {
@@ -183,9 +191,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     for note in lo..=hi {
         for &vel in &vels {
-            // Warm this note so a cache miss cannot masquerade as a mapping
-            // hole; the sweep is about what the MAP can answer.
+            // Warm this note and WAIT for it to land. `warm_note_samples` is
+            // asynchronous — it hands the paths to the decode worker and
+            // returns — so triggering straight after races the worker and
+            // every note reads as NOT LOADED. That is a fact about the test's
+            // timing, not about the pack, and conflating the two is how a
+            // perfectly-mapped library gets called broken.
             engine.warm_note_samples(note, vel);
+            let paths = engine.resolve_note_sample_paths(note, vel);
+            let deadline = std::time::Instant::now() + Duration::from_millis(1500);
+            while std::time::Instant::now() < deadline
+                && !paths.iter().all(|p| engine.is_sample_resident(p))
+            {
+                std::thread::sleep(Duration::from_millis(2));
+            }
             let before = engine.render_trace().events.len();
             engine.note_on(note, vel);
             out.fill(0.0);

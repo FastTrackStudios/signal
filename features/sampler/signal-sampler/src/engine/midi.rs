@@ -1594,6 +1594,22 @@ impl SampleEngine {
             self.cache_misses
                 .set(self.cache_misses.get().saturating_add(1));
             self.record_cache_miss(&path);
+            // This is a note the player pressed that produced NO SOUND, and
+            // until now the zoned path dropped it in silence: no trace event,
+            // and no bump of the process-wide counter — so `notes_dropped()`
+            // read zero while a whole keyboard went dead, and the render trace
+            // showed a note-on with nothing after it. The convention path has
+            // always recorded both; matching it here is what lets anyone tell
+            // "this zone is not resident yet" from "this note is unmapped",
+            // which are different faults with different fixes.
+            crate::engine::note_dropped();
+            self.trace_push(TraceKind::SampleMiss {
+                note,
+                articulation: zone_artic.clone(),
+                dynamic: String::new(),
+                rr: 0,
+                reason: MissReason::NotLoaded,
+            });
             // Warm it off-thread so the next hit of this note sounds.
             self.cache.warm_async(&path);
             return false;
