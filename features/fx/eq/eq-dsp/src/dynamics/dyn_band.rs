@@ -309,7 +309,7 @@ impl DynBand {
 
     /// Current live gain in dB (for metering / the yellow bar).
     #[must_use]
-    pub fn live_gain_db(&self) -> f64 {
+    pub const fn live_gain_db(&self) -> f64 {
         self.applied_gain_db
     }
 
@@ -329,13 +329,12 @@ impl DynBand {
             Placement::Mid => 0.5 * (left + right),
             Placement::Side => 0.5 * (left - right),
         };
-        let filtered_side = match self.params.side_mode {
-            SideMode::Wide => side,
-            _ => {
-                let hp = self.side_hp2.tick(0, self.side_hp.tick(0, component));
-                let lp = self.side_lp2.tick(0, self.side_lp.tick(0, hp));
-                lp * self.side_makeup
-            }
+        let filtered_side = if self.params.side_mode == SideMode::Wide {
+            side
+        } else {
+            let hp = self.side_hp2.tick(0, self.side_hp.tick(0, component));
+            let lp = self.side_lp2.tick(0, self.side_lp.tick(0, hp));
+            lp * self.side_makeup
         };
         let d = self.detector.tick(filtered_side, side);
         let target = self.params.base_gain_db + d * self.params.range_db;
@@ -363,13 +362,12 @@ impl DynBand {
             Placement::Side => 0.5 * (*left - *right),
         };
         // Side path: band-limit, detect.
-        let filtered_side = match self.params.side_mode {
-            SideMode::Wide => side,
-            _ => {
-                let hp = self.side_hp2.tick(0, self.side_hp.tick(0, component));
-                let lp = self.side_lp2.tick(0, self.side_lp.tick(0, hp));
-                lp * self.side_makeup
-            }
+        let filtered_side = if self.params.side_mode == SideMode::Wide {
+            side
+        } else {
+            let hp = self.side_hp2.tick(0, self.side_hp.tick(0, component));
+            let lp = self.side_lp2.tick(0, self.side_lp.tick(0, hp));
+            lp * self.side_makeup
         };
         let d = self.detector.tick(filtered_side, side);
 
@@ -422,6 +420,7 @@ mod tests {
 
     /// RMS of a window of samples.
     fn rms(buf: &[f64]) -> f64 {
+        #[expect(clippy::as_conversions, reason = "int-to-float conversion; no std equivalent")]
         (buf.iter().map(|x| x * x).sum::<f64>() / buf.len() as f64).sqrt()
     }
 

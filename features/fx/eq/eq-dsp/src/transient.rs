@@ -125,7 +125,7 @@ impl PeakSteadySplitter {
         self.mask
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.short_ms_state = 0.0;
         self.long_ms_state = 0.0;
         self.mask = 0.0;
@@ -176,7 +176,7 @@ impl TransientEq {
             let (a, b) = t.split_at_mut(1);
             self.transient_eq.process(&mut a[..], &mut b[..]);
         }
-        let mut s = [sl, sr];
+        let mut s: [f64; 2] = (sl, sr).into();
         {
             let (a, b) = s.split_at_mut(1);
             self.steady_eq.process(&mut a[..], &mut b[..]);
@@ -185,7 +185,7 @@ impl TransientEq {
         let tg = 10.0f64.powf(self.transient_gain_db / 20.0);
         let sg = 10.0f64.powf(self.steady_gain_db / 20.0);
         match self.solo {
-            StreamSolo::None => (t[0] * tg + s[0] * sg, t[1] * tg + s[1] * sg),
+            StreamSolo::None => (t[0].mul_add(tg, s[0] * sg), t[1].mul_add(tg, s[1] * sg)),
             StreamSolo::Transient => (t[0] * tg, t[1] * tg),
             StreamSolo::Steady => (s[0] * sg, s[1] * sg),
         }
@@ -206,7 +206,7 @@ mod tests {
 
     /// Drum-ish test signal: steady 220 Hz tone + periodic clicks.
     fn test_signal(i: usize) -> f64 {
-        let tone = 0.2 * (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin();
+        let tone = 0.2 * (core::f64::consts::TAU * 220.0 * f64::from(i32::try_from(i).unwrap_or(0)) / SR).sin();
         let click = if i % 12000 < 48 { 0.7 } else { 0.0 };
         tone + click
     }
@@ -268,7 +268,7 @@ mod tests {
                 }
             }
         }
-        let tone_rms = (tone_rms / tone_n as f64).sqrt();
+        let tone_rms = (tone_rms / f64::from(i32::try_from(tone_n).unwrap_or(1))).sqrt();
         assert!(
             click_peak > 0.3,
             "clicks must pass the transient solo: {click_peak}"

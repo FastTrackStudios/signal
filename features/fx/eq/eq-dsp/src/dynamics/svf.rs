@@ -89,7 +89,7 @@ impl Svf {
     }
 
     #[must_use]
-    pub fn gain_db(&self) -> f64 {
+    pub const fn gain_db(&self) -> f64 {
         self.gain_db
     }
 
@@ -110,7 +110,7 @@ impl Svf {
                 (self.g_base, self.k_base)
             }
         };
-        self.a1 = 1.0 / (1.0 + g * (g + k));
+        self.a1 = 1.0 / g.mul_add(g + k, 1.0);
         self.a2 = g * self.a1;
         self.a3 = g * self.a2;
         match self.shape {
@@ -150,8 +150,8 @@ impl Svf {
 
     #[inline]
     pub fn tick(&mut self, ch: usize, x: f64) -> f64 {
-        let v3 = x - self.ic2[ch];
-        let v1 = self.a1 * self.ic1[ch] + self.a2 * v3;
+        let v3 = x - self.ic2[..].get(ch).copied().unwrap_or(0.0);
+        let v1 = self.a1.mul_add(self.ic1[ch], self.a2 * v3);
         let v2 = self.ic2[ch] + self.a2 * self.ic1[ch] + self.a3 * v3;
         self.ic1[ch] = 2.0 * v1 - self.ic1[ch];
         self.ic2[ch] = 2.0 * v2 - self.ic2[ch];

@@ -4,9 +4,9 @@
 //!   1. Butterworth LP prototype (`filter_type_dispatcher`, iVar9==2 path)
 //!   2. `apply_shelf_gain_to_zpk` (0x1800fcce0) — for type 7 (low shelf) only
 //!   3. Bilinear transform (transform type 2)
-//!   4. zpk_to_biquad_coefficients (0x1800fe040)
+//!   4. `zpk_to_biquad_coefficients` (0x1800fe040)
 //!
-//! is_low_type_shelf_gain (0x1800ffbc0) returns true for types {2, 5, 6, 7}:
+//! `is_low_type_shelf_gain` (0x1800ffbc0) returns true for types {2, 5, 6, 7}:
 //!   - Type 7 (Low Shelf): zeros *= gain, poles /= gain at ZPK stage
 //!   - Type 8 (High Shelf): gain applied via numerator normalization at biquad stage
 //!   - Type 9 (Tilt Shelf): similar to high shelf
@@ -19,7 +19,7 @@ use crate::zpk::Zpk;
 
 /// Design a low shelf filter via ZPK pipeline.
 ///
-/// Pro-Q 4 type 7: Butterworth LP prototype → apply_shelf_gain_to_zpk
+/// Pro-Q 4 type 7: Butterworth LP prototype → `apply_shelf_gain_to_zpk`
 /// (scales zeros × gain, poles ÷ gain) → bilinear → biquads.
 ///
 /// From binary analysis of setup_eq_band_filter (0x1800fdf10):
@@ -144,7 +144,7 @@ pub fn design_band_shelf(
 
     // Compute bandwidth edges from center frequency and Q.
     let halfbw = (0.5 / q).asinh() / 2.0_f64.ln();
-    let scale = 2.0_f64.powf(halfbw);
+    let scale = halfbw.exp2();
     let f_lo = freq_hz / scale;
     let f_hi = freq_hz * scale;
     let w_lo = 2.0 * PI * f_lo / sample_rate;

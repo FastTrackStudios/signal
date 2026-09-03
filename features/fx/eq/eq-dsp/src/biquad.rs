@@ -89,12 +89,20 @@ pub fn zpk_to_sos(zpk: &Zpk) -> Vec<Coeffs> {
 #[must_use]
 pub fn eval_sos(sections: &[Coeffs], w: f64) -> Complex {
     let ejw = Complex::from_polar(1.0, -w);
-    let ejw2 = ejw * ejw;
+    let ejw2 = Complex::from_polar(1.0, -2.0 * w);
 
     let mut result = Complex::ONE;
     for s in sections {
-        let den = Complex::new(s[0], 0.0) + ejw * s[1] + ejw2 * s[2];
-        let num = Complex::new(s[3], 0.0) + ejw * s[4] + ejw2 * s[5];
+        let den_0 = Complex::new(s[0], 0.0);
+        let den_1 = ejw * s[1];
+        let den_2 = ejw2 * s[2];
+        let den = den_0 + den_1 + den_2;
+
+        let num_0 = Complex::new(s[3], 0.0);
+        let num_1 = ejw * s[4];
+        let num_2 = ejw2 * s[5];
+        let num = num_0 + num_1 + num_2;
+
         result = result * (num / den);
     }
     result

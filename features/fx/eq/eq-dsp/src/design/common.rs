@@ -48,14 +48,14 @@ pub fn db_to_linear(gain_db: f64) -> f64 {
 /// `docs/reports/proq4/re/shelf_q_scaling.md`.  Floor of `1e-6` matches the
 /// Pro-Q binary's protection against `pow(0, _)`.
 #[inline]
-pub(crate) fn ui_q_to_bandwidth_q(q: f64) -> f64 {
+pub fn ui_q_to_bandwidth_q(q: f64) -> f64 {
     q.max(1e-6).powf(5.0 / 10.644)
 }
 
 /// Butterworth Q values per section for a 2N-pole filter.
-/// At user_q=1, each section's MZT-form Q equals its natural Butterworth value,
-/// giving a proper Butterworth cascade. For user_q != 1, the highest-Q section
-/// is scaled by user_q^(1/N) so that the cumulative effect of N sections matches
+/// At `user_q=1`, each section's MZT-form Q equals its natural Butterworth value,
+/// giving a proper Butterworth cascade. For `user_q` != 1, the highest-Q section
+/// is scaled by `user_q^(1/N)` so that the cumulative effect of N sections matches
 /// Pro-Q 4's resonance amount (matches LP/HP cascade at fc=1k Q=10 to ~0.5 dB).
 pub(crate) fn cascade_qs(n: usize, user_q: f64) -> Vec<f64> {
     let order = 2 * n;

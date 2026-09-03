@@ -250,7 +250,7 @@ impl SslChannelSettings {
     }
 
     #[must_use]
-    pub fn g_series() -> Self {
+    pub const fn g_series() -> Self {
         Self {
             e_series: false,
             ..Self::e_series()
@@ -275,6 +275,7 @@ pub struct HardwareEqModel {
 }
 
 impl HardwareEqModel {
+    #[must_use]
     pub fn new(sample_rate: f64, settings: HardwareEqSettings) -> Self {
         let mut model = Self {
             settings,
@@ -288,7 +289,8 @@ impl HardwareEqModel {
         model
     }
 
-    pub fn settings(&self) -> HardwareEqSettings {
+    #[must_use]
+    pub const fn settings(&self) -> HardwareEqSettings {
         self.settings
     }
 

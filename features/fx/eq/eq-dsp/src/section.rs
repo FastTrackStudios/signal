@@ -20,7 +20,7 @@ pub struct Tdf2Section {
 
 impl Tdf2Section {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             c0: 1.0,
             c1: 0.0,
@@ -47,16 +47,21 @@ impl Tdf2Section {
     /// Wanted for evaluating the cascade's response without redesigning it —
     /// the auto-gain compensation has to know what curve the chain is
     /// currently applying.
-    pub fn coeffs(&self) -> [f64; 5] {
+    #[must_use]
+    pub const fn coeffs(&self) -> [f64; 5] {
         [self.c0, self.c1, self.c2, self.c3, self.c4]
     }
 
     /// Process one sample through the biquad (TDF2).
     #[inline]
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
-        let output = input * self.c0 + self.s1[ch];
-        self.s1[ch] = input * self.c1 - output * self.c3 + self.s2[ch];
-        self.s2[ch] = input * self.c2 - output * self.c4;
+        let output = input * self.c0 + self.s1.get(ch).copied().unwrap_or(0.0);
+        if let Some(s1_ref) = self.s1.get_mut(ch) {
+            *s1_ref = input * self.c1 - output * self.c3 + self.s2.get(ch).copied().unwrap_or(0.0);
+        }
+        if let Some(s2_ref) = self.s2.get_mut(ch) {
+            *s2_ref = input * self.c2 - output * self.c4;
+        }
         output
     }
 
@@ -95,7 +100,7 @@ pub struct Df1Section {
 }
 
 impl Df1Section {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             b0: 1.0,
             b1: 0.0,

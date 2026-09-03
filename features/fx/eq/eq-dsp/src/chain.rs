@@ -16,7 +16,7 @@ pub struct EqChain {
 
 impl EqChain {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             bands: Vec::new(),
             sample_rate: 48000.0,
@@ -25,10 +25,10 @@ impl EqChain {
 
     /// Add a new band and return its index.
     ///
-    /// Returns the last valid index if the chain is already at MAX_BANDS.
+    /// Returns the last valid index if the chain is already at `MAX_BANDS`.
     pub fn add_band(&mut self) -> usize {
         if self.bands.len() >= MAX_BANDS {
-            return self.bands.len() - 1;
+            return self.bands.len().saturating_sub(1);
         }
         let idx = self.bands.len();
         let mut band = Band::new();
@@ -48,7 +48,7 @@ impl EqChain {
     }
 
     /// Return the number of bands in the chain.
-    pub fn num_bands(&self) -> usize {
+    pub const fn num_bands(&self) -> usize {
         self.bands.len()
     }
 
@@ -96,17 +96,17 @@ impl EqChain {
         if !self.has_active_bands() {
             return;
         }
-        for i in 0..left.len().min(right.len()) {
+        for (li, ri) in left.iter_mut().zip(right.iter_mut()) {
             for band in &mut self.bands {
                 if band.is_idle() {
                     continue;
                 }
                 match band.placement {
                     Placement::Stereo => {
-                        left[i] = band.tick(left[i], 0);
-                        right[i] = band.tick(right[i], 1);
+                        *li = band.tick(*li, 0);
+                        *ri = band.tick(*ri, 1);
                     }
-                    Placement::Left => left[i] = band.tick(left[i], 0),
+                    Placement::Left => *li = band.tick(*li, 0),
                     // Channel slot 0, not 1. A Right band only ever sees one
                     // channel, and `Band::tick` advances its enable ramp on
                     // slot 0 alone — driven on slot 1 the ramp never left
@@ -114,20 +114,20 @@ impl EqChain {
                     // library was silently inert**. Its own filter state has
                     // nowhere else to live either, so slot 0 is where it
                     // belongs.
-                    Placement::Right => right[i] = band.tick(right[i], 0),
+                    Placement::Right => *ri = band.tick(*ri, 0),
                     Placement::Mid => {
-                        let m = 0.5 * (left[i] + right[i]);
-                        let s = 0.5 * (left[i] - right[i]);
+                        let m = 0.5 * (*li + *ri);
+                        let s = 0.5 * (*li - *ri);
                         let m = band.tick(m, 0);
-                        left[i] = m + s;
-                        right[i] = m - s;
+                        *li = m + s;
+                        *ri = m - s;
                     }
                     Placement::Side => {
-                        let m = 0.5 * (left[i] + right[i]);
-                        let s = 0.5 * (left[i] - right[i]);
+                        let m = 0.5 * (*li + *ri);
+                        let s = 0.5 * (*li - *ri);
                         let s = band.tick(s, 0);
-                        left[i] = m + s;
-                        right[i] = m - s;
+                        *li = m + s;
+                        *ri = m - s;
                     }
                 }
             }

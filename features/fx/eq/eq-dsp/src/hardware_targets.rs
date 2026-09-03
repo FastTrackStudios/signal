@@ -74,6 +74,7 @@ pub fn hardware_response_snapshots() -> Vec<HardwareResponseSnapshot> {
     snapshots
 }
 
+#[must_use]
 pub fn eq1979_digitized_snapshots() -> Vec<HardwareResponseSnapshot> {
     vec![
         eq1979_raw_target(),
@@ -87,6 +88,7 @@ pub fn eq1979_digitized_snapshots() -> Vec<HardwareResponseSnapshot> {
     ]
 }
 
+#[must_use]
 pub fn eq1979_raw_target() -> HardwareResponseSnapshot {
     csv_snapshot(
         HardwareTargetKind::Neve1073,
@@ -96,6 +98,7 @@ pub fn eq1979_raw_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn eq1979_raw_mid_engaged_target() -> HardwareResponseSnapshot {
     csv_snapshot(
         HardwareTargetKind::Neve1073,
@@ -108,6 +111,7 @@ pub fn eq1979_raw_mid_engaged_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn eq1979_raw_low_engaged_target() -> HardwareResponseSnapshot {
     csv_snapshot(
         HardwareTargetKind::Neve1073,

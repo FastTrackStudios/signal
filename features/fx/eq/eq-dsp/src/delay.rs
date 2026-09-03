@@ -24,10 +24,10 @@ impl DelayFilter {
     /// The buffer is allocated as the next power of 2 >= `max_delay` + 1.
     #[must_use]
     pub fn new(max_delay: usize) -> Self {
-        let size = (max_delay + 1).next_power_of_two();
+        let size = max_delay.saturating_add(1).next_power_of_two();
         Self {
             buffer: vec![0.0; size],
-            mask: size - 1,
+            mask: size.saturating_sub(1),
             write_pos: 0,
             delay_samples: 0,
         }
@@ -42,9 +42,11 @@ impl DelayFilter {
     /// Process one sample: write to buffer, read from delayed position.
     #[inline]
     pub fn process(&mut self, input: f64) -> f64 {
-        self.buffer[self.write_pos] = input;
+        if let Some(slot) = self.buffer.get_mut(self.write_pos) {
+            *slot = input;
+        }
         let read_pos = (self.write_pos + self.buffer.len() - self.delay_samples) & self.mask;
-        let output = self.buffer[read_pos];
+        let output = self.buffer.get(read_pos).copied().unwrap_or(0.0);
         self.write_pos = (self.write_pos + 1) & self.mask;
         output
     }
@@ -114,8 +116,8 @@ mod tests {
     fn zero_delay_passes_through() {
         let mut d = DelayFilter::new(64);
         d.set_delay(0);
-        for i in 0..10 {
-            let input = i as f64 * 0.1;
+        for i in 0u32..10u32 {
+            let input = f64::from(i) * 0.1;
             let output = d.process(input);
             assert!(
                 (output - input).abs() < 1e-14,

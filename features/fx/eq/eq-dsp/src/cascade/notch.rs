@@ -4,7 +4,7 @@ use std::f64::consts::PI;
 
 use crate::biquad::Coeffs;
 
-use super::*;
+use super::PASSTHROUGH;
 
 /// Solve for the inner-section `(a1, a2)` of the LP→BS factorisation
 /// (`notch_formula.md` / `bandpass_formula.md`).
@@ -12,6 +12,7 @@ use super::*;
 /// The palindromic quartic `s⁴ + B·s³ + C·s² + B·s + 1` factors via
 /// `u = s + 1/s` into `u² + B·u + (C − 2) = 0`, giving two `u` values;
 /// the inner pole pair is the smaller-|s| roots of `s² − u·s + 1 = 0`.
+#[must_use]
 pub fn notch_inner_pair(b_quartic: f64, c_quartic: f64) -> (f64, f64) {
     let half_b = 0.5 * b_quartic;
     let disc = half_b * half_b - (c_quartic - 2.0);
@@ -20,11 +21,11 @@ pub fn notch_inner_pair(b_quartic: f64, c_quartic: f64) -> (f64, f64) {
     } else {
         (-half_b, (-disc).sqrt())
     };
-    let u_sq_re = u_re * u_re - u_im * u_im;
+    let u_sq_re = u_re.mul_add(u_re, -(u_im * u_im));
     let u_sq_im = 2.0 * u_re * u_im;
     let d_re = u_sq_re - 4.0;
     let d_im = u_sq_im;
-    let d_mag = (d_re * d_re + d_im * d_im).sqrt();
+    let d_mag = d_re.hypot(d_im);
     let sqrt_re = ((d_mag + d_re) * 0.5).max(0.0).sqrt();
     let sqrt_im = ((d_mag - d_re) * 0.5).max(0.0).sqrt() * d_im.signum();
     let s_plus_re = 0.5 * (u_re + sqrt_re);

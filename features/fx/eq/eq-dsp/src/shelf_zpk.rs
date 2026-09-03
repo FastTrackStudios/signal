@@ -49,7 +49,8 @@ fn q_to_bandwidth(q: f64) -> f64 {
 ///
 /// RBJ analog prototype:
 ///   H(s) = A · (s² + (√A · `w0/Q_bw`) · s + A·w0²) / (A·s² + (√A · `w0/Q_bw`) · s + w0²)
-/// where A = √(linear_gain).
+/// where A = √(`linear_gain`).
+#[must_use]
 pub fn design_low_shelf_zpk(
     n_sections: usize,
     freq_hz: f64,
@@ -63,7 +64,7 @@ pub fn design_low_shelf_zpk(
     }
 
     let total_linear = (user_gain_db * LN10_OVER_20).exp();
-    let section_gain = total_linear.powf(1.0 / n as f64);
+    let section_gain = total_linear.powf(1.0 / (u32::try_from(n).unwrap_or(1) as f64));
     // Pro-Q4's cos/pow bandwidth — used as RBJ shelf slope `S`. Best match at Q≈1.
     let q_bw = q_to_bandwidth(user_q);
     let w0 = 2.0 * PI * freq_hz / sample_rate;
@@ -85,7 +86,7 @@ fn rbj_low_shelf_slope_biquad(w0: f64, slope: f64, linear_gain: f64) -> Coeffs {
     let cos_w0 = w0.cos();
     let sin_w0 = w0.sin();
     let s = slope.max(1e-6);
-    let disc = (a + 1.0 / a) * (1.0 / s - 1.0) + 2.0;
+    let disc = (a + 1.0 / a).mul_add(1.0 / s - 1.0, 2.0);
     let alpha = sin_w0 / 2.0 * disc.max(0.0).sqrt();
     let two_sqrt_a_alpha = 2.0 * a.sqrt() * alpha;
 

@@ -55,6 +55,12 @@ impl ResponseTarget {
         self.points.iter().map(|point| point.freq_hz).collect()
     }
 
+    /// Compute weighted root mean square (RMS) error and maximum absolute error.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `predicted_db` length does not match the number of target points.
+    #[must_use]
     pub fn weighted_error_db(&self, predicted_db: &[f64]) -> CalibrationError {
         assert_eq!(
             self.points.len(),
@@ -83,6 +89,7 @@ impl ResponseTarget {
         CalibrationError { rms_db, max_abs_db }
     }
 
+    #[must_use]
     pub fn evaluate_sections(&self, sections: &[Coeffs]) -> CalibrationError {
         let freqs = self.frequencies();
         let predicted = compute_magnitude_response(sections, &freqs, self.sample_rate);
@@ -105,6 +112,7 @@ pub struct CalibratedScalar {
 }
 
 impl CalibratedScalar {
+    #[must_use]
     pub const fn new(value: f64, min: f64, max: f64, step: f64) -> Self {
         Self {
             value,
@@ -114,7 +122,8 @@ impl CalibratedScalar {
         }
     }
 
-    pub fn clamp_value(&self, value: f64) -> f64 {
+    #[must_use]
+    pub const fn clamp_value(&self, value: f64) -> f64 {
         value.clamp(self.min, self.max)
     }
 }
@@ -169,7 +178,7 @@ where
     let mut iterations_run = 0;
 
     for iteration in 0..options.iterations {
-        iterations_run = iteration + 1;
+        iterations_run = iteration.saturating_add(1);
         let mut improved = false;
 
         for index in 0..current.len() {
@@ -182,7 +191,7 @@ where
             let mut best_error = current_error;
 
             for direction in [-1.0, 1.0] {
-                let candidate_value = scalar.clamp_value(scalar.value + scalar.step * direction);
+                let candidate_value = scalar.clamp_value(scalar.step.mul_add(direction, scalar.value));
                 if (candidate_value - scalar.value).abs() <= f64::EPSILON {
                     continue;
                 }

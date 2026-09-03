@@ -121,12 +121,12 @@ const SPREAD_RANGE_OCT: f64 = 0.15;
 /// is what the plugin traces: at Density 25 a bin 0.149 octaves out is at full
 /// depth and one 0.166 octaves out is at 0.42 of it. A gentler `1 - x^3` gives
 /// up depth far too early and measured 6.1 dB shallow at Density 0.
-const SPREAD_TAPER_EXP: f64 = 6.0;
+const SPREAD_TAPER_EXP: i32 = 6;
 
 #[inline]
 fn spread_taper(x: f64) -> f64 {
     let x = x.clamp(0.0, 1.0);
-    1.0 - x.powf(SPREAD_TAPER_EXP)
+    1.0 - x.powi(SPREAD_TAPER_EXP)
 }
 
 /// Spectral Tilt: how much a bin's trigger is weighted per octave, and about
@@ -515,7 +515,7 @@ impl SpectralEngine {
         // and with their own profile.
         let (mut peak, mut reach, mut from) = (0.0f64, 1.0f64, f64::NEG_INFINITY);
         for i in 0..bins {
-            let t = self.target_db[i];
+            let t = self.target_db.get(i).copied().unwrap_or(0.0);
             let dist = self.bin_log2[i] - from;
             let carried = if dist < reach { peak * spread_taper(dist / reach) } else { 0.0 };
             if t >= carried {

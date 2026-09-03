@@ -74,8 +74,6 @@ const ORDER: usize = 12;
 /// It is also consistent with the passband: 0.02 dB of ripple is exactly the
 /// 0.00..0.03 spread the plugin's passband was measured at.
 const PASSBAND_RIPPLE_DB: f64 = 0.02;
-/// Equiripple stopband floor in dB.
-const STOPBAND_DB: f64 = 90.0;
 
 /// The elliptic analog prototype, passband edge at `omega = 1`.
 ///
@@ -95,7 +93,7 @@ fn prototype() -> Zpk {
     // sc(w, k1') = 1/ep, which is a real sn of a real value.
     let k1p = (1.0 - k1 * k1).max(0.0).sqrt();
     let v0_param = elliptic_asn(1.0 / (1.0 + ep * ep).sqrt(), k1p);
-    let v0 = v0_param / (ORDER as u32 as f64 * elliptic_k_complete(k1 * k1));
+    let v0 = v0_param / (f64::from(u32::try_from(ORDER).unwrap_or(u32::MAX)) * elliptic_k_complete(k1 * k1));
 
     // cd(x + jy, k) = cn(x + jy) / dn(x + jy); the shared denominator of the
     // complex-argument formulas cancels, leaving only real sn/cn/dn at x

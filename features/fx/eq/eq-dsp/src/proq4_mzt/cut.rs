@@ -11,6 +11,7 @@ use super::biquad_from_mode0_params;
 /// Analog prototype: `H(s) = 1 / (s² + (1/Q_bw)·s + 1)` with `Q_bw` = Q/√2.
 /// Verified at fc=1000 Q=1: |H(0)|=1, |H(e^{jw0})|=-3 dB, |H(π)|≈-55 dB
 /// (standard cutoff convention).
+#[must_use]
 pub fn design_lowpass(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     let q = q.max(1e-6);
     let w0 = 2.0 * PI * freq_hz / sample_rate;
@@ -54,9 +55,10 @@ pub fn design_lowpass(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
 
     [a0, a1, a2, b0, b1, b2]
 }
-/// Highpass biquad — Pro-Q 4 form, BLT with Q_bw = Q/√2.
+/// Highpass biquad — Pro-Q 4 form, BLT with `Q_bw` = Q/√2.
 ///
 /// Verified at fc=1000 Q=1: |H(0)|≈-134 dB, |H(e^{jw0})|=-3 dB, |H(π)|=0.
+#[must_use]
 pub fn design_highpass(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     let q = q.max(1e-6);
     let w0 = 2.0 * PI * freq_hz / sample_rate;
@@ -82,7 +84,7 @@ pub fn design_highpass(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
 
     [a0, a1, a2, b0, b1, b2]
 }
-/// Lowpass via MZT — Pro-Q 4 formulation (from lp_exact.md RE).
+/// Lowpass via MZT — Pro-Q 4 formulation (from `lp_exact.md` RE).
 ///
 /// p2 = 1
 /// p3 = 1 / ((fs/(2·fc))² − 1)  ← gives Nyquist leak matching Pro-Q 4

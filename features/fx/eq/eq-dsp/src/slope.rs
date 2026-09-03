@@ -47,19 +47,20 @@ pub const BRICKWALL_ORDER: usize = 1000;
 
 impl Slope {
     /// Pro-Q internal slope index (0..=9). `Brickwall` returns `None`.
-    pub fn pro_q_index(self) -> Option<usize> {
+    #[must_use]
+    pub const fn pro_q_index(self) -> Option<usize> {
         Some(match self {
-            Slope::Db0 => 0,
-            Slope::Db6 => 1,
-            Slope::Db12 => 2,
-            Slope::Db18 => 3,
-            Slope::Db24 => 4,
-            Slope::Db30 => 5,
-            Slope::Db36 => 6,
-            Slope::Db48 => 7,
-            Slope::Db72 => 8,
-            Slope::Db96 => 9,
-            Slope::Brickwall => return None,
+            Self::Db0 => 0,
+            Self::Db6 => 1,
+            Self::Db12 => 2,
+            Self::Db18 => 3,
+            Self::Db24 => 4,
+            Self::Db30 => 5,
+            Self::Db36 => 6,
+            Self::Db48 => 7,
+            Self::Db72 => 8,
+            Self::Db96 => 9,
+            Self::Brickwall => return None,
         })
     }
 

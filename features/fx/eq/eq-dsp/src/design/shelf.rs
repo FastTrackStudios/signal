@@ -5,9 +5,9 @@
 //! analog prototype (see
 //! `docs/reports/proq4/re/shelf_analog_prototype_decoded.md`). Per-section
 //! anti-cramping clamps from `compute_shelf_band_parameters`
-//! (W_POLE_MAX ≈ 2.99, W_THIRD_MAX ≈ 2.36, W_ZERO_MAX ≈ 1.88) are folded in
+//! (`W_POLE_MAX` ≈ 2.99, `W_THIRD_MAX` ≈ 2.36, `W_ZERO_MAX` ≈ 1.88) are folded in
 //! through that helper, giving 3744/3744 pure-algorithmic conformance on
-//! both high_shelf and low_shelf.
+//! both `high_shelf` and `low_shelf`.
 
 use std::f64::consts::PI;
 
@@ -16,7 +16,7 @@ use crate::biquad::Coeffs;
 use super::common::{db_to_linear, ui_q_to_bandwidth_q};
 
 fn section_internal_type(proq_internal_filter_type: u8, _slope_n: usize, _sec_idx: usize) -> i32 {
-    proq_internal_filter_type as i32
+    i32::try_from(proq_internal_filter_type).unwrap_or(0)
 }
 
 /// Shelf cascade builder via Pro-Q's universal per-section synth.
@@ -29,7 +29,7 @@ fn section_internal_type(proq_internal_filter_type: u8, _slope_n: usize, _sec_id
 /// anti-cramping clamps decoded from `compute_shelf_band_parameters` —
 /// these are what carry shelves to 3744/3744 pure-algorithmic conformance.
 ///
-/// Per-section analog prototype (per shelf_analog_prototype_decoded.md):
+/// Per-section analog prototype (per `shelf_analog_prototype_decoded.md`):
 /// ```text
 /// gain    = 10^(g_dB/20)
 /// θ_k     = π·(2k+1)/(4N)

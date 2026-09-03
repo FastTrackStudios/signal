@@ -32,6 +32,7 @@ pub struct SPrototype {
 ///
 /// Binary: `setup_eq_band_filter` stores gain/Q in band state,
 /// `compute_cascade_coefficients` uses them for pole placement.
+#[must_use]
 pub fn s_domain_prototype(q: f64, g: f64) -> SPrototype {
     let a_val = g.sqrt(); // `A` = √(`linear_gain`) = 10^(`gain_dB`/40)
     SPrototype {
@@ -61,16 +62,17 @@ pub struct MagSqPoly {
 ///
 /// Binary: `compute_zpk_transfer_function_coefficients` @ 0x1800fd420
 /// Stores at `BiquadPrototype` offsets +0x20 through +0x48 with fs² scaling.
-pub fn squared_magnitude_poly(proto: &SPrototype) -> MagSqPoly {
+#[must_use]
+pub const fn squared_magnitude_poly(proto: &SPrototype) -> MagSqPoly {
     // For `H(s)` = (`s²` + `s`·`b` + 1)/(`s²` + `s`·`a` + 1):
     // |`H(jw)`|² = ((1-`w²`)² + `w²`·`b²`) / ((1-`w²`)² + `w²`·`a²`)
     //          = (`w⁴` + `w²`·(`b²`-2) + 1) / (`w⁴` + `w²`·(`a²`-2) + 1)
     MagSqPoly {
         num_w4: 1.0,
-        num_w2: proto.b_s1 * proto.b_s1 - 2.0,
+        num_w2: proto.b_s1.mul_add(proto.b_s1, -2.0),
         num_w0: 1.0,
         den_w4: 1.0,
-        den_w2: proto.a_s1 * proto.a_s1 - 2.0,
+        den_w2: proto.a_s1.mul_add(proto.a_s1, -2.0),
         den_w0: 1.0,
     }
 }

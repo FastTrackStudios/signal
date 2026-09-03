@@ -17,7 +17,6 @@ export const meta = {
 //   maxRounds: number (default 4)
 //   maxErrorsPerAgent: number (default 60) — hard cap on errors handed to one
 //     agent. Overflow is deferred to the next round, NOT dropped.
-//   maxCharsPerAgent: number (default 24000) — second cap, on prompt size.
 //   issuesPerAgent: number (default 10) — bin-packing target. Files with fewer
 //     errors than this are grouped so one agent fixes ~this many issues across
 //     several small files, instead of one agent per file.
@@ -48,17 +47,23 @@ if (!cwd) throw new Error('args.cwd is required — absolute path to the repo ro
 const pkgFlag = args.package
   ? `-p ${args.package} --no-deps --all-targets --keep-going`
   : '--workspace --no-deps --all-targets --keep-going'
-const extra = args.extraClippyArgs || ''
+// Discovery MUST run with lints capped to warn. Under `deny` a crate aborts
+// partway through, so the visible error set depends on which errors were just
+// fixed — measured across four rounds it went 3954 -> 3892 -> 1655 -> 684 ->
+// 2574, and rounds saw 11-13 of 49 files. The Cargo.toml gate stays `deny`;
+// only this measurement pass is capped.
+const extra = `${args.extraClippyArgs || ''} -- --cap-lints warn`.trim()
 const fixerModel = args.fixerModel || 'haiku'
 const maxRounds = args.maxRounds || 4
 const maxErrorsPerAgent = args.maxErrorsPerAgent || 60
-const maxCharsPerAgent = args.maxCharsPerAgent || 24000
 const issuesPerAgent = args.issuesPerAgent || 10
 
 const DISCOVER_SCHEMA = {
   type: 'object',
   properties: {
     totalErrors: { type: 'number' },
+    withheld: { type: 'object' },
+    compileErrors: { type: 'array', items: { type: 'string' } },
     files: {
       type: 'array',
       items: {
@@ -66,9 +71,9 @@ const DISCOVER_SCHEMA = {
         properties: {
           path: { type: 'string' },
           count: { type: 'number' },
-          errorBlocks: { type: 'array', items: { type: 'string' } },
+          errorFile: { type: 'string' },
         },
-        required: ['path', 'count', 'errorBlocks'],
+        required: ['path', 'count', 'errorFile'],
       },
     },
   },
@@ -92,31 +97,68 @@ function discoverPrompt() {
 2. Run: timeout 1800 cargo clippy ${pkgFlag} ${extra} > /tmp/clippy_migration_out.log 2>&1 ; true
    (If another cargo process holds the build lock this will sit silently. That
    is expected and it will proceed; do not start a second cargo command.)
-3. Run this Python script (via \`python3 - <<'PY' ... PY\`) to group the errors by file into JSON, and print ONLY the JSON to stdout:
+3. Run this Python script (via \`python3 - <<'PY' ... PY\`) EXACTLY as written. It
+   writes each file's clippy errors to its own text file on disk and prints a
+   small manifest. Print ONLY the manifest JSON to stdout:
 
-import re, json
+import re, json, os, hashlib, shutil
+# Lints whose only possible fix is reshaping an API or renaming domain
+# variables. A fixer agent cannot compile, so it cannot verify such a change is
+# safe — and twice now one has grouped a struct's pub fields and broken the
+# crate for everyone. These stay DENIED in Cargo.toml (the gate is honest);
+# they are simply withheld from the automated fixers and reported for a human.
+WITHHOLD = {
+    "struct_excessive_bools", "fn_params_excessive_bools", "too_many_arguments",
+    "needless_pass_by_value", "module_name_repetitions", "too_many_lines",
+    "similar_names", "many_single_char_names",
+}
+OUT = "/tmp/clippy_migration_errors"
+shutil.rmtree(OUT, ignore_errors=True)
+os.makedirs(OUT, exist_ok=True)
 with open("/tmp/clippy_migration_out.log") as f:
     log = f.read()
-blocks = re.split(r'\\n(?=error(?:\\[|:))', log)
+blocks = re.split(r'\\n(?=(?:error|warning)(?:\\[|:))', log)
 by_file = {}
+withheld = {}
+compile_errors = []
 for b in blocks:
-    if not b.startswith("error"):
+    if not (b.startswith("error") or b.startswith("warning")):
         continue
     m = re.search(r'--> (\\S+):(\\d+):(\\d+)', b)
     if not m:
         continue
+    ln = re.search(r'index\\.html#([a-z_]+)', b)
+    if ln is None:
+        # Not a clippy lint. If it is an ERROR it is a genuine compile failure —
+        # a fixer corrupted the source. Count it; the workflow aborts on these.
+        # (Discovery caps lints to warn, so anything still at error level is real.)
+        if b.startswith("error"):
+            compile_errors.append(b.strip()[:400])
+        continue
+    if ln.group(1) in WITHHOLD:
+        withheld.setdefault(ln.group(1), 0)
+        withheld[ln.group(1)] += 1
+        continue
     by_file.setdefault(m.group(1), []).append(b.strip())
-files = [{"path": p, "count": len(v), "errorBlocks": v} for p, v in by_file.items()]
+files = []
+for p, v in by_file.items():
+    name = hashlib.sha1(p.encode()).hexdigest()[:16] + ".txt"
+    dest = os.path.join(OUT, name)
+    with open(dest, "w") as fh:
+        fh.write(("\\n\\n" + "-" * 60 + "\\n\\n").join(v))
+    files.append({"path": p, "count": len(v), "errorFile": dest})
 files.sort(key=lambda f: -f["count"])
-total = sum(f["count"] for f in files)
-print(json.dumps({"totalErrors": total, "files": files}))
+print(json.dumps({"totalErrors": sum(f["count"] for f in files), "files": files, "withheld": withheld, "compileErrors": compile_errors}))
 
-4. Report back the exact JSON object the Python script printed, matching the required schema. Do not summarize, truncate, or reformat the "errorBlocks" entries — each must be one full raw clippy error block, verbatim, so a fixer agent can act on it without re-running clippy.`
+4. Report back the exact JSON object the script printed: totalErrors, and files[]
+   with path/count/errorFile. This manifest is small by design — the error text
+   stays on disk and the fixer agents read it themselves. Do NOT inline, quote,
+   or summarize any error text into your answer.`
 }
 
 function fixPrompt(units) {
   const multi = units.length > 1
-  const total = units.reduce((n, u) => n + u.blocks.length, 0)
+  const total = units.reduce((n, u) => n + u.take, 0)
   const header = multi
     ? `You are fixing ${total} cargo clippy lint violations spread across ${units.length} files. Only use Read and Edit (or Write), and only on the files listed below. You have no Bash tool: verification is a later stage's job.
 
@@ -129,21 +171,21 @@ Repo root: ${cwd}`
 
   const body = units
     .map((u) => {
-      const deferred = u.file.count - u.blocks.length
-      const note = deferred > 0
-        ? `\n(This file has ${u.file.count} errors in total; you are given the first ${u.blocks.length}. The remaining ${deferred} go to a later round. Fix only the ones listed here.)`
-        : ''
-      return `${multi ? '========================================\n' : ''}File: ${u.file.path} (relative to the repo root above)${note}
-
-Errors reported for this file (line numbers refer to the file's current state on disk):
-
-${u.blocks.join('\n\n')}`
+      const partial = u.take < u.file.count
+      return `${multi ? '========================================\n' : ''}File: ${u.file.path} (relative to the repo root above)
+Its exact clippy errors: READ THE FILE ${u.file.errorFile} — it holds ${u.file.count} error block${u.file.count === 1 ? '' : 's'}, separated by dashed lines. Line numbers in it refer to the source file's current state on disk.${
+        partial
+          ? `\nThis file has more errors than one pass should take: fix ONLY THE FIRST ${u.take} blocks in that error file. The remaining ${u.file.count - u.take} go to a later round — leave them alone.`
+          : ''
+      }`
     })
     .join('\n\n')
 
   return `${header}
 
 ${body}
+
+Read each error file first, then fix the source. The error text is on disk rather than in this prompt so that nothing is truncated — if an error file seems short or cut off, say so in your summary rather than guessing at what it said.
 
 Fix every one of them by editing the file directly with a REAL fix. Never use \`#[allow(clippy::...)]\` (item, function, module, or file level) to satisfy a lint — not even when the flagged code looks safe/bounded. Always rewrite instead:
 - \`checked_add\`/\`checked_sub\`/\`saturating_add\`/\`saturating_sub\`/\`saturating_neg\`/\`saturating_mul\` instead of raw +, -, *, unary - on ints.
@@ -165,6 +207,10 @@ If you hit anything else you genuinely cannot fix without a suppression, do NOT 
 
 Never remove a \`use\` import just because it looks unused from a non-test read of the file — check whether it's referenced only inside \`#[cfg(test)] mod tests { ... }\` (via \`use super::*;\`) before deleting; removing a test-only import silently breaks \`cargo test\`/\`--all-targets\` even though the lib target still compiles.
 
+NEVER change a struct definition, enum definition, function signature, trait, or any other public API shape. This is the single most damaging thing a fixer can do here and it has already happened once: an agent "fixed" a bools-heavy struct by grouping three \`pub\` fields into a new config struct, did not update every call site, and broke the crate's compilation for everyone. If a lint (\`struct_excessive_bools\`, \`fn_params_excessive_bools\`, \`too_many_arguments\`, \`needless_pass_by_value\` on a public item, and the like) can only be satisfied by reshaping an API, LEAVE IT UNFIXED and say so in your summary. A remaining lint is cheap; a broken build that another agent has to bisect is not. You cannot compile, so you cannot possibly verify such a change is safe.
+
+Leave variable names alone in numerical/DSP code. \`a\`, \`b\`, \`q\`, \`w0\`, \`l\`, \`r\` are the standard names from filter cookbooks, and renaming them to satisfy \`similar_names\`/\`many_single_char_names\` makes the math harder to check against its reference. Report those as unfixed instead.
+
 Never change behavior. Do not reformat or touch code that isn't part of a listed error. Do not add tests, comments beyond what's specified above, or unrelated cleanup. Work quickly and do not explore the repo beyond this file.
 
 When done, report {path, changed, summary}. For \`path\`, give ${multi ? 'the paths of all the files you edited, comma-separated' : 'the file path'}. For \`summary\`, one short sentence per distinct fix (or exactly which error you left unfixed and why, if any).`
@@ -173,46 +219,30 @@ When done, report {path, changed, summary}. For \`path\`, give ${multi ? 'the pa
 // Bound one agent's workload by BOTH error count and prompt size. Overflow is
 // deferred to the next round rather than dropped — a silent cap would read as
 // "this file is clean" when it is not.
-function budgetBlocks(file) {
-  const blocks = []
-  let chars = 0
-  for (const b of file.errorBlocks) {
-    if (blocks.length >= maxErrorsPerAgent) break
-    if (blocks.length > 0 && chars + b.length > maxCharsPerAgent) break
-    blocks.push(b)
-    chars += b.length
-  }
-  return blocks
-}
-
 // Group files into agent-sized batches. A file is never split across two
 // concurrent agents (see the note at the top of this file) — heavy files get a
 // dedicated agent, light ones are packed together until the batch reaches
-// issuesPerAgent or the prompt-size cap.
+// issuesPerAgent. `take` is how many of that file's errors this round fixes;
+// the rest are deferred to a later round, never dropped.
 function planBatches(files) {
   const heavy = []
   const light = []
   for (const f of files) {
-    ;(f.errorBlocks.length >= issuesPerAgent ? heavy : light).push(f)
+    ;(f.count >= issuesPerAgent ? heavy : light).push(f)
   }
 
-  const batches = heavy.map((f) => [{ file: f, blocks: budgetBlocks(f) }])
+  const batches = heavy.map((f) => [{ file: f, take: Math.min(f.count, maxErrorsPerAgent) }])
 
   let cur = []
   let n = 0
-  let chars = 0
   for (const f of light) {
-    const size = f.errorBlocks.length
-    const cost = f.errorBlocks.reduce((c, b) => c + b.length, 0)
-    if (n > 0 && (n + size > issuesPerAgent || chars + cost > maxCharsPerAgent)) {
+    if (n > 0 && n + f.count > issuesPerAgent) {
       batches.push(cur)
       cur = []
       n = 0
-      chars = 0
     }
-    cur.push({ file: f, blocks: f.errorBlocks })
-    n += size
-    chars += cost
+    cur.push({ file: f, take: f.count })
+    n += f.count
   }
   if (cur.length > 0) batches.push(cur)
 
@@ -222,15 +252,37 @@ function planBatches(files) {
 let round = 0
 let prevTotal = Infinity
 let discovery = await agent(discoverPrompt(), { schema: DISCOVER_SCHEMA, phase: 'Discover' })
-log(`Initial: ${discovery.totalErrors} errors across ${discovery.files.length} files`)
+function withheldNote(d) {
+  const w = d.withheld || {}
+  const keys = Object.keys(w)
+  if (keys.length === 0) return ''
+  const n = keys.reduce((s, k) => s + w[k], 0)
+  return ` | ${n} withheld from fixers for human review (${keys.map((k) => `${k}:${w[k]}`).join(', ')})`
+}
+
+log(`Initial: ${discovery.totalErrors} errors across ${discovery.files.length} files${withheldNote(discovery)}`)
+
+function assertCompiles(d, when) {
+  const errs = d.compileErrors || []
+  if (errs.length === 0) return
+  log(`ABORTING: ${errs.length} compile error(s) ${when}. A fixer corrupted the source.`)
+  for (const e of errs.slice(0, 5)) log(`  ${e.split('\n')[0]}`)
+  throw new Error(
+    `Build is broken ${when} (${errs.length} compile errors) — stopping. ` +
+      `Revert the offending files (git checkout HEAD -- <path>) before re-running. ` +
+      `Fixing lints on a crate that does not compile produces garbage.`
+  )
+}
+
+assertCompiles(discovery, 'before the first round')
 
 while (discovery.files.length > 0 && round < maxRounds) {
   round++
   const roundLabel = `Fix round ${round}`
   const batches = planBatches(discovery.files)
-  const thisRound = batches.reduce((n, b) => n + b.reduce((m, u) => m + u.blocks.length, 0), 0)
+  const thisRound = batches.reduce((n, b) => n + b.reduce((m, u) => m + u.take, 0), 0)
   const deferredTotal = batches.reduce(
-    (n, b) => n + b.reduce((m, u) => m + (u.file.count - u.blocks.length), 0),
+    (n, b) => n + b.reduce((m, u) => m + (u.file.count - u.take), 0),
     0
   )
   log(
@@ -244,7 +296,7 @@ while (discovery.files.length > 0 && round < maxRounds) {
       label:
         batch.length === 1
           ? `fix:${batch[0].file.path}`
-          : `fix:${batch.length} files (${batch.reduce((n, u) => n + u.blocks.length, 0)} errors)`,
+          : `fix:${batch.length} files (${batch.reduce((n, u) => n + u.take, 0)} errors)`,
       phase: roundLabel,
       model: fixerModel,
       effort: 'low',
@@ -254,7 +306,8 @@ while (discovery.files.length > 0 && round < maxRounds) {
   )
 
   discovery = await agent(discoverPrompt(), { schema: DISCOVER_SCHEMA, phase: 'Verify' })
-  log(`After round ${round}: ${discovery.totalErrors} errors across ${discovery.files.length} files`)
+  log(`After round ${round}: ${discovery.totalErrors} errors across ${discovery.files.length} files${withheldNote(discovery)}`)
+  assertCompiles(discovery, `after round ${round}`)
 
   if (discovery.totalErrors >= prevTotal) {
     log(`No progress this round (${discovery.totalErrors} >= ${prevTotal}) — stopping early`)
@@ -268,4 +321,5 @@ return {
   clean: discovery.totalErrors === 0,
   remainingErrors: discovery.totalErrors,
   remainingFiles: discovery.files.map((f) => ({ path: f.path, count: f.count })),
+  withheldForHumanReview: discovery.withheld || {},
 }

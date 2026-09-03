@@ -5,7 +5,7 @@
 //! (Q, gain, frequency) based on filter type and mode, producing "effective"
 //! parameters used by the design stage.
 //!
-//! Magic constants extracted from binary @ 0x18010de30 (compute_peak_band_parameters).
+//! Magic constants extracted from binary @ 0x18010de30 (`compute_peak_band_parameters`).
 
 /// Magic constant: Shelf frequency bound
 const SHELF_FREQ_BOUND_1: f64 = 2.607_521_902_479_528;
@@ -42,7 +42,7 @@ const PI: f64 = std::f64::consts::PI;
 /// Magic constant: 9π/10
 const NINE_PI_OVER_10: f64 = 2.827_433_388_230_814;
 
-/// Transformed parameters output from compute_peak_band_parameters
+/// Transformed parameters output from `compute_peak_band_parameters`
 #[derive(Debug, Clone, Copy)]
 pub struct TransformedParams {
     /// param[0x8] - processed Q or gain
@@ -61,7 +61,7 @@ pub struct TransformedParams {
 
 impl Default for TransformedParams {
     fn default() -> Self {
-        TransformedParams {
+        Self {
             processed_q: 1.0,
             q_term: 0.5,
             gain_term: 0.5,
@@ -75,7 +75,7 @@ impl Default for TransformedParams {
 
 /// Apply parameter transformations based on filter type and user inputs
 ///
-/// This mirrors the compute_peak_band_parameters function from Pro-Q 4.
+/// This mirrors the `compute_peak_band_parameters` function from Pro-Q 4.
 ///
 /// # Arguments
 /// * `filter_type` - Filter type (0-12)

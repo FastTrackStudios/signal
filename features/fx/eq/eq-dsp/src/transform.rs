@@ -18,14 +18,15 @@ use crate::zpk::{Complex, Zpk};
 #[must_use]
 pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
     let fs2 = 2.0 * sample_rate;
+    let fs2_complex = Complex::new(fs2, 0.0);
 
     let mut z_zeros: Vec<Complex> = zpk
         .zeros
         .iter()
         .map(|&z| {
-            let num = (Complex::new(fs2, 0.0) + z) / fs2;
-            let den = (Complex::new(fs2, 0.0) - z) / fs2;
-            num / den
+            let num = Complex::new(1.0 + z.re / fs2, z.im / fs2);
+            let den = Complex::new(1.0 - z.re / fs2, -z.im / fs2);
+            num * den.inv()
         })
         .collect();
 
@@ -33,9 +34,9 @@ pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
         .poles
         .iter()
         .map(|&p| {
-            let num = (Complex::new(fs2, 0.0) + p) / fs2;
-            let den = (Complex::new(fs2, 0.0) - p) / fs2;
-            num / den
+            let num = Complex::new(1.0 + p.re / fs2, p.im / fs2);
+            let den = Complex::new(1.0 - p.re / fs2, -p.im / fs2);
+            num * den.inv()
         })
         .collect();
 

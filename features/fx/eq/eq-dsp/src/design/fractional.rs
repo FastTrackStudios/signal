@@ -138,23 +138,23 @@ pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) 
     let ceiling = sample_rate * 0.45;
     // And below the band there is nothing left to attenuate; a cell under this
     // is pinned by `first_order`'s own clamp into a degenerate pass-through.
-    const FLOOR_HZ: f64 = 5.0;
+    let floor_hz: f64 = 5.0;
     let mut first_orders = Vec::with_capacity(CELLS);
     for cell in 0..CELLS {
         let (zero, pole) = if high_pass {
             // March down from the corner. Attenuate below, unity above: the
             // zero sits under the pole and the top asymptote stays at 1.
-            let upper = freq_hz * 2.0f64.powf(-(cell as f64) * CELL_OCTAVES);
-            let lower = upper * 2.0f64.powf(-separation);
-            if lower <= FLOOR_HZ {
+            let upper = freq_hz * (-(f64::from(i32::try_from(cell).unwrap_or(0))) * CELL_OCTAVES).exp2();
+            let lower = upper * (-separation).exp2();
+            if lower <= floor_hz {
                 break;
             }
             (lower, upper)
         } else {
             // March up from the corner. Unity below, attenuate above: the
             // pole sits under the zero and the DC asymptote is normalised.
-            let lower = freq_hz * 2.0f64.powf(cell as f64 * CELL_OCTAVES);
-            let upper = lower * 2.0f64.powf(separation);
+            let lower = freq_hz * (f64::from(i32::try_from(cell).unwrap_or(0)) * CELL_OCTAVES).exp2();
+            let upper = lower * separation.exp2();
             // BOTH ends have to fit. Keeping a cell whose zero lands past
             // Nyquist does not give a gentler slope — the pre-warp pins the
             // zero at the edge and the pole/zero ratio comes out far larger

@@ -22,7 +22,7 @@
 //! sub-frequencies feed the universal Lagrange-MZT synth at
 //! `crates/eq-dsp/src/cascade.rs:1587`.
 //!
-//! Status: peak_type3 (type=0 branch) ported and bit-exact verified by
+//! Status: `peak_type3` (type=0 branch) ported and bit-exact verified by
 //! construction. Other helpers staged with explicit `unimplemented!` until
 //! their respective probe captures are wired in.
 
@@ -59,6 +59,7 @@ impl AnalogBiquad {
     ///
     /// |H(jw)|² = (A·w⁴ + B·w² + C) / (D·w⁴ + E·w² + F) with
     /// `ω₀` scaling baked into B/C/E/F.
+    #[must_use]
     pub fn squared_mag_coeffs(&self, omega0: f64) -> MagSqCoeffs {
         let g_om2 = omega0 * omega0;
         let g_om4 = g_om2 * g_om2;
@@ -590,8 +591,8 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
         //   _DAT_180231a78 = 0.95  (stored_f scale)
         //   DAT_180231a90  = 0.995 (stored_g scale relative to stored_f)
         const SMOOTH_FLOOR: f64 = 0.70;
-        const QUAD_COEF: f64 = 0.06157521601035995;
-        const QUAD_OFFSET: f64 = 2.419026343264141;
+        const QUAD_COEF: f64 = 0.061_575_216_010_359_95;
+        const QUAD_OFFSET: f64 = 2.419_026_343_264_141;
         const WT_OFFSET: f64 = 0.15;
         const STORED_F_SCALE: f64 = 0.95;
         const STORED_G_SCALE: f64 = 0.995;
@@ -782,9 +783,9 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
     const FOUR_PI_OVER_5: f64 = 4.0 * PI / 5.0;
     const CONST_0_0001: f64 = 0.0001;
     const NINE_PI_TEN: f64 = 0.9 * PI;
-    const NEAR_PI_E0A: f64 = f64::from_bits(0x4007e0485cda5e0a); // 0.95π
-    const NEAR_PI_PI_C: f64 = f64::from_bits(0x4002d97c7f3321d2); // ≈ 0.75π
-    const NEAR_PI_PI_D: f64 = f64::from_bits(0x3ffe28c731eb6950); // ≈ 0.6π
+    const NEAR_PI_E0A: f64 = f64::from_bits(0x4007_e048_5cda_5e0a); // 0.95π
+    const NEAR_PI_PI_C: f64 = f64::from_bits(0x4002_d97c_7f33_21d2); // ≈ 0.75π
+    const NEAR_PI_PI_D: f64 = f64::from_bits(0x3ffe_28c7_31eb_6950); // ≈ 0.6π
 
     // Step 1: stored_e/f/g initialized to π.
     proto.stored_e = PI;
@@ -813,7 +814,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
     update_tracked_band_frequencies(proto, CONST_0_0001, PI);
 
     // Step 4: proto+0x49 byte = (mode > 0). Not modeled.
-    let mut iv5 = proto.mode;
+    let iv5 = proto.mode;
 
     // Step 5: mode==2 smooth-blend on wz.
     let mut bvar3 = false;
@@ -828,7 +829,6 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             if dvar10 < diff_wz {
                 proto.wp = proto.wz;
                 proto.mode = 1;
-                iv5 = 1;
             }
         }
 
@@ -938,7 +938,6 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
                 };
                 proto.wt = dvar11.sqrt() * dvar1;
                 proto.wz = dvar11_use * dvar11.sqrt() * dvar1;
-                iv5_local = 1;
             }
             // Final w_eval (when iv5_local != 0) — bypass to LAB_18010d2d4.
             let cand = (PI / PI).powf(local_res8 * CONST_3_3) * PI_OVER_5 + FOUR_PI_OVER_5;
@@ -993,8 +992,6 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             proto.stored_f = NEAR_PI_PI_D;
             dvar10_x = dvar13 / dvar11;
             proto.wp = dvar10_x;
-        } else {
-            dvar10_x = proto.wp;
         }
         proto.wt = dvar11.sqrt() * proto.wp;
         let dvar12 = dvar11.sqrt() * proto.wp * CONST_0_25;
@@ -1051,7 +1048,7 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
 
     // fv8 = clamp(√2 / proto[10], 0, 1.0); the binary stores √2 as a
     // single-rounded double (0x3FF6A09E60000000).
-    const SQRT2_F32_ROUNDED: f64 = 1.4142135381698608;
+    const SQRT2_F32_ROUNDED: f64 = 1.414_213_538_169_860_8;
     let mut iv3 = mode_in;
     let raw = SQRT2_F32_ROUNDED / proto.q_scratch_50;
     let fv8: f64;
@@ -1092,8 +1089,8 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
 
     // w_eval branch on proto[0x12] sign.
     let nine_pi_10 = 0.9 * PI;
-    let zero_eight_five_pi = 2.670353755551324; // 0.85π
-    let zero_nine_nine_pi = 3.1101767270538954; // 0.99π
+    let zero_eight_five_pi = 2.670_353_755_551_324; // 0.85π
+    let zero_nine_nine_pi = 3.110_176_727_053_895_4; // 0.99π
     let wp_now = proto.wp;
     let new_w_eval = if proto.proto_0x12_sign == -1 {
         let cand = wp_now * 1.25;
@@ -1170,10 +1167,10 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
 /// [`eval_squared_mag_scalar`] — this matches in the common case where
 /// the prototype's two-component output reduces to the squared magnitude.
 pub fn compute_band_shelf_parameters(proto: &mut Prototype) {
-    const SQRT2_F32_ROUNDED: f64 = 1.4142135381698608;
+    const SQRT2_F32_ROUNDED: f64 = 1.414_213_538_169_860_8;
     const EPS_1E_NEG_10: f64 = 1e-10;
     const EPS_1_192E_NEG_7: f64 = 1.192_092_9e-7;
-    const NEAR_PI_E0A: f64 = f64::from_bits(0x4007e0485cda5e0a); // 0.95π
+    const NEAR_PI_E0A: f64 = f64::from_bits(0x4007_e048_5cda_5e0a); // 0.95π
 
     // dVar3 = √2 / proto[10]; binary marks proto+0x49 flag (we don't model it).
     let raw = SQRT2_F32_ROUNDED / proto.q_scratch_50;
@@ -1278,11 +1275,11 @@ pub fn compute_band_shelf_parameters(proto: &mut Prototype) {
 
 /// LAB_18010d7f9 fall-through block from `compute_band_shelf_parameters`.
 fn label_d7f9(proto: &mut Prototype, fv11: f64, fv12_f32: f32) {
-    const ZERO_NINE_THREE_PI: f64 = 2.921681167838508; // 0.93π
-    const ZERO_EIGHT_THREE_PI: f64 = 2.607521902479528; // ≈ 0.83π
-    const PROTO_E: f64 = f64::from_bits(0x400921569e860335);
-    const PROTO_F: f64 = f64::from_bits(0x4008e10145e5f3d1);
-    const PROTO_G: f64 = f64::from_bits(0x40091ae7af42ce78);
+    const ZERO_NINE_THREE_PI: f64 = 2.921_681_167_838_508; // 0.93π
+    const ZERO_EIGHT_THREE_PI: f64 = 2.607_521_902_479_528; // ≈ 0.83π
+    const PROTO_E: f64 = f64::from_bits(0x4009_2156_9e86_0335);
+    const PROTO_F: f64 = f64::from_bits(0x4008_e101_45e5_f3d1);
+    const PROTO_G: f64 = f64::from_bits(0x4009_1ae7_af42_ce78);
 
     let cand = proto.wp * 1.80;
     let new_w_eval = if ZERO_EIGHT_THREE_PI <= cand {
@@ -1323,7 +1320,7 @@ fn label_d7f9(proto: &mut Prototype, fv11: f64, fv12_f32: f32) {
     // mode >= 1: branch on proto[0x12] / proto[0x11].
     let dvar3: f64;
     if proto.proto_0x12_sign == 1 {
-        const NEAR_PI_A: f64 = 3.141278494324434; // ≈ π
+        const NEAR_PI_A: f64 = 3.141_278_494_324_434; // ≈ π
         let a8c = proto.alpha_scratch_8c;
         let bracket = 0.9998 - (a8c * a8c) as f64 * 0.0005;
         let mut v = bracket * proto.wp;
@@ -1455,9 +1452,9 @@ pub fn proq4_universal_section_synth(
     // Synchronize derived caches the helpers may read.
     proto.analog = Some(*analog);
     proto.omega_band = omega;
-    proto.stored_e = f64::from_bits(0x4008a14d57b373df);
-    proto.stored_f = f64::from_bits(0x40069e9565708efc);
-    proto.stored_g = f64::from_bits(0x400881c68e4d6f74);
+    proto.stored_e = f64::from_bits(0x4008_a14d_57b3_73df);
+    proto.stored_f = f64::from_bits(0x4006_9e95_6570_8efc);
+    proto.stored_g = f64::from_bits(0x4008_81c6_8e4d_6f74);
 
     // Step 3: dispatch into the per-section helper (or apply inline default).
     let fallback = match dispatch_section_helper(proto) {
@@ -1898,9 +1895,9 @@ mod tests {
         p.q_scratch_50 = 1.0;
         compute_band_shelf_parameters(&mut p);
         // Stored constants get the magic π-near values.
-        let proto_e = f64::from_bits(0x400921569e860335);
-        let proto_g = f64::from_bits(0x40091ae7af42ce78);
-        let proto_f = f64::from_bits(0x4008e10145e5f3d1);
+        let proto_e = f64::from_bits(0x4009_2156_9e86_0335);
+        let proto_g = f64::from_bits(0x4009_1ae7_af42_ce78);
+        let proto_f = f64::from_bits(0x4008_e101_45e5_f3d1);
         assert!((p.stored_e - proto_e).abs() < 1e-12);
         assert!((p.stored_g - proto_g).abs() < 1e-12);
         assert!((p.stored_f - proto_f).abs() < 1e-12);
@@ -2014,7 +2011,7 @@ mod tests {
         p.section_type = 6;
         p.band_omega_ref = 3.0; // > 0.6π
         compute_notch_type46_parameters(&mut p);
-        const ZERO_POINT_SIX_PI: f64 = 1.8849555921538759;
+        const ZERO_POINT_SIX_PI: f64 = 1.884_955_592_153_875_9;
         assert_eq!(p.wp, ZERO_POINT_SIX_PI);
         assert_eq!(p.wz, ZERO_POINT_SIX_PI * 0.05);
         assert_eq!(p.wt, ZERO_POINT_SIX_PI * 0.5);
@@ -2074,7 +2071,7 @@ mod tests {
         // dvar4_floor = max(1, 0.70) = 1
         // quad_floor = 1·0.06157521601 + 2.41902634 = 2.48060...
         // smooth_blend (1.3142) ≤ quad_floor (2.48) → w_eval = min(quad_floor, π) = 2.48060…
-        let expected_w_eval = 1.0 * 0.06157521601035995 + 2.419026343264141;
+        let expected_w_eval = 1.0 * 0.061_575_216_010_359_95 + 2.419_026_343_264_141;
         assert!((p.w_eval - expected_w_eval).abs() < 1e-12);
 
         // fv3 = (1.0 - 0.5) - 0.15 = 0.35 → fv7 = 0.35

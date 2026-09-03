@@ -19,12 +19,13 @@ const TOL: f64 = 1e-15;
 /// Complete elliptic integral of the first kind K(m), where m = k^2.
 ///
 /// Uses the arithmetic-geometric mean (AGM) method:
-///   a_0 = 1,  b_0 = sqrt(1 - m)
-///   a_n = (a_{n-1} + b_{n-1}) / 2
-///   b_n = sqrt(a_{n-1} * b_{n-1})
-///   K(m) = pi / (2 * a_final)
+///   `a_0` = 1,  `b_0` = `sqrt(1 - m)`
+///   `a_n` = (`a_{n-1}` + `b_{n-1}`) / 2
+///   `b_n` = `sqrt(a_{n-1} * b_{n-1})`
+///   `K(m)` = pi / (2 * `a_final`)
 ///
 /// Matches Pro-Q 4 function at 0x18011eb50.
+#[must_use]
 pub fn elliptic_k_complete(m: f64) -> f64 {
     if m >= 1.0 {
         return f64::INFINITY;
@@ -53,12 +54,13 @@ pub fn elliptic_k_complete(m: f64) -> f64 {
 
 /// Jacobi elliptic function sn(u, k) via AGM descent (Abramowitz & Stegun 16.4).
 ///
-/// 1. Compute AGM sequence: a_0=1, b_0=sqrt(1-m), c_0=k
-/// 2. Compute phi_N = 2^N * a_N * u, then descend:
-///    phi_{n-1} = (phi_n + arcsin(c_n / a_n * sin(phi_n))) / 2
-/// 3. sn(u,k) = sin(phi_0)
+/// 1. Compute AGM sequence: `a_0`=1, `b_0`=`sqrt(1-m)`, `c_0`=k
+/// 2. Compute `phi_N` = 2^N * `a_N` * u, then descend:
+///    `phi_{n-1}` = (`phi_n` + `arcsin(c_n / a_n * sin(phi_n))`) / 2
+/// 3. `sn(u,k)` = `sin(phi_0)`
 ///
 /// Matches Pro-Q 4 function at 0x18011e6f0.
+#[must_use]
 pub fn elliptic_sn(u_input: f64, modulus: f64) -> f64 {
     if modulus.abs() < TOL {
         return u_input.sin();
@@ -79,12 +81,12 @@ pub fn elliptic_sn(u_input: f64, modulus: f64) -> f64 {
     a_seq.push(agm_a);
     c_seq.push(modulus.abs());
 
-    let mut iter_count = 0;
+    let mut iter_count: usize = 0;
     for _ in 0..MAX_ITER {
         let a_next = (agm_a + agm_b) * 0.5;
         let c_next = (agm_a - agm_b) * 0.5;
         let b_next = (agm_a * agm_b).sqrt();
-        iter_count += 1;
+        iter_count = iter_count.saturating_add(1);
         a_seq.push(a_next);
         c_seq.push(c_next);
 

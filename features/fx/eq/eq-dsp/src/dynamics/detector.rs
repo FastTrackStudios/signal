@@ -262,6 +262,17 @@ impl Detector {
         self.auto_conf_coeff = 1.0 - (-1.0 / (1000.0 * AUTO_SETTLE_S)).exp();
     }
 
+    /// Compute countdown from sample rate for ~1 kHz histogram push cadence.
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "float-to-int cast: std has no non-`as` equivalent"
+    )]
+    fn histogram_push_countdown(&self) -> u32 {
+        (self.sample_rate / 1000.0) as u32
+    }
+
     /// Effective (threshold, knee) — learned values while auto is on.
     #[must_use]
     pub fn effective_threshold(&self) -> (f64, f64) {
@@ -299,7 +310,7 @@ impl Detector {
                     // the band the wrong way.
                     let blended = (1.0 - self.auto_conf).mul_add(AUTO_COLD_OFFSET_DB, learned);
                     return (
-                        blended + self.params.threshold_db * 0.25,
+                        self.params.threshold_db.mul_add(0.25, blended),
                         self.params.knee_db,
                     );
                 }
@@ -319,7 +330,7 @@ impl Detector {
             //
             // The knob stays an offset around it, which is how Pro-Q's reads.
             return (
-                AUTO_FULL_RANGE_AT_DB - self.params.span_db + self.params.threshold_db * 0.25,
+                self.params.threshold_db.mul_add(0.25, AUTO_FULL_RANGE_AT_DB - self.params.span_db),
                 self.params.knee_db,
             );
         }
@@ -363,7 +374,7 @@ impl Detector {
         // the audio thread.
         if self.params.auto && self.params.adaptive {
             if self.push_countdown == 0 {
-                self.push_countdown = (self.sample_rate / 1000.0) as u32;
+                self.push_countdown = self.histogram_push_countdown();
                 self.hist.push(level_db);
                 self.auto_conf += (1.0 - self.auto_conf) * self.auto_conf_coeff;
             }

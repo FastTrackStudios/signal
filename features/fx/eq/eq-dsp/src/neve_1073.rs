@@ -45,7 +45,7 @@ pub enum Neve1073LowFreq {
 
 impl Neve1073LowFreq {
     #[must_use]
-    pub fn hz(self) -> Option<f64> {
+    pub const fn hz(self) -> Option<f64> {
         match self {
             Self::Off => None,
             Self::Hz35 => Some(35.0),
@@ -68,7 +68,8 @@ pub enum Neve1073MidFreq {
 }
 
 impl Neve1073MidFreq {
-    pub fn hz(self) -> Option<f64> {
+    #[must_use]
+    pub const fn hz(self) -> Option<f64> {
         match self {
             Self::Off => None,
             Self::Hz360 => Some(360.0),
@@ -297,6 +298,7 @@ impl CalibrationParameters for Neve1073Calibration {
     }
 }
 
+#[must_use]
 pub fn fit_neve_1073_response(
     initial: Neve1073Calibration,
     settings: Neve1073Settings,

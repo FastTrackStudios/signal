@@ -58,7 +58,9 @@ pub(super) fn design_allpass(n: usize, freq_hz: f64, q: f64, sample_rate: f64) -
 
     let mut sections = Vec::with_capacity(n_sec);
     for k in 0..n_sec {
-        let alpha_butter = 2.0 * ((k.saturating_mul(2).saturating_add(1)) as f64 * PI / (2.0 * n_filter as f64)).sin();
+        let k_int = u32::try_from(k).unwrap_or(0);
+        let n_int = u32::try_from(n_filter).unwrap_or(1);
+        let alpha_butter = 2.0 * ((f64::from(k_int.saturating_mul(2).saturating_add(1))) * PI / (2.0 * f64::from(n_int))).sin();
         // Section-0 Q modulation. At slope=8 (N=12) Pro-Q clamps Q_eff to
         // ~7.4 (verified bit-exact via PROBE_HOOK_AUDIO_BIQUAD across fc).
         // Slopes 2/4/6 (N=2/4/6) use plain butter/Q for all Q.
@@ -75,10 +77,10 @@ pub(super) fn design_allpass(n: usize, freq_hz: f64, q: f64, sample_rate: f64) -
         // Prewarped BLT of analog allpass H(s) = (s² − α·s + 1)/(s² + α·s + 1)
         // via s = (1/t)·(z-1)/(z+1):
         let nb0 = 1.0 - alpha * t + t2;
-        let nb1 = -2.0 + 2.0 * t2;
+        let nb1 = 2.0f64.mul_add(t2, -2.0);
         let nb2 = 1.0 + alpha * t + t2;
         let da0 = 1.0 + alpha * t + t2;
-        let da1 = -2.0 + 2.0 * t2;
+        let da1 = 2.0f64.mul_add(t2, -2.0);
         let da2 = 1.0 - alpha * t + t2;
         let inv = 1.0 / da0;
         sections.push([1.0, da1 * inv, da2 * inv, nb0 * inv, nb1 * inv, nb2 * inv]);

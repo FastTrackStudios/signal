@@ -19,11 +19,12 @@ use crate::zpk::{Complex, Zpk};
 /// An N-th order Butterworth LP has N poles on the unit circle in the left half-plane:
 ///   `s_k` = exp(j * pi * (2k + N + 1) / (2N))  for k = 0..N-1
 ///
-/// All poles have |s_k| = 1 (unit circle), and the prototype has cutoff w = 1.
+/// All poles have |`s_k`| = 1 (unit circle), and the prototype has cutoff w = 1.
+#[must_use]
 pub fn butterworth_lp(order: usize) -> Zpk {
     let mut poles = Vec::with_capacity(order);
     for k in 0..order {
-        let angle = PI * (2 * k + order + 1) as f64 / (2 * order) as f64;
+        let angle = PI * (2.0f64.mul_add(k as f64, order as f64) + 1.0) / (2.0 * order as f64);
         poles.push(Complex::from_polar(1.0, angle));
     }
     Zpk::new(vec![], poles, 1.0)

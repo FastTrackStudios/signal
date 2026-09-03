@@ -37,13 +37,13 @@ pub enum Placement {
 
 impl Placement {
     #[must_use]
-    pub fn from_index(idx: u32) -> Placement {
+    pub const fn from_index(idx: u32) -> Self {
         match idx {
-            1 => Placement::Left,
-            2 => Placement::Right,
-            3 => Placement::Mid,
-            4 => Placement::Side,
-            _ => Placement::Stereo,
+            1 => Self::Left,
+            2 => Self::Right,
+            3 => Self::Mid,
+            4 => Self::Side,
+            _ => Self::Stereo,
         }
     }
 }
@@ -81,6 +81,7 @@ pub struct Band {
 }
 
 impl Band {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             filter_type: FilterType::Peak,
@@ -250,7 +251,7 @@ impl Band {
                 self.sections[i].coeffs()
             };
             // H(e^jw) with z^-1 = cos w - j sin w.
-            let num_re = b0 + b1 * cw + b2 * c2w;
+            let num_re = b2.mul_add(c2w, b0 + b1 * cw);
             let num_im = -(b1 * sw + b2 * s2w);
             let den_re = 1.0 + a1 * cw + a2 * c2w;
             let den_im = -(a1 * sw + a2 * s2w);
@@ -314,7 +315,7 @@ impl Band {
     /// True when the band contributes nothing to the signal (disabled
     /// and the bypass ramp fully settled) — the chain skips it.
     #[inline]
-    pub fn is_idle(&self) -> bool {
+    pub const fn is_idle(&self) -> bool {
         !self.enabled && self.bypass_ramp == 0.0
     }
 

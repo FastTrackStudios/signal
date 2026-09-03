@@ -28,9 +28,15 @@ impl LoudnessHistogram {
     }
 
     #[inline]
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        reason = "float-to-int cast after safe clamp to [0, N_BINS-1]"
+    )]
     fn bin_of(db: f64) -> usize {
         let t = (db - DB_MIN) / (DB_MAX - DB_MIN);
-        ((t * N_BINS as f64) as isize).clamp(0, N_BINS as i64 as isize - 1).cast_unsigned()
+        (t * f64::from(N_BINS as u32)).clamp(0.0, f64::from(N_BINS as u32) - 1.0) as usize
     }
 
     /// Push one loudness observation (dB). Silence below the floor is

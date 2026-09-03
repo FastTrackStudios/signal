@@ -39,15 +39,15 @@ use tilt::mzt_tilt_shelf_cascade;
 
 /// Filter types matching Pro-Q 4's type codes (0-12).
 ///
-/// From filter_type_dispatcher (0x1800fe2a0) and apply_eq_band_parameters_full (0x1801110b0):
+/// From `filter_type_dispatcher` (0x1800fe2a0) and `apply_eq_band_parameters_full` (0x1801110b0):
 ///   0 = Peak/Bell, 1 = HP, 2 = LP, 3 = BP, 4 = Notch,
 ///   5 = Band Pass variant, 6 = Flat Tilt,
 ///   7 = Low Shelf, 8 = High Shelf, 9 = Tilt Shelf,
 ///   10 = Band Shelf, 11 = Allpass, 12 = Shelf Alt
 ///
-/// Type 6 (Flat Tilt) identified from binary: apply_eq_band_parameters_full uses
+/// Type 6 (Flat Tilt) identified from binary: `apply_eq_band_parameters_full` uses
 /// `cos(Q) * pow(const, cos(Q)*scale + offset)` frequency mapping for type 6,
-/// and apply_shelf_gain_to_zpk squares the gain for type 6.
+/// and `apply_shelf_gain_to_zpk` squares the gain for type 6.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FilterType {
     Peak,            // type 0 — own ZPK via compute_cascade_coefficients
@@ -291,7 +291,6 @@ pub fn compute_auto_gain(band_sections: &[Vec<Coeffs>], sample_rate: f64) -> f64
 ///
 /// The first section has the highest Butterworth Q (pole pair nearest jw axis).
 /// Scale its poles to match the user's desired Q.
-
 #[cfg(test)]
 mod tests {
     use super::*;

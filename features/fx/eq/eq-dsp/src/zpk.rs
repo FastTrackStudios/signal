@@ -21,6 +21,7 @@ impl Complex {
         Self { re, im }
     }
 
+    #[must_use]
     pub fn from_polar(r: f64, theta: f64) -> Self {
         Self {
             re: r * theta.cos(),
@@ -28,6 +29,7 @@ impl Complex {
         }
     }
 
+    #[must_use]
     pub fn conj(self) -> Self {
         Self {
             re: self.re,
@@ -35,6 +37,7 @@ impl Complex {
         }
     }
 
+    #[must_use]
     pub fn mag_sq(self) -> f64 {
         self.re * self.re + self.im * self.im
     }
@@ -251,16 +254,8 @@ pub fn pair_conjugates(zpk: &Zpk) -> Vec<(Vec<Complex>, Vec<Complex>, f64)> {
 
     let mut sections = Vec::with_capacity(n);
     for i in 0..n {
-        let pp = if i < pole_pairs.len() {
-            pole_pairs[i].clone()
-        } else {
-            vec![]
-        };
-        let zp = if i < zero_pairs.len() {
-            zero_pairs[i].clone()
-        } else {
-            vec![]
-        };
+        let pp = pole_pairs.get(i).cloned().unwrap_or_default();
+        let zp = zero_pairs.get(i).cloned().unwrap_or_default();
         let g = if i == 0 {
             zpk.gain / gain_per.powi((n - 1) as i32)
         } else {
