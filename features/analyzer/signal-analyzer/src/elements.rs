@@ -68,7 +68,7 @@ pub fn band_centres() -> Vec<f64> {
 /// Together these say whether something is a narrow tone, a broadband
 /// wash, or a focused hit with a tail — which is what "how saturated is
 /// it" was really asking, and unlike THD it is measurable from a record.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Fullness {
     /// Spectral flatness, 0 to 1. Near 0 is tonal (a clean sine), near 1
     /// is noise-like (a snare, heavy saturation, cymbals).
@@ -459,7 +459,7 @@ fn band_energies(x: &[f32], sample_rate: f64) -> Option<Vec<f64>> {
 }
 
 /// A named span of the spectrum an engineer actually reaches for.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Region {
     pub name: &'static str,
     pub lo_hz: f64,
