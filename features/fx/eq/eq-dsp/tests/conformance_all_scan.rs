@@ -9,11 +9,11 @@
 // A test/example target is its own crate, so the crate-root allow there does
 // not reach this file and it needs its own copy.
 #![allow(
-    as_conversions,
-    cast_precision_loss,
     clippy::allow_attributes,
     clippy::allow_attributes_without_reason,
-    indexing_slicing,
+    clippy::as_conversions,
+    clippy::cast_precision_loss,
+    clippy::indexing_slicing,
     reason = "pending the DSP algorithm rewrite"
 )]
 

@@ -17,15 +17,15 @@
 // A test/example target is its own crate, so the crate-root allow there does
 // not reach this file and it needs its own copy.
 #![allow(
-    arithmetic_side_effects,
-    as_conversions,
-    cast_possible_truncation,
-    cast_precision_loss,
-    cast_sign_loss,
     clippy::allow_attributes,
     clippy::allow_attributes_without_reason,
-    indexing_slicing,
-    too_many_lines,
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::indexing_slicing,
+    clippy::too_many_lines,
     reason = "pending the DSP algorithm rewrite"
 )]
 
