@@ -458,6 +458,86 @@ fn band_energies(x: &[f32], sample_rate: f64) -> Option<Vec<f64>> {
     )
 }
 
+/// A named span of the spectrum an engineer actually reaches for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Region {
+    pub name: &'static str,
+    pub lo_hz: f64,
+    pub hi_hz: f64,
+}
+
+/// The parts of a kick worth naming.
+///
+/// `click` is the beater — the part that survives a small speaker and
+/// decides whether a kick reads as an event or a thump. It is also the
+/// hardest part to recover from a separated stem, because it overlaps
+/// everything else transient in the mix; check it against
+/// [`region_balance`] on ground truth before trusting it.
+pub const KICK_REGIONS: &[Region] = &[
+    Region { name: "sub",   lo_hz: 30.0,   hi_hz: 60.0 },
+    Region { name: "punch", lo_hz: 60.0,   hi_hz: 120.0 },
+    Region { name: "knock", lo_hz: 120.0,  hi_hz: 250.0 },
+    Region { name: "click", lo_hz: 2000.0, hi_hz: 6000.0 },
+];
+
+/// The parts of a bass worth naming.
+///
+/// `clarity` is where a bass stops being weight and starts being a
+/// note you can follow on a phone speaker. Separation models are
+/// documented to roll off exactly this region, so it is the one to
+/// distrust first.
+pub const BASS_REGIONS: &[Region] = &[
+    Region { name: "sub",     lo_hz: 30.0,  hi_hz: 60.0 },
+    Region { name: "body",    lo_hz: 60.0,  hi_hz: 250.0 },
+    Region { name: "growl",   lo_hz: 250.0, hi_hz: 800.0 },
+    Region { name: "clarity", lo_hz: 800.0, hi_hz: 3000.0 },
+];
+
+/// The parts of a vocal worth naming.
+pub const VOCAL_REGIONS: &[Region] = &[
+    Region { name: "weight",    lo_hz: 100.0,   hi_hz: 250.0 },
+    Region { name: "body",      lo_hz: 250.0,   hi_hz: 800.0 },
+    Region { name: "presence",  lo_hz: 2000.0,  hi_hz: 5000.0 },
+    Region { name: "sibilance", lo_hz: 5000.0,  hi_hz: 9000.0 },
+    Region { name: "air",       lo_hz: 10000.0, hi_hz: 18000.0 },
+];
+
+/// How an element's energy is split across named regions, in dB
+/// relative to its own total.
+///
+/// Relative, not absolute, on purpose: the question is "how clicky is
+/// this kick", not "how loud was it printed". Expressed this way the
+/// numbers compare across songs, across masters, and — importantly —
+/// survive separation better, because a level error shared by the whole
+/// stem cancels out.
+///
+/// Sums power rather than averaging decibels. Averaging dB across a
+/// region weights a near-silent band the same as the peak, which
+/// understates any region with a narrow strong feature — the kick click
+/// being exactly that.
+pub fn region_balance(profile: &[(f64, f64)], regions: &[Region]) -> Vec<(&'static str, f64)> {
+    let total: f64 = profile
+        .iter()
+        .filter(|(_, d)| d.is_finite())
+        .map(|(_, d)| 10.0_f64.powf(d / 10.0))
+        .sum();
+    if total <= 0.0 {
+        return regions.iter().map(|r| (r.name, f64::NEG_INFINITY)).collect();
+    }
+
+    regions
+        .iter()
+        .map(|r| {
+            let power: f64 = profile
+                .iter()
+                .filter(|(f, d)| d.is_finite() && (r.lo_hz..r.hi_hz).contains(f))
+                .map(|(_, d)| 10.0_f64.powf(d / 10.0))
+                .sum();
+            (r.name, 10.0 * (power / total + 1e-30).log10())
+        })
+        .collect()
+}
+
 /// How far `a` sits above `b` in each band, in dB.
 ///
 /// Positive means `a` dominates that band. Both profiles are already
@@ -630,6 +710,55 @@ mod tests {
             "alternating should split ownership, got {:?}",
             at200
         );
+    }
+
+    #[test]
+    fn region_balance_finds_energy_where_it_actually_is() {
+        // A tone at 3 kHz belongs to the kick's click region and to
+        // nothing else.
+        let p = band_profile(&sine(3000.0, 3.0, 0.5), SR).unwrap();
+        let r = region_balance(&p, KICK_REGIONS);
+        let get = |n: &str| r.iter().find(|(k, _)| *k == n).unwrap().1;
+        assert!(get("click") > get("sub") + 20.0, "{r:?}");
+        assert!(get("click") > get("punch") + 20.0, "{r:?}");
+    }
+
+    #[test]
+    fn region_balance_tracks_a_moving_feature() {
+        // Move the energy down and the balance must follow it.
+        let low = region_balance(&band_profile(&sine(45.0, 3.0, 0.5), SR).unwrap(), KICK_REGIONS);
+        let high = region_balance(&band_profile(&sine(3000.0, 3.0, 0.5), SR).unwrap(), KICK_REGIONS);
+        let get = |r: &Vec<(&'static str, f64)>, n: &str| r.iter().find(|(k, _)| *k == n).unwrap().1;
+        assert!(get(&low, "sub") > get(&high, "sub") + 20.0);
+        assert!(get(&high, "click") > get(&low, "click") + 20.0);
+    }
+
+    /// Summing power, not averaging decibels. A narrow strong feature —
+    /// which is exactly what a kick click is — is understated by a dB
+    /// average, because a near-silent band counts as much as the peak.
+    #[test]
+    fn a_narrow_peak_is_not_diluted_by_its_quiet_neighbours() {
+        let p = band_profile(&sine(3000.0, 3.0, 0.5), SR).unwrap();
+        let click = region_balance(&p, KICK_REGIONS)
+            .iter()
+            .find(|(k, _)| *k == "click")
+            .unwrap()
+            .1;
+        // Nearly all the energy is in that one region, so its share of
+        // the total must be close to 0 dB rather than tens down.
+        assert!(click > -3.0, "click share {click:.1} dB — diluted");
+    }
+
+    #[test]
+    fn a_silent_region_reports_nothing_rather_than_zero() {
+        // A kick with no click must not read as one with an average click.
+        let p = band_profile(&sine(45.0, 3.0, 0.5), SR).unwrap();
+        let click = region_balance(&p, KICK_REGIONS)
+            .iter()
+            .find(|(k, _)| *k == "click")
+            .unwrap()
+            .1;
+        assert!(click < -40.0, "expected near-empty click, got {click:.1}");
     }
 
     #[test]

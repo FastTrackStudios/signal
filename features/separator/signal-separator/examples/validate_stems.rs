@@ -20,7 +20,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use signal_analyzer::elements::{self, ElementProfile};
+use signal_analyzer::elements::{self, ElementProfile, Region};
 
 fn main() {
     let pairs: Vec<(String, String, String)> = std::env::args()
@@ -85,6 +85,33 @@ fn main() {
     }
     println!("\n  Δ is estimated minus true. Curve Δ is the mean absolute");
     println!("  difference across the sixth-octave EQ profile, 50 Hz–16 kHz.");
+
+    // Region balance is the question "how clicky is this kick, how
+    // clear is this bass" — and the regions most worth having are the
+    // ones separation is least likely to preserve, so report the error
+    // per region rather than assuming.
+    println!("\n  region balance, dB relative to each stem's own total");
+    println!("  {:<10}{:<12}{:>9}{:>9}{:>9}", "stem", "region", "true", "est", "Δ");
+    println!("  {}", "-".repeat(49));
+    for (label, truth_path, est_path) in &pairs {
+        let Some(regions) = regions_for(label) else { continue };
+        let (Some(t), Some(e)) = (measure(truth_path), measure(est_path)) else { continue };
+        let tb = elements::region_balance(&t.profile, regions);
+        let eb = elements::region_balance(&e.profile, regions);
+        for ((name, tv), (_, ev)) in tb.iter().zip(&eb) {
+            println!("  {:<10}{:<12}{:>9.1}{:>9.1}{:>+9.1}", label, name, tv, ev, ev - tv);
+        }
+    }
+}
+
+/// Which named regions suit this stem.
+fn regions_for(label: &str) -> Option<&'static [Region]> {
+    match label {
+        "kick" => Some(elements::KICK_REGIONS),
+        "bass" => Some(elements::BASS_REGIONS),
+        "vocals" | "lead" | "backing" => Some(elements::VOCAL_REGIONS),
+        _ => None,
+    }
 }
 
 fn measure(path: &str) -> Option<ElementProfile> {
