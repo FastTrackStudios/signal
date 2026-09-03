@@ -143,10 +143,6 @@ where
 
     /// Attach a DAW patch applier for live FX chain loading.
     /// Can be called at construction time or later — all clones share the same slot.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the underlying lock is poisoned.
     #[must_use]
     pub fn with_daw_applier(self, applier: Arc<dyn DawPatchApplier>) -> Self {
         *self.daw_applier.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(applier);
@@ -155,19 +151,11 @@ where
 
     /// Set (or replace) the DAW patch applier after construction.
     /// All clones share the same slot, so replacing it affects all users.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the underlying lock is poisoned.
     pub fn set_daw_applier(&self, applier: Arc<dyn DawPatchApplier>) {
         *self.daw_applier.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(applier);
     }
 
     /// Check if a DAW patch applier is attached.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the underlying lock is poisoned.
     #[must_use]
     pub fn has_daw_applier(&self) -> bool {
         self.daw_applier.read().unwrap_or_else(std::sync::PoisonError::into_inner).is_some()
@@ -175,10 +163,6 @@ where
 
     /// Attach a rig scene applier for preloaded rig hierarchy switching.
     /// Can be called at construction time or later — all clones share the same slot.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the underlying lock is poisoned.
     #[must_use]
     pub fn with_rig_scene_applier(self, applier: Arc<dyn RigSceneApplier>) -> Self {
         *self.daw_rig_applier.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(applier);
@@ -187,10 +171,6 @@ where
 
     /// Set (or replace) the rig scene applier after construction.
     /// All clones share the same slot, so replacing it affects all users.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the underlying lock is poisoned.
     pub fn set_rig_scene_applier(&self, applier: Arc<dyn RigSceneApplier>) {
         *self.daw_rig_applier.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(applier);
     }
@@ -204,7 +184,7 @@ where
     pub fn has_rig_scene_applier(&self) -> bool {
         self.daw_rig_applier
             .read()
-            .expect("lock poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .is_some()
     }
 

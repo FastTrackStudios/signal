@@ -2000,10 +2000,6 @@ impl SamplerRig {
     /// # Errors
     ///
     /// Returns an error if the track table is poisoned during setup.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the track table mutex is poisoned when resizing meters.
     pub fn unload_kit_tracks(&self) -> eyre::Result<()> {
         let Some(state) = self.inner.kit.lock().ok().and_then(|mut k| k.take()) else {
             return Ok(());

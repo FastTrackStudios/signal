@@ -86,20 +86,12 @@ impl SharedState {
     /// # Errors
     ///
     /// Returns an error if the patch is not yet loaded or annotation fails.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the mutex is poisoned (a previous lock holder panicked).
     pub fn set_document(&self, doc: TrackDocument) -> eyre::Result<()> {
         *self.doc.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(doc);
         self.annotate_stored()
     }
 
     /// Drop the document: next block boundary falls back to `StrictLive`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the mutex is poisoned (a previous lock holder panicked).
     pub fn clear_document(&self) {
         *self.doc.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         self.schedule.store(None);

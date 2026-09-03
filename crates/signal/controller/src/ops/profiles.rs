@@ -109,8 +109,6 @@ impl<S: SignalApi> ProfileOps<S> {
 
     /// # Errors
     /// Returns `ResolveError` if the profile or patch cannot be found, or if graph resolution fails.
-    /// # Panics
-    /// Panics if the `daw_rig_applier` or `daw_applier` lock is poisoned.
     pub async fn activate(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -149,7 +147,7 @@ impl<S: SignalApi> ProfileOps<S> {
                     .0
                     .daw_rig_applier
                     .read()
-                    .expect("lock poisoned")
+                    .unwrap_or_else(|e| e.into_inner())
                     .clone();
                 if let Some(rig_applier) = rig_applier {
                     let applied = match rig_applier

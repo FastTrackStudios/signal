@@ -49,10 +49,6 @@ impl MockRigEngine {
     }
 
     /// Initialize slots for the given module types.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the slots mutex is poisoned.
     pub fn initialize_slots(&self, module_types: &[ModuleType]) {
         let mut slots = self.slots.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         for &mt in module_types {
@@ -68,10 +64,6 @@ impl MockRigEngine {
     /// Load a scene by applying a set of targets to slots.
     ///
     /// Missing slots are auto-created. Slots not in targets are disabled.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the slots mutex is poisoned.
     pub fn load_scene_targets(
         &self,
         targets: HashMap<ModuleType, ModuleTarget>,

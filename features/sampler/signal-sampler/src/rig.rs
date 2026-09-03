@@ -1444,10 +1444,6 @@ impl GuitarRig {
     ///
     /// Returns an error if any block fails to load, validate, or prepare, or if the
     /// chain exceeds the maximum number of slots.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the swap state mutex is poisoned.
     pub fn install_chain_with_ids(
         &mut self,
         blocks: &[RigBlock],
@@ -1526,10 +1522,6 @@ impl GuitarRig {
     }
 
     /// Remove a resident chain. If it was active, falls back to passthrough.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the swap state mutex is poisoned.
     pub fn uninstall_model(&mut self, id: ModelId) {
         if self.active() == Some(id) {
             self.set_active(None);
@@ -1544,10 +1536,11 @@ impl GuitarRig {
     /// = clean DI passthrough (all chain slots → identity). The old boxes are
     /// dropped on this (control) thread, off the audio thread. `&self` (via an
     /// internal `Mutex`) so footswitch / UI paths needn't hold the rig `&mut`.
-    ///
     /// # Panics
     ///
-    /// Panics if the swap state mutex is poisoned.
+    /// Panics if a chain GUID recorded in `slot_guids` is missing from
+    /// `swap.chains`, or if a slot marked present turns out to be empty —
+    /// both are internal invariants, not input errors.
     pub fn set_active(&self, id: Option<ModelId>) {
         let mut swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let chain_guids = &self.slot_guids[1..]; // slot 0 is the input probe
@@ -1615,9 +1608,6 @@ impl GuitarRig {
         Box::new(id)
     }
 
-    /// # Panics
-    ///
-    /// Panics if the swap state mutex is poisoned.
     pub fn active(&self) -> Option<ModelId> {
         self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).active
     }
@@ -1638,10 +1628,6 @@ impl GuitarRig {
     }
 
     /// Remove every chain and fall back to passthrough.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the swap state mutex is poisoned.
     pub fn clear(&mut self) {
         self.set_active(None);
         self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).chains.clear();
@@ -1658,9 +1644,6 @@ impl GuitarRig {
         self.slots.iter().find(|s| s.id == id)
     }
 
-    /// # Panics
-    ///
-    /// Panics if the swap state mutex is poisoned.
     pub fn set_input_trim_db(&self, db: f32) {
         self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).input_trim_db = db;
         // The input trim is folded into each NAM block's per-block input gain at
@@ -1670,9 +1653,6 @@ impl GuitarRig {
         // where they take effect.
     }
 
-    /// # Panics
-    ///
-    /// Panics if the swap state mutex is poisoned.
     pub fn set_output_trim_db(&self, db: f32) {
         self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).output_trim_db = db;
         // Output trim → the track's post-fader gain (linear).
@@ -1685,9 +1665,6 @@ impl GuitarRig {
         );
     }
 
-    /// # Panics
-    ///
-    /// Panics if the swap state mutex is poisoned.
     pub fn set_bypass(&self, bypass: bool) {
         {
             let mut swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -1702,23 +1679,14 @@ impl GuitarRig {
         self.set_active(active);
     }
 
-    /// # Panics
-    ///
-    /// Panics if the swap state mutex is poisoned.
     pub fn is_bypassed(&self) -> bool {
         self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).bypass
     }
 
-    /// # Panics
-    ///
-    /// Panics if the swap state mutex is poisoned.
     pub fn input_trim_db(&self) -> f32 {
         self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).input_trim_db
     }
 
-    /// # Panics
-    ///
-    /// Panics if the swap state mutex is poisoned.
     pub fn output_trim_db(&self) -> f32 {
         self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).output_trim_db
     }
@@ -1860,10 +1828,6 @@ impl GuitarRig {
     }
 
     /// Block ids of the active chain, in order. Empty when nothing is active.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the swap state mutex is poisoned.
     pub fn active_block_ids(&self) -> Vec<String> {
         let swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         swap.active

@@ -115,10 +115,6 @@ impl EkitBackend {
 
     /// An offline rig (no audio device) for tests + the pad probe: every
     /// other path is identical, only `render_offline` pulls the blocks.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the mutex is poisoned.
     #[must_use]
     pub fn new_offline(sample_rate: u32) -> Self {
         let b = Self::new();
@@ -127,10 +123,6 @@ impl EkitBackend {
     }
 
     /// Trigger `pad` and render ~0.4 s, returning the peak. Offline only.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the mutex is poisoned.
     #[must_use]
     pub fn render_hit(&self, pad: u32, velocity: u32) -> f32 {
         // Note-on/off inline: `trigger` takes the same (non-reentrant) rig

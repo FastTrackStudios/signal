@@ -141,19 +141,11 @@ impl MockRigControlService {
     }
 
     /// Get the command history for test assertions.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the mutex is poisoned (a previous lock holder panicked).
     pub fn history(&self) -> Vec<RigControlCommand> {
         self.history.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
     }
 
     /// Clear command history.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the mutex is poisoned (a previous lock holder panicked).
     pub fn clear_history(&self) {
         self.history.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clear();
     }

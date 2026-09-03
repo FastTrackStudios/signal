@@ -147,10 +147,6 @@ impl<S: SignalApi> BlockPresetOps<S> {
     /// Builds a minimal single-block `ResolvedGraph` and pushes it through the
     /// DAW applier (if attached). This is the "Preset mode" path — no profile,
     /// no rig hierarchy, just a single FX chain swap.
-    ///
-    /// # Panics
-    /// Panics if the DAW applier lock is poisoned.
-    ///
     /// # Errors
     /// Returns `OpsError::Storage` if the preset snapshot cannot be retrieved, or
     /// `OpsError::VariantNotFound` if the snapshot does not exist.

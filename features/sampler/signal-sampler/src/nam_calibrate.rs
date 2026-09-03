@@ -309,7 +309,8 @@ fn context() -> &'static Mutex<Option<Context>> {
 ///
 /// # Panics
 ///
-/// Panics if a mutex lock is poisoned.
+/// Panics if the shared NAM context slot is empty immediately after being
+/// initialised — an internal invariant of this function, not an input error.
 pub fn measured_loudness(
     model: &mut NamModel,
     model_path: &Path,
@@ -601,10 +602,6 @@ pub fn measure_thd(model: &mut NamModel, sample_rate: f64, input_gain_db: f64) -
 
 /// The cached drive curve for a model file, measuring on first sight (the
 /// "import-time test"). Returns `None` if the model can't be loaded/hashed.
-///
-/// # Panics
-///
-/// Panics if a mutex lock is poisoned.
 pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntry> {
     let sr_key = sample_rate.round() as u32;
     let model_hash = hash_file(model_path).ok()?;
@@ -687,10 +684,6 @@ pub fn drive_compensation(model_path: &Path, sample_rate: f64, drive: f32) -> Op
 /// # Errors
 ///
 /// Returns `Err` if the capture is too short (< 1 second) or if the file cannot be written.
-///
-/// # Panics
-///
-/// Panics if a mutex lock is poisoned.
 pub fn install_di_reference(samples: &[f32], sample_rate: u32) -> Result<(), String> {
     if samples.len() < sample_rate as usize {
         return Err("capture too short for a DI reference (need ≥ 1 s)".into());
