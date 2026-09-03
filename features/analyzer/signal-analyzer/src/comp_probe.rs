@@ -244,21 +244,35 @@ pub fn align_latency(output: &[f32], latency_samples: usize) -> &[f32] {
 
 /// Quantisation range for the stored `u8` gain values.
 ///
-/// Gain, not gain *reduction*: a compressor with makeup applied is above 0 dB,
-/// so the range has to carry positive values too. -48 dB is below any usable
-/// reduction and +6 dB above any sane makeup, giving 0.21 dB per step — an
-/// order of magnitude finer than the differences the comparison cares about,
-/// at a quarter the size of `f32`.
-const GAIN_MIN_DB: f32 = -48.0;
-const GAIN_MAX_DB: f32 = 6.0;
+/// Gain, not gain *reduction*: a compressor with makeup applied is above
+/// 0 dB, so the range has to carry positive values too. The original +6 dB
+/// ceiling was chosen for reduction and is not enough for makeup — measuring
+/// an LA-2A's Gain knob railed every setting above a third of its travel at
+/// exactly +6.00 dB, which reads as a plugin that stops responding and is in
+/// fact a format that stops recording.
+///
+/// -60 to +40 dB covers both, at 0.39 dB per step. That is still an order of
+/// magnitude finer than the differences any comparison here cares about, at a
+/// quarter the size of `f32`.
+pub const GAIN_MIN_DB: f32 = -60.0;
+pub const GAIN_MAX_DB: f32 = 40.0;
 
-fn gain_to_u8(db: f32) -> u8 {
-    let clamped = db.clamp(GAIN_MIN_DB, GAIN_MAX_DB);
-    ((clamped - GAIN_MIN_DB) / (GAIN_MAX_DB - GAIN_MIN_DB) * 255.0).round() as u8
+/// The range captures written before the widening used.
+///
+/// A `.bin` carries no header for it, so a file written under the old range
+/// is silently misread by the new one — every value shifted and scaled. Both
+/// are named so a reader can say which it means, and `read_capture_with_range`
+/// exists for the ones already on disk.
+pub const LEGACY_GAIN_MIN_DB: f32 = -48.0;
+pub const LEGACY_GAIN_MAX_DB: f32 = 6.0;
+
+fn gain_to_u8(db: f32, min: f32, max: f32) -> u8 {
+    let clamped = db.clamp(min, max);
+    ((clamped - min) / (max - min) * 255.0).round() as u8
 }
 
-fn u8_to_gain(v: u8) -> f32 {
-    GAIN_MIN_DB + (v as f32 / 255.0) * (GAIN_MAX_DB - GAIN_MIN_DB)
+fn u8_to_gain(v: u8, min: f32, max: f32) -> f32 {
+    min + (v as f32 / 255.0) * (max - min)
 }
 
 /// Write one scenario's gain curves — all frequencies — to a single file.
@@ -275,14 +289,28 @@ pub fn write_capture(path: &Path, per_freq: &[Vec<f32>]) -> std::io::Result<()> 
     f.write_all(&num_freqs.to_le_bytes())?;
     f.write_all(&rows.to_le_bytes())?;
     for curve in per_freq {
-        let quantised: Vec<u8> = curve.iter().map(|&v| gain_to_u8(v)).collect();
+        let quantised: Vec<u8> =
+            curve.iter().map(|&v| gain_to_u8(v, GAIN_MIN_DB, GAIN_MAX_DB)).collect();
         f.write_all(&quantised)?;
     }
     f.flush()
 }
 
-/// Read back what [`write_capture`] wrote.
+/// Read back what [`write_capture`] wrote, at the current range.
 pub fn read_capture(path: &Path) -> std::io::Result<Vec<Vec<f32>>> {
+    read_capture_with_range(path, GAIN_MIN_DB, GAIN_MAX_DB)
+}
+
+/// Read a capture written under a given range.
+///
+/// Pass [`LEGACY_GAIN_MIN_DB`] / [`LEGACY_GAIN_MAX_DB`] for anything captured
+/// before the range was widened; the metadata written alongside a capture
+/// records which it used.
+pub fn read_capture_with_range(
+    path: &Path,
+    min: f32,
+    max: f32,
+) -> std::io::Result<Vec<Vec<f32>>> {
     let mut f = std::io::BufReader::new(std::fs::File::open(path)?);
     let mut header = [0u8; 8];
     f.read_exact(&mut header)?;
@@ -293,7 +321,7 @@ pub fn read_capture(path: &Path) -> std::io::Result<Vec<Vec<f32>>> {
     for _ in 0..num_freqs {
         let mut buf = vec![0u8; rows];
         f.read_exact(&mut buf)?;
-        out.push(buf.iter().map(|&v| u8_to_gain(v)).collect());
+        out.push(buf.iter().map(|&v| u8_to_gain(v, min, max)).collect());
     }
     Ok(out)
 }
@@ -534,14 +562,14 @@ mod tests {
 
     #[test]
     fn quantisation_round_trips_inside_half_a_step() {
-        // 54 dB over 255 steps — half a step is ~0.106 dB.
-        for db in [-48.0, -30.0, -12.5, -6.0, 0.0, 3.3, 6.0] {
-            let back = u8_to_gain(gain_to_u8(db));
-            assert!((back - db).abs() < 0.107, "{db} -> {back}");
+        // 100 dB over 255 steps — half a step is ~0.196 dB.
+        for db in [-60.0, -30.0, -12.5, -6.0, 0.0, 3.3, 6.0, 20.0, 40.0] {
+            let back = u8_to_gain(gain_to_u8(db, GAIN_MIN_DB, GAIN_MAX_DB), GAIN_MIN_DB, GAIN_MAX_DB);
+            assert!((back - db).abs() < 0.2, "{db} -> {back}");
         }
         // Out of range clamps rather than wrapping.
-        assert_eq!(gain_to_u8(-100.0), 0);
-        assert_eq!(gain_to_u8(100.0), 255);
+        assert_eq!(gain_to_u8(-100.0, GAIN_MIN_DB, GAIN_MAX_DB), 0);
+        assert_eq!(gain_to_u8(100.0, GAIN_MIN_DB, GAIN_MAX_DB), 255);
     }
 
     #[test]
@@ -557,7 +585,8 @@ mod tests {
         assert_eq!(back.len(), 2);
         assert_eq!(back[0].len(), 3);
         for (a, b) in data.iter().flatten().zip(back.iter().flatten()) {
-            assert!((a - b).abs() < 0.107, "{a} -> {b}");
+            // Half a step at the widened range.
+            assert!((a - b).abs() < 0.2, "{a} -> {b}");
         }
         std::fs::remove_file(&path).ok();
     }

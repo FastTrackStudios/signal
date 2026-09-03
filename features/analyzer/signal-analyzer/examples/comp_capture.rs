@@ -515,6 +515,11 @@ fn main() {
         "waveform": format!("{:?}", spec.waveform),
         "duration_s": spec.duration_s,
         "row_ms": row_ms,
+        // The quantisation range this capture was written with. Without it a
+        // reader cannot tell a file written before the range was widened from
+        // one written after, and misreads every value in it.
+        "store_min_db": signal_analyzer::comp_probe::GAIN_MIN_DB,
+        "store_max_db": signal_analyzer::comp_probe::GAIN_MAX_DB,
         "settle_ms": SETTLE_MS,
         "frequencies": freqs,
         // Every parameter's *resting* value as well as its range. A grid sets
