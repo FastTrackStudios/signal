@@ -71,6 +71,7 @@ pub struct ArpEngine {
 }
 
 impl ArpEngine {
+    #[must_use]
     pub fn new(steps: Vec<ArpStep>, step_beats: f32) -> Self {
         Self {
             steps: if steps.is_empty() {
@@ -166,7 +167,7 @@ impl ArpEngine {
             // Advance to the next event inside the block, or leave.
             let next = self
                 .frames_to_step
-                .min(self.sounding.map(|(_, off)| off).unwrap_or(f32::INFINITY));
+                .min(self.sounding.map_or(f32::INFINITY, |(_, off)| off));
             if next >= frames as f32 {
                 break;
             }

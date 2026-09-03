@@ -1,6 +1,6 @@
 //! Measure FTS FX against reference plugins.
 //!
-//! The question this crate exists to answer: *when we translate a FabFilter or
+//! The question this crate exists to answer: *when we translate a `FabFilter` or
 //! Valhalla patch onto our own DSP, how close did we actually get?* It renders
 //! the same stimulus through a reference plugin and through our processor, and
 //! reports the difference under metrics chosen to suit the processor.

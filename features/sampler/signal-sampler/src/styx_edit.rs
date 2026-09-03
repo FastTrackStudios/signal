@@ -40,6 +40,7 @@ pub fn scan(text: &str, mut f: impl FnMut(usize, u8, bool)) {
 
 /// Find the top-level `key ( … )` list block. Returns
 /// `(block_start, inner_start, inner_end, block_end)` byte offsets.
+#[must_use]
 pub fn find_list_block(text: &str, key: &str) -> Option<(usize, usize, usize, usize)> {
     let mut depth = 0i32;
     let mut result = None;
@@ -77,8 +78,7 @@ pub fn find_list_block(text: &str, key: &str) -> Option<(usize, usize, usize, us
                         let after = i + key.len();
                         let ok = bytes
                             .get(after)
-                            .map(|c| c.is_ascii_whitespace() || *c == b'(')
-                            .unwrap_or(false);
+                            .is_some_and(|c| c.is_ascii_whitespace() || *c == b'(');
                         if ok {
                             pending_key_at = Some(i);
                             return;
@@ -99,6 +99,7 @@ pub fn find_list_block(text: &str, key: &str) -> Option<(usize, usize, usize, us
 }
 
 /// Split a list block's inner text into top-level `{ … }` entry spans.
+#[must_use]
 pub fn split_entries(inner: &str) -> Vec<(usize, usize)> {
     let mut spans = Vec::new();
     let mut depth = 0i32;
@@ -128,6 +129,7 @@ pub fn split_entries(inner: &str) -> Vec<(usize, usize)> {
 
 /// First `key <value>` field in an entry (any position — handles both
 /// line-per-field and inline `{id Mix, label Mix}` styles). Unquotes.
+#[must_use]
 pub fn entry_field(entry: &str, key: &str) -> Option<String> {
     let bytes = entry.as_bytes();
     let mut depth = 0i32;
@@ -171,13 +173,13 @@ fn has_key_at(text: &str, bytes: &[u8], i: usize, key: &str) -> bool {
     }
     bytes
         .get(i + key.len())
-        .map(|c| c.is_ascii_whitespace())
-        .unwrap_or(false)
+        .is_some_and(u8::is_ascii_whitespace)
 }
 
 /// Set (replace or insert) a one-line scalar field in a line-per-field entry
 /// block, preserving the block's indentation and `name<pad>value` alignment.
 /// Returns the rewritten entry text.
+#[must_use]
 pub fn set_entry_field(entry: &str, key: &str, value: &str) -> String {
     let lines: Vec<&str> = entry.split_inclusive('\n').collect();
     // Field indent: taken from the first field line (fallback 8 spaces).
@@ -187,8 +189,7 @@ pub fn set_entry_field(entry: &str, key: &str, value: &str) -> String {
             let t = l.trim_start();
             !t.is_empty() && !t.starts_with('{') && !t.starts_with('}') && !t.starts_with("//")
         })
-        .map(|l| &l[..l.len() - l.trim_start().len()])
-        .unwrap_or("        ");
+        .map_or("        ", |l| &l[..l.len() - l.trim_start().len()]);
     let field_line = format!("{indent}{key:<12} {value}\n");
 
     let mut out = String::with_capacity(entry.len() + field_line.len());

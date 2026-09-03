@@ -8,11 +8,11 @@ use std::f64::consts::PI;
 
 /// Coefficient scaling constants used by the modeled style response.
 struct CoefficientScalingConstants {
-    /// Frequency limit for Style 2 special case (DAT_1802135c8)
+    /// Frequency limit for Style 2 special case (`DAT_1802135c8`)
     freq_limit_style2: f64,
-    /// Scaling factor for frequency computation (DAT_180213418)
+    /// Scaling factor for frequency computation (`DAT_180213418`)
     freq_scaling: f64,
-    /// Threshold value in frequency scaling (DAT_1802132b8)
+    /// Threshold value in frequency scaling (`DAT_1802132b8`)
     freq_threshold: f64,
     /// Blend factor for complex frequency-dependent computation
     blend_factor: f64,
@@ -52,6 +52,7 @@ pub struct GainCurve {
 }
 
 impl GainCurve {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut curve = Self {
             threshold_db: 0.0,
@@ -79,6 +80,7 @@ impl GainCurve {
     }
 
     /// Get current compression style
+    #[must_use]
     pub fn style(&self) -> CompressionStyle {
         self.style
     }
@@ -96,11 +98,9 @@ impl GainCurve {
         // VCA: 1.0x both (baseline, clean)
         // Optical: 1.15x attack (slower), 0.93x release (faster) = vintage character
         let (attack_mult, release_mult) = match self.style {
-            CompressionStyle::Clean => (1.0, 1.0),
             CompressionStyle::Fet => (0.9, 0.95),
-            CompressionStyle::Vca => (1.0, 1.0),
             CompressionStyle::Optical => (1.15, 0.93),
-            CompressionStyle::Reserved => (1.0, 1.0),
+            CompressionStyle::Clean | CompressionStyle::Vca | CompressionStyle::Reserved => (1.0, 1.0),
         };
 
         self.attack_coeff = base_attack * attack_mult;
@@ -152,6 +152,7 @@ impl GainCurve {
 
     /// Compute gain reduction (linear) from detected level (dB).
     /// Returns linear GR where 1.0 = no reduction, 0.5 = -6 dB reduction.
+    #[must_use]
     pub fn compute_gr(&self, level_db: f64) -> f64 {
         let thresh = self.threshold_db;
         let half_knee = self.knee_db / 2.0;
@@ -178,7 +179,8 @@ impl GainCurve {
 
     /// Apply style-specific coefficient scaling to attack/release.
     /// Applies the post-curve transformations used by this modeled style layer.
-    /// Returns scaled attack_coeff and release_coeff based on style.
+    /// Returns scaled `attack_coeff` and `release_coeff` based on style.
+    #[must_use]
     pub fn apply_coefficient_scaling(&self, frequency_hz: f64) -> (f64, f64) {
         let constants = CoefficientScalingConstants::default();
 
@@ -222,6 +224,7 @@ impl GainCurve {
     /// This applies style-specific transformations after gain curve computation
     /// but before final GR application.
     /// Modeled from the reference style analysis.
+    #[must_use]
     pub fn compute_coefficient_adjustment(&self, input_frequency: f64) -> f64 {
         let constants = CoefficientScalingConstants::default();
 

@@ -13,10 +13,14 @@
 //! (that would form a `sampler → synth → sampler` cycle), so any caller that
 //! wants the Omnisphere built-ins calls this after `PresetRegistry::with_builtins`.
 
-/// The Signal Engine — the canonical layer program every rig loads
-/// patches into (source stack → filters → amp → FX + modulators).
+/// The Signal Engine.
+///
+/// The canonical layer program every rig loads patches into
+/// (source stack → filters → amp → FX + modulators).
 pub mod engine;
 /// Reading a Gig Performer rig back out of a `.gig` file.
+///
+/// The inverse of the exporter in [`crate::engine`].
 pub mod gig;
 pub mod omni;
 pub mod omni_import;

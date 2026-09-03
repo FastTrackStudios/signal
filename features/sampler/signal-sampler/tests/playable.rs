@@ -261,9 +261,7 @@ fn rhodes_silence_sweep() {
     eprintln!("PROBE note=36 vel=30: voices={}", bank.active_voices("tui"));
     let mut p = 0.0f32;
     for _ in 0..40 {
-        for s in &mut buf {
-            *s = 0.0;
-        }
+        buf.fill(0.0);
         bank.render(&mut buf);
         for &s in &buf {
             p = p.max(s.abs());
@@ -272,9 +270,7 @@ fn rhodes_silence_sweep() {
     eprintln!("PROBE peak={p}");
     bank.note_off("tui", 36);
     for _ in 0..40 {
-        for s in &mut buf {
-            *s = 0.0;
-        }
+        buf.fill(0.0);
         bank.render(&mut buf);
     }
 
@@ -287,9 +283,7 @@ fn rhodes_silence_sweep() {
             }
             let mut peak = 0.0f32;
             for _ in 0..40 {
-                for s in &mut buf {
-                    *s = 0.0;
-                }
+                buf.fill(0.0);
                 bank.render(&mut buf);
                 for &s in &buf {
                     peak = peak.max(s.abs());
@@ -297,9 +291,7 @@ fn rhodes_silence_sweep() {
             }
             bank.note_off("tui", note);
             for _ in 0..30 {
-                for s in &mut buf {
-                    *s = 0.0;
-                }
+                buf.fill(0.0);
                 bank.render(&mut buf);
             }
             if peak < 0.001 {
@@ -365,9 +357,7 @@ fn rhodes_tui_path_produces_audio() {
     let mut buf = vec![0.0f32; 256 * 2];
     let mut hold_peak = 0.0f32;
     for _ in 0..50 {
-        for s in &mut buf {
-            *s = 0.0;
-        }
+        buf.fill(0.0);
         bank.render(&mut buf);
         for &s in &buf {
             hold_peak = hold_peak.max(s.abs());
@@ -376,9 +366,7 @@ fn rhodes_tui_path_produces_audio() {
     bank.note_off("tui", 60);
     let mut release_peak = 0.0f32;
     for _ in 0..30 {
-        for s in &mut buf {
-            *s = 0.0;
-        }
+        buf.fill(0.0);
         bank.render(&mut buf);
         for &s in &buf {
             release_peak = release_peak.max(s.abs());

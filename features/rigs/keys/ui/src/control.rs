@@ -34,6 +34,7 @@ use crate::zoom::{OpenButton, Zoom};
 /// Accent per engine — the same color language the Perform strip uses.
 /// Keys is the green one (it is the engine you look at most, and green reads
 /// as "running"); the blue belongs to Pad.
+#[must_use]
 pub fn engine_color(name: &str) -> &'static str {
     match name {
         "Keys" => "#34d399",
@@ -151,10 +152,10 @@ enum MacroScope {
 impl MacroScope {
     fn of(selection: &Selection) -> Self {
         match selection {
-            Selection::None => MacroScope::Rig,
-            Selection::Engine(engine) => MacroScope::Engine(engine.clone()),
+            Selection::None => Self::Rig,
+            Selection::Engine(engine) => Self::Engine(engine.clone()),
             Selection::Layer { engine, layer } | Selection::Module { engine, layer, .. } => {
-                MacroScope::Layer {
+                Self::Layer {
                     engine: engine.clone(),
                     layer: layer.clone(),
                 }
@@ -169,9 +170,9 @@ impl MacroScope {
     #[expect(dead_code, reason = "macro-band header, not wired up yet")]
     fn heading(&self) -> (String, &'static str) {
         match self {
-            MacroScope::Rig => ("All engines".to_string(), "rig controls"),
-            MacroScope::Engine(engine) => (engine.clone(), "engine controls"),
-            MacroScope::Layer { layer, .. } => (layer.clone(), "layer controls"),
+            Self::Rig => ("All engines".to_string(), "rig controls"),
+            Self::Engine(engine) => (engine.clone(), "engine controls"),
+            Self::Layer { layer, .. } => (layer.clone(), "layer controls"),
         }
     }
 
@@ -179,18 +180,17 @@ impl MacroScope {
     /// it takes the master strip's neutral white.
     fn accent(&self) -> String {
         match self {
-            MacroScope::Rig => "#e4e4e7".to_string(),
-            MacroScope::Engine(engine) => engine_color(engine).to_string(),
-            MacroScope::Layer { engine, .. } => engine_color(engine).to_string(),
+            Self::Rig => "#e4e4e7".to_string(),
+            Self::Engine(engine) | Self::Layer { engine, .. } => engine_color(engine).to_string(),
         }
     }
 
     /// Whether this scope's knobs reach a given lane.
     fn reaches(&self, engine: &str, layer: &str) -> bool {
         match self {
-            MacroScope::Rig => true,
-            MacroScope::Engine(e) => e == engine,
-            MacroScope::Layer { layer: l, .. } => l == layer,
+            Self::Rig => true,
+            Self::Engine(e) => e == engine,
+            Self::Layer { layer: l, .. } => l == layer,
         }
     }
 }
@@ -221,9 +221,9 @@ fn set_scope_macro(rig: Option<KeysRigClient>, scope: MacroScope, id: String, v:
 /// the lane, which is also the module a lane preset fills first.
 fn rig_time_fx(mixer: &KeysMixer, scope: &MacroScope) -> Vec<crate::time_fx::FxLane> {
     let mut lanes = Vec::new();
-    for engine in mixer.engines.iter() {
+    for engine in &mixer.engines {
         let color = engine_color(&engine.name).to_string();
-        for layer in engine.layers.iter() {
+        for layer in &engine.layers {
             let Some(m) = layer.modules.iter().find(|m| m.live) else {
                 continue;
             };
@@ -247,9 +247,9 @@ fn rig_time_fx(mixer: &KeysMixer, scope: &MacroScope) -> Vec<crate::time_fx::FxL
 
 fn rig_curves(mixer: &KeysMixer, scope: &MacroScope) -> Vec<ModuleCurve> {
     let mut curves = Vec::new();
-    for engine in mixer.engines.iter() {
+    for engine in &mixer.engines {
         let color = engine_color(&engine.name).to_string();
-        for layer in engine.layers.iter() {
+        for layer in &engine.layers {
             let focus = scope.reaches(&engine.name, &layer.name);
             let many = layer.modules.iter().filter(|m| m.live).count() > 1;
             for m in layer.modules.iter().filter(|m| m.live) {
@@ -706,7 +706,7 @@ fn EngineStrip(
                     }
                     OpenButton {
                         title: format!("Open {}", engine.name),
-                        on_open: move |_| zoom.set(Zoom::Engine(open_name.clone())),
+                        on_open: move |()| zoom.set(Zoom::Engine(open_name.clone())),
                     }
                 }
                 // Layer strips.
@@ -778,7 +778,7 @@ fn DroneKeys(engine: String, drone: signal_keys_proto::KeysDrone) -> Element {
                     DroneField {
                         label: "Key".to_string(),
                         current: KEYS[key].to_string(),
-                        options: KEYS.iter().map(|k| k.to_string()).collect::<Vec<_>>(),
+                        options: KEYS.iter().map(ToString::to_string).collect::<Vec<_>>(),
                         selected: key,
                         accent: accent.clone(),
                         on_pick: move |i: usize| send_key((i as u32, octave, playing)),

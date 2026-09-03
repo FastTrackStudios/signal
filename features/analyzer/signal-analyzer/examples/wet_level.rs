@@ -4,6 +4,8 @@
 //! through every algorithm at a fixed decay and prints peak / RMS / energy, so
 //! a per-algorithm offset (or a runaway) is visible without the plugin host.
 
+use std::fmt::Write;
+
 use signal_analyzer::generators;
 use signal_fx::NativeReverb;
 use signal_plugin_host::PluginInstance;
@@ -165,9 +167,9 @@ fn main() {
             let e: f64 = ir.iter().map(|s| f64::from(*s) * f64::from(*s)).sum();
             let ideal = t / 13.8155;
             if e <= 1e-12 {
-                line.push_str(&format!(" {t:>4.1}s:  silent"));
+                let _ = write!(line, " {t:>4.1}s:  silent");
             } else {
-                line.push_str(&format!(" {t:>4.1}s:{:>7.2}", 10.0 * (e / ideal).log10()));
+                let _ = write!(line, " {t:>4.1}s:{:>7.2}", 10.0 * (e / ideal).log10());
             }
         }
         println!("{line}");
@@ -203,7 +205,7 @@ fn main() {
         for pd in [0.0, 1.0, 10.0, 50.0, 125.0, 250.0] {
             let ir = render(i as f64, 2.0, frames, &[("predelay", pd)]);
             let peak = ir.iter().fold(0.0f32, |a, s| a.max(s.abs()));
-            line.push_str(&format!(" {pd:>5.0}ms:{peak:>8.3}"));
+            let _ = write!(line, " {pd:>5.0}ms:{peak:>8.3}");
         }
         println!("{line}");
     }

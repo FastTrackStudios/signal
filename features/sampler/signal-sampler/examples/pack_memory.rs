@@ -89,11 +89,11 @@ fn main() -> eyre::Result<()> {
     println!("mode    {streamed} streamed · {decoded} decoded whole");
     println!(
         "live    {:.1} MB held by the samples",
-        live_bytes as f64 / 1048576.0
+        live_bytes as f64 / 1_048_576.0
     );
     println!(
         "charged {:.1} MB (sampler's own accounting)",
-        (budget::used_bytes() - before_charge) as f64 / 1048576.0
+        (budget::used_bytes() - before_charge) as f64 / 1_048_576.0
     );
     println!(
         "anon    {:.1} MB → {:.1} MB  (Δ {:+.1} MB)",
@@ -109,7 +109,7 @@ fn main() -> eyre::Result<()> {
     let (_, _, idle_bytes) = live(&cache);
     println!(
         "idle    {:.1} MB held by the samples · anon {:.1} MB",
-        idle_bytes as f64 / 1048576.0,
+        idle_bytes as f64 / 1_048_576.0,
         rss_anon_mb(),
     );
     Ok(())

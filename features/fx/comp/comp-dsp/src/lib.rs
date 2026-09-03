@@ -4,9 +4,14 @@
 //! 1. Peak/RMS blended detection
 //! 2. Gain curve: threshold/ratio/knee with range limiting
 //! 3. Reference-informed smoothing with change detection:
-//!    - Coefficients: attack_coeff, release_coeff, other_coeff
+//!    - Coefficients: `attack_coeff`, `release_coeff`, `other_coeff`
 //!    - Change detection: 0.1% threshold
 //! 4. Apply upward/expander stages, output gain, character drive, ceiling, and mix
+
+// Realtime guard. This crate runs on an audio callback, so the calls in
+// clippy.toml's disallowed-methods list (locks, env, sleep) are real bugs here
+// even though they are allowed workspace-wide off the audio thread.
+#![deny(clippy::disallowed_methods)]
 
 pub mod biquad;
 pub mod chain;
@@ -92,6 +97,7 @@ pub struct ProC3Compressor {
 }
 
 impl ProC3Compressor {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         Self {
             detector: Detector::new(),
@@ -268,6 +274,7 @@ impl ProC3Compressor {
     }
 
     /// Get current gain reduction in dB
+    #[must_use]
     pub fn gain_reduction_db(&self) -> f64 {
         self.last_gr_db[0].max(self.last_gr_db[1])
     }
@@ -450,7 +457,6 @@ impl ProC3Compressor {
             4 => cubic_drive_raw(x),
             5 => x.clamp(-1.0, 1.0),
             6 if x < 0.0 => 0.75 * x.tanh(),
-            6 => x.tanh(),
             _ => x.tanh(),
         }
     }
@@ -464,7 +470,6 @@ impl ProC3Compressor {
             4 => cubic_drive_antiderivative_raw(x),
             5 => hard_clip_antiderivative_raw(x),
             6 if x < 0.0 => 0.75 * stable_log_cosh(x),
-            6 => stable_log_cosh(x),
             _ => stable_log_cosh(x),
         };
         integral / (pre_gain * normalization)

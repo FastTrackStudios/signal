@@ -52,6 +52,10 @@ impl TokenStore {
     /// Read the stored session. A missing file is `None`, not an error — not
     /// being signed in is an ordinary state, and the caller's next move is the
     /// same either way.
+    ///
+    /// # Errors
+    ///
+    /// Returns `std::io::Error` if the file cannot be read (other than missing).
     pub fn load(&self) -> std::io::Result<Option<Tokens>> {
         match std::fs::read_to_string(&self.path) {
             Ok(s) => Ok(serde_json::from_str(&s).ok()),
@@ -65,6 +69,10 @@ impl TokenStore {
     /// Written through a temporary file and renamed, so an interrupted write
     /// cannot leave a half-written token file that reads as corrupt (and, on
     /// unix, created 0600 — it is a credential).
+    ///
+    /// # Errors
+    ///
+    /// Returns `std::io::Error` if directory creation, file write, or rename fails.
     pub fn save(&self, tokens: &Tokens) -> std::io::Result<()> {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -81,6 +89,10 @@ impl TokenStore {
     }
 
     /// Forget the session — signing out. Absent is already the desired state.
+    ///
+    /// # Errors
+    ///
+    /// Returns `std::io::Error` if file deletion fails (other than missing file).
     pub fn clear(&self) -> std::io::Result<()> {
         match std::fs::remove_file(&self.path) {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),

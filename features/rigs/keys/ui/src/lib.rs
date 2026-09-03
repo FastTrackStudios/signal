@@ -86,8 +86,7 @@ pub fn KeysRigRemote() -> Element {
     // The header lens: the active stack IS the sound, like the guitar rig's.
     let active_stack = perform.stacks.iter().find(|s| s.is_active);
     let (lens_bg, lens_fg) = active_stack
-        .map(|s| stack_color(&s.name))
-        .unwrap_or(("#1c1c20", "#a1a1aa"));
+        .map_or(("#1c1c20", "#a1a1aa"), |s| stack_color(&s.name));
     let lens_label = active_stack
         .map(|s| s.name.to_uppercase())
         .or_else(|| status.loaded_preset.clone())

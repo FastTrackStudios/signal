@@ -19,6 +19,10 @@ pub struct OmniMulti {
 
 /// Parse a `.mlt_omn` document: `SynthMaster` wraps 8 `SynthEngine` parts
 /// plus `MasterEngineBaseParamBlock` mixer attrs (`pLevel0..7`, `pMute0..7`).
+///
+/// # Errors
+///
+/// Returns an error if the XML is invalid, does not contain the expected multi structure, or has no synth engines.
 pub fn parse_multi(xml: &str) -> Result<OmniMulti, String> {
     let root = parse_xml(xml)?;
     let mut multi = OmniMulti::default();
@@ -76,6 +80,10 @@ pub fn multi_to_container(multi: &OmniMulti, index: &SoundsourceIndex) -> Contai
 }
 
 /// Convenience: read + parse + map a `.mlt_omn` file.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or the XML is invalid.
 pub fn load_multi_file(path: &Path, index: &SoundsourceIndex) -> Result<Container, String> {
     let xml = std::fs::read_to_string(path).map_err(|e| format!("read {path:?}: {e}"))?;
     let multi = parse_multi(&xml)?;

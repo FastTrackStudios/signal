@@ -40,7 +40,7 @@ struct SongDef {
 const SETLIST: &[SongDef] = &[
     SongDef {
         title: "Belief",
-        color: 0x22C55E, // green
+        color: 0x0022_C55E, // green
         sections: &[
             ("Clean", &["input", "amp", "master"]),
             ("Ambient", &["input", "amp", "modulation", "time", "master"]),
@@ -49,7 +49,7 @@ const SETLIST: &[SongDef] = &[
     },
     SongDef {
         title: "Vienna",
-        color: 0x3B82F6, // blue
+        color: 0x003B_82F6, // blue
         sections: &[
             ("Clean", &["input", "amp", "master"]),
             ("Crunch", &["input", "drive", "amp", "master"]),
@@ -62,12 +62,12 @@ const SETLIST: &[SongDef] = &[
     },
     SongDef {
         title: "Anomalie",
-        color: 0x8B5CF6, // violet
+        color: 0x008B_5CF6, // violet
         sections: &[("Default", &["input", "amp", "dynamics", "master"])],
     },
     SongDef {
         title: "New Whip",
-        color: 0xEAB308, // yellow
+        color: 0x00EA_B308, // yellow
         sections: &[
             ("Clean", &["input", "amp", "master"]),
             ("Rhythm", &["input", "drive", "amp", "dynamics", "master"]),
@@ -79,7 +79,7 @@ const SETLIST: &[SongDef] = &[
     },
     SongDef {
         title: "Leave No Stone",
-        color: 0xEF4444, // red
+        color: 0x00EF_4444, // red
         sections: &[
             (
                 "Lead",
@@ -95,7 +95,7 @@ const SETLIST: &[SongDef] = &[
     },
     SongDef {
         title: "Won't Stand Down",
-        color: 0xF97316, // orange
+        color: 0x00F9_7316, // orange
         sections: &[
             ("Chug", &["input", "drive", "amp", "dynamics", "master"]),
             (
@@ -111,7 +111,7 @@ const SETLIST: &[SongDef] = &[
     },
     SongDef {
         title: "What About Me",
-        color: 0xEC4899, // pink
+        color: 0x00EC_4899, // pink
         sections: &[
             (
                 "Lead",
@@ -122,7 +122,7 @@ const SETLIST: &[SongDef] = &[
     },
     SongDef {
         title: "Harder to Breathe",
-        color: 0x06B6D4, // cyan
+        color: 0x0006_B6D4, // cyan
         sections: &[
             ("Crunch", &["input", "drive", "amp", "master"]),
             ("Dry Drive", &["input", "drive", "amp", "master"]),
@@ -139,6 +139,11 @@ const SETLIST: &[SongDef] = &[
 const SWITCH_BASE_NOTE: u8 = 36;
 
 /// Create the demo setlist in the current REAPER project.
+///
+/// # Errors
+///
+/// Returns an error if the current project cannot be accessed, or if any
+/// track, item, or FX chain operations fail.
 pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
     let project = daw.current_project().await.wrap_err("no current project")?;
     let tracks = project.tracks();
@@ -160,7 +165,7 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
     // Top-level rig folder with Signal Controller for song switching.
     let rig_folder = tracks.add("Guitar Rig", None).await?;
     rig_folder.set_folder_depth(1).await?;
-    rig_folder.set_color(0x9CA3AF).await?; // gray
+    rig_folder.set_color(0x009C_A3AF).await?; // gray
 
     // Signal Controller on rig folder — receives MIDI to switch songs
     rig_folder
@@ -178,7 +183,7 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
     // Rig-level audio source. Sends are created to each section track.
     // Scene switching mutes/unmutes the sends, not the tracks.
     let rig_input = tracks.add("Guitar Input", None).await?;
-    rig_input.set_color(0x6B7280).await?;
+    rig_input.set_color(0x006B_7280).await?;
 
     // Collect all section tracks so we can create sends after building the hierarchy
     let mut all_section_tracks: Vec<daw::rpc::TrackHandle> = Vec::new();

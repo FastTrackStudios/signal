@@ -20,6 +20,7 @@
 //! cargo run --release -p signal-orchestra --example sweep_arrival_semantics
 //! ```
 
+use std::fmt::Write;
 use std::path::PathBuf;
 
 use signal_orchestra::timing::{mix_click, render_click, timing_corpus, CountIn};
@@ -115,7 +116,7 @@ fn main() -> eyre::Result<()> {
             write_wav(&path, &mix)?;
             eprintln!("wrote {}", path.display());
         }
-        readme.push_str(&format!("\n- case `{}`: {}\n", case.name, case.desc));
+        let _ = write!(readme, "\n- case `{}`: {}\n", case.name, case.desc);
     }
     std::env::remove_var("SIGNAL_ARRIVAL_SEMANTICS");
     std::fs::write(out_dir.join("README.md"), readme)?;

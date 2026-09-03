@@ -50,6 +50,7 @@ impl SetlistEntry {
     }
 
     /// Clone this entry with a new ID and name.
+    #[must_use]
     pub fn duplicate(
         &self,
         new_id: impl Into<SetlistEntryId>,
@@ -69,7 +70,7 @@ impl SetlistEntry {
 }
 
 /// A setlist collection — ordered list of entries with a default.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct Setlist {
     pub id: SetlistId,
     pub name: String,

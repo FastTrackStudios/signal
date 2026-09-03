@@ -11,6 +11,11 @@ use signal_proto::scene_template::{SceneTemplate, SceneTemplateId};
 pub struct SceneTemplateOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> SceneTemplateOps<S> {
+    /// List all scene templates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage layer fails.
     pub async fn list(&self) -> Result<Vec<SceneTemplate>, OpsError> {
         self.0
             .service
@@ -19,6 +24,11 @@ impl<S: SignalApi> SceneTemplateOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// Load a scene template by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage layer fails.
     pub async fn load(
         &self,
         id: impl Into<SceneTemplateId>,
@@ -30,6 +40,11 @@ impl<S: SignalApi> SceneTemplateOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// Save a scene template.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage layer fails.
     pub async fn save(&self, template: SceneTemplate) -> Result<SceneTemplate, OpsError> {
         self.0
             .service
@@ -39,6 +54,11 @@ impl<S: SignalApi> SceneTemplateOps<S> {
         Ok(template)
     }
 
+    /// Delete a scene template.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage layer fails.
     pub async fn delete(&self, id: impl Into<SceneTemplateId>) -> Result<(), OpsError> {
         self.0
             .service
@@ -47,6 +67,11 @@ impl<S: SignalApi> SceneTemplateOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// Reorder scene templates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage layer fails.
     pub async fn reorder(&self, ordered_ids: Vec<SceneTemplateId>) -> Result<(), OpsError> {
         self.0
             .service

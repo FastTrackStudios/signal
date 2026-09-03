@@ -72,9 +72,9 @@ pub enum Style {
 impl Style {
     fn from_raw(v: f32) -> Self {
         match v.round() as i32 {
-            1 => Style::Style1,
-            2 => Style::Style2,
-            _ => Style::Modern,
+            1 => Self::Style1,
+            2 => Self::Style2,
+            _ => Self::Modern,
         }
     }
 }
@@ -98,6 +98,7 @@ pub struct DecayEqBand {
 }
 
 impl DecayEqBand {
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.used && self.enabled
     }
@@ -119,6 +120,7 @@ pub struct PostEqBand {
 }
 
 impl PostEqBand {
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.used && self.enabled
     }
@@ -165,6 +167,7 @@ impl ProR2 {
     /// render bridge.
     ///
     /// [`ProR2::predelay_normalized`] carries the raw value meanwhile.
+    #[must_use]
     pub fn predelay_ms(&self) -> Option<f32> {
         None
     }
@@ -193,11 +196,11 @@ pub enum ProR2Error {
 impl std::fmt::Display for ProR2Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProR2Error::UnexpectedParamCount { got } => write!(
+            Self::UnexpectedParamCount { got } => write!(
                 f,
                 "expected {PARAM_COUNT} floats in a Pro-R 2 state, found {got}"
             ),
-            ProR2Error::ProR1NotSupported => {
+            Self::ProR1NotSupported => {
                 write!(f, "this is a Pro-R 1 preset (FPRr); its layout is unmapped")
             }
         }
@@ -207,6 +210,11 @@ impl std::fmt::Display for ProR2Error {
 impl std::error::Error for ProR2Error {}
 
 /// Decode a parsed [`FfbsState`] as a Pro-R 2 instance.
+///
+/// # Errors
+///
+/// Returns [`ProR2Error::UnexpectedParamCount`] if the state vector is shorter than
+/// [`PARAM_COUNT`], or [`ProR2Error::ProR1NotSupported`] if the blob is a Pro-R 1 preset.
 pub fn decode(state: &FfbsState) -> Result<ProR2, ProR2Error> {
     if state.metadata.signature == "FPRr" {
         return Err(ProR2Error::ProR1NotSupported);
@@ -282,6 +290,7 @@ pub fn decode(state: &FfbsState) -> Result<ProR2, ProR2Error> {
 /// - **Post EQ** — belongs on a `NativeEq` downstream, not on the reverb.
 ///   [`ProR2::active_post_eq`] exposes the bands for a caller that builds one.
 /// - **Distance**, **Stereo Width**, **Ducking** — no counterpart.
+#[must_use]
 pub fn to_native_reverb_params(r: &ProR2) -> Vec<(String, f64)> {
     let mut out: Vec<(String, f64)> = Vec::new();
     let mut set = |k: &str, v: f64| out.push((k.to_string(), v));

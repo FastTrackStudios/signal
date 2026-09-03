@@ -8,7 +8,7 @@ use signal_keys_proto::{KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStatus
 
 /// The whole rig, as the remote sees it. `PartialEq` compares the signal
 /// handles (cheap + stable), so it can ride as a component prop.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct KeysViewState {
     pub status: Signal<KeysStatus>,
     pub presets: Signal<Vec<KeysPreset>>,
@@ -108,9 +108,10 @@ pub fn use_keys_state() -> (KeysViewState, Option<KeysRigClient>) {
 }
 
 /// Notes currently held, derived from the MIDI monitor — lights the piano.
+#[must_use]
 pub fn held_notes(midi: &[MidiEvent]) -> Vec<u8> {
     let mut held = std::collections::BTreeSet::<u8>::new();
-    for e in midi.iter() {
+    for e in midi {
         match e {
             MidiEvent::NoteOn { key, velocity, .. } if velocity.get() > 0 => {
                 held.insert(key.get());

@@ -68,7 +68,10 @@ impl LearnState {
     /// Set a curve point for the last touched parameter.
     ///
     /// If this is the first point for this parameter, creates a new pending binding.
-    /// Returns `Err` if no parameter has been touched yet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no parameter has been touched yet.
     pub fn set_point(
         &mut self,
         macro_value: f64,
@@ -106,6 +109,10 @@ impl LearnState {
     }
 
     /// Remove the last point added for the last touched parameter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no parameter has been touched yet.
     pub fn remove_last_point(&mut self) -> Result<(), &'static str> {
         let target = self
             .last_touched

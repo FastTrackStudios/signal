@@ -52,7 +52,7 @@
 //! ## Mode arbitration (block boundaries only)
 //!
 //! `transport playing && schedule present` ⇒ document mode owns the engine
-//! (Lookahead + expressive legato). Anything else ⇒ StrictLive: the caller
+//! (Lookahead + expressive legato). Anything else ⇒ `StrictLive`: the caller
 //! (the CLAP plugin) dispatches incoming live MIDI through the normal bank
 //! path. Transitions happen exclusively at block boundaries: entering kills
 //! live voices and reconstructs at the playhead; leaving releases scheduled
@@ -145,12 +145,14 @@ impl RealtimeScheduler {
     }
 
     /// Whether document mode owned the engine after the last block.
+    #[must_use]
     pub fn document_active(&self) -> bool {
         self.active
     }
 
     /// Trigger events replayed (audio discarded) so far to reconstruct the
     /// voices alive across playback starts/seeks.
+    #[must_use]
     pub fn reconstructed_voices(&self) -> u64 {
         self.reconstructed_voices
     }
@@ -160,10 +162,14 @@ impl RealtimeScheduler {
     ///
     /// Returns `true` when document mode consumed the block (the schedule
     /// was walked and `out` rendered). Returns `false` when the engine is in
-    /// StrictLive for this block — `out` is left CLEARED and untouched; the
+    /// `StrictLive` for this block — `out` is left CLEARED and untouched; the
     /// caller dispatches live MIDI and renders. Mode transitions (including
     /// the release/reconstruction bookkeeping) happen inside this call, at
     /// the block boundary only.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the scheduler is marked active but no schedule is present.
     pub fn process_block(
         &mut self,
         bank: &mut SamplerBank,
@@ -308,7 +314,7 @@ impl RealtimeScheduler {
 /// the document epoch (inverse-integration counterpart of
 /// [`qn_to_sec`](crate::document::qn_to_sec)).
 fn bpm_at_sec(tempo: &[TempoPoint], sec: f64) -> f64 {
-    let mut bpm = tempo.first().map(|t| t.bpm).unwrap_or(120.0);
+    let mut bpm = tempo.first().map_or(120.0, |t| t.bpm);
     let mut cur_sec = 0.0;
     let mut cur_qn = 0.0;
     for t in tempo {

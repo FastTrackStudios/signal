@@ -100,21 +100,25 @@ fn slugify(name: &str) -> String {
 
 impl RigManager {
     /// Directory rig settings are stored in: `<config>/signal/rigs`.
+    #[must_use]
     pub fn rigs_dir() -> PathBuf {
         signal_config_dir().join("rigs")
     }
 
     /// File path for a rig of the given name.
+    #[must_use]
     pub fn path_for(name: &str) -> PathBuf {
         Self::rigs_dir().join(format!("{}.styx", slugify(name)))
     }
 
     /// This manager's file path.
+    #[must_use]
     pub fn config_path(&self) -> PathBuf {
         Self::path_for(&self.name)
     }
 
     /// Load a rig's settings by name, or a fresh default (named) if not saved.
+    #[must_use]
     pub fn load(name: &str) -> Self {
         match Self::load_from(&Self::path_for(name)) {
             Ok(m) => m,
@@ -126,6 +130,7 @@ impl RigManager {
     }
 
     /// List the names of all saved rigs.
+    #[must_use]
     pub fn list() -> Vec<String> {
         let mut names = Vec::new();
         if let Ok(rd) = std::fs::read_dir(Self::rigs_dir()) {
@@ -142,16 +147,30 @@ impl RigManager {
         names
     }
 
+    /// Load a rig's settings from a file.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SamplerError` if the file cannot be read or if its contents are not valid styx format.
     pub fn load_from(path: &Path) -> Result<Self, SamplerError> {
         let text = std::fs::read_to_string(path)?;
         facet_styx::from_str(&text).map_err(|e| SamplerError::SpecParse(e.to_string()))
     }
 
     /// Save these settings to [`config_path`](Self::config_path).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if the directory cannot be created or the file cannot be written.
     pub fn save(&self) -> Result<(), String> {
         self.save_to(&self.config_path())
     }
 
+    /// Save these settings to the specified path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if the directory cannot be created or the file cannot be written.
     pub fn save_to(&self, path: &Path) -> Result<(), String> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -163,6 +182,7 @@ impl RigManager {
     /// Directory of the library this rig browses/loads from: `library_path` if
     /// set, else the user library (`<config>/signal/library`) if it exists, else
     /// the shipped example library (`signal-sampler/examples/library`).
+    #[must_use]
     pub fn library_root(&self) -> PathBuf {
         if !self.library_path.is_empty() {
             return PathBuf::from(&self.library_path);
@@ -210,6 +230,10 @@ impl RigManager {
     /// Open a live rig from these settings: open the audio interface on the
     /// configured input channel, load the profile (if any), and apply
     /// level-match. Returns a ready-to-play [`ProfileRig`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio interface cannot be opened on the configured device/channel.
     pub fn open(&self) -> eyre::Result<ProfileRig> {
         let rig = GuitarRig::open(&self.audio)?;
         let mut prig = ProfileRig::new(rig);
@@ -230,7 +254,7 @@ impl RigManager {
                 match prig.load_profile(profile, Some(&base)) {
                     Ok(()) => loaded = true,
                     Err(e) => {
-                        tracing::warn!(error = %e, "RigManager: library profile load failed")
+                        tracing::warn!(error = %e, "RigManager: library profile load failed");
                     }
                 }
             }
@@ -318,8 +342,7 @@ mod tests {
         assert!(profile.patches[0]
             .chain
             .first()
-            .map(|b| b.is_nam())
-            .unwrap_or(false));
+            .is_some_and(super::super::rig::RigBlock::is_nam));
     }
 
     #[test]

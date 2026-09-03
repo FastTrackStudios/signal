@@ -168,6 +168,7 @@ pub struct Spring {
 }
 
 impl Spring {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         // Maximum delay for any parameter setting:
         // delay_a_max = 20 + 35 = 55ms, delay_b_max = 55 * 1.38 = 75.9ms

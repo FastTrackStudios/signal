@@ -41,6 +41,10 @@ pub struct Analysis {
 /// Decode a wav file to mono at [`ANALYSIS_SR`], trimmed to leading silence
 /// removed + [`MAX_ANALYSIS_S`]. Returns the mono buffer and the full
 /// (untrimmed) duration in seconds.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or decoded as audio.
 pub fn decode_wav_mono(path: &std::path::Path) -> Result<(Vec<f32>, f32), String> {
     // Quality is deliberately the lowest (linear interpolation): fidelity is
     // irrelevant for similarity features and speed matters across 10^5 files.

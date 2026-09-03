@@ -105,6 +105,10 @@ where
     ///
     /// Returns a [`RigLoadResult`] containing the track handles and per-layer
     /// module FX GUIDs needed for scene switching.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig or scene cannot be found or loaded.
     pub async fn load_rig_to_daw(
         &self,
         rig: &Rig,

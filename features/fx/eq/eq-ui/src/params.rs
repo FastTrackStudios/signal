@@ -211,7 +211,6 @@ impl BandParams {
             // These strings used to carry Pro-Q's order, so picking "High
             // Shelf" in this plugin built a low cut.
             .with_value_to_string(Arc::new(|v| match v {
-                0 => "Bell".to_string(),
                 1 => "Low Shelf".to_string(),
                 2 => "High Shelf".to_string(),
                 3 => "Low Cut".to_string(),

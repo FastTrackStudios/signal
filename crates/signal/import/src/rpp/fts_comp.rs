@@ -131,6 +131,7 @@ const SC_DEFAULTS: &[(&str, ParamValue)] = &[
 ];
 
 /// Translate a decoded Pro-C 3 into FTS Comp's parameter map.
+#[must_use]
 pub fn plugin_params(comp: &ProC3) -> BTreeMap<String, ParamValue> {
     use ParamValue::{Bool, F32, I32};
     let mut out: BTreeMap<String, ParamValue> = BTreeMap::new();
@@ -215,6 +216,7 @@ pub fn plugin_params(comp: &ProC3) -> BTreeMap<String, ParamValue> {
 /// Returned rather than logged so the caller decides how loudly to say it —
 /// and returned at all because the alternative is a converter that drops a
 /// preset's external side chain without mentioning it.
+#[must_use]
 pub fn unmapped(comp: &ProC3) -> Vec<String> {
     let mut out = Vec::new();
     if comp.auto_threshold {
@@ -245,6 +247,7 @@ pub fn unmapped(comp: &ProC3) -> Vec<String> {
 }
 
 /// The bytes an FTS Comp instance would have saved for this Pro-C preset.
+#[must_use]
 pub fn clap_state(comp: &ProC3) -> Vec<u8> {
     super::fts_eq::encode_state(VERSION, &plugin_params(comp))
 }

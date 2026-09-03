@@ -59,13 +59,13 @@ impl Biquad {
 /// bilinear transform so they are correct at any sample rate (libebur128's
 /// parametrisation), not just the 48 kHz constants tabulated in the spec.
 fn prefilter(fs: f64) -> Biquad {
-    let f0 = 1681.974450955533;
-    let g = 3.999843853973347; // dB
-    let q = 0.7071752369554196;
+    let f0 = 1_681.974_450_955_533;
+    let g = 3.999_843_853_973_347; // dB
+    let q = 0.707_175_236_955_419_6;
 
     let k = (core::f64::consts::PI * f0 / fs).tan();
     let vh = 10f64.powf(g / 20.0);
-    let vb = vh.powf(0.4996667741545416);
+    let vb = vh.powf(0.499_666_774_154_541_6);
     let a0 = 1.0 + k / q + k * k;
     Biquad::new(
         (vh + vb * k / q + k * k) / a0,
@@ -79,8 +79,8 @@ fn prefilter(fs: f64) -> Biquad {
 /// Stage 2 of K-weighting: the RLB high-pass (~38 Hz), which de-emphasises
 /// rumble/DC. Same bilinear parametrisation as [`prefilter`].
 fn rlb_highpass(fs: f64) -> Biquad {
-    let f0 = 38.13547087602444;
-    let q = 0.5003270373238773;
+    let f0 = 38.135_470_876_024_44;
+    let q = 0.500_327_037_323_877_3;
 
     let k = (core::f64::consts::PI * f0 / fs).tan();
     let a0 = 1.0 + k / q + k * k;
@@ -109,6 +109,7 @@ pub const SILENCE_LUFS: f64 = f64::NEG_INFINITY;
 /// Returns [`SILENCE_LUFS`] (−∞) when the signal is silent or shorter than one
 /// 400 ms measurement block. This is an offline measurement — it allocates and
 /// is not for the audio hot path.
+#[must_use]
 pub fn integrated_lufs(samples: &[f64], sample_rate: f64) -> f64 {
     if sample_rate <= 0.0 {
         return SILENCE_LUFS;

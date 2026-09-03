@@ -15,7 +15,7 @@
 //!                             └─ other
 //! ```
 //!
-//! Separation itself is PyTorch, reached through `audio-separator`;
+//! Separation itself is `PyTorch`, reached through `audio-separator`;
 //! `nix develop .#stems` provides that. Rust owns the model registry,
 //! the ordering, and the checking — the parts where a silent mistake is
 //! expensive.

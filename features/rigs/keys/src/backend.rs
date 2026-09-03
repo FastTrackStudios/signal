@@ -2626,7 +2626,7 @@ impl KeysRigBackend {
         match opened {
             Ok(r) => {
                 {
-                    let mut rig = self.inner.rig.lock().unwrap();
+                    let mut rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                     *rig = Some(r);
                 }
                 // A freshly opened rig has no MIDI input yet, and every
@@ -2724,7 +2724,7 @@ impl KeysRigBackend {
         // lock before touching the hub, so a slow port open can never wedge
         // status() and with it the whole UI.
         let sink = {
-            let rig = self.inner.rig.lock().unwrap();
+            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             match rig.as_ref() {
                 Some(rig) => rig.midi_sink(),
                 None => return, // Not running — nothing to feed.
@@ -2862,7 +2862,7 @@ impl KeysRigSvc for KeysRigBackend {
     fn status(&self) -> KeysStatus {
         tracing::debug!("keys rpc: status →");
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-        let s = self.inner.state.lock().unwrap();
+        let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let loaded_preset = s
             .loaded
             .and_then(|i| s.presets.get(i))

@@ -60,9 +60,13 @@ impl MultiPointCurve {
     }
 
     /// Create a curve from a list of points. Points are sorted on creation.
-    #[must_use] 
+    ///
+    /// # Panics
+    ///
+    /// Panics if any point's `macro_value` is NaN.
+    #[must_use]
     pub fn from_points(mut points: Vec<CurvePoint>) -> Self {
-        points.sort_by(|a, b| a.macro_value.partial_cmp(&b.macro_value).unwrap());
+        points.sort_by(|a, b| a.macro_value.total_cmp(&b.macro_value));
         Self { points }
     }
 
@@ -81,6 +85,10 @@ impl MultiPointCurve {
 
     /// Remove the point nearest to the given `macro_value`.
     /// Won't remove if fewer than 2 points remain.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any point's `macro_value` is NaN.
     pub fn remove_nearest(&mut self, macro_value: f64) -> Option<CurvePoint> {
         if self.points.len() <= 2 {
             return None;
@@ -92,7 +100,7 @@ impl MultiPointCurve {
             .min_by(|(_, a), (_, b)| {
                 let da = (a.macro_value - macro_value).abs();
                 let db = (b.macro_value - macro_value).abs();
-                da.partial_cmp(&db).unwrap()
+                da.total_cmp(&db)
             })
             .map(|(i, _)| i)?;
         Some(self.points.remove(idx))

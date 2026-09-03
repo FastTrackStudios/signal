@@ -106,6 +106,11 @@ fn decode_entities(s: &str) -> String {
 
 /// Parse the `AmberPart` XML dialect (elements + attributes only; comments,
 /// PIs and text content are skipped).
+///
+/// # Errors
+///
+/// Returns an error if the XML is malformed: unterminated tags, invalid UTF-8,
+/// mismatched closing tags, missing quotes on attributes, or no root element.
 pub fn parse_xml(input: &str) -> Result<XmlNode, String> {
     let b = input.as_bytes();
     let mut i = 0usize;

@@ -1,12 +1,17 @@
 //! Delay DSP engine — time-based effects for the plugin suite.
 //!
-//! Based on techniques from qdelay (tiagolr) and ChowDSP's AnalogTapeModel.
+//! Based on techniques from qdelay (tiagolr) and `ChowDSP`'s `AnalogTapeModel`.
 //!
 //! - [`tape_delay::TapeDelay`] — Tape echo with wow/flutter, feedback filtering,
 //!   saturation, ducking, and diffusion
 //! - [`pitch_delay::PitchDelay`] — Per-repeat pitch shifting with granular crossfade
 //! - [`engine::DelayEngine`] — Unified wrapper over all delay styles
 //! - [`chain::DelayChain`] — Full stereo delay with ping-pong, swing, and mix
+
+// Realtime guard. This crate runs on an audio callback, so the calls in
+// clippy.toml's disallowed-methods list (locks, env, sleep) are real bugs here
+// even though they are allowed workspace-wide off the audio thread.
+#![deny(clippy::disallowed_methods)]
 
 pub mod bbd_core;
 pub mod bbd_delay;

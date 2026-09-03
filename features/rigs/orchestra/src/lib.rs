@@ -25,19 +25,27 @@ pub const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
 
 /// The articulation-config styx that maps CSS zones/articulations onto the
-/// engine — the SOUNDPACK DEFINITION: every CSS-specific number (legato
-/// timing curves, retire crossfades, makeup gains, master tune, amp
-/// envelopes, keyswitch map) lives in this file, not in engine code. Owned
-/// by this crate; resolved relative to the source tree at compile time.
+/// engine.
+///
+/// The SOUNDPACK DEFINITION: every CSS-specific number (legato timing
+/// curves, retire crossfades, makeup gains, master tune, amp envelopes,
+/// keyswitch map) lives in this file, not in engine code.
+///
+/// Owned by this crate; resolved relative to the source tree at compile
+/// time.
 // r[impl signal.soundsource.declarative]
 pub const CSS_CONFIG: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/specs/cinematic-strings.styx");
 
 /// Load a CSS strings section (e.g. `"1st Violins"`) into `rig` under `id`,
 /// wired with the engine settings that match a real CSS-in-Kontakt render
-/// (solo mic, arco-attack bloom, release overlap). This is the orchestra
-/// feature's core *definition*: everything the engine needs to sound like CSS.
+/// (solo mic, arco-attack bloom, release overlap).
 ///
+/// This is the orchestra feature's core *definition*: everything the engine needs to sound like CSS.
 /// `css_root` is the library install dir; `config` is the articulation styx.
+///
+/// # Errors
+///
+/// Returns an error if the instrument cannot be loaded from the provided paths.
 // r[impl orchestra.load.css-match]
 // r[impl orchestra.load.section-zones]
 pub fn load_strings(
@@ -61,15 +69,17 @@ pub fn load_strings(
 
 // ── Score → document bridge (keyflow-orchestra → signal-sampler) ─────────────
 
-/// Convert one keyflow-orchestra engine output ([`PartOutput`], score-time —
-/// run `process_part` with `timing_comp: false`; the document annotation does
-/// the anticipation) into a sampler [`TrackDocument`].
+/// Convert one keyflow-orchestra engine output into a sampler [`TrackDocument`].
 ///
-/// keyflow channels are 1-based; documents are 0-based. keyflow has already
-/// assigned divisi channels, so `auto_divisi` stays off and channel N maps to
-/// engine line N. `seed` pins every stochastic choice (round-robin) — persist
-/// it to reproduce a render byte-identically.
-#[must_use] 
+/// The output is score-time ([`PartOutput`]) — run `process_part` with
+/// `timing_comp: false`; the document annotation does the anticipation.
+///
+/// keyflow channels are 1-based; documents are 0-based.
+///
+/// keyflow has already assigned divisi channels, so `auto_divisi` stays off and channel N maps to engine
+/// line N. `seed` pins every stochastic choice (round-robin) — persist it to reproduce a render
+/// byte-identically.
+#[must_use]
 pub fn part_to_document(po: &PartOutput, tempos: &[score::TempoPoint], seed: u64) -> TrackDocument {
     TrackDocument {
         version: 1,
@@ -106,11 +116,18 @@ pub fn part_to_document(po: &PartOutput, tempos: &[score::TempoPoint], seed: u64
     }
 }
 
-/// The full score → audio path for one part: `MusicXML` part → keyflow-orchestra
-/// engine (score-time output) → [`TrackDocument`] → annotated schedule →
+/// The full score → audio path for one part.
+///
+/// `MusicXML` part → keyflow-orchestra engine (score-time output) →
+/// [`TrackDocument`] → annotated schedule →
 /// [`SamplerRig::render_offline_document`] on an instrument already loaded
-/// under `id` (see [`load_strings`]). `rig` must be a
-/// [`SamplerRig::new_offline`].
+/// under `id` (see [`load_strings`]).
+///
+/// `rig` must be a [`SamplerRig::new_offline`].
+///
+/// # Errors
+///
+/// Returns an error if the document rendering fails.
 pub fn render_part_offline(
     rig: &SamplerRig,
     id: &str,

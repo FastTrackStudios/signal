@@ -379,8 +379,8 @@ mod tests {
     struct Gain(f64);
     impl Stage for Gain {
         fn process(&mut self, l: &mut [f64], r: &mut [f64]) {
-            l.iter_mut().for_each(|x| *x *= self.0);
-            r.iter_mut().for_each(|x| *x *= self.0);
+            for x in l.iter_mut() { *x *= self.0; }
+            for x in r.iter_mut() { *x *= self.0; }
         }
     }
 

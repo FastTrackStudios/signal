@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         last = now;
     }
-    println!("preload settled at {:.1} MB", last as f64 / 1048576.0);
+    println!("preload settled at {:.1} MB", last as f64 / 1_048_576.0);
 
     let blocks = (sr as f64 * secs / 512.0) as usize;
     let mut worst_note = 0u8;
@@ -156,7 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!(
         "\nresident {:.1} MB charged · anon {:.1} MB",
-        budget::used_bytes() as f64 / 1048576.0,
+        budget::used_bytes() as f64 / 1_048_576.0,
         rss_anon_mb(),
     );
     if failures.is_empty() {

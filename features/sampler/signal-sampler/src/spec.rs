@@ -160,6 +160,10 @@ pub struct LibrarySpec {
 
 impl LibrarySpec {
     /// Load a spec from a `.styx` or `.toml` file (format detected by extension).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed as a valid spec.
     pub fn from_file(path: &Path) -> Result<Self, SamplerError> {
         let text = std::fs::read_to_string(path).map_err(SamplerError::Io)?;
         let mut spec = match path.extension().and_then(|e| e.to_str()) {
@@ -199,15 +203,26 @@ impl LibrarySpec {
     }
 
     /// Parse from styx format.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input is not a valid spec.
     pub fn from_styx(s: &str) -> Result<Self, SamplerError> {
         facet_styx::from_str(s).map_err(|e| SamplerError::SpecParse(e.to_string()))
     }
 
     /// Parse from TOML format.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input is not a valid spec.
     pub fn from_toml(s: &str) -> Result<Self, SamplerError> {
         facet_toml::from_str(s).map_err(|e| SamplerError::SpecParse(e.to_string()))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the SFZ input is invalid.
     pub fn from_sfz(s: &str) -> Result<Self, SamplerError> {
         let zones = parse_sfz_zones(s)?;
         Ok(Self {
@@ -237,6 +252,7 @@ impl LibrarySpec {
     }
 
     /// Look up an articulation by its `id` field.
+    #[must_use]
     pub fn articulation(&self, id: &str) -> Option<&ArticulationSpec> {
         self.articulations.iter().find(|a| a.id == id)
     }
@@ -245,6 +261,7 @@ impl LibrarySpec {
     /// `active`: the articulation's explicit `sordino_pair` when authored
     /// (`""` = none), else the CSS `Sord` id-prefix convention — in both
     /// cases only if the counterpart exists in the spec.
+    #[must_use]
     pub fn sordino_counterpart(&self, artic_id: &str, active: bool) -> Option<String> {
         let a = self.articulation(artic_id);
         if let Some(pair) = a.and_then(|a| a.sordino_pair.clone()) {
@@ -276,6 +293,7 @@ impl LibrarySpec {
     /// `vibrato_pair` when authored (`""` = none), else the opposite
     /// vibrato side within the same kind + sordino family. `None` when the
     /// library declares no vibrato controller.
+    #[must_use]
     pub fn vibrato_counterpart(&self, artic_id: &str) -> Option<String> {
         self.dynamics.vibrato_controller.as_deref()?;
         let a = self.articulation(artic_id);
@@ -299,6 +317,7 @@ impl LibrarySpec {
     /// [`LegatoEngineSpec`] when the library declares none — so engine code
     /// can read timing/crossfade policy unconditionally (the defaults are
     /// the historical hardcoded values).
+    #[must_use]
     pub fn legato_cfg(&self) -> &LegatoEngineSpec {
         static DEFAULT: std::sync::OnceLock<LegatoEngineSpec> = std::sync::OnceLock::new();
         self.legato_engine
@@ -307,11 +326,13 @@ impl LibrarySpec {
     }
 
     /// Look up a section by its `id` field.
+    #[must_use]
     pub fn section(&self, id: &str) -> Option<&SectionSpec> {
         self.sections.iter().find(|s| s.id == id)
     }
 
     /// Look up a mic by its `id` field.
+    #[must_use]
     pub fn mic(&self, id: &str) -> Option<&MicSpec> {
         self.mics.iter().find(|m| m.id == id)
     }
@@ -333,6 +354,7 @@ impl LibrarySpec {
     /// they are unmeasured (the historical claim — no lead-in). `None` when
     /// the library has no measured transition zones at all (caller falls
     /// back to the velocity curve).
+    #[must_use]
     pub fn legato_lead_ms(&self, from: u8, to: u8) -> Option<u32> {
         if from == to {
             if !self.has_measured_legato() {
@@ -366,7 +388,7 @@ impl LibrarySpec {
             return candidates()
                 .filter(|z| z.root_key.abs_diff(from) == best_dist)
                 .map(|z| z.arrival_ms)
-                .max_by(|a, b| a.total_cmp(b))
+                .max_by(f32::total_cmp)
                 .map(|ms| ms.ceil() as u32);
         }
         let direction = if to > from { "up" } else { "down" };
@@ -389,9 +411,9 @@ impl LibrarySpec {
         let best_dist = candidates().map(|z| z.root_key.abs_diff(named)).min()?;
         let mut leads: Vec<f32> = candidates()
             .filter(|z| z.root_key.abs_diff(named) == best_dist)
-            .map(|z| z.transition_arrival_ms())
+            .map(ZoneSpec::transition_arrival_ms)
             .collect();
-        leads.sort_by(|a, b| a.total_cmp(b));
+        leads.sort_by(f32::total_cmp);
         Some(leads[leads.len() / 2].round() as u32)
     }
 
@@ -403,6 +425,7 @@ impl LibrarySpec {
     /// layer fires. `None` when no matching zone carries a measurement
     /// (caller falls back to `pre_delay_ms` for shorts / trigger-time for
     /// sustains — the historical behaviour).
+    #[must_use]
     pub fn max_attack_arrival_ms(&self, artic_ids: &[&str], pitch: u8) -> Option<f32> {
         let tol = self.performance.zone_pitch_tolerance;
         self.zones
@@ -417,13 +440,14 @@ impl LibrarySpec {
                         || (z.root_key as i32 - pitch as i32).unsigned_abs() as u8 <= tol)
             })
             .map(|z| z.arrival_ms)
-            .max_by(|a, b| a.total_cmp(b))
+            .max_by(f32::total_cmp)
     }
 
     /// Whether any zone carries a measured legato transition (interval +
     /// lead-in written by the sample-collector generator). Gates the
     /// measured-lead prefire alignment; without it the engine and scheduler
     /// keep the legacy velocity-curve behaviour.
+    #[must_use]
     pub fn has_measured_legato(&self) -> bool {
         self.zones
             .iter()
@@ -442,6 +466,7 @@ impl LibrarySpec {
     ///    `Release` articulations, which are engine-internal sample sets,
     ///    not selectable playing styles.
     // r[impl signal.sampling.articulation.select]
+    #[must_use]
     pub fn latched_cc_selector(&self) -> Option<LatchedCcSelector> {
         if !self.selector.eq_ignore_ascii_case("uacc") {
             return None;
@@ -484,6 +509,7 @@ impl LibrarySpec {
     ///
     /// The collection browser consumes `TagSet`; the spec stores tags as a
     /// `Vec` purely for facet-styx round-trip ergonomics.
+    #[must_use]
     pub fn tag_set(&self) -> TagSet {
         let mut set = TagSet::new();
         for t in &self.tags {
@@ -497,11 +523,13 @@ impl LibrarySpec {
 
 /// Library-wide playback-policy numbers — the POLICY the engine reads from
 /// data (the engine keeps only the MECHANISM: zone resolution, scheduling,
-/// crossfading). Every default equals the value the engine hardcoded before
-/// this block existed, so a spec that omits `performance` plays identically.
+/// crossfading).
+///
+/// Every default equals the value the engine hardcoded before this block
+/// existed, so a spec that omits `performance` plays identically.
 ///
 /// The non-zero defaults were decoded from Cinematic Studio Strings (KSP
-/// persistent values / GroupList envelopes) but apply harmlessly to any
+/// persistent values / `GroupList` envelopes) but apply harmlessly to any
 /// zoned library; a library that needs different numbers writes them here.
 // r[impl signal.soundsource.declarative]
 #[derive(Debug, Clone, Facet)]
@@ -537,7 +565,7 @@ pub struct PerformanceSpec {
     /// zone spans a note (CSS whole-tone grid → 2).
     #[facet(default = 2)]
     pub zone_pitch_tolerance: u8,
-    /// Linear gain for recorded release-tail voices (the release ENV_FLEX
+    /// Linear gain for recorded release-tail voices (the release `ENV_FLEX`
     /// does the shaping; CSS release groups ship 0 dB static → 1.0).
     #[facet(default = 1.0f32)]
     pub release_gain: f32,
@@ -585,7 +613,7 @@ impl Default for PerformanceSpec {
 }
 
 /// One decoded amp-envelope segment `(time_ms, level, curve)` — the literal
-/// ENV_FLEX representation (segment 0 is the attack). See
+/// `ENV_FLEX` representation (segment 0 is the attack). See
 /// [`ArticulationSpec::amp_env`].
 #[derive(Debug, Clone, Copy, PartialEq, Facet)]
 pub struct EnvSegmentSpec {
@@ -599,8 +627,9 @@ pub struct EnvSegmentSpec {
 
 /// A piecewise-linear curve over the inter-onset interval (IOI, ms): below
 /// `thresholds_ms[0]` → `anchors_ms[0]`, above the last threshold → the last
-/// anchor, linear between. Used for the legato Overlap-Delay and the
-/// transition sample-start offset.
+/// anchor, linear between.
+///
+/// Used for the legato Overlap-Delay and the transition sample-start offset.
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct IoiCurveSpec {
     /// Ascending IOI breakpoints (ms).
@@ -611,6 +640,7 @@ pub struct IoiCurveSpec {
 
 impl IoiCurveSpec {
     /// Piecewise-linear interpolation of `ioi_ms` across the breakpoints.
+    #[must_use]
     pub fn value_at(&self, ioi_ms: f32) -> f32 {
         let n = self.thresholds_ms.len().min(self.anchors_ms.len());
         if n == 0 {
@@ -631,8 +661,9 @@ impl IoiCurveSpec {
 }
 
 /// Overlap-Delay curves for one legato mode: how long the engine waits after
-/// a note-on before firing the transition, interpolated over the IOI. `soft`
-/// applies to attack-velocity range 1 (≤ the first
+/// a note-on before firing the transition, interpolated over the IOI.
+///
+/// `soft` applies to attack-velocity range 1 (≤ the first
 /// [`LegatoEngineSpec::velocity_splits`] split), `loud` to ranges 2+.
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct OverlapDelayCurveSpec {
@@ -650,7 +681,7 @@ pub struct OverlapDelaySpec {
 }
 
 impl Default for OverlapDelaySpec {
-    /// The decoded CSS persistent values (`CSS 1st Violins.nki` BParScript
+    /// The decoded CSS persistent values (`CSS 1st Violins.nki` `BParScript`
     /// store): LL thresholds `$deey3/$fxiox/$jystg/$zvaet`, EX thresholds
     /// `$g45yq/$bwkdm/$waq1e/$whtm2`; soft anchors `$nbkqa…` / `$kadcz…`;
     /// loud anchors all-zero.
@@ -693,10 +724,11 @@ fn default_start_offset_curve() -> IoiCurveSpec {
 }
 
 /// CC1 → loudness expression curve for CC1-crossfaded sustains: 0 dB at and
-/// above `knee`, linear to `floor_db` at CC1=0. The per-layer crossfade
-/// handles TIMBRE (≈flat total level); this supplies only the gentle bottom
-/// rolloff. Defaults calibrated on the CSS reference render (CC1=20 →
-/// −3.0 dB, flat from CC1≈45).
+/// above `knee`, linear to `floor_db` at CC1=0.
+///
+/// The per-layer crossfade handles TIMBRE (≈flat total level); this supplies
+/// only the gentle bottom rolloff. Defaults calibrated on the CSS reference
+/// render (CC1=20 → −3.0 dB, flat from CC1≈45).
 #[derive(Debug, Clone, Copy, PartialEq, Facet)]
 pub struct Cc1ExpressionSpec {
     #[facet(default = 45)]
@@ -728,6 +760,7 @@ impl DynamicsSpec {
     /// CC1 → linear loudness gain from [`DynamicsSpec::cc1_expression`]
     /// (falling back to the CSS-calibrated defaults): 0 dB at/above the knee,
     /// falling to `floor_db` at CC1=0 along `shape` (1.0 = straight line).
+    #[must_use]
     pub fn cc1_expression_gain(&self, cc1: u8) -> f32 {
         let c = self.cc1_expression.unwrap_or_default();
         let db = if cc1 >= c.knee || c.knee == 0 {
@@ -828,6 +861,7 @@ pub enum AmpEnvRole {
 /// Family-default amp envelope `(segments, hold)` for an articulation id +
 /// voice role. `None` = no envelope (flat unity — legacy behaviour for
 /// families outside the decoded set).
+#[must_use]
 pub fn default_amp_env(
     artic_id: &str,
     role: AmpEnvRole,
@@ -883,7 +917,7 @@ fn read_flac_stinfo_loop(path: &Path) -> Option<(u32, u32)> {
     }
 }
 
-/// Find + parse a `STINFO=` entry inside a FLAC VORBIS_COMMENT block body
+/// Find + parse a `STINFO=` entry inside a FLAC `VORBIS_COMMENT` block body
 /// (`[vendor_len u32le][vendor][count u32le]([len u32le][KEY=val])*`).
 fn parse_stinfo_from_vorbis(body: &[u8]) -> Option<(u32, u32)> {
     let rd = |o: usize| -> Option<u32> {
@@ -1288,7 +1322,7 @@ pub struct ArticulationSpec {
     #[facet(default)]
     pub transpose: i8,
 
-    /// Decoded per-articulation amp envelope (ENV_FLEX segments; segment 0
+    /// Decoded per-articulation amp envelope (`ENV_FLEX` segments; segment 0
     /// is the attack). Empty = fall back to the built-in family defaults
     /// ([`default_amp_env`], keyed by articulation kind/id), which preserve
     /// the historical behaviour for libraries that don't author envelopes.
@@ -1337,6 +1371,7 @@ pub enum LegatoRole {
 impl ArticulationSpec {
     /// Sordino-family membership: the explicit `sordino` flag, else the CSS
     /// `Sord` id-prefix convention.
+    #[must_use]
     pub fn is_sordino(&self) -> bool {
         self.sordino.unwrap_or_else(|| self.id.starts_with("Sord"))
     }
@@ -1344,6 +1379,7 @@ impl ArticulationSpec {
     /// Vibrato-side membership for the CC2 crossfade: the explicit
     /// `vibrato` flag, else the CSS convention (`nv`/`nonvib` in the id =
     /// non-vibrato side).
+    #[must_use]
     pub fn is_vibrato(&self) -> bool {
         self.vibrato.unwrap_or_else(|| {
             let id = self.id.to_lowercase();
@@ -1354,6 +1390,7 @@ impl ArticulationSpec {
     /// Transition-selection role: the explicit `legato_role`, else inferred
     /// from the id (CSS convention: `port` → portamento, `zero` →
     /// retrigger).
+    #[must_use]
     pub fn resolve_legato_role(&self) -> LegatoRole {
         match self.legato_role.to_ascii_lowercase().as_str() {
             "retrigger" => LegatoRole::Retrigger,
@@ -1537,6 +1574,7 @@ impl Default for LegatoEngineSpec {
 impl LegatoEngineSpec {
     /// Get the flat mode (for single-mode libraries like brass), or fall back
     /// to the expressive mode if flat zones are absent.
+    #[must_use]
     pub fn primary_mode(&self) -> Option<LegatoModeSpec> {
         if !self.zones.is_empty() {
             Some(LegatoModeSpec {
@@ -1550,6 +1588,7 @@ impl LegatoEngineSpec {
 
     /// Attack-velocity range (1..=3) from [`Self::velocity_splits`]
     /// (defaults `[64, 100]` — CSS `$eluxs`/`$0uhls`).
+    #[must_use]
     pub fn velocity_range(&self, vel: u8) -> u8 {
         let (s1, s2) = match self.velocity_splits.as_slice() {
             [] => (64, 100),
@@ -1570,14 +1609,14 @@ impl LegatoEngineSpec {
     /// [`Self::overlap_delay`] (defaults = the decoded CSS persistent
     /// values: near-zero except soft+fast playing).
     // r[impl signal.soundsource.legato.live]
+    #[must_use]
     pub fn overlap_delay_ms(&self, ioi_ms: f32, velocity: u8, expressive: bool) -> u32 {
         let default;
-        let od = match &self.overlap_delay {
-            Some(od) => od,
-            None => {
-                default = OverlapDelaySpec::default();
-                &default
-            }
+        let od = if let Some(od) = &self.overlap_delay {
+            od
+        } else {
+            default = OverlapDelaySpec::default();
+            &default
         };
         let mode = if expressive {
             &od.expressive
@@ -1596,6 +1635,7 @@ impl LegatoEngineSpec {
     /// recording playback begins (`$1fvjk`), IOI-interpolated from
     /// [`Self::start_offset`] (defaults 177 → 117 ms).
     // r[impl signal.soundsource.legato.offline]
+    #[must_use]
     pub fn start_offset_ms(&self, ioi_ms: f32) -> f32 {
         match &self.start_offset {
             Some(c) => c.value_at(ioi_ms),
@@ -1610,6 +1650,7 @@ impl LegatoEngineSpec {
     /// ADDS TO THE OFFSET (`$1fvjk := base + $b0n3s` — it is not a wait).
     /// Libraries without authored bases keep the legacy IOI curve
     /// ([`Self::start_offset_ms`]).
+    #[must_use]
     pub fn lt_offset_ms(&self, ioi_ms: f32, velocity: u8, expressive: bool) -> f32 {
         let bases = if expressive {
             &self.lt_offset_expressive
@@ -1626,6 +1667,7 @@ impl LegatoEngineSpec {
 
     /// Retire crossfades `(transition_ms, sustain_ms)` for the PREVIOUS
     /// legato pair, indexed by the attack-velocity range of the NEW note.
+    #[must_use]
     pub fn retire_fades_ms(&self, velocity: u8) -> (u32, u32) {
         let vr = (self.velocity_range(velocity) - 1) as usize;
         let pick = |v: &[u32], defaults: [u32; 3]| -> u32 {
@@ -1665,6 +1707,7 @@ pub struct LegatoZoneSpec {
 
 impl LegatoModeSpec {
     /// Look up the pre-delay for a given MIDI velocity.
+    #[must_use]
     pub fn delay_for_velocity(&self, vel: u8) -> Option<u32> {
         self.zones
             .iter()
@@ -1746,11 +1789,15 @@ pub struct KeyswitchSpec {
     pub notes: Vec<KeyswitchNote>,
 }
 
-/// One velocity-sensitive keyswitch note: playing `note` at a given velocity
-/// applies the mapped value — a zone articulation tag (e.g. `Spiccato`) or an
-/// `@`-prefixed mode token (`@legato-on`, `@sordino-off`, `@legato-expressive`).
-/// `+` joins several, e.g. `"Leg+@legato-expressive"` (select Leg AND set
-/// expressive legato).
+/// One velocity-sensitive keyswitch note.
+///
+/// Playing `note` at a given velocity applies the mapped value — a zone
+/// articulation tag (e.g. `Spiccato`) or an `@`-prefixed mode token
+/// (`@legato-on`, `@sordino-off`, `@legato-expressive`).
+///
+/// `+` joins several, e.g. `"Leg+@legato-expressive"` (select Leg AND set).
+///
+/// Expressive legato.
 #[derive(Debug, Clone, Facet)]
 pub struct KeyswitchNote {
     /// MIDI note name (e.g. `"C0"`, `"A#0"`) — convention C0 = MIDI 12.
@@ -1764,6 +1811,7 @@ pub struct KeyswitchNote {
 
 impl KeyswitchNote {
     /// The value mapped to `velocity` on this keyswitch, if any.
+    #[must_use]
     pub fn value_for(&self, velocity: u8) -> Option<&str> {
         for (range_str, value) in &self.vel_map {
             if let Some((lo, hi)) = parse_range(range_str) {
@@ -1778,6 +1826,7 @@ impl KeyswitchNote {
 
 impl KeyswitchSpec {
     /// Look up the function name for a given CC58 value.
+    #[must_use]
     pub fn cc58_function(&self, value: u8) -> Option<&str> {
         for (range_str, function) in &self.cc58_map {
             if let Some((lo, hi)) = parse_range(range_str) {
@@ -1887,14 +1936,16 @@ pub const UACC_STANDARD_TABLE: &[(u8, &str, &[&str])] = &[
 /// alphanumerics only (`"Bartok Pizz."` → `"bartokpizz"`).
 fn normalize_artic_name(s: &str) -> String {
     s.chars()
-        .filter(|c| c.is_ascii_alphanumeric())
+        .filter(char::is_ascii_alphanumeric)
         .collect::<String>()
         .to_ascii_lowercase()
 }
 
 /// The standard UACC code for a conventionally-named articulation, matching
-/// the normalized name against [`UACC_STANDARD_TABLE`] keywords. `None` =
-/// not a standard name (the pack must author `uacc <code>` explicitly).
+/// the normalized name against [`UACC_STANDARD_TABLE`] keywords.
+///
+/// `None` = not a standard name (the pack must author `uacc <code>` explicitly).
+#[must_use]
 pub fn standard_uacc_code(name: &str) -> Option<u8> {
     let n = normalize_artic_name(name);
     if n.is_empty() {
@@ -1909,7 +1960,7 @@ pub fn standard_uacc_code(name: &str) -> Option<u8> {
 /// A resolved latched-CC articulation selector: the controller number and
 /// the code → articulation-id map, ready for the engine (which treats it as
 /// a pure mechanism — no convention names in engine code).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LatchedCcSelector {
     /// Controller number carrying the selector value.
     pub cc: u8,
@@ -1920,6 +1971,7 @@ pub struct LatchedCcSelector {
 impl LatchedCcSelector {
     /// The articulation id selected by CC `value`, if any. Unknown codes
     /// select nothing (the previous latch stays).
+    #[must_use]
     pub fn artic_for(&self, value: u8) -> Option<&str> {
         self.map
             .iter()
@@ -2119,7 +2171,7 @@ pub struct ZoneSpec {
     /// Empty = single-variant library. When non-empty, multiple zones
     /// share the same `(key, vel, RR, mic, articulation)` and differ only
     /// by `variant`; the engine picks one at patch load. Used by
-    /// GetGoodDrums Luke Holland and Thomas Pridgen kits.
+    /// `GetGoodDrums` Luke Holland and Thomas Pridgen kits.
     #[facet(default)]
     pub variant: String,
 }
@@ -2176,7 +2228,7 @@ pub struct GrooveSpec {
 }
 
 /// One slice marker inside a [`GrooveSpec`].
-#[derive(Debug, Clone, Copy, PartialEq, Facet)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Facet)]
 pub struct SliceMarker {
     /// Inclusive start sample offset in original-tempo frames.
     pub begin: u32,
@@ -2226,6 +2278,7 @@ impl ZoneSpec {
     /// time): the MEASURED `arrival_ms` (destination-pitch settle from the
     /// audio itself) when present, else the metadata `lead_in_ms`. `0.0` =
     /// no marker at all (legacy zone).
+    #[must_use]
     pub fn transition_arrival_ms(&self) -> f32 {
         if self.arrival_ms > 0.0 {
             self.arrival_ms
@@ -2235,6 +2288,7 @@ impl ZoneSpec {
     }
 
     /// Whether this zone contains the given `(note, velocity)`.
+    #[must_use]
     pub fn contains(&self, note: u8, velocity: u8) -> bool {
         note >= self.key_min
             && note <= self.key_max
@@ -2244,6 +2298,7 @@ impl ZoneSpec {
 }
 
 /// Parse a range string like `"0-5"` into `(lo, hi)`.
+#[must_use]
 pub fn parse_range(s: &str) -> Option<(u8, u8)> {
     let (a, b) = s.split_once('-')?;
     Some((a.trim().parse().ok()?, b.trim().parse().ok()?))

@@ -16,6 +16,8 @@ use signal_proto::{
 pub struct ProfileOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> ProfileOps<S> {
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn list(&self) -> Result<Vec<Profile>, OpsError> {
         self.0
             .service
@@ -24,6 +26,8 @@ impl<S: SignalApi> ProfileOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn load(&self, id: impl Into<ProfileId>) -> Result<Option<Profile>, OpsError> {
         self.0
             .service
@@ -32,6 +36,8 @@ impl<S: SignalApi> ProfileOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn create(
         &self,
         name: impl Into<String>,
@@ -47,6 +53,8 @@ impl<S: SignalApi> ProfileOps<S> {
         Ok(profile)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn save(&self, profile: Profile) -> Result<Profile, OpsError> {
         self.0
             .service
@@ -56,6 +64,8 @@ impl<S: SignalApi> ProfileOps<S> {
         Ok(profile)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn delete(&self, id: impl Into<ProfileId>) -> Result<(), OpsError> {
         self.0
             .service
@@ -64,6 +74,8 @@ impl<S: SignalApi> ProfileOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn load_patch(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -76,6 +88,8 @@ impl<S: SignalApi> ProfileOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn save_patch(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -93,6 +107,10 @@ impl<S: SignalApi> ProfileOps<S> {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns `ResolveError` if the profile or patch cannot be found, or if graph resolution fails.
+    /// # Panics
+    /// Panics if the `daw_rig_applier` or `daw_applier` lock is poisoned.
     pub async fn activate(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -181,7 +199,7 @@ impl<S: SignalApi> ProfileOps<S> {
             .find(|p| p.id == patch_id)
             .map(|p| p.name.as_str());
         // Clone out of the lock in its own statement (guard-across-await).
-        let applier = self.0.daw_applier.read().expect("lock poisoned").clone();
+        let applier = self.0.daw_applier.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
         let applied_to_daw = if let Some(applier) = applier {
             match applier.apply_graph(&graph, patch_name).await {
                 Ok(_) => true,
@@ -203,6 +221,8 @@ impl<S: SignalApi> ProfileOps<S> {
         Ok(graph)
     }
 
+    /// # Errors
+    /// Returns `ResolveError` if the profile or its default patch cannot be found, or if graph resolution fails.
     pub async fn activate_default(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -210,6 +230,8 @@ impl<S: SignalApi> ProfileOps<S> {
         self.activate(profile_id, None::<PatchId>).await
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn set_patch_target(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -227,6 +249,8 @@ impl<S: SignalApi> ProfileOps<S> {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn set_patch_preset(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -245,6 +269,8 @@ impl<S: SignalApi> ProfileOps<S> {
         .await
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn reorder_patches(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -258,6 +284,8 @@ impl<S: SignalApi> ProfileOps<S> {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn by_tag(&self, tag: &str) -> Result<Vec<Profile>, OpsError> {
         let all = self.list().await?;
         Ok(all
@@ -267,11 +295,15 @@ impl<S: SignalApi> ProfileOps<S> {
     }
 
     /// Find a profile by name (first match).
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn find_by_name(&self, name: &str) -> Result<Option<Profile>, OpsError> {
         Ok(self.list().await?.into_iter().find(|p| p.name == name))
     }
 
     /// Rename a profile.
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn rename(
         &self,
         id: impl Into<ProfileId>,
@@ -285,6 +317,8 @@ impl<S: SignalApi> ProfileOps<S> {
     }
 
     /// Load a profile, apply a closure to one of its patches, and save.
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn update_patch(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -303,6 +337,8 @@ impl<S: SignalApi> ProfileOps<S> {
     }
 
     /// Add a patch to a profile. Returns the updated profile, or `None` if the profile doesn't exist.
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn add_patch(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -318,6 +354,8 @@ impl<S: SignalApi> ProfileOps<S> {
     }
 
     /// Remove a patch from a profile. Returns the removed patch, or `None` if not found.
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn remove_patch(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -337,6 +375,8 @@ impl<S: SignalApi> ProfileOps<S> {
     }
 
     /// Duplicate a patch within a profile. Returns the new patch, or `None` if not found.
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn duplicate_patch(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -361,11 +401,15 @@ impl<S: SignalApi> ProfileOps<S> {
     }
 
     /// Check if a profile exists.
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn exists(&self, id: impl Into<ProfileId>) -> Result<bool, OpsError> {
         Ok(self.load(id).await?.is_some())
     }
 
     /// Count all profiles.
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn count(&self) -> Result<usize, OpsError> {
         Ok(self.list().await?.len())
     }
@@ -373,6 +417,8 @@ impl<S: SignalApi> ProfileOps<S> {
     // region: --- try_* variants
 
     /// Add a patch, returning an error if the profile doesn't exist.
+    /// # Errors
+    /// Returns `OpsError::NotFound` if the profile doesn't exist, or `OpsError::Storage` if the storage backend fails.
     pub async fn try_add_patch(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -391,6 +437,8 @@ impl<S: SignalApi> ProfileOps<S> {
     }
 
     /// Remove a patch, returning an error if the profile or patch doesn't exist.
+    /// # Errors
+    /// Returns `OpsError::NotFound` if the profile doesn't exist, `OpsError::VariantNotFound` if the patch doesn't exist, or `OpsError::Storage` if the storage backend fails.
     pub async fn try_remove_patch(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -417,6 +465,8 @@ impl<S: SignalApi> ProfileOps<S> {
     }
 
     /// Duplicate a patch, returning an error if the profile or patch doesn't exist.
+    /// # Errors
+    /// Returns `OpsError::NotFound` if the profile doesn't exist, `OpsError::VariantNotFound` if the patch doesn't exist, or `OpsError::Storage` if the storage backend fails.
     pub async fn try_duplicate_patch(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -447,6 +497,8 @@ impl<S: SignalApi> ProfileOps<S> {
     }
 
     /// Save a patch within a profile, returning an error if the profile doesn't exist.
+    /// # Errors
+    /// Returns `OpsError::NotFound` if the profile doesn't exist, or `OpsError::Storage` if the storage backend fails.
     pub async fn try_save_patch(
         &self,
         profile_id: impl Into<ProfileId>,
@@ -470,6 +522,8 @@ impl<S: SignalApi> ProfileOps<S> {
     }
 
     /// Update a patch via closure, returning an error if the profile or patch doesn't exist.
+    /// # Errors
+    /// Returns `OpsError::NotFound` if the profile doesn't exist, `OpsError::VariantNotFound` if the patch doesn't exist, or `OpsError::Storage` if the storage backend fails.
     pub async fn try_update_patch(
         &self,
         profile_id: impl Into<ProfileId>,

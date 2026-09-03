@@ -49,15 +49,30 @@ impl BlockRepoLive {
         Self { db }
     }
 
+    /// Connect to a `SQLite` database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database connection fails.
     pub async fn connect_sqlite(url: &str) -> StorageResult<Self> {
         let db = Database::connect(url).await?;
         Ok(Self::new(db))
     }
 
+    /// Connect to an in-memory `SQLite` database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database connection fails.
     pub async fn connect_sqlite_in_memory() -> StorageResult<Self> {
         Self::connect_sqlite("sqlite::memory:").await
     }
 
+    /// Initialize the database schema.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if database operations fail.
     pub async fn init_schema(&self) -> StorageResult<()> {
         let backend = self.db.get_database_backend();
         let schema = Schema::new(backend);
@@ -109,6 +124,11 @@ impl BlockRepoLive {
         Ok(())
     }
 
+    /// Reseed the database with default block collections.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if database operations fail.
     pub async fn reseed_defaults(&self, block_collections: &[Preset]) -> StorageResult<()> {
         entity::snapshot::Entity::delete_many()
             .exec(&self.db)

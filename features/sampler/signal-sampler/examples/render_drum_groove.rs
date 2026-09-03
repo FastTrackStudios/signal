@@ -51,8 +51,8 @@ fn bar(events: &mut Vec<(f64, u8, u8)>, base_qn: f64, first_bar: bool, jitter: &
     // both get exercised without needing rng in the example.
     let mut vel = |center: i32| -> u8 {
         *jitter = jitter
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         let j = ((*jitter >> 40) & 0x1f) as i32 - 16; // ±16
         (center + j).clamp(1, 127) as u8
     };
@@ -81,8 +81,8 @@ fn bar(events: &mut Vec<(f64, u8, u8)>, base_qn: f64, first_bar: bool, jitter: &
 fn fill(events: &mut Vec<(f64, u8, u8)>, base_qn: f64, jitter: &mut u64) {
     let mut vel = |center: i32| -> u8 {
         *jitter = jitter
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         let j = ((*jitter >> 40) & 0x1f) as i32 - 16;
         (center + j).clamp(1, 127) as u8
     };

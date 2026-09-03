@@ -49,6 +49,7 @@
 //! `--write` it is a dry run: measure + report only.
 
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -632,31 +633,34 @@ fn main() -> Result<(), String> {
 
     // Report.
     let mut report = String::new();
-    report.push_str(&format!(
-        "arrival measurement: {} zones — {} measured, {} low-confidence (not written), {} skipped (release/non-attack)\n",
+    let _ = writeln!(
+        report,
+        "arrival measurement: {} zones — {} measured, {} low-confidence (not written), {} skipped (release/non-attack)",
         results.len(),
         arrivals.len(),
         flagged.len(),
         skipped
-    ));
+    );
     for (cname, (n, vals)) in &per_class {
         let mut v = vals.clone();
         v.sort_by(f64::total_cmp);
         let med = v[v.len() / 2];
-        report.push_str(&format!(
-            "  {cname}: {n} measured, arrival min {:.0} / median {med:.0} / p95 {:.0} / max {:.0} ms\n",
+        let _ = writeln!(
+            report,
+            "  {cname}: {n} measured, arrival min {:.0} / median {med:.0} / p95 {:.0} / max {:.0} ms",
             v[0],
             v[((v.len() as f64 * 0.95) as usize).min(v.len() - 1)],
             v[v.len() - 1]
-        ));
+        );
     }
     report.push_str("\nlow-confidence zones (fallback markers kept):\n");
     for (file, (class, ms, reason)) in &flagged {
-        report.push_str(&format!(
-            "  {file} [{class:?}] {} — {reason}\n",
+        let _ = writeln!(
+            report,
+            "  {file} [{class:?}] {} — {reason}",
             ms.map(|m| format!("{m:.0} ms"))
                 .unwrap_or_else(|| "-".into())
-        ));
+        );
     }
     print!("{report}");
     if let Some(p) = &report_path {

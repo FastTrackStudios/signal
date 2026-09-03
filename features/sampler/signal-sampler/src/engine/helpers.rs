@@ -11,8 +11,7 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(artic_id)
-            .map(|a| a.rr)
-            .unwrap_or(1);
+            .map_or(1, |a| a.rr);
         self.rr
             .borrow_mut()
             .next(section, artic_id, dynamic, max_rr)
@@ -65,7 +64,7 @@ impl SampleEngine {
         release_frames: usize,
         rr_idx: usize,
     ) -> Option<Voice> {
-        let (path, sampled_note) = match self.patch.resolve(&crate::sample_map::SampleQuery {
+        let Some((path, sampled_note)) = self.patch.resolve(&crate::sample_map::SampleQuery {
             section_id: section,
             articulation_id: artic_id,
             mic_id: mic,
@@ -73,29 +72,26 @@ impl SampleEngine {
             target_note: note,
             direction,
             rr: rr_idx,
-        }) {
-            Some(resolved) => resolved,
-            None => {
-                self.sample_misses
-                    .set(self.sample_misses.get().saturating_add(1));
-                self.record_sample_miss(format!(
-                    "section={section} artic={artic_id} mic={mic} dynamic={dynamic} note={note} direction={direction:?} rr={rr_idx}"
-                ));
-                tracing::debug!(
-                    target: "signal_sampler::trigger",
-                    section, artic = artic_id, mic, dynamic, note,
-                    direction = ?direction, rr = rr_idx,
-                    "sample miss: no matching sample"
-                );
-                self.trace_push(TraceKind::SampleMiss {
-                    note,
-                    articulation: artic_id.to_string(),
-                    dynamic: dynamic.to_string(),
-                    rr: rr_idx,
-                    reason: MissReason::NoSample,
-                });
-                return None;
-            }
+        }) else {
+            self.sample_misses
+                .set(self.sample_misses.get().saturating_add(1));
+            self.record_sample_miss(format!(
+                "section={section} artic={artic_id} mic={mic} dynamic={dynamic} note={note} direction={direction:?} rr={rr_idx}"
+            ));
+            tracing::debug!(
+                target: "signal_sampler::trigger",
+                section, artic = artic_id, mic, dynamic, note,
+                direction = ?direction, rr = rr_idx,
+                "sample miss: no matching sample"
+            );
+            self.trace_push(TraceKind::SampleMiss {
+                note,
+                articulation: artic_id.to_string(),
+                dynamic: dynamic.to_string(),
+                rr: rr_idx,
+                reason: MissReason::NoSample,
+            });
+            return None;
         };
 
         // Audio-thread fast path: skip silently when not yet preloaded.
@@ -135,8 +131,7 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(artic_id)
-            .map(|a| a.transpose as i16)
-            .unwrap_or(0);
+            .map_or(0, |a| a.transpose as i16);
         let semitone_offset = note as i16 - sampled_note as i16 + artic_transpose;
         let mic_index = self.mic_index_for(mic);
         // Cap Release-voice lifetime. lacr release-tail FLACs are 30 s of
@@ -242,8 +237,7 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(artic_id)
-            .map(|a| a.dynamics.len())
-            .unwrap_or(0);
+            .map_or(0, |a| a.dynamics.len());
         let d = &self.patch.spec.dynamics;
         let layers: &[Cc1Layer] = match n {
             2 => &d.cc1_layers_2,
@@ -295,11 +289,10 @@ impl SampleEngine {
             if cc1 <= xfade_end {
                 if cc1 < xfade_start {
                     return (lo.label.clone(), lo.label.clone(), 0.0);
-                } else {
-                    let span = (xfade_end - xfade_start + 1).max(1) as f32;
-                    let blend = (cc1 - xfade_start) as f32 / span;
-                    return (lo.label.clone(), hi.label.clone(), blend);
                 }
+                let span = (xfade_end - xfade_start + 1).max(1) as f32;
+                let blend = (cc1 - xfade_start) as f32 / span;
+                return (lo.label.clone(), hi.label.clone(), blend);
             }
         }
         let top = &layers[layers.len() - 1];
@@ -407,7 +400,7 @@ impl SampleEngine {
         let Some(artic) = self.patch.spec.articulation(artic_id) else {
             return (self.dynamic_for_artic(artic_id, velocity), 0.0);
         };
-        let Some((band, n_bands, _num_top, _span)) = self.short_band(artic, velocity) else {
+        let Some((band, n_bands, _num_top, _span)) = Self::short_band(artic, velocity) else {
             return (self.dynamic_for_artic(artic_id, velocity), 0.0);
         };
         // Band → recorded dynamic: 1:1 when counts match, else TOP-align (the
@@ -481,13 +474,17 @@ impl SampleEngine {
     ///   the preferred variant is absent.
     pub(crate) fn find_legato_artic_id(&self, retrigger: bool) -> Option<String> {
         let cur = self.patch.spec.articulation(&self.articulation);
-        let want_sord = cur
-            .map(|a| a.is_sordino())
-            .unwrap_or_else(|| self.articulation.starts_with("Sord"));
-        let prefer_vibrato = cur.map(|a| a.is_vibrato()).unwrap_or_else(|| {
-            let l = self.articulation.to_lowercase();
-            !(l.contains("nv") || l.contains("nonvib"))
-        });
+        let want_sord = cur.map_or_else(
+            || self.articulation.starts_with("Sord"),
+            super::super::spec::ArticulationSpec::is_sordino,
+        );
+        let prefer_vibrato = cur.map_or_else(
+            || {
+                let l = self.articulation.to_lowercase();
+                !(l.contains("nv") || l.contains("nonvib"))
+            },
+            super::super::spec::ArticulationSpec::is_vibrato,
+        );
         let want_role = if retrigger {
             crate::spec::LegatoRole::Retrigger
         } else {

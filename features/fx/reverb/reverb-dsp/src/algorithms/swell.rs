@@ -1,6 +1,6 @@
 //! Swell reverb — envelope-controlled reverb buildup.
 //!
-//! Based on Strymon BigSky Swell: the reverb gradually builds
+//! Based on Strymon `BigSky` Swell: the reverb gradually builds
 //! behind the dry signal using an envelope follower to control
 //! the reverb level. Creates pad-like textures that swell up
 //! during sustained notes and fade during silence.
@@ -26,6 +26,7 @@ pub struct Swell {
 }
 
 impl Swell {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut env = EnvelopeFollower::new(0.0);
         env.set_times_ms(50.0, 500.0, sample_rate); // Slow attack, medium release

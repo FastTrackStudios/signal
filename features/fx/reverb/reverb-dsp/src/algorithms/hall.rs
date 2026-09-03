@@ -50,6 +50,7 @@ pub struct Hall {
 }
 
 impl Hall {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let max_er = (sample_rate * 0.15) as usize; // 150ms max ER
 

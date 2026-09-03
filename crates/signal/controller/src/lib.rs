@@ -143,38 +143,64 @@ where
 
     /// Attach a DAW patch applier for live FX chain loading.
     /// Can be called at construction time or later — all clones share the same slot.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying lock is poisoned.
+    #[must_use]
     pub fn with_daw_applier(self, applier: Arc<dyn DawPatchApplier>) -> Self {
-        *self.daw_applier.write().expect("lock poisoned") = Some(applier);
+        *self.daw_applier.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(applier);
         self
     }
 
     /// Set (or replace) the DAW patch applier after construction.
     /// All clones share the same slot, so replacing it affects all users.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying lock is poisoned.
     pub fn set_daw_applier(&self, applier: Arc<dyn DawPatchApplier>) {
-        *self.daw_applier.write().expect("lock poisoned") = Some(applier);
+        *self.daw_applier.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(applier);
     }
 
     /// Check if a DAW patch applier is attached.
-    #[must_use] 
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying lock is poisoned.
+    #[must_use]
     pub fn has_daw_applier(&self) -> bool {
-        self.daw_applier.read().expect("lock poisoned").is_some()
+        self.daw_applier.read().unwrap_or_else(std::sync::PoisonError::into_inner).is_some()
     }
 
     /// Attach a rig scene applier for preloaded rig hierarchy switching.
     /// Can be called at construction time or later — all clones share the same slot.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying lock is poisoned.
+    #[must_use]
     pub fn with_rig_scene_applier(self, applier: Arc<dyn RigSceneApplier>) -> Self {
-        *self.daw_rig_applier.write().expect("lock poisoned") = Some(applier);
+        *self.daw_rig_applier.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(applier);
         self
     }
 
     /// Set (or replace) the rig scene applier after construction.
     /// All clones share the same slot, so replacing it affects all users.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying lock is poisoned.
     pub fn set_rig_scene_applier(&self, applier: Arc<dyn RigSceneApplier>) {
-        *self.daw_rig_applier.write().expect("lock poisoned") = Some(applier);
+        *self.daw_rig_applier.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(applier);
     }
 
     /// Check if a rig scene applier is attached.
-    #[must_use] 
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying lock is poisoned.
+    #[must_use]
     pub fn has_rig_scene_applier(&self) -> bool {
         self.daw_rig_applier
             .read()
@@ -287,6 +313,10 @@ where
     // region: --- Cross-cutting operations
 
     /// Build the current browser index across all signal domain levels.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ops::OpsError::Storage`] if the underlying service fails.
     pub async fn browser_index(&self) -> Result<BrowserIndex, ops::OpsError> {
         self.service
             .browser_index()
@@ -295,6 +325,10 @@ where
     }
 
     /// Query the semantic browser using structured tags and fallback scoring.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ops::OpsError::Storage`] if the underlying service fails.
     pub async fn browse(&self, query: BrowserQuery) -> Result<Vec<BrowserHit>, ops::OpsError> {
         self.service
             .browse(query)
@@ -303,6 +337,10 @@ where
     }
 
     /// Resolve any target (rig scene, profile patch, song section) into an executable graph.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ResolveError`] if the target cannot be resolved.
     pub async fn resolve_target(
         &self,
         target: ResolveTarget,
@@ -317,6 +355,10 @@ where
     /// Save all entities from a [`signal_proto::builder::BuiltRig`] in dependency order.
     ///
     /// Saves: block presets → module → layer → engine → rig → profile.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ops::OpsError`] if any entity save operation fails.
     pub async fn save_built_rig(
         &self,
         built: &signal_proto::builder::BuiltRig,
@@ -345,6 +387,10 @@ where
     /// Creates block presets → module presets → layer → engine → rig.
     /// Blocks are structural skeletons (default params); use `presets capture`
     /// to fill in live values later.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ops::OpsError`] if the import operation fails.
     pub async fn import_rig_from_chain(
         &self,
         chain: &ops::rig_importer::ImportChain,

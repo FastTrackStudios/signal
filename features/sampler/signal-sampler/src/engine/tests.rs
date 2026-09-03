@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use super::*;
 
 #[test]
@@ -267,11 +269,10 @@ fn cc1_layer_selection() {
             if cc1 <= xe {
                 if cc1 < xs {
                     return (lo.label.clone(), lo.label.clone(), 0.0);
-                } else {
-                    let span = (xe - xs + 1).max(1) as f32;
-                    let blend = (cc1 - xs) as f32 / span;
-                    return (lo.label.clone(), hi.label.clone(), blend);
                 }
+                let span = (xe - xs + 1).max(1) as f32;
+                let blend = (cc1 - xs) as f32 / span;
+                return (lo.label.clone(), hi.label.clone(), blend);
             }
         }
         let top = &layers[layers.len() - 1];
@@ -600,7 +601,7 @@ fn keyswitch_note_selects_articulation_velocity_sensitive() {
     assert!(!eng.try_keyswitch(60, 100));
 }
 
-/// Build a zoned NVLeg legato engine with directional zones for a set of
+/// Build a zoned `NVLeg` legato engine with directional zones for a set of
 /// notes (synthetic paths so it reads as zoned; samples never load).
 fn mono_legato_engine(notes: &[u8]) -> SampleEngine {
     let mut styx = String::from(
@@ -610,9 +611,7 @@ fn mono_legato_engine(notes: &[u8]) -> SampleEngine {
     );
     for &n in notes {
         for dir in ["up", "down"] {
-            styx.push_str(&format!(
-                    "{{file \"{n}_{dir}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"NVLeg\", direction \"{dir}\"}}\n"
-                ));
+            let _ = write!(styx, "{{file \"{n}_{dir}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"NVLeg\", direction \"{dir}\"}}\n");
         }
     }
     styx.push_str(")\n");
@@ -682,16 +681,12 @@ fn pacific_legato_engine(notes: &[u8]) -> SampleEngine {
     );
     for &n in notes {
         for artic in ["sus", "atk", "rel"] {
-            styx.push_str(&format!(
-                    "{{file \"{artic}_{n}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"{artic}\"}}\n"
-                ));
+            let _ = write!(styx, "{{file \"{artic}_{n}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"{artic}\"}}\n");
         }
         // Destination-rooted transitions: every interval 1..=12, both dirs.
         for dir in ["up", "down"] {
             for iv in 1..=12u8 {
-                styx.push_str(&format!(
-                        "{{file \"leg_{dir}{iv}_{n}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"leg\", direction \"{dir}\", interval {iv}}}\n"
-                    ));
+                let _ = write!(styx, "{{file \"leg_{dir}{iv}_{n}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"leg\", direction \"{dir}\", interval {iv}}}\n");
             }
         }
     }

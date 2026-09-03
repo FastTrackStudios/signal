@@ -28,6 +28,7 @@
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use facet::Facet;
@@ -201,21 +202,23 @@ fn library_styx(lib_name: &str, pack: &str, vendor: &str, zones: &[Zone]) -> Str
     let mut s = String::new();
     let lo = zones.iter().map(|z| z.key_lo).min().unwrap_or(21);
     let hi = zones.iter().map(|z| z.key_hi).max().unwrap_or(108);
-    s.push_str(&format!(
-        "name \"{} - {}\"\n",
+    let _ = writeln!(
+        s,
+        "name \"{} - {}\"",
         styx_escape(lib_name),
         styx_escape(pack)
-    ));
+    );
     s.push_str("version \"1.0\"\n");
-    s.push_str(&format!("vendor \"{}\"\n\n", styx_escape(vendor)));
+    let _ = write!(s, "vendor \"{}\"\n\n", styx_escape(vendor));
     s.push_str("sections ({\n  id main\n");
-    s.push_str(&format!("  label \"{}\"\n", styx_escape(lib_name)));
+    let _ = writeln!(s, "  label \"{}\"", styx_escape(lib_name));
     s.push_str("  note_grid ()\n");
-    s.push_str(&format!(
+    let _ = write!(
+        s,
         "  lowest_note {}\n  highest_note {}\n}})\n\n",
         note_name(lo),
         note_name(hi)
-    ));
+    );
     s.push_str("mics ({\n  id Main\n  label Main\n  kind blended\n  default true\n})\n\n");
     s.push_str("dynamics {\n  short_note_controller velocity\n}\n\n");
 
@@ -246,9 +249,10 @@ fn library_styx(lib_name: &str, pack: &str, vendor: &str, zones: &[Zone]) -> Str
         if i > 0 {
             s.push(' ');
         }
-        s.push_str(&format!(
+        let _ = write!(
+            s,
             "{{\n  id {g}\n  label \"{g}\"\n  kind {kind}\n  rr 1\n  dyn_ctrl velocity\n"
-        ));
+        );
         if has_release && *g == "DryTones" {
             s.push_str("  release_artic Release\n");
         }
@@ -257,21 +261,21 @@ fn library_styx(lib_name: &str, pack: &str, vendor: &str, zones: &[Zone]) -> Str
     s.push_str(")\n\nzones (\n");
     for z in zones {
         s.push_str("  {\n");
-        s.push_str(&format!("    file         \"{}\"\n", styx_escape(&z.wav)));
-        s.push_str(&format!("    key_min      {}\n", z.key_lo));
-        s.push_str(&format!("    key_max      {}\n", z.key_hi));
-        s.push_str(&format!("    root_key     {}\n", z.root));
-        s.push_str(&format!("    vel_min      {}\n", z.vel_lo));
-        s.push_str(&format!("    vel_max      {}\n", z.vel_hi));
-        s.push_str(&format!("    articulation \"{}\"\n", z.group));
+        let _ = writeln!(s, "    file         \"{}\"", styx_escape(&z.wav));
+        let _ = writeln!(s, "    key_min      {}", z.key_lo);
+        let _ = writeln!(s, "    key_max      {}", z.key_hi);
+        let _ = writeln!(s, "    root_key     {}", z.root);
+        let _ = writeln!(s, "    vel_min      {}", z.vel_lo);
+        let _ = writeln!(s, "    vel_max      {}", z.vel_hi);
+        let _ = writeln!(s, "    articulation \"{}\"", z.group);
         s.push_str("    mic          \"Main\"\n");
         if z.tune_cents != 0.0 {
-            s.push_str(&format!("    tune_cents   {:.3}\n", z.tune_cents));
+            let _ = writeln!(s, "    tune_cents   {:.3}", z.tune_cents);
         }
         // Kontakt writes -1 for "no loop"; the spec's sentinel is 0/0.
         if z.loop_start >= 0 && z.loop_end > z.loop_start {
-            s.push_str(&format!("    loop_start   {}\n", z.loop_start));
-            s.push_str(&format!("    loop_end     {}\n", z.loop_end));
+            let _ = writeln!(s, "    loop_start   {}", z.loop_start);
+            let _ = writeln!(s, "    loop_end     {}", z.loop_end);
         }
         s.push_str("  }\n");
     }

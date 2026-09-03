@@ -40,6 +40,10 @@ impl NamCatalog {
     }
 
     /// Load catalog from a JSON file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or the JSON is invalid.
     pub fn load(path: &Path) -> Result<Self, NamError> {
         let contents = std::fs::read_to_string(path).map_err(|e| {
             NamError::CatalogError(format!("reading catalog {}: {}", path.display(), e))
@@ -51,6 +55,10 @@ impl NamCatalog {
     }
 
     /// Save catalog to a JSON file (pretty-printed).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be created or written, or if serialization fails.
     pub fn save(&self, path: &Path) -> Result<(), NamError> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;

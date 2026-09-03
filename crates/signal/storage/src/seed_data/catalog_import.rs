@@ -311,10 +311,7 @@ fn rfxchain_preset_from_dir(
 
 /// Recursively walk a directory collecting `SnapshotMetadata` + parent dir from `*.json` files.
 fn collect_snapshot_metas(dir: &Path, out: &mut Vec<(SnapshotMetadata, PathBuf)>) {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
 
     for entry in entries.flatten() {
         let path = entry.path();

@@ -168,6 +168,9 @@ impl NodePath {
         Self(out)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the path is empty, malformed, or contains unknown segment kinds.
     pub fn try_parse_legacy(path: &str) -> Result<Self, NodePathError> {
         if path.trim().is_empty() {
             return Err(NodePathError::Empty);
@@ -231,6 +234,9 @@ impl NodePath {
         })
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the path is empty or structurally invalid.
     pub fn validate(&self) -> Result<(), NodePathError> {
         if self.0.is_empty() {
             return Err(NodePathError::Empty);

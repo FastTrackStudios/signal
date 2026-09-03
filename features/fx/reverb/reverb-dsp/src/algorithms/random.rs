@@ -50,6 +50,7 @@ pub struct Random {
 }
 
 impl Random {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut tone_lp_l = Lp1::new();
         tone_lp_l.set_freq(16_000.0, sample_rate);

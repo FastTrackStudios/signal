@@ -1,6 +1,6 @@
 //! Non-Linear reverb — physics-defying decay shapes.
 //!
-//! Based on Strymon BigSky Non-Linear: applies envelope shaping
+//! Based on Strymon `BigSky` Non-Linear: applies envelope shaping
 //! to a reverb tail, creating reverse, gated, swell, and ramp effects.
 
 use crate::algorithm::{AlgorithmParams, NlShape, NonLinearParams, ReverbAlgorithm};
@@ -16,7 +16,7 @@ use audiocore_dsp::delay_line::DelayLine;
 const REGEN_MARGIN: f64 = 0.9;
 
 /// Envelope shape for the reverb tail.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnvelopeShape {
     /// Bell-curve profile.
     Gauss,
@@ -52,7 +52,7 @@ pub struct NonLinear {
     /// Late stage: its own long-tail FDN, level-gated behind
     /// `mx.late_level > 0` so the default costs nothing.
     late_fdn: Fdn,
-    /// One-pole swell state for the late stage onset (late_speed).
+    /// One-pole swell state for the late stage onset (`late_speed`).
     late_env: f64,
     /// PRE-DELAY remap: shaped output recirculated into the generator.
     nl_fb_state: f64,
@@ -70,6 +70,7 @@ pub struct NonLinear {
 }
 
 impl NonLinear {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let max_env = (sample_rate * 2.0) as usize; // 2s max envelope
 

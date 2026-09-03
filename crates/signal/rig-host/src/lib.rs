@@ -51,8 +51,10 @@ use daw_audio_io::AudioIoPrefs;
 
 pub mod gestures;
 pub mod lock;
-/// Instrumented MIDI attach — the one wide event every rig emits when it
-/// (re)attaches hardware MIDI. Native only: it wraps the midir backend.
+/// Instrumented MIDI attach.
+///
+/// The one wide event every rig emits when it (re)attaches hardware MIDI.
+/// Native only: it wraps the midir backend.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod midi;
 /// The process-wide shared MIDI input — one set of OS clients fanned out to
@@ -62,14 +64,20 @@ pub mod midi_hub;
 pub mod mixer;
 pub mod store;
 
-/// A realtime engine the host can run on — implemented by daw's cpal
-/// [`AudioEngine`] and (on Linux with the `pipewire` feature) the native
-/// duplex `pw_filter` engine. The engine type is a [`RigHost`] type parameter
-/// so output-only hosts stay `Sync` (the duplex engine owns raw `PipeWire`
-/// pointers and is `Send`-only — rigs that use it already serialize through a
-/// `Mutex`).
+/// A realtime engine the host can run on.
+///
+/// Implemented by daw's cpal [`AudioEngine`] and (on Linux with the `pipewire`
+/// feature) the native duplex `pw_filter` engine. The engine type is a
+/// [`RigHost`] type parameter so output-only hosts stay `Sync` (the duplex
+/// engine owns raw `PipeWire` pointers and is `Send`-only — rigs that use it
+/// already serialize through a `Mutex`).
 #[cfg(not(target_arch = "wasm32"))]
 pub trait HostedEngine: Sized {
+    /// Open the engine with the given configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the engine fails to initialize.
     fn open(
         daw: Standalone,
         project_guid: String,
@@ -131,9 +139,11 @@ pub type DuplexEngine = AudioEngine;
 #[cfg(not(target_arch = "wasm32"))]
 pub type DuplexRigHost = RigHost<DuplexEngine>;
 
-/// A seeded rig project **before** the engine opens: add tracks and reserve
-/// FX slots here, then start the engine ([`start_output`](Self::start_output) /
-/// [`start_duplex`](Self::start_duplex)) to get a [`RigHost`].
+/// A seeded rig project **before** the engine opens.
+///
+/// Add tracks and reserve FX slots here, then start the engine
+/// ([`start_output`](Self::start_output) / [`start_duplex`](Self::start_duplex))
+/// to get a [`RigHost`].
 pub struct RigProject {
     daw: Standalone,
     project_guid: String,
@@ -186,12 +196,20 @@ impl RigProject {
     }
 
     /// Add a track; returns its guid.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the track cannot be added to the project.
     pub fn add_track(&self, name: &str) -> eyre::Result<String> {
         add_track(&self.daw, name)
     }
 
     /// Arm `track` to monitor hardware input `channel` — what makes daw's
     /// engine open a live input stream and feed the track's bus.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input cannot be armed.
     pub fn arm_input(&self, track_guid: &str, channel: u32) -> eyre::Result<()> {
         self.daw
             .current()
@@ -203,6 +221,10 @@ impl RigProject {
     /// Reserve one FX slot on `track` (the add + guid-fetch dance); returns
     /// the slot's guid — constant for the project's life, so swapping the
     /// instance behind it never rebuilds the renderer's snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the FX slot cannot be added to the track.
     pub fn add_fx_slot(&self, track_guid: &str, label: &str) -> eyre::Result<String> {
         add_fx_slot(&self.daw, track_guid, label)
     }
@@ -210,6 +232,10 @@ impl RigProject {
     /// Open the output-only realtime engine (a sampler/synth generates,
     /// never records) and return the running host. `prefs.sample_rate == 0`
     /// requests 48 kHz (the rig default); `want_input` is forced off.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio engine fails to initialize.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn start_output(self, prefs: &AudioIoPrefs) -> eyre::Result<RigHost> {
         let mut io = prefs.clone();
@@ -238,6 +264,10 @@ impl RigProject {
     /// the device BY NAME, so two engines sharing one leaves the second node
     /// unlinked and silent — a rig whose UI and MIDI are perfect and whose
     /// meters never move.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio engine fails to initialize.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn start_output_native(
         self,
@@ -253,6 +283,10 @@ impl RigProject {
     /// Open the duplex (live input → FX chain → output) engine — the native
     /// `PipeWire` `pw_filter` engine on Linux with the `pipewire` feature, the
     /// cpal engine elsewhere. `want_input` is forced on.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio engine fails to initialize.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn start_duplex(self, prefs: &AudioIoPrefs) -> eyre::Result<DuplexRigHost> {
         let mut io = prefs.clone();
@@ -360,11 +394,19 @@ impl<E: HostedEngine> RigHost<E> {
 
     /// Add a track after the engine opened (the per-track sampler API grows
     /// its project live); returns its guid.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the track cannot be added to the project.
     pub fn add_track(&self, name: &str) -> eyre::Result<String> {
         add_track(&self.daw, name)
     }
 
     /// Reserve one FX slot on `track` after the engine opened.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the FX slot cannot be added to the track.
     pub fn add_fx_slot(&self, track_guid: &str, label: &str) -> eyre::Result<String> {
         add_fx_slot(&self.daw, track_guid, label)
     }
@@ -385,10 +427,11 @@ fn add_fx_slot(daw: &Standalone, track_guid: &str, label: &str) -> eyre::Result<
         .map_err(|e| eyre::eyre!("rig host: reserve fx slot '{label}' failed: {e}"))
 }
 
-/// Low latency under the JACK/PipeWire shim: ask `PipeWire` for the quantum
-/// before the JACK client connects (the client can't set the buffer there).
-/// No-op unless built with the `jack` feature, or when `PIPEWIRE_LATENCY` is
-/// already set / no buffer size is requested.
+/// Low latency under the JACK/PipeWire shim.
+///
+/// Ask `PipeWire` for the quantum before the JACK client connects (the client
+/// can't set the buffer there). No-op unless built with the `jack` feature, or
+/// when `PIPEWIRE_LATENCY` is already set / no buffer size is requested.
 #[cfg(not(target_arch = "wasm32"))]
 pub const fn request_low_latency_quantum(prefs: &AudioIoPrefs) {
     #[cfg(feature = "jack")]

@@ -1,5 +1,6 @@
 use signal_fx::NativeEq;
 use signal_plugin_host::{PluginEvents, PluginInstance};
+use std::fmt::Write;
 const SR: f64 = 48_000.0;
 const BLOCK: usize = 512;
 
@@ -92,7 +93,7 @@ fn probe() {
                 ("b2_shape", 3.0),
                 ("b2_slope", slope),
             ];
-            line.push_str(&format!("  slope{slope:.0}:{:>8.2}", resp(&[&b], 1000.0)));
+            let _ = write!(line, "  slope{slope:.0}:{:>8.2}", resp(&[&b], 1000.0));
         }
         eprintln!("{line}");
     }

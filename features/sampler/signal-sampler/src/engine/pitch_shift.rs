@@ -68,6 +68,7 @@ pub struct PitchShifter {
 
 impl PitchShifter {
     /// Build a shifter for the given pitch offset in cents (100 = a semitone).
+    #[must_use]
     pub fn new(cents: f64) -> Self {
         Self {
             ratio: 2.0f64.powf(cents / 1200.0),
@@ -79,6 +80,7 @@ impl PitchShifter {
     }
 
     /// True when this shifter is effectively unity (caller can bypass).
+    #[must_use]
     pub fn is_unity(cents: f64) -> bool {
         cents.abs() < 0.5
     }
@@ -97,6 +99,7 @@ impl PitchShifter {
     /// `S .. S + startup_frames()` first and then continue from there;
     /// [`Voice::prime_pitch_shifters`](crate::engine::voice::Voice::prime_pitch_shifters)
     /// does exactly that.
+    #[must_use]
     pub fn startup_frames(&self) -> usize {
         (STARTUP_HISTORY as f64 / self.ratio).ceil() as usize
     }

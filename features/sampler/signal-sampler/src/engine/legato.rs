@@ -144,7 +144,7 @@ impl SampleEngine {
         if !self.patch.is_zoned() {
             return PreloadStats::default();
         }
-        let artic = self.effective_articulation().map(|s| s.to_string());
+        let artic = self.effective_articulation().map(std::string::ToString::to_string);
         // Also warm the vibrato pair — CC2 can blend it in at any time, and the
         // directional legato samples come in up/down pairs (warmed by ignoring
         // direction below), so any combination is ready without a cold first hit.
@@ -211,8 +211,7 @@ impl SampleEngine {
                         .find(|a| {
                             a.id.eq_ignore_ascii_case(tok) || a.label.eq_ignore_ascii_case(tok)
                         })
-                        .map(|a| a.id.clone())
-                        .unwrap_or_else(|| tok.to_string());
+                        .map_or_else(|| tok.to_string(), |a| a.id.clone());
                     warm_ids.push(id.clone());
                     if let Some(r) = rel(&id) {
                         warm_ids.push(r);

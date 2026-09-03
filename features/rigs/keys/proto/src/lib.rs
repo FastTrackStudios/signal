@@ -420,11 +420,11 @@ pub struct KeysLaneRef {
 }
 
 /// The engine's CURRENT profile, resolved for a browser worklet: the lane
-/// program as the `WireProgram` JSON `signal-keys-worklet`'s `openLanes`
-/// accepts, plus the packs it references. Everything (profile, patch
-/// resolution, spec scan) happens on the engine — the browser never needs
-/// the resolvers. Empty `program_json` = no profile is loaded.
+/// program as the `WireProgram` JSON `signal-keys-worklet`'s `openLanes` accepts,
+/// plus the packs it references.
 ///
+/// Everything (profile, patch resolution, spec scan) happens on the engine — the browser never needs
+/// the resolvers. Empty `program_json` = no profile is loaded.
 /// Worklet track order (for `trackPeaks` / `setTrackVolume` indices): the
 /// rig folder first, then each engine's folder track followed by its lanes,
 /// engines and lanes in `lanes` order.

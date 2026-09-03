@@ -11,6 +11,8 @@
 //! damping, so turning a knob changes the picture of the space rather than
 //! just a number. That is the whole reason for drawing a space at all.
 
+use std::fmt::Write;
+
 use dioxus::prelude::*;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
@@ -411,8 +413,9 @@ pub fn design_for(profile_id: &str) -> &'static SpaceDesign {
 }
 
 /// How lit the centrepiece is for a given variant — the second plate is
-/// brighter than the first, the Arena brighter than the Concert hall. Small,
-/// but it means the variants are visibly different and not just re-labelled.
+/// brighter than the first, the Arena brighter than the Concert hall.
+///
+/// Small, but it means the variants are visibly different and not just re-labelled.
 #[must_use] 
 pub fn variant_lift(profile_id: &str) -> f64 {
     match reverb_profiles::category_of(profile_id) {
@@ -804,13 +807,14 @@ fn CentreView(
                 let x = x0 + step * (f64::from(i) + 1.0);
                 let dir = if i % 2 == 0 { -1.0 } else { 1.0 };
                 let mid = h / 2.0 + -(sag * (f64::from(i) / f64::from(turns)).mul_add(2.0, -1.0).abs()) + sag;
-                d.push_str(&format!(
+                let _ = write!(
+                    d,
                     " Q {:.1} {:.1} {:.1} {:.1}",
                     x - step / 2.0,
                     mid + dir * amp,
                     x,
                     mid,
-                ));
+                );
                 i += 1;
             }
             rsx! {

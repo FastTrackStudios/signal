@@ -55,7 +55,6 @@ pub fn core_param_ptr(params: &CompStageParams, core_name: &str) -> Option<Param
         "style" => params.style.as_ptr(),
         "profile" => params.profile.as_ptr(),
         // Not exposed by this plugin (no crossover UI yet).
-        "multiband_amount" => return None,
         _ => return None,
     })
 }

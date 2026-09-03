@@ -32,7 +32,7 @@ pub enum MidiMessage {
 }
 
 /// A resolved action a script emits — what the voicer/engine should do.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Play { note: Note, vel: Velocity },
     Stop { note: Note },
@@ -56,6 +56,7 @@ pub struct Performance<'a> {
 }
 
 impl<'a> Performance<'a> {
+    #[must_use]
     pub fn new(articulations: &'a [ArticulationId]) -> Self {
         Performance {
             held: Vec::new(),
@@ -97,15 +98,19 @@ impl<'a> Performance<'a> {
     }
 
     // ── shared state queries ──
+    #[must_use]
     pub fn held(&self) -> &[Note] {
         &self.held
     }
+    #[must_use]
     pub fn last_note(&self) -> Option<Note> {
         self.last_note
     }
+    #[must_use]
     pub fn active_articulation(&self) -> usize {
         self.articulation
     }
+    #[must_use]
     pub fn round_robin(&self) -> u32 {
         self.round_robin
     }
@@ -116,6 +121,7 @@ impl<'a> Performance<'a> {
     }
 
     /// Emitted actions for the message just processed.
+    #[must_use]
     pub fn actions(&self) -> &[Action] {
         &self.actions
     }
@@ -141,13 +147,15 @@ pub struct ScriptPipeline {
 }
 
 impl ScriptPipeline {
+    #[must_use]
     pub fn new() -> Self {
-        ScriptPipeline {
+        Self {
             scripts: Vec::new(),
         }
     }
 
     /// Append a script (builder style).
+    #[must_use]
     pub fn then(mut self, script: impl PerformanceScript + 'static) -> Self {
         self.scripts.push(Box::new(script));
         self
@@ -155,21 +163,23 @@ impl ScriptPipeline {
 
     /// Run every script over one message, in order.
     pub fn on_message(&mut self, msg: MidiMessage, perf: &mut Performance) {
-        for s in self.scripts.iter_mut() {
+        for s in &mut self.scripts {
             s.on_message(msg, perf);
         }
     }
 
     /// Tick every script for time-based behavior.
     pub fn tick(&mut self, frames: usize, perf: &mut Performance) {
-        for s in self.scripts.iter_mut() {
+        for s in &mut self.scripts {
             s.tick(frames, perf);
         }
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.scripts.len()
     }
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.scripts.is_empty()
     }
@@ -186,13 +196,15 @@ pub struct KeyswitchRouter {
 }
 
 impl KeyswitchRouter {
+    #[must_use]
     pub fn new() -> Self {
-        KeyswitchRouter {
+        Self {
             map: HashMap::new(),
         }
     }
 
     /// Map a keyswitch note to an articulation.
+    #[must_use]
     pub fn route(mut self, ks: Note, artic: ArticulationId) -> Self {
         self.map.insert(ks.get(), artic);
         self
@@ -200,7 +212,7 @@ impl KeyswitchRouter {
 
     /// Build from `(keyswitch, articulation)` pairs.
     pub fn from_pairs(pairs: impl IntoIterator<Item = (Note, ArticulationId)>) -> Self {
-        let mut r = KeyswitchRouter::new();
+        let mut r = Self::new();
         for (ks, a) in pairs {
             r.map.insert(ks.get(), a);
         }
@@ -246,11 +258,13 @@ pub struct VelocityCurve {
 
 impl VelocityCurve {
     /// `gamma` is the curve exponent (`0.7` ≈ the doc's `VelocityCurve::cubic`).
+    #[must_use]
     pub fn new(gamma: f32) -> Self {
-        VelocityCurve {
+        Self {
             exp: gamma.max(0.01),
         }
     }
+    #[must_use]
     pub fn cubic(gamma: f32) -> Self {
         Self::new(gamma)
     }
@@ -273,15 +287,16 @@ impl PerformanceScript for VelocityCurve {
 // These are defined so the built-in set named in the design doc exists and the
 // pipeline can be assembled, but their behavior is a TODO for Phase B.
 
-/// **Phase B**: reads the per-velocity [`Legato`] (`VelCurve` pre_delay /
+/// **Phase B**: reads the per-velocity [`Legato`] (`VelCurve` `pre_delay` /
 /// portamento / crossfade), picks the transition recording, and emits
 /// `legato_to`. Today it passes notes through unchanged.
 pub struct TrueLegato {
     _cfg: Legato,
 }
 impl TrueLegato {
+    #[must_use]
     pub fn new(cfg: Legato) -> Self {
-        TrueLegato { _cfg: cfg }
+        Self { _cfg: cfg }
     }
 }
 impl PerformanceScript for TrueLegato {
@@ -296,8 +311,9 @@ pub struct SustainPedal {
     _cc: Cc,
 }
 impl SustainPedal {
+    #[must_use]
     pub fn new(cc: Cc) -> Self {
-        SustainPedal { _cc: cc }
+        Self { _cc: cc }
     }
 }
 impl PerformanceScript for SustainPedal {
@@ -311,8 +327,9 @@ pub struct CcArticulation {
     _cc: Cc,
 }
 impl CcArticulation {
+    #[must_use]
     pub fn new(cc: Cc) -> Self {
-        CcArticulation { _cc: cc }
+        Self { _cc: cc }
     }
 }
 impl PerformanceScript for CcArticulation {
@@ -326,8 +343,9 @@ pub struct RoundRobinReset {
     _after: Seconds,
 }
 impl RoundRobinReset {
+    #[must_use]
     pub fn on_silence(after: Seconds) -> Self {
-        RoundRobinReset { _after: after }
+        Self { _after: after }
     }
 }
 impl PerformanceScript for RoundRobinReset {

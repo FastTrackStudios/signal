@@ -178,11 +178,12 @@ pub const ROW_HEADER_H: f64 = 18.0;
 pub const SIDECAR_W: f64 = 560.0;
 
 /// The row height a stage's face WANTS at `row_w` window width — so a
-/// faceplate fills its row instead of floating in dead space: a hardware
-/// panel's row is its design aspect at full width (the drawing's own
+/// faceplate fills its row instead of floating in dead space.
+///
+/// A hardware panel's row is its design aspect at full width (the drawing's own
 /// proportions, rack ears to rack ears), the FTS surface's is the graph's
 /// standard height.
-#[must_use] 
+#[must_use]
 pub fn preferred_row_height(profile_index: usize, row_w: f64) -> f64 {
     let face_w = (row_w - crate::control_view::RAIL_W).max(1.0);
     match units::design_for(profile_id_for_index(profile_index)) {
@@ -199,9 +200,10 @@ pub fn preferred_row_height(profile_index: usize, row_w: f64) -> f64 {
 }
 
 /// The stack's rows at `row_w` width, each at its face's preferred height
-/// (`fx.stack.strip`): `(heights, total)`, headers included when more than
-/// one stage is up, scaled down together when the total passes the resize
-/// bound so the proportions hold.
+/// (`fx.stack.strip`): `(heights, total)`.
+///
+/// Headers included when more than one stage is up, scaled down together when
+/// the total passes the resize bound so the proportions hold.
 pub fn stack_row_heights(
     params: &crate::params::CompParams,
     rows: &[usize],
@@ -313,6 +315,8 @@ pub struct FaceContext {
 impl FaceContext {
     /// A handle for one of the profile's controls, by id.
     ///
+    /// # Panics
+    ///
     /// Panics if the control is not on the profile or writes nothing this
     /// plugin exposes — both are authoring mistakes in a face, not runtime
     /// conditions, and a silently missing knob is worse than a loud one.
@@ -321,7 +325,7 @@ impl FaceContext {
     /// the DSP does not yet: it draws and does not move. Which controls those
     /// are is pinned by `the_unwired_controls_are_the_ones_we_know_about`, so
     /// a typo still lands in the panic above rather than here.
-    #[must_use] 
+    #[must_use]
     pub fn handle(&self, control_id: &str) -> ParamHandle {
         if control_id.is_empty() {
             return ParamHandle::inert("Not wired", 0.5);
@@ -338,6 +342,10 @@ impl FaceContext {
 }
 
 /// Pull the face's context out of the editor's Dioxus contexts.
+///
+/// # Panics
+///
+/// Panics if `CompUiState` is not found in the shared context.
 pub fn use_face_context(profile: &'static (dyn Profile + Sync)) -> FaceContext {
     let shared = use_context::<SharedState>();
     let ui = shared.get::<CompUiState>().expect("CompUiState missing");

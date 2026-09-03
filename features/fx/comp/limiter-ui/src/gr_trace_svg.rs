@@ -9,6 +9,8 @@
 //! Two layers share it — the output waveform as a filled envelope around the
 //! centre line, and the gain reduction hanging down from the top.
 
+use std::fmt::Write;
+
 /// Trace height in CSS px. The component pins its container to this so pointer
 /// y maps 1:1 onto the viewBox.
 pub const TRACE_H: f64 = 180.0;
@@ -65,10 +67,10 @@ pub fn gr_area_path(gr_db: &[f32], width: f64, height: f64) -> String {
     for (i, &g) in gr_db.iter().enumerate() {
         let x = sample_x(i, n, width);
         let y = gr_to_y(f64::from(g), height);
-        d.push_str(&format!(" L {x:.2} {y:.2}"));
+        let _ = write!(d, " L {x:.2} {y:.2}");
     }
     // Close back along the top edge.
-    d.push_str(&format!(" L {width:.2} 0 Z"));
+    let _ = write!(d, " L {width:.2} 0 Z");
     d
 }
 
@@ -87,13 +89,13 @@ pub fn waveform_path(peaks: &[f32], width: f64, height: f64) -> String {
         let x = sample_x(i, n, width);
         let y = mid - amp_to_half_height(f64::from(p), height);
         d.push_str(if i == 0 { "M " } else { " L " });
-        d.push_str(&format!("{x:.2} {y:.2}"));
+        let _ = write!(d, "{x:.2} {y:.2}");
     }
     // Lower edge, right → left.
     for (i, &p) in peaks.iter().enumerate().rev() {
         let x = sample_x(i, n, width);
         let y = mid + amp_to_half_height(f64::from(p), height);
-        d.push_str(&format!(" L {x:.2} {y:.2}"));
+        let _ = write!(d, " L {x:.2} {y:.2}");
     }
     d.push_str(" Z");
     d

@@ -1,6 +1,6 @@
 //! Signal preset import system -- converts vendor plugin presets into the signal domain.
 //!
-//! Converts vendor plugin presets (FabFilter, rfxchain, etc.) into Signal's
+//! Converts vendor plugin presets (`FabFilter`, rfxchain, etc.) into Signal's
 //! `Preset` / `Snapshot` model. Each vendor importer produces an
 //! `ImportedPresetCollection` which the orchestrator converts and persists
 //! via [`signal_controller::SignalController`].
@@ -32,9 +32,9 @@
 //!
 //! # Vendor modules
 //!
-//! - [`fabfilter`] -- FabFilter Pro-Q, Pro-R, Saturn, etc. preset parsing and tag mapping
+//! - [`fabfilter`] -- `FabFilter` Pro-Q, Pro-R, Saturn, etc. preset parsing and tag mapping
 //! - [`rfxchain`] -- REAPER `.RfxChain` file parsing
-//! - [`valhalla`] -- ValhallaVintageVerb / ValhallaRoom project state -> FTS reverb
+//! - [`valhalla`] -- `ValhallaVintageVerb` / `ValhallaRoom` project state -> FTS reverb
 
 pub mod fabfilter;
 pub mod library_writer;
@@ -44,6 +44,7 @@ pub mod types;
 pub mod valhalla;
 
 use std::path::Path;
+use std::fmt::Write as FmtWrite;
 
 use eyre::Result;
 use signal_controller::SignalController;
@@ -64,6 +65,7 @@ pub const IMPORT_NAMESPACE: Uuid = Uuid::from_bytes([
 ]);
 
 /// Compute the deterministic preset ID for a vendor+plugin combination.
+#[must_use]
 pub fn import_preset_id(vendor: &str, plugin_name: &str) -> PresetId {
     let uuid = Uuid::new_v5(
         &IMPORT_NAMESPACE,
@@ -79,6 +81,10 @@ pub fn import_preset_id(vendor: &str, plugin_name: &str) -> PresetId {
 ///
 /// If `library_root` is provided, also writes preset files to the library
 /// directory structure (the DB acts as a queryable cache).
+///
+/// # Errors
+///
+/// Returns an error if the signal controller fails to save the preset.
 pub async fn import_presets(
     signal: &SignalController,
     collection: ImportedPresetCollection,
@@ -87,6 +93,10 @@ pub async fn import_presets(
 }
 
 /// Import presets with optional file-based library writing.
+///
+/// # Errors
+///
+/// Returns an error if the signal controller fails to save the preset or if writing to the library fails.
 pub async fn import_presets_with_library(
     signal: &SignalController,
     collection: ImportedPresetCollection,
@@ -249,15 +259,12 @@ pub async fn import_presets_with_library(
 }
 
 /// Dry-run: show what would be imported without persisting.
+#[must_use]
 pub fn dry_run_report(collection: &ImportedPresetCollection) -> String {
     let mut out = String::new();
-    out.push_str(&format!(
-        "Preset: {} ({})\n",
-        collection.plugin_name,
-        collection.block_type.display_name()
-    ));
-    out.push_str(&format!("Vendor: {}\n", collection.vendor));
-    out.push_str(&format!("Snapshots: {}\n", collection.snapshots.len()));
+    let _ = write!(out, "Preset: {} ({})\n", collection.plugin_name, collection.block_type.display_name());
+    let _ = write!(out, "Vendor: {}\n", collection.vendor);
+    let _ = write!(out, "Snapshots: {}\n", collection.snapshots.len());
 
     // Group by folder
     let mut folders = std::collections::BTreeMap::<String, usize>::new();
@@ -268,7 +275,7 @@ pub fn dry_run_report(collection: &ImportedPresetCollection) -> String {
     if !folders.is_empty() {
         out.push_str("Folders:\n");
         for (folder, count) in &folders {
-            out.push_str(&format!("  {folder}: {count} presets\n"));
+            let _ = write!(out, "  {folder}: {count} presets\n");
         }
     }
 

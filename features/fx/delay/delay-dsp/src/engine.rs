@@ -1,7 +1,7 @@
-//! DelayEngine — unified wrapper for all delay styles.
+//! `DelayEngine` — unified wrapper for all delay styles.
 //!
-//! Provides a common interface over TapeDelay, CleanDelay, BbdDelay, LoFiDelay,
-//! ShimmerDelay, ReverseDelay, and PitchDelay. The chain uses this instead of
+//! Provides a common interface over `TapeDelay`, `CleanDelay`, `BbdDelay`, `LoFiDelay`,
+//! `ShimmerDelay`, `ReverseDelay`, and `PitchDelay`. The chain uses this instead of
 //! a concrete delay type, enabling runtime style switching.
 
 use crate::bbd_delay::BbdDelay;
@@ -23,13 +23,13 @@ use crate::tape_delay::{SaturationType, TapeDelay, TapeSpeed, TapeVoice};
 
 /// Available delay styles.
 ///
-/// TimeLine MX machine mapping: `Tape`≈dTape, `Clean`≈Digital,
+/// `TimeLine` MX machine mapping: `Tape`≈dTape, `Clean`≈Digital,
 /// `Bbd`≈dBucket, `LoFi`≈Lo-Fi, `Reverse`≈Reverse, `Pitch`≈Ice,
 /// `Rhythm`≈TimeLine-v1 Pattern (fixed patterns), `Drum`≈Drum,
-/// `OilCan`≈Oil Can, `MultiTap`≈MultiTap (editable taps),
+/// `OilCan`≈Oil Can, `MultiTap`≈`MultiTap` (editable taps),
 /// `Spectral`≈Spectral, `Filter`≈Filter (+folded-in Trem),
 /// `Reverb`≈Reverb (bonus machine: TIME = pre-delay, REPEATS = decay).
-/// `Shimmer` has no TimeLine counterpart.
+/// `Shimmer` has no `TimeLine` counterpart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DelayStyle {
     Tape,
@@ -51,9 +51,9 @@ pub enum DelayStyle {
 impl DelayStyle {
     pub const COUNT: usize = 14;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
-            0 => Self::Tape,
             1 => Self::Clean,
             2 => Self::Bbd,
             3 => Self::LoFi,
@@ -67,10 +67,12 @@ impl DelayStyle {
             11 => Self::Spectral,
             12 => Self::Filter,
             13 => Self::Reverb,
+            // 0 and anything out of range.
             _ => Self::Tape,
         }
     }
 
+    #[must_use]
     pub fn to_index(self) -> usize {
         match self {
             Self::Tape => 0,
@@ -90,6 +92,7 @@ impl DelayStyle {
         }
     }
 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Tape => "Tape",
@@ -109,15 +112,14 @@ impl DelayStyle {
         }
     }
 
-    /// Valid delay-time range in ms (TimeLine MX per-machine ranges).
+    /// Valid delay-time range in ms (`TimeLine` MX per-machine ranges).
+    #[must_use]
     pub fn time_range_ms(self) -> (f64, f64) {
         match self {
             Self::Bbd => (80.0, 800.0),
             Self::Drum => (200.0, 2000.0),
             Self::OilCan => (200.0, 800.0),
-            Self::LoFi => (2.0, 2500.0),
-            // TIME = pre-delay on the Reverb machine.
-            Self::Reverb => (2.0, 2500.0),
+            Self::LoFi | Self::Reverb => (2.0, 2500.0),
             _ => (60.0, 2500.0),
         }
     }
@@ -161,7 +163,7 @@ pub struct DelayEngine {
 
     // ── Tape-specific parameters ───────────────────────────────────
     /// Saturation drive (0.0–1.0). Tape (record level / bias per
-    /// voice) and LoFi (grit — saturation before the sample-rate
+    /// voice) and `LoFi` (grit — saturation before the sample-rate
     /// hold, so its harmonics alias at low rates).
     pub drive: f64,
     /// Wow depth (0.0–1.0). Tape only.
@@ -208,22 +210,22 @@ pub struct DelayEngine {
     pub bbd_phase_offset: f64,
 
     // ── LoFi-specific ──────────────────────────────────────────────
-    /// Bit depth for quantization (4–32). LoFi only.
+    /// Bit depth for quantization (4–32). `LoFi` only.
     pub lofi_bit_depth: f64,
-    /// Sample rate divisor (1–64). LoFi only.
+    /// Sample rate divisor (1–64). `LoFi` only.
     pub lofi_sr_div: f64,
-    /// Noise floor injection (0.0–1.0). LoFi only.
+    /// Noise floor injection (0.0–1.0). `LoFi` only.
     pub lofi_noise: f64,
-    /// Degraded↔clean blend on the delay line (TimeLine "LoFi Mix",
-    /// recirculates). LoFi only.
+    /// Degraded↔clean blend on the delay line (`TimeLine` "`LoFi` Mix",
+    /// recirculates). `LoFi` only.
     pub lofi_mix: f64,
-    /// dVinyl amount (0–0.5 dynamic, 0.5–1.0 static). LoFi only.
+    /// dVinyl amount (0–0.5 dynamic, 0.5–1.0 static). `LoFi` only.
     pub lofi_vinyl: f64,
-    /// Output device voicing (telephone/victrola/...). LoFi only.
+    /// Output device voicing (telephone/victrola/...). `LoFi` only.
     pub lofi_filter_shape: LoFiFilterShape,
-    /// Delay-line mod LFO rate in Hz. LoFi only.
+    /// Delay-line mod LFO rate in Hz. `LoFi` only.
     pub lofi_mod_rate: f64,
-    /// Delay-line mod depth (0.0–1.0). LoFi only.
+    /// Delay-line mod depth (0.0–1.0). `LoFi` only.
     pub lofi_mod_depth: f64,
 
     // ── Shimmer-specific ───────────────────────────────────────────
@@ -256,7 +258,7 @@ pub struct DelayEngine {
     pub pitch_speed: f64,
     /// Musical interval; non-Free overrides `pitch_speed`. Pitch only.
     pub pitch_interval: IceInterval,
-    /// Slice size (scales with delay time); None = free grain_ms. Pitch only.
+    /// Slice size (scales with delay time); None = free `grain_ms`. Pitch only.
     pub pitch_slice: Option<IceSlice>,
     /// Dry↔ice blend on the delay line, pre-feedback. Pitch only.
     pub pitch_blend: f64,
@@ -282,7 +284,7 @@ pub struct DelayEngine {
     /// mutes the loop input while frozen.
     pub frozen: bool,
 
-    /// Machine voice selector (TimeLine MX: dTape MX/Classic, dBucket
+    /// Machine voice selector (`TimeLine` MX: dTape MX/Classic, dBucket
     /// MX/Classic, Digital 24/96 / ADM / 12-bit / Classic). Plumbing
     /// slot only — style engines adopt it in their deep passes.
     pub voice: u8,
@@ -305,30 +307,30 @@ pub struct DelayEngine {
     pub drum_wobble: f64,
 
     // ── OilCan-specific ────────────────────────────────────────────
-    /// Head mode. OilCan only.
+    /// Head mode. `OilCan` only.
     pub oilcan_heads: OilCanHeads,
-    /// Wobble depth (0.0–1.0). OilCan only.
+    /// Wobble depth (0.0–1.0). `OilCan` only.
     pub oilcan_wobble: f64,
-    /// Loop darkness cutoff in Hz. OilCan only.
+    /// Loop darkness cutoff in Hz. `OilCan` only.
     pub oilcan_tone: f64,
-    /// Rotation-speed randomization (time-domain dirt, 0.0-1.0). OilCan only.
+    /// Rotation-speed randomization (time-domain dirt, 0.0-1.0). `OilCan` only.
     pub oilcan_grit: f64,
-    /// Rotation LFO base rate in Hz (Mod Speed). OilCan only.
+    /// Rotation LFO base rate in Hz (Mod Speed). `OilCan` only.
     pub oilcan_mod_rate: f64,
 
     // ── MultiTap-specific ──────────────────────────────────────────
-    /// User tap pattern. MultiTap only.
+    /// User tap pattern. `MultiTap` only.
     pub multitap_taps: [Tap; MAX_TAPS],
     /// Step grid (16th / triplet / free-256) used when editing taps by
-    /// step and recalled with Classic patterns. MultiTap only.
+    /// step and recalled with Classic patterns. `MultiTap` only.
     pub multitap_grid: TapGrid,
     /// Feedback topology (Input = shared line, Parallel = 8 independent
-    /// lines). MultiTap only.
+    /// lines). `MultiTap` only.
     pub multitap_feedback_mode: FeedbackMode,
-    /// Shared tap-mod LFO rate in Hz. MultiTap only.
+    /// Shared tap-mod LFO rate in Hz. `MultiTap` only.
     pub multitap_mod_rate_hz: f64,
     /// Shared tap-mod depth (0.0–1.0), scaled per tap by `mod_amount`.
-    /// MultiTap only.
+    /// `MultiTap` only.
     pub multitap_mod_depth: f64,
 
     // ── Spectral-specific ──────────────────────────────────────────
@@ -382,6 +384,7 @@ impl Default for DelayEngine {
 }
 
 impl DelayEngine {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             inner: EngineInner::Tape(TapeDelay::new()),
@@ -479,6 +482,7 @@ impl DelayEngine {
         }
     }
 
+    #[must_use]
     pub fn style(&self) -> DelayStyle {
         self.style
     }
@@ -512,7 +516,7 @@ impl DelayEngine {
         }
     }
 
-    /// Recall a MultiTap Classic pattern (1–16): rewrites the engine's
+    /// Recall a `MultiTap` Classic pattern (1–16): rewrites the engine's
     /// tap pattern and auto-sets the 16th grid + `Input` feedback like
     /// the MX does on recall. Engine-side so it survives `update()`'s
     /// tap sync (the inner `MultiTapDelay::apply_classic` would be
@@ -912,6 +916,7 @@ impl DelayEngine {
     /// True for the head/tap/grain machines whose stereo image comes
     /// from per-element pans. The chain routes these through ONE
     /// stereo engine (mono-summed input) instead of two mono engines.
+    #[must_use]
     pub fn is_stereo_field_style(&self) -> bool {
         matches!(
             self.style,
@@ -920,7 +925,7 @@ impl DelayEngine {
     }
 
     /// Stereo variant of [`Self::tick_at`] for the stereo-field styles
-    /// (Drum / MultiTap / Spectral). Other styles fall back to their
+    /// (Drum / `MultiTap` / Spectral). Other styles fall back to their
     /// mono tick duplicated to both sides.
     pub fn tick_at_stereo(&mut self, input: f64, time_ms: f64) -> (f64, f64) {
         let fb = self.eff_feedback();
@@ -948,6 +953,7 @@ impl DelayEngine {
     }
 
     /// Get the last feedback sample for ping-pong cross-feeding.
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         match &self.inner {
             EngineInner::Tape(d) => d.last_feedback(),
@@ -1012,7 +1018,7 @@ mod tests {
                 }
             }
 
-            assert!(has_output, "{:?} style should produce output", style);
+            assert!(has_output, "{style:?} style should produce output");
         }
     }
 
@@ -1031,8 +1037,7 @@ mod tests {
                 let out = e.tick(input, 0);
                 assert!(
                     out.is_finite(),
-                    "{:?} produced NaN/Inf at sample {s}",
-                    style
+                    "{style:?} produced NaN/Inf at sample {s}"
                 );
             }
         }

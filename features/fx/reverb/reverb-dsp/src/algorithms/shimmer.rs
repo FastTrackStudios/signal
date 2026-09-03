@@ -1,10 +1,10 @@
 //! Shimmer reverb — pitch-shifted feedback reverb.
 //!
-//! Based on CloudSeedCore + Strymon BigSky MX Shimmer:
+//! Based on `CloudSeedCore` + Strymon `BigSky` MX Shimmer:
 //! A reverb tank with pitch-shifted signal fed back into the input,
 //! creating evolving harmonic tails. Two independent pitch voices
 //! (Shift 1 + Shift 2, each −oct..+oct) share a single Amount level,
-//! and the voices' source is selectable (BigSky "Feedback" mode):
+//! and the voices' source is selectable (`BigSky` "Feedback" mode):
 //! Input (one-pass shimmer, no laddering), Regenerative (shift inside
 //! the loop → octave ladders), or both summed.
 
@@ -56,6 +56,7 @@ pub struct Shimmer {
 }
 
 impl Shimmer {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let grain_samples = (sample_rate * 0.05) as usize; // 50ms grains
 
@@ -129,8 +130,7 @@ impl Shimmer {
         self.shimmer_amount = self
             .mx
             .amount
-            .map(|a| a.clamp(0.0, 1.0))
-            .unwrap_or(self.legacy_amount);
+            .map_or(self.legacy_amount, |a| a.clamp(0.0, 1.0));
     }
 }
 

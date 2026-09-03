@@ -17,6 +17,7 @@
 //! ```
 
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::path::PathBuf;
 
 use signal_sampler::engine::cache::create_signal_pack;
@@ -128,15 +129,15 @@ fn inject(
         // Tags: emit once, right before the zones block.
         if !tags_done && trimmed.starts_with("zones") {
             if !category.is_empty() {
-                out.push_str(&format!("category {}\n", quote(category)));
+                let _ = writeln!(out, "category {}", quote(category));
             }
             if !instrument.is_empty() {
-                out.push_str(&format!("instrument {}\n", quote(instrument)));
+                let _ = writeln!(out, "instrument {}", quote(instrument));
             }
             if !styles.is_empty() {
                 out.push_str("style (\n");
                 for s in styles {
-                    out.push_str(&format!("    {}\n", quote(s)));
+                    let _ = writeln!(out, "    {}", quote(s));
                 }
                 out.push_str(")\n");
             }
@@ -150,7 +151,7 @@ fn inject(
         if let Some(name) = file_line_name(trimmed) {
             if let Some((ls, le)) = loops.get(name) {
                 let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
-                out.push_str(&format!("{indent}loop_start {ls}\n{indent}loop_end {le}\n"));
+                let _ = write!(out, "{indent}loop_start {ls}\n{indent}loop_end {le}\n");
             }
         }
     }

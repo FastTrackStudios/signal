@@ -9,7 +9,7 @@
 //!   {snapshot_id}.bin    — binary state data (only for binary-format presets)
 //! ```
 //!
-//! These files are the source of truth; the SQLite DB is a queryable cache.
+//! These files are the source of truth; the `SQLite` DB is a queryable cache.
 
 use std::path::{Path, PathBuf};
 
@@ -70,7 +70,7 @@ pub struct SnapshotParameter {
 /// Extract the `source:` tag value from a metadata tag list.
 fn extract_source_tag(tags: &[String]) -> Option<String> {
     tags.iter()
-        .find_map(|t| t.strip_prefix("source:").map(|s| s.to_string()))
+        .find_map(|t| t.strip_prefix("source:").map(std::string::ToString::to_string))
 }
 
 /// Extract the `folder:` value from metadata, if present.
@@ -98,7 +98,7 @@ fn write_snapshot(snapshots_dir: &Path, snapshot: &Snapshot) -> Result<()> {
                 id: p.id().to_string(),
                 name: p.name().to_string(),
                 value: p.value().get(),
-                daw_name: p.daw_name().map(|s| s.to_string()),
+                daw_name: p.daw_name().map(std::string::ToString::to_string),
             })
             .collect(),
         has_state_data: snapshot.state_data().is_some(),
@@ -132,6 +132,10 @@ fn write_snapshot(snapshots_dir: &Path, snapshot: &Snapshot) -> Result<()> {
 ///     {snapshot_id}.json
 ///     ...
 /// ```
+///
+/// # Errors
+///
+/// Returns an error if the directory structure cannot be created or if JSON serialization fails.
 pub fn write_preset_to_library(library_root: &Path, vendor: &str, preset: &Preset) -> Result<()> {
     let vendor_lower = vendor.to_ascii_lowercase();
     let preset_dir = library_root
@@ -180,6 +184,7 @@ pub fn write_preset_to_library(library_root: &Path, vendor: &str, preset: &Prese
 }
 
 /// Compute the library directory path for a preset.
+#[must_use]
 pub fn preset_library_path(library_root: &Path, vendor: &str, preset_name: &str) -> PathBuf {
     library_root
         .join("blocks")

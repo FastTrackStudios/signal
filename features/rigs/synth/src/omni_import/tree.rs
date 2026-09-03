@@ -189,39 +189,37 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                     .with_param(format!("harm{n}_shape"), format!("{shape:.4}"));
             }
             osc.add(wt)
-        } else {
-            if let Some(spec) = index.find(&layer.soundsource) {
-                // Sample mode: unison + amp attack/release ride the
-                // Sampler block (the engine handles them at trigger time;
-                // decay/sustain need a full per-voice ADSR — pending).
-                let mut sb = RigBlock::sample_lib(spec.to_string_lossy().to_string())
-                    .named(&layer.soundsource);
-                if layer.unison_count > 1 {
-                    sb = sb
-                        .with_param("unison_voices", layer.unison_count.to_string())
-                        // Calibrated: udpth → ~185 cents total spread (measured
-                        // 189/184/182 across a 3-point sweep). Our param is
-                        // cents/100, so scale by 1.85.
-                        .with_param(
-                            "unison_detune",
-                            format!("{:.4}", layer.unison_detune * 1.85),
-                        )
-                        .with_param("unison_width", format!("{:.4}", layer.unison_width));
-                }
-                if let Some((a, _d, _s, r)) = layer.amp_env {
-                    sb = sb
-                        .with_param("amp_attack", format!("{a:.4}"))
-                        .with_param("amp_release", format!("{r:.4}"));
-                }
-                osc.add(sb)
-            } else {
-                tracing::warn!(
-                    soundsource = %layer.soundsource,
-                    library = %layer.ss_library,
-                    "omni import: soundsource not in the local extraction — placeholder"
-                );
-                osc.block(BlockType::Sampler, &layer.soundsource)
+        } else if let Some(spec) = index.find(&layer.soundsource) {
+            // Sample mode: unison + amp attack/release ride the
+            // Sampler block (the engine handles them at trigger time;
+            // decay/sustain need a full per-voice ADSR — pending).
+            let mut sb = RigBlock::sample_lib(spec.to_string_lossy().to_string())
+                .named(&layer.soundsource);
+            if layer.unison_count > 1 {
+                sb = sb
+                    .with_param("unison_voices", layer.unison_count.to_string())
+                    // Calibrated: udpth → ~185 cents total spread (measured
+                    // 189/184/182 across a 3-point sweep). Our param is
+                    // cents/100, so scale by 1.85.
+                    .with_param(
+                        "unison_detune",
+                        format!("{:.4}", layer.unison_detune * 1.85),
+                    )
+                    .with_param("unison_width", format!("{:.4}", layer.unison_width));
             }
+            if let Some((a, _d, _s, r)) = layer.amp_env {
+                sb = sb
+                    .with_param("amp_attack", format!("{a:.4}"))
+                    .with_param("amp_release", format!("{r:.4}"));
+            }
+            osc.add(sb)
+        } else {
+            tracing::warn!(
+                soundsource = %layer.soundsource,
+                library = %layer.ss_library,
+                "omni import: soundsource not in the local extraction — placeholder"
+            );
+            osc.block(BlockType::Sampler, &layer.soundsource)
         };
         // The oscillator sub-modules chain in SERIES after the source. The LIVE
         // native ones (Harmonia → modal, Dual Freq Shifter, Waveshaper) are
@@ -414,6 +412,11 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
 }
 
 /// Convenience: read + parse + map a `.prt_omn` patch or `.mlt_omn` Multi.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or if the XML cannot be parsed
+/// as a valid Omnisphere patch or multi.
 pub fn load_patch_file(path: &Path, index: &SoundsourceIndex) -> Result<Container, String> {
     if path.extension().is_some_and(|e| e == "mlt_omn") {
         return super::multi::load_multi_file(path, index);

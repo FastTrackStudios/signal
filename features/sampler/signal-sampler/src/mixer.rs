@@ -29,6 +29,7 @@ use crate::nam::NamProcessor;
 const METER_DECAY: f32 = 0.85;
 
 /// Max block size (in frames) we prepare hosted plugins for at install time.
+///
 /// The cpal callback's actual block is normally 256–1024 frames; preparing
 /// for 8192 keeps us safe against larger upstream buffers + future variable-
 /// block-size paths without re-preparing per block.
@@ -37,8 +38,9 @@ pub const FX_PREPARE_BLOCK: u32 = 8192;
 // ── FX chain (REAPER-style track FX) ────────────────────────────────────────
 
 /// One slot's DSP backend — what's actually filling the slot. Maps 1:1 to
-/// [`signal_proto::block_kind::BlockKind`]'s non-Native variants. Adding a
-/// new backend (e.g. built-in convolution reverb) is a new variant here +
+/// [`signal_proto::block_kind::BlockKind`]'s non-Native variants.
+///
+/// Adding a new backend (e.g. built-in convolution reverb) is a new variant here +
 /// a matching `BlockKind` arm.
 pub enum FxBackend {
     /// Third-party CLAP / VST3 plugin loaded via `signal-plugin-host`.
@@ -130,14 +132,16 @@ impl std::fmt::Debug for FxSlot {
 
 /// A serial FX chain that processes its slots in order, in place on an
 /// interleaved-stereo buffer. Modeled after a REAPER track FX chain: each
-/// slot is one [`FxBackend`], bypassable per-slot. An empty chain is a
-/// no-op.
+/// slot is one [`FxBackend`], bypassable per-slot.
+///
+/// An empty chain is a no-op.
 #[derive(Debug, Default)]
 pub struct FxChain {
     pub slots: Vec<FxSlot>,
 }
 
 impl FxChain {
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.slots.is_empty()
     }
@@ -163,6 +167,7 @@ fn db_to_lin(db: f32) -> f32 {
 /// A drum mic id routes to a shared **bus** (overhead / room) rather than
 /// straight out a close-mic channel when its name looks like an overhead or
 /// room/ambient mic. Everything else is a direct close mic.
+#[must_use]
 pub fn mic_is_bus(id: &str) -> bool {
     let l = id.to_ascii_lowercase();
     l == "oh"
@@ -208,19 +213,19 @@ impl MixerMeters {
 
     /// Current peak (linear) of piece (engine) `i`.
     pub fn piece_peak(&self, i: usize) -> f32 {
-        self.pieces.get(i).map(Self::read).unwrap_or(0.0)
+        self.pieces.get(i).map_or(0.0, Self::read)
     }
     /// Current peak (linear) of direct channel `i`.
     pub fn channel_peak(&self, i: usize) -> f32 {
-        self.channels.get(i).map(Self::read).unwrap_or(0.0)
+        self.channels.get(i).map_or(0.0, Self::read)
     }
     /// Current peak (linear) of send `i`.
     pub fn send_peak(&self, i: usize) -> f32 {
-        self.sends.get(i).map(Self::read).unwrap_or(0.0)
+        self.sends.get(i).map_or(0.0, Self::read)
     }
     /// Current peak (linear) of bus `i`.
     pub fn bus_peak(&self, i: usize) -> f32 {
-        self.buses.get(i).map(Self::read).unwrap_or(0.0)
+        self.buses.get(i).map_or(0.0, Self::read)
     }
     /// Current peak (linear) of the master output.
     pub fn master_peak(&self) -> f32 {
@@ -299,6 +304,7 @@ pub struct Bus {
 }
 
 /// One kit *piece* (an engine: kick, snare, …) — the primary mixer surface.
+///
 /// A piece owns all of an engine's close-mic channels **and** its bus sends, so
 /// its gain/mute/solo apply uniformly across every mic of that drum regardless
 /// of routing (the piece fader is a true per-drum level). Indexed by
@@ -324,7 +330,7 @@ pub struct DrumMixer {
     pub master_gain_db: f32,
     pub master_gain_lin: f32,
     pub master_muted: bool,
-    /// FX chain on the master sum (master_scratch → FX → master gain → output).
+    /// FX chain on the master sum (`master_scratch` → FX → master gain → output).
     pub master_fx: FxChain,
     pub meters: Arc<MixerMeters>,
     /// Sample rate this mixer is running at — passed at construction so
@@ -349,6 +355,7 @@ impl DrumMixer {
     /// become sends into shared buses (one bus per distinct bus-mic id, in
     /// first-seen order). `sample_rate` is stored so installed FX slots can
     /// be `prepare`d without a callback to the audio backend.
+    #[must_use]
     pub fn build(engine_mics: &[(String, Vec<String>)], sample_rate: u32) -> Self {
         let mut channels = Vec::new();
         let mut sends = Vec::new();
@@ -432,6 +439,7 @@ impl DrumMixer {
     }
 
     /// True if there is anything to route (avoids engaging on empty presets).
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.channels.is_empty() && self.sends.is_empty()
     }
@@ -523,6 +531,10 @@ impl DrumMixer {
     /// Prepares the plugin for this mixer's sample rate + a generous max
     /// block size, then appends. Returns the new slot index, or the
     /// underlying plugin error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin prepare fails.
     pub fn install_plugin(
         &mut self,
         target: FxTarget,
@@ -538,6 +550,10 @@ impl DrumMixer {
     /// `.nam` model file from disk and prepares it for this mixer's
     /// sample rate. The load is fast (file IO + on-stack network parse);
     /// no further activation step is needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the model file cannot be loaded or parsed.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn install_nam(
         &mut self,
@@ -559,10 +575,7 @@ impl DrumMixer {
         backend: FxBackend,
         display_name: String,
     ) -> Result<usize, String> {
-        let chain = match self.chain_mut(target) {
-            Some(c) => c,
-            None => return Err("FX target not found".into()),
-        };
+        let Some(chain) = self.chain_mut(target) else { return Err("FX target not found".into()) };
         chain.slots.push(FxSlot {
             backend,
             bypassed: false,
@@ -730,6 +743,7 @@ pub struct FxSlotStrip {
 
 impl FxChain {
     /// Snapshot the chain for the UI.
+    #[must_use]
     pub fn strip(&self) -> Vec<FxSlotStrip> {
         self.slots
             .iter()
@@ -745,6 +759,7 @@ impl FxChain {
 
 impl DrumMixer {
     /// Snapshot the current structure + fader/mute/solo state, grouped by engine.
+    #[must_use]
     pub fn layout(&self) -> MixerLayout {
         let mut engines: Vec<EngineStrip> = Vec::new();
         let mut idx_of_engine: std::collections::HashMap<usize, usize> =
@@ -760,9 +775,9 @@ impl DrumMixer {
                 engines.push(EngineStrip {
                     engine_idx,
                     label: label.to_string(),
-                    piece_gain_db: p.map(|p| p.gain_db).unwrap_or(0.0),
-                    piece_muted: p.map(|p| p.muted).unwrap_or(false),
-                    piece_soloed: p.map(|p| p.soloed).unwrap_or(false),
+                    piece_gain_db: p.map_or(0.0, |p| p.gain_db),
+                    piece_muted: p.is_some_and(|p| p.muted),
+                    piece_soloed: p.is_some_and(|p| p.soloed),
                     channels: Vec::new(),
                     sends: Vec::new(),
                 });
@@ -838,7 +853,7 @@ mod tests {
     use super::*;
 
     fn mm2_like() -> Vec<(String, Vec<String>)> {
-        let mics = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let mics = |v: &[&str]| v.iter().map(std::string::ToString::to_string).collect::<Vec<_>>();
         vec![
             (
                 "kick".into(),

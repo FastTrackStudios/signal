@@ -23,6 +23,7 @@ pub struct StereoBuf<'a> {
 
 impl StereoBuf<'_> {
     #[inline]
+    #[must_use]
     pub fn frames(&self) -> usize {
         self.l.len().min(self.r.len())
     }
@@ -75,7 +76,7 @@ pub trait Instrument: Send {
     fn note_on(&mut self, note: Note, vel: Velocity);
     fn note_off(&mut self, note: Note);
     fn note_off_vel(&mut self, note: Note, _vel: Velocity) {
-        self.note_off(note)
+        self.note_off(note);
     }
     fn control(&mut self, cc: Cc, value: U7);
     fn pitch_bend(&mut self, _bend: U14) {}
@@ -83,7 +84,7 @@ pub trait Instrument: Send {
     fn channel_pressure(&mut self, _pressure: U7) {}
     fn all_notes_off(&mut self);
     fn panic(&mut self) {
-        self.all_notes_off()
+        self.all_notes_off();
     }
 
     // ── Articulation / keyswitch ──
@@ -180,7 +181,7 @@ pub struct ModContext {
     pub sample_rate: f64,
 }
 
-/// Anything that produces a control value over time (LFO / Env / CcFollower /
+/// Anything that produces a control value over time (LFO / Env / `CcFollower` /
 /// Random / Macro). Phase B ships the built-ins; Phase A provides the trait +
 /// a constant default.
 pub trait Modulator: Send {
@@ -273,6 +274,11 @@ pub struct License {
 
 /// Account-based unlock + per-library license, checked at load (never render).
 pub trait Authorization: Send + Sync {
+    /// Authorize access to a library for the given account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the account is not authorized to access the library.
     fn authorize(&self, library: &LibraryId, account: &Account) -> Result<License, AuthError>;
 }
 

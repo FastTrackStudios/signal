@@ -30,6 +30,10 @@ pub use signal_sampler::keys_rig::{WireEngine, WireLayer, WireProgram};
 /// Parse a lane program from its JSON wire form (the payload of the
 /// worklet's `open_lanes` message — the engine's `lane_program_wire` RPC
 /// produces it).
+///
+/// # Errors
+///
+/// Returns an error if the JSON text cannot be parsed as a valid lane program.
 pub fn wire_program_from_json(text: &str) -> eyre::Result<WireProgram> {
     facet_json::from_str(text).map_err(|e| eyre::eyre!("lane program JSON: {e}"))
 }

@@ -63,6 +63,10 @@ impl HostedPlugin {
     /// (`.clap` / `.vst3`); see [`PluginFormat::from_path_or_name`]. Returns
     /// `Ok(None)` if `path` resolves to the synthetic backend (caller should
     /// fall back to its own DSP).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PluginError`] if loading or initializing the plugin fails.
     pub fn load(path: impl AsRef<Path>) -> Result<Option<Self>, PluginError> {
         let path_str = path.as_ref().to_string_lossy();
         let Some(mut inner) = daw::plugin::load_plugin(&path_str)? else {
@@ -131,6 +135,10 @@ impl HostedPlugin {
     }
 
     /// Activate the plugin. Must be called before `process_interleaved`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PluginError`] if the plugin fails to initialize.
     pub fn prepare(&mut self, sample_rate: f64, block_size: u32) -> Result<(), PluginError> {
         self.in_l.resize(block_size as usize, 0.0);
         self.in_r.resize(block_size as usize, 0.0);
@@ -155,6 +163,10 @@ impl HostedPlugin {
     /// processed in-place: the plugin receives the current contents as
     /// audio input and overwrites it with its output. `extra` carries MIDI
     /// + note expressions; UI param writes are drained automatically.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PluginError`] if the buffer size exceeds the prepared block size or processing fails.
     pub fn process_interleaved(
         &mut self,
         inout: &mut [f32],
@@ -205,18 +217,31 @@ impl HostedPlugin {
     }
 
     /// Open the plugin's editor UI (no-op for backends without GUI).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PluginError`] if opening the GUI fails.
     pub fn open_gui(&mut self) -> Result<(), PluginError> {
         self.inner.open_gui()
     }
 
+    /// # Errors
+    ///
+    /// Returns [`PluginError`] if closing the GUI fails.
     pub fn close_gui(&mut self) -> Result<(), PluginError> {
         self.inner.close_gui()
     }
 
+    /// # Errors
+    ///
+    /// Returns [`PluginError`] if saving the plugin state fails.
     pub fn save_state(&mut self) -> Result<Vec<u8>, PluginError> {
         self.inner.save_state()
     }
 
+    /// # Errors
+    ///
+    /// Returns [`PluginError`] if loading the plugin state fails.
     pub fn load_state(&mut self, state: &[u8]) -> Result<(), PluginError> {
         self.inner.load_state(state)
     }
@@ -237,10 +262,11 @@ impl std::fmt::Debug for HostedPlugin {
 
 // ── Plugin scanner (standard directories) ───────────────────────────────────
 
-/// One plugin discovered on disk by [`scan_plugins`]. The display name is
-/// derived from the filename (stem) — the host doesn't open the bundle
-/// during the scan, so this is fast even with hundreds of installed plugins.
-/// Open the actual descriptor by calling [`HostedPlugin::load`] on `path`.
+/// One plugin discovered on disk by [`scan_plugins`].
+///
+/// The display name is derived from the filename (stem) — the host doesn't open
+/// the bundle during the scan, so this is fast even with hundreds of installed
+/// plugins. Open the actual descriptor by calling [`HostedPlugin::load`] on `path`.
 #[derive(Clone, Debug)]
 pub struct PluginEntry {
     pub display_name: String,
@@ -318,11 +344,12 @@ pub fn standard_dirs(format: PluginFormat) -> Vec<std::path::PathBuf> {
     dirs
 }
 
-/// Walk `standard_dirs(fmt)` for each requested format and collect plugin
-/// entries. Recurses up to `max_depth` levels into subdirectories (CLAP
-/// vendors commonly nest plugins one level deep; VST3 is a directory
-/// bundle itself so depth 1 suffices). Duplicates by path are dropped.
-#[must_use] 
+/// Walk `standard_dirs(fmt)` for each requested format and collect plugin entries.
+///
+/// Recurses up to `max_depth` levels into subdirectories (CLAP vendors commonly
+/// nest plugins one level deep; VST3 is a directory bundle itself so depth 1
+/// suffices). Duplicates by path are dropped.
+#[must_use]
 pub fn scan_plugins(formats: &[PluginFormat], max_depth: usize) -> Vec<PluginEntry> {
     use std::collections::HashSet;
     let mut seen: HashSet<std::path::PathBuf> = HashSet::new();

@@ -57,6 +57,7 @@ pub struct PlateProgenitor {
 }
 
 impl PlateProgenitor {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let s = sample_rate / 29761.0;
 

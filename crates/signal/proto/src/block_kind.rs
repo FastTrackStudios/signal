@@ -60,10 +60,11 @@ impl BlockKind {
 // ─── Soundsource kind ───────────────────────────────────────────
 
 /// Which kind of **generator** a layer's source is — the wire-visible
-/// classification of a `Soundsource` (the pluggable generator inside an
-/// instrument layer; see `docs/spec/signal/soundsource.md` and
-/// `features/sampler/signal-sampler/src/soundsource.rs`).
+/// classification of a `Soundsource`.
 ///
+/// The pluggable generator inside an instrument layer; see
+/// `docs/spec/signal/soundsource.md` and
+/// `features/sampler/signal-sampler/src/soundsource.rs`.
 /// A third axis beside [`BlockType`](crate::block::BlockType) (semantic
 /// role) and [`BlockKind`] (how the DSP is realized): `SoundsourceKind`
 /// says what *generates* the sound in a source slot, so remotes can show
@@ -165,10 +166,11 @@ pub struct NamRef {
     pub model_id: Option<String>,
 }
 
-/// Reference to a hosted plugin slot. `format` matches
-/// `daw::plugin::PluginFormat`'s variants by name (Clap / Vst3 / Lv2)
-/// and is stored as a string so a preset survives format additions
-/// without a schema bump.
+/// Reference to a hosted plugin slot.
+///
+/// `format` matches `daw::plugin::PluginFormat`'s variants by name
+/// (Clap / Vst3 / Lv2) and is stored as a string so a preset survives
+/// format additions without a schema bump.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct HostedPluginRef {
     pub format: String,

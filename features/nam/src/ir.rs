@@ -12,6 +12,10 @@ pub struct IrMetadata {
 
 /// Parse a WAV header to extract IR metadata — header only, no sample
 /// decode, so the library scanner stays cheap over big IR banks.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or parsed as a valid WAV file.
 pub fn parse_wav_header(path: &Path) -> Result<IrMetadata, NamError> {
     let info = fts_sample::probe(path).map_err(|e| NamError::ParseError(e.to_string()))?;
     Ok(IrMetadata {

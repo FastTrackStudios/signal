@@ -375,9 +375,10 @@ pub const GENERAL: InstrumentProfile = InstrumentProfile {
 
 /// All selectable instrument profiles. Order matters: it's both the dropdown
 /// order AND the match priority — more specific variants come before the generic
-/// ones they'd otherwise be shadowed by (808/EDM before acoustic kick, acoustic
-/// before electric guitar, backing before lead vocal). `GENERAL` is last and is
-/// the no-match fallback.
+/// ones they'd otherwise be shadowed by.
+///
+/// 808/EDM before acoustic kick, acoustic before electric guitar, backing before
+/// lead vocal. `GENERAL` is last and is the no-match fallback.
 pub const PROFILES: &[InstrumentProfile] = &[
     KICK_808,
     KICK_EDM,
@@ -495,9 +496,10 @@ pub fn overlay_for(provider: &dyn TrackInfoProvider) -> Option<&'static Instrume
 
 /// One ISO-octave ear-training reference band: a center frequency, the
 /// perceptual **cue** for recognizing it by ear (a vowel sound 250 Hz–4 kHz, a
-/// haptic/body sensation below, sibilance above), and what **too much** vs
-/// **too little** of it sounds like. These are the always-available "general
-/// zones" shown on the graph by default, independent of any instrument profile.
+/// haptic/body sensation below, sibilance above).
+///
+/// Also stores what **too much** vs **too little** of it sounds like.
+/// These are the always-available "general zones" shown on the graph by default,
 #[derive(Debug, Clone, Copy)]
 pub struct EarBand {
     /// ISO octave center frequency in Hz.
@@ -584,10 +586,11 @@ pub fn ear_band_for(hz: f32) -> Option<&'static EarBand> {
 // ── Too-much / too-little range descriptors ─────────────────────────────────
 
 /// A frequency range with the commonly-agreed words for what **boosting too
-/// much** vs **cutting too much / having too little** of it sounds like. These
-/// are the consensus mixing-chart terms (Sound on Sound, iZotope, Audio Issues,
-/// Unison, etc.) and render near the 0 dB line on the graph — `too_much` above
-/// (the boost direction), `too_little` below (the cut direction).
+/// much** vs **cutting too much / having too little** of it sounds like.
+///
+/// These are the consensus mixing-chart terms (Sound on Sound, iZotope, Audio
+/// Issues, Unison, etc.) and render near the 0 dB line on the graph — `too_much`
+/// above (the boost direction), `too_little` below (the cut direction).
 #[derive(Debug, Clone, Copy)]
 pub struct FreqRange {
     pub lo_hz: f32,

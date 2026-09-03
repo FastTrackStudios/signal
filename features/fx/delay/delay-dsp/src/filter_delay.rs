@@ -1,6 +1,6 @@
-//! FilterDelay — delay with a tempo-synced LFO-swept filter (+ tremolo).
+//! `FilterDelay` — delay with a tempo-synced LFO-swept filter (+ tremolo).
 //!
-//! TimeLine MX "Filter" machine parity: a clean delay whose wet path
+//! `TimeLine` MX "Filter" machine parity: a clean delay whose wet path
 //! runs through a resonant state-variable filter swept by an LFO whose
 //! rate is a ratio of the delay time (1/32–32/1). The filter sits pre or
 //! post the delay line. The MX folds the old Trem machine in here too:
@@ -13,10 +13,12 @@ use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
 
 /// LFO waveform for the filter sweep. `+` shapes start at their peak,
-/// `-` shapes at their trough (TimeLine's polarity convention: where the
-/// sweep sits when repeats begin). `Down`/`Up` are ATTACK-TRIGGERED
-/// one-shot sweeps: once per detected input attack the filter sweeps
-/// down (or up) over one LFO period, then holds — not cyclical.
+/// `-` shapes at their trough (`TimeLine`'s polarity convention: where the
+/// sweep sits when repeats begin).
+///
+/// `Down`/`Up` are ATTACK-TRIGGERED one-shot sweeps: once per detected input
+/// attack the filter sweeps down (or up) over one LFO period, then holds — not
+/// cyclical.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterLfoShape {
     TrianglePos,
@@ -35,8 +37,9 @@ pub enum FilterLfoShape {
 impl FilterLfoShape {
     pub const COUNT: usize = 11;
 
-    /// TimeLine MX CC order: +Tri, −Tri, +Sq, −Sq, +Sine, −Sine, Ramp,
+    /// `TimeLine` MX CC order: +Tri, −Tri, +Sq, −Sq, +Sine, −Sine, Ramp,
     /// Saw, Random, Down, Up (CC 0–10).
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             0 => Self::TrianglePos,
@@ -53,6 +56,7 @@ impl FilterLfoShape {
         }
     }
 
+    #[must_use]
     pub fn is_one_shot(self) -> bool {
         matches!(self, Self::Down | Self::Up)
     }
@@ -76,29 +80,29 @@ impl FilterLfoShape {
     /// their own sweep phase.
     fn cyclic_value(self, phase: f64, sh: f64) -> f64 {
         match self {
-            FilterLfoShape::SinePos | FilterLfoShape::Down | FilterLfoShape::Up => {
+            Self::SinePos | Self::Down | Self::Up => {
                 (std::f64::consts::TAU * phase).cos()
             }
-            FilterLfoShape::SineNeg => -(std::f64::consts::TAU * phase).cos(),
-            FilterLfoShape::TrianglePos => 1.0 - 4.0 * (phase - 0.5).abs(),
-            FilterLfoShape::TriangleNeg => 4.0 * (phase - 0.5).abs() - 1.0,
-            FilterLfoShape::SquarePos => {
+            Self::SineNeg => -(std::f64::consts::TAU * phase).cos(),
+            Self::TrianglePos => 1.0 - 4.0 * (phase - 0.5).abs(),
+            Self::TriangleNeg => 4.0 * (phase - 0.5).abs() - 1.0,
+            Self::SquarePos => {
                 if phase < 0.5 {
                     1.0
                 } else {
                     -1.0
                 }
             }
-            FilterLfoShape::SquareNeg => {
+            Self::SquareNeg => {
                 if phase < 0.5 {
                     -1.0
                 } else {
                     1.0
                 }
             }
-            FilterLfoShape::Saw => 1.0 - 2.0 * phase,
-            FilterLfoShape::Ramp => 2.0 * phase - 1.0,
-            FilterLfoShape::Random => sh,
+            Self::Saw => 1.0 - 2.0 * phase,
+            Self::Ramp => 2.0 * phase - 1.0,
+            Self::Random => sh,
         }
     }
 }
@@ -210,6 +214,7 @@ impl FilterDelay {
     const MAX_DELAY_S: f64 = 3.0;
     const CTRL_BLOCK: u32 = 16;
 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             time_ms: 400.0,
@@ -353,6 +358,7 @@ impl FilterDelay {
         output
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }

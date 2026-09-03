@@ -1,4 +1,4 @@
-//! The **ModMatrix engine** and its compiler: control-rate sources, resolved
+//! The **`ModMatrix` engine** and its compiler: control-rate sources, resolved
 //! routes, send buses, tempo and the MIDI-domain arpeggiator — everything the
 //! render tree root ticks once per block.
 
@@ -32,7 +32,7 @@ pub(super) fn build_arp(container: &Container) -> Option<crate::native::ArpEngin
     Some(ArpEngine::new(steps, step_beats))
 }
 
-/// One resolved ModMatrix row.
+/// One resolved `ModMatrix` row.
 pub(super) struct CompiledRoute {
     pub(super) source: usize,
     pub(super) leaf: usize,
@@ -96,6 +96,7 @@ impl ModEngine {
         accumulate_writes(&self.routes, &values, &self.overlay, &mut self.writes);
     }
 
+    #[must_use]
     pub fn route_count(&self) -> usize {
         self.routes.len()
     }

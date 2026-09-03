@@ -6,6 +6,8 @@
 //! rig's editor (Vital-style): time axis stretched by the segment lengths,
 //! draggable handles at the segment corners.
 
+use std::fmt::Write;
+
 use dioxus::prelude::*;
 
 /// ADSR values in macro units (ms / 0..1), as the layer detail carries them.
@@ -184,7 +186,7 @@ pub fn EnvelopeGraph(
                             }
                             Some(Grab::Sustain) => on_change.call(("sustain", level(start.sustain))),
                             Some(Grab::Release) => {
-                                on_change.call(("release", time(start.release_ms, 8000.0)))
+                                on_change.call(("release", time(start.release_ms, 8000.0)));
                             }
                             None => {}
                         }
@@ -247,7 +249,7 @@ pub fn FilterCurve(
         let mag = 1.0 / (1.0 + r.powi(4)).sqrt();
         let bump = res * 0.9 * (-((r.ln()).powi(2)) * 6.0).exp();
         let y = PAD + (1.0 - (mag + bump).clamp(0.0, 1.35) / 1.35) * (H - 2.0 * PAD);
-        d.push_str(&format!("{} {x:.1} {y:.1}", if i == 0 { "M" } else { "L" }));
+        let _ = write!(d, "{} {x:.1} {y:.1}", if i == 0 { "M" } else { "L" });
         d.push(' ');
     }
     let cx = x_of(cutoff);
@@ -369,8 +371,7 @@ pub struct ModuleCurve {
 fn ink(c: &ModuleCurve) -> (&'static str, &'static str, &'static str) {
     match (c.focus, c.dim) {
         (true, false) => ("1", "2.25", "0.07"),
-        (true, true) => ("0.4", "1.5", "0.03"),
-        (false, false) => ("0.4", "1.5", "0.03"),
+        (true, true) | (false, false) => ("0.4", "1.5", "0.03"),
         (false, true) => ("0.16", "1", "0"),
     }
 }
@@ -519,7 +520,7 @@ pub fn StackedVibrato(
                             let ramp = if FADE_S > 0.0 { (live / FADE_S).min(1.0) } else { 1.0 };
                             let y = mid
                                 - (live * rate * std::f64::consts::TAU).sin() * swing * ramp;
-                            d.push_str(&format!("{} {x:.1} {y:.1} ", if i == 0 { "M" } else { "L" }));
+                            let _ = write!(d, "{} {x:.1} {y:.1} ", if i == 0 { "M" } else { "L" });
                         }
                         rsx! {
                             path {
@@ -732,7 +733,7 @@ pub fn StackedFilters(
                             let mag = 1.0 / (1.0 + r.powi(4)).sqrt();
                             let bump = res * 0.9 * (-((r.ln()).powi(2)) * 6.0).exp();
                             let y = PAD + (1.0 - (mag + bump).clamp(0.0, 1.35) / 1.35) * (h - 2.0 * PAD);
-                            d.push_str(&format!("{} {x:.1} {y:.1} ", if i == 0 { "M" } else { "L" }));
+                            let _ = write!(d, "{} {x:.1} {y:.1} ", if i == 0 { "M" } else { "L" });
                         }
                         let cx = x_of(cutoff);
                         let (op, width, _) = ink(c);

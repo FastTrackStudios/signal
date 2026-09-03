@@ -532,10 +532,11 @@ pub mod analysis {
 
     /// Measure the harmonic spectrum of the CURRENT settings: an
     /// internally synthesized full-scale sine runs through a state
-    /// clone (including the DC blocker), and Goertzel correlation
-    /// reads H1..Hn. `out[k]` = linear magnitude of harmonic k+1,
-    /// normalized so H1 = 1. This is the "what is the saturation
-    /// actually adding" visualization — measured, not hand-waved.
+    /// clone (including the DC blocker), and Goertzel correlation reads H1..Hn.
+    ///
+    /// `out[k]` = linear magnitude of harmonic k+1, normalized so H1 = 1. This
+    /// is the "what is the saturation actually adding" visualization — measured,
+    /// not hand-waved.
     pub fn harmonic_spectrum(pre: &ClassAPreamp, out: &mut [f32]) {
         const N: usize = 8192;
         const CYCLES: usize = 64;

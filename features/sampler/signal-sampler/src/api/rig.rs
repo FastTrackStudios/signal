@@ -154,7 +154,7 @@ pub struct ParamRef {
 
 impl ParamRef {
     pub fn new(block: impl Into<BlockId>, param: impl AsRef<str>) -> Self {
-        ParamRef {
+        Self {
             block: block.into(),
             param: Interned::new(param),
         }
@@ -162,10 +162,11 @@ impl ParamRef {
 
     /// Parse `"amp.gain"` → `ParamRef { block: "amp", param: "gain" }`. A
     /// missing `.` puts the whole string in `param` with an empty block id.
+    #[must_use]
     pub fn parse(spec: &str) -> Self {
         match spec.split_once('.') {
-            Some((b, p)) => ParamRef::new(b, p),
-            None => ParamRef {
+            Some((b, p)) => Self::new(b, p),
+            None => Self {
                 block: BlockId::new(""),
                 param: Interned::new(spec),
             },
@@ -195,8 +196,9 @@ pub enum BlockRole {
 }
 
 /// A named, addressable parameter on a block — for GUI binding, automation, and
-/// snapshot/expression control. **Phase B** deepens this to the block's real
-/// DSP params (NAM has none today; hosted plugins expose theirs via the host).
+/// snapshot/expression control.
+///
+/// **Phase B** deepens this to the block's real DSP params (NAM has none today; hosted plugins expose theirs via the host).
 #[derive(Clone, Debug)]
 pub struct Param {
     pub name: Interned,
@@ -205,16 +207,16 @@ pub struct Param {
 
 impl Param {
     pub fn new(name: impl AsRef<str>, value: f32) -> Self {
-        Param {
+        Self {
             name: Interned::new(name),
             value,
         }
     }
 }
 
-/// One FX block. `Send` (rides the audio thread). The audio is a
-/// `PluginInstance`; `Block` adds the rig-domain role + addressable params +
-/// bypass. `as_plugin()` hands the inner instance to daw's renderer.
+/// One FX block. `Send` (rides the audio thread).
+///
+/// The audio is a `PluginInstance`; `Block` adds the rig-domain role + addressable params + bypass. `as_plugin()` hands the inner instance to daw's renderer.
 pub trait Block: Send {
     fn role(&self) -> BlockRole;
     fn id(&self) -> BlockId;
@@ -243,7 +245,7 @@ struct BlockCore {
 
 impl BlockCore {
     fn new(id: BlockId, role: BlockRole) -> Self {
-        BlockCore {
+        Self {
             id,
             role,
             bypassed: false,
@@ -276,15 +278,17 @@ impl Amp {
             .push(Param::new("input_trim", nam.input_gain_db));
         core.params
             .push(Param::new("output_trim", nam.output_gain_db));
-        Amp { core, nam }
+        Self { core, nam }
     }
 
     /// NAM model loudness in dB (modern format), for level-matching. REAL.
+    #[must_use]
     pub fn loudness(&self) -> Option<Db> {
         self.nam.loudness().map(|d| Db(d as f32))
     }
 
     /// Sample rate the NAM model was trained at, if declared. REAL.
+    #[must_use]
     pub fn expected_sample_rate(&self) -> Option<f64> {
         self.nam.expected_sample_rate()
     }
@@ -292,6 +296,11 @@ impl Amp {
     /// Reload the capture in place at the same sample rate. REAL — rebuilds the
     /// processor (NAM models are immutable once loaded; a true zero-alloc
     /// in-place swap is Phase B).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the NAM model file cannot be loaded or if the file
+    /// format is invalid.
     pub fn swap_model(&mut self, path: impl AsRef<Path>) -> Result<(), String> {
         let mut nam = NamProcessor::load(path, self.nam.sample_rate, PREPARE_BLOCK as usize)?;
         nam.input_gain_db = self.nam.input_gain_db;
@@ -301,6 +310,7 @@ impl Amp {
     }
 
     /// The model's display name (filename stem).
+    #[must_use]
     pub fn display_name(&self) -> &str {
         &self.nam.display_name
     }
@@ -357,18 +367,19 @@ pub struct Cabinet {
 
 impl Cabinet {
     fn ir(id: BlockId, conv: Convolver) -> Self {
-        Cabinet {
+        Self {
             core: BlockCore::new(id, BlockRole::Cabinet),
             dsp: CabDsp::Ir(conv),
         }
     }
     fn neural(id: BlockId, nam: NamProcessor) -> Self {
-        Cabinet {
+        Self {
             core: BlockCore::new(id, BlockRole::Cabinet),
             dsp: CabDsp::Neural(nam),
         }
     }
 
+    #[must_use]
     pub fn display_name(&self) -> &str {
         match &self.dsp {
             CabDsp::Ir(c) => &c.display_name,
@@ -410,10 +421,9 @@ impl Block for Cabinet {
     }
 }
 
-/// A hosted CLAP / VST3 plugin as a generic block — wraps the boxed
-/// `PluginInstance` daw's loader returns. REAL: audio passes straight through to
-/// daw's renderer. **Phase B**: `params()` mirrors the host's exposed params
-/// (today empty — the host param surface is read on demand, not cached here).
+/// A hosted CLAP / VST3 plugin as a generic block — wraps the boxed `PluginInstance` daw's loader returns.
+///
+/// REAL: audio passes straight through to daw's renderer. **Phase B**: `params()` mirrors the host's exposed params (today empty — the host param surface is read on demand, not cached here).
 pub struct Plugin {
     core: BlockCore,
     inner: Box<dyn PluginInstance>,
@@ -421,12 +431,13 @@ pub struct Plugin {
 
 impl Plugin {
     fn build(id: BlockId, role: BlockRole, inner: Box<dyn PluginInstance>) -> Self {
-        Plugin {
+        Self {
             core: BlockCore::new(id, role),
             inner,
         }
     }
 
+    #[must_use]
     pub fn display_name(&self) -> String {
         self.inner.descriptor().name
     }
@@ -461,9 +472,9 @@ impl Block for Plugin {
     }
 }
 
-/// A **parallel-sum** block: runs N lane sub-chains on copies of the input and
-/// sums their outputs with per-lane level + pan. This is the `Node::Parallel`
-/// lowering for the live rig (dual cabs, wet/dry, dual amps).
+/// A **parallel-sum** block: runs N lane sub-chains on copies of the input and sums their outputs with per-lane level + pan.
+///
+/// This is the `Node::Parallel` lowering for the live rig (dual cabs, wet/dry, dual amps).
 ///
 /// ## Why an in-track summing block, not daw send-buses
 ///
@@ -529,7 +540,7 @@ impl ParallelSum {
                 gain_r,
             });
         }
-        Ok(ParallelSum {
+        Ok(Self {
             core: BlockCore::new(id, BlockRole::Utility),
             lanes: rt,
             level_lin: mix.level.linear(),
@@ -602,10 +613,10 @@ impl PluginInstance for ParallelSum {
             return Ok(());
         }
         self.ensure_scratch(frames);
-        for v in out_l[..frames].iter_mut() {
+        for v in &mut out_l[..frames] {
             *v = 0.0;
         }
-        for v in out_r[..frames].iter_mut() {
+        for v in &mut out_r[..frames] {
             *v = 0.0;
         }
         for lane in &mut self.lanes {
@@ -614,10 +625,10 @@ impl PluginInstance for ParallelSum {
             self.src_r[..frames].copy_from_slice(&in_r[..frames]);
             // Run the lane's series in place (src → lane_out → src → …).
             for inst in &mut lane.instances {
-                for v in self.lane_l[..frames].iter_mut() {
+                for v in &mut self.lane_l[..frames] {
                     *v = 0.0;
                 }
-                for v in self.lane_r[..frames].iter_mut() {
+                for v in &mut self.lane_r[..frames] {
                     *v = 0.0;
                 }
                 inst.process_block(
@@ -681,18 +692,33 @@ pub mod block {
 
     /// Load a `.nam` amp/drive model. Carries loudness / expected-SR metadata.
     /// REAL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the NAM model file cannot be loaded or if the file
+    /// format is invalid.
     pub fn amp_nam(path: &Path) -> Result<Amp, String> {
         let nam = NamProcessor::load(path, 48_000.0, PREPARE_BLOCK as usize)?;
         Ok(Amp::build(default_id(path, "amp"), BlockRole::Amp, nam))
     }
 
     /// Load a `.nam` drive/pedal model as a [`BlockRole::Drive`] block. REAL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the NAM model file cannot be loaded or if the file
+    /// format is invalid.
     pub fn drive_nam(path: &Path) -> Result<Amp, String> {
         let nam = NamProcessor::load(path, 48_000.0, PREPARE_BLOCK as usize)?;
         Ok(Amp::build(default_id(path, "drive"), BlockRole::Drive, nam))
     }
 
     /// Load a `.wav` cabinet impulse response. REAL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the WAV file cannot be loaded or if the file
+    /// format is invalid.
     pub fn cab_ir(path: &Path) -> Result<Cabinet, String> {
         let conv = Convolver::load(path)?;
         Ok(Cabinet::ir(default_id(path, "cab"), conv))
@@ -700,6 +726,11 @@ pub mod block {
 
     /// Load a neural cabinet (`.nam` used as a cab). REAL audio. **Phase B**:
     /// neural-cab-specific params (mic / distance).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the NAM model file cannot be loaded or if the file
+    /// format is invalid.
     pub fn cab_nam(path: &Path) -> Result<Cabinet, String> {
         let nam = NamProcessor::load(path, 48_000.0, PREPARE_BLOCK as usize)?;
         Ok(Cabinet::neural(default_id(path, "cab"), nam))
@@ -707,6 +738,11 @@ pub mod block {
 
     /// Load any CLAP / VST3 plugin as a block of `role`. REAL (goes through
     /// daw's loader). Optional saved-state restore.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin file cannot be loaded, if it is not a
+    /// recognized CLAP/VST3 plugin, or if plugin preparation fails.
     pub fn plugin(path: &Path, role: BlockRole) -> Result<Plugin, String> {
         let path_str = path.to_string_lossy().to_string();
         let mut inner = daw::plugin::load_plugin(&path_str)
@@ -730,6 +766,7 @@ pub mod block {
 
     /// Test accessor for [`default_id`] (asserts the api/rig id agreement).
     #[doc(hidden)]
+    #[must_use]
     pub fn default_id_for_test(path: &Path) -> BlockId {
         default_id(path, "block")
     }
@@ -747,7 +784,7 @@ pub struct ParallelMix {
 
 impl Default for ParallelMix {
     fn default() -> Self {
-        ParallelMix { level: Db::UNITY }
+        Self { level: Db::UNITY }
     }
 }
 
@@ -777,11 +814,13 @@ pub struct Chain {
 }
 
 impl Chain {
+    #[must_use]
     pub fn builder() -> ChainBuilder {
         ChainBuilder { nodes: Vec::new() }
     }
 
     /// Find a block by id (searches into parallel lanes).
+    #[must_use]
     pub fn block(&self, id: &BlockId) -> Option<&dyn Block> {
         fn search<'a>(nodes: &'a [Node], id: &BlockId) -> Option<&'a dyn Block> {
             for n in nodes {
@@ -833,7 +872,11 @@ impl Chain {
     /// This is the live-rig realization of parallel paths — see [`ParallelSum`]
     /// for why a summing block (not daw send-buses) fits the swappable
     /// single-track rig.
-    pub fn lower_parallels(self) -> Result<Chain, String> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a nested parallel section is encountered inside a lane.
+    pub fn lower_parallels(self) -> Result<Self, String> {
         let mut out = Vec::with_capacity(self.nodes.len());
         for node in self.nodes {
             match node {
@@ -844,11 +887,12 @@ impl Chain {
                 }
             }
         }
-        Ok(Chain { nodes: out })
+        Ok(Self { nodes: out })
     }
 
     /// Whether any node is a [`Node::Parallel`] (needs `lower_parallels` to
     /// realize on the live rig).
+    #[must_use]
     pub fn has_parallel(&self) -> bool {
         self.nodes
             .iter()
@@ -856,6 +900,7 @@ impl Chain {
     }
 
     /// Number of blocks (flattened across parallel lanes).
+    #[must_use]
     pub fn block_count(&self) -> usize {
         fn count(nodes: &[Node]) -> usize {
             nodes
@@ -904,6 +949,7 @@ impl ChainBuilder {
         self
     }
 
+    #[must_use]
     pub fn build(self) -> Chain {
         Chain { nodes: self.nodes }
     }
@@ -964,9 +1010,9 @@ impl LaneBuilder {
 
 // ── Patch / Snapshot / Profile (doc §5) ────────────────────────────────────
 
-/// An instant state WITHIN a patch — param values + per-block bypass (Helix
-/// snapshots). Switching is a handful of `set_param` / `set_bypassed` calls, no
-/// chain rebuild. **Phase B**: applying a snapshot onto live running blocks.
+/// An instant state WITHIN a patch — param values + per-block bypass (Helix snapshots).
+///
+/// Switching is a handful of `set_param` / `set_bypassed` calls, no chain rebuild. **Phase B**: applying a snapshot onto live running blocks.
 pub struct Snapshot {
     pub id: SnapshotId,
     pub params: Vec<(ParamRef, f32)>,
@@ -975,7 +1021,7 @@ pub struct Snapshot {
 
 impl Snapshot {
     pub fn new(id: impl Into<SnapshotId>) -> Self {
-        Snapshot {
+        Self {
             id: id.into(),
             params: Vec::new(),
             bypass: Vec::new(),
@@ -1010,7 +1056,7 @@ pub struct Patch {
 
 impl Patch {
     pub fn new(id: impl Into<PatchId>, chain: Chain) -> Self {
-        Patch {
+        Self {
             id: id.into(),
             chain,
             input_trim: Db::UNITY,
@@ -1041,6 +1087,11 @@ impl Profile {
 
     /// Parse a profile from the existing rig `.styx` (reuses
     /// [`RigProfile::from_styx_file`]) and adapt it to the new model. REAL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the .styx file cannot be read or parsed, or if any
+    /// block's DSP cannot be loaded.
     pub fn from_styx(path: &Path) -> Result<Self, String> {
         let rp = RigProfile::from_styx_file(path).map_err(|e| e.to_string())?;
         let base = path.parent();
@@ -1050,6 +1101,11 @@ impl Profile {
     /// Adapt an existing [`RigProfile`] into a [`Profile`], loading each block's
     /// DSP. `base_dir` resolves relative block paths. REAL — the `From<&…>`
     /// adapter shape from the doc (§11).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any block's DSP cannot be loaded or if the profile
+    /// is invalid.
     pub fn from_rig_profile_at(rp: &RigProfile, base_dir: Option<&Path>) -> Result<Self, String> {
         let mut patches = Vec::with_capacity(rp.patches.len());
         for p in &rp.patches {
@@ -1063,7 +1119,7 @@ impl Profile {
             patch.output_trim = Db(p.output_trim_db);
             patches.push(patch);
         }
-        Ok(Profile {
+        Ok(Self {
             id: ProfileId::new(&rp.name),
             patches,
             default: rp.default_patch.min(rp.patches.len().saturating_sub(1)),
@@ -1075,6 +1131,7 @@ impl Profile {
     /// untouched [`ProfileRig`] machinery. REAL — round-trips file paths +
     /// trims; parallel sections flatten to the series spine (Phase B preserves
     /// them as daw buses).
+    #[must_use]
     pub fn to_rig_profile(&self) -> RigProfile {
         let mut rp = RigProfile::new(self.id.as_str());
         rp.default_patch = self.default;
@@ -1093,6 +1150,7 @@ impl Profile {
         rp
     }
 
+    #[must_use]
     pub fn patch_ids(&self) -> Vec<PatchId> {
         self.patches.iter().map(|p| p.id.clone()).collect()
     }
@@ -1117,7 +1175,7 @@ impl From<&RigProfile> for Profile {
             patch.output_trim = Db(p.output_trim_db);
             patches.push(patch);
         }
-        Profile {
+        Self {
             id: ProfileId::new(&rp.name),
             patches,
             default: rp.default_patch.min(rp.patches.len().saturating_sub(1)),
@@ -1237,6 +1295,9 @@ impl ProfileBuilder {
         self
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if any block failed to load during patch construction.
     pub fn build(self) -> Result<Profile, String> {
         if let Some(e) = self.error {
             return Err(e);
@@ -1261,6 +1322,11 @@ pub struct PatchBuilder {
 
 impl PatchBuilder {
     /// Build this patch's chain.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the closure returns an error (typically if a block
+    /// fails to load).
     pub fn chain(
         mut self,
         f: impl FnOnce(ChainBuilder) -> Result<ChainBuilder, String>,
@@ -1304,13 +1370,15 @@ pub struct TunerReading {
     pub cents: f32,
 }
 
-/// Autocorrelation pitch detector over a mono window. Returns a
-/// [`TunerReading`] with the detected fundamental, nearest MIDI note, and cents
+/// Autocorrelation pitch detector over a mono window.
+///
+/// Returns a [`TunerReading`] with the detected fundamental, nearest MIDI note, and cents
 /// deviation, or a null reading if the window is too quiet / has no stable
 /// pitch. `sample_rate` in Hz.
 ///
 /// Approximate by design (one window, time-domain): good enough to tune a
 /// guitar string; not a reference-grade analyzer.
+#[must_use]
 pub fn detect_pitch(samples: &[f32], sample_rate: f32) -> TunerReading {
     const MIN_HZ: f32 = 50.0; // below low-B (~62 Hz) with margin
     const MAX_HZ: f32 = 1000.0; // well above the 24th-fret high-E
@@ -1396,15 +1464,11 @@ pub trait Rig: Send {
     fn set_output_trim(&mut self, db: Db);
 }
 
-/// The working [`Rig`] impl — wraps the existing [`ProfileRig`] (which wraps
-/// [`GuitarRig`]). Patch switching, metering, bypass, and trims are all the
-/// existing instant, click-free machinery; this is the doc's `DawRig`
-/// (§9: "the existing [`GuitarRig`] generalized to the `Rig` trait").
+/// The working [`Rig`] impl — wraps the existing [`ProfileRig`] (which wraps [`GuitarRig`]).
 ///
-/// REAL: patches / active_patch / select_patch / next / prev / input_peak /
-/// output_peak / set_bypass / set_input_trim / set_output_trim. **Phase B**:
-/// select_snapshot / set_block_bypass / set_param / tap_tempo / tuner (flagged
-/// inline).
+/// Patch switching, metering, bypass, and trims are all the existing instant, click-free machinery; this is the doc's `DawRig` (§9: "the existing [`GuitarRig`] generalized to the `Rig` trait").
+///
+/// REAL: patches / `active_patch` / `select_patch` / `next` / `prev` / `input_peak` / `output_peak` / `set_bypass` / `set_input_trim` / `set_output_trim`. **Phase B**: `select_snapshot` / `set_block_bypass` / `set_param` / `tap_tempo` / `tuner` (flagged inline).
 pub struct DawRig {
     inner: ProfileRig,
     patch_ids: Vec<PatchId>,
@@ -1427,6 +1491,11 @@ impl DawRig {
     /// Parallel sections in a patch's [`Chain`] are lowered to daw sends + a
     /// summed bus track by `build_parallel_project` before the chain installs
     /// — see that function for what's supported (2-lane common case).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio device cannot be opened or if the profile
+    /// fails to load.
     pub fn open(prefs: &RigAudioPrefs, profile: &Profile) -> Result<Self, String> {
         let rig = GuitarRig::open(prefs).map_err(|e| e.to_string())?;
         let mut inner = ProfileRig::new(rig);
@@ -1447,7 +1516,7 @@ impl DawRig {
                     .collect()
             })
             .collect();
-        Ok(DawRig {
+        Ok(Self {
             inner,
             patch_ids,
             snapshots,
@@ -1467,7 +1536,7 @@ impl DawRig {
             .map(|p| PatchId::new(&p.name))
             .collect();
         let snapshots = (0..patch_ids.len()).map(|_| Vec::new()).collect();
-        DawRig {
+        Self {
             inner,
             patch_ids,
             snapshots,
@@ -1632,8 +1701,9 @@ pub struct PatchStepper {
 
 impl PatchStepper {
     /// `up` / `down` are footswitch numbers.
+    #[must_use]
     pub fn footswitches(up: u8, down: u8) -> Self {
-        PatchStepper { up, down }
+        Self { up, down }
     }
 }
 
@@ -1654,8 +1724,9 @@ impl Controller for PatchStepper {
 pub struct ProgramChangeMap;
 
 impl ProgramChangeMap {
+    #[must_use]
     pub fn patches() -> Self {
-        ProgramChangeMap
+        Self
     }
 }
 
@@ -1679,8 +1750,9 @@ pub struct ExpressionBind {
 }
 
 impl ExpressionBind {
+    #[must_use]
     pub fn new(cc: Cc, target: ParamRef) -> Self {
-        ExpressionBind { cc, target }
+        Self { cc, target }
     }
 }
 
@@ -1703,8 +1775,9 @@ pub struct BlockToggle {
 }
 
 impl BlockToggle {
+    #[must_use]
     pub fn footswitch(sw: u8, block: impl Into<BlockId>) -> Self {
-        BlockToggle {
+        Self {
             footswitch: sw,
             block: block.into(),
             on: false,
@@ -1731,8 +1804,9 @@ pub struct TapTempo {
 }
 
 impl TapTempo {
+    #[must_use]
     pub fn footswitch(sw: u8) -> Self {
-        TapTempo { footswitch: sw }
+        Self { footswitch: sw }
     }
 }
 
@@ -1754,8 +1828,9 @@ pub struct SnapshotSwitcher {
 }
 
 impl SnapshotSwitcher {
+    #[must_use]
     pub fn new(bindings: Vec<(u8, SnapshotId)>) -> Self {
-        SnapshotSwitcher { bindings }
+        Self { bindings }
     }
 }
 
@@ -1789,7 +1864,7 @@ mod tests {
     }
     impl FakeRig {
         fn with(n: usize) -> Self {
-            FakeRig {
+            Self {
                 ids: (0..n).map(|i| PatchId::new(format!("P{i}"))).collect(),
                 ..Default::default()
             }
@@ -1888,7 +1963,7 @@ mod tests {
         let mut rig = FakeRig::with(2);
         let mut ctl = SnapshotSwitcher::new(vec![(3, SnapshotId::new("Solo"))]);
         ctl.on_event(ControlEvent::Footswitch(3, true), &mut rig);
-        assert_eq!(rig.snapshot.as_ref().map(|s| s.as_str()), Some("Solo"));
+        assert_eq!(rig.snapshot.as_ref().map(super::SnapshotId::as_str), Some("Solo"));
     }
 
     #[test]

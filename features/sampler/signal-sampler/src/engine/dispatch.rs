@@ -12,7 +12,7 @@ use super::*;
 const RETRIGGER_FADE_MS: u32 = 90;
 
 /// `$jvqtp` "Old out" — the fade the OUTGOING body takes when a new body starts
-/// (script_1.ksp 19239, `fade_out($eyijx,$jvqtp*1000,1)`; shipped persistent
+/// (`script_1.ksp` 19239, `fade_out($eyijx,$jvqtp*1000,1)`; shipped persistent
 /// 250). It sits outside the interval guard at 19247, so it runs on every new
 /// body: a pitch change and a pedal-less repeat alike. Scoped to the CSS legato
 /// re-attack; measured neutral on the param test (S10 shape 6.00 → 5.99), so
@@ -154,8 +154,7 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(&self.articulation)
-            .map(|a| a.dynamics.len())
-            .unwrap_or(0);
+            .map_or(0, |a| a.dynamics.len());
         let gain = if n_dyn > 1 {
             1.0
         } else {
@@ -308,7 +307,7 @@ impl SampleEngine {
     }
 
     /// The `$1z3x0` "AB volume" dip a mono-legato (`$ocjln=0`) connected note
-    /// takes, decoded from script_1.ksp 20038-20068 — the mono counterpart of
+    /// takes, decoded from `script_1.ksp` 20038-20068 — the mono counterpart of
     /// the chord-mode dip at 12717, which is the one we had been reading.
     ///
     /// ```text
@@ -358,8 +357,7 @@ impl SampleEngine {
             .legato_engine
             .as_ref()
             .and_then(|le| le.portamento.as_ref())
-            .map(|p| p.trigger_vel_max)
-            .unwrap_or(0); // 0 disables portamento
+            .map_or(0, |p| p.trigger_vel_max); // 0 disables portamento
         let cc5 = self.cc_values[5];
         let portamento = port_thresh > 0 && velocity <= port_thresh && cc5 > 10;
 
@@ -742,8 +740,10 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(&self.articulation)
-            .map(|a| a.is_sordino())
-            .unwrap_or_else(|| self.articulation.starts_with("Sord"));
+            .map_or_else(
+                || self.articulation.starts_with("Sord"),
+                super::super::spec::ArticulationSpec::is_sordino,
+            );
         self.patch
             .spec
             .articulations
@@ -999,8 +999,7 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(&cur)
-            .map(|a| a.is_vibrato())
-            .unwrap_or(false);
+            .is_some_and(super::super::spec::ArticulationSpec::is_vibrato);
         let (nv_artic, vib_artic) = if base_is_vib {
             (
                 self.find_vibrato_pair_id(&cur)
@@ -1042,8 +1041,7 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(&self.articulation)
-            .map(|a| a.dynamics.len() > 1)
-            .unwrap_or(false);
+            .is_some_and(|a| a.dynamics.len() > 1);
         for v in self.voices.voices_mut() {
             if !has_cc1_dynamics {
                 break;
@@ -1131,7 +1129,7 @@ impl SampleEngine {
             .as_ref()
             .and_then(|ks| ks.notes.get(idx))
             .and_then(|kn| kn.value_for(velocity))
-            .map(|s| s.to_string());
+            .map(std::string::ToString::to_string);
         if let Some(v) = value {
             self.apply_keyswitch_value(&v);
         }
@@ -1178,16 +1176,14 @@ impl SampleEngine {
             .spec
             .articulations
             .iter()
-            .find(|a| a.id.eq_ignore_ascii_case(tag) || a.label.eq_ignore_ascii_case(tag))
-            .map(|a| a.id.clone())
-            .unwrap_or_else(|| tag.to_string());
+            .find(|a| a.id.eq_ignore_ascii_case(tag) || a.label.eq_ignore_ascii_case(tag)).map_or_else(|| tag.to_string(), |a| a.id.clone());
         self.articulation = self.remap_sordino(&id, self.con_sordino);
     }
 
     /// Apply a latched-CC selector value (spec `selector uacc`): the CC's
     /// value is a code in the resolved code → articulation map. A matching
     /// code latches that articulation for all subsequent notes — identical
-    /// semantics to a keyswitch latch (StrictLive: a CC arriving before a
+    /// semantics to a keyswitch latch (`StrictLive`: a CC arriving before a
     /// note-on selects the articulation the notes after it play). Unknown
     /// codes keep the previous latch (published code tables leave gaps by
     /// design). Honours Con Sordino remapping via `select_articulation_tag`.

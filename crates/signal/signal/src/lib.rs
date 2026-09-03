@@ -129,6 +129,11 @@ pub fn strip_fxchain_wrapper(chunk: &str) -> String {
 }
 use std::sync::Arc;
 
+/// Create a fully-wired in-memory controller with seeded default data.
+///
+/// # Errors
+///
+/// Returns `StorageError` if database connection or schema initialization fails.
 pub async fn bootstrap_in_memory_controller_async() -> Result<SignalController, StorageError> {
     let db = Database::connect("sqlite::memory:").await?;
     let seeds = runtime_seed_bundle();
@@ -198,6 +203,11 @@ pub async fn bootstrap_in_memory_controller_async() -> Result<SignalController, 
     Ok(SignalController::new(service))
 }
 
+/// Create a fully-wired in-memory controller with seeded default data (blocking).
+///
+/// # Errors
+///
+/// Returns `StorageError` if Tokio runtime creation fails or if database operations fail.
 pub fn bootstrap_in_memory_controller() -> Result<SignalController, StorageError> {
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| StorageError::Data(format!("failed to build tokio runtime: {e}")))?;
@@ -210,6 +220,10 @@ pub fn bootstrap_in_memory_controller() -> Result<SignalController, StorageError
 ///
 /// Creates the database file if it doesn't exist. All table schemas are created
 /// with `IF NOT EXISTS` so this is safe to call on existing databases.
+///
+/// # Errors
+///
+/// Returns `StorageError` if database connection or schema initialization fails.
 pub async fn connect_db(path: &str) -> Result<SignalController, StorageError> {
     let url = format!("sqlite:{path}?mode=rwc");
     let db = Database::connect(&url).await?;
@@ -223,6 +237,10 @@ pub async fn connect_db(path: &str) -> Result<SignalController, StorageError> {
 /// RfxChain-based presets from `<fts_home>/Library/presets/`
 /// are always refreshed from disk on every startup, so swapping `.RfxChain`
 /// files takes effect immediately without deleting the database.
+///
+/// # Errors
+///
+/// Returns `StorageError` if database operations or seed operations fail.
 pub async fn connect_db_seeded(path: &str) -> Result<SignalController, StorageError> {
     let url = format!("sqlite:{path}?mode=rwc");
     let db = Database::connect(&url).await?;
@@ -322,26 +340,46 @@ async fn init_all_schemas(db: &DatabaseConnection) -> Result<(), StorageError> {
 // region: --- Mock constructors
 
 /// Create a mock controller for guitar-type development and testing.
+///
+/// # Errors
+///
+/// Returns `StorageError` if database operations fail.
 pub fn mock_guitar() -> Result<SignalController, StorageError> {
     bootstrap_in_memory_controller()
 }
 
 /// Create a mock controller for bass-type development and testing.
+///
+/// # Errors
+///
+/// Returns `StorageError` if database operations fail.
 pub fn mock_bass() -> Result<SignalController, StorageError> {
     bootstrap_in_memory_controller()
 }
 
 /// Create a mock controller for keys-type development and testing.
+///
+/// # Errors
+///
+/// Returns `StorageError` if database operations fail.
 pub fn mock_keys() -> Result<SignalController, StorageError> {
     bootstrap_in_memory_controller()
 }
 
 /// Create a mock controller for drums-type development and testing.
+///
+/// # Errors
+///
+/// Returns `StorageError` if database operations fail.
 pub fn mock_drums() -> Result<SignalController, StorageError> {
     bootstrap_in_memory_controller()
 }
 
 /// Create a mock controller for vocals-type development and testing.
+///
+/// # Errors
+///
+/// Returns `StorageError` if database operations fail.
 pub fn mock_vocals() -> Result<SignalController, StorageError> {
     bootstrap_in_memory_controller()
 }

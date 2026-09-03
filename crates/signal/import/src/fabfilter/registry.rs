@@ -1,4 +1,4 @@
-//! Registry of all known FabFilter plugins with their block type mappings.
+//! Registry of all known `FabFilter` plugins with their block type mappings.
 //!
 //! Each entry maps a plugin name to its Signal `BlockType` and whether its
 //! preset files use the text-parseable INI format or binary format.
@@ -12,7 +12,7 @@ pub enum FfpFormat {
     Binary,
 }
 
-/// A known FabFilter plugin.
+/// A known `FabFilter` plugin.
 #[derive(Debug, Clone)]
 pub struct FabFilterPluginEntry {
     /// Plugin display name as it appears in the preset directory.
@@ -30,7 +30,7 @@ pub struct FabFilterPluginEntry {
     pub reaper_name: &'static str,
 }
 
-/// All known FabFilter plugins. Directory names under `~/Documents/FabFilter/Presets/`
+/// All known `FabFilter` plugins. Directory names under `~/Documents/FabFilter/Presets/`
 /// match these names exactly.
 pub const FABFILTER_PLUGINS: &[FabFilterPluginEntry] = &[
     // ─── Text-format plugins (INI .ffp) ──────────────────────────
@@ -199,6 +199,7 @@ pub const FABFILTER_PLUGINS: &[FabFilterPluginEntry] = &[
 ];
 
 /// Look up a plugin by name (case-insensitive).
+#[must_use]
 pub fn lookup_plugin(name: &str) -> Option<&'static FabFilterPluginEntry> {
     FABFILTER_PLUGINS
         .iter()
@@ -208,6 +209,7 @@ pub fn lookup_plugin(name: &str) -> Option<&'static FabFilterPluginEntry> {
 /// Look up a plugin by its full REAPER identifier (case-insensitive).
 ///
 /// Matches against the `reaper_name` field, e.g. `"CLAP: Pro-Q 4 (FabFilter)"`.
+#[must_use]
 pub fn lookup_by_reaper_name(reaper_name: &str) -> Option<&'static FabFilterPluginEntry> {
     FABFILTER_PLUGINS
         .iter()

@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut buf = vec![0.0f32; 512 * 2];
         // Warm up: let the kick's samples decode on the background thread.
         for _ in 0..60 {
-            buf.iter_mut().for_each(|s| *s = 0.0);
+            buf.fill(0.0);
             let _ = rig.render_offline(&mut buf);
             std::thread::sleep(std::time::Duration::from_millis(8));
         }
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         rig.midi_message(signal_drums::GM_DRUM_CHANNEL, 0x90, 35, 120);
         let mut pk = 0.0f32;
         for _ in 0..40 {
-            buf.iter_mut().for_each(|s| *s = 0.0);
+            buf.fill(0.0);
             let _ = rig.render_offline(&mut buf);
             std::thread::sleep(std::time::Duration::from_millis(6));
             pk = pk.max(buf.iter().fold(0.0, |a, s| a.max(s.abs())));

@@ -11,6 +11,7 @@ pub struct Saturator {
 }
 
 impl Saturator {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             drive: 0.0,
@@ -27,11 +28,13 @@ impl Saturator {
         self.makeup = 1.0 / self.drive_gain.sqrt();
     }
 
+    #[must_use]
     pub fn drive(&self) -> f64 {
         self.drive
     }
 
     #[inline]
+    #[must_use]
     pub fn tick(&self, input: f64) -> f64 {
         if self.drive == 0.0 {
             return input;

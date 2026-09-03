@@ -1,8 +1,8 @@
 //! Full reverb delay line with feedback loop.
 //!
-//! Ported from CloudSeedCore DelayLine.h (MIT, Ghost Note Audio).
-//! Signal flow: input + feedback → ModulatedDelay → [AllpassDiffuser]
-//! → [Biquad LowShelf] → [Biquad HighShelf] → [Lp1 Cutoff] → feedback buffer → output.
+//! Ported from `CloudSeedCore` DelayLine.h (MIT, Ghost Note Audio).
+//! Signal flow: input + feedback → `ModulatedDelay` → [`AllpassDiffuser`]
+//! → [Biquad `LowShelf`] → [Biquad `HighShelf`] → [Lp1 Cutoff] → feedback buffer → output.
 
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::denormal::flush;
@@ -29,6 +29,7 @@ pub struct ReverbLine {
 }
 
 impl ReverbLine {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut low_shelf = Biquad::new(FilterType::LowShelf, sample_rate);
         low_shelf.set_gain_db(-20.0);

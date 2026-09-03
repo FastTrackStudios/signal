@@ -1,6 +1,6 @@
 //! Cascade of modulated allpass filters for diffusion.
 //!
-//! Ported from CloudSeedCore AllpassDiffuser.h (MIT, Ghost Note Audio).
+//! Ported from `CloudSeedCore` AllpassDiffuser.h (MIT, Ghost Note Audio).
 //! Chains up to 12 modulated allpass stages in series with seed-based
 //! delay distribution: `d = pow(10, r) * 0.1 * baseDelay`.
 
@@ -22,6 +22,7 @@ pub struct AllpassDiffuser {
 }
 
 impl AllpassDiffuser {
+    #[must_use]
     pub fn new_default() -> Self {
         let filters = std::array::from_fn(|_| ModulatedAllpass::new());
         let mut d = Self {
@@ -39,6 +40,7 @@ impl AllpassDiffuser {
     }
 
     /// Create a diffuser with delay lengths derived from seed-based distribution.
+    #[must_use]
     pub fn new(delay_lengths: &[usize]) -> Self {
         let mut d = Self::new_default();
         // Set individual stage delays directly (non-seed mode)
@@ -50,6 +52,7 @@ impl AllpassDiffuser {
     }
 
     /// Create a diffuser with default delay lengths scaled by a size factor.
+    #[must_use]
     pub fn with_defaults(sample_rate: f64, size: f64) -> Self {
         let mut d = Self::new_default();
         d.sample_rate = sample_rate;
@@ -116,7 +119,7 @@ impl AllpassDiffuser {
         }
     }
 
-    /// Convenience: set modulation from rate_hz, depth, and sample_rate.
+    /// Convenience: set modulation from `rate_hz`, depth, and `sample_rate`.
     pub fn set_modulation(&mut self, rate_hz: f64, depth: f64, sample_rate: f64) {
         self.sample_rate = sample_rate;
         self.set_mod_amount(depth);
@@ -128,7 +131,7 @@ impl AllpassDiffuser {
     }
 
     /// Distribute stage LFO phases in quadrature (0°/90°/180°/270°
-    /// cycling): the BigSky Cloud scheme — heavy diffusor modulation
+    /// cycling): the `BigSky` Cloud scheme — heavy diffusor modulation
     /// without common-mode pitch pumping, because the four phases'
     /// instantaneous delay changes cancel in aggregate.
     pub fn set_quadrature_phases(&mut self) {
@@ -168,7 +171,7 @@ impl AllpassDiffuser {
         self.clear();
     }
 
-    /// CloudSeed delay distribution: `d = pow(10, r) * 0.1 * baseDelay`.
+    /// `CloudSeed` delay distribution: `d = pow(10, r) * 0.1 * baseDelay`.
     fn update_delays(&mut self) {
         for i in 0..MAX_STAGES {
             if i < self.seed_values.len() {

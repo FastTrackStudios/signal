@@ -1,8 +1,9 @@
 //! Reader for **GGD Cradle** preset snapshots — the text format GGD Modern &
-//! Massive 2 (and its siblings) save their mixer + FX in. A snapshot is a
-//! Lua-table (`key = value`, `{ … }` tables, comma-separated, `--** … **--`
-//! comment banners), obtained by exporting a `.preset` from the plugin or by
-//! decoding the VST3 chunk out of a Reaper RPP.
+//! Massive 2 (and its siblings) save their mixer + FX in.
+//!
+//! A snapshot is a Lua-table (`key = value`, `{ … }` tables, comma-separated,
+//! `--** … **--` comment banners), obtained by exporting a `.preset` from the
+//! plugin or by decoding the VST3 chunk out of a Reaper RPP.
 //!
 //! We parse the `audio.mixer` section: per-strip `level`/`pan`/`mute`/`solo`/
 //! `phase`, the `cables` mic→strip routing, and each strip's `sends` + `fx`
@@ -76,9 +77,11 @@ pub struct Strip {
     pub sends: Vec<Value>,
 }
 
-/// One FX-chain slot on a strip: the effect type, its bypass, the factory
-/// preset name it came from, and the raw `fxData` params (typed access via the
-/// helpers — MM2's param scaling is mapped onto our signal-fx at import time).
+/// One FX-chain slot on a strip: the effect type, its bypass, and the factory
+/// preset name it came from.
+///
+/// Contains the raw `fxData` params (typed access via the helpers — MM2's param
+/// scaling is mapped onto our signal-fx at import time).
 #[derive(Debug, Clone, PartialEq)]
 pub struct FxSlot {
     /// "EQ", "Modern Compressor", "Vintage Compressor", "Transient", "Drive",
@@ -167,9 +170,14 @@ pub struct Mixer {
 }
 
 /// Parse the `{ … }` table that follows a `--** <banner>: **--` marker in a
-/// Cradle snapshot. A snapshot is a sequence of such blocks (`Metadata:`,
-/// `Project info:`, `Script state:`); the live mixer lives under
-/// `Script state:`.
+/// Cradle snapshot.
+///
+/// A snapshot is a sequence of such blocks (`Metadata:`, `Project info:`,
+/// `Script state:`); the live mixer lives under `Script state:`.
+///
+/// # Errors
+///
+/// Returns an error if the banner cannot be found or if the table cannot be parsed.
 pub fn parse_block(text: &str, banner: &str) -> Result<Value, String> {
     let start = text
         .find(banner)
@@ -183,6 +191,10 @@ pub fn parse_block(text: &str, banner: &str) -> Result<Value, String> {
 }
 
 /// Parse a whole snapshot and extract its mixer (from the `Script state:` block).
+///
+/// # Errors
+///
+/// Returns an error if the mixer block cannot be found or parsed.
 pub fn parse_mixer(text: &str) -> Result<Mixer, String> {
     let info = parse_block(text, "Script state:")?;
     let mixer = info

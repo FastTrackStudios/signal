@@ -7,7 +7,8 @@ use audiocore_dsp::AudioConfig;
 /// Number of sidechain EQ bands.
 pub const SC_EQ_BANDS: usize = 6;
 
-/// One sidechain EQ band — a curve on the DETECTOR key, not the audio
+/// One sidechain EQ band — a curve on the DETECTOR key, not the audio.
+///
 /// (`fx.embed-eq.one-surface`: the comp stage's sidecar EQ). Boost a band
 /// and the compressor listens harder there; cut it and that frequency stops
 /// triggering. The classic HP/LP pair stays alongside as the coarse control.
@@ -33,6 +34,7 @@ impl Default for SidechainBand {
 }
 
 impl SidechainBand {
+    #[must_use]
     pub fn is_active(&self) -> bool {
         match self.shape {
             3 => self.freq_hz > 21.0,
@@ -69,6 +71,7 @@ pub struct CompChain {
 }
 
 impl CompChain {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             comp: super::ProC3Compressor::new(48000.0),
@@ -237,7 +240,7 @@ impl CompChain {
         self.feedback_r = 0.0;
         self.detector_l.reset();
         self.detector_r.reset();
-        for f in self.sc_eq_filters.iter_mut() {
+        for f in &mut self.sc_eq_filters {
             f.reset();
         }
     }
@@ -280,6 +283,7 @@ impl CompChain {
     }
 
     /// The sidechain EQ bands as set.
+    #[must_use]
     pub fn sidechain_eq(&self) -> &[SidechainBand; SC_EQ_BANDS] {
         &self.sc_eq
     }

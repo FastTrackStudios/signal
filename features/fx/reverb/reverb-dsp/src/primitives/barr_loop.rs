@@ -77,6 +77,7 @@ pub struct BarrLoop {
 }
 
 impl BarrLoop {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let k = sample_rate / 32_768.0;
         let sections = core::array::from_fn(|i| Section {

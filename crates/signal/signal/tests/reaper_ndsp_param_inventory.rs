@@ -5,6 +5,7 @@
 //!   cargo xtask reaper-test `reaper_ndsp_param_inventory`
 
 use std::fs;
+use std::fmt::Write;
 use std::path::PathBuf;
 
 use daw::test::reaper_test;
@@ -71,18 +72,20 @@ async fn capture_ndsp_full_parameter_lists(ctx: &ReaperTestContext) -> eyre::Res
         );
 
         let mut plugin_report = String::new();
-        plugin_report.push_str(&format!("# {plugin_name}\n"));
-        plugin_report.push_str(&format!(
+        let _ = writeln!(plugin_report, "# {plugin_name}");
+        let _ = write!(
+            plugin_report,
             "- plugin_name: {}\n- parameter_count: {}\n\n",
             info.plugin_name,
             params.len()
-        ));
+        );
         plugin_report.push_str("## Parameters\n");
         for p in &params {
-            plugin_report.push_str(&format!(
-                "- [{}] {} | value={:.6} | formatted={}\n",
+            let _ = writeln!(
+                plugin_report,
+                "- [{}] {} | value={:.6} | formatted={}",
                 p.index, p.name, p.value, p.formatted
-            ));
+            );
         }
         plugin_report.push('\n');
 
@@ -90,9 +93,9 @@ async fn capture_ndsp_full_parameter_lists(ctx: &ReaperTestContext) -> eyre::Res
         let plugin_path = report_dir.join(file_name);
         fs::write(&plugin_path, &plugin_report)?;
 
-        combined_report.push_str(&format!("## {plugin_name}\n"));
-        combined_report.push_str(&format!("- parameter_count: {}\n", params.len()));
-        combined_report.push_str(&format!("- report: {}\n\n", plugin_path.to_string_lossy()));
+        let _ = writeln!(combined_report, "## {plugin_name}");
+        let _ = writeln!(combined_report, "- parameter_count: {}", params.len());
+        let _ = write!(combined_report, "- report: {}\n\n", plugin_path.to_string_lossy());
     }
 
     let combined_path = report_dir.join("ndsp-full-parameter-list.md");

@@ -14,6 +14,7 @@
 //! wow is not locked to its rate; an envelope wah draws a flat line because
 //! nothing periodic drives it at all.
 
+use std::fmt::Write;
 use dioxus::prelude::*;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
@@ -153,8 +154,7 @@ pub fn knob_legends(profile_id: &str) -> [&'static str; 4] {
         "flanger_bbd" => ["Feedback", "Clock", "Width", "Voices"],
         "vibrato" => ["Tone", "Width", "Voices", ""],
         "vibrato_juno" => ["Brightness", "Width", "Voices", ""],
-        "trem_opto" => ["Groove", "Feel", "Accent", "Analog"],
-        "trem_stereo" => ["Groove", "Feel", "Accent", "Analog"],
+        "trem_opto" | "trem_stereo" => ["Groove", "Feel", "Accent", "Analog"],
         "trem_harmonic" => ["Groove", "Feel", "Crossover", "Analog"],
         "wah_auto" => ["Position", "Resonance", "Sensitivity", "Shape"],
         "wah_pedal" => ["Position", "Resonance", "Stages", "Shape"],
@@ -358,14 +358,14 @@ fn ShapeView(
         let x = ((i as f64 / total as f64) * span).mul_add(2.0, cx - span);
         let y = (s * half).mul_add(-2.0, cy + half);
         if i == 0 {
-            path.push_str(&format!("M {x:.1} {y:.1}"));
-            fill.push_str(&format!("M {x:.1} {:.1} L {x:.1} {y:.1}", cy + half));
+            let _ = write!(path, "M {x:.1} {y:.1}");
+            let _ = write!(fill, "M {x:.1} {:.1} L {x:.1} {y:.1}", cy + half);
         } else {
-            path.push_str(&format!(" L {x:.1} {y:.1}"));
-            fill.push_str(&format!(" L {x:.1} {y:.1}"));
+            let _ = write!(path, " L {x:.1} {y:.1}");
+            let _ = write!(fill, " L {x:.1} {y:.1}");
         }
     }
-    fill.push_str(&format!(" L {:.1} {:.1} Z", cx + span, cy + half));
+    let _ = write!(fill, " L {:.1} {:.1} Z", cx + span, cy + half);
 
     rsx! {
         svg {

@@ -63,6 +63,7 @@ pub struct Room {
 }
 
 impl Room {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let max_er = (sample_rate * 0.08) as usize; // 80ms max ER (rooms are smaller)
 
@@ -228,14 +229,14 @@ impl Room {
         // stays near zero (plain alternation leaves ~0.4 of
         // residual area because the gains decay).
         let mut sum = 0.0;
-        for t in taps_l.iter_mut() {
+        for t in &mut taps_l {
             if sum > 0.0 {
                 t.gain = -t.gain;
             }
             sum += t.gain;
         }
         sum = 0.0;
-        for t in taps_r.iter_mut() {
+        for t in &mut taps_r {
             if sum > 0.0 {
                 t.gain = -t.gain;
             }

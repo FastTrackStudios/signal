@@ -3,13 +3,14 @@
 //! Adds `log2(f / 1000) * slope` dB to every bin, so the displayed spectrum is
 //! tilted around the 1 kHz pivot. A 4.5 dB/oct tilt roughly compensates for the
 //! natural slope of music, flattening typical program material. Port of
-//! ZLEqualizer's `SpectrumTilter`.
+//! `ZLEqualizer`'s `SpectrumTilter`.
 
 pub struct SpectrumTilter {
     shift_db: Vec<f32>,
 }
 
 impl SpectrumTilter {
+    #[must_use]
     pub fn new(num_bins: usize) -> Self {
         Self {
             shift_db: vec![0.0; num_bins],

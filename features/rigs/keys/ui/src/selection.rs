@@ -34,50 +34,54 @@ pub enum Selection {
 impl Selection {
     /// The engine this selection lives under, if any — the browser's tag
     /// filter.
+    #[must_use]
     pub fn engine(&self) -> Option<&str> {
         match self {
-            Selection::None => None,
-            Selection::Engine(e) => Some(e),
-            Selection::Layer { engine, .. } | Selection::Module { engine, .. } => Some(engine),
+            Self::None => None,
+            Self::Engine(e) => Some(e),
+            Self::Layer { engine, .. } | Self::Module { engine, .. } => Some(engine),
         }
     }
 
     /// The lane a preset would load into, if the selection names one.
+    #[must_use]
     pub fn layer(&self) -> Option<&str> {
         match self {
-            Selection::Layer { layer, .. } | Selection::Module { layer, .. } => Some(layer),
+            Self::Layer { layer, .. } | Self::Module { layer, .. } => Some(layer),
             _ => None,
         }
     }
 
     /// Which module a preset would land in. A layer selection loads into its
     /// first module — a lane's preset is what module A is playing.
+    #[must_use]
     pub fn module(&self) -> u32 {
         match self {
-            Selection::Module { module, .. } => *module,
+            Self::Module { module, .. } => *module,
             _ => 0,
         }
     }
 
     /// What to call this level in the browser's header.
+    #[must_use]
     pub fn level(&self) -> &'static str {
         match self {
-            Selection::None => "Library",
-            Selection::Engine(_) => "Engine presets",
-            Selection::Layer { .. } => "Layer presets",
-            Selection::Module { .. } => "Module presets",
+            Self::None => "Library",
+            Self::Engine(_) => "Engine presets",
+            Self::Layer { .. } => "Layer presets",
+            Self::Module { .. } => "Module presets",
         }
     }
 
     /// Whether a preset of `scope` belongs at this level. A level shows its
     /// own scope and everything beneath it: a soundsource is a fine thing to
     /// put in a lane, it just fills one of its modules.
+    #[must_use]
     pub fn accepts(&self, scope: &str) -> bool {
         match self {
-            Selection::None => true,
-            Selection::Engine(_) => true,
-            Selection::Layer { .. } => scope == "layer" || scope == "module",
-            Selection::Module { .. } => scope == "module" || scope == "layer",
+            Self::None | Self::Engine(_) => true,
+            Self::Layer { .. } => scope == "layer" || scope == "module",
+            Self::Module { .. } => scope == "module" || scope == "layer",
         }
     }
 }

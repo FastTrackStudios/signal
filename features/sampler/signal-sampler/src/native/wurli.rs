@@ -2,7 +2,7 @@
 //! Wurlitzer 200A electric piano.
 //!
 //! This wraps the vendored `openwurli-dsp` `WurliEngine` (modal reed synthesis
-//! → pickup → preamp → tremolo → power amp → speaker) as the **PhysicalModel**
+//! → pickup → preamp → tremolo → power amp → speaker) as the **`PhysicalModel`**
 //! [`Soundsource`] — the first physically-modeled generator on the trait.
 //! openwurli is GPL-3.0, vendored for personal use; see
 //! `features/rigs/wurli/openwurli-dsp/`.
@@ -27,9 +27,10 @@ use signal_plugin_host::{PluginDescriptor, PluginEvents, PluginFormat};
 use crate::soundsource::{Soundsource, SoundsourceKind};
 
 /// The City Wurli voice — a polyphonic physically-modeled generator backed by
-/// `openwurli_dsp::WurliEngine`, presented as the **PhysicalModel**
-/// [`Soundsource`]. Enters the render tree through the generic
-/// [`SoundsourceLeaf`](crate::soundsource::SoundsourceLeaf) adapter.
+/// `openwurli_dsp::WurliEngine`, presented as the **`PhysicalModel`**
+/// [`Soundsource`].
+///
+/// Enters the render tree through the generic [`SoundsourceLeaf`](crate::soundsource::SoundsourceLeaf) adapter.
 pub struct NativeWurli {
     engine: WurliEngine,
     sample_rate: f64,
@@ -38,6 +39,7 @@ pub struct NativeWurli {
 }
 
 impl NativeWurli {
+    #[must_use]
     pub fn new(sample_rate: u32) -> Self {
         let sr = (sample_rate.max(1)) as f64;
         Self {
@@ -47,6 +49,7 @@ impl NativeWurli {
         }
     }
 
+    #[must_use]
     pub fn active_voices(&self) -> usize {
         self.engine.active_voice_count()
     }
@@ -155,7 +158,7 @@ mod tests {
         }
     }
 
-    /// The wurli is the PhysicalModel Soundsource, and a direct
+    /// The wurli is the `PhysicalModel` Soundsource, and a direct
     /// `note_on` (the out-of-band voice entry point) renders nonzero audio.
     #[test]
     fn soundsource_note_on_renders_nonzero_audio() {

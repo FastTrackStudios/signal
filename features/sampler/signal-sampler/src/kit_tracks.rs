@@ -98,13 +98,10 @@ impl PluginInstance for KitMicInstrument {
     ) -> Result<(), PluginError> {
         let frames = out_l.len().min(out_r.len());
         // Never block the audio thread on the dispatcher's engine lock.
-        let mut engine = match self.engine.try_lock() {
-            Ok(e) => e,
-            Err(_) => {
-                out_l[..frames].fill(0.0);
-                out_r[..frames].fill(0.0);
-                return Ok(());
-            }
+        let Ok(mut engine) = self.engine.try_lock() else {
+            out_l[..frames].fill(0.0);
+            out_r[..frames].fill(0.0);
+            return Ok(());
         };
         let want = frames * 2;
         if self.scratch.len() < want {
@@ -140,6 +137,7 @@ pub struct KitRouting {
 }
 
 impl KitRouting {
+    #[must_use]
     pub fn from_preset(preset: &crate::preset_spec::PresetSpec) -> Self {
         let mut routes: HashMap<u8, Vec<RouteTarget>> = HashMap::new();
         for r in &preset.note_routing {
@@ -157,10 +155,12 @@ impl KitRouting {
     /// The targets for `note`. An empty routing table routes every note to
     /// every piece (each engine's own zones filter), mirroring the bank's
     /// default-instrument behavior.
+    #[must_use]
     pub fn targets(&self, note: u8) -> Option<&[RouteTarget]> {
-        self.routes.get(&note).map(|v| v.as_slice())
+        self.routes.get(&note).map(Vec::as_slice)
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.routes.is_empty()
     }
@@ -237,6 +237,7 @@ pub struct KitState {
 }
 
 impl KitState {
+    #[must_use]
     pub fn piece(&self, id: &str) -> Option<&KitPiece> {
         self.pieces.iter().find(|p| p.id == id)
     }
@@ -246,7 +247,7 @@ impl KitState {
         use midicore::MidiEvent;
         match ev {
             MidiEvent::NoteOn { key, velocity, .. } => {
-                self.dispatch_note(key.get(), velocity.get())
+                self.dispatch_note(key.get(), velocity.get());
             }
             MidiEvent::NoteOff { key, .. } => {
                 let note = key.get();

@@ -39,6 +39,10 @@ pub struct Convolver {
 impl Convolver {
     /// Load a cabinet IR from a `.wav` file. Uses channel 0, converts to `f32`,
     /// and truncates to [`MAX_TAPS`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be opened, loaded, or contains no samples.
     pub fn load(path: impl AsRef<Path>) -> Result<Self, String> {
         let path = path.as_ref();
         let loaded =
@@ -92,6 +96,7 @@ impl Convolver {
     }
 
     /// Number of IR taps.
+    #[must_use]
     pub fn taps(&self) -> usize {
         self.ir.len()
     }

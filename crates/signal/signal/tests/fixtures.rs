@@ -21,6 +21,9 @@ use signal::Signal;
 
 // ─── Controller bootstrap ───────────────────────────────────────
 
+/// # Panics
+///
+/// Panics if in-memory controller bootstrap fails.
 pub async fn controller() -> Signal {
     signal::bootstrap_in_memory_controller_async()
         .await
@@ -106,6 +109,10 @@ use signal::{
 /// presets → layer → engine → rig) under the canonical `seed_id`s.
 ///
 /// Call this at the top of any test that references the JM megarig by seed id.
+///
+/// # Panics
+///
+/// Panics if saving any preset, layer, engine, or rig fails.
 pub async fn seed_jm_megarig(signal: &Signal) {
     for preset in jm_block_presets() {
         signal.block_presets().save(preset).await.unwrap();
@@ -118,15 +125,20 @@ pub async fn seed_jm_megarig(signal: &Signal) {
     signal.rigs().save(guitar_megarig()).await.unwrap();
 }
 
-/// Seed the full guitar library the higher-level tests expect: the JM megarig
-/// plus a "Worship" profile (Clean/Lead patches targeting the megarig), a song
-/// whose sections resolve, and a setlist referencing that song.
+/// Seed the full guitar library the higher-level tests expect.
+///
+/// Sets up the JM megarig plus a "Worship" profile (Clean/Lead patches targeting
+/// the megarig), a song whose sections resolve, and a setlist referencing that song.
 ///
 /// Everything targets the JM megarig (which fully resolves), so `resolve_target`
 /// succeeds for every patch/section. The old seed put the worship profile on a
 /// separate worship rig; here it targets the megarig so we only need one
 /// resolvable rig — the tests only assert the profile name, patch names/targets,
 /// and that the Clean patch drives amp gain low.
+///
+/// # Panics
+///
+/// Panics if saving profiles, songs, or setlists fails.
 pub async fn seed_guitar_library(signal: &Signal) {
     use signal::profile::{Patch, Profile};
     use signal::setlist::{Setlist, SetlistEntry};
@@ -286,8 +298,9 @@ fn megarig_patch(id: &str, name: &str, lead: bool, gain: f32) -> signal::profile
     )
 }
 
-/// Seed the full set of guitar profiles the profile/song tests expect:
-/// Worship (default Clean), Blues (default Crunch), Rock (default Drive), and
+/// Seed the full set of guitar profiles the profile/song tests expect.
+///
+/// Sets up Worship (default Clean), Blues (default Crunch), Rock (default Drive), and
 /// All-Around (default Clean, 8 named patches). Also seeds the megarig + song +
 /// setlist via [`seed_guitar_library`].
 ///
@@ -295,6 +308,10 @@ fn megarig_patch(id: &str, name: &str, lead: bool, gain: f32) -> signal::profile
 /// every patch targets the JM megarig so they all resolve, and the tests'
 /// assertions (patch counts, default-patch names, per-patch gain overrides,
 /// activate/resolve success) hold.
+///
+/// # Panics
+///
+/// Panics if saving profiles fails.
 pub async fn seed_guitar_profiles(signal: &Signal) {
     use signal::profile::Profile;
 
@@ -476,6 +493,10 @@ fn keys_rig_scene(scene_seed: &str, scene_name: &str, keys_engine_scene: &str) -
 
 /// Build + persist the Keys megarig hierarchy (block/module preset → 9 layers →
 /// 4 engines → rig) plus the "Keys Feature" profile and "Feature-Demo Song".
+///
+/// # Panics
+///
+/// Panics if saving any preset, layer, engine, rig, profile, or song fails.
 pub async fn seed_keys_megarig(signal: &Signal) {
     use signal::profile::{Patch, Profile};
     use signal::song::{Section, Song};

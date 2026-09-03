@@ -16,6 +16,9 @@ pub enum OverridePolicyError {
 }
 
 pub trait OverridePolicy {
+    /// # Errors
+    ///
+    /// Returns an error if the override is invalid for this policy.
     fn validate_override(index: usize, ov: &Override) -> Result<(), OverridePolicyError>;
 }
 
@@ -94,6 +97,9 @@ impl OverridePolicy for FreePolicy {
     }
 }
 
+/// # Errors
+///
+/// Returns an error if any override fails validation under policy `P`.
 pub fn validate_overrides<P: OverridePolicy>(
     overrides: &[Override],
 ) -> Result<(), OverridePolicyError> {

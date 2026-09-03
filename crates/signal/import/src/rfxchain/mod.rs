@@ -1,4 +1,4 @@
-//! RfxChain importer for signal-library preset directories.
+//! `RfxChain` importer for signal-library preset directories.
 //!
 //! Each signal-library block directory contains:
 //! - `preset.rfxchain` — REAPER FX chain chunk
@@ -13,7 +13,7 @@ use signal_proto::block::BlockType;
 
 use crate::types::{ImportedPresetCollection, ImportedSnapshot};
 
-/// RfxChain preset importer for signal-library directories.
+/// `RfxChain` preset importer for signal-library directories.
 pub struct RfxChainImporter;
 
 impl RfxChainImporter {
@@ -29,6 +29,10 @@ impl RfxChainImporter {
     ///     preset.rfxchain
     ///     raw.json
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the source directory cannot be read or if preset files are missing.
     pub fn scan(
         source_dir: &Path,
         block_type: BlockType,
@@ -51,9 +55,9 @@ impl RfxChainImporter {
 
         let mut entries: Vec<_> = std::fs::read_dir(source_dir)
             .wrap_err("Failed to read source directory")?
-            .filter_map(|e| e.ok())
+            .filter_map(Result::ok)
             .collect();
-        entries.sort_by_key(|e| e.file_name());
+        entries.sort_by_key(std::fs::DirEntry::file_name);
 
         for entry in entries {
             let path = entry.path();

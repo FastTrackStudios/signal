@@ -1,7 +1,7 @@
 //! Multi-tap delay line with seed-based tap positioning.
 //!
-//! Ported from CloudSeedCore MultitapDelay.h (MIT, Ghost Note Audio).
-//! Supports both manual tap placement and CloudSeed's randomized
+//! Ported from `CloudSeedCore` MultitapDelay.h (MIT, Ghost Note Audio).
+//! Supports both manual tap placement and `CloudSeed`'s randomized
 //! tap distribution with phase-randomized gains and exponential decay.
 
 use audiocore_dsp::db::db_to_linear;
@@ -36,6 +36,7 @@ pub struct MultitapDelay {
 }
 
 impl MultitapDelay {
+    #[must_use]
     pub fn new(max_delay: usize) -> Self {
         let default_len = (DEFAULT_SAMPLE_RATE * BUFFER_SECONDS) as usize;
         let mut mt = Self {
@@ -140,7 +141,7 @@ impl MultitapDelay {
         self.clear();
     }
 
-    /// CloudSeed tap generation: seed-based positions with phase-randomized gains.
+    /// `CloudSeed` tap generation: seed-based positions with phase-randomized gains.
     fn update_taps(&mut self) {
         let mut s = 0;
         for i in 0..MAX_TAPS {

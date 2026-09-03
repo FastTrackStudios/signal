@@ -57,7 +57,7 @@ const MAX_IR_SECONDS: f64 = 8.0;
 
 /// Control-rate granularity for coefficient-level updates (damping
 /// cutoff, predelay retune, motion depth). Matches the chain's
-/// SMOOTH_BLOCK: 0.67 ms at 48 kHz.
+/// `SMOOTH_BLOCK`: 0.67 ms at 48 kHz.
 const CTRL_BLOCK: u32 = 32;
 
 /// Below this a smoothed depth counts as "off" and its stage is gated out.
@@ -260,7 +260,7 @@ impl PartitionedConv {
         // Accumulate Σ_k IR[k] * Input[t - k]. Ring modulus is the
         // history length so differently-sized partition sets (during a
         // crossfade) index consistently.
-        for s in self.accumulator.iter_mut() {
+        for s in &mut self.accumulator {
             *s = Complex::new(0.0, 0.0);
         }
         let hist_len = self.input_history.len();
@@ -508,6 +508,7 @@ fn slot_idx(slot: IrSlot) -> usize {
 }
 
 impl Convolution {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut planner = RealFftPlanner::<f64>::new();
         let mut conv_l = PartitionedConv::new(&mut planner);
@@ -517,14 +518,14 @@ impl Convolution {
         let conv_lr = PartitionedConv::new(&mut planner);
         let conv_rl = PartitionedConv::new(&mut planner);
 
-        let ir_l = synthesize_ir(sample_rate, 1.5, 0xC0FFEE);
-        let ir_r = synthesize_ir(sample_rate, 1.5, 0xBADBEEF);
+        let ir_l = synthesize_ir(sample_rate, 1.5, 0x00C0_FFEE);
+        let ir_r = synthesize_ir(sample_rate, 1.5, 0x0BAD_BEEF);
         conv_l.load_ir(&ir_l);
         conv_r.load_ir(&ir_r);
         // Slot B ships with a differently-seeded velvet IR so the morph
         // is audible before the user loads anything.
-        let ir_l_b = synthesize_ir(sample_rate, 1.5, 0x5EED0B);
-        let ir_r_b = synthesize_ir(sample_rate, 1.5, 0x0DDB17);
+        let ir_l_b = synthesize_ir(sample_rate, 1.5, 0x005E_ED0B);
+        let ir_r_b = synthesize_ir(sample_rate, 1.5, 0x000D_DB17);
         conv_l_b.load_ir(&ir_l_b);
         conv_r_b.load_ir(&ir_r_b);
         let originals = [
@@ -607,7 +608,7 @@ impl Convolution {
 
     /// Replace the convolution IR in slot A. `ir_l` and `ir_r` may be
     /// different lengths (zero-padded internally) and are truncated to
-    /// MAX_IR_SECONDS.
+    /// `MAX_IR_SECONDS`.
     pub fn load_ir_stereo(&mut self, ir_l: &[f64], ir_r: &[f64]) {
         self.load_ir_stereo_slot(ir_l, ir_r, IrSlot::A);
     }
@@ -615,7 +616,7 @@ impl Convolution {
     /// Slot-addressed synchronous IR load (runs FFTs — background/setup
     /// use only).
     ///
-    /// Per the BigSky MX manual, loading a new IR resets the Impulse
+    /// Per the `BigSky` MX manual, loading a new IR resets the Impulse
     /// shaping params to defaults (the chain preserves mix).
     pub fn load_ir_stereo_slot(&mut self, ir_l: &[f64], ir_r: &[f64], slot: IrSlot) {
         let max = (self.sample_rate * MAX_IR_SECONDS) as usize;
@@ -659,6 +660,7 @@ impl Convolution {
 
     /// Cross reshape originals for the chain's reshape pump.
     #[allow(clippy::type_complexity)]
+    #[must_use]
     pub fn cross_reshape_source(&self) -> Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)> {
         if self.true_stereo {
             self.cross_originals.clone()
@@ -806,6 +808,7 @@ impl Convolution {
 
     /// Impulse shaping params currently targeted (not necessarily baked
     /// into the partitions yet — re-preparation is asynchronous).
+    #[must_use]
     pub fn impulse_params(&self) -> ImpulseParams {
         self.impulse
     }
@@ -877,6 +880,7 @@ impl Convolution {
     }
 
     /// Current modulation options (targets, not ramp positions).
+    #[must_use]
     pub fn mod_params(&self) -> ConvolutionModParams {
         self.mod_params
     }
@@ -891,16 +895,16 @@ impl Convolution {
 
     fn rebuild_synth_ir(&mut self, seconds: f64) {
         if !self.user_ir_loaded {
-            let ir_l = synthesize_ir(self.sample_rate, seconds, 0xC0FFEE);
-            let ir_r = synthesize_ir(self.sample_rate, seconds, 0xBADBEEF);
+            let ir_l = synthesize_ir(self.sample_rate, seconds, 0x00C0_FFEE);
+            let ir_r = synthesize_ir(self.sample_rate, seconds, 0x0BAD_BEEF);
             self.conv_l.load_ir(&ir_l);
             self.conv_r.load_ir(&ir_r);
             self.originals[0] = Some((Arc::new(ir_l), Arc::new(ir_r)));
             self.applied_shape[0] = ImpulseParams::default();
         }
         if !self.user_ir_loaded_b {
-            let ir_l = synthesize_ir(self.sample_rate, seconds, 0x5EED0B);
-            let ir_r = synthesize_ir(self.sample_rate, seconds, 0x0DDB17);
+            let ir_l = synthesize_ir(self.sample_rate, seconds, 0x005E_ED0B);
+            let ir_r = synthesize_ir(self.sample_rate, seconds, 0x000D_DB17);
             self.conv_l_b.load_ir(&ir_l);
             self.conv_r_b.load_ir(&ir_r);
             self.originals[1] = Some((Arc::new(ir_l), Arc::new(ir_r)));

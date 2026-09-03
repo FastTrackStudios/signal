@@ -1,4 +1,4 @@
-//! Parser for FabFilter `.ffp` text-format presets (Pro-Q 4, Pro-C 3).
+//! Parser for `FabFilter` `.ffp` text-format presets (Pro-Q 4, Pro-C 3).
 //!
 //! Text-format `.ffp` files use an INI-like structure:
 //! ```text
@@ -28,6 +28,7 @@ pub struct FfpPreset {
 /// Check whether raw bytes represent a text-format `.ffp` file.
 ///
 /// Text presets start with `[Preset]` (possibly with a UTF-8 BOM).
+#[must_use]
 pub fn is_text_format(bytes: &[u8]) -> bool {
     let s = std::str::from_utf8(bytes).unwrap_or("");
     let trimmed = s.trim_start_matches('\u{feff}').trim_start();
@@ -38,6 +39,10 @@ pub fn is_text_format(bytes: &[u8]) -> bool {
 ///
 /// Extracts Signature, Author, Description, and Tags from the `[Preset]` section,
 /// and all key=value pairs from the `[Parameters]` section.
+///
+/// # Errors
+///
+/// Returns an error if the `Signature` field is missing from the `[Preset]` section.
 pub fn parse_ffp_text(content: &str) -> eyre::Result<FfpPreset> {
     let content = content.trim_start_matches('\u{feff}');
     let mut signature = String::new();
@@ -127,7 +132,7 @@ fn param_get(params: &[(String, f64)], key: &str) -> Option<f64> {
     params.iter().find(|(k, _)| k == key).map(|(_, v)| *v)
 }
 
-/// Extract meaningful block parameters from parsed FabFilter parameters.
+/// Extract meaningful block parameters from parsed `FabFilter` parameters.
 ///
 /// Rather than dumping all 400+ band parameters, extracts only the parameters
 /// that are useful for browsing: active EQ bands, compressor controls, etc.
@@ -136,6 +141,7 @@ fn param_get(params: &[(String, f64)], key: &str) -> Option<f64> {
 /// Returns `ImportedParameter` values that include the original DAW parameter
 /// name when it differs from the shortened display name. This allows the apply
 /// path to send the correct name to `set_parameter_by_name`.
+#[must_use]
 pub fn extract_block_parameters(
     signature: &str,
     params: &[(String, f64)],
@@ -157,20 +163,19 @@ fn extract_proq_params(params: &[(String, f64)]) -> Vec<crate::types::ImportedPa
 
     // Find which bands are active
     for band in 1..=24 {
-        let used = param_get(params, &format!("Band {} Used", band)).unwrap_or(0.0);
-        let enabled = param_get(params, &format!("Band {} Enabled", band)).unwrap_or(0.0);
+        let used = param_get(params, &format!("Band {band} Used")).unwrap_or(0.0);
+        let enabled = param_get(params, &format!("Band {band} Enabled")).unwrap_or(0.0);
 
         if used < 0.5 || enabled < 0.5 {
             continue;
         }
 
-        let freq = param_get(params, &format!("Band {} Frequency", band)).unwrap_or(10.0);
-        let gain = param_get(params, &format!("Band {} Gain", band)).unwrap_or(0.0);
-        let q = param_get(params, &format!("Band {} Q", band)).unwrap_or(0.5);
-        let shape = param_get(params, &format!("Band {} Shape", band)).unwrap_or(0.0);
+        let freq = param_get(params, &format!("Band {band} Frequency")).unwrap_or(10.0);
+        let gain = param_get(params, &format!("Band {band} Gain")).unwrap_or(0.0);
+        let q = param_get(params, &format!("Band {band} Q")).unwrap_or(0.5);
+        let shape = param_get(params, &format!("Band {band} Shape")).unwrap_or(0.0);
 
         let shape_name = match shape as u32 {
-            0 => "Bell",
             1 => "Low Shelf",
             2 => "Low Cut",
             3 => "High Shelf",
@@ -260,7 +265,6 @@ fn extract_proc_params(params: &[(String, f64)]) -> Vec<crate::types::ImportedPa
     // Style (enum 0-7) — display name is decorated, daw_name preserves "Style"
     if let Some(style) = param_get(params, "Style") {
         let style_name = match style as u32 {
-            0 => "Clean",
             1 => "Classic",
             2 => "Opto",
             3 => "Vocal",

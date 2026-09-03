@@ -1,6 +1,6 @@
-//! BbdDelay — Bucket Brigade Device emulation with a true variable clock.
+//! `BbdDelay` — Bucket Brigade Device emulation with a true variable clock.
 //!
-//! The defining dBucket behavior (TimeLine MX spec): the delay line is a
+//! The defining dBucket behavior (`TimeLine` MX spec): the delay line is a
 //! fixed number of analog "stages"; delay time changes alter the read/write
 //! CLOCK RATE, not the buffer contents. Audio already in the buckets is
 //! preserved and re-pitched during time changes — sweep the time away and
@@ -24,11 +24,11 @@ use audiocore_dsp::denormal::flush;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
 
-/// dBucket voice (TimeLine MX).
+/// dBucket voice (`TimeLine` MX).
 ///
 /// `Mx` (Brig lineage) runs 8192 virtual stages — double the clock rate at
 /// any delay time, so wider bandwidth and less aliasing. `Classic`
-/// (TimeLine v1) runs 4096 stages (MN3005-style): darker, grittier.
+/// (`TimeLine` v1) runs 4096 stages (MN3005-style): darker, grittier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BbdVoice {
     #[default]
@@ -39,8 +39,8 @@ pub enum BbdVoice {
 impl BbdVoice {
     fn stages(self) -> f64 {
         match self {
-            BbdVoice::Mx => 8192.0,
-            BbdVoice::Classic => 4096.0,
+            Self::Mx => 8192.0,
+            Self::Classic => 4096.0,
         }
     }
 }
@@ -153,6 +153,7 @@ impl Default for BbdDelay {
 }
 
 impl BbdDelay {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             time_ms: 250.0,
@@ -281,6 +282,7 @@ impl BbdDelay {
         output
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }

@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = vec![0.0f32; 512 * 2];
     // Warm up so lazy samples decode.
     for _ in 0..60 {
-        buf.iter_mut().for_each(|s| *s = 0.0);
+        buf.fill(0.0);
         let _ = rig.render_offline(&mut buf);
         std::thread::sleep(std::time::Duration::from_millis(8));
     }
@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let (mut pk, mut rms, mut n) = (0.0f32, 0.0f64, 0u64);
     for _ in 0..48 {
-        buf.iter_mut().for_each(|s| *s = 0.0);
+        buf.fill(0.0);
         rig.render_offline(&mut buf)?;
         for &s in &buf {
             pk = pk.max(s.abs());

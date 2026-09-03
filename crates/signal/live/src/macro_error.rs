@@ -86,6 +86,10 @@ impl std::error::Error for MacroError {}
 ///
 /// - `Ok(())` if inputs are valid
 /// - `Err(MacroError)` if validation fails
+///
+/// # Errors
+///
+/// Returns an error if the macro bank is invalid or incomplete.
 pub fn validate_macro_bank(bank: &signal_macromod::MacroBank) -> MacroResult<()> {
     if bank.knobs.is_empty() && bank.groups.is_empty() {
         return Err(MacroError::NoBindings);

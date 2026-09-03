@@ -221,7 +221,7 @@ fn main() {
     for k in 0..=steps {
         let v = (info.max - info.min).mul_add(k as f64 / steps as f64, info.min);
         plugin.set_param(info.id, v);
-        scratch.iter_mut().for_each(|s| *s = 0.0);
+        scratch.fill(0.0);
         if plugin.process_interleaved(&mut scratch, &[], &[]).is_err() {
             eprintln!("  process failed at {v:.4}");
             break;

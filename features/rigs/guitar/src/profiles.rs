@@ -648,8 +648,9 @@ pub fn default_setlists() -> Vec<SetlistDef> {
     ]
 }
 
-/// MIDI footswitch mapping — `midi.styx`. `tap_ccs` are the five gesture
-/// switches in order (stacks 1–4 + tap tempo; hold = the hold layer);
+/// MIDI footswitch mapping — `midi.styx`.
+///
+/// `tap_ccs` are the five gesture switches in order (stacks 1–4 + tap tempo; hold = the hold layer);
 /// `direct` maps extra CCs straight onto hold-layer slots
 /// (0 Ambient / 1 FX toggle / 2 next song / 3 boost / 4 tuner).
 #[derive(Clone, Debug, Facet)]
@@ -677,8 +678,9 @@ pub fn default_midi_map() -> MidiMapDef {
     }
 }
 
-/// One keyboard binding — `keys` is "ctrl+1" / "meta+shift+t" style
-/// (modifiers ctrl/meta/shift/alt + a key name), `action` uses the rig
+/// One keyboard binding — `keys` is "ctrl+1" / "meta+shift+t" style.
+///
+/// Modifiers: ctrl/meta/shift/alt + a key name. `action` uses the rig
 /// action vocabulary: stack:N, patch:N, preset:N, song:next|prev|N,
 /// setlist:N, mode:pedals|profile|setlist, `toggle_fx`, boost, tuner,
 /// mute, tap, reload.

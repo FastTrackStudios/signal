@@ -8,12 +8,10 @@ use signal_widgets::arc::{arc_path, arc_point, SENSITIVITY, START_ANGLE, SWEEP};
 pub fn fmt_value(value: f32, unit: &str) -> String {
     match unit {
         "Hz" if value >= 1000.0 => format!("{:.1}k", value / 1000.0),
-        "Hz" => format!("{value:.0}"),
         "ms" if value >= 1000.0 => format!("{:.2}s", value / 1000.0),
-        "ms" => format!("{value:.0}"),
+        "Hz" | "ms" | "v" => format!("{value:.0}"),
         "dB" => format!("{value:+.1}"),
         "st" => format!("{value:+.0}"),
-        "v" => format!("{value:.0}"),
         "" if value.abs() < 10.0 => format!("{value:.2}"),
         _ => format!("{value:.1}"),
     }

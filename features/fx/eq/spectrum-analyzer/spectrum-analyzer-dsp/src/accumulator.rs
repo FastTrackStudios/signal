@@ -2,7 +2,7 @@
 //!
 //! When several FFT frames are available in one UI tick, their power spectra are
 //! averaged so the displayed spectrum is the mean over the tick rather than just
-//! the last frame. Port of ZLEqualizer's `SpectrumAccumulator`.
+//! the last frame. Port of `ZLEqualizer`'s `SpectrumAccumulator`.
 
 /// Accumulates squared-magnitude spectra and reports their running mean in place.
 pub struct SpectrumAccumulator {
@@ -11,6 +11,7 @@ pub struct SpectrumAccumulator {
 }
 
 impl SpectrumAccumulator {
+    #[must_use]
     pub fn new(num_bins: usize) -> Self {
         Self {
             sums: vec![0.0; num_bins],

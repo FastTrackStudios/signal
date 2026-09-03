@@ -53,6 +53,7 @@ pub struct Adsr {
 }
 
 impl Adsr {
+    #[must_use]
     pub fn new(sample_rate: f32, params: AdsrParams) -> Self {
         let mut env = Self {
             params,
@@ -100,6 +101,7 @@ impl Adsr {
         self.level = 0.0;
     }
 
+    #[must_use]
     pub fn is_idle(&self) -> bool {
         self.stage == Stage::Idle
     }

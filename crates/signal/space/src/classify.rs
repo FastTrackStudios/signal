@@ -1,8 +1,12 @@
-//! Heuristic one-shot classification — deterministic rules over the analyzer
-//! scalars (the trigger-dsp multiband intuition, offline): kick lives in the
-//! sub band, hats/cymbals in the top octave with noisy spectra, snares carry
-//! a mid body plus broadband noise, toms are tonal low-mid. Filename hints
-//! break ties (sample libraries almost always name their one-shots).
+//! Heuristic one-shot classification.
+//!
+//! Deterministic rules over the analyzer scalars (the trigger-dsp multiband
+//! intuition, offline): kick lives in the sub band, hats/cymbals in the top
+//! octave with noisy spectra, snares carry a mid body plus broadband noise,
+//! toms are tonal low-mid.
+//!
+//! Filename hints break ties (sample libraries almost always name their
+//! one-shots).
 //!
 //! An optional ONNX classifier (YAMNet-style) can replace this later; the
 //! class vocabulary is the contract, not the rules.

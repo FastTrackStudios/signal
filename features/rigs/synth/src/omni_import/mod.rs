@@ -1,7 +1,8 @@
-//! **Omnisphere patch import** — parse Spectrasonics `.prt_omn` patch files
-//! (the "`AmberPart`" XML dialect) and map them onto the composition tree from
-//! [`crate::omni`], realizing Soundsource blocks against the local
-//! soundsource extraction by name.
+//! **Omnisphere patch import.**
+//!
+//! Parse Spectrasonics `.prt_omn` patch files (the "`AmberPart`" XML dialect)
+//! and map them onto the composition tree from [`crate::omni`], realizing
+//! Soundsource blocks against the local soundsource extraction by name.
 //!
 //! Format notes (reverse-engineered from the Settings Library):
 //! - Plain XML, no declaration; root `<AmberPart><SynthEngine>…`.

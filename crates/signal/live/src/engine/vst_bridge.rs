@@ -170,10 +170,9 @@ impl MockVstBridge {
 
     /// Simulate the DAW changing a parameter externally.
     pub fn simulate_daw_change(&self, fx_id: &str, param_index: u32, value: f64) {
-        self.params
-            .lock()
-            .unwrap()
-            .insert((fx_id.to_string(), param_index), value);
+        if let Ok(mut p) = self.params.lock() {
+            p.insert((fx_id.to_string(), param_index), value);
+        }
     }
 }
 

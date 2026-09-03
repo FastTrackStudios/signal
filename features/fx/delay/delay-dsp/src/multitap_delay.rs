@@ -1,4 +1,4 @@
-//! MultiTapDelay — 8 user-editable taps (TimeLine MX MultiTap).
+//! `MultiTapDelay` — 8 user-editable taps (`TimeLine` MX `MultiTap`).
 //!
 //! Per spec/timeline-mx-reference.md: 8 taps on one delay line, each with
 //! step position, level, pan, per-tap repeats (feedback contribution),
@@ -28,7 +28,7 @@ use audiocore_dsp::smoothing::ParamSmoother;
 
 pub const MAX_TAPS: usize = 8;
 
-/// Per-tap filter type (TimeLine MX's 9 options).
+/// Per-tap filter type (`TimeLine` MX's 9 options).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TapFilter {
     #[default]
@@ -49,17 +49,17 @@ impl TapFilter {
     fn configure(self, bq: &mut Biquad, cutoff: f64, sample_rate: f64) {
         let f = cutoff.clamp(40.0, 12000.0);
         match self {
-            TapFilter::Off => {}
-            TapFilter::Lowpass => bq.set(FilterType::Lowpass, f, 0.707, sample_rate),
-            TapFilter::LowpassPeak => bq.set(FilterType::Lowpass, f, 2.5, sample_rate),
-            TapFilter::Highpass => bq.set(FilterType::Highpass, f, 0.707, sample_rate),
-            TapFilter::HighpassPeak => bq.set(FilterType::Highpass, f, 2.5, sample_rate),
-            TapFilter::Bandpass => bq.set(FilterType::Bandpass, f, 1.0, sample_rate),
-            TapFilter::BandpassPeak => bq.set(FilterType::Bandpass, f, 3.5, sample_rate),
-            TapFilter::LowShelf => {
-                bq.set(FilterType::LowShelf { gain_db: 6.0 }, f, 0.707, sample_rate)
+            Self::Off => {}
+            Self::Lowpass => bq.set(FilterType::Lowpass, f, 0.707, sample_rate),
+            Self::LowpassPeak => bq.set(FilterType::Lowpass, f, 2.5, sample_rate),
+            Self::Highpass => bq.set(FilterType::Highpass, f, 0.707, sample_rate),
+            Self::HighpassPeak => bq.set(FilterType::Highpass, f, 2.5, sample_rate),
+            Self::Bandpass => bq.set(FilterType::Bandpass, f, 1.0, sample_rate),
+            Self::BandpassPeak => bq.set(FilterType::Bandpass, f, 3.5, sample_rate),
+            Self::LowShelf => {
+                bq.set(FilterType::LowShelf { gain_db: 6.0 }, f, 0.707, sample_rate);
             }
-            TapFilter::HighShelf => bq.set(
+            Self::HighShelf => bq.set(
                 FilterType::HighShelf { gain_db: 6.0 },
                 f,
                 0.707,
@@ -116,7 +116,7 @@ impl Tap {
     /// grid's total step count: 16th = 16 steps (4 beats × 4), Triplet
     /// = 12 (4 × 3), Off = 256 free steps. DAW-style: step 1 is the
     /// pattern start (position clamps to ≥ 1/256 so the tap stays a
-    /// real read), and TimeLine's "step 65 of 256 lands on beat 2"
+    /// real read), and `TimeLine`'s "step 65 of 256 lands on beat 2"
     /// holds: (65 − 1) / 256 = 0.25.
     pub fn set_step(&mut self, step: u16, grid: TapGrid) {
         let total: u16 = match grid {
@@ -128,6 +128,7 @@ impl Tap {
         self.position = (f64::from(s - 1) / f64::from(total)).max(1.0 / 256.0);
     }
 
+    #[must_use]
     pub const fn off() -> Self {
         Self {
             enabled: false,
@@ -141,6 +142,7 @@ impl Tap {
         }
     }
 
+    #[must_use]
     pub const fn at(position: f64, level: f64) -> Self {
         Self {
             enabled: true,
@@ -173,7 +175,7 @@ pub enum TapPreset {
 }
 
 impl TapPreset {
-    /// TimeLine v1 "Classic" pattern bank, 1–16, as tap layouts.
+    /// `TimeLine` v1 "Classic" pattern bank, 1–16, as tap layouts.
     ///
     /// Only pattern 1 (simple ping-pong) and pattern 16 (early-reflection
     /// cluster) are documented; the rest are designed in the spirit of
@@ -181,6 +183,7 @@ impl TapPreset {
     /// interpretation is marked. Selecting a classic via
     /// [`MultiTapDelay::apply_classic`] also sets the 16th grid and
     /// `Input` feedback, matching the MX's auto-config on recall.
+    #[must_use]
     pub fn classic(n: u8) -> [Tap; MAX_TAPS] {
         let mut taps = [Tap::off(); MAX_TAPS];
         // Helper: enabled tap at (position, level, pan, repeats).
@@ -345,34 +348,35 @@ impl TapPreset {
         taps
     }
 
+    #[must_use]
     pub fn taps(self) -> [Tap; MAX_TAPS] {
         let mut taps = [Tap::off(); MAX_TAPS];
         match self {
-            TapPreset::Classic1PingPong => {
+            Self::Classic1PingPong => {
                 return Self::classic(1);
             }
-            TapPreset::Quarters => {
+            Self::Quarters => {
                 for (i, t) in [0.25, 0.5, 0.75, 1.0].iter().enumerate() {
                     taps[i] = Tap::at(*t, 1.0 - i as f64 * 0.2);
                 }
             }
-            TapPreset::DottedEighth => {
+            Self::DottedEighth => {
                 taps[0] = Tap::at(0.375, 0.8);
                 taps[1] = Tap::at(0.75, 0.6);
                 taps[2] = Tap::at(1.0, 1.0);
             }
-            TapPreset::Golden => {
+            Self::Golden => {
                 for (i, t) in [0.146, 0.236, 0.382, 0.618, 1.0].iter().enumerate() {
                     taps[i] = Tap::at(*t, 0.5 + 0.5 * t);
                 }
             }
-            TapPreset::EarlyReflections => {
+            Self::EarlyReflections => {
                 let positions = [0.06, 0.11, 0.17, 0.25, 0.36, 0.5, 0.71, 1.0];
                 for (i, t) in positions.iter().enumerate() {
                     taps[i] = Tap::at(*t, 0.9 - i as f64 * 0.09);
                 }
             }
-            TapPreset::Accelerando => {
+            Self::Accelerando => {
                 let positions = [0.5, 0.75, 0.875, 0.9375, 0.96875, 1.0];
                 for (i, t) in positions.iter().enumerate() {
                     taps[i] = Tap::at(*t, 0.5 + i as f64 * 0.1);
@@ -431,6 +435,7 @@ impl MultiTapDelay {
     pub const MAX_TIME_MS: f64 = 2500.0;
     const MAX_DELAY_S: f64 = 3.0;
 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             time_ms: 500.0,
@@ -658,6 +663,7 @@ impl MultiTapDelay {
         (out_l, out_r)
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }

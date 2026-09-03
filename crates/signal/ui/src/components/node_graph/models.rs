@@ -44,24 +44,26 @@ impl NodeParameter {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn with_range(mut self, min: f64, max: f64) -> Self {
         self.min = min;
         self.max = max;
         self
     }
 
+    #[must_use]
     pub fn with_unit(mut self, unit: impl Into<String>) -> Self {
         self.unit = unit.into();
         self
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn with_param_type(mut self, param_type: ParameterType) -> Self {
         self.param_type = param_type;
         self
     }
 
+    #[must_use]
     pub fn with_formatted_display(mut self, formatted: impl Into<String>) -> Self {
         self.formatted_display = Some(formatted.into());
         self
@@ -205,6 +207,7 @@ impl NodePort {
         }
     }
 
+    #[must_use]
     pub fn with_color(mut self, color: impl Into<String>) -> Self {
         self.color = Some(color.into());
         self
@@ -266,12 +269,13 @@ impl Node {
         self.widget = widget;
         self
     }
-    #[must_use] 
+    #[must_use]
     pub const fn with_bypassed(mut self, bypassed: bool) -> Self {
         self.bypassed = bypassed;
         self
     }
 
+    #[must_use]
     pub fn with_short_label(mut self, label: impl Into<String>) -> Self {
         self.short_label = Some(label.into());
         self
@@ -357,6 +361,7 @@ impl Wire {
         }
     }
 
+    #[must_use]
     pub fn with_color(mut self, color: impl Into<String>) -> Self {
         self.color = Some(color.into());
         self

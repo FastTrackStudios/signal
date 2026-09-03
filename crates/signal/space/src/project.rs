@@ -3,7 +3,11 @@
 //! euclidean) down to the map plane, normalized to 0..1.
 
 /// Reduce `data` (row-major, `count` x `dim`) to `k` principal components.
-#[must_use] 
+///
+/// # Panics
+///
+/// Panics if `data.len() != count * dim`.
+#[must_use]
 pub fn pca(data: &[f32], count: usize, dim: usize, k: usize) -> Vec<f32> {
     assert_eq!(data.len(), count * dim);
     let k = k.min(dim).min(count.max(1));
@@ -28,7 +32,7 @@ pub fn pca(data: &[f32], count: usize, dim: usize, k: usize) -> Vec<f32> {
     let mut components: Vec<Vec<f64>> = Vec::with_capacity(k);
     for comp_i in 0..k {
         let mut v: Vec<f64> = (0..dim)
-            .map(|i| (((i * 2654435761 + comp_i * 40503) % 1000) as f64 / 500.0) - 1.0)
+            .map(|i| (((i * 2_654_435_761 + comp_i * 40503) % 1000) as f64 / 500.0) - 1.0)
             .collect();
         for _ in 0..60 {
             // w = X^T (X v)

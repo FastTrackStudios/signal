@@ -14,7 +14,7 @@ use crate::modulation::{Diffuser, DuckingFollower};
 
 // r[impl delay.chain.signal-flow]
 /// Stereo mode for the delay chain.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StereoMode {
     /// Independent L/R delays.
     Stereo,
@@ -31,7 +31,7 @@ pub enum StereoMode {
 /// (matching RE-201 physical head spacing).
 ///
 /// Modes match the Neural DSP Archetype: Mateus Asato Echo module.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeadMode {
     /// Head 3 only — single repetition at longest interval.
     Mode1,
@@ -43,11 +43,11 @@ pub enum HeadMode {
     Mode4,
 }
 
-/// Tempo-sync tap division (TimeLine MX set, plus Free).
+/// Tempo-sync tap division (`TimeLine` MX set, plus Free).
 ///
 /// `GoldenRatio` and `SilverRatio` divide the quarter note by φ (≈1.618)
 /// and δ (≈2.414) respectively — repeats that never land on the grid,
-/// TimeLine MX's signature anti-rhythmic divisions.
+/// `TimeLine` MX's signature anti-rhythmic divisions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TapDivision {
     Quarter,
@@ -64,6 +64,7 @@ pub enum TapDivision {
 impl TapDivision {
     pub const COUNT: usize = 8;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             0 => Self::Quarter,
@@ -77,6 +78,7 @@ impl TapDivision {
         }
     }
 
+    #[must_use]
     pub fn to_index(self) -> usize {
         match self {
             Self::Quarter => 0,
@@ -90,6 +92,7 @@ impl TapDivision {
         }
     }
 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Quarter => "1/4",
@@ -104,6 +107,7 @@ impl TapDivision {
     }
 
     /// Delay time in ms at the given tempo; `None` for `Free`.
+    #[must_use]
     pub fn to_ms(self, bpm: f64) -> Option<f64> {
         let quarter = NoteValue::Quarter.to_ms(bpm);
         match self {
@@ -121,9 +125,9 @@ impl TapDivision {
 
 /// Full stereo delay processing chain.
 ///
-/// Signal flow: Input → Swell → InputLevel → Diffusion(loop) → Stereo Routing →
-/// Engine → Diffusion(post) → Accent → Duck → RepeatDyn → HighPass →
-/// LR Offset → Width → Pan → OutputLevel → Mix
+/// Signal flow: Input → Swell → `InputLevel` → Diffusion(loop) → Stereo Routing →
+/// Engine → Diffusion(post) → Accent → Duck → `RepeatDyn` → `HighPass` →
+/// LR Offset → Width → Pan → `OutputLevel` → Mix
 pub struct DelayChain {
     // Delay engines
     pub delay_l: DelayEngine,
@@ -146,7 +150,7 @@ pub struct DelayChain {
     pub diffusion_smear: f64,
     /// Enable ducking.
     pub ducking_enabled: bool,
-    /// Ping-pong feedback (used when stereo_mode == PingPong).
+    /// Ping-pong feedback (used when `stereo_mode` == `PingPong`).
     pub pingpong_feedback: f64,
 
     // --- New parameters ---
@@ -186,7 +190,7 @@ pub struct DelayChain {
     pub tap_div_l: TapDivision,
     /// Tap division for the right delay line (used when tempo is set).
     pub tap_div_r: TapDivision,
-    /// Swell: input-triggered fade-in time in seconds (0 = off, TimeLine
+    /// Swell: input-triggered fade-in time in seconds (0 = off, `TimeLine`
     /// range 0.10–4.0). Mix-dependent semantics (per the MX spec): at
     /// mix < full the envelope rides the WET signal behind the dry; at
     /// full wet it rides the dry signal INTO the delay (volume-pedal
@@ -197,17 +201,17 @@ pub struct DelayChain {
     /// Repeat dynamics: the tail tapers off faster than exponential.
     /// Runs IN the regeneration loop via the engines' feedback trim, so
     /// the first repeats are untouched and only the recirculation
-    /// accelerates its decay (TimeLine: "high-feedback tails cut off
+    /// accelerates its decay (`TimeLine`: "high-feedback tails cut off
     /// more abruptly").
     pub repeat_dynamics: bool,
-    /// Post-delay wet high-pass in Hz (0 = off, TimeLine range 20–900).
+    /// Post-delay wet high-pass in Hz (0 = off, `TimeLine` range 20–900).
     pub high_pass_hz: f64,
     /// Left line output pan (-1.0 hard left … 1.0 hard right).
     /// Default -1.0 preserves the classic hard-L routing.
     pub pan_l: f64,
     /// Right line output pan. Default 1.0 (hard right).
     pub pan_r: f64,
-    /// Duck GATE mode (TimeLine "Ducking Feedback"): while playing, the
+    /// Duck GATE mode (`TimeLine` "Ducking Feedback"): while playing, the
     /// REGENERATION is muted via the engines' feedback trim — repeats
     /// recirculated during playing die, so after you stop only the last
     /// note repeats. The normal sensitivity-controlled wet duck still
@@ -274,6 +278,7 @@ impl Default for DelayChain {
 }
 
 impl DelayChain {
+    #[must_use]
     pub fn new() -> Self {
         let mut lr_smoother = ParamSmoother::new(8.0);
         lr_smoother.set_time_ms(5.0, 48000.0);
@@ -1058,8 +1063,7 @@ mod tests {
             let energy: f64 = l.iter().map(|x| x * x).sum();
             assert!(
                 energy > 0.001,
-                "{:?} style should produce output in chain: energy={energy}",
-                style
+                "{style:?} style should produce output in chain: energy={energy}"
             );
         }
     }

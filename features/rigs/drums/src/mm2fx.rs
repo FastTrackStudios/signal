@@ -1,7 +1,8 @@
 //! Map a parsed MM2 (Cradle) FX slot onto one of our built-in `signal-fx`
-//! processors, wrapped as a [`HostedPlugin`] the drum mixer can host. This is
-//! the bridge that turns MM2's per-piece mix recipe into real processing on our
-//! own drum samples.
+//! processors, wrapped as a [`HostedPlugin`] the drum mixer can host.
+//!
+//! This is the bridge that turns MM2's per-piece mix recipe into real processing
+//! on our own drum samples.
 //!
 //! Coverage: EQ (parametric bands), Modern/Vintage Compressor, Limiter (→ comp
 //! with a brick-wall ratio), Reverb, Transient (`NativeTransient` dual-envelope

@@ -41,6 +41,10 @@ pub struct RetagSummary {
 
 /// Walk `root`, retag every `.signalpack` (skipping any path containing one
 /// of the `skip` substrings). Parallel via rayon.
+///
+/// # Errors
+///
+/// Returns an error if the root path is not a directory or if rewriting packs fails.
 pub fn retag_tree(
     root: &Path,
     skip: &[String],
@@ -85,14 +89,15 @@ pub fn retag_tree(
 }
 
 /// Discover packs without retagging — useful for `--dry-run` previews.
+#[must_use]
 pub fn discover_packs(root: &Path, skip: &[String]) -> Vec<PathBuf> {
     walkdir::WalkDir::new(root)
         .follow_links(false)
         .max_depth(12)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(Result::ok)
         .filter(|e| e.file_type().is_file())
-        .map(|e| e.into_path())
+        .map(walkdir::DirEntry::into_path)
         .filter(|p| {
             p.extension().is_some_and(|e| e == "signalpack")
                 && !skip.iter().any(|s| p.to_string_lossy().contains(s))
@@ -100,6 +105,7 @@ pub fn discover_packs(root: &Path, skip: &[String]) -> Vec<PathBuf> {
         .collect()
 }
 
+#[must_use]
 pub fn derive(pack_path: &Path, root: &Path) -> Derived {
     let rel = pack_path.strip_prefix(root).unwrap_or(pack_path);
     let segs: Vec<&str> = rel
@@ -206,7 +212,7 @@ pub fn derive(pack_path: &Path, root: &Path) -> Derived {
 
 fn extract_leading_bpm(name: &str) -> Option<u32> {
     let s = name.trim_start_matches(|c: char| !c.is_ascii_digit());
-    let digits: String = s.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let digits: String = s.chars().take_while(char::is_ascii_digit).collect();
     let bpm: u32 = digits.parse().ok()?;
     (40..=220).contains(&bpm).then_some(bpm)
 }
@@ -252,21 +258,21 @@ fn keys_instrument(lib: &str, pack_path: &Path) -> String {
         .to_lowercase();
     if lib == "Keyscape" {
         match () {
-            _ if stem.contains("rhodes") => "rhodes".into(),
-            _ if stem.contains("wurl") => "wurlitzer".into(),
-            _ if stem.contains("clav") => "clavinet".into(),
-            _ if stem.contains("harpsichord") => "harpsichord".into(),
-            _ if stem.contains("toy") => "toy-piano".into(),
-            _ if stem.contains("celest") => "celesta".into(),
-            _ if stem.contains("vibe") || stem.contains("vibraphone") => "vibraphone".into(),
-            _ if stem.contains("glock") => "glockenspiel".into(),
-            _ if stem.contains("mks") || stem.contains("jd-800") || stem.contains("dx") => {
+            () if stem.contains("rhodes") => "rhodes".into(),
+            () if stem.contains("wurl") => "wurlitzer".into(),
+            () if stem.contains("clav") => "clavinet".into(),
+            () if stem.contains("harpsichord") => "harpsichord".into(),
+            () if stem.contains("toy") => "toy-piano".into(),
+            () if stem.contains("celest") => "celesta".into(),
+            () if stem.contains("vibe") || stem.contains("vibraphone") => "vibraphone".into(),
+            () if stem.contains("glock") => "glockenspiel".into(),
+            () if stem.contains("mks") || stem.contains("jd-800") || stem.contains("dx") => {
                 "synth-keys".into()
             }
-            _ if stem.contains("piano") || stem.contains("grand") || stem.contains("upright") => {
+            () if stem.contains("piano") || stem.contains("grand") || stem.contains("upright") => {
                 "piano".into()
             }
-            _ => "keys".into(),
+            () => "keys".into(),
         }
     } else if lib == "Trilian" {
         "synth-bass".into()
@@ -353,18 +359,20 @@ fn orchestral_vendor(lib: &str) -> Option<&'static str> {
     }
 }
 
+#[must_use]
 pub fn render_styx_appendix(d: &Derived) -> String {
+    use std::fmt::Write;
     let mut out = String::new();
     if !d.instrument.is_empty() {
-        out.push_str(&format!("instrument {}\n", quote(&d.instrument)));
+        let _ = write!(out, "instrument {}\n", quote(&d.instrument));
     }
     if !d.category.is_empty() {
-        out.push_str(&format!("category {}\n", quote(&d.category)));
+        let _ = write!(out, "category {}\n", quote(&d.category));
     }
     if !d.style.is_empty() {
         out.push_str("style (\n");
         for s in &d.style {
-            out.push_str(&format!("    {}\n", quote(s)));
+            let _ = write!(out, "    {}\n", quote(s));
         }
         out.push_str(")\n");
     }
@@ -373,11 +381,12 @@ pub fn render_styx_appendix(d: &Derived) -> String {
         for t in &d.tags {
             // facet-styx wants one field per line.
             out.push_str("    {\n");
-            out.push_str(&format!(
+            let _ = write!(
+                out,
                 "        category @{}\n",
                 tag_category_variant(t.category)
-            ));
-            out.push_str(&format!("        value    {}\n", quote(&t.value)));
+            );
+            let _ = write!(out, "        value    {}\n", quote(&t.value));
             out.push_str("        source   @Manual\n");
             out.push_str("        weight   60\n");
             out.push_str("    }\n");

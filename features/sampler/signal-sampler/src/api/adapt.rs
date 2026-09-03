@@ -79,6 +79,7 @@ fn axis_from_controller(s: &str) -> Option<Axis> {
 /// → different legato times" means on real CSS-style data: soft+slow gets the
 /// long expressive pre-delay, hard+fast the short one, and everything between
 /// glides smoothly rather than stepping.
+#[must_use]
 pub fn pre_delay_curve(mode: &LegatoModeSpec) -> VelCurve<Seconds> {
     let mut pts: Vec<(Velocity, Seconds)> = mode
         .zones
@@ -134,7 +135,7 @@ fn legato_from_spec(spec: &LibrarySpec) -> Option<Legato> {
         })
         .collect();
     let portamento = if porta_pts.len() < 2 {
-        VelCurve::constant(porta_pts.first().map(|(_, s)| *s).unwrap_or(Seconds(0.0)))
+        VelCurve::constant(porta_pts.first().map_or(Seconds(0.0), |(_, s)| *s))
     } else {
         VelCurve::breakpoints(porta_pts)
     };
@@ -205,6 +206,7 @@ impl CacheZoneLayers {
     /// patch exposes at this note and record the resolved path, so a
     /// [`SampleSlice`] is a stable index even though the underlying lookup is
     /// `patch.resolve_zone`.
+    #[must_use]
     pub fn for_zone_note(
         patch: Arc<PlayerPatch>,
         cache: SampleCache,
@@ -260,27 +262,32 @@ impl CacheZoneLayers {
 
     /// The decoded PCM for a resolved [`SampleSlice`], from the real cache.
     /// Returns `None` on a cache miss (not yet preloaded) or a bad index.
+    #[must_use]
     pub fn pcm(&self, slice: SampleSlice) -> Option<Arc<SampleData>> {
         let path = self.paths.get(slice.index as usize)?;
         self.cache.get_loaded(path)
     }
 
     /// The resolved file path for a slice (for preload / debugging).
+    #[must_use]
     pub fn path(&self, slice: SampleSlice) -> Option<&PathBuf> {
         self.paths.get(slice.index as usize)
     }
 
     /// Dynamic-layer labels, parallel to [`dynamics`](ZoneLayers::dynamics).
+    #[must_use]
     pub fn dyn_labels(&self) -> &[String] {
         &self.dyn_labels
     }
 
     /// The anchor note this zone resolves around.
+    #[must_use]
     pub fn note(&self) -> Note {
         self.note
     }
 
     /// Borrow the backing patch (shared).
+    #[must_use]
     pub fn patch(&self) -> &Arc<PlayerPatch> {
         &self.patch
     }
@@ -325,27 +332,31 @@ fn dyn_repr_velocity(i: usize, n: usize) -> u8 {
 
 // ── Loader bound to the real cache ───────────────────────────────────────
 
-/// A real `Loader` backed by the [`SampleCache`]: `preload` warms every
-/// sample path the patch knows about (delegating to `SampleCache::preload`),
-/// `slice` returns an addressing handle. IO stays off the hot path exactly as
-/// the design doc §9 requires — `note_on`/`render` only ever touch
-/// `cache.get_loaded`, which is the lock-free read snapshot.
+/// A real `Loader` backed by the [`SampleCache`]: `preload` warms every sample
+/// path the patch knows about (delegating to `SampleCache::preload`), `slice`
+/// returns an addressing handle.
+///
+/// IO stays off the hot path exactly as the design doc §9 requires — `note_on`/`render`
+/// only ever touch `cache.get_loaded`, which is the lock-free read snapshot.
 pub struct CacheLoader {
     patch: Arc<PlayerPatch>,
     cache: SampleCache,
 }
 
 impl CacheLoader {
+    #[must_use]
     pub fn new(patch: Arc<PlayerPatch>, cache: SampleCache) -> Self {
         Self { patch, cache }
     }
 
     /// The shared cache handle (cheap clone) — hand to [`CacheZoneLayers`].
+    #[must_use]
     pub fn cache(&self) -> SampleCache {
         self.cache.clone_handle()
     }
 
     /// All sample paths the patch exposes, owned (for the centered preloader).
+    #[must_use]
     pub fn sample_paths(&self) -> Vec<PathBuf> {
         self.patch.sample_paths().cloned().collect()
     }
@@ -354,7 +365,7 @@ impl CacheLoader {
 impl super::traits::Loader for CacheLoader {
     fn preload(&self, _profile: super::traits::PreloadProfile) -> super::traits::PreloadStats {
         let paths: Vec<PathBuf> = self.patch.sample_paths().cloned().collect();
-        let stats = self.cache.preload(paths.iter().map(|p| p.as_path()));
+        let stats = self.cache.preload(paths.iter().map(PathBuf::as_path));
         super::traits::PreloadStats {
             samples: stats.loaded,
             bytes: stats.bytes,
@@ -406,6 +417,7 @@ impl InstrumentModel {
     /// ([`PlayerPatch`] is not `Clone`; the resolve methods only need `&self`,
     /// so an `Arc` is the natural shared owner). Pair it with a [`CacheLoader`]
     /// built from the same patch + cache to warm the bytes before rendering.
+    #[must_use]
     pub fn from_patch_arc(patch: Arc<PlayerPatch>, cache: SampleCache) -> Self {
         let spec_clone = patch.spec.clone();
         model_from(&spec_clone, Some((patch, cache)))
@@ -509,7 +521,6 @@ fn articulation_from_spec(
     };
     let polyphony = match a.kind {
         ArticulationKind::Legato => Polyphony::Mono,
-        ArticulationKind::OneShot => Polyphony::Unlimited,
         _ => Polyphony::Unlimited,
     };
 
@@ -671,6 +682,7 @@ impl super::engine::EngineInstrument {
     /// both reflect the same patch. A direct `InstrumentModel → SampleEngine`
     /// construction is **Phase C** (the engine would need to consume the model
     /// tree rather than the spec) — flagged, not attempted.
+    #[must_use]
     pub fn from_patch(
         patch: PlayerPatch,
         sample_rate: u32,
@@ -879,7 +891,7 @@ zones ()
         let cache = SampleCache::with_prepared(None);
         let patch_arc = Arc::new(patch);
         // Preload the one sample so get_loaded hits.
-        let stats = cache.preload(patch_arc.sample_paths().map(|p| p.as_path()));
+        let stats = cache.preload(patch_arc.sample_paths().map(PathBuf::as_path));
         assert!(stats.loaded >= 1, "expected the sine wav to preload");
 
         let layers = CacheZoneLayers::for_zone_note(

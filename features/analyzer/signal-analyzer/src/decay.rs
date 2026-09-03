@@ -32,9 +32,9 @@ impl DecayFit {
     /// The dB range fitted, and the factor that extrapolates it to 60 dB.
     fn range(self) -> (f64, f64, f64) {
         match self {
-            DecayFit::T20 => (-5.0, -25.0, 3.0),
-            DecayFit::T30 => (-5.0, -35.0, 2.0),
-            DecayFit::T10 => (-5.0, -15.0, 6.0),
+            Self::T20 => (-5.0, -25.0, 3.0),
+            Self::T30 => (-5.0, -35.0, 2.0),
+            Self::T10 => (-5.0, -15.0, 6.0),
         }
     }
 }
@@ -44,6 +44,7 @@ impl DecayFit {
 /// `edc[i]` is the energy remaining from sample `i` onward. Monotonically
 /// decreasing by construction, which is what makes the level crossings
 /// unambiguous.
+#[must_use]
 pub fn energy_decay_curve(ir: &[f32]) -> Vec<f64> {
     let mut running = 0.0f64;
     // Backwards cumulative sum of squares.
@@ -99,6 +100,7 @@ const MIN_FIT_R_SQUARED: f64 = 0.98;
 /// noisy, or simply not a decaying response at all. That is a real outcome,
 /// not an error: an honest "not measurable" beats a number extrapolated from
 /// a truncation artifact.
+#[must_use]
 pub fn reverb_time(ir: &[f32], sample_rate: f64, fit: DecayFit) -> Option<f64> {
     let edc = energy_decay_curve(ir);
     let (from_db, to_db, factor) = fit.range();
@@ -154,6 +156,7 @@ pub fn reverb_time(ir: &[f32], sample_rate: f64, fit: DecayFit) -> Option<f64> {
 /// silently declines to measure a perfectly good reverb. Trying `T20` and then
 /// `T10` keeps those in scope, at the cost of a larger extrapolation on the
 /// ones that need the fallback.
+#[must_use]
 pub fn reverb_time_best_effort(ir: &[f32], sample_rate: f64, preferred: DecayFit) -> Option<f64> {
     let mut order = vec![preferred];
     for f in [DecayFit::T20, DecayFit::T10] {
@@ -170,6 +173,7 @@ pub fn reverb_time_best_effort(ir: &[f32], sample_rate: f64, preferred: DecayFit
 ///
 /// Index matches [`OCTAVE_CENTRES_HZ`]; a band that cannot be fitted is
 /// `None` rather than a fabricated number.
+#[must_use]
 pub fn reverb_time_per_band(
     ir: &[f32],
     sample_rate: f64,
@@ -210,6 +214,7 @@ pub struct DecayBand {
 }
 
 /// Compare two impulse responses band by band.
+#[must_use]
 pub fn compare_decay(
     reference_ir: &[f32],
     candidate_ir: &[f32],
@@ -227,6 +232,7 @@ pub fn compare_decay(
 /// bands, three biquad sections each, over the whole tail. A tuning loop
 /// compares against the same reference dozens of times, so measuring it once
 /// and reusing it removes half the work from every iteration.
+#[must_use]
 pub fn compare_decay_against(
     reference_bands: &[(f64, Option<f64>)],
     candidate_ir: &[f32],

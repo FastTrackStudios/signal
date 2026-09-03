@@ -62,6 +62,11 @@ impl RigConfig {
         }
     }
 
+    /// Parse a rig config from a styx string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the styx syntax is invalid.
     pub fn from_styx(s: &str) -> eyre::Result<Self> {
         facet_styx::from_str(s).map_err(|e| eyre::eyre!("rig config parse: {e}"))
     }
@@ -72,9 +77,14 @@ impl RigConfig {
         std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/signal/plugin/rig.styx"))
     }
 
-    /// Resolve per the priority in the module docs. `Ok(None)` means "no rig
-    /// configured" (passthrough mode) — only real errors (unreadable file,
-    /// bad styx) are `Err`.
+    /// Resolve per the priority in the module docs.
+    ///
+    /// `Ok(None)` means "no rig configured" (passthrough mode) — only real
+    /// errors (unreadable file, bad styx) are `Err`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a rig file cannot be read or has invalid syntax.
     pub fn resolve() -> eyre::Result<Option<Self>> {
         if let Ok(path) = std::env::var(RIG_ENV) {
             if !path.is_empty() {
@@ -93,6 +103,10 @@ impl RigConfig {
 
     /// Load from a path: `.signalpack` → direct pack config; anything else is
     /// parsed as a [`RigConfig`] styx file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or has invalid styx syntax.
     pub fn load(path: &PathBuf) -> eyre::Result<Self> {
         let is_pack = path
             .extension()

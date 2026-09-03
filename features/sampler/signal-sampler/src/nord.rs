@@ -1,7 +1,8 @@
-//! The full **Nord Stage 4** signal routing, built as a placeholder composition
-//! tree ([`crate::rig_node`]). Every block is a placeholder (no DSP yet) — this
-//! locks the *routing* per `docs/nord-stage-4-signal-routing.md`; the `Native`
-//! DSP for each block type gets implemented one at a time afterwards.
+//! The full **Nord Stage 4** signal routing, built as a placeholder composition tree.
+//!
+//! Every block is a placeholder (no DSP yet) — this locks the *routing* per
+//! `docs/nord-stage-4-signal-routing.md`; the `Native` DSP for each block type
+//! gets implemented one at a time afterwards. Built with [`crate::rig_node`].
 //!
 //! Shape:
 //! ```text
@@ -150,10 +151,12 @@ fn keyscape_spec(instrument: &str) -> Option<String> {
     p.exists().then(|| p.to_string_lossy().into_owned())
 }
 
-/// The Nord Stage program with its Keys layers realized by real Keyscape
-/// libraries (Layer A = LA Custom C7 Grand, Layer B = Classic Rhodes).
+/// The Nord Stage program with its Keys layers realized by real Keyscape libraries.
+///
+/// Layer A = LA Custom C7 Grand, Layer B = Classic Rhodes.
 /// `None` on machines without the extraction — callers register it
 /// conditionally so [`nord_stage_preset`] stays deterministic for tests.
+#[must_use]
 pub fn nord_stage_piano_preset() -> Option<Container> {
     let grand = keyscape_spec("LA Custom C7 Grand")?;
     let rhodes = keyscape_spec("Rhodes - Classic");
@@ -210,6 +213,7 @@ fn synth_layer(name: &str) -> Container {
 
 /// The complete Nord Stage 4 program as a placeholder routing tree. Inspect with
 /// [`Container::dump`].
+#[must_use]
 pub fn nord_stage_preset() -> Container {
     build_program("Nord Stage", keys_engine())
 }
@@ -251,11 +255,13 @@ fn build_program(name: &str, keys: Container) -> Container {
         )
 }
 
-/// A small, fully-traceable **layering demo** preset showing the central-MIDI
-/// router: a keyboard split (left-hand bass / right-hand) plus an Omnisphere-
-/// style **velocity crossfade** on the right hand (a soft pad fading into a
-/// bright lead). Demonstrates **nested zones** — the right-hand key split holds
-/// two velocity-windowed layers, so gains multiply (key × velocity).
+/// A small, fully-traceable **layering demo** preset showing the central-MIDI router.
+///
+/// A keyboard split (left-hand bass / right-hand) plus an Omnisphere-style
+/// **velocity crossfade** on the right hand (a soft pad fading into a bright lead).
+/// Demonstrates **nested zones** — the right-hand key split holds two velocity-windowed
+/// layers, so gains multiply (key × velocity).
+#[must_use]
 pub fn layering_demo() -> Container {
     Container::preset("Layering Demo").add(
         Container::parallel("Keys")
@@ -290,6 +296,7 @@ pub fn layering_demo() -> Container {
 /// The **City Grand** physically-modeled piano across the full 88 keys — a
 /// single `Harmonic` (modal synthesis) native block. The voice loads its
 /// measured parameter table at runtime (see `native::modal`).
+#[must_use]
 pub fn city_grand_preset() -> Container {
     Container::preset("City Grand").add(
         Container::layer("Grand Piano")
@@ -298,9 +305,11 @@ pub fn city_grand_preset() -> Container {
     )
 }
 
-/// City Wurli — the vendored physically-modeled Wurlitzer 200A
-/// (`openwurli-dsp`) on the Formant block. The engine's native range is MIDI
-/// 33–96; the layer spans the full keyboard and the engine clamps internally.
+/// City Wurli — the vendored physically-modeled Wurlitzer 200A on the Formant block.
+///
+/// The engine's native range is MIDI 33–96; the layer spans the full keyboard and
+/// the engine clamps internally. Uses `openwurli-dsp`.
+#[must_use]
 pub fn city_wurli_preset() -> Container {
     Container::preset("City Wurli").add(
         Container::layer("Wurli")

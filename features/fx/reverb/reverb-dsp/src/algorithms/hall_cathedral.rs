@@ -40,6 +40,7 @@ pub struct HallCathedral {
 }
 
 impl HallCathedral {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let max_er = (sample_rate * 0.25) as usize; // 250ms max ER (cathedral is huge)
 

@@ -364,7 +364,7 @@ mod tests {
 
     fn noise(len: usize) -> Vec<f32> {
         // Deterministic white-ish test signal.
-        let mut x = 0x12345678u32;
+        let mut x = 0x1234_5678_u32;
         (0..len)
             .map(|_| {
                 x ^= x << 13;

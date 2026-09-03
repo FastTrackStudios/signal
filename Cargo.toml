@@ -933,6 +933,22 @@ panic = "deny"
 exit = "deny"
 as_conversions = "deny"
 
+# `disallowed_methods` is the realtime-audio guard (the list lives in
+# clippy.toml: Mutex::lock, RwLock::read/write, env::var, thread::sleep). It is
+# meaningful ONLY on code that runs on an audio callback — off the audio thread
+# every one of these calls is ordinary and correct, and "fixing" a control-plane
+# `Mutex::lock` into a `try_lock` produces strictly worse code.
+#
+# So the level follows the architecture rather than the call site: allowed by
+# default here, and re-denied crate-by-crate via `#![deny(clippy::disallowed_methods)]`
+# at the root of each processing crate (the `*-dsp` family + signal-sampler —
+# the same crates CLAUDE.md requires to be no_std-able and allocation-free on
+# the hot path). Measured at adoption: 518 of 562 findings were control-plane,
+# 44 were in processing crates, and NONE of those was a Mutex::lock — the
+# realtime discipline was already being kept, and this makes the boundary
+# explicit rather than trusting a reviewer to notice.
+disallowed_methods = "allow"
+
 # Suppressions must be deliberate and self-deleting: `#[expect(.., reason = "..")]`
 # fails the build once it stops being needed, `#[allow]` rots silently.
 allow_attributes = "deny"

@@ -17,6 +17,8 @@
 //! ├ AMBIENCE ──────┴ EFFECTS ────────────┴─────────────────────┤
 //! ```
 
+use std::fmt::Write;
+
 use dioxus::prelude::*;
 use signal_keys_proto::{KeysLayerDetail, KeysMacro};
 
@@ -149,21 +151,19 @@ pub fn ModuleEdit(
             .macros
             .iter()
             .find(|m| m.id == id)
-            .map(|m| m.value)
-            .unwrap_or(0.0)
+            .map_or(0.0, |m| m.value)
     };
     let live = |id: &str| {
         detail
             .macros
             .iter()
             .find(|m| m.id == id)
-            .map(|m| m.live)
-            .unwrap_or(false)
+            .is_some_and(|m| m.live)
     };
 
     let here = detail.modules.iter().find(|m| m.index == module).cloned();
-    let enabled = here.as_ref().map(|m| m.enabled).unwrap_or(true);
-    let mod_gain = here.as_ref().map(|m| m.gain_db).unwrap_or(0.0);
+    let enabled = here.as_ref().map_or(true, |m| m.enabled);
+    let mod_gain = here.as_ref().map_or(0.0, |m| m.gain_db);
     let has_source = !detail.patch.is_empty();
 
     // The selected envelope / LFO.
@@ -399,10 +399,8 @@ fn LfoShape(shape: f32, depth: f32, accent: String) -> Element {
         };
         let x = PAD + t * (W - 2.0 * PAD);
         let y = H / 2.0 - v * d * (H / 2.0 - PAD);
-        path.push_str(&format!(
-            "{} {x:.1} {y:.1} ",
-            if i == 0 { "M" } else { "L" }
-        ));
+        let _ = write!(path, "{} {x:.1} {y:.1} ",
+            if i == 0 { "M" } else { "L" });
     }
     rsx! {
         svg {

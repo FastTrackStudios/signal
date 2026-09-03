@@ -1,7 +1,8 @@
-//! The engine-side `SampleSpace` service: discovers built `.space` stores
-//! under the configured roots, serves map/similarity queries, auditions
-//! through the system output, and runs (re)builds off-thread with progress
-//! events.
+//! The engine-side `SampleSpace` service.
+//!
+//! Discovers built `.space` stores under the configured roots, serves
+//! map/similarity queries, auditions through the system output, and runs
+//! (re)builds off-thread with progress events.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -61,16 +62,15 @@ impl SpaceBackend {
     }
 
     /// All `.space` dirs under the roots.
-    fn discover(&self) -> Vec<PathBuf> {
+    fn discover() -> Vec<PathBuf> {
         crate::discover_spaces()
     }
 
     fn load(&self, name: &str) -> Option<Arc<Loaded>> {
-        if let Some(l) = self.inner.cache.lock().unwrap().get(name) {
+        if let Some(l) = self.inner.cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(name) {
             return Some(l.clone());
         }
-        let dir = self
-            .discover()
+        let dir = Self::discover()
             .into_iter()
             .find(|d| d.file_stem().and_then(|s| s.to_str()) == Some(name))?;
         let (space, features) = Space::load(&dir).ok()?;
@@ -123,7 +123,7 @@ fn matches(item: &crate::SpaceItem, f: &SpaceFilter) -> bool {
 
 impl SampleSpace for SpaceBackend {
     fn spaces(&self) -> Vec<SpaceInfo> {
-        self.discover()
+        Self::discover()
             .into_iter()
             .filter_map(|dir| {
                 let name = dir.file_stem()?.to_str()?.to_string();
@@ -188,7 +188,7 @@ impl SampleSpace for SpaceBackend {
         };
         // Placeholder preview path until a proper engine preview lane lands:
         // a PipeWire client per audition (default sink), previous one killed.
-        let mut slot = self.inner.audition.lock().unwrap();
+        let mut slot = self.inner.audition.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(mut old) = slot.take() {
             let _ = old.kill();
             let _ = old.wait();
@@ -211,7 +211,7 @@ impl SampleSpace for SpaceBackend {
             it.favorite = favorite;
         }
         if s.save(&l.dir, &l.features).is_ok() {
-            self.inner.cache.lock().unwrap().insert(
+            self.inner.cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(
                 space,
                 Arc::new(Loaded {
                     dir: l.dir.clone(),
@@ -249,7 +249,7 @@ impl SampleSpace for SpaceBackend {
                 );
                 match report.space.save(&dir, &report.features) {
                     Ok(()) => {
-                        b.inner.cache.lock().unwrap().remove(&name);
+                        b.inner.cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&name);
                         tracing::info!(
                             name,
                             items = report.space.items.len(),

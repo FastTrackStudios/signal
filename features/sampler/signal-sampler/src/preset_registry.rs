@@ -36,12 +36,14 @@ pub struct PresetRegistry {
 }
 
 impl PresetRegistry {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// A registry seeded with the built-in **code** presets (Nord Stage, the
     /// layering demo, …).
+    #[must_use]
     pub fn with_builtins() -> Self {
         let mut r = Self::new();
         r.register_code(crate::nord::nord_stage_preset());
@@ -110,6 +112,7 @@ impl PresetRegistry {
         }
     }
 
+    #[must_use]
     pub fn get(&self, name: &str) -> Option<&RegisteredPreset> {
         self.presets
             .iter()
@@ -117,10 +120,12 @@ impl PresetRegistry {
     }
 
     /// The composition tree for `name`, if registered.
+    #[must_use]
     pub fn tree(&self, name: &str) -> Option<&Container> {
         self.get(name).map(|p| &p.tree)
     }
 
+    #[must_use]
     pub fn names(&self) -> Vec<&str> {
         self.presets.iter().map(|p| p.name.as_str()).collect()
     }
@@ -129,10 +134,12 @@ impl PresetRegistry {
         self.presets.iter()
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.presets.len()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.presets.is_empty()
     }

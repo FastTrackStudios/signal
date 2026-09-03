@@ -1,6 +1,6 @@
 //! Reflections reverb — psychoacoustically accurate early reflections.
 //!
-//! Based on Strymon BigSky Reflections: computes geometrically-derived
+//! Based on Strymon `BigSky` Reflections: computes geometrically-derived
 //! early reflections based on source position within a modeled room.
 //! Pure early reflections with no late reverb tail.
 
@@ -21,6 +21,7 @@ pub struct Reflections {
 }
 
 impl Reflections {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let max_delay = (sample_rate * 0.3) as usize; // 300ms max reflection
 

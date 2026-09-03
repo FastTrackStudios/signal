@@ -14,6 +14,8 @@ use signal_proto::{
 pub struct LayerOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> LayerOps<S> {
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn list(&self) -> Result<Vec<Layer>, OpsError> {
         self.0
             .service
@@ -22,6 +24,8 @@ impl<S: SignalApi> LayerOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn load(&self, id: impl Into<LayerId>) -> Result<Option<Layer>, OpsError> {
         self.0
             .service
@@ -30,6 +34,8 @@ impl<S: SignalApi> LayerOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn create(
         &self,
         name: impl Into<String>,
@@ -45,6 +51,8 @@ impl<S: SignalApi> LayerOps<S> {
         Ok(layer)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn save(&self, layer: Layer) -> Result<Layer, OpsError> {
         self.0
             .service
@@ -54,6 +62,8 @@ impl<S: SignalApi> LayerOps<S> {
         Ok(layer)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn delete(&self, id: impl Into<LayerId>) -> Result<(), OpsError> {
         self.0
             .service
@@ -62,6 +72,8 @@ impl<S: SignalApi> LayerOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn load_variant(
         &self,
         layer_id: impl Into<LayerId>,
@@ -74,6 +86,8 @@ impl<S: SignalApi> LayerOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails, or if the layer cannot be loaded.
     pub async fn save_variant(
         &self,
         layer_id: impl Into<LayerId>,
@@ -91,6 +105,8 @@ impl<S: SignalApi> LayerOps<S> {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn by_tag(&self, tag: &str) -> Result<Vec<Layer>, OpsError> {
         let all = self.list().await?;
         Ok(all
@@ -99,10 +115,14 @@ impl<S: SignalApi> LayerOps<S> {
             .collect())
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn find_by_name(&self, name: &str) -> Result<Option<Layer>, OpsError> {
         Ok(self.list().await?.into_iter().find(|l| l.name == name))
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn rename(
         &self,
         id: impl Into<LayerId>,
@@ -116,6 +136,9 @@ impl<S: SignalApi> LayerOps<S> {
     }
 
     /// Load a layer, apply a closure to one of its snapshots, and save.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn update_variant(
         &self,
         layer_id: impl Into<LayerId>,
@@ -134,6 +157,9 @@ impl<S: SignalApi> LayerOps<S> {
     }
 
     /// Add a variant to a layer. Returns the updated layer, or `None` if the layer doesn't exist.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn add_variant(
         &self,
         layer_id: impl Into<LayerId>,
@@ -149,6 +175,9 @@ impl<S: SignalApi> LayerOps<S> {
     }
 
     /// Remove a variant from a layer. Returns the removed snapshot, or `None` if not found.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn remove_variant(
         &self,
         layer_id: impl Into<LayerId>,
@@ -168,6 +197,9 @@ impl<S: SignalApi> LayerOps<S> {
     }
 
     /// Duplicate a variant within a layer. Returns the new snapshot, or `None` if not found.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn duplicate_variant(
         &self,
         layer_id: impl Into<LayerId>,
@@ -192,11 +224,17 @@ impl<S: SignalApi> LayerOps<S> {
     }
 
     /// Check if a layer exists.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn exists(&self, id: impl Into<LayerId>) -> Result<bool, OpsError> {
         Ok(self.load(id).await?.is_some())
     }
 
     /// Count all layers.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails.
     pub async fn count(&self) -> Result<usize, OpsError> {
         Ok(self.list().await?.len())
     }
@@ -204,6 +242,9 @@ impl<S: SignalApi> LayerOps<S> {
     // region: --- try_* variants
 
     /// Add a variant, returning an error if the layer doesn't exist.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails, or `OpsError::NotFound` if the layer doesn't exist.
     pub async fn try_add_variant(
         &self,
         layer_id: impl Into<LayerId>,
@@ -222,6 +263,9 @@ impl<S: SignalApi> LayerOps<S> {
     }
 
     /// Remove a variant, returning an error if the layer or variant doesn't exist.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails, `OpsError::NotFound` if the layer doesn't exist, or `OpsError::VariantNotFound` if the variant doesn't exist.
     pub async fn try_remove_variant(
         &self,
         layer_id: impl Into<LayerId>,
@@ -249,6 +293,9 @@ impl<S: SignalApi> LayerOps<S> {
     }
 
     /// Duplicate a variant, returning an error if the layer or variant doesn't exist.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails, `OpsError::NotFound` if the layer doesn't exist, or `OpsError::VariantNotFound` if the variant doesn't exist.
     pub async fn try_duplicate_variant(
         &self,
         layer_id: impl Into<LayerId>,
@@ -279,6 +326,9 @@ impl<S: SignalApi> LayerOps<S> {
     }
 
     /// Save a variant within a layer, returning an error if the layer doesn't exist.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails, or `OpsError::NotFound` if the layer doesn't exist.
     pub async fn try_save_variant(
         &self,
         layer_id: impl Into<LayerId>,
@@ -302,6 +352,9 @@ impl<S: SignalApi> LayerOps<S> {
     }
 
     /// Update a variant via closure, returning an error if the layer or variant doesn't exist.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage operation fails, `OpsError::NotFound` if the layer doesn't exist, or `OpsError::VariantNotFound` if the variant doesn't exist.
     pub async fn try_update_variant(
         &self,
         layer_id: impl Into<LayerId>,

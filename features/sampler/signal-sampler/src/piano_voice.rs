@@ -71,6 +71,7 @@ impl PianoOffsets {
     ///
     /// Returns `None` for anything that is not one of the four: a pack this
     /// does not recognise should play flat, not borrow another piano's bias.
+    #[must_use]
     pub fn for_library(name: &str) -> Option<Self> {
         let n = name.to_ascii_lowercase();
         if n.contains("grandeur") {
@@ -133,6 +134,7 @@ pub struct VoiceShift {
 }
 
 impl PianoVoice {
+    #[must_use]
     pub fn new(offsets: PianoOffsets) -> Self {
         Self {
             offsets,
@@ -142,6 +144,7 @@ impl PianoVoice {
 
     /// Whether this leaves every note untouched — the fast path, and the
     /// shipped default.
+    #[must_use]
     pub fn is_identity(&self) -> bool {
         self.color + self.offsets.color == 0 && self.dynamic_range == 0
     }
@@ -165,6 +168,7 @@ impl PianoVoice {
     /// twelve-group table: `Resonance` (the pedal-down string bed) and `SSR`
     /// (sympathetic string resonance / overtones). Both are pedal-gated and
     /// both ride the Resonances control.
+    #[must_use]
     pub fn is_resonance_group(articulation: &str) -> bool {
         articulation.eq_ignore_ascii_case("Resonance") || articulation.eq_ignore_ascii_case("SSR")
     }
@@ -174,6 +178,7 @@ impl PianoVoice {
     /// `r[keys.piano.resonance.pedal-gate]`: silent unless the pedal is down
     /// AND the control is above zero — the KSP's
     /// `if ($Mas_sliAnaReso > 0 and $PedalDown = 1)`.
+    #[must_use]
     pub fn resonance_gain_db(&self, pedal_held: bool) -> Option<f32> {
         if !pedal_held || self.resonance <= 0.0 {
             return None;
@@ -195,6 +200,7 @@ impl PianoVoice {
     /// alongside Kontakt's `%VolumeTabelle` — which is why [`Self::apply`]
     /// uses the *delta* instead. Kept public because A/B-ing against real
     /// Kontakt needs the absolute figure.
+    #[must_use]
     pub fn dynamic_mdb_absolute(&self, velocity: u8, knob: i32) -> i32 {
         let vel = velocity.clamp(1, 127) as i32;
         let helper = knob
@@ -229,6 +235,7 @@ impl PianoVoice {
     ///
     /// Color needs no such treatment — its `case 0` arm is already zero, so
     /// the control is inherently relative.
+    #[must_use]
     pub fn apply(&self, velocity: u8) -> VoiceShift {
         let vel = velocity.clamp(1, 127) as i32;
 

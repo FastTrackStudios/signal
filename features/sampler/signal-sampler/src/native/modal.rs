@@ -56,7 +56,7 @@ struct Residual {
     level: f32,
 }
 
-/// One sampled cell. Unknown JSON fields (f0, B, T60, peak_rms) are ignored.
+/// One sampled cell. Unknown JSON fields (f0, B, T60, `peak_rms`) are ignored.
 #[derive(Deserialize)]
 struct Rec {
     note: u8,
@@ -162,9 +162,9 @@ fn analytic_partials(note: u8) -> Vec<Partial> {
 
 #[inline]
 fn lcg(state: &mut u32) -> f32 {
-    *state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+    *state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
     let u = (*state >> 1) as f32 / (u32::MAX as f32 / 2.0);
-    (u * 2.0 - 1.0) * 1.7320508
+    (u * 2.0 - 1.0) * 1.732_050_8
 }
 
 /// One partial of one string.
@@ -307,7 +307,7 @@ impl ResidualGen {
 
     #[inline]
     fn raw(&mut self) -> f32 {
-        let noise = lcg(&mut self.rng) / 1.7320508;
+        let noise = lcg(&mut self.rng) / 1.732_050_8;
         let mut s = 0.0;
         for (bp, g) in &mut self.filters {
             s += *g * bp.process(noise);
@@ -400,7 +400,7 @@ impl SympatheticBank {
         let r = 10f32.powf(-3.0 / (t60 * sr));
 
         let mut strings = Vec::new();
-        for (&note, layers) in table.by_note.iter() {
+        for (&note, layers) in &table.by_note {
             // representative voicing: the middle velocity layer
             let (_, v) = &layers[layers.len() / 2];
             let mut resos = Vec::new();
@@ -515,6 +515,7 @@ pub struct NativeModal {
 }
 
 impl NativeModal {
+    #[must_use]
     pub fn new(sample_rate: u32) -> Self {
         let sr = sample_rate.max(1) as f32;
         let revert = (-1.0 / (JITTER_TAU * sr)).exp();
@@ -532,6 +533,7 @@ impl NativeModal {
         }
     }
 
+    #[must_use]
     pub fn active_voices(&self) -> usize {
         self.voices.len()
     }
@@ -552,7 +554,7 @@ impl NativeModal {
         let n_strings = strings_per_note(note);
         let detunes = detune_factors(n_strings);
         let g_string = 1.0 / (n_strings as f32).sqrt();
-        let base_seed = ((note as u32) << 8) ^ (velocity as u32).wrapping_mul(2654435761);
+        let base_seed = ((note as u32) << 8) ^ (velocity as u32).wrapping_mul(2_654_435_761);
 
         let mut oscs = Vec::with_capacity(partials.len() * n_strings);
         for (si, &d) in detunes.iter().enumerate() {
@@ -585,7 +587,7 @@ impl NativeModal {
         }
 
         let vel01 = (velocity as f32 / 127.0).clamp(0.0, 1.0);
-        let f0 = partials.first().map(|p| p.freq * scale).unwrap_or(440.0);
+        let f0 = partials.first().map_or(440.0, |p| p.freq * scale);
         let center = (f0 * ATTACK_CENTER_MULT).clamp(200.0, 2000.0);
 
         let res = ResidualGen::build(&residual, scale, sr, base_seed ^ 0x5bd1_e995);
@@ -603,7 +605,7 @@ impl NativeModal {
             atk_amp: ATTACK_AMP * vel01 * vel01,
             atk_decay: (-1.0 / (ATTACK_TAU * sr)).exp(),
             atk_bpf: Biquad::bandpass(center, 0.7, sr),
-            atk_rng: base_seed ^ 0x9e3779b9,
+            atk_rng: base_seed ^ 0x9e37_79b9,
             rel_env: 1.0,
             rel_mult: 1.0,
             releasing: false,
@@ -719,7 +721,7 @@ impl PluginInstance for NativeModal {
             self.apply_midi(&ev.message);
         }
         let frames = out_l.len().min(out_r.len());
-        for s in out_l[..frames].iter_mut() {
+        for s in &mut out_l[..frames] {
             *s = 0.0;
         }
 
@@ -747,7 +749,7 @@ impl PluginInstance for NativeModal {
                     o.slow_env *= o.slow_mult;
                 }
                 if v.atk_remaining > 0 {
-                    let noise = lcg(&mut v.atk_rng) / 1.7320508;
+                    let noise = lcg(&mut v.atk_rng) / 1.732_050_8;
                     sum += v.atk_amp * v.atk_bpf.process(noise);
                     v.atk_amp *= v.atk_decay;
                     v.atk_remaining -= 1;
@@ -787,7 +789,7 @@ impl PluginInstance for NativeModal {
         // bank; the bloom is added back. State rings across blocks; the drive is
         // recomputed each block, so there's no feedback loop.
         if let Some(symp) = &mut self.symp {
-            for s in out_l[..frames].iter_mut() {
+            for s in &mut out_l[..frames] {
                 let sym = symp.process(*s);
                 *s = (*s + sym).tanh();
             }

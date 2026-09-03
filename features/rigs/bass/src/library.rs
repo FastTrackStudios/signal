@@ -1,7 +1,9 @@
 //! The runtime bass library — everything the rig plays from, as plain styx
-//! text files in one directory. Portable, git-trackable, and directly
-//! editable: an LLM (or a human in a text editor) can add presets, point
-//! them at new `.nam` captures / IR wavs, rename things — then hit reload.
+//! text files in one directory.
+//!
+//! Portable, git-trackable, and directly editable: an LLM (or a human in a
+//! text editor) can add presets, point them at new `.nam` captures / IR wavs,
+//! rename things — then hit reload.
 //!
 //! ```text
 //! <config>/signal/bass/         (override: SIGNAL_BASS_DIR)
@@ -88,10 +90,12 @@ pub struct BassLib {
     pub presets: Vec<BassPresetDef>,
 }
 
-/// `midi.styx` — how hardware switches presets. Program change `n` selects
-/// preset `n`; the prev/next CCs step through available presets
-/// (footswitch taps, edge-detected on value > 0). `port` filters which MIDI
-/// input feeds the rig (substring match; empty = omni, all inputs merged).
+/// `midi.styx` — how hardware switches presets.
+///
+/// Program change `n` selects preset `n`; the prev/next CCs step through
+/// available presets (footswitch taps, edge-detected on value > 0). `port`
+/// filters which MIDI input feeds the rig (substring match; empty = omni,
+/// all inputs merged).
 #[derive(Clone, Debug, Facet)]
 pub struct BassMidiMapDef {
     #[facet(default)]
@@ -121,10 +125,11 @@ pub const fn default_midi_map() -> BassMidiMapDef {
     }
 }
 
-/// `last-state.styx` — the rig's last-active position, flushed by the meter
-/// pump on preset/trim changes and restored on the next open, so a crash
-/// restart lands back on the same tone. Names are re-validated against the
-/// (possibly hand-edited) library on restore.
+/// `last-state.styx` — the rig's last-active position.
+///
+/// Flushed by the meter pump on preset/trim changes and restored on the next
+/// open, so a crash restart lands back on the same tone. Names are re-validated
+/// against the (possibly hand-edited) library on restore.
 #[derive(Clone, Debug, Default, Facet)]
 pub struct BassLastState {
     /// Active preset by name; empty = none saved.

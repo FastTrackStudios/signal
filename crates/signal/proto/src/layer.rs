@@ -193,11 +193,15 @@ impl LayerSnapshot {
         self
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if any override fails validation.
     pub fn validate_overrides(&self) -> Result<(), OverridePolicyError> {
         validate_overrides::<SnapshotPolicy>(&self.overrides)
     }
 
     /// Clone this snapshot with a new ID and name.
+    #[must_use]
     pub fn duplicate(
         &self,
         new_id: impl Into<LayerSnapshotId>,

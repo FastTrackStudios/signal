@@ -1,6 +1,6 @@
-//! Worship rig FabFilter preset constants.
+//! Worship rig `FabFilter` preset constants.
 //!
-//! Maps each rig block role to a specific FabFilter snapshot. All snapshot IDs
+//! Maps each rig block role to a specific `FabFilter` snapshot. All snapshot IDs
 //! are computed deterministically via the same UUID v5 scheme used at import
 //! time, so these constants remain valid across re-imports.
 //!
@@ -19,11 +19,11 @@ use uuid::Uuid;
 
 use crate::IMPORT_NAMESPACE;
 
-/// A specific FabFilter preset snapshot selected for a rig block role.
+/// A specific `FabFilter` preset snapshot selected for a rig block role.
 pub struct RigPreset {
     /// Display name for diagnostic output.
     pub name: &'static str,
-    /// FabFilter plugin name (must match the directory under `~/Documents/FabFilter/Presets/`).
+    /// `FabFilter` plugin name (must match the directory under `~/Documents/FabFilter/Presets/`).
     pub plugin_name: &'static str,
     /// Snapshot name (file stem of the `.ffp` file).
     pub snapshot_name: &'static str,
@@ -33,6 +33,7 @@ pub struct RigPreset {
 
 impl RigPreset {
     /// Compute the deterministic snapshot ID for this rig preset.
+    #[must_use]
     pub fn snapshot_id(&self) -> SnapshotId {
         let preset_uuid = Uuid::new_v5(
             &IMPORT_NAMESPACE,
@@ -162,8 +163,8 @@ mod tests {
     /// Pin the specific snapshot IDs so any upstream change is caught.
     ///
     /// These values were computed from the formula:
-    ///   preset_uuid = uuid_v5(IMPORT_NAMESPACE, "FabFilter:{plugin_name}")
-    ///   snap_uuid   = uuid_v5(preset_uuid, "{folder}/{name}")
+    ///   `preset_uuid` = `uuid_v5(IMPORT_NAMESPACE`, "`FabFilter:{plugin_name`}")
+    ///   `snap_uuid`   = `uuid_v5(preset_uuid`, "{folder}/{name}")
     ///
     /// If these values change, the rig template must be updated to match.
     #[test]
@@ -194,7 +195,7 @@ mod tests {
         }
     }
 
-    /// Verify the plugin names are all registered in the FabFilter registry.
+    /// Verify the plugin names are all registered in the `FabFilter` registry.
     #[test]
     fn all_rig_plugins_are_registered() {
         use crate::fabfilter::registry::lookup_plugin;

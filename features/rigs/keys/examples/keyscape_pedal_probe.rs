@@ -21,7 +21,9 @@ const ID: &str = "rhodes";
 fn render_peak(rig: &SamplerRig, buf: &mut [f32], blocks: usize) -> f32 {
     let mut pk = 0.0f32;
     for _ in 0..blocks {
-        buf.iter_mut().for_each(|s| *s = 0.0);
+        for s in buf.iter_mut() {
+            *s = 0.0;
+        }
         let _ = rig.render_offline(buf);
         for &s in buf.iter() {
             pk = pk.max(s.abs());

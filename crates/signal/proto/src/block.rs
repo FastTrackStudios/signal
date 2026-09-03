@@ -175,7 +175,7 @@ macro_rules! block_types {
                 })
             }
 
-            /// PascalCase variant name matching the Rust enum variant.
+            /// `PascalCase` variant name matching the Rust enum variant.
             pub const fn variant_name(self) -> &'static str {
                 match self {
                     Self::$default_variant => stringify!($default_variant),
@@ -183,7 +183,7 @@ macro_rules! block_types {
                 }
             }
 
-            /// Parse from PascalCase variant name.
+            /// Parse from `PascalCase` variant name.
             pub fn from_variant_name(s: &str) -> Option<Self> {
                 Some(match s {
                     stringify!($default_variant) => Self::$default_variant,

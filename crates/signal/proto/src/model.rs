@@ -555,13 +555,13 @@ impl ModuleBlockSource {
     /// The snapshot version this source was saved against, if known.
     ///
     /// Returns `None` for legacy data or inline blocks.
-    #[must_use] 
+    #[must_use]
     pub const fn saved_at_version(&self) -> Option<u32> {
         match self {
             Self::PresetDefault {
                 saved_at_version, ..
-            } => *saved_at_version,
-            Self::PresetSnapshot {
+            }
+            | Self::PresetSnapshot {
                 saved_at_version, ..
             } => *saved_at_version,
             Self::Inline { .. } => None,

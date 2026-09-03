@@ -1,6 +1,6 @@
-//! Parser for FabFilter's `FFBS` state container.
+//! Parser for `FabFilter`'s `FFBS` state container.
 //!
-//! This is the state FabFilter's **CLAP** plugins write into a host project —
+//! This is the state `FabFilter`'s **CLAP** plugins write into a host project —
 //! the `<STATE>` block of a REAPER `<CLAP …>` FX entry — as opposed to the
 //! `.ffp` preset files handled by [`super::parser`]. Binary `.ffp` files use
 //! the same container, so this parser serves both.
@@ -34,6 +34,7 @@ pub struct FfbsMetadata {
 
 impl FfbsMetadata {
     /// Look up a `CuSV` field by key (case-insensitive).
+    #[must_use]
     pub fn field(&self, key: &str) -> Option<&str> {
         self.fields
             .iter()
@@ -42,17 +43,19 @@ impl FfbsMetadata {
     }
 
     /// `AUTHOR`, if present.
+    #[must_use]
     pub fn author(&self) -> Option<&str> {
         self.field("AUTHOR")
     }
 
     /// `DESCRIPTION`, if present.
+    #[must_use]
     pub fn description(&self) -> Option<&str> {
         self.field("DESCRIPTION")
     }
 }
 
-/// A decoded FabFilter `FFBS` state blob.
+/// A decoded `FabFilter` `FFBS` state blob.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FfbsState {
     /// Container format version (`1` in every observed build).
@@ -78,11 +81,11 @@ pub enum FfbsError {
 impl std::fmt::Display for FfbsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FfbsError::TooShort => write!(f, "FFBS blob shorter than its 12-byte header"),
-            FfbsError::BadMagic(m) => {
+            Self::TooShort => write!(f, "FFBS blob shorter than its 12-byte header"),
+            Self::BadMagic(m) => {
                 write!(f, "not an FFBS blob: magic {:?}", String::from_utf8_lossy(m))
             }
-            FfbsError::TruncatedParams {
+            Self::TruncatedParams {
                 declared,
                 available,
             } => write!(
@@ -108,6 +111,7 @@ impl std::error::Error for FfbsError {}
 ///
 /// The trailer is omitted: it carries the preset's name and author, which the
 /// plugin does not need in order to sound like the preset.
+#[must_use]
 pub fn encode(params: &[f32]) -> Vec<u8> {
     let mut out = Vec::with_capacity(12 + params.len() * 4);
     out.extend_from_slice(b"FFBS");
@@ -119,6 +123,7 @@ pub fn encode(params: &[f32]) -> Vec<u8> {
     out
 }
 
+#[must_use]
 pub fn is_ffbs(bytes: &[u8]) -> bool {
     bytes.len() >= 4 && &bytes[..4] == b"FFBS"
 }
@@ -132,6 +137,10 @@ fn u32_at(b: &[u8], off: usize) -> Option<u32> {
 ///
 /// A malformed *trailer* is not an error — the parameter vector is the useful
 /// payload, so metadata degrades to [`FfbsMetadata::default`].
+///
+/// # Errors
+///
+/// Returns an error if the blob is too short, has an invalid magic number, or declares a float count that exceeds the available data.
 pub fn parse(bytes: &[u8]) -> Result<FfbsState, FfbsError> {
     if bytes.len() < 12 {
         return Err(FfbsError::TooShort);

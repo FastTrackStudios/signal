@@ -10,6 +10,8 @@
 //! `native`-gated [`crate::trigger_waveform`] component renders these paths
 //! and adds the interactions.
 
+use std::fmt::Write as _;
+
 /// Display dB range (0 dBFS at the top … −`RANGE_DB` at the bottom).
 /// Matches the threshold param's −60..0 dB range, so pointer y ↔ threshold
 /// dB is a straight linear map.
@@ -44,10 +46,11 @@ pub fn threshold_line_y(threshold_db: f32, h: f64) -> f64 {
     db_to_y(f64::from(threshold_db), h)
 }
 
-/// Linear peak sample (0..1) → normalized display amplitude (0..1) through
-/// dB, so the bar heights are log-scaled onto the same axis as the
-/// threshold line (a bar exactly reaches the line when its peak equals the
-/// threshold).
+/// Linear peak sample (0..1) → normalized display amplitude (0..1).
+///
+/// Converted through dB, so the bar heights are log-scaled onto the same
+/// axis as the threshold line (a bar exactly reaches the line when its peak
+/// equals the threshold).
 #[must_use] 
 pub fn scale_peak(peak: f32) -> f32 {
     if peak <= 0.0 {
@@ -64,10 +67,12 @@ pub fn scale_peaks(peaks: &[f32]) -> Vec<f32> {
     peaks.iter().map(|&p| scale_peak(p)).collect()
 }
 
-/// One SVG path containing every peak-bar column: for each normalized sample
-/// a rect subpath from the bottom edge up to its display amplitude. Columns
-/// get a 1-px-ish gap (20 % of the column) like the legacy bar rendering;
-/// near-silent columns are skipped so an idle display is an empty path.
+/// One SVG path containing every peak-bar column.
+///
+/// For each normalized sample, a rect subpath from the bottom edge up to its
+/// display amplitude. Columns get a 1-px-ish gap (20 % of the column) like
+/// the legacy bar rendering; near-silent columns are skipped so an idle
+/// display is an empty path.
 #[must_use] 
 pub fn bars_path(samples: &[f32], w: f64, h: f64) -> String {
     let n = samples.len();
@@ -84,11 +89,12 @@ pub fn bars_path(samples: &[f32], w: f64, h: f64) -> String {
         }
         let x = i as f64 * step;
         let y = h - amp * h;
-        d.push_str(&format!(
+        let _ = write!(
+            d,
             "M {x:.1} {h:.1} L {x:.1} {y:.1} L {:.1} {y:.1} L {:.1} {h:.1} Z ",
             x + bar_w,
             x + bar_w,
-        ));
+        );
     }
     d
 }

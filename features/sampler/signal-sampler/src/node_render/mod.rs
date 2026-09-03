@@ -9,7 +9,7 @@
 //! renders correctly today (placeholders = silence/thru) and gains sound as
 //! each block type's DSP is implemented.
 //!
-//! **Control-rate modulation (the ModMatrix).** Containers carry
+//! **Control-rate modulation (the `ModMatrix`).** Containers carry
 //! `ModRoute`s (`source → "Block.param"` at a depth). At compile time each
 //! route is resolved: the source becomes a `ModSource` (a modulator block —
 //! LFO/Envelope — or a MIDI performance source), the target becomes a
@@ -31,13 +31,15 @@ use crate::rig_node::{Combine, Container, RigNode, Role, Zone};
 use crate::soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent, PluginParamInfo};
 
-/// A compiled leaf's audio backend: **source slots hold their generator
-/// directly** (no [`SoundsourceLeaf`] adapter round-trip inside the tree);
-/// processors and hosted plugins keep the general [`PluginInstance`] leaf
-/// role. The adapter remains only at graph boundaries that need a true
-/// `PluginInstance` (FX chains — see `build_block`).
+/// A compiled leaf's audio backend.
+///
+/// **Source slots hold their generator directly** (no [`SoundsourceLeaf`]
+/// adapter round-trip inside the tree); processors and hosted plugins keep
+/// the general [`PluginInstance`] leaf role. The adapter remains only at
+/// graph boundaries that need a true `PluginInstance` (FX chains — see
+/// `build_block`).
 pub enum LeafBackend {
-    /// A generator (Oscillator / Wavetable / Sample / PhysicalModel / Audio).
+    /// A generator (Oscillator / Wavetable / Sample / `PhysicalModel` / Audio).
     Source(Box<dyn Soundsource>),
     /// A processor or hosted plugin — the general leaf.
     Plugin(Box<dyn PluginInstance>),
@@ -45,19 +47,20 @@ pub enum LeafBackend {
 
 impl LeafBackend {
     /// The generator kind when this leaf is a source slot.
+    #[must_use] 
     pub fn soundsource_kind(&self) -> Option<SoundsourceKind> {
         match self {
-            LeafBackend::Source(s) => Some(s.kind()),
-            LeafBackend::Plugin(_) => None,
+            Self::Source(s) => Some(s.kind()),
+            Self::Plugin(_) => None,
         }
     }
 
     fn prepare(&mut self, sample_rate: f64, block_size: u32) {
         match self {
-            LeafBackend::Source(s) => {
+            Self::Source(s) => {
                 s.prepare(sample_rate.max(1.0) as f32, block_size as usize);
             }
-            LeafBackend::Plugin(p) => {
+            Self::Plugin(p) => {
                 let _ = p.prepare(sample_rate, block_size);
             }
         }
@@ -72,8 +75,8 @@ impl LeafBackend {
         events: &PluginEvents<'_>,
     ) {
         match self {
-            LeafBackend::Source(s) => s.render(in_l, in_r, out_l, out_r, events),
-            LeafBackend::Plugin(p) => {
+            Self::Source(s) => s.render(in_l, in_r, out_l, out_r, events),
+            Self::Plugin(p) => {
                 let _ = p.process_block(in_l, in_r, out_l, out_r, events);
             }
         }
@@ -84,8 +87,8 @@ impl LeafBackend {
     /// already report live state through `Soundsource::params`.
     fn params_snapshot(&mut self) -> Vec<PluginParamInfo> {
         match self {
-            LeafBackend::Source(s) => s.params(),
-            LeafBackend::Plugin(p) => {
+            Self::Source(s) => s.params(),
+            Self::Plugin(p) => {
                 let mut ps = p.params();
                 for info in &mut ps {
                     if let Some(v) = p.param_value(info.id) {
@@ -126,12 +129,14 @@ pub(crate) fn build_leaf_backend(block: &RigBlock, sample_rate: u32) -> Option<L
     }
 }
 
-/// Build the audio backend for one block as a render-tree
-/// [`PluginInstance`], or `None` when the block is a placeholder or an
-/// unimplemented `Native` type (→ pass-through). Sources are wrapped in the
+/// Build the audio backend for one block as a render-tree [`PluginInstance`].
+///
+/// `None` when the block is a placeholder or an unimplemented `Native` type
+/// (→ pass-through). Sources are wrapped in the
 /// generic [`SoundsourceLeaf`] — this is the graph-boundary form; the
 /// compiled tree itself uses `build_leaf_backend` and holds sources
 /// directly.
+#[must_use] 
 pub fn build_node_backend(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn PluginInstance>> {
     build_leaf_backend(block, sample_rate).map(|backend| match backend {
         LeafBackend::Source(src) => {
@@ -158,13 +163,13 @@ pub enum RenderNode {
         inst: Option<LeafBackend>,
     },
     /// Children chained in order.
-    Serial(Vec<RenderNode>),
+    Serial(Vec<Self>),
     /// Children summed.
-    Parallel(Vec<RenderNode>),
+    Parallel(Vec<Self>),
     /// A keyboard-routed subtree: incoming MIDI is filtered + velocity-scaled by
     /// the [`Zone`] (key split + velocity crossfade) before reaching `inner`.
     /// This is the central-MIDI-input router, expressed in the render tree.
-    Zoned { zone: Zone, inner: Box<RenderNode> },
+    Zoned { zone: Zone, inner: Box<Self> },
     /// Container volume: input trim applied before `inner`, output fader after.
     Gain {
         input: f32,
@@ -179,23 +184,23 @@ pub enum RenderNode {
         /// audio thread with its own decay (see `METER_RELEASE_S`) so any
         /// number of readers can sample it without stealing each other's peak.
         meter: Option<Arc<AtomicU32>>,
-        inner: Box<RenderNode>,
+        inner: Box<Self>,
     },
     /// A subtree whose output also feeds one or more send buses (unity gain).
     SendTap {
         buses: Vec<usize>,
-        inner: Box<RenderNode>,
+        inner: Box<Self>,
     },
     /// A send-bus **return**: `inner` processes the bus content and its
     /// output is summed with the pass-through main signal (send/return
     /// semantics — the main chain is not re-processed by the return).
-    BusInject { bus: usize, inner: Box<RenderNode> },
+    BusInject { bus: usize, inner: Box<Self> },
     /// The tree root when any mod routes or send buses resolved: ticks the
     /// [`ModEngine`] each block and threads its parameter writes + bus
     /// buffers down the tree.
     Modulated {
         engine: Box<ModEngine>,
-        inner: Box<RenderNode>,
+        inner: Box<Self>,
     },
 }
 
@@ -216,15 +221,17 @@ const METER_RELEASE_S: f32 = 0.3;
 /// out only makes the fall-back visibly faster or slower, never wrong.
 const METER_RATE_HZ: f32 = 48_000.0;
 
-/// How a live cell is addressed: **role and name together**. Name alone is
-/// not an address — a one-lane engine is conventionally named after its lane
+/// How a live cell is addressed: **role and name together**.
+///
+/// Name alone is not an address — a one-lane engine is conventionally named after its lane
 /// ("Pad" holding "Pad"), and keying by name gave the engine and its layer the
 /// same cell, so whichever the mixer wrote last silently won (the lane's mute,
 /// solo and fader all lost to the engine's trim).
 pub type CellId = (Role, String);
 
-/// Live fader + meter cells for a compiled tree, keyed by [`CellId`] (Engine,
-/// Layer and module containers get one each). A mixer writes linear gain into
+/// Live fader + meter cells for a compiled tree, keyed by [`CellId`].
+///
+/// Engine, Layer and module containers get one each. A mixer writes linear gain into
 /// the fader cells to ride faders and mute lanes with no recompile, and reads
 /// the meter cells to draw what each container is putting out — see
 /// [`RenderNode::Gain`].
@@ -236,11 +243,13 @@ pub struct GainCells {
 
 impl GainCells {
     /// The cell for one container, if the tree had it.
+    #[must_use] 
     pub fn get(&self, role: Role, name: &str) -> Option<&Arc<AtomicU32>> {
         self.gains.get(&(role, name.to_string()))
     }
 
     /// Set a container's live gain (linear; `0.0` = muted).
+    #[must_use] 
     pub fn set(&self, role: Role, name: &str, gain: f32) -> bool {
         match self.gains.get(&(role, name.to_string())) {
             Some(cell) => {
@@ -258,15 +267,16 @@ impl GainCells {
 
     /// A container's post-fader peak (linear, already decaying) — `0.0` when
     /// the tree has no such container.
+    #[must_use] 
     pub fn peak(&self, role: Role, name: &str) -> f32 {
         self.peaks
             .get(&(role, name.to_string()))
-            .map(|c| f32::from_bits(c.load(Ordering::Relaxed)))
-            .unwrap_or(0.0)
+            .map_or(0.0, |c| f32::from_bits(c.load(Ordering::Relaxed)))
     }
 
     /// Every metered container and its current peak — the payload a mixer
     /// publishes at meter rate.
+    #[must_use] 
     pub fn peaks(&self) -> Vec<(Role, String, f32)> {
         self.peaks
             .iter()
@@ -283,15 +293,17 @@ impl GainCells {
 
 impl RenderNode {
     /// Compile a container tree into a render tree at `sample_rate`,
-    /// resolving its ModMatrix routes. A container with a non-full [`Zone`]
+    /// resolving its `ModMatrix` routes. A container with a non-full [`Zone`]
     /// is wrapped in [`RenderNode::Zoned`] so only its in-window notes reach it.
-    pub fn compile(container: &Container, sample_rate: u32) -> RenderNode {
+    #[must_use] 
+    pub fn compile(container: &Container, sample_rate: u32) -> Self {
         Self::compile_with_cells(container, sample_rate).0
     }
 
     /// As [`compile`](Self::compile), also returning the [`GainCells`] for the
     /// tree's Engine/Layer containers — the mixer's live fader handles.
-    pub fn compile_with_cells(container: &Container, sample_rate: u32) -> (RenderNode, GainCells) {
+    #[must_use] 
+    pub fn compile_with_cells(container: &Container, sample_rate: u32) -> (Self, GainCells) {
         let mut mc = ModCompiler::new(sample_rate);
         mc.collect_buses(container);
         let mut cells = GainCells::default();
@@ -300,17 +312,17 @@ impl RenderNode {
     }
 
     fn finish(
-        root: RenderNode,
+        root: Self,
         mc: ModCompiler,
         container: &Container,
         sample_rate: u32,
-    ) -> RenderNode {
+    ) -> Self {
         // Always wrap: the ModEngine is also the tree's live-edit address
         // book (leaf/source registries + parameter overlay), so even a
         // route-less tree keeps it — an empty tick is a few clears.
         let bus_count = mc.buses.len();
         let (leaf_names, leaf_params): (Vec<_>, Vec<_>) = mc.leaves.into_iter().unzip();
-        RenderNode::Modulated {
+        Self::Modulated {
             engine: Box::new(ModEngine {
                 sources: mc.sources,
                 source_paths: mc.source_paths,
@@ -337,10 +349,10 @@ impl RenderNode {
         sample_rate: u32,
         mc: &mut ModCompiler,
         cells: &mut GainCells,
-    ) -> RenderNode {
+    ) -> Self {
         // A bypassed subtree renders as a pass-through (no leaves, no routes).
         if container.bypassed {
-            return RenderNode::Serial(Vec::new());
+            return Self::Serial(Vec::new());
         }
         // Bring this container's modulators into scope (its name is on the
         // path first, so their live address includes this container).
@@ -367,13 +379,13 @@ impl RenderNode {
         mc.path.pop();
 
         let base = match container.combine {
-            Combine::Serial => RenderNode::Serial(kids),
-            Combine::Parallel => RenderNode::Parallel(kids),
+            Combine::Serial => Self::Serial(kids),
+            Combine::Parallel => Self::Parallel(kids),
         };
         let mut node = if container.zone.is_full() {
             base
         } else {
-            RenderNode::Zoned {
+            Self::Zoned {
                 zone: container.zone,
                 inner: Box::new(base),
             }
@@ -400,7 +412,7 @@ impl RenderNode {
                 cells.peaks.insert(id, cell.clone());
                 cell
             });
-            node = RenderNode::Gain {
+            node = Self::Gain {
                 input: 10f32.powf(container.input_db / 20.0),
                 output: 10f32.powf(container.output_db / 20.0),
                 cell,
@@ -410,7 +422,7 @@ impl RenderNode {
         }
         // This container is a send target → it becomes a bus return.
         if let Some(bus) = mc.bus_id(&container.name) {
-            node = RenderNode::BusInject {
+            node = Self::BusInject {
                 bus,
                 inner: Box::new(node),
             };
@@ -422,7 +434,7 @@ impl RenderNode {
             .filter_map(|s| mc.bus_id(&s.target))
             .collect();
         if !taps.is_empty() {
-            node = RenderNode::SendTap {
+            node = Self::SendTap {
                 buses: taps,
                 inner: Box::new(node),
             };
@@ -435,7 +447,7 @@ impl RenderNode {
         sample_rate: u32,
         mc: &mut ModCompiler,
         cells: &mut GainCells,
-    ) -> RenderNode {
+    ) -> Self {
         match node {
             RigNode::Block { block: b } => {
                 let mut inst = build_leaf_backend(b, sample_rate);
@@ -443,15 +455,15 @@ impl RenderNode {
                 // block params applied) — routes modulate around these bases.
                 let params = inst
                     .as_mut()
-                    .map(|i| i.params_snapshot())
+                    .map(LeafBackend::params_snapshot)
                     .unwrap_or_default();
                 let id = mc.leaves.len();
                 mc.leaves.push((b.display_name().to_lowercase(), params));
                 mc.leaf_paths.push(mc.path.clone());
-                let leaf = RenderNode::Leaf { id, inst };
+                let leaf = Self::Leaf { id, inst };
                 // A block can also be a send target (e.g. the global Rotary).
                 match mc.bus_id(&b.display_name()) {
-                    Some(bus) => RenderNode::BusInject {
+                    Some(bus) => Self::BusInject {
                         bus,
                         inner: Box::new(leaf),
                     },
@@ -475,7 +487,7 @@ impl RenderNode {
 
     fn root_engine(&mut self) -> Option<&mut ModEngine> {
         match self {
-            RenderNode::Modulated { engine, .. } => Some(engine),
+            Self::Modulated { engine, .. } => Some(engine),
             _ => None,
         }
     }
@@ -485,16 +497,14 @@ impl RenderNode {
     /// the next set; modulation routes on the same parameter ride on top.
     pub fn set_leaf_param(&mut self, module: &str, leaf: &str, param: &str, value: f64) -> bool {
         self.root_engine()
-            .map(|e| e.set_leaf_param(module, leaf, param, value))
-            .unwrap_or(false)
+            .is_some_and(|e| e.set_leaf_param(module, leaf, param, value))
     }
 
     /// Live-update a modulator envelope's ADSR ("amp env" / "filter env"),
     /// addressed by its owning `module` container.
     pub fn set_env(&mut self, module: &str, name: &str, params: crate::native::AdsrParams) -> bool {
         self.root_engine()
-            .map(|e| e.set_env(module, name, params))
-            .unwrap_or(false)
+            .is_some_and(|e| e.set_env(module, name, params))
     }
 
     /// Live-update a modulation route's depth (e.g. Filter Env → cutoff
@@ -508,8 +518,7 @@ impl RenderNode {
         depth: f32,
     ) -> bool {
         self.root_engine()
-            .map(|e| e.set_route_depth(module, source, leaf, param, depth))
-            .unwrap_or(false)
+            .is_some_and(|e| e.set_route_depth(module, source, leaf, param, depth))
     }
 
     /// Run `f` against the sampler source instance of `module`'s leaf named
@@ -542,37 +551,38 @@ impl RenderNode {
     /// The leaf backend behind leaf `id`, if present in this subtree.
     fn leaf_backend_mut(&mut self, id: usize) -> Option<&mut LeafBackend> {
         match self {
-            RenderNode::Leaf { id: lid, inst } if *lid == id => inst.as_mut(),
-            RenderNode::Leaf { .. } => None,
-            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+            Self::Leaf { id: lid, inst } if *lid == id => inst.as_mut(),
+            Self::Leaf { .. } => None,
+            Self::Serial(v) | Self::Parallel(v) => {
                 v.iter_mut().find_map(|n| n.leaf_backend_mut(id))
             }
-            RenderNode::Zoned { inner, .. }
-            | RenderNode::Gain { inner, .. }
-            | RenderNode::Modulated { inner, .. }
-            | RenderNode::BusInject { inner, .. }
-            | RenderNode::SendTap { inner, .. } => inner.leaf_backend_mut(id),
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::BusInject { inner, .. }
+            | Self::SendTap { inner, .. } => inner.leaf_backend_mut(id),
         }
     }
 
     /// Prepare every leaf processor for `sample_rate` / `block_size`.
     pub fn prepare(&mut self, sample_rate: f64, block_size: u32) {
         match self {
-            RenderNode::Leaf {
+            Self::Leaf {
                 inst: Some(inst), ..
             } => {
                 inst.prepare(sample_rate, block_size);
             }
-            RenderNode::Leaf { inst: None, .. } => {}
-            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
-                v.iter_mut()
-                    .for_each(|n| n.prepare(sample_rate, block_size));
+            Self::Leaf { inst: None, .. } => {}
+            Self::Serial(v) | Self::Parallel(v) => {
+                for n in v.iter_mut() {
+                    n.prepare(sample_rate, block_size);
+                }
             }
-            RenderNode::Zoned { inner, .. }
-            | RenderNode::Gain { inner, .. }
-            | RenderNode::SendTap { inner, .. }
-            | RenderNode::BusInject { inner, .. } => inner.prepare(sample_rate, block_size),
-            RenderNode::Modulated { engine, inner } => {
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.prepare(sample_rate, block_size),
+            Self::Modulated { engine, inner } => {
                 inner.prepare(sample_rate, block_size);
                 engine.prepare(sample_rate, inner.leaf_count());
             }
@@ -582,30 +592,31 @@ impl RenderNode {
     /// Total leaves (placeholder or live) — sizes the mod write table.
     fn leaf_count(&self) -> usize {
         match self {
-            RenderNode::Leaf { .. } => 1,
-            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
-                v.iter().map(|n| n.leaf_count()).sum()
+            Self::Leaf { .. } => 1,
+            Self::Serial(v) | Self::Parallel(v) => {
+                v.iter().map(Self::leaf_count).sum()
             }
-            RenderNode::Zoned { inner, .. }
-            | RenderNode::Modulated { inner, .. }
-            | RenderNode::Gain { inner, .. }
-            | RenderNode::SendTap { inner, .. }
-            | RenderNode::BusInject { inner, .. } => inner.leaf_count(),
+            Self::Zoned { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.leaf_count(),
         }
     }
 
     /// Count the leaf processors that actually have a backend (for tests/metering).
+    #[must_use] 
     pub fn live_leaves(&self) -> usize {
         match self {
-            RenderNode::Leaf { inst, .. } => inst.is_some() as usize,
-            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
-                v.iter().map(|n| n.live_leaves()).sum()
+            Self::Leaf { inst, .. } => inst.is_some() as usize,
+            Self::Serial(v) | Self::Parallel(v) => {
+                v.iter().map(Self::live_leaves).sum()
             }
-            RenderNode::Zoned { inner, .. }
-            | RenderNode::Modulated { inner, .. }
-            | RenderNode::Gain { inner, .. }
-            | RenderNode::SendTap { inner, .. }
-            | RenderNode::BusInject { inner, .. } => inner.live_leaves(),
+            Self::Zoned { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.live_leaves(),
         }
     }
 
@@ -617,7 +628,7 @@ impl RenderNode {
     /// zone filters out warms nothing behind it.
     pub fn warm_note_samples(&mut self, note: u8, velocity: u8) {
         match self {
-            RenderNode::Leaf {
+            Self::Leaf {
                 inst: Some(LeafBackend::Source(src)),
                 ..
             } => {
@@ -644,27 +655,28 @@ impl RenderNode {
                     }
                 }
             }
-            RenderNode::Leaf { .. } => {}
-            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
-                v.iter_mut()
-                    .for_each(|n| n.warm_note_samples(note, velocity));
+            Self::Leaf { .. } => {}
+            Self::Serial(v) | Self::Parallel(v) => {
+                for n in v.iter_mut() {
+                    n.warm_note_samples(note, velocity);
+                }
             }
-            RenderNode::Zoned { zone, inner } => {
+            Self::Zoned { zone, inner } => {
                 if zone.note_gain(note, velocity) > 0.0 {
                     inner.warm_note_samples(note, velocity);
                 }
             }
-            RenderNode::Gain { inner, .. }
-            | RenderNode::Modulated { inner, .. }
-            | RenderNode::SendTap { inner, .. }
-            | RenderNode::BusInject { inner, .. } => inner.warm_note_samples(note, velocity),
+            Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.warm_note_samples(note, velocity),
         }
     }
 
     /// Collect the sample paths a note-on for `note`/`velocity` would need
     /// across this subtree's **sampler** sources that are NOT resident yet —
     /// the resolve-only half of [`warm_note_samples`]
-    /// (Self::warm_note_samples), for callers that must never decode on the
+    /// (`Self::warm_note_samples`), for callers that must never decode on the
     /// calling thread (the browser worklet's audio thread: it ships these to
     /// the decoder worker instead). Respects [`Zoned`](RenderNode::Zoned)
     /// windows exactly like the warm walk.
@@ -675,7 +687,7 @@ impl RenderNode {
         out: &mut Vec<std::path::PathBuf>,
     ) {
         match self {
-            RenderNode::Leaf {
+            Self::Leaf {
                 inst: Some(LeafBackend::Source(src)),
                 ..
             } => {
@@ -695,21 +707,22 @@ impl RenderNode {
                     }
                 }
             }
-            RenderNode::Leaf { .. } => {}
-            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
-                v.iter_mut()
-                    .for_each(|n| n.missing_note_sample_paths(note, velocity, out));
+            Self::Leaf { .. } => {}
+            Self::Serial(v) | Self::Parallel(v) => {
+                for n in v.iter_mut() {
+                    n.missing_note_sample_paths(note, velocity, out);
+                }
             }
-            RenderNode::Zoned { zone, inner } => {
+            Self::Zoned { zone, inner } => {
                 if zone.note_gain(note, velocity) > 0.0 {
                     inner.missing_note_sample_paths(note, velocity, out);
                 }
             }
-            RenderNode::Gain { inner, .. }
-            | RenderNode::Modulated { inner, .. }
-            | RenderNode::SendTap { inner, .. }
-            | RenderNode::BusInject { inner, .. } => {
-                inner.missing_note_sample_paths(note, velocity, out)
+            Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => {
+                inner.missing_note_sample_paths(note, velocity, out);
             }
         }
     }
@@ -781,7 +794,7 @@ impl RenderNode {
         charge_past_ceiling: bool,
     ) -> bool {
         match self {
-            RenderNode::Leaf {
+            Self::Leaf {
                 inst: Some(LeafBackend::Source(src)),
                 ..
             } => {
@@ -814,19 +827,19 @@ impl RenderNode {
                 }
                 accepted
             }
-            RenderNode::Leaf { .. } => false,
-            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+            Self::Leaf { .. } => false,
+            Self::Serial(v) | Self::Parallel(v) => {
                 let mut any = false;
                 for n in v.iter_mut() {
                     any |= n.insert_decoded_sample(path, data, charge_past_ceiling);
                 }
                 any
             }
-            RenderNode::Zoned { inner, .. }
-            | RenderNode::Gain { inner, .. }
-            | RenderNode::Modulated { inner, .. }
-            | RenderNode::SendTap { inner, .. }
-            | RenderNode::BusInject { inner, .. } => {
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => {
                 inner.insert_decoded_sample(path, data, charge_past_ceiling)
             }
         }
@@ -840,7 +853,7 @@ impl RenderNode {
         path: &std::path::Path,
     ) -> Option<std::sync::Arc<crate::engine::cache::SampleData>> {
         match self {
-            RenderNode::Leaf {
+            Self::Leaf {
                 inst: Some(LeafBackend::Source(src)),
                 ..
             } => {
@@ -853,15 +866,15 @@ impl RenderNode {
                 }
                 engine.decode_sample_take(path).ok()
             }
-            RenderNode::Leaf { .. } => None,
-            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+            Self::Leaf { .. } => None,
+            Self::Serial(v) | Self::Parallel(v) => {
                 v.iter_mut().find_map(|n| n.decode_sample_take(path))
             }
-            RenderNode::Zoned { inner, .. }
-            | RenderNode::Gain { inner, .. }
-            | RenderNode::Modulated { inner, .. }
-            | RenderNode::SendTap { inner, .. }
-            | RenderNode::BusInject { inner, .. } => inner.decode_sample_take(path),
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.decode_sample_take(path),
         }
     }
 
@@ -870,7 +883,7 @@ impl RenderNode {
     /// worker's background fill list.
     pub fn coverage_sample_paths(&mut self, center: u8, out: &mut Vec<std::path::PathBuf>) {
         match self {
-            RenderNode::Leaf {
+            Self::Leaf {
                 inst: Some(LeafBackend::Source(src)),
                 ..
             } => {
@@ -881,16 +894,17 @@ impl RenderNode {
                     out.extend(sampler.engine().sample_paths_playable(center));
                 }
             }
-            RenderNode::Leaf { .. } => {}
-            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
-                v.iter_mut()
-                    .for_each(|n| n.coverage_sample_paths(center, out));
+            Self::Leaf { .. } => {}
+            Self::Serial(v) | Self::Parallel(v) => {
+                for n in v.iter_mut() {
+                    n.coverage_sample_paths(center, out);
+                }
             }
-            RenderNode::Zoned { inner, .. }
-            | RenderNode::Gain { inner, .. }
-            | RenderNode::Modulated { inner, .. }
-            | RenderNode::SendTap { inner, .. }
-            | RenderNode::BusInject { inner, .. } => inner.coverage_sample_paths(center, out),
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.coverage_sample_paths(center, out),
         }
     }
 
@@ -901,39 +915,41 @@ impl RenderNode {
     /// through `as_any_mut`.
     pub fn active_voices(&mut self) -> usize {
         match self {
-            RenderNode::Leaf {
+            Self::Leaf {
                 inst: Some(LeafBackend::Source(src)),
                 ..
             } => src
                 .as_any_mut()
                 .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
-                .map(|s| s.engine().active_voices())
-                .unwrap_or(0),
-            RenderNode::Leaf { .. } => 0,
-            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
-                v.iter_mut().map(|n| n.active_voices()).sum()
+                .map_or(0, |s| s.engine().active_voices()),
+            Self::Leaf { .. } => 0,
+            Self::Serial(v) | Self::Parallel(v) => {
+                v.iter_mut().map(Self::active_voices).sum()
             }
-            RenderNode::Zoned { inner, .. }
-            | RenderNode::Gain { inner, .. }
-            | RenderNode::Modulated { inner, .. }
-            | RenderNode::SendTap { inner, .. }
-            | RenderNode::BusInject { inner, .. } => inner.active_voices(),
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.active_voices(),
         }
     }
 
     /// The generator kinds of this subtree's **source** leaves, in compile
     /// order — the tree-side view remotes classify layers by (processors
     /// and placeholders are skipped).
+    #[must_use] 
     pub fn source_kinds(&self) -> Vec<SoundsourceKind> {
         fn walk(node: &RenderNode, out: &mut Vec<SoundsourceKind>) {
             match node {
                 RenderNode::Leaf { inst, .. } => {
-                    if let Some(kind) = inst.as_ref().and_then(|i| i.soundsource_kind()) {
+                    if let Some(kind) = inst.as_ref().and_then(LeafBackend::soundsource_kind) {
                         out.push(kind);
                     }
                 }
                 RenderNode::Serial(v) | RenderNode::Parallel(v) => {
-                    v.iter().for_each(|n| walk(n, out));
+                    for n in v {
+                        walk(n, out);
+                    }
                 }
                 RenderNode::Zoned { inner, .. }
                 | RenderNode::Modulated { inner, .. }
@@ -947,17 +963,18 @@ impl RenderNode {
         out
     }
 
-    /// The compiled ModMatrix, when any routes resolved (for tests/UI).
+    /// The compiled `ModMatrix`, when any routes resolved (for tests/UI).
+    #[must_use] 
     pub fn mod_engine(&self) -> Option<&ModEngine> {
         match self {
-            RenderNode::Modulated { engine, .. } => Some(engine),
+            Self::Modulated { engine, .. } => Some(engine),
             _ => None,
         }
     }
 
     /// Set the tempo used by synced LFOs (no-op on trees without a mod engine).
     pub fn set_tempo(&mut self, bpm: f32) {
-        if let RenderNode::Modulated { engine, .. } = self {
+        if let Self::Modulated { engine, .. } = self {
             engine.tempo_bpm = bpm.max(1.0);
         }
     }
@@ -973,7 +990,7 @@ impl RenderNode {
     ) {
         // Root-level: tick the mod engine, then thread its writes + bus
         // buffers down the tree.
-        if let RenderNode::Modulated { engine, inner } = self {
+        if let Self::Modulated { engine, inner } = self {
             let frames = out_l.len().min(out_r.len());
             // The arpeggiator rewrites the MIDI stream before anything else
             // (steps replace held notes; CC/bend pass through).
@@ -1021,11 +1038,11 @@ impl RenderNode {
     ) {
         let frames = out_l.len().min(out_r.len());
         match self {
-            RenderNode::Leaf {
+            Self::Leaf {
                 id,
                 inst: Some(inst),
             } => {
-                let mods = ctx.writes.get(*id).map(|w| w.as_slice()).unwrap_or(&[]);
+                let mods = ctx.writes.get(*id).map_or(&[][..], |w| w.as_slice());
                 if mods.is_empty() {
                     inst.process(in_l, in_r, out_l, out_r, events);
                 } else {
@@ -1042,8 +1059,8 @@ impl RenderNode {
                     inst.process(in_l, in_r, out_l, out_r, &ev);
                 }
             }
-            RenderNode::Leaf { inst: None, .. } => copy_in(in_l, in_r, out_l, out_r, frames),
-            RenderNode::Serial(nodes) => {
+            Self::Leaf { inst: None, .. } => copy_in(in_l, in_r, out_l, out_r, frames),
+            Self::Serial(nodes) => {
                 if nodes.is_empty() {
                     return copy_in(in_l, in_r, out_l, out_r, frames);
                 }
@@ -1053,8 +1070,8 @@ impl RenderNode {
                 let mut nxt_l = vec![0.0f32; frames];
                 let mut nxt_r = vec![0.0f32; frames];
                 for node in nodes.iter_mut() {
-                    nxt_l.iter_mut().for_each(|x| *x = 0.0);
-                    nxt_r.iter_mut().for_each(|x| *x = 0.0);
+                    nxt_l.fill(0.0);
+                    nxt_r.fill(0.0);
                     node.process_inner(&cur_l, &cur_r, &mut nxt_l, &mut nxt_r, events, ctx);
                     std::mem::swap(&mut cur_l, &mut nxt_l);
                     std::mem::swap(&mut cur_r, &mut nxt_r);
@@ -1062,14 +1079,14 @@ impl RenderNode {
                 out_l[..frames].copy_from_slice(&cur_l[..frames]);
                 out_r[..frames].copy_from_slice(&cur_r[..frames]);
             }
-            RenderNode::Parallel(nodes) => {
-                out_l[..frames].iter_mut().for_each(|x| *x = 0.0);
-                out_r[..frames].iter_mut().for_each(|x| *x = 0.0);
+            Self::Parallel(nodes) => {
+                out_l[..frames].fill(0.0);
+                out_r[..frames].fill(0.0);
                 let mut tl = vec![0.0f32; frames];
                 let mut tr = vec![0.0f32; frames];
                 for node in nodes.iter_mut() {
-                    tl.iter_mut().for_each(|x| *x = 0.0);
-                    tr.iter_mut().for_each(|x| *x = 0.0);
+                    tl.fill(0.0);
+                    tr.fill(0.0);
                     node.process_inner(in_l, in_r, &mut tl, &mut tr, events, ctx);
                     for f in 0..frames {
                         out_l[f] += tl[f];
@@ -1077,7 +1094,7 @@ impl RenderNode {
                     }
                 }
             }
-            RenderNode::Zoned { zone, inner } => {
+            Self::Zoned { zone, inner } => {
                 // Central-MIDI-input routing: keep only notes in this zone's
                 // window, scaling each NoteOn's velocity by the crossfade gain.
                 // Note-offs and CC pass through (so held notes always release).
@@ -1089,7 +1106,7 @@ impl RenderNode {
                 };
                 inner.process_inner(in_l, in_r, out_l, out_r, &fe, ctx);
             }
-            RenderNode::Gain {
+            Self::Gain {
                 input,
                 output,
                 cell,
@@ -1112,8 +1129,7 @@ impl RenderNode {
                 // Authored fader × the live cell (mixer rides / mutes).
                 let live = cell
                     .as_ref()
-                    .map(|c| f32::from_bits(c.load(Ordering::Relaxed)))
-                    .unwrap_or(1.0);
+                    .map_or(1.0, |c| f32::from_bits(c.load(Ordering::Relaxed)));
                 let out_gain = *output * live;
                 if out_gain != 1.0 {
                     for f in 0..frames {
@@ -1135,7 +1151,7 @@ impl RenderNode {
                     m.store(peak.max(decayed).to_bits(), Ordering::Relaxed);
                 }
             }
-            RenderNode::SendTap { buses, inner } => {
+            Self::SendTap { buses, inner } => {
                 inner.process_inner(in_l, in_r, out_l, out_r, events, ctx);
                 // Feed this node's output into each bus (unity gain).
                 for &bus in buses.iter() {
@@ -1151,19 +1167,15 @@ impl RenderNode {
                     }
                 }
             }
-            RenderNode::BusInject { bus, inner } => {
+            Self::BusInject { bus, inner } => {
                 // Send/return: `inner` processes the BUS content only; its
                 // output sums onto the pass-through main signal.
                 let bl: Vec<f32> = ctx
                     .bus_l
-                    .get(*bus)
-                    .map(|b| b[..frames.min(b.len())].to_vec())
-                    .unwrap_or_else(|| vec![0.0; frames]);
+                    .get(*bus).map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
                 let br: Vec<f32> = ctx
                     .bus_r
-                    .get(*bus)
-                    .map(|b| b[..frames.min(b.len())].to_vec())
-                    .unwrap_or_else(|| vec![0.0; frames]);
+                    .get(*bus).map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
                 let mut tl = vec![0.0f32; frames];
                 let mut tr = vec![0.0f32; frames];
                 inner.process_inner(&bl, &br, &mut tl, &mut tr, events, ctx);
@@ -1172,7 +1184,7 @@ impl RenderNode {
                     out_r[f] = in_r.get(f).copied().unwrap_or(0.0) + tr[f];
                 }
             }
-            RenderNode::Modulated { .. } => {
+            Self::Modulated { .. } => {
                 // Only ever the root; handled in `process`.
                 debug_assert!(false, "nested Modulated node");
             }
@@ -1187,9 +1199,9 @@ impl RenderNode {
     }
 }
 
-/// Apply a [`Zone`] to a MIDI stream: drop NoteOns outside the window, scale
+/// Apply a [`Zone`] to a MIDI stream: drop `NoteOns` outside the window, scale
 /// the rest by the crossfade gain (velocity × gain), and pass everything else
-/// (NoteOff / CC / …) through unchanged so releases always land.
+/// (`NoteOff` / CC / …) through unchanged so releases always land.
 fn filter_events_by_zone(zone: Zone, events: &PluginEvents<'_>) -> Vec<PluginMidiEvent> {
     use midicore::{MidiEvent, Velocity};
     let mut out = Vec::with_capacity(events.midi.len());
@@ -1422,7 +1434,7 @@ mod tests {
     }
 
     /// A Formant block compiles to the City Wurli physical model, held as a
-    /// direct PhysicalModel source, and a note renders nonzero audio.
+    /// direct `PhysicalModel` source, and a note renders nonzero audio.
     #[test]
     fn formant_block_is_a_direct_physical_model_source() {
         let tree = Container::module("Wurli").block(BlockType::Formant, "Wurli");
@@ -1529,7 +1541,7 @@ mod tests {
         );
     }
 
-    /// A Sampler block (BlockImpl::Sample) plays a real library through the
+    /// A Sampler block (`BlockImpl::Sample`) plays a real library through the
     /// render tree — the keys/piano/drums/orchestral loading path.
     #[test]
     fn sampler_block_plays_a_library() {
@@ -1751,7 +1763,7 @@ zones (
             // The engine (live-edit address book) is always present now;
             // only the ROUTE count depends on the tree.
             assert_eq!(
-                rn.mod_engine().map(|e| e.route_count()),
+                rn.mod_engine().map(super::modmatrix::ModEngine::route_count),
                 Some(if with_route { 1 } else { 0 }),
                 "route resolution matches"
             );
@@ -1787,7 +1799,7 @@ zones (
             .block(BlockType::Filter, "Filter")
             .route("Wheel", "Filter.cutoff", -1.0);
         let mut rn = RenderNode::compile(&tree, 48_000);
-        assert_eq!(rn.mod_engine().map(|e| e.route_count()), Some(1));
+        assert_eq!(rn.mod_engine().map(super::modmatrix::ModEngine::route_count), Some(1));
         rn.prepare(48_000.0, 512);
 
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
@@ -1926,7 +1938,7 @@ zones (
         );
     }
 
-    /// Container volumes and bypass render: output_db scales the subtree,
+    /// Container volumes and bypass render: `output_db` scales the subtree,
     /// bypassed subtrees pass audio through untouched.
     #[test]
     fn container_volume_and_bypass_apply() {
@@ -2072,7 +2084,7 @@ zones (
         // The engine is always present (live-edit address book); the broken
         // routes just resolve to nothing.
         assert_eq!(
-            rn.mod_engine().map(|e| e.route_count()),
+            rn.mod_engine().map(super::modmatrix::ModEngine::route_count),
             Some(0),
             "no routes resolved"
         );

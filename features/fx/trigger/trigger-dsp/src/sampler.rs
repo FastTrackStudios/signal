@@ -197,11 +197,15 @@ impl Sampler {
     }
 
     /// Add a velocity layer.
+    ///
+    /// # Panics
+    ///
+    /// Panics if velocity comparison fails for floating-point NaN values.
     pub fn add_layer(&mut self, layer: VelocityLayer) {
         self.layers.push(layer);
         // Keep sorted by min_velocity for efficient lookup
         self.layers
-            .sort_by(|a, b| a.min_velocity.partial_cmp(&b.min_velocity).unwrap());
+            .sort_by(|a, b| a.min_velocity.total_cmp(&b.min_velocity));
     }
 
     /// Add a single sample covering the full velocity range.
@@ -216,6 +220,10 @@ impl Sampler {
     ///
     /// Finds the appropriate velocity layer, selects the next round-robin
     /// sample, and starts a new voice.
+    ///
+    /// # Panics
+    ///
+    /// Panics if velocity comparison fails for floating-point NaN values.
     pub fn trigger(&mut self, velocity: f64) {
         // Find matching layer
         let layer = self.layers.iter_mut().find(|l| l.matches(velocity));
@@ -237,17 +245,15 @@ impl Sampler {
                     let dist_b = (b.min_velocity - velocity)
                         .abs()
                         .min((b.max_velocity - velocity).abs());
-                    dist_a.partial_cmp(&dist_b).unwrap()
+                    dist_a.total_cmp(&dist_b)
                 })
                 .map(|(i, _)| i)
                 .unwrap();
             &mut self.layers[idx]
         };
 
-        let sample = match layer.next_sample() {
-            Some(s) => s,
-            None => return,
-        };
+        let Some(sample) = layer.next_sample() else { return };
+
 
         // Calculate playback rate for sample rate conversion + pitch
         let rate = (sample.sample_rate / self.sample_rate) * sample.playback_rate;

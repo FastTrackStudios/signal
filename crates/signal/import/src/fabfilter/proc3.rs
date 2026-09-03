@@ -1,4 +1,4 @@
-//! Reading a FabFilter Pro-C 3 instance.
+//! Reading a `FabFilter` Pro-C 3 instance.
 //!
 //! Pro-C 3 stores a hundred floats, and unlike Pro-Q 4 it hands over their
 //! names for free: a text `.ffp` preset lists exactly the same hundred values
@@ -101,7 +101,7 @@ pub mod field {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProC3Error {
     /// The blob carries a signature that is not Pro-C 3's.
     WrongSignature(String),
@@ -112,8 +112,8 @@ pub enum ProC3Error {
 impl std::fmt::Display for ProC3Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProC3Error::WrongSignature(s) => write!(f, "signature {s:?} is not FC3p"),
-            ProC3Error::Truncated { found } => {
+            Self::WrongSignature(s) => write!(f, "signature {s:?} is not FC3p"),
+            Self::Truncated { found } => {
                 write!(f, "{found} parameters, expected at least {PARAM_COUNT}")
             }
         }
@@ -142,6 +142,7 @@ pub struct ScBand {
 
 impl ScBand {
     /// In the preset, and switched on.
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.used && self.enabled
     }
@@ -196,6 +197,7 @@ impl ProC3 {
     }
 
     /// True when the instance leaves the signal alone.
+    #[must_use]
     pub fn is_transparent(&self) -> bool {
         self.bypassed || self.ratio <= 1.0001 || self.range_db <= 0.0
     }
@@ -225,6 +227,7 @@ pub const FADER_DB_PER_UNIT: f64 = 36.0;
 const FADER_TAPER_AT: f64 = -0.6;
 
 /// A fader position in dB. `None` is the bottom stop, which is off.
+#[must_use]
 pub fn fader_db(stored: f64) -> Option<f64> {
     if stored <= -1.0 {
         return None;
@@ -242,6 +245,7 @@ pub fn fader_db(stored: f64) -> Option<f64> {
 /// points: 0.05 shows 0.036 ms, 0.4 shows 16.00, 0.8 shows 128.0, 1.0 shows
 /// 250.0. Worth having in closed form rather than a table — it is the one
 /// encoding here that has one.
+#[must_use]
 pub fn attack_ms(stored: f64) -> f64 {
     0.005 + 250.0 * stored.clamp(0.0, 1.0).powi(3)
 }
@@ -250,6 +254,7 @@ pub fn attack_ms(stored: f64) -> f64 {
 ///
 /// `0.025 * 1600^x` — the same curve Pro-Q uses, because it is the same
 /// equalizer cut down to six bands and pointed at the detector.
+#[must_use]
 pub fn sc_q(stored: f64) -> f64 {
     0.025 * 1600.0f64.powf(stored.clamp(0.0, 1.0))
 }
@@ -260,11 +265,13 @@ pub fn sc_q(stored: f64) -> f64 {
 /// to 100%, and 0.5 to 1.0 holds full link while dialling in "Mid-only" from
 /// 0 to 100%. Only the first half is a link amount, so only the first half
 /// is what comes back here.
+#[must_use]
 pub fn stereo_link(stored: f64) -> f64 {
     (stored * 2.0).clamp(0.0, 1.0)
 }
 
 /// How much of the second half of the stereo-link knob is dialled in.
+#[must_use]
 pub fn mid_only(stored: f64) -> f64 {
     ((stored - 0.5) * 2.0).clamp(0.0, 1.0)
 }
@@ -354,16 +361,19 @@ fn read_curve(curve: &[(f64, f64)], stored: f64) -> f64 {
 }
 
 /// Compression ratio. 1:1 at the bottom, 100:1 — Pro-C's limiting — at the top.
+#[must_use]
 pub fn ratio(stored: f64) -> f64 {
     read_curve(&RATIO_CURVE, stored)
 }
 
 /// Release in milliseconds, 10 ms to 2.5 s.
+#[must_use]
 pub fn release_ms(stored: f64) -> f64 {
     read_curve(&RELEASE_CURVE_MS, stored)
 }
 
 /// Hold in milliseconds, 0 to 500.
+#[must_use]
 pub fn hold_ms(stored: f64) -> f64 {
     read_curve(&HOLD_CURVE_MS, stored)
 }
@@ -390,6 +400,9 @@ pub const STYLE_NAMES: [&str; 14] = [
 pub const CHARACTER_NAMES: [&str; 4] = ["Off", "Tube", "Diode", "Bright"];
 
 /// Read a Pro-C 3 instance out of its saved state.
+///
+/// # Errors
+/// Returns an error if the state has wrong signature or insufficient parameters.
 pub fn decode(state: &FfbsState) -> Result<ProC3, ProC3Error> {
     let sig = &state.metadata.signature;
     if !sig.is_empty() && sig != "FC3p" {

@@ -671,11 +671,10 @@ pub fn EqGraph(
                 } else {
                     match (cur_focus, new_focus) {
                         (Some(old), Some(new)) if old != new => { set_focused(Some(new)); focus_leave_time.set(None); }
-                        (Some(_), Some(_)) => { focus_leave_time.set(None); }
+                        (Some(_), Some(_)) | (None, None) => { focus_leave_time.set(None); }
                         (None, Some(new)) => { set_focused(Some(new)); focus_leave_time.set(None); }
                         (Some(old), None) => {
                             match leave_time {
-                                None => { focus_leave_time.set(Some((now, old))); }
                                 Some((ts, idx)) if idx == old => {
                                     if now - ts > popup_fade_timeout_ms {
                                         set_focused(None);
@@ -685,7 +684,6 @@ pub fn EqGraph(
                                 _ => { focus_leave_time.set(Some((now, old))); }
                             }
                         }
-                        (None, None) => { focus_leave_time.set(None); }
                     }
                 }
             },

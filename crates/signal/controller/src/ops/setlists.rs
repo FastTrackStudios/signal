@@ -14,6 +14,8 @@ use signal_proto::{
 pub struct SetlistOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> SetlistOps<S> {
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn list(&self) -> Result<Vec<Setlist>, OpsError> {
         self.0
             .service
@@ -22,6 +24,8 @@ impl<S: SignalApi> SetlistOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn load(&self, id: impl Into<SetlistId>) -> Result<Option<Setlist>, OpsError> {
         self.0
             .service
@@ -30,6 +34,8 @@ impl<S: SignalApi> SetlistOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn create(
         &self,
         name: impl Into<String>,
@@ -45,6 +51,8 @@ impl<S: SignalApi> SetlistOps<S> {
         Ok(setlist)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn save(&self, setlist: Setlist) -> Result<Setlist, OpsError> {
         self.0
             .service
@@ -54,6 +62,8 @@ impl<S: SignalApi> SetlistOps<S> {
         Ok(setlist)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn delete(&self, id: impl Into<SetlistId>) -> Result<(), OpsError> {
         self.0
             .service
@@ -62,6 +72,8 @@ impl<S: SignalApi> SetlistOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn load_entry(
         &self,
         setlist_id: impl Into<SetlistId>,
@@ -74,6 +86,8 @@ impl<S: SignalApi> SetlistOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn save_entry(
         &self,
         setlist_id: impl Into<SetlistId>,
@@ -91,6 +105,8 @@ impl<S: SignalApi> SetlistOps<S> {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn reorder_entries(
         &self,
         setlist_id: impl Into<SetlistId>,
@@ -104,6 +120,8 @@ impl<S: SignalApi> SetlistOps<S> {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn by_tag(&self, tag: &str) -> Result<Vec<Setlist>, OpsError> {
         let all = self.list().await?;
         Ok(all
@@ -112,10 +130,14 @@ impl<S: SignalApi> SetlistOps<S> {
             .collect())
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn find_by_name(&self, name: &str) -> Result<Option<Setlist>, OpsError> {
         Ok(self.list().await?.into_iter().find(|s| s.name == name))
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn rename(
         &self,
         id: impl Into<SetlistId>,
@@ -129,6 +151,9 @@ impl<S: SignalApi> SetlistOps<S> {
     }
 
     /// Load a setlist, apply a closure to one of its entries, and save.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn update_entry(
         &self,
         setlist_id: impl Into<SetlistId>,
@@ -147,6 +172,9 @@ impl<S: SignalApi> SetlistOps<S> {
     }
 
     /// Add an entry to a setlist. Returns the updated setlist, or `None` if the setlist doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn add_entry(
         &self,
         setlist_id: impl Into<SetlistId>,
@@ -162,6 +190,9 @@ impl<S: SignalApi> SetlistOps<S> {
     }
 
     /// Remove an entry from a setlist. Returns the removed entry, or `None` if not found.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn remove_entry(
         &self,
         setlist_id: impl Into<SetlistId>,
@@ -181,6 +212,9 @@ impl<S: SignalApi> SetlistOps<S> {
     }
 
     /// Duplicate an entry within a setlist. Returns the new entry, or `None` if not found.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn duplicate_entry(
         &self,
         setlist_id: impl Into<SetlistId>,
@@ -205,11 +239,17 @@ impl<S: SignalApi> SetlistOps<S> {
     }
 
     /// Check if a setlist exists.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn exists(&self, id: impl Into<SetlistId>) -> Result<bool, OpsError> {
         Ok(self.load(id).await?.is_some())
     }
 
     /// Count all setlists.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn count(&self) -> Result<usize, OpsError> {
         Ok(self.list().await?.len())
     }
@@ -217,6 +257,9 @@ impl<S: SignalApi> SetlistOps<S> {
     // region: --- try_* variants
 
     /// Add an entry, returning an error if the setlist doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::NotFound`] if the setlist doesn't exist, or [`OpsError::Storage`] if the storage backend fails.
     pub async fn try_add_entry(
         &self,
         setlist_id: impl Into<SetlistId>,
@@ -235,6 +278,10 @@ impl<S: SignalApi> SetlistOps<S> {
     }
 
     /// Remove an entry, returning an error if the setlist or entry doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::NotFound`] if the setlist doesn't exist, [`OpsError::VariantNotFound`] if the entry doesn't exist,
+    /// or [`OpsError::Storage`] if the storage backend fails.
     pub async fn try_remove_entry(
         &self,
         setlist_id: impl Into<SetlistId>,
@@ -261,6 +308,10 @@ impl<S: SignalApi> SetlistOps<S> {
     }
 
     /// Duplicate an entry, returning an error if the setlist or entry doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::NotFound`] if the setlist doesn't exist, [`OpsError::VariantNotFound`] if the entry doesn't exist,
+    /// or [`OpsError::Storage`] if the storage backend fails.
     pub async fn try_duplicate_entry(
         &self,
         setlist_id: impl Into<SetlistId>,
@@ -291,6 +342,9 @@ impl<S: SignalApi> SetlistOps<S> {
     }
 
     /// Save an entry within a setlist, returning an error if the setlist doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::NotFound`] if the setlist doesn't exist, or [`OpsError::Storage`] if the storage backend fails.
     pub async fn try_save_entry(
         &self,
         setlist_id: impl Into<SetlistId>,
@@ -314,6 +368,10 @@ impl<S: SignalApi> SetlistOps<S> {
     }
 
     /// Update an entry via closure, returning an error if the setlist or entry doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::NotFound`] if the setlist doesn't exist, [`OpsError::VariantNotFound`] if the entry doesn't exist,
+    /// or [`OpsError::Storage`] if the storage backend fails.
     pub async fn try_update_entry(
         &self,
         setlist_id: impl Into<SetlistId>,

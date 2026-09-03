@@ -34,27 +34,27 @@ struct C {
 }
 
 impl C {
-    const ZERO: C = C { re: 0.0, im: 0.0 };
+    const ZERO: Self = Self { re: 0.0, im: 0.0 };
 
     #[inline]
-    fn mul(self, o: C) -> C {
-        C {
+    fn mul(self, o: Self) -> Self {
+        Self {
             re: self.re * o.re - self.im * o.im,
             im: self.re * o.im + self.im * o.re,
         }
     }
 
     #[inline]
-    fn add(self, o: C) -> C {
-        C {
+    fn add(self, o: Self) -> Self {
+        Self {
             re: self.re + o.re,
             im: self.im + o.im,
         }
     }
 
     #[inline]
-    fn scale(self, k: f64) -> C {
-        C {
+    fn scale(self, k: f64) -> Self {
+        Self {
             re: self.re * k,
             im: self.im * k,
         }
@@ -62,18 +62,18 @@ impl C {
 
     /// e^self.
     #[inline]
-    fn exp(self) -> C {
+    fn exp(self) -> Self {
         let e = self.re.exp();
-        C {
+        Self {
             re: e * self.im.cos(),
             im: e * self.im.sin(),
         }
     }
 
     #[inline]
-    fn div(self, o: C) -> C {
+    fn div(self, o: Self) -> Self {
         let d = o.re * o.re + o.im * o.im;
-        C {
+        Self {
             re: (self.re * o.re + self.im * o.im) / d,
             im: (self.im * o.re - self.re * o.im) / d,
         }
@@ -205,7 +205,7 @@ pub struct BbdCore {
     /// Time of the next BBD half-tick, in samples past the current
     /// audio sample's start (carries the fractional remainder).
     tn: f64,
-    /// Half-tick period in samples (= sample_rate / clock_hz).
+    /// Half-tick period in samples (= `sample_rate` / `clock_hz`).
     ts_bbd: f64,
 
     // Input sections: state x, per-sample pole p̄, its inverse, base
@@ -229,7 +229,7 @@ pub struct BbdCore {
     out_phat: [C; N_FILT],
 
     h0: f64,
-    /// Unity-insertion makeup: 1 / (H_in(0)·H_out(0)). The raw Juno
+    /// Unity-insertion makeup: 1 / (`H_in(0)·H_out(0)`). The raw Juno
     /// filter chain carries several dB of insertion gain; inside a
     /// compander loop that inflates loop gain quadratically, so the
     /// core is normalized to unity at DC.
@@ -241,6 +241,7 @@ pub struct BbdCore {
 }
 
 impl BbdCore {
+    #[must_use]
     pub fn new() -> Self {
         let mut core = Self {
             sample_rate: 48_000.0,
@@ -329,10 +330,12 @@ impl BbdCore {
     }
 
     /// Current clock rate in Hz.
+    #[must_use]
     pub fn clock_hz(&self) -> f64 {
         self.sample_rate / self.ts_bbd
     }
 
+    #[must_use]
     pub fn stages(&self) -> usize {
         self.stages
     }

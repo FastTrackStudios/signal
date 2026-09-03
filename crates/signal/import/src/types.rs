@@ -17,7 +17,7 @@ pub struct ImportedParameter {
     pub value: f32,
     /// Original DAW plugin parameter name, if it differs from `name`.
     ///
-    /// For example, FabFilter Pro-Q renames `"Band 1 Frequency"` to `"B1 Freq"` for
+    /// For example, `FabFilter` Pro-Q renames `"Band 1 Frequency"` to `"B1 Freq"` for
     /// display — this field preserves `"Band 1 Frequency"` so we can send it back
     /// to REAPER's `set_parameter_by_name`.
     pub daw_name: Option<String>,
@@ -34,7 +34,7 @@ pub struct ImportedSnapshot {
     pub author: Option<String>,
     /// Description extracted from preset metadata, if available.
     pub description: Option<String>,
-    /// Raw tags from the vendor preset file (e.g. FabFilter comma-separated tags).
+    /// Raw tags from the vendor preset file (e.g. `FabFilter` comma-separated tags).
     pub vendor_tags: Vec<String>,
     /// Entire file contents — may or may not be stored as `Snapshot.state_data`
     /// depending on `store_raw_as_state`.
@@ -47,7 +47,7 @@ pub struct ImportedSnapshot {
     /// non-template display, and "Add to FX Chain".
     pub source_plugin: Option<String>,
     /// Whether to store `raw_bytes` as `Snapshot.state_data`.
-    /// Set to `false` for vendor-native formats (e.g. FabFilter `.ffp`) that REAPER
+    /// Set to `false` for vendor-native formats (e.g. `FabFilter` `.ffp`) that REAPER
     /// can't load via `set_state_chunk`. Set to `true` for REAPER-native formats
     /// (e.g. rfxchain) where the bytes ARE valid state chunks.
     pub store_raw_as_state: bool,
@@ -58,7 +58,7 @@ pub struct ImportedSnapshot {
 pub struct ImportedPresetCollection {
     /// Plugin display name (e.g. "Pro-Q 4").
     pub plugin_name: String,
-    /// Vendor name (e.g. "FabFilter").
+    /// Vendor name (e.g. "`FabFilter`").
     pub vendor: String,
     /// Signal block type this plugin maps to.
     pub block_type: BlockType,

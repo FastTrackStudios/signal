@@ -4,8 +4,10 @@
 //! sub-millisecond; no index structure earns its complexity yet.
 
 /// Top-`k` most similar items to `query_idx`, as `(index, cosine)` sorted
-/// best-first. `mask` (same length as item count) filters candidates —
-/// this is the XO rule: active filters re-scope every similarity list.
+/// best-first.
+///
+/// `mask` (same length as item count) filters candidates — this is the XO rule:
+/// active filters re-scope every similarity list.
 pub fn similar(
     features: &[f32],
     dim: usize,

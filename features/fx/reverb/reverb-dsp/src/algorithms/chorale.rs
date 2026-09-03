@@ -1,6 +1,6 @@
 //! Chorale reverb — vocal choir synthesis via formant-filtered pitch shifting.
 //!
-//! Based on Strymon BigSky Chorale: pitch-shifted reverb feedback
+//! Based on Strymon `BigSky` Chorale: pitch-shifted reverb feedback
 //! filtered through formant resonances to create vocal/choral textures.
 //! Combines shimmer architecture with a formant filter bank.
 
@@ -93,6 +93,7 @@ pub struct Chorale {
 const CTRL_BLOCK: usize = 64;
 
 impl Chorale {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let grain = (sample_rate * 0.06) as usize;
 
@@ -193,7 +194,7 @@ impl Chorale {
     /// Simple LCG in [-1, 1].
     #[inline]
     fn rand_bipolar(&mut self) -> f64 {
-        self.rng = self.rng.wrapping_mul(1664525).wrapping_add(1013904223);
+        self.rng = self.rng.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         (self.rng >> 8) as f64 / ((u32::MAX >> 8) as f64) * 2.0 - 1.0
     }
 
@@ -321,8 +322,7 @@ impl ReverbAlgorithm for Chorale {
         self.chorale_amount = self
             .mx
             .choir_level
-            .map(|v| v.clamp(0.0, 1.0) * 0.6)
-            .unwrap_or(self.legacy_amount);
+            .map_or(self.legacy_amount, |v| v.clamp(0.0, 1.0) * 0.6);
 
         // Vowel selection (extra_b: 0=ah, 0.33=ee, 0.66=oh, 1.0=oo)
         self.vowel_mix = params.extra_b;
@@ -347,8 +347,7 @@ impl ReverbAlgorithm for Chorale {
         self.chorale_amount = self
             .mx
             .choir_level
-            .map(|v| v.clamp(0.0, 1.0) * 0.6)
-            .unwrap_or(self.legacy_amount);
+            .map_or(self.legacy_amount, |v| v.clamp(0.0, 1.0) * 0.6);
         if mod_off {
             // Land the randomized offsets back on neutral.
             self.rand_speed = [0.0; 2];

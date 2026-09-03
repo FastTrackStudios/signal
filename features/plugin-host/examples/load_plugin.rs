@@ -132,7 +132,9 @@ fn main() {
         } else {
             &[]
         };
-        inter.iter_mut().for_each(|s| *s = 0.0);
+        for s in &mut inter {
+            *s = 0.0;
+        }
         if let Err(e) = plugin.process_interleaved(&mut inter, midi, &[]) {
             eprintln!("process failed: {e}");
             std::process::exit(1);

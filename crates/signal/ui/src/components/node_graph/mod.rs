@@ -150,6 +150,11 @@ impl NodeGraph {
     }
 
     /// Automatically arrange modules vertically with proper spacing.
+    ///
+    /// # Panics
+    ///
+    /// Does not panic. Early return if no modules; rows are populated before any
+    /// unwrap operations.
     pub fn compact_layout(&mut self, gap: f64) {
         if self.modules.is_empty() {
             return;

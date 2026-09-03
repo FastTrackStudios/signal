@@ -12,6 +12,7 @@
 //! block (shape = `EqBandShape` ordinal).
 
 use dioxus::prelude::*;
+use std::fmt::Write;
 
 use eq_ui::cheatsheet::GUITAR_ELECTRIC;
 use eq_ui::eq_graph_interaction::{
@@ -139,9 +140,9 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
             let f = 20.0 * (1000.0f64).powf(i as f64 / (n - 1).max(1) as f64);
             let x = mapper.freq_to_x(f);
             let y = H - (f64::from(*db + 90.0) / 90.0 * H).clamp(0.0, H);
-            pts.push_str(&format!("{x:.1},{y:.1} "));
+            let _ = write!(pts, "{x:.1},{y:.1} ");
         }
-        pts.push_str(&format!("{:.1},{H}", mapper.freq_to_x(20000.0)));
+        let _ = write!(pts, "{:.1},{H}", mapper.freq_to_x(20000.0));
         pts
     };
 

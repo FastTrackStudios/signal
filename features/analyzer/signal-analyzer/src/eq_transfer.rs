@@ -71,11 +71,13 @@ const PARTIALS: [f64; 6] = [110.0, 275.0, 700.0, 1650.0, 3900.0, 9200.0];
 const PARTIAL_GAIN: f64 = 1.6;
 
 /// How many frames a full measurement needs at this FFT size.
+#[must_use]
 pub fn frames_needed() -> usize {
     (WARMUP_FRAMES + FRAMES + 2) * FFT / 2 + FFT
 }
 
 /// Build the test signal: `(left, right)`.
+#[must_use]
 pub fn stimulus(frames: usize, amplitude: f64, kind: Stimulus, sample_rate: f64) -> (Vec<f32>, Vec<f32>) {
     let tonal = kind == Stimulus::Tonal;
     let mono = kind == Stimulus::Mono;
@@ -122,6 +124,7 @@ pub fn stimulus(frames: usize, amplitude: f64, kind: Stimulus, sample_rate: f64)
 }
 
 /// Mid and side of a channel pair.
+#[must_use]
 pub fn to_ms(left: &[f32], right: &[f32]) -> (Vec<f32>, Vec<f32>) {
     let mid = left.iter().zip(right).map(|(l, r)| 0.5 * (l + r)).collect();
     let side = left.iter().zip(right).map(|(l, r)| 0.5 * (l - r)).collect();
@@ -129,6 +132,11 @@ pub fn to_ms(left: &[f32], right: &[f32]) -> (Vec<f32>, Vec<f32>) {
 }
 
 /// Average magnitude spectrum, in linear units, skipping the warmup.
+///
+/// # Panics
+///
+/// Panics if the FFT processing fails (which should not happen with valid input).
+#[must_use]
 pub fn spectrum(buf: &[f32]) -> Vec<f64> {
     let mut planner = RealFftPlanner::<f64>::new();
     let fft = planner.plan_fft_forward(FFT);
@@ -151,11 +159,14 @@ pub fn spectrum(buf: &[f32]) -> Vec<f64> {
         used += 1;
         pos += FFT / 2; // 50% overlap
     }
-    mag.iter_mut().for_each(|m| *m /= used.max(1) as f64);
+    for m in &mut mag {
+        *m /= used.max(1) as f64;
+    }
     mag
 }
 
 /// Third-octave comparison centres, 25 Hz to 16 kHz.
+#[must_use]
 pub fn band_centres() -> Vec<f64> {
     let mut f = 25.0f64;
     let mut out = Vec::new();
@@ -167,6 +178,7 @@ pub fn band_centres() -> Vec<f64> {
 }
 
 /// Transfer function in dB at each centre, as an energy ratio over the band.
+#[must_use]
 pub fn response_db(input: &[f64], output: &[f64], centres: &[f64], sample_rate: f64) -> Vec<f64> {
     let bin_hz = sample_rate / FFT as f64;
     let sixth = 2.0f64.powf(1.0 / 6.0);
@@ -209,6 +221,7 @@ pub struct Difference {
 /// `dry` is the signal both were fed; `a` and `b` are what they returned.
 /// Mid and side are measured separately and pooled, which is what makes a
 /// stereo-placed band visible.
+#[must_use]
 pub fn difference(
     dry: (&[f32], &[f32]),
     a: (&[f32], &[f32]),
@@ -300,7 +313,7 @@ mod tests {
         let half: Vec<f32> = l.iter().map(|x| x * 0.5).collect();
         let half_r: Vec<f32> = r.iter().map(|x| x * 0.5).collect();
         let d = difference((&l, &r), (&l, &r), (&half, &half_r), SR);
-        assert!((d.mean_db - 6.02).abs() < 0.05, "{:?}", d);
+        assert!((d.mean_db - 6.02).abs() < 0.05, "{d:?}");
     }
 
     #[test]

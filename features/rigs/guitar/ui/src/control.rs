@@ -11,6 +11,7 @@
 //! whole screen.
 
 use std::time::Duration;
+use std::fmt::Write;
 
 use dioxus::prelude::*;
 
@@ -832,8 +833,8 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                         let a = (1.0 - t / t60).max(0.0) as f32;
                         let h = mix * a * wig * 26.0;
                         let x = x_of_t(t);
-                        top.push_str(&format!("L {x:.1} {:.1} ", 28.0 - h));
-                        bot.push_str(&format!("L {x:.1} {:.1} ", 28.0 + h));
+                        let _ = write!(top, "L {x:.1} {:.1} ", 28.0 - h);
+                        let _ = write!(bot, "L {x:.1} {:.1} ", 28.0 + h);
                     }
                     top.push_str("L 456 28 Z");
                     bot.push_str("L 456 28 Z");
@@ -1007,7 +1008,7 @@ fn ModGroupPanel(
         // Two seconds of LFO at the actual rate.
         let y = ((t * rate * 2.0 * std::f32::consts::TAU).sin() * depth).mul_add(-18.0, 26.0);
         d.push_str(if px == 0 { "M " } else { "L " });
-        d.push_str(&format!("{:.1} {:.1} ", 4.0 + t * 192.0, y));
+        let _ = write!(d, "{:.1} {:.1} ", 4.0 + t * 192.0, y);
     }
     let color = if engaged { "#f472b6" } else { "#3f3f46" };
 

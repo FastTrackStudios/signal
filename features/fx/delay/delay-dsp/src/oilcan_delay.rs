@@ -1,4 +1,4 @@
-//! OilCanDelay — murky electrostatic oil-can echo (Tel-Ray/Adineko style).
+//! `OilCanDelay` — murky electrostatic oil-can echo (Tel-Ray/Adineko style).
 //!
 //! Per spec/timeline-mx-reference.md: the defining behavior is the
 //! NO-ERASE head. The signal is written as electrostatic charge on a
@@ -36,7 +36,7 @@ pub enum OilCanHeads {
 }
 
 pub struct OilCanDelay {
-    /// Base delay time in ms (clamped to 200–800, TimeLine Oil Can range).
+    /// Base delay time in ms (clamped to 200–800, `TimeLine` Oil Can range).
     pub time_ms: f64,
     /// Feedback amount (0.0–1.0).
     pub feedback: f64,
@@ -50,13 +50,13 @@ pub struct OilCanDelay {
     /// lowpass into a resonant band-pass with the deep lows thinned —
     /// the "extremely dark murky bandpass" at the FILTER knob's max.
     pub tone_hz: f64,
-    /// Rotation LFO base rate in Hz (TimeLine Mod Speed). The wobble is
+    /// Rotation LFO base rate in Hz (`TimeLine` Mod Speed). The wobble is
     /// spring-loaded: it crawls through the first half of each cycle
     /// and accelerates through the second, like a disc fighting its
     /// drive spring before letting go.
     pub mod_rate: f64,
     /// Rotation-speed randomization (0.0–1.0): time-domain jitter on the
-    /// read heads. This is TimeLine's Grit for Oil Can — dirt via speed
+    /// read heads. This is `TimeLine`'s Grit for Oil Can — dirt via speed
     /// uncertainty, not saturation.
     pub grit: f64,
     /// Decay EQ tilt (shared engine param).
@@ -101,6 +101,7 @@ impl OilCanDelay {
     /// write equation instead of being a bolted-on tap.
     const WRITE_ALPHA: f64 = 0.6;
 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             time_ms: 400.0,
@@ -250,6 +251,7 @@ impl OilCanDelay {
         output
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }

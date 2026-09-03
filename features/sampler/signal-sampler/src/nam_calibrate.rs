@@ -53,6 +53,7 @@ fn center_window(samples: &[f64], max_len: usize) -> Vec<f64> {
 
 /// Directory holding the DI reference clip and the loudness cache.
 /// `SIGNAL_CALIBRATION_DIR` overrides it (isolates tests/CI from user config).
+#[must_use]
 pub fn calibration_dir() -> PathBuf {
     if let Ok(p) = std::env::var("SIGNAL_CALIBRATION_DIR") {
         if !p.is_empty() {
@@ -63,6 +64,7 @@ pub fn calibration_dir() -> PathBuf {
 }
 
 /// Path of the user-supplied DI reference clip. `SIGNAL_NAM_DI` overrides it.
+#[must_use]
 pub fn di_reference_path() -> PathBuf {
     if let Ok(p) = std::env::var("SIGNAL_NAM_DI") {
         if !p.is_empty() {
@@ -85,6 +87,10 @@ pub struct DiReference {
 impl DiReference {
     /// Load the DI at `path`, downmixed to mono `f64` and resampled to
     /// `target_sr`. WAV via `hound`; integer formats are normalised to ±1.0.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the file cannot be read or the sample format is invalid.
     pub fn load(path: &Path, target_sr: f64) -> Result<Self, String> {
         // The DI is measured offline and quality only has to preserve
         // loudness — linear (Low) is more than enough.
@@ -109,6 +115,7 @@ impl DiReference {
     }
 
     /// Load the configured DI, or synthesise a deterministic fallback pluck.
+    #[must_use]
     pub fn load_or_synthetic(target_sr: f64) -> Self {
         let path = di_reference_path();
         match Self::load(&path, target_sr) {
@@ -129,6 +136,7 @@ impl DiReference {
     /// the guitar range with decaying harmonics and varying velocity, so it
     /// drives amp nonlinearity with a guitar-like crest factor. Not a substitute
     /// for a real DI, but keeps the guarantee working out of the box.
+    #[must_use]
     pub fn synthetic(target_sr: f64) -> Self {
         let sr = target_sr;
         // Open-string-ish fundamentals (E2 A2 D3 G3 B3 E4), repeated with
@@ -160,6 +168,10 @@ impl DiReference {
 }
 
 /// SHA-256 of a file's contents (hex), for keying the cache by model identity.
+///
+/// # Errors
+///
+/// Returns `Err` if the file cannot be read.
 pub fn hash_file(path: &Path) -> Result<String, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let mut h = Sha256::new();
@@ -186,9 +198,10 @@ fn hex(bytes: &[u8]) -> String {
     s
 }
 
-/// Run `di` through `model` (mono, in `max_block`-sized chunks) and return the
-/// integrated loudness (LUFS) of the output. Resets the model before and after
-/// so the caller's live state is not disturbed. Off the hot path — allocates.
+/// Run `di` through `model` (mono, in `max_block`-sized chunks) and return the integrated loudness
+/// (LUFS) of the output.
+///
+/// Resets the model before and after so the caller's live state is not disturbed. Off the hot path — allocates.
 pub fn measure_model_lufs(model: &mut NamModel, di: &DiReference, max_block: usize) -> f64 {
     let block = max_block.clamp(64, 8192);
     model.reset(di.sample_rate, block);
@@ -285,13 +298,18 @@ fn context() -> &'static Mutex<Option<Context>> {
     CTX.get_or_init(|| Mutex::new(None))
 }
 
-/// Measured loudness (LUFS) of the model at `model_path`, cache-first. On a miss
-/// it runs the DI through `model`, stores the result, and re-resets `model` to
+/// Measured loudness (LUFS) of the model at `model_path`, cache-first.
+///
+/// On a miss it runs the DI through `model`, stores the result, and re-resets `model` to
 /// `(sample_rate, max_block)` so it is ready for live playback. Returns `None`
 /// if the model produced silence (no reliable measurement).
 ///
 /// This is the value [`crate::rig_profile`] level-matching normalises toward the
 /// target — preferred over the model's own `loudness()` metadata.
+///
+/// # Panics
+///
+/// Panics if a mutex lock is poisoned.
 pub fn measured_loudness(
     model: &mut NamModel,
     model_path: &Path,
@@ -308,12 +326,11 @@ pub fn measured_loudness(
     };
 
     let guard = context();
-    let mut slot = guard.lock().unwrap();
+    let mut slot = guard.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     // (Re)initialise the context if absent or the DI sample rate changed.
     if slot
         .as_ref()
-        .map(|c| (c.di.sample_rate - sample_rate).abs() > 1.0)
-        .unwrap_or(true)
+        .map_or(true, |c| (c.di.sample_rate - sample_rate).abs() > 1.0)
     {
         *slot = Some(Context {
             di: DiReference::load_or_synthetic(sample_rate),
@@ -343,11 +360,12 @@ pub fn measured_loudness(
     (stored > FAILED_LUFS).then_some(stored)
 }
 
-/// Pre-model input calibration gain (dB) so the model is fed the analog level it
-/// was captured at: `interface_cal_dbu − model.input_level_dbu` (matching the
-/// NAM plugin's `_SetInputGain`). Returns 0 dB when the model declares no input
+/// Pre-model input calibration gain (dB) so the model is fed the analog level it was captured at.
+///
+/// `interface_cal_dbu − model.input_level_dbu` (matching the NAM plugin's `_SetInputGain`). Returns 0 dB when the model declares no input
 /// level. This makes the model's *drive* authentic; the LUFS makeup above keeps
 /// the *volume* uniform — the two are orthogonal.
+#[must_use]
 pub fn input_calibration_db(model_input_level_dbu: Option<f64>, interface_cal_dbu: f64) -> f32 {
     match model_input_level_dbu {
         Some(level) => (interface_cal_dbu - level) as f32,
@@ -452,9 +470,9 @@ mod tests {
 /// Input-gain sweep (dB) behind drive 0..1. Index 4 (0 dB) = drive 50%.
 pub const DRIVE_SWEEP_DB: [f64; 9] = [-12.0, -9.0, -6.0, -3.0, 0.0, 3.0, 6.0, 9.0, 12.0];
 
-/// Perceptual bias for harmonic density: LUFS alone under-weights how loud
-/// dense saturation *reads* — an equal-LUFS crunch sounds louder than a
-/// clean. Each sweep point's THD scales extra attenuation up to this many
+/// Perceptual bias for harmonic density: LUFS alone under-weights how loud dense saturation *reads*.
+///
+/// An equal-LUFS crunch sounds louder than a clean. Each sweep point's THD scales extra attenuation up to this many
 /// dB (√-compressed), so low-THD models sit relatively louder.
 pub const THD_BIAS_DB: f64 = 3.5;
 
@@ -506,7 +524,7 @@ fn drive_cache() -> &'static Mutex<DriveCurveCache> {
     DRIVE_CACHE.get_or_init(|| Mutex::new(DriveCurveCache::load()))
 }
 
-/// Measure `model`'s output LUFS at every sweep gain (offline — WaveNet over
+/// Measure `model`'s output LUFS at every sweep gain (offline — `WaveNet` over
 /// the DI window per point, so ~seconds per model; run once and cached).
 pub fn measure_drive_curve(model: &mut NamModel, di: &DiReference, max_block: usize) -> Vec<f64> {
     let block = max_block.clamp(64, 8192);
@@ -583,12 +601,16 @@ pub fn measure_thd(model: &mut NamModel, sample_rate: f64, input_gain_db: f64) -
 
 /// The cached drive curve for a model file, measuring on first sight (the
 /// "import-time test"). Returns `None` if the model can't be loaded/hashed.
+///
+/// # Panics
+///
+/// Panics if a mutex lock is poisoned.
 pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntry> {
     let sr_key = sample_rate.round() as u32;
     let model_hash = hash_file(model_path).ok()?;
     let di = DiReference::load_or_synthetic(sample_rate);
     {
-        let cache = drive_cache().lock().unwrap();
+        let cache = drive_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(e) = cache.lookup(&model_hash, &di.id, sr_key) {
             return Some(e.clone());
         }
@@ -609,7 +631,7 @@ pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntr
         lufs,
         thd,
     };
-    let mut cache = drive_cache().lock().unwrap();
+    let mut cache = drive_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     // Re-check under the lock — a concurrent caller may have measured the
     // same model while we were (the lock is dropped during measurement).
     if cache
@@ -622,11 +644,12 @@ pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntr
     Some(entry)
 }
 
-/// Map a drive position (0..1, 0.5 = the capture at unity input) to the
-/// `(input_trim_db, output_trim_db)` pair that realises it at **constant
-/// perceived level**: input pushes the nonlinearity, output compensates the
+/// Map a drive position (0..1, 0.5 = the capture at unity input) to the pair that realises it at constant perceived level.
+///
+/// The `(input_trim_db, output_trim_db)` pair is calculated such that: input pushes the nonlinearity, output compensates the
 /// measured loudness back to the DI's own — engaging the block or sweeping
 /// the knob never moves the volume.
+#[must_use]
 pub fn drive_compensation(model_path: &Path, sample_rate: f64, drive: f32) -> Option<(f32, f32)> {
     let entry = drive_curve(model_path, sample_rate)?;
     let lo = DRIVE_SWEEP_DB[0];
@@ -657,9 +680,17 @@ pub fn drive_compensation(model_path: &Path, sample_rate: f64, drive: f32) -> Op
     Some((in_db as f32, out_db as f32))
 }
 
-/// Install `samples` (mono, `sample_rate`) as the calibration DI reference
-/// and wipe both measurement caches so everything re-measures against it.
-/// The next calibration pass then reflects the player's own guitar.
+/// Install `samples` (mono, `sample_rate`) as the calibration DI reference and wipe both measurement caches.
+///
+/// Everything re-measures against it. The next calibration pass then reflects the player's own guitar.
+///
+/// # Errors
+///
+/// Returns `Err` if the capture is too short (< 1 second) or if the file cannot be written.
+///
+/// # Panics
+///
+/// Panics if a mutex lock is poisoned.
 pub fn install_di_reference(samples: &[f32], sample_rate: u32) -> Result<(), String> {
     if samples.len() < sample_rate as usize {
         return Err("capture too short for a DI reference (need ≥ 1 s)".into());
@@ -681,8 +712,8 @@ pub fn install_di_reference(samples: &[f32], sample_rate: u32) -> Result<(), Str
     // Invalidate everything measured against the old DI.
     let _ = std::fs::remove_file(dir.join("loudness-cache.styx"));
     let _ = std::fs::remove_file(DriveCurveCache::path());
-    *drive_cache().lock().unwrap() = DriveCurveCache::default();
-    if let Some(ctx) = context().lock().unwrap().as_mut() {
+    *drive_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner) = DriveCurveCache::default();
+    if let Some(ctx) = context().lock().unwrap_or_else(std::sync::PoisonError::into_inner).as_mut() {
         ctx.di = DiReference::load_or_synthetic(sample_rate as f64);
         ctx.cache = LoudnessCache::load();
     }

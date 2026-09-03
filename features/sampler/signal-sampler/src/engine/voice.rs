@@ -29,8 +29,9 @@ pub enum VoiceState {
 }
 
 /// Stem class of the articulation that spawned a voice — the routing key for
-/// stem-aware output buses (see `docs/plan/document-mode.md`, "Stem-aware
-/// output buses"). Longs: sustain/legato/tremolo bodies + their releases.
+/// stem-aware output buses (see `docs/plan/document-mode.md`, "Stem-aware output buses").
+///
+/// Longs: sustain/legato/tremolo bodies + their releases.
 /// Shorts: short articulations (staccato/spiccato/pizz/…) + their releases.
 /// Default routing sends every class to the main bus (no behavior change).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -71,19 +72,20 @@ pub enum VoiceKind {
 
 impl VoiceKind {
     /// Stable name for the render trace / debug output.
+    #[must_use]
     pub fn trace_name(&self) -> &'static str {
         match self {
-            VoiceKind::SustainNVLo => "SustainNVLo",
-            VoiceKind::SustainNVHi => "SustainNVHi",
-            VoiceKind::SustainVibLo => "SustainVibLo",
-            VoiceKind::SustainVibHi => "SustainVibHi",
-            VoiceKind::SustainLo => "SustainLo",
-            VoiceKind::SustainHi => "SustainHi",
-            VoiceKind::SustainLayer => "SustainLayer",
-            VoiceKind::Legato => "Legato",
-            VoiceKind::Release => "Release",
-            VoiceKind::Short => "Short",
-            VoiceKind::Zoned => "Zoned",
+            Self::SustainNVLo => "SustainNVLo",
+            Self::SustainNVHi => "SustainNVHi",
+            Self::SustainVibLo => "SustainVibLo",
+            Self::SustainVibHi => "SustainVibHi",
+            Self::SustainLo => "SustainLo",
+            Self::SustainHi => "SustainHi",
+            Self::SustainLayer => "SustainLayer",
+            Self::Legato => "Legato",
+            Self::Release => "Release",
+            Self::Short => "Short",
+            Self::Zoned => "Zoned",
         }
     }
 }
@@ -243,7 +245,7 @@ pub struct Voice {
     /// Stem class of the articulation that spawned this voice (bus routing).
     pub artic_class: ArticClass,
 
-    /// Decoded ENV_FLEX amplitude envelope (the instrument's real per-voice amp
+    /// Decoded `ENV_FLEX` amplitude envelope (the instrument's real per-voice amp
     /// AHDSR), multiplied into the output. `None` = flat unity (legacy voices /
     /// families with no decoded envelope).
     flex: Option<FlexEnv>,
@@ -280,10 +282,11 @@ pub struct Voice {
     pitch: Option<[crate::engine::pitch_shift::PitchShifter; 2]>,
 }
 
-/// One decoded Kontakt ENV_FLEX amplitude envelope, evaluated per frame and
-/// multiplied into the voice's output. Segments are `(len_frames, from, to,
-/// tension)` — the actual shipped `(time_ms, level, curve)` triplets from the
-/// instrument's GroupList (see `nkx-extract/CSS_GROUP_MOD.md` §2), converted to
+/// One decoded Kontakt `ENV_FLEX` amplitude envelope, evaluated per frame and
+/// multiplied into the voice's output.
+///
+/// Segments are `(len_frames, from, to, tension)` — the actual shipped `(time_ms, level, curve)` triplets from the
+/// instrument's `GroupList` (see `nkx-extract/CSS_GROUP_MOD.md` §2), converted to
 /// frames at construction. Segment 0 ramps from 0 (or the caller-supplied
 /// `seg0_from`) to its level; each later segment ramps from the previous
 /// segment's level.
@@ -311,6 +314,7 @@ impl FlexEnv {
     /// the starting level of segment 0 (0.0 for attack-from-silence). When
     /// `hold` is true the timeline freezes at the end of the *last segment that
     /// does not decay to ~0* (the sustain hold point).
+    #[must_use]
     pub fn from_segments(
         segments: &[(f32, f32, f32)],
         seg0_from: f32,
@@ -324,7 +328,7 @@ impl FlexEnv {
         let mut from = seg0_from;
         let mut cum = 0.0f64;
         let mut hold_end: Option<f64> = None;
-        for &(ms, level, tension) in segments.iter() {
+        for &(ms, level, tension) in segments {
             let len = (ms as f64 * sample_rate as f64 / 1000.0).max(1.0);
             segs.push((len, from, level, tension.clamp(0.0, 1.0)));
             // The sustain hold point is the end of the last non-decaying
@@ -373,7 +377,7 @@ impl FlexEnv {
             acc += len;
         }
         // Past the last segment: hold its final level.
-        self.segs.last().map(|s| s.2).unwrap_or(0.0)
+        self.segs.last().map_or(0.0, |s| s.2)
     }
 
     /// Advance one frame (respecting the sustain-hold freeze) and return the
@@ -405,6 +409,7 @@ impl Voice {
     ///   Positive = up, negative = down.
     /// - `gain`: initial output gain (0.0–1.0).
     /// - `release_frames`: fade-out length when note-off arrives.
+    #[must_use]
     pub fn new(
         data: Arc<SampleData>,
         note: u8,
@@ -472,8 +477,9 @@ impl Voice {
     /// Create a voice with an explicit playback rate.
     ///
     /// Used by the zone-mode path (Spectrasonics-style libraries) where pitch
-    /// shifting combines an integer semitone offset (note - root_key) with a
+    /// shifting combines an integer semitone offset (note - `root_key`) with a
     /// per-zone fine-tune in cents. Caller computes `rate = 2^(total_cents/1200)`.
+    #[must_use]
     pub fn with_rate(
         data: Arc<SampleData>,
         note: u8,
@@ -544,6 +550,7 @@ impl Voice {
     /// (~147 cents) sharp. `Voice::new`/`Voice::with_rate` compute pitch only
     /// (they don't know the output rate); the spawning engine, which knows
     /// both, applies this. `scale == 1.0` (native == output) is a no-op.
+    #[must_use]
     pub fn with_rate_scale(mut self, scale: f64) -> Self {
         self.rate *= scale;
         self
@@ -554,6 +561,7 @@ impl Voice {
     /// off-grid note keeps its recorded arrival timing (`rate` carries only
     /// sample-rate conversion) while pitch moves here. A near-zero shift is a
     /// no-op — on-grid voices pay nothing.
+    #[must_use]
     pub fn with_pitch_cents(mut self, cents: f64) -> Self {
         use crate::engine::pitch_shift::PitchShifter;
         if !PitchShifter::is_unity(cents) {
@@ -628,32 +636,38 @@ impl Voice {
 
     /// Set the mic index this voice routes to. `mic_index` indexes into
     /// `LibrarySpec.mics` in declaration order.
+    #[must_use]
     pub fn data_num_frames(&self) -> usize {
         self.data.num_frames
     }
 
+    #[must_use]
     pub fn with_mic_index(mut self, mic_index: Option<u8>) -> Self {
         self.mic_index = mic_index;
         self
     }
 
     /// Tag this voice with its mono legato line (engine `LineId`).
+    #[must_use]
     pub fn with_line(mut self, line: u8) -> Self {
         self.line = line;
         self
     }
 
     /// Tag this voice with the stem class of its source articulation.
+    #[must_use]
     pub fn with_artic_class(mut self, class: ArticClass) -> Self {
         self.artic_class = class;
         self
     }
 
+    #[must_use]
     pub fn with_choke_group(mut self, choke_group: Option<u64>) -> Self {
         self.choke_group = choke_group;
         self
     }
 
+    #[must_use]
     pub fn with_pan(mut self, pan: f32) -> Self {
         let pan = pan.clamp(-1.0, 1.0);
         if self.data.channels >= 2 {
@@ -674,13 +688,15 @@ impl Voice {
     }
 
     /// Tag this voice as a zoned sustain dynamic layer (CC1/CC2 crossfade).
+    #[must_use]
     pub fn with_dyn_layer(mut self, layer: DynLayer) -> Self {
         self.dyn_layer = Some(layer);
         self
     }
 
-    /// Attach the decoded ENV_FLEX amplitude envelope (the instrument's real
+    /// Attach the decoded `ENV_FLEX` amplitude envelope (the instrument's real
     /// per-voice amp AHDSR). Multiplied into the output every frame.
+    #[must_use]
     pub fn with_flex_env(mut self, flex: FlexEnv) -> Self {
         self.flex = Some(flex);
         self
@@ -688,6 +704,7 @@ impl Voice {
 
     /// Start at silence and ramp up to the spawn gain over `frames` — the
     /// attack envelope. `frames == 0` keeps the sample's natural attack.
+    #[must_use]
     pub fn with_attack(mut self, frames: usize) -> Self {
         if frames > 0 {
             self.gain = 0.0; // target_gain stays at the intended spawn gain
@@ -702,6 +719,7 @@ impl Voice {
     /// brings the destination sustain up underneath the one-shot bow-change
     /// transition (spec §2.1 step 7). `delay_frames == 0 && fade_frames == 0`
     /// leaves the natural attack unchanged.
+    #[must_use]
     pub fn with_fade_in_under(mut self, delay_frames: usize, fade_frames: usize) -> Self {
         if delay_frames > 0 || fade_frames > 0 {
             self.gain = 0.0; // target_gain stays at the intended spawn gain
@@ -717,6 +735,7 @@ impl Voice {
     /// reaching ~`stage1_run/stage1_denom` of target — then a slower stage-2
     /// ramp of `stage2_frames` (`$rixqv`) that completes to target. Falls back
     /// to a single-stage fade when `stage2_frames == 0`.
+    #[must_use]
     pub fn with_two_stage_fade_in(
         mut self,
         delay_frames: usize,
@@ -735,6 +754,7 @@ impl Voice {
     /// Portamento micro-glide: ramp the pitch from `start_cents` to `end_cents`
     /// over `frames` (CSS `$1mwwo`≈60 ms). Incoming: `(-jyttf, 0)`; outgoing:
     /// `(0, +jyttf)`. (`$upjkh`/`$ma0b1`.)
+    #[must_use]
     pub fn with_pitch_glide(mut self, start_cents: f32, end_cents: f32, frames: usize) -> Self {
         self.set_pitch_glide(start_cents, end_cents, frames);
         self
@@ -757,6 +777,7 @@ impl Voice {
     /// trigger by an upper-bound lead; each spawned voice is held back by
     /// `lead − its own measured arrival` so the heard arrival lands exactly
     /// on the grid tick, per round-robin / mic / dynamic layer. `0` = no-op.
+    #[must_use]
     pub fn with_start_hold(mut self, frames: usize) -> Self {
         self.start_hold = frames;
         self
@@ -766,6 +787,7 @@ impl Voice {
     /// and the engine output frame this voice spawns at. See
     /// `marker_arrival_file` — the marker is emitted when the real playhead
     /// crosses the position, stamped with the actual output frame.
+    #[must_use]
     pub fn with_arrival_marker(mut self, file_frame: f64, spawn_frame: u64) -> Self {
         self.marker_arrival_file = Some(file_frame);
         self.spawn_frame = spawn_frame;
@@ -789,6 +811,7 @@ impl Voice {
     /// / attack delay). Used by the legato handoff to swell the −6 dB
     /// connected sustain back to full body over ~1 s. No-op when `frames ==
     /// 0` or `target == 1.0`.
+    #[must_use]
     pub fn with_slow_bloom(mut self, frames: usize, target: f32) -> Self {
         if frames > 0 && (target - 1.0).abs() > 1e-6 {
             self.bloom_frames = frames;
@@ -798,6 +821,7 @@ impl Voice {
         self
     }
 
+    #[must_use]
     pub fn with_sample_window(mut self, start_frame: usize, end_frame: Option<usize>) -> Self {
         let start = start_frame.min(self.data.num_frames);
         let end = end_frame
@@ -813,6 +837,7 @@ impl Voice {
         self
     }
 
+    #[must_use]
     pub fn with_forward_loop(mut self, loop_start: usize, loop_end: usize) -> Self {
         let start = loop_start.min(self.end_frame);
         let end = loop_end.min(self.end_frame);
@@ -826,6 +851,7 @@ impl Voice {
         self
     }
 
+    #[must_use]
     pub fn with_alternating_loop(mut self, loop_start: usize, loop_end: usize) -> Self {
         self = self.with_forward_loop(loop_start, loop_end);
         if self.loop_range.is_some() {
@@ -838,6 +864,7 @@ impl Voice {
     /// the material available before `loop_start` and to half the loop length.
     /// No-op unless a forward (non-ping-pong) loop is set — ping-pong loops
     /// reflect the read position and are already continuous at the turnaround.
+    #[must_use]
     pub fn with_loop_xfade(mut self, frames: usize) -> Self {
         if let Some((loop_start, loop_end)) = self.loop_range {
             if !self.alternating_loop && loop_end > loop_start {
@@ -849,6 +876,7 @@ impl Voice {
         self
     }
 
+    #[must_use]
     pub fn reversed(mut self) -> Self {
         self.reverse = true;
         self.loop_range = None;
@@ -917,6 +945,7 @@ impl Voice {
     }
 
     /// Returns true when this voice should be removed from the pool.
+    #[must_use]
     pub fn is_done(&self) -> bool {
         self.state == VoiceState::Done
     }
@@ -1207,6 +1236,7 @@ impl Voice {
     }
 
     /// Current peak-follower level of this voice (for release-gain scaling).
+    #[must_use]
     pub fn env_peak(&self) -> f32 {
         self.env_peak
     }
@@ -1267,6 +1297,7 @@ pub enum VoiceStealPolicy {
 }
 
 impl VoiceStealPolicy {
+    #[must_use]
     pub fn parse(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
             "oldest" => Self::Oldest,
@@ -1304,6 +1335,7 @@ impl Default for VoicePool {
 }
 
 impl VoicePool {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             voices: Vec::with_capacity(MAX_VOICES),
@@ -1316,6 +1348,7 @@ impl VoicePool {
         }
     }
 
+    #[must_use]
     pub fn with_max_voices(max_voices: usize) -> Self {
         let capacity = max_voices.clamp(1, MAX_VOICES);
         Self {
@@ -1334,6 +1367,7 @@ impl VoicePool {
         self.enforce_limit();
     }
 
+    #[must_use]
     pub fn max_voices(&self) -> usize {
         self.max_voices
     }
@@ -1342,6 +1376,7 @@ impl VoicePool {
         self.steal_policy = policy;
     }
 
+    #[must_use]
     pub fn steal_policy(&self) -> VoiceStealPolicy {
         self.steal_policy
     }
@@ -1380,7 +1415,7 @@ impl VoicePool {
     }
 
     /// Collect the trace ids of all currently-alive traced voices into `out`
-    /// (cleared first). Drives the render-trace VoiceEnd sweep.
+    /// (cleared first). Drives the render-trace `VoiceEnd` sweep.
     pub fn alive_trace_ids_into(&self, out: &mut Vec<u64>) {
         out.clear();
         out.extend(self.voices.iter().filter_map(|v| v.trace_id));
@@ -1411,7 +1446,7 @@ impl VoicePool {
             .filter(|v| {
                 v.note == note && v.kind != VoiceKind::Release && v.state != VoiceState::Done
             })
-            .map(|v| v.env_peak())
+            .map(Voice::env_peak)
             .fold(0.0f32, f32::max)
     }
 
@@ -1623,6 +1658,7 @@ impl VoicePool {
         }
     }
 
+    #[must_use]
     pub fn active_choke_group_count(&self, group: u64) -> usize {
         self.voices
             .iter()
@@ -1740,10 +1776,12 @@ impl VoicePool {
         self.voices.retain(|v| !v.is_done());
     }
 
+    #[must_use]
     pub fn active_count(&self) -> usize {
         self.voices.len()
     }
 
+    #[must_use]
     pub fn stolen_count(&self) -> usize {
         self.stolen
     }
@@ -1797,7 +1835,7 @@ impl VoicePool {
                 .iter()
                 .position(|v| matches!(v.state, VoiceState::Releasing { .. })),
             VoiceStealPolicy::Oldest => Some(0),
-            VoiceStealPolicy::Quietest => None,
+            VoiceStealPolicy::Quietest | VoiceStealPolicy::DropNew => None,
             VoiceStealPolicy::SameNoteFirst => incoming_note
                 .and_then(|note| self.voices.iter().position(|v| v.note == note))
                 .or_else(|| {
@@ -1805,7 +1843,6 @@ impl VoicePool {
                         .iter()
                         .position(|v| matches!(v.state, VoiceState::Releasing { .. }))
                 }),
-            VoiceStealPolicy::DropNew => None,
         }
     }
 }

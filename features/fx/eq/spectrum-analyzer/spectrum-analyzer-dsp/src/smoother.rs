@@ -2,7 +2,7 @@
 //!
 //! For each bin `i`, average the bins spanning ±half-the-smoothing-octave around
 //! it. Window edges are precomputed; the average itself is a prefix-sum boxcar
-//! applied twice (a triangular smoothing). Port of ZLEqualizer's
+//! applied twice (a triangular smoothing). Port of `ZLEqualizer`'s
 //! `SpectrumSmoother`.
 
 pub struct SpectrumSmoother {
@@ -14,6 +14,7 @@ pub struct SpectrumSmoother {
 }
 
 impl SpectrumSmoother {
+    #[must_use]
     pub fn new(num_bins: usize) -> Self {
         let mut s = Self {
             low_idx: vec![0; num_bins],

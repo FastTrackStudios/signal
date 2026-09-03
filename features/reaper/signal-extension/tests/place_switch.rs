@@ -50,7 +50,7 @@ async fn build_test_setlist(tracks: &daw::rpc::Tracks) -> eyre::Result<TestSetli
     // ── Rig folder ──────────────────────────────────────────────────
     let rig_folder = tracks.add("Guitar Rig", None).await?;
     rig_folder.set_folder_depth(1).await?;
-    rig_folder.set_color(0x9CA3AF).await?;
+    rig_folder.set_color(0x009C_A3AF).await?;
     rig_folder
         .set_ext_state("fts_signal", "scene_count", "2")
         .await?;
@@ -63,7 +63,7 @@ async fn build_test_setlist(tracks: &daw::rpc::Tracks) -> eyre::Result<TestSetli
     // ── Song 1: Belief (3 sections) ─────────────────────────────────
     let belief_folder = tracks.add("Belief", None).await?;
     belief_folder.set_folder_depth(1).await?;
-    belief_folder.set_color(0x22C55E).await?;
+    belief_folder.set_color(0x0022_C55E).await?;
     belief_folder
         .set_ext_state("fts_signal", "scene_count", "3")
         .await?;
@@ -82,7 +82,7 @@ async fn build_test_setlist(tracks: &daw::rpc::Tracks) -> eyre::Result<TestSetli
     // ── Song 2: Vienna (2 sections) ─────────────────────────────────
     let vienna_folder = tracks.add("Vienna", None).await?;
     vienna_folder.set_folder_depth(1).await?;
-    vienna_folder.set_color(0x3B82F6).await?;
+    vienna_folder.set_color(0x003B_82F6).await?;
     vienna_folder
         .set_ext_state("fts_signal", "scene_count", "2")
         .await?;

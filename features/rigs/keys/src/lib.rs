@@ -11,7 +11,9 @@
 mod backend;
 pub mod normalize;
 /// Profiles: the engine/layer mixer shape + the footswitch stacks (scenes)
-/// that recall it. The Worship profile lives here.
+/// that recall it.
+///
+/// The Worship profile lives here.
 pub mod profile;
 pub mod variations;
 pub use backend::KeysRigBackend;

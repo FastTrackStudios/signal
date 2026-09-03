@@ -1,4 +1,4 @@
-//! Dual-delay composition — TimeLine MX "1+2" routing.
+//! Dual-delay composition — `TimeLine` MX "1+2" routing.
 //!
 //! Two full [`DelayChain`]s (each its own machine, params, tap division
 //! incl. `Free`) composed per [`DualRouting`]:
@@ -41,6 +41,7 @@ pub enum DualRouting {
 impl DualRouting {
     pub const COUNT: usize = 6;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Series12,
@@ -52,6 +53,7 @@ impl DualRouting {
         }
     }
 
+    #[must_use]
     pub fn to_index(self) -> usize {
         match self {
             Self::Single => 0,
@@ -63,6 +65,7 @@ impl DualRouting {
         }
     }
 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Single => "Single",
@@ -75,7 +78,7 @@ impl DualRouting {
     }
 }
 
-/// Two delay chains + routing (TimeLine MX dual-delay presets).
+/// Two delay chains + routing (`TimeLine` MX dual-delay presets).
 pub struct DualDelay {
     pub a: DelayChain,
     pub b: DelayChain,
@@ -89,6 +92,7 @@ pub struct DualDelay {
 }
 
 impl DualDelay {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             a: DelayChain::new(),

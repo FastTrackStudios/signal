@@ -19,7 +19,7 @@ pub fn EngineView(engine: KeysEngineModel, zoom: Signal<Zoom>) -> Element {
     // Back button anywhere in the app any more, only the trail.
     let level = fts_chrome::use_chrome_level(3);
     level.crumbs(vec![
-        fts_chrome::Crumb::new("Mixer", Callback::new(move |_| zoom.set(Zoom::Mixer))),
+        fts_chrome::Crumb::new("Mixer", Callback::new(move |()| zoom.set(Zoom::Mixer))),
         fts_chrome::Crumb::here(engine.name.clone()),
     ]);
     level.status(vec![fts_chrome::StatusItem::text(format!(
@@ -100,7 +100,7 @@ pub fn EngineView(engine: KeysEngineModel, zoom: Signal<Zoom>) -> Element {
                                         size: 14,
                                         on_open: {
                                             let open_lane = open_lane.clone();
-                                            move |_| zoom.set(Zoom::Layer(open_lane.clone()))
+                                            move |()| zoom.set(Zoom::Layer(open_lane.clone()))
                                         },
                                     }
                                 }

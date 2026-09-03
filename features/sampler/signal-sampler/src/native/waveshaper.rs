@@ -32,6 +32,7 @@ pub struct NativeWaveshaper {
 }
 
 impl NativeWaveshaper {
+    #[must_use]
     pub fn new(_sample_rate: u32) -> Self {
         Self {
             drive: 0.0,

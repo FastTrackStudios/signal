@@ -1,5 +1,6 @@
-//! Styx-directory persistence for rig libraries — the read / write /
-//! read-or-seed trio each rig's `library.rs` re-implemented, over one
+//! Styx-directory persistence for rig libraries.
+//!
+//! The read / write / read-or-seed trio each rig's `library.rs` re-implemented, over one
 //! directory of plain styx text files (portable, git-trackable, editable).
 
 use std::path::PathBuf;

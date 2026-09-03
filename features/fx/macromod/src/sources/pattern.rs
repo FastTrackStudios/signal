@@ -10,11 +10,12 @@ use serde::{Deserialize, Serialize};
 
 use super::lfo::{RetriggerMode, TempoDiv};
 
-/// One breakpoint of a drawn pattern. `x`/`y` are normalized 0..1;
-/// `curve_type` indexes [`fts_modulation::CurveType`] (0 = Hold,
-/// 1 = Curve, 2 = `SCurve`, 3 = `HalfSine`, 4 = Pulse, 5 = Wave,
-/// 6 = Triangle, 7 = Stairs, 8 = `SmoothStairs`); `tension` bends the
-/// segment leaving this point (−1..1).
+/// One breakpoint of a drawn pattern. `x`/`y` are normalized 0..1.
+///
+/// `curve_type` indexes [`fts_modulation::CurveType`] (0 = Hold, 1 = Curve,
+/// 2 = `SCurve`, 3 = `HalfSine`, 4 = Pulse, 5 = Wave, 6 = Triangle,
+/// 7 = Stairs, 8 = `SmoothStairs`); `tension` bends the segment leaving
+/// this point (−1..1).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Facet)]
 pub struct PatternPoint {
     pub x: f32,

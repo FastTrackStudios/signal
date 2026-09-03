@@ -42,9 +42,11 @@ use crate::rig_profile::{RigPatch, RigProfile, RigStack};
 use crate::SamplerError;
 
 /// A **Scene** — one named variant (snapshot) of a [`RigPreset`]: an ordered FX
-/// chain plus scene-level trims. For an ML "full rig" capture a scene's chain is
-/// a single `.nam` block (the capture already bakes in the cab); a hand-built
-/// preset's scene might be drive → amp → cab → reverb.
+/// chain plus scene-level trims.
+///
+/// For an ML "full rig" capture a scene's chain is a single `.nam` block (the
+/// capture already bakes in the cab); a hand-built preset's scene might be drive
+/// → amp → cab → reverb.
 #[derive(Debug, Clone, Facet)]
 pub struct RigScene {
     /// Scene name (e.g. "Clean", "Drive", "Lead").
@@ -72,8 +74,10 @@ impl RigScene {
 }
 
 /// A **Preset** — a playable tone (e.g. an amp model) holding a set of named
-/// [`RigScene`]s. The standalone analogue of the domain's *Rig Preset*
-/// (`signal_proto::rig::Rig`, whose variants are `RigScene`s).
+/// [`RigScene`]s.
+///
+/// The standalone analogue of the domain's *Rig Preset* (`signal_proto::rig::Rig`,
+/// whose variants are `RigScene`s).
 #[derive(Debug, Clone, Facet)]
 pub struct RigPreset {
     /// Display name (e.g. "Marshall JCM800").
@@ -109,6 +113,7 @@ impl RigPreset {
     }
 
     /// Look up a scene by name (case-insensitive).
+    #[must_use]
     pub fn scene(&self, name: &str) -> Option<&RigScene> {
         self.scenes
             .iter()
@@ -116,11 +121,16 @@ impl RigPreset {
     }
 
     /// The default scene, if any.
+    #[must_use]
     pub fn default_scene(&self) -> Option<&RigScene> {
         self.scenes.get(self.default_scene).or(self.scenes.first())
     }
 
     /// Parse a preset from a `.styx` file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed as valid `.styx` syntax.
     pub fn from_styx_file(path: &Path) -> Result<Self, SamplerError> {
         let text = std::fs::read_to_string(path)?;
         facet_styx::from_str(&text).map_err(|e| SamplerError::SpecParse(e.to_string()))
@@ -164,6 +174,10 @@ pub struct RigSong {
 
 impl RigSong {
     /// Parse a song from a `.styx` file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed as valid `.styx` syntax.
     pub fn from_styx_file(path: &Path) -> Result<Self, SamplerError> {
         let text = std::fs::read_to_string(path)?;
         facet_styx::from_str(&text).map_err(|e| SamplerError::SpecParse(e.to_string()))
@@ -171,8 +185,10 @@ impl RigSong {
 }
 
 /// An in-memory catalog of [`RigPreset`]s, [`RigProfile`]s and [`RigSong`]s
-/// scanned from a library directory. The browser views these; resolution
-/// methods turn any of the three into a playable [`RigProfile`].
+/// scanned from a library directory.
+///
+/// The browser views these; resolution methods turn any of the three into a
+/// playable [`RigProfile`].
 #[derive(Debug, Clone, Default)]
 pub struct Library {
     pub root: PathBuf,
@@ -190,7 +206,7 @@ impl Library {
     /// sorted by name for a stable browser order.
     pub fn load_dir(root: impl AsRef<Path>) -> Self {
         let root = root.as_ref().to_path_buf();
-        let mut lib = Library {
+        let mut lib = Self {
             root: root.clone(),
             ..Default::default()
         };
@@ -244,24 +260,28 @@ impl Library {
     }
 
     /// True when nothing loaded.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.presets.is_empty() && self.profiles.is_empty() && self.songs.is_empty()
     }
 
     // ── Lookups ──────────────────────────────────────────────────────────
 
+    #[must_use]
     pub fn preset(&self, name: &str) -> Option<&RigPreset> {
         self.presets
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(name))
     }
 
+    #[must_use]
     pub fn profile(&self, name: &str) -> Option<&RigProfile> {
         self.profiles
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(name))
     }
 
+    #[must_use]
     pub fn song(&self, name: &str) -> Option<&RigSong> {
         self.songs
             .iter()
@@ -273,6 +293,7 @@ impl Library {
     /// Turn a preset into a profile whose patches are its scenes — so the whole
     /// preset can be loaded and its scenes stepped through with the patch keys.
     /// The default scene becomes the default patch.
+    #[must_use]
     pub fn preset_as_profile(&self, preset: &RigPreset) -> RigProfile {
         let patches: Vec<RigPatch> = preset
             .scenes
@@ -294,6 +315,7 @@ impl Library {
     /// A reference that can't be resolved yields an empty-chain patch (it shows
     /// "unavailable" at load time) and records an [`error`](Self::errors)-style
     /// warning via `tracing`.
+    #[must_use]
     pub fn resolve_profile(&self, profile: &RigProfile) -> RigProfile {
         let patches = profile
             .patches
@@ -350,6 +372,7 @@ impl Library {
 
     /// Turn a song into a profile whose patches are its sections in order — so a
     /// song loads and its sections step through with the patch keys.
+    #[must_use]
     pub fn song_as_profile(&self, song: &RigSong) -> RigProfile {
         let patches: Vec<RigPatch> = song
             .sections
@@ -662,7 +685,7 @@ mod tests {
         // Every section's patch resolved to a playable amp NAM (first block).
         for patch in &prof.patches {
             assert!(
-                patch.chain.first().map(|b| b.is_nam()).unwrap_or(false),
+                patch.chain.first().is_some_and(super::super::rig::RigBlock::is_nam),
                 "section {:?} did not resolve to an amp",
                 patch.name
             );

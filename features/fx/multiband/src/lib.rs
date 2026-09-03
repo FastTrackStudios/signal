@@ -19,6 +19,11 @@
 //! `ShaperBox`, a saturator per band…). One band = bit-exact
 //! passthrough of the closure over the raw buffers (zero split cost).
 
+// Realtime guard. This crate runs on an audio callback, so the calls in
+// clippy.toml's disallowed-methods list (locks, env, sleep) are real bugs here
+// even though they are allowed workspace-wide off the audio thread.
+#![deny(clippy::disallowed_methods)]
+
 /// Maximum supported bands (5 crossovers).
 pub const MAX_BANDS: usize = 6;
 
@@ -152,7 +157,7 @@ impl BandSplitter {
             sorted[n] = f.clamp(20.0, self.sample_rate * 0.45);
             n += 1;
         }
-        sorted[..n].sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted[..n].sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         self.crossovers.clear();
         for &f in &sorted[..n] {
             // Skip near-duplicates (< 1/12 octave apart).

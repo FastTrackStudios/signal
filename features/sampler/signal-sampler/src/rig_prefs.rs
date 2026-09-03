@@ -9,7 +9,7 @@ use facet::Facet;
 /// Empty-string / `0` mean "unset" (use the system default) rather than
 /// `Option`, because the styx config is both written and re-read and the
 /// serializer can't round-trip a serialized `None`.
-#[derive(Clone, Debug, PartialEq, Facet)]
+#[derive(Clone, Debug, PartialEq, Eq, Facet)]
 pub struct RigAudioPrefs {
     /// Input device substring (matched against device names). Empty = system
     /// default input.
@@ -71,18 +71,22 @@ impl Default for RigAudioPrefs {
 
 impl RigAudioPrefs {
     /// Input device substring, or `None` if unset (use default).
+    #[must_use]
     pub fn input_name(&self) -> Option<&str> {
         Some(self.input_device.as_str()).filter(|s| !s.is_empty())
     }
     /// Output device substring, or `None` if unset.
+    #[must_use]
     pub fn output_name(&self) -> Option<&str> {
         Some(self.output_device.as_str()).filter(|s| !s.is_empty())
     }
     /// Requested sample rate, or `None` (device native) if `0`.
+    #[must_use]
     pub fn sample_rate_opt(&self) -> Option<u32> {
         (self.sample_rate != 0).then_some(self.sample_rate)
     }
     /// Requested buffer size, or `None` (backend default) if `0`.
+    #[must_use]
     pub fn buffer_size_opt(&self) -> Option<u32> {
         (self.buffer_size != 0).then_some(self.buffer_size)
     }
@@ -96,7 +100,7 @@ impl RigAudioPrefs {
 /// track's `RecordInput` separately, in `GuitarRig::open`.
 impl From<&RigAudioPrefs> for daw_audio_io::AudioIoPrefs {
     fn from(p: &RigAudioPrefs) -> Self {
-        daw_audio_io::AudioIoPrefs {
+        Self {
             input_device: p.input_device.clone(),
             output_device: p.output_device.clone(),
             sample_rate: p.sample_rate,

@@ -14,13 +14,10 @@ use nice_plug_dioxus::prelude::*;
 
 fn control_range_label(mapping: &ParamMapping) -> String {
     match mapping {
-        ParamMapping::Direct { range, .. } => {
+        ParamMapping::Direct { range, .. } | ParamMapping::Compound { range, .. } => {
             format!("{:.1} - {:.1}", range.start(), range.end())
         }
         ParamMapping::Stepped { labels, .. } => labels.join("  "),
-        ParamMapping::Compound { range, .. } => {
-            format!("{:.1} - {:.1}", range.start(), range.end())
-        }
     }
 }
 

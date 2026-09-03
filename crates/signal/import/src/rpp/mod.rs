@@ -53,6 +53,7 @@ pub struct Block {
 
 impl Block {
     /// The block's name — the token right after the `<`.
+    #[must_use]
     pub fn token(&self) -> &str {
         let s = self.header.trim_start();
         let s = s.strip_prefix('<').unwrap_or(s);
@@ -61,6 +62,7 @@ impl Block {
 
     /// The leading whitespace of the header line, so a replacement block can
     /// be rendered at the same depth.
+    #[must_use]
     pub fn indent(&self) -> &str {
         let end = self
             .header
@@ -74,6 +76,7 @@ impl Block {
     /// A `<VST>` block's children are exactly its base64 lines; a `<CLAP>`
     /// block wraps them one level deeper in `<STATE>`, so callers reach for
     /// [`Self::child_block`] first.
+    #[must_use]
     pub fn base64_lines(&self) -> Vec<String> {
         self.children
             .iter()
@@ -86,7 +89,8 @@ impl Block {
     }
 
     /// The first direct child block named `token`.
-    pub fn child_block(&self, token: &str) -> Option<&Block> {
+    #[must_use]
+    pub fn child_block(&self, token: &str) -> Option<&Self> {
         self.children.iter().find_map(|n| match n {
             Node::Block(b) if b.token() == token => Some(b),
             _ => None,
@@ -122,15 +126,17 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn parse(text: &str) -> Document {
+    #[must_use]
+    pub fn parse(text: &str) -> Self {
         let crlf = text.contains("\r\n");
         let body = text.replace("\r\n", "\n");
         let mut lines = body.lines();
         let mut nodes = Vec::new();
         parse_into(&mut lines, &mut nodes);
-        Document { nodes, crlf }
+        Self { nodes, crlf }
     }
 
+    #[must_use]
     pub fn render(&self) -> String {
         let mut out = String::new();
         for node in &self.nodes {
@@ -149,6 +155,7 @@ impl Document {
 
     /// Every block in the tree, depth-first, with the path of enclosing block
     /// tokens that leads to it.
+    #[must_use]
     pub fn walk(&self) -> Vec<BlockRef<'_>> {
         let mut out = Vec::new();
         walk_nodes(&self.nodes, &mut Vec::new(), &mut out);
@@ -215,6 +222,7 @@ fn parse_into(lines: &mut std::str::Lines<'_>, out: &mut Vec<Node>) -> Option<St
 /// value has a double quote, a backtick if it has both — so a field is not
 /// splittable on whitespace alone. Returned fields keep their quotes, because
 /// the converter's job is to reproduce them.
+#[must_use]
 pub fn split_fields(line: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
@@ -246,6 +254,7 @@ pub fn split_fields(line: &str) -> Vec<String> {
 }
 
 /// Strip one layer of REAPER quoting from a field.
+#[must_use]
 pub fn unquote(field: &str) -> &str {
     let mut chars = field.chars();
     match (chars.next(), field.chars().last()) {
@@ -257,6 +266,7 @@ pub fn unquote(field: &str) -> &str {
 }
 
 /// Quote a value the way REAPER does: pick a delimiter the value lacks.
+#[must_use]
 pub fn quote(value: &str) -> String {
     let q = if !value.contains('"') {
         '"'

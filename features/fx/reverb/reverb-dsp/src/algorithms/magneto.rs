@@ -1,6 +1,6 @@
 //! Magneto reverb — multi-head tape echo with diffusion crossover.
 //!
-//! Based on Strymon BigSky Magneto: simulates a multi-head tape
+//! Based on Strymon `BigSky` Magneto: simulates a multi-head tape
 //! machine where the echoes are progressively diffused, blurring
 //! the boundary between delay and reverb.
 
@@ -46,6 +46,7 @@ pub struct Magneto {
 }
 
 impl Magneto {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let max_delay = (sample_rate * 1.5) as usize; // 1.5s max tape
 

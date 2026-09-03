@@ -54,6 +54,10 @@ impl AuthStart {
     ///
     /// Compared in full rather than short-circuiting on the first differing
     /// byte, so the check does not leak the value through its timing.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SessionError::StateMismatch` if the echoed state does not match the stored one.
     pub fn verify_state(&self, echoed: &str) -> Result<(), SessionError> {
         let (a, b) = (self.state.as_bytes(), echoed.as_bytes());
         let equal = a.len() == b.len()
@@ -99,10 +103,20 @@ impl Session {
         matches!(self.tokens.load(), Ok(Some(_)))
     }
 
+    /// Sign out by clearing stored tokens.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the token store fails to clear (e.g., I/O error).
     pub fn sign_out(&self) -> Result<(), SessionError> {
         self.tokens.clear().map_err(SessionError::from)
     }
 
+    /// Retrieve the stored tokens if the session is signed in.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SessionError::NotSignedIn` if no tokens are stored, or a token store error if loading fails.
     pub fn stored_tokens(&self) -> Result<Tokens, SessionError> {
         self.tokens.load()?.ok_or(SessionError::NotSignedIn)
     }
@@ -128,6 +142,10 @@ impl Session {
     /// destination, nothing is rewritten and `written` is false. Re-picking a
     /// tone you already have is a normal thing to do, and it should cost
     /// nothing and disturb no file the catalog has already indexed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if creating directories or writing the file fails.
     pub fn place_model(
         &self,
         tone_id: &str,

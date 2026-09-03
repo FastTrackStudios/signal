@@ -90,7 +90,7 @@ pub struct Bloom {
     size_scale: f64,
     stereo_width: f64,
 
-    /// BigSky MX "Harmonics": POG filter-bank overtone generator fed
+    /// `BigSky` MX "Harmonics": POG filter-bank overtone generator fed
     /// into the trail (octave + double-octave partials — the POG bank
     /// resynthesizes octaves; a true fifth isn't available, noted as
     /// the closest honest match). Level-gated: 0 = no tick, no CPU.
@@ -102,6 +102,7 @@ pub struct Bloom {
 }
 
 impl Bloom {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         // Input diffusers with different seeds for L/R decorrelation
         let mut input_diffuser_l = AllpassDiffuser::with_defaults(sample_rate, 1.0);

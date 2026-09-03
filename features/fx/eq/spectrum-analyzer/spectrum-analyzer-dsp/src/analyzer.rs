@@ -180,7 +180,9 @@ impl SlotProcessor {
             }
             self.tilter.tilt(&mut fresh);
         } else {
-            fresh.iter_mut().for_each(|d| *d = FLOOR_DB);
+            for d in &mut fresh {
+                *d = FLOOR_DB;
+            }
         }
 
         // Attack/release (or freeze hold).
@@ -216,7 +218,8 @@ struct AnalyzerState {
 impl Analyzer {
     /// Create an analyzer for `instance_id` at `sample_rate`. Returns the shared
     /// analyzer (for the UI) and the audio feed (for the processor).
-    pub fn new(instance_id: InstanceId, sample_rate: f32) -> (Arc<Analyzer>, AudioFeed) {
+    #[must_use]
+    pub fn new(instance_id: InstanceId, sample_rate: f32) -> (Arc<Self>, AudioFeed) {
         let cap = Resolution::MAX_FFT_SIZE * RING_FRAMES;
         let (pre_tx, pre_rx) = ring(cap);
         let (post_tx, post_rx) = ring(cap);
@@ -240,7 +243,7 @@ impl Analyzer {
             ext_freq: Vec::new(),
         };
 
-        let analyzer = Arc::new(Analyzer {
+        let analyzer = Arc::new(Self {
             id: instance_id,
             shared: sharing::register(instance_id),
             state: parking_lot::Mutex::new(state),
@@ -437,7 +440,7 @@ mod tests {
             .post_db
             .iter()
             .enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .max_by(|a, b| a.1.total_cmp(b.1))
             .unwrap();
         let peak_hz = snap.freq_hz[idx];
         assert!((peak_hz - 1000.0).abs() < 50.0, "peak at {peak_hz} Hz");

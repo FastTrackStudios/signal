@@ -220,10 +220,9 @@ impl MockDawBridge {
 
     /// Pre-load a snapshot for a track (for test setup).
     pub fn set_snapshot(&self, track_id: &str, snapshot: DawParameterSnapshot) {
-        self.snapshots
-            .lock()
-            .unwrap()
-            .insert(track_id.to_string(), snapshot);
+        if let Ok(mut s) = self.snapshots.lock() {
+            s.insert(track_id.to_string(), snapshot);
+        }
     }
 }
 

@@ -41,11 +41,12 @@ pub struct PackChunk {
     pub bytes: Vec<u8>,
 }
 
-/// One byte range within a pack file. Crosses the wire as its
-/// [`Display`](std::fmt::Display) form `"start+len"` (decimal), parsed
-/// back with [`FromStr`](std::str::FromStr): the RPC surface caps at 4
-/// params, and a struct-valued arg is not a wire shape the wasm reader's
-/// phon compat path has proven — strings are (see `pack_plan`'s docs).
+/// One byte range within a pack file.
+///
+/// Crosses the wire as its [`Display`](std::fmt::Display) form `"start+len"`
+/// (decimal), parsed back with [`FromStr`](std::str::FromStr): the RPC surface
+/// caps at 4 params, and a struct-valued arg is not a wire shape the wasm
+/// reader's phon compat path has proven — strings are (see `pack_plan`'s docs).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Facet)]
 pub struct PackRange {
     /// Absolute byte offset of the range's first byte.
@@ -77,10 +78,12 @@ impl std::str::FromStr for PackRange {
     }
 }
 
-/// One segment of a pack's download plan: a contiguous byte span plus its fetch
-/// priority. Segments tile the pack file exactly once (no overlap, no gap);
-/// fetching them in ascending `rank` order makes the pack *playable* long
-/// before it is *complete*.
+/// One segment of a pack's download plan: a contiguous byte span plus its
+/// fetch priority.
+///
+/// Segments tile the pack file exactly once (no overlap, no gap); fetching them
+/// in ascending `rank` order makes the pack *playable* long before it is
+/// *complete*.
 #[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct PackSegment {
     /// Absolute byte offset of the segment.

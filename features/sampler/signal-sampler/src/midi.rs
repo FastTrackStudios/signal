@@ -28,6 +28,10 @@ const NOTE_NAMES: &[(&str, u8)] = &[
 
 /// Parse a note name like "G2", "C#4", "A#-1" to a MIDI note number.
 /// Middle C (C4) = 60.
+///
+/// # Errors
+///
+/// Returns an error if the note name is malformed or out of range.
 pub fn note_name_to_midi(name: &str) -> Result<u8, SamplerError> {
     let bad = || SamplerError::BadNoteName(name.to_string());
 
@@ -65,6 +69,7 @@ pub fn note_name_to_midi(name: &str) -> Result<u8, SamplerError> {
 
 /// Convert a MIDI note number to its standard name in the note grid.
 /// Returns e.g. "G#" for note class 8.
+#[must_use]
 pub fn midi_to_note_class(midi: u8) -> &'static str {
     const CLASSES: &[&str] = &[
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
@@ -73,6 +78,7 @@ pub fn midi_to_note_class(midi: u8) -> &'static str {
 }
 
 /// Octave number for a MIDI note (C4=60 → octave 4).
+#[must_use]
 pub fn midi_to_octave(midi: u8) -> i32 {
     (midi as i32 / 12) - 1
 }
@@ -83,6 +89,7 @@ pub fn midi_to_octave(midi: u8) -> i32 {
 /// describing which pitch classes are sampled. The function finds the closest
 /// note in the grid (in semitone distance) across all octaves within the range
 /// `[lowest, highest]`, then returns that MIDI note number.
+#[must_use]
 pub fn nearest_grid_note(target: u8, grid: &[String], lowest: u8, highest: u8) -> u8 {
     let mut best = lowest;
     let mut best_dist = u8::MAX;
@@ -139,7 +146,7 @@ mod tests {
         // G whole-tone grid (CSS violins)
         let grid: Vec<String> = ["G", "A", "B", "C#", "D#", "F"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
         // G2 = 43, A2 = 45, B2 = 47
         let lowest = note_name_to_midi("G2").unwrap();

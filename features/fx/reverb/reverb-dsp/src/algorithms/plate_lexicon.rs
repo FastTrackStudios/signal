@@ -53,6 +53,7 @@ pub struct PlateLexicon {
 }
 
 impl PlateLexicon {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         // Lexicon 224 reference rate ~30000 Hz (slightly different from Dattorro's 29761)
         let s = sample_rate / 30000.0;

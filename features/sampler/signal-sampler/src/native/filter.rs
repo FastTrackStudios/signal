@@ -19,14 +19,15 @@ pub enum FilterMode {
 
 impl FilterMode {
     /// Parse a mode name (`"lp"`, `"highpass"`, `"bp"`, `"notch"`, …).
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         let k = s.to_ascii_lowercase();
         Some(match () {
-            _ if k.starts_with("lp") || k.starts_with("low") => FilterMode::Lowpass,
-            _ if k.starts_with("hp") || k.starts_with("high") => FilterMode::Highpass,
-            _ if k.starts_with("bp") || k.starts_with("band") => FilterMode::Bandpass,
-            _ if k.starts_with("notch") => FilterMode::Notch,
-            _ => return None,
+            () if k.starts_with("lp") || k.starts_with("low") => Self::Lowpass,
+            () if k.starts_with("hp") || k.starts_with("high") => Self::Highpass,
+            () if k.starts_with("bp") || k.starts_with("band") => Self::Bandpass,
+            () if k.starts_with("notch") => Self::Notch,
+            () => return None,
         })
     }
 }
@@ -76,8 +77,9 @@ impl Svf {
 }
 
 /// A saturating 4-stage ladder (Moog-style): four one-pole lowpasses with
-/// global resonance feedback and a tanh nonlinearity at the input — the
-/// "character" engine behind the Juicy/Moogie/OB/Jupiter/FATBOY families.
+/// global resonance feedback and a tanh nonlinearity at the input.
+///
+/// The "character" engine behind the Juicy/Moogie/OB/Jupiter/FATBOY families.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Ladder {
     a: f32,
@@ -119,9 +121,10 @@ pub enum FilterCharacter {
     Ladder,
 }
 
-/// The `Filter` block: stereo multi-pole SVF processor. `sections` cascades
-/// 12 dB TPT sections (1..=4 → 12/24/36/48 dB); resonance lives on the first
-/// section, the rest stay flat so the cascade doesn't compound Q.
+/// The `Filter` block: stereo multi-pole SVF processor.
+///
+/// `sections` cascades 12 dB TPT sections (1..=4 → 12/24/36/48 dB); resonance
+/// lives on the first section, the rest stay flat so the cascade doesn't compound Q.
 pub struct NativeFilter {
     sample_rate: f32,
     mode: FilterMode,
@@ -137,6 +140,7 @@ pub struct NativeFilter {
 }
 
 impl NativeFilter {
+    #[must_use]
     pub fn new(sample_rate: u32) -> Self {
         let mut f = Self {
             sample_rate: sample_rate.max(1) as f32,
@@ -222,16 +226,19 @@ impl NativeFilter {
     }
 
     /// Normalized 0..1 → 20 Hz..20 kHz (exponential).
+    #[must_use]
     pub fn cutoff_from_norm(v: f32) -> f32 {
         20.0 * 1000f32.powf(v.clamp(0.0, 1.0))
     }
 
     /// 20 Hz..20 kHz → normalized 0..1.
+    #[must_use]
     pub fn norm_from_cutoff(hz: f32) -> f32 {
         ((hz / 20.0).max(1.0).log10() / 3.0).clamp(0.0, 1.0)
     }
 
     /// Normalized 0..1 → Q 0.5..12 (flat ≈ 0.018).
+    #[must_use]
     pub fn q_from_norm(v: f32) -> f32 {
         0.5 + 11.5 * v.clamp(0.0, 1.0)
     }

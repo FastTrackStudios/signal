@@ -80,11 +80,10 @@ pub fn Browser(state: KeysViewState) -> Element {
     let all_engines = use_signal(|| false);
 
     let sel = selection.read().clone();
-    let engine = sel.engine().map(|e| e.to_string());
+    let engine = sel.engine().map(ToString::to_string);
     let accent = engine
         .as_deref()
-        .map(engine_color)
-        .unwrap_or("#94a3b8")
+        .map_or("#94a3b8", engine_color)
         .to_string();
     let loadable = !matches!(sel, Selection::None);
 
@@ -111,12 +110,12 @@ pub fn Browser(state: KeysViewState) -> Element {
                         index: i,
                         accent: accent.clone(),
                         loadable,
-                        on_back: move |_| inside.set(None),
+                        on_back: move |()| inside.set(None),
                         on_load: {
                             let rig = rig.clone();
                             let sel = sel.clone();
                             move |(i, variant): (usize, Option<usize>)| {
-                                load_variant(rig.clone(), sel.clone(), i, variant)
+                                load_variant(rig.clone(), sel.clone(), i, variant);
                             }
                         },
                     }
@@ -151,7 +150,7 @@ fn load_variant(rig: Option<KeysRigClient>, sel: Selection, index: usize, varian
         load_into(rig, sel, index);
         return;
     };
-    let Some(layer) = sel.layer().map(|l| l.to_string()) else {
+    let Some(layer) = sel.layer().map(ToString::to_string) else {
         // Variations belong to a lane's module; an engine program has none.
         load_into(rig, sel, index);
         return;

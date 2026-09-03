@@ -15,6 +15,7 @@ use dioxus::prelude::*;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
 use fts_audio_ui::ParamHandle;
+use std::fmt::Write;
 
 /// Panel drawing size — 2U, like the compressor's faces.
 pub const W: f64 = 960.0;
@@ -402,12 +403,13 @@ fn CurveView(
         let shaped = pre.transfer(x as f32) * makeup;
         let y = f64::from(quantiser.process(0, shaped)).clamp(-1.0, 1.0);
         let (px, py) = ((x * half).mul_add(2.0, cx), cy - y * half);
-        path.push_str(&format!(
+        let _ = write!(
+            path,
             "{}{:.1} {:.1}",
             if i == 0 { "M " } else { " L " },
             px,
             py
-        ));
+        );
     }
     // The corner markers on the solid-state panel sit where the curve gives
     // up, which is the drive it takes to reach the rail.

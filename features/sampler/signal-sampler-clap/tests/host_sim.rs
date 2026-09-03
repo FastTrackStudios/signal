@@ -14,6 +14,7 @@
 //! Fixture library: the same synthetic CSS-shaped legato patch as
 //! `signal-sampler/tests/document_mode.rs`.
 
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -56,9 +57,7 @@ fn build_fixture(dir: &Path) -> PathBuf {
         for dirn in ["up", "down"] {
             let f = format!("leg_{dirn}_{rr}.wav");
             write_sine_wav(&dir.join(&f), SR as usize, 40.0f64.mul_add(f64::from(rr), 300.0), 0.4);
-            zones.push_str(&format!(
-                "    {{ file {f}, key_min 0, key_max 127, root_key 64, articulation Leg, direction {dirn}, rr_index {rr} }}\n"
-            ));
+            let _ = writeln!(zones, "    {{ file {f}, key_min 0, key_max 127, root_key 64, articulation Leg, direction {dirn}, rr_index {rr} }}");
         }
         let f = format!("stac_{rr}.wav");
         write_sine_wav(
@@ -67,9 +66,7 @@ fn build_fixture(dir: &Path) -> PathBuf {
             60.0f64.mul_add(f64::from(rr), 500.0),
             0.4,
         );
-        zones.push_str(&format!(
-            "    {{ file {f}, key_min 0, key_max 127, root_key 60, articulation Stac, rr_index {rr} }}\n"
-        ));
+        let _ = writeln!(zones, "    {{ file {f}, key_min 0, key_max 127, root_key 60, articulation Stac, rr_index {rr} }}");
     }
     let styx = format!(
         r#"

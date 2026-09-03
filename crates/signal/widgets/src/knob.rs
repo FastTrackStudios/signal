@@ -1,8 +1,10 @@
 //! Rotary knob — a 1:1 port of audio-gui's `Knob` (FTS plugin editors) for
-//! the detached remotes: same 270° arc geometry (135° start), same 3D body
-//! with the arc ring + indicator line, same label/value stack and drag feel
-//! (150 px per sweep, wheel steps). The nih-plug `ParamPtr` binding is
-//! replaced by plain `value/on_change` props writing over the vox link.
+//! the detached remotes.
+//!
+//! Same 270° arc geometry (135° start), same 3D body with the arc ring +
+//! indicator line, same label/value stack and drag feel (150 px per sweep,
+//! wheel steps). The nih-plug `ParamPtr` binding is replaced by plain
+//! `value/on_change` props writing over the vox link.
 
 use dioxus::prelude::*;
 
@@ -64,9 +66,11 @@ fn svg_arc(cx: f64, cy: f64, r: f64, start_deg: f64, end_deg: f64) -> String {
     arc_path(cx, cy, r, start_deg, end_deg)
 }
 
-/// A `fn(f32) -> String` formatter override, wrapped so props-diffing
-/// compares it via `fn_addr_eq` instead of a raw (unpredictable) fn-pointer
-/// comparison — see `#[component]`'s derived `PartialEq` on this field.
+/// A `fn(f32) -> String` formatter override.
+///
+/// Wrapped so props-diffing compares it via `fn_addr_eq` instead of a raw
+/// (unpredictable) fn-pointer comparison — see `#[component]`'s derived
+/// `PartialEq` on this field.
 #[derive(Clone, Copy)]
 pub struct FmtFn(pub fn(f32) -> String);
 

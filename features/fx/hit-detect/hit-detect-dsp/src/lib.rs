@@ -40,6 +40,11 @@
 //! }
 //! ```
 
+// Realtime guard. This crate runs on an audio callback, so the calls in
+// clippy.toml's disallowed-methods list (locks, env, sleep) are real bugs here
+// even though they are allowed workspace-wide off the audio thread.
+#![deny(clippy::disallowed_methods)]
+
 use trigger_dsp::spectral_flux::{FluxMode, SpectralFluxDetector};
 
 /// Which part of the spectrum a hit was found in.
@@ -100,7 +105,11 @@ impl Analysis {
     /// Interpolated rather than nearest-frame because this drives light
     /// levels: stepping between frames at ~86 Hz is visible as a stutter
     /// on a slow fade, which is exactly what this curve is for.
-    #[must_use] 
+    ///
+    /// # Panics
+    ///
+    /// Never panics; the dynamics vector is checked for emptiness at the beginning.
+    #[must_use]
     pub fn dynamics_at(&self, secs: f64) -> f32 {
         if self.dynamics.is_empty() {
             return 0.0;

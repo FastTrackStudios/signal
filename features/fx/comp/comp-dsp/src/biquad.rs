@@ -19,6 +19,7 @@ pub use audiocore_dsp::biquad::Biquad;
 ///
 /// Uses bilinear transform to convert analog Butterworth pole to digital
 /// biquad. `normalized_cutoff` is 0.0..1.0 where 1.0 = Nyquist.
+#[must_use]
 pub fn design_lowpass_biquad(normalized_cutoff: f64) -> Biquad {
     let fc = normalized_cutoff.clamp(0.001, 0.999);
     let tan_half_omega = (PI * fc / 2.0).tan();
@@ -36,6 +37,7 @@ pub fn design_lowpass_biquad(normalized_cutoff: f64) -> Biquad {
 /// Compute high-pass biquad filter coefficients from cutoff frequency.
 ///
 /// Butterworth high-pass counterpart of [`design_lowpass_biquad`].
+#[must_use]
 pub fn design_highpass_biquad(normalized_cutoff: f64) -> Biquad {
     let fc = normalized_cutoff.clamp(0.001, 0.999);
     let tan_half_omega = (PI * fc / 2.0).tan();

@@ -18,6 +18,7 @@ const LUFS_OFFSET: f64 = -0.691;
 /// feeds continuous, deliberately-chosen stimulus rather than programme
 /// material, so BS.1770's gating (which exists to ignore silence between
 /// dialogue) would only add variance.
+#[must_use]
 pub fn loudness_lufs(x: &[f32], sample_rate: f64) -> f64 {
     if x.is_empty() {
         return f64::NEG_INFINITY;
@@ -37,6 +38,7 @@ pub fn loudness_lufs(x: &[f32], sample_rate: f64) -> f64 {
 /// Per-octave-band energy of a buffer, in dB.
 ///
 /// Bands follow [`OCTAVE_CENTRES_HZ`]. A silent band reports `-inf`.
+#[must_use]
 pub fn band_levels_db(x: &[f32], sample_rate: f64) -> Vec<(f64, f64)> {
     octave_bands(x, sample_rate)
         .into_iter()
@@ -80,6 +82,7 @@ pub struct LoudnessComparison {
 impl LoudnessComparison {
     /// Whether overall loudness and every comparable band sit within
     /// `tolerance_db`.
+    #[must_use]
     pub fn passes(&self, tolerance_db: f64) -> bool {
         if !self.loudness_difference_lu.is_finite()
             || self.loudness_difference_lu.abs() > tolerance_db
@@ -176,7 +179,7 @@ mod tests {
         let loudest = levels
             .iter()
             .filter(|(_, db)| db.is_finite())
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .max_by(|a, b| a.1.total_cmp(&b.1))
             .unwrap();
         assert_eq!(loudest.0, 1000.0, "1 kHz tone should peak the 1 kHz band");
     }

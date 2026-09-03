@@ -121,14 +121,14 @@ impl SnapshotAutomation {
     }
 
     /// All events across all lanes in a time range, sorted by position.
-    #[must_use] 
+    #[must_use]
     pub fn all_events_in_range(&self, start_beats: f64, end_beats: f64) -> Vec<&AutomationEvent> {
         let mut events: Vec<&AutomationEvent> = self
             .lanes
             .iter()
             .flat_map(|lane| lane.events_in_range(start_beats, end_beats))
             .collect();
-        events.sort_by(|a, b| a.position_beats.partial_cmp(&b.position_beats).unwrap());
+        events.sort_by(|a, b| a.position_beats.partial_cmp(&b.position_beats).unwrap_or(std::cmp::Ordering::Equal));
         events
     }
 }

@@ -82,21 +82,33 @@ impl SharedState {
     /// and publishes the schedule; the audio thread swaps it in at the next
     /// block boundary. Returns `Err` (and queues the document) while the
     /// patch is still loading — the loader re-runs annotation when ready.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the patch is not yet loaded or annotation fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the mutex is poisoned (a previous lock holder panicked).
     pub fn set_document(&self, doc: TrackDocument) -> eyre::Result<()> {
-        *self.doc.lock().unwrap() = Some(doc);
+        *self.doc.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(doc);
         self.annotate_stored()
     }
 
     /// Drop the document: next block boundary falls back to `StrictLive`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the mutex is poisoned (a previous lock holder panicked).
     pub fn clear_document(&self) {
-        *self.doc.lock().unwrap() = None;
+        *self.doc.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         self.schedule.store(None);
     }
 
     /// (Re-)annotate the stored document against the current spec + sample
     /// rate. No-op without a stored document.
     fn annotate_stored(&self) -> eyre::Result<()> {
-        let Some(doc) = self.doc.lock().unwrap().clone() else {
+        let Some(doc) = self.doc.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone() else {
             return Ok(());
         };
         if !self.patch_loaded.load(Ordering::Acquire) {
@@ -174,8 +186,8 @@ fn load_patch(shared: &SharedState, sr: u32) {
     let spec = bank.instrument_spec(INSTRUMENT_ID);
 
     // Swap the finished bank in (one locked assignment).
-    *shared.bank.lock().unwrap() = bank;
-    *shared.spec.lock().unwrap() = spec;
+    *shared.bank.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = bank;
+    *shared.spec.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = spec;
     shared.sample_rate.store(sr, Ordering::Release);
     shared.patch_loaded.store(true, Ordering::Release);
     tracing::info!(sr, "patch ready");

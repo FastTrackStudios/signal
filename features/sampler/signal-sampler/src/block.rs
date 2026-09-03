@@ -47,7 +47,7 @@ impl ParamOverride {
     }
 }
 
-/// Block-level audio params applied at the SamplerBlock's output.
+/// Block-level audio params applied at the `SamplerBlock`'s output.
 ///
 /// All defaults are no-ops: `gain_db=0`, `pan=0`, `transpose=0`,
 /// `tune_cents=0`. Loading a `.signalpack` with no `.signalblock` file
@@ -90,6 +90,9 @@ pub struct BlockSpec {
 }
 
 impl BlockSpec {
+    /// # Errors
+    ///
+    /// Returns `SamplerError` if the file cannot be read or parsed as a valid spec.
     pub fn from_file(path: &Path) -> Result<Self, SamplerError> {
         let text = std::fs::read_to_string(path)?;
         facet_styx::from_str(&text).map_err(|e| SamplerError::SpecParse(e.to_string()))
@@ -118,9 +121,13 @@ pub struct SamplerBlock {
 }
 
 impl SamplerBlock {
-    /// Create a SamplerBlock from a parsed `BlockSpec`. `spec_dir` is the
+    /// Create a `SamplerBlock` from a parsed `BlockSpec`. `spec_dir` is the
     /// directory of the `.signalblock` file, used to resolve a relative
     /// `pack` path.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SamplerError` if the pack cannot be loaded or if initialization fails.
     pub fn from_spec(
         spec: BlockSpec,
         spec_dir: &Path,
@@ -135,7 +142,7 @@ impl SamplerBlock {
         Self::build(spec.name, &pack_path, spec.params, sample_rate)
     }
 
-    /// Construct a SamplerBlock from an already-built `SampleEngine`.
+    /// Construct a `SamplerBlock` from an already-built `SampleEngine`.
     /// Used by code paths that need to supply a non-default section/mic
     /// at load time (e.g. legacy `load_instrument`); for new code prefer
     /// `from_pack` or `from_spec`.
@@ -164,8 +171,12 @@ impl SamplerBlock {
         }
     }
 
-    /// Create a SamplerBlock from a bare `.signalpack` with default params.
+    /// Create a `SamplerBlock` from a bare `.signalpack` with default params.
     /// Convenience for callers that don't have a `.signalblock` file.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SamplerError` if the pack cannot be loaded or if initialization fails.
     pub fn from_pack(pack_path: &Path, sample_rate: u32) -> Result<Self, SamplerError> {
         let name = pack_path
             .file_stem()
@@ -453,7 +464,7 @@ impl SamplerBlock {
                 "SamplerBlock: resized render scratch"
             );
         }
-        for s in self.scratch.iter_mut() {
+        for s in &mut self.scratch {
             *s = 0.0;
         }
         self.engine.render(&mut self.scratch);
@@ -704,7 +715,7 @@ mod tests {
     fn pan_is_equal_power() {
         let (l, r) = pan_gains(0.0);
         assert!((l - r).abs() < 1e-6);
-        assert!((l - 0.70710677).abs() < 1e-6);
+        assert!((l - 0.707_106_77).abs() < 1e-6);
     }
 
     #[test]

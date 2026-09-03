@@ -9,7 +9,7 @@
 //! - Karjalainen & Järveläinen, "Reverberation Modeling Using Velvet
 //!   Noise" (AES 30th Conference, 2007).
 //! - Välimäki, Holm-Rasmussen, Alary, Lehtonen, "Late reverberation
-//!   synthesis using filtered velvet noise" (DAFx 2017).
+//!   synthesis using filtered velvet noise" (`DAFx` 2017).
 //! - Amalgamated Signals "Nepenthe" — open-source velvet reverb.
 //!
 //! Architecture:
@@ -26,13 +26,13 @@ const MAX_TAIL_SECONDS: f64 = 5.0;
 /// perceptually indistinguishable from Gaussian white noise reverb.
 const DENSITY_HZ: f64 = 2000.0;
 
-/// One velvet-noise FIR. Stores sparse (offset, signed_gain) taps and a
+/// One velvet-noise FIR. Stores sparse (offset, `signed_gain`) taps and a
 /// circular input buffer.
 struct VelvetFir {
     buffer: Vec<f64>,
     buffer_size: usize,
     write_idx: usize,
-    /// (delay_samples, signed_gain) — gain folds tap sign and the
+    /// (`delay_samples`, `signed_gain`) — gain folds tap sign and the
     /// exponential decay envelope at that position.
     taps: Vec<(usize, f64)>,
 }
@@ -115,6 +115,7 @@ pub struct Velvet {
 }
 
 impl Velvet {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let max_samples = (sample_rate * MAX_TAIL_SECONDS) as usize + 32;
         let mut v = Self {
@@ -146,9 +147,9 @@ impl Velvet {
         let density = DENSITY_HZ * (0.5 + self.diffusion * 1.5);
 
         self.fir_l
-            .rebuild(length_samples, density, t60_samples, 0xC0FFEE);
+            .rebuild(length_samples, density, t60_samples, 0x00C0_FFEE);
         self.fir_r
-            .rebuild(length_samples, density, t60_samples, 0xBADBEEF);
+            .rebuild(length_samples, density, t60_samples, 0x0BAD_BEEF);
     }
 }
 

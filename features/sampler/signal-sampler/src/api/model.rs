@@ -32,21 +32,21 @@ impl Lerp for f32 {
 impl Lerp for Seconds {
     #[inline]
     fn lerp(a: Self, b: Self, t: f32) -> Self {
-        Seconds(a.0 + (b.0 - a.0) * t as f64)
+        Self(a.0 + (b.0 - a.0) * t as f64)
     }
 }
 
 impl Lerp for Cents {
     #[inline]
     fn lerp(a: Self, b: Self, t: f32) -> Self {
-        Cents(a.0 + (b.0 - a.0) * t)
+        Self(a.0 + (b.0 - a.0) * t)
     }
 }
 
 impl Lerp for Db {
     #[inline]
     fn lerp(a: Self, b: Self, t: f32) -> Self {
-        Db(a.0 + (b.0 - a.0) * t)
+        Self(a.0 + (b.0 - a.0) * t)
     }
 }
 
@@ -63,14 +63,11 @@ enum Shape<T> {
     Fn(Box<dyn Fn(Velocity) -> T + Send + Sync>),
 }
 
-/// A velocity → value curve, `O(1)`-ish to sample on the audio thread, with an
-/// optional interval (leap-size) scale factor. THIS is the type that lets
-/// "different velocities have different portamento / transition times" — see
-/// the CSS legato example in the design doc §5.
+/// A velocity → value curve, `O(1)`-ish to sample on the audio thread, with an optional interval (leap-size) scale factor.
 ///
-/// Build it from a constant, breakpoints, or a closure, then optionally
-/// [`scaled_by_interval`](VelCurve::scaled_by_interval) so wider leaps glide
-/// longer. Sample with [`at`](VelCurve::at) on the audio thread.
+/// THIS is the type that lets "different velocities have different portamento / transition times" — see
+/// the CSS legato example in the design doc §5. Build it from a constant, breakpoints, or a closure, then optionally
+/// [`scaled_by_interval`](VelCurve::scaled_by_interval) so wider leaps glide longer. Sample with [`at`](VelCurve::at) on the audio thread.
 pub struct VelCurve<T> {
     shape: Shape<T>,
     /// `Some(f)` multiplies the base value by `f(interval)`.
@@ -80,7 +77,7 @@ pub struct VelCurve<T> {
 impl<T: Lerp + Copy> VelCurve<T> {
     /// One value regardless of velocity (e.g. a fixed crossfade time).
     pub fn constant(v: T) -> Self {
-        VelCurve {
+        Self {
             shape: Shape::Constant(v),
             interval_scale: None,
         }
@@ -92,7 +89,7 @@ impl<T: Lerp + Copy> VelCurve<T> {
     pub fn breakpoints(points: impl IntoIterator<Item = (Velocity, T)>) -> Self {
         let mut pts: Vec<(Velocity, T)> = points.into_iter().collect();
         pts.sort_by_key(|(v, _)| v.get());
-        VelCurve {
+        Self {
             shape: Shape::Breakpoints(pts),
             interval_scale: None,
         }
@@ -100,7 +97,7 @@ impl<T: Lerp + Copy> VelCurve<T> {
 
     /// An arbitrary `Velocity -> T` closure.
     pub fn from_fn(f: impl Fn(Velocity) -> T + Send + Sync + 'static) -> Self {
-        VelCurve {
+        Self {
             shape: Shape::Fn(Box::new(f)),
             interval_scale: None,
         }
@@ -111,6 +108,7 @@ impl<T: Lerp + Copy> VelCurve<T> {
     /// Requires `T` to support scalar multiplication via [`Lerp`] against a
     /// zero (we scale by interpolating `zero..base`), which works for the
     /// numeric value types used here.
+    #[must_use]
     pub fn scaled_by_interval(
         mut self,
         f: impl Fn(Interval) -> f32 + Send + Sync + 'static,
@@ -174,6 +172,7 @@ impl<T: Lerp + Copy> VelCurve<T> {
 /// Scalar multiply for [`VelCurve::scaled_by_interval`]. Separate from [`Lerp`]
 /// so only the genuinely-numeric value types opt in.
 pub trait Scale: Copy {
+    #[must_use]
     fn scale(self, factor: f32) -> Self;
 }
 impl Scale for f32 {
@@ -185,19 +184,19 @@ impl Scale for f32 {
 impl Scale for Seconds {
     #[inline]
     fn scale(self, factor: f32) -> Self {
-        Seconds(self.0 * factor as f64)
+        Self(self.0 * factor as f64)
     }
 }
 impl Scale for Cents {
     #[inline]
     fn scale(self, factor: f32) -> Self {
-        Cents(self.0 * factor)
+        Self(self.0 * factor)
     }
 }
 impl Scale for Db {
     #[inline]
     fn scale(self, factor: f32) -> Self {
-        Db(self.0 * factor)
+        Self(self.0 * factor)
     }
 }
 
@@ -269,10 +268,10 @@ pub struct Zone {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct DynLayer(pub u16);
 
-/// A reference to a resolved sample slice. Phase A keeps this opaque — the
-/// engine owns the real sample bytes via [`crate::SampleMap`]; this is a thin
-/// addressing handle so the model surface compiles. Phase B fills it in with
-/// the daw `AudioSource` slice.
+/// A reference to a resolved sample slice.
+///
+/// Phase A keeps this opaque — the engine owns the real sample bytes via [`crate::SampleMap`]; this is a thin
+/// addressing handle so the model surface compiles. Phase B fills it in with the daw `AudioSource` slice.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SampleSlice {
     /// Opaque index into the owning library's sample pool.
@@ -301,8 +300,9 @@ pub enum Select {
 }
 
 impl Select {
+    #[must_use]
     pub fn keyswitch(note: Note) -> Self {
-        Select::Keyswitch(note)
+        Self::Keyswitch(note)
     }
 }
 
@@ -363,11 +363,12 @@ pub enum Direction {
 }
 
 impl Direction {
+    #[must_use]
     pub fn of(interval: Interval) -> Self {
         if interval.semitones() >= 0 {
-            Direction::Up
+            Self::Up
         } else {
-            Direction::Down
+            Self::Down
         }
     }
 }

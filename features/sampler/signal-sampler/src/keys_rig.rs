@@ -1,17 +1,17 @@
-//! Live **Keys rig** — hosts a composition-tree preset (a [`RenderNode`]) as one
-//! MIDI-driven instrument on daw's audio engine. The MIDI analog of
-//! [`GuitarRig`](crate::rig::GuitarRig), but it plays the Nord-style composition
-//! tree: the central MIDI input feeds the tree, whose [`Zone`](crate::rig_node::Zone)s
-//! route notes to layers (splits + velocity crossfades), and the live oscillators
-//! (and, later, the rest of the native DSP) render the audio.
+//! Live **Keys rig** — hosts a composition-tree preset (a [`RenderNode`]) as one MIDI-driven
+//! instrument on daw's audio engine.
+//!
+//! The MIDI analog of [`GuitarRig`](crate::rig::GuitarRig), but it plays the Nord-style
+//! composition tree: the central MIDI input feeds the tree, whose [`Zone`](crate::rig_node::Zone)s
+//! route notes to layers (splits + velocity crossfades), and the live oscillators (and, later,
+//! the rest of the native DSP) render the audio.
 //!
 //! Same engine pattern as [`SamplerRig`](crate::SamplerRig): an output-only daw
-//! project with one track (bootstrapped by the shared
-//! [`RigHost`]); the preset is wrapped as a
-//! [`KeysInstrument`] (`PluginInstance`) inserted into that track's fx slot, and
-//! hardware/UI MIDI is pushed into daw's live-MIDI ring keyed by the track — so
-//! the renderer hands it to the instrument each block. Swapping the preset is a
-//! glitch-free `insert_plugin_instance` under the renderer lock.
+//! project with one track (bootstrapped by the shared [`RigHost`]); the preset is wrapped as a
+//! [`KeysInstrument`] (`PluginInstance`) inserted into that track's fx slot, and hardware/UI
+//! MIDI is pushed into daw's live-MIDI ring keyed by the track — so the renderer hands it to
+//! the instrument each block. Swapping the preset is a glitch-free `insert_plugin_instance`
+//! under the renderer lock.
 
 use std::sync::Arc;
 
@@ -75,7 +75,7 @@ fn ev_cc(controller: u8, value: u8) -> midicore::MidiEvent {
 /// Block size the keys instrument is prepared for.
 const PREPARE_BLOCK: u32 = 1024;
 
-/// The keys rig's PipeWire graph node name. Distinct from the guitar rig's,
+/// The keys rig's `PipeWire` graph node name. Distinct from the guitar rig's,
 /// because the audio backend's linker matches ports by name and the engine
 /// process runs both.
 const KEYS_NODE_NAME: &str = "FTS-Keys";
@@ -114,6 +114,7 @@ pub struct KeysInstrument {
 }
 
 impl KeysInstrument {
+    #[must_use]
     pub fn new(tree: &Container, sample_rate: u32) -> Self {
         Self::with_gain(
             tree,
@@ -176,8 +177,7 @@ impl KeysInstrument {
         let done = self
             .retiring
             .as_mut()
-            .map(|r| r.active_voices() == 0)
-            .unwrap_or(false);
+            .is_some_and(|r| r.active_voices() == 0);
         if done {
             self.retiring.take()
         } else {
@@ -186,11 +186,13 @@ impl KeysInstrument {
     }
 
     /// Whether a swapped-out tree is still sounding.
+    #[must_use]
     pub fn is_retiring(&self) -> bool {
         self.retiring.is_some()
     }
 
     /// The live fader cells for this instrument's engines + layers.
+    #[must_use]
     pub fn gain_cells(&self) -> GainCells {
         self.cells.clone()
     }
@@ -314,9 +316,10 @@ pub struct LaneEngine {
     pub layers: Vec<LaneLayer>,
 }
 
-/// A whole profile as per-lane daw tracks: engines of layers under one rig
-/// folder, plus an optional serial FX tail (e.g. the master reverb) hosted on
-/// the rig folder track — it processes the folder-summed rig exactly where
+/// A whole profile as per-lane daw tracks.
+///
+/// Engines of layers under one rig folder, plus an optional serial FX tail (e.g. the master
+/// reverb) hosted on the rig folder track — it processes the folder-summed rig exactly where
 /// the single-tree mode's trailing Global module did.
 pub struct LaneProgram {
     pub name: String,
@@ -376,8 +379,9 @@ pub struct WireProgram {
 
 impl WireProgram {
     /// Mirror a compiled [`LaneProgram`] for the wire.
+    #[must_use]
     pub fn from_program(p: &LaneProgram) -> Self {
-        WireProgram {
+        Self {
             name: p.name.clone(),
             engines: p
                 .engines
@@ -399,6 +403,7 @@ impl WireProgram {
     }
 
     /// Convert into the rig's native [`LaneProgram`].
+    #[must_use]
     pub fn into_lane_program(self) -> LaneProgram {
         LaneProgram {
             name: self.name,
@@ -495,10 +500,14 @@ impl KeysRig {
     /// of times a second while its average load read a comfortable 20%.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn engine_stats(&self) -> Option<std::sync::Arc<daw_audio_io::duplex::EngineStats>> {
-        self._host.as_ref().and_then(|h| h.stats())
+        self._host.as_ref().and_then(signal_rig_host::RigHost::stats)
     }
 
     /// Open a device, build the project, and host `tree` as the playable preset.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if device initialization, project setup, or track configuration fails.
     // r[impl keys.rig.composition-tree]
     // r[impl keys.rig.output-only]
     #[cfg(not(target_arch = "wasm32"))]
@@ -548,6 +557,10 @@ impl KeysRig {
     /// sums the engines (and carries the tail FX + master fader), and every
     /// fader/mute/solo is a daw track op the renderer resolves natively
     /// (folder-aware solo, folder mute, per-track post-fader meters).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if device initialization, track setup, or project configuration fails.
     // r[impl keys.rig.lane-tracks]
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open_lanes(prefs: &AudioIoPrefs, program: &LaneProgram) -> eyre::Result<Self> {
@@ -592,13 +605,17 @@ impl KeysRig {
     /// layer tracks, one [`KeysInstrument`] per lane installed through the
     /// plugin seam), but the caller owns rendering: natively a
     /// `ProjectRenderer` over [`daw`](Self::daw) +
-    /// [`project_guid`](Self::project_guid); in the browser the AudioWorklet
+    /// [`project_guid`](Self::project_guid); in the browser the `AudioWorklet`
     /// (see [`open_headless_on`](Self::open_headless_on)).
     ///
     /// Lane packs resolve by spec path as usual; a browser (or any caller
     /// with no filesystem) installs in-memory packs first via
     /// [`crate::pack_registry::install`] — `build_sample_source` consults
     /// the registry before touching disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if track setup or project configuration fails.
     pub fn open_headless(sample_rate: u32, program: &LaneProgram) -> eyre::Result<Self> {
         let project = RigProject::new(KEYS_PROJECT_NAME);
         Self::open_headless_impl(project, sample_rate, program)
@@ -608,6 +625,10 @@ impl KeysRig {
     /// the browser worklet path: the rig project is seeded into the
     /// worklet's own daw (the one its `WebRenderer` renders), so a project
     /// select + transport play makes the lanes live.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if track setup or project configuration fails.
     pub fn open_headless_on(
         daw: &Standalone,
         sample_rate: u32,
@@ -743,6 +764,10 @@ impl KeysRig {
     /// Load a lane program. Same engine/layer shape → per-track instrument
     /// swaps (no audio gap). A different shape (profile edit) rebuilds the
     /// track set — a brief gap, on an explicit editing action.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if removing existing tracks or creating new lanes fails.
     pub fn load_lanes(&mut self, program: &LaneProgram) -> eyre::Result<()> {
         let same_shape = match &self.hosting {
             Hosting::Lanes(l) => {
@@ -1134,7 +1159,7 @@ impl KeysRig {
         let mut i = 0;
         loop {
             let mut any = false;
-            for (layer, paths) in per_lane.iter_mut() {
+            for (layer, paths) in &mut per_lane {
                 if let Some(p) = paths.get(i) {
                     out.push((layer.clone(), p.clone()));
                     any = true;
@@ -1189,6 +1214,7 @@ impl KeysRig {
 
     /// Enumerate hardware MIDI input ports.
     #[cfg(not(target_arch = "wasm32"))]
+    #[must_use]
     pub fn midi_input_ports() -> Vec<String> {
         midicore::pipewire::input_ports()
     }
@@ -1197,7 +1223,7 @@ impl KeysRig {
     /// from `self`: everything it captures is a cheap clone, so a caller can
     /// build it under a lock and then open ports with the lock released —
     /// opening hardware ports takes seconds and can stall outright while the
-    /// PipeWire graph reconfigures, and that stall must not pin a rig mutex.
+    /// `PipeWire` graph reconfigures, and that stall must not pin a rig mutex.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn midi_sink(&self) -> impl Fn(midicore::TimedEvent) + Send + Clone + 'static {
         let daw = self.daw.clone();
@@ -1211,6 +1237,10 @@ impl KeysRig {
 
     /// Open a hardware MIDI keyboard and forward its events into the rig
     /// (monitor tap + live-MIDI sink wired by `midicore::attach`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if opening the MIDI port fails.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn attach_midi(
         &self,
@@ -1238,15 +1268,13 @@ impl KeysRig {
     pub fn output_peak(&self) -> f32 {
         self.meters
             .cell(0)
-            .map(|c| c.peak(0).max(c.peak(1)))
-            .unwrap_or(0.0)
+            .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
     }
 
     fn meter_peak(&self, idx: usize) -> f32 {
         self.meters
             .cell(idx)
-            .map(|c| c.peak(0).max(c.peak(1)))
-            .unwrap_or(0.0)
+            .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
     }
 
     /// Every metered container in the loaded program — engines, layers and

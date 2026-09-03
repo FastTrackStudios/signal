@@ -51,8 +51,10 @@ impl Source {
 }
 
 /// How many modules a layer starts with — Omnisphere's Quadzone, and the
-/// A/B/C/D the layer zoom switches between. It is a *default*, not a limit:
-/// [`signal_layer`] builds as many modules as it is given sources for.
+/// A/B/C/D the layer zoom switches between.
+///
+/// It is a *default*, not a limit: [`signal_layer`] builds as many modules
+/// as it is given sources for.
 pub const MODULES_PER_LAYER: usize = 4;
 
 /// Slot label for module `index`: A..Z, then A1, B1, … so a layer can grow
@@ -393,8 +395,14 @@ fn omni_lfo_hz(v: f32) -> f32 {
 }
 
 /// Read an Omnisphere `.prt_omn` patch and flatten its layers onto module
-/// settings. Each Omnisphere layer becomes one module — the same mapping the
+/// settings.
+///
+/// Each Omnisphere layer becomes one module — the same mapping the
 /// engine already uses structurally, now carrying the patch's values.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or the patch format is invalid.
 pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String> {
     let xml = std::fs::read_to_string(path).map_err(|e| format!("read {path:?}: {e}"))?;
     let patch = crate::omni_import::parse_patch(&xml)?;

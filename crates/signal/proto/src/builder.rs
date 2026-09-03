@@ -353,7 +353,6 @@ impl RigBuilder {
         let module_snap = ModuleSnapshot::new(module_snap_id, "Default", module);
         let module_type = match self.engine_type {
             EngineType::Guitar | EngineType::Bass => ModuleType::Amp,
-            EngineType::Keys => ModuleType::Custom,
             _ => ModuleType::Custom,
         };
         let module_preset = ModulePreset::new(

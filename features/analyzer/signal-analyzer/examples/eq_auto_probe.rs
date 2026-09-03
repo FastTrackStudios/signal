@@ -233,7 +233,7 @@ fn main() {
     };
     let rms = 10.0f64.powf(num("--level", -18.8) / 20.0);
 
-    let mut plugin = if let Ok(Some(p)) = HostedPlugin::load(&path) { p } else {
+    let Ok(Some(mut plugin)) = HostedPlugin::load(&path) else {
         eprintln!("{path}: could not load");
         std::process::exit(1);
     };

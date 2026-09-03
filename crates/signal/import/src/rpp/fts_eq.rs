@@ -57,9 +57,9 @@ pub enum ParamValue {
 impl ParamValue {
     fn to_json(self) -> serde_json::Value {
         match self {
-            ParamValue::F32(v) => serde_json::json!({ "f32": v }),
-            ParamValue::I32(v) => serde_json::json!({ "i32": v }),
-            ParamValue::Bool(v) => serde_json::json!({ "bool": v }),
+            Self::F32(v) => serde_json::json!({ "f32": v }),
+            Self::I32(v) => serde_json::json!({ "i32": v }),
+            Self::Bool(v) => serde_json::json!({ "bool": v }),
         }
     }
 }
@@ -112,6 +112,7 @@ const GLOBAL_DEFAULTS: &[(&str, ParamValue)] = &[
 /// Translate the engine parameter list into the plugin's parameter map.
 ///
 /// Every band is written, used or not — see [`BAND_DEFAULTS`] for why.
+#[must_use]
 pub fn plugin_params(native: &[(String, f64)]) -> BTreeMap<String, ParamValue> {
     use ParamValue::{F32, I32};
     let mut out: BTreeMap<String, ParamValue> = BTreeMap::new();
@@ -209,18 +210,26 @@ fn split_band(name: &str) -> Option<(usize, &str)> {
 /// nih-plug's own framing: a little-endian `u64` length, then the JSON. That
 /// prefix is the plugin's, not REAPER's — a REAPER `<STATE>` block holds
 /// exactly what the plugin wrote and nothing more.
+#[must_use]
 pub fn clap_state(eq: &ProQ4) -> Vec<u8> {
     state_bytes(&plugin_params(&to_native_eq_params(eq)))
 }
 
 /// The same, from an already-translated parameter list.
+#[must_use]
 pub fn state_bytes(params: &BTreeMap<String, ParamValue>) -> Vec<u8> {
     encode_state(VERSION, params)
 }
 
-/// nih-plug's state framing, for any FTS plugin: a little-endian `u64`
-/// length, then the JSON. The prefix is the plugin's own — a REAPER `<STATE>`
-/// block holds exactly what the plugin wrote and nothing more.
+/// nih-plug's state framing, for any FTS plugin: a little-endian `u64` length, then JSON.
+///
+/// The prefix is the plugin's own — a REAPER `<STATE>` block holds exactly what the plugin
+/// wrote and nothing more.
+///
+/// # Panics
+///
+/// Panics if the parameters cannot be serialized to JSON (should not happen with valid data).
+#[must_use]
 pub fn encode_state(version: &str, params: &BTreeMap<String, ParamValue>) -> Vec<u8> {
     let doc = serde_json::json!({
         "version": version,

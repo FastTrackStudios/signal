@@ -1,7 +1,9 @@
 //! The runtime rig library — everything the rig plays from, as plain styx
-//! text files in one directory. Portable, git-trackable, and directly
-//! editable: an LLM (or a human in a text editor) can create presets, add
-//! patches, write patch-level overrides, rename things — then hit reload.
+//! text files in one directory.
+//!
+//! Portable, git-trackable, and directly editable: an LLM (or a human in a
+//! text editor) can create presets, add patches, write patch-level overrides,
+//! rename things — then hit reload.
 //!
 //! ```text
 //! <config>/signal/rig/          (override: SIGNAL_RIG_DIR)
@@ -68,8 +70,9 @@ pub struct KeymapLib {
 }
 
 /// The rig's last-active position (`last-state.styx`) — flushed by the
-/// meter pump on patch/song/part/setlist/tempo changes and restored on the
-/// next open, so a crash restart mid-set lands back on the same song
+/// meter pump on patch/song/part/setlist/tempo changes.
+///
+/// Restored on the next open, so a crash restart mid-set lands back on the same song
 /// instead of song 1 at 120 BPM. Indices/names are re-validated against
 /// the (possibly edited) library on restore.
 #[derive(Clone, Debug, Default, Facet)]

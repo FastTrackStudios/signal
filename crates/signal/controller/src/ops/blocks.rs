@@ -11,6 +11,11 @@ use signal_proto::{Block, BlockType};
 pub struct BlockOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> BlockOps<S> {
+    /// Get the block state for a block type.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn get(&self, block_type: BlockType) -> Result<Block, OpsError> {
         self.0
             .service
@@ -19,6 +24,11 @@ impl<S: SignalApi> BlockOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// Set the block state for a block type.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn set(&self, block_type: BlockType, block: Block) -> Result<Block, OpsError> {
         self.0
             .service
@@ -27,10 +37,20 @@ impl<S: SignalApi> BlockOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// Get the first parameter value of a block, defaulting to 0.0 if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn get_value(&self, block_type: BlockType) -> Result<f32, OpsError> {
         Ok(self.get(block_type).await?.first_value().unwrap_or(0.0))
     }
 
+    /// Set the first parameter value of a block.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if retrieving or storing the block fails.
     pub async fn set_value(&self, block_type: BlockType, value: f32) -> Result<Block, OpsError> {
         let mut block = self.get(block_type).await?;
         block.set_first_value(value);

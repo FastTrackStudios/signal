@@ -52,6 +52,7 @@ pub const BAND_HI_HZ: f64 = 20_000.0;
 const NFFT: usize = 8192;
 
 /// The centre frequency of every band in [`band_profile`], low to high.
+#[must_use]
 pub fn band_centres() -> Vec<f64> {
     let step = 2.0_f64.powf(1.0 / BANDS_PER_OCTAVE);
     let mut out = Vec::new();
@@ -110,6 +111,7 @@ pub struct ElementProfile {
 /// Returns `None` for a stem that never rises above the gate — which is
 /// what an absent instrument looks like, and must not be reported as a
 /// measurement of zero.
+#[must_use]
 pub fn profile(x: &[f32], sample_rate: f64) -> Option<ElementProfile> {
     let voiced = sounding_samples(x, sample_rate)?;
     let spectrum = power_spectrum(&voiced)?;
@@ -125,6 +127,7 @@ pub fn profile(x: &[f32], sample_rate: f64) -> Option<ElementProfile> {
 }
 
 /// Sixth-octave EQ profile of a signal, normalised to its own mean.
+#[must_use]
 pub fn band_profile(x: &[f32], sample_rate: f64) -> Option<Vec<(f64, f64)>> {
     let spectrum = power_spectrum(x)?;
     Some(bands_from_spectrum(&spectrum, sample_rate))
@@ -323,7 +326,7 @@ fn fullness_from(power: &[f64], profile: &[(f64, f64)], sample_rate: f64) -> Ful
     };
 
     let mut cum = 0.0;
-    let mut rolloff = usable.last().map(|(f, _)| *f).unwrap_or(0.0);
+    let mut rolloff = usable.last().map_or(0.0, |(f, _)| *f);
     for (f, p) in &usable {
         cum += p;
         if cum >= 0.85 * total {
@@ -354,6 +357,7 @@ fn fullness_from(power: &[f64], profile: &[(f64, f64)], sample_rate: f64) -> Ful
 /// Positive means `a` dominates that band. Both profiles are already
 /// normalised to their own mean, so this compares *shape* — where each
 /// element puts its energy — rather than which is louder overall.
+#[must_use]
 pub fn band_margin(a: &[(f64, f64)], b: &[(f64, f64)]) -> Vec<(f64, f64)> {
     a.iter()
         .zip(b)

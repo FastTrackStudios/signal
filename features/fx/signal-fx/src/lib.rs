@@ -141,9 +141,9 @@ pub const EQ_OUTPUT_PAN_MODE_ID: u32 = 373;
 /// Spectral): its freq/Q footprint + dyn range/threshold drive the
 /// shared spectral engine instead of the whole-band gain ride.
 pub const EQ_SPECTRAL_BASE: u32 = 376;
-/// `b{i}_listen` — 0 off, 1 solo the band's frequency region,
-/// 2 delta (hear only what this EQ changes). One band at a time (the
-/// most recent non-zero wins); composes with `split_solo` so you can
+/// `b{i}_listen` — 0 off, 1 solo the band's frequency region, 2 delta (hear only what this EQ changes).
+///
+/// One band at a time (the most recent non-zero wins); composes with `split_solo` so you can
 /// hear e.g. just the transients of the soloed region.
 pub const EQ_LISTEN_BASE: u32 = 400;
 /// One past the last EQ param id.
@@ -239,17 +239,13 @@ pub fn eq_param_range(id: u32) -> (f64, f64, f64) {
         };
     }
     match id {
-        EQ_OUTPUT_GAIN_ID => (-30.0, 30.0, 0.0),
         EQ_GAIN_SCALE_ID => (-1.0, 2.0, 1.0),
-        EQ_TRANSIENT_MODE_ID => (0.0, 1.0, 0.0),
         EQ_SPLIT_BALANCE_ID => (-50.0, 50.0, 0.0),
         EQ_SPLIT_ATTACK_ID | EQ_SPLIT_HOLD_ID | EQ_SPLIT_SMOOTH_ID => (0.0, 100.0, 50.0),
-        EQ_SPLIT_SOLO_ID => (0.0, 2.0, 0.0),
-        EQ_TRANSIENT_GAIN_ID | EQ_STEADY_GAIN_ID => (-30.0, 30.0, 0.0),
-        EQ_AUTO_GAIN_ID => (0.0, 1.0, 0.0),
-        EQ_CHARACTER_ID => (0.0, 2.0, 0.0),
         EQ_OUTPUT_PAN_ID => (-1.0, 1.0, 0.0),
-        EQ_OUTPUT_PAN_MODE_ID => (0.0, 1.0, 0.0),
+        EQ_OUTPUT_GAIN_ID | EQ_TRANSIENT_GAIN_ID | EQ_STEADY_GAIN_ID => (-30.0, 30.0, 0.0),
+        EQ_TRANSIENT_MODE_ID | EQ_AUTO_GAIN_ID | EQ_OUTPUT_PAN_MODE_ID => (0.0, 1.0, 0.0),
+        EQ_SPLIT_SOLO_ID | EQ_CHARACTER_ID => (0.0, 2.0, 0.0),
         i if (EQ_SLOPE_BASE..EQ_SLOPE_BASE + 24).contains(&i) => (0.0, 10.0, 2.0),
         i if (EQ_DYN_RANGE_BASE..EQ_DYN_RANGE_BASE + 24).contains(&i) => (-30.0, 30.0, 0.0),
         i if (EQ_DYN_THR_BASE..EQ_DYN_THR_BASE + 24).contains(&i) => (-80.0, 0.0, -40.0),
@@ -307,19 +303,18 @@ pub fn eq_param_name_of(id: u32) -> Option<String> {
     None
 }
 
-/// Native EQ block — the full FTS-EQ engine: 24 dynamic bands over
-/// [`eq::EqChain`]'s Pro-Q ZPK pipeline, each with
-/// used/on/freq/gain/q/shape (all thirteen canonical shapes) + slope,
-/// plus per-band DYNAMIC EQ (Pro-Q-style range/threshold/auto) running
-/// on the SVF dynamics engine, and output gain / gain-scale masters.
-/// Bands start unused → transparent passthrough.
+/// Native EQ block — the full FTS-EQ engine: 24 dynamic bands over [`eq::EqChain`]'s
+/// Pro-Q ZPK pipeline.
+///
+/// Each band has used/on/freq/gain/q/shape (all thirteen canonical shapes) + slope, plus
+/// per-band DYNAMIC EQ (Pro-Q-style range/threshold/auto) running on the SVF dynamics engine,
+/// and output gain / gain-scale masters. Bands start unused → transparent passthrough.
 /// The rig's front end for the one EQ engine.
 ///
-/// Everything that makes an EQ — the filter bank, per-band dynamics, the
-/// spectral engine, transient splitting, listening — lives in
-/// [`eq::engine::FtsEq`]. This is the parameter surface the rig drives it
-/// through: an id-indexed value table, the automation-event pump, and the f32
-/// buffers a host hands over.
+/// Everything that makes an EQ — the filter bank, per-band dynamics, the spectral engine,
+/// transient splitting, listening — lives in [`eq::engine::FtsEq`]. This is the parameter
+/// surface the rig drives it through: an id-indexed value table, the automation-event pump,
+/// and the f32 buffers a host hands over.
 ///
 /// It used to be the engine itself, which is why the FTS-EQ plugin could not
 /// play a dynamic band: the capability was reachable only through these ids.
@@ -690,10 +685,10 @@ const PREAMP_PARAMS: &[ParamSpec] = &[
     },
 ];
 
-/// Harmonic readback ids: `h1`..`h8` (ids 100..107) return the
-/// measured harmonic magnitudes of the CURRENT settings, normalized to
-/// H1 — the UI's harmonic visualization polls these. The transfer
-/// curve for the indicative sine display comes from
+/// Harmonic readback ids: `h1`..`h8` (ids 100..107) return the measured harmonic magnitudes.
+///
+/// The magnitudes are normalized to H1 — the UI's harmonic visualization polls these.
+/// The transfer curve for the indicative sine display comes from
 /// `saturate_dsp::preamp::analysis::transfer_curve` on a mirror.
 pub const PREAMP_HARMONIC_BASE: u32 = 100;
 pub const PREAMP_HARMONICS: usize = 8;
@@ -936,11 +931,11 @@ const SATURATE_PARAMS: &[ParamSpec] = &[
 
 /// Harmonic readback ids `h1`..`h8` — same contract as the preamp.
 pub const SATURATE_HARMONIC_BASE: u32 = 100;
-/// Emphasis-EQ band params: `eq_b{i}_{used|on|freq|gain|q|shape}` at
-/// id 200 + (band*6+field) — a full FTS-EQ band surface whose curve
-/// shapes what the saturator drives; the SAME curve, gain-inverted,
-/// runs on the way out so the net tone stays balanced (drive the
-/// highs harder, keep the mix tonally identical).
+/// Emphasis-EQ band params: `eq_b{i}_{used|on|freq|gain|q|shape}` at id 200 + (band*6+field).
+///
+/// A full FTS-EQ band surface whose curve shapes what the saturator drives; the SAME curve,
+/// gain-inverted, runs on the way out so the net tone stays balanced (drive the highs harder,
+/// keep the mix tonally identical).
 pub const SATURATE_EQ_BASE: u32 = 200;
 
 /// FTS-Saturate — the distortion engine: Class-A asymmetric core
@@ -1522,10 +1517,10 @@ pub const TUNE_PC_BYPASS_BASE: u32 = 40;
 pub const TUNE_DETECTED_MIDI_ID: u32 = 100;
 pub const TUNE_CENTS_OFF_ID: u32 = 101;
 
-/// Native autotune block — YIN detection → keyflow-compatible scale
-/// snapping (hysteresis, per-PC bypass, flex-tune, A4 reference) →
-/// buffer-size-independent retune slew → PSOLA shifting. MIDI target
-/// modes take notes straight from `PluginEvents.midi`.
+/// Native autotune block — YIN detection → keyflow-compatible scale snapping.
+///
+/// Hysteresis, per-PC bypass, flex-tune, A4 reference, buffer-size-independent retune slew,
+/// and PSOLA shifting. MIDI target modes take notes straight from `PluginEvents.midi`.
 pub struct NativeTune {
     detector: tune::detect::YinDetector,
     chain: pitch_dsp::chain::PitchChain,
@@ -1853,10 +1848,11 @@ impl PluginInstance for NativeTune {
 
 // ── Compressor ─────────────────────────────────────────────────────────────
 
-/// Live compressor telemetry — the rolling waveform + GR the FTS-Comp
-/// editor shows. A single global ring: only the *active* chain's comp
-/// processes audio, so whichever instance is running owns the meters
-/// (multiband/per-instance telemetry comes with real per-block channels).
+/// Live compressor telemetry — the rolling waveform + GR the FTS-Comp editor shows.
+///
+/// A single global ring: only the *active* chain's comp processes audio, so whichever
+/// instance is running owns the meters (multiband/per-instance telemetry comes with real
+/// per-block channels).
 pub mod comp_meter {
     use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
@@ -1921,9 +1917,10 @@ pub mod comp_meter {
     }
 }
 
-/// Global DI sidechain — the rig's input probe publishes the clean guitar
-/// peak per block; the gate keys off it so gating stays tight regardless
-/// of what the tone (amp/EQ/drive) does to the signal it actually gates.
+/// Global DI sidechain — the rig's input probe publishes the clean guitar peak per block.
+///
+/// The gate keys off it so gating stays tight regardless of what the tone (amp/EQ/drive)
+/// does to the signal it actually gates.
 pub mod sidechain {
     use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -2231,10 +2228,11 @@ const LEVEL_PARAMS: &[ParamSpec] = &[
     },
 ];
 
-/// Native Leveler block — wraps [`level_dsp::VocalLeveler`], the realtime vocal
-/// chain (gate → de-breath → ride → de-ess). The core is mono, so L/R each get
-/// their own leveler instance (independent state). Every stage parameter is an
-/// enumerable, macro/modulation-targetable [`PluginParamInfo`].
+/// Native Leveler block — wraps [`level_dsp::VocalLeveler`], the realtime vocal chain.
+///
+/// Gate → de-breath → ride → de-ess. The core is mono, so L/R each get their own leveler
+/// instance (independent state). Every stage parameter is an enumerable, macro/modulation-targetable
+/// [`PluginParamInfo`].
 pub struct NativeLevel {
     left: level_dsp::VocalLeveler,
     right: level_dsp::VocalLeveler,
@@ -3104,8 +3102,10 @@ const REVERB_PARAMS: &[ParamSpec] = &[
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
 /// `BigSky` MX dual routing; `Single` = chain A only, bit-compatible with
-/// the previous single-chain wrapper). Defaults to a subtle Hall (low
-/// mix) so it sits under the tone rather than washing it out.
+/// the previous single-chain wrapper).
+///
+/// Defaults to a subtle Hall (low mix) so it sits under the tone rather than
+/// washing it out.
 pub struct NativeReverb {
     rev: reverb::DualReverb,
     prepared: bool,
@@ -4049,8 +4049,9 @@ const DELAY_PARAMS: &[ParamSpec] = &[
 
 /// Native Delay block — wraps [`delay::DualDelay`] (two full chains +
 /// `TimeLine` MX 1+2 routing; `Single` = chain A only, bit-compatible with
-/// the previous single-chain wrapper). Defaults to a subtle clean
-/// quarter-note-ish delay with modest feedback.
+/// the previous single-chain wrapper).
+///
+/// Defaults to a subtle clean quarter-note-ish delay with modest feedback.
 pub struct NativeDelay {
     dly: delay::DualDelay,
     prepared: bool,
@@ -5199,11 +5200,13 @@ const TRANSIENT_ATTACK_DB: f64 = 15.0;
 const TRANSIENT_SUSTAIN_DB: f64 = 24.0;
 
 /// Native transient designer — level-independent dual-envelope differential
-/// (the SPL Transient Designer topology). The attack section compares a fast
-/// follower against a slowed copy: their difference in dB *is* the transient,
-/// scaled by the bipolar `attack` amount. The sustain section compares a fast
-/// release against a long release: the long tail hanging above the fast one
-/// *is* the sustain, scaled by `sustain`. Detection is stereo-linked.
+/// (the SPL Transient Designer topology).
+///
+/// The attack section compares a fast follower against a slowed copy: their
+/// difference in dB *is* the transient, scaled by the bipolar `attack` amount.
+/// The sustain section compares a fast release against a long release: the long
+/// tail hanging above the fast one *is* the sustain, scaled by `sustain`.
+/// Detection is stereo-linked.
 pub struct NativeTransient {
     attack: f64,
     sustain: f64,

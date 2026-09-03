@@ -1,15 +1,16 @@
-//! Mapping from FabFilter's flat tag vocabulary to Signal's structured tags.
+//! Mapping from `FabFilter`'s flat tag vocabulary to Signal's structured tags.
 //!
-//! FabFilter presets use simple comma-separated tags like "Drums,Bright,Bus".
+//! `FabFilter` presets use simple comma-separated tags like "Drums,Bright,Bus".
 //! We map these into Signal's `TagCategory` taxonomy so they integrate with
 //! the browser's semantic search.
 
 use signal_proto::tagging::{StructuredTag, TagCategory, TagSource};
 
-/// Map a single FabFilter tag string to a Signal `StructuredTag`.
+/// Map a single `FabFilter` tag string to a Signal `StructuredTag`.
 ///
 /// Returns a tag with `TagSource::Imported` and the appropriate category.
 /// Unmapped tags are preserved as `custom:<tag>`.
+#[must_use]
 pub fn map_fabfilter_tag(raw: &str) -> StructuredTag {
     let lower = raw.trim().to_ascii_lowercase();
 

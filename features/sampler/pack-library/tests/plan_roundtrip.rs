@@ -4,6 +4,7 @@
 //! reply types (a writer/reader schema mismatch here is invisible to
 //! `cargo check`).
 
+use std::fmt::Write;
 use std::io::Write as _;
 use std::time::Duration;
 
@@ -34,9 +35,10 @@ fn build_library(root: &std::path::Path) {
             w.write_sample(((n % 32) as i16) << 8).expect("sample");
         }
         w.finalize().expect("finalize");
-        zones.push_str(&format!(
+        let _ = write!(
+            zones,
             "  {{\n    file \"{f}\"\n    key_min {key}\n    key_max {key}\n    root_key {key}\n  }}\n"
-        ));
+        );
     }
     zones.push_str(")\n");
     let mut sf = std::fs::File::create(&spec).expect("spec file");

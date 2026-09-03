@@ -19,6 +19,8 @@
 //! decaying tap train (`amp *= feedback` every `time`), a reverb is a
 //! dB-linear tail to its RT60 on a log time axis.
 
+use std::fmt::Write;
+
 use dioxus::prelude::*;
 use signal_keys_proto::KeysMacro;
 
@@ -165,7 +167,7 @@ pub fn DelayView(
             div { style: "display: flex; align-items: baseline; gap: 8px;",
                 BypassLamp {
                     id: macros.iter().find(|m| m.id.ends_with("dly.bypass")).map(|m| m.id.clone()).unwrap_or_default(),
-                    bypassed: macros.iter().find(|m| m.id.ends_with("dly.bypass")).map(|m| m.value >= 0.5).unwrap_or(false),
+                    bypassed: macros.iter().find(|m| m.id.ends_with("dly.bypass")).is_some_and(|m| m.value >= 0.5),
                     accent: accent.clone(),
                     on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
                 }
@@ -176,13 +178,13 @@ pub fn DelayView(
                 }
                 crate::algos::AlgoPicker {
                     id: macros.iter().find(|m| m.id.ends_with("dly.algo")).map(|m| m.id.clone()).unwrap_or_default(),
-                    value: macros.iter().find(|m| m.id.ends_with("dly.algo")).map(|m| m.value).unwrap_or(0.0),
+                    value: macros.iter().find(|m| m.id.ends_with("dly.algo")).map_or(0.0, |m| m.value),
                     options: crate::algos::DELAY_ALGOS.to_vec(),
                     accent: accent.clone(),
                     on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
                 }
                 span { style: "font-size: 8px; color: #3f3f46;",
-                    {format!("{:.0} bpm · 8 beats", tempo_bpm)}
+                    "{tempo_bpm:.0} bpm · 8 beats"
                 }
                 div { style: "flex: 1;" }
                 if audible.is_empty() {
@@ -311,7 +313,7 @@ pub fn ReverbView(
             div { style: "display: flex; align-items: baseline; gap: 8px;",
                 BypassLamp {
                     id: macros.iter().find(|m| m.id.ends_with("amb.bypass")).map(|m| m.id.clone()).unwrap_or_default(),
-                    bypassed: macros.iter().find(|m| m.id.ends_with("amb.bypass")).map(|m| m.value >= 0.5).unwrap_or(false),
+                    bypassed: macros.iter().find(|m| m.id.ends_with("amb.bypass")).is_some_and(|m| m.value >= 0.5),
                     accent: accent.clone(),
                     on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
                 }
@@ -322,7 +324,7 @@ pub fn ReverbView(
                 }
                 crate::algos::AlgoPicker {
                     id: macros.iter().find(|m| m.id.ends_with("amb.algo")).map(|m| m.id.clone()).unwrap_or_default(),
-                    value: macros.iter().find(|m| m.id.ends_with("amb.algo")).map(|m| m.value).unwrap_or(1.0),
+                    value: macros.iter().find(|m| m.id.ends_with("amb.algo")).map_or(1.0, |m| m.value),
                     options: crate::algos::VERB_ALGOS.to_vec(),
                     accent: accent.clone(),
                     on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
@@ -373,9 +375,9 @@ pub fn ReverbView(
                                 continue;
                             }
                             let a = (1.0 - (t - pre) / t60).max(0.0);
-                            d.push_str(&format!("L {:.1} {:.1} ", x_of(t), floor - a * mix * span));
+                            let _ = write!(d, "L {:.1} {:.1} ", x_of(t), floor - a * mix * span);
                         }
-                        d.push_str(&format!("L {:.1} {floor:.1} Z", x_of(20.0)));
+                        let _ = write!(d, "L {:.1} {floor:.1} Z", x_of(20.0));
                         rsx! {
                             g { key: "verb-{li}",
                                 path {

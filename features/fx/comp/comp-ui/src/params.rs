@@ -120,10 +120,12 @@ pub const MAX_STAGES: usize = 8;
 
 /// One stage's complete parameter set (`fx.stack.model`): a full compressor
 /// — profile, classic surface, extended surface — plus its place in the
-/// stack. [`CompParams`] holds [`MAX_STAGES`] of these; stage 1 is declared
-/// bare (`#[nested]`) so its ids are exactly the pre-stack plugin's and a
-/// saved single-stage session loads into it bit-for-bit
-/// (`fx.stack.params`); stages 2+ get `s{n}_` id prefixes.
+/// stack.
+///
+/// [`CompParams`] holds [`MAX_STAGES`] of these; stage 1 is declared bare
+/// (`#[nested]`) so its ids are exactly the pre-stack plugin's and a saved
+/// single-stage session loads into it bit-for-bit (`fx.stack.params`); stages 2+
+/// get `s{n}_` id prefixes.
 ///
 /// The first eight ids (`threshold`…`link`) are the original classic set and
 /// **must keep their order and ids** — hosts persist VST3 state by index.
@@ -413,8 +415,10 @@ impl Default for LaneParams {
 }
 
 /// The full parameter tree: the stage pool, the lanes, and the stack
-/// globals (`fx.stack.params`). Stage 1 is nested bare so its ids are the
-/// pre-stack plugin's, unchanged; stages 2–8 are prefixed `s2_`…`s8_`.
+/// globals (`fx.stack.params`).
+///
+/// Stage 1 is nested bare so its ids are the pre-stack plugin's, unchanged;
+/// stages 2–8 are prefixed `s2_`…`s8_`.
 #[derive(Params)]
 pub struct CompParams {
     #[nested]
@@ -459,7 +463,11 @@ pub struct CompParams {
 }
 
 impl CompParams {
-    /// Stage `i` (0-based). Panics past [`MAX_STAGES`].
+    /// Stage `i` (0-based).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `i >= MAX_STAGES`.
     pub fn stage(&self, i: usize) -> &CompStageParams {
         match i {
             0 => &self.stage1,

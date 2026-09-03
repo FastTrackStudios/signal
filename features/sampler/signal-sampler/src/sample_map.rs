@@ -2,7 +2,7 @@
 //!
 //! The sample map builds an index over all sample files in a library root
 //! directory, then provides O(1) lookup by (section, mic, articulation,
-//! dynamic, note, rr_index, direction).
+//! dynamic, note, `rr_index`, direction).
 //!
 //! # File naming convention
 //!
@@ -130,6 +130,7 @@ fn group_hash(section: &str, articulation: &str, mic: &str, note: u8) -> u64 {
 
 impl SampleMap {
     /// Build an empty map. Useful in tests.
+    #[must_use] 
     pub fn empty() -> Self {
         Self::from_map(HashMap::new())
     }
@@ -149,23 +150,20 @@ impl SampleMap {
             };
             let h = group_hash(&key.section, &key.articulation, &key.mic, key.note);
             let groups = by_note.entry(h).or_default();
-            let idx = match groups.iter().position(|g| {
+            let idx = if let Some(i) = groups.iter().position(|g| {
                 g.section == key.section
                     && g.articulation == key.articulation
                     && g.mic == key.mic
                     && g.note == key.note
-            }) {
-                Some(i) => i,
-                None => {
-                    groups.push(NoteGroup {
-                        section: key.section.clone(),
-                        articulation: key.articulation.clone(),
-                        mic: key.mic.clone(),
-                        note: key.note,
-                        candidates: Vec::new(),
-                    });
-                    groups.len() - 1
-                }
+            }) { i } else {
+                groups.push(NoteGroup {
+                    section: key.section.clone(),
+                    articulation: key.articulation.clone(),
+                    mic: key.mic.clone(),
+                    note: key.note,
+                    candidates: Vec::new(),
+                });
+                groups.len() - 1
             };
             groups[idx].candidates.push(Candidate {
                 direction: key.direction.clone(),
@@ -215,6 +213,11 @@ impl SampleMap {
     /// Expects sample files either directly in `root_dir` (flat layout) or
     /// nested in subdirectories (organised layout). `.wav` and `.flac` files
     /// are parsed using [`parse_sample_stem`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SamplerError`] if `root_dir` cannot be read, or if a sample
+    /// file under it cannot be opened or parsed.
     pub fn scan(root_dir: &Path) -> Result<Self, SamplerError> {
         let mut map = HashMap::new();
         scan_dir(root_dir, &mut map)?;
@@ -222,6 +225,7 @@ impl SampleMap {
     }
 
     /// Total number of sample files indexed.
+    #[must_use] 
     pub fn total(&self) -> usize {
         self.total
     }
@@ -232,6 +236,7 @@ impl SampleMap {
     }
 
     /// Look up the exact path for a sample key.
+    #[must_use] 
     pub fn get(&self, key: &SampleKey) -> Option<&PathBuf> {
         self.map.get(key)
     }
@@ -241,6 +246,7 @@ impl SampleMap {
     ///
     /// If `target_note` is not directly sampled, the nearest grid note is
     /// used and the engine is expected to transpose the sample at playback.
+    #[must_use] 
     pub fn resolve(
         &self,
         spec: &LibrarySpec,
@@ -271,8 +277,7 @@ impl SampleMap {
         // Build the candidate token list: primary id + any aliases from the spec.
         let aliases = spec
             .articulation(articulation_id)
-            .map(|a| a.aliases.as_slice())
-            .unwrap_or(&[]);
+            .map_or(&[][..], |a| a.aliases.as_slice());
 
         let mut key = SampleKey {
             section: section_id.to_string(),
@@ -357,6 +362,7 @@ impl SampleMap {
     /// `["rel", "relm", "relsl"]` for a release, or `["", "2"]` for a body
     /// that ships a second hard-hit layer. Empty when nothing matches (the
     /// caller then falls back to a single nearest-match voice).
+    #[must_use] 
     pub fn layer_directions(
         &self,
         section: &str,
@@ -382,7 +388,8 @@ impl SampleMap {
         dirs
     }
 
-    /// All (section_id, articulation_id) pairs present in the map.
+    /// All (`section_id`, `articulation_id`) pairs present in the map.
+    #[must_use] 
     pub fn articulations_present(&self) -> Vec<(String, String)> {
         let mut pairs: Vec<(String, String)> = self
             .map
@@ -441,7 +448,6 @@ fn prefer_existing_keyscape_sample(existing: &Path, candidate: &Path) -> bool {
         existing_dynamic.contains('_'),
         candidate_dynamic.contains('_'),
     ) {
-        (false, true) => true,
         (true, false) => false,
         _ => true,
     }
@@ -458,13 +464,15 @@ fn is_supported_sample_ext(ext: &str) -> bool {
 /// Expected patterns (underscore-separated):
 /// - Standard:    `{Section}_{Artic}_{Mic}_{Dyn}_{Note}[_{Dir}][_{RR}]`
 /// - Dir-legato:  `{Section}_{Artic}_{Mic}_{Dyn}_{Dir}_{Note}_{RR}`
-///   (Leg / NVLeg / Port have direction **before** the note in CSS filenames)
+///   (Leg / `NVLeg` / Port have direction **before** the note in CSS filenames)
 ///
 /// Returns `None` if the stem cannot be parsed (non-CS file, etc.).
+#[must_use] 
 pub fn parse_wav_stem(stem: &str) -> Option<SampleKey> {
     parse_sample_stem(stem)
 }
 
+#[must_use] 
 pub fn parse_sample_stem(stem: &str) -> Option<SampleKey> {
     parse_signal_stem(stem)
         .or_else(|| parse_keyscape_c7_stem(stem))
@@ -814,9 +822,7 @@ fn parse_keyscape_loose_stem(stem: &str) -> Option<SampleKey> {
         numeric
             .iter()
             .rev()
-            .find(|(idx, value)| *idx != note_idx && *value <= 127)
-            .map(|(_, value)| value.to_string())
-            .unwrap_or_else(|| "127".to_string())
+            .find(|(idx, value)| *idx != note_idx && *value <= 127).map_or_else(|| "127".to_string(), |(_, value)| value.to_string())
     });
 
     let articulation = loose_articulation(&tokens, note_idx)?;

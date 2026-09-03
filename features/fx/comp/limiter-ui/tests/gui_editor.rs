@@ -17,7 +17,7 @@
 //!   body `<style>` elements — blitz-dom processes `<style>` anywhere in the
 //!   tree. Without them every layout utility is undefined and the layout
 //!   collapses.
-//! - `pump()` drives the VirtualDom but does **not** recompute layout, so any
+//! - `pump()` drives the `VirtualDom` but does **not** recompute layout, so any
 //!   assertion on size or hit-testing after a re-render needs
 //!   [`support::Fixture::settle`], which calls `advance_time`.
 

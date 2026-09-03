@@ -1,4 +1,4 @@
-//! PitchDelay — TimeLine MX "Ice" machine: slices the delay buffer and
+//! `PitchDelay` — `TimeLine` MX "Ice" machine: slices the delay buffer and
 //! plays the pieces back re-pitched.
 //!
 //! The delay tap feeds a granular pitch shifter (pitch-dsp
@@ -16,7 +16,7 @@ use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
 use pitch_dsp::granular::GranularShifter;
 
-/// TimeLine MX Ice interval menu. `Free` uses `PitchDelay::speed` raw.
+/// `TimeLine` MX Ice interval menu. `Free` uses `PitchDelay::speed` raw.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IceInterval {
     /// Use the raw `speed` ratio field (non-MX escape hatch).
@@ -33,6 +33,7 @@ pub enum IceInterval {
 
 impl IceInterval {
     /// Pitch ratio for the interval; `None` for `Free`.
+    #[must_use]
     pub fn ratio(self) -> Option<f64> {
         match self {
             Self::Free => None,
@@ -45,6 +46,7 @@ impl IceInterval {
 
     /// The 30-entry MX menu order: −12..−1, −50c, −25c, +25c, +50c,
     /// +1..+11, +12, +19, +24. Out-of-range indices clamp to the ends.
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             0..=11 => Self::Semitones(i as i8 - 12),
@@ -123,6 +125,7 @@ pub struct PitchDelay {
 impl PitchDelay {
     const MAX_DELAY_S: f64 = 5.0;
 
+    #[must_use]
     pub fn new() -> Self {
         let buf_len = 48000 * 5 + 1024;
         let mut shifter = GranularShifter::new();
@@ -243,6 +246,7 @@ impl PitchDelay {
         output
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }

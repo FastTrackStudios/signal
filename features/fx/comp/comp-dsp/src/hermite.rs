@@ -20,24 +20,25 @@ pub struct HermiteCubicSmoother {
     change_threshold: f64,
 }
 
-/// Different hypotheses for what state_func does (mostly unused in current impl)
+/// Different hypotheses for what `state_func` does (mostly unused in current impl)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StateFuncHypothesis {
-    /// Hypothesis 1: state_func(x) = x (identity)
+    /// Hypothesis 1: `state_func(x)` = x (identity)
     Identity,
-    /// Hypothesis 2: state_func(x) = 2.0 * x (simple scaling)
+    /// Hypothesis 2: `state_func(x)` = 2.0 * x (simple scaling)
     Scale2x,
-    /// Hypothesis 3: state_func returns stored gr_inst
+    /// Hypothesis 3: `state_func` returns stored `gr_inst`
     GrInst,
-    /// Hypothesis 4: state_func = exponential smoother (IIR)
+    /// Hypothesis 4: `state_func` = exponential smoother (IIR)
     ExponentialSmoothing,
-    /// Hypothesis 5: state_func(x) = sqrt(x)
+    /// Hypothesis 5: `state_func(x)` = sqrt(x)
     PowerDomain,
-    /// Hypothesis 6: state_func(x) = log(x)
+    /// Hypothesis 6: `state_func(x)` = log(x)
     LogDomain,
 }
 
 impl HermiteCubicSmoother {
+    #[must_use]
     pub fn new(_hypothesis: StateFuncHypothesis) -> Self {
         Self {
             history: [[1.0; 4]; 2],
@@ -47,8 +48,8 @@ impl HermiteCubicSmoother {
 
     /// Active smoothing algorithm:
     /// 1. Read GR history (4 most recent smoothed results)
-    /// 2. Detect change: threshold = gr_inst * 0.001, compare with history
-    /// 3. Route: Hermite cubic if change detected, sqrt(gr_inst) if steady state
+    /// 2. Detect change: threshold = `gr_inst` * 0.001, compare with history
+    /// 3. Route: Hermite cubic if change detected, `sqrt(gr_inst)` if steady state
     /// 4. Update history for next sample
     #[allow(clippy::too_many_arguments)]
     pub fn process(
@@ -118,6 +119,7 @@ impl HermiteCubicSmoother {
     }
 
     /// Get current change detection threshold
+    #[must_use]
     pub fn get_change_threshold(&self) -> f64 {
         self.change_threshold
     }

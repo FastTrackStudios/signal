@@ -12,7 +12,7 @@ use super::householder;
 use super::one_pole::Lp1;
 
 /// Mixing matrix type.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MixMatrix {
     Householder,
     Hadamard,
@@ -111,6 +111,7 @@ pub struct Fdn {
 
 impl Fdn {
     /// Create an FDN with the given delay lengths (in samples).
+    #[must_use]
     pub fn new(delay_lengths: &[usize], matrix: MixMatrix) -> Self {
         let n = delay_lengths.len();
         let delays = delay_lengths
@@ -284,7 +285,7 @@ impl Fdn {
         sample_rate: f64,
     ) {
         use audiocore_dsp::biquad::FilterType;
-        let any = bands.iter().any(|b| b.is_active());
+        let any = bands.iter().any(crate::algorithm::DecayBand::is_active);
         self.decay_eq_active = any;
         if !any {
             return;

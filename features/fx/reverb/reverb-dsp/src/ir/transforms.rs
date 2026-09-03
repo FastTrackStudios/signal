@@ -42,7 +42,7 @@ pub struct IrTransforms {
     pub gain_db: f64,
     /// Channel reconciliation.
     pub layout: ChannelLayout,
-    /// BigSky MX Impulse "Decay": fraction of the IR that plays
+    /// `BigSky` MX Impulse "Decay": fraction of the IR that plays
     /// (0.01..1.0, 1.0 = whole file, no-op). Applied BEFORE `reverse`,
     /// so a reversed IR is the decay-shortened head played backwards.
     pub decay_frac: f64,
@@ -56,7 +56,7 @@ pub struct IrTransforms {
     /// How `decay_frac` < 1.0 shortens: `false` = decreasing ramp
     /// (Envelope), `true` = abrupt truncation (Gate).
     pub tail_gate: bool,
-    /// BigSky MX Impulse "Attack": relative onset fade-in over the
+    /// `BigSky` MX Impulse "Attack": relative onset fade-in over the
     /// final buffer's head (0..1 maps to 0..25% of the shaped length).
     /// Unlike `attack_s` this is length-relative and applied after
     /// reverse/stretch, i.e. on what actually plays first.
@@ -89,6 +89,7 @@ impl IrTransforms {
     /// The single source of truth for the Impulse-param → transform
     /// mapping, used by both the synchronous and background reshape
     /// paths.
+    #[must_use]
     pub fn from_impulse(p: &crate::algorithm::ImpulseParams) -> Self {
         Self {
             decay_frac: p.decay.clamp(0.01, 1.0),
@@ -103,6 +104,7 @@ impl IrTransforms {
 
     /// Apply the full pipeline to an [`IrAsset`] and produce a stereo
     /// pair at the asset's sample rate.
+    #[must_use]
     pub fn apply(&self, ir: &IrAsset) -> (Vec<f64>, Vec<f64>) {
         let (l, r) = extract_stereo(ir, self.layout);
         self.apply_pair(l, r, ir.sample_rate)
@@ -111,6 +113,7 @@ impl IrTransforms {
     /// Apply the pipeline to an already-extracted channel pair — used
     /// for the cross (LR/RL) channels of a true-stereo IR so all four
     /// legs get identical shaping.
+    #[must_use]
     pub fn apply_pair(&self, l: Vec<f64>, r: Vec<f64>, sr: f64) -> (Vec<f64>, Vec<f64>) {
         let (mut l, mut r) = (l, r);
 

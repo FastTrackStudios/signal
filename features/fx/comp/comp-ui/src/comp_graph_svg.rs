@@ -2,12 +2,15 @@
 //!
 //! The pure core of the comp graph — ported from the signal domain's
 //! `CompSurface` (`features/rigs/guitar/ui/src/comp_surface.rs`, itself a 1:1
-//! port of the audio-gui vello painter): the soft-knee `compress_transfer`
-//! curve, the Catmull-Rom `smooth_path` waveform fills, and the dB ↔ y
-//! coordinate mapping. No plugin framework, no Dioxus — compiles for every
-//! target (same split as eq-ui's `eq_graph_svg`). The `native`-gated
-//! [`crate::comp_graph`] component renders these paths and adds the
-//! interactions.
+//! port of the audio-gui vello painter).
+//!
+//! Supports the soft-knee `compress_transfer` curve, the Catmull-Rom
+//! `smooth_path` waveform fills, and the dB ↔ y coordinate mapping. No
+//! plugin framework, no Dioxus — compiles for every target (same split as
+//! eq-ui's `eq_graph_svg`). The `native`-gated [`crate::comp_graph`]
+//! component renders these paths and adds the interactions.
+
+use std::fmt::Write;
 
 /// Display dB range (0 dBFS at the top … −`RANGE_DB` at the bottom). 60 dB:
 /// matches the reference surface — the −20/−30 dB neighborhood where
@@ -91,7 +94,9 @@ pub fn scale_gr_wave(gr_db: &[f32]) -> Vec<f32> {
 
 /// Smooth SVG path through normalized samples (Catmull-Rom → cubic Bézier,
 /// the painter's `build_smooth_path`), optionally closed to `baseline` for a
-/// fill. `from_bottom = true` draws amplitude up from the bottom edge (the
+/// fill.
+///
+/// `from_bottom = true` draws amplitude up from the bottom edge (the
 /// input waveform); `false` draws downward from the top (the GR trace).
 #[must_use] 
 pub fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) -> String {
@@ -114,9 +119,9 @@ pub fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bo
     let baseline = if from_bottom { h } else { 0.0 };
     let mut d = String::new();
     if close {
-        d.push_str(&format!("M 0 {baseline:.1} L 0 {:.1} ", ys[0]));
+        let _ = write!(d, "M 0 {baseline:.1} L 0 {:.1} ", ys[0]);
     } else {
-        d.push_str(&format!("M 0 {:.1} ", ys[0]));
+        let _ = write!(d, "M 0 {:.1} ", ys[0]);
     }
     for i in 0..n - 1 {
         let x0 = i as f64 * step;
@@ -126,7 +131,8 @@ pub fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bo
         let y_next2 = if i + 2 < n { ys[i + 2] } else { ys[n - 1] };
         let t1 = (y_next - y_prev) / 2.0;
         let t2 = (y_next2 - y_curr) / 2.0;
-        d.push_str(&format!(
+        let _ = write!(
+            d,
             "C {:.1} {:.1} {:.1} {:.1} {:.1} {:.1} ",
             x0 + step / 3.0,
             y_curr + t1 / 3.0,
@@ -134,10 +140,10 @@ pub fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bo
             y_next - t2 / 3.0,
             x1,
             y_next,
-        ));
+        );
     }
     if close {
-        d.push_str(&format!("L {w:.1} {baseline:.1} Z"));
+        let _ = write!(d, "L {w:.1} {baseline:.1} Z");
     }
     d
 }
@@ -153,7 +159,7 @@ pub fn transfer_curve_path(threshold_db: f32, ratio: f32, knee_db: f32, w: f64, 
         let x = db_to_x(input, w);
         let y = db_to_y(output, h);
         d.push_str(if i == 0 { "M " } else { "L " });
-        d.push_str(&format!("{x:.1} {y:.1} "));
+        let _ = write!(d, "{x:.1} {y:.1} ");
     }
     d
 }

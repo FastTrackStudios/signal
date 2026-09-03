@@ -71,6 +71,10 @@ pub struct ImportedRig {
 /// For each module in the chain, block presets are found-or-created by
 /// `(block_type, label)`, then assembled into a module preset.  All modules
 /// are wired into a single layer → engine → rig with one "Default" scene.
+///
+/// # Errors
+///
+/// Returns an error if the import operation fails.
 pub async fn import_rig_from_chain<S: SignalApi>(
     signal: &SignalController<S>,
     chain: &ImportChain,

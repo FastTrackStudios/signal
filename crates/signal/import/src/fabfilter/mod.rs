@@ -1,4 +1,4 @@
-//! FabFilter preset importer.
+//! `FabFilter` preset importer.
 //!
 //! Scans `~/Documents/FabFilter/Presets/<PluginName>/` for `.ffp` files,
 //! extracts metadata from text-format presets, and produces
@@ -21,7 +21,7 @@ use tracing::debug;
 use crate::types::{DiscoveredPlugin, ImportedPresetCollection, ImportedSnapshot};
 use registry::{FabFilterPluginEntry, FfpFormat, FABFILTER_PLUGINS};
 
-/// Default location for FabFilter presets on macOS.
+/// Default location for `FabFilter` presets on macOS.
 const DEFAULT_PRESETS_ROOT: &str = "~/Documents/FabFilter/Presets";
 
 fn expand_tilde(path: &str) -> PathBuf {
@@ -37,13 +37,13 @@ fn default_presets_root() -> PathBuf {
     expand_tilde(DEFAULT_PRESETS_ROOT)
 }
 
-/// FabFilter preset importer.
+/// `FabFilter` preset importer.
 pub struct FabFilterImporter {
     presets_root: PathBuf,
 }
 
 impl Default for FabFilterImporter {
-    /// Create an importer using the default FabFilter preset location.
+    /// Create an importer using the default `FabFilter` preset location.
     fn default() -> Self {
         Self {
             presets_root: default_presets_root(),
@@ -52,17 +52,23 @@ impl Default for FabFilterImporter {
 }
 
 impl FabFilterImporter {
-    /// Create an importer using the default FabFilter preset location.
+    /// Create an importer using the default `FabFilter` preset location.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create an importer with a custom root directory (useful for testing).
+    #[must_use]
     pub fn with_root(root: PathBuf) -> Self {
         Self { presets_root: root }
     }
 
-    /// Discover all FabFilter plugins that have preset directories on disk.
+    /// Discover all `FabFilter` plugins that have preset directories on disk.
+    ///
+    /// # Errors
+    ///
+    /// Currently does not return an error; this method is infallible.
     pub fn discover_plugins(&self) -> Result<Vec<DiscoveredPlugin>> {
         let mut plugins = Vec::new();
 
@@ -90,6 +96,10 @@ impl FabFilterImporter {
     }
 
     /// Scan a specific plugin's preset directory and produce an `ImportedPresetCollection`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin is not found, the preset directory does not exist, or directory reading fails.
     pub fn scan(&self, plugin_name: &str) -> Result<ImportedPresetCollection> {
         let entry = registry::lookup_plugin(plugin_name)
             .ok_or_else(|| eyre::eyre!("Unknown FabFilter plugin: {plugin_name}"))?;
@@ -139,9 +149,9 @@ fn scan_directory(
 
     let mut entries: Vec<_> = std::fs::read_dir(dir)
         .wrap_err_with(|| format!("Failed to read directory: {}", dir.display()))?
-        .filter_map(|e| e.ok())
+        .filter_map(Result::ok)
         .collect();
-    entries.sort_by_key(|e| e.file_name());
+    entries.sort_by_key(std::fs::DirEntry::file_name);
 
     for fs_entry in entries {
         let path = fs_entry.path();

@@ -25,13 +25,18 @@ pub use signal_drums_proto as proto;
 /// General-MIDI percussion channel (0-indexed 9 = MIDI channel 10).
 pub const GM_DRUM_CHANNEL: u8 = 9;
 
-/// Open a hardware drum controller and play a loaded kit through it, running
-/// every event through a [`DrumMapConverter`] so a `from`-mapped kit (e.g. an
-/// Alesis Strata Prime e-kit, [`DrumMap::StrataPrime`]) drives the loaded
-/// sample library's note layout (e.g. [`DrumMap::Mm2`]).
+/// Open a hardware drum controller and play a loaded kit through it.
+///
+/// Every event is run through a [`DrumMapConverter`] so a `from`-mapped kit
+/// (e.g. an Alesis Strata Prime e-kit, [`DrumMap::StrataPrime`]) drives the
+/// loaded sample library's note layout (e.g. [`DrumMap::Mm2`]).
 ///
 /// Returns the live [`MidiInput`](signal_sampler::MidiInputHandle) — hold it
 /// alive for as long as the kit should play. Requires a live (non-offline) rig.
+///
+/// # Errors
+///
+/// Returns an error if MIDI attachment fails.
 pub fn attach_converted_kit(
     rig: &SamplerRig,
     selection: midicore::PortSelector,
@@ -43,12 +48,12 @@ pub fn attach_converted_kit(
         .map_err(|e| e.to_string())
 }
 
-/// Load a full drum kit from a `.signalpreset` (one engine per piece +
-/// GM `note_routing` + the send-based multi-mic `DrumMixer`) and route it to
-/// the GM percussion channel. This is the loader for the native GGD-style kits
-/// (e.g. Modern & Massive 2), whose `.signalpreset` files already carry the
-/// note map and per-piece mic sets — unlike [`load_kit`], which loads a single
-/// merged articulation/zone library.
+/// Load a full drum kit from a `.signalpreset` and route it to the GM percussion channel.
+///
+/// This is the loader for native GGD-style kits (e.g. Modern & Massive 2), where
+/// the `.signalpreset` carries one engine per piece + GM `note_routing` +
+/// send-based multi-mic `DrumMixer`, with per-piece mic sets. Unlike [`load_kit`],
+/// which loads a single merged articulation/zone library.
 ///
 /// Returns the per-engine instrument ids (`"<id>:<piece>"`).
 ///
@@ -57,12 +62,12 @@ pub fn attach_converted_kit(
 /// map it to channel 0 or send `midi_message` on [`GM_DRUM_CHANNEL`]. This
 /// loader maps [`GM_DRUM_CHANNEL`]; a hardware/e-kit feed on MIDI channel 10
 /// therefore plays without extra wiring.
+///
+/// # Errors
+///
+/// Returns an error if the preset file cannot be read or loaded.
 // r[impl drums.kit.gm-channel]
 // r[impl drums.kit.sample-zones]
-/// Load a `.signalpreset` kit as per-track daw tracks (the fully daw-based
-/// mixer): parse the preset, then hand it to
-/// [`SamplerRig::load_kit_tracks`]. MIDI reaches the kit through its routing
-/// table ([`SamplerRig::kit_dispatch`]), not a bank channel.
 pub fn load_kit_tracks(
     rig: &SamplerRig,
     id: &str,
@@ -77,6 +82,10 @@ pub fn load_kit_tracks(
 }
 
 /// As [`load_kit_tracks`] from an in-memory spec (the kit-designer swap path).
+///
+/// # Errors
+///
+/// Returns an error if kit loading fails.
 pub fn load_kit_tracks_spec(
     rig: &SamplerRig,
     id: &str,
@@ -88,6 +97,9 @@ pub fn load_kit_tracks_spec(
         .map_err(|e| e.to_string())
 }
 
+/// # Errors
+///
+/// Returns an error if the preset file cannot be loaded.
 pub fn load_preset_kit(
     rig: &SamplerRig,
     id: &str,
@@ -104,13 +116,18 @@ pub fn load_preset_kit(
     Ok(ids)
 }
 
-/// Load a drum-kit sample library into `rig` under `id` and route it to the
-/// GM percussion channel. A kit is ordinary engine zones — this is a thin
-/// definition over the shared sampler loader, the drums analogue of the
-/// orchestra `load_strings` and keys rig definitions.
+/// Load a drum-kit sample library into `rig` under `id` and route it to GM percussion channel.
+///
+/// A kit is ordinary engine zones — this is a thin definition over the shared
+/// sampler loader, the drums analogue of the orchestra `load_strings` and keys
+/// rig definitions.
 ///
 /// `config` is the articulation/zone styx, `zones` the resolved `library.styx`,
 /// `root` the samples root, `section`/`mic` the kit + mic to solo.
+///
+/// # Errors
+///
+/// Returns an error if loading the instrument configuration fails.
 // r[impl drums.kit.gm-channel]
 // r[impl drums.kit.sample-zones]
 pub fn load_kit(

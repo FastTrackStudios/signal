@@ -83,7 +83,7 @@ pub struct CubicVoice {
 }
 
 impl CubicVoice {
-    const MAX_DELAY: usize = 192000 / 20 + 64;
+    const MAX_DELAY: usize = 192_000 / 20 + 64;
     #[must_use] 
     pub fn new(phase_offset: f64) -> Self {
         Self {
@@ -254,7 +254,7 @@ pub struct TapeVoice {
 }
 
 impl TapeVoice {
-    const MAX_DELAY: usize = 192000 / 20 + 64;
+    const MAX_DELAY: usize = 192_000 / 20 + 64;
     #[must_use] 
     pub fn new(phase_offset: f64) -> Self {
         Self {
@@ -341,7 +341,7 @@ pub struct OrbitVoice {
 }
 
 impl OrbitVoice {
-    const MAX_DELAY: usize = 192000 / 20 + 64;
+    const MAX_DELAY: usize = 192_000 / 20 + 64;
     #[must_use] 
     pub fn new(phase_offset: f64) -> Self {
         Self {

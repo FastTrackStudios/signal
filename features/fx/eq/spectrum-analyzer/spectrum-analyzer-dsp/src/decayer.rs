@@ -27,6 +27,7 @@ pub struct SpectrumDecayer {
 }
 
 impl SpectrumDecayer {
+    #[must_use]
     pub fn new(num_bins: usize) -> Self {
         Self {
             state: vec![INIT_DB; num_bins],

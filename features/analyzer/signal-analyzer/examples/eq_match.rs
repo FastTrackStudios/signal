@@ -183,7 +183,9 @@ fn spectrum(buf: &[f32]) -> Vec<f64> {
         pos += FFT / 2; // 50% overlap
     }
     let n = used.max(1) as f64;
-    mag.iter_mut().for_each(|m| *m /= n);
+    for m in &mut mag {
+        *m /= n;
+    }
     mag
 }
 
@@ -285,12 +287,9 @@ fn main() {
         std::process::exit(2);
     };
 
-    let mut plugin = match HostedPlugin::load(&plugin_path) {
-        Ok(Some(p)) => p,
-        _ => {
-            eprintln!("{plugin_path}: could not load");
-            std::process::exit(1);
-        }
+    let Ok(Some(mut plugin)) = HostedPlugin::load(&plugin_path) else {
+        eprintln!("{plugin_path}: could not load");
+        std::process::exit(1);
     };
     plugin.prepare(SR, BLOCK as u32).expect("prepare");
 
@@ -376,7 +375,7 @@ fn main() {
                 }
             }
         }
-        for (name, value) in params.iter_mut() {
+        for (name, value) in &mut params {
             if let Some(rest) = name.strip_prefix('b') {
                 if let Some((idx, field)) = rest.split_once('_') {
                     if field == "used"

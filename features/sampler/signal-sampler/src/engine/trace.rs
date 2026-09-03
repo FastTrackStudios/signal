@@ -1,8 +1,12 @@
-//! Render trace — a structured, queryable log of what the engine actually did
-//! during a render: which sample files it played, at what frame, at what gain
-//! and pitch, where their loop points are, and every note-off / legato
-//! transition. Off by default (zero cost); enable with
-//! [`SampleEngine::set_trace_enabled`](super::SampleEngine::set_trace_enabled).
+//! Render trace.
+//!
+//! A structured, queryable log of what the engine actually did during a
+//! render: which sample files it played, at what frame, at what gain and
+//! pitch, where their loop points are, and every note-off / legato
+//! transition.
+//!
+//! Off by default (zero cost); enable with [`SampleEngine::set_trace_enabled`]
+//! (`super::SampleEngine::set_trace_enabled`).
 //!
 //! This is the ground truth for debugging "what is actually going on" — the QA
 //! harness and the `trace_dump` example consume it, and it answers questions a
@@ -99,6 +103,7 @@ pub struct VoiceSpawn {
 
 impl VoiceSpawn {
     /// True when this voice loops (holds indefinitely).
+    #[must_use]
     pub fn loops(&self) -> bool {
         self.loop_end > self.loop_start
     }
@@ -112,11 +117,13 @@ pub struct RenderTrace {
 }
 
 impl RenderTrace {
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
     }
 
     /// All voice spawns in `[from, to)` frames, in order.
+    #[must_use]
     pub fn spawns_in(&self, from: u64, to: u64) -> Vec<(&TraceEvent, &VoiceSpawn)> {
         self.events
             .iter()
@@ -129,6 +136,7 @@ impl RenderTrace {
     }
 
     /// Every spawn of a sample whose file path contains `needle`.
+    #[must_use]
     pub fn spawns_of_file(&self, needle: &str) -> Vec<(&TraceEvent, &VoiceSpawn)> {
         self.events
             .iter()
@@ -140,6 +148,7 @@ impl RenderTrace {
     }
 
     /// Every voice spawn of `note`, in order.
+    #[must_use]
     pub fn spawns_of_note(&self, note: u8) -> Vec<&VoiceSpawn> {
         self.events
             .iter()
@@ -151,6 +160,7 @@ impl RenderTrace {
     }
 
     /// Every sample-miss recorded, in order.
+    #[must_use]
     pub fn misses(&self) -> Vec<(&TraceEvent, u8, MissReason)> {
         self.events
             .iter()
@@ -165,6 +175,7 @@ impl RenderTrace {
     /// only spawns before `frame` (a coarse overlap probe — no end tracking
     /// yet, so it over-counts once release tails are added; useful for spotting
     /// doubling right after a transition).
+    #[must_use]
     pub fn voices_on_note_at(&self, note: u8, frame: u64, window: u64) -> usize {
         self.events
             .iter()

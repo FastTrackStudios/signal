@@ -1,6 +1,8 @@
 //! Piece subspaces (#77 M4) — a similarity space over the drum library's
-//! swappable `.signalengine` pieces, so "find me another snare like this
-//! one" is a ranked list instead of a scroll through filenames.
+//! swappable `.signalengine` pieces.
+//!
+//! "Find me another snare like this one" is a ranked list instead of a
+//! scroll through filenames.
 //!
 //! Engines are specs, not audio, so each one is *rendered*: load it on an
 //! offline sampler, strike a representative note, and run the rendered hit
@@ -25,7 +27,7 @@ fn render_engine(rig: &SamplerRig, engine_path: &Path, note: u8) -> Option<Vec<f
     let mut buf = vec![0.0f32; 512 * 2];
     // Let the cache warm — a cold engine renders silence.
     for _ in 0..30 {
-        buf.iter_mut().for_each(|s| *s = 0.0);
+        buf.fill(0.0);
         let _ = rig.render_offline(&mut buf);
         std::thread::sleep(std::time::Duration::from_millis(6));
     }
@@ -34,7 +36,7 @@ fn render_engine(rig: &SamplerRig, engine_path: &Path, note: u8) -> Option<Vec<f
     let want = sr * 3 / 2;
     let mut mono = Vec::with_capacity(want);
     while mono.len() < want {
-        buf.iter_mut().for_each(|s| *s = 0.0);
+        buf.fill(0.0);
         if rig.render_offline(&mut buf).is_err() {
             break;
         }
@@ -66,7 +68,6 @@ fn render_engine(rig: &SamplerRig, engine_path: &Path, note: u8) -> Option<Vec<f
 fn probe_note(kind: &str) -> u8 {
     match kind {
         "kick" => 36,
-        "snare" => 38,
         "tom" => 45,
         "hi-hat" => 42,
         "ride" => 51,
@@ -80,6 +81,11 @@ fn probe_note(kind: &str) -> u8 {
 /// Build (or rebuild) the piece space for a drum library.
 ///
 /// Returns `(space dir, engines analyzed, engines skipped)`.
+///
+/// # Errors
+///
+/// Returns `Err` if the library has no engines, if analysis fails, or if space
+/// serialization fails.
 pub fn build(library_root: &Path) -> Result<(PathBuf, usize, usize), String> {
     let engines = crate::library::scan_engines(&crate::library::engines_dir(library_root));
     if engines.is_empty() {
@@ -146,6 +152,11 @@ pub fn build(library_root: &Path) -> Result<(PathBuf, usize, usize), String> {
 
 /// Rank the library's pieces by similarity to `engine_path`, restricted to
 /// the same kind. Returns `(engine path, score)` best-first.
+///
+/// # Errors
+///
+/// Returns `Err` if the space cannot be loaded or if the engine path is not
+/// in the library.
 pub fn similar_to(
     library_root: &Path,
     engine_path: &Path,

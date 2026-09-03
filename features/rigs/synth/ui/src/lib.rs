@@ -7,6 +7,8 @@
 //! Quadzone + its layers, from the composition tree), and a **performance**
 //! strip (the piano) at the bottom.
 
+use std::fmt::Write;
+
 use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
@@ -356,9 +358,9 @@ fn filter_path(f: &SynthFilter) -> String {
         );
         let (x, y) = (freq_to_x(freq), db_to_y(db));
         if i == 0 {
-            s.push_str(&format!("M{x:.1} {y:.1}"));
+            let _ = write!(s, "M{x:.1} {y:.1}");
         } else {
-            s.push_str(&format!(" L{x:.1} {y:.1}"));
+            let _ = write!(s, " L{x:.1} {y:.1}");
         }
     }
     s
@@ -487,23 +489,23 @@ fn env_geom(e: &SynthEnvelope, x: &EnvExtra) -> EnvGeom {
         let t = i as f64 / n as f64;
         let xx = (xa - ENV_LEFT).mul_add(t, ENV_LEFT);
         let yy = (ytop - y0).mul_add(power_scale(t, x.attack_power), y0);
-        s.push_str(&format!(" L{xx:.1} {yy:.1}"));
+        let _ = write!(s, " L{xx:.1} {yy:.1}");
     }
     // hold: flat at peak
-    s.push_str(&format!(" L{xh:.1} {ytop:.1}"));
+    let _ = write!(s, " L{xh:.1} {ytop:.1}");
     // decay: peak → sustain
     for i in 1..=n {
         let t = i as f64 / n as f64;
         let xx = (xc - xh).mul_add(t, xh);
         let yy = (ysus - ytop).mul_add(power_scale(t, x.decay_power), ytop);
-        s.push_str(&format!(" L{xx:.1} {yy:.1}"));
+        let _ = write!(s, " L{xx:.1} {yy:.1}");
     }
     // release: sustain → baseline
     for i in 1..=n {
         let t = i as f64 / n as f64;
         let xx = (xr - xc).mul_add(t, xc);
         let yy = (y0 - ysus).mul_add(power_scale(t, x.release_power), ysus);
-        s.push_str(&format!(" L{xx:.1} {yy:.1}"));
+        let _ = write!(s, " L{xx:.1} {yy:.1}");
     }
     let fill = format!("{s} L{ENV_LEFT:.1} {y0:.1} Z");
 
@@ -1572,9 +1574,9 @@ fn color_key(z: &SynthZone) -> String {
 
 /// Stable hue from a label (FNV-1a) → an HSL fill.
 fn color_for(key: &str) -> String {
-    let mut h: u32 = 2166136261;
+    let mut h: u32 = 2_166_136_261;
     for b in key.bytes() {
-        h = (h ^ u32::from(b)).wrapping_mul(16777619);
+        h = (h ^ u32::from(b)).wrapping_mul(16_777_619);
     }
     format!("hsl({}, 58%, 52%)", h % 360)
 }

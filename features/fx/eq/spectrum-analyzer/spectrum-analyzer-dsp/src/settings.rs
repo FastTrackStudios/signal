@@ -1,7 +1,7 @@
 //! Pro-Q 4 analyzer settings model.
 //!
 //! Every user-facing analyzer control maps to a field here. Values and ranges
-//! follow the FabFilter Pro-Q 4 help: Resolution 1024/2048/4096/8192, Range
+//! follow the `FabFilter` Pro-Q 4 help: Resolution 1024/2048/4096/8192, Range
 //! 60/90/120 dB (default 90), Tilt around 1 kHz in dB/oct (default 4.5).
 
 /// FFT resolution. Higher = more low-frequency detail but slower update rate
@@ -21,12 +21,13 @@ pub enum Resolution {
 
 impl Resolution {
     /// FFT size in samples.
+    #[must_use]
     pub fn fft_size(self) -> usize {
         match self {
-            Resolution::Low => 1024,
-            Resolution::Medium => 2048,
-            Resolution::High => 4096,
-            Resolution::Maximum => 8192,
+            Self::Low => 1024,
+            Self::Medium => 2048,
+            Self::High => 4096,
+            Self::Maximum => 8192,
         }
     }
 
@@ -49,11 +50,12 @@ pub enum Range {
 
 impl Range {
     /// Span in dB.
+    #[must_use]
     pub fn db(self) -> f32 {
         match self {
-            Range::Db60 => 60.0,
-            Range::Db90 => 90.0,
-            Range::Db120 => 120.0,
+            Self::Db60 => 60.0,
+            Self::Db90 => 90.0,
+            Self::Db120 => 120.0,
         }
     }
 }
@@ -77,12 +79,13 @@ impl Speed {
     /// Release time constant in seconds (larger = slower fall = calmer, nicer
     /// looking display). These lean slow on purpose — community-favorite
     /// analyzer settings prize a smooth, settled spectrum over a twitchy one.
+    #[must_use]
     pub fn release_seconds(self) -> f32 {
         match self {
-            Speed::Slow => 2.0,
-            Speed::Medium => 1.0,
-            Speed::Fast => 0.5,
-            Speed::VeryFast => 0.25,
+            Self::Slow => 2.0,
+            Self::Medium => 1.0,
+            Self::Fast => 0.5,
+            Self::VeryFast => 0.25,
         }
     }
 }

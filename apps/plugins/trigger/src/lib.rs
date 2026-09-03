@@ -10,7 +10,7 @@
 //! mirror of `signal-sampler-clap`'s note *input*).
 //!
 //! Detection can be the zero-latency time-domain peak envelope or one of the
-//! six FFT onset detection functions (spectral flux / SuperFlux / HFC /
+//! six FFT onset detection functions (spectral flux / `SuperFlux` / HFC /
 //! complex domain / rectified complex domain / modified KL); FFT modes report
 //! their latency to the host.
 //!
@@ -42,8 +42,8 @@ use trigger_ui::params::{TriggerParams, TriggerUiState};
 const PLUGIN_NAME: &str = "FTS Trigger";
 
 /// Emitted note length. MUST stay shorter than the minimum retrigger guard
-/// (5 ms) so at most one NoteOff is ever pending per hit ordering-wise —
-/// a NoteOn can never be sent with a timing before the previous NoteOff.
+/// (5 ms) so at most one `NoteOff` is ever pending per hit ordering-wise —
+/// a `NoteOn` can never be sent with a timing before the previous `NoteOff`.
 const NOTE_LEN_MS: f32 = 4.0;
 /// Listen-mode click: length and frequency of the per-hit sine burst.
 const CLICK_LEN_MS: f32 = 2.0;
@@ -76,7 +76,7 @@ fn curve_from_index(i: i32) -> VelocityCurve {
 
 // ── Plugin ────────────────────────────────────────────────────────────────
 
-/// A NoteOff owed to a hit whose note length spilled past the block end.
+/// A `NoteOff` owed to a hit whose note length spilled past the block end.
 #[derive(Clone, Copy)]
 struct PendingOff {
     /// Samples from the start of the *next* processed block.
@@ -108,7 +108,7 @@ pub struct FtsTrigger {
     synced: Option<SyncedParams>,
     sample_rate: f32,
     note_len_samples: u32,
-    /// NoteOffs carried across block boundaries. NOTE_LEN < min retrigger
+    /// `NoteOffs` carried across block boundaries. `NOTE_LEN` < min retrigger
     /// guard, so this can only ever hold one live entry — sized for slack.
     pending_offs: [Option<PendingOff>; 4],
     // Listen-mode click state.
@@ -318,8 +318,8 @@ impl Plugin for FtsTrigger {
         for (i, mut frame) in buffer.iter_samples().enumerate() {
             // The chain sidechain wants a stereo pair; duplicate mono.
             let mut it = frame.iter_mut();
-            let l = it.next().map(|s| *s as f64).unwrap_or(0.0);
-            let r = it.next().map(|s| *s as f64).unwrap_or(l);
+            let l = it.next().map_or(0.0, |s| *s as f64);
+            let r = it.next().map_or(l, |s| *s as f64);
             block_peak = block_peak.max((0.5 * (l + r)).abs() as f32);
 
             if let Some(vel) = self.chain.detect_tick(l, r) {

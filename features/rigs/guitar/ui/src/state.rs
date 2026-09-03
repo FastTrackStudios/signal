@@ -40,9 +40,11 @@ pub struct RigViewState {
 }
 
 /// Seed the rig view-state with one `status`/`perf`/`chain` fetch, then fold
-/// every [`RigEvent`] from the stream into it. Clients come from Dioxus
-/// context (provided by the host app root); absent clients leave the state
-/// at its defaults, so the view renders a disconnected shell gracefully.
+/// every [`RigEvent`] from the stream into it.
+///
+/// Clients come from Dioxus context (provided by the host app root); absent
+/// clients leave the state at its defaults, so the view renders a disconnected
+/// shell gracefully.
 pub fn use_rig_state() -> RigViewState {
     let rig = use_hook(try_consume_context::<RigClient>);
     let rig_stream = use_hook(try_consume_context::<RigStreamClient>);

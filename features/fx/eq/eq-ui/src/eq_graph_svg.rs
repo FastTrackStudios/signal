@@ -6,6 +6,8 @@
 #![allow(dead_code)]
 #![allow(clippy::too_many_arguments)]
 
+use std::fmt::Write;
+
 use super::eq_graph_model::EqBand;
 use super::eq_graph_response::{calculate_band_response, calculate_combined_response};
 
@@ -103,24 +105,24 @@ where
         let x = freq_to_x(freq);
         let y = db_to_y(db);
         if i == 0 {
-            stroke_path.push_str(&format!("M{x:.2} {y:.2}"));
+            let _ = write!(stroke_path, "M{x:.2} {y:.2}");
         } else {
-            stroke_path.push_str(&format!("L{x:.2} {y:.2}"));
+            let _ = write!(stroke_path, "L{x:.2} {y:.2}");
         }
     }
 
     let mut fill_path = String::new();
     let first_x = freq_to_x(frequencies[0]);
-    fill_path.push_str(&format!("M{first_x:.2} {zero_y:.2}"));
+    let _ = write!(fill_path, "M{first_x:.2} {zero_y:.2}");
 
     for (&freq, &db) in frequencies.iter().zip(response_db.iter()) {
         let x = freq_to_x(freq);
         let y = db_to_y(db);
-        fill_path.push_str(&format!("L{x:.2} {y:.2}"));
+        let _ = write!(fill_path, "L{x:.2} {y:.2}");
     }
 
     let last_x = freq_to_x(*frequencies.last().unwrap());
-    fill_path.push_str(&format!("L{last_x:.2} {zero_y:.2}Z"));
+    let _ = write!(fill_path, "L{last_x:.2} {zero_y:.2}Z");
 
     (stroke_path, fill_path)
 }

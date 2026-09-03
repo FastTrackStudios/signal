@@ -424,10 +424,7 @@ async fn resolve_layer_module_chains(
     all_module_presets: &[ModulePreset],
     block_preset_lookup: &HashMap<String, (BlockType, String)>,
 ) -> Vec<ModuleChainData> {
-    let variant = match layer.default_variant() {
-        Some(v) => v,
-        None => return Vec::new(),
-    };
+    let Some(variant) = layer.default_variant() else { return Vec::new() };
     resolve_variant_module_chains(signal, variant, all_module_presets, block_preset_lookup).await
 }
 
@@ -564,24 +561,15 @@ async fn resolve_rig_scene_engines(
     let mut engines = Vec::new();
     for es in &scene.engine_selections {
         let engine_id_str = es.engine_id.as_str();
-        let engine = match signal.engines().load(engine_id_str).await.ok().flatten() {
-            Some(e) => e,
-            None => continue,
-        };
+        let Some(engine) = signal.engines().load(engine_id_str).await.ok().flatten() else { continue };
         let engine_variant = engine
             .variant(&es.variant_id)
             .or_else(|| engine.default_variant());
-        let engine_variant = match engine_variant {
-            Some(v) => v,
-            None => continue,
-        };
+        let Some(engine_variant) = engine_variant else { continue };
         let mut layers = Vec::new();
         for ls in &engine_variant.layer_selections {
             let layer_id_str = ls.layer_id.as_str();
-            let layer = match signal.layers().load(layer_id_str).await.ok().flatten() {
-                Some(l) => l,
-                None => continue,
-            };
+            let Some(layer) = signal.layers().load(layer_id_str).await.ok().flatten() else { continue };
             let module_chains = resolve_layer_module_chains(
                 signal,
                 &layer,
@@ -777,13 +765,12 @@ async fn resolve_node_params(node: &signal::SignalNode, lookup: &mut ParamLookup
 
 // region: --- Utility
 
-#[must_use] 
+#[must_use]
 pub const fn rig_type_to_engine_type(rig_type: RigType) -> signal::EngineType {
     match rig_type {
-        RigType::Guitar => signal::EngineType::Guitar,
+        RigType::Guitar | RigType::Drums | RigType::DrumEnhancement => signal::EngineType::Guitar,
         RigType::Bass => signal::EngineType::Bass,
         RigType::Keys => signal::EngineType::Keys,
-        RigType::Drums | RigType::DrumEnhancement => signal::EngineType::Guitar,
         RigType::Vocals => signal::EngineType::Vocal,
     }
 }

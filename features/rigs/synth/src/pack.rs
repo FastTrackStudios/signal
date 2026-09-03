@@ -8,6 +8,7 @@
 //! as variant tags the styx *parser* rejects, which makes the pack unloadable.
 
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use signal_sampler::engine::cache::{create_signal_pack, PrepareStats};
@@ -23,6 +24,11 @@ pub struct PackTags {
 
 /// Build one soundsource dir (`<dir>/library.styx` + its audio) into `out`,
 /// baking in STINFO loops + `tags`. Returns the pack stats.
+///
+/// # Errors
+///
+/// Returns an error if the library.styx file is missing, cannot be read, or the enriched
+/// pack cannot be created.
 pub fn build_soundsource_pack(
     dir: &Path,
     out: &Path,
@@ -98,15 +104,15 @@ fn inject(original: &str, loops: &HashMap<String, (u32, u32)>, tags: &PackTags) 
         let trimmed = line.trim_start();
         if !tags_done && trimmed.starts_with("zones") {
             if !tags.category.is_empty() {
-                out.push_str(&format!("category {}\n", quote(&tags.category)));
+                let _ = writeln!(out, "category {}", quote(&tags.category));
             }
             if !tags.instrument.is_empty() {
-                out.push_str(&format!("instrument {}\n", quote(&tags.instrument)));
+                let _ = writeln!(out, "instrument {}", quote(&tags.instrument));
             }
             if !tags.style.is_empty() {
                 out.push_str("style (\n");
                 for s in &tags.style {
-                    out.push_str(&format!("    {}\n", quote(s)));
+                    let _ = writeln!(out, "    {}", quote(s));
                 }
                 out.push_str(")\n");
             }
@@ -117,7 +123,7 @@ fn inject(original: &str, loops: &HashMap<String, (u32, u32)>, tags: &PackTags) 
         if let Some(name) = file_line_name(trimmed) {
             if let Some((ls, le)) = loops.get(name) {
                 let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
-                out.push_str(&format!("{indent}loop_start {ls}\n{indent}loop_end {le}\n"));
+                let _ = write!(out, "{indent}loop_start {ls}\n{indent}loop_end {le}\n");
             }
         }
     }

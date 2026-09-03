@@ -214,6 +214,10 @@ pub trait Templateable: Sized {
 
     /// Attempt to create an instance from a template. Fails if any
     /// required [`Assignment`] slots are still `Unassigned`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if instantiation fails (e.g. missing required assignments).
     fn instantiate(template: &Self::Template) -> Result<Self, InstantiateError>;
 }
 
@@ -732,10 +736,8 @@ impl Templateable for crate::Module {
                             block_type: mb.block_type(),
                             name: mb.label().to_string(),
                             preset_id: match mb.source() {
-                                crate::ModuleBlockSource::PresetDefault { preset_id, .. } => {
-                                    Assignment::Assigned(preset_id.clone())
-                                }
-                                crate::ModuleBlockSource::PresetSnapshot { preset_id, .. } => {
+                                crate::ModuleBlockSource::PresetDefault { preset_id, .. }
+                                | crate::ModuleBlockSource::PresetSnapshot { preset_id, .. } => {
                                     Assignment::Assigned(preset_id.clone())
                                 }
                                 crate::ModuleBlockSource::Inline { .. } => Assignment::Unassigned,

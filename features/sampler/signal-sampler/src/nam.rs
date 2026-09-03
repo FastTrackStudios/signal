@@ -48,6 +48,10 @@ impl NamProcessor {
     /// Load a `.nam` model from disk and prepare it for `sample_rate` /
     /// `max_block` frames. The display name is derived from the
     /// filename stem.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed.
     pub fn load(
         path: impl AsRef<std::path::Path>,
         sample_rate: f64,
@@ -79,6 +83,7 @@ impl NamProcessor {
     /// model at a different host rate shifts its voicing/pitch, so the rig
     /// uses this to warn (and, later, to resample).
     // r[impl sampler.nam.expected-rate]
+    #[must_use]
     pub fn expected_sample_rate(&self) -> Option<f64> {
         self.model.expected_sample_rate()
     }
@@ -89,6 +94,7 @@ impl NamProcessor {
     /// This is the model's *declared* loudness metadata — often missing or
     /// inconsistent between models. Prefer [`measured_loudness`](Self::measured_loudness)
     /// for the level-match guarantee; this is the fallback.
+    #[must_use]
     pub fn loudness(&self) -> Option<f64> {
         self.model.loudness()
     }
@@ -96,6 +102,7 @@ impl NamProcessor {
     /// The analog input level (dBu) the model was captured at — the level that a
     /// 0 dBFS signal represents at the modeled gear's input (`.nam` v0.10+).
     /// Feeds input-staging calibration so the model gets the drive it expects.
+    #[must_use]
     pub fn input_level(&self) -> Option<f64> {
         self.model.input_level()
     }
@@ -103,6 +110,7 @@ impl NamProcessor {
     /// The analog output level (dBu) at which the model's 0 dBFS was recorded
     /// (`.nam` v0.10+). Informational here — uniform output volume is handled by
     /// LUFS makeup, not by restoring the captured analog level.
+    #[must_use]
     pub fn output_level(&self) -> Option<f64> {
         self.model.output_level()
     }

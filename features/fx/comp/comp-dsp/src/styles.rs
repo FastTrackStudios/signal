@@ -1,9 +1,9 @@
 //! Compression style models informed by Pro-C 3 reference analysis.
 //!
 //! Three main style families are modeled here:
-//! 1. FET (Field Effect Transistor) - atan_approx() nonlinearity for warmth
+//! 1. FET (Field Effect Transistor) - `atan_approx()` nonlinearity for warmth
 //! 2. VCA (Voltage Controlled Amplifier) - Pure quadratic pole solving, clean
-//! 3. Optical - Heavy atan_approx() with frequency-dependent shaping, vintage tube character
+//! 3. Optical - Heavy `atan_approx()` with frequency-dependent shaping, vintage tube character
 //!
 //! The ids are local DSP style ids, not a full reproduction of Pro-C style ids.
 
@@ -24,17 +24,18 @@ pub enum CompressionStyle {
 
 impl CompressionStyle {
     /// Create from integer style ID (0-4)
+    #[must_use]
     pub fn from_id(id: i32) -> Self {
         match id {
-            0 => CompressionStyle::Clean,
-            1 => CompressionStyle::Fet,
-            2 => CompressionStyle::Vca,
-            3 => CompressionStyle::Optical,
-            _ => CompressionStyle::Clean,
+            1 => Self::Fet,
+            2 => Self::Vca,
+            3 => Self::Optical,
+            _ => Self::Clean,
         }
     }
 
     /// Get style ID
+    #[must_use]
     pub fn id(&self) -> i32 {
         *self as i32
     }
@@ -66,6 +67,7 @@ impl Default for StyleCoefficients {
 
 /// Fast atan-like approximation used by the modeled FET and Optical styles.
 /// Provides smooth nonlinear mapping characteristic of vintage analog compressors.
+#[must_use]
 pub fn atan_approx(x: f64) -> f64 {
     // Simple fast approximation: 2 * x / (π + π*x²)
     // This matches the nonlinear response observed in FET and Optical styles
@@ -77,6 +79,7 @@ pub fn atan_approx(x: f64) -> f64 {
 /// Dispatcher for compression style functions.
 /// Routes to style-specific coefficient computation based on style ID.
 /// The dispatcher is intentionally small and maps local style ids to coefficients.
+#[must_use]
 pub fn compute_style_dispatcher(style: CompressionStyle, _sample_rate: f64) -> StyleCoefficients {
     match style {
         CompressionStyle::Fet => compute_style_fet_coefficients(),
@@ -88,7 +91,7 @@ pub fn compute_style_dispatcher(style: CompressionStyle, _sample_rate: f64) -> S
 
 /// FET (Field Effect Transistor) style coefficient computation.
 /// Characteristics:
-/// - Uses atan_approx() for nonlinear response
+/// - Uses `atan_approx()` for nonlinear response
 /// - Gate detection triggers mode switching
 /// - π-based time constants
 /// - Sqrt-based gain scaling
@@ -121,8 +124,8 @@ fn compute_style_vca_coefficients() -> StyleCoefficients {
 /// Binary location: 0x18010aaf0
 ///
 /// Characteristics:
-/// - Heavy atan_approx() nonlinearity
-/// - Frequency-dependent gain scaling (magic_const / input_freq)
+/// - Heavy `atan_approx()` nonlinearity
+/// - Frequency-dependent gain scaling (`magic_const` / `input_freq`)
 /// - 4+ adaptive detection modes with state tracking
 /// - Sqrt blending and smooth interpolation
 /// - Authentic vintage optical tube response

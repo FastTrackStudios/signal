@@ -89,8 +89,9 @@ pub struct CountIn {
 }
 
 /// Render a stereo (interleaved) click track of `total_frames` from `tempo`
-/// — THE SAME map the document render uses — via the session-guide engine:
-/// accented downbeats (4/4), plain quarter clicks elsewhere, plus an
+/// — THE SAME map the document render uses — via the session-guide engine.
+///
+/// Accented downbeats (4/4), plain quarter clicks elsewhere, plus an
 /// optional count-in on its own voice. Sample-accurate: the guide engine
 /// places each hit from the `BlockClock` beat grid this function derives
 /// from the map (see `features/guide/tests/guide_engine.rs`).
@@ -168,7 +169,9 @@ pub fn render_click(
 }
 
 /// Mix a click track over music (both interleaved stereo; output length =
-/// the longer input). The click is gain-scaled and panned toward the right
+/// the longer input).
+///
+/// The click is gain-scaled and panned toward the right
 /// (`pan` 0.5 = center, 1.0 = hard right) so it reads clearly against the
 /// music.
 #[must_use] 
@@ -397,8 +400,9 @@ fn goertzel(mono: &[f64], off: usize, n: usize, sr: u32, freq: f64) -> f64 {
 }
 
 /// Acoustic PITCH-ARRIVAL time of a legato transition: the moment the
-/// destination pitch takes over from the source. Tracks Goertzel energy on
-/// the first few harmonics of `from` vs `to` (collision-pruned, so octaves
+/// destination pitch takes over from the source.
+///
+/// Tracks Goertzel energy on the first few harmonics of `from` vs `to` (collision-pruned, so octaves
 /// work) over `expected ± search` and returns the interpolated time where
 /// the destination's share first crosses 50% and holds. This measures
 /// exactly what the schedule promises ("the pitch change lands ON the
@@ -497,8 +501,9 @@ pub fn pitch_arrival(
 }
 
 /// Destination-vs-source harmonic share over `[t0, t1]` (sec) of interleaved
-/// stereo `audio` — the raw curve behind [`pitch_arrival`], exported for the
-/// offline arrival-measurement tool (`examples/measure_arrivals.rs`), which
+/// stereo `audio` — the raw curve behind [`pitch_arrival`].
+///
+/// Exported for the offline arrival-measurement tool (`examples/measure_arrivals.rs`), which
 /// needs the whole curve to grade its own confidence (source dominant before
 /// the crossing, destination settled after) instead of just the crossing.
 /// Same analysis: Goertzel power on collision-pruned harmonics 1..=4 of each
@@ -571,14 +576,18 @@ pub fn pitch_share_curve(
 }
 
 /// Destination-band ENERGY curve over `[t0, t1]` (sec) of interleaved stereo
-/// `audio`: summed Goertzel power on the destination's collision-pruned
-/// harmonics (same pruning + windows as [`pitch_share_curve`]) — WITHOUT
-/// normalizing against the source. The share detector reads
+/// `audio`.
+///
+/// Summed Goertzel power on the destination's collision-pruned harmonics
+/// (same pruning + windows as [`pitch_share_curve`]).
+///
+/// Without normalizing against the source. The share detector reads
 /// "destination-vs-source balance", which the source's own level skews
 /// (retiring voices, recorded tails, collision leak); the raw destination
 /// energy tracks what the ear follows — "when does the new note's pitch
-/// appear and grow" — independent of everything else in the mix. Used by
-/// the join analyzer (`examples/analyze_joins.rs`) as the independent
+/// appear and grow" — independent of everything else in the mix.
+///
+/// Used by the join analyzer (`examples/analyze_joins.rs`) as the independent
 /// cross-measurement.
 #[must_use] 
 pub fn dest_energy_curve(
@@ -888,13 +897,18 @@ pub fn timing_corpus() -> Vec<TimingCase> {
 // ── StrictLive replay ────────────────────────────────────────────────────────
 
 /// Replay a document through the LIVE (reactive) path: every CC / note-on /
-/// note-off dispatched at its wall-clock time against `render_offline` gaps
+/// note-off dispatched at its wall-clock time against `render_offline` gaps.
+///
 /// — the way a live player would drive the rig, with NO lookahead. Returns
 /// interleaved stereo. Live legato commits reactively (at/after the note-on
 /// plus the Overlap-Delay), so arrivals are EXPECTED to sit late of the
 /// grid by roughly the velocity-zone delay — rendering both paths side by
 /// side makes that difference audible and measurable.
-#[must_use] 
+///
+/// # Panics
+///
+/// Panics if `rig.render_offline` fails.
+#[must_use]
 pub fn render_live_replay(
     rig: &SamplerRig,
     id: &str,

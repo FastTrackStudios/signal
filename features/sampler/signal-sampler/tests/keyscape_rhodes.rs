@@ -33,7 +33,7 @@ fn rhodes() -> Option<SamplerRig> {
     let _ = rig.preload_instrument(ID);
     let mut buf = vec![0.0f32; BLK * 2];
     for _ in 0..40 {
-        buf.iter_mut().for_each(|s| *s = 0.0);
+        buf.fill(0.0);
         let _ = rig.render_offline(&mut buf);
     }
     Some(rig)
@@ -41,7 +41,7 @@ fn rhodes() -> Option<SamplerRig> {
 
 fn render(rig: &SamplerRig, buf: &mut [f32], blocks: usize) {
     for _ in 0..blocks {
-        buf.iter_mut().for_each(|s| *s = 0.0);
+        for s in buf.iter_mut() { *s = 0.0; }
         let _ = rig.render_offline(buf);
     }
 }

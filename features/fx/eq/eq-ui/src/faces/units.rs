@@ -781,12 +781,13 @@ const NEVE_H: f64 = 300.0;
 const NEVE_ROW: f64 = 170.0;
 const NEVE_GLYPH_Y: f64 = 74.0;
 
-/// The 1073, laid out from the module's own front: one row, a red gain switch
-/// at the left, the bands' knobs each inside a printed ring of dots with the
-/// filter's *shape* drawn above it, and the latching buttons stacked on a pale
-/// strip at the right.
+/// The 1073, laid out from the module's own front: one row.
 ///
-/// The details that are the unit rather than decoration:
+/// A red gain switch at the left, the bands' knobs each inside a printed ring
+/// of dots, and the latching buttons stacked on a pale strip at the right.
+///
+/// The details that are the unit rather than decoration (the filter's *shape*
+/// drawn above each knob, the colours, the frequencies):
 ///
 /// - The rings are **dots**, not ticks. It is the first thing you see of a
 ///   1073 from across a room and the reason its knobs read as haloed.

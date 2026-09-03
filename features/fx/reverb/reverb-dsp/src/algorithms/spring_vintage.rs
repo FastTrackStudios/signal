@@ -141,8 +141,8 @@ pub struct SpringVintage {
     output_lp: Lp1,
     /// Number of active springs (1–3).
     num_active: usize,
-    /// Named Number-of-Springs override (set_spring_params wins over
-    /// the legacy extra_b mapping).
+    /// Named Number-of-Springs override (`set_spring_params` wins over
+    /// the legacy `extra_b` mapping).
     named_springs: Option<usize>,
     /// Preamp drive stage (manual "Dwell").
     dwell: SpringDwell,
@@ -150,6 +150,7 @@ pub struct SpringVintage {
 }
 
 impl SpringVintage {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         // Three springs with different characteristics for a rich, dense sound.
         // Vintage tanks: short + medium + long spring, more aggressive chirp.

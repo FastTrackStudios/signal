@@ -89,9 +89,10 @@ use signal_rig_host::gestures::{FootswitchAction, FootswitchEngine, FootswitchMa
 use signal_rig_host::lock::{panic_message, LockExt};
 
 /// The headless rig session: live audio + profile/footswitch state, shared
-/// behind `Arc`s so service calls can arrive from any thread. `ProfileRig` is
-/// `Send` but not `Sync` (the pipewire backend owns a `*mut pw_thread_loop`),
-/// so it lives in a `Mutex` and calls serialize through it.
+/// behind `Arc`s so service calls can arrive from any thread.
+///
+/// `ProfileRig` is `Send` but not `Sync` (the pipewire backend owns a
+/// `*mut pw_thread_loop`), so it lives in a `Mutex` and calls serialize through it.
 #[derive(Clone, HasDispatcher)]
 #[dispatch(CurrentThreadDispatcher)]
 pub struct GuitarRigBackend {

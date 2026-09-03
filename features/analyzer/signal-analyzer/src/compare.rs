@@ -39,6 +39,7 @@ impl Thresholds {
     ///
     /// 60 dB is well below anything audible while still leaving room for the
     /// f32/f64 rounding differences between two implementations.
+    #[must_use]
     pub fn exact_match() -> Self {
         Self {
             min_null_depth_db: Some(60.0),
@@ -50,6 +51,7 @@ impl Thresholds {
 
     /// For a reverb matched to a reference reverb. No null requirement —
     /// judged on decay character and spectral balance.
+    #[must_use]
     pub fn reverb_match() -> Self {
         Self {
             min_null_depth_db: None,
@@ -94,6 +96,7 @@ impl Comparison {
     ///
     /// A comparison with no enabled criteria is **not** a pass — that would
     /// mean reporting success without measuring anything.
+    #[must_use]
     pub fn passed(&self) -> bool {
         !self.results.is_empty() && self.results.iter().all(|r| r.passed)
     }
@@ -113,6 +116,7 @@ impl Comparison {
 /// `reference_ir` / `candidate_ir` are the impulse responses used for the
 /// decay criterion. Pass the same buffers as the main renders when the
 /// stimulus *was* an impulse.
+#[must_use]
 pub fn compare(
     reference: &[f32],
     candidate: &[f32],

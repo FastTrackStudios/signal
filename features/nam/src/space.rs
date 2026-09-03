@@ -1,7 +1,9 @@
-//! NAM model space (#77 M5) — measure what a model actually *does* and put
-//! it on the same similarity space the samples use, so a library of
-//! inconsistently-named `.nam` files becomes navigable: "amps that sound
-//! like this one", grouped by archetype, instead of a wall of filenames.
+//! NAM model space (#77 M5).
+//!
+//! Measure what a model actually *does* and put it on the same similarity
+//! space the samples use, so a library of inconsistently-named `.nam` files
+//! becomes navigable: "amps that sound like this one", grouped by
+//! archetype, instead of a wall of filenames.
 //!
 //! A model is not audio, so it is **probed**: run known signals through it
 //! and measure the response.
@@ -58,16 +60,20 @@ fn rms_db(x: &[f64]) -> f32 {
 
 /// Deterministic pseudo-noise (no RNG — every probe is reproducible).
 fn noise(n: usize) -> Vec<f64> {
-    let mut s = 0x9E3779B9u32;
+    let mut s = 0x9E37_79B9_u32;
     (0..n)
         .map(|_| {
-            s = s.wrapping_mul(1664525).wrapping_add(1013904223);
+            s = s.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
             (f64::from(s >> 8) / 8_388_608.0) - 1.0
         })
         .collect()
 }
 
 /// Probe one model.
+///
+/// # Errors
+///
+/// Returns an error if the model cannot be loaded or probed.
 pub fn probe(path: &Path) -> Result<NamProbe, String> {
     let mut model = NamModel::load(path)?;
     let block = 4096usize;
@@ -163,6 +169,10 @@ impl NamProbe {
 
 /// Build (or rebuild) the NAM space over every `.nam` under `root`.
 /// Returns `(space dir, probed, skipped)`.
+///
+/// # Errors
+///
+/// Returns an error if no models are found, no models probe successfully, or space save fails.
 pub fn build(root: &Path) -> Result<(PathBuf, usize, usize), String> {
     let mut models: Vec<PathBuf> = walkdir::WalkDir::new(root)
         .max_depth(6)
@@ -267,6 +277,10 @@ fn voicing_centroid(p: &NamProbe) -> f32 {
 }
 
 /// Models most similar to `model_path`, best-first.
+///
+/// # Errors
+///
+/// Returns an error if the space cannot be loaded or the model is not found.
 pub fn similar_to(
     root: &Path,
     model_path: &Path,
@@ -292,6 +306,10 @@ pub fn similar_to(
 
 /// **Partner**: a model that is similar in gain behaviour but deliberately
 /// offset in voicing — the stereo-pair pick, not the closest match.
+///
+/// # Errors
+///
+/// Returns an error if the space cannot be loaded or the model is not found.
 pub fn partner_for(
     root: &Path,
     model_path: &Path,

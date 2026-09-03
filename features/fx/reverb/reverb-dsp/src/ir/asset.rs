@@ -24,6 +24,10 @@ impl IrAsset {
     /// Decode an audio file and resample to `target_sample_rate`. Mono
     /// IRs come back with 1 channel; multichannel IRs preserve their
     /// channel count (transforms layer collapses to stereo later).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be decoded or if the decoded audio is empty.
     pub fn load<P: AsRef<Path>>(path: P, target_sample_rate: f64) -> Result<Self, IrLoadError> {
         let path = path.as_ref();
         let mut loader = SymphoniumLoader::new();
@@ -43,7 +47,7 @@ impl IrAsset {
             .map(|ch| ch.iter().map(|&s| s as f64).collect())
             .collect();
 
-        if channels.is_empty() || channels.iter().any(|c| c.is_empty()) {
+        if channels.is_empty() || channels.iter().any(Vec::is_empty) {
             return Err(IrLoadError::Empty);
         }
 
@@ -56,6 +60,7 @@ impl IrAsset {
     }
 
     /// Construct directly from f64 mono samples (e.g. synthetic IRs).
+    #[must_use]
     pub fn from_mono(samples: Vec<f64>, sample_rate: f64) -> Self {
         Self {
             channels: vec![samples],
@@ -66,6 +71,7 @@ impl IrAsset {
     }
 
     /// Construct from a stereo pair already at the target SR.
+    #[must_use]
     pub fn from_stereo(left: Vec<f64>, right: Vec<f64>, sample_rate: f64) -> Self {
         Self {
             channels: vec![left, right],
@@ -75,14 +81,17 @@ impl IrAsset {
         }
     }
 
+    #[must_use]
     pub fn frames(&self) -> usize {
-        self.channels.first().map(|c| c.len()).unwrap_or(0)
+        self.channels.first().map_or(0, Vec::len)
     }
 
+    #[must_use]
     pub fn num_channels(&self) -> usize {
         self.channels.len()
     }
 
+    #[must_use]
     pub fn duration_seconds(&self) -> f64 {
         self.frames() as f64 / self.sample_rate.max(1.0)
     }

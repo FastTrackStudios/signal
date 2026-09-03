@@ -54,6 +54,7 @@ pub struct CompressionBand {
 }
 
 impl CompressionBand {
+    #[must_use]
     pub fn new(sample_rate: f64, band_index: usize) -> Self {
         Self {
             band_index,
@@ -70,7 +71,7 @@ impl CompressionBand {
 
     /// Calculate level-dependent crossover frequency from detected level
     /// Modeled band level computation:
-    /// freq = (2 * exp(level * LN2) * PI) / sample_rate
+    /// freq = (2 * exp(level * LN2) * PI) / `sample_rate`
     fn compute_crossover_frequency(&self, level_db: f64) -> f64 {
         // Clamp level to reasonable range to prevent overflow
         let level_clamped = level_db.clamp(-80.0, 20.0);
@@ -83,9 +84,9 @@ impl CompressionBand {
     }
 
     /// Set up band-specific filters based on crossover frequencies
-    /// Band 0 (low): Low-pass filter at freq_low
-    /// Band 1 (mid): High-pass at freq_low + Low-pass at freq_high
-    /// Band 2 (high): High-pass filter at freq_high
+    /// Band 0 (low): Low-pass filter at `freq_low`
+    /// Band 1 (mid): High-pass at `freq_low` + Low-pass at `freq_high`
+    /// Band 2 (high): High-pass filter at `freq_high`
     fn update_band_filters(&mut self, freq_low: f64, freq_high: f64) {
         // Normalize frequencies to 0-1 range (0 = DC, 1 = Nyquist)
         // Nyquist frequency = sample_rate / 2
@@ -130,10 +131,10 @@ impl CompressionBand {
         output
     }
 
-    /// Apply Band 2 special sqrt-based processing (only for band_index == 2)
+    /// Apply Band 2 special sqrt-based processing (only for `band_index` == 2)
     /// Modeled band gain computation:
-    /// band2_output = sqrt(level_abs² + 1.0) * freq_scaled + (level_abs * 0.5)
-    /// Where freq_scaled = crossover_freq * 0.5 (DAT_180213064)
+    /// `band2_output` = `sqrt(level_abs²` + 1.0) * `freq_scaled` + (`level_abs` * 0.5)
+    /// Where `freq_scaled` = `crossover_freq` * 0.5 (`DAT_180213064`)
     fn apply_band2_special_processing(&mut self, level_db: f64, crossover_freq: f64) -> f64 {
         if self.band_index != 2 {
             return level_db;
@@ -212,7 +213,7 @@ impl CompressionBand {
 
             // Constants from the reference model.
             const ATAN_MIN: f64 = 0.1; // DAT_180213300
-            const ATAN_MAX: f64 = 0.971948; // DAT_1802134f8
+            const ATAN_MAX: f64 = 0.971_948; // DAT_1802134f8
 
             let clamped_atan = atan_result.clamp(ATAN_MIN, ATAN_MAX);
 
@@ -278,6 +279,7 @@ impl CompressionBand {
     }
 
     /// Get gain reduction in dB
+    #[must_use]
     pub fn gain_reduction_db(&self) -> f64 {
         self.last_gr_db
     }
@@ -294,6 +296,7 @@ pub struct MultiBandCompressor {
 }
 
 impl MultiBandCompressor {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         Self {
             bands: [
@@ -387,7 +390,7 @@ impl MultiBandCompressor {
     pub fn gain_reduction_db(&self) -> f64 {
         self.bands
             .iter()
-            .map(|b| b.gain_reduction_db())
+            .map(CompressionBand::gain_reduction_db)
             .fold(0.0, f64::max)
     }
 }

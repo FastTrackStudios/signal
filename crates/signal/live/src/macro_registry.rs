@@ -54,8 +54,12 @@ static BINDINGS: LazyLock<RwLock<HashMap<String, Vec<MacroParamTarget>>>> =
 ///
 /// Merges new bindings into existing ones (if a knob already has targets,
 /// new targets are added). This allows multiple blocks to share the same macro knob.
+///
+/// # Panics
+///
+/// Panics if the registry lock is poisoned.
 pub fn register(result: &MacroSetupResult) {
-    let mut map = BINDINGS.write().expect("lock poisoned");
+    let mut map = BINDINGS.write().unwrap_or_else(std::sync::PoisonError::into_inner);
     for binding in &result.bindings {
         let targets = map.entry(binding.knob_id.clone()).or_default();
         targets.push(MacroParamTarget {
@@ -70,6 +74,10 @@ pub fn register(result: &MacroSetupResult) {
 
 /// Get all parameter targets for a macro knob.
 /// Returns an empty vector if the knob has no registered targets.
+///
+/// # Panics
+///
+/// Panics if the registry lock is poisoned.
 pub fn get_targets(knob_id: &str) -> Vec<MacroParamTarget> {
     BINDINGS
         .read()
@@ -91,8 +99,12 @@ pub fn get_targets(knob_id: &str) -> Vec<MacroParamTarget> {
 /// // Then load new patch
 /// setup_and_register_new_patch().await?;
 /// ```
+///
+/// # Panics
+///
+/// Panics if the registry lock is poisoned.
 pub fn clear() {
-    BINDINGS.write().expect("lock poisoned").clear();
+    BINDINGS.write().unwrap_or_else(std::sync::PoisonError::into_inner).clear();
 }
 
 /// Get statistics about the current registry state.
@@ -102,8 +114,12 @@ pub fn clear() {
 /// # Returns
 ///
 /// Tuple of (`total_knobs`, `total_targets`, `avg_targets_per_knob`)
+///
+/// # Panics
+///
+/// Panics if the registry lock is poisoned.
 pub fn stats() -> (usize, usize, f32) {
-    let map = BINDINGS.read().expect("lock poisoned");
+    let map = BINDINGS.read().unwrap_or_else(std::sync::PoisonError::into_inner);
     let knob_count = map.len();
     let target_count: usize = map.values().map(std::vec::Vec::len).sum();
     let avg = if knob_count > 0 {
@@ -115,13 +131,21 @@ pub fn stats() -> (usize, usize, f32) {
 }
 
 /// Check if any bindings are registered.
+///
+/// # Panics
+///
+/// Panics if the registry lock is poisoned.
 pub fn is_empty() -> bool {
-    BINDINGS.read().expect("lock poisoned").is_empty()
+    BINDINGS.read().unwrap_or_else(std::sync::PoisonError::into_inner).is_empty()
 }
 
 /// Get the number of registered knobs.
+///
+/// # Panics
+///
+/// Panics if the registry lock is poisoned.
 pub fn knob_count() -> usize {
-    BINDINGS.read().expect("lock poisoned").len()
+    BINDINGS.read().unwrap_or_else(std::sync::PoisonError::into_inner).len()
 }
 
 #[cfg(test)]

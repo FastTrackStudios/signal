@@ -1,14 +1,14 @@
-//! Self-contained HTML analysis reports — rendered audio + the full event
-//! log as marker lanes over the waveform, and per-sample waveform views with
-//! loop points. The debugging view for "why does this sound weird": every
-//! `RenderTrace` event (voice spawns/ends, transitions, note-offs, sample
-//! misses), `LegatoFireEvent`, and document `RenderMarker` lands on the
-//! timeline, with computed loop-wrap ticks per looped voice.
+//! Self-contained HTML analysis reports — rendered audio + the full event log as marker lanes.
 //!
-//! One template (`report_template.html`, REAPER-render-stats-inspired canvas
-//! viewer, zero external resources) serves both modes; the injected JSON's
-//! `mode` field selects the layout. Emitted by `fts signal pack
-//! render-report` / `inspect-samples` and the trace_dump example.
+//! Marker lanes over the waveform, and per-sample waveform views with loop points.
+//! The debugging view for "why does this sound weird": every `RenderTrace` event
+//! (voice spawns/ends, transitions, note-offs, sample misses), `LegatoFireEvent`,
+//! and document `RenderMarker` lands on the timeline, with computed loop-wrap ticks per looped voice.
+//!
+//! One template (`report_template.html`, REAPER-render-stats-inspired canvas viewer,
+//! zero external resources) serves both modes; the injected JSON's `mode` field selects
+//! the layout. Emitted by `fts signal pack render-report` / `inspect-samples` and the
+//! `trace_dump` example.
 
 use std::path::Path;
 
@@ -22,6 +22,7 @@ use crate::SamplerError;
 /// Min/max peak pairs over `block`-frame windows of an interleaved buffer,
 /// mixed to mono (same shape as daw-proto's `TakePeakData`; reused by the
 /// future analysis RPC).
+#[must_use]
 pub fn compute_peaks(audio: &[f32], channels: usize, block: usize) -> (Vec<f32>, Vec<f32>) {
     let channels = channels.max(1);
     let frames = audio.len() / channels;
@@ -131,6 +132,7 @@ fn voice_json(
 }
 
 /// Build the render-report JSON model.
+#[must_use]
 pub fn render_report_json(
     name: &str,
     audio: &[f32],
@@ -246,6 +248,7 @@ pub struct SampleView {
 }
 
 /// Build the sample-inspector JSON model.
+#[must_use]
 pub fn sample_report_json(name: &str, entries: &[SampleView]) -> Value {
     let samples: Vec<Value> = entries
         .iter()
@@ -301,10 +304,12 @@ fn load_click_grain(path: &Path, sample_rate: u32) -> Option<Vec<f32>> {
     Some(grain)
 }
 
-/// Generate an interleaved-stereo metronome click over `total_frames`,
-/// anchored to beat 1 of bar 1 at frame 0. Uses the real click sample at
-/// `click_sample` (louder on the downbeat) when decodable, else a synth blip.
-/// Same rate/length as the mix so the viewer overlays it as a synced layer.
+/// Generate an interleaved-stereo metronome click over `total_frames`, anchored to beat 1.
+///
+/// Anchored to beat 1 of bar 1 at frame 0. Uses the real click sample at `click_sample`
+/// (louder on the downbeat) when decodable, else a synth blip. Same rate/length as
+/// the mix so the viewer overlays it as a synced layer.
+#[must_use]
 pub fn click_track(
     total_frames: usize,
     sample_rate: u32,
@@ -329,36 +334,33 @@ pub fn click_track(
         }
         let downbeat = (beat as u32).is_multiple_of(bpbar);
         let amp = if downbeat { 1.0 } else { 0.55 };
-        match &grain {
-            Some(g) => {
-                for (i, &s) in g.iter().enumerate() {
-                    let f = start + i;
-                    if f >= total_frames {
-                        break;
-                    }
-                    let v = s * amp;
-                    out[f * 2] += v;
-                    out[f * 2 + 1] += v;
+        if let Some(g) = &grain {
+            for (i, &s) in g.iter().enumerate() {
+                let f = start + i;
+                if f >= total_frames {
+                    break;
                 }
+                let v = s * amp;
+                out[f * 2] += v;
+                out[f * 2 + 1] += v;
             }
-            None => {
-                // Synth fallback: fast-decaying tone (higher on the downbeat).
-                let (freq, a) = if downbeat {
-                    (1500.0f32, 0.6)
-                } else {
-                    (1000.0f32, 0.4)
-                };
-                let click_len = (sample_rate as f64 * 0.035) as usize;
-                for i in 0..click_len {
-                    let f = start + i;
-                    if f >= total_frames {
-                        break;
-                    }
-                    let t = i as f32 / sr;
-                    let s = (t * freq * std::f32::consts::TAU).sin() * (-t * 90.0).exp() * a;
-                    out[f * 2] += s;
-                    out[f * 2 + 1] += s;
+        } else {
+            // Synth fallback: fast-decaying tone (higher on the downbeat).
+            let (freq, a) = if downbeat {
+                (1500.0f32, 0.6)
+            } else {
+                (1000.0f32, 0.4)
+            };
+            let click_len = (sample_rate as f64 * 0.035) as usize;
+            for i in 0..click_len {
+                let f = start + i;
+                if f >= total_frames {
+                    break;
                 }
+                let t = i as f32 / sr;
+                let s = (t * freq * std::f32::consts::TAU).sin() * (-t * 90.0).exp() * a;
+                out[f * 2] += s;
+                out[f * 2 + 1] += s;
             }
         }
         beat += 1;
@@ -367,6 +369,10 @@ pub fn click_track(
 }
 
 /// Write a report HTML file: the shared template + injected JSON.
+///
+/// # Errors
+///
+/// Returns an error if the JSON cannot be serialized or if the file cannot be written.
 pub fn write_report_html(path: &Path, data: &Value) -> Result<(), SamplerError> {
     const TEMPLATE: &str = include_str!("report_template.html");
     let json = serde_json::to_string(data)

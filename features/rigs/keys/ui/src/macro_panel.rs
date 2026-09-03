@@ -94,7 +94,7 @@ fn offset_badge(on: bool) -> Element {
 }
 
 /// Which shape a card draws — and, with it, which knobs sit under it.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
     /// The unison stack: one line per voice, spread by detune.
     Unison,
@@ -115,7 +115,7 @@ impl Shape {
     /// it. `0` means no ceiling.
     fn max_width_px(self) -> u32 {
         match self {
-            Shape::Unison | Shape::Vibrato => 210,
+            Self::Unison | Self::Vibrato => 210,
             _ => 0,
         }
     }
@@ -123,11 +123,11 @@ impl Shape {
     /// `(card title, macro group)`.
     fn parts(self) -> (&'static str, &'static str) {
         match self {
-            Shape::Unison => ("Unison", "Unison"),
-            Shape::Vibrato => ("Vibrato", "Vibrato"),
-            Shape::FilterResponse => ("Filter", "Filter"),
-            Shape::FilterEnv => ("Filter Envelope", "Filter Env"),
-            Shape::AmpEnv => ("Amp Envelope", "Amp Env"),
+            Self::Unison => ("Unison", "Unison"),
+            Self::Vibrato => ("Vibrato", "Vibrato"),
+            Self::FilterResponse => ("Filter", "Filter"),
+            Self::FilterEnv => ("Filter Envelope", "Filter Env"),
+            Self::AmpEnv => ("Amp Envelope", "Amp Env"),
         }
     }
 }

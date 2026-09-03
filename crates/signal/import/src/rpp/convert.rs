@@ -1,4 +1,4 @@
-//! Replacing FabFilter plugins in a REAPER project with FTS ones.
+//! Replacing `FabFilter` plugins in a REAPER project with FTS ones.
 //!
 //! Pro-Q 4 becomes FTS EQ and Pro-C 3 becomes FTS Comp. What differs between
 //! the two is only which bytes mean what — everything below, the project
@@ -31,7 +31,7 @@
 use crate::fabfilter::{ffbs, proc3, proq4};
 use crate::rpp::{chunk, fts_comp, fts_eq, split_fields, unquote, Block, Document, Node};
 
-/// Which FabFilter plugin an instance is, and therefore what it becomes.
+/// Which `FabFilter` plugin an instance is, and therefore what it becomes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Family {
     ProQ4,
@@ -40,17 +40,19 @@ pub enum Family {
 
 impl Family {
     /// The FTS plugin that replaces it: `(clap id, name, vendor)`.
+    #[must_use]
     pub fn target(self) -> (&'static str, &'static str, &'static str) {
         match self {
-            Family::ProQ4 => (fts_eq::CLAP_ID, fts_eq::NAME, fts_eq::VENDOR),
-            Family::ProC3 => (fts_comp::CLAP_ID, fts_comp::NAME, fts_comp::VENDOR),
+            Self::ProQ4 => (fts_eq::CLAP_ID, fts_eq::NAME, fts_eq::VENDOR),
+            Self::ProC3 => (fts_comp::CLAP_ID, fts_comp::NAME, fts_comp::VENDOR),
         }
     }
 
+    #[must_use]
     pub fn source_name(self) -> &'static str {
         match self {
-            Family::ProQ4 => "Pro-Q 4",
-            Family::ProC3 => "Pro-C 3",
+            Self::ProQ4 => "Pro-Q 4",
+            Self::ProC3 => "Pro-C 3",
         }
     }
 }
@@ -65,7 +67,7 @@ pub enum Hosted {
 /// What happened to one converted instance.
 ///
 /// Everything here is plugin-agnostic on purpose. A caller reporting or
-/// verifying a conversion should not have to know which FabFilter plugin it
+/// verifying a conversion should not have to know which `FabFilter` plugin it
 /// came from, and the moment it does, adding a third means editing the
 /// caller too.
 #[derive(Debug, Clone)]
@@ -124,12 +126,13 @@ pub struct Report {
 }
 
 impl Report {
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.converted.is_empty() && self.skipped.is_empty()
     }
 }
 
-/// Rewrite every recognised FabFilter instance in `doc`, in place.
+/// Rewrite every recognised `FabFilter` instance in `doc`, in place.
 pub fn convert(doc: &mut Document) -> Report {
     let mut report = Report::default();
     let mut nodes = std::mem::take(&mut doc.nodes);

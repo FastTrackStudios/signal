@@ -30,6 +30,10 @@ const SPEC_END: &str = "# spec_end";
 /// `# spec_begin` and `# spec_end` in the index) and returns its
 /// replacement. The audio body and per-row index lines are copied
 /// verbatim. Header offsets/lengths are recomputed.
+///
+/// # Errors
+///
+/// Returns an error if file I/O fails, the header is invalid, or the spec markers are not found.
 pub fn rewrite_embedded_spec<F>(pack_path: &Path, mutate: F) -> Result<(), SamplerError>
 where
     F: FnOnce(&str) -> String,
@@ -71,6 +75,10 @@ where
 
 /// Read the embedded spec text from a pack without parsing the rest of the
 /// index. Cheap header-only read for tools that only need the spec content.
+///
+/// # Errors
+///
+/// Returns an error if file I/O fails, the header is invalid, the index is not valid UTF-8, or the spec markers are not found.
 pub fn read_embedded_spec(pack_path: &Path) -> Result<String, SamplerError> {
     let mut file = File::open(pack_path)?;
     let header = PackFileHeader::read(&mut file)?;

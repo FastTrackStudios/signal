@@ -15,10 +15,16 @@ use signal_proto::{
 pub struct SongOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> SongOps<S> {
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn list(&self) -> Result<Vec<Song>, OpsError> {
         self.0.service.list_songs().await.map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn load(&self, id: impl Into<SongId>) -> Result<Option<Song>, OpsError> {
         self.0
             .service
@@ -27,6 +33,9 @@ impl<S: SignalApi> SongOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn create(
         &self,
         name: impl Into<String>,
@@ -53,6 +62,10 @@ impl<S: SignalApi> SongOps<S> {
     /// Each section is named after its source patch and linked via
     /// `SectionSource::Patch`. The profile's ID is stored in the song's
     /// `metadata.base_profile_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails, or if the profile cannot be found.
     pub async fn create_from_profile(
         &self,
         name: impl Into<String>,
@@ -80,6 +93,10 @@ impl<S: SignalApi> SongOps<S> {
     /// Sections still pointing at the old profile's patches are remapped by
     /// slot position to the new profile. Manually relinked sections are left
     /// untouched. Saves the song after remapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails, or if the song or profile cannot be found.
     pub async fn change_base_profile(
         &self,
         song_id: impl Into<SongId>,
@@ -131,6 +148,9 @@ impl<S: SignalApi> SongOps<S> {
         Ok(song)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn save(&self, song: Song) -> Result<Song, OpsError> {
         self.0
             .service
@@ -140,6 +160,9 @@ impl<S: SignalApi> SongOps<S> {
         Ok(song)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn delete(&self, id: impl Into<SongId>) -> Result<(), OpsError> {
         self.0
             .service
@@ -148,6 +171,9 @@ impl<S: SignalApi> SongOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn load_section(
         &self,
         song_id: impl Into<SongId>,
@@ -160,6 +186,9 @@ impl<S: SignalApi> SongOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn save_section(
         &self,
         song_id: impl Into<SongId>,
@@ -177,6 +206,9 @@ impl<S: SignalApi> SongOps<S> {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn set_section_source(
         &self,
         song_id: impl Into<SongId>,
@@ -194,6 +226,9 @@ impl<S: SignalApi> SongOps<S> {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn reorder_sections(
         &self,
         song_id: impl Into<SongId>,
@@ -207,6 +242,9 @@ impl<S: SignalApi> SongOps<S> {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn by_tag(&self, tag: &str) -> Result<Vec<Song>, OpsError> {
         let all = self.list().await?;
         Ok(all
@@ -215,10 +253,16 @@ impl<S: SignalApi> SongOps<S> {
             .collect())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn find_by_name(&self, name: &str) -> Result<Option<Song>, OpsError> {
         Ok(self.list().await?.into_iter().find(|s| s.name == name))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn rename(
         &self,
         id: impl Into<SongId>,
@@ -232,6 +276,10 @@ impl<S: SignalApi> SongOps<S> {
     }
 
     /// Load a song, apply a closure to one of its sections, and save.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn update_section(
         &self,
         song_id: impl Into<SongId>,
@@ -250,6 +298,10 @@ impl<S: SignalApi> SongOps<S> {
     }
 
     /// Add a section to a song. Returns the updated song, or `None` if the song doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn add_section(
         &self,
         song_id: impl Into<SongId>,
@@ -265,6 +317,10 @@ impl<S: SignalApi> SongOps<S> {
     }
 
     /// Remove a section from a song. Returns the removed section, or `None` if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn remove_section(
         &self,
         song_id: impl Into<SongId>,
@@ -284,6 +340,10 @@ impl<S: SignalApi> SongOps<S> {
     }
 
     /// Duplicate a section within a song. Returns the new section, or `None` if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn duplicate_section(
         &self,
         song_id: impl Into<SongId>,
@@ -308,11 +368,19 @@ impl<S: SignalApi> SongOps<S> {
     }
 
     /// Check if a song exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn exists(&self, id: impl Into<SongId>) -> Result<bool, OpsError> {
         Ok(self.load(id).await?.is_some())
     }
 
     /// Count all songs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails.
     pub async fn count(&self) -> Result<usize, OpsError> {
         Ok(self.list().await?.len())
     }
@@ -320,6 +388,10 @@ impl<S: SignalApi> SongOps<S> {
     // region: --- try_* variants
 
     /// Add a section, returning an error if the song doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails or if the song cannot be found.
     pub async fn try_add_section(
         &self,
         song_id: impl Into<SongId>,
@@ -338,6 +410,10 @@ impl<S: SignalApi> SongOps<S> {
     }
 
     /// Remove a section, returning an error if the song or section doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails, or if the song or section cannot be found.
     pub async fn try_remove_section(
         &self,
         song_id: impl Into<SongId>,
@@ -364,6 +440,10 @@ impl<S: SignalApi> SongOps<S> {
     }
 
     /// Duplicate a section, returning an error if the song or section doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails, or if the song or section cannot be found.
     pub async fn try_duplicate_section(
         &self,
         song_id: impl Into<SongId>,
@@ -394,6 +474,10 @@ impl<S: SignalApi> SongOps<S> {
     }
 
     /// Save a section within a song, returning an error if the song doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails or if the song cannot be found.
     pub async fn try_save_section(
         &self,
         song_id: impl Into<SongId>,
@@ -417,6 +501,10 @@ impl<S: SignalApi> SongOps<S> {
     }
 
     /// Update a section via closure, returning an error if the song or section doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails, or if the song or section cannot be found.
     pub async fn try_update_section(
         &self,
         song_id: impl Into<SongId>,
@@ -447,6 +535,10 @@ impl<S: SignalApi> SongOps<S> {
     }
 
     /// Set a section's source, returning an error if the song or section doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails, or if the song or section cannot be found.
     pub async fn try_set_section_source(
         &self,
         song_id: impl Into<SongId>,

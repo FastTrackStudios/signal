@@ -28,7 +28,7 @@ impl StereoSaturator {
         self.stage.set_curve(curve);
     }
 
-    pub fn set_mix(&mut self, mix: f32) {
+    pub const fn set_mix(&mut self, mix: f32) {
         self.stage.set_mix(mix);
     }
 

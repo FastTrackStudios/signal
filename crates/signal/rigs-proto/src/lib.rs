@@ -176,8 +176,7 @@ mod catalogue_tests {
             // Exhaustive match: adding a variant without adding it to ALL
             // fails to compile here rather than disappearing at runtime.
             let covered = match rig {
-                Rig::Guitar | Rig::Keys | Rig::Drums | Rig::Bass => true,
-                Rig::Vocals | Rig::Synth | Rig::Ekit | Rig::Space => true,
+                Rig::Guitar | Rig::Keys | Rig::Drums | Rig::Bass | Rig::Vocals | Rig::Synth | Rig::Ekit | Rig::Space => true,
             };
             assert!(covered);
         }

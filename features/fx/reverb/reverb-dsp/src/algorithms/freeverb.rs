@@ -1,4 +1,4 @@
-//! FreeVerb — Schroeder–Moorer reference architecture.
+//! `FreeVerb` — Schroeder–Moorer reference architecture.
 //!
 //! 8 parallel lowpass-feedback comb filters → 4 series allpass filters,
 //! per channel. Right channel adds a 23-sample offset to every delay
@@ -113,6 +113,7 @@ pub struct FreeVerb {
 }
 
 impl FreeVerb {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let _ = sample_rate;
         let scale = sample_rate / 44100.0;

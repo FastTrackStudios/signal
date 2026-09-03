@@ -206,7 +206,7 @@ fn main() {
     let auto = std::env::args().any(|a| a == "--auto");
     let use_noise = std::env::args().any(|a| a == "--noise");
 
-    let mut plugin = if let Ok(Some(p)) = HostedPlugin::load(&plugin_path) { p } else {
+    let Ok(Some(mut plugin)) = HostedPlugin::load(&plugin_path) else {
         eprintln!("{plugin_path}: could not load");
         std::process::exit(1);
     };

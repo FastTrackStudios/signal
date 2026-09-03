@@ -49,9 +49,7 @@ pub fn block_color(key: &str) -> BlockColor {
         "input" | "send" | "volume" => BlockColor::new("#6B7280", "#F9FAFB", "#4B5563"),
 
         // Dynamics — Blue family
-        "compressor" => BlockColor::new("#3B82F6", "#EFF6FF", "#2563EB"),
-        "gate" => BlockColor::new("#3B82F6", "#EFF6FF", "#2563EB"),
-        "limiter" => BlockColor::new("#3B82F6", "#EFF6FF", "#2563EB"),
+        "compressor" | "gate" | "limiter" => BlockColor::new("#3B82F6", "#EFF6FF", "#2563EB"),
         "deesser" | "de_esser" | "de-esser" => BlockColor::new("#60A5FA", "#EFF6FF", "#3B82F6"),
 
         // Drive/Saturation — Orange/Red family

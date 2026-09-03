@@ -268,6 +268,6 @@ fn read_item_timeline(daw: &daw::reaper::DawMainThread, track_guid: &str) -> Vec
         })
         .collect();
 
-    timeline.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap());
+    timeline.sort_by(|a, b| a.start.total_cmp(&b.start));
     timeline
 }

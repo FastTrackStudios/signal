@@ -40,10 +40,11 @@ use facet::Facet;
 use crate::block::ParamOverride;
 use crate::SamplerError;
 
-/// Parsed `.signalengine` file. The Engine type discriminator (`Kick`,
-/// `Snare`, `Piano`, …) lives in `engine_type`; the Engine runtime
-/// dispatches per-type behavior off of that. Most fields default to
-/// permissive values so factory Engines can be tiny.
+/// Parsed `.signalengine` file.
+///
+/// The Engine type discriminator (`Kick`, `Snare`, `Piano`, …) lives in `engine_type`;
+/// the Engine runtime dispatches per-type behavior off of that.
+/// Most fields default to permissive values so factory Engines can be tiny.
 #[derive(Debug, Clone, Facet)]
 pub struct EngineSpec {
     pub name: String,
@@ -76,6 +77,11 @@ pub struct EngineSpec {
 }
 
 impl EngineSpec {
+    /// Load an Engine spec from a `.signalengine` file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed.
     pub fn from_file(path: &Path) -> Result<Self, SamplerError> {
         let text = std::fs::read_to_string(path)?;
         facet_styx::from_str(&text).map_err(|e| SamplerError::SpecParse(e.to_string()))
@@ -83,7 +89,7 @@ impl EngineSpec {
 }
 
 /// Reference to the source pack + block-level overrides applied at
-/// SamplerBlock construction.
+/// `SamplerBlock` construction.
 #[derive(Debug, Clone, Facet)]
 pub struct BlockRef {
     /// Path to a `.signalpack`, relative to the `.signalengine` file.
@@ -92,9 +98,10 @@ pub struct BlockRef {
     pub overrides: Vec<ParamOverride>,
 }
 
-/// One Layer slot inside an Engine. Subscribes to one mic of the source
-/// pack and applies per-mic gain/pan. The optional FX chain is parsed
-/// but not yet processed at the audio rate (FX runtime is a follow-up;
+/// One Layer slot inside an Engine.
+///
+/// Subscribes to one mic of the source pack and applies per-mic gain/pan.
+/// The optional FX chain is parsed but not yet processed at the audio rate (FX runtime is a follow-up;
 /// see crate docs).
 #[derive(Debug, Clone, Facet)]
 pub struct EngineLayerSpec {

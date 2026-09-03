@@ -306,9 +306,8 @@ fn ndsp_binary_string_at(data: &[u8], offset: usize) -> Option<String> {
 #[must_use] 
 pub fn ndsp_binary_tags(data: &[u8]) -> Vec<String> {
     let mut tags = Vec::new();
-    let tag_section = match data.windows(5).position(|w| w == b"tags\x00") {
-        Some(idx) => idx,
-        None => return tags,
+    let Some(tag_section) = data.windows(5).position(|w| w == b"tags\x00") else {
+        return tags;
     };
     // Tags end where appModel begins
     let end = data
@@ -430,10 +429,8 @@ pub fn fingerprint_from_xml(xml: &str) -> PresetFingerprint {
     let mut remaining = attrs_str;
     while !remaining.is_empty() {
         remaining = remaining.trim_start();
-        let eq_pos = match remaining.find('=') {
-            Some(pos) => pos,
-            None => break,
-        };
+        let Some(eq_pos) = remaining.find('=') else { break };
+
         let key = remaining[..eq_pos].trim();
         let after_eq = &remaining[eq_pos + 1..];
 

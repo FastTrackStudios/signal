@@ -69,6 +69,7 @@ impl BlockParameter {
     }
 
     /// Set the original DAW parameter name (builder pattern).
+    #[must_use]
     pub fn with_daw_name(mut self, name: impl Into<String>) -> Self {
         self.daw_name = Some(name.into());
         self

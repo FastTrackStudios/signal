@@ -11,6 +11,7 @@
 //! anything else so a proto change can't silently drift from Swift.
 
 use std::collections::BTreeMap;
+use std::fmt::Write;
 
 use facet::{Def, Facet, Shape, Type, UserType};
 use signal_guitar_proto::watch::WatchState;
@@ -28,11 +29,9 @@ fn main() {
          import Foundation\n\n",
     );
     for (name, body) in &structs {
-        out.push_str(&format!(
-            "public struct {name}: Codable, Equatable, Sendable {{\n"
-        ));
+        let _ = writeln!(out, "public struct {name}: Codable, Equatable, Sendable {{");
         for (field, ty) in body {
-            out.push_str(&format!("    public var {}: {ty}\n", camel(field)));
+            let _ = writeln!(out, "    public var {}: {ty}", camel(field));
         }
         // Memberwise init (public structs don't get one across module
         // boundaries for free).
@@ -45,13 +44,13 @@ fn main() {
         out.push_str("\n    ) {\n");
         for (field, _) in body {
             let f = camel(field);
-            out.push_str(&format!("        self.{f} = {f}\n"));
+            let _ = writeln!(out, "        self.{f} = {f}");
         }
         out.push_str("    }\n\n");
         // The wire is snake_case (facet-json uses the Rust field names).
         out.push_str("    enum CodingKeys: String, CodingKey {\n");
         for (field, _) in body {
-            out.push_str(&format!("        case {} = \"{field}\"\n", camel(field)));
+            let _ = writeln!(out, "        case {} = \"{field}\"", camel(field));
         }
         out.push_str("    }\n}\n\n");
     }

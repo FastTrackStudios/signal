@@ -19,22 +19,25 @@ use std::sync::Arc;
 pub struct U7(u8);
 
 impl U7 {
-    pub const MIN: U7 = U7(0);
-    pub const MAX: U7 = U7(127);
+    pub const MIN: Self = Self(0);
+    pub const MAX: Self = Self(127);
 
     /// Clamp `v` into `0..=127`.
     #[inline]
+    #[must_use]
     pub const fn new(v: u8) -> Self {
-        U7(if v > 127 { 127 } else { v })
+        Self(if v > 127 { 127 } else { v })
     }
 
     #[inline]
+    #[must_use]
     pub const fn get(self) -> u8 {
         self.0
     }
 
     /// Normalize to `0.0..=1.0` (127 → 1.0). Handy for gain/curve math.
     #[inline]
+    #[must_use]
     pub fn unit(self) -> f32 {
         self.0 as f32 / 127.0
     }
@@ -43,7 +46,7 @@ impl U7 {
 impl From<u8> for U7 {
     #[inline]
     fn from(v: u8) -> Self {
-        U7::new(v)
+        Self::new(v)
     }
 }
 
@@ -52,22 +55,25 @@ impl From<u8> for U7 {
 pub struct U14(u16);
 
 impl U14 {
-    pub const MIN: U14 = U14(0);
-    pub const CENTER: U14 = U14(8192);
-    pub const MAX: U14 = U14(16383);
+    pub const MIN: Self = Self(0);
+    pub const CENTER: Self = Self(8192);
+    pub const MAX: Self = Self(16383);
 
     #[inline]
+    #[must_use]
     pub const fn new(v: u16) -> Self {
-        U14(if v > 16383 { 16383 } else { v })
+        Self(if v > 16383 { 16383 } else { v })
     }
 
     #[inline]
+    #[must_use]
     pub const fn get(self) -> u16 {
         self.0
     }
 
     /// Signed bipolar position `-1.0..=1.0`, centre = 0.0.
     #[inline]
+    #[must_use]
     pub fn bipolar(self) -> f32 {
         (self.0 as f32 - 8192.0) / 8192.0
     }
@@ -76,14 +82,14 @@ impl U14 {
 impl Default for U14 {
     #[inline]
     fn default() -> Self {
-        U14::CENTER
+        Self::CENTER
     }
 }
 
 impl From<u16> for U14 {
     #[inline]
     fn from(v: u16) -> Self {
-        U14::new(v)
+        Self::new(v)
     }
 }
 
@@ -95,26 +101,33 @@ impl From<u16> for U14 {
 pub struct Note(pub u8);
 
 impl Note {
-    pub const MIDDLE_C: Note = Note(60);
+    pub const MIDDLE_C: Self = Self(60);
 
     #[inline]
+    #[must_use]
     pub const fn new(v: u8) -> Self {
-        Note(if v > 127 { 127 } else { v })
+        Self(if v > 127 { 127 } else { v })
     }
 
     #[inline]
+    #[must_use]
     pub const fn get(self) -> u8 {
         self.0
     }
 
     /// Parse scientific pitch notation (`"C4"`, `"C#-1"`) via [`crate::midi`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input string is not a valid note name.
     pub fn from_name(name: &str) -> Result<Self, crate::SamplerError> {
-        crate::midi::note_name_to_midi(name).map(Note)
+        crate::midi::note_name_to_midi(name).map(Self)
     }
 
     /// Semitone interval to another note (signed, `to - self`).
     #[inline]
-    pub fn interval_to(self, to: Note) -> Interval {
+    #[must_use]
+    pub fn interval_to(self, to: Self) -> Interval {
         Interval(to.0 as i32 - self.0 as i32)
     }
 }
@@ -122,7 +135,7 @@ impl Note {
 impl From<u8> for Note {
     #[inline]
     fn from(v: u8) -> Self {
-        Note::new(v)
+        Self::new(v)
     }
 }
 
@@ -132,14 +145,17 @@ pub struct Velocity(pub U7);
 
 impl Velocity {
     #[inline]
+    #[must_use]
     pub const fn new(v: u8) -> Self {
-        Velocity(U7::new(v))
+        Self(U7::new(v))
     }
     #[inline]
+    #[must_use]
     pub const fn get(self) -> u8 {
         self.0.get()
     }
     #[inline]
+    #[must_use]
     pub fn unit(self) -> f32 {
         self.0.unit()
     }
@@ -148,7 +164,7 @@ impl Velocity {
 impl From<u8> for Velocity {
     #[inline]
     fn from(v: u8) -> Self {
-        Velocity::new(v)
+        Self::new(v)
     }
 }
 
@@ -158,14 +174,16 @@ impl From<u8> for Velocity {
 pub struct Cc(pub U7);
 
 impl Cc {
-    pub const MOD_WHEEL: Cc = Cc(U7::new(1));
-    pub const SUSTAIN: Cc = Cc(U7::new(64));
+    pub const MOD_WHEEL: Self = Self(U7::new(1));
+    pub const SUSTAIN: Self = Self(U7::new(64));
 
     #[inline]
+    #[must_use]
     pub const fn new(n: u8) -> Self {
-        Cc(U7::new(n))
+        Self(U7::new(n))
     }
     #[inline]
+    #[must_use]
     pub const fn get(self) -> u8 {
         self.0.get()
     }
@@ -174,7 +192,7 @@ impl Cc {
 impl From<u8> for Cc {
     #[inline]
     fn from(v: u8) -> Self {
-        Cc::new(v)
+        Self::new(v)
     }
 }
 
@@ -184,10 +202,12 @@ pub struct MidiCh(u8);
 
 impl MidiCh {
     #[inline]
+    #[must_use]
     pub const fn new(v: u8) -> Self {
-        MidiCh(if v > 15 { 15 } else { v })
+        Self(if v > 15 { 15 } else { v })
     }
     #[inline]
+    #[must_use]
     pub const fn get(self) -> u8 {
         self.0
     }
@@ -196,7 +216,7 @@ impl MidiCh {
 impl From<u8> for MidiCh {
     #[inline]
     fn from(v: u8) -> Self {
-        MidiCh::new(v)
+        Self::new(v)
     }
 }
 
@@ -207,10 +227,11 @@ impl From<u8> for MidiCh {
 pub struct Db(pub f32);
 
 impl Db {
-    pub const UNITY: Db = Db(0.0);
+    pub const UNITY: Self = Self(0.0);
 
     /// Linear amplitude factor (`10^(dB/20)`).
     #[inline]
+    #[must_use]
     pub fn linear(self) -> f32 {
         10f32.powf(self.0 / 20.0)
     }
@@ -228,15 +249,18 @@ impl Seconds {
     /// Construct from milliseconds — the unit the design doc's `ms(120)`
     /// breakpoints are written in.
     #[inline]
+    #[must_use]
     pub fn from_ms(ms: f64) -> Self {
-        Seconds(ms / 1000.0)
+        Self(ms / 1000.0)
     }
     #[inline]
+    #[must_use]
     pub fn as_ms(self) -> f64 {
         self.0 * 1000.0
     }
     /// Convert to a frame count at `sample_rate`.
     #[inline]
+    #[must_use]
     pub fn to_frames(self, sample_rate: u32) -> Frames {
         Frames((self.0 * sample_rate as f64).round() as u64)
     }
@@ -252,10 +276,12 @@ pub struct Interval(pub i32);
 
 impl Interval {
     #[inline]
+    #[must_use]
     pub const fn semitones(self) -> i32 {
         self.0
     }
     #[inline]
+    #[must_use]
     pub const fn abs_semitones(self) -> u32 {
         self.0.unsigned_abs()
     }
@@ -275,16 +301,19 @@ pub enum Axis {
 
 // ── Interned, Copy-ish ids ────────────────────────────────────────────────
 
-/// A cheaply-clonable interned string. Phase A uses an `Arc<str>` (clone is a
-/// refcount bump); equality/hash are by string contents. A future phase can
-/// swap this for an index into a global intern table without touching callers.
+/// A cheaply-clonable interned string.
+///
+/// Phase A uses an `Arc<str>` (clone is a refcount bump); equality/hash are by
+/// string contents. A future phase can swap this for an index into a global
+/// intern table without touching callers.
 #[derive(Clone, Debug)]
 pub struct Interned(Arc<str>);
 
 impl Interned {
     pub fn new(s: impl AsRef<str>) -> Self {
-        Interned(Arc::from(s.as_ref()))
+        Self(Arc::from(s.as_ref()))
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -300,7 +329,7 @@ impl Eq for Interned {}
 
 impl std::hash::Hash for Interned {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state)
+        self.0.hash(state);
     }
 }
 
@@ -312,12 +341,12 @@ impl std::fmt::Display for Interned {
 
 impl From<&str> for Interned {
     fn from(s: &str) -> Self {
-        Interned::new(s)
+        Self::new(s)
     }
 }
 impl From<String> for Interned {
     fn from(s: String) -> Self {
-        Interned::new(s)
+        Self::new(s)
     }
 }
 
@@ -332,7 +361,7 @@ macro_rules! interned_id {
         impl $name {
             #[inline]
             pub fn new(s: impl AsRef<str>) -> Self {
-                $name(Interned::new(s))
+                Self(Interned::new(s))
             }
             #[inline]
             pub fn as_str(&self) -> &str {
@@ -340,10 +369,10 @@ macro_rules! interned_id {
             }
         }
         impl From<&str> for $name {
-            fn from(s: &str) -> Self { $name::new(s) }
+            fn from(s: &str) -> Self { Self::new(s) }
         }
         impl From<String> for $name {
-            fn from(s: String) -> Self { $name::new(s) }
+            fn from(s: String) -> Self { Self::new(s) }
         }
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

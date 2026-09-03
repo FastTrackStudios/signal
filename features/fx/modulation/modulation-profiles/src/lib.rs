@@ -647,10 +647,11 @@ impl Default for Controls {
     }
 }
 
-/// The rate knob's range. Modulation rate is heard logarithmically — the step
-/// from 0.1 to 0.2 Hz is as big a musical move as 5 to 10 — so the knob is
-/// exponential and a linear one would spend most of its travel above the
-/// useful range.
+/// The rate knob's range.
+///
+/// Modulation rate is heard logarithmically — the step from 0.1 to 0.2 Hz is as
+/// big a musical move as 5 to 10 — so the knob is exponential and a linear one
+/// would spend most of its travel above the useful range.
 pub const RATE_MIN_HZ: f32 = 0.05;
 pub const RATE_MAX_HZ: f32 = 20.0;
 
@@ -713,9 +714,10 @@ fn pick(knob: f32, at_noon: f32, count: usize) -> usize {
 }
 
 /// The saturation styles the tremolo can run through, in [`AnalogStyle`]
-/// order. Kept here rather than derived because the DSP enum has no
-/// iteration and a wrong count would silently make the last style
-/// unreachable.
+/// order.
+///
+/// Kept here rather than derived because the DSP enum has no iteration and a
+/// wrong count would silently make the last style unreachable.
 pub const ANALOG_STYLES: [AnalogStyle; 7] = [
     AnalogStyle::Clean,
     AnalogStyle::Fat,
@@ -958,15 +960,14 @@ pub fn shape(profile: &Profile, controls: &Controls, out: &mut [f64]) {
                 // Already in 0..1, and a flat line has no range to normalise
                 // against: drawn where the pedal actually is.
                 return;
-            } else {
-                let rate = wah.modulator.trigger.rate_hz.max(1.0e-6);
-                wah.modulator.update(n as f64 * rate.max(1.0));
-                wah.modulator.reset();
-                let transport = TransportInfo::default();
-                for slot in out.iter_mut() {
-                    wah.modulator.tick(&transport, 0.0);
-                    *slot = wah.modulator.output().mul_add(wah.pattern_amount, wah.base_position);
-                }
+            }
+            let rate = wah.modulator.trigger.rate_hz.max(1.0e-6);
+            wah.modulator.update(n as f64 * rate.max(1.0));
+            wah.modulator.reset();
+            let transport = TransportInfo::default();
+            for slot in out.iter_mut() {
+                wah.modulator.tick(&transport, 0.0);
+                *slot = wah.modulator.output().mul_add(wah.pattern_amount, wah.base_position);
             }
         }
     }

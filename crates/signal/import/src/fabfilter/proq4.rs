@@ -120,26 +120,27 @@ pub enum Placement {
 impl Placement {
     fn from_raw(v: f32) -> Self {
         match v.round() as i32 {
-            0 => Placement::Left,
-            1 => Placement::Right,
-            3 => Placement::Mid,
-            4 => Placement::Side,
+            0 => Self::Left,
+            1 => Self::Right,
+            3 => Self::Mid,
+            4 => Self::Side,
             // 2 is Stereo, and anything unrecognized is safest as Stereo —
             // a band on the wrong side of the image is worse than a band
             // across the whole of it.
-            _ => Placement::Stereo,
+            _ => Self::Stereo,
         }
     }
 
     /// The equivalent `NativeEq` placement index
     /// (0 Stereo, 1 Left, 2 Right, 3 Mid, 4 Side).
+    #[must_use]
     pub fn native_index(self) -> f64 {
         match self {
-            Placement::Stereo => 0.0,
-            Placement::Left => 1.0,
-            Placement::Right => 2.0,
-            Placement::Mid => 3.0,
-            Placement::Side => 4.0,
+            Self::Stereo => 0.0,
+            Self::Left => 1.0,
+            Self::Right => 2.0,
+            Self::Mid => 3.0,
+            Self::Side => 4.0,
         }
     }
 }
@@ -209,6 +210,7 @@ impl Band {
     /// Measured, not inferred: the hosted plugin reports a stored 0.384688 as
     /// "0.427" and 0.596290 as "2.035", both of which are
     /// `0.025 * 1600^x` to three decimals.
+    #[must_use]
     pub fn q_value(&self) -> f64 {
         const MIN_Q: f64 = 0.025;
         const MAX_Q: f64 = 40.0;
@@ -236,6 +238,7 @@ impl Band {
     /// as "0 dB" — which the plain linear reading of the top segment gives —
     /// pins them to a threshold nothing ever crosses instead of letting the
     /// plugin find its own.
+    #[must_use]
     pub fn threshold_db(&self) -> Option<f64> {
         let x = (self.threshold as f64).clamp(0.0, 1.0);
         if x >= 1.0 {
@@ -254,26 +257,31 @@ impl Band {
     ///
     /// Two things say so and either is enough: the dedicated flag, and the
     /// threshold knob parked at its Auto position.
+    #[must_use]
     pub fn threshold_is_auto(&self) -> bool {
         self.dynamics_auto || self.threshold_db().is_none()
     }
 
     /// Whether this band actually shapes a stereo signal.
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.used && self.enabled && self.addresses_stereo()
     }
 
     /// Whether the band's dynamics are doing anything.
+    #[must_use]
     pub fn is_dynamic(&self) -> bool {
         self.dynamics_enabled && self.dynamic_range_db != 0.0
     }
 
     /// The `NativeEq` placement index for this band.
+    #[must_use]
     pub fn native_placement(&self) -> f64 {
         self.placement.native_index()
     }
 
     /// The side-chain range in Hz, stored the same way `Frequency` is.
+    #[must_use]
     pub fn side_range_hz(&self) -> (f64, f64) {
         let hz = |v: f32| (v as f64).exp2().clamp(20.0, 20_000.0);
         (hz(self.side_lo), hz(self.side_hi))
@@ -289,6 +297,7 @@ impl Band {
     ///
     /// Only "All Speakers", "All (excl. LFE)" and "L/R (Front)" reach the two
     /// channels a stereo bus has.
+    #[must_use]
     pub fn addresses_stereo(&self) -> bool {
         matches!(self.speakers, 0 | 1 | 4)
     }
@@ -305,6 +314,7 @@ impl Band {
     ///
     /// Translated rather than passed through, exactly as `Placement` is, and
     /// for the same reason.
+    #[must_use]
     pub fn native_shape(&self) -> f64 {
         match self.shape {
             2 => 3.0, // Pro-Q Low Cut
@@ -369,7 +379,7 @@ pub enum ProQ4Error {
 impl std::fmt::Display for ProQ4Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProQ4Error::UnexpectedParamCount { got } => write!(
+            Self::UnexpectedParamCount { got } => write!(
                 f,
                 "expected at least {GLOBALS_OFFSET} floats in a Pro-Q 4 state, found {got}"
             ),
@@ -380,6 +390,10 @@ impl std::fmt::Display for ProQ4Error {
 impl std::error::Error for ProQ4Error {}
 
 /// Decode a parsed [`FfbsState`] as a Pro-Q 4 instance.
+///
+/// # Errors
+///
+/// Returns an error if the parameter vector is too short to contain a full Pro-Q 4 state.
 pub fn decode(state: &FfbsState) -> Result<ProQ4, ProQ4Error> {
     let p = &state.params;
     if p.len() < GLOBALS_OFFSET {
@@ -443,6 +457,7 @@ pub fn decode(state: &FfbsState) -> Result<ProQ4, ProQ4Error> {
 ///
 /// Every slot the source did not fill is explicitly cleared (`b{n}_used = 0`),
 /// so applying the result to a reused `NativeEq` leaves no stale bands behind.
+#[must_use]
 pub fn to_native_eq_params(eq: &ProQ4) -> Vec<(String, f64)> {
     let mut out = Vec::new();
     let mut slot = 0usize;

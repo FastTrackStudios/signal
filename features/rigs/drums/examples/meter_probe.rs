@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     rig.midi_message(signal_drums::GM_DRUM_CHANNEL, 0x90, kick, 120);
     let (mut mx_ch, mut mx_bus, mut mx_master) = (0.0f32, 0.0f32, 0.0f32);
     for _ in 0..20 {
-        buf.iter_mut().for_each(|s| *s = 0.0);
+        buf.fill(0.0);
         rig.render_offline(&mut buf)?;
         if let Some(m) = rig.drum_mixer_meters(KIT) {
             for i in 0..8 {
@@ -85,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let mut peaks = vec![0.0f32; notes.len()];
         for _ in 0..30 {
-            buf.iter_mut().for_each(|s| *s = 0.0);
+            for s in buf.iter_mut() { *s = 0.0; }
             let _ = rig.render_offline(buf);
             if let Some(m) = rig.drum_mixer_meters(KIT) {
                 for (i, (eidx, _)) in notes.iter().enumerate() {

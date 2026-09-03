@@ -110,6 +110,10 @@ async fn build_engine(
 ///
 /// Creates the full folder hierarchy with `[R]`/`[E]`/`[L]` prefixed names,
 /// FX sends sub-folders, and layer→send routing.
+///
+/// # Errors
+///
+/// Returns an error if a track creation, folder depth setting, or send routing fails.
 pub async fn instantiate_rig(
     template: &RigTemplate,
     project: &Project,
@@ -164,6 +168,10 @@ pub async fn instantiate_rig(
 ///
 /// Creates the rack folder, input tracks, sub-rig hierarchies,
 /// and rack-level FX send groups.
+///
+/// # Errors
+///
+/// Returns an error if a track creation, folder depth setting, or send routing fails.
 pub async fn instantiate_rack(
     template: &RackTemplate,
     project: &Project,

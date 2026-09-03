@@ -1,4 +1,4 @@
-//! ReverbDelay — the TimeLine MX bonus "Reverb" machine (Flint-inspired).
+//! `ReverbDelay` — the `TimeLine` MX bonus "Reverb" machine (Flint-inspired).
 //!
 //! Knob remap on this machine: TIME = **pre-delay** (2 ms–2.5 s),
 //! REPEATS = **decay** (0.15 s → 40 s, infinite at the top), Mod
@@ -109,6 +109,7 @@ impl ReverbDelay {
     const LINE_MOD_MS: f64 = 0.18;
     const LINE_MOD_HZ: [f64; 2] = [0.61, 0.83];
 
+    #[must_use]
     pub fn new() -> Self {
         let sr = 48000.0;
         let ms = |m: f64| m * sr / 1000.0;
@@ -279,6 +280,7 @@ impl ReverbDelay {
         wet
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
@@ -364,8 +366,8 @@ mod tests {
         d.update(SR);
         // Excite, then measure two late windows a second apart.
         let out = impulse_response(&mut d, 4 * 48000);
-        let w1: f64 = out[96000..120000].iter().map(|x| x * x).sum();
-        let w2: f64 = out[168000..192000].iter().map(|x| x * x).sum();
+        let w1: f64 = out[96000..120_000].iter().map(|x| x * x).sum();
+        let w2: f64 = out[168_000..192_000].iter().map(|x| x * x).sum();
         assert!(w1 > 1e-9);
         assert!(
             w2 > w1 * 0.5,
@@ -479,7 +481,7 @@ mod tests {
         d.hicut_freq = 500.0;
         d.decay_tilt = 0.7;
         d.update(SR);
-        for i in 0..192000 {
+        for i in 0..192_000 {
             let input = (core::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.7;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at {i}");

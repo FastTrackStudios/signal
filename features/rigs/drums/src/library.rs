@@ -1,17 +1,19 @@
-//! Sample-library catalog for the kit designer: scan the library's
-//! `.signalengine` files, group them by engine type (kick, snare, tom, …), and
-//! map a loaded preset's engine slots onto friendly labels so any piece can be
-//! swapped for another of the same type.
+//! Sample-library catalog for the kit designer.
+//!
+//! Scan the library's `.signalengine` files, group them by engine type
+//! (kick, snare, tom, …), and map a loaded preset's engine slots onto friendly
+//! labels so any piece can be swapped for another of the same type.
 
 use std::path::{Path, PathBuf};
 
 use signal_drums_proto::LibraryPiece;
 use signal_sampler::{EngineSpec, PresetSpec};
 
-/// Recursively collect every `.signalengine` under `root` as a [`LibraryPiece`]
-/// (name + absolute path + engine type). Engines whose type is empty/`effects`
+/// Recursively collect every `.signalengine` under `root` as a [`LibraryPiece`].
+///
+/// Name + absolute path + engine type. Engines whose type is empty/`effects`
 /// are still listed under their raw type so nothing is silently dropped.
-#[must_use] 
+#[must_use]
 pub fn scan_engines(root: &Path) -> Vec<LibraryPiece> {
     let mut out = Vec::new();
     collect(root, &mut out);
@@ -70,11 +72,12 @@ pub fn engines_dir(library_root: &Path) -> PathBuf {
 }
 
 /// Canonical piece label for a preset engine-slot id — the MM2 mixer strip
-/// name, so it doubles as the mix-import match key. Handles the differing id
-/// schemes across presets: Metal Monster uses `rtom1`/`hats`/`snare`, while
-/// Pound/Organic use `rtom-a`/`hh-o`/`snare-a`/`kick-b`. Tom numbering comes
-/// from a trailing `1`/`2` or `-a`/`-b`.
-#[must_use] 
+/// name, so it doubles as the mix-import match key.
+///
+/// Handles the differing id schemes across presets: Metal Monster uses
+/// `rtom1`/`hats`/`snare`, while Pound/Organic use `rtom-a`/`hh-o`/`snare-a`/
+/// `kick-b`. Tom numbering comes from a trailing `1`/`2` or `-a`/`-b`.
+#[must_use]
 pub fn slot_label(slot_id: &str) -> String {
     let s = slot_id.to_ascii_lowercase();
     // Which of a pair of same-type pieces: `-b`/`2`/`3` → 2/3, else 1.

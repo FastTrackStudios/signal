@@ -131,7 +131,10 @@ MECHANICAL = {
     "single_match_else", "too_long_first_doc_paragraph", "missing_errors_doc",
     "missing_panics_doc", "format_push_string", "return_self_not_must_use",
     "needless_for_each", "match_same_arms", "unnested_or_patterns",
-    "manual_let_else", "redundant_else", "unused_self", "doc_link_with_quotes",
+    "manual_let_else", "redundant_else", "doc_link_with_quotes",
+    # NOT unused_self: it turns &self methods into associated functions, which
+    # breaks every self.foo() call site in other files. Broke signal-sampler
+    # on the first workspace run.
 }
 OUT = "/tmp/clippy_migration_errors"
 shutil.rmtree(OUT, ignore_errors=True)

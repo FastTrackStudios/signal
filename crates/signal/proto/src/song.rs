@@ -94,11 +94,15 @@ impl Section {
         self
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if any override fails validation.
     pub fn validate_overrides(&self) -> Result<(), OverridePolicyError> {
         validate_overrides::<FreePolicy>(&self.overrides)
     }
 
     /// Clone this section with a new ID and name.
+    #[must_use]
     pub fn duplicate(&self, new_id: impl Into<SectionId>, new_name: impl Into<String>) -> Self {
         let mut dup = self.clone();
         dup.id = new_id.into();

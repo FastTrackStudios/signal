@@ -91,10 +91,10 @@ const MAX_CHAIN_SLOTS: usize = 24;
 pub type ModelId = u32;
 
 /// How a block's [`BlockType`] is **implemented** — the realization axis
-/// (orthogonal to the semantic `block_type`). Each block type can have several
-/// implementations; a [`RigBlock`] picks one by which asset it carries.
+/// (orthogonal to the semantic `block_type`).
 ///
-/// Mirrors `signal_proto::block_kind::BlockKind` and the runtime
+/// Each block type can have several implementations; a [`RigBlock`] picks one by which
+/// asset it carries. Mirrors `signal_proto::block_kind::BlockKind` and the runtime
 /// [`FxBackend`](crate::mixer::FxBackend).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Facet)]
 #[repr(C)]
@@ -126,28 +126,30 @@ impl BlockImpl {
     /// - **Ir** only fits a `Cabinet` (impulse-response convolution).
     /// - **Plugin** and **Native** fit any block type (an external plugin or our
     ///   built-in DSP can implement anything).
+    #[must_use]
     pub fn supports(self, block_type: BlockType) -> bool {
         match self {
-            BlockImpl::Native | BlockImpl::Plugin => true,
-            BlockImpl::Nam => matches!(
+            Self::Native | Self::Plugin => true,
+            Self::Nam => matches!(
                 block_type,
                 BlockType::Amp | BlockType::Drive | BlockType::Saturator
             ),
-            BlockImpl::Ir => block_type == BlockType::Cabinet,
-            BlockImpl::Sample => block_type == BlockType::Sampler,
+            Self::Ir => block_type == BlockType::Cabinet,
+            Self::Sample => block_type == BlockType::Sampler,
         }
     }
 
     /// The implementations valid for `block_type` (for UI pickers). `Native`
     /// always leads (the default), then the type-specific specials, then
     /// `Plugin`.
-    pub fn allowed_for(block_type: BlockType) -> Vec<BlockImpl> {
+    #[must_use]
+    pub fn allowed_for(block_type: BlockType) -> Vec<Self> {
         [
-            BlockImpl::Native,
-            BlockImpl::Nam,
-            BlockImpl::Ir,
-            BlockImpl::Sample,
-            BlockImpl::Plugin,
+            Self::Native,
+            Self::Nam,
+            Self::Ir,
+            Self::Sample,
+            Self::Plugin,
         ]
         .into_iter()
         .filter(|i| i.supports(block_type))
@@ -155,13 +157,14 @@ impl BlockImpl {
     }
 
     /// Short identifier for logs / UI.
+    #[must_use]
     pub const fn tag(self) -> &'static str {
         match self {
-            BlockImpl::Native => "native",
-            BlockImpl::Nam => "nam",
-            BlockImpl::Ir => "ir",
-            BlockImpl::Plugin => "plugin",
-            BlockImpl::Sample => "sample",
+            Self::Native => "native",
+            Self::Nam => "nam",
+            Self::Ir => "ir",
+            Self::Plugin => "plugin",
+            Self::Sample => "sample",
         }
     }
 }
@@ -280,6 +283,7 @@ impl RigBlock {
     }
 
     /// A bare block of `block_type` with no realization (a placeholder).
+    #[must_use]
     pub fn of_type(block_type: BlockType) -> Self {
         Self {
             block_type,
@@ -359,6 +363,7 @@ impl RigBlock {
     }
 
     /// A build-time parameter's raw string value, if present.
+    #[must_use]
     pub fn param_str(&self, name: &str) -> Option<String> {
         self.params
             .iter()
@@ -367,6 +372,7 @@ impl RigBlock {
     }
 
     /// A build-time parameter as `f32`, if present and numeric.
+    #[must_use]
     pub fn param_f32(&self, name: &str) -> Option<f32> {
         self.params
             .iter()
@@ -388,6 +394,7 @@ impl RigBlock {
 
     /// The realization's asset path — the `.nam`, `.wav` IR, sample-library
     /// spec, or plugin path, whichever is set (empty for a placeholder).
+    #[must_use]
     pub fn asset_path(&self) -> &str {
         if !self.nam.is_empty() {
             &self.nam
@@ -403,6 +410,7 @@ impl RigBlock {
     /// Which **implementation** (backend) realizes this block's type. Derived
     /// from which asset is set; no asset ⇒ [`BlockImpl::Native`] (our built-in
     /// DSP). See [`BlockImpl`].
+    #[must_use]
     pub fn implementation(&self) -> BlockImpl {
         if !self.nam.trim().is_empty() {
             BlockImpl::Nam
@@ -419,6 +427,7 @@ impl RigBlock {
 
     /// True when this block is realized by the built-in [`Native`](BlockImpl::Native)
     /// DSP for its type (no NAM / IR / plugin asset chosen).
+    #[must_use]
     pub fn is_native(&self) -> bool {
         self.implementation() == BlockImpl::Native
     }
@@ -427,6 +436,7 @@ impl RigBlock {
     /// IR and Plugin implementations are always buildable; a `Native` block is
     /// buildable only for the block types whose built-in DSP is implemented (see
     /// [`native_dsp_available`]) — the rest are placeholders until their DSP lands.
+    #[must_use]
     pub fn has_backend(&self) -> bool {
         match self.implementation() {
             BlockImpl::Native => native_dsp_available(self.block_type),
@@ -436,6 +446,10 @@ impl RigBlock {
 
     /// Check the block's implementation is valid for its type (e.g. a NAM model
     /// can't realize a `Delay`). Returns a human-readable error otherwise.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the block's implementation is not valid for its `block_type`.
     pub fn validate(&self) -> Result<(), String> {
         let imp = self.implementation();
         if imp.supports(self.block_type) {
@@ -455,6 +469,7 @@ impl RigBlock {
 
     /// Display label: explicit `name`, else the asset file stem, else the block
     /// type's display name.
+    #[must_use]
     pub fn display_name(&self) -> String {
         if !self.name.is_empty() {
             return self.name.clone();
@@ -462,7 +477,7 @@ impl RigBlock {
         std::path::Path::new(self.asset_path())
             .file_stem()
             .and_then(|s| s.to_str())
-            .map(|s| s.to_string())
+            .map(ToString::to_string)
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| self.block_type.display_name().to_string())
     }
@@ -471,23 +486,28 @@ impl RigBlock {
     /// type is a Time effect (Delay / Reverb / Freeze) or it's tagged into a
     /// "Time" module. Deliberately narrow — drive, pitch (POG) and modulation
     /// are NOT killed by the time switch (Funk = clean with Time bypassed).
+    #[must_use]
     pub fn is_time_fx(&self) -> bool {
         self.module.eq_ignore_ascii_case("time")
             || self.block_type.category() == BlockCategory::Time
     }
 
+    #[must_use]
     pub fn is_nam(&self) -> bool {
         !self.nam.is_empty()
     }
 
+    #[must_use]
     pub fn is_cab_ir(&self) -> bool {
         !self.ir.is_empty()
     }
 
+    #[must_use]
     pub fn is_plugin(&self) -> bool {
         !self.plugin.is_empty()
     }
 
+    #[must_use]
     pub fn is_sample(&self) -> bool {
         !self.sample.is_empty()
     }
@@ -832,6 +852,7 @@ impl PluginInstance for Identity {
 /// Block types whose built-in `Native` DSP is implemented today — delegated
 /// to the [`native` registry](crate::native::native_dsp_available), the one
 /// place a new block type's DSP is declared.
+#[must_use]
 pub fn native_dsp_available(block_type: BlockType) -> bool {
     crate::native::native_dsp_available(block_type)
 }
@@ -978,8 +999,8 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
 
 /// Build a sample block's **Sample Soundsource** — the `SampleEngine`
 /// wrapped as a [`SamplerInstrument`](crate::SamplerInstrument), same as the
-/// sampler TUI's loading path (PlayerPatch::load/from_pack +
-/// SampleEngine::new) — plus its display name. The render tree holds this
+/// sampler TUI's loading path (`PlayerPatch::load/from_pack` +
+/// `SampleEngine::new`) — plus its display name. The render tree holds this
 /// directly as a `Box<dyn Soundsource>`; [`build_block`] wraps it in the
 /// generic leaf for FX-chain hosts.
 pub(crate) fn build_sample_source(
@@ -1099,7 +1120,7 @@ pub(crate) fn build_sample_source(
     if let Err(err) = std::thread::Builder::new()
         .name(format!("signal-preload:{label}"))
         .spawn(move || {
-            let stats = cache.preload(paths.iter().map(|p| p.as_path()));
+            let stats = cache.preload(paths.iter().map(std::path::PathBuf::as_path));
             tracing::info!(
                 library = %label,
                 loaded = stats.loaded,
@@ -1222,11 +1243,19 @@ const RIG_TRACK_NAME: &str = "Guitar In";
 #[cfg(not(target_arch = "wasm32"))]
 impl GuitarRig {
     /// Open the system default input + output devices.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the default audio devices cannot be opened or configured.
     pub fn new() -> eyre::Result<Self> {
         Self::open(&RigAudioPrefs::default())
     }
 
     /// Back-compat: open by device substring on input channel 0.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the specified audio devices cannot be opened or configured.
     pub fn with_devices(
         input_name: Option<&str>,
         output_name: Option<&str>,
@@ -1253,6 +1282,10 @@ impl GuitarRig {
     /// track armed to monitor `prefs.input_channel`), starts daw's realtime
     /// `AudioEngine` with live input, reserves the track's FX slots, and
     /// begins transport so the renderer runs every block.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio engine cannot be started or the project cannot be set up.
     pub fn open(prefs: &RigAudioPrefs) -> eyre::Result<Self> {
         // 1. Seed a one-track project (current, so the FX-chain service
         //    targets it); arm the track to monitor the hardware input channel.
@@ -1343,6 +1376,7 @@ impl GuitarRig {
     }
 
     /// List available input devices (name + channel count + native rate).
+    #[must_use]
     pub fn input_devices() -> Vec<DeviceInfo> {
         let host = daw_audio_io::audio_host();
         daw_audio_io::input_devices(&host)
@@ -1356,6 +1390,7 @@ impl GuitarRig {
     }
 
     /// List available output devices.
+    #[must_use]
     pub fn output_devices() -> Vec<DeviceInfo> {
         let host = daw_audio_io::audio_host();
         daw_audio_io::output_devices(&host)
@@ -1387,6 +1422,10 @@ impl GuitarRig {
     /// Returns its [`ModelId`]. Does **not** activate it — call
     /// [`set_active`](Self::set_active). A failed block load fails the whole
     /// install.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any block fails to load, validate, or prepare.
     pub fn install_chain(&mut self, blocks: &[RigBlock]) -> Result<ModelId, String> {
         let ids: Vec<String> = blocks
             .iter()
@@ -1400,6 +1439,15 @@ impl GuitarRig {
     /// can address a running block by id (`with_active_block_instance`,
     /// `set_block_slot_bypass`). `block_ids` shorter than `blocks` falls back
     /// to file-stem ids for the remainder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any block fails to load, validate, or prepare, or if the
+    /// chain exceeds the maximum number of slots.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn install_chain_with_ids(
         &mut self,
         blocks: &[RigBlock],
@@ -1456,7 +1504,7 @@ impl GuitarRig {
             primary_output_level_dbu,
         };
         self.slots.push(info.clone());
-        self.swap.lock().unwrap().chains.insert(
+        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).chains.insert(
             id,
             ResidentChain {
                 info,
@@ -1468,17 +1516,25 @@ impl GuitarRig {
     }
 
     /// Convenience: install a single-NAM chain (amp only). Does not activate.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the model cannot be loaded or prepared.
     pub fn install_model(&mut self, path: impl AsRef<Path>) -> Result<ModelId, String> {
         let p = path.as_ref().to_string_lossy().to_string();
         self.install_chain(&[RigBlock::nam(p)])
     }
 
     /// Remove a resident chain. If it was active, falls back to passthrough.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn uninstall_model(&mut self, id: ModelId) {
         if self.active() == Some(id) {
             self.set_active(None);
         }
-        self.swap.lock().unwrap().chains.remove(&id);
+        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).chains.remove(&id);
         self.slots.retain(|s| s.id != id);
     }
 
@@ -1488,8 +1544,12 @@ impl GuitarRig {
     /// = clean DI passthrough (all chain slots → identity). The old boxes are
     /// dropped on this (control) thread, off the audio thread. `&self` (via an
     /// internal `Mutex`) so footswitch / UI paths needn't hold the rig `&mut`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn set_active(&self, id: Option<ModelId>) {
-        let mut swap = self.swap.lock().unwrap();
+        let mut swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let chain_guids = &self.slot_guids[1..]; // slot 0 is the input probe
         let sr = self.sample_rate as f64;
         let bypass = swap.bypass;
@@ -1521,34 +1581,31 @@ impl GuitarRig {
 
         // 2. Arm the requested chain — unless bypassed, or the id is unknown.
         let known = id.filter(|i| swap.chains.contains_key(i));
-        match known.filter(|_| !bypass) {
-            Some(cid) => {
-                let chain = swap.chains.get_mut(&cid).expect("checked contains_key");
-                for (slot, guid) in chain_guids.iter().enumerate() {
-                    let mut new_box: Box<dyn PluginInstance> = match chain.boxes.get_mut(slot) {
-                        Some(slot_box) if slot_box.is_some() => slot_box.take().unwrap(),
-                        _ => Self::fresh_identity(sr),
-                    };
-                    // Re-prepare on arm: clears delay lines and reverb tails
-                    // left from this chain's last activation — otherwise the
-                    // stale tail dumps out as a burst on the patch switch.
-                    // (Control thread, not the audio callback.)
-                    let _ = new_box.prepare(sr, FX_PREPARE_BLOCK);
-                    drop(self.daw.insert_plugin_instance(guid.clone(), new_box));
-                }
-                swap.active = Some(cid);
+        if let Some(cid) = known.filter(|_| !bypass) {
+            let chain = swap.chains.get_mut(&cid).expect("checked contains_key");
+            for (slot, guid) in chain_guids.iter().enumerate() {
+                let mut new_box: Box<dyn PluginInstance> = match chain.boxes.get_mut(slot) {
+                    Some(slot_box) if slot_box.is_some() => slot_box.take().unwrap(),
+                    _ => Self::fresh_identity(sr),
+                };
+                // Re-prepare on arm: clears delay lines and reverb tails
+                // left from this chain's last activation — otherwise the
+                // stale tail dumps out as a burst on the patch switch.
+                // (Control thread, not the audio callback.)
+                let _ = new_box.prepare(sr, FX_PREPARE_BLOCK);
+                drop(self.daw.insert_plugin_instance(guid.clone(), new_box));
             }
-            None => {
-                for guid in chain_guids {
-                    drop(
-                        self.daw
-                            .insert_plugin_instance(guid.clone(), Self::fresh_identity(sr)),
-                    );
-                }
-                // When bypassed, remember the requested (known) id so toggling
-                // bypass off re-arms it; otherwise we're cleanly passthrough.
-                swap.active = if bypass { known } else { None };
+            swap.active = Some(cid);
+        } else {
+            for guid in chain_guids {
+                drop(
+                    self.daw
+                        .insert_plugin_instance(guid.clone(), Self::fresh_identity(sr)),
+                );
             }
+            // When bypassed, remember the requested (known) id so toggling
+            // bypass off re-arms it; otherwise we're cleanly passthrough.
+            swap.active = if bypass { known } else { None };
         }
     }
 
@@ -1558,11 +1615,22 @@ impl GuitarRig {
         Box::new(id)
     }
 
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn active(&self) -> Option<ModelId> {
-        self.swap.lock().unwrap().active
+        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).active
     }
 
     /// Convenience for the single-amp case: install a single-NAM chain + activate.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the model cannot be loaded or prepared.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned or the just-installed slot cannot be retrieved.
     pub fn load_nam(&mut self, path: impl AsRef<Path>) -> Result<SlotInfo, String> {
         let id = self.install_model(path)?;
         self.set_active(Some(id));
@@ -1570,9 +1638,13 @@ impl GuitarRig {
     }
 
     /// Remove every chain and fall back to passthrough.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn clear(&mut self) {
         self.set_active(None);
-        self.swap.lock().unwrap().chains.clear();
+        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).chains.clear();
         self.slots.clear();
     }
 
@@ -1586,8 +1658,11 @@ impl GuitarRig {
         self.slots.iter().find(|s| s.id == id)
     }
 
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn set_input_trim_db(&self, db: f32) {
-        self.swap.lock().unwrap().input_trim_db = db;
+        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).input_trim_db = db;
         // The input trim is folded into each NAM block's per-block input gain at
         // build time (the resolver sets `RigBlock::input_trim_db`), so the
         // patch-level input trim is a no-op live; kept for API parity. The
@@ -1595,8 +1670,11 @@ impl GuitarRig {
         // where they take effect.
     }
 
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn set_output_trim_db(&self, db: f32) {
-        self.swap.lock().unwrap().output_trim_db = db;
+        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).output_trim_db = db;
         // Output trim → the track's post-fader gain (linear).
         let out_lin = signal_rig_host::mixer::db_to_linear(db) as f64;
         let _ = <Standalone as Tracks>::set_volume(
@@ -1607,9 +1685,12 @@ impl GuitarRig {
         );
     }
 
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn set_bypass(&self, bypass: bool) {
         {
-            let mut swap = self.swap.lock().unwrap();
+            let mut swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             if swap.bypass == bypass {
                 return;
             }
@@ -1621,16 +1702,25 @@ impl GuitarRig {
         self.set_active(active);
     }
 
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn is_bypassed(&self) -> bool {
-        self.swap.lock().unwrap().bypass
+        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).bypass
     }
 
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn input_trim_db(&self) -> f32 {
-        self.swap.lock().unwrap().input_trim_db
+        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).input_trim_db
     }
 
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn output_trim_db(&self) -> f32 {
-        self.swap.lock().unwrap().output_trim_db
+        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).output_trim_db
     }
 
     /// Post-input peak (linear) — from the `InputProbe` at slot 0.
@@ -1676,16 +1766,14 @@ impl GuitarRig {
     pub fn output_peak(&self) -> f32 {
         self.meters
             .cell(0)
-            .map(|c| c.peak(0).max(c.peak(1)))
-            .unwrap_or(0.0)
+            .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
     }
 
     /// Per-channel output peaks (linear) — stereo metering.
     pub fn output_peak_lr(&self) -> (f32, f32) {
         self.meters
             .cell(0)
-            .map(|c| (c.peak(0), c.peak(1)))
-            .unwrap_or((0.0, 0.0))
+            .map_or((0.0, 0.0), |c| (c.peak(0), c.peak(1)))
     }
 
     /// Realtime xruns. The duplex engine has no input ring (input and output are
@@ -1694,8 +1782,7 @@ impl GuitarRig {
     pub fn underruns(&self) -> u64 {
         self.engine_stats
             .as_ref()
-            .map(|s| s.xruns.load(std::sync::atomic::Ordering::Relaxed))
-            .unwrap_or(0)
+            .map_or(0, |s| s.xruns.load(std::sync::atomic::Ordering::Relaxed))
     }
 
     pub fn overruns(&self) -> u64 {
@@ -1711,15 +1798,13 @@ impl GuitarRig {
     pub fn render_us(&self) -> u32 {
         self.engine_stats
             .as_ref()
-            .map(|s| (s.render_ns.load(std::sync::atomic::Ordering::Relaxed) / 1000) as u32)
-            .unwrap_or(0)
+            .map_or(0, |s| (s.render_ns.load(std::sync::atomic::Ordering::Relaxed) / 1000) as u32)
     }
 
     pub fn peak_render_us(&self) -> u32 {
         self.engine_stats
             .as_ref()
-            .map(|s| (s.peak_render_ns.load(std::sync::atomic::Ordering::Relaxed) / 1000) as u32)
-            .unwrap_or(0)
+            .map_or(0, |s| (s.peak_render_ns.load(std::sync::atomic::Ordering::Relaxed) / 1000) as u32)
     }
 
     pub fn reset_render_peak(&self) {
@@ -1734,8 +1819,7 @@ impl GuitarRig {
         let live = self
             .engine_stats
             .as_ref()
-            .map(|s| s.block_frames.load(std::sync::atomic::Ordering::Relaxed))
-            .unwrap_or(0);
+            .map_or(0, |s| s.block_frames.load(std::sync::atomic::Ordering::Relaxed));
         if live > 0 {
             live
         } else {
@@ -1764,9 +1848,9 @@ impl GuitarRig {
 
     /// Resolve, for the currently-active chain, a block id → `(chain_slot_index,
     /// fx_guid)`. `chain_slot_index` is 0-based within the chain (slot 0 of the
-    /// chain maps to `slot_guids[1]`, the renderer fx_idx is `index + 1`).
+    /// chain maps to `slot_guids[1]`, the renderer `fx_idx` is `index + 1`).
     fn active_block_slot(&self, block_id: &str) -> Option<(usize, String)> {
-        let swap = self.swap.lock().unwrap();
+        let swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let active = swap.active?;
         let chain = swap.chains.get(&active)?;
         let slot = chain.block_ids.iter().position(|b| b == block_id)?;
@@ -1776,8 +1860,12 @@ impl GuitarRig {
     }
 
     /// Block ids of the active chain, in order. Empty when nothing is active.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the swap state mutex is poisoned.
     pub fn active_block_ids(&self) -> Vec<String> {
-        let swap = self.swap.lock().unwrap();
+        let swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         swap.active
             .and_then(|a| swap.chains.get(&a))
             .map(|c| c.block_ids.clone())
@@ -1893,6 +1981,7 @@ impl GuitarRig {
 
 /// Test accessor for [`default_block_id`] (cross-module test in `api::rig`).
 #[doc(hidden)]
+#[must_use]
 pub fn default_block_id_for_test(path: &str) -> String {
     default_block_id(path)
 }

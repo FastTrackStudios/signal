@@ -272,7 +272,7 @@ impl DrumRigBackend {
 
     fn open_blocking(&self) {
         {
-            let mut rig = self.inner.rig.lock().unwrap();
+            let mut rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             if rig.is_none() {
                 match SamplerRig::new() {
                     Ok(r) => {
@@ -298,14 +298,14 @@ impl DrumRigBackend {
 
     fn do_load_kit(&self, index: usize) {
         let path = {
-            let s = self.inner.state.lock().unwrap();
+            let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             s.kits.get(index).map(|k| PathBuf::from(&k.path))
         };
         let Some(path) = path else { return };
 
         // Ensure audio is open.
         {
-            let mut rig = self.inner.rig.lock().unwrap();
+            let mut rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             if rig.is_none() {
                 match SamplerRig::new() {
                     Ok(r) => {
@@ -321,7 +321,7 @@ impl DrumRigBackend {
         }
 
         let (piece_ids, pieces) = {
-            let rig = self.inner.rig.lock().unwrap();
+            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             let Some(rig) = rig.as_ref() else { return };
             match crate::load_kit_tracks(rig, KIT, &path) {
                 Ok(ids) => {
@@ -383,7 +383,7 @@ impl DrumRigBackend {
             return;
         }
         {
-            let rig = self.inner.rig.lock().unwrap();
+            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             let Some(rig) = rig.as_ref() else { return };
             match crate::load_kit_tracks_spec(rig, KIT, &spec, &dir) {
                 Ok(ids) => {
@@ -420,20 +420,20 @@ impl DrumRigBackend {
     /// channel/bus (and the Master Bus chain to master). Strips match our mixer
     /// by name (Kick In 1, Snare Top, Overheads, Room Far, …).
     fn do_import_mix(&self, kit_index: usize, mix_path: PathBuf) {
-        let mixer = if let Some(m) = std::fs::read_to_string(&mix_path)
+        let Some(mixer) = std::fs::read_to_string(&mix_path)
             .ok()
-            .and_then(|t| crate::cradle::parse_mixer(&t).ok()) { m } else {
+            .and_then(|t| crate::cradle::parse_mixer(&t).ok()) else {
             tracing::error!("mm2 import: read/parse {}", mix_path.display());
             return;
         };
         let path = {
-            let s = self.inner.state.lock().unwrap();
+            let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             s.kits.get(kit_index).map(|k| PathBuf::from(&k.path))
         };
         let Some(path) = path else { return };
         // Ensure audio is open.
         {
-            let mut rig = self.inner.rig.lock().unwrap();
+            let mut rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             if rig.is_none() {
                 match SamplerRig::new() {
                     Ok(r) => {
@@ -449,7 +449,7 @@ impl DrumRigBackend {
         }
         // Load the kit clean, then apply the mix onto it.
         let (piece_ids, pieces) = {
-            let rig = self.inner.rig.lock().unwrap();
+            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             let Some(rig) = rig.as_ref() else { return };
             match crate::load_kit_tracks(rig, KIT, &path) {
                 Ok(ids) => {
@@ -464,7 +464,7 @@ impl DrumRigBackend {
         };
         self.rebuild_mix_state();
         {
-            let rig = self.inner.rig.lock().unwrap();
+            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Some(rig) = rig.as_ref() {
                 self.apply_mix(rig, &mixer);
             }
@@ -495,7 +495,7 @@ impl DrumRigBackend {
         let project = daw.current();
         let mut fx_applied = 0usize;
         let (channels, buses, piece_labels) = {
-            let s = self.inner.state.lock().unwrap();
+            let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             (
                 s.mix.channels.clone(),
                 s.mix.buses.clone(),
@@ -572,7 +572,7 @@ impl DrumRigBackend {
     /// Rebuild the strip model from the freshly loaded kit's tracks.
     fn rebuild_mix_state(&self) {
         let mix = {
-            let rig = self.inner.rig.lock().unwrap();
+            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             let Some(rig) = rig.as_ref() else { return };
             rig.with_kit(KitMix::from_kit)
         };
@@ -592,13 +592,13 @@ impl DrumRigBackend {
         use daw::service::handle::DawHandle as _;
         use daw::service::{RouteLocation, RouteRef, RoutingDirectExt as _, TrackRef};
         let daw = {
-            let rig = self.inner.rig.lock().unwrap();
+            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             let Some(rig) = rig.as_ref() else { return };
             let Some(daw) = rig.daw_handle() else { return };
             daw
         };
         let project = daw.current();
-        let s = self.inner.state.lock().unwrap();
+        let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let mix = &s.mix;
         let vol = |db: f32| f64::from(db_to_linear(db));
         for ch in &mix.channels {
@@ -648,7 +648,7 @@ impl DrumRigBackend {
 
     fn reattach_midi(&self, trigger: signal_rig_host::midi::AttachTrigger) {
         let (port, map) = {
-            let s = self.inner.state.lock().unwrap();
+            let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             (s.midi_port.clone(), s.input_map)
         };
         signal_rig_host::midi::reattach_instrumented(
@@ -670,7 +670,7 @@ impl DrumRigBackend {
                 // shows "no kit". Cloning lets those keep serving during the
                 // attach.
                 let rig = {
-                    let g = self.inner.rig.lock().unwrap();
+                    let g = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                     match g.as_ref() {
                         Some(r) => r.clone(),
                         None => return Ok(None),
@@ -736,7 +736,7 @@ impl DrumRigBackend {
     /// kit's per-piece colours onto it. Safe no-op when no keyboard.
     fn paint_light_guide(&self) {
         let pieces: Vec<(u8, String)> = {
-            let s = self.inner.state.lock().unwrap();
+            let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             s.pieces
                 .iter()
                 .map(|p| (p.note as u8, p.id.clone()))
@@ -839,12 +839,12 @@ impl DrumRig for DrumRigBackend {
 
     fn status(&self) -> DrumStatus {
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-        let s = self.inner.state.lock().unwrap();
+        let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let loaded_kit = s.loaded.and_then(|i| s.kits.get(i)).map(|k| k.name.clone());
         let (mut master_peak, mut voices) = (0.0f32, 0u32);
         let (mut loaded_n, mut total_n) = (0usize, 0usize);
         if running {
-            let rig = self.inner.rig.lock().unwrap();
+            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Some(rig) = rig.as_ref() {
                 // Master ≈ the loudest strip (close mics + buses); the daw
                 // master has no meter cell of its own yet.
@@ -967,7 +967,7 @@ impl DrumRig for DrumRigBackend {
 
     fn similar_pieces(&self, slot_id: String) -> Vec<signal_drums_proto::LibraryPiece> {
         let current = {
-            let s = self.inner.state.lock().unwrap();
+            let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             s.engines
                 .iter()
                 .find(|(id, _)| *id == slot_id)
@@ -1020,7 +1020,7 @@ impl DrumRig for DrumRigBackend {
         // this mix (Metal monster → the Metal Monster kit); "Default" and any
         // unmatched mix keep the current kit (else the first available).
         let kit_index = {
-            let s = self.inner.state.lock().unwrap();
+            let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             // Normalize away punctuation/spacing so "80's Meet Now-ies" (mix)
             // matches "80s Meet Now-ies" (kit).
             let want = norm_name(&name);
@@ -1078,7 +1078,7 @@ impl DrumRig for DrumRigBackend {
 
     fn mixer(&self) -> Vec<MixerStrip> {
         let meters = {
-            let rig = self.inner.rig.lock().unwrap();
+            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             let Some(rig) = rig.as_ref() else {
                 return Vec::new();
             };
@@ -1089,7 +1089,7 @@ impl DrumRig for DrumRigBackend {
                 .cell(idx)
                 .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
         };
-        let s = self.inner.state.lock().unwrap();
+        let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let mix = &s.mix;
         let mut strips = Vec::new();
         // Hierarchy: each piece is a folder-level strip (its fader rides all
@@ -1177,7 +1177,7 @@ impl DrumRig for DrumRigBackend {
 
     fn meters(&self) -> signal_drums_proto::MeterSnapshot {
         let (meters, voices) = {
-            let rig = self.inner.rig.lock().unwrap();
+            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             let Some(rig) = rig.as_ref() else {
                 return Default::default();
             };
@@ -1188,7 +1188,7 @@ impl DrumRig for DrumRigBackend {
                 .cell(idx)
                 .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
         };
-        let s = self.inner.state.lock().unwrap();
+        let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let mix = &s.mix;
         // Positionally aligned with `mixer()`: per piece [piece, channels…],
         // then buses.

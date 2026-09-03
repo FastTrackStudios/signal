@@ -13,7 +13,7 @@
 use realfft::num_complex::Complex;
 use realfft::RealFftPlanner;
 
-/// Partition size in samples. Sets latency (BLOCK / sample_rate) and
+/// Partition size in samples. Sets latency (BLOCK / `sample_rate`) and
 /// per-block FFT size (2 × BLOCK). 512 → ~10.7 ms @ 48 kHz.
 pub const BLOCK: usize = 512;
 /// FFT frame size for overlap-save. Must be 2 × BLOCK.
@@ -24,7 +24,7 @@ pub const SPECTRUM_LEN: usize = FFT_LEN / 2 + 1;
 /// Single-channel pre-FFT'd IR.
 #[derive(Clone)]
 pub struct PreparedIr {
-    /// One `Vec<Complex>` per partition. Length = ceil(ir_len / BLOCK).
+    /// One `Vec<Complex>` per partition. Length = `ceil(ir_len / BLOCK)`.
     pub partitions: Vec<Vec<Complex<f64>>>,
     /// Compensation gain to apply to the IFFT output.
     pub gain: f64,
@@ -34,6 +34,7 @@ pub struct PreparedIr {
 
 impl PreparedIr {
     /// Empty IR — convolver will produce silence.
+    #[must_use]
     pub fn empty() -> Self {
         Self {
             partitions: Vec::new(),
@@ -42,12 +43,14 @@ impl PreparedIr {
         }
     }
 
+    #[must_use]
     pub fn num_partitions(&self) -> usize {
         self.partitions.len()
     }
 
     /// Build a `PreparedIr` from time-domain samples. Allocates and
     /// FFTs every partition — heavy work, meant for a background thread.
+    #[must_use]
     pub fn build(ir: &[f64]) -> Self {
         let mut planner = RealFftPlanner::<f64>::new();
         Self::build_with_planner(ir, &mut planner)
@@ -55,6 +58,10 @@ impl PreparedIr {
 
     /// Same as [`Self::build`] but reuses an existing planner — useful
     /// inside loops or long-lived workers that prepare many IRs.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the FFT computation fails.
     pub fn build_with_planner(ir: &[f64], planner: &mut RealFftPlanner<f64>) -> Self {
         if ir.is_empty() {
             return Self::empty();
@@ -70,7 +77,9 @@ impl PreparedIr {
             let start = p * BLOCK;
             let end = (start + BLOCK).min(ir.len());
 
-            padded.iter_mut().for_each(|x| *x = 0.0);
+            for x in &mut padded {
+                *x = 0.0;
+            }
             // Overlap-save convention: IR data lives in the second half.
             padded[BLOCK..(BLOCK + (end - start))].copy_from_slice(&ir[start..end]);
 
@@ -118,6 +127,7 @@ pub struct PreparedIrPair {
 }
 
 impl PreparedIrPair {
+    #[must_use]
     pub fn empty() -> Self {
         Self {
             left: PreparedIr::empty(),
@@ -133,6 +143,7 @@ impl PreparedIrPair {
     /// Build a stereo prepared IR using a single planner instance.
     /// Slot A, not a reshape, no raw retention — use the field syntax
     /// to override.
+    #[must_use]
     pub fn build(left: &[f64], right: &[f64]) -> Self {
         let mut planner = RealFftPlanner::<f64>::new();
         Self {

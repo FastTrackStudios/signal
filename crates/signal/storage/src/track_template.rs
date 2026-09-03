@@ -130,6 +130,10 @@ pub fn track_templates_root() -> PathBuf {
 ///
 /// # Returns
 /// The path to the written `.RTrackTemplate` file.
+///
+/// # Errors
+///
+/// Returns an I/O error if directory creation, template file write, or sidecar write fails.
 #[expect(clippy::too_many_arguments)]
 pub fn save_track_template(
     preset_name: &str,
@@ -169,6 +173,10 @@ pub fn save_track_template(
 }
 
 /// Save a rack template variation (multi-instrument, under `Racks/`).
+///
+/// # Errors
+///
+/// Returns an I/O error if directory creation, template file write, or sidecar write fails.
 pub fn save_rack_template(
     preset_name: &str,
     variation_name: &str,

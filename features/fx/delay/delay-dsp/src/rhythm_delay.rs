@@ -1,4 +1,4 @@
-//! RhythmDelay — multi-tap rhythm delay with 8 taps at integer multiples.
+//! `RhythmDelay` — multi-tap rhythm delay with 8 taps at integer multiples.
 //!
 //! Each tap reads at 1x, 2x, 3x… 8x the base delay time, with independent
 //! per-tap level control and a decay tilt EQ in the feedback path for tonal
@@ -15,7 +15,7 @@ pub struct RhythmDelay {
     pub time_ms: f64,
     /// Feedback amount (clamped to -1.5..1.5 internally).
     pub feedback: f64,
-    /// Per-tap levels (0.0–1.0). Tap i reads at (i+1) * time_ms.
+    /// Per-tap levels (0.0–1.0). Tap i reads at (i+1) * `time_ms`.
     pub tap_levels: [f64; 8],
     /// High-cut filter frequency in Hz (0 = disabled).
     pub hicut_freq: f64,
@@ -45,6 +45,7 @@ impl RhythmDelay {
     /// 5 seconds * 8 taps = 40 seconds max delay.
     const MAX_DELAY_S: f64 = 40.0;
 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             time_ms: 250.0,
@@ -133,6 +134,7 @@ impl RhythmDelay {
         output
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }

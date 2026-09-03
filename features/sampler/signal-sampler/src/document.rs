@@ -23,7 +23,7 @@
 //! `keyflow-annotate` model — the same implementation keyflow-orchestra's
 //! mirror pass runs (where it is parity-tested against the CSS reference
 //! engine in keyflow's `tests/mirror_parity.rs`). The adapter-level
-//! equivalence of the two consumers is asserted over the whole MusicXML
+//! equivalence of the two consumers is asserted over the whole `MusicXML`
 //! corpus in `tests/annotation_parity.rs`.
 
 use keyflow_annotate::{
@@ -120,8 +120,9 @@ impl Default for TempoPoint {
 /// Seconds from the document epoch (QN 0) to `qn`, integrating the
 /// piecewise-constant tempo map. Before the first point, the first point's
 /// BPM applies; an empty map means 120 BPM.
+#[must_use]
 pub fn qn_to_sec(tempo: &[TempoPoint], qn: f64) -> f64 {
-    let mut bpm = tempo.first().map(|t| t.bpm).unwrap_or(120.0);
+    let mut bpm = tempo.first().map_or(120.0, |t| t.bpm);
     let mut sec = 0.0;
     let mut cur_qn = 0.0;
     for t in tempo {
@@ -138,6 +139,7 @@ pub fn qn_to_sec(tempo: &[TempoPoint], qn: f64) -> f64 {
 }
 
 /// Absolute frame (from the document epoch) for a QN position.
+#[must_use]
 pub fn qn_to_frame(tempo: &[TempoPoint], qn: f64, sample_rate: u32) -> i64 {
     (qn_to_sec(tempo, qn) * sample_rate as f64).round() as i64
 }
@@ -172,16 +174,19 @@ fn splitmix64(mut x: u64) -> u64 {
     z ^ (z >> 31)
 }
 
-/// Number of abstract RR positions the stable hash draws from. The engine
-/// reduces the pinned slot modulo the actual RR-group size at trigger time
+/// Number of abstract RR positions the stable hash draws from.
+///
+/// The engine reduces the pinned slot modulo the actual RR-group size at trigger time
 /// (`select_zone_rr_slot` / `find_layer_zone`), so any group size divides in.
 pub const RR_SLOT_SPACE: u32 = 4096;
 
 /// The document-mode round-robin choice: a pure function of the seed and the
-/// note's identity — **no mutable counter**. Consequences (per the design
-/// doc's "Determinism"): position independence (starting playback at bar 17
+/// note's identity — **no mutable counter**.
+///
+/// Consequences (per the design doc's "Determinism"): position independence (starting playback at bar 17
 /// gives every note the same RR as playing from the top) and edit stability
 /// (inserting a note re-rolls only that note).
+#[must_use]
 pub fn stable_rr_slot(seed: u64, start_qn: f64, pitch: u8, chan: u8, purpose: RrPurpose) -> u32 {
     let mut h = seed;
     for v in [
@@ -198,7 +203,7 @@ pub fn stable_rr_slot(seed: u64, start_qn: f64, pitch: u8, chan: u8, purpose: Rr
 // ── Schedule ──────────────────────────────────────────────────────────────────
 
 /// One engine action in the schedule.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocEvent {
     /// Plain note-on (first-of-phrase sustains, shorts). `lead` is the
     /// pre-roll: wall frames from this trigger to the note's grid tick
@@ -256,9 +261,12 @@ pub enum MarkerKind {
     Release,
 }
 
-/// One typed marker on a document render's timeline: the GUI-renderable
-/// waveform-marker set (note starts, transition starts, arrivals, re-bows,
-/// releases) and the substrate the deterministic timing tests assert on.
+/// One typed marker on a document render's timeline.
+///
+/// The GUI-renderable waveform-marker set (note starts, transition starts,
+/// arrivals, re-bows, releases) and the substrate the deterministic timing
+/// tests assert on.
+///
 /// Built during [`annotate`] (frames are absolute document frames) and
 /// carried through [`Schedule::markers`] → [`DocumentRenderResult::markers`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -273,7 +281,7 @@ pub struct RenderMarker {
 }
 
 /// One scheduled event at an absolute frame from the document epoch.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScheduledEvent {
     pub frame: u64,
     /// Engine mono line ([`LineId`], truncated) this event dispatches to.
@@ -334,6 +342,7 @@ impl Schedule {
     /// legato is replayed from its phrase start (a transition's identity
     /// depends on the line's sounding note, so the chain context must be
     /// rebuilt, not just the straddling voice).
+    #[must_use]
     pub fn reconstruction_start(&self, p: u64) -> u64 {
         let i = self.busy.partition_point(|s| s.0 <= p);
         if i > 0 {
@@ -348,7 +357,9 @@ impl Schedule {
 
 /// Conservative bound (seconds) on how long a note keeps voices alive after
 /// its note-off: release envelope + recorded release-sample tails + legato
-/// fade-outs. Overestimating only widens (merges) activity spans — replay
+/// fade-outs.
+///
+/// Overestimating only widens (merges) activity spans — replay
 /// gets longer but stays exact; underestimating would silently drop a
 /// still-ringing tail from reconstruction. 6 s comfortably exceeds any
 /// release sample in the supported libraries.
@@ -378,8 +389,7 @@ fn kind_for_ks(spec: &LibrarySpec, ks_val: Option<u8>) -> ArticulationKind {
     spec.articulations
         .iter()
         .find(|a| a.id == label || a.label == label)
-        .map(|a| a.kind.clone())
-        .unwrap_or(ArticulationKind::Sustain)
+        .map_or(ArticulationKind::Sustain, |a| a.kind.clone())
 }
 
 /// What the spec says a latched-CC selector code plays. Unmatched code /
@@ -392,8 +402,7 @@ fn kind_for_selector(
     ks_val
         .and_then(|v| sel.artic_for(v))
         .and_then(|id| spec.articulation(id))
-        .map(|a| a.kind.clone())
-        .unwrap_or(ArticulationKind::Sustain)
+        .map_or(ArticulationKind::Sustain, |a| a.kind.clone())
 }
 
 /// The articulation SPEC a CC58 state resolves to, when the value maps to a
@@ -509,12 +518,14 @@ impl ANote {
 }
 
 /// Stage 1 of [`annotate`] on its own: infer each note's articulation state
-/// (CC58 at note-on) and the legato/re-bow edges, per engine line — a thin
-/// grouping adapter over [`keyflow_annotate::annotate_line`] (the ONE shared
+/// (CC58 at note-on) and the legato/re-bow edges, per engine line.
+///
+/// A thin grouping adapter over [`keyflow_annotate::annotate_line`] (the ONE shared
 /// implementation, also consumed by keyflow-orchestra's mirror pass, where
 /// it is parity-tested against the CSS reference engine). `legato_capable`
 /// is `spec.legato_engine.is_some()` in [`annotate`]. The adapter-level
 /// parity with the mirror pass is asserted in `tests/annotation_parity.rs`.
+#[must_use]
 pub fn stage1_annotations(doc: &TrackDocument, legato_capable: bool) -> Vec<NoteAnnotation> {
     stage1_annotations_impl(doc, legato_capable, None, None)
 }
@@ -555,7 +566,7 @@ fn stage1_annotations_impl(
         // Keyswitch state comes from the line's SOURCE channel (every note
         // in a line shares one source channel under both allocators).
         let ch = doc.notes[list[0]].chan;
-        let ks = cc_timeline(&doc.ccs, ch, sel.map(|s| s.cc).unwrap_or(58));
+        let ks = cc_timeline(&doc.ccs, ch, sel.map_or(58, |s| s.cc));
         let line: Vec<LineNote> = list
             .iter()
             .map(|&ni| LineNote {
@@ -624,7 +635,7 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
         .legato_engine
         .as_ref()
         .and_then(|le| le.expressive.clone());
-    let primary = spec.legato_engine.as_ref().and_then(|le| le.primary_mode());
+    let primary = spec.legato_engine.as_ref().and_then(crate::spec::LegatoEngineSpec::primary_mode);
     let ll_range = low_latency
         .as_ref()
         .and_then(|m| m.enabled_cc58_range.as_deref())
@@ -638,13 +649,11 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
         .legato_engine
         .as_ref()
         .and_then(|le| le.portamento.as_ref())
-        .map(|p| p.trigger_vel_max)
-        .unwrap_or(0);
+        .map_or(0, |p| p.trigger_vel_max);
     let short_pre_frames = spec
         .short_note_timing
         .as_ref()
-        .map(|s| ms_to_frames_i64(s.pre_delay_ms, sample_rate))
-        .unwrap_or(0);
+        .map_or(0, |s| ms_to_frames_i64(s.pre_delay_ms, sample_rate));
     let legato_capable = spec.legato_engine.is_some();
 
     // Line allocation FIRST (channel→line identity, or the auto-divisi
@@ -680,7 +689,7 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 Some(sel) => ann[i]
                     .ks_val
                     .is_some_and(|v| selector_is_marcato(spec, sel, v)),
-                None => ann[i].ks_val.map(ks_is_marcato).unwrap_or(false),
+                None => ann[i].ks_val.is_some_and(ks_is_marcato),
             },
         })
         .collect();
@@ -896,7 +905,7 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 } else if n.is_marcato() || (porta_vel_max > 0 && vel <= porta_vel_max) {
                     0
                 } else {
-                    let ioi_frames = prev_start.map(|p| (start - p).max(0)).unwrap_or(0);
+                    let ioi_frames = prev_start.map_or(0, |p| (start - p).max(0));
                     let ioi_ms = crate::engine::frames_to_ms(ioi_frames as u64, sample_rate);
                     // The spec's velocity-zone delay for the mode this note
                     // resolved (Expressive / Low-Latency / flat) — the
@@ -1100,7 +1109,7 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
     // re-triggers. Vec::sort_by is stable → equal keys keep emission order.
     events.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
 
-    let end_frame = events.last().map(|e| e.0).unwrap_or(0);
+    let end_frame = events.last().map_or(0, |e| e.0);
     let max_prefire_lead = events
         .iter()
         .filter_map(|(_, _, _, kind)| match kind {
@@ -1147,11 +1156,14 @@ fn merge_spans(mut spans: Vec<(u64, u64)>) -> Vec<(u64, u64)> {
 
 /// The channel→line allocator (import path): a document whose notes carry
 /// meaningful MIDI channels (e.g. keyflow's divisi export) maps channel N →
-/// engine line N. Lines are first-class engine entities, NOT channels —
+/// engine line N.
+///
+/// Lines are first-class engine entities, NOT channels —
 /// this is merely the first of several allocators in front of the line pool
 /// (lookahead auto-divisi in `annotate` and live greedy auto-divisi assign
 /// [`LineId`]s from note ranking instead; see `docs/plan/document-mode.md`,
 /// "Auto-divisi").
+#[must_use]
 pub fn line_for_chan(chan: u8) -> LineId {
     chan as LineId
 }
@@ -1520,8 +1532,9 @@ fn walk_schedule(
 
 /// Walk a [`Schedule`] through a bank instrument, rendering block-sized
 /// chunks that split at every event's exact frame — events therefore land
-/// sample-accurately regardless of `block_frames`. Round-robin is pinned per
-/// event via the forced-RR path; the engine never consults a mutable counter.
+/// sample-accurately regardless of `block_frames`.
+///
+/// Round-robin is pinned per event via the forced-RR path; the engine never consults a mutable counter.
 pub fn render_schedule(
     bank: &mut crate::bank::SamplerBank,
     id: &str,
@@ -1595,7 +1608,7 @@ pub fn render_schedule_buses(
     let mut chunk: Vec<Vec<f32>> = names.iter().map(|_| Vec::new()).collect();
     let (transitions, reactive_fallbacks, reconstructed_events, emitted_markers) =
         walk_schedule(bank, id, schedule, opts, |bank, frames, discard| {
-            for c in chunk.iter_mut() {
+            for c in &mut chunk {
                 c.clear();
                 c.resize(frames * 2, 0.0);
             }

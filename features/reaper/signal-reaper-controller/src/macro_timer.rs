@@ -366,7 +366,7 @@ fn flush_console_log() {
         return;
     }
 
-    let mut last = LAST_CONSOLE_MSG.lock().unwrap();
+    let mut last = LAST_CONSOLE_MSG.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if msg == last.as_str() {
         return;
     }

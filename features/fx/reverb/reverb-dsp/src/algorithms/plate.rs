@@ -5,10 +5,10 @@
 //!
 //! Full topology:
 //!   Input → Bandwidth LP → 4× Input Diffusion AP
-//!   → Tank A (decay_diffusion_1 AP → delay_4 → damp → ×decay
-//!            → decay_diffusion_2 AP → delay_5 → cross-feed to B)
-//!   → Tank B (decay_diffusion_1 AP → delay_6 → damp → ×decay
-//!            → decay_diffusion_2 AP → delay_7 → cross-feed to A)
+//!   → Tank A (`decay_diffusion_1` AP → `delay_4` → damp → ×decay
+//!            → `decay_diffusion_2` AP → `delay_5` → cross-feed to B)
+//!   → Tank B (`decay_diffusion_1` AP → `delay_6` → damp → ×decay
+//!            → `decay_diffusion_2` AP → `delay_7` → cross-feed to A)
 //!   → 7-tap output per channel from delays AND allpass filters.
 //!
 //! All delay lengths from Dattorro's published values at 29761 Hz
@@ -88,7 +88,7 @@ pub struct Plate {
     /// Input dispersion (96 stages, a = −0.55 ≈ 6 ms LF-vs-HF spread).
     dispersion: Dispersion,
     /// Decoupled low-frequency decay: one-pole crossover per tank with
-    /// its own feedback multiplier (low_decay_mult from Low End).
+    /// its own feedback multiplier (`low_decay_mult` from Low End).
     lf_split_a: Lp1,
     lf_split_b: Lp1,
     low_decay_mult: f64,
@@ -99,6 +99,7 @@ pub struct Plate {
 }
 
 impl Plate {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let s = sample_rate / 29761.0; // Dattorro reference rate
 

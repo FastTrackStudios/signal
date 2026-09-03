@@ -102,6 +102,11 @@ pub fn slugify(s: &str) -> String {
 ///
 /// Copies files preserving subdirectory structure (slugified), then scans
 /// the target directory and merges results into the catalog.
+///
+/// # Errors
+///
+/// Returns `NamError::IoError` if file operations fail or `NamError::ParseError` if
+/// catalog parsing fails.
 pub fn import_directory(
     source_dir: &std::path::Path,
     nam_root: &std::path::Path,
@@ -161,6 +166,11 @@ pub fn import_directory(
 /// The algorithm: walk each category dir, find directories that directly contain
 /// `.nam`/`.wav` files (or whose children like "Amp Only"/"Full Rig" do), and create
 /// one pack per model-level directory.
+///
+/// # Errors
+///
+/// Returns `NamError::IoError` if file operations fail or `NamError::ParseError` if
+/// JSON serialization fails.
 pub fn generate_pack_skeletons(
     source_dir: &std::path::Path,
     packs_output_dir: &std::path::Path,
@@ -421,6 +431,11 @@ pub struct FullRigModel {
 /// files both in the signal-library and in a source captures directory.
 ///
 /// Packs with no resolvable FULL files are omitted.
+///
+/// # Errors
+///
+/// Returns `NamError::IoError` if file I/O operations fail or `NamError::ParseError` if
+/// pack definitions cannot be parsed.
 pub fn full_rig_models_by_pack(
     packs_dir: &std::path::Path,
     search_roots: &[&std::path::Path],
@@ -467,10 +482,7 @@ pub fn full_rig_models_by_pack(
                 continue;
             }
 
-            let abs_path = match filename_index.get(filename) {
-                Some(p) => p,
-                None => continue,
-            };
+            let Some(abs_path) = filename_index.get(filename) else { continue };
 
             // Tone: prefer per-file override, then pack default, then infer from filename
             let tone = file_override
@@ -504,6 +516,11 @@ pub fn full_rig_models_by_pack(
 ///
 /// Similar to `full_rig_models_by_pack` but for drive pedals: includes ALL `.nam`
 /// files (no "FULL" filter) and filters to `PackCategory::Drive`.
+///
+/// # Errors
+///
+/// Returns `NamError::IoError` if file I/O operations fail or `NamError::ParseError` if
+/// pack definitions cannot be parsed.
 pub fn drive_models_by_pack(
     packs_dir: &std::path::Path,
     search_roots: &[&std::path::Path],
@@ -540,10 +557,7 @@ pub fn drive_models_by_pack(
 
         let mut models = Vec::new();
         for (filename, file_override) in &pack.files {
-            let abs_path = match filename_index.get(filename) {
-                Some(p) => p,
-                None => continue,
-            };
+            let Some(abs_path) = filename_index.get(filename) else { continue };
 
             let tone = file_override
                 .tone

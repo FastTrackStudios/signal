@@ -1,9 +1,9 @@
-//! ReverseDelay — input-triggered reversed playback windows.
+//! `ReverseDelay` — input-triggered reversed playback windows.
 //!
 //! Records forward continuously; two alternating grain windows (each
 //! `time_ms` long, half a cycle apart) play the buffer backwards with a
 //! raised-cosine crossfade. The window cycle re-syncs to input onsets —
-//! the TimeLine MX "reverse process is synced to performance" behavior —
+//! the `TimeLine` MX "reverse process is synced to performance" behavior —
 //! so a phrase played after silence reverses from its own start instead
 //! of landing at a random point in a free-running cycle.
 //!
@@ -32,7 +32,7 @@ pub struct ReverseDelay {
     /// Decay EQ tilt (-1.0 = darken repeats, 0 = neutral, +1.0 = brighten).
     pub decay_tilt: f64,
     /// Smear (0.0–1.0): allpass diffusion softening the reversed
-    /// attacks / enhancing the swell (TimeLine "Smear" 0–18).
+    /// attacks / enhancing the swell (`TimeLine` "Smear" 0–18).
     pub smear: f64,
     /// Delay-line modulation LFO rate in Hz.
     pub mod_rate_hz: f64,
@@ -45,7 +45,7 @@ pub struct ReverseDelay {
     diffuser: Diffuser,
     feedback_sample: f64,
     sample_rate: f64,
-    /// Current position within the grain cycle (0..2·grain_samples).
+    /// Current position within the grain cycle (`0..2·grain_samples`).
     grain_pos: usize,
     /// Length of current grain in samples.
     grain_samples: usize,
@@ -71,6 +71,7 @@ impl ReverseDelay {
     /// Full-depth modulation excursion in seconds (≈ ±4 ms).
     const MOD_RANGE_S: f64 = 0.004;
 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             time_ms: 250.0,
@@ -206,7 +207,7 @@ impl ReverseDelay {
 
     /// Read a reversed grain from the delay line.
     ///
-    /// `pos` is the position within the grain cycle (0..2·grain_len).
+    /// `pos` is the position within the grain cycle (`0..2·grain_len`).
     /// The offset advances 2 samples per tick, so the absolute read
     /// position walks backward at −1× through the grain recorded just
     /// before this window started.
@@ -239,6 +240,7 @@ impl ReverseDelay {
         }
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }

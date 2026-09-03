@@ -234,8 +234,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
         NavCategory::Presets => "Scenes",
         NavCategory::Engines => "Layers",
         NavCategory::Layers => "Variants",
-        NavCategory::Modules => "Presets",
-        NavCategory::Blocks => "Presets",
+        NavCategory::Modules | NavCategory::Blocks => "Presets",
     };
 
     let accent = nav_accent(current_nav);

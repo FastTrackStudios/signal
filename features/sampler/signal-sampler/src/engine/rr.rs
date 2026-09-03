@@ -33,6 +33,7 @@ impl Default for RrCounters {
 }
 
 impl RrCounters {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             counters: HashMap::new(),

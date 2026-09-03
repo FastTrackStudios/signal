@@ -13,6 +13,7 @@ pub struct RealFft {
 }
 
 impl RealFft {
+    #[must_use]
     pub fn new(size: usize) -> Self {
         let mut planner = RealFftPlanner::<f32>::new();
         let fft = planner.plan_fft_forward(size);
@@ -26,17 +27,19 @@ impl RealFft {
         }
     }
 
+    #[must_use]
     pub fn size(&self) -> usize {
         self.size
     }
 
     /// Number of half-spectrum bins (`size/2 + 1`).
+    #[must_use]
     pub fn num_bins(&self) -> usize {
         self.size / 2 + 1
     }
 
     /// Transform `input` (length == size, already windowed) and write the
-    /// squared magnitude of each half-spectrum bin into `out` (length == num_bins).
+    /// squared magnitude of each half-spectrum bin into `out` (length == `num_bins`).
     pub fn forward_sqr_mag(&mut self, input: &mut [f32], out: &mut [f32]) {
         debug_assert_eq!(input.len(), self.size);
         debug_assert_eq!(out.len(), self.num_bins());

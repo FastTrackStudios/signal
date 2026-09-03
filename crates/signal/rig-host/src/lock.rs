@@ -4,9 +4,10 @@
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 /// Poison-tolerant locking: a panic in one service call must never take the
-/// rest of the rig down with it (the guarded state is plain data — recovering
-/// the inner value is safe, and far better mid-service than footswitches
-/// going dead).
+/// rest of the rig down with it.
+///
+/// The guarded state is plain data — recovering the inner value is safe, and far
+/// better mid-service than footswitches going dead.
 pub trait LockExt<T> {
     fn lock_ok(&self) -> MutexGuard<'_, T>;
 }

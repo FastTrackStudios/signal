@@ -89,7 +89,7 @@ pub struct RandomState {
 impl RandomState {
     #[must_use] 
     pub fn new(seed: Option<u64>) -> Self {
-        let rng_state = seed.unwrap_or(0x12345678_9ABCDEF0);
+        let rng_state = seed.unwrap_or(0x1234_5678_9ABC_DEF0);
         let mut s = Self {
             current: 0.5,
             target: 0.5,

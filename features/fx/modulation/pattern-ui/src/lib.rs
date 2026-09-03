@@ -10,6 +10,8 @@
 //! Mirrors the `eq-ui` split: interaction math lives here, wasm-clean
 //! and unit-tested; the component stays a thin event shim.
 
+use std::fmt::Write;
+
 use fts_modulation::{CurveType, Pattern, Point};
 
 /// Maps normalized pattern coordinates to a pixel viewBox and back.
@@ -97,9 +99,9 @@ pub fn pattern_paths(
         let px = mapper.x_to_px(x);
         let py = mapper.y_to_px(pattern.get_y(x));
         if i == 0 {
-            stroke.push_str(&format!("M{px:.1} {py:.1}"));
+            let _ = write!(stroke, "M{px:.1} {py:.1}");
         } else {
-            stroke.push_str(&format!(" L{px:.1} {py:.1}"));
+            let _ = write!(stroke, " L{px:.1} {py:.1}");
         }
     }
     let bottom = mapper.y_to_px(0.0);

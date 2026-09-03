@@ -89,7 +89,7 @@ use voice::{DynLayer, FlexEnv, Voice, VoiceKind, VoicePool, VoiceStealPolicy};
 
 /// CC1 gain ramp length (ms). Smooths dynamic crossfade to avoid clicks.
 /// CC-mod smoothing lags DECODED from the CSS group modulators
-/// (GROUP_MODULATORS.md): every CC1/CC11 volume mod carries `lag_ms = 120`,
+/// (`GROUP_MODULATORS.md`): every CC1/CC11 volume mod carries `lag_ms = 120`,
 /// every CC2 (vibrato crossfade) mod `lag_ms = 1000`. These are Kontakt's
 /// per-modulator smoothing — the reason CSS CC sweeps are glassy.
 const CC1_RAMP_MS: u32 = 120;
@@ -109,7 +109,7 @@ const HALF_PEDAL_MAX_RELEASE_MULTIPLIER: f32 = 4.0;
 
 /// Short de-click fade for sample-playback instruments that have explicit
 /// release/noise samples. The tone should stop on key-up; this only avoids a pop.
-/// Damper-engagement time on note-off when a release_artic supplies the
+/// Damper-engagement time on note-off when a `release_artic` supplies the
 /// natural tail (e.g. Keyscape pianos). Long enough that the body fades
 /// naturally — short enough that holding the key is what determines note
 /// length. Real Rhodes dampers ring out over ~50–100 ms.
@@ -329,8 +329,9 @@ pub enum PlayMode {
     Lookahead,
 }
 
-/// Identifies one monophonic legato line inside an engine. Lines are
-/// first-class engine entities — they are NOT MIDI channels. Allocators sit
+/// Identifies one monophonic legato line inside an engine.
+///
+/// Lines are first-class engine entities — they are NOT MIDI channels. Allocators sit
 /// in front of the line pool and decide which line an incoming note belongs
 /// to (see `docs/plan/document-mode.md`, "Auto-divisi"):
 /// - the document scheduler currently maps channel N → line N (import path),
@@ -394,10 +395,10 @@ impl Default for LegatoLine {
     }
 }
 
-/// One legato transition firing, recorded for tests / offline analysis when
-/// the fire log is enabled (see [`SampleEngine::set_legato_fire_log_enabled`]).
-/// `frame` is the engine's running render position ([`SampleEngine::frames_rendered`])
-/// at the moment the transition voice spawned.
+/// One legato transition firing, recorded for tests / offline analysis when the fire log is enabled.
+///
+/// See [`SampleEngine::set_legato_fire_log_enabled`]. `frame` is the engine's running render
+/// position ([`SampleEngine::frames_rendered`]) at the moment the transition voice spawned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LegatoFireEvent {
     pub frame: u64,
@@ -424,9 +425,9 @@ pub struct LegatoFireEvent {
 /// audio thread (the Vec is pre-allocated to this capacity when enabled).
 const LEGATO_FIRE_LOG_CAP: usize = 1024;
 
-/// One PLAYBACK-EMITTED marker: the voice actually played through the
-/// zone's marker position at this output frame — after every start-offset
-/// skip, start hold, and playback-rate scaling. Nothing is estimated; the
+/// One PLAYBACK-EMITTED marker: the voice actually played through the zone's marker position at this output frame.
+///
+/// After every start-offset skip, start hold, and playback-rate scaling. Nothing is estimated; the
 /// emitted time IS what was heard (r[signal.sampling.markers.arrival]).
 /// Collected per block from the voice pool when the log is enabled; the
 /// schedule-derived marker timeline remains available as the INTENDED
@@ -480,7 +481,7 @@ pub struct SampleEngine {
     /// Active microphone position ID (e.g. `"Mix"`, `"Main"`).
     mic: String,
     /// Opt-in single-mic filter for multi-mic zone sets that declare no
-    /// `mics` block (so mic_index folds everything to bus 0). When `Some`,
+    /// `mics` block (so `mic_index` folds everything to bus 0). When `Some`,
     /// only zones whose `mic` matches fire — otherwise every mic in the set
     /// sounds at once (Main + Mix doubling). `None` keeps the default
     /// play-all-mics behaviour used by multi-mic mixing + drum kits.
@@ -609,9 +610,9 @@ pub struct SampleEngine {
     legato_enabled: bool,
     /// True = expressive mode (3 zones, 333/250/100ms), false = low-latency (2 zones, 100/150ms).
     /// What CC58 / keyswitches REQUESTED; [`PlayMode`] decides whether the
-    /// request is honored — StrictLive plays low-latency no matter what.
+    /// request is honored — `StrictLive` plays low-latency no matter what.
     legato_expressive: bool,
-    /// Automatic mode policy — see [`PlayMode`]. Default: StrictLive.
+    /// Automatic mode policy — see [`PlayMode`]. Default: `StrictLive`.
     play_mode: PlayMode,
 
     /// CSS "Releases on/off" (`$4p5kj`, spec §6). Default **off** — a released
@@ -669,7 +670,7 @@ pub struct SampleEngine {
     legato_glide: Option<(f32, usize)>,
     /// CSS `%jcxqm` two-stage transition fade-in `(stage1_run, stage1_denom,
     /// stage2)` in frames — the transition voice EMERGES via the swell, not a
-    /// 25 ms declick (the NVLeg sample has no silent head; it starts ~-16 dB, so
+    /// 25 ms declick (the `NVLeg` sample has no silent head; it starts ~-16 dB, so
     /// a fast declick reads as an artificial onset). Set around the transition
     /// spawn; the `start_hold` provides the silent pre-roll before it.
     transition_fade: Option<(usize, usize, usize)>,
@@ -713,7 +714,7 @@ pub struct SampleEngine {
     trace_enabled: bool,
     /// Pure sample-playback mode: strips the naturalism layers so a held note
     /// is ONE looped sample at a straight gain (no CC1 multi-layer dynamic
-    /// crossfade, no ENV_FLEX amp envelope, no legato −6 dB sustain trim +
+    /// crossfade, no `ENV_FLEX` amp envelope, no legato −6 dB sustain trim +
     /// slow bloom). CC1 still SELECTS the dynamic layer. A clean
     /// Kontakt-CSS-correct baseline to build naturalism back onto. Off by
     /// default (the full engine behaviour).
@@ -724,7 +725,7 @@ pub struct SampleEngine {
     trace: RefCell<RenderTrace>,
     /// Monotonic voice id source for trace correlation.
     next_voice_id: Cell<u64>,
-    /// Trace ids of voices whose VoiceSpawn was recorded and whose VoiceEnd
+    /// Trace ids of voices whose `VoiceSpawn` was recorded and whose `VoiceEnd`
     /// hasn't fired yet (the per-block end sweep drains this).
     traced_alive: RefCell<std::collections::BTreeSet<u64>>,
     /// Scratch for the end sweep (avoids per-block allocation).
@@ -841,8 +842,7 @@ impl SampleEngine {
             .spec
             .performance
             .attack_ms
-            .map(|ms| ms_to_frames(ms, sample_rate))
-            .unwrap_or(0);
+            .map_or(0, |ms| ms_to_frames(ms, sample_rate));
         let cache = if let Some(pack) = patch.pack.clone() {
             SampleCache::with_pack(pack)
         } else {
@@ -1109,7 +1109,7 @@ impl SampleEngine {
         #[cfg(not(target_arch = "wasm32"))]
         let stats = self
             .cache
-            .preload(self.patch.sample_paths().map(|p| p.as_path()));
+            .preload(self.patch.sample_paths().map(std::path::PathBuf::as_path));
         #[cfg(not(target_arch = "wasm32"))]
         tracing::info!(
             "signal-sampler: preloaded {}/{} samples ({:.1} MiB PCM) in {:.2}s",
@@ -1173,7 +1173,7 @@ impl SampleEngine {
     /// index, and every frame past that head decodes an ogg chunk on
     /// whatever thread reads it. That is fine natively (a streamer thread
     /// pool fills chunks behind the audio thread) but fatal in an
-    /// AudioWorklet, where the reader IS the audio thread — so on wasm the
+    /// `AudioWorklet`, where the reader IS the audio thread — so on wasm the
     /// browser rig treats streamed samples as "not resident" and has its
     /// decoder worker replace them with fully decoded PCM.
     pub fn is_sample_resident(&self, path: &std::path::Path) -> bool {
@@ -1225,6 +1225,10 @@ impl SampleEngine {
     /// (budget released) — the decoder-worker seam: the PCM's one long-term
     /// home is the audio-side engine it gets shipped to, so the decoding
     /// instance stays memory-flat.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the sample at `path` cannot be decoded.
     pub fn decode_sample_take(
         &self,
         path: &std::path::Path,
@@ -1355,9 +1359,9 @@ impl SampleEngine {
     /// As the explicit HOST-level override, this also sets the [`PlayMode`]
     /// policy: `expressive = true` ⇒ Lookahead (the caller vouches that
     /// latency is acceptable — document renders and the CSS-parity
-    /// harnesses), `false` ⇒ StrictLive. CC58 / keyswitch "expressive"
+    /// harnesses), `false` ⇒ `StrictLive`. CC58 / keyswitch "expressive"
     /// requests do NOT reach here — they only set the preference flag, which
-    /// StrictLive ignores.
+    /// `StrictLive` ignores.
     pub fn set_legato_mode(&mut self, enabled: bool, expressive: bool) {
         self.legato_enabled = enabled;
         self.legato_expressive = expressive;
@@ -1391,7 +1395,7 @@ impl SampleEngine {
     }
 
     /// Added latency this engine imposes, in frames: 0 in BOTH modes.
-    /// StrictLive plays now; Lookahead anticipates (transitions are prefired
+    /// `StrictLive` plays now; Lookahead anticipates (transitions are prefired
     /// from the schedule) rather than delaying — the tradeoff moves from
     /// latency to transition authenticity, per the design doc.
     pub fn latency_frames(&self) -> usize {
@@ -1604,7 +1608,7 @@ impl SampleEngine {
     /// zeroed here — the caller owns clearing if accumulation isn't
     /// desired. No allocation occurs.
     pub fn render_multi(&mut self, outputs: &mut [Vec<f32>]) {
-        let block_frames = outputs.first().map(|b| b.len() / 2).unwrap_or(0);
+        let block_frames = outputs.first().map_or(0, |b| b.len() / 2);
 
         // Advance every line's legato countdown.
         self.advance_legato_countdowns(block_frames);
@@ -1651,7 +1655,7 @@ impl SampleEngine {
         route_longs: usize,
         route_shorts: usize,
     ) {
-        let block_frames = outputs.first().map(|b| b.len() / 2).unwrap_or(0);
+        let block_frames = outputs.first().map_or(0, |b| b.len() / 2);
         self.advance_legato_countdowns(block_frames);
         self.voices
             .render_matrix(outputs, nmics, [route_longs, route_shorts]);
@@ -1729,13 +1733,10 @@ impl VoicePool {
                 continue;
             }
             match v.kind {
-                VoiceKind::SustainNVLo => v.ramp_gain(nv_lo, ramp_frames),
-                VoiceKind::SustainNVHi => v.ramp_gain(nv_hi, ramp_frames),
+                VoiceKind::SustainNVLo | VoiceKind::SustainLo => v.ramp_gain(nv_lo, ramp_frames),
+                VoiceKind::SustainNVHi | VoiceKind::SustainHi => v.ramp_gain(nv_hi, ramp_frames),
                 VoiceKind::SustainVibLo => v.ramp_gain(vib_lo, ramp_frames),
                 VoiceKind::SustainVibHi => v.ramp_gain(vib_hi, ramp_frames),
-                // Legacy kinds still accepted; treat as NV Lo/Hi.
-                VoiceKind::SustainLo => v.ramp_gain(nv_lo, ramp_frames),
-                VoiceKind::SustainHi => v.ramp_gain(nv_hi, ramp_frames),
                 _ => {}
             }
         }
@@ -1759,6 +1760,7 @@ fn layer_gain(index: usize, lo: usize, hi: usize, lo_g: f32, hi_g: f32) -> f32 {
 
 /// Convert milliseconds to audio frames at the given sample rate.
 #[inline]
+#[must_use]
 pub fn ms_to_frames(ms: u32, sample_rate: u32) -> usize {
     (ms as f64 * sample_rate as f64 / 1000.0).round() as usize
 }
@@ -1766,12 +1768,14 @@ pub fn ms_to_frames(ms: u32, sample_rate: u32) -> usize {
 /// Decibels → linear amplitude gain (`10^(dB/20)`). Used for the data-derived
 /// CSS `change_vol` makeup constants (`$3tsb0`/`$xfnyt`/`$kuqqb`).
 #[inline]
+#[must_use]
 pub fn db_to_gain(db: f32) -> f32 {
     10f32.powf(db / 20.0)
 }
 
 /// Linear amplitude gain → decibels. Inverse of [`db_to_gain`]; `-inf` for 0.
 #[inline]
+#[must_use]
 pub fn gain_to_db(gain: f32) -> f32 {
     if gain <= 0.0 {
         f32::NEG_INFINITY
@@ -1846,6 +1850,7 @@ fn amp_env_for(
 }
 
 /// Frames → milliseconds (the inverse of [`ms_to_frames`]).
+#[must_use]
 pub fn frames_to_ms(frames: u64, sample_rate: u32) -> f32 {
     if sample_rate == 0 {
         return 0.0;
@@ -2043,6 +2048,7 @@ fn steady_loop_region(
 /// (`(v/127)^2`), which approximates the perceptual MIDI velocity curve
 /// without needing a per-library response table.
 #[inline]
+#[must_use]
 pub fn velocity_gain(velocity: u8) -> f32 {
     let v = (velocity as f32 / 127.0).clamp(0.0, 1.0);
     v * v
@@ -2346,6 +2352,7 @@ mod tests;
 /// Specs ship declared-but-empty articulations (Keyscape's C7 lists
 /// `grndpnopdl` with zero zones); starting there means every note sounds as
 /// a release click with no body.
+#[must_use]
 pub fn default_articulation(spec: &crate::spec::LibrarySpec) -> Option<String> {
     // `pdl` is Keyscape's pedal spelling — "ped" alone misses `grndpnopdl`.
     let is_aux = |id: &str| {

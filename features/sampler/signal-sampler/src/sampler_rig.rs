@@ -1,5 +1,7 @@
-//! Live **sample-instrument** rig — the MIDI analog of [`GuitarRig`](crate::rig::GuitarRig),
-//! running signal's [`SampleEngine`]s ON daw's realtime [`AudioEngine`](daw::standalone::audio_engine::AudioEngine).
+//! Live **sample-instrument** rig — the MIDI analog of [`GuitarRig`](crate::rig::GuitarRig).
+//!
+//! Running signal's [`SampleEngine`]s ON daw's realtime
+//! [`AudioEngine`](daw::standalone::audio_engine::AudioEngine).
 //!
 //! [`SamplerRig`] is the daw-backed replacement for the retired `SamplerPlayer`
 //! (`player.rs`, deleted): same load / MIDI / drum-mixer / preload / stats surface,
@@ -188,14 +190,11 @@ impl PluginInstance for BankInstrument {
         let frames = out_l.len().min(out_r.len());
 
         // Never block the audio thread on the control side's bank lock.
-        let mut bank = match self.bank.try_lock() {
-            Ok(b) => b,
-            Err(_) => {
-                self.stats.lock_misses.fetch_add(1, Ordering::Relaxed);
-                out_l[..frames].fill(0.0);
-                out_r[..frames].fill(0.0);
-                return Ok(());
-            }
+        let Ok(mut bank) = self.bank.try_lock() else {
+            self.stats.lock_misses.fetch_add(1, Ordering::Relaxed);
+            out_l[..frames].fill(0.0);
+            out_r[..frames].fill(0.0);
+            return Ok(());
         };
 
         // Apply this block's live / clip MIDI to the bank (channel 0; the
@@ -246,7 +245,7 @@ fn apply_midi(bank: &mut SamplerBank, message: &midicore::MidiEvent) {
             value,
         } => bank.midi_message(channel.index(), 0xB0, controller.get(), value.get()),
         MidiEvent::ChannelPressure { channel, pressure } => {
-            bank.midi_message(channel.index(), 0xD0, pressure.get(), 0)
+            bank.midi_message(channel.index(), 0xD0, pressure.get(), 0);
         }
         MidiEvent::PolyAftertouch {
             channel,
@@ -379,9 +378,11 @@ struct TrackTables {
     buses: HashMap<String, BusTrack>,
 }
 
-/// A live sample-instrument rig backed by daw's [`AudioEngine`](daw::standalone::audio_engine::AudioEngine) — the
-/// daw-native replacement for the retired `SamplerPlayer`. Cheap
-/// to clone; all clones share one audio engine + bank.
+/// A live sample-instrument rig backed by daw's
+/// [`AudioEngine`](daw::standalone::audio_engine::AudioEngine) — the daw-native replacement for
+/// the retired `SamplerPlayer`.
+///
+/// Cheap to clone; all clones share one audio engine + bank.
 #[derive(Clone)]
 pub struct SamplerRig {
     inner: Arc<Inner>,
@@ -392,6 +393,10 @@ impl SamplerRig {
 
     /// Open the system default output device (replaces the retired
     /// `SamplerPlayer::new`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio device cannot be opened.
     pub fn new() -> eyre::Result<Self> {
         Self::open(&AudioIoPrefs {
             sample_rate: 0,
@@ -404,6 +409,10 @@ impl SamplerRig {
     /// cache budget (replaces the retired
     /// `SamplerPlayer::with_device_config_and_cache_budget`).
     /// `device_name` empty / `None` = system default.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio device cannot be opened or initialized.
     pub fn with_device_config_and_cache_budget(
         device_name: Option<&str>,
         sample_rate: Option<u32>,
@@ -421,11 +430,19 @@ impl SamplerRig {
 
     /// Open an output-only sampler project on daw's engine, transport rolling,
     /// carrying an (empty) [`SamplerBank`] on a single bank track.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio engine cannot be initialized.
     pub fn open(prefs: &AudioIoPrefs) -> eyre::Result<Self> {
         Self::open_with_cache_budget(prefs, None)
     }
 
     /// [`open`](Self::open) with an explicit decoded-sample cache budget.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio engine cannot be initialized.
     pub fn open_with_cache_budget(
         prefs: &AudioIoPrefs,
         cache_budget_bytes: Option<usize>,
@@ -484,10 +501,12 @@ impl SamplerRig {
     /// MIDI APIs, then [`render_offline`](Self::render_offline) /
     /// [`render_offline_buses`](Self::render_offline_buses) to pull blocks.
     /// Replaces the retired `SamplerPlayer::new_offline`.
+    #[must_use]
     pub fn new_offline(sample_rate: u32) -> Self {
         Self::new_offline_with_cache_budget(sample_rate, None)
     }
 
+    #[must_use]
     pub fn new_offline_with_cache_budget(
         sample_rate: u32,
         cache_budget_bytes: Option<usize>,
@@ -514,6 +533,7 @@ impl SamplerRig {
     }
 
     /// True if this rig has no audio device (offline mode).
+    #[must_use]
     pub fn is_offline(&self) -> bool {
         self.inner.daw.is_none()
     }
@@ -524,6 +544,9 @@ impl SamplerRig {
 
     // ── Instrument loading (bank-backed; SamplerPlayer-equivalent) ────────────
 
+    /// # Errors
+    ///
+    /// Returns an error if the instrument cannot be loaded or if the bank is poisoned.
     pub fn load_instrument(
         &self,
         id: impl Into<InstrumentId>,
@@ -542,6 +565,10 @@ impl SamplerRig {
     /// config (articulations / keyswitch / CC58 / legato / dynamics) comes from
     /// a separate descriptive spec — required for articulation + keyswitch
     /// switching on Cinematic Studio libraries (zone specs carry no config).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the instrument cannot be loaded or if the bank is poisoned.
     pub fn load_instrument_with_config(
         &self,
         id: impl Into<InstrumentId>,
@@ -558,6 +585,10 @@ impl SamplerRig {
     }
 
     /// Load a `.signalpack`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pack cannot be loaded or if the bank is poisoned.
     pub fn load_pack(&self, id: impl Into<InstrumentId>, pack_path: &Path) -> eyre::Result<()> {
         self.bank()
             .lock()
@@ -566,6 +597,10 @@ impl SamplerRig {
     }
 
     /// Load a `.signalblock`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the block cannot be loaded or if the bank is poisoned.
     pub fn load_block(&self, id: impl Into<InstrumentId>, block_path: &Path) -> eyre::Result<()> {
         self.bank()
             .lock()
@@ -574,6 +609,10 @@ impl SamplerRig {
     }
 
     /// Load a `.signalengine`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the engine cannot be loaded or if the bank is poisoned.
     pub fn load_engine(&self, id: impl Into<InstrumentId>, engine_path: &Path) -> eyre::Result<()> {
         let spec = crate::engine_spec::EngineSpec::from_file(engine_path)?;
         let dir = engine_path.parent().unwrap_or(std::path::Path::new(""));
@@ -585,6 +624,10 @@ impl SamplerRig {
 
     /// Load a `.signalpreset` — returns the per-engine ids registered under
     /// `<id_prefix>:<engine_id>`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the preset cannot be loaded or if the bank is poisoned.
     pub fn load_preset(
         &self,
         id_prefix: &str,
@@ -601,6 +644,10 @@ impl SamplerRig {
     /// Load a preset from an in-memory `PresetSpec` (engine paths resolve
     /// against `preset_dir`; absolute paths pass through). Lets callers swap a
     /// single engine ref and reload — the kit-designer's per-piece swap.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the preset cannot be loaded or if the bank is poisoned.
     pub fn load_preset_spec(
         &self,
         id_prefix: &str,
@@ -614,9 +661,10 @@ impl SamplerRig {
     }
 
     pub fn unload_instrument(&self, id: &str) {
-        match self.bank().lock() {
-            Ok(mut bank) => bank.unload_instrument(id),
-            Err(_) => tracing::warn!("signal-sampler: sampler bank lock poisoned; unload skipped"),
+        if let Ok(mut bank) = self.bank().lock() {
+            bank.unload_instrument(id);
+        } else {
+            tracing::warn!("signal-sampler: sampler bank lock poisoned; unload skipped");
         }
     }
 
@@ -624,7 +672,7 @@ impl SamplerRig {
         match self.bank().lock() {
             Ok(mut bank) => bank.set_midi_channel(id, channel),
             Err(_) => {
-                tracing::warn!("signal-sampler: sampler bank lock poisoned; MIDI channel skipped")
+                tracing::warn!("signal-sampler: sampler bank lock poisoned; MIDI channel skipped");
             }
         }
     }
@@ -635,15 +683,16 @@ impl SamplerRig {
         match self.bank().lock() {
             Ok(mut bank) => bank.set_default_instrument(id),
             Err(_) => {
-                tracing::warn!("signal-sampler: sampler bank lock poisoned; default instr skipped")
+                tracing::warn!("signal-sampler: sampler bank lock poisoned; default instr skipped");
             }
         }
     }
 
     pub fn set_muted(&self, id: &str, muted: bool) {
-        match self.bank().lock() {
-            Ok(mut bank) => bank.set_muted(id, muted),
-            Err(_) => tracing::warn!("signal-sampler: sampler bank lock poisoned; mute skipped"),
+        if let Ok(mut bank) = self.bank().lock() {
+            bank.set_muted(id, muted);
+        } else {
+            tracing::warn!("signal-sampler: sampler bank lock poisoned; mute skipped");
         }
     }
 
@@ -651,9 +700,10 @@ impl SamplerRig {
     /// `None` clears the pin. Without a pin, a multi-articulation zone set fires
     /// every articulation matching the note — pin one to play just sustains.
     pub fn pin_articulation(&self, id: &str, artic: Option<String>) {
-        match self.bank().lock() {
-            Ok(mut bank) => bank.pin_articulation(id, artic),
-            Err(_) => tracing::warn!("signal-sampler: bank lock poisoned; pin skipped"),
+        if let Ok(mut bank) = self.bank().lock() {
+            bank.pin_articulation(id, artic);
+        } else {
+            tracing::warn!("signal-sampler: bank lock poisoned; pin skipped");
         }
     }
 
@@ -665,13 +715,14 @@ impl SamplerRig {
         match self.bank().lock() {
             Ok(mut bank) => bank.set_articulation(id, artic),
             Err(_) => {
-                tracing::warn!("signal-sampler: bank lock poisoned; set_articulation skipped")
+                tracing::warn!("signal-sampler: bank lock poisoned; set_articulation skipped");
             }
         }
     }
 
     /// An instrument's current live articulation — reflects keyswitch / CC58
     /// changes coming from the keyboard, so a UI can display what's selected.
+    #[must_use]
     pub fn articulation(&self, id: &str) -> Option<String> {
         self.bank().lock().ok().and_then(|b| b.articulation(id))
     }
@@ -703,6 +754,7 @@ impl SamplerRig {
     }
 
     /// Clone an instrument's loaded [`LibrarySpec`](crate::spec::LibrarySpec).
+    #[must_use]
     pub fn instrument_spec(&self, id: &str) -> Option<crate::spec::LibrarySpec> {
         self.bank().lock().ok().and_then(|b| b.instrument_spec(id))
     }
@@ -716,7 +768,7 @@ impl SamplerRig {
 
     /// Explicitly set an instrument's play-mode policy — see
     /// [`PlayMode`](crate::engine::PlayMode). Mode selection is normally
-    /// automatic (StrictLive everywhere; the document renderer forces
+    /// automatic (`StrictLive` everywhere; the document renderer forces
     /// Lookahead for its duration); this is the explicit override.
     pub fn set_play_mode(&self, id: &str, mode: crate::engine::PlayMode) {
         if let Ok(mut bank) = self.bank().lock() {
@@ -725,6 +777,7 @@ impl SamplerRig {
     }
 
     /// An instrument's current play-mode policy.
+    #[must_use]
     pub fn play_mode(&self, id: &str) -> Option<crate::engine::PlayMode> {
         self.bank().lock().ok().and_then(|b| b.play_mode(id))
     }
@@ -738,6 +791,7 @@ impl SamplerRig {
     }
 
     /// Recorded legato transition firings for an instrument.
+    #[must_use]
     pub fn legato_fire_log(&self, id: &str) -> Vec<crate::engine::LegatoFireEvent> {
         self.bank()
             .lock()
@@ -764,7 +818,7 @@ impl SamplerRig {
     }
 
     /// Pure sample-playback mode: one looped sample per note at a straight
-    /// gain — no CC1 layer crossfade, ENV_FLEX, or legato trim/bloom. A clean
+    /// gain — no CC1 layer crossfade, `ENV_FLEX`, or legato trim/bloom. A clean
     /// Kontakt-CSS baseline for validating raw sample playback.
     pub fn set_pure_playback(&self, id: &str, on: bool) {
         if let Ok(mut bank) = self.bank().lock() {
@@ -773,6 +827,7 @@ impl SamplerRig {
     }
 
     /// The structured render trace for an instrument (frames are engine-local).
+    #[must_use]
     pub fn render_trace(&self, id: &str) -> crate::engine::RenderTrace {
         self.bank()
             .lock()
@@ -804,6 +859,7 @@ impl SamplerRig {
 
     /// Engine frames rendered so far by an instrument — the clock the fire
     /// log's `frame` field is measured on (tests / offline analysis).
+    #[must_use]
     pub fn engine_frames_rendered(&self, id: &str) -> Option<u64> {
         self.bank()
             .lock()
@@ -814,6 +870,7 @@ impl SamplerRig {
     /// REACTIVE legato-path trigger count since an instrument's fire log was
     /// last enabled — see
     /// [`SampleEngine::reactive_legato_fires`](crate::engine::SampleEngine::reactive_legato_fires).
+    #[must_use]
     pub fn reactive_legato_fires(&self, id: &str) -> u64 {
         self.bank()
             .lock()
@@ -830,6 +887,10 @@ impl SamplerRig {
     /// seed + sample rate ⇒ byte-identical audio (round-robin is pinned per
     /// note from a stable hash of the seed — see `document::stable_rr_slot`).
     /// Only available on an offline rig.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig is not offline, the instrument is not loaded, or rendering fails.
     pub fn render_offline_document(
         &self,
         id: &str,
@@ -867,16 +928,20 @@ impl SamplerRig {
     }
 
     /// Current stem routing (class → bus id).
+    #[must_use]
     pub fn class_routing(&self) -> std::collections::BTreeMap<crate::engine::ArticClass, String> {
         self.inner
             .class_routing
             .lock()
-            .map(|m| m.clone())
-            .unwrap_or_else(|_| default_class_routing())
+            .map_or_else(|_| default_class_routing(), |m| m.clone())
     }
 
     /// [`render_offline_document`](Self::render_offline_document), split into
     /// articulation-class output buses per the routing set with
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig is not offline, the instrument is not loaded, or rendering fails.
     /// [`set_class_bus`](Self::set_class_bus) (stem export: Longs / Shorts).
     /// With the default routing the single `"main"` bus is bit-identical to
     /// the plain document render. Only available on an offline rig.
@@ -908,9 +973,10 @@ impl SamplerRig {
 
     /// Switch an instrument's active microphone position (e.g. `"Mix"`).
     pub fn set_mic(&self, id: &str, mic_id: impl Into<String>) {
-        match self.bank().lock() {
-            Ok(mut bank) => bank.set_mic(id, mic_id),
-            Err(_) => tracing::warn!("signal-sampler: bank lock poisoned; set_mic skipped"),
+        if let Ok(mut bank) = self.bank().lock() {
+            bank.set_mic(id, mic_id);
+        } else {
+            tracing::warn!("signal-sampler: bank lock poisoned; set_mic skipped");
         }
     }
 
@@ -918,9 +984,10 @@ impl SamplerRig {
     /// all. Needed for multi-mic libraries (CSS ships Main + Mix in one zone
     /// set with no `mics` block, so all mics otherwise sound at once).
     pub fn set_solo_mic(&self, id: &str, mic_id: Option<String>) {
-        match self.bank().lock() {
-            Ok(mut bank) => bank.set_solo_mic(id, mic_id),
-            Err(_) => tracing::warn!("signal-sampler: bank lock poisoned; set_solo_mic skipped"),
+        if let Ok(mut bank) = self.bank().lock() {
+            bank.set_solo_mic(id, mic_id);
+        } else {
+            tracing::warn!("signal-sampler: bank lock poisoned; set_solo_mic skipped");
         }
     }
 
@@ -928,6 +995,7 @@ impl SamplerRig {
     /// its current articulation pin + solo mic, so the first hit isn't silent.
     /// Background-warm a playable range at startup, like the guitar rig prewarms
     /// its NAM models. Returns how many samples were decoded.
+    #[must_use]
     pub fn warm_note(&self, id: &str, note: u8) -> PreloadStats {
         match self.bank().lock() {
             Ok(bank) => bank.warm_note(id, note),
@@ -935,6 +1003,9 @@ impl SamplerRig {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the bank is poisoned or the instrument is not loaded.
     pub fn preload_instrument(&self, id: &str) -> eyre::Result<PreloadStats> {
         self.bank()
             .lock()
@@ -948,7 +1019,7 @@ impl SamplerRig {
             Err(_) => {
                 tracing::warn!(
                     "signal-sampler: sampler bank lock poisoned; preload profile skipped"
-                )
+                );
             }
         }
     }
@@ -984,17 +1055,19 @@ impl SamplerRig {
     /// neither can drive a bank of many instruments that must each answer
     /// independently (a pad grid, where every pad is its own instrument).
     pub fn note_on_instrument(&self, id: &str, note: u8, velocity: u8) {
-        match self.bank().lock() {
-            Ok(mut bank) => bank.note_on(id, note, velocity),
-            Err(_) => tracing::warn!("signal-sampler: bank lock poisoned; note_on skipped"),
+        if let Ok(mut bank) = self.bank().lock() {
+            bank.note_on(id, note, velocity);
+        } else {
+            tracing::warn!("signal-sampler: bank lock poisoned; note_on skipped");
         }
     }
 
     /// The [`note_on_instrument`](Self::note_on_instrument) counterpart.
     pub fn note_off_instrument(&self, id: &str, note: u8, velocity: u8) {
-        match self.bank().lock() {
-            Ok(mut bank) => bank.note_off_with_velocity(id, note, velocity),
-            Err(_) => tracing::warn!("signal-sampler: bank lock poisoned; note_off skipped"),
+        if let Ok(mut bank) = self.bank().lock() {
+            bank.note_off_with_velocity(id, note, velocity);
+        } else {
+            tracing::warn!("signal-sampler: bank lock poisoned; note_off skipped");
         }
     }
 
@@ -1053,6 +1126,7 @@ impl SamplerRig {
 
     /// List available hardware MIDI input port names — for a device picker.
     /// All device enumeration lives in `midicore::midir`; signal only forwards.
+    #[must_use]
     pub fn midi_input_ports() -> Vec<String> {
         midicore::pipewire::input_ports()
     }
@@ -1066,6 +1140,10 @@ impl SamplerRig {
     /// logic (enumeration, selection, byte parsing) lives in `midicore`; signal
     /// just wires the source to daw's live-MIDI ring with full fidelity
     /// (channel / velocity / pitch-bend preserved via `push_live_midi`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig is not live (no bank track), or if the MIDI port cannot be opened.
     pub fn attach_midi(
         &self,
         selection: midicore::PortSelector,
@@ -1092,6 +1170,10 @@ impl SamplerRig {
     /// `transform` is shared behind a mutex (the midir sink is `Fn + Clone`),
     /// and runs in the MIDI callback — keep it allocation-light and lock-free
     /// of the audio thread.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig is not live (no bank track), or if the MIDI port cannot be opened.
     pub fn attach_midi_transformed<F>(
         &self,
         selection: midicore::PortSelector,
@@ -1118,16 +1200,19 @@ impl SamplerRig {
 
     /// The live MIDI monitor — a rolling log + total count of messages reaching
     /// the rig, so a UI can confirm MIDI is arriving (and from which device).
+    #[must_use]
     pub fn midi_monitor(&self) -> MidiMonitor {
         self.inner.midi_monitor.clone()
     }
 
     // ── Drum mixer (bank-backed; SamplerPlayer-equivalent) ────────────────────
 
+    #[must_use]
     pub fn drum_mixer_layout(&self, id: &str) -> Option<MixerLayout> {
         self.bank().lock().ok()?.preset_mixer_layout(id)
     }
 
+    #[must_use]
     pub fn drum_mixer_meters(&self, id: &str) -> Option<Arc<crate::mixer::MixerMeters>> {
         self.bank().lock().ok()?.preset_mixer_meters(id)
     }
@@ -1205,15 +1290,17 @@ impl SamplerRig {
 
     // ── Hosted FX plugins (CLAP / VST3) on the bank's drum mixer ──────────────
 
+    /// # Errors
+    ///
+    /// Returns an error if the plugin cannot be loaded or if the bank is poisoned.
     pub fn load_mixer_plugin(
         &self,
         id: &str,
         target: crate::mixer::FxTarget,
         path: impl AsRef<std::path::Path>,
     ) -> Result<Option<usize>, signal_plugin_host::PluginError> {
-        let plugin = match signal_plugin_host::HostedPlugin::load(path)? {
-            Some(p) => p,
-            None => return Ok(None),
+        let Some(plugin) = signal_plugin_host::HostedPlugin::load(path)? else {
+            return Ok(None);
         };
         let mut bank = self.bank().lock().map_err(|_| {
             signal_plugin_host::PluginError::LoadFailed("bank mutex poisoned".into())
@@ -1224,6 +1311,10 @@ impl SamplerRig {
 
     /// Install an already-built `HostedPlugin` (e.g. a built-in signal-fx
     /// processor) into a drum-mixer channel/bus/master FX chain.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bank is poisoned or the plugin cannot be installed.
     pub fn install_mixer_plugin(
         &self,
         id: &str,
@@ -1236,14 +1327,16 @@ impl SamplerRig {
         bank.install_mixer_plugin(id, target, plugin)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the plugin cannot be loaded or if the bank is poisoned.
     pub fn load_preset_master_plugin(
         &self,
         id: &str,
         path: impl AsRef<std::path::Path>,
     ) -> Result<Option<usize>, signal_plugin_host::PluginError> {
-        let plugin = match signal_plugin_host::HostedPlugin::load(path)? {
-            Some(p) => p,
-            None => return Ok(None),
+        let Some(plugin) = signal_plugin_host::HostedPlugin::load(path)? else {
+            return Ok(None);
         };
         let mut bank = self.bank().lock().map_err(|_| {
             signal_plugin_host::PluginError::LoadFailed("bank mutex poisoned".into())
@@ -1289,6 +1382,7 @@ impl SamplerRig {
         }
     }
 
+    #[must_use]
     pub fn mixer_slot_params(
         &self,
         id: &str,
@@ -1301,6 +1395,9 @@ impl SamplerRig {
             .mixer_slot_params(id, target, slot_idx)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the NAM model cannot be loaded or if the bank is poisoned.
     pub fn load_mixer_nam(
         &self,
         id: &str,
@@ -1315,6 +1412,9 @@ impl SamplerRig {
         bank.install_mixer_nam(id, target, &path)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the NAM model cannot be loaded or if the bank is poisoned.
     pub fn load_preset_master_nam(
         &self,
         id: &str,
@@ -1344,6 +1444,7 @@ impl SamplerRig {
     // ── Stats / introspection (bank-backed; SamplerPlayer-equivalent) ─────────
 
     /// `(loaded, total)` background-preload progress for an instrument.
+    #[must_use]
     pub fn preload_progress(&self, id: &str) -> (usize, usize) {
         self.bank()
             .try_lock()
@@ -1351,6 +1452,7 @@ impl SamplerRig {
             .unwrap_or((0, 0))
     }
 
+    #[must_use]
     pub fn active_voices(&self, id: &str) -> usize {
         self.bank()
             .try_lock()
@@ -1358,6 +1460,7 @@ impl SamplerRig {
             .unwrap_or(0)
     }
 
+    #[must_use]
     pub fn stolen_voices(&self, id: &str) -> usize {
         self.bank()
             .try_lock()
@@ -1365,6 +1468,7 @@ impl SamplerRig {
             .unwrap_or(0)
     }
 
+    #[must_use]
     pub fn evict_cache_over_budget(&self) -> EvictStats {
         self.bank()
             .try_lock()
@@ -1381,6 +1485,7 @@ impl SamplerRig {
     /// daw's renderer doesn't surface (stream errors, callback intervals,
     /// MIDI-to-callback latency) stay 0 — the daw engine owns them and they
     /// aren't exposed yet.
+    #[must_use]
     pub fn audio_stats(&self) -> AudioStatsSnapshot {
         let s = &self.inner.stats;
         let mut snap = AudioStatsSnapshot {
@@ -1408,6 +1513,10 @@ impl SamplerRig {
 
     /// Render one offline stereo block. `output` is interleaved L/R and is
     /// cleared before rendering. Only available on an offline rig.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig is not offline or if the bank is poisoned.
     pub fn render_offline(&self, output: &mut [f32]) -> eyre::Result<()> {
         if !self.is_offline() {
             return Err(eyre::eyre!(
@@ -1425,6 +1534,10 @@ impl SamplerRig {
 
     /// Offline render of a loaded preset into per-mic buses, keyed by mic id.
     /// Only available on an offline rig.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig is not offline, if the bank is poisoned, or if no preset is loaded.
     pub fn render_offline_buses(
         &self,
         prefix: &str,
@@ -1510,13 +1623,17 @@ impl SamplerRig {
         tables.instruments.insert(id.clone(), track.clone());
         tables.order.push(id);
         drop(tables);
-        let tables = self.inner.tracks.lock().expect("track table poisoned");
+        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(track)
     }
 
     /// Add a standalone sample instrument on its own daw track (per-track API).
     /// The engine must already be at this rig's [`sample_rate`](Self::sample_rate).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig is offline, if the track table is poisoned, or if the instrument already exists.
     pub fn add_instrument(&self, id: InstrumentId, engine: SampleEngine) -> eyre::Result<()> {
         {
             let tables = self
@@ -1555,7 +1672,7 @@ impl SamplerRig {
         };
         tables.buses.insert(bus_id.to_string(), bus.clone());
         drop(tables);
-        let tables = self.inner.tracks.lock().expect("track table poisoned");
+        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(bus)
     }
@@ -1582,6 +1699,10 @@ impl SamplerRig {
     /// Build a per-track sampler rig from a [`MixerLayout`] + a per-strip
     /// engine map (per-track API). Each close mic → an instrument track direct
     /// to master; each bus mic → an instrument track sending into a shared bus.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio engine cannot be initialized or if track setup fails.
     pub fn from_mixer_layout(
         prefs: &AudioIoPrefs,
         layout: &MixerLayout,
@@ -1667,6 +1788,7 @@ impl SamplerRig {
 
     /// The daw service handle (live mode) — the backend drives strip
     /// fader/mute/solo directly via the `Tracks` service by guid.
+    #[must_use]
     pub fn daw_handle(&self) -> Option<Standalone> {
         self.inner.daw.clone()
     }
@@ -1676,6 +1798,10 @@ impl SamplerRig {
     /// instrument tracks sending into shared bus tracks. Replaces any
     /// previously loaded per-track kit. Returns the piece ids
     /// (`"<prefix>:<engine id>"`), preset order.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig is not live, if the preset cannot be loaded, or if track setup fails.
     pub fn load_kit_tracks(
         &self,
         id_prefix: &str,
@@ -1847,7 +1973,7 @@ impl SamplerRig {
             .name(format!("signal-preload-kit:{kit_label}"))
             .spawn(move || {
                 for (id, cache, paths, _) in preload {
-                    let stats = cache.preload(paths.iter().map(|p| p.as_path()));
+                    let stats = cache.preload(paths.iter().map(std::path::PathBuf::as_path));
                     tracing::debug!(mic = %id, loaded = stats.loaded, skipped = stats.skipped, "kit mic preload done");
                 }
                 tracing::info!(kit = %kit_label, "kit preload complete");
@@ -1870,6 +1996,14 @@ impl SamplerRig {
     }
 
     /// Remove the current per-track kit's tracks (mics + buses), if any.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the track table is poisoned during setup.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the track table mutex is poisoned when resizing meters.
     pub fn unload_kit_tracks(&self) -> eyre::Result<()> {
         let Some(state) = self.inner.kit.lock().ok().and_then(|mut k| k.take()) else {
             return Ok(());
@@ -1900,7 +2034,7 @@ impl SamplerRig {
         }
         // Meter indices are compacted on the next load (resize_meters).
         drop(tables);
-        let tables = self.inner.tracks.lock().expect("track table poisoned");
+        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(())
     }
@@ -1945,7 +2079,7 @@ impl SamplerRig {
         tables.instruments.insert(id.to_string(), track.clone());
         tables.order.push(id.to_string());
         drop(tables);
-        let tables = self.inner.tracks.lock().expect("track table poisoned");
+        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(track)
     }
@@ -1983,6 +2117,7 @@ impl SamplerRig {
     }
 
     /// True when a per-track kit is loaded.
+    #[must_use]
     pub fn kit_active(&self) -> bool {
         self.inner.kit.lock().map(|k| k.is_some()).unwrap_or(false)
     }
@@ -1995,16 +2130,17 @@ impl SamplerRig {
 
     /// The current per-track meter bank (cell indices = the meter indices in
     /// the kit/instrument track tables).
+    #[must_use]
     pub fn meters_bank(&self) -> Arc<Meters> {
         self.inner
             .meters
             .lock()
-            .map(|m| m.clone())
-            .unwrap_or_else(|_| Meters::new(0))
+            .map_or_else(|_| Meters::new(0), |m| m.clone())
     }
 
     /// A kit piece's preload progress `(loaded, total)`, summed over its mic
     /// engines.
+    #[must_use]
     pub fn kit_piece_progress(&self, piece: &str) -> (usize, usize) {
         self.with_kit(|kit| {
             let Some(p) = kit.piece(piece) else {
@@ -2024,6 +2160,7 @@ impl SamplerRig {
     }
 
     /// Active voices across the loaded kit's mic engines.
+    #[must_use]
     pub fn kit_voices(&self) -> usize {
         self.with_kit(|kit| {
             kit.pieces
@@ -2038,6 +2175,10 @@ impl SamplerRig {
     /// Open a hardware MIDI input whose events are transformed then routed
     /// through the loaded kit's dispatch table (per-track kit analog of
     /// [`attach_midi_transformed`](Self::attach_midi_transformed)).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the MIDI port cannot be opened.
     pub fn attach_midi_kit<F>(
         &self,
         selection: midicore::PortSelector,
@@ -2072,11 +2213,13 @@ impl SamplerRig {
 
     // ── Introspection / metering ──────────────────────────────────────────────
 
+    #[must_use]
     pub fn sample_rate(&self) -> u32 {
         self.inner.sample_rate
     }
 
     /// Number of per-track instruments (per-track API).
+    #[must_use]
     pub fn instrument_count(&self) -> usize {
         self.inner
             .tracks
@@ -2086,11 +2229,13 @@ impl SamplerRig {
     }
 
     /// The per-track routing entry for an instrument id (per-track API).
+    #[must_use]
     pub fn instrument(&self, id: &str) -> Option<InstrumentTrack> {
         self.inner.tracks.lock().ok()?.instruments.get(id).cloned()
     }
 
     /// Per-track bus tracks, keyed by bus id (per-track API).
+    #[must_use]
     pub fn buses(&self) -> HashMap<String, BusTrack> {
         self.inner
             .tracks
@@ -2103,11 +2248,11 @@ impl SamplerRig {
         self.inner
             .meters
             .lock()
-            .map(|m| m.clone())
-            .unwrap_or_else(|_| Meters::new(0))
+            .map_or_else(|_| Meters::new(0), |m| m.clone())
     }
 
     /// Per-track output peak (linear) for a per-track instrument `id`.
+    #[must_use]
     pub fn instrument_peak(&self, id: &str) -> f32 {
         let meters = self.meters();
         self.inner
@@ -2116,11 +2261,11 @@ impl SamplerRig {
             .ok()
             .and_then(|t| t.instruments.get(id).map(|i| i.meter_index))
             .and_then(|i| meters.cell(i))
-            .map(|c| c.peak(0).max(c.peak(1)))
-            .unwrap_or(0.0)
+            .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
     }
 
     /// Per-track output peak (linear) for a per-track bus `id`.
+    #[must_use]
     pub fn bus_peak(&self, id: &str) -> f32 {
         let meters = self.meters();
         self.inner
@@ -2129,11 +2274,11 @@ impl SamplerRig {
             .ok()
             .and_then(|t| t.buses.get(id).map(|b| b.meter_index))
             .and_then(|i| meters.cell(i))
-            .map(|c| c.peak(0).max(c.peak(1)))
-            .unwrap_or(0.0)
+            .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
     }
 
     /// Master / overall output peak (linear) — the loudest track cell.
+    #[must_use]
     pub fn output_peak(&self) -> f32 {
         let meters = self.meters();
         let mut pk = 0.0f32;
@@ -2145,6 +2290,7 @@ impl SamplerRig {
         pk
     }
 
+    #[must_use]
     pub fn output_peak_db(&self) -> f64 {
         linear_to_db(self.output_peak())
     }
@@ -2206,7 +2352,7 @@ mod tests {
 
     /// A 2-piece kit (kick, snare), each with a close mic + an Overhead bus mic.
     fn kit_layout() -> MixerLayout {
-        let mics = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let mics = |v: &[&str]| v.iter().map(std::string::ToString::to_string).collect::<Vec<_>>();
         let engine_mics = vec![
             ("kick".to_string(), mics(&["In 1", "Overhead"])),
             ("snare".to_string(), mics(&["In 1", "Overhead"])),
@@ -2325,7 +2471,7 @@ zones (
     /// The pitch wheel bends a SAMPLED voice live: playback rate shifts on
     /// the held note, and returns on wheel-center — the path an Omnisphere
     /// synth preset takes (percussion engines ignore it, tested in
-    /// engine::tests).
+    /// `engine::tests`).
     #[test]
     fn pitch_bend_bends_a_sampled_voice() {
         let dir = std::env::temp_dir().join(format!("signal-bend-{}", std::process::id()));
@@ -2506,7 +2652,7 @@ zones (
 
         let bus_guid = rig.buses()["Overhead"].track_guid.clone();
         let daw = rig.inner.daw.as_ref().unwrap();
-        for (id, t) in rig.inner.tracks.lock().unwrap().instruments.iter() {
+        for (id, t) in &rig.inner.tracks.lock().unwrap().instruments {
             if id.ends_with(":Overhead") {
                 let sends = <Standalone as Routing>::sends(
                     daw,

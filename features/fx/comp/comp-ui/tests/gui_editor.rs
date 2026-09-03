@@ -222,7 +222,7 @@ async fn clicking_a_knob_without_dragging_changes_nothing() -> dioxus_test::Resu
 }
 
 /// THE drag test: press on the Threshold knob, drag 30 px up in steps,
-/// release. Vertical knob drags map up → increase (DragProvider, sensitivity
+/// release. Vertical knob drags map up → increase (`DragProvider`, sensitivity
 /// 150 px per full sweep), so the threshold must rise from its −20 dB default
 /// by 30/150 of the −60..0 range = +12 dB, through recorded host gestures.
 #[tokio::test]
@@ -330,7 +330,7 @@ async fn graph_renders_transfer_curve() -> dioxus_test::Result<()> {
     Ok(())
 }
 
-/// Grab the threshold line (drawn at db_to_y(−20 dB)) and drag it 45 px down.
+/// Grab the threshold line (drawn at `db_to_y(−20 dB)`) and drag it 45 px down.
 /// The threshold must fall to the dB the pointer lands on (−29 dB on the
 /// 60 dB / 300 px scale), through recorded host gestures — and the rendered
 /// transfer-curve path must move with it.

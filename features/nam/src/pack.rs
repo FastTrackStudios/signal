@@ -109,6 +109,11 @@ pub struct FileOverride {
 }
 
 /// Load all pack definitions from a directory.
+///
+/// # Errors
+///
+/// Returns an error if the directory cannot be read or any pack definition
+/// is invalid.
 pub fn load_packs(packs_dir: &Path) -> Result<Vec<PackDefinition>, NamError> {
     let mut packs = Vec::new();
 

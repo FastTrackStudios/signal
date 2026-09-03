@@ -19,6 +19,7 @@ pub struct GainReductionSmoother {
 }
 
 impl GainReductionSmoother {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut s = Self {
             sample_rate,

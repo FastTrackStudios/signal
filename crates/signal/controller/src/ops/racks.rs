@@ -11,10 +11,20 @@ use signal_proto::rack::{Rack, RackId};
 pub struct RackOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> RackOps<S> {
+    /// List all racks.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn list(&self) -> Result<Vec<Rack>, OpsError> {
         self.0.service.list_racks().await.map_err(OpsError::Storage)
     }
 
+    /// Load a rack by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn load(&self, id: impl Into<RackId>) -> Result<Option<Rack>, OpsError> {
         self.0
             .service
@@ -23,6 +33,11 @@ impl<S: SignalApi> RackOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// Save a rack.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn save(&self, rack: Rack) -> Result<Rack, OpsError> {
         self.0
             .service
@@ -32,6 +47,11 @@ impl<S: SignalApi> RackOps<S> {
         Ok(rack)
     }
 
+    /// Delete a rack by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn delete(&self, id: impl Into<RackId>) -> Result<(), OpsError> {
         self.0
             .service

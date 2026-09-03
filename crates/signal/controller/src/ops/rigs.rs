@@ -14,10 +14,20 @@ use signal_proto::{
 pub struct RigOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> RigOps<S> {
+    /// List all rigs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn list(&self) -> Result<Vec<Rig>, OpsError> {
         self.0.service.list_rigs().await.map_err(OpsError::Storage)
     }
 
+    /// Load a rig by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn load(&self, id: impl Into<RigId>) -> Result<Option<Rig>, OpsError> {
         self.0
             .service
@@ -26,6 +36,11 @@ impl<S: SignalApi> RigOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// Create a new rig with the given name and engine IDs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn create(
         &self,
         name: impl Into<String>,
@@ -41,6 +56,11 @@ impl<S: SignalApi> RigOps<S> {
         Ok(rig)
     }
 
+    /// Save a rig.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn save(&self, rig: Rig) -> Result<Rig, OpsError> {
         self.0
             .service
@@ -50,6 +70,11 @@ impl<S: SignalApi> RigOps<S> {
         Ok(rig)
     }
 
+    /// Delete a rig by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn delete(&self, id: impl Into<RigId>) -> Result<(), OpsError> {
         self.0
             .service
@@ -58,6 +83,11 @@ impl<S: SignalApi> RigOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// Load a rig scene variant by rig ID and variant ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn load_variant(
         &self,
         rig_id: impl Into<RigId>,
@@ -70,6 +100,11 @@ impl<S: SignalApi> RigOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// Save a scene within a rig, creating it if it doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn save_scene(
         &self,
         rig_id: impl Into<RigId>,
@@ -87,6 +122,11 @@ impl<S: SignalApi> RigOps<S> {
         Ok(())
     }
 
+    /// Reorder scenes within a rig.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn reorder_scenes(
         &self,
         rig_id: impl Into<RigId>,
@@ -100,6 +140,11 @@ impl<S: SignalApi> RigOps<S> {
         Ok(())
     }
 
+    /// Find all rigs with a given tag.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn by_tag(&self, tag: &str) -> Result<Vec<Rig>, OpsError> {
         let all = self.list().await?;
         Ok(all
@@ -108,10 +153,20 @@ impl<S: SignalApi> RigOps<S> {
             .collect())
     }
 
+    /// Find a rig by name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn find_by_name(&self, name: &str) -> Result<Option<Rig>, OpsError> {
         Ok(self.list().await?.into_iter().find(|r| r.name == name))
     }
 
+    /// Rename a rig.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn rename(
         &self,
         id: impl Into<RigId>,
@@ -125,6 +180,10 @@ impl<S: SignalApi> RigOps<S> {
     }
 
     /// Load a rig, apply a closure to one of its scenes, and save.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn update_scene(
         &self,
         rig_id: impl Into<RigId>,
@@ -143,6 +202,10 @@ impl<S: SignalApi> RigOps<S> {
     }
 
     /// Add a scene to a rig. Returns the updated rig, or `None` if the rig doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn add_scene(
         &self,
         rig_id: impl Into<RigId>,
@@ -158,6 +221,10 @@ impl<S: SignalApi> RigOps<S> {
     }
 
     /// Remove a scene from a rig. Returns the removed scene, or `None` if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn remove_scene(
         &self,
         rig_id: impl Into<RigId>,
@@ -177,6 +244,10 @@ impl<S: SignalApi> RigOps<S> {
     }
 
     /// Duplicate a scene within a rig. Returns the new scene, or `None` if not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn duplicate_scene(
         &self,
         rig_id: impl Into<RigId>,
@@ -201,11 +272,19 @@ impl<S: SignalApi> RigOps<S> {
     }
 
     /// Check if a rig exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn exists(&self, id: impl Into<RigId>) -> Result<bool, OpsError> {
         Ok(self.load(id).await?.is_some())
     }
 
     /// Count all rigs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn count(&self) -> Result<usize, OpsError> {
         Ok(self.list().await?.len())
     }
@@ -213,6 +292,10 @@ impl<S: SignalApi> RigOps<S> {
     // region: --- try_* variants
 
     /// Add a scene, returning an error if the rig doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig is not found or if the storage operation fails.
     pub async fn try_add_scene(
         &self,
         rig_id: impl Into<RigId>,
@@ -231,6 +314,10 @@ impl<S: SignalApi> RigOps<S> {
     }
 
     /// Remove a scene, returning an error if the rig or scene doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig or scene is not found, or if the storage operation fails.
     pub async fn try_remove_scene(
         &self,
         rig_id: impl Into<RigId>,
@@ -257,6 +344,10 @@ impl<S: SignalApi> RigOps<S> {
     }
 
     /// Duplicate a scene, returning an error if the rig or scene doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig or scene is not found, or if the storage operation fails.
     pub async fn try_duplicate_scene(
         &self,
         rig_id: impl Into<RigId>,
@@ -287,6 +378,10 @@ impl<S: SignalApi> RigOps<S> {
     }
 
     /// Save a scene within a rig, returning an error if the rig doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig is not found or if the storage operation fails.
     pub async fn try_save_scene(
         &self,
         rig_id: impl Into<RigId>,
@@ -310,6 +405,10 @@ impl<S: SignalApi> RigOps<S> {
     }
 
     /// Update a scene via closure, returning an error if the rig or scene doesn't exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rig or scene is not found, or if the storage operation fails.
     pub async fn try_update_scene(
         &self,
         rig_id: impl Into<RigId>,

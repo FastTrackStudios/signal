@@ -157,8 +157,9 @@ impl PackEntry {
 }
 
 /// Scan `root` recursively for any Signal loadable file (.signalpack,
-/// .signalengine, .signalpreset, .signalmodule, .signalblock). Returns
-/// `PackEntry` records sorted by path. Errors during individual reads
+/// .signalengine, .signalpreset, .signalmodule, .signalblock).
+///
+/// Returns `PackEntry` records sorted by path. Errors during individual reads
 /// are logged and skipped.
 ///
 /// Renamed conceptually to "loadables" but keeps the name `scan_packs`

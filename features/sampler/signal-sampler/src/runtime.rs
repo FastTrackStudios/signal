@@ -33,12 +33,12 @@ use crate::preset_spec::{PresetSpec, RoutingRule};
 /// stereo output buffer that downstream graph edges read from.
 pub struct LayerRuntime {
     pub spec: EngineLayerSpec,
-    /// Index into the parent engine's mic_scratches (0..mic_count).
+    /// Index into the parent engine's `mic_scratches` (`0..mic_count`).
     pub mic_index: usize,
     pub gain_lin: f32,
     pub pan_l: f32,
     pub pan_r: f32,
-    /// Pre-allocated stereo output buffer (length = block_frames * 2).
+    /// Pre-allocated stereo output buffer (length = `block_frames` * 2).
     pub out_buffer: Vec<f32>,
 }
 
@@ -50,7 +50,7 @@ pub struct PortRuntime {
     pub layer_index: usize,
 }
 
-/// One Engine instance: source SamplerBlock + N Layers + M Ports.
+/// One Engine instance: source `SamplerBlock` + N Layers + M Ports.
 /// Pre-allocates `mic_count` stereo scratch buffers; never allocates in
 /// `render`.
 pub struct EngineInstance {
@@ -67,13 +67,13 @@ pub struct EngineInstance {
     /// this path is offline-only, so growth here never touches the audio
     /// thread. Empty until first use.
     routed_scratches: Vec<Vec<f32>>,
-    /// Cached so we know if block_frames changed between renders.
+    /// Cached so we know if `block_frames` changed between renders.
     block_frames: usize,
     resize_events: u64,
 }
 
 impl EngineInstance {
-    /// Build an EngineInstance from a parsed `EngineSpec`. `block_frames`
+    /// Build an `EngineInstance` from a parsed `EngineSpec`. `block_frames`
     /// is the per-callback frame count used to pre-size all scratch
     /// buffers; if the audio callback uses a different size, render resizes
     /// once as an explicit stream block-size change fallback.
@@ -165,7 +165,7 @@ impl EngineInstance {
         }
     }
 
-    /// Render this engine into its Layer out_buffers.
+    /// Render this engine into its Layer `out_buffers`.
     /// Always writes Layer outputs (zeroed when `muted`) — downstream
     /// edges still read them, just summing zeros.
     pub fn render(&mut self, block_frames: usize) {
@@ -196,7 +196,7 @@ impl EngineInstance {
             }
         }
         for layer in &mut self.layers {
-            for s in layer.out_buffer.iter_mut() {
+            for s in &mut layer.out_buffer {
                 *s = 0.0;
             }
         }
@@ -417,6 +417,7 @@ pub struct ModuleInstance {
 }
 
 impl ModuleInstance {
+    #[must_use]
     pub fn new(spec: ModuleSpec, block_frames: usize) -> Self {
         let input_buffers = (0..spec.inputs.len().max(1))
             .map(|_| vec![0.0; block_frames * 2])
@@ -433,20 +434,23 @@ impl ModuleInstance {
         }
     }
 
+    #[must_use]
     pub fn input_index(&self, port_id: &str) -> Option<usize> {
         self.spec.inputs.iter().position(|p| p.id == port_id)
     }
 
+    #[must_use]
     pub fn output_index(&self, port_id: &str) -> Option<usize> {
         self.spec.outputs.iter().position(|p| p.id == port_id)
     }
 
     pub fn input_buffer_mut(&mut self, idx: usize) -> Option<&mut [f32]> {
-        self.input_buffers.get_mut(idx).map(|v| v.as_mut_slice())
+        self.input_buffers.get_mut(idx).map(Vec::as_mut_slice)
     }
 
+    #[must_use]
     pub fn output_buffer(&self, idx: usize) -> Option<&[f32]> {
-        self.output_buffers.get(idx).map(|v| v.as_slice())
+        self.output_buffers.get(idx).map(Vec::as_slice)
     }
 
     /// Zero input buffers. Call at the start of each audio block before
@@ -506,7 +510,7 @@ impl ModuleInstance {
 /// Resolved buffer reference into the Preset's render graph.
 #[derive(Debug, Clone, Copy)]
 pub enum BufferRef {
-    /// `engines[idx].ports[port_idx]` → reads from a Layer's out_buffer.
+    /// `engines[idx].ports[port_idx]` → reads from a Layer's `out_buffer`.
     EnginePort { engine_idx: usize, port_idx: usize },
     /// `modules[idx].outputs[port_idx]`.
     ModuleOutput { module_idx: usize, port_idx: usize },
@@ -544,7 +548,7 @@ pub struct PresetRuntime {
     /// fallback path); `None` keeps the original graph render.
     pub mixer: Option<crate::mixer::DrumMixer>,
     /// Master FX chain applied to the preset's master sum after the engine /
-    /// edge graph (or after the drum mixer's own master_fx). Used by
+    /// edge graph (or after the drum mixer's own `master_fx`). Used by
     /// non-drum presets (orchestral, synth, …) for a REAPER-style master
     /// FX bus when there is no per-strip mixer. Mutated by the bank API.
     pub master_fx: crate::mixer::FxChain,
@@ -557,6 +561,11 @@ impl PresetRuntime {
     /// Build engines + modules from a preset; resolve all routing strings
     /// to `BufferRef`s. Cycle detection happens here — returns an error
     /// if the module graph contains one.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module graph contains a cycle or if routing
+    /// resolution fails.
     pub fn build(
         preset: &PresetSpec,
         preset_dir: &Path,
@@ -616,25 +625,19 @@ impl PresetRuntime {
         // Resolve routing edges.
         let mut edges: Vec<ResolvedEdge> = Vec::new();
         for rule in &preset.routing {
-            let from = match resolve_source(
+            let Some(from) = resolve_source(
                 &rule.from,
                 &engine_id_to_idx,
                 &module_id_to_idx,
                 &engine_instances,
                 &module_instances,
-            ) {
-                Some(r) => r,
-                None => {
-                    tracing::warn!(from = %rule.from, "routing source unresolved — skipping");
-                    continue;
-                }
+            ) else {
+                tracing::warn!(from = %rule.from, "routing source unresolved — skipping");
+                continue;
             };
-            let to = match resolve_target(&rule.to, &module_id_to_idx, &module_instances) {
-                Some(r) => r,
-                None => {
-                    tracing::warn!(to = %rule.to, "routing target unresolved — skipping");
-                    continue;
-                }
+            let Some(to) = resolve_target(&rule.to, &module_id_to_idx, &module_instances) else {
+                tracing::warn!(to = %rule.to, "routing target unresolved — skipping");
+                continue;
             };
             edges.push(ResolvedEdge {
                 from,
@@ -716,6 +719,10 @@ impl PresetRuntime {
     /// Install a hosted plugin in the preset's master FX chain (the chain
     /// applied after engine/edge render or after the drum mixer's master).
     /// Returns the new slot index.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin preparation fails.
     pub fn install_master_plugin(
         &mut self,
         plugin: signal_plugin_host::HostedPlugin,
@@ -732,6 +739,10 @@ impl PresetRuntime {
     }
 
     /// Install a NAM model on the preset's master FX chain.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the NAM model fails to load.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn install_master_nam(
         &mut self,
@@ -818,12 +829,11 @@ impl PresetRuntime {
         for &mod_idx in &self.module_order {
             // Sum every edge targeting this module's inputs.
             for edge in &self.edges {
-                let (target_mod_idx, target_port_idx) = match edge.to {
-                    BufferRef::ModuleInput {
-                        module_idx,
-                        port_idx,
-                    } => (module_idx, port_idx),
-                    _ => continue,
+                let BufferRef::ModuleInput {
+                    module_idx: target_mod_idx,
+                    port_idx: target_port_idx,
+                } = edge.to else {
+                    continue;
                 };
                 if target_mod_idx != mod_idx {
                     continue;
@@ -962,9 +972,9 @@ impl PresetRuntime {
         // fader multiplies the channel gain (uniform per-drum level).
         for (ci, ch) in channels.iter_mut().enumerate() {
             let piece = pieces.get(ch.engine_idx);
-            let p_muted = piece.map(|p| p.muted).unwrap_or(false);
-            let p_soloed = piece.map(|p| p.soloed).unwrap_or(false);
-            let p_gain = piece.map(|p| p.gain_lin).unwrap_or(1.0);
+            let p_muted = piece.is_some_and(|p| p.muted);
+            let p_soloed = piece.is_some_and(|p| p.soloed);
+            let p_gain = piece.map_or(1.0, |p| p.gain_lin);
             let active = !ch.muted && !p_muted && (!any_solo || ch.soloed || p_soloed);
             let mut peak = 0.0f32;
             if active {
@@ -1004,11 +1014,11 @@ impl PresetRuntime {
         // Bus-mic sends → bus accumulators. A send routes if its own send or
         // its target bus is soloed (so bus solo is audible).
         for (si, snd) in sends.iter().enumerate() {
-            let bus_soloed = buses.get(snd.bus_idx).map(|b| b.soloed).unwrap_or(false);
+            let bus_soloed = buses.get(snd.bus_idx).is_some_and(|b| b.soloed);
             let piece = pieces.get(snd.engine_idx);
-            let p_muted = piece.map(|p| p.muted).unwrap_or(false);
-            let p_soloed = piece.map(|p| p.soloed).unwrap_or(false);
-            let p_gain = piece.map(|p| p.gain_lin).unwrap_or(1.0);
+            let p_muted = piece.is_some_and(|p| p.muted);
+            let p_soloed = piece.is_some_and(|p| p.soloed);
+            let p_gain = piece.map_or(1.0, |p| p.gain_lin);
             let active =
                 !snd.muted && !p_muted && (!any_solo || snd.soloed || p_soloed || bus_soloed);
             let mut peak = 0.0f32;
@@ -1047,7 +1057,7 @@ impl PresetRuntime {
             let pulled = bus.soloed
                 || sends.iter().any(|s| {
                     s.bus_idx == bi
-                        && (s.soloed || pieces.get(s.engine_idx).map(|p| p.soloed).unwrap_or(false))
+                        && (s.soloed || pieces.get(s.engine_idx).is_some_and(|p| p.soloed))
                 });
             let active = !bus.muted && (!any_solo || pulled);
             let mut peak = 0.0f32;
@@ -1102,6 +1112,7 @@ impl PresetRuntime {
     }
 
     /// The drum mixer, if this preset uses send-based mic routing.
+    #[must_use]
     pub fn mixer(&self) -> Option<&crate::mixer::DrumMixer> {
         self.mixer.as_ref()
     }
@@ -1130,6 +1141,7 @@ impl PresetRuntime {
             .sum()
     }
 
+    #[must_use]
     pub fn evict_cache_until_under_budget(&self, budget_bytes: usize) -> EvictStats {
         let mut stats = EvictStats::default();
         for engine in &self.engines {

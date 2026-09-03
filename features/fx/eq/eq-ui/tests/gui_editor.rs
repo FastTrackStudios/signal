@@ -1,6 +1,6 @@
 //! Behavioral tests for the REAL FTS-EQ plugin editor UI.
 //!
-//! Unlike tests/gui_headless.rs (a synthetic component around the curve
+//! Unlike `tests/gui_headless.rs` (a synthetic component around the curve
 //! generators), these mount `eq_ui::control_view::App` — the exact Dioxus
 //! surface the CLAP/VST3 plugin embeds — on the vendored dioxus-test harness
 //! (headless Blitz DOM, no GPU, no window) and drive it with real hit-tested
@@ -25,7 +25,7 @@
 //!   an `<object>` node (no SVG, no wgpu canvas in this path). Headless, the
 //!   widget's `paint()` never runs — which is exactly why this works without
 //!   a GPU — and `EqGraph` falls back to its fixed 800×350 viewBox for
-//!   hit-testing (`graph_width`/`graph_height` fallback in eq_graph.rs). The
+//!   hit-testing (`graph_width`/`graph_height` fallback in `eq_graph.rs`). The
 //!   tests reuse the same `GraphMapper` with those dimensions to compute
 //!   where band nodes live on screen.
 //! - The spectrum analyzer engine (`EqUiState::analyzer`) is pure CPU math
@@ -118,7 +118,7 @@ mod support {
 
     /// Root component: the real editor `App`, plus its stylesheets re-hosted
     /// as body `<style>` elements (see module docs — `document::Style` head
-    /// elements are dropped by the headless harness's NoOpDocument fallback).
+    /// elements are dropped by the headless harness's `NoOpDocument` fallback).
     #[component]
     pub fn Harness() -> Element {
         rsx! {
@@ -247,18 +247,17 @@ mod support {
                 .immediately()
                 .into_iter()
                 .find(|e| e.inner_html().trim() == label);
-            match found {
-                Some(e) => e,
-                None => {
-                    let labels: Vec<String> = self
-                        .tester
-                        .query_all(sel.as_str())
-                        .immediately()
-                        .into_iter()
-                        .map(|e| e.inner_html().trim().to_string())
-                        .collect();
-                    panic!("no {label:?} control in the band panel; found {labels:?}");
-                }
+            if let Some(e) = found {
+                e
+            } else {
+                let labels: Vec<String> = self
+                    .tester
+                    .query_all(sel.as_str())
+                    .immediately()
+                    .into_iter()
+                    .map(|e| e.inner_html().trim().to_string())
+                    .collect();
+                panic!("no {label:?} control in the band panel; found {labels:?}");
             }
         }
 
@@ -294,9 +293,9 @@ use support::{mount, ptr_key, Gesture};
 // ─────────────────────────────────────────────────────────────────────────
 
 /// The graph-only editor mounts headless: the graph widget node has real
-/// (non-collapsed) layout and the EqGraph subtree rendered its band name
+/// (non-collapsed) layout and the `EqGraph` subtree rendered its band name
 /// labels. The header / inspector / bottom bar are parked behind
-/// `SHOW_CHROME = false` in control_view.rs and must NOT render.
+/// `SHOW_CHROME = false` in `control_view.rs` and must NOT render.
 #[tokio::test]
 async fn editor_mounts_headless_graph_only() -> dioxus_test::Result<()> {
     let fx = mount();

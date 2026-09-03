@@ -27,6 +27,7 @@ pub fn pos_to_db(pos: f32) -> f32 {
 }
 
 /// Format a fader value the way a console does.
+#[must_use]
 pub fn fmt_db(db: f32) -> String {
     if db <= MIN_DB {
         "−∞".into()

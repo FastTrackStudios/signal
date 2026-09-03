@@ -25,9 +25,10 @@ use signal_plugin_host::{
 pub use signal_proto::block_kind::SoundsourceKind;
 
 /// A sound **generator** — turns note/param events into audio, ignoring audio
-/// input (the distinction from a *processor*). A refinement of the render
-/// tree's general leaf, so a `Soundsource` adapts into the graph with no new
-/// leaf machinery.
+/// input (the distinction from a *processor*).
+///
+/// A refinement of the render tree's general leaf, so a `Soundsource` adapts
+/// into the graph with no new leaf machinery.
 ///
 /// Contract (shared with the processing-core rules): `Send`; allocate in
 /// [`prepare`](Soundsource::prepare); no heap on the hot path; `render` never
@@ -118,9 +119,11 @@ pub trait Soundsource: Send {
 
 /// **The one generic adapter** from [`Soundsource`] to the render tree's
 /// [`PluginInstance`] leaf — every generator drops into `node_render`
-/// through this, with no per-type shims. `process_block` → `render`,
-/// `prepare` → `prepare`, `params`/`param_value` → `params`, the param
-/// setters → `set_param`, `deactivate` → [`reset`](Soundsource::reset).
+/// through this, with no per-type shims.
+///
+/// Method mappings: `process_block` → `render`, `prepare` → `prepare`,
+/// `params`/`param_value` → `params`, the param setters → `set_param`,
+/// `deactivate` → [`reset`](Soundsource::reset).
 ///
 /// Notes still flow through `events.midi`: `render` forwards the block's
 /// events, and the wrapped source (oscillator / wavetable / sampler) reads
@@ -142,6 +145,7 @@ impl SoundsourceLeaf {
     }
 
     /// Wrap an already-boxed generator.
+    #[must_use]
     pub fn from_boxed(source: Box<dyn Soundsource>) -> Self {
         Self {
             source,
@@ -150,11 +154,13 @@ impl SoundsourceLeaf {
     }
 
     /// Which kind of generator this leaf carries.
+    #[must_use]
     pub fn kind(&self) -> SoundsourceKind {
         self.source.kind()
     }
 
     /// The wrapped generator.
+    #[must_use]
     pub fn source(&self) -> &dyn Soundsource {
         self.source.as_ref()
     }

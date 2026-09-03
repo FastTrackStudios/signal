@@ -1,7 +1,8 @@
 //! The watch remote's wire DTOs — a tiny JSON projection of
-//! [`PerformanceModel`] served by the engine's
-//! `/watch/v1` HTTP+SSE bridge (watchOS can't speak vox over WebSocket;
-//! Apple TN3135 forbids it outside audio-streaming sessions).
+//! [`PerformanceModel`] served by the engine's `/watch/v1` HTTP+SSE bridge.
+//!
+//! watchOS can't speak vox over WebSocket; Apple TN3135 forbids it outside
+//! audio-streaming sessions.
 //!
 //! These shapes are the source of truth for the Swift side: the
 //! `gen_watch_swift` example reflects them through facet and emits the

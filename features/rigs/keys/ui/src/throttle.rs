@@ -49,14 +49,13 @@ impl Throttled {
             loop {
                 architect::platform::sleep(Duration::from_millis(TICK_MS)).await;
                 let next = { me.pending.clone().write().take() };
-                match next {
-                    Some(v) => me.sink.call(v),
-                    None => {
-                        // Nothing arrived this tick: the drag has stopped, so
-                        // stop ticking rather than spinning behind it.
-                        me.inflight.clone().set(false);
-                        break;
-                    }
+                if let Some(v) = next {
+                    me.sink.call(v);
+                } else {
+                    // Nothing arrived this tick: the drag has stopped, so
+                    // stop ticking rather than spinning behind it.
+                    me.inflight.clone().set(false);
+                    break;
                 }
             }
         });

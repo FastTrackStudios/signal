@@ -5,6 +5,11 @@ use std::path::{Path, PathBuf};
 ///
 /// Looks up the entry in the catalog, combines its `relative_path` with the
 /// provided `nam_root` base directory to produce an absolute path.
+///
+/// # Errors
+///
+/// Returns an error if the hash is not found in the catalog or if the
+/// resolved file does not exist.
 pub fn resolve_path(
     catalog: &NamCatalog,
     hash: &str,
@@ -28,6 +33,10 @@ pub fn resolve_path(
 
 /// Resolve a content hash to a path without checking existence.
 /// Useful when constructing paths for VST chunk rewriting on a different machine.
+///
+/// # Errors
+///
+/// Returns an error if the hash is not found in the catalog.
 pub fn resolve_path_unchecked(
     catalog: &NamCatalog,
     hash: &str,

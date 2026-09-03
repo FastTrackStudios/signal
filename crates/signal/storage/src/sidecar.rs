@@ -7,6 +7,7 @@
 //! Files without sidecars are auto-indexed from their path: folder name → category,
 //! file stem → display name, path hash → stable ID.
 
+use std::fmt::Write;
 use std::path::Path;
 
 use facet::Facet;
@@ -105,6 +106,10 @@ pub fn read_sidecar(preset_path: &Path) -> Option<SignalSidecar> {
 }
 
 /// Write a `.signal.styx` sidecar file alongside a REAPER preset file.
+///
+/// # Errors
+///
+/// Returns an I/O error if the file cannot be written.
 pub fn write_sidecar(preset_path: &Path, sidecar: &SignalSidecar) -> std::io::Result<()> {
     let path = sidecar_path(preset_path);
     let content = render_sidecar_styx(sidecar);
@@ -119,13 +124,13 @@ pub fn write_sidecar(preset_path: &Path, sidecar: &SignalSidecar) -> std::io::Re
 pub fn render_sidecar_styx(s: &SignalSidecar) -> String {
     let mut out = String::new();
 
-    out.push_str(&format!("version {}\n", s.version));
-    out.push_str(&format!("id \"{}\"\n", s.id));
+    let _ = writeln!(out, "version {}", s.version);
+    let _ = writeln!(out, "id \"{}\"", s.id);
 
     // Render kind as a styx tag — PascalCase to match Facet enum variant names
     match &s.kind {
         PresetKind::Block { block_type } => {
-            out.push_str(&format!("kind @Block{{block_type {block_type}}}\n"));
+            let _ = writeln!(out, "kind @Block{{block_type {block_type}}}");
         }
         PresetKind::Module => out.push_str("kind @Module@\n"),
         PresetKind::Layer => out.push_str("kind @Layer@\n"),
@@ -138,22 +143,20 @@ pub fn render_sidecar_styx(s: &SignalSidecar) -> String {
 
     if !s.tags.is_empty() {
         let tags: Vec<_> = s.tags.iter().map(|t| quote_if_needed(t)).collect();
-        out.push_str(&format!("tags ({})\n", tags.join(" ")));
+        let _ = writeln!(out, "tags ({})", tags.join(" "));
     }
 
     if let Some(desc) = &s.description {
-        out.push_str(&format!("description \"{}\"\n", desc.replace('"', "\\\"")));
+        let _ = writeln!(out, "description \"{}\"", desc.replace('"', "\\\""));
     }
 
     if !s.parameters.is_empty() {
         out.push_str("parameters (\n");
         for p in &s.parameters {
-            out.push_str(&format!(
-                "  {{id {}, name {}, value {}}}\n",
+            let _ = writeln!(out, "  {{id {}, name {}, value {}}}",
                 quote_if_needed(&p.id),
                 quote_if_needed(&p.name),
-                p.value
-            ));
+                p.value);
         }
         out.push_str(")\n");
     }

@@ -129,7 +129,7 @@ fn enumerate(plugin: &mut HostedPlugin, param_name: &str) {
     let mut scratch = vec![0.0f32; BLOCK * 2];
     let mut probe = |plugin: &mut HostedPlugin, v: f64| -> Option<String> {
         plugin.set_param(info.id, v);
-        scratch.iter_mut().for_each(|s| *s = 0.0);
+        scratch.fill(0.0);
         plugin.process_interleaved(&mut scratch, &[], &[]).ok()?;
         let current = plugin.param_value(info.id).unwrap_or(v);
         plugin.value_to_text(info.id, current)
@@ -212,7 +212,7 @@ fn render_reference(plugin: &mut HostedPlugin, frames: usize) -> Vec<f32> {
 
     let mut warm = vec![0.0f32; BLOCK * 2];
     for _ in 0..WARMUP_BLOCKS {
-        warm.iter_mut().for_each(|s| *s = 0.0);
+        warm.fill(0.0);
         if plugin.process_interleaved(&mut warm, &[], &[]).is_err() {
             break;
         }
@@ -417,7 +417,6 @@ fn run_comparison(
 
     let reference_ir = match (&cached, reference) {
         // A cached render is already whatever length it was captured at.
-        (Some(_), _) => probe_ir,
         (None, Some(plugin)) if frames > probe_frames => render_reference(plugin, frames),
         _ => probe_ir,
     };

@@ -1,6 +1,6 @@
-//! SpectralDelay — granular ambient delay.
+//! `SpectralDelay` — granular ambient delay.
 //!
-//! TimeLine MX "Spectral" machine parity: the wet path is a granular
+//! `TimeLine` MX "Spectral" machine parity: the wet path is a granular
 //! cloud read from the delay buffer. Grains spawn at a configurable
 //! density (free-running Hz or synced to a fraction of the delay time),
 //! can be time-stretched (slower read speed), and blend in octave-up
@@ -34,7 +34,7 @@ use audiocore_dsp::smoothing::ParamSmoother;
 // exhausted voices skip spawns and the cloud thins audibly.
 const NUM_GRAINS: usize = 16;
 
-/// Grain envelope shape (TimeLine MX Spectral "Shape").
+/// Grain envelope shape (`TimeLine` MX Spectral "Shape").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GrainShape {
     /// Slow attack, slow release (Hann-like).
@@ -50,7 +50,7 @@ pub enum GrainShape {
     Bounce,
 }
 
-/// Grain playback direction (TimeLine MX Spectral "Direction").
+/// Grain playback direction (`TimeLine` MX Spectral "Direction").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GrainDirection {
     #[default]
@@ -157,11 +157,11 @@ impl CloudsDiffuser {
 /// Grain-spawn density mode.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DensityMode {
-    /// Grains per second. TimeLine's free mode spans 6–250 ms per
+    /// Grains per second. `TimeLine`'s free mode spans 6–250 ms per
     /// grain, i.e. 4–166.7 Hz (clamped).
     FreeHz(f64),
     /// One grain per `fraction` of the delay time (1.0 = every full
-    /// delay period, 1/32 = 32 grains per period). TimeLine's synced
+    /// delay period, 1/32 = 32 grains per period). `TimeLine`'s synced
     /// density 1/1–1/32.
     Synced(f64),
 }
@@ -223,6 +223,7 @@ impl SpectralDelay {
     pub const MAX_TIME_MS: f64 = 2500.0;
     const MAX_DELAY_S: f64 = 3.0;
 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             time_ms: 500.0,
@@ -292,9 +293,8 @@ impl SpectralDelay {
     }
 
     fn spawn_grain(&mut self, delay_samples: f64, interval: f64) {
-        let slot = match self.grains.iter().position(|g| !g.active) {
-            Some(i) => i,
-            None => return, // all voices busy — skip, no stealing clicks
+        let Some(slot) = self.grains.iter().position(|g| !g.active) else {
+            return; // all voices busy — skip, no stealing clicks
         };
 
         let rand01 = |rng: &mut XorShift32| (rng.next_bipolar() + 1.0) * 0.5;
@@ -532,6 +532,7 @@ impl SpectralDelay {
         (wet_l, wet_r)
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
@@ -701,7 +702,7 @@ mod tests {
         d.update(SR);
 
         let mut out = Vec::with_capacity(96000);
-        for i in 0..144000 {
+        for i in 0..144_000 {
             let input = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
             let v = d.tick(input, 0);
             if i >= 48000 {

@@ -44,6 +44,10 @@ const SCENES: &[(&str, &[&str])] = &[
 ];
 
 /// Create the All-Around demo profile in the current REAPER project.
+///
+/// # Errors
+///
+/// Returns an error if the current project cannot be retrieved, if any track or FX operations fail.
 pub async fn load_demo_profile(daw: &Daw) -> Result<()> {
     let project = daw.current_project().await.wrap_err("no current project")?;
     let tracks = project.tracks();
@@ -53,7 +57,7 @@ pub async fn load_demo_profile(daw: &Daw) -> Result<()> {
     // ── Profile folder ───────────────────────────────────────────────
     let profile = tracks.add("Guitar Profile: All-Around", None).await?;
     profile.set_folder_depth(1).await?;
-    profile.set_color(0xF97316).await?; // orange
+    profile.set_color(0x00F9_7316).await?; // orange
 
     // FTS Signal Controller on the profile folder (macro host)
     profile
@@ -66,7 +70,7 @@ pub async fn load_demo_profile(daw: &Daw) -> Result<()> {
     // Receives live guitar. Parent send disabled — routes audio via
     // sends to each scene's input track.
     let profile_input = tracks.add("Guitar Input", None).await?;
-    profile_input.set_color(0x6B7280).await?;
+    profile_input.set_color(0x006B_7280).await?;
     profile_input.set_parent_send(false).await?;
 
     // ── Build each scene ─────────────────────────────────────────────
@@ -90,7 +94,7 @@ pub async fn load_demo_profile(daw: &Daw) -> Result<()> {
         let scene_input = tracks
             .add(&format!("Guitar Input: {scene_name}"), None)
             .await?;
-        scene_input.set_color(0x6B7280).await?;
+        scene_input.set_color(0x006B_7280).await?;
         scene_input.set_parent_send(false).await?;
 
         // Layer track
@@ -142,6 +146,10 @@ pub async fn load_demo_profile(daw: &Daw) -> Result<()> {
 ///   modulation → `ReaDelay` (short delay as chorus)
 ///   time       → `ReaDelay` (delay) + `ReaDelay` (reverb)
 ///   master     → `ReaComp` (limiter) + `ReaEQ` (final shape)
+///
+/// # Errors
+///
+/// Returns an error if any FX or parameter operation fails.
 pub async fn add_layer_fx(layer: &TrackHandle, module_types: &[&str]) -> Result<()> {
     let fx = layer.fx_chain();
 
@@ -230,28 +238,28 @@ pub async fn add_layer_fx(layer: &TrackHandle, module_types: &[&str]) -> Result<
 }
 
 /// Pick a color for each scene/section to visually distinguish them in REAPER.
-#[must_use] 
+#[must_use]
 pub fn scene_color(name: &str) -> u32 {
     match name {
         // Profile scenes
-        "Clean" => 0x22C55E,   // green
-        "Crunch" => 0xEAB308,  // yellow
-        "Drive" => 0xEF4444,   // red
-        "Lead" => 0xF97316,    // orange
-        "Funk" => 0x8B5CF6,    // violet
-        "Ambient" => 0x06B6D4, // cyan
-        "Q-Tron" => 0xEC4899,  // pink
-        "Solo" => 0x3B82F6,    // blue
+        "Clean" => 0x0022_C55E,   // green
+        "Crunch" => 0x00EA_B308,  // yellow
+        "Drive" => 0x00EF_4444,   // red
+        "Lead" => 0x00F9_7316,    // orange
+        "Funk" => 0x008B_5CF6,    // violet
+        "Ambient" => 0x0006_B6D4, // cyan
+        "Q-Tron" => 0x00EC_4899,  // pink
+        "Solo" => 0x003B_82F6,    // blue
         // Setlist sections
-        "Rhythm" => 0x84CC16,       // lime
-        "Edge" => 0xF43F5E,         // rose
-        "Djent" => 0xDC2626,        // red-dark
-        "Harmony Lead" => 0xFBBF24, // amber
-        "Chug" => 0xB45309,         // amber-dark
-        "Filtered" => 0xA855F7,     // purple
-        "Dry Lead" => 0xFB923C,     // orange-light
-        "Dry Drive" => 0xF87171,    // red-light
-        "Default" => 0x9CA3AF,      // gray-light
-        _ => 0x6B7280,              // gray
+        "Rhythm" => 0x0084_CC16,       // lime
+        "Edge" => 0x00F4_3F5E,         // rose
+        "Djent" => 0x00DC_2626,        // red-dark
+        "Harmony Lead" => 0x00FB_BF24, // amber
+        "Chug" => 0x00B4_5309,         // amber-dark
+        "Filtered" => 0x00A8_55F7,     // purple
+        "Dry Lead" => 0x00FB_923C,     // orange-light
+        "Dry Drive" => 0x00F8_7171,    // red-light
+        "Default" => 0x009C_A3AF,      // gray-light
+        _ => 0x006B_7280,              // gray
     }
 }

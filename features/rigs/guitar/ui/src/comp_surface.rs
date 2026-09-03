@@ -10,6 +10,8 @@
 //! ring streams from the live DSP over `RigEvent::CompWave`, and the GR
 //! readout is the detector's real `gain_reduction_db`.
 
+use std::fmt::Write;
+
 use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::RigClient;
@@ -80,9 +82,9 @@ fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) 
     let baseline = if from_bottom { h } else { 0.0 };
     let mut d = String::new();
     if close {
-        d.push_str(&format!("M 0 {baseline:.1} L 0 {:.1} ", ys[0]));
+        let _ = write!(d, "M 0 {baseline:.1} L 0 {:.1} ", ys[0]);
     } else {
-        d.push_str(&format!("M 0 {:.1} ", ys[0]));
+        let _ = write!(d, "M 0 {:.1} ", ys[0]);
     }
     for i in 0..n - 1 {
         let x0 = i as f64 * step;
@@ -92,7 +94,8 @@ fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) 
         let y_next2 = if i + 2 < n { ys[i + 2] } else { ys[n - 1] };
         let t1 = (y_next - y_prev) / 2.0;
         let t2 = (y_next2 - y_curr) / 2.0;
-        d.push_str(&format!(
+        let _ = write!(
+            d,
             "C {:.1} {:.1} {:.1} {:.1} {:.1} {:.1} ",
             x0 + step / 3.0,
             y_curr + t1 / 3.0,
@@ -100,10 +103,10 @@ fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) 
             y_next - t2 / 3.0,
             x1,
             y_next,
-        ));
+        );
     }
     if close {
-        d.push_str(&format!("L {w:.1} {baseline:.1} Z"));
+        let _ = write!(d, "L {w:.1} {baseline:.1} Z");
     }
     d
 }
@@ -169,7 +172,7 @@ pub fn CompSurface(
         let x = (input + RANGE_DB) / RANGE_DB * W;
         let y = db_to_y(output, H);
         tc.push_str(if i == 0 { "M " } else { "L " });
-        tc.push_str(&format!("{x:.1} {y:.1} "));
+        let _ = write!(tc, "{x:.1} {y:.1} ");
     }
     let ball = {
         let level = in_db.clamp(-(RANGE_DB as f32), 0.0);

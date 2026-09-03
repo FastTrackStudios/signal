@@ -127,6 +127,10 @@ impl SavedPreset {
 ///
 /// Returns a report rather than a bare `Vec`, so a caller can distinguish
 /// "this bank is empty" from "this bank is broken".
+///
+/// # Errors
+///
+/// Returns an error if the directory cannot be read.
 pub fn load_directory(dir: impl AsRef<Path>) -> Result<LoadReport, LoadError> {
     let dir = dir.as_ref();
     let entries = std::fs::read_dir(dir).map_err(|source| LoadError::Unreadable {

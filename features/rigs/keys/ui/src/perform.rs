@@ -11,6 +11,7 @@ use signal_keys_proto::KeysPerform;
 
 /// Per-stack color — the worship set's shape, left to right: intimate →
 /// full → intimate again.
+#[must_use]
 pub fn stack_color(name: &str) -> (&'static str, &'static str) {
     match name {
         "Spotlight" => ("#1e3a5f", "#7dd3fc"),

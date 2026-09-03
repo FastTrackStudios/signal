@@ -1,5 +1,5 @@
 //! Native **Amp** block — the voice-chain gain stage (`BlockType::Amp`,
-//! `Native` impl). Unity by default; the ModMatrix will drive its gain from the
+//! `Native` impl). Unity by default; the `ModMatrix` will drive its gain from the
 //! amp envelope once control-rate modulation lands (roadmap §2).
 
 use signal_plugin_host::{
@@ -12,6 +12,7 @@ pub struct NativeAmp {
 }
 
 impl NativeAmp {
+    #[must_use]
     pub fn new(_sample_rate: u32) -> Self {
         Self {
             gain: 1.0,

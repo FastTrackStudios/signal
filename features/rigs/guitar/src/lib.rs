@@ -43,6 +43,10 @@ impl AmpEngine {
     /// Open the live duplex audio (guitar in → out) with no amp loaded yet —
     /// the signal passes through clean until [`load_model`](Self::load_model).
     /// Device / channel / sample-rate come from `prefs`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if audio initialization fails.
     // r[impl guitar.amp.clean-passthrough]
     pub fn open(prefs: &RigAudioPrefs) -> Result<Self, String> {
         let rig = GuitarRig::open(prefs).map_err(|e| e.to_string())?;
@@ -57,6 +61,10 @@ impl AmpEngine {
     /// Installs a fresh one-patch profile whose only block is the NAM amp. The
     /// full model path is carried through directly (no id round-trip), so paths
     /// with spaces/quotes resolve correctly.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the model cannot be loaded or the profile cannot be applied.
     // r[impl guitar.amp.full-path]
     // r[impl guitar.amp.single-patch]
     pub fn load_model(&mut self, path: impl AsRef<Path>) -> Result<(), String> {

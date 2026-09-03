@@ -49,11 +49,10 @@ pub const fn icon(rig: Rig) -> fts_chrome::Icon {
     match rig {
         Rig::Guitar => Icon::Guitar,
         Rig::Keys => Icon::Keys,
-        Rig::Drums => Icon::Drums,
+        Rig::Drums | Rig::Ekit => Icon::Drums,
         Rig::Bass => Icon::Bass,
         Rig::Vocals => Icon::Perform,
         Rig::Synth => Icon::Synth,
-        Rig::Ekit => Icon::Drums,
         Rig::Space => Icon::Browser,
     }
 }

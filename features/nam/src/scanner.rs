@@ -13,6 +13,10 @@ use walkdir::WalkDir;
 /// Returns a map of SHA-256 hash → `NamFileEntry`.
 /// For `.nam` files, metadata is extracted from the JSON.
 /// For `.wav` files, WAV header metadata is extracted.
+///
+/// # Errors
+///
+/// Returns `NamError` if file I/O fails or if metadata parsing fails.
 pub fn scan_directory(nam_root: &Path) -> Result<HashMap<String, NamFileEntry>, NamError> {
     let mut entries = HashMap::new();
 
@@ -26,10 +30,7 @@ pub fn scan_directory(nam_root: &Path) -> Result<HashMap<String, NamFileEntry>, 
             continue;
         }
 
-        let kind = match kind_from_path(path) {
-            Some(k) => k,
-            None => continue,
-        };
+        let Some(kind) = kind_from_path(path) else { continue };
 
         let file_entry = scan_file(path, nam_root, kind)?;
         entries.insert(file_entry.hash.clone(), file_entry);

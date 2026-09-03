@@ -7,6 +7,7 @@
 //! near-meaningless for reverb, where two different algorithms never null.
 
 /// Level helpers, in dBFS. `-inf` for digital silence.
+#[must_use]
 pub fn rms_db(x: &[f32]) -> f64 {
     let r = rms(x);
     if r <= 0.0 {
@@ -17,6 +18,7 @@ pub fn rms_db(x: &[f32]) -> f64 {
 }
 
 /// Root-mean-square level, linear.
+#[must_use]
 pub fn rms(x: &[f32]) -> f64 {
     if x.is_empty() {
         return 0.0;
@@ -25,11 +27,13 @@ pub fn rms(x: &[f32]) -> f64 {
 }
 
 /// Peak absolute level, linear.
+#[must_use]
 pub fn peak(x: &[f32]) -> f64 {
     x.iter().fold(0.0f64, |m, &s| m.max((s as f64).abs()))
 }
 
 /// Peak level in dBFS.
+#[must_use]
 pub fn peak_db(x: &[f32]) -> f64 {
     let p = peak(x);
     if p <= 0.0 {
@@ -60,12 +64,14 @@ impl NullTest {
     ///
     /// A perfect null (`inf`) passes any threshold; a comparison over no
     /// samples never passes.
+    #[must_use]
     pub fn passes(&self, required_db: f64) -> bool {
         self.samples > 0 && self.null_depth_db >= required_db
     }
 }
 
 /// Sample-wise difference. Truncates to the shorter input.
+#[must_use]
 pub fn residual(reference: &[f32], candidate: &[f32]) -> Vec<f32> {
     reference
         .iter()
@@ -79,6 +85,7 @@ pub fn residual(reference: &[f32], candidate: &[f32]) -> Vec<f32> {
 /// Both buffers must be sample-aligned — compensate any plugin latency
 /// *before* calling this, or the residual measures the misalignment rather
 /// than the processing difference. [`align_by_latency`] does that.
+#[must_use]
 pub fn null_test(reference: &[f32], candidate: &[f32]) -> NullTest {
     let res = residual(reference, candidate);
     let n = res.len();
@@ -105,6 +112,7 @@ pub fn null_test(reference: &[f32], candidate: &[f32]) -> NullTest {
 ///
 /// Reported plugin latency is the reliable source here; cross-correlation is
 /// not, because a reverb's own pre-delay would be mistaken for latency.
+#[must_use]
 pub fn align_by_latency<'a>(
     reference: &'a [f32],
     candidate: &'a [f32],

@@ -332,6 +332,7 @@ fn fit_at(window: &[f32], members: &[&[f32]], offset: usize) -> Option<(Vec<f32>
 /// `members` are the group's samples, already resampled to the reference's
 /// rate; each is searched over its first `scan` frames. `peaks` proposals from
 /// the FFT sweep are fitted at full rate, each refined over ±`refine` frames.
+#[must_use]
 pub fn best_fit(
     window: &[f32],
     members: &[&[f32]],
@@ -395,7 +396,7 @@ pub fn best_fit(
     // knowing the MIDI buys — not from fitting each one less carefully.
     let mut best: Option<GroupFit> = None;
     let mut seen: Vec<usize> = Vec::new();
-    for &c in order.iter() {
+    for &c in &order {
         if seen.iter().any(|&s| c.abs_diff(s) <= refine) {
             continue;
         }
@@ -432,6 +433,7 @@ pub fn best_fit(
 /// Stops at `max_voices`, or when a pass explains less than `min_share` of the
 /// original window — an honest floor, since with enough candidates something
 /// will always shave a little off a residual.
+#[must_use]
 pub fn decompose(
     window: &[f32],
     groups: &[Vec<&[f32]>],
@@ -488,8 +490,8 @@ mod tests {
         let mut s = seed;
         (0..n)
             .map(|_| {
-                s = s.wrapping_mul(1664525).wrapping_add(1013904223);
-                ((s >> 8) as f32 / 8388608.0) - 1.0
+                s = s.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                ((s >> 8) as f32 / 8_388_608.0) - 1.0
             })
             .collect()
     }

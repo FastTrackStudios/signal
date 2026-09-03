@@ -43,6 +43,7 @@ pub struct HallArena {
 }
 
 impl HallArena {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let max_er = (sample_rate * 0.4) as usize; // 400ms — sound takes time to reach arena walls
 

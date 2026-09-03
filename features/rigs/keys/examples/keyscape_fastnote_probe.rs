@@ -18,7 +18,9 @@ const BLK: usize = 512;
 /// Render `blocks` of audio (advancing engine time).
 fn render(rig: &SamplerRig, buf: &mut [f32], blocks: usize) {
     for _ in 0..blocks {
-        buf.iter_mut().for_each(|s| *s = 0.0);
+        for s in buf.iter_mut() {
+            *s = 0.0;
+        }
         let _ = rig.render_offline(buf);
     }
 }

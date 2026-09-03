@@ -106,7 +106,6 @@ const fn shape_to_int(shape: EqBandShape) -> i32 {
 
 const fn int_to_shape(v: i32) -> EqBandShape {
     match v {
-        0 => EqBandShape::Bell,
         1 => EqBandShape::LowShelf,
         2 => EqBandShape::LowCut,
         3 => EqBandShape::HighShelf,

@@ -1,6 +1,6 @@
 //! Lightweight one-pole lowpass/highpass filters for reverb damping.
 //!
-//! Ported from CloudSeedCore Lp1.h/Hp1.h (MIT, Ghost Note Audio).
+//! Ported from `CloudSeedCore` Lp1.h/Hp1.h (MIT, Ghost Note Audio).
 //! Uses the exact same coefficient formula: `alpha = nn - sqrt(nn^2 - 1)`
 //! where `nn = 2 - cos(2*pi*fc/fs)`.
 
@@ -25,6 +25,7 @@ impl Default for Lp1 {
 }
 
 impl Lp1 {
+    #[must_use]
     pub fn new() -> Self {
         let mut lp = Self {
             output: 0.0,
@@ -105,6 +106,7 @@ impl Default for Hp1 {
 }
 
 impl Hp1 {
+    #[must_use]
     pub fn new() -> Self {
         let mut hp = Self {
             lp_out: 0.0,

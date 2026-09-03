@@ -49,6 +49,11 @@ pub struct ModulePort {
 }
 
 impl ModuleSpec {
+    /// Load a module specification from a file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed.
     pub fn from_file(path: &Path) -> Result<Self, SamplerError> {
         let text = std::fs::read_to_string(path)?;
         facet_styx::from_str(&text).map_err(|e| SamplerError::SpecParse(e.to_string()))

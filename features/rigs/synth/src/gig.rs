@@ -44,6 +44,11 @@ fn juce_index(c: u8) -> Option<u32> {
 /// Six bits per character, written LSB-first into the byte buffer (JUCE's
 /// `setBitRange`), with the decoded length carried in the decimal prefix
 /// rather than by padding.
+///
+/// # Errors
+///
+/// Returns an error if the format is invalid: missing length separator, malformed
+/// length prefix, or an invalid base64 character.
 pub fn juce_base64_decode(s: &str) -> Result<Vec<u8>, String> {
     let s = s.trim();
     let dot = s.find('.').ok_or("no '.' length separator")?;

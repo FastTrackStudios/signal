@@ -22,6 +22,8 @@ use signal_proto::{
 pub struct BlockPresetOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> BlockPresetOps<S> {
+    /// # Errors
+    /// Returns `OpsError::Storage` if the preset list cannot be retrieved.
     pub async fn list(&self, block_type: BlockType) -> Result<Vec<Preset>, OpsError> {
         self.0
             .service
@@ -30,6 +32,8 @@ impl<S: SignalApi> BlockPresetOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the preset cannot be retrieved.
     pub async fn load_default(
         &self,
         block_type: BlockType,
@@ -44,6 +48,8 @@ impl<S: SignalApi> BlockPresetOps<S> {
         Ok(snapshot.map(|s| s.block()))
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the preset snapshot cannot be retrieved.
     pub async fn load_variant(
         &self,
         block_type: BlockType,
@@ -59,6 +65,8 @@ impl<S: SignalApi> BlockPresetOps<S> {
         Ok(snapshot.map(|s| s.block()))
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the preset cannot be saved.
     pub async fn create(
         &self,
         name: impl Into<String>,
@@ -75,6 +83,8 @@ impl<S: SignalApi> BlockPresetOps<S> {
         Ok(preset)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the preset cannot be saved.
     pub async fn save(&self, preset: Preset) -> Result<Preset, OpsError> {
         self.0
             .service
@@ -84,6 +94,8 @@ impl<S: SignalApi> BlockPresetOps<S> {
         Ok(preset)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the preset cannot be deleted.
     pub async fn delete(
         &self,
         block_type: BlockType,
@@ -96,6 +108,8 @@ impl<S: SignalApi> BlockPresetOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns `OpsError::Storage` if the preset list cannot be retrieved or saved.
     pub async fn update_snapshot_params(
         &self,
         block_type: BlockType,
@@ -121,6 +135,9 @@ impl<S: SignalApi> BlockPresetOps<S> {
     }
 
     /// Count all block presets of a given type.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the preset list cannot be retrieved.
     pub async fn count(&self, block_type: BlockType) -> Result<usize, OpsError> {
         Ok(self.list(block_type).await?.len())
     }
@@ -130,6 +147,13 @@ impl<S: SignalApi> BlockPresetOps<S> {
     /// Builds a minimal single-block `ResolvedGraph` and pushes it through the
     /// DAW applier (if attached). This is the "Preset mode" path — no profile,
     /// no rig hierarchy, just a single FX chain swap.
+    ///
+    /// # Panics
+    /// Panics if the DAW applier lock is poisoned.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the preset snapshot cannot be retrieved, or
+    /// `OpsError::VariantNotFound` if the snapshot does not exist.
     pub async fn activate(
         &self,
         block_type: BlockType,
@@ -202,7 +226,7 @@ impl<S: SignalApi> BlockPresetOps<S> {
         let snapshot_name = snapshot.name().to_string();
         // Clone out of the lock in its own statement — an if-let scrutinee
         // temporary would hold the guard across the await below.
-        let applier = self.0.daw_applier.read().expect("lock poisoned").clone();
+        let applier = self.0.daw_applier.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
         let applied_to_daw = if let Some(applier) = applier {
             match applier.apply_graph(&graph, Some(&snapshot_name)).await {
                 Ok(_) => true,
@@ -227,6 +251,10 @@ impl<S: SignalApi> BlockPresetOps<S> {
     }
 
     /// Overwrite an existing snapshot with fresh DAW capture data (params + state bytes).
+    ///
+    /// # Errors
+    /// Returns `OpsError::NotFound` if the preset does not exist, `OpsError::VariantNotFound`
+    /// if the snapshot does not exist, or `OpsError::Storage` if the preset cannot be saved.
     pub async fn update_snapshot_from_capture(
         &self,
         block_type: BlockType,
@@ -272,6 +300,11 @@ impl<S: SignalApi> BlockPresetOps<S> {
     }
 
     /// Patch a single parameter value by name on an existing snapshot.
+    ///
+    /// # Errors
+    /// Returns `OpsError::NotFound` if the preset or parameter does not exist,
+    /// `OpsError::VariantNotFound` if the snapshot does not exist, or
+    /// `OpsError::Storage` if the preset cannot be saved.
     pub async fn update_snapshot_param_by_name(
         &self,
         block_type: BlockType,
@@ -323,6 +356,9 @@ impl<S: SignalApi> BlockPresetOps<S> {
     /// This is the ops-layer equivalent of the capture workflow: given raw
     /// parameter data and binary state from a DAW plugin, it constructs the
     /// full `Preset` hierarchy and persists it.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the preset cannot be saved.
     pub async fn create_from_capture(
         &self,
         block_type: BlockType,

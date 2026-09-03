@@ -38,16 +38,16 @@ pub enum OscWave {
 impl OscWave {
     fn sample(self, phase: f32) -> f32 {
         match self {
-            OscWave::Sine => (phase * core::f32::consts::TAU).sin(),
-            OscWave::Saw => 2.0 * phase - 1.0,
-            OscWave::Square => {
+            Self::Sine => (phase * core::f32::consts::TAU).sin(),
+            Self::Saw => 2.0 * phase - 1.0,
+            Self::Square => {
                 if phase < 0.5 {
                     1.0
                 } else {
                     -1.0
                 }
             }
-            OscWave::Triangle => 4.0 * (phase - 0.5).abs() - 1.0,
+            Self::Triangle => 4.0 * (phase - 0.5).abs() - 1.0,
         }
     }
 }
@@ -161,6 +161,7 @@ pub struct NativeOscillator {
 }
 
 impl NativeOscillator {
+    #[must_use]
     pub fn new(sample_rate: u32) -> Self {
         Self {
             sample_rate: sample_rate.max(1) as f32,
@@ -232,6 +233,7 @@ impl NativeOscillator {
     }
 
     /// Number of sounding voices (for tests / metering).
+    #[must_use]
     pub fn active_voices(&self) -> usize {
         self.voices.len()
     }
@@ -439,11 +441,11 @@ impl Soundsource for NativeOscillator {
     fn note_on(&mut self, note: u8, velocity: u8) {
         // Inherent `NativeOscillator::note_on` (inherent methods win over the
         // trait method of the same name, so this is not a recursion).
-        NativeOscillator::note_on(self, note, velocity);
+        Self::note_on(self, note, velocity);
     }
 
     fn note_off(&mut self, note: u8) {
-        NativeOscillator::note_off(self, note);
+        Self::note_off(self, note);
     }
 
     fn render(

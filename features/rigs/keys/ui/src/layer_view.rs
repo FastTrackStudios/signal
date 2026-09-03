@@ -53,7 +53,7 @@ pub fn LayerView(
     let refresh = use_callback({
         let rig = rig.clone();
         let layer = layer.clone();
-        move |_: ()| {
+        move |()| {
             let (rig, layer, slot) = (rig.clone(), layer.clone(), module());
             spawn(async move {
                 if let Some(r) = rig {
@@ -123,7 +123,7 @@ pub fn LayerView(
             (
                 name,
                 is_here,
-                Callback::new(move |_| zoom_to.set(Zoom::Layer(target.clone()))),
+                Callback::new(move |()| zoom_to.set(Zoom::Layer(target.clone()))),
             )
         })
         .collect();
@@ -141,7 +141,7 @@ pub fn LayerView(
             (
                 label,
                 m.index == d.module,
-                Callback::new(move |_| pick.set(idx)),
+                Callback::new(move |()| pick.set(idx)),
             )
         })
         .collect();
@@ -149,15 +149,14 @@ pub fn LayerView(
         .modules
         .iter()
         .find(|m| m.index == d.module)
-        .map(|m| format!("Module {}", m.slot))
-        .unwrap_or_else(|| "Module".to_string());
+        .map_or_else(|| "Module".to_string(), |m| format!("Module {}", m.slot));
     {
         let up = back_to.clone();
         let mut zoom_up = zoom;
         level.crumbs(vec![
             fts_chrome::Crumb::new(
                 d.engine.clone(),
-                Callback::new(move |_| zoom_up.set(Zoom::Engine(up.clone()))),
+                Callback::new(move |()| zoom_up.set(Zoom::Engine(up.clone()))),
             ),
             fts_chrome::Crumb::here(d.layer.clone()).with_menu(lanes),
             fts_chrome::Crumb::here(module_label).with_menu(modules),
@@ -168,19 +167,19 @@ pub fn LayerView(
             "layer",
             "Layer",
             page() == Page::Layer,
-            Callback::new(move |_| page.set(Page::Layer)),
+            Callback::new(move |()| page.set(Page::Layer)),
         ),
         fts_chrome::ChromeTab::new(
             "module",
             "Module",
             page() == Page::Module,
-            Callback::new(move |_| page.set(Page::Module)),
+            Callback::new(move |()| page.set(Page::Module)),
         ),
         fts_chrome::ChromeTab::new(
             "edit",
             "Edit",
             page() == Page::Edit,
-            Callback::new(move |_| page.set(Page::Edit)),
+            Callback::new(move |()| page.set(Page::Edit)),
         ),
     ]);
     level.status(vec![fts_chrome::StatusItem::pill(

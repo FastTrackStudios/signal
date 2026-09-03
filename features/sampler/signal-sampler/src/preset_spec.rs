@@ -48,7 +48,7 @@ pub struct PresetSpec {
     pub engines: Vec<PresetEngineRef>,
 
     /// MIDI note → engine-id dispatch. A note can target multiple engines
-    /// (e.g. layered kicks); the runtime fires note_on on each.
+    /// (e.g. layered kicks); the runtime fires `note_on` on each.
     #[facet(default)]
     pub note_routing: Vec<NoteRoute>,
 
@@ -72,6 +72,9 @@ pub struct PresetSpec {
 }
 
 impl PresetSpec {
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or the content is not valid Styx.
     pub fn from_file(path: &Path) -> Result<Self, SamplerError> {
         let text = std::fs::read_to_string(path)?;
         facet_styx::from_str(&text).map_err(|e| SamplerError::SpecParse(e.to_string()))

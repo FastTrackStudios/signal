@@ -94,6 +94,10 @@ impl ReaperPatchApplier {
     /// Creates (or finds) a "Guitar Rig" folder track with an "Input: Guitar Rig"
     /// child track. The input track has its parent send disabled so audio flows
     /// only through explicit sends to patch child tracks.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PatchApplyError::DawError` if track creation or configuration fails.
     pub async fn set_target(
         &self,
         project: Project,
@@ -169,10 +173,8 @@ impl ReaperPatchApplier {
                     .find(|s| s.dest_track_guid.as_deref() == Some(&track_info.guid))
                     .is_none_or(|s| s.muted); // No send found = treat as muted/preloaded
 
-                let handle = match tracks.by_guid(&track_info.guid).await {
-                    Ok(Some(h)) => h,
-                    _ => continue,
-                };
+                let Ok(Some(handle)) = tracks.by_guid(&track_info.guid).await else { continue };
+
 
                 if send_muted {
                     // Muted send = preloaded patch (inactive, ready for fast-switch)
@@ -232,6 +234,11 @@ impl ReaperPatchApplier {
     ///
     /// `channel_index` is the 0-based mono hardware input index
     /// (matching REAPER's `I_RECINPUT` encoding for mono inputs).
+    ///
+    /// # Errors
+    ///
+    /// Returns `PatchApplyError::NoTarget` if no folder rig is configured,
+    /// or `PatchApplyError::DawError` if track configuration fails.
     pub async fn configure_input(&self, channel_index: u32) -> Result<(), PatchApplyError> {
         let guard = self.state.read().await;
         let state = guard
@@ -266,6 +273,10 @@ impl ReaperPatchApplier {
     /// Each patch gets a child track with its FX chain loaded and a muted send
     /// from the input track. Patches are loaded sequentially to avoid overwhelming
     /// REAPER. Skips patches that are already the `current_patch` or already preloaded.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if patch preloading fails.
     pub async fn preload_patches(
         &self,
         patches: Vec<(String, ResolvedGraph)>,
@@ -299,10 +310,7 @@ impl ReaperPatchApplier {
         };
 
         let chunks = graph_state_chunks(graph, &fx_id);
-        let chunk = match chunks.first() {
-            Some(c) => c,
-            None => return Ok(()), // No state chunks — skip silently
-        };
+        let Some(chunk) = chunks.first() else { return Ok(()); }; // No state chunks — skip silently
 
         let rfxchain_text = String::from_utf8(chunk.chunk_data.clone())
             .map_err(|e| PatchApplyError::DawError(format!("rfxchain not UTF-8: {e}")))?
@@ -435,16 +443,18 @@ impl ReaperPatchApplier {
 
     /// Capture the current patch's REAPER FX chain as raw rfxchain bytes.
     /// Returns `None` if no patch is currently active.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PatchApplyError::NoTarget` if no rig is configured,
+    /// or `PatchApplyError::DawError` if chunk extraction fails.
     pub async fn capture_current_patch(&self) -> Result<Option<Vec<u8>>, PatchApplyError> {
         let guard = self.state.read().await;
         let state = guard
             .as_ref()
             .ok_or_else(|| PatchApplyError::NoTarget("no rig configured".into()))?;
 
-        let current = match state.current_patch.as_ref() {
-            Some(p) => p,
-            None => return Ok(None),
-        };
+        let Some(current) = state.current_patch.as_ref() else { return Ok(None); };
 
         let track_chunk = current
             .track

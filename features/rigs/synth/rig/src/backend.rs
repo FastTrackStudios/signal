@@ -191,7 +191,7 @@ impl SynthRigBackend {
             Ok(r) => {
                 r.set_output_gain(volume); // pad the hot summed output
                 {
-                    let mut rig = self.inner.rig.lock().unwrap();
+                    let mut rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                     *rig = Some(r);
                 }
                 // A freshly opened rig has no MIDI input yet, and every
@@ -251,7 +251,7 @@ impl SynthRigBackend {
         // graph reconfiguration must not pin the rig mutex (it wedges
         // status() and the UI).
         let sink = {
-            let rig = self.inner.rig.lock().unwrap();
+            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             match rig.as_ref() {
                 Some(rig) => rig.midi_sink(),
                 None => return,
@@ -350,7 +350,7 @@ impl SynthRigSvc for SynthRigBackend {
 
     fn status(&self) -> SynthStatus {
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-        let s = self.inner.state.lock().unwrap();
+        let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let loaded_preset = s
             .loaded
             .and_then(|i| s.presets.get(i))
@@ -471,10 +471,7 @@ impl SynthRigSvc for SynthRigBackend {
         // Resolve the soundsource → its spec path: prefer the exact pack the
         // loaded tree references; fall back to the library index by name.
         let path = {
-            let s = match self.inner.state.lock() {
-                Ok(s) => s,
-                Err(_) => return SynthMapping::default(),
-            };
+            let Ok(s) = self.inner.state.lock() else { return SynthMapping::default() };
             let mut blocks = Vec::new();
             if let Some(tree) = s.tree.as_ref() {
                 sample_blocks(tree, &mut blocks);

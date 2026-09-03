@@ -53,9 +53,7 @@ fn mm2_metal_monster_plays_on_gm_channel() {
     let mut block = vec![0.0f32; 512 * 2];
     let mut peak = 0.0f32;
     for _ in 0..40 {
-        for s in &mut block {
-            *s = 0.0;
-        }
+        block.fill(0.0);
         rig.render_offline(&mut block).expect("render");
         for &s in &block {
             peak = peak.max(s.abs());

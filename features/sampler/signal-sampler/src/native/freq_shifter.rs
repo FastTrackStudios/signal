@@ -154,6 +154,7 @@ pub struct NativeDfs {
 }
 
 impl NativeDfs {
+    #[must_use]
     pub fn new(sample_rate: u32) -> Self {
         Self {
             sample_rate: sample_rate.max(1) as f32,

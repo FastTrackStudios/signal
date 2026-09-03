@@ -1,7 +1,7 @@
 //! Modulated delay line for pre-delay and late reverb lines.
 //!
-//! Ported from CloudSeedCore ModulatedDelay.h (MIT, Ghost Note Audio).
-//! The LFO target is recomputed every 8 samples (as in CloudSeed) but the
+//! Ported from `CloudSeedCore` ModulatedDelay.h (MIT, Ghost Note Audio).
+//! The LFO target is recomputed every 8 samples (as in `CloudSeed`) but the
 //! fractional read position ramps per-sample between updates and the buffer
 //! is read with cubic interpolation, so fast modulation stays smooth instead
 //! of stepping in whole samples.
@@ -29,6 +29,7 @@ pub struct ModulatedDelay {
 }
 
 impl ModulatedDelay {
+    #[must_use]
     pub fn new() -> Self {
         let mut d = Self {
             buffer: DelayLine::new((DEFAULT_SAMPLE_RATE * BUFFER_SECONDS) as usize),

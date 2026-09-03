@@ -103,6 +103,10 @@ fn epoch_timestamp() -> String {
 /// Capture live DAW parameters and save to `SQLite`.
 ///
 /// Returns the captured snapshot for immediate use (e.g. morphing between scenes).
+///
+/// # Errors
+///
+/// Returns an error if parameter serialization or storage operations fail.
 pub async fn capture_and_save_snapshot(
     bridge: &dyn DawBridge,
     repo: &dyn DawSnapshotRepo,
@@ -128,6 +132,10 @@ pub async fn capture_and_save_snapshot(
 /// Load the most recent stored snapshot for an owner and apply it to the DAW.
 ///
 /// Returns the deserialized snapshot for follow-up operations.
+///
+/// # Errors
+///
+/// Returns an error if no snapshot is found, or if deserialization/storage operations fail.
 pub async fn recall_snapshot(
     bridge: &dyn DawBridge,
     repo: &dyn DawSnapshotRepo,
@@ -149,6 +157,10 @@ pub async fn recall_snapshot(
 ///
 /// This is the heavyweight save: captures exact binary plugin state for
 /// complete preset recall. Previous chunks for this owner are replaced.
+///
+/// # Errors
+///
+/// Returns an error if parameter serialization, chunk encoding, or storage operations fail.
 pub async fn capture_and_save_preset(
     bridge: &dyn DawBridge,
     repo: &dyn DawSnapshotRepo,
@@ -184,6 +196,10 @@ pub async fn capture_and_save_preset(
 ///
 /// Applies state chunks first (coarse binary state), then parameter values
 /// (fine-tuned on top) for the most accurate state restoration.
+///
+/// # Errors
+///
+/// Returns an error if no preset is found, or if deserialization/storage operations fail.
 pub async fn recall_preset(
     bridge: &dyn DawBridge,
     repo: &dyn DawSnapshotRepo,

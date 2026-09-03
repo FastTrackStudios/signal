@@ -80,6 +80,10 @@ impl RigSceneManager {
     /// Creates (or finds) an "Input: {`rig_name`}" track with `parent_send` disabled,
     /// record-armed, and input monitoring enabled. Recovers existing scene tracks
     /// from a previous session by scanning `[R] {name} :: *` tracks.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if track creation or configuration fails in the DAW.
     pub async fn set_target(
         &self,
         rig_name: impl Into<String>,
@@ -131,10 +135,7 @@ impl RigSceneManager {
                     .find(|s| s.dest_track_guid.as_deref() == Some(&track_info.guid))
                     .is_none_or(|s| s.muted);
 
-                let handle = match tracks.by_guid(&track_info.guid).await {
-                    Ok(Some(h)) => h,
-                    _ => continue,
-                };
+                let Ok(Some(handle)) = tracks.by_guid(&track_info.guid).await else { continue };
 
                 if send_muted {
                     eprintln!(
@@ -193,6 +194,11 @@ impl RigSceneManager {
     /// For each scene: calls `signal_live.load_rig_to_daw()`, renames the rig track
     /// to `[R] {name} :: {scene_name}`, creates a muted send from input, and mutes
     /// the folder. The first scene (or default) is left active as `current`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if preloading is already active, not set up, or if scene
+    /// loading or DAW track operations fail.
     pub async fn preload_all_scenes(
         &self,
         rig: &Rig,

@@ -32,6 +32,7 @@ impl Default for AudioSoundsource {
 
 impl AudioSoundsource {
     /// A unity-gain input passthrough.
+    #[must_use]
     pub fn new() -> Self {
         Self { level: 1.0 }
     }
@@ -44,6 +45,7 @@ impl AudioSoundsource {
     }
 
     /// Current passthrough gain (linear).
+    #[must_use]
     pub fn level(&self) -> f32 {
         self.level
     }

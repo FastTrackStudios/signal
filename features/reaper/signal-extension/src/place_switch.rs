@@ -30,6 +30,10 @@ const SWITCH_BASE_NOTE: u8 = 36;
 /// The selected track should be a section track (direct child of a song
 /// folder with `fts_signal/scene_count`). The MIDI item is placed on
 /// the song folder.
+///
+/// # Errors
+///
+/// Returns an error if DAW operations fail.
 pub async fn place_section_switch(daw: &Daw) -> Result<()> {
     place_switch(daw, SwitchLevel::Section).await
 }
@@ -39,12 +43,20 @@ pub async fn place_section_switch(daw: &Daw) -> Result<()> {
 /// The selected track should be inside a song folder that's a child
 /// of a rig folder with `fts_signal/scene_count`. The MIDI item is
 /// placed on the rig folder.
+///
+/// # Errors
+///
+/// Returns an error if DAW operations fail.
 pub async fn place_song_switch(daw: &Daw) -> Result<()> {
     place_switch(daw, SwitchLevel::Song).await
 }
 
 /// Place a scene-switch MIDI item at the edit cursor.
 /// Same as section switch.
+///
+/// # Errors
+///
+/// Returns an error if DAW operations fail.
 pub async fn place_scene_switch(daw: &Daw) -> Result<()> {
     place_switch(daw, SwitchLevel::Scene).await
 }
@@ -304,7 +316,7 @@ fn find_track_color(all_tracks: &[daw::service::Track], name: &str) -> u32 {
         .iter()
         .find(|t| t.name == name)
         .and_then(|t| t.color)
-        .unwrap_or(0x6B7280)
+        .unwrap_or(0x006B_7280)
 }
 
 /// Place a one-bar MIDI item at the given position on the controller track.

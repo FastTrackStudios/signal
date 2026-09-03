@@ -87,19 +87,31 @@ pub struct ActiveContextState {
 
 impl ActiveContextState {
     /// Read the current context.
-    #[must_use] 
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `RwLock` is poisoned (a previous lock holder panicked).
+    #[must_use]
     pub fn get(&self) -> ActiveContext {
-        self.inner.read().expect("lock poisoned").clone()
+        self.inner.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
     }
 
     /// Replace the current context.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `RwLock` is poisoned (a previous lock holder panicked).
     pub fn set(&self, ctx: ActiveContext) {
-        *self.inner.write().expect("lock poisoned") = ctx;
+        *self.inner.write().unwrap_or_else(std::sync::PoisonError::into_inner) = ctx;
     }
 
     /// Update the active index within the current context.
     /// Returns `false` if context is `None`.
-    #[must_use] 
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `RwLock` is poisoned (a previous lock holder panicked).
+    #[must_use]
     pub fn set_active_index(&self, index: usize) -> bool {
         self.inner
             .write()

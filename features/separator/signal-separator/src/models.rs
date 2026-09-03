@@ -2,14 +2,14 @@
 //!
 //! Most models are in `audio-separator`'s own catalog and it fetches
 //! them itself. The one that matters most here is not: the MDX23C
-//! DrumSep checkpoint that splits a kit into kick, snare, toms and
+//! `DrumSep` checkpoint that splits a kit into kick, snare, toms and
 //! cymbals has to be side-loaded. So this module owns a small registry
 //! and fetches on first use.
 //!
 //! # Why the checksum is not optional
 //!
-//! The DrumSep checkpoint is 417 MB. A download truncated by a dropped
-//! connection still *loads* — PyTorch reads what is there — and then
+//! The `DrumSep` checkpoint is 417 MB. A download truncated by a dropped
+//! connection still *loads* — `PyTorch` reads what is there — and then
 //! emits stems that are quietly wrong. Nothing errors, and the damage
 //! only shows up as numbers that look plausible and are not. Every asset
 //! is therefore verified against a known SHA-256 before it is allowed
@@ -40,7 +40,7 @@ pub struct Asset {
     pub url: &'static str,
     /// Lowercase hex SHA-256 of the file's contents.
     ///
-    /// For Hugging Face LFS objects this is the ETag, which is the
+    /// For Hugging Face LFS objects this is the `ETag`, which is the
     /// content hash — so it can be checked against the server without
     /// downloading first.
     pub sha256: &'static str,
@@ -51,7 +51,7 @@ pub struct Asset {
 pub enum Arch {
     /// MDX23C — checkpoint plus a YAML declaring its outputs.
     Mdx23c,
-    /// Band-split / Mel-band RoFormer.
+    /// Band-split / Mel-band `RoFormer`.
     RoFormer,
     /// Demucs v4.
     Demucs,
@@ -103,11 +103,16 @@ pub const MANAGED: &[Model] = &[DRUMSEP];
 
 impl Model {
     /// Where this model's files live under `cache`.
+    #[must_use]
     pub fn dir(&self, cache: &Path) -> PathBuf {
         cache.join(self.id)
     }
 
     /// Fetch anything missing, verify it, and return the paths.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if directory creation fails, fetching the asset fails, or verification fails.
     pub async fn ensure(&self, cache: &Path) -> Result<Resolved> {
         let dir = self.dir(cache);
         tokio::fs::create_dir_all(&dir)
@@ -136,6 +141,10 @@ impl Model {
     /// A mismatch does not fail at inference — it mislabels the stems,
     /// so a four-stem config on a six-stem checkpoint silently returns a
     /// "snare" that is something else entirely.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the config file cannot be read or if the declared instruments do not match the checkpoint's stems.
     pub fn verify_config(&self, path: &Path) -> Result<()> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("reading {}", path.display()))?;
@@ -174,6 +183,7 @@ pub struct Resolved {
 /// Deliberately a small hand parser rather than a full YAML load: the
 /// only thing needed is one list, and this keeps the check available
 /// without pinning a YAML version.
+#[must_use]
 pub fn config_instruments(yaml: &str) -> Option<Vec<String>> {
     let mut lines = yaml.lines();
     loop {
@@ -277,6 +287,7 @@ fn sha256_of(path: &Path) -> Result<String> {
 }
 
 /// Default cache location, honouring `SIGNAL_MODEL_DIR`.
+#[must_use]
 pub fn default_cache() -> PathBuf {
     if let Ok(p) = std::env::var("SIGNAL_MODEL_DIR") {
         return PathBuf::from(p);
@@ -285,11 +296,12 @@ pub fn default_cache() -> PathBuf {
 }
 
 fn dirs_cache() -> PathBuf {
-    std::env::var("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
+    std::env::var("XDG_CACHE_HOME").map_or_else(
+        |_| {
             PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".cache")
-        })
+        },
+        PathBuf::from,
+    )
 }
 
 #[cfg(test)]

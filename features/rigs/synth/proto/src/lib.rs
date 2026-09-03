@@ -25,6 +25,7 @@ pub struct SynthPreset {
 
 /// One browsable soundsource pack in the library — a faceted, tag-driven
 /// projection of `signal_browser::pack_registry::PackEntry` for the BROWSE view.
+///
 /// Metadata only (no audio): the UI fetches every item once and filters
 /// client-side. `tags` are encoded `"category:value"` keys
 /// (`signal_proto::tagging::StructuredTag::encode`); re-parse them with
@@ -87,8 +88,9 @@ pub struct SynthStatus {
 }
 
 /// One sample zone in a soundsource's keymap — a faithful projection of the
-/// sampler's `ZoneSpec` for the Mapping editor. A rectangle spanning
-/// `key_min..=key_max` × `vel_min..=vel_max`; zones sharing that window and
+/// sampler's `ZoneSpec` for the Mapping editor.
+///
+/// A rectangle spanning `key_min..=key_max` × `vel_min..=vel_max`; zones sharing that window and
 /// differing by `rr_index` are round-robins (drawn stacked/striped).
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct SynthZone {
@@ -224,8 +226,9 @@ pub struct SynthLayer {
 }
 
 /// Omnisphere-style **Live global controls** — performance macros applied over
-/// the loaded patch (all layers). Bipolar offset controls are neutral at `0.5`
-/// (no change); unipolar controls are off at `0.0`. See
+/// the loaded patch (all layers).
+///
+/// Bipolar offset controls are neutral at `0.5` (no change); unipolar controls are off at `0.0`. See
 /// [`SynthGlobals::neutral`] for the default state.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct SynthGlobals {

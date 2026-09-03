@@ -89,8 +89,8 @@ fn reprepare_keeps_cross_in_sync() {
         (0..4800)
             .map(|i| {
                 s = s
-                    .wrapping_mul(6364136223846793005)
-                    .wrapping_add(1442695040888963407);
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
                 let r = ((s >> 33) as f64 / (1u64 << 31) as f64) - 1.0;
                 r * (-3.0 * f64::from(i) / 4800.0).exp()
             })

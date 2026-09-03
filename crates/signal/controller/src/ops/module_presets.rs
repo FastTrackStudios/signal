@@ -15,6 +15,9 @@ use signal_proto::{
 pub struct ModulePresetOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> ModulePresetOps<S> {
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn list(&self) -> Result<Vec<ModulePreset>, OpsError> {
         self.0
             .service
@@ -23,6 +26,9 @@ impl<S: SignalApi> ModulePresetOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn load_default(
         &self,
         collection_id: impl Into<ModulePresetId>,
@@ -34,6 +40,9 @@ impl<S: SignalApi> ModulePresetOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn load_variant(
         &self,
         collection_id: impl Into<ModulePresetId>,
@@ -46,6 +55,9 @@ impl<S: SignalApi> ModulePresetOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn save(&self, preset: ModulePreset) -> Result<ModulePreset, OpsError> {
         self.0
             .service
@@ -55,6 +67,9 @@ impl<S: SignalApi> ModulePresetOps<S> {
         Ok(preset)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn delete(&self, id: impl Into<ModulePresetId>) -> Result<(), OpsError> {
         self.0
             .service
@@ -66,6 +81,10 @@ impl<S: SignalApi> ModulePresetOps<S> {
     /// Update a specific snapshot's module content and bump its version.
     ///
     /// Mirrors [`crate::ops::BlockPresetOps::update_snapshot_params`] for the module layer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the preset cannot be found or if the storage operation fails.
     pub async fn update_snapshot_module(
         &self,
         preset_id: impl Into<ModulePresetId>,
@@ -90,6 +109,10 @@ impl<S: SignalApi> ModulePresetOps<S> {
     }
 
     /// Count all module presets.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage operation fails.
     pub async fn count(&self) -> Result<usize, OpsError> {
         Ok(self.list().await?.len())
     }
@@ -98,6 +121,10 @@ impl<S: SignalApi> ModulePresetOps<S> {
     ///
     /// Verifies each `PresetId` exists under its `BlockType`, then builds
     /// the full `ModulePreset` hierarchy and persists it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a block preset is not found or if the storage operation fails.
     pub async fn create(
         &self,
         name: impl Into<String>,
@@ -133,6 +160,10 @@ impl<S: SignalApi> ModulePresetOps<S> {
     }
 
     /// Add a snapshot (variation) to an existing module preset.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the preset is not found or if the storage operation fails.
     pub async fn add_snapshot(
         &self,
         preset_id: impl Into<ModulePresetId>,

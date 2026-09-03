@@ -27,6 +27,7 @@ pub mod velvet;
 use crate::algorithm::{AlgorithmType, ReverbAlgorithm};
 
 /// Create a reverb algorithm instance for the given type and variant.
+#[must_use]
 pub fn create(
     algorithm: AlgorithmType,
     variant: usize,

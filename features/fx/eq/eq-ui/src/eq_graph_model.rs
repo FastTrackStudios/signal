@@ -196,7 +196,9 @@ pub fn get_band_color(index: usize) -> &'static str {
 
 /// Map a frequency (Hz) to a color across the audible spectrum, low → high as
 /// red → violet — the visible-light analogy (higher audio frequency reads as
-/// "bluer"). Used to color band nodes by their center frequency (ReJJ-style) so
+/// "bluer").
+///
+/// Used to color band nodes by their center frequency (ReJJ-style) so
 /// the graph is readable at a glance: bass nodes warm, treble nodes cool.
 /// Returns a `#rrggbb` hex string.
 #[must_use] 
@@ -274,10 +276,11 @@ impl EqGraphRenderState {
 }
 
 /// The selectable display ranges, in `db_range` param index order
-/// (`fx.eq.display.range`). THE source of truth for the display range —
-/// the graph component, the painter, this model and the param formatter all
-/// map through it; none carries its own default
-/// (`fx.eq.display.defaults-agree`).
+/// (`fx.eq.display.range`).
+///
+/// THE source of truth for the display range — the graph component, the painter,
+/// this model and the param formatter all map through it; none carries its own
+/// default (`fx.eq.display.defaults-agree`).
 // r[impl fx.eq.display.range]
 // r[impl fx.eq.display.defaults-agree]
 pub const DB_RANGE_STEPS: [f64; 6] = [3.0, 6.0, 12.0, 18.0, 24.0, 30.0];

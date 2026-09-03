@@ -847,9 +847,8 @@ where
         &self,
         target: &ResolveTarget,
     ) -> Result<Option<ResolvedGraph>, ResolveError> {
-        let patch_target = match self.extract_patch_target(target).await? {
-            Some(t) => t,
-            None => return Ok(None),
+        let Some(patch_target) = self.extract_patch_target(target).await? else {
+            return Ok(None)
         };
 
         let PatchTarget::BlockSnapshot {

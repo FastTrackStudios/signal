@@ -35,7 +35,11 @@ type GroupMap = HashMap<String, Vec<(u8, String, String, Option<f64>)>>;
 ///
 /// Applies pattern-matching heuristics to filenames to identify families
 /// of captures that represent the same amp at different gain settings.
-#[must_use] 
+///
+/// # Panics
+///
+/// Panics if the hardcoded regular expressions cannot be compiled.
+#[must_use]
 pub fn auto_group(entries: &HashMap<String, NamFileEntry>) -> HashMap<String, GainStageGroup> {
     let amp_entries: Vec<&NamFileEntry> = entries
         .values()

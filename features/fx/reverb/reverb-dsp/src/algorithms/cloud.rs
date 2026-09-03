@@ -1,15 +1,15 @@
-//! Cloud reverb — full CloudSeedCore reverb engine.
+//! Cloud reverb — full `CloudSeedCore` reverb engine.
 //!
-//! Faithfully ported from CloudSeedCore (MIT, Ghost Note Audio).
-//! Implements the complete 45-parameter CloudSeed architecture:
-//! Input HP/LP → PreDelay → MultitapDelay → AllpassDiffuser
-//! → Parallel ReverbLines with per-line feedback/diffusion/EQ → Output.
+//! Faithfully ported from `CloudSeedCore` (MIT, Ghost Note Audio).
+//! Implements the complete 45-parameter `CloudSeed` architecture:
+//! Input HP/LP → `PreDelay` → `MultitapDelay` → `AllpassDiffuser`
+//! → Parallel `ReverbLines` with per-line feedback/diffusion/EQ → Output.
 //!
 //! The stereo version runs two independent channels with cross-seed
-//! decorrelation, matching CloudSeed's ReverbController architecture.
+//! decorrelation, matching `CloudSeed`'s `ReverbController` architecture.
 //!
-//! The 8 AlgorithmParams are mapped to CloudSeed's 45 internal parameters
-//! using the original ScaleParam() response curves.
+//! The 8 `AlgorithmParams` are mapped to `CloudSeed`'s 45 internal parameters
+//! using the original `ScaleParam()` response curves.
 
 use crate::algorithm::{AlgorithmParams, CloudParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
@@ -23,7 +23,7 @@ use audiocore_dsp::biquad::{Biquad, FilterType};
 
 const TOTAL_LINE_COUNT: usize = 12;
 
-/// CloudSeed's 45 internal parameter indices (matching Parameters.h).
+/// `CloudSeed`'s 45 internal parameter indices (matching Parameters.h).
 mod param {
     pub const INTERPOLATION: usize = 0;
     pub const LOW_CUT_ENABLED: usize = 1;
@@ -73,7 +73,7 @@ mod param {
     pub const COUNT: usize = 45;
 }
 
-/// CloudSeed's ScaleParam() — exact port from Parameters.h.
+/// `CloudSeed`'s `ScaleParam()` — exact port from Parameters.h.
 fn scale_param(val: f64, index: usize) -> f64 {
     match index {
         param::INTERPOLATION
@@ -84,7 +84,8 @@ fn scale_param(val: f64, index: usize) -> f64 {
         | param::EQ_LOW_SHELF_ENABLED
         | param::EQ_HIGH_SHELF_ENABLED
         | param::EQ_LOWPASS_ENABLED
-        | param::EARLY_DIFFUSE_ENABLED => {
+        | param::EARLY_DIFFUSE_ENABLED
+        | param::LATE_MODE => {
             if val < 0.5 {
                 0.0
             } else {
@@ -92,11 +93,10 @@ fn scale_param(val: f64, index: usize) -> f64 {
             }
         }
 
-        param::INPUT_MIX
-        | param::EARLY_DIFFUSE_FEEDBACK
-        | param::TAP_DECAY
-        | param::LATE_DIFFUSE_FEEDBACK
-        | param::EQ_CROSS_SEED => val,
+        // Pass-through 0..1 params, handled by the wildcard below: INPUT_MIX,
+        // EARLY_DIFFUSE_FEEDBACK, TAP_DECAY, LATE_DIFFUSE_FEEDBACK,
+        // EQ_CROSS_SEED. Listed here because "which params are unscaled" is
+        // not otherwise readable from this table.
 
         param::SEED_TAP
         | param::SEED_DIFFUSION
@@ -104,7 +104,7 @@ fn scale_param(val: f64, index: usize) -> f64 {
         | param::SEED_POST_DIFFUSION => (val * 999.999).floor(),
 
         param::LOW_CUT => 20.0 + resp4oct(val) * 980.0,
-        param::HIGH_CUT => 400.0 + resp4oct(val) * 19600.0,
+        param::HIGH_CUT | param::EQ_HIGH_FREQ | param::EQ_CUTOFF => 400.0 + resp4oct(val) * 19600.0,
 
         param::DRY_OUT | param::EARLY_OUT | param::LATE_OUT => -30.0 + val * 30.0,
 
@@ -112,38 +112,23 @@ fn scale_param(val: f64, index: usize) -> f64 {
         param::TAP_PREDELAY => resp1dec(val) * 500.0,
         param::TAP_LENGTH => 10.0 + val * 990.0,
 
-        param::EARLY_DIFFUSE_COUNT => (1.0 + val * 11.999).floor(),
-        param::EARLY_DIFFUSE_DELAY => 10.0 + val * 90.0,
-        param::EARLY_DIFFUSE_MOD_AMOUNT => val * 2.5,
-        param::EARLY_DIFFUSE_MOD_RATE => resp2dec(val) * 5.0,
+        param::EARLY_DIFFUSE_COUNT | param::LATE_LINE_COUNT => (1.0 + val * 11.999).floor(),
+        param::EARLY_DIFFUSE_DELAY | param::LATE_DIFFUSE_DELAY => 10.0 + val * 90.0,
+        param::EARLY_DIFFUSE_MOD_AMOUNT | param::LATE_LINE_MOD_AMOUNT | param::LATE_DIFFUSE_MOD_AMOUNT => val * 2.5,
+        param::EARLY_DIFFUSE_MOD_RATE | param::LATE_LINE_MOD_RATE | param::LATE_DIFFUSE_MOD_RATE => resp2dec(val) * 5.0,
 
-        param::LATE_MODE => {
-            if val < 0.5 {
-                0.0
-            } else {
-                1.0
-            }
-        }
-        param::LATE_LINE_COUNT => (1.0 + val * 11.999).floor(),
         param::LATE_DIFFUSE_COUNT => (1.0 + val * 7.999).floor(),
         param::LATE_LINE_SIZE => 20.0 + resp2dec(val) * 980.0,
-        param::LATE_LINE_MOD_AMOUNT => val * 2.5,
-        param::LATE_DIFFUSE_DELAY => 10.0 + val * 90.0,
-        param::LATE_DIFFUSE_MOD_AMOUNT => val * 2.5,
         param::LATE_LINE_DECAY => 0.05 + resp3dec(val) * 59.95,
-        param::LATE_LINE_MOD_RATE => resp2dec(val) * 5.0,
-        param::LATE_DIFFUSE_MOD_RATE => resp2dec(val) * 5.0,
 
         param::EQ_LOW_FREQ => 20.0 + resp3oct(val) * 980.0,
-        param::EQ_HIGH_FREQ => 400.0 + resp4oct(val) * 19600.0,
-        param::EQ_CUTOFF => 400.0 + resp4oct(val) * 19600.0,
         param::EQ_LOW_GAIN | param::EQ_HIGH_GAIN => -20.0 + val * 20.0,
 
         _ => val,
     }
 }
 
-/// Single CloudSeed reverb channel (mono).
+/// Single `CloudSeed` reverb channel (mono).
 struct CloudChannel {
     params_scaled: [f64; param::COUNT],
     sample_rate: f64,
@@ -192,7 +177,7 @@ impl CloudChannel {
             params_scaled: [0.0; param::COUNT],
             sample_rate,
             pre_delay: ModulatedDelay::new(),
-            multitap: MultitapDelay::new(384000),
+            multitap: MultitapDelay::new(384_000),
             diffuser,
             lines,
             high_pass,
@@ -237,7 +222,7 @@ impl CloudChannel {
         }
     }
 
-    /// Apply a single scaled parameter — exact port of ReverbChannel::SetParameter.
+    /// Apply a single scaled parameter — exact port of `ReverbChannel::SetParameter`.
     fn apply_param(&mut self, para: usize, scaled: f64) {
         self.params_scaled[para] = scaled;
 
@@ -262,7 +247,6 @@ impl CloudChannel {
             param::INPUT_MIX => self.input_mix = scaled,
             param::LOW_CUT => self.high_pass.set_cutoff(scaled),
             param::HIGH_CUT => self.low_pass.set_cutoff(scaled),
-            param::DRY_OUT => { /* handled at stereo level */ }
             param::EARLY_OUT => {
                 self.early_out = if scaled <= -30.0 {
                     0.0
@@ -428,7 +412,7 @@ impl CloudChannel {
         1.0 / (self.line_count.max(1) as f64).sqrt()
     }
 
-    /// Exact port of ReverbChannel::UpdateLines.
+    /// Exact port of `ReverbChannel::UpdateLines`.
     fn update_lines(&mut self) {
         let line_delay_samples = self.ms2samples(self.params_scaled[param::LATE_LINE_SIZE]);
         let line_decay_millis = self.params_scaled[param::LATE_LINE_DECAY] * 1000.0;
@@ -470,7 +454,7 @@ impl CloudChannel {
         }
     }
 
-    /// Exact port of ReverbChannel::UpdatePostDiffusion.
+    /// Exact port of `ReverbChannel::UpdatePostDiffusion`.
     fn update_post_diffusion(&mut self) {
         for i in 0..TOTAL_LINE_COUNT {
             self.lines[i]
@@ -478,7 +462,7 @@ impl CloudChannel {
         }
     }
 
-    /// Process one sample — exact port of ReverbChannel::Process (per-sample).
+    /// Process one sample — exact port of `ReverbChannel::Process` (per-sample).
     #[inline]
     fn tick(&mut self, input: f64) -> (f64, f64) {
         let mut x = input;
@@ -535,7 +519,7 @@ impl CloudChannel {
     }
 }
 
-/// Vocoder-driven additive ensemble (BigSky MX Cloud "Ensemble",
+/// Vocoder-driven additive ensemble (`BigSky` MX Cloud "Ensemble",
 /// from Cloudburst).
 ///
 /// Strymon describes Cloudburst's ensemble as continuously analyzing
@@ -652,11 +636,11 @@ impl Ensemble {
     }
 }
 
-/// Cloud reverb — stereo CloudSeed engine.
+/// Cloud reverb — stereo `CloudSeed` engine.
 ///
-/// Exact port of CloudSeedCore's ReverbController:
-/// two independent ReverbChannels with input crossfeed mixing
-/// and per-channel cross-seed decorrelation. The BigSky MX "Ensemble"
+/// Exact port of `CloudSeedCore`'s `ReverbController`:
+/// two independent `ReverbChannels` with input crossfeed mixing
+/// and per-channel cross-seed decorrelation. The `BigSky` MX "Ensemble"
 /// layer (pitch-tracked synthetic strings) is additive on the input
 /// and coexists with Diffusion.
 pub struct Cloud {
@@ -669,6 +653,7 @@ pub struct Cloud {
 }
 
 impl Cloud {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut cloud = Self {
             left: CloudChannel::new(sample_rate, false),
@@ -718,7 +703,7 @@ impl Cloud {
         cloud
     }
 
-    /// Set a raw [0, 1] parameter and apply through ScaleParam to both channels.
+    /// Set a raw [0, 1] parameter and apply through `ScaleParam` to both channels.
     fn set_raw_param(&mut self, param_id: usize, value: f64) {
         self.raw_params[param_id] = value;
         let scaled = scale_param(value, param_id);

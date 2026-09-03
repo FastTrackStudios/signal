@@ -51,6 +51,16 @@ pub fn build_state(multi_xml: &str) -> Vec<u8> {
 /// above; `IComponent::getState` — what a host stores, and so what comes out
 /// of a Gig Performer file via [`crate::gig`] — omits the leading `"DAW3"` and
 /// length words and starts at the magic. Same body either way.
+///
+/// # Errors
+///
+/// Returns an error if the chunk is too short, has an invalid magic number, or
+/// contains truncated data.
+///
+/// # Panics
+///
+/// Panics if the chunk body is between 4 and 23 bytes (should not happen with
+/// valid input due to length checks).
 pub fn parse_state(chunk: &[u8]) -> Result<String, String> {
     let body = if chunk.len() >= 12 && &chunk[0..4] == b"DAW3" {
         &chunk[8..]
@@ -69,6 +79,11 @@ pub fn parse_state(chunk: &[u8]) -> Result<String, String> {
 
 /// Splice a patch's `<SynthEngine>` subtree into Part 1 of a template Multi
 /// XML — how a single `.prt_omn` becomes loadable plugin state.
+///
+/// # Errors
+///
+/// Returns an error if the patch or template XML is malformed or missing
+/// required elements.
 pub fn patch_into_multi(patch_xml: &str, template_multi_xml: &str) -> Result<String, String> {
     let engine = {
         let start = patch_xml

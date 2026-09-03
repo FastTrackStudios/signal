@@ -62,11 +62,22 @@ pub const SPACE_VERSION: u32 = 1;
 const FEATURES_MAGIC: &[u8; 8] = b"SIGSPACE";
 
 impl Space {
-    #[must_use] 
+    #[must_use]
     pub fn space_dir(library_root: &Path, name: &str) -> PathBuf {
         library_root.join("Space").join(format!("{name}.space"))
     }
 
+    /// Load a space from disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the space.json or features.bin files cannot be read,
+    /// if the file formats are invalid, or if the feature matrix dimensions
+    /// do not match the space metadata.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the file headers cannot be parsed as little-endian u32 values.
     pub fn load(dir: &Path) -> Result<(Self, Vec<f32>), String> {
         let space: Self = serde_json::from_slice(
             &std::fs::read(dir.join("space.json")).map_err(|e| e.to_string())?,
@@ -96,6 +107,16 @@ impl Space {
         Ok((space, feats))
     }
 
+    /// Save a space to disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directories cannot be created or if the
+    /// space.json or features.bin files cannot be written.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `features.len()` does not equal `self.dim * self.items.len()`.
     pub fn save(&self, dir: &Path, features: &[f32]) -> Result<(), String> {
         assert_eq!(features.len(), self.dim * self.items.len());
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -203,7 +224,7 @@ mod tests {
         let hat = |seed: u32| {
             let s = std::cell::Cell::new(seed | 1);
             burst(sr, 0.15, move |i| {
-                s.set(s.get().wrapping_mul(1664525).wrapping_add(1013904223));
+                s.set(s.get().wrapping_mul(1_664_525).wrapping_add(1_013_904_223));
                 let t = i as f32 / sr as f32;
                 ((s.get() >> 16) as f32 / 32768.0 - 1.0) * (-t * 40.0).exp() * 0.5
             })

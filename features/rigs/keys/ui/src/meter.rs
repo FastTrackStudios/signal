@@ -105,6 +105,7 @@ pub fn EdgeMeter(
 }
 
 /// A peak as a console reads it: dBFS, or `−∞` for silence.
+#[must_use]
 pub fn fmt_dbfs(peak: f32) -> String {
     if peak <= 0.0 {
         "−∞".into()
@@ -132,6 +133,5 @@ pub fn peak_of(kind: &str, name: &str) -> f32 {
         .meters
         .iter()
         .find(|m| m.name == name && m.kind == kind)
-        .map(|m| m.peak)
-        .unwrap_or(0.0)
+        .map_or(0.0, |m| m.peak)
 }

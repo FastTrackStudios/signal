@@ -28,6 +28,10 @@ use tracing::info;
 ///   5: Reverb   (reverb wet/dry)
 ///   6: Gate     (input gate threshold)
 ///   7: Volume   (output comp makeup / volume)
+///
+/// # Errors
+///
+/// Returns an error if DAW operations fail.
 pub async fn load_demo_guitar_rig(daw: &Daw) -> Result<()> {
     let project = daw.current_project().await.wrap_err("no current project")?;
     let tracks = project.tracks();
@@ -37,7 +41,7 @@ pub async fn load_demo_guitar_rig(daw: &Daw) -> Result<()> {
     // ── Rig folder ───────────────────────────────────────────────────
     let rig = tracks.add("Guitar Rig", None).await?;
     rig.set_folder_depth(1).await?;
-    rig.set_color(0xF97316).await?; // orange
+    rig.set_color(0x00F9_7316).await?; // orange
 
     // FTS Signal Controller on rig folder (macro host)
     rig.fx_chain()
@@ -47,12 +51,12 @@ pub async fn load_demo_guitar_rig(daw: &Daw) -> Result<()> {
 
     // ── Input track ──────────────────────────────────────────────────
     let input = tracks.add("Guitar Input", None).await?;
-    input.set_color(0x6B7280).await?; // gray
+    input.set_color(0x006B_7280).await?; // gray
     input.set_parent_send(false).await?;
 
     // ── Layer track: [L] Clean ───────────────────────────────────────
     let layer = tracks.add("[L] Clean", None).await?;
-    layer.set_color(0x22C55E).await?; // green
+    layer.set_color(0x0022_C55E).await?; // green
     layer.set_folder_depth(-1).await?; // close rig folder
 
     // Send: input → layer

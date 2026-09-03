@@ -42,6 +42,11 @@ impl LayerRepoLive {
         Self { db }
     }
 
+    /// Initialize the database schema.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database schema cannot be created.
     pub async fn init_schema(&self) -> StorageResult<()> {
         let backend = self.db.get_database_backend();
         let schema = Schema::new(backend);

@@ -19,6 +19,7 @@ pub struct Biquad {
 
 impl Biquad {
     /// Run the filter over a whole buffer, starting from rest.
+    #[must_use]
     pub fn apply(&self, x: &[f32]) -> Vec<f32> {
         let (mut z1, mut z2) = (0.0f64, 0.0f64);
         x.iter()
@@ -44,6 +45,7 @@ impl Biquad {
     }
 
     /// Constant-Q bandpass (RBJ cookbook), unity gain at the centre.
+    #[must_use]
     pub fn bandpass(centre_hz: f64, q: f64, sample_rate: f64) -> Self {
         let w0 = 2.0 * PI * centre_hz / sample_rate;
         let (sin, cos) = (w0.sin(), w0.cos());
@@ -59,6 +61,7 @@ impl Biquad {
     }
 
     /// High-shelf (RBJ cookbook), `gain_db` above the corner.
+    #[must_use]
     pub fn high_shelf(f0: f64, q: f64, gain_db: f64, sample_rate: f64) -> Self {
         let a = 10.0f64.powf(gain_db / 40.0);
         let w0 = 2.0 * PI * f0 / sample_rate;
@@ -76,6 +79,7 @@ impl Biquad {
     }
 
     /// Second-order highpass (RBJ cookbook).
+    #[must_use]
     pub fn highpass(f0: f64, q: f64, sample_rate: f64) -> Self {
         let w0 = 2.0 * PI * f0 / sample_rate;
         let (sin, cos) = (w0.sin(), w0.cos());
@@ -118,6 +122,7 @@ const OCTAVE_SECTIONS: usize = 3;
 /// Bands whose centre is at or above Nyquist are returned as silence rather
 /// than being dropped, so the band index always lines up with the frequency
 /// table regardless of sample rate.
+#[must_use]
 pub fn octave_bands(x: &[f32], sample_rate: f64) -> Vec<Vec<f32>> {
     OCTAVE_CENTRES_HZ
         .iter()
@@ -141,12 +146,13 @@ pub fn octave_bands(x: &[f32], sample_rate: f64) -> Vec<Vec<f32>> {
 /// The standard tabulates coefficients for 48 kHz; these are the analog
 /// prototype parameters the table is derived from, re-designed at the actual
 /// sample rate so the weighting stays correct off 48 kHz.
+#[must_use]
 pub fn k_weighting(sample_rate: f64) -> [Biquad; 2] {
-    const SHELF_F0: f64 = 1681.974450955533;
-    const SHELF_Q: f64 = 0.7071752369554196;
-    const SHELF_GAIN_DB: f64 = 3.999843853973347;
-    const HP_F0: f64 = 38.13547087602444;
-    const HP_Q: f64 = 0.5003270373238773;
+    const SHELF_F0: f64 = 1_681.974_450_955_533;
+    const SHELF_Q: f64 = 0.707_175_236_955_419_6;
+    const SHELF_GAIN_DB: f64 = 3.999_843_853_973_347;
+    const HP_F0: f64 = 38.135_470_876_024_44;
+    const HP_Q: f64 = 0.500_327_037_323_877_3;
 
     [
         Biquad::high_shelf(SHELF_F0, SHELF_Q, SHELF_GAIN_DB, sample_rate),
@@ -155,6 +161,7 @@ pub fn k_weighting(sample_rate: f64) -> [Biquad; 2] {
 }
 
 /// Apply K-weighting to a buffer.
+#[must_use]
 pub fn k_weight(x: &[f32], sample_rate: f64) -> Vec<f32> {
     let [shelf, hp] = k_weighting(sample_rate);
     hp.apply(&shelf.apply(x))

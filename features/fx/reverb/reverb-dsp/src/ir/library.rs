@@ -27,16 +27,22 @@ impl IrLibrary {
         }
     }
 
+    #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
     }
 
+    #[must_use]
     pub fn entries(&self) -> &[IrEntry] {
         &self.entries
     }
 
     /// Walk `root` recursively, collect IR files. Re-running replaces
     /// the entry list.
+    ///
+    /// # Errors
+    ///
+    /// Returns `std::io::Error` if directory traversal fails.
     pub fn rescan(&mut self) -> std::io::Result<()> {
         self.entries.clear();
         if !self.root.is_dir() {

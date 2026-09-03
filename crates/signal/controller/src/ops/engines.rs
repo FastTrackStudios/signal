@@ -15,6 +15,8 @@ use signal_proto::{
 pub struct EngineOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> EngineOps<S> {
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn list(&self) -> Result<Vec<Engine>, OpsError> {
         self.0
             .service
@@ -23,6 +25,8 @@ impl<S: SignalApi> EngineOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn load(&self, id: impl Into<EngineId>) -> Result<Option<Engine>, OpsError> {
         self.0
             .service
@@ -31,6 +35,8 @@ impl<S: SignalApi> EngineOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn create(
         &self,
         name: impl Into<String>,
@@ -48,6 +54,8 @@ impl<S: SignalApi> EngineOps<S> {
         Ok(engine)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn save(&self, engine: Engine) -> Result<Engine, OpsError> {
         self.0
             .service
@@ -57,6 +65,8 @@ impl<S: SignalApi> EngineOps<S> {
         Ok(engine)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn delete(&self, id: impl Into<EngineId>) -> Result<(), OpsError> {
         self.0
             .service
@@ -65,6 +75,8 @@ impl<S: SignalApi> EngineOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn load_variant(
         &self,
         engine_id: impl Into<EngineId>,
@@ -77,6 +89,8 @@ impl<S: SignalApi> EngineOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn save_scene(
         &self,
         engine_id: impl Into<EngineId>,
@@ -94,6 +108,8 @@ impl<S: SignalApi> EngineOps<S> {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn by_tag(&self, tag: &str) -> Result<Vec<Engine>, OpsError> {
         let all = self.list().await?;
         Ok(all
@@ -102,10 +118,14 @@ impl<S: SignalApi> EngineOps<S> {
             .collect())
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn find_by_name(&self, name: &str) -> Result<Option<Engine>, OpsError> {
         Ok(self.list().await?.into_iter().find(|e| e.name == name))
     }
 
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn rename(
         &self,
         id: impl Into<EngineId>,
@@ -119,6 +139,9 @@ impl<S: SignalApi> EngineOps<S> {
     }
 
     /// Load an engine, apply a closure to one of its scenes, and save.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn update_scene(
         &self,
         engine_id: impl Into<EngineId>,
@@ -137,6 +160,9 @@ impl<S: SignalApi> EngineOps<S> {
     }
 
     /// Add a scene to an engine. Returns the updated engine, or `None` if the engine doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn add_scene(
         &self,
         engine_id: impl Into<EngineId>,
@@ -152,6 +178,9 @@ impl<S: SignalApi> EngineOps<S> {
     }
 
     /// Remove a scene from an engine. Returns the removed scene, or `None` if not found.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn remove_scene(
         &self,
         engine_id: impl Into<EngineId>,
@@ -171,6 +200,9 @@ impl<S: SignalApi> EngineOps<S> {
     }
 
     /// Duplicate a scene within an engine. Returns the new scene, or `None` if not found.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn duplicate_scene(
         &self,
         engine_id: impl Into<EngineId>,
@@ -195,11 +227,17 @@ impl<S: SignalApi> EngineOps<S> {
     }
 
     /// Check if an engine exists.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn exists(&self, id: impl Into<EngineId>) -> Result<bool, OpsError> {
         Ok(self.load(id).await?.is_some())
     }
 
     /// Count all engines.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::Storage`] if the storage backend fails.
     pub async fn count(&self) -> Result<usize, OpsError> {
         Ok(self.list().await?.len())
     }
@@ -207,6 +245,9 @@ impl<S: SignalApi> EngineOps<S> {
     // region: --- try_* variants
 
     /// Add a scene, returning an error if the engine doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::NotFound`] if the engine doesn't exist, or [`OpsError::Storage`] if the storage backend fails.
     pub async fn try_add_scene(
         &self,
         engine_id: impl Into<EngineId>,
@@ -225,6 +266,10 @@ impl<S: SignalApi> EngineOps<S> {
     }
 
     /// Remove a scene, returning an error if the engine or scene doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::NotFound`] if the engine doesn't exist, [`OpsError::VariantNotFound`] if the scene doesn't exist,
+    /// or [`OpsError::Storage`] if the storage backend fails.
     pub async fn try_remove_scene(
         &self,
         engine_id: impl Into<EngineId>,
@@ -252,6 +297,10 @@ impl<S: SignalApi> EngineOps<S> {
     }
 
     /// Duplicate a scene, returning an error if the engine or scene doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::NotFound`] if the engine doesn't exist, [`OpsError::VariantNotFound`] if the scene doesn't exist,
+    /// or [`OpsError::Storage`] if the storage backend fails.
     pub async fn try_duplicate_scene(
         &self,
         engine_id: impl Into<EngineId>,
@@ -282,6 +331,9 @@ impl<S: SignalApi> EngineOps<S> {
     }
 
     /// Save a scene within an engine, returning an error if the engine doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::NotFound`] if the engine doesn't exist, or [`OpsError::Storage`] if the storage backend fails.
     pub async fn try_save_scene(
         &self,
         engine_id: impl Into<EngineId>,
@@ -305,6 +357,10 @@ impl<S: SignalApi> EngineOps<S> {
     }
 
     /// Update a scene via closure, returning an error if the engine or scene doesn't exist.
+    ///
+    /// # Errors
+    /// Returns [`OpsError::NotFound`] if the engine doesn't exist, [`OpsError::VariantNotFound`] if the scene doesn't exist,
+    /// or [`OpsError::Storage`] if the storage backend fails.
     pub async fn try_update_scene(
         &self,
         engine_id: impl Into<EngineId>,

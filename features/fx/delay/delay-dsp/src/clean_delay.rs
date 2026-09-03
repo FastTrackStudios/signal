@@ -1,4 +1,4 @@
-//! CleanDelay — the TimeLine MX "Digital" machine, four voices.
+//! `CleanDelay` — the `TimeLine` MX "Digital" machine, four voices.
 //!
 //! One delay line, cubic interpolation, optional feedback EQ — and a
 //! per-voice conversion codec in the write path so every regeneration
@@ -13,7 +13,7 @@
 //!   quantizer + noise floor (compress at the write head, expand at the
 //!   read head — the expander's envelope-tracking noise breathing is
 //!   the era sound) plus a gentle in-loop lowpass.
-//! - **Classic** — the original TimeLine digital voice: rounder/fatter
+//! - **Classic** — the original `TimeLine` digital voice: rounder/fatter
 //!   (soft one-pole rolloff + mild saturation), with the voice's
 //!   morphing FILTER response (full bandwidth → analog → tape) driven
 //!   by [`CleanDelay::filter_morph`].
@@ -24,7 +24,7 @@ use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
 
-/// Digital machine voicing (TimeLine MX `Voice`).
+/// Digital machine voicing (`TimeLine` MX `Voice`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DigitalVoice {
     /// Modern full-bandwidth conversion; clean and pure.
@@ -34,37 +34,40 @@ pub enum DigitalVoice {
     Adm,
     /// 12-bit companded conversion — darker, warmer.
     TwelveBit,
-    /// Original TimeLine digital — rounder/fatter, morphing filter.
+    /// Original `TimeLine` digital — rounder/fatter, morphing filter.
     Classic,
 }
 
 impl DigitalVoice {
     pub const COUNT: usize = 4;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
-            1 => DigitalVoice::Adm,
-            2 => DigitalVoice::TwelveBit,
-            3 => DigitalVoice::Classic,
-            _ => DigitalVoice::TwentyFour96,
+            1 => Self::Adm,
+            2 => Self::TwelveBit,
+            3 => Self::Classic,
+            _ => Self::TwentyFour96,
         }
     }
 
+    #[must_use]
     pub fn to_index(self) -> usize {
         match self {
-            DigitalVoice::TwentyFour96 => 0,
-            DigitalVoice::Adm => 1,
-            DigitalVoice::TwelveBit => 2,
-            DigitalVoice::Classic => 3,
+            Self::TwentyFour96 => 0,
+            Self::Adm => 1,
+            Self::TwelveBit => 2,
+            Self::Classic => 3,
         }
     }
 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
-            DigitalVoice::TwentyFour96 => "24/96",
-            DigitalVoice::Adm => "ADM",
-            DigitalVoice::TwelveBit => "12-Bit",
-            DigitalVoice::Classic => "Classic",
+            Self::TwentyFour96 => "24/96",
+            Self::Adm => "ADM",
+            Self::TwelveBit => "12-Bit",
+            Self::Classic => "Classic",
         }
     }
 }
@@ -87,8 +90,8 @@ struct AdmCodec {
     level: f64,
     step: f64,
     history: u32,
-    /// Per-clock-tick syllabic decay toward MIN_STEP / charge toward
-    /// MAX_STEP (exp(-1/(τ_syllabic · f_clock))).
+    /// Per-clock-tick syllabic decay toward `MIN_STEP` / charge toward
+    /// `MAX_STEP` (exp(-1/(τ_syllabic · `f_clock`))).
     syllabic: f64,
     /// Per-clock-tick principal-integrator leak.
     leak: f64,
@@ -213,6 +216,7 @@ impl CleanDelay {
     /// Full-depth modulation excursion in seconds (≈ ±3 ms).
     const MOD_RANGE_S: f64 = 0.003;
 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             time_ms: 250.0,
@@ -375,6 +379,7 @@ impl CleanDelay {
         output
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
@@ -533,10 +538,10 @@ mod tests {
             d.feedback = 0.6;
             d.voice = voice;
             d.update(SR);
-            let mut seed = 0x2545f491u32;
+            let mut seed = 0x2545_f491_u32;
             (0..48000)
                 .map(|i| {
-                    seed = seed.wrapping_mul(747796405).wrapping_add(2891336453);
+                    seed = seed.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
                     let noise = (seed >> 9) as f64 / (1u32 << 23) as f64 - 1.0;
                     let input = if i < 4800 { noise * 0.5 } else { 0.0 };
                     d.tick(input, 0)
@@ -561,10 +566,10 @@ mod tests {
             d.voice = DigitalVoice::Classic;
             d.filter_morph = morph;
             d.update(SR);
-            let mut seed = 0x1234567u32;
+            let mut seed = 0x0123_4567_u32;
             let out: Vec<f64> = (0..48000)
                 .map(|i| {
-                    seed = seed.wrapping_mul(747796405).wrapping_add(2891336453);
+                    seed = seed.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
                     let noise = (seed >> 9) as f64 / (1u32 << 23) as f64 - 1.0;
                     let input = if i < 4800 { noise * 0.5 } else { 0.0 };
                     d.tick(input, 0)

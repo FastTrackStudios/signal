@@ -29,6 +29,7 @@
 //!             `proxy_out_root` = …/Signal/Libraries/Proxy/<Category>/<Library>
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
 use std::path::PathBuf;
 
 use signal_sampler::engine::cache::{create_signal_pack_with, PackCodec, PackSpecSource};
@@ -428,10 +429,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 let mut synth = String::new();
                 for id in &undeclared {
-                    synth.push_str(&format!(
-                        "    {{ id {id:?}, label {id:?}, kind {} }}\n",
+                    let _ = writeln!(
+                        synth,
+                        "    {{ id {id:?}, label {id:?}, kind {} }}",
                         synth_artic_kind(id)
-                    ));
+                    );
                 }
                 match find_list_block(&body, "articulations") {
                     Some((_, _, ie, _)) => format!("{}{synth}{}", &body[..ie], &body[ie..]),

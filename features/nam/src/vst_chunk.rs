@@ -45,6 +45,11 @@ const OUTER_SIZE_OFFSET: usize = 0x30;
 const COMPONENT_SIZE_OFFSET: usize = 0x3C;
 
 /// Decode a NAM VST3 state chunk from base64.
+///
+/// # Errors
+///
+/// Returns an error if the base64 decoding fails or the decoded data
+/// is invalid.
 pub fn decode_chunk(base64_data: &str) -> Result<NamVstChunk, NamError> {
     let data = BASE64
         .decode(base64_data.trim())

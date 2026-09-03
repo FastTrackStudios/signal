@@ -99,6 +99,10 @@ pub struct NamMetadata {
 ///
 /// NAM files are JSON with a large `weights` array that we don't need.
 /// We deserialize into `serde_json::Value` and pluck out only the fields we want.
+///
+/// # Errors
+///
+/// Returns an error if the contents cannot be parsed as valid JSON.
 pub fn parse_nam_metadata(contents: &str) -> Result<NamMetadata, serde_json::Error> {
     let val: serde_json::Value = serde_json::from_str(contents)?;
     let obj = val.as_object();

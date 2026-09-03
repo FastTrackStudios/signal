@@ -93,16 +93,17 @@ struct CollectedBinding<'a> {
 /// a `MacroSetupResult` that can be registered in the global registry.
 ///
 /// No JSFX insertion, no MIDI CC assignment, no plink configuration.
+///
+/// # Errors
+///
+/// Returns an error if FX parameter retrieval fails.
 pub async fn setup_macros_for_block(
     track: &TrackHandle,
     target_fx: &FxHandle,
     block: &Block,
 ) -> Result<Option<MacroSetupResult>, String> {
     // 1. Early return if no macro bank.
-    let macro_bank = match &block.macro_bank {
-        Some(bank) => bank,
-        None => return Ok(None),
-    };
+    let Some(macro_bank) = &block.macro_bank else { return Ok(None) };
 
     // 2. Collect all bindings from the knob tree.
     let collected = collect_all_bindings(macro_bank);

@@ -93,11 +93,18 @@ impl PatchConfig {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the styx string is not valid.
     pub fn from_styx(s: &str) -> eyre::Result<Self> {
         facet_styx::from_str(s).map_err(|e| eyre::eyre!("patch config parse: {e}"))
     }
 
     /// Resolve per the priority in the module docs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration file cannot be read or parsed.
     pub fn resolve() -> eyre::Result<Self> {
         match std::env::var(PATCH_ENV) {
             Ok(path) if !path.is_empty() => {

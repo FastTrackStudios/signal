@@ -1,7 +1,9 @@
 //! The full **Omnisphere 3** per-Part signal chain, built as a composition
 //! tree ([`signal_sampler::rig_node`]) — the routing experiment companion to
-//! [`signal_sampler::nord`]. If the engine can express both the Nord Stage 4 and the
-//! Omnisphere 3 routing, there aren't many synth architectures it can't.
+//! [`signal_sampler::nord`].
+//!
+//! If the engine can express both the Nord Stage 4 and the Omnisphere 3 routing,
+//! there aren't many synth architectures it can't.
 //!
 //! Source: the official Omnisphere 3 Reference Guide (v3.0.2c). One Part:
 //!

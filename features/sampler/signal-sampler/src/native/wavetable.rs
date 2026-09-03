@@ -3,7 +3,7 @@
 //! into the full oscillator stack:
 //!
 //! - **Morphing wave** — `shape` 0..1 crossfades sine → triangle → saw →
-//!   square (PolyBLEP band-limited). Stands in for the 638 Omnisphere
+//!   square (`PolyBLEP` band-limited). Stands in for the 638 Omnisphere
 //!   wavetables until table extraction lands.
 //! - **Unison** — up to 8 detuned voices per note, symmetric cent spread,
 //!   stereo width (pan spread), 1/√n level compensation.
@@ -22,7 +22,7 @@ use signal_plugin_host::{PluginDescriptor, PluginEvents, PluginFormat, PluginPar
 use super::adsr::{Adsr, AdsrParams};
 use crate::soundsource::{Soundsource, SoundsourceKind};
 
-/// PolyBLEP residual for a discontinuity at phase 0 (t in 0..1, dt = inc).
+/// `PolyBLEP` residual for a discontinuity at phase 0 (t in 0..1, dt = inc).
 #[inline]
 fn poly_blep(t: f32, dt: f32) -> f32 {
     if t < dt {
@@ -174,12 +174,13 @@ pub struct NativeWavetable {
     pitch_mult: f32,
     /// Square pulse width (param 5 "symmetry": 0.5 = symmetric).
     duty: f32,
-    /// Harmonia level scale (param 6 "harm_mix").
+    /// Harmonia level scale (param 6 "`harm_mix`").
     harm_mix: f32,
     voices: Vec<Voice>,
 }
 
 impl NativeWavetable {
+    #[must_use]
     pub fn new(sample_rate: u32) -> Self {
         Self {
             sample_rate: sample_rate.max(1) as f32,
@@ -204,10 +205,12 @@ impl NativeWavetable {
         self
     }
 
+    #[must_use]
     pub fn config(&self) -> &SynthConfig {
         &self.cfg
     }
 
+    #[must_use]
     pub fn active_voices(&self) -> usize {
         self.voices.len()
     }
@@ -401,11 +404,11 @@ impl Soundsource for NativeWavetable {
 
     fn note_on(&mut self, note: u8, velocity: u8) {
         // Inherent method wins over the trait method of the same name.
-        NativeWavetable::note_on(self, note, velocity);
+        Self::note_on(self, note, velocity);
     }
 
     fn note_off(&mut self, note: u8) {
-        NativeWavetable::note_off(self, note);
+        Self::note_off(self, note);
     }
 
     fn render(

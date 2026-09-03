@@ -43,6 +43,7 @@ pub struct BiquadFilter {
 
 impl BiquadFilter {
     /// Build a second-order lowpass at `fc` Hz with quality factor `q`.
+    #[must_use]
     pub fn lowpass(fc: f32, q: f32, sample_rate: u32) -> Self {
         let omega = 2.0 * std::f32::consts::PI * fc / sample_rate as f32;
         let sin_w = omega.sin();

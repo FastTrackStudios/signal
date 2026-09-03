@@ -1,6 +1,6 @@
 //! Biquad filter with multiple filter types.
 //!
-//! Ported from CloudSeedCore Biquad.h/.cpp (MIT, Ghost Note Audio).
+//! Ported from `CloudSeedCore` Biquad.h/.cpp (MIT, Ghost Note Audio).
 //! Uses earlevel.com formulas for coefficient computation.
 
 use std::f64::consts::PI;
@@ -42,6 +42,7 @@ pub struct Biquad {
 }
 
 impl Biquad {
+    #[must_use]
     pub fn new(filter_type: FilterType, sample_rate: f64) -> Self {
         let mut bq = Self {
             b0: 1.0,

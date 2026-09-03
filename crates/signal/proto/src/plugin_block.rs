@@ -244,6 +244,11 @@ impl PluginBlockDef {
     ///
     /// For multi-FX blocks, the same `plugin_param_index` is allowed across
     /// different `fx_slot` values (they target different plugins).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a parameter index exceeds the valid range or if
+    /// an index is mapped multiple times within the same FX slot.
     pub fn validate(&self) -> Result<(), PluginBlockDefError> {
         // Key: (fx_slot, plugin_param_index) — duplicates within the same FX are errors.
         let mut seen = std::collections::HashSet::new();

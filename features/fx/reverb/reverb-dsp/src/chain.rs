@@ -21,7 +21,7 @@ use fts_modulation::{EnvFollower, Modulator, TransportInfo};
 use crate::primitives::saturation::Saturator;
 use crate::primitives::tilt_eq::TiltEq;
 
-/// BigSky MX INFINITE footswitch behavior (per-preset `Inf Mode`).
+/// `BigSky` MX INFINITE footswitch behavior (per-preset `Inf Mode`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InfiniteMode {
     /// Capture and sustain the current reverb; new playing stays dry.
@@ -33,11 +33,13 @@ pub enum InfiniteMode {
     Off,
 }
 
-/// The chain's copyable parameter surface — everything BigSky MX
+/// The chain's copyable parameter surface — everything `BigSky` MX
 /// "copy settings" carries between dual slots (NOT the algorithm
-/// selection or internal state). One list, used by both
-/// [`ReverbChain::param_surface`] and [`ReverbChain::apply_surface`],
-/// so a new chain param only needs adding here to travel.
+/// selection or internal state).
+///
+/// One list, used by both [`ReverbChain::param_surface`] and
+/// [`ReverbChain::apply_surface`], so a new chain param only needs
+/// adding here to travel.
 #[derive(Debug, Clone, Copy)]
 pub struct ChainParamSurface {
     pub params: AlgorithmParams,
@@ -82,9 +84,10 @@ pub struct ChainParamSurface {
 pub const POST_EQ_BANDS: usize = 6;
 
 /// One Post EQ band — the 6-band EQ on the final reverb sound
-/// (`fx.reverb.post-eq`, docs/spec/fx/embedded-eq.md). Wet path only; the
-/// wet gain auto-compensates for the curve so shaping the reverb never
-/// rides the mix.
+/// (`fx.reverb.post-eq`, docs/spec/fx/embedded-eq.md).
+///
+/// Wet path only; the wet gain auto-compensates for the curve so shaping
+/// the reverb never rides the mix.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PostEqBand {
     /// 0 = Bell, 1 = Low Shelf, 2 = High Shelf, 3 = Low Cut, 4 = High Cut.
@@ -109,6 +112,7 @@ impl Default for PostEqBand {
 impl PostEqBand {
     /// Whether this band shapes anything. Cuts count when their corner is
     /// inside the audible band; gain shapes when their gain is non-zero.
+    #[must_use]
     pub fn is_active(&self) -> bool {
         match self.shape {
             3 => self.freq_hz > 21.0,
@@ -119,6 +123,7 @@ impl PostEqBand {
 
     /// This band's magnitude at `freq`, in dB — analog-prototype grade, for
     /// the display curve and the wet-gain compensation.
+    #[must_use]
     pub fn magnitude_db(&self, freq: f64) -> f64 {
         let f0 = self.freq_hz.max(10.0);
         let q = self.q.clamp(0.1, 18.0);
@@ -207,7 +212,7 @@ pub struct ReverbChain {
     /// inside the algorithm.
     pub conv_mod: ConvolutionModParams,
 
-    /// BigSky MX Impulse live shaping params (decay % / tail / attack /
+    /// `BigSky` MX Impulse live shaping params (decay % / tail / attack /
     /// stretch / direction / feedback). Only consumed by Convolution.
     /// Shaping changes trigger a background re-preparation via the
     /// sender attached with [`Self::set_reshape_sender`] (or
@@ -216,32 +221,32 @@ pub struct ReverbChain {
     /// mirroring the hardware.
     pub impulse: ImpulseParams,
 
-    /// BigSky MX Shimmer params (dual shift voices + feedback mode).
+    /// `BigSky` MX Shimmer params (dual shift voices + feedback mode).
     /// Only consumed by Shimmer; defaults are transparent.
     pub shimmer: ShimmerParams,
-    /// BigSky MX Magneto params (ping pong). Only consumed by Magneto.
+    /// `BigSky` MX Magneto params (ping pong). Only consumed by Magneto.
     pub magneto: MagnetoParams,
     /// Chamber Color (applies to the Chamber engine).
     pub chamber: ChamberParams,
     /// Spring Dwell + Number of Springs (applies to the Spring engines).
     pub spring: SpringParams,
-    /// BigSky MX NonLinear params (chop / gate speed / late stage).
-    /// Only consumed by NonLinear; defaults are transparent.
+    /// `BigSky` MX `NonLinear` params (chop / gate speed / late stage).
+    /// Only consumed by `NonLinear`; defaults are transparent.
     pub nonlinear: NonLinearParams,
-    /// BigSky MX Cloud params (Ensemble). Only consumed by Cloud;
+    /// `BigSky` MX Cloud params (Ensemble). Only consumed by Cloud;
     /// default is transparent.
     pub cloud: CloudParams,
-    /// BigSky MX Bloom params (Harmonics). Only consumed by Bloom;
+    /// `BigSky` MX Bloom params (Harmonics). Only consumed by Bloom;
     /// default is transparent.
     pub bloom: BloomParams,
-    /// BigSky MX Chorale params (Choir level / voice / mod
+    /// `BigSky` MX Chorale params (Choir level / voice / mod
     /// randomization). Only consumed by Chorale; defaults transparent.
     pub chorale: ChoraleParams,
-    /// BigSky MX Voice select (MX / Classic). Plate/Spring toggle
+    /// `BigSky` MX Voice select (MX / Classic). Plate/Spring toggle
     /// between their two heritage variants; Hall/Room/Shimmer get a
     /// Classic re-tune via `effective_params`. Default MX = transparent.
     pub voice: ReverbVoice,
-    /// BigSky MX Hall params (Mid EQ + Swell). Applied on the chain's
+    /// `BigSky` MX Hall params (Mid EQ + Swell). Applied on the chain's
     /// wet bus while a Hall variant is active; defaults transparent.
     pub hall: HallParams,
 
@@ -265,10 +270,10 @@ pub struct ReverbChain {
     pub width: f64,
     /// Wet-output pan (-1 left .. +1 right, 0 = centered). Equal-power,
     /// unity at center; a mid setting weights the field rather than
-    /// muting the far side (BigSky MX per-slot pan).
+    /// muting the far side (`BigSky` MX per-slot pan).
     pub pan: f64,
     /// Wet tremolo rate in Hz (Flint-style trem on the reverb output;
-    /// covers BigSky NonLinear Chop / TimeLine MX Reverb-machine trem).
+    /// covers `BigSky` `NonLinear` Chop / `TimeLine` MX Reverb-machine trem).
     pub trem_rate_hz: f64,
     /// Wet tremolo depth (0 = off, 1 = full amplitude modulation).
     pub trem_depth: f64,
@@ -296,7 +301,7 @@ pub struct ReverbChain {
     pub duck_release_ms: f64,
     /// Freeze / infinite hold (kills new input, forces max feedback).
     pub freeze: bool,
-    /// What engaging `freeze` does (BigSky MX INFINITE modes): `Freeze`
+    /// What engaging `freeze` does (`BigSky` MX INFINITE modes): `Freeze`
     /// captures the current tail and mutes new input into the reverb;
     /// `Infinite` pins the decay while input keeps feeding the wash;
     /// `Off` disables the footswitch entirely.
@@ -374,6 +379,7 @@ impl Default for ReverbChain {
 }
 
 impl ReverbChain {
+    #[must_use]
     pub fn new() -> Self {
         let sample_rate = 48000.0;
         let max_predelay = (sample_rate * 0.5) as usize; // 500ms
@@ -638,6 +644,7 @@ impl ReverbChain {
     }
 
     /// Does the current algorithm accept IRs?
+    #[must_use]
     pub fn algorithm_supports_ir(&self) -> bool {
         self.algorithm.supports_ir_loading()
     }
@@ -713,6 +720,7 @@ impl ReverbChain {
     }
 
     /// The reverberation-time range the active engine's `decay` spans.
+    #[must_use]
     pub fn decay_seconds_range(&self) -> Option<(f64, f64)> {
         self.algorithm_type.t60_range(self.variant)
     }
@@ -723,17 +731,20 @@ impl ReverbChain {
     }
 
     /// Get the current algorithm type.
+    #[must_use]
     pub fn algorithm_type(&self) -> AlgorithmType {
         self.algorithm_type
     }
 
     /// Get the current variant index.
+    #[must_use]
     pub fn variant(&self) -> usize {
         self.variant
     }
 
     /// Snapshot the copyable parameter surface (see
     /// [`ChainParamSurface`]).
+    #[must_use]
     pub fn param_surface(&self) -> ChainParamSurface {
         ChainParamSurface {
             params: self.params,
@@ -814,7 +825,7 @@ impl ReverbChain {
 
     /// Input bandwidth including the Classic-voice vintage cap: the
     /// early-'80s color is bandwidth + interpolation grain, not just
-    /// EQ (VintageVerb's lesson) — Classic on the retuned engines caps
+    /// EQ (`VintageVerb`'s lesson) — Classic on the retuned engines caps
     /// the input at ~9 kHz before the user's own input LP.
     fn effective_input_lp(&self) -> f64 {
         let user = self.input_lp_freq.min(20000.0);
@@ -841,7 +852,7 @@ impl ReverbChain {
         m
     }
 
-    /// NonLinear shares the PRE-DELAY→feedback knob remap.
+    /// `NonLinear` shares the PRE-DELAY→feedback knob remap.
     fn effective_nonlinear(&self) -> NonLinearParams {
         let mut n = self.nonlinear;
         if self.algorithm_type == AlgorithmType::NonLinear {
@@ -914,11 +925,10 @@ impl ReverbChain {
         let variant = match (self.voice, self.algorithm_type) {
             // Plate: MX rebuild = Dattorro, Classic = the Lexicon 224
             // port. (Progenitor stays reachable via set_variant.)
-            (ReverbVoice::Mx, AlgorithmType::Plate) => Some(0),
-            (ReverbVoice::Classic, AlgorithmType::Plate) => Some(1),
-            // Spring: Vintage IS the classic heritage.
-            (ReverbVoice::Mx, AlgorithmType::Spring) => Some(0),
-            (ReverbVoice::Classic, AlgorithmType::Spring) => Some(1),
+            (ReverbVoice::Mx, AlgorithmType::Plate | AlgorithmType::Spring) => {
+                Some(0)
+            }
+            (ReverbVoice::Classic, AlgorithmType::Plate | AlgorithmType::Spring) => Some(1),
             _ => None,
         };
         if let Some(v) = variant {
@@ -926,7 +936,7 @@ impl ReverbChain {
         }
     }
 
-    /// BigSky MX named-Size selector (see
+    /// `BigSky` MX named-Size selector (see
     /// [`AlgorithmType::size_names`]). Hall and Room sizes are distinct
     /// tunings, so they map onto the existing variant system
     /// (Hall: Concert/Arena; Room: Studio/Club ≈ Studio/Medium);
@@ -1084,7 +1094,7 @@ impl Processor for ReverbChain {
         self.duck_env.reset(0.0);
         self.duck_gain = 1.0;
         self.mid_eq.reset();
-        for f in self.post_eq_filters.iter_mut() {
+        for f in &mut self.post_eq_filters {
             f.reset();
         }
         self.swell_env.reset(0.0);
@@ -1890,7 +1900,7 @@ mod tests {
     }
 
     /// Drive a chain with a steady sine, step `mutate` mid-stream via
-    /// update_params, and assert the post-step region has no adjacent-
+    /// `update_params`, and assert the post-step region has no adjacent-
     /// sample jump grossly larger than the pre-step region's natural
     /// slope (i.e. the ramp, not the step, reaches the audio).
     fn assert_step_click_free(
@@ -1943,7 +1953,7 @@ mod tests {
         // level, and with it the natural slope).
         let settled = max_step(&l2[4800..]);
 
-        for &v in l2.iter() {
+        for &v in &l2 {
             assert!(v.is_finite());
         }
         // ×2.5: a saturation engage legitimately has a ramp window

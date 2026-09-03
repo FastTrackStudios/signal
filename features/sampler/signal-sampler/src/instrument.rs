@@ -301,9 +301,9 @@ zones (
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The MIDI→engine mapping seam (no audio needed): NoteOff is delivered
-    /// with its release velocity, CC reaches `engine.cc`, and a NoteOn with
-    /// velocity 0 is treated as a NoteOff.
+    /// The MIDI→engine mapping seam (no audio needed): `NoteOff` is delivered
+    /// with its release velocity, CC reaches `engine.cc`, and a `NoteOn` with
+    /// velocity 0 is treated as a `NoteOff`.
     #[test]
     fn apply_midi_maps_every_handled_variant() {
         use midicore::{

@@ -109,6 +109,7 @@ impl SpectralDelay {
     /// - `num_sections`: Number of allpass sections (80–300 typical)
     /// - `stretch`: Stretch factor k (1–8, higher = fewer sections needed)
     /// - `coefficient`: Allpass coefficient a (0.3–0.7 typical)
+    #[must_use]
     pub fn new(num_sections: usize, stretch: usize, coefficient: f64) -> Self {
         let n = num_sections.min(MAX_SECTIONS);
         let k = stretch.clamp(1, MAX_STRETCH);
@@ -134,16 +135,18 @@ impl SpectralDelay {
     }
 
     /// Get the approximate group delay at DC in samples.
+    #[must_use]
     pub fn group_delay_dc(&self) -> f64 {
         let a = self.coefficient;
-        let k = self.sections.first().map(|s| s.k).unwrap_or(1) as f64;
+        let k = self.sections.first().map_or(1, |s| s.k) as f64;
         self.active_sections as f64 * k * (1.0 - a) / (1.0 + a)
     }
 
     /// Get the approximate group delay at Nyquist in samples.
+    #[must_use]
     pub fn group_delay_nyquist(&self) -> f64 {
         let a = self.coefficient;
-        let k = self.sections.first().map(|s| s.k).unwrap_or(1) as f64;
+        let k = self.sections.first().map_or(1, |s| s.k) as f64;
         self.active_sections as f64 * k * (1.0 + a) / (1.0 - a)
     }
 

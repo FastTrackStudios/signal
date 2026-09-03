@@ -1,6 +1,6 @@
-//! DrumDelay — multi-head "drum echo" (Binson Echorec style).
+//! `DrumDelay` — multi-head "drum echo" (Binson Echorec style).
 //!
-//! TimeLine MX "Drum" machine parity: four playback heads on one
+//! `TimeLine` MX "Drum" machine parity: four playback heads on one
 //! rotating-drum delay line, each individually enabled with its own
 //! level, feedback contribution, and pan. Default spacing follows the
 //! golden ratio, like the Echorec's magnetic drum head layout.
@@ -27,17 +27,18 @@ pub enum HeadPlayback {
 
 impl HeadPlayback {
     #[inline]
+    #[must_use]
     pub fn gain(self) -> f64 {
         match self {
-            HeadPlayback::Off => 0.0,
-            HeadPlayback::Half => 0.5, // −6 dB
-            HeadPlayback::Full => 1.0,
+            Self::Off => 0.0,
+            Self::Half => 0.5, // −6 dB
+            Self::Full => 1.0,
         }
     }
 }
 
 /// One playback head. Playback routing and feedback enable are
-/// independent (TimeLine MX): a head can feed back into the input while
+/// independent (`TimeLine` MX): a head can feed back into the input while
 /// silent at the output.
 #[derive(Debug, Clone, Copy)]
 pub struct DrumHead {
@@ -52,7 +53,7 @@ pub struct DrumHead {
     pub pan: f64,
 }
 
-/// Head-spacing presets (TimeLine MX Drum "Spacing").
+/// Head-spacing presets (`TimeLine` MX Drum "Spacing").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DrumSpacing {
     /// 16th-note spacing: heads at even quarters of the delay time.
@@ -68,14 +69,15 @@ pub enum DrumSpacing {
 }
 
 impl DrumSpacing {
+    #[must_use]
     pub fn positions(self) -> [f64; 4] {
         match self {
-            DrumSpacing::Even => [0.25, 0.5, 0.75, 1.0],
-            DrumSpacing::Triplet => [1.0 / 6.0, 1.0 / 3.0, 2.0 / 3.0, 1.0],
+            Self::Even => [0.25, 0.5, 0.75, 1.0],
+            Self::Triplet => [1.0 / 6.0, 1.0 / 3.0, 2.0 / 3.0, 1.0],
             // 1/φ³, 1/φ², 1/φ, 1 — each head 1.618x the previous.
-            DrumSpacing::Golden => [0.236, 0.382, 0.618, 1.0],
+            Self::Golden => [0.236, 0.382, 0.618, 1.0],
             // Geometric spacing shrinking toward the end (ratio 1/sqrt(2)).
-            DrumSpacing::Silver => [0.395, 0.674, 0.872, 1.0],
+            Self::Silver => [0.395, 0.674, 0.872, 1.0],
         }
     }
 }
@@ -86,7 +88,7 @@ pub const GOLDEN_HEADS: [f64; 4] = [0.236, 0.382, 0.618, 1.0];
 pub const SILVER_HEADS: [f64; 4] = [0.395, 0.674, 0.872, 1.0];
 
 pub struct DrumDelay {
-    /// Base delay time in ms (clamped to 200–2000, TimeLine Drum range).
+    /// Base delay time in ms (clamped to 200–2000, `TimeLine` Drum range).
     pub time_ms: f64,
     /// Global feedback scale applied to the per-head feedback sum (0.0–1.0).
     pub feedback: f64,
@@ -95,11 +97,11 @@ pub struct DrumDelay {
     /// Low-frequency shaping of the echoes: 0 = full low end,
     /// 1 = heavily thinned (progressive high-pass up to ~500 Hz).
     pub lo_cut: f64,
-    /// Head-alignment high-end fidelity (TimeLine FILTER knob): lowpass
+    /// Head-alignment high-end fidelity (`TimeLine` FILTER knob): lowpass
     /// on everything recorded to the drum, 0 = disabled. Repeats darken
     /// progressively as they recirculate, like a worn/misaligned head.
     pub hicut_freq: f64,
-    /// Soft-clip drive in the record path (TimeLine GRIT), 0.0–1.0.
+    /// Soft-clip drive in the record path (`TimeLine` GRIT), 0.0–1.0.
     pub grit: f64,
     /// Drum-motor wobble depth (0.0–1.0).
     pub wobble: f64,
@@ -132,6 +134,7 @@ impl DrumDelay {
     pub const MAX_TIME_MS: f64 = 2000.0;
     const MAX_DELAY_S: f64 = 2.5;
 
+    #[must_use]
     pub fn new() -> Self {
         let heads = GOLDEN_HEADS.map(|position| DrumHead {
             playback: HeadPlayback::Full,
@@ -299,6 +302,7 @@ impl DrumDelay {
         (out_l, out_r)
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
@@ -389,7 +393,7 @@ mod tests {
             let mut seed = 0xABCD_1234u32;
             let out: Vec<f64> = (0..96000)
                 .map(|i| {
-                    seed = seed.wrapping_mul(747796405).wrapping_add(2891336453);
+                    seed = seed.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
                     let noise = (seed >> 9) as f64 / (1u32 << 23) as f64 - 1.0;
                     let input = if i < 4800 { noise * 0.5 } else { 0.0 };
                     d.tick(input, 0)

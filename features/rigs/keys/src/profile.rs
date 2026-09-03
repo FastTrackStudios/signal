@@ -191,11 +191,19 @@ pub struct KeysProfile {
 
 impl KeysProfile {
     /// Parse a profile from `.styx` (the on-disk authoring format).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the styx text is not valid.
     pub fn from_styx_str(text: &str) -> Result<Self, String> {
         facet_styx::from_str(text).map_err(|e| e.to_string())
     }
 
     /// Serialize to `.styx`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails.
     pub fn to_styx_string(&self) -> Result<String, String> {
         facet_styx::to_string(self).map_err(|e| e.to_string())
     }

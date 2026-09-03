@@ -13,7 +13,7 @@ impl SampleEngine {
         let prev = self.trigger_articulation.take();
         self.trigger_articulation = articulation
             .filter(|s| !s.is_empty())
-            .map(|s| s.to_string());
+            .map(std::string::ToString::to_string);
         self.note_on(note, velocity);
         self.trigger_articulation = prev;
     }
@@ -34,7 +34,7 @@ impl SampleEngine {
             .as_ref()
             .and_then(|ks| ks.notes.get(gi))
             .and_then(|kn| kn.value_for(velocity))
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
         {
             self.apply_keyswitch_value(&v);
         }
@@ -132,7 +132,7 @@ impl SampleEngine {
     ///   if within `live_legato_interval_max` semitones of that line's
     ///   sounding note (nearest line wins; ties → lowest line id), or of a
     ///   line's just-released note (abutment within the chord window).
-    ///   Transitions run through the reactive countdown, which StrictLive
+    ///   Transitions run through the reactive countdown, which `StrictLive`
     ///   times from the `low_latency` tables.
     /// - Otherwise: fresh attack on a free line (LRU-silent first; if every
     ///   line is sounding, the least-recently-active line is retagged).
@@ -226,7 +226,7 @@ impl SampleEngine {
                 best_any = Some((l.last_activity, li));
             }
         }
-        let li = best_free.or(best_any).map(|(_, li)| li).unwrap_or(0);
+        let li = best_free.or(best_any).map_or(0, |(_, li)| li);
         // Stealing a sounding line: clear its bookkeeping so the new note
         // owns it (the old note's voices release via the global fallback).
         let l = &mut self.lines[li];
@@ -617,8 +617,7 @@ impl SampleEngine {
         // consults the mutable counter (position-independent determinism).
         let rr = self
             .forced_rr
-            .map(|f| f as usize)
-            .unwrap_or(self.zone_rr_counter);
+            .map_or(self.zone_rr_counter, |f| f as usize);
         self.zone_rr_counter = self.zone_rr_counter.wrapping_add(1);
 
         let nv_artic = self.articulation.clone();
@@ -636,8 +635,7 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(&nv_artic)
-            .map(|a| a.is_vibrato())
-            .unwrap_or(false);
+            .is_some_and(super::super::spec::ArticulationSpec::is_vibrato);
         let (nv_id, vib_id) = if base_is_vib {
             (
                 self.find_vibrato_pair_id(&nv_artic)
@@ -732,8 +730,7 @@ impl SampleEngine {
     pub(crate) fn trigger_zoned_short(&mut self, note: u8, velocity: u8) {
         let rr = self
             .forced_rr
-            .map(|f| f as usize)
-            .unwrap_or(self.zone_rr_counter);
+            .map_or(self.zone_rr_counter, |f| f as usize);
         self.zone_rr_counter = self.zone_rr_counter.wrapping_add(1);
         let artic = self.articulation.clone();
 
@@ -743,8 +740,7 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(&artic)
-            .map(|a| a.dynamics.len())
-            .unwrap_or(0);
+            .map_or(0, |a| a.dynamics.len());
         // With ≥2 recorded dynamics the loudness IS the sampled layer plus the
         // `$arhiq` intra-band trim; only single-layer artics use velocity².
         let gain = if n_dyn > 1 {
@@ -776,7 +772,6 @@ impl SampleEngine {
     /// short's `%g1qri` floor — verified against the reference render, where the
     /// CC1=90-collapsed Staccato's vel 40/80/120 land on mp/f/fff, not pp/mp/f).
     pub(crate) fn short_band(
-        &self,
         artic: &crate::spec::ArticulationSpec,
         velocity: u8,
     ) -> Option<(usize, usize, i32, i32)> {
@@ -820,7 +815,7 @@ impl SampleEngine {
         let Some(artic) = self.patch.spec.articulation(artic_id) else {
             return 0.0;
         };
-        let Some((band, _n_bands, num_top, span)) = self.short_band(artic, velocity) else {
+        let Some((band, _n_bands, num_top, span)) = Self::short_band(artic, velocity) else {
             return 0.0;
         };
         let delta = artic.vel_layer_db.get(band).copied().unwrap_or(0.0);
@@ -898,7 +893,7 @@ impl SampleEngine {
         let expr = self.cc1_expression(self.cc1);
         if dyn_labels.len() <= 1 {
             // Single (or no) declared dynamic — one zone, loudness from CC1.
-            let label = dyn_labels.first().map(String::as_str).unwrap_or("");
+            let label = dyn_labels.first().map_or("", String::as_str);
             let gain = side_scale * expr;
             if let Some(idx) = self.find_layer_zone(artic, direction, label, note, rr) {
                 self.spawn_zone_voice(
@@ -1000,7 +995,7 @@ impl SampleEngine {
     /// velocity: portamento below the threshold, else the expressive or
     /// low-latency velocity→delay curve from the spec — chosen by the
     /// [`PlayMode`] policy: Lookahead → expressive (full authenticity),
-    /// StrictLive → low_latency, NO exceptions (a CC58 "expressive" request
+    /// `StrictLive` → `low_latency`, NO exceptions (a CC58 "expressive" request
     /// only takes effect once the mode is Lookahead).
     pub(crate) fn legato_timing(&self, velocity: u8, ioi_frames: u64) -> (u32, bool) {
         // Pacific: transitions fire IMMEDIATELY — no velocity-zone delays, no
@@ -1014,8 +1009,7 @@ impl SampleEngine {
             .legato_engine
             .as_ref()
             .and_then(|le| le.portamento.as_ref())
-            .map(|p| p.trigger_vel_max)
-            .unwrap_or(0);
+            .map_or(0, |p| p.trigger_vel_max);
         // CSS portamento (spec §2.4): CC5 > 10 AND attack velocity ≤ threshold
         // (real `$fkyb2 = 10`; falls back to the spec-configured value).
         let cc5 = self.cc_values[5];
@@ -1146,8 +1140,7 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(&self.articulation)
-            .map(|a| a.is_sordino())
-            .unwrap_or_else(|| self.articulation.starts_with("Sord"));
+            .map_or_else(|| self.articulation.starts_with("Sord"), super::super::spec::ArticulationSpec::is_sordino);
         let want_role = if retrigger {
             crate::spec::LegatoRole::Retrigger
         } else {
@@ -1199,8 +1192,7 @@ impl SampleEngine {
             // tick; live re-bows keep firing immediately.
             let rr = self
                 .forced_rr
-                .map(|f| f as usize)
-                .unwrap_or(self.zone_rr_counter);
+                .map_or(self.zone_rr_counter, |f| f as usize);
             if let Some(idx) = self.find_layer_zone(leg_id, "", &dynamic, to, rr) {
                 let restore = self.spawn_align_lead;
                 self.spawn_align_lead = sched_lead.filter(|&l| l > 0);
@@ -1239,8 +1231,7 @@ impl SampleEngine {
         let sr_scale = self
             .cache
             .get_loaded(&self.patch.zone_paths[idx])
-            .map(|d| d.sample_rate as f64 / self.sample_rate as f64)
-            .unwrap_or(1.0);
+            .map_or(1.0, |d| d.sample_rate as f64 / self.sample_rate as f64);
         let rate =
             2.0f64.powf((z.tune_cents as f64 + self.master_tune_cents()) / 1200.0) * sr_scale;
         // Diagnostic sweep semantics (see `document::arrival_semantics_env`):
@@ -1445,8 +1436,7 @@ impl SampleEngine {
         let dynamic = if blend >= 0.5 { hi } else { lo };
         let rr = self
             .forced_rr
-            .map(|f| f as usize)
-            .unwrap_or(self.zone_rr_counter);
+            .map_or(self.zone_rr_counter, |f| f as usize);
         // Release samples are non-directional → pass "" (no direction filter).
         // CSS's recorded releases are a subtle bow-off tail UNDER the note's
         // decay — but these samples are normalised loud, so at unity (×makeup)
@@ -1459,13 +1449,12 @@ impl SampleEngine {
             let held_ms = self
                 .note_on_frame
                 .get(&note)
-                .map(|&f| {
+                .map_or(1000.0, |&f| {
                     crate::engine::frames_to_ms(
                         self.frames_rendered.saturating_sub(f),
                         self.sample_rate,
                     )
-                })
-                .unwrap_or(1000.0);
+                });
             let held_db = if held_ms >= 1000.0 {
                 0.0
             } else {
@@ -1506,8 +1495,7 @@ impl SampleEngine {
         let dynamic = if blend >= 0.5 { hi } else { lo };
         let rr = self
             .forced_rr
-            .map(|f| f as usize)
-            .unwrap_or(self.zone_rr_counter);
+            .map_or(self.zone_rr_counter, |f| f as usize);
         if let Some(idx) = self.find_layer_zone(&atk_id, "", &dynamic, note, rr) {
             self.spawn_zone_voice(idx, note, VoiceKind::Short, 1.0, None, 0.0);
         }
@@ -1648,8 +1636,7 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(&z.articulation)
-            .map(|a| a.transpose as f64)
-            .unwrap_or(0.0);
+            .map_or(0.0, |a| a.transpose as f64);
         let (sample_start, sample_end) = (z.sample_start, z.sample_end);
         let playback_mode = z.playback_mode.clone();
         let (loop_start, loop_end) = (z.loop_start, z.loop_end);
@@ -1766,8 +1753,7 @@ impl SampleEngine {
                     .spec
                     .short_note_timing
                     .as_ref()
-                    .map(|t| t.pre_delay_ms as f32)
-                    .unwrap_or(0.0)
+                    .map_or(0.0, |t| t.pre_delay_ms as f32)
             } else {
                 0.0
             };
@@ -1812,8 +1798,7 @@ impl SampleEngine {
                             .spec
                             .short_note_timing
                             .as_ref()
-                            .map(|t| t.pre_delay_ms as f32)
-                            .unwrap_or(0.0),
+                            .map_or(0.0, |t| t.pre_delay_ms as f32),
                     )
                 } else {
                     // Unmeasured sustain / re-trigger: heard at trigger.
@@ -2211,8 +2196,7 @@ impl SampleEngine {
                 self.record_sample_miss(format!(
                     "zone note={} velocity={velocity}",
                     event_note
-                        .map(|note| note.to_string())
-                        .unwrap_or_else(|| "event".to_string())
+                        .map_or_else(|| "event".to_string(), |note| note.to_string())
                 ));
                 tracing::debug!(note = ?event_note, velocity, trigger = ?trigger, "zone miss");
             }
@@ -2229,7 +2213,7 @@ impl SampleEngine {
         all_indices.extend(by_mic.values().flatten().copied());
         // Packed key: trigger discriminant | note (+1, 0 = None) | velocity.
         let rr_key = ((trigger as u8 as u64) << 16)
-            | ((event_note.map(|n| n as u64 + 1).unwrap_or(0)) << 8)
+            | ((event_note.map_or(0, |n| n as u64 + 1)) << 8)
             | velocity as u64;
         let last_slot = self.zone_rr_last_slots.get(&rr_key).copied();
         let selected_rr_slot = select_zone_rr_slot(
@@ -2454,8 +2438,7 @@ impl SampleEngine {
                     .patch
                     .spec
                     .articulation(&self.articulation)
-                    .map(|a| a.kind == ArticulationKind::Short)
-                    .unwrap_or(false);
+                    .is_some_and(|a| a.kind == ArticulationKind::Short);
                 if is_short {
                     // KSP-confirmed model: CC1 selects the short TYPE via
                     // `short_note_cc1_map` (the reference collapses every short to

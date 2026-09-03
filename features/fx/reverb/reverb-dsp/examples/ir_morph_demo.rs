@@ -134,8 +134,8 @@ fn main() {
     // Normalize to -1 dBFS so the wet sum never clips the 16-bit output.
     if peak > 0.0 {
         let g = 0.89 / peak;
-        left.iter_mut().for_each(|s| *s *= g);
-        right.iter_mut().for_each(|s| *s *= g);
+        for s in &mut left { *s *= g; }
+        for s in &mut right { *s *= g; }
     }
 
     write_wav_stereo_16(&args[2], &left, &right);

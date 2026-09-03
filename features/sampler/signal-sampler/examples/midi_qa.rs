@@ -333,8 +333,7 @@ fn main() -> eyre::Result<()> {
                         }
                     }
                 }
-                Kind::Onset => {}
-                Kind::Release => {}
+                Kind::Onset | Kind::Release => {}
             }
 
             let t = f as f64 / f64::from(SR);

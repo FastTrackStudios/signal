@@ -28,7 +28,9 @@ fn render_window(
     let to_b = (to_s * SR as f32 / BLK as f32) as usize;
     let (mut whole, mut win) = (0.0f32, 0.0f32);
     for b in 0..blocks {
-        buf.iter_mut().for_each(|s| *s = 0.0);
+        for s in buf.iter_mut() {
+            *s = 0.0;
+        }
         let _ = rig.render_offline(buf);
         let mut bpk = 0.0f32;
         for &s in buf.iter() {

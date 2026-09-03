@@ -40,9 +40,10 @@ use crate::params::CompUiState;
 /// Design viewBox width, and the fallback when no window size is in context.
 pub const GRAPH_VB_W: f64 = 360.0;
 /// Design height of the graph: the viewBox height AND the CSS pixel height of
-/// the container at the editor's design size. Keeping the two equal is what
-/// makes pointer y map 1:1 onto graph dB space — see [`graph_height`], which
-/// preserves that property as the editor grows.
+/// the container at the editor's design size.
+///
+/// Keeping the two equal is what makes pointer y map 1:1 onto graph dB space —
+/// see [`graph_height`], which preserves that property as the editor grows.
 pub const GRAPH_H: f64 = 300.0;
 /// The graph's size for the current editor window: the surface the shell rail
 /// leaves, in CSS px.

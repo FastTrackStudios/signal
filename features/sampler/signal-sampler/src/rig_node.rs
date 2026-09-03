@@ -20,6 +20,8 @@
 //! ([`RigBlock`] with no realization → `has_backend() == false`). DSP gets
 //! implemented block-type by block-type later; the routing is locked first.
 
+use std::fmt::Write;
+
 use facet::Facet;
 use signal_proto::block::BlockType;
 
@@ -57,12 +59,13 @@ pub enum Role {
 }
 
 impl Role {
+    #[must_use]
     pub const fn tag(self) -> &'static str {
         match self {
-            Role::Preset => "Preset",
-            Role::Engine => "Engine",
-            Role::Layer => "Layer",
-            Role::Module => "Module",
+            Self::Preset => "Preset",
+            Self::Engine => "Engine",
+            Self::Layer => "Layer",
+            Self::Module => "Module",
         }
     }
 }
@@ -78,10 +81,11 @@ pub enum Combine {
 }
 
 impl Combine {
+    #[must_use]
     pub const fn tag(self) -> &'static str {
         match self {
-            Combine::Serial => "serial",
-            Combine::Parallel => "parallel",
+            Self::Serial => "serial",
+            Self::Parallel => "parallel",
         }
     }
 }
@@ -96,7 +100,7 @@ pub struct Send {
     pub label: String,
 }
 
-/// One **control-rate modulation route** (a ModMatrix row): a modulation
+/// One **control-rate modulation route** (a `ModMatrix` row): a modulation
 /// source drives one parameter of one block, scaled by `depth`.
 ///
 /// - `source` — the name of a modulator block attached to this container or
@@ -123,9 +127,11 @@ pub struct Param {
 }
 
 /// The **keyboard-routing zone** a container occupies — the central MIDI input
-/// router's per-container rule. A note must fall in both the key window and the
-/// velocity window to reach this subtree; crossfade edges blend it in/out
-/// (Nord-style key splits + Omnisphere-style velocity crossfades).
+/// router's per-container rule.
+///
+/// A note must fall in both the key window and the velocity window to reach this
+/// subtree; crossfade edges blend it in/out (Nord-style key splits +
+/// Omnisphere-style velocity crossfades).
 ///
 /// The combined gain (`key_gain × vel_gain`, 0..1) scales the note's velocity
 /// into the subtree, so a note in a crossfade region plays adjacent layers at
@@ -149,12 +155,13 @@ pub struct Zone {
 
 impl Default for Zone {
     fn default() -> Self {
-        Zone::full()
+        Self::full()
     }
 }
 
 impl Zone {
     /// The everything-passes zone (full key + velocity range, no crossfade).
+    #[must_use]
     pub const fn full() -> Self {
         Self {
             key_lo: 0,
@@ -166,21 +173,25 @@ impl Zone {
         }
     }
 
+    #[must_use]
     pub fn is_full(&self) -> bool {
-        *self == Zone::full()
+        *self == Self::full()
     }
 
     /// Key-axis gain for `key` (0 outside the window, ramped across the xfade).
+    #[must_use]
     pub fn key_gain(&self, key: u8) -> f32 {
         ramp(key, self.key_lo, self.key_hi, self.key_xfade)
     }
 
     /// Velocity-axis gain for `vel`.
+    #[must_use]
     pub fn vel_gain(&self, vel: u8) -> f32 {
         ramp(vel, self.vel_lo, self.vel_hi, self.vel_xfade)
     }
 
     /// Combined routing gain for a note — `key_gain × vel_gain`, in `0..=1`.
+    #[must_use]
     pub fn note_gain(&self, key: u8, vel: u8) -> f32 {
         self.key_gain(key) * self.vel_gain(vel)
     }
@@ -235,7 +246,7 @@ pub struct Container {
     /// Cross-tree audio sends from this node's output.
     #[facet(default)]
     pub sends: Vec<Send>,
-    /// Control-rate modulation routes scoped to this subtree (the ModMatrix).
+    /// Control-rate modulation routes scoped to this subtree (the `ModMatrix`).
     #[facet(default)]
     pub mod_routes: Vec<ModRoute>,
     /// Container-level settings that aren't blocks — e.g. a Layer's `voice_mode`,
@@ -254,27 +265,29 @@ pub struct Container {
 
 impl From<RigBlock> for RigNode {
     fn from(b: RigBlock) -> Self {
-        RigNode::Block { block: b }
+        Self::Block { block: b }
     }
 }
 
 impl From<Container> for RigNode {
     fn from(c: Container) -> Self {
-        RigNode::Container { container: c }
+        Self::Container { container: c }
     }
 }
 
 impl RigNode {
+    #[must_use]
     pub fn name(&self) -> &str {
         match self {
-            RigNode::Block { block: b } => &b.name,
-            RigNode::Container { container: c } => &c.name,
+            Self::Block { block: b } => &b.name,
+            Self::Container { container: c } => &c.name,
         }
     }
 
+    #[must_use]
     pub fn as_container(&self) -> Option<&Container> {
         match self {
-            RigNode::Container { container: c } => Some(c),
+            Self::Container { container: c } => Some(c),
             _ => None,
         }
     }
@@ -384,7 +397,7 @@ impl Container {
         self
     }
 
-    /// Add a control-rate modulation route (a ModMatrix row) scoped to this
+    /// Add a control-rate modulation route (a `ModMatrix` row) scoped to this
     /// subtree. See [`ModRoute`].
     #[must_use]
     pub fn route(
@@ -414,17 +427,30 @@ impl Container {
     // ── styx (de)serialization ───────────────────────────────────────────
 
     /// Parse a composition tree from a `.styx` string.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SamplerError::SpecParse` if the string is not valid styx syntax.
     pub fn from_styx_str(text: &str) -> Result<Self, SamplerError> {
         facet_styx::from_str(text).map_err(|e| SamplerError::SpecParse(e.to_string()))
     }
 
     /// Parse a composition tree from a `.styx` file.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SamplerError::SpecParse` if the file is not valid styx syntax,
+    /// or a `std::io::Error` wrapped in `SamplerError` if the file cannot be read.
     pub fn from_styx_file(path: &std::path::Path) -> Result<Self, SamplerError> {
         let text = std::fs::read_to_string(path)?;
         Self::from_styx_str(&text)
     }
 
     /// Serialize this tree to a `.styx` string.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SamplerError::SpecParse` if the tree cannot be serialized to styx.
     pub fn to_styx_string(&self) -> Result<String, SamplerError> {
         facet_styx::to_string(self).map_err(|e| SamplerError::SpecParse(e.to_string()))
     }
@@ -487,6 +513,7 @@ impl Container {
 
     /// Every leaf block in this subtree (recursive, audio tree only — excludes
     /// modulators).
+    #[must_use]
     pub fn blocks(&self) -> Vec<&RigBlock> {
         let mut out = Vec::new();
         self.collect_blocks(&mut out);
@@ -503,6 +530,7 @@ impl Container {
     }
 
     /// All modulator blocks in this subtree (recursive).
+    #[must_use]
     pub fn modulators_recursive(&self) -> Vec<&RigBlock> {
         let mut out: Vec<&RigBlock> = self.modulators.iter().collect();
         for child in &self.children {
@@ -514,7 +542,8 @@ impl Container {
     }
 
     /// Find the first descendant container named `name` (depth-first, incl self).
-    pub fn find(&self, name: &str) -> Option<&Container> {
+    #[must_use]
+    pub fn find(&self, name: &str) -> Option<&Self> {
         if self.name == name {
             return Some(self);
         }
@@ -529,13 +558,14 @@ impl Container {
     }
 
     /// Containers of a given role anywhere in the subtree (incl self).
-    pub fn of_role(&self, role: Role) -> Vec<&Container> {
+    #[must_use]
+    pub fn of_role(&self, role: Role) -> Vec<&Self> {
         let mut out = Vec::new();
         self.collect_role(role, &mut out);
         out
     }
 
-    fn collect_role<'a>(&'a self, role: Role, out: &mut Vec<&'a Container>) {
+    fn collect_role<'a>(&'a self, role: Role, out: &mut Vec<&'a Self>) {
         if self.role == role {
             out.push(self);
         }
@@ -547,6 +577,7 @@ impl Container {
     }
 
     /// All cross-tree sends in this subtree, as `(from_name, Send)`.
+    #[must_use]
     pub fn sends_recursive(&self) -> Vec<(&str, &Send)> {
         let mut out: Vec<(&str, &Send)> =
             self.sends.iter().map(|s| (self.name.as_str(), s)).collect();
@@ -559,6 +590,7 @@ impl Container {
     }
 
     /// Render the subtree as an indented routing diagram (for inspection/tests).
+    #[must_use]
     pub fn dump(&self) -> String {
         let mut s = String::new();
         self.dump_into(&mut s, "", true, true);
@@ -575,30 +607,27 @@ impl Container {
         };
         out.push_str(prefix);
         out.push_str(branch);
-        out.push_str(&format!(
-            "{} \"{}\" [{}]",
+        let _ = write!(out, "{} \"{}\" [{}]",
             self.role.tag(),
             self.name,
             self.combine.tag()
-        ));
+        );
         match self.role {
             // Layers/Engines/Presets have one native volume (the fader).
             Role::Layer | Role::Engine | Role::Preset => {
-                out.push_str(&format!("  vol {:+.0}dB", self.output_db));
+                let _ = write!(out, "  vol {:+.0}dB", self.output_db);
             }
             // Modules show in/out trim only when set.
             Role::Module if self.input_db != 0.0 || self.output_db != 0.0 => {
-                out.push_str(&format!(
-                    "  trim {:+.0}/{:+.0}dB",
+                let _ = write!(out, "  trim {:+.0}/{:+.0}dB",
                     self.input_db, self.output_db
-                ));
+                );
             }
             Role::Module => {}
         }
         if !self.zone.is_full() {
             let z = &self.zone;
-            out.push_str(&format!(
-                "  ⌨ keys {}-{}{}  vel {}-{}{}",
+            let _ = write!(out, "  ⌨ keys {}-{}{}  vel {}-{}{}",
                 z.key_lo,
                 z.key_hi,
                 if z.key_xfade > 0 {
@@ -613,7 +642,7 @@ impl Container {
                 } else {
                     String::new()
                 },
-            ));
+            );
         }
         if !self.params.is_empty() {
             let ps: Vec<String> = self
@@ -621,13 +650,13 @@ impl Container {
                 .iter()
                 .map(|p| format!("{}={}", p.name, p.value))
                 .collect();
-            out.push_str(&format!("  {{{}}}", ps.join(", ")));
+            let _ = write!(out, "  {{{}}}", ps.join(", "));
         }
         for m in &self.modulators {
-            out.push_str(&format!("  ~{}:{}", m.block_type_tag(), m.display_name()));
+            let _ = write!(out, "  ~{}:{}", m.block_type_tag(), m.display_name());
         }
         for snd in &self.sends {
-            out.push_str(&format!("  ⟿ {}→{}", snd.label, snd.target));
+            let _ = write!(out, "  ⟿ {}→{}", snd.label, snd.target);
         }
         out.push('\n');
 
@@ -636,14 +665,13 @@ impl Container {
             let is_last = i + 1 == n;
             match child {
                 RigNode::Container { container: c } => {
-                    c.dump_into(out, &child_prefix, is_last, false)
+                    c.dump_into(out, &child_prefix, is_last, false);
                 }
                 RigNode::Block { block: b } => {
                     let bb = if is_last { "└─ " } else { "├─ " };
                     out.push_str(&child_prefix);
                     out.push_str(bb);
-                    out.push_str(&format!(
-                        "Block {} \"{}\"{}\n",
+                    let _ = write!(out, "Block {} \"{}\"{}\n",
                         b.block_type_tag(),
                         b.display_name(),
                         if b.has_backend() {
@@ -651,7 +679,7 @@ impl Container {
                         } else {
                             " (placeholder)"
                         }
-                    ));
+                    );
                 }
             }
         }
@@ -660,6 +688,7 @@ impl Container {
 
 impl RigBlock {
     /// Lowercase tag of the block's type (e.g. "amp", "delay") for display/dump.
+    #[must_use]
     pub fn block_type_tag(&self) -> &'static str {
         self.block_type.as_str()
     }

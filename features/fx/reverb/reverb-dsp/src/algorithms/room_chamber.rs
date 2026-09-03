@@ -44,6 +44,7 @@ pub struct RoomChamber {
 }
 
 impl RoomChamber {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let max_er = (sample_rate * 0.04) as usize; // 40ms max ER (small space)
 
@@ -214,14 +215,14 @@ impl RoomChamber {
         // the net area stays near zero (plain alternation leaves ~0.4 of
         // residual area because the gains decay).
         let mut sum = 0.0;
-        for t in taps_l.iter_mut() {
+        for t in &mut taps_l {
             if sum > 0.0 {
                 t.gain = -t.gain;
             }
             sum += t.gain;
         }
         sum = 0.0;
-        for t in taps_r.iter_mut() {
+        for t in &mut taps_r {
             if sum > 0.0 {
                 t.gain = -t.gain;
             }
@@ -307,16 +308,16 @@ impl ReverbAlgorithm for RoomChamber {
             ChamberColor::Neutral => {}
             ChamberColor::Clear => {
                 self.color_eq
-                    .set(FilterType::LowShelf { gain_db: -6.0 }, 250.0, 0.707, sr)
+                    .set(FilterType::LowShelf { gain_db: -6.0 }, 250.0, 0.707, sr);
             }
             ChamberColor::Smooth => {
                 self.color_eq
-                    .set(FilterType::Peak { gain_db: -5.0 }, 900.0, 0.8, sr)
+                    .set(FilterType::Peak { gain_db: -5.0 }, 900.0, 0.8, sr);
             }
             ChamberColor::Crisp => self.color_eq.set(FilterType::Highpass, 350.0, 0.707, sr),
             ChamberColor::Deep => {
                 self.color_eq
-                    .set(FilterType::Peak { gain_db: 5.0 }, 800.0, 1.0, sr)
+                    .set(FilterType::Peak { gain_db: 5.0 }, 800.0, 1.0, sr);
             }
         }
         true

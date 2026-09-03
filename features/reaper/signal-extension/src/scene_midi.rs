@@ -24,6 +24,10 @@ pub const SCENE_SWITCH_BASE_NOTE: u8 = 36; // C1
 ///
 /// Scans tracks for the profile folder (has `fts_signal/scene_count` `ext_state`),
 /// then creates one MIDI item per scene on the profile folder track.
+///
+/// # Errors
+///
+/// Returns an error if DAW operations fail.
 pub async fn generate_scene_midi_items(daw: &Daw) -> Result<()> {
     let project = daw.current_project().await.wrap_err("no current project")?;
     let tracks = project.tracks();
@@ -35,9 +39,8 @@ pub async fn generate_scene_midi_items(daw: &Daw) -> Result<()> {
     let mut profile_name = String::new();
 
     for track_info in &all_tracks {
-        let track = match tracks.by_guid(&track_info.guid).await? {
-            Some(t) => t,
-            None => continue,
+        let Some(track) = tracks.by_guid(&track_info.guid).await? else {
+            continue;
         };
 
         if let Some(count_str) = track.get_ext_state("fts_signal", "scene_count").await? {
@@ -69,7 +72,7 @@ pub async fn generate_scene_midi_items(daw: &Daw) -> Result<()> {
         }
         // Scene folder tracks are named "Scene N: Name"
         if track_info.name.starts_with("Scene ") {
-            let color = track_info.color.unwrap_or(0x808080);
+            let color = track_info.color.unwrap_or(0x0080_8080);
             // Extract scene name: "Scene 1: Clean" → "Clean"
             let scene_name = track_info
                 .name
@@ -84,7 +87,7 @@ pub async fn generate_scene_midi_items(daw: &Daw) -> Result<()> {
     if scenes.is_empty() {
         // Fall back to scene_count with generic names
         for i in 0..scene_count {
-            scenes.push((format!("Scene {}", i + 1), 0x808080));
+            scenes.push((format!("Scene {}", i + 1), 0x0080_8080));
         }
     }
 

@@ -1,4 +1,4 @@
-//! SamplerBank — holds N named EngineInstances and zero or more
+//! `SamplerBank` — holds N named `EngineInstances` and zero or more
 //! Preset runtimes, mixes everything into a stereo master output.
 //!
 //! Single-engine load paths (`load_pack`, `load_block`,
@@ -53,6 +53,7 @@ pub enum PreloadProfile {
 }
 
 impl PreloadProfile {
+    #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
         match name.trim().to_ascii_lowercase().as_str() {
             "fast-audition" | "fast_audition" | "audition" | "fast" => Some(Self::FastAudition),
@@ -68,6 +69,7 @@ impl PreloadProfile {
     }
 
     /// How many samples this profile preloads eagerly (`None` = all).
+    #[must_use]
     pub fn preload_cap(self) -> Option<usize> {
         match self {
             Self::FastAudition => Some(FAST_AUDITION_PRELOAD_SAMPLES),
@@ -128,6 +130,7 @@ pub(crate) fn resolve_relative(path_str: &str, base_dir: &Path) -> PathBuf {
 
 /// Map an instrument tag to a drum-kit preload priority. Lower values are
 /// loaded first.
+#[must_use]
 pub fn drum_priority(instrument: &str) -> u8 {
     match instrument {
         "kick" => 0,
@@ -164,10 +167,11 @@ fn orchestral_priority(instrument: &str) -> u8 {
     }
 }
 
-/// One free-standing instrument (not part of a preset). Each holds
-/// a complete `EngineInstance` so multi-mic layer routing applies even
-/// for single-pack loads (in the simplest case there's one default
-/// layer subscribed to mic 0).
+/// One free-standing instrument (not part of a preset).
+///
+/// Each holds a complete `EngineInstance` so multi-mic layer routing applies
+/// even for single-pack loads (in the simplest case there's one default layer
+/// subscribed to mic 0).
 pub struct InstrumentSlot {
     pub engine: EngineInstance,
     pub muted: bool,
@@ -177,9 +181,9 @@ pub struct InstrumentSlot {
 /// Holds multiple instruments + preset runtimes and mixes them.
 pub struct SamplerBank {
     /// Free-standing instruments registered under string ids
-    /// (load_pack / load_block / load_engine_spec).
+    /// (`load_pack` / `load_block` / `load_engine_spec`).
     instruments: HashMap<InstrumentId, InstrumentSlot>,
-    /// Loaded presets keyed by id_prefix.
+    /// Loaded presets keyed by `id_prefix`.
     presets: HashMap<String, PresetRuntime>,
     /// MIDI channel → instrument ID routing (channel 1–16, 1-based index).
     midi_channels: HashMap<u8, InstrumentId>,
@@ -189,7 +193,7 @@ pub struct SamplerBank {
     note_routing: HashMap<u8, InstrumentId>,
     /// Maps every instrument id (free-standing OR `<prefix>:<engine>`)
     /// to the preset prefix that owns it, when applicable. Lets
-    /// note_on/note_off route to the right engine inside the preset.
+    /// `note_on`/`note_off` route to the right engine inside the preset.
     instrument_to_preset: HashMap<InstrumentId, (String, String)>, // id -> (prefix, engine_id)
     /// Instrument that unrouted MIDI falls back to — the most recently loaded
     /// free-standing instrument. Lets a single-instrument live rig play without
@@ -204,10 +208,12 @@ pub struct SamplerBank {
 }
 
 impl SamplerBank {
+    #[must_use]
     pub fn new(sample_rate: u32) -> Self {
         Self::with_cache_budget(sample_rate, None)
     }
 
+    #[must_use]
     pub fn with_cache_budget(sample_rate: u32, cache_budget_bytes: Option<usize>) -> Self {
         Self {
             instruments: HashMap::new(),
@@ -230,6 +236,7 @@ impl SamplerBank {
         }
     }
 
+    #[must_use]
     pub fn cache_handle_for(&self, id: &str) -> Option<crate::engine::cache::SampleCache> {
         self.instruments
             .get(id)
@@ -248,7 +255,7 @@ impl SamplerBank {
         Arc::clone(&self.preload_generation)
     }
 
-    /// Build a synthetic single-Layer / single-Port EngineSpec for a
+    /// Build a synthetic single-Layer / single-Port `EngineSpec` for a
     /// free-standing block load.
     fn synth_default_engine_spec(name: &str) -> EngineSpec {
         EngineSpec {
@@ -276,6 +283,11 @@ impl SamplerBank {
     }
 
     /// Load a sample library from `spec_path` + optional `samples_root` WAV directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the spec file cannot be read or parsed, or if the patch
+    /// cannot be loaded.
     pub fn load_instrument(
         &mut self,
         id: impl Into<InstrumentId>,
@@ -285,12 +297,11 @@ impl SamplerBank {
         mic: impl Into<String>,
     ) -> eyre::Result<()> {
         let id = id.into();
-        let patch = match samples_root {
-            Some(root) => crate::PlayerPatch::load(spec_path, root)?,
-            None => {
-                let spec = crate::LibrarySpec::from_file(spec_path)?;
-                crate::PlayerPatch::from_spec(spec)
-            }
+        let patch = if let Some(root) = samples_root {
+            crate::PlayerPatch::load(spec_path, root)?
+        } else {
+            let spec = crate::LibrarySpec::from_file(spec_path)?;
+            crate::PlayerPatch::from_spec(spec)
         };
         let name = spec_path
             .file_stem()
@@ -307,6 +318,11 @@ impl SamplerBank {
     /// Without this, the zone spec alone has no articulation metadata, so
     /// articulation + keyswitch switching can't work. See
     /// [`PlayerPatch::load_merged`](crate::PlayerPatch::load_merged).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the config or zones files cannot be read or parsed, or if
+    /// the patch cannot be merged.
     pub fn load_instrument_with_config(
         &mut self,
         id: impl Into<InstrumentId>,
@@ -363,6 +379,11 @@ impl SamplerBank {
         self.default_instrument = Some(id.into());
     }
 
+    /// Load a sampler pack and stream it in the background.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pack file cannot be read or parsed.
     pub fn load_pack(&mut self, id: impl Into<InstrumentId>, pack_path: &Path) -> eyre::Result<()> {
         let id = id.into();
         let cache = self.register_pack(id.clone(), pack_path)?;
@@ -370,7 +391,7 @@ impl SamplerBank {
         let generation = self.next_preload_generation();
         let cancel = self.preload_cancel_token();
         if let Err(err) = std::thread::Builder::new()
-            .name(format!("signal-preload:{}", pack_label))
+            .name(format!("signal-preload:{pack_label}"))
             .spawn(move || {
                 let start = std::time::Instant::now();
                 tracing::info!(
@@ -380,7 +401,7 @@ impl SamplerBank {
                 );
                 let stats = cache
                     .cache
-                    .preload_cancelable(cache.paths.iter().map(|p| p.as_path()), || {
+                    .preload_cancelable(cache.paths.iter().map(std::path::PathBuf::as_path), || {
                         cancel.load(Ordering::Relaxed) != generation
                     });
                 tracing::info!(
@@ -429,6 +450,11 @@ impl SamplerBank {
         Ok(PendingPreload { cache, paths })
     }
 
+    /// Load a single block and stream it in the background.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the block file cannot be read or parsed.
     pub fn load_block(
         &mut self,
         id: impl Into<InstrumentId>,
@@ -440,11 +466,11 @@ impl SamplerBank {
         let generation = self.next_preload_generation();
         let cancel = self.preload_cancel_token();
         if let Err(err) = std::thread::Builder::new()
-            .name(format!("signal-preload:{}", label))
+            .name(format!("signal-preload:{label}"))
             .spawn(move || {
                 let stats = pending
                     .cache
-                    .preload_cancelable(pending.paths.iter().map(|p| p.as_path()), || {
+                    .preload_cancelable(pending.paths.iter().map(std::path::PathBuf::as_path), || {
                         cancel.load(Ordering::Relaxed) != generation
                     });
                 tracing::info!(
@@ -562,6 +588,7 @@ impl SamplerBank {
     }
 
     /// An instrument's current live articulation (reflects keyswitch / CC58).
+    #[must_use]
     pub fn articulation(&self, id: &str) -> Option<String> {
         if let Some(slot) = self.instruments.get(id) {
             return Some(slot.engine.block.articulation().to_string());
@@ -625,6 +652,7 @@ impl SamplerBank {
 
     /// Clone an instrument's loaded [`LibrarySpec`](crate::spec::LibrarySpec)
     /// (document annotation reads keyswitch / legato / short-note tables).
+    #[must_use]
     pub fn instrument_spec(&self, id: &str) -> Option<crate::spec::LibrarySpec> {
         self.read_block(id, |b| b.patch().spec.clone())
     }
@@ -659,7 +687,7 @@ impl SamplerBank {
         lead: u64,
     ) {
         self.with_block(id, |b| {
-            b.legato_prefire_line_lead(line, note, velocity, lead)
+            b.legato_prefire_line_lead(line, note, velocity, lead);
         });
     }
 
@@ -724,8 +752,9 @@ impl SamplerBank {
 
     /// Reactive legato-path trigger count for an instrument — see
     /// [`SampleEngine::reactive_legato_fires`](crate::engine::SampleEngine::reactive_legato_fires).
+    #[must_use]
     pub fn reactive_legato_fires(&self, id: &str) -> u64 {
-        self.read_block(id, |b| b.reactive_legato_fires())
+        self.read_block(id, super::block::SamplerBlock::reactive_legato_fires)
             .unwrap_or(0)
     }
 
@@ -743,7 +772,7 @@ impl SamplerBank {
         route_longs: usize,
         route_shorts: usize,
     ) -> bool {
-        let block_frames = outputs.first().map(|b| b.len() / 2).unwrap_or(0);
+        let block_frames = outputs.first().map_or(0, |b| b.len() / 2);
         if let Some(slot) = self.instruments.get_mut(id) {
             if !slot.muted {
                 slot.engine
@@ -780,8 +809,9 @@ impl SamplerBank {
     }
 
     /// An instrument's current play-mode policy.
+    #[must_use]
     pub fn play_mode(&self, id: &str) -> Option<crate::engine::PlayMode> {
-        self.read_block(id, |b| b.play_mode())
+        self.read_block(id, super::block::SamplerBlock::play_mode)
     }
 
     /// Enable/disable an instrument's legato transition fire log.
@@ -790,6 +820,7 @@ impl SamplerBank {
     }
 
     /// Recorded legato transition firings for an instrument.
+    #[must_use]
     pub fn legato_fire_log(&self, id: &str) -> Vec<crate::engine::LegatoFireEvent> {
         self.read_block(id, |b| b.legato_fire_log().to_vec())
             .unwrap_or_default()
@@ -802,6 +833,7 @@ impl SamplerBank {
 
     /// Markers emitted BY PLAYBACK for an instrument since the log was
     /// enabled (see [`crate::engine::EmittedMarker`]).
+    #[must_use]
     pub fn emitted_markers(&self, id: &str) -> Vec<crate::engine::EmittedMarker> {
         self.read_block(id, |b| b.emitted_markers().to_vec())
             .unwrap_or_default()
@@ -821,18 +853,21 @@ impl SamplerBank {
     }
 
     /// The structured render trace for an instrument.
+    #[must_use]
     pub fn render_trace(&self, id: &str) -> crate::engine::RenderTrace {
-        self.read_block(id, |b| b.render_trace())
+        self.read_block(id, super::block::SamplerBlock::render_trace)
             .unwrap_or_default()
     }
 
     /// An instrument engine's running render position in frames.
+    #[must_use]
     pub fn engine_frames_rendered(&self, id: &str) -> Option<u64> {
-        self.read_block(id, |b| b.frames_rendered())
+        self.read_block(id, super::block::SamplerBlock::frames_rendered)
     }
 
     /// Warm the samples `note` would trigger for `id` under its current pin +
     /// solo mic (read-only on the cache; safe to call off-thread).
+    #[must_use]
     pub fn warm_note(&self, id: &str, note: u8) -> PreloadStats {
         if let Some(slot) = self.instruments.get(id) {
             return slot.engine.block.warm_note(note);
@@ -851,12 +886,12 @@ impl SamplerBank {
     pub fn set_module_muted(&mut self, preset_prefix: &str, module_id: &str, muted: bool) -> bool {
         self.presets
             .get_mut(preset_prefix)
-            .map(|p| p.set_module_muted(module_id, muted))
-            .unwrap_or(false)
+            .is_some_and(|p| p.set_module_muted(module_id, muted))
     }
 
     /// Read a port buffer from a preset's engine. Used by tests to verify
     /// per-bus separation.
+    #[must_use]
     pub fn preset_engine_port_buffer(
         &self,
         preset_prefix: &str,
@@ -892,6 +927,11 @@ impl SamplerBank {
         Ok(PendingPreload { cache, paths })
     }
 
+    /// Load an engine spec directly, bypassing the preset framework.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the engine cannot be registered or loaded.
     pub fn load_engine_spec(
         &mut self,
         id: impl Into<InstrumentId>,
@@ -904,11 +944,11 @@ impl SamplerBank {
         let generation = self.next_preload_generation();
         let cancel = self.preload_cancel_token();
         if let Err(err) = std::thread::Builder::new()
-            .name(format!("signal-preload-engine:{}", label))
+            .name(format!("signal-preload-engine:{label}"))
             .spawn(move || {
                 let stats = pending
                     .cache
-                    .preload_cancelable(pending.paths.iter().map(|p| p.as_path()), || {
+                    .preload_cancelable(pending.paths.iter().map(std::path::PathBuf::as_path), || {
                         cancel.load(Ordering::Relaxed) != generation
                     });
                 tracing::info!(
@@ -935,6 +975,11 @@ impl SamplerBank {
     /// `<id_prefix>:<engine_id>`, registers a `PresetRuntime` for the
     /// routing graph, populates note routing, and spawns a coordinator
     /// thread that preloads engines in drum priority order.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any engine spec or pack file cannot be read or parsed, or
+    /// if the preset runtime cannot be built.
     pub fn load_preset_spec(
         &mut self,
         id_prefix: &str,
@@ -990,7 +1035,7 @@ impl SamplerBank {
         let generation = self.next_preload_generation();
         let cancel = self.preload_cancel_token();
         if let Err(err) = std::thread::Builder::new()
-            .name(format!("signal-preload-preset:{}", preset_label))
+            .name(format!("signal-preload-preset:{preset_label}"))
             .spawn(move || {
                 let start = std::time::Instant::now();
                 tracing::info!(
@@ -1006,7 +1051,7 @@ impl SamplerBank {
                         break;
                     }
                     let s = std::time::Instant::now();
-                    let stats = cache.preload_cancelable(paths.iter().map(|p| p.as_path()), || {
+                    let stats = cache.preload_cancelable(paths.iter().map(std::path::PathBuf::as_path), || {
                         cancel.load(Ordering::Relaxed) != generation
                     });
                     total_loaded += stats.loaded;
@@ -1064,6 +1109,7 @@ impl SamplerBank {
         Ok(PendingPreload { cache, paths })
     }
 
+    #[must_use]
     pub fn preload_progress(&self, id: &str) -> (usize, usize) {
         if let Some(slot) = self.instruments.get(id) {
             if let Some(total) = slot.preload_target {
@@ -1096,6 +1142,7 @@ impl SamplerBank {
         (0, 0)
     }
 
+    #[must_use]
     pub fn active_voices(&self, id: &str) -> usize {
         if let Some(slot) = self.instruments.get(id) {
             return slot.engine.active_voices();
@@ -1113,6 +1160,7 @@ impl SamplerBank {
         0
     }
 
+    #[must_use]
     pub fn stolen_voices(&self, id: &str) -> usize {
         if let Some(slot) = self.instruments.get(id) {
             return slot.engine.stolen_voices();
@@ -1216,10 +1264,12 @@ impl SamplerBank {
                 .sum::<usize>()
     }
 
+    #[must_use]
     pub fn cache_budget_bytes(&self) -> Option<usize> {
         self.cache_budget_bytes
     }
 
+    #[must_use]
     pub fn cache_over_budget_bytes(&self) -> usize {
         match self.cache_budget_bytes {
             Some(budget) => self.total_loaded_sample_bytes().saturating_sub(budget),
@@ -1227,6 +1277,7 @@ impl SamplerBank {
         }
     }
 
+    #[must_use]
     pub fn evict_cache_over_budget(&self) -> EvictStats {
         let Some(budget) = self.cache_budget_bytes else {
             return EvictStats {
@@ -1278,6 +1329,11 @@ impl SamplerBank {
         stats
     }
 
+    /// Preload all samples for an instrument synchronously.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the instrument is not loaded.
     pub fn preload_instrument(&mut self, id: &str) -> eyre::Result<PreloadStats> {
         if let Some(slot) = self.instruments.get_mut(id) {
             return Ok(slot.engine.block.preload_samples());
@@ -1347,11 +1403,11 @@ impl SamplerBank {
     // ── MIDI dispatch ─────────────────────────────────────────────────────
 
     /// Dispatch a note-on. Resolution order:
-    /// 1. If `id` references a preset (via instrument_to_preset),
+    /// 1. If `id` references a preset (via `instrument_to_preset`),
     ///    dispatch to that preset's note routing or fall through to the
     ///    specific engine.
     /// 2. If `id` matches a free-standing instrument, dispatch directly.
-    /// 3. Otherwise — try `id` as a preset prefix and use its note_routing.
+    /// 3. Otherwise — try `id` as a preset prefix and use its `note_routing`.
     pub fn note_on(&mut self, id: &str, note: u8, velocity: u8) {
         // Free-standing fallback note routing.
         let routed = self.note_routing.get(&note).cloned();
@@ -1480,14 +1536,12 @@ impl SamplerBank {
         // Explicit channel mapping wins; otherwise fall back to the default
         // instrument so a single-instrument live rig plays on any channel
         // without needing `set_midi_channel`.
-        let id = match self
+        let Some(id) = self
             .midi_channels
             .get(&channel)
             .cloned()
-            .or_else(|| self.default_instrument.clone())
-        {
-            Some(id) => id,
-            None => return,
+            .or_else(|| self.default_instrument.clone()) else {
+            return;
         };
         let kind = status & 0xF0;
         match kind {
@@ -1535,11 +1589,13 @@ impl SamplerBank {
     /// Snapshot the drum mixer layout for a loaded preset (engines → close-mic
     /// channels + bus sends, plus shared bus tracks). `None` if the preset
     /// isn't a send-routed drum preset.
+    #[must_use]
     pub fn preset_mixer_layout(&self, prefix: &str) -> Option<crate::mixer::MixerLayout> {
-        self.presets.get(prefix)?.mixer().map(|m| m.layout())
+        self.presets.get(prefix)?.mixer().map(super::mixer::DrumMixer::layout)
     }
 
     /// Clone the lock-free peak-meter handle for a loaded preset's mixer.
+    #[must_use]
     pub fn preset_mixer_meters(
         &self,
         prefix: &str,
@@ -1622,6 +1678,11 @@ impl SamplerBank {
 
     /// Install a hosted plugin into a slot on the loaded preset's drum mixer
     /// (channel / bus / master). Returns the new slot index.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the preset or mixer cannot be found, or if the plugin
+    /// cannot be installed.
     pub fn install_mixer_plugin(
         &mut self,
         prefix: &str,
@@ -1642,7 +1703,12 @@ impl SamplerBank {
 
     /// Install a hosted plugin on the preset's master FX chain (works for
     /// drum and non-drum presets — for drum presets this chain runs after
-    /// the drum mixer's own master_fx).
+    /// the drum mixer's own `master_fx`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the preset cannot be found or if the plugin cannot be
+    /// installed.
     pub fn install_preset_master_plugin(
         &mut self,
         prefix: &str,
@@ -1710,6 +1776,11 @@ impl SamplerBank {
     /// loaded from disk + prepared at the mixer's sample rate before the
     /// audio thread sees the slot — so the slot is render-ready the
     /// instant `install_nam` returns.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the preset or mixer cannot be found, or if the NAM model
+    /// cannot be loaded or installed.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn install_mixer_nam(
         &mut self,
@@ -1727,6 +1798,11 @@ impl SamplerBank {
 
     /// Install a NAM model on the preset's master FX chain (works for
     /// non-drum presets too).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the preset cannot be found, or if the NAM model cannot be
+    /// loaded or installed.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn install_preset_master_nam(
         &mut self,
@@ -1768,6 +1844,7 @@ impl SamplerBank {
             .map(|p| p.render_buses(block_frames))
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.instruments.len()
             + self
@@ -1777,13 +1854,15 @@ impl SamplerBank {
                 .sum::<usize>()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.instruments.is_empty() && self.presets.is_empty()
     }
 
+    #[must_use]
     pub fn instrument_ids(&self) -> Vec<&str> {
-        let mut ids: Vec<&str> = self.instruments.keys().map(|s| s.as_str()).collect();
-        ids.extend(self.instrument_to_preset.keys().map(|s| s.as_str()));
+        let mut ids: Vec<&str> = self.instruments.keys().map(std::string::String::as_str).collect();
+        ids.extend(self.instrument_to_preset.keys().map(std::string::String::as_str));
         ids
     }
 }

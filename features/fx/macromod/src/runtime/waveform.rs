@@ -49,9 +49,7 @@ pub fn evaluate_waveform(
 
         LfoWaveform::InverseSawtooth => 2.0f64.mul_add(-phase, 1.0),
 
-        LfoWaveform::SampleAndHold => held_value,
-
-        LfoWaveform::StepSequence => held_value,
+        LfoWaveform::SampleAndHold | LfoWaveform::StepSequence => held_value,
     }
 }
 

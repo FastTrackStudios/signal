@@ -1,4 +1,4 @@
-//! Control-rate **modulation sources** — the runtime behind the ModMatrix
+//! Control-rate **modulation sources** — the runtime behind the `ModMatrix`
 //! (keys-rig roadmap §2, Omnisphere compat §7).
 //!
 //! Sources produce one value per render block (block-rate control). Three
@@ -45,6 +45,7 @@ pub struct ControlLfo {
 }
 
 impl ControlLfo {
+    #[must_use]
     pub fn new(wave: LfoWave, rate_hz: f32) -> Self {
         Self {
             wave,
@@ -119,6 +120,7 @@ pub struct ControlEnv {
 }
 
 impl ControlEnv {
+    #[must_use]
     pub fn new(sample_rate: f32, params: AdsrParams) -> Self {
         Self {
             env: Adsr::new(sample_rate, params),
@@ -188,7 +190,7 @@ pub enum MidiMod {
 
 /// A **control-rate modulation source**: produces one value per render
 /// block. Implement this to add a new source kind (a sequencer, a follower,
-/// a macro…) — the ModMatrix engine only sees the trait.
+/// a macro…) — the `ModMatrix` engine only sees the trait.
 pub trait ControlSource: Send {
     /// Live-update an envelope source's ADSR. `false` for non-envelope
     /// sources (the caller treats it as "not an env").
@@ -247,6 +249,7 @@ pub struct MidiSource {
 }
 
 impl MidiSource {
+    #[must_use]
     pub fn new(mode: MidiMod) -> Self {
         Self {
             mode,
@@ -337,26 +340,31 @@ impl ModSource {
         self.0.set_env_params(sample_rate, params)
     }
 
+    #[must_use]
     pub fn lfo(mut lfo: ControlLfo, sample_rate: f32) -> Self {
         lfo.sample_rate = sample_rate;
         Self(Box::new(lfo))
     }
 
+    #[must_use]
     pub fn env(mut env: ControlEnv, sample_rate: f32) -> Self {
         env.env.set_sample_rate(sample_rate);
         Self(Box::new(env))
     }
 
+    #[must_use]
     pub fn midi(m: MidiMod) -> Self {
         Self(Box::new(MidiSource::new(m)))
     }
 
     /// Wrap any custom source implementation.
+    #[must_use]
     pub fn custom(source: Box<dyn ControlSource>) -> Self {
         Self(source)
     }
 
     /// Map a MIDI source name (ours or Omnisphere's) to a [`MidiMod`].
+    #[must_use]
     pub fn midi_by_name(name: &str) -> Option<MidiMod> {
         Some(match name.to_ascii_lowercase().as_str() {
             "wheel" | "mod wheel" | "modwheel" => MidiMod::Wheel,

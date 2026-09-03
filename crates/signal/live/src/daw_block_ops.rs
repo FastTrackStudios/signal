@@ -287,6 +287,10 @@ where
     /// Looks up the preset in storage, extracts the plugin name from the
     /// `source:` metadata tag, selects the requested snapshot, and gathers
     /// the block state and optional binary chunk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the preset or snapshot cannot be found, or if metadata is missing.
     pub async fn resolve_block_load(
         &self,
         block_type: BlockType,
@@ -347,6 +351,10 @@ where
     }
 
     /// Resolve a module preset into resolved loads for each block in the module.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module preset or snapshot cannot be found.
     pub async fn resolve_module_load(
         &self,
         module_type: ModuleType,
@@ -510,6 +518,10 @@ where
     /// Load a block preset onto a DAW track: add FX, apply state, rename.
     ///
     /// Returns the FX GUID and display name on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the preset cannot be resolved or loaded.
     pub async fn load_block_to_track(
         &self,
         block_type: BlockType,
@@ -530,6 +542,10 @@ where
     /// - `Split` nodes create a parallel REAPER container with one sub-container per lane.
     ///
     /// The outer module container wraps all top-level nodes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module preset cannot be resolved or loaded.
     pub async fn load_module_to_track(
         &self,
         module_type: ModuleType,
@@ -582,6 +598,10 @@ where
     ///
     /// Adds all FX sequentially (to get stable indices), then configures
     /// them (state injection, rename, macros) concurrently.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any preset cannot be resolved or loaded.
     pub async fn load_blocks_to_track(
         &self,
         loads: Vec<(BlockType, &PresetId, Option<&SnapshotId>)>,

@@ -1,6 +1,6 @@
-//! LoFiDelay — bit-crushed, sample-rate-reduced delay for degraded sound.
+//! `LoFiDelay` — bit-crushed, sample-rate-reduced delay for degraded sound.
 //!
-//! TimeLine MX "Lo Fi" machine parity (spec/timeline-mx-reference.md):
+//! `TimeLine` MX "Lo Fi" machine parity (spec/timeline-mx-reference.md):
 //!
 //! - Degradation order is grit saturation → sample-rate hold → bit
 //!   quantize, so grit's added harmonics ALIAS at low sample rates
@@ -21,7 +21,7 @@ use audiocore_dsp::envelope::EnvelopeFollower;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
 
-/// Device voicings for the Lo-Fi output filter (TimeLine MX "Filter
+/// Device voicings for the Lo-Fi output filter (`TimeLine` MX "Filter
 /// Shape"). Center frequencies / resonances are chosen per the device
 /// character descriptions; exact hardware curves are unknown.
 // interpretation: voicings designed to the MX manual's device list.
@@ -48,6 +48,7 @@ pub enum LoFiFilterShape {
 }
 
 impl LoFiFilterShape {
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             1 => Self::VintageAmp,
@@ -62,7 +63,7 @@ impl LoFiFilterShape {
         }
     }
 
-    /// (hp_hz, lp_hz, peak_hz, peak_q, peak_db) for the 3-section bank.
+    /// (`hp_hz`, `lp_hz`, `peak_hz`, `peak_q`, `peak_db`) for the 3-section bank.
     fn design(self) -> Option<(f64, f64, f64, f64, f64)> {
         // interpretation: 2–3 biquad approximations of each device.
         match self {
@@ -250,6 +251,7 @@ impl Default for LoFiDelay {
 impl LoFiDelay {
     const MAX_DELAY_S: f64 = 5.0;
 
+    #[must_use]
     pub fn new() -> Self {
         let mut wet_env = EnvelopeFollower::new(0.0);
         wet_env.set_times_ms(5.0, 300.0, 48000.0);
@@ -417,6 +419,7 @@ impl LoFiDelay {
         output
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
@@ -461,7 +464,7 @@ mod tests {
     #[test]
     fn quantize_reduces_precision() {
         // 8-bit quantization should snap to 256 levels
-        let q = LoFiDelay::quantize(0.123456, 8.0);
+        let q = LoFiDelay::quantize(0.123_456, 8.0);
         let step = 1.0 / 256.0;
         let remainder = (q / step).fract();
         assert!(

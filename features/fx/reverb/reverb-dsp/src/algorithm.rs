@@ -43,6 +43,7 @@ impl AlgorithmType {
     /// which prints the measurement these come from.
     /// `algorithms_share_one_output_level` in `tests/stability.rs` fails if a
     /// change to an engine invalidates its constant.
+    #[must_use]
     pub fn wet_calibration_db(self) -> f64 {
         match self {
             Self::Room => -3.03,
@@ -68,7 +69,7 @@ impl AlgorithmType {
         }
     }
 
-    pub const ALL: &'static [AlgorithmType] = &[
+    pub const ALL: &'static [Self] = &[
         Self::Room,
         Self::Hall,
         Self::Plate,
@@ -87,6 +88,7 @@ impl AlgorithmType {
         Self::Random,
     ];
 
+    #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             Self::Room => "Room",
@@ -109,39 +111,37 @@ impl AlgorithmType {
     }
 
     /// Number of sub-type variants for this algorithm.
+    #[must_use]
     pub fn variant_count(self) -> usize {
         match self {
-            Self::Room => 3,   // Medium, Chamber, Studio
-            Self::Hall => 3,   // Concert, Cathedral, Arena
-            Self::Plate => 3,  // Dattorro, Lexicon 224, Progenitor
+            // Medium, Chamber, Studio / Concert, Cathedral, Arena /
+            // Dattorro, Lexicon 224, Progenitor
+            Self::Room | Self::Hall | Self::Plate => 3,
             Self::Spring => 2, // Classic, Vintage
             _ => 1,
         }
     }
 
     /// Name of a specific variant.
+    #[must_use]
     pub fn variant_name(self, variant: usize) -> &'static str {
         match self {
             Self::Room => match variant {
-                0 => "Medium",
                 1 => "Chamber",
                 2 => "Studio",
                 _ => "Medium",
             },
             Self::Hall => match variant {
-                0 => "Concert",
                 1 => "Cathedral",
                 2 => "Arena",
                 _ => "Concert",
             },
             Self::Plate => match variant {
-                0 => "Dattorro",
                 1 => "Lexicon",
                 2 => "Progenitor",
                 _ => "Dattorro",
             },
             Self::Spring => match variant {
-                0 => "Classic",
                 1 => "Vintage",
                 _ => "Classic",
             },
@@ -149,10 +149,11 @@ impl AlgorithmType {
         }
     }
 
-    /// BigSky MX named Size options for this engine (see
+    /// `BigSky` MX named Size options for this engine (see
     /// [`crate::chain::ReverbChain::set_size_index`]). Hall/Room sizes
     /// map onto the variant system; everything else steps
     /// `params.size`.
+    #[must_use]
     pub fn size_names(self) -> &'static [&'static str] {
         match self {
             Self::Hall => &["Concert", "Arena"],
@@ -162,6 +163,7 @@ impl AlgorithmType {
     }
 
     /// Maximum variant count across all algorithm types.
+    #[must_use]
     pub fn max_variant_count() -> usize {
         Self::ALL
             .iter()
@@ -170,10 +172,12 @@ impl AlgorithmType {
             .unwrap_or(1)
     }
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         Self::ALL.get(i).copied().unwrap_or(Self::Room)
     }
 
+    #[must_use]
     pub fn index(self) -> usize {
         Self::ALL.iter().position(|&a| a == self).unwrap_or(0)
     }
@@ -232,15 +236,15 @@ pub const DECAY_RATE_MIN: f64 = 0.1;
 pub const DECAY_RATE_MAX: f64 = 4.0;
 
 /// One Decay Rate EQ band: a curve of decay-TIME multipliers over frequency
-/// (`fx.reverb.decay-eq`). `rate` 1.0 = the space's natural decay; 4.0 =
-/// four times longer at this band; [`DECAY_RATE_MIN`] a tenth.
+/// (`fx.reverb.decay-eq`).
 ///
-/// The cut range goes further than Pro-R 2's 25 %–400 %, deliberately. That
-/// is a product limit, not a property of the engine, and matching a real
-/// space needs more: fitting our chamber to a Valhalla reference drove both
-/// shelves hard against a 0.25x floor and still could not darken the tail
-/// enough. Cuts are also the safe direction — the loop-runaway guard in
-/// `Fdn::set_decay_curve` exists to bound boosts.
+/// `rate` 1.0 = the space's natural decay; 4.0 = four times longer at this
+/// band; [`DECAY_RATE_MIN`] a tenth. The cut range goes further than Pro-R 2's
+/// 25 %–400 %, deliberately. That is a product limit, not a property of the
+/// engine, and matching a real space needs more: fitting our chamber to a
+/// Valhalla reference drove both shelves hard against a 0.25x floor and still
+/// could not darken the tail enough. Cuts are also the safe direction — the
+/// loop-runaway guard in `Fdn::set_decay_curve` exists to bound boosts.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DecayBand {
     /// 0 = Bell, 1 = Low Shelf, 2 = High Shelf (a Notch is a Bell with a
@@ -265,6 +269,7 @@ impl Default for DecayBand {
 
 impl DecayBand {
     /// Whether this band changes anything.
+    #[must_use]
     pub fn is_active(&self) -> bool {
         (self.rate - 1.0).abs() > 0.005
     }
@@ -272,6 +277,7 @@ impl DecayBand {
     /// The band's rate contribution at `freq`, in "rate dB"
     /// (20·log10(rate) shaped by the band's curve — the same bell/shelf
     /// magnitude the EQ display draws).
+    #[must_use]
     pub fn rate_db_at(&self, freq: f64) -> f64 {
         let peak_db = 20.0 * self.rate.clamp(DECAY_RATE_MIN, DECAY_RATE_MAX).log10();
         peak_db * self.shape_weight_at(freq)
@@ -283,6 +289,7 @@ impl DecayBand {
     /// gain by the band's curve — the loop-stability check needs the combined
     /// response of every band at a frequency, which is the peak gains scaled
     /// by their shapes and summed, not the peaks themselves.
+    #[must_use]
     pub fn shape_weight_at(&self, freq: f64) -> f64 {
         let f0 = self.freq_hz.max(10.0);
         let q = self.q.clamp(0.1, 18.0);
@@ -304,6 +311,7 @@ impl DecayBand {
 
 /// The whole curve's decay-rate multiplier at `freq` (bands sum in rate-dB,
 /// clamped to Pro-R's 0.25..4 range).
+#[must_use]
 pub fn decay_rate_at(bands: &[DecayBand; DECAY_BANDS], freq: f64) -> f64 {
     let db: f64 = bands
         .iter()
@@ -318,8 +326,9 @@ pub fn decay_rate_at(bands: &[DecayBand; DECAY_BANDS], freq: f64) -> f64 {
 /// Collapse the curve to the legacy low/high multiplier pair, for engines
 /// without a per-frequency feedback path: the rate sampled in the bass
 /// (100 Hz) and the top (6 kHz).
+#[must_use]
 pub fn decay_bands_collapsed(bands: &[DecayBand; DECAY_BANDS]) -> (f64, f64) {
-    if !bands.iter().any(|b| b.is_active()) {
+    if !bands.iter().any(DecayBand::is_active) {
         return (1.0, 1.0);
     }
     (decay_rate_at(bands, 100.0), decay_rate_at(bands, 6000.0))
@@ -423,7 +432,7 @@ pub enum ImpulseDirection {
     Reverse,
 }
 
-/// BigSky MX "Impulse" engine live shaping parameters.
+/// `BigSky` MX "Impulse" engine live shaping parameters.
 ///
 /// `decay`/`tail`/`attack`/`stretch`/`direction` re-derive the active
 /// partitioned IR from the stored original (background re-preparation —
@@ -474,6 +483,7 @@ impl ImpulseParams {
     /// The shaping subset (everything except `feedback`) — equality on
     /// this tuple decides whether a re-preparation is needed.
     #[allow(clippy::type_complexity)]
+    #[must_use]
     pub fn shape_key(&self) -> (u64, ImpulseTail, u64, u64, ImpulseDirection, u64, u64) {
         (
             self.decay.clamp(0.01, 1.0).to_bits(),
@@ -488,6 +498,7 @@ impl ImpulseParams {
 
     /// True when every shaping param is at its identity value (no
     /// re-preparation needed, original IR plays untouched).
+    #[must_use]
     pub fn shape_is_identity(&self) -> bool {
         self.decay >= 1.0 - 1e-9
             && self.attack <= 1e-9
@@ -498,7 +509,7 @@ impl ImpulseParams {
     }
 }
 
-/// Where the Shimmer pitch voices take their signal from (BigSky MX
+/// Where the Shimmer pitch voices take their signal from (`BigSky` MX
 /// Shimmer "Feedback" mode).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ShimmerFeedbackMode {
@@ -515,6 +526,7 @@ pub enum ShimmerFeedbackMode {
 }
 
 impl ShimmerFeedbackMode {
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             0 => Self::Input,
@@ -524,10 +536,11 @@ impl ShimmerFeedbackMode {
     }
 }
 
-/// BigSky MX Shimmer engine params: two independent pitch voices +
-/// feedback-mode select. Defaults are bit-transparent against the
-/// legacy single-voice mapping (`extra_a` = amount, `extra_b` = coarse
-/// interval select).
+/// `BigSky` MX Shimmer engine params: two independent pitch voices +
+/// feedback-mode select.
+///
+/// Defaults are bit-transparent against the legacy single-voice mapping
+/// (`extra_a` = amount, `extra_b` = coarse interval select).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct ShimmerParams {
     /// Voice 1 interval in semitones (-12..+12). `None` = keep the
@@ -544,7 +557,7 @@ pub struct ShimmerParams {
     pub feedback_mode: ShimmerFeedbackMode,
 }
 
-/// BigSky MX Magneto engine params (beyond the shared set).
+/// `BigSky` MX Magneto engine params (beyond the shared set).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct MagnetoParams {
     /// Taps alternate hard L/R (center clarity + width).
@@ -574,6 +587,7 @@ pub enum MagnetoHeads {
 impl MagnetoHeads {
     pub const COUNT: usize = 5;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             0 => Self::One,
@@ -584,6 +598,7 @@ impl MagnetoHeads {
         }
     }
 
+    #[must_use]
     pub fn count(self) -> usize {
         match self {
             Self::One => 1,
@@ -603,7 +618,7 @@ pub enum MagnetoSpacing {
     Uneven,
 }
 
-/// BigSky MX Spring "Dwell": drive stages of the spring-tank preamp.
+/// `BigSky` MX Spring "Dwell": drive stages of the spring-tank preamp.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SpringDwell {
     /// The cleanest spring tones.
@@ -620,6 +635,7 @@ pub enum SpringDwell {
 impl SpringDwell {
     pub const COUNT: usize = 4;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Combo,
@@ -630,6 +646,7 @@ impl SpringDwell {
     }
 
     /// Preamp drive into the tank (1.0 = unity/clean).
+    #[must_use]
     pub fn drive(self) -> f64 {
         match self {
             Self::Clean => 1.0,
@@ -640,7 +657,7 @@ impl SpringDwell {
     }
 }
 
-/// BigSky MX Spring engine params.
+/// `BigSky` MX Spring engine params.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpringParams {
     pub dwell: SpringDwell,
@@ -657,7 +674,7 @@ impl Default for SpringParams {
     }
 }
 
-/// BigSky MX NonLinear envelope shapes (manual menu order, CC 0–5).
+/// `BigSky` MX `NonLinear` envelope shapes (manual menu order, CC 0–5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NlShape {
     /// Exponential backward swell.
@@ -677,6 +694,7 @@ pub enum NlShape {
 impl NlShape {
     pub const COUNT: usize = 6;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             0 => Self::Swoosh,
@@ -689,7 +707,7 @@ impl NlShape {
     }
 }
 
-/// BigSky MX Chamber "Color": five fixed post-tonality profiles
+/// `BigSky` MX Chamber "Color": five fixed post-tonality profiles
 /// capturing "the speakers and mics used in the chamber recording
 /// process". Not a continuous control.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -710,6 +728,7 @@ pub enum ChamberColor {
 impl ChamberColor {
     pub const COUNT: usize = 5;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Clear,
@@ -721,15 +740,16 @@ impl ChamberColor {
     }
 }
 
-/// BigSky MX Chamber engine params.
+/// `BigSky` MX Chamber engine params.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ChamberParams {
     pub color: ChamberColor,
 }
 
-/// BigSky MX NonLinear engine params: Chop (amplitude mod on the decay),
-/// explicit gate speed, and the separate Late reverb stage. Defaults
-/// are transparent (chop depth 0, late level 0, gate speed 1.0 ≙ the
+/// `BigSky` MX `NonLinear` engine params: Chop (amplitude mod on the decay),
+/// explicit gate speed, and the separate Late reverb stage.
+///
+/// Defaults are transparent (chop depth 0, late level 0, gate speed 1.0 ≙ the
 /// legacy 90% hold point).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NonLinearParams {
@@ -738,7 +758,7 @@ pub struct NonLinearParams {
     pub shape: Option<NlShape>,
     /// Feedback from the nonlinear generator back to the input, before
     /// the late stage (0..1). This is the engine's PRE-DELAY knob
-    /// remap — the chain routes `predelay_ms` here for NonLinear.
+    /// remap — the chain routes `predelay_ms` here for `NonLinear`.
     pub feedback: f64,
     /// Chop LFO rate in Hz (0.1..15).
     pub chop_rate_hz: f64,
@@ -772,7 +792,7 @@ impl Default for NonLinearParams {
     }
 }
 
-/// BigSky MX Cloud engine params (beyond the shared set).
+/// `BigSky` MX Cloud engine params (beyond the shared set).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CloudParams {
     /// Ensemble level (0..1): a pitch-tracked synthetic string/pad
@@ -787,7 +807,7 @@ impl Default for CloudParams {
     }
 }
 
-/// BigSky MX Bloom engine params (beyond the shared set).
+/// `BigSky` MX Bloom engine params (beyond the shared set).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BloomParams {
     /// Harmonics level (0..1): filter-bank overtone generator
@@ -802,7 +822,7 @@ impl Default for BloomParams {
     }
 }
 
-/// BigSky MX Chorale vowel programs (manual menu order, CC 0–6).
+/// `BigSky` MX Chorale vowel programs (manual menu order, CC 0–6).
 /// Combination entries morph slowly between their vowels; `Random`
 /// wanders the whole formant space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -819,6 +839,7 @@ pub enum ChoraleVowel {
 impl ChoraleVowel {
     pub const COUNT: usize = 7;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             0 => Self::Aahhoo,
@@ -832,7 +853,7 @@ impl ChoraleVowel {
     }
 }
 
-/// BigSky MX Chorale "Resonance": intensity of the vowel via the
+/// `BigSky` MX Chorale "Resonance": intensity of the vowel via the
 /// vocal-filter Q.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChoraleResonance {
@@ -846,6 +867,7 @@ pub enum ChoraleResonance {
 }
 
 impl ChoraleResonance {
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Medium,
@@ -855,6 +877,7 @@ impl ChoraleResonance {
     }
 
     /// (Q, peak dB) for the formant filters.
+    #[must_use]
     pub fn q_gain(self) -> (f64, f64) {
         match self {
             Self::Mild => (3.0, 8.0),
@@ -864,7 +887,7 @@ impl ChoraleResonance {
     }
 }
 
-/// Chorale choir range (BigSky MX "Choir Voice").
+/// Chorale choir range (`BigSky` MX "Choir Voice").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChoirVoice {
     /// Mid-to-high chorale range — the legacy voicing.
@@ -875,7 +898,7 @@ pub enum ChoirVoice {
     Baritone,
 }
 
-/// BigSky MX Chorale engine params (beyond the shared set).
+/// `BigSky` MX Chorale engine params (beyond the shared set).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct ChoraleParams {
     /// Choir voice level (0..1). `None` = legacy `extra_a` mapping.
@@ -892,7 +915,7 @@ pub struct ChoraleParams {
     pub mod_amount: f64,
 }
 
-/// BigSky MX per-engine Voice select. MX = the current voicing
+/// `BigSky` MX per-engine Voice select. MX = the current voicing
 /// (default, bit-transparent); Classic selects the counterpart
 /// heritage.
 ///
@@ -901,7 +924,7 @@ pub struct ChoraleParams {
 ///   both implementations genuinely exist.
 /// - Hall / Room / Shimmer: `Classic` is a re-tune of the same
 ///   algorithm (slappier, punchier, more resonant harmonic buildup —
-///   the manual's description), NOT a port of the original BigSky.
+///   the manual's description), NOT a port of the original `BigSky`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ReverbVoice {
     #[default]
@@ -909,7 +932,7 @@ pub enum ReverbVoice {
     Classic,
 }
 
-/// How the Hall Swell shapes the signal (BigSky MX "Swell Type").
+/// How the Hall Swell shapes the signal (`BigSky` MX "Swell Type").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SwellType {
     /// Swell the reverb only — dry stays untouched.
@@ -919,10 +942,11 @@ pub enum SwellType {
     WetPlusDry,
 }
 
-/// BigSky MX Hall engine params. Consumed at the CHAIN level (not the
+/// `BigSky` MX Hall engine params. Consumed at the CHAIN level (not the
 /// algorithm): the Mid EQ rides the wet output bus so it covers every
-/// hall variant, and the swell needs both wet and dry. Defaults are
-/// transparent.
+/// hall variant, and the swell needs both wet and dry.
+///
+/// Defaults are transparent.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HallParams {
     /// Mid-band cut/boost in dB around ~1 kHz on the wet (-6..+6).
@@ -948,13 +972,13 @@ impl Default for HallParams {
 /// Common interface for all reverb algorithms.
 ///
 /// Each algorithm processes one stereo sample pair at a time (tick-based),
-/// returning the wet signal only. The ReverbChain handles pre-delay,
+/// returning the wet signal only. The `ReverbChain` handles pre-delay,
 /// input filtering, mix, and width.
 pub trait ReverbAlgorithm: Send {
     fn reset(&mut self);
     fn set_sample_rate(&mut self, sample_rate: f64);
     fn set_params(&mut self, params: &AlgorithmParams);
-    /// Process one stereo sample, return (left_wet, right_wet).
+    /// Process one stereo sample, return (`left_wet`, `right_wet`).
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64);
 
     /// Replace this algorithm's impulse response. No-op for algorithms
@@ -1059,7 +1083,7 @@ pub trait ReverbAlgorithm: Send {
         false
     }
 
-    /// Push NonLinear engine params. No-op outside NonLinear; returns
+    /// Push `NonLinear` engine params. No-op outside `NonLinear`; returns
     /// `true` if accepted.
     fn set_nonlinear_params(&mut self, params: &NonLinearParams) -> bool {
         let _ = params;
@@ -1146,6 +1170,7 @@ pub const INFINITE_T60: f64 = 1.0e6;
 /// from 0.2 s to 0.4 s is as large a change as 2 s to 4 s.
 ///
 /// `decay >= FREEZE_DECAY` returns [`INFINITE_T60`].
+#[must_use]
 pub fn decay_to_t60(decay: f64, min_s: f64, max_s: f64) -> f64 {
     if decay >= FREEZE_DECAY {
         return INFINITE_T60;
@@ -1165,6 +1190,7 @@ pub fn decay_to_t60(decay: f64, min_s: f64, max_s: f64) -> f64 {
 /// `ReverbChain::set_decay_seconds` applies it.
 ///
 /// Shared so every engine derives its shelf the same way.
+#[must_use]
 pub fn t60_shelf_targets(
     t60: f64,
     low_decay_mult: f64,
@@ -1189,6 +1215,7 @@ pub fn t60_shelf_targets(
 /// Damping is deliberately excluded: absorption genuinely shortens a tail, so
 /// a damped space is *meant* to decay faster and compensating for it would
 /// fight the control. Only the explicit tilt multipliers are corrected.
+#[must_use]
 pub fn tilt_midband_factor(low_decay_mult: f64, high_decay_mult: f64) -> f64 {
     let lo = low_decay_mult.max(0.05);
     let hi = high_decay_mult.max(0.05);
@@ -1258,6 +1285,7 @@ pub const PLATE_DECAY_APPLICATIONS: f64 = 4.0;
 /// exact — losing 60 dB over `t60_s` at `applications` multiplications per
 /// `loop_seconds` round trip means each multiplication is
 /// `10^(-3·loop/(applications·t60))`.
+#[must_use]
 pub fn dattorro_gain_for_t60(t60_s: f64, loop_seconds: f64, applications: f64) -> f64 {
     let t60 = t60_s.max(0.01);
     let exponent = -3.0 * loop_seconds / (applications.max(1.0) * t60);
@@ -1280,6 +1308,7 @@ impl AlgorithmType {
     /// This is a property of the engine, not a hardcoded list at the call
     /// site, so wiring `set_decay_curve` into another engine means updating
     /// one place rather than silently double-applying.
+    #[must_use]
     pub fn realizes_decay_curve(self) -> bool {
         matches!(self, Self::Hall | Self::Room | Self::Random)
     }
@@ -1290,6 +1319,7 @@ impl AlgorithmType {
     /// `None` for engines that do not model decay as a time — the plate tank
     /// and the character engines set a feedback coefficient directly, so
     /// there is no honest time to report.
+    #[must_use]
     pub fn t60_range(self, variant: usize) -> Option<(f64, f64)> {
         match (self, variant) {
             (Self::Room, 1) => Some(ROOM_CHAMBER_T60),
@@ -1313,6 +1343,7 @@ impl AlgorithmType {
 /// nearest end rather than producing an out-of-range control value. Callers
 /// that need to know they were clamped should compare against
 /// [`AlgorithmType::t60_range`] first.
+#[must_use] 
 pub fn t60_to_decay(t60_s: f64, min_s: f64, max_s: f64) -> f64 {
     let min_s = min_s.max(0.01);
     let max_s = max_s.max(min_s * 1.001);

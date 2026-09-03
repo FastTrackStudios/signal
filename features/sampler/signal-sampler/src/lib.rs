@@ -73,9 +73,9 @@
 //! # Ok::<(), eyre::Error>(())
 //! ```
 
-// Off the audio path these are ordinary, correct code; see the `deny` on
-// `mod engine`, which is where they must never appear.
-#![allow(clippy::disallowed_methods)]
+// `disallowed_methods` is allowed workspace-wide (control-plane code uses locks
+// and env vars legitimately) and re-denied on `mod engine` below, which is the
+// audio path and the one place these must never appear.
 
 // Native-only modules (audio devices, hardware MIDI, the NAM C++ core,
 // filesystem scans, the pack CLI). The wasm32 build keeps the pure engine +
@@ -93,13 +93,15 @@ pub mod built_lanes;
 pub mod convolver;
 pub mod document;
 pub mod document_rt;
-/// The audio path. `disallowed_methods` is DENIED here and allowed at the
-/// crate root: everything in `clippy.toml` can block for an unbounded time,
-/// which is fine in a loader and fatal in a render callback. Scoping it this
-/// way keeps the lint meaningful — workspace-wide it fires 171 times in this
-/// crate alone, almost all of them legitimate control-surface code, and a
-/// lint that noisy gets ignored. It found two `env::var_os` calls on the
-/// audio thread the first time it ran.
+/// The audio path.
+///
+/// `disallowed_methods` is DENIED here and allowed workspace-wide:
+/// everything in `clippy.toml` can block for an unbounded time, which is
+/// fine in a loader and fatal in a render callback. Scoping it this way
+/// keeps the lint meaningful — unscoped it fires 562 times across the
+/// workspace, 518 of them legitimate control-surface code, and a lint that
+/// noisy gets ignored. It found two `env::var_os` calls on the audio thread
+/// the first time it ran.
 #[deny(clippy::disallowed_methods)]
 pub mod engine;
 pub mod engine_spec;
@@ -124,8 +126,10 @@ pub mod pack_cli;
 pub mod pack_plan;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pack_rewrite;
-/// The NI Essential Pianos' Color / Dynamic Range controls, as velocity-domain
-/// transforms. See `features/rigs/keys/spec/piano-voice.md`.
+/// The NI Essential Pianos' Color / Dynamic Range controls, as
+/// velocity-domain transforms.
+///
+/// See `features/rigs/keys/spec/piano-voice.md`.
 pub mod piano_voice;
 pub mod preset_registry;
 pub mod preset_spec;
@@ -237,6 +241,10 @@ pub mod pack {
     ///
     /// Returns the embedded `LibrarySpec` plus pack statistics. No audio is
     /// decoded — suitable for browse/list panels.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or the pack is malformed.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn read_pack_header(pack_path: &Path) -> Result<PackHeader, SamplerError> {
         let pack = SignalPcmPack::open(pack_path)?;
@@ -265,12 +273,11 @@ pub use pack::read_pack_header;
 pub use pack::PackHeader;
 
 pub mod pack_registry {
-    //! In-memory `.signalpack`s, keyed by the spec-path string lanes
-    //! reference (`RigBlock.sample`) — the browser seam: packs arrive as
-    //! fetched bytes, not files, so `build_sample_source` consults this
-    //! registry before touching disk. Native callers may use it too (tests,
-    //! network-fed rigs); an installed entry always wins over the
-    //! filesystem.
+    //! In-memory `.signalpack`s, keyed by the spec-path string lanes reference (`RigBlock.sample`).
+    //!
+    //! This is the browser seam: packs arrive as fetched bytes, not files, so `build_sample_source`
+    //! consults this registry before touching disk. Native callers may use it too (tests,
+    //! network-fed rigs); an installed entry always wins over the filesystem.
     //!
     //! Bytes are parsed once at [`install`] (surfacing a bad pack at the
     //! transfer boundary, not at note-on) and stored as an opened
@@ -290,6 +297,10 @@ pub mod pack_registry {
 
     /// Parse `bytes` as a `.signalpack` and install it under `key` (the
     /// spec-path string lanes reference). Replaces any previous entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bytes do not represent a valid `.signalpack`.
     pub fn install(key: &str, bytes: Vec<u8>) -> Result<(), SamplerError> {
         let pack = SignalPcmPack::open_bytes(bytes)?;
         packs()
@@ -299,13 +310,18 @@ pub mod pack_registry {
         Ok(())
     }
 
-    /// Install an EXTERNAL pack under `key`: the pack's bytes stay outside
-    /// this address space (the browser worklet's JS heap), reachable only
-    /// through the process-wide reader installed with
+    /// Install an EXTERNAL pack under `key`.
+    ///
+    /// The pack's bytes stay outside this address space (the browser worklet's JS heap),
+    /// reachable only through the process-wide reader installed with
     /// [`fts_sample::cache::set_external_pack_reader`]. Header + index are
     /// parsed through that reader here (surfacing a bad pack, or a missing
     /// reader, at the transfer boundary); audio entries materialize
     /// per-entry at decode time. Replaces any previous entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the external pack cannot be read or is malformed.
     pub fn install_external(key: &str, id: u32, len: u64) -> Result<(), SamplerError> {
         let pack = SignalPcmPack::open_external(id, len)?;
         packs()
@@ -410,6 +426,11 @@ impl PlayerPatch {
     /// If the spec carries explicit `zones`, the patch is built in zone mode and
     /// the on-disk filename scan is skipped (zoned libraries have arbitrary
     /// filenames that the convention parser cannot handle).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the spec file cannot be read or is invalid, or if
+    /// scanning the samples directory fails.
     pub fn load(spec_path: &Path, samples_root: &Path) -> Result<Self, SamplerError> {
         let spec = LibrarySpec::from_file(spec_path)?;
         let zoned = !spec.zones.is_empty();
@@ -464,6 +485,10 @@ impl PlayerPatch {
     /// own header says to load `cinematic-strings.styx` alongside it for the
     /// engine config. Without the config, the runtime has no articulation
     /// definitions or keyswitch/CC58 map, so articulation switching can't work.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either spec file cannot be read or is invalid.
     pub fn load_merged(
         config_path: &Path,
         zones_path: &Path,
@@ -485,6 +510,7 @@ impl PlayerPatch {
     }
 
     /// Build a patch from an already-parsed spec with an empty sample map.
+    #[must_use]
     pub fn from_spec(spec: LibrarySpec) -> Self {
         Self {
             spec,
@@ -507,6 +533,10 @@ impl PlayerPatch {
     /// per groove rooted at `slice_base_note` so a single MIDI key triggers
     /// the whole loop. Slicing and time-stretch are intentionally not
     /// implemented — the loop plays sample-rate-locked at original tempo.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pack file cannot be opened or parsed.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn from_pack(pack_path: &Path) -> Result<Self, SamplerError> {
         use crate::engine::cache::SignalPcmPack;
@@ -517,6 +547,10 @@ impl PlayerPatch {
     /// [`from_pack`](Self::from_pack) over a pack handed over as one
     /// in-memory buffer — the wasm path (a fetched pack), and anything else
     /// with no file to open. See also [`crate::pack_registry`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bytes do not represent a valid `.signalpack`.
     pub fn from_pack_bytes(bytes: Vec<u8>) -> Result<Self, SamplerError> {
         let pack = crate::engine::cache::SignalPcmPack::open_bytes(bytes)?;
         Self::from_opened_pack(pack)
@@ -524,6 +558,10 @@ impl PlayerPatch {
 
     /// Build a patch from an ALREADY-OPENED pack, however its bytes arrived
     /// (mmap'd file, in-memory buffer, registry clone).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pack is malformed or lacks an embedded spec.
     pub fn from_opened_pack(
         pack: crate::engine::cache::SignalPcmPack,
     ) -> Result<Self, SamplerError> {
@@ -603,7 +641,7 @@ impl PlayerPatch {
         // pack's entry list so playback works even when no on-disk source
         // is available.
         let map = if spec.zones.is_empty() && spec.grooves.is_empty() {
-            SampleMap::from_paths(pack.entry_paths().map(|p| p.to_path_buf()))
+            SampleMap::from_paths(pack.entry_paths().map(std::path::Path::to_path_buf))
         } else {
             SampleMap::empty()
         };
@@ -625,7 +663,7 @@ impl PlayerPatch {
                 e.0.insert(k.dynamic.clone());
                 e.1.insert(k.rr);
             }
-            for a in spec.articulations.iter_mut() {
+            for a in &mut spec.articulations {
                 if let Some((dyns, rrs)) = by_artic.get(&a.id) {
                     if !dyns.is_empty() {
                         a.dynamics = dyns.iter().cloned().collect();
@@ -650,10 +688,12 @@ impl PlayerPatch {
     }
 
     /// Whether the patch is in zone mode (explicit `(key × vel × RR)` zones).
+    #[must_use]
     pub fn is_zoned(&self) -> bool {
         !self.zone_paths.is_empty()
     }
 
+    #[must_use]
     pub fn total_samples(&self) -> usize {
         let base = if self.is_zoned() {
             self.zone_paths.len()
@@ -663,6 +703,7 @@ impl PlayerPatch {
         base + self.groove_paths.len() + self.wavetable_paths.len()
     }
 
+    #[must_use]
     pub fn sample_paths(&self) -> Box<dyn Iterator<Item = &std::path::PathBuf> + '_> {
         let base: Box<dyn Iterator<Item = &std::path::PathBuf> + '_> = if self.is_zoned() {
             Box::new(self.zone_paths.iter())
@@ -683,6 +724,7 @@ impl PlayerPatch {
     /// - Zone-mode patches: zones sorted by `|root_key - center|`.
     /// - Convention-mode patches: sample-map entries sorted by `|note - center|`.
     /// - Grooves + wavetables: appended last (no inherent pitch priority).
+    #[must_use]
     pub fn sample_paths_centered(&self, center: u8) -> Vec<std::path::PathBuf> {
         let center = center as i32;
         let mut out: Vec<std::path::PathBuf> = Vec::new();
@@ -720,6 +762,7 @@ impl PlayerPatch {
     /// voice at all. Round-robining across notes spends the same budget on a
     /// playable instrument: every key sounds, dense velocity layers fill in
     /// as the budget allows.
+    #[must_use]
     pub fn sample_paths_playable(&self, center: u8) -> Vec<std::path::PathBuf> {
         use std::collections::BTreeMap;
         let center = center as i32;
@@ -740,7 +783,7 @@ impl PlayerPatch {
         // Notes nearest the centre get their samples first within each round.
         let mut notes: Vec<i32> = by_note.keys().copied().collect();
         notes.sort_by_key(|n| (n - center).abs());
-        let depth = by_note.values().map(|v| v.len()).max().unwrap_or(0);
+        let depth = by_note.values().map(std::vec::Vec::len).max().unwrap_or(0);
         let mut out = Vec::new();
         for round in 0..depth {
             for note in &notes {
@@ -754,6 +797,7 @@ impl PlayerPatch {
         out
     }
 
+    #[must_use]
     pub fn resolve(
         &self,
         query: &crate::sample_map::SampleQuery<'_>,
@@ -766,6 +810,7 @@ impl PlayerPatch {
     /// Returns `None` if the patch is not in zone mode or no zone contains the
     /// `(note, velocity)` point. Multiple matching zones form a round-robin
     /// group; `rr_idx` is reduced modulo the group size.
+    #[must_use]
     pub fn resolve_zone(&self, note: u8, velocity: u8, rr_idx: usize) -> Option<ResolvedZone> {
         if !self.is_zoned() {
             return None;
@@ -802,6 +847,7 @@ impl PlayerPatch {
     /// piano with several round-robins per key that means most presses ask
     /// for a sample nobody opened — heard as wrong or missing samples.
     /// Warming needs the whole candidate set.
+    #[must_use]
     pub fn resolve_zone_candidates(&self, note: u8, velocity: u8) -> Vec<std::path::PathBuf> {
         if !self.is_zoned() {
             return Vec::new();
@@ -815,6 +861,7 @@ impl PlayerPatch {
             .collect()
     }
 
+    #[must_use]
     pub fn legato_delay_expressive(&self, velocity: u8) -> Option<u32> {
         self.spec
             .legato_engine
@@ -824,6 +871,7 @@ impl PlayerPatch {
             .delay_for_velocity(velocity)
     }
 
+    #[must_use]
     pub fn legato_delay_low_latency(&self, velocity: u8) -> Option<u32> {
         self.spec
             .legato_engine
@@ -833,11 +881,11 @@ impl PlayerPatch {
             .delay_for_velocity(velocity)
     }
 
+    #[must_use]
     pub fn short_note_pre_delay_ms(&self) -> u32 {
         self.spec
             .short_note_timing
             .as_ref()
-            .map(|t| t.pre_delay_ms)
-            .unwrap_or(0)
+            .map_or(0, |t| t.pre_delay_ms)
     }
 }

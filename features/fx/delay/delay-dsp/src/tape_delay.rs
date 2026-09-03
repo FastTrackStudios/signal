@@ -1,7 +1,7 @@
-//! TapeDelay — tape echo with wow/flutter, feedback filtering, and saturation.
+//! `TapeDelay` — tape echo with wow/flutter, feedback filtering, and saturation.
 //!
 //! Based on qdelay (tiagolr). Signal flow per channel:
-//! Input → DelayLine (cubic read) → Feedback EQ → Saturation → Hard Limit → Write back
+//! Input → `DelayLine` (cubic read) → Feedback EQ → Saturation → Hard Limit → Write back
 //!
 //! Supports up to 3 read heads (RE-201 Space Echo style). All heads read from
 //! the same delay buffer with shared wow/flutter modulation.
@@ -16,12 +16,12 @@ use audiocore_dsp::soft_clip::sin_clip;
 
 use crate::modulation::{Flutter, WobbleShape, Wow};
 
-/// dTape voice (TimeLine MX).
+/// dTape voice (`TimeLine` MX).
 ///
 /// Selects how the `drive` knob hits the tape:
 /// - `Mx` (EC-1 lineage): drive = record level — gain into the saturation
 ///   stage with output makeup, so repeats get punchier as they saturate.
-/// - `Classic` (TimeLine v1): drive = tape bias — bias eats headroom, the
+/// - `Classic` (`TimeLine` v1): drive = tape bias — bias eats headroom, the
 ///   saturation ceiling drops with drive. More distortion, no input punch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TapeVoice {
@@ -30,7 +30,7 @@ pub enum TapeVoice {
     Classic,
 }
 
-/// Tape transport speed (TimeLine MX dTape).
+/// Tape transport speed (`TimeLine` MX dTape).
 ///
 /// `Fast` = higher fidelity: wider playback-head bandwidth and half the
 /// effective wow/flutter/crinkle for the same knob settings. `Normal` =
@@ -64,10 +64,10 @@ pub enum SaturationType {
 impl SaturationType {
     pub const COUNT: usize = 7;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             0 => Self::Clean,
-            1 => Self::Tape,
             2 => Self::Warm,
             3 => Self::Dirt,
             4 => Self::Pump,
@@ -77,6 +77,7 @@ impl SaturationType {
         }
     }
 
+    #[must_use]
     pub fn to_index(self) -> usize {
         match self {
             Self::Clean => 0,
@@ -89,6 +90,7 @@ impl SaturationType {
         }
     }
 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Clean => "Clean",
@@ -142,11 +144,11 @@ pub struct TapeDelay {
     pub flutter_rate: f64,
 
     // Multi-head (RE-201 style)
-    /// Enable Head 1 (reads at base time_ms).
+    /// Enable Head 1 (reads at base `time_ms`).
     pub head1_enabled: bool,
-    /// Enable Head 2 (reads at HEAD2_RATIO × time_ms).
+    /// Enable Head 2 (reads at `HEAD2_RATIO` × `time_ms`).
     pub head2_enabled: bool,
-    /// Enable Head 3 (reads at HEAD3_RATIO × time_ms).
+    /// Enable Head 3 (reads at `HEAD3_RATIO` × `time_ms`).
     pub head3_enabled: bool,
     /// Head 1 output level (0.0–1.0).
     pub head1_level: f64,
@@ -242,6 +244,7 @@ impl Default for TapeDelay {
 }
 
 impl TapeDelay {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             time_ms: 250.0,
@@ -674,6 +677,7 @@ impl TapeDelay {
         output
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
@@ -766,7 +770,7 @@ mod tests {
         d.tick(1.0, 0);
 
         let mut peaks = Vec::new();
-        for i in 1..144000 {
+        for i in 1..144_000 {
             let out = d.tick(0.0, 0);
             if out.abs() > 0.05 && (peaks.is_empty() || i - peaks.last().unwrap() > 2000) {
                 peaks.push(i);

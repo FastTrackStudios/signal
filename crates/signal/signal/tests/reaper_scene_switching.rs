@@ -108,7 +108,7 @@ async fn scene_switching_named_items(ctx: &ReaperTestContext) -> eyre::Result<()
         .await?;
     if let Some(ref item) = item_clean {
         item.active_take().set_name("Clean").await?;
-        item.set_color(Some(0x22C55E)).await?; // green
+        item.set_color(Some(0x0022_C55E)).await?; // green
     }
 
     let item_drive = items
@@ -116,7 +116,7 @@ async fn scene_switching_named_items(ctx: &ReaperTestContext) -> eyre::Result<()
         .await?;
     if let Some(ref item) = item_drive {
         item.active_take().set_name("Drive").await?;
-        item.set_color(Some(0xEF4444)).await?; // red
+        item.set_color(Some(0x00EF_4444)).await?; // red
     }
 
     let item_lead = items
@@ -124,7 +124,7 @@ async fn scene_switching_named_items(ctx: &ReaperTestContext) -> eyre::Result<()
         .await?;
     if let Some(ref item) = item_lead {
         item.active_take().set_name("Lead").await?;
-        item.set_color(Some(0x3B82F6)).await?; // blue
+        item.set_color(Some(0x003B_82F6)).await?; // blue
     }
 
     settle().await;

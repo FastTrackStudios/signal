@@ -150,11 +150,15 @@ impl RigScene {
         self
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if any override fails validation.
     pub fn validate_overrides(&self) -> Result<(), OverridePolicyError> {
         validate_overrides::<ScenePolicy>(&self.overrides)
     }
 
     /// Clone this scene with a new ID and name.
+    #[must_use]
     pub fn duplicate(&self, new_id: impl Into<RigSceneId>, new_name: impl Into<String>) -> Self {
         let mut dup = self.clone();
         dup.id = new_id.into();

@@ -42,10 +42,13 @@ impl Rng {
     }
 }
 
-/// Pink noise via the Paul Kellet economy filter over deterministic white
-/// noise, band-limited to the audible band (2nd-order high-pass at 20 Hz —
+/// Pink noise at [`REFERENCE_DBFS`] RMS.
+///
+/// The Paul Kellet economy filter over deterministic white noise,
+/// band-limited to the audible band (2nd-order high-pass at 20 Hz —
 /// sub-audible pink power would otherwise charge a stage's DC blocker with
-/// a level "loss" no ear can hear), scaled to [`REFERENCE_DBFS`] RMS.
+/// a level "loss" no ear can hear).
+///
 /// Stereo: two decorrelated channels (different seeds). Assumes ~48 kHz.
 #[must_use] 
 pub fn pink_reference(len: usize) -> (Vec<f64>, Vec<f64>) {
@@ -75,7 +78,7 @@ pub fn pink_reference(len: usize) -> (Vec<f64>, Vec<f64>) {
         let rms = rms(&v);
         let target = db_to_lin(REFERENCE_DBFS);
         let g = if rms > 0.0 { target / rms } else { 1.0 };
-        v.iter_mut().for_each(|x| *x *= g);
+        for x in &mut v { *x *= g; }
         v
     }
     (
@@ -112,9 +115,9 @@ pub fn lin_to_db(lin: f64) -> f64 {
 
 /// Render the reference through `stage` and return the level deviation in
 /// dB: `RMS(out) − RMS(in)`, measured after a warm-up region so envelopes
-/// and compensation smoothing have settled. 0.0 = perfectly compensated.
+/// and compensation smoothing have settled.
 ///
-/// `sample_rate` only sizes the render: 2 s of signal, first 25 % skipped.
+/// 0.0 = perfectly compensated. `sample_rate` only sizes the render: 2 s of signal, first 25 % skipped.
 // r[impl fx.gain-comp.verify-harness]
 pub fn level_deviation_db<S: Stage>(stage: &mut S, sample_rate: f64) -> f64 {
     let len = (sample_rate * 2.0) as usize;
@@ -137,9 +140,9 @@ pub fn level_deviation_db<S: Stage>(stage: &mut S, sample_rate: f64) -> f64 {
 
 /// Sweep one character control through `points` positions (0..=1 of its
 /// travel), building a fresh stage per point via `make`, and return
-/// `(worst_full_range, worst_typical_range)` deviations in dB. The typical
-/// range is the middle 80 % of travel (`fx.gain-comp.reference`).
+/// `(worst_full_range, worst_typical_range)` deviations in dB.
 ///
+/// The typical range is the middle 80 % of travel (`fx.gain-comp.reference`).
 /// Assert against [`FULL_RANGE_BOUND_DB`] / [`TYPICAL_RANGE_BOUND_DB`].
 // r[impl fx.gain-comp.reference]
 pub fn sweep_deviation_db<S: Stage>(
@@ -169,8 +172,8 @@ mod tests {
     struct Gain(f64);
     impl Stage for Gain {
         fn process(&mut self, l: &mut [f64], r: &mut [f64]) {
-            l.iter_mut().for_each(|x| *x *= self.0);
-            r.iter_mut().for_each(|x| *x *= self.0);
+            for x in l.iter_mut() { *x *= self.0; }
+            for x in r.iter_mut() { *x *= self.0; }
         }
     }
 

@@ -1,4 +1,4 @@
-//! ShimmerDelay — pitch-shifted delay for ethereal/ambient textures.
+//! `ShimmerDelay` — pitch-shifted delay for ethereal/ambient textures.
 //!
 //! Delay line with pitch shifter in the feedback path. Each repeat
 //! is shifted by `pitch_ratio`, creating cascading shimmer effects.
@@ -57,6 +57,7 @@ impl Default for ShimmerDelay {
 impl ShimmerDelay {
     const MAX_DELAY_S: f64 = 5.0;
 
+    #[must_use]
     pub fn new() -> Self {
         let mut shifter = WsolaShifter::new();
         shifter.mix = 1.0;
@@ -161,6 +162,7 @@ impl ShimmerDelay {
         output
     }
 
+    #[must_use]
     pub fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }

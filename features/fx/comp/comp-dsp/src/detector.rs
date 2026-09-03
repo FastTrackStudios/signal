@@ -21,6 +21,7 @@ impl Default for Detector {
 }
 
 impl Detector {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             peak: 0.0,

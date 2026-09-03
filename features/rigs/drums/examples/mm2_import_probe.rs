@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = vec![0.0f32; 512 * 2];
     let warm = |rig: &SamplerRig, buf: &mut Vec<f32>| {
         for _ in 0..70 {
-            buf.iter_mut().for_each(|s| *s = 0.0);
+            for s in buf.iter_mut() { *s = 0.0; }
             let _ = rig.render_offline(buf);
             std::thread::sleep(std::time::Duration::from_millis(8));
         }
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (mut pk, mut rms) = (0.0f32, 0.0f64);
         let mut n = 0u64;
         for _ in 0..40 {
-            buf.iter_mut().for_each(|s| *s = 0.0);
+            for s in buf.iter_mut() { *s = 0.0; }
             let _ = rig.render_offline(buf);
             for &s in buf.iter() {
                 pk = pk.max(s.abs());

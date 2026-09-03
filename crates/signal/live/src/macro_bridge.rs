@@ -75,6 +75,10 @@ pub fn build_mapping_bank_json(
 /// track on each timer tick, so no acknowledgment polling is needed.
 ///
 /// This function is **non-fatal**: failures are logged but do not block module loading.
+///
+/// # Errors
+///
+/// Returns an error if the macro configuration cannot be set up or applied.
 pub async fn bridge_macros(
     track: &TrackHandle,
     loaded_fx: &[LoadBlockResult],

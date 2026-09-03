@@ -91,14 +91,17 @@ impl Vst3Header {
         self.raw.len().saturating_sub(12)
     }
 
+    #[must_use]
     pub fn plugin_id(&self) -> u32 {
         u32_at(&self.raw, 0).unwrap_or(0)
     }
 
+    #[must_use]
     pub fn magic(&self) -> u32 {
         u32_at(&self.raw, 4).unwrap_or(0)
     }
 
+    #[must_use]
     pub fn body_len(&self) -> usize {
         u32_at(&self.raw, self.body_len_offset()).unwrap_or(0) as usize
     }
@@ -122,6 +125,11 @@ pub struct Vst3Chunk {
 }
 
 /// Decode the base64 lines of a `<VST>` block.
+///
+/// # Errors
+///
+/// Returns an error if the base64 cannot be decoded, if the magic number is incorrect,
+/// or if the declared length does not match the actual data.
 pub fn decode_vst3(lines: &[String]) -> Result<Vst3Chunk, ChunkError> {
     if lines.len() < 2 {
         return Err(ChunkError::TooShort("a VST3 chunk"));
@@ -169,6 +177,7 @@ pub fn decode_vst3(lines: &[String]) -> Result<Vst3Chunk, ChunkError> {
 
 /// Re-encode a VST3 chunk, with the body length in the header corrected to
 /// whatever the component state now weighs.
+#[must_use]
 pub fn encode_vst3(chunk: &Vst3Chunk) -> Vec<String> {
     let mut body = Vec::with_capacity(16 + chunk.component.len() + chunk.controller.len());
     body.extend_from_slice(&(chunk.component.len() as u32).to_le_bytes());
@@ -188,11 +197,16 @@ pub fn encode_vst3(chunk: &Vst3Chunk) -> Vec<String> {
 }
 
 /// Decode a CLAP `<STATE>` block's base64 into the bytes the plugin saved.
+///
+/// # Errors
+///
+/// Returns an error if the base64 cannot be decoded.
 pub fn decode_clap_state(lines: &[String]) -> Result<Vec<u8>, ChunkError> {
     Ok(B64.decode(lines.concat())?)
 }
 
 /// Encode plugin-saved bytes as a CLAP `<STATE>` body.
+#[must_use]
 pub fn encode_clap_state(state: &[u8]) -> Vec<String> {
     wrap(&B64.encode(state))
 }
@@ -209,7 +223,7 @@ mod tests {
     use super::*;
     use crate::rpp::{Document, Node};
 
-    /// The fixture is a real REAPER 7 track template: a FabFilter Pro-C 3
+    /// The fixture is a real REAPER 7 track template: a `FabFilter` Pro-C 3
     /// CLAP between two JUCE VST3s. It is checked in because the framing
     /// below was read off it — a regression here means we have started
     /// guessing again.
@@ -305,7 +319,7 @@ mod tests {
         let lines = vec!["AAAA".to_string(), "AAAA".to_string()];
         assert!(matches!(
             decode_vst3(&lines),
-            Err(ChunkError::NotVst3(_)) | Err(ChunkError::TooShort(_))
+            Err(ChunkError::NotVst3(_) | ChunkError::TooShort(_))
         ));
     }
 

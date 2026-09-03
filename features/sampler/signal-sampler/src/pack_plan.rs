@@ -52,6 +52,10 @@ pub struct PackPlanOut {
 
 /// Open `path` (header + index only — no audio) and plan it. `total` is
 /// taken from the file's on-disk size.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or the pack cannot be opened.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn plan_pack_file(path: &Path) -> Result<PackPlanOut, SamplerError> {
     let total = std::fs::metadata(path)?.len();
@@ -62,6 +66,7 @@ pub fn plan_pack_file(path: &Path) -> Result<PackPlanOut, SamplerError> {
 /// Plan an already-opened pack. `total` must be the pack file's full byte
 /// length (the opened pack knows it too, but callers streaming from disk
 /// already have it).
+#[must_use]
 pub fn plan_pack(pack: &SignalPcmPack, total: u64) -> PackPlanOut {
     // ── Rank 0: what `SignalPcmPack::from_pack_bytes` reads ──────────────
     // The header parse reads [0, 64); the index parse reads
@@ -159,7 +164,7 @@ struct MusicalRank {
 }
 
 impl MusicalRank {
-    const UNKNOWN: MusicalRank = MusicalRank {
+    const UNKNOWN: Self = Self {
         unknown: 1,
         vel_layer_dist: 0,
         note_dist: 0,
@@ -203,7 +208,7 @@ impl EntryRanking {
         Self::from_convention(pack)
     }
 
-    /// Zone mode: velocity layers are the distinct (vel_min, vel_max)
+    /// Zone mode: velocity layers are the distinct (`vel_min`, `vel_max`)
     /// bands across all zones, ordered by band midpoint; each entry takes
     /// the best (minimum) rank over the zones that reference it.
     fn from_zones(pack: &SignalPcmPack, spec: &crate::LibrarySpec) -> Self {
@@ -346,10 +351,9 @@ mod tests {
         }
         let zone = |file: &str, key: u8, vel_min: u8, vel_max: u8, rr: u32| {
             format!(
-                "  {{\n    file \"{file}\"\n    key_min {k}\n    key_max {k}\n    \
-                 root_key {k}\n    vel_min {vel_min}\n    vel_max {vel_max}\n    \
-                 rr_index {rr}\n  }}\n",
-                k = key
+                "  {{\n    file \"{file}\"\n    key_min {key}\n    key_max {key}\n    \
+                 root_key {key}\n    vel_min {vel_min}\n    vel_max {vel_max}\n    \
+                 rr_index {rr}\n  }}\n"
             )
         };
         let mut spec = String::from("name \"plan-test\"\nzones (\n");
@@ -370,7 +374,7 @@ mod tests {
                 format: "styx",
             },
             &samples,
-            paths.iter().map(|p| p.as_path()),
+            paths.iter().map(std::path::PathBuf::as_path),
             PackCodec::OggVorbis { quality: 0.4 },
         )
         .expect("pack build");

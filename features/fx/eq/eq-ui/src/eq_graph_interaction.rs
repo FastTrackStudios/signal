@@ -143,7 +143,7 @@ pub fn nearest_band(
         let bx = mapper.freq_to_x(f64::from(band.frequency));
         let by = mapper.db_to_y(f64::from(band.gain));
         let d = (x - bx).hypot(y - by);
-        if d < radius && (best.is_none() || d < best.unwrap().1) {
+        if d < radius && best.is_none_or(|(_idx, dist)| d < dist) {
             best = Some((idx, d));
         }
     }

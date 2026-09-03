@@ -1,7 +1,7 @@
 //! Modulated allpass filter.
 //!
-//! Ported from CloudSeedCore ModulatedAllpass.h (MIT, Ghost Note Audio).
-//! The LFO target updates every 8 samples (as in CloudSeed) but the
+//! Ported from `CloudSeedCore` ModulatedAllpass.h (MIT, Ghost Note Audio).
+//! The LFO target updates every 8 samples (as in `CloudSeed`) but the
 //! fractional delay ramps per-sample between updates and the buffer is
 //! read with cubic interpolation — no more whole-sample stair-stepping.
 
@@ -13,7 +13,7 @@ use audiocore_dsp::delay_line::DelayLine;
 const DEFAULT_SAMPLE_RATE: f64 = 48000.0;
 /// Modulation recalculation rate.
 const MOD_UPDATE_RATE: u64 = 8;
-/// Buffer length in seconds (100ms covers CloudSeed diffuser delays).
+/// Buffer length in seconds (100ms covers `CloudSeed` diffuser delays).
 const BUFFER_SECONDS: f64 = 0.1;
 
 pub struct ModulatedAllpass {
@@ -35,6 +35,7 @@ pub struct ModulatedAllpass {
 }
 
 impl ModulatedAllpass {
+    #[must_use]
     pub fn new() -> Self {
         let mut ap = Self {
             buffer: DelayLine::new((DEFAULT_SAMPLE_RATE * BUFFER_SECONDS) as usize),
@@ -54,6 +55,7 @@ impl ModulatedAllpass {
     }
 
     /// Create with a specific initial phase for stereo decorrelation.
+    #[must_use]
     pub fn with_phase(phase: f64) -> Self {
         let mut ap = Self::new();
         ap.mod_phase = phase;

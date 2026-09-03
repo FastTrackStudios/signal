@@ -18,6 +18,7 @@ pub struct TiltEq {
 }
 
 impl TiltEq {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut t = Self {
             low_shelf: Biquad::new(),

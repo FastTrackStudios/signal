@@ -25,7 +25,7 @@ use signal_plugin_host::{
 };
 
 const TAU: f32 = std::f32::consts::TAU;
-/// Output level: v_J = g·Σ with g = 2/(N+zb), so raw bridge velocity varies
+/// Output level: `v_J` = g·Σ with g = 2/(N+zb), so raw bridge velocity varies
 /// ~400× across the table's zb range. Normalize by 1/g (zb then shapes decay,
 /// not loudness) and scale to a sane instrument level.
 const MASTER_GAIN: f32 = 0.6;
@@ -455,6 +455,7 @@ pub struct NativeWaveguide {
 }
 
 impl NativeWaveguide {
+    #[must_use]
     pub fn new(sample_rate: u32) -> Self {
         Self {
             sample_rate: sample_rate.max(1) as f32,
@@ -478,8 +479,7 @@ impl NativeWaveguide {
                     .min_by_key(|r| (r.note as i32 - note as i32).abs())
                     .filter(|r| (r.note as i32 - note as i32).abs() <= 3)
                     .cloned()
-            })
-            .map(|mut r| {
+            }).map_or_else(|| fallback_row(note), |mut r| {
                 if r.note != note {
                     // shift a neighbor's params to this pitch
                     r.f0 *= 2f32.powf((note as f32 - r.note as f32) / 12.0);
@@ -487,7 +487,6 @@ impl NativeWaveguide {
                 }
                 r
             })
-            .unwrap_or_else(|| fallback_row(note))
     }
 
     fn note_on(&mut self, note: u8, vel: u8) {
@@ -641,12 +640,12 @@ impl PluginInstance for NativeWaveguide {
             self.apply_midi(&ev.message);
         }
         let frames = out_l.len().min(out_r.len());
-        for s in out_l[..frames].iter_mut() {
+        for s in &mut out_l[..frames] {
             *s = 0.0;
         }
         for v in &mut self.voices {
             let mut alive = false;
-            for out_s in out_l[..frames].iter_mut() {
+            for out_s in &mut out_l[..frames] {
                 let mut y = v.cs.process();
                 if v.releasing {
                     v.rel_env *= v.rel_mult;
@@ -665,7 +664,7 @@ impl PluginInstance for NativeWaveguide {
             }
         }
         self.voices.retain(|v| !v.dead);
-        for s in out_l[..frames].iter_mut() {
+        for s in &mut out_l[..frames] {
             *s = s.tanh();
         }
         out_r[..frames].copy_from_slice(&out_l[..frames]);

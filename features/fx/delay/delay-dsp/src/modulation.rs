@@ -23,17 +23,19 @@ pub enum WobbleShape {
 impl WobbleShape {
     pub const COUNT: usize = 5;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
-            0 => Self::Sine,
             1 => Self::Triangle,
             2 => Self::Square,
             3 => Self::SampleAndHold,
             4 => Self::Random,
+            // 0 and anything out of range.
             _ => Self::Sine,
         }
     }
 
+    #[must_use]
     pub fn to_index(self) -> usize {
         match self {
             Self::Sine => 0,
@@ -44,6 +46,7 @@ impl WobbleShape {
         }
     }
 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Sine => "Sine",
@@ -56,7 +59,7 @@ impl WobbleShape {
 }
 
 // r[impl delay.modulation.flutter]
-/// Three-oscillator flutter LFO (from ChowDSP AnalogTapeModel via qdelay).
+/// Three-oscillator flutter LFO (from `ChowDSP` `AnalogTapeModel` via qdelay).
 ///
 /// Oscillators at fundamental, 2x, and 3x frequency with distinct amplitudes
 /// and phase offsets produce a complex, non-repeating modulation pattern.
@@ -83,6 +86,7 @@ impl Default for Flutter {
 }
 
 impl Flutter {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             rate: 0.3,
@@ -172,6 +176,7 @@ impl Default for Wow {
 }
 
 impl Wow {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             rate: 0.5,
@@ -305,6 +310,7 @@ impl Default for DuckingFollower {
 }
 
 impl DuckingFollower {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             attack_ms: 5.0,
@@ -362,6 +368,7 @@ impl DuckingFollower {
     /// Current follower envelope (level above threshold, smoothed).
     /// Used by the chain's GATE-mode feedback ducking, which needs
     /// input PRESENCE rather than the amplitude-scaled gain.
+    #[must_use]
     pub fn envelope(&self) -> f64 {
         self.envelope.value()
     }
@@ -372,7 +379,7 @@ impl DuckingFollower {
 }
 
 // r[impl delay.modulation.diffusion]
-/// 8-allpass diffusion network (from Tarons MiniVerb via qdelay).
+/// 8-allpass diffusion network (from Tarons `MiniVerb` via qdelay).
 ///
 /// Cascaded allpass filters create diffuse, reverb-like smearing of the
 /// delay output. Size controls delay times, smear controls feedback.
@@ -424,6 +431,7 @@ const DIFFUSE_DELAYS_L: [f64; 8] = [12.11, 10.49, 8.51, 7.13, 5.37, 4.21, 3.07, 
 const DIFFUSE_DELAYS_R: [f64; 8] = [12.08, 10.47, 8.49, 7.11, 5.35, 4.19, 3.05, 2.09];
 
 impl Diffuser {
+    #[must_use] 
     pub fn new(sample_rate: f64, is_right: bool) -> Self {
         let mps = sample_rate / 343.0; // Samples per meter (speed of sound)
         let base_distance = mps * 3.75;
@@ -484,11 +492,11 @@ impl Diffuser {
     }
 }
 
-/// NE570/571-style 2:1 compander half (one-pole full-wave-rectifier
-/// averager, τ ≈ 5 ms). The 12-bit era stored COMPRESSED audio; the
-/// expander at playback modulates the quantization-noise floor with
-/// the signal envelope — that breathing is the sound, more than the
-/// bit depth itself.
+/// NE570/571-style 2:1 compander half (one-pole full-wave-rectifier averager, τ ≈ 5 ms).
+///
+/// The 12-bit era stored COMPRESSED audio; the expander at playback modulates the
+/// quantization-noise floor with the signal envelope — that breathing is the sound,
+/// more than the bit depth itself.
 pub struct CompanderEnv {
     env: f64,
     attack: f64,
@@ -503,6 +511,7 @@ impl CompanderEnv {
     const ATTACK_S: f64 = 0.001;
     const RELEASE_S: f64 = 0.005;
 
+    #[must_use]
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let mut c = Self {

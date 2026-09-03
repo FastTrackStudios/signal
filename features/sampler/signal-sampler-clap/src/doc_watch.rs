@@ -79,6 +79,10 @@ struct DocJson {
 }
 
 /// Parse a `TrackDocument` from the dev JSON format.
+///
+/// # Errors
+///
+/// Returns an error if the JSON is invalid.
 pub fn parse_document_json(text: &str) -> eyre::Result<TrackDocument> {
     let d: DocJson = serde_json::from_str(text)?;
     Ok(TrackDocument {
@@ -117,8 +121,9 @@ pub fn parse_document_json(text: &str) -> eyre::Result<TrackDocument> {
     })
 }
 
-/// Dev-only polling watcher: loads + pushes the document whenever the file
-/// changes. Runs until `shared` is the only reference left. Spawned by the
+/// Dev-only polling watcher: loads + pushes the document whenever the file changes.
+///
+/// Runs until `shared` is the only reference left. Spawned by the
 /// plugin's `initialize()` when `$SIGNAL_SAMPLER_CLAP_DOC` is set.
 pub fn watch_document_file(path: String, shared: std::sync::Arc<crate::plugin::SharedState>) {
     let mut last: Option<(std::time::SystemTime, u64)> = None;

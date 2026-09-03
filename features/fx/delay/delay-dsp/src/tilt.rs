@@ -5,17 +5,18 @@ use audiocore_dsp::biquad::{Biquad, FilterType};
 
 /// Tilt EQ inside a delay's regeneration loop: negative tilt darkens the
 /// repeats (a lowpass walking down from 20 kHz), positive tilt thins them
-/// (a highpass walking up from 20 Hz). |tilt| ≤ 0.01 is bypass.
+/// (a highpass walking up from 20 Hz).
 ///
-/// Every machine used to open-code this pair (coefficient block in
-/// `update()`, gated `tick` in the feedback path); this is that block,
-/// once.
+/// |tilt| ≤ 0.01 is bypass. Every machine used to open-code this pair
+/// (coefficient block in `update()`, gated `tick` in the feedback path);
+/// this is that block, once.
 pub struct DecayTilt {
     tilt: f64,
     eq: Biquad,
 }
 
 impl DecayTilt {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             tilt: 0.0,

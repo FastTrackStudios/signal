@@ -102,12 +102,20 @@ impl ExportBundle {
     }
 
     /// Serialize to JSON string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if JSON serialization fails.
     pub fn to_json(&self) -> StorageResult<String> {
         serde_json::to_string_pretty(self)
             .map_err(|e| crate::StorageError::Data(format!("JSON serialization error: {e}")))
     }
 
     /// Deserialize from JSON string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if JSON parsing fails or the format version is unsupported.
     pub fn from_json(json: &str) -> StorageResult<Self> {
         let bundle: Self = serde_json::from_str(json)
             .map_err(|e| crate::StorageError::Data(format!("JSON parse error: {e}")))?;
@@ -124,12 +132,20 @@ impl ExportBundle {
     }
 
     /// Serialize to compact JSON bytes (for transmission).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if JSON serialization fails.
     pub fn to_json_bytes(&self) -> StorageResult<Vec<u8>> {
         serde_json::to_vec(self)
             .map_err(|e| crate::StorageError::Data(format!("JSON serialization error: {e}")))
     }
 
     /// Deserialize from JSON bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if JSON parsing fails or the format version is unsupported.
     pub fn from_json_bytes(bytes: &[u8]) -> StorageResult<Self> {
         let bundle: Self = serde_json::from_slice(bytes)
             .map_err(|e| crate::StorageError::Data(format!("JSON parse error: {e}")))?;
@@ -243,13 +259,13 @@ mod tests {
     fn bundle_with_label() {
         let mut bundle = ExportBundle::new();
         bundle.label = Some("My Backup".to_string());
-        bundle.exported_at = 1700000000;
+        bundle.exported_at = 1_700_000_000;
         bundle.device_id = Some("device-123".to_string());
 
         let json = bundle.to_json().unwrap();
         let parsed = ExportBundle::from_json(&json).unwrap();
         assert_eq!(parsed.label.as_deref(), Some("My Backup"));
-        assert_eq!(parsed.exported_at, 1700000000);
+        assert_eq!(parsed.exported_at, 1_700_000_000);
         assert_eq!(parsed.device_id.as_deref(), Some("device-123"));
     }
 

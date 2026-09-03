@@ -13,7 +13,7 @@
 //!
 //! Two wrinkles the format hides:
 //!
-//! - **Case differs per plugin.** VintageVerb writes `Mix`/`Decay`, Room writes
+//! - **Case differs per plugin.** `VintageVerb` writes `Mix`/`Decay`, Room writes
 //!   `mix`/`decay`. Attribute lookup is case-insensitive throughout.
 //! - **Enums are fractions.** `ReverbMode`, `ColorMode`, `type` and `space` are
 //!   selectors stored as `index / (count - 1)`, so they must be rounded back to
@@ -46,9 +46,9 @@ impl ValhallaPlugin {
     /// Measured from the shipping plugins, not inferred — the render bridge
     /// (`signal-analyzer`'s `reverb_match --enumerate`) sweeps the parameter
     /// and reads back each display name. Entries sit ~1/24 apart for
-    /// VintageVerb and ~1/12 for Room.
+    /// `VintageVerb` and ~1/12 for Room.
     ///
-    /// Values are exact 24ths (VintageVerb) / 12ths (Room): the sweep reports
+    /// Values are exact 24ths (`VintageVerb`) / 12ths (Room): the sweep reports
     /// the first step at or past each boundary, so the measurements are
     /// snapped back to those fractions. Both plugins report their slot 0 and
     /// slot 1 under one name, which is why the tables skip index 1.
@@ -61,6 +61,7 @@ impl ValhallaPlugin {
     // readable down the column; that makes the last row `n / n`, which is the
     // value 1.0 written the same way as its neighbours rather than a mistake.
     #[allow(clippy::eq_op)]
+    #[must_use]
     pub fn modes(self) -> &'static [(f64, &'static str)] {
         match self {
             Self::VintageVerb => &[
@@ -110,7 +111,7 @@ impl ValhallaPlugin {
 }
 
 /// A parsed Valhalla patch: the raw normalized attributes plus identity.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValhallaState {
     pub plugin: ValhallaPlugin,
     pub plugin_version: Option<String>,
@@ -121,6 +122,7 @@ pub struct ValhallaState {
 
 impl ValhallaState {
     /// Attribute lookup, case-insensitive.
+    #[must_use]
     pub fn attr(&self, key: &str) -> Option<&str> {
         self.attributes
             .iter()
@@ -129,6 +131,7 @@ impl ValhallaState {
     }
 
     /// Numeric attribute lookup, case-insensitive.
+    #[must_use]
     pub fn num(&self, key: &str) -> Option<f64> {
         self.attr(key).and_then(|v| v.parse().ok())
     }
@@ -140,6 +143,7 @@ impl ValhallaState {
     }
 
     /// The raw stored algorithm selector.
+    #[must_use]
     pub fn mode_value(&self) -> Option<f64> {
         let key = match self.plugin {
             ValhallaPlugin::VintageVerb => "ReverbMode",
@@ -149,6 +153,7 @@ impl ValhallaState {
     }
 
     /// The selected algorithm's menu position and name.
+    #[must_use]
     pub fn mode(&self) -> Option<(usize, &'static str)> {
         let v = self.mode_value()?;
         let modes = self.plugin.modes();
@@ -162,6 +167,7 @@ impl ValhallaState {
     }
 
     /// The selected algorithm's name.
+    #[must_use]
     pub fn mode_name(&self) -> Option<&'static str> {
         self.mode().map(|(_, n)| n)
     }
@@ -187,6 +193,7 @@ fn nearest_step(v: f64, count: usize) -> usize {
 ///
 /// The element is plain UTF-8 inside otherwise-binary chunk data, so the
 /// surrounding bytes are scanned rather than parsed.
+#[must_use]
 pub fn extract_xml(chunk: &[u8]) -> Option<String> {
     let text = String::from_utf8_lossy(chunk);
     let start = text.find("<Valhalla")?;
@@ -288,14 +295,14 @@ pub fn parse_vst_chunk_lines<'a>(
     parse_xml(&extract_xml(&chunk)?)
 }
 
-/// VintageVerb's pre-delay range, in milliseconds, at `PreDelay = 1.0`.
+/// `VintageVerb`'s pre-delay range, in milliseconds, at `PreDelay = 1.0`.
 const VVV_PREDELAY_MAX_MS: f64 = 500.0;
-/// ValhallaRoom's pre-delay range, in milliseconds, at `predelay = 1.0`.
+/// `ValhallaRoom`'s pre-delay range, in milliseconds, at `predelay = 1.0`.
 const ROOM_PREDELAY_MAX_MS: f64 = 1000.0;
 /// `NativeReverb`'s `predelay` ceiling — the translation clamps to it.
 const NATIVE_PREDELAY_MAX_MS: f64 = 200.0;
 
-/// VintageVerb's `Decay` control, in seconds.
+/// `VintageVerb`'s `Decay` control, in seconds.
 ///
 /// Measured off the shipping plugin by stepping the parameter and reading its
 /// display text (`reverb_match --enumerate Decay --slots 20`): 0.2 s at 0
@@ -308,6 +315,7 @@ const NATIVE_PREDELAY_MAX_MS: f64 = 200.0;
 /// `Size = 1.0` a preset reading 3.8 s here measured 2.47 s in the render
 /// bridge. So treat this as a starting estimate; the authoritative number is
 /// the measured RT60 of a real render.
+#[must_use]
 pub fn vintageverb_decay_seconds(decay: f64) -> f64 {
     const MIN_S: f64 = 0.2;
     const SPAN_S: f64 = 69.8;
@@ -360,16 +368,19 @@ fn vintageverb_high_shelf_rate(high_shelf: f64) -> f64 {
 }
 
 /// `BassMult` as a decay-time multiplier.
+#[must_use]
 pub fn vintageverb_bass_mult(bass_mult: f64) -> f64 {
     interp_log(&VVV_BASS_MULT, bass_mult)
 }
 
 /// `BassXover` in Hz.
+#[must_use]
 pub fn vintageverb_bass_xover_hz(bass_xover: f64) -> f64 {
     interp_log(&VVV_BASS_XOVER_HZ, bass_xover)
 }
 
 /// `HighFreq` in Hz.
+#[must_use]
 pub fn vintageverb_high_freq_hz(high_freq: f64) -> f64 {
     interp_log(&VVV_HIGH_FREQ_HZ, high_freq)
 }
@@ -377,8 +388,8 @@ pub fn vintageverb_high_freq_hz(high_freq: f64) -> f64 {
 /// Map a Valhalla algorithm name onto an FTS `(algorithm, variant)` pair.
 ///
 /// Algorithm indices follow `AlgorithmType::ALL`: 0 Room, 1 Hall, 2 Plate,
-/// 3 Spring, 4 Cloud, 5 Bloom, 6 Shimmer, 7 Chorale, 8 Magneto, 9 NonLinear,
-/// 10 Swell, 11 Reflections, 12 Velvet, 13 FreeVerb, 14 Convolution.
+/// 3 Spring, 4 Cloud, 5 Bloom, 6 Shimmer, 7 Chorale, 8 Magneto, 9 `NonLinear`,
+/// 10 Swell, 11 Reflections, 12 Velvet, 13 `FreeVerb`, 14 Convolution.
 ///
 /// The **variant** matters as much as the algorithm: several FTS engines ship
 /// more than one tuning, and two of them are exactly what Valhalla's biggest
@@ -386,11 +397,11 @@ pub fn vintageverb_high_freq_hz(high_freq: f64) -> f64 {
 ///
 /// - `Room` variant 1 is `room_chamber`, which covers Valhalla's `Chamber`,
 ///   `Chaotic Chamber`, `Chamber1979`, `Large Chamber` and `Dark Chamber`.
-///   Between VintageVerb and Room those account for roughly a quarter of the
+///   Between `VintageVerb` and Room those account for roughly a quarter of the
 ///   425 factory presets.
 /// - `Hall` variant 1 is `hall_cathedral`, for `Cathedral` and `Sanctuary`.
 /// - `Hall` variant 2 is `hall_arena`, the largest hall tuning — the closest
-///   fit for `Palace`, VintageVerb's single biggest cluster (50 presets).
+///   fit for `Palace`, `VintageVerb`'s single biggest cluster (50 presets).
 ///
 /// The remaining genuine gap is Palace itself: arena is the nearest existing
 /// space, not the same one. See `spec/project-state-formats.md`.
@@ -479,7 +490,8 @@ fn algorithm_and_variant_by_name(mode: &str) -> (f64, f64) {
 ///
 /// Not everything survives: see `spec/project-state-formats.md` §3 for the
 /// parameters with no FTS equivalent yet (frequency-dependent decay
-/// multipliers, separate early/late sections, VintageVerb's `ColorMode`).
+/// multipliers, separate early/late sections, `VintageVerb`'s `ColorMode`).
+#[must_use]
 pub fn to_native_reverb_params(v: &ValhallaState) -> Vec<(String, f64)> {
     let mut out: Vec<(String, f64)> = Vec::new();
     let mut set = |k: &str, val: f64| out.push((k.to_string(), val));
@@ -622,7 +634,7 @@ mod tests {
     /// The real "Kick Room" instance from `02 LORD OF THE FIGHT.RPP`.
     const KICK_ROOM: &str = r#"<ValhallaVintageVerb pluginVersion="4.0.5" presetName="Kick Room" Mix="1.0" PreDelay="0.1488498598337173" Decay="0.1974855214357376" Size="0.6000000238418579" Attack="0.2000000029802322" BassMult="0.5535849928855896" BassXover="0.4218710362911224" HighShelf="0.5" HighFreq="0.5" EarlyDiffusion="1.0" LateDiffusion="1.0" ModRate="0.09700000286102295" ModDepth="0.515999972820282" HighCut="0.422995388507843" LowCut="0.02684563770890236" ColorMode="0.6666666865348816" ReverbMode="0.4583333432674408" mixLock="0" uiWidth="935" uiHeight="435"/>"#;
 
-    /// The real "SnareBigRoom" ValhallaRoom instance — note the lowercase keys.
+    /// The real "`SnareBigRoom`" `ValhallaRoom` instance — note the lowercase keys.
     const SNARE_ROOM: &str = r#"<ValhallaRoom pluginVersion="2.0.5" presetName="SnareBigRoom" mix="1.0" predelay="0.0015999999595806" decay="0.01991992071270943" HiCut="0.4241610765457153" earlyLateMix="0.5070000290870667" lateSize="0.5099999904632568" diffusion="0.9100000262260437" RTBassMultiply="0.273333340883255" lateModDepth="0.449999988079071" type="0.0833333358168602" space="0.0" LoCut="0.0" mixLock="0"/>"#;
 
     #[test]
@@ -632,7 +644,7 @@ mod tests {
         assert_eq!(v.preset_name.as_deref(), Some("Kick Room"));
         assert_eq!(v.plugin_version.as_deref(), Some("4.0.5"));
         assert_eq!(v.num("Mix"), Some(1.0));
-        assert!((v.num("Decay").unwrap() - 0.19748552).abs() < 1e-6);
+        assert!((v.num("Decay").unwrap() - 0.197_485_52).abs() < 1e-6);
     }
 
     #[test]
@@ -906,7 +918,7 @@ mod tests {
         let get = |k: &str| p.iter().find(|(n, _)| n == k).map(|(_, v)| *v);
 
         assert_eq!(get("mix"), Some(1.0));
-        assert!((get("decay").unwrap() - 0.19748552).abs() < 1e-6);
+        assert!((get("decay").unwrap() - 0.197_485_52).abs() < 1e-6);
         // 0.1488 × 500 ms = 74.4 ms, under the 200 ms ceiling.
         assert!((get("predelay").unwrap() - 74.42).abs() < 0.1);
         // Early 1.0 + late 1.0 → 1.0.
@@ -981,8 +993,8 @@ mod tests {
         assert_eq!(v.plugin, ValhallaPlugin::VintageVerb);
         // Attributes split across lines must still be read.
         assert_eq!(v.num("Mix"), Some(1.0));
-        assert!((v.num("LowCut").unwrap() - 0.43599999).abs() < 1e-6);
-        assert!((v.num("ReverbMode").unwrap() - 0.41666666).abs() < 1e-6);
+        assert!((v.num("LowCut").unwrap() - 0.435_999_99).abs() < 1e-6);
+        assert!((v.num("ReverbMode").unwrap() - 0.416_666_66).abs() < 1e-6);
 
         // And it translates like any other patch.
         let p = to_native_reverb_params(&v);
@@ -999,9 +1011,9 @@ mod tests {
     /// A pre-delay is never handed to an engine that reads that knob as
     /// regeneration.
     ///
-    /// Magneto and NonLinear remap PRE-DELAY to their own feedback and switch
+    /// Magneto and `NonLinear` remap PRE-DELAY to their own feedback and switch
     /// the chain's delay line off, so the number means something else entirely
-    /// there. The four shipped "NL-" VintageVerb presets each carried a 125 ms
+    /// there. The four shipped "NL-" `VintageVerb` presets each carried a 125 ms
     /// pre-delay; translated straight through it became 0.625 regeneration and
     /// the tail self-oscillated at +71 LU.
     #[test]

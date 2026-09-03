@@ -193,10 +193,11 @@ pub struct SongSlot {
     pub bpm: u32,
 }
 
-/// The headphone-cue module's state. The physical headphone bus lands with
-/// engine multi-out; until then volume/self-mix are staged state and
-/// `main_mute` is real (kills the main output, monitoring survives on the
-/// hardware direct path).
+/// The headphone-cue module's state.
+///
+/// The physical headphone bus lands with engine multi-out; until then
+/// volume/self-mix are staged state and `main_mute` is real (kills the main
+/// output, monitoring survives on the hardware direct path).
 #[derive(Clone, PartialEq, Debug, Facet)]
 pub struct HeadphoneState {
     /// Headphone level (0–1).

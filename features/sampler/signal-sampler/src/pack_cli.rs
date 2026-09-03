@@ -8,6 +8,7 @@
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
@@ -161,7 +162,7 @@ enum Cmd {
         /// Only zones of this mic id.
         #[arg(long)]
         mic: Option<String>,
-        /// Note filter: "55,60-64" (matches root_key). Names allowed ("C4").
+        /// Note filter: "55,60-64" (matches `root_key`). Names allowed ("C4").
         #[arg(long)]
         notes: Option<String>,
         /// Max samples in the report.
@@ -172,7 +173,7 @@ enum Cmd {
     },
     /// Render a note script through a pack with FULL tracing and write a
     /// waveform+event-log analysis report (plus the rendered WAV).
-    /// Script: "60@0:2,62@2:1.5,C5@4:2v80" = note[@start_s][:dur_s][vNN].
+    /// Script: "60@0:2,62@2:1.5,C5@4:2v80" = note[@`start_s`][:dur_s][vNN].
     RenderReport {
         pack: PathBuf,
         /// Note script (see above). Sequential legato by default.
@@ -199,7 +200,7 @@ enum Cmd {
         #[arg(long, default_value_t = 4)]
         beats_per_bar: u32,
         /// Pure sample playback — one looped sample per note at straight gain
-        /// (no CC1 layer crossfade, ENV_FLEX, or legato trim/bloom).
+        /// (no CC1 layer crossfade, `ENV_FLEX`, or legato trim/bloom).
         #[arg(long)]
         pure: bool,
         /// Use an EXTERNAL audio file as the waveform (skip the engine render) —
@@ -290,7 +291,7 @@ enum ZonesCmd {
     /// `nki --zones` zones.tsv (Cinematic Studio naming:
     /// `<sec>_<Artic>_<Mic>_<REST>.ncw` → `<Mic>/<section>/[<Cat>/]<Artic>/<REST>.wav`).
     /// Existing articulations are never touched (they may carry measured
-    /// fields — lead_in, arrival — the tsv cannot reproduce).
+    /// fields — `lead_in`, arrival — the tsv cannot reproduce).
     AppendMissing {
         /// A .signalpack or a loose library.styx.
         target: PathBuf,
@@ -314,10 +315,10 @@ enum ZonesCmd {
     },
     /// Normalize Pacific (Performance Samples) articulation ids that bake
     /// direction/interval/RR/velocity codes into the id string:
-    ///   leg_up2_18      → articulation "leg", direction "up", interval 2
-    ///   legslur_dn3_3   → articulation "legslur", direction "down", interval 3
-    ///   pizzrr3         → articulation "pizz", rr_index 2
-    ///   pluckrr2_64     → articulation "pluck", rr_index 1, vel band 64..
+    ///   `leg_up2_18`      → articulation "leg", direction "up", interval 2
+    ///   `legslur_dn3_3`   → articulation "legslur", direction "down", interval 3
+    ///   pizzrr3         → articulation "pizz", `rr_index` 2
+    ///   `pluckrr2_64`     → articulation "pluck", `rr_index` 1, vel band 64..
     /// Idempotent: already-normalized zones are untouched.
     NormalizePacific {
         /// A .signalpack or a loose library.styx.
@@ -331,9 +332,9 @@ enum ZonesCmd {
         /// A .signalpack (embedded spec is rewritten) or a loose .styx
         /// (rewritten in place, .bak sibling kept).
         target: PathBuf,
-        /// field=value pairs; allowed fields: loop_start loop_end loop_xfade
-        /// gain_db tune_cents vel_min vel_max key_min key_max root_key
-        /// sample_start sample_end
+        /// field=value pairs; allowed fields: `loop_start` `loop_end` `loop_xfade`
+        /// `gain_db` `tune_cents` `vel_min` `vel_max` `key_min` `key_max` `root_key`
+        /// `sample_start` `sample_end`
         #[arg(long = "set", required = true)]
         sets: Vec<String>,
         /// Only zones whose `file` contains this substring.
@@ -375,6 +376,11 @@ enum LoopsCmd {
 
 /// Entry point for fts-cli mounting (and tests). `argv` should NOT include
 /// the program name; pass the args after `fts signal pack`.
+///
+/// # Errors
+///
+/// Returns an error if the CLI arguments are invalid, if pack file operations
+/// fail, or if the subcommand operation fails.
 pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
     let argv = std::iter::once(OsString::from("pack")).chain(argv);
     match PackCli::parse_from(argv).command {
@@ -701,11 +707,11 @@ impl Target {
     fn open(path: &Path) -> Result<(Self, String)> {
         if path.extension().and_then(|e| e.to_str()) == Some("styx") {
             Ok((
-                Target::Styx(path.to_owned()),
+                Self::Styx(path.to_owned()),
                 std::fs::read_to_string(path)?,
             ))
         } else {
-            Ok((Target::Pack(path.to_owned()), read_embedded_spec(path)?))
+            Ok((Self::Pack(path.to_owned()), read_embedded_spec(path)?))
         }
     }
 
@@ -714,11 +720,11 @@ impl Target {
         LibrarySpec::from_styx(new_spec)
             .map_err(|e| eyre::eyre!("edited spec does not parse (refusing to write): {e}"))?;
         match self {
-            Target::Pack(p) => {
+            Self::Pack(p) => {
                 rewrite_embedded_spec(p, |_| new_spec.to_string())?;
                 println!("wrote embedded spec in {}", p.display());
             }
-            Target::Styx(p) => {
+            Self::Styx(p) => {
                 let bak = p.with_extension("styx.bak");
                 std::fs::copy(p, &bak)?;
                 std::fs::write(p, new_spec)?;
@@ -730,7 +736,7 @@ impl Target {
 }
 
 /// Rewrite each zone block via `edit` (returning `Some(new_block)` to change
-/// it). Returns (new_spec_text, matched_count).
+/// it). Returns (`new_spec_text`, `matched_count`).
 fn edit_zones(
     spec_text: &str,
     mut edit: impl FnMut(&str) -> Option<String>,
@@ -845,7 +851,7 @@ fn zones_set(
 enum PacificId {
     /// `leg_up2_18` / `legslur_dn3_3` → (family, direction, interval)
     Legato(String, &'static str, u32),
-    /// `pizzrr3` / `pluckrr2_64` → (family, rr_index, vel_code)
+    /// `pizzrr3` / `pluckrr2_64` → (family, `rr_index`, `vel_code`)
     RoundRobin(String, u32, Option<u32>),
 }
 
@@ -904,8 +910,7 @@ fn zones_normalize_pacific(target: &Path, dry_run: bool) -> Result<()> {
         let hi = codes
             .iter()
             .find(|c| **c > code)
-            .map(|next| next - 1)
-            .unwrap_or(127);
+            .map_or(127, |next| next - 1);
         (lo, hi)
     };
 
@@ -1110,7 +1115,7 @@ fn load_tsv_zones(
 fn emit_zone_block(z: &TsvZone) -> String {
     let mut s = String::from("    {\n");
     let mut f = |k: &str, v: String| {
-        s.push_str(&format!("        {k:<12} {v}\n"));
+        let _ = write!(s, "        {k:<12} {v}\n");
     };
     f("section", format!("{:?}", z.section));
     f("file", format!("{:?}", z.file));
@@ -1246,7 +1251,7 @@ fn cs_category(artic: &str) -> Option<&'static str> {
     })
 }
 
-/// wav-relative-path → (loop_start, loop_end) for looped NKI zones.
+/// wav-relative-path → (`loop_start`, `loop_end`) for looped NKI zones.
 /// First-wins on per-file loop variants (matches nki-styx accumulation).
 fn load_loop_map(tsv: &Path, section_label: &str) -> Result<BTreeMap<String, (u64, u64)>> {
     let text = std::fs::read_to_string(tsv)?;
@@ -1378,8 +1383,18 @@ fn loops_inject(
 // ── check ────────────────────────────────────────────────────────────────────
 
 /// Zone-mode pack validation: per-articulation key coverage (vs the spec's
-/// pitch tolerance), zone-file → pack-entry presence, decode probes (with
-/// optional A/B correlation against source files). Returns Ok(true) = PASS.
+/// pitch tolerance), zone-file → pack-entry presence, and optional decode
+/// probes (with A/B correlation against source files).
+///
+/// Returns `Ok(true)` if validation passes.
+///
+/// # Panics
+///
+/// Panics if a spec with zones has an empty articulation set (should never happen).
+///
+/// # Errors
+///
+/// Returns an error if pack reading fails, decoding fails, or source file operations fail.
 pub fn run_check(pack_path: &Path, src_root: Option<&Path>) -> Result<bool> {
     let patch = crate::PlayerPatch::from_pack(pack_path)?;
     let spec = &patch.spec;
@@ -1536,7 +1551,7 @@ fn parse_note(s: &str) -> Result<u8> {
         return Ok(n);
     }
     let b = s.as_bytes();
-    let step = match b.first().map(|c| c.to_ascii_uppercase()) {
+    let step = match b.first().map(u8::to_ascii_uppercase) {
         Some(b'C') => 0i32,
         Some(b'D') => 2,
         Some(b'E') => 4,
@@ -1815,17 +1830,16 @@ fn match_ref_sweep(
                     let Ok(data) = cache.get(Path::new(&z.file)) else {
                         continue;
                     };
-                    let base = match mono.get(&(z.file.clone(), 0)) {
-                        Some(b) => std::sync::Arc::clone(b),
-                        None => {
-                            let b = std::sync::Arc::new(mono_of(
-                                &data.to_f32(),
-                                data.channels as usize,
-                                data.num_frames,
-                            ));
-                            mono.insert((z.file.clone(), 0), std::sync::Arc::clone(&b));
-                            b
-                        }
+                    let base = if let Some(b) = mono.get(&(z.file.clone(), 0)) {
+                        std::sync::Arc::clone(b)
+                    } else {
+                        let b = std::sync::Arc::new(mono_of(
+                            &data.to_f32(),
+                            data.channels as usize,
+                            data.num_frames,
+                        ));
+                        mono.insert((z.file.clone(), 0), std::sync::Arc::clone(&b));
+                        b
                     };
                     let made = if shift == 0 {
                         base
@@ -2044,7 +2058,7 @@ fn match_ref_self_test(
         bail!("no zones matched the filters");
     };
     let members: Vec<Vec<f32>> = group.iter().map(|(_, a)| a.clone()).collect();
-    let shortest = members.iter().map(|m| m.len()).min().unwrap_or(0);
+    let shortest = members.iter().map(std::vec::Vec::len).min().unwrap_or(0);
 
     let wlen = ((window_ms / 1000.0) * f64::from(sr)) as usize;
     let scan = ((scan_ms / 1000.0) * f64::from(sr)) as usize;
@@ -2074,7 +2088,7 @@ fn match_ref_self_test(
                 .sum()
         })
         .collect();
-    let refs: Vec<&[f32]> = members.iter().map(|m| m.as_slice()).collect();
+    let refs: Vec<&[f32]> = members.iter().map(std::vec::Vec::as_slice).collect();
     match crate::ref_match::best_fit(&window, &refs, scan, 48, 24) {
         Some(fit) => {
             let err = fit.offset as f64 - truth as f64;
@@ -2282,7 +2296,7 @@ fn match_ref(
                 ]
             };
             for (fill, members) in variants {
-                let refs: Vec<&[f32]> = members.iter().map(|m| m.as_slice()).collect();
+                let refs: Vec<&[f32]> = members.iter().map(std::vec::Vec::as_slice).collect();
                 let Some(fit) = crate::ref_match::best_fit(window, &refs, scan, 48, 24) else {
                     continue;
                 };
@@ -2440,7 +2454,7 @@ struct ScriptNote {
     dur: f32,
 }
 
-/// "60@0:2,62@2:1.5,C5@4:2v80" — note[@start_s][:dur_s][vNN]. Missing start =
+/// "60@0:2,62@2:1.5,C5@4:2v80" — note[@`start_s`][:dur_s][vNN]. Missing start =
 /// previous end; missing dur = 2 s.
 /// What [`parse_smf`] yields: merged notes, timed CC events as
 /// `(seconds, controller, value)`, and the file's first tempo in BPM.
@@ -2888,9 +2902,7 @@ fn render_report(
     distinct.sort_unstable();
     distinct.dedup();
     let stem_base = wav_path
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "render".into());
+        .file_stem().map_or_else(|| "render".into(), |s| s.to_string_lossy().into_owned());
     let mut stems = Vec::new();
     for note in &distinct {
         let (stem_audio, _, _, _, _, _) = render_pass(Some(std::iter::once(*note).collect()))?;
@@ -2987,9 +2999,7 @@ fn render_compare(
     }
 
     let stem = out
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "compare".into());
+        .file_stem().map_or_else(|| "compare".into(), |s| s.to_string_lossy().into_owned());
 
     // Render each variant to its own full report next to the wrapper.
     let mut entries: Vec<(String, u8, String)> = Vec::new(); // (label, vel, html filename)
@@ -3090,13 +3100,12 @@ fn build(samples_root: &Path, out: &Path, codec: &str, quality: f32) -> Result<(
         .filter(|p| {
             p.extension()
                 .and_then(|e| e.to_str())
-                .map(|e| {
+                .is_some_and(|e| {
                     matches!(
                         e.to_ascii_lowercase().as_str(),
                         "flac" | "wav" | "aif" | "aiff"
                     )
                 })
-                .unwrap_or(false)
         })
         .collect();
     paths.sort();

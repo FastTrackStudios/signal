@@ -243,11 +243,13 @@ pub fn omni_cutoff_hz(v: f32) -> f32 {
     15.0 * (9.55 * v.clamp(0.0, 1.0)).exp2()
 }
 
-/// Coarse filter classification from the factory preset name (`NameStr`) —
-/// mode + pole count. The real algorithm enum (`type1`) is undecoded; the
+/// Coarse filter classification from the factory preset name (`NameStr`).
+///
+/// Mode + pole count. The real algorithm enum (`type1`) is undecoded; the
 /// names cover the dominant families ("Classic LPF 4-pole", "HPF Juicy
-/// 12db", "Bandpass", "Notch", …). Defaults: LP 12 dB.
-/// Classification including the engine character: the saturating families
+/// 12db", "Bandpass", "Notch", …).
+///
+/// Defaults: LP 12 dB. Classification including the engine character: the saturating families
 /// (Juicy / Moogie / OB / Jupiter / FATBOY / Sauce / Beefy / Warm / Power /
 /// French / Brit) map onto the ladder engine.
 #[must_use] 
@@ -368,6 +370,10 @@ fn parse_env_breakpoints(e: &XmlNode) -> Option<(f32, f32, f32, f32)> {
 }
 
 /// Parse a `.prt_omn` document into an [`OmniPatch`].
+///
+/// # Errors
+///
+/// Returns an error if the XML is invalid or does not contain the expected patch structure.
 pub fn parse_patch(xml: &str) -> Result<OmniPatch, String> {
     let root = parse_xml(xml)?;
     parse_patch_node(&root)

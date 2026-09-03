@@ -44,6 +44,7 @@ impl RingConsumer {
 }
 
 /// Create a producer/consumer pair holding up to `capacity` samples.
+#[must_use]
 pub fn ring(capacity: usize) -> (RingProducer, RingConsumer) {
     let (tx, rx) = RingBuffer::<f32>::new(capacity);
     (RingProducer { tx }, RingConsumer { rx })

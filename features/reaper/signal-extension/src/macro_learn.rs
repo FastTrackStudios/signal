@@ -155,7 +155,7 @@ async fn update_mapping(
         // Replace or add the point at this macro_value
         points.retain(|&(mv, _)| (mv - macro_value).abs() > 1e-6);
         points.push((macro_value, param_value));
-        points.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        points.sort_by(|a, b| a.0.total_cmp(&b.0));
 
         // Write back as appropriate mode
         let new_mode = if points.len() == 2
@@ -204,6 +204,10 @@ async fn update_mapping(
 // ── Action Handlers ──────────────────────────────────────────────────
 
 /// Set the minimum (macro=0) value for the last-touched parameter.
+///
+/// # Errors
+///
+/// Returns an error if getting the macro index, polling the last touched parameter, or updating the mapping fails.
 pub async fn handle_macro_set_min(daw: &Daw) -> Result<()> {
     let macro_idx = last_macro_index(daw).await?;
     let touched = poll_last_touched(daw).await?;
@@ -227,6 +231,10 @@ pub async fn handle_macro_set_min(daw: &Daw) -> Result<()> {
 }
 
 /// Set the maximum (macro=1) value for the last-touched parameter.
+///
+/// # Errors
+///
+/// Returns an error if getting the macro index, polling the last touched parameter, or updating the mapping fails.
 pub async fn handle_macro_set_max(daw: &Daw) -> Result<()> {
     let macro_idx = last_macro_index(daw).await?;
     let touched = poll_last_touched(daw).await?;
@@ -250,6 +258,10 @@ pub async fn handle_macro_set_max(daw: &Daw) -> Result<()> {
 }
 
 /// Set a curve point for the last touched parameter at a specific macro position.
+///
+/// # Errors
+///
+/// Returns an error if getting the macro index, polling the last touched parameter, or updating the mapping fails.
 pub async fn handle_macro_set_point(daw: &Daw) -> Result<()> {
     let macro_idx = last_macro_index(daw).await?;
     let touched = poll_last_touched(daw).await?;
@@ -278,6 +290,10 @@ pub async fn handle_macro_set_point(daw: &Daw) -> Result<()> {
 }
 
 /// Clear all mappings for the last-moved macro on the last-touched track.
+///
+/// # Errors
+///
+/// Returns an error if getting the macro index, polling the last touched parameter, or accessing track state fails.
 pub async fn handle_macro_clear(daw: &Daw) -> Result<()> {
     let macro_idx = last_macro_index(daw).await?;
     let touched = poll_last_touched(daw).await?;
@@ -318,6 +334,9 @@ pub async fn handle_macro_clear(daw: &Daw) -> Result<()> {
 
 // Keep arm/disarm as no-ops for backward compat (actions still registered)
 
+/// # Errors
+///
+/// This function is a no-op and always returns `Ok(())`.
 pub async fn handle_macro_arm(daw: &Daw) -> Result<()> {
     console_log(
         daw,
@@ -327,11 +346,17 @@ pub async fn handle_macro_arm(daw: &Daw) -> Result<()> {
     Ok(())
 }
 
+/// # Errors
+///
+/// This function is a no-op and always returns `Ok(())`.
 pub async fn handle_macro_disarm(daw: &Daw) -> Result<()> {
     console_log(daw, "Macro learn is automatic — no disarm needed").await;
     Ok(())
 }
 
+/// # Errors
+///
+/// This function is a stub and always returns `Ok(())`.
 pub async fn handle_macro_remove_last_point(daw: &Daw) -> Result<()> {
     // TODO: implement point removal for MultiPoint curves
     console_log(daw, "Remove last point: not yet implemented").await;

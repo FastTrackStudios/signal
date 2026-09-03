@@ -1,4 +1,4 @@
-//! Dual-reverb composition — BigSky MX two-reverbs-per-preset routing.
+//! Dual-reverb composition — `BigSky` MX two-reverbs-per-preset routing.
 //!
 //! Two full [`ReverbChain`]s (each its own algorithm — including two
 //! independent Convolution/Impulse slots — params, pan, mix) composed
@@ -43,6 +43,7 @@ pub enum DualRouting {
 impl DualRouting {
     pub const COUNT: usize = 6;
 
+    #[must_use]
     pub fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Series12,
@@ -54,6 +55,7 @@ impl DualRouting {
         }
     }
 
+    #[must_use]
     pub fn to_index(self) -> usize {
         match self {
             Self::Single => 0,
@@ -65,6 +67,7 @@ impl DualRouting {
         }
     }
 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Single => "Single",
@@ -77,7 +80,7 @@ impl DualRouting {
     }
 }
 
-/// Two reverb chains + routing (BigSky MX dual-reverb presets).
+/// Two reverb chains + routing (`BigSky` MX dual-reverb presets).
 pub struct DualReverb {
     pub a: ReverbChain,
     pub b: ReverbChain,
@@ -91,6 +94,7 @@ pub struct DualReverb {
 }
 
 impl DualReverb {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             a: ReverbChain::new(),
@@ -104,7 +108,7 @@ impl DualReverb {
     }
 
     /// Copy the public parameter surface from one slot to the other
-    /// (BigSky MX "copy settings"). Copies params/mix/pan/EQ/duck/trem —
+    /// (`BigSky` MX "copy settings"). Copies params/mix/pan/EQ/duck/trem —
     /// NOT the algorithm selection or its internal state, so you can
     /// carry one slot's settings onto a different engine. Call
     /// `update()` (or `update_params()` on the destination) afterwards

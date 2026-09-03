@@ -4,7 +4,7 @@
 //! that's present in both — a "collision". For each bin we take the quieter of
 //! the two relative to an adaptive threshold, normalize it, and smooth the
 //! resulting strength over time into `final_ps` (0 = no collision, up to 0.9 =
-//! strong). The UI paints these as a red overlay. Port of ZLEqualizer's
+//! strong). The UI paints these as a red overlay. Port of `ZLEqualizer`'s
 //! `SpectrumCollision`.
 
 const DECAY: f32 = 0.95;
@@ -17,6 +17,7 @@ pub struct SpectrumCollision {
 }
 
 impl SpectrumCollision {
+    #[must_use]
     pub fn new(num_bins: usize) -> Self {
         Self {
             final_ps: vec![0.0; num_bins],
@@ -30,6 +31,7 @@ impl SpectrumCollision {
     }
 
     /// Current smoothed collision strengths.
+    #[must_use]
     pub fn strengths(&self) -> &[f32] {
         &self.final_ps
     }

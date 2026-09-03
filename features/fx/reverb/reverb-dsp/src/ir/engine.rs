@@ -69,6 +69,11 @@ pub struct IrEngine {
 
 impl IrEngine {
     /// Spawn a worker thread.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the worker thread cannot be spawned.
+    #[must_use]
     pub fn new() -> Self {
         let (tx_jobs, rx_jobs) = unbounded::<IrJob>();
         let (tx_results, rx_results) = unbounded::<IrResult>();
@@ -102,16 +107,27 @@ impl IrEngine {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the worker thread has shut down.
     #[allow(clippy::result_large_err)]
     pub fn submit(&self, job: IrJob) -> Result<(), crossbeam_channel::SendError<IrJob>> {
         self.tx_jobs.send(job)
     }
 
+    /// # Errors
+    ///
+    /// Returns `Empty` if no results are ready, or `Disconnected` if the
+    /// loader has shut down.
     pub fn try_recv(&self) -> Result<IrResult, TryRecvError> {
         self.rx_results.try_recv()
     }
 
     /// Convenience for the most common case: just submit a path (slot A).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the worker thread has shut down.
     #[allow(clippy::result_large_err)]
     pub fn submit_path<P: AsRef<Path>>(
         &self,
@@ -125,6 +141,10 @@ impl IrEngine {
 
     /// Submit a path load destined for a specific IR slot (B feeds the
     /// convolution morph's second convolver).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the worker thread has shut down.
     #[allow(clippy::result_large_err)]
     pub fn submit_path_slot<P: AsRef<Path>>(
         &self,
@@ -148,6 +168,11 @@ impl IrEngine {
     /// feeding [`crate::chain::ReverbChain::set_ir_swap_receiver`].
     /// Errors are dropped (typically the plugin GUI handles errors via
     /// `try_recv` on the engine's primary channel directly).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the relay thread cannot be spawned.
+    #[must_use]
     pub fn spawn_processed_relay(&self) -> Receiver<ProcessedIr> {
         let (tx, rx) = unbounded::<ProcessedIr>();
         let src = self.rx_results.clone();
@@ -168,13 +193,19 @@ impl IrEngine {
 
     /// Spawn a relay thread that consumes successful loads, performs
     /// the partitioned-FFT precompute on this background thread, and
-    /// forwards a [`PreparedIrPair`] downstream. Feed the returned
-    /// receiver into
+    /// forwards a [`PreparedIrPair`] downstream.
+    ///
+    /// Feed the returned receiver into
     /// [`crate::chain::ReverbChain::set_prepared_ir_receiver`] for
     /// zero-FFT-cost IR swaps on the audio thread.
     ///
     /// The relay shares a single [`RealFftPlanner`] across loads so
     /// FFT plan caching pays off across many IR changes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the relay thread cannot be spawned.
+    #[must_use]
     pub fn spawn_prepared_relay(&self) -> Receiver<PreparedIrPair> {
         let (tx, rx) = unbounded::<PreparedIrPair>();
         let src = self.rx_results.clone();
@@ -239,8 +270,8 @@ pub struct ReshapeJob {
     pub slot: IrSlot,
     pub left: Arc<Vec<f64>>,
     pub right: Arc<Vec<f64>>,
-    /// Full transform set to apply (the caller maps ImpulseParams onto
-    /// decay_frac / tail_gate / attack_frac / stretch / reverse).
+    /// Full transform set to apply (the caller maps `ImpulseParams` onto
+    /// `decay_frac` / `tail_gate` / `attack_frac` / stretch / reverse).
     pub transforms: IrTransforms,
     pub sample_rate: f64,
     /// True-stereo cross originals (LR, RL) to shape alongside.
@@ -249,10 +280,11 @@ pub struct ReshapeJob {
 }
 
 /// Background worker that re-shapes an Impulse engine's IR when its
-/// live shaping params change: applies [`IrTransforms`] to the stored
-/// original, FFT-prepares the result, and delivers a
-/// [`PreparedIrPair`] (tagged `reshape: true`) for the audio thread to
-/// hot-swap via the chain's prepared-IR receiver.
+/// live shaping params change.
+///
+/// Applies [`IrTransforms`] to the stored original, FFT-prepares the result,
+/// and delivers a [`PreparedIrPair`] (tagged `reshape: true`) for the audio
+/// thread to hot-swap via the chain's prepared-IR receiver.
 ///
 /// Knob sweeps are debounced by draining the job queue and keeping
 /// only the newest job per slot before doing any work.
@@ -267,6 +299,11 @@ impl ImpulseReshaper {
     /// Spawn the worker. Feed the returned receiver into
     /// [`crate::chain::ReverbChain::set_prepared_ir_receiver`] (or
     /// merge it with the loader relay's channel upstream).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the worker thread cannot be spawned.
+    #[must_use]
     pub fn new() -> (Self, Receiver<PreparedIrPair>) {
         let (tx_jobs, rx_jobs) = unbounded::<ReshapeJob>();
         let (tx_out, rx_out) = unbounded::<PreparedIrPair>();
@@ -352,12 +389,17 @@ impl ImpulseReshaper {
 
     /// Submit a re-shape. RT-safe: the job is `Arc` clones + a `Copy`
     /// transform set; the channel is lock-free.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the worker thread has shut down.
     #[allow(clippy::result_large_err)]
     pub fn submit(&self, job: ReshapeJob) -> Result<(), crossbeam_channel::SendError<ReshapeJob>> {
         self.tx_jobs.send(job)
     }
 
     /// A cloneable submission handle for the audio-thread side.
+    #[must_use]
     pub fn sender(&self) -> Sender<ReshapeJob> {
         self.tx_jobs.clone()
     }
@@ -365,6 +407,7 @@ impl ImpulseReshaper {
     /// Disposal handle for buffers displaced by audio-thread IR swaps —
     /// feed into [`crate::chain::ReverbChain::set_ir_trash_sender`].
     /// The worker drops whatever arrives.
+    #[must_use]
     pub fn trash_sender(&self) -> Sender<crate::ir::IrTrash> {
         self.tx_trash.clone()
     }

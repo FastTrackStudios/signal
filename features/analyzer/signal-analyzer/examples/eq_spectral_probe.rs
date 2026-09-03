@@ -113,7 +113,7 @@ fn spectrum(buf: &[f32]) -> Vec<f64> {
         pos += FFT / 2;
     }
     let n = used.max(1) as f64;
-    mag.iter_mut().for_each(|m| *m /= n);
+    for m in &mut mag { *m /= n; }
     mag
 }
 
@@ -181,12 +181,9 @@ fn main() {
     let auto = flag("--auto");
     let tilt = flag("--tilt");
 
-    let mut plugin = match HostedPlugin::load(&path) {
-        Ok(Some(p)) => p,
-        _ => {
-            eprintln!("{path}: could not load");
-            std::process::exit(1);
-        }
+    let Ok(Some(mut plugin)) = HostedPlugin::load(&path) else {
+        eprintln!("{path}: could not load");
+        std::process::exit(1);
     };
     plugin.prepare(SR, BLOCK as u32).expect("prepare");
 

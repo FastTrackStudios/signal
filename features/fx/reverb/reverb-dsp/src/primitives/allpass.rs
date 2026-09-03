@@ -14,6 +14,7 @@ pub struct Allpass {
 }
 
 impl Allpass {
+    #[must_use]
     pub fn new(max_delay: usize) -> Self {
         Self {
             delay: DelayLine::new(max_delay + 1),
@@ -34,6 +35,7 @@ impl Allpass {
     ///
     /// Dattorro's plate (1997, Table 2) taps the tank allpasses mid-buffer
     /// for its output matrix; this exposes that without changing state.
+    #[must_use]
     #[inline]
     pub fn tap(&self, delay_samples: usize) -> f64 {
         self.delay.read(delay_samples.min(self.delay_samples))

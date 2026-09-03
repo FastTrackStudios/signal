@@ -151,10 +151,10 @@ impl RigStack {
     }
 }
 
-/// A named collection of patches — the standalone-rig analogue of a
-/// `signal_proto::Profile`. Patches can be activated directly (flat, by index)
-/// or grouped into [`RigStack`]s (footswitch rotation); both views share the
-/// same `patches` pool.
+/// A named collection of patches — the standalone-rig analogue of a `signal_proto::Profile`.
+///
+/// Patches can be activated directly (flat, by index) or grouped into [`RigStack`]s
+/// (footswitch rotation); both views share the same `patches` pool.
 #[derive(Debug, Clone, Facet)]
 pub struct RigProfile {
     pub name: String,
@@ -191,6 +191,7 @@ impl RigProfile {
     }
 
     /// Index of the patch named `name` (case-insensitive) in `patches`.
+    #[must_use]
     pub fn patch_index(&self, name: &str) -> Option<usize> {
         self.patches
             .iter()
@@ -198,22 +199,32 @@ impl RigProfile {
     }
 
     /// Parse a profile from a `.styx` file (see `examples/worship.styx`).
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be read or the content is invalid.
     pub fn from_styx_file(path: &Path) -> Result<Self, SamplerError> {
         let text = std::fs::read_to_string(path)?;
         Self::from_styx_str(&text)
     }
 
+    /// Parse a profile from a string.
+    ///
+    /// # Errors
+    /// Returns an error if the content is invalid.
     pub fn from_styx_str(text: &str) -> Result<Self, SamplerError> {
         facet_styx::from_str(text).map_err(|e| SamplerError::SpecParse(e.to_string()))
     }
 
-    /// Convert a `signal_proto::Profile` into a `RigProfile`, using `resolver`
-    /// to turn each patch into an ordered chain of realized blocks. NAM blocks
-    /// map to [`RigBlock::nam`]; cabinet blocks with an IR path map to
-    /// [`RigBlock::cab_ir`]. Non-NAM/non-cab blocks (hosted plugins, native DSP
-    /// without a path) are skipped with a log — the standalone rig can't host
-    /// them yet. A patch that resolves to an empty chain is kept (it will be
-    /// "unavailable" at load time).
+    /// Convert a `signal_proto::Profile` into a `RigProfile` using a resolver.
+    ///
+    /// Uses `resolver` to turn each patch into an ordered chain of realized blocks.
+    /// NAM blocks map to [`RigBlock::nam`]; cabinet blocks with an IR path map to
+    /// [`RigBlock::cab_ir`]. Non-NAM/non-cab blocks (hosted plugins, native DSP without a path)
+    /// are skipped with a log — the standalone rig can't host them yet. A patch that resolves
+    /// to an empty chain is kept (it will be "unavailable" at load time).
+    ///
+    /// # Errors
+    /// Returns an error if the resolver fails.
     pub fn from_proto<R: PatchResolver>(
         profile: &signal_proto::profile::Profile,
         resolver: &R,
@@ -232,7 +243,7 @@ impl RigProfile {
                 match rb.kind {
                     BlockKind::Nam(nam) => chain.push(RigBlock::nam(nam.model_path)),
                     BlockKind::HostedPlugin(href) => {
-                        chain.push(RigBlock::plugin_with_state(href.path, href.state_b64))
+                        chain.push(RigBlock::plugin_with_state(href.path, href.state_b64));
                     }
                     BlockKind::Native => {
                         // A cabinet realized natively carries its IR path.
@@ -272,11 +283,16 @@ impl RigProfile {
     }
 }
 
-/// Resolves a proto `Patch` into an ordered list of realized blocks. The
-/// `signal-live` resolve stack (repos + `ResolveService`) implements this; the
-/// standalone rig only needs this narrow surface, so it stays decoupled from
-/// storage. Each [`ResolvedRigBlock`] is one block in chain order.
+/// Resolves a proto `Patch` into an ordered list of realized blocks.
+///
+/// The `signal-live` resolve stack (repos + `ResolveService`) implements this;
+/// the standalone rig only needs this narrow surface, so it stays decoupled from storage.
+/// Each [`ResolvedRigBlock`] is one block in chain order.
 pub trait PatchResolver {
+    /// Resolve a patch into blocks.
+    ///
+    /// # Errors
+    /// Returns an error if the patch cannot be resolved.
     fn resolve_patch(
         &self,
         patch: &signal_proto::profile::Patch,
@@ -284,7 +300,7 @@ pub trait PatchResolver {
 }
 
 /// One realized block from a [`PatchResolver`]: its `BlockKind` (Nam / Native /
-/// HostedPlugin / …) plus, for a natively-realized cabinet, its IR path.
+/// `HostedPlugin` / …) plus, for a natively-realized cabinet, its IR path.
 #[derive(Debug, Clone)]
 pub struct ResolvedRigBlock {
     pub kind: signal_proto::block_kind::BlockKind,
@@ -387,6 +403,9 @@ impl ProfileRig {
     }
 
     /// Open the default audio devices and wrap a fresh rig.
+    ///
+    /// # Errors
+    /// Returns an error if audio initialization fails.
     pub fn open_default() -> eyre::Result<Self> {
         Ok(Self::new(GuitarRig::new()?))
     }
@@ -443,6 +462,9 @@ impl ProfileRig {
     /// Load a profile: uninstall any previous chains, pre-install every patch's
     /// chain into the bank, then activate the default patch. `base_dir` resolves
     /// relative block paths (pass the profile file's directory).
+    ///
+    /// # Errors
+    /// Returns an error if no patches could be built.
     pub fn load_profile(
         &mut self,
         profile: RigProfile,
@@ -548,6 +570,9 @@ impl ProfileRig {
     }
 
     /// Convenience: load a profile from a `.styx` file.
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be read or loaded.
     pub fn load_profile_file(&mut self, path: &Path) -> Result<(), String> {
         let profile = RigProfile::from_styx_file(path).map_err(|e| e.to_string())?;
         let base = path.parent();
@@ -648,14 +673,13 @@ impl ProfileRig {
     pub fn stacks(&self) -> &[RigStack] {
         self.profile
             .as_ref()
-            .map(|p| p.stacks.as_slice())
-            .unwrap_or(&[])
+            .map_or(&[], |p| p.stacks.as_slice())
     }
 
     /// The rotation cursor (index into the stack's patch list) for `stack_idx`.
     /// Reset every stack's rotation cursor to its first patch.
     pub fn reset_stack_positions(&mut self) {
-        for p in self.stack_pos.iter_mut() {
+        for p in &mut self.stack_pos {
             *p = 0;
         }
     }
@@ -810,16 +834,14 @@ impl ProfileRig {
     pub fn patches(&self) -> &[RigPatch] {
         self.profile
             .as_ref()
-            .map(|p| p.patches.as_slice())
-            .unwrap_or(&[])
+            .map_or(&[], |p| p.patches.as_slice())
     }
 
     pub fn is_patch_available(&self, index: usize) -> bool {
         self.patch_ids
             .get(index)
             .copied()
-            .map(|id| id != MODEL_UNAVAILABLE)
-            .unwrap_or(false)
+            .is_some_and(|id| id != MODEL_UNAVAILABLE)
     }
 
     pub fn active_index(&self) -> Option<usize> {
