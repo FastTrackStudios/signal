@@ -349,6 +349,115 @@ fn fullness_from(power: &[f64], profile: &[(f64, f64)], sample_rate: f64) -> Ful
     }
 }
 
+/// Who owns a band, and by how much.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BandDominance {
+    pub centre_hz: f64,
+    /// Fraction of sounding frames where the first element is louder.
+    ///
+    /// Near 1.0 the band belongs to the first element, near 0.0 to the
+    /// second, near 0.5 they are fighting over it.
+    pub first_wins: f64,
+    /// Median level difference across those frames, in dB. Positive
+    /// means the first element leads.
+    pub median_margin_db: f64,
+}
+
+/// Which of two elements owns each band, moment to moment.
+///
+/// Comparing two averaged spectra cannot answer this, because a kick and
+/// a bass **take turns**: averaged, a band they alternate in and a band
+/// they genuinely share look identical. Only a time-resolved measure
+/// separates "carved apart, each owning its own region" from "both
+/// present and masking each other" — and that distinction is most of
+/// what low-end mixing is.
+///
+/// Frames where neither element is sounding are skipped, so silence
+/// cannot vote on ownership.
+pub fn dominance(a: &[f32], b: &[f32], sample_rate: f64) -> Vec<BandDominance> {
+    const HOP_MS: f64 = 100.0;
+    let hop = ((sample_rate * HOP_MS / 1000.0) as usize).max(1);
+    let centres = band_centres();
+    let mut margins: Vec<Vec<f64>> = vec![Vec::new(); centres.len()];
+
+    for (fa, fb) in a.chunks_exact(hop).zip(b.chunks_exact(hop)) {
+        if rms_of(fa) < 1e-5 && rms_of(fb) < 1e-5 {
+            continue;
+        }
+        let (Some(pa), Some(pb)) = (band_energies(fa, sample_rate), band_energies(fb, sample_rate))
+        else {
+            continue;
+        };
+        for (i, m) in margins.iter_mut().enumerate() {
+            if pa[i].is_finite() && pb[i].is_finite() {
+                m.push(pa[i] - pb[i]);
+            }
+        }
+    }
+
+    centres
+        .iter()
+        .zip(&margins)
+        .map(|(centre, m)| {
+            if m.is_empty() {
+                return BandDominance {
+                    centre_hz: *centre,
+                    first_wins: f64::NAN,
+                    median_margin_db: f64::NAN,
+                };
+            }
+            let wins = m.iter().filter(|d| **d > 0.0).count() as f64 / m.len() as f64;
+            let mut sorted = m.clone();
+            sorted.sort_by(|x, y| x.total_cmp(y));
+            BandDominance {
+                centre_hz: *centre,
+                first_wins: wins,
+                median_margin_db: sorted[sorted.len() / 2],
+            }
+        })
+        .collect()
+}
+
+/// Absolute band levels for one short frame, in dB.
+///
+/// Unlike [`band_profile`] these are deliberately **not** normalised:
+/// comparing two elements needs their real relative levels, and
+/// normalising each would erase exactly the difference being measured.
+fn band_energies(x: &[f32], sample_rate: f64) -> Option<Vec<f64>> {
+    // A short frame will not fill the transform, so pad rather than
+    // refuse — the alternative is no measurement at all.
+    let mut buf: Vec<f32> = x.to_vec();
+    buf.resize(NFFT.max(x.len()), 0.0);
+    let spectrum = power_spectrum(&buf)?;
+
+    let bin_hz = sample_rate / NFFT as f64;
+    let nyquist = sample_rate / 2.0;
+    let step = 2.0_f64.powf(0.5 / BANDS_PER_OCTAVE);
+
+    Some(
+        band_centres()
+            .into_iter()
+            .map(|centre| {
+                let lo = centre / step;
+                if lo >= nyquist {
+                    return f64::NEG_INFINITY;
+                }
+                let hi = (centre * step).min(nyquist);
+                let first = ((lo / bin_hz - 0.5).floor().max(0.0)) as usize;
+                let last =
+                    (((hi / bin_hz) + 0.5).ceil() as usize).min(spectrum.len().saturating_sub(1));
+                let mut acc = 0.0;
+                for (k, p) in spectrum.iter().enumerate().take(last + 1).skip(first) {
+                    let klo = k as f64 * bin_hz - bin_hz / 2.0;
+                    let khi = k as f64 * bin_hz + bin_hz / 2.0;
+                    acc += p * (hi.min(khi) - lo.max(klo)).max(0.0);
+                }
+                10.0 * (acc / (hi - lo).max(1e-9) + 1e-30).log10()
+            })
+            .collect(),
+    )
+}
+
 /// How far `a` sits above `b` in each band, in dB.
 ///
 /// Positive means `a` dominates that band. Both profiles are already
@@ -463,6 +572,64 @@ mod tests {
         assert!(*c.last().unwrap() > 15_000.0, "highest band {}", c.last().unwrap());
         assert!(c.len() > 50, "expected ~60 bands, got {}", c.len());
         assert!((c[6] / c[0] - 2.0).abs() < 1e-6, "six bands should be an octave");
+    }
+
+    #[test]
+    fn dominance_assigns_each_band_to_whoever_owns_it() {
+        // A low element and a high one, carved apart — the shape a good
+        // kick/bass relationship has.
+        let low = sine(60.0, 4.0, 0.5);
+        let high = sine(3000.0, 4.0, 0.5);
+        let d = dominance(&low, &high, SR);
+
+        let at = |hz: f64| {
+            d.iter()
+                .min_by(|a, b| {
+                    (a.centre_hz - hz).abs().total_cmp(&(b.centre_hz - hz).abs())
+                })
+                .unwrap()
+        };
+        assert!(at(60.0).first_wins > 0.9, "low band: {:?}", at(60.0));
+        assert!(at(3000.0).first_wins < 0.1, "high band: {:?}", at(3000.0));
+        assert!(at(60.0).median_margin_db > 20.0);
+        assert!(at(3000.0).median_margin_db < -20.0);
+    }
+
+    /// The distinction averaging cannot make: two elements alternating
+    /// in a band are not the same as two elements sharing it, even
+    /// though their mean spectra match.
+    #[test]
+    fn alternating_elements_are_not_reported_as_sharing() {
+        let n = (SR * 4.0) as usize;
+        let hop = (SR * 0.1) as usize;
+        let tone = sine(200.0, 4.0, 0.5);
+
+        // Interleave: a sounds in even 100 ms slots, b in odd ones.
+        let mut a = vec![0.0_f32; n];
+        let mut b = vec![0.0_f32; n];
+        for (i, chunk) in (0..n).step_by(hop).enumerate() {
+            let end = (chunk + hop).min(n);
+            let dst = if i % 2 == 0 { &mut a } else { &mut b };
+            dst[chunk..end].copy_from_slice(&tone[chunk..end]);
+        }
+
+        let d = dominance(&a, &b, SR);
+        let at200 = d
+            .iter()
+            .min_by(|x, y| {
+                (x.centre_hz - 200.0)
+                    .abs()
+                    .total_cmp(&(y.centre_hz - 200.0).abs())
+            })
+            .unwrap();
+
+        // Each owns the band about half the time — decisively, not
+        // because they are equal at every instant.
+        assert!(
+            (0.3..=0.7).contains(&at200.first_wins),
+            "alternating should split ownership, got {:?}",
+            at200
+        );
     }
 
     #[test]
