@@ -82,8 +82,6 @@ performance {
     // swell that the vendor instrument skips via Kontakt sample-start.
     // Starting the body at its steady plateau is what makes onsets prompt
     // here. Opt-in, because on a struck instrument it removes the attack —
-    // see `sustain_starts_at_plateau`.
-    sustain_starts_at_plateau true
     zone_pitch_tolerance 2     // whole-tone grid → shift ±1..2 to fill
     release_gain         1.0   // release groups ship 0 dB static; the amp env shapes the tail
     attack_ms            198   // "Arco attack" $mmirg=30/127 under Kontakt's cubic law

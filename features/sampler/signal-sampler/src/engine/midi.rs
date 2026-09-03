@@ -664,7 +664,7 @@ impl SampleEngine {
         // the hammer and most of the note's identity — measured on The
         // Grandeur as a first non-zero sample 1940 frames (40 ms) after
         // note-on against 1 frame in the source recording.
-        let fresh_vz = if !self.legato_sustain && self.patch.spec.legato_engine.is_some() {
+        let fresh_vz = if !self.legato_sustain && self.cs_family() {
             self.patch
                 .spec
                 .legato_cfg()
@@ -835,6 +835,26 @@ impl SampleEngine {
     /// gained by the current CC1 crossfade. Holding all layers — even the silent
     /// ones — is what lets a held note swell the full dynamic range as CC1 moves
     /// (`update_sustain_gains` re-levels them live), the way CSS does.
+    /// Whether this library is a Cinematic-Studio-family instrument — i.e. it
+    /// authored a `legato_engine`.
+    ///
+    /// That declaration is what marks the libraries the engine's bowed-string
+    /// behaviours were decoded FROM, and they travel together: a sparse pitch
+    /// grid (so transposition must preserve duration), sustains with no loop
+    /// points and a slow bow swell (so bodies loop the steady plateau), an
+    /// attack ornament over the first 40 ms, and CC-driven dynamic layers.
+    /// Applied to a struck, chromatically-sampled instrument every one of them
+    /// is wrong, and each was individually making the piano unplayable.
+    ///
+    /// Keyed off the declaration rather than a per-behaviour flag because the
+    /// flags have to be set on every CS spec and it is too easy to miss one —
+    /// which is exactly what happened: `cinematic-brass`,
+    /// `cinematic-woodwinds` and `pacific-ensemble-strings` all author a
+    /// legato engine and would have silently lost the plateau start.
+    pub(crate) fn cs_family(&self) -> bool {
+        self.patch.spec.legato_engine.is_some()
+    }
+
     /// Whether a CC can raise a layer that is currently silent.
     ///
     /// True for libraries that authored a legato engine (the Cinematic Studio
@@ -843,7 +863,7 @@ impl SampleEngine {
     /// velocity-layered instrument picks its layer when the key is struck and
     /// nothing afterwards changes it.
     pub(crate) fn cc_driven_layers(&self) -> bool {
-        self.patch.spec.legato_engine.is_some()
+        self.cs_family()
     }
 
     pub(crate) fn spawn_sustain_layers(
@@ -1664,6 +1684,7 @@ impl SampleEngine {
             zone = idx,
             vel_min = self.patch.spec.zones[idx].vel_min,
             vel_max = self.patch.spec.zones[idx].vel_max,
+            root = self.patch.spec.zones[idx].root_key,
             file = %path.file_name().and_then(|s| s.to_str()).unwrap_or_default(),
             "zoned spawn"
         );
@@ -1704,9 +1725,25 @@ impl SampleEngine {
         // timing; only TUNING (per-zone + master, tiny) rides `rate`, which
         // now carries just tuning × SR-conversion. `transpose_cents == 0` on
         // the recorded grid → no shifter, byte-identical to before.
-        let transpose_cents = semitones * 100.0;
+        // Time-preserving transposition is a CS-family need: those libraries
+        // sample 6 of 12 pitch classes, so a transposed note must still last
+        // exactly as recorded or its legato arrival lands off the grid. The
+        // barberpole shifter that buys it costs two cubic-interpolated reads
+        // and a crossfade PER SAMPLE — measured at roughly 10x a plain voice,
+        // and on the keys rig 9 transposed voices out of 432 were ~19% of the
+        // audio thread.
+        //
+        // A chromatically sampled library needs none of it: transposition is
+        // rare (a release tail reaching past its sampled range) and nobody
+        // minds it running a few milliseconds short. Fold it into the playback
+        // rate instead, which is free.
+        let (transpose_cents, resample_semitones) = if self.cs_family() {
+            (semitones * 100.0, 0.0)
+        } else {
+            (0.0, semitones)
+        };
         let tune_cents_total = tune_cents as f64 + self.master_tune_cents();
-        let rate = 2.0f64.powf(tune_cents_total / 1200.0);
+        let rate = 2.0f64.powf(tune_cents_total / 1200.0 + resample_semitones / 12.0);
 
         // Marker position for playback emission (FILE frames): the zone's
         // heard-arrival CLAIM, exactly the ladder the alignment uses —
@@ -1902,7 +1939,7 @@ impl SampleEngine {
         // pianos have none either, and skipping a piano's attack removes the
         // hammer and the core of the tone while leaving a plausible-sounding
         // note behind.
-        let synth_loop = self.patch.spec.performance.sustain_starts_at_plateau
+        let synth_loop = self.cs_family()
             && is_sustain_layer
             && loop_end <= loop_start
             && playback_mode.is_empty()
