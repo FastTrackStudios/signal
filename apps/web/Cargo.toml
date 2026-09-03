@@ -1,0 +1,55 @@
+[package]
+name = "signal-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "signal.fasttrackstudio.app — the Signal landing page, rig demos, and guide"
+
+[dependencies]
+# The router and the view layer. The workspace dep carries no platform
+# features (`default-features = false, features = ["lib"]` at the root);
+# this crate's `default = ["web"]` turns on `dioxus/web` + `dioxus/launch`.
+# That is dioxus-flake's packages/web pattern, and what keyflow-web does —
+# `dx serve` gets away without it by injecting the platform itself, but a
+# sandboxed `dx build` resolves offline and falls back to a feature set
+# that wants `dioxus-fullstack`, which the vendored dioxus source does not
+# carry.
+dioxus = { workspace = true, features = ["router"] }
+
+# The guide is markdown compiled in by build.rs. Rendering is a plain
+# pulldown-cmark pass rather than the editor crate keyflow-web uses: the
+# guide here has no fences to engrave and no wikilink graph yet, so
+# pulling the whole editor in would be weight for nothing.
+pulldown-cmark = { workspace = true, features = ["html"] }
+
+tracing = { workspace = true }
+
+# Not called directly. web-sys features are ADDITIVE across the dependency
+# graph and only a direct dependent can turn one on, so dioxus-web's own
+# use of `Window::location` (its history/router backend) does not compile
+# unless something in this crate enables `Location`. keyflow-web carries
+# the same block for the same reason.
+web-sys = { workspace = true, features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "Location",
+    "History",
+    "Navigator",
+    "Storage",
+] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tracing-wasm = "0.2"
+console_error_panic_hook = "0.1"
+
+[lints]
+workspace = true
+
+[features]
+default = ["web"]
+web = ["dioxus/web", "dioxus/launch"]

@@ -1,0 +1,17 @@
+# dx config for the Signal site. The web build is the product; the desktop
+# launch exists only so `cargo check --workspace` and the tests are
+# meaningful on the host.
+[application]
+
+[web.app]
+title = "Signal"
+base_path = "/"
+
+[web.watcher]
+# The guide is compiled in by build.rs, so editing a guide page must
+# trigger a rebuild, not just an asset reload.
+watch_path = ["src", "assets", "../../docs/guides/signal"]
+
+[bundle]
+identifier = "app.fasttrackstudio.signal.web"
+publisher = "FastTrackStudio"

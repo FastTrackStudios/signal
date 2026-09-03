@@ -1,0 +1,561 @@
+/* signal.fasttrackstudio.app
+ *
+ * One stylesheet, inlined into the bundle by `document::Style` in main.rs
+ * rather than linked: Blitz (the desktop/plugin renderer these components
+ * may later be shared with) does not load external CSS reliably, and the
+ * signal UI rule in CLAUDE.md is inline-or-embedded only.
+ *
+ * Every demo animation lives at the bottom under "rig demos". They are
+ * CSS keyframes on purpose — see the module docs in src/demos/mod.rs.
+ */
+
+:root {
+  /* Dark only, declared rather than merely implied. Without this the
+     browser still paints light scrollbars and light form controls over a
+     dark page, and shows a white canvas for the frame before this
+     stylesheet applies. There is no light theme and none is planned — the
+     product is a stage tool. */
+  color-scheme: dark;
+
+  /* Taken from the app icon (apps/desktop/ios/icon.svg) so the site and
+     the thing on your home screen are the same product: the plate's
+     #232327 -> #0A0A0C ramp, and its #2FD673 glyph. */
+  --bg: #0a0a0c;
+  --bg-alt: #0f0f12;
+  --panel: #151517;
+  --panel-hi: #1c1c20;
+  --line: #26262c;
+  --ink: #e9e9ec;
+  --ink-dim: #9b9ba5;
+  --ink-faint: #6c6c78;
+  --accent: #2fd673;
+  --accent-soft: rgba(47, 214, 115, 0.16);
+  --good: #b6f7cb;
+  --radius: 10px;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  background: #0a0a0c;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+
+.sg-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ── header ─────────────────────────────────────────────────────────── */
+
+.sg-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem clamp(1rem, 5vw, 3rem);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: rgba(10, 10, 12, 0.86);
+  backdrop-filter: blur(10px);
+  z-index: 10;
+}
+
+.sg-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-size: 1.05rem;
+}
+
+/* The mark pulses slowly — the one piece of motion in the chrome, and a
+   nod to what the product is. */
+.sg-wordmark-mark {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent-soft);
+  animation: sg-pulse 2.6s ease-out infinite;
+}
+
+@keyframes sg-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(47, 214, 115, 0.5); }
+  70%  { box-shadow: 0 0 0 9px rgba(47, 214, 115, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(47, 214, 115, 0); }
+}
+
+.sg-nav { display: flex; align-items: center; gap: 1.4rem; font-size: 0.92rem; }
+.sg-nav a { color: var(--ink-dim); transition: color 0.15s ease; }
+.sg-nav a:hover { color: var(--ink); }
+
+.sg-main { flex: 1; }
+
+.sg-footer {
+  border-top: 1px solid var(--line);
+  padding: 1.6rem clamp(1rem, 5vw, 3rem);
+  color: var(--ink-faint);
+  font-size: 0.84rem;
+  display: flex;
+  gap: 0.6rem;
+}
+
+/* ── hero ───────────────────────────────────────────────────────────── */
+
+.sg-hero {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: clamp(3.5rem, 11vh, 7rem) clamp(1rem, 5vw, 3rem) clamp(2.5rem, 7vh, 4.5rem);
+  text-align: center;
+}
+
+.sg-display {
+  font-size: clamp(2.2rem, 6.5vw, 4rem);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  font-weight: 680;
+  margin: 0 0 1.1rem;
+}
+
+.sg-accent { color: var(--accent); }
+
+.sg-lede {
+  font-size: clamp(1rem, 1.9vw, 1.18rem);
+  line-height: 1.6;
+  color: var(--ink-dim);
+  max-width: 40rem;
+  margin: 0 auto 2rem;
+}
+
+.sg-lede-sm { color: var(--ink-dim); line-height: 1.6; }
+
+.sg-hero-actions {
+  display: flex;
+  gap: 0.7rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 1.6rem;
+}
+
+/* ── buttons ────────────────────────────────────────────────────────── */
+
+.sg-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.62rem 1.15rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 0.93rem;
+  font-weight: 550;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.sg-btn:hover { border-color: #3a3a44; transform: translateY(-1px); }
+
+.sg-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06140c;
+}
+
+.sg-btn-primary:hover { background: #4ae389; border-color: #4ae389; }
+
+/* Vocal has no page to link to. Rendered as a span, not a disabled
+   anchor, so it is not focusable and cannot be clicked to nowhere. */
+.sg-btn-disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.sg-btn-disabled:hover { transform: none; border-color: var(--line); }
+
+/* ── stripes ────────────────────────────────────────────────────────── */
+
+.sg-stripe { border-top: 1px solid var(--line); }
+.sg-stripe-alt { background: var(--bg-alt); }
+
+.sg-stripe-inner {
+  max-width: 74rem;
+  margin: 0 auto;
+  padding: clamp(3rem, 8vh, 5rem) clamp(1rem, 5vw, 3rem);
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: clamp(1.8rem, 5vw, 4rem);
+  align-items: center;
+}
+
+.sg-stripe-alt .sg-stripe-inner { direction: rtl; }
+.sg-stripe-alt .sg-stripe-inner > * { direction: ltr; }
+
+.sg-eyebrow {
+  display: inline-block;
+  font-size: 0.74rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 620;
+  margin-bottom: 0.7rem;
+}
+
+.sg-stripe-copy h2 {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.8rem;
+}
+
+.sg-stripe-copy p {
+  color: var(--ink-dim);
+  line-height: 1.65;
+  margin: 0 0 1.5rem;
+  max-width: 34rem;
+}
+
+/* ── prose (guide, rig stubs) ───────────────────────────────────────── */
+
+.sg-prose {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: clamp(2.5rem, 8vh, 4.5rem) clamp(1rem, 5vw, 3rem) 5rem;
+  line-height: 1.7;
+}
+
+.sg-prose h1 { font-size: clamp(1.8rem, 4vw, 2.5rem); letter-spacing: -0.025em; margin: 0 0 1rem; }
+.sg-prose h2 { font-size: 1.22rem; margin: 2.2rem 0 0.7rem; letter-spacing: -0.015em; }
+.sg-prose h3 { font-size: 1.04rem; margin: 1.7rem 0 0.5rem; color: var(--ink-dim); }
+.sg-prose p, .sg-prose li { color: var(--ink-dim); }
+.sg-prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.sg-prose code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.1em 0.36em;
+}
+.sg-prose pre {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+  overflow-x: auto;
+}
+.sg-prose pre code { background: none; border: none; padding: 0; }
+.sg-prose blockquote {
+  margin: 1.2rem 0;
+  padding-left: 1rem;
+  border-left: 2px solid var(--accent);
+  color: var(--ink-dim);
+}
+
+.sg-callout {
+  background: var(--accent-soft);
+  border: 1px solid rgba(47, 214, 115, 0.3);
+  border-radius: var(--radius);
+  padding: 0.9rem 1.1rem;
+  color: var(--ink) !important;
+}
+
+.sg-back { display: inline-block; color: var(--ink-faint) !important; text-decoration: none !important; margin-bottom: 1.5rem; font-size: 0.9rem; }
+.sg-back:hover { color: var(--ink) !important; }
+
+.sg-toc { list-style: none; padding: 0; margin: 1.8rem 0 0; }
+.sg-toc li { padding: 0.75rem 0; border-bottom: 1px solid var(--line); }
+.sg-toc a { color: var(--ink) !important; text-decoration: none !important; font-weight: 550; }
+.sg-toc a:hover { color: var(--accent) !important; }
+.sg-toc-summary { color: var(--ink-faint); font-size: 0.9rem; }
+
+/* ══ rig demos ══════════════════════════════════════════════════════════
+ *
+ * Everything below is the moving picture. No engine, no timers in Rust —
+ * the compositor runs all of it. Anyone reducing motion gets the layout
+ * with the animation switched off, which still reads as an interface.
+ */
+
+.sg-demo {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.9rem;
+  min-height: 15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.sg-demo-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.sg-demo-title { font-size: 0.9rem; font-weight: 600; }
+.sg-demo-chip {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.16rem 0.55rem;
+}
+
+/* -- guitar ---------------------------------------------------------- */
+
+.sg-board { display: flex; gap: 0.5rem; }
+
+.sg-pedal {
+  flex: 1;
+  background: var(--panel-hi);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.55rem 0.3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.sg-pedal-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #33384a;
+  animation: sg-led 1.8s ease-in-out infinite;
+}
+
+@keyframes sg-led {
+  0%, 62%, 100% { background: #33384a; box-shadow: none; }
+  70%           { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+}
+
+.sg-pedal-name { font-family: var(--mono); font-size: 0.55rem; color: var(--ink-faint); letter-spacing: 0.06em; }
+.sg-pedal-knobs { display: flex; gap: 0.25rem; }
+.sg-knob { width: 9px; height: 9px; border-radius: 50%; background: #2a2f3c; border: 1px solid #363c4b; }
+.sg-knob-b { background: #232732; }
+
+.sg-amp {
+  flex: 1;
+  background: linear-gradient(180deg, #191b22, #131519);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  justify-content: center;
+}
+
+/* The speaker cloth: a repeating weave, cheap and recognisable. */
+.sg-amp-grille {
+  height: 3.2rem;
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(45deg, #1e222b 0 2px, #171a21 2px 4px),
+    #14171d;
+  border: 1px solid #22262f;
+}
+
+.sg-amp-meter { display: flex; gap: 3px; align-items: flex-end; height: 1.6rem; }
+
+.sg-meter-bar {
+  flex: 1;
+  background: linear-gradient(180deg, var(--accent), #0e7c42);
+  border-radius: 2px;
+  height: 20%;
+  animation: sg-meter 1.8s ease-in-out infinite;
+}
+
+@keyframes sg-meter {
+  0%, 55%, 100% { height: 16%; opacity: 0.45; }
+  72%           { height: 92%; opacity: 1; }
+  85%           { height: 44%; opacity: 0.8; }
+}
+
+.sg-amp-label { font-family: var(--mono); font-size: 0.62rem; color: var(--ink-faint); }
+
+/* -- keys ------------------------------------------------------------ */
+
+.sg-keys-body { display: flex; flex-direction: column; gap: 0.8rem; flex: 1; }
+
+.sg-mixer { display: flex; gap: 0.5rem; flex: 1; }
+.sg-mixer-strip { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+
+.sg-fader-track {
+  flex: 1;
+  width: 100%;
+  min-height: 4.5rem;
+  background: var(--panel-hi);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.sg-fader-fill {
+  width: 100%;
+  background: linear-gradient(180deg, #7fe8a8, #2fd673);
+  animation: sg-fader 3.2s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+/* Scales around the inline height rather than replacing it, so each
+   layer keeps the balance set in the markup. */
+@keyframes sg-fader {
+  0%, 100% { transform: scaleY(1); }
+  45%      { transform: scaleY(0.72); }
+  70%      { transform: scaleY(1.12); }
+}
+
+.sg-mixer-label { font-family: var(--mono); font-size: 0.56rem; color: var(--ink-faint); }
+
+.sg-keybed {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  height: 3.6rem;
+  background: #0e1014;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.sg-key-white {
+  flex: 1;
+  background: #d8dbe3;
+  border-radius: 0 0 3px 3px;
+  animation: sg-key 3s ease-out infinite;
+}
+
+@keyframes sg-key {
+  0%, 8%, 100% { background: #d8dbe3; }
+  2%           { background: var(--accent); }
+}
+
+.sg-key-black {
+  position: absolute;
+  top: 3px;
+  width: 1.8%;
+  height: 58%;
+  background: #16181d;
+  border-radius: 0 0 2px 2px;
+  border: 1px solid #0a0b0e;
+}
+
+/* -- drums ----------------------------------------------------------- */
+
+.sg-pads {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.45rem;
+  flex: 1;
+}
+
+.sg-pad {
+  background: var(--panel-hi);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  min-height: 2.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: sg-pad-hit 2s ease-out infinite;
+}
+
+@keyframes sg-pad-hit {
+  0%, 12%, 100% { background: var(--panel-hi); border-color: var(--line); }
+  3%            { background: #2b3040; border-color: #454c60; }
+}
+
+.sg-pad-accent { animation-name: sg-pad-hit-accent; }
+
+@keyframes sg-pad-hit-accent {
+  0%, 12%, 100% { background: var(--panel-hi); border-color: var(--line); }
+  3%            { background: rgba(47, 214, 115, 0.24); border-color: var(--accent); }
+}
+
+.sg-pad-name { font-family: var(--mono); font-size: 0.54rem; color: var(--ink-faint); letter-spacing: 0.05em; }
+
+.sg-mics { display: flex; gap: 0.4rem; height: 3.4rem; }
+.sg-mic { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
+
+.sg-mic-track {
+  flex: 1;
+  width: 100%;
+  background: #0e1014;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.sg-mic-fill {
+  width: 100%;
+  background: linear-gradient(180deg, var(--accent), #0e7c42);
+  animation: sg-mic 2s ease-out infinite;
+  transform-origin: bottom;
+}
+
+@keyframes sg-mic {
+  0%, 100% { transform: scaleY(0.5); opacity: 0.6; }
+  4%       { transform: scaleY(1); opacity: 1; }
+  40%      { transform: scaleY(0.62); opacity: 0.75; }
+}
+
+.sg-mic-label { font-family: var(--mono); font-size: 0.5rem; color: var(--ink-faint); }
+
+/* -- vocal (no demo) ------------------------------------------------- */
+
+.sg-demo-soon {
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+  box-shadow: none;
+  background: transparent;
+}
+
+.sg-soon-badge {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+}
+
+/* ── responsive ─────────────────────────────────────────────────────── */
+
+@media (max-width: 860px) {
+  .sg-stripe-inner { grid-template-columns: 1fr; }
+  /* The alternation is a two-column effect; stacked, it would only
+     reorder the copy under the demo. */
+  .sg-stripe-alt .sg-stripe-inner { direction: ltr; }
+}
+
+/* Motion is decoration here — the layout alone still reads as an
+   interface, so honouring the preference costs nothing. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

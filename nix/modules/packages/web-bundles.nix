@@ -1,4 +1,4 @@
-# dx web bundles (fts-site-web) + their static-site OCI images.
+# dx web bundles (signal-web) + their static-site OCI images.
 # dx bundle → $out/www (+ brotli pre-compression).
 { ... }:
 {
@@ -76,21 +76,26 @@
       # task-webapp moved to the task repo with the August 2026 split,
       # along with task-server and the ui-lab bundle.
 
-      # fasttrackstudio.app website — `just site-build` is a plain
-      # `dx build --platform web --release` (assets/tailwind.css is
-      # committed; no tailwind step).
-      fts-site-web = mkDxWebBundle {
-        pname = "fts-site-web";
-        appDir = "apps/site";
-        dxName = "fts-site";
+      # signal.fasttrackstudio.app — the Signal landing page, rig demos
+      # and guide. No tailwind step: assets/site.css is committed and
+      # inlined by the app, per the signal UI rule in CLAUDE.md.
+      #
+      # (This replaced an `apps/site` bundle for fasttrackstudio.app. That
+      # directory does not exist in this repo — the site moved out with
+      # the August 2026 split — so the derivation had been referring to
+      # nothing and could not have built.)
+      signal-web = mkDxWebBundle {
+        pname = "signal-web";
+        appDir = "apps/web";
+        dxName = "signal-web";
       };
     in
     {
-      packages = { inherit fts-site-web; }
+      packages = { inherit signal-web; }
       // lib.optionalAttrs pkgs.stdenv.isLinux {
-        fts-site-image = mkStaticSite {
-          name = "fts-site";
-          siteRoot = "${fts-site-web}/www";
+        signal-web-image = mkStaticSite {
+          name = "signal-web";
+          siteRoot = "${signal-web}/www";
         };
       };
     };

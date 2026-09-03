@@ -9,6 +9,7 @@ resolver = "3"
 
 members = [
     "apps/desktop",
+    "apps/web",
     "apps/fts-convert",
     "apps/plugins/comp",
     "apps/plugins/delay",
@@ -317,6 +318,7 @@ signal-live = { path = "crates/signal/live" }
 signal-storage = { path = "crates/signal/storage" }
 signal-import = { path = "crates/signal/import" }
 fts-convert = { path = "apps/fts-convert" }
+signal-web = { path = "apps/web" }
 signal-daw-bridge = { path = "crates/signal/daw-bridge" }
 signal-rig-host = { path = "crates/signal/rig-host" }
 signal-rigs-proto = { path = "crates/signal/rigs-proto" }
