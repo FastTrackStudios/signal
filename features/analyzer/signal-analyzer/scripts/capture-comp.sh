@@ -39,28 +39,38 @@ ARCHIVE="${PLUGIN_ANALYSIS_ROOT:-/run/media/AudioHaven/Plugin Analysis}"
 FILTER="${1:-}"
 START=$(date +%s)
 
-# vst3 file | display name | drive | attack | release | ratio
+# The stimulus levels the static surface is measured across.
+#
+# Sweeping a control at one level gives a slice, not a surface. It matters
+# most for units whose drive control is a *threshold* rather than a gain: an
+# LA-2A's Peak Reduction moves the threshold while the signal stays put, so
+# sweeping it alone never varies how hard the unit is hit. An 1176's Input is
+# a gain, so its sweep doubles as a level sweep and this axis is partly
+# redundant there — but only partly.
+LEVELS="${LEVELS:--36 -30 -24 -18 -12 -6 0}"
+
+# vst3 file | display name | drive | attack | release | ratio | extra modes
 FLEET='
-uaudio_ua_1176ln_rev_e|UADx 1176LN Rev E|Input|Attack|Release|Ratio
-uaudio_ua_1176_rev_a|UADx 1176 Rev A|Input|Attack|Release|Ratio
-uaudio_ua_1176ae|UADx 1176AE|Input|Attack|Release|Ratio
-uaudio_teletronix_la-2a_gray|UADx LA-2A Gray|Peak Reduct|-|-|-
-uaudio_teletronix_la-2a_silver|UADx LA-2A Silver|Peak Reduct|-|-|-
-uaudio_teletronix_la-2|UADx LA-2|Peak Reduct|-|-|-
-uaudio_la3a|UADx LA-3A|Peak Reduction|-|-|-
-uaudio_fairchild_660|UADx Fairchild 660|Input|-|-|Time Const
-uaudio_dbx_160|UADx dbx 160|Thresh|-|-|Compress
-uaudio_distressor|UADx Distressor|Input|Attack|Release|Ratio
-uaudio_api_2500|UADx API 2500|Threshold|Attack|Release|Ratio
-uaudio_capitol_compressor|UADx Capitol Mastering Compressor|L Input|L Attack|L Release|L Ratio
-uaudio_175_b|UADx UA 175-B|Input|Attack|Release|-
-uaudio_176|UADx UA 176|Input|Attack|Release|Ratio
-SSL Native Bus Compressor 2|SSL Native Bus Compressor 2|Threshold|Attack|Release|Ratio
+uaudio_ua_1176ln_rev_e|UADx 1176LN Rev E|Input|Attack|Release|Ratio|-
+uaudio_ua_1176_rev_a|UADx 1176 Rev A|Input|Attack|Release|Ratio|-
+uaudio_ua_1176ae|UADx 1176AE|Input|Attack|Release|Ratio|-
+uaudio_teletronix_la-2a_gray|UADx LA-2A Gray|Peak Reduct|-|-|-|Comp/Limit;Emphasis
+uaudio_teletronix_la-2a_silver|UADx LA-2A Silver|Peak Reduct|-|-|-|Comp/Limit;Emphasis
+uaudio_teletronix_la-2|UADx LA-2|Peak Reduct|-|-|-|Emphasis
+uaudio_la3a|UADx LA-3A|Peak Reduction|-|-|-|Comp/Limit;HF Emphasis
+uaudio_fairchild_660|UADx Fairchild 660|Input|-|-|Time Const|-
+uaudio_dbx_160|UADx dbx 160|Thresh|-|-|Compress|-
+uaudio_distressor|UADx Distressor|Input|Attack|Release|Ratio|-
+uaudio_api_2500|UADx API 2500|Threshold|Attack|Release|Ratio|-
+uaudio_capitol_compressor|UADx Capitol Mastering Compressor|L Input|L Attack|L Release|L Ratio|-
+uaudio_175_b|UADx UA 175-B|Input|Attack|Release|-|-
+uaudio_176|UADx UA 176|Input|Attack|Release|Ratio|-
+SSL Native Bus Compressor 2|SSL Native Bus Compressor 2|Threshold|Attack|Release|Ratio|-
 '
 
 TOTAL=$(echo "$FLEET" | grep -c '|')
 INDEX=0
-echo "$FLEET" | while IFS='|' read -r file name drive atk rel ratio; do
+echo "$FLEET" | while IFS='|' read -r file name drive atk rel ratio modes; do
   [ -z "$file" ] && continue
   INDEX=$((INDEX + 1))
   if [ -n "$FILTER" ]; then
@@ -99,6 +109,37 @@ echo "$FLEET" | while IFS='|' read -r file name drive atk rel ratio; do
   # unit whose input knob also sets the threshold the two interact.
   if [ "$ratio" != "-" ]; then
     run ratio --sweep "$ratio=0..1:11;$drive=0..1:6"
+  fi
+
+  # The static *surface*: the drive control swept again at each stimulus
+  # level, so gain reduction is known as a function of both rather than of
+  # one with the other held wherever it happened to sit.
+  for L in $LEVELS; do
+    low=$(awk "BEGIN{print $L - 14}")
+    run "level$L" --sweep "$drive=0..1:16" --gain-high "$L" --gain-low "$low"
+  done
+
+  # A long-tailed release capture.
+  #
+  # The default 240 ms quiet half cannot measure an optical release. An
+  # LA-2A recovers over seconds, so at 240 ms it has barely started and both
+  # the 63% and 90% times are measured against a value the curve has not
+  # reached — which came back as `t90/t63 = 1.6`, below the 2.30 a decaying
+  # exponential must give. That is not a fast release, it is a window too
+  # short to see one. Four seconds of quiet, and long enough overall to hold
+  # two full cycles.
+  run release --sweep "$drive=0..1:8" \
+      --time-high 500 --time-low 4000 --duration 12 --freqs 100,1000,5000
+
+  # Mode controls the unit has that are neither drive nor ratio — an LA-2A
+  # Comp/Limit switch changes the curve outright, and its Emphasis control
+  # tilts the side chain.
+  if [ "$modes" != "-" ] && [ -n "$modes" ]; then
+    IFS=";" read -ra MODE_LIST <<< "$modes"
+    for mode in "${MODE_LIST[@]}"; do
+      safe_mode=$(echo "$mode" | tr -c "[:alnum:]-_" "_")
+      run "mode-$safe_mode" --sweep "$mode=0..1:6;$drive=0..1:8"
+    done
   fi
 
   NOW=$(date +%s); SPENT=$((NOW - START))

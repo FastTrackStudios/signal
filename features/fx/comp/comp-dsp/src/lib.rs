@@ -8,6 +8,7 @@
 //!    - Change detection: 0.1% threshold
 //! 4. Apply upward/expander stages, output gain, character drive, ceiling, and mix
 
+pub mod opto;
 pub mod biquad;
 pub mod chain;
 pub mod detector;
