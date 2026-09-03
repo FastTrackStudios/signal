@@ -33,5 +33,6 @@
 //! −12 LUFS"). Prefer the former when building anything on top.
 
 pub mod models;
+pub mod vocal;
 
 pub use models::{Arch, Asset, Model, Resolved, DRUMSEP, MANAGED};

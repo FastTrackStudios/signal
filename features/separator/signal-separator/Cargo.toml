@@ -8,6 +8,9 @@ description = "Split a finished mix into stems for reference analysis — model 
 [dependencies]
 anyhow.workspace = true
 reqwest.workspace = true
+level-dsp.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 sha2.workspace = true
 tokio = { workspace = true, features = ["fs", "process", "rt", "macros"] }
 tracing.workspace = true
