@@ -38,7 +38,7 @@
 
       # The dx build runs from the app dir but writes to the
       # WORKSPACE-ROOT target/dx/<name>/release/web/public.
-      mkDxWebBundle = { pname, appDir, dxName, preBuild ? "" }:
+      mkDxWebBundle = { pname, appDir, dxName, preBuild ? "", dxArgs ? "" }:
         craneLib.buildPackage (commonArgs // dxWebEnv // {
           inherit pname;
           version = "0.1.0";
@@ -54,7 +54,7 @@
             # --debug-symbols false: drop DWARF for a smaller release
             # bundle (and it sidesteps DWARF-version mismatches in
             # wasm-opt).
-            dx build --release --platform web --debug-symbols false
+            dx build --release --platform web --debug-symbols false ${dxArgs}
           '';
           # buildPhase ends inside ${appDir}; anchor the copy at the
           # workspace root explicitly.
@@ -88,6 +88,20 @@
         pname = "signal-web";
         appDir = "apps/web";
         dxName = "signal-web";
+        # --wasm-split is NOT optional here, and not really about splitting.
+        #
+        # Without it, wasm-opt (binaryen 129) aborts with SIGABRT and no
+        # diagnostic on this bundle; dx reports the failure, carries on, and
+        # ships the UNOPTIMISED wasm — 2,029,954 bytes. With it, wasm-opt
+        # completes and the same bundle is 859,778. Measured both ways on a
+        # clean target dir.
+        #
+        # The route splitting itself earns almost nothing (a 324-byte chunk):
+        # the pages here are small and the CSS does the work. The flag is
+        # load-bearing because of what it does to the wasm-opt pipeline, not
+        # because of the chunking, so do not drop it as "we don't need
+        # splitting" — that silently triples the bundle.
+        dxArgs = "--wasm-split --features wasm-split";
       };
     in
     {

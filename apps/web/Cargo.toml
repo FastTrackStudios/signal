@@ -15,6 +15,9 @@ description = "signal.fasttrackstudio.app — the Signal landing page, rig demos
 # that wants `dioxus-fullstack`, which the vendored dioxus source does not
 # carry.
 dioxus = { workspace = true, features = ["router"] }
+# A direct dep only so `wasm-split` below can turn on its feature; the
+# router itself is used through `dioxus::prelude`.
+dioxus-router = { workspace = true }
 
 # The guide is markdown compiled in by build.rs. Rendering is a plain
 # pulldown-cmark pass rather than the editor crate keyflow-web uses: the
@@ -53,3 +56,8 @@ workspace = true
 [features]
 default = ["web"]
 web = ["dioxus/web", "dioxus/launch"]
+# Bundle-split the wasm along route variants, so the landing page does not
+# ship the guide and the rig pages before anyone asks for them. Requires
+# building with `dx build --wasm-split`; the feature alone changes nothing.
+# Same shape as task's apps/web.
+wasm-split = ["dioxus-router/wasm-split"]
