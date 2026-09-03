@@ -102,15 +102,9 @@ fn all_filters_all_slopes_scan() {
             if !stem.starts_with(&format!("{prefix}_")) {
                 continue;
             }
-            let (fc, gain, q, slope) = match parse_filename(&stem, prefix, *has_gain) {
-                Some(t) => t,
-                None => break,
-            };
+            let Some((fc, gain, q, slope)) = parse_filename(&stem, prefix, *has_gain) else { break };
             let order = slope_to_order(slope);
-            let (freqs, ref_mags) = match load_ref(&path) {
-                Some(t) => t,
-                None => break,
-            };
+            let Some((freqs, ref_mags)) = load_ref(&path) else { break };
             let sos = design_filter(*ftype, fc, q, gain, SR, order);
             if sos.is_empty() {
                 break;

@@ -65,10 +65,10 @@ impl AnalogBiquad {
         let g_om4 = g_om2 * g_om2;
         MagSqCoeffs {
             a: self.b2z * self.b2z,
-            b: (self.b1z * self.b1z - 2.0 * self.b2z * self.b0z) * g_om2,
+            b: self.b1z.mul_add(self.b1z, -(2.0 * self.b2z * self.b0z)) * g_om2,
             c: self.b0z * self.b0z * g_om4,
             d: self.b2p * self.b2p,
-            e: (self.b1p * self.b1p - 2.0 * self.b2p * self.b0p) * g_om2,
+            e: self.b1p.mul_add(self.b1p, -(2.0 * self.b2p * self.b0p)) * g_om2,
             f: self.b0p * self.b0p * g_om4,
         }
     }
@@ -84,6 +84,7 @@ impl AnalogBiquad {
 ///
 /// Returns `(MagSqCoeffs, is_quadratic)`. `is_quadratic` is the binary's
 /// `iVar4 == 2` flag, needed by `solve_biquad_denominator_quadratic_generic`.
+#[must_use]
 pub fn compute_zpk_transfer_coeffs_generic(
     analog: &AnalogBiquad,
     omega: f64,
@@ -92,7 +93,7 @@ pub fn compute_zpk_transfer_coeffs_generic(
     let omega_sq = omega * omega;
     let omega_qd = omega_sq * omega_sq;
 
-    let is_quadratic = (analog.b2z as f32).abs() > EPS_F32 || (analog.b2p as f32).abs() > EPS_F32;
+    let is_quadratic = analog.b2z.abs() > EPS_F32 as f64 || analog.b2p.abs() > EPS_F32 as f64;
 
     let coeffs = if is_quadratic {
         MagSqCoeffs {
@@ -136,6 +137,7 @@ pub struct PoleRoots {
 /// When `det_a == 0` the quadratic degenerates to linear; the binary swaps
 /// `det_a/det_b` and skips the final sqrt of the root (`take_sqrt = false`).
 /// `count` reports how many roots were strictly positive.
+#[must_use]
 pub fn solve_biquad_denominator_quadratic_generic(
     coeffs: &MagSqCoeffs,
     is_quadratic: bool,
@@ -235,6 +237,7 @@ pub fn solve_biquad_denominator_quadratic_generic(
 ///
 /// Returns `max(num/den, 0)` with the den-zero guard the binary uses (the
 /// binary returns 0 when den is sub-normal; we mirror via `> 1e-300`).
+#[must_use]
 pub fn eval_squared_mag_scalar(coeffs: &MagSqCoeffs, w: f64) -> f64 {
     let w2 = w * w;
     let w4 = w2 * w2;
@@ -255,6 +258,7 @@ pub fn eval_squared_mag_scalar(coeffs: &MagSqCoeffs, w: f64) -> f64 {
 /// `docs/reports/proq4/re/lagrange_mzt_universal_decode.md`.
 ///
 /// Tilt/bandpass/notch use `1.0` until probe sweeps confirm otherwise.
+#[must_use]
 pub fn omega_scale_for_band_type(band_filter_type: u8) -> f64 {
     match band_filter_type {
         // 7 = LowShelf, 8 = HighShelf, 9 = TiltShelf — TiltShelf's 0.64
@@ -277,7 +281,7 @@ pub struct Prototype {
     pub wz: f64,
     /// proto[3] @ +0x18 — wt (third sub-frequency, radians).
     pub wt: f64,
-    /// proto[4] @ +0x20 — w_eval (magnitude evaluation point, radians).
+    /// proto[4] @ +0x20 — `w_eval` (magnitude evaluation point, radians).
     pub w_eval: f64,
 
     /// proto[7] @ +0x38 — `iVar5`/dispatch sub-mode (1 = real-root path,
@@ -308,7 +312,7 @@ pub struct Prototype {
 
     /// proto[0xe] @ +0x70, proto[0xf] @ +0x78, proto[0x10] @ +0x80 —
     /// stored-constant slots written by certain branches (notch46 type=2,
-    /// band_shelf v2 swap-branch).
+    /// `band_shelf` v2 swap-branch).
     pub stored_e: f64,
     pub stored_f: f64,
     pub stored_g: f64,
@@ -335,7 +339,7 @@ pub struct Prototype {
     pub q_scratch_50: f64,
 
     /// proto[0x12] @ +0x90 area (int) — section variant sign indicator
-    /// (`-1`, `0`, `+1`); steers the w_eval branch in bandshelf v2.
+    /// (`-1`, `0`, `+1`); steers the `w_eval` branch in bandshelf v2.
     pub proto_0x12_sign: i32,
 
     /// Byte flag at +0x68 (read as `*(char *)(proto + 0xd)` in Pro-Q) —
@@ -525,10 +529,10 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
 ///
 /// **Pending branch:**
 /// - `mode == 2, section_type != 6, wp < 2.9845…` — smooth-blend on
-///   `w_eval` and update of `proto[0xe..0x10]` (stored_e/f/g). Decompilation
+///   `w_eval` and update of `proto[0xe..0x10]` (`stored_e/f/g`). Decompilation
 ///   has an unbound `dVar6` reference in the line
 ///   `dVar5 = proto[0xe] - fVar7·0.15·dVar6` — needs probe captures to
-///   confirm whether `dVar6` is `proto[0xa0]` (band_omega_ref) or `proto[1]`
+///   confirm whether `dVar6` is `proto[0xa0]` (`band_omega_ref`) or `proto[1]`
 ///   (current wp). Stubbed with `unimplemented!`.
 pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
     // Composite scratch (binary keeps everything in f32 SS instructions
@@ -675,6 +679,7 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
 /// Returns `true` (in-band) when the magnitude term is strictly less than
 /// the distance term — i.e., the magnitude is below threshold for the
 /// frequency's distance to nearest band edge.
+#[must_use]
 pub fn check_frequency_within_band_limits(
     proto: &Prototype,
     freq: f64,
@@ -760,7 +765,7 @@ pub fn update_tracked_band_frequencies(proto: &mut Prototype, abs_threshold: f64
 /// 2026-05-09). Faithful port of all branches.
 ///
 /// Pipeline:
-/// 1. Initialize stored_e/f/g to π.
+/// 1. Initialize `stored_e/f/g` to π.
 /// 2. Compute `local_res8 = max(sqrt(wp/wz), 0.1)` if `proto[0x11] == 2`,
 ///    else later overwritten by α.
 /// 3. Call `update_tracked_band_frequencies`.
@@ -768,9 +773,9 @@ pub fn update_tracked_band_frequencies(proto: &mut Prototype, abs_threshold: f64
 /// 5. Mode==2: smooth-blend wz against threshold; possibly snap mode→1.
 /// 6. Branch on (proto+0x69 flag, proto[0xd] flag) for special path or
 ///    main computation.
-/// 7. Compute α = clamp(pow(0.5, q_scratch_50·0.5), 0.1, 0.99).
+/// 7. Compute α = clamp(pow(0.5, `q_scratch_50·0.5`), 0.1, 0.99).
 /// 8. Main dispatch on (mode, proto[0x12], proto[0x11]) producing wp/wz/wt.
-/// 9. Final w_eval = clamp(pow(wp/π, local_res8·3.3) · π/5 + 4π/5, 0, π).
+/// 9. Final `w_eval` = clamp(pow(wp/π, `local_res8·3.3`) · π/5 + 4π/5, 0, π).
 pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
     const CONST_0_1: f64 = 0.1;
     const CONST_0_25: f64 = 0.25;
@@ -1273,7 +1278,7 @@ pub fn compute_band_shelf_parameters(proto: &mut Prototype) {
     label_d7f9(proto, fv11, fv12_f32);
 }
 
-/// LAB_18010d7f9 fall-through block from `compute_band_shelf_parameters`.
+/// `LAB_18010d7f9` fall-through block from `compute_band_shelf_parameters`.
 fn label_d7f9(proto: &mut Prototype, fv11: f64, fv12_f32: f32) {
     const ZERO_NINE_THREE_PI: f64 = 2.921_681_167_838_508; // 0.93π
     const ZERO_EIGHT_THREE_PI: f64 = 2.607_521_902_479_528; // ≈ 0.83π
@@ -1379,6 +1384,11 @@ fn label_d7f9(proto: &mut Prototype, fv11: f64, fv12_f32: f32) {
 /// Returns `Err(SectionType)` for inline/fallback section types not handled
 /// by a dedicated helper — caller is expected to apply the inline default
 /// (typically `wz = wp·0.05`, `wt = wp·0.5`).
+///
+/// # Errors
+///
+/// Returns `Err(section_type)` when `proto.section_type` does not match
+/// a handled type (0, 1, 2, 3, 4, 5, 6, 7, 8, or 10).
 pub fn dispatch_section_helper(proto: &mut Prototype) -> Result<(), i32> {
     match proto.section_type {
         0 | 3 => {
@@ -1536,8 +1546,8 @@ mod tests {
         }
     }
 
-    /// peak3 type=0, mode=0 (or anything ≠ 1): wt = 0.5·band_omega_ref;
-    /// wp = band_omega_ref; wz = wt/2.
+    /// peak3 type=0, mode=0 (or anything ≠ 1): wt = `0.5·band_omega_ref`;
+    /// wp = `band_omega_ref`; wz = wt/2.
     #[test]
     fn peak_type3_section_type0_mode_default() {
         let mut p = fresh_proto();
@@ -1551,7 +1561,7 @@ mod tests {
         assert_eq!(p.wz, 0.1);
     }
 
-    /// peak3 type=0, mode=1, wp ≤ half_ref: still uses half_ref for wt.
+    /// peak3 type=0, mode=1, wp ≤ `half_ref`: still uses `half_ref` for wt.
     #[test]
     fn peak_type3_section_type0_mode1_low_wp() {
         let mut p = fresh_proto();
@@ -1565,7 +1575,7 @@ mod tests {
         assert_eq!(p.wz, 0.25);
     }
 
-    /// peak3 type=0, mode=1, wp > half_ref: wt latches onto wp before the
+    /// peak3 type=0, mode=1, wp > `half_ref`: wt latches onto wp before the
     /// wp-overwrite. This is the only branch where the original wp survives
     /// (as wt and as wz/2).
     #[test]
@@ -1581,11 +1591,11 @@ mod tests {
         assert_eq!(p.wz, 0.4);
     }
 
-    /// peak3 type=3 with mode=0 (skips w_eval update) and benign alpha_94=0:
-    /// fv2 = -2.0 → dvar_alpha = max(sqrt(1.0), 0.5) = 1.0
+    /// peak3 type=3 with mode=0 (skips `w_eval` update) and benign `alpha_94=0`:
+    /// fv2 = -2.0 → `dvar_alpha` = max(sqrt(1.0), 0.5) = 1.0
     /// fv11 = clamp(1.0, 0, 1.0) = 1.0
-    /// wp_new = band_omega_ref / ((1.0 - 1)·1.0 + 1) = band_omega_ref
-    /// wp_final = min(band_omega_ref, π - clamp(…), 0.3π·1 + 0.7π) = min(band_omega_ref, π)
+    /// `wp_new` = `band_omega_ref` / ((1.0 - 1)·1.0 + 1) = `band_omega_ref`
+    /// `wp_final` = `min(band_omega_ref`, π - clamp(…), 0.3π·1 + 0.7π) = `min(band_omega_ref`, π)
     /// dvar10 = 0.20 (fv2 = -2 < 6)
     /// wt = wp · 0.20, wz = wp · 0.001
     #[test]
@@ -1609,12 +1619,12 @@ mod tests {
         assert_eq!(p.alpha_scratch_94, -2.0);
     }
 
-    /// peak3 type=3 with mode=0 and alpha_94=1.0 (positive, so fv2 = 4·1 - 2 = 2 ≥ 0):
-    /// dvar_alpha = 0.5 (no sqrt taken)
+    /// peak3 type=3 with mode=0 and `alpha_94=1.0` (positive, so fv2 = 4·1 - 2 = 2 ≥ 0):
+    /// `dvar_alpha` = 0.5 (no sqrt taken)
     /// fv3 = 2 · -0.5 = -1, fv11 = clamp(-1, 0, 1) = 0
-    /// wp_new = ω / ((0.5-1)·0 + 1) = ω
-    /// dvar6_ceiling = 0·0.3π + 0.7π = 0.7π ≈ 2.199
-    /// wp_final = min(ω, π, 0.7π)
+    /// `wp_new` = ω / ((0.5-1)·0 + 1) = ω
+    /// `dvar6_ceiling` = 0·0.3π + 0.7π = 0.7π ≈ 2.199
+    /// `wp_final` = min(ω, π, 0.7π)
     #[test]
     fn peak_type3_section_type3_alpha_one_clamps_to_07pi() {
         let mut p = fresh_proto();
@@ -1630,8 +1640,8 @@ mod tests {
         assert_eq!(p.alpha_scratch_94, 2.0);
     }
 
-    /// peak3 type=3, mode=1: w_eval IS updated. With wp=1.0 the f32 lane
-    /// math should produce a finite, in-range w_eval ∈ [wp_clamped, π].
+    /// peak3 type=3, mode=1: `w_eval` IS updated. With wp=1.0 the f32 lane
+    /// math should produce a finite, in-range `w_eval` ∈ [`wp_clamped`, π].
     #[test]
     fn peak_type3_section_type3_mode1_w_eval_updated() {
         let mut p = fresh_proto();
@@ -1647,7 +1657,7 @@ mod tests {
         assert!(p.wp.is_finite() && p.wt.is_finite() && p.wz.is_finite());
     }
 
-    /// peak3 type=3 with fv2 ≥ 6 path (alpha_94 large): dvar10 shrinks
+    /// peak3 type=3 with fv2 ≥ 6 path (`alpha_94` large): dvar10 shrinks
     /// from 0.20 toward 0.02 (at fv2=20, dvar10 = 0.20 - 14·9/700 = 0.02).
     #[test]
     fn peak_type3_section_type3_large_alpha_shrinks_wt() {
@@ -1664,7 +1674,7 @@ mod tests {
         assert!((p.wt - wp * 0.20).abs() < 1e-12);
     }
 
-    /// bandshelf v2 mode==0, sign=+1: w_eval picks the upper branch
+    /// bandshelf v2 mode==0, sign=+1: `w_eval` picks the upper branch
     /// (wp·1.5, clamped to [0.9π, 0.99π]).
     #[test]
     fn bandshelf_v2_w_eval_positive_sign() {
@@ -1693,7 +1703,7 @@ mod tests {
     }
 
     /// bandshelf v2 swap branch: mode==2, sign==+1, wz<=π → swaps wp/wz,
-    /// clamps the (now-swapped) wp to 9π/10, scales stored_e through 0.999².
+    /// clamps the (now-swapped) wp to 9π/10, scales `stored_e` through 0.999².
     /// To trigger swap, ORIGINAL wz must be ≤ π. To trigger the wp clamp
     /// after swap, original wz must additionally be > 9π/10.
     #[test]
@@ -1733,7 +1743,7 @@ mod tests {
     }
 
     /// bandshelf v2 wt formula: (0.999 - (1-fv8)²·0.5) · wp.
-    /// q_scratch_50 = 1.0 → fv8 = 1.0 → bracket = 0.999.
+    /// `q_scratch_50` = 1.0 → fv8 = 1.0 → bracket = 0.999.
     #[test]
     fn bandshelf_v2_wt_at_full_fv8() {
         let mut p = fresh_proto();
@@ -1747,7 +1757,7 @@ mod tests {
         assert!((p.wt - 0.999).abs() < 1e-12);
     }
 
-    /// bandshelf v2 delegation: mode==1 AND flag_byte_69==0 → calls shelf7
+    /// bandshelf v2 delegation: mode==1 AND `flag_byte_69==0` → calls shelf7
     /// (now ported), which produces finite outputs.
     #[test]
     fn bandshelf_v2_delegates_to_shelf7() {
@@ -1763,7 +1773,7 @@ mod tests {
     }
 
     /// shelf7 mode==0 happy path with a positive sign — produces finite,
-    /// in-range wp/wz/wt and w_eval ∈ [0, π].
+    /// in-range wp/wz/wt and `w_eval` ∈ [0, π].
     #[test]
     fn shelf7_mode0_positive_sign_smoke() {
         let mut p = fresh_proto();
@@ -1792,7 +1802,7 @@ mod tests {
         assert!((p.wp - 0.9 * PI).abs() < 1e-12);
     }
 
-    /// shelf7 special-flag path (flag_69 != 0): uses simplified clamp branch.
+    /// shelf7 special-flag path (`flag_69` != 0): uses simplified clamp branch.
     #[test]
     fn shelf7_special_flag_path() {
         let mut p = fresh_proto();
@@ -1825,7 +1835,7 @@ mod tests {
         assert!(!inside);
     }
 
-    /// `check_frequency_within_band_limits`: abs_threshold == 0 → always true
+    /// `check_frequency_within_band_limits`: `abs_threshold` == 0 → always true
     /// (when within upper).
     #[test]
     fn check_band_limits_zero_threshold_always_in() {
@@ -1884,8 +1894,8 @@ mod tests {
         assert!((p.prev_wp - 1.0).abs() < 1e-12);
     }
 
-    /// bandshelf 10 mode==0: snaps wp = band_omega_ref, then falls into
-    /// LAB_18010d7f9 mode<1 (pow + dot-magnitude path).
+    /// bandshelf 10 mode==0: snaps wp = `band_omega_ref`, then falls into
+    /// `LAB_18010d7f9` mode<1 (pow + dot-magnitude path).
     #[test]
     fn bandshelf10_mode0_snap_and_fallthrough() {
         let mut p = fresh_proto();
@@ -1909,7 +1919,7 @@ mod tests {
         assert!(p.wp.is_finite() && p.wz.is_finite() && p.wt.is_finite());
     }
 
-    /// bandshelf 10 mode==1, no analog → mp_wp=0 → use_wp=wp; reaches the
+    /// bandshelf 10 mode==1, no analog → `mp_wp=0` → `use_wp=wp`; reaches the
     /// iv3==1 sub-branch with finite outputs.
     #[test]
     fn bandshelf10_mode1_no_analog() {
@@ -1927,8 +1937,8 @@ mod tests {
         assert!((p.wp - 1.0).abs() < 1e-12);
     }
 
-    /// bandshelf 10 mode==1 with use_wp < π/100 triggers the !bvar1 override
-    /// (wz = 2·use_wp).
+    /// bandshelf 10 mode==1 with `use_wp` < π/100 triggers the !bvar1 override
+    /// (wz = `2·use_wp`).
     #[test]
     fn bandshelf10_mode1_low_wp_doubles_wz() {
         let mut p = fresh_proto();
@@ -1974,7 +1984,7 @@ mod tests {
         (1.0 - fv8 as f64, 1.0 - fv8_005)
     }
 
-    /// notch46 mode≠2, type=4: wp = 0.5·band_omega_ref; wz/wt scaled by
+    /// notch46 mode≠2, type=4: wp = `0.5·band_omega_ref`; wz/wt scaled by
     /// the f32 fv8 factors derived from alpha scratch slots.
     #[test]
     fn notch46_mode_static_type4() {
@@ -1991,7 +2001,7 @@ mod tests {
         assert_eq!(p.wt, one_minus_005 * 0.3);
     }
 
-    /// notch46 mode≠2, type=6, band_omega_ref < 0.6π: no clamp, fixed splits.
+    /// notch46 mode≠2, type=6, `band_omega_ref` < 0.6π: no clamp, fixed splits.
     #[test]
     fn notch46_mode_static_type6_unclamped() {
         let mut p = fresh_proto();
@@ -2004,7 +2014,7 @@ mod tests {
         assert_eq!(p.wt, 0.5);
     }
 
-    /// notch46 mode≠2, type=6, band_omega_ref > 0.6π: wp clamps to 0.6π.
+    /// notch46 mode≠2, type=6, `band_omega_ref` > 0.6π: wp clamps to 0.6π.
     #[test]
     fn notch46_mode_static_type6_clamped() {
         let mut p = fresh_proto();
@@ -2053,7 +2063,7 @@ mod tests {
     }
 
     /// notch46 mode==2, type=4, wp < 0.95π: smooth-blend branch.
-    /// Verifies the w_eval, stored_e/f/g, and wt updates match the
+    /// Verifies the `w_eval`, `stored_e/f/g`, and wt updates match the
     /// decompiled formula (gap resolved 2026-05-09).
     #[test]
     fn notch46_mode2_type4_smooth_blend() {
@@ -2110,7 +2120,7 @@ mod tests {
         assert!((p.wt - 0.4975).abs() < 1e-7);
     }
 
-    /// Dispatcher routes section_type=0 through peak_type3.
+    /// Dispatcher routes `section_type=0` through `peak_type3`.
     #[test]
     fn dispatch_routes_type0_to_peak3() {
         let mut p = fresh_proto();
@@ -2207,7 +2217,7 @@ mod tests {
         assert_eq!(omega_scale_for_band_type(11), 1.0);
     }
 
-    /// End-to-end synth with a unity gain prototype + section_type=0 helper.
+    /// End-to-end synth with a unity gain prototype + `section_type=0` helper.
     /// Output coeffs should be a valid biquad (a0 == 1.0, finite).
     #[test]
     fn universal_synth_smoke_type0() {
@@ -2226,12 +2236,12 @@ mod tests {
             proq4_universal_section_synth(&mut p, &analog, 1000.0, 48000.0, 1.0);
         assert!(fallback.is_none());
         assert_eq!(coeffs[0], 1.0); // a0
-        for c in coeffs.iter() {
+        for c in &coeffs {
             assert!(c.is_finite(), "coeff {c} must be finite");
         }
     }
 
-    /// End-to-end synth with section_type=9 (inline fallback): returns
+    /// End-to-end synth with `section_type=9` (inline fallback): returns
     /// `Some(9)` and applies inline defaults.
     #[test]
     fn universal_synth_inline_fallback() {

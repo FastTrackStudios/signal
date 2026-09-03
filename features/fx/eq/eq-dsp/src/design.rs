@@ -48,7 +48,7 @@ use tilt::mzt_tilt_shelf_cascade;
 /// Type 6 (Flat Tilt) identified from binary: `apply_eq_band_parameters_full` uses
 /// `cos(Q) * pow(const, cos(Q)*scale + offset)` frequency mapping for type 6,
 /// and `apply_shelf_gain_to_zpk` squares the gain for type 6.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterType {
     Peak,            // type 0 — own ZPK via compute_cascade_coefficients
     Highpass,        // type 1 — Butterworth direct
@@ -79,6 +79,7 @@ pub enum FilterType {
 ///   - `order`: filter order (2, 4, 6, 8, ... -- number of poles)
 ///
 /// Returns a vector of biquad coefficient arrays, one per section.
+#[must_use]
 pub fn design_filter(
     filter_type: FilterType,
     freq_hz: f64,
@@ -145,11 +146,12 @@ pub fn design_filter(
 /// Low shelf cascade — Pro-Q 4 Butterworth cascade with per-pole gain g = gain^(1/(2N)).
 ///
 /// Analog prototype (per `docs/reports/proq4/re/shelf_cascade_higher_slopes.md`):
-///   - Butterworth angles θ_i = π(2i+1)/(2N)
+///   - Butterworth angles `θ_i` = π(2i+1)/(2N)
 ///   - Poles at `(-sin θ_i, ±cos θ_i) · wa / g`       (scaled INWARD in frequency)
 ///   - Zeros at `(-sin θ_i, ±cos θ_i) · wa · g`       (scaled OUTWARD in frequency)
 ///   - wa = 2·fs·tan(π·fc/fs) (pre-warped corner)
-/// Each 2nd-order analog section is bilinear-transformed to a digital biquad.
+///
+///   Each 2nd-order analog section is bilinear-transformed to a digital biquad.
 fn mzt_low_shelf_cascade(
     n: usize,
     freq_hz: f64,
@@ -200,7 +202,7 @@ fn mzt_high_shelf_cascade(
 
 /// Apply Gain-Q interaction to a peak filter.
 ///
-/// From Pro-Q 4 binary (compute_peak_band_parameters at 0x18010de30):
+/// From Pro-Q 4 binary (`compute_peak_band_parameters` at 0x18010de30):
 /// The gain-Q interaction coefficient at offset 0x8c modifies Q:
 ///   `Q_effective = gain_q_coeff² * scaling_constant + base_Q`
 ///
@@ -208,6 +210,7 @@ fn mzt_high_shelf_cascade(
 /// The interaction amount (0.0-1.0) controls how much gain affects Q.
 ///
 /// Only applies to Bell (Peak) filter type.
+#[must_use]
 pub fn apply_gain_q_interaction(q: f64, gain_db: f64, interaction: f64) -> f64 {
     if interaction.abs() < 0.001 {
         return q;
@@ -229,13 +232,14 @@ pub fn apply_gain_q_interaction(q: f64, gain_db: f64, interaction: f64) -> f64 {
 
 /// Compute auto-gain compensation for current EQ settings.
 ///
-/// From Pro-Q 4 binary: "AutoGain" parameter at 0x18022ccf8.
+/// From Pro-Q 4 binary: "`AutoGain`" parameter at 0x18022ccf8.
 /// Manual states: "Pro-Q automatically compensates for increase or loss of gain
-/// after EQing. The applied make-up gain is an educated guess based on the
+/// after `EQing`. The applied make-up gain is an educated guess based on the
 /// current EQ settings, and is not a dynamic process."
 ///
 /// Implementation: evaluate the combined EQ response at key frequency points
 /// and compute the RMS level change, then invert it.
+#[must_use]
 pub fn compute_auto_gain(band_sections: &[Vec<Coeffs>], sample_rate: f64) -> f64 {
     use crate::zpk::Complex;
 

@@ -90,6 +90,7 @@ impl Default for TransformedParams {
 ///
 /// # Returns
 /// Transformed parameters ready for filter design stage
+#[must_use]
 pub fn transform_parameters(
     filter_type: u32,
     user_q: f64,
@@ -179,8 +180,8 @@ fn transform_types_3_to_6(
     mode_param: f64,
 ) -> TransformedParams {
     // Compute Q² adjustment
-    let q_sq_adj = sq_component * sq_component * 0.25 + mode_param;
-    let q_sq_adj_clamped = q_sq_adj.max(Q_SQ_EPSILON).min(0.65); // Reasonable bounds
+    let q_sq_adj = (sq_component * sq_component).mul_add(0.25, mode_param);
+    let q_sq_adj_clamped = q_sq_adj.clamp(Q_SQ_EPSILON, 0.65); // Reasonable bounds
 
     // Type 6 special handling
     if filter_type == 6 {
@@ -275,7 +276,7 @@ fn transform_type_10_band_shelf(
         let processed_q = if mode == 1 {
             // Mode 1: SQ-based adjustment
             let sq_sq = sq_component * sq_component;
-            let adjusted = (Q_CONSTRAINT_HIGH - sq_sq * SQ_SCALE_0_0005) * user_q;
+            let adjusted = sq_sq.mul_add(-SQ_SCALE_0_0005, Q_CONSTRAINT_HIGH) * user_q;
             adjusted.min(PI_BOUND)
         } else if mode == 0 && param_state == 1 {
             // Mode 0, special param: power operation

@@ -39,21 +39,25 @@ impl Complex {
 
     #[must_use]
     pub fn mag_sq(self) -> f64 {
-        self.re * self.re + self.im * self.im
+        self.re.mul_add(self.re, self.im * self.im)
     }
 
+    #[must_use]
     pub fn mag(self) -> f64 {
         self.mag_sq().sqrt()
     }
 
+    #[must_use]
     pub fn arg(self) -> f64 {
         self.im.atan2(self.re)
     }
 
+    #[must_use]
     pub fn is_real(self) -> bool {
         self.im.abs() < 1e-15
     }
 
+    #[must_use]
     pub fn inv(self) -> Self {
         let d = self.mag_sq();
         Self {
@@ -62,6 +66,7 @@ impl Complex {
         }
     }
 
+    #[must_use]
     pub fn sqrt(self) -> Self {
         let r = self.mag();
         let theta = self.arg();
@@ -176,15 +181,18 @@ pub struct Zpk {
 }
 
 impl Zpk {
+    #[must_use]
     pub fn new(zeros: Vec<Complex>, poles: Vec<Complex>, gain: f64) -> Self {
         Self { zeros, poles, gain }
     }
 
+    #[must_use]
     pub fn num_sos(&self) -> usize {
         let n = self.poles.len().max(self.zeros.len());
         n.div_ceil(2)
     }
 
+    #[must_use]
     pub fn eval(&self, s: Complex) -> Complex {
         let mut num = Complex::new(self.gain, 0.0);
         for &z in &self.zeros {
@@ -197,17 +205,20 @@ impl Zpk {
         num / den
     }
 
+    #[must_use]
     pub fn eval_z(&self, w: f64) -> Complex {
         let ejw = Complex::from_polar(1.0, w);
         self.eval(ejw)
     }
 
+    #[must_use]
     pub fn mag_db(&self, w: f64) -> f64 {
         20.0 * self.eval_z(w).mag().log10()
     }
 }
 
 /// Pair complex conjugate poles/zeros for second-order sections.
+#[must_use]
 pub fn pair_conjugates(zpk: &Zpk) -> Vec<(Vec<Complex>, Vec<Complex>, f64)> {
     let mut poles = zpk.poles.clone();
     let mut zeros = zpk.zeros.clone();

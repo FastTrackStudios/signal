@@ -20,7 +20,7 @@
 //!
 //! This formulation matches Pro-Q 4's `compute_biquad_coefficients_from_poles` Mode 0
 //! formula exactly with substitutions:
-//!   `p_2` = 1, `p_3` = 1, `p_4` = x_0, `sp_5` = √x_0 / (A·Q), `sp_6` = √x_0 · A / Q.
+//!   `p_2` = 1, `p_3` = 1, `p_4` = `x_0`, `sp_5` = √`x_0` / (A·Q), `sp_6` = √`x_0` · A / Q.
 
 mod bandpass;
 mod cut;
@@ -44,12 +44,13 @@ use std::f64::consts::PI;
 ///
 /// Parameters:
 /// - `w0_d`: digital corner angular frequency (radians/sample)
-/// - `num_alpha`: analog numerator α_n such that (s² + 2·α_n·s + c_n)/... at normalized w=1
-/// - `den_alpha`: analog denominator α_d
+/// - `num_alpha`: analog numerator `α_n` such that (s² + `2·α_n·s` + `c_n`)/... at normalized w=1
+/// - `den_alpha`: analog denominator `α_d`
 /// - `num_const`: analog numerator constant term (e.g. A² for peak gain A)
 /// - `den_const`: analog denominator constant term (1 for peak)
 ///
 /// For Pro-Q 4 peak: `num_alpha = A/(2Q)`, `den_alpha = 1/(2·A·Q)`, both constants = 1.
+#[must_use]
 pub fn mzt_biquad(
     w0_d: f64,
     num_alpha: f64,
@@ -116,10 +117,10 @@ pub(crate) fn mzt_quadratic(w0: f64, alpha: f64) -> (f64, f64) {
 /// LP slope=8 per-section closed-form biquad.
 ///
 /// **Decoded 2026-05-01** (corrected) from `compute_audio_biquad_lagrange_mzt`
-/// captures via `PROBE_HOOK_AUDIO_BIQUAD=1` at filter_type=4 (= Pro-Q UI
+/// captures via `PROBE_HOOK_AUDIO_BIQUAD=1` at `filter_type=4` (= Pro-Q UI
 /// "High Cut" = LP). Earlier traces at `filter_type=2` were misread — that ID
-/// is "Low Cut" = HP, so the prior LAG_OUT data was actually HP s=8 (already
-/// solved). With the correct filter_type, AUDIO_BIQUAD == LAG_OUT bit-exactly,
+/// is "Low Cut" = HP, so the prior `LAG_OUT` data was actually HP s=8 (already
+/// solved). With the correct `filter_type`, `AUDIO_BIQUAD` == `LAG_OUT` bit-exactly,
 /// confirming both paths share `compute_audio_biquad_lagrange_mzt`.
 ///
 /// Decoded prototype struct (`LAG_PROTO_DETAIL`) — **updated 2026-05-01**
@@ -129,7 +130,7 @@ pub(crate) fn mzt_quadratic(w0: f64, alpha: f64) -> (f64, f64) {
 /// - analog denominator: `b2p = 1, b1p = 1, b0p = 1` (LITERAL — generic
 ///   `s²+s+1`); the per-section Butterworth damping is carried in a
 ///   separate `w_section_field` slot.
-/// - `w_section_field = 2·cos(θ_k)/Q_eff` where θ_k = (2k+1)π/24,
+/// - `w_section_field = 2·cos(θ_k)/Q_eff` where `θ_k` = (2k+1)π/24,
 ///
 /// Closed-form decode of `compute_zpk_transfer_function_coefficients @ 0x1800fd420`
 /// (281 bytes, Pro-Q 4 binary).
@@ -154,11 +155,12 @@ pub(crate) fn mzt_quadratic(w0: f64, alpha: f64) -> (f64, f64) {
 ///
 /// Inputs: analog prototype `(b2z, b1z, b0z, b2p, b1p, b0p)` and frequency scale
 /// `g` (= post-clamp ω₀). The b1p input MUST be the per-section
-/// `w_section_field` value (= 2·cos(θ_k)/Q_eff for cascaded LP/HP sections,
+/// `w_section_field` value (= `2·cos(θ_k)/Q_eff` for cascaded LP/HP sections,
 /// = √2/Q for slope=2 single-section) — NOT the literal `b1p=1` from the
-/// LAG_PROTO template, which the binary overwrites at slot `+0x80` before
+/// `LAG_PROTO` template, which the binary overwrites at slot `+0x80` before
 /// calling this function.
 #[inline]
+#[must_use]
 #[expect(non_snake_case, reason = "parameter names match Pro-Q 4 analog prototype")]
 pub fn zpk_section_to_AF(
     b2z: f64,
@@ -197,8 +199,9 @@ pub fn zpk_section_to_AF(
 
 /// Sibling kernel that takes pre-computed `(A..F)` (e.g. from
 /// [`zpk_section_to_AF`]) and feeds them through the
-/// `compute_audio_biquad_lagrange_mzt` synth, branching in AFTER the
-/// `compute_zpk_transfer_function_coefficients` step.
+/// `compute_audio_biquad_lagrange_mzt` synth.
+///
+/// Branches in AFTER the `compute_zpk_transfer_function_coefficients` step.
 ///
 /// The existing [`crate::cascade::proq4_s2_from_prototype_with_subfreq_pub`]
 /// kernel takes `(b2z..b0p)` and computes `(A..F)` internally. This sibling
@@ -213,6 +216,7 @@ pub fn zpk_section_to_AF(
 /// `compute_zpk_transfer_function_coefficients_decoded.md` for the full
 /// analysis.
 #[expect(non_snake_case, reason = "parameter names (A, B, C, D, E, F) match the zpk transfer-function coefficients")]
+#[must_use]
 pub fn proq4_s2_from_AF_with_subfreq(
     freq_hz: f64,
     sample_rate: f64,
@@ -397,7 +401,7 @@ mod tests {
     }
 
     /// HP s=8 self-test against captured biquad coefficients from the
-    /// hp_s8_override_probe_*.csv ground-truth set. Picks 4 (fc, Q) points
+    /// `hp_s8_override_probe`_*.csv ground-truth set. Picks 4 (fc, Q) points
     /// covering the conformance grid (passing + failing baseline cells).
     #[test]
     fn hp_s8_section_biquad_matches_captures() {
@@ -497,9 +501,9 @@ mod tests {
         }
     }
 
-    /// LP s=8 self-test: closed-form section biquad matches AUDIO_BIQUAD
-    /// captures (== LAG_OUT for LP) from PROBE_HOOK_AUDIO_BIQUAD at
-    /// filter_type=4 (Pro-Q UI "High Cut" = LP). The probe was run via
+    /// LP s=8 self-test: closed-form section biquad matches `AUDIO_BIQUAD`
+    /// captures (== `LAG_OUT` for LP) from `PROBE_HOOK_AUDIO_BIQUAD` at
+    /// `filter_type=4` (Pro-Q UI "High Cut" = LP). The probe was run via
     /// Wine on 2026-05-01 at fc=10000 Q=1 — sections 0..5 match bit-exactly.
     /// At higher fc (14k+) sections 4-5 enter the real-pole regime where
     /// the binary's Lagrange synth uses a different kernel; those cells
@@ -569,15 +573,10 @@ mod tests {
                 sec, pred, cap[sec]
             );
         }
-        eprintln!(
-            "LP fc=10k Q=1 max_err={:.3e} worst_sec={}",
-            max_err, worst_sec
-        );
+        eprintln!("LP fc=10k Q=1 max_err={max_err:.3e} worst_sec={worst_sec}");
         assert!(
             max_err < 1e-5,
-            "LP s=8 max coeff err {:.3e} >= 1e-5 at sec {}",
-            max_err,
-            worst_sec
+            "LP s=8 max coeff err {max_err:.3e} >= 1e-5 at sec {worst_sec}"
         );
     }
 }

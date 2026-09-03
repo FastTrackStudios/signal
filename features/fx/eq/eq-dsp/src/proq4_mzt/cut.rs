@@ -93,6 +93,7 @@ pub fn design_highpass(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
 /// sp6 = 1.04193 · (p4 + p3)
 ///
 /// Accuracy: <0.01% error at fc≤500 Hz for Q≥1.
+#[must_use]
 pub fn design_lowpass_mzt(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     let q = q.max(1e-6);
     let w0 = 2.0 * PI * freq_hz / sample_rate;
@@ -108,8 +109,9 @@ pub fn design_lowpass_mzt(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     let sp5 = std::f64::consts::SQRT_2 * t / q;
     biquad_from_mode0_params(p2, p3, p4, sp5, sp6)
 }
-/// Highpass via MZT — from notch_bandpass_lp_hp_mzt.md.
+/// Highpass via MZT — from `notch_bandpass_lp_hp_mzt.md`.
 /// Exact (~10 ppm): p2=0, p3=1, sp6=0.
+#[must_use]
 pub fn design_highpass_mzt(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     let q = q.max(1e-6);
     let w0 = 2.0 * PI * freq_hz / sample_rate;
@@ -126,27 +128,28 @@ pub fn design_highpass_mzt(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
 /// - `docs/reports/proq4/re/lagrange_runtime_decoded.md` (mode-0 closed form)
 ///
 /// Pipeline per section k ∈ 0..6:
-/// 1. θ_k = π·(2k+1)/24 → pole_re_k = -cos(θ_k) (Butterworth N=12 poles).
-/// 2. Sec 0 only: Q-loaded — pole_re_k /= q_eff, q_eff = min(q_user, 7.383).
-/// 3. Analog poly A=1, B=0, C=0, D=1, b1p=2|pole_re_k|, b0p=1; helper rescales by ω₀.
-/// 4. Sub-frequencies (sec 0..2): solver_wp = ω_base · M_k where
-///    M_k = [1.01749, 1.18923, 1.96544]. Apply 0.7π Nyquist guard.
-/// 5. w_zero = 0.001·w_pole, w_third = 0.2·w_pole.
-/// 6. Sec 0..2 w_eval: ((0.4421·w_pole − 5/12)² · 0.2 + 0.785) · π (f32 cast),
-///    then max with min(w_pole, π), capped at π.
-/// 7. Sec 3..5: w_eval = π directly (formula skipped, root_count=0 in solver).
-/// 8. Feed (b2z,b1z,b0z,b2p,b1p,b0p,w_pole,w_zero,w_third,w_eval) into the
+/// 1. `θ_k` = π·(2k+1)/24 → `pole_re_k` = -`cos(θ_k)` (Butterworth N=12 poles).
+/// 2. Sec 0 only: Q-loaded — `pole_re_k` /= `q_eff`, `q_eff` = `min(q_user, 7.383)`.
+/// 3. Analog poly A=1, B=0, C=0, D=1, `b1p=2|pole_re_k|`, b0p=1; helper rescales by ω₀.
+/// 4. Sub-frequencies (sec 0..2): `solver_wp` = `ω_base` · `M_k` where
+///    `M_k` = [1.01749, 1.18923, 1.96544]. Apply 0.7π Nyquist guard.
+/// 5. `w_zero` = `0.001·w_pole`, `w_third` = `0.2·w_pole`.
+/// 6. Sec 0..2 `w_eval`: ((`0.4421·w_pole` − 5/12)² · 0.2 + 0.785) · π (f32 cast),
+///    then max with `min(w_pole, π)`, capped at π.
+/// 7. Sec 3..5: `w_eval` = π directly (formula skipped, `root_count=0` in solver).
+/// 8. Feed (`b2z,b1z,b0z,b2p,b1p,b0p,w_pole,w_zero,w_third,w_eval`) into the
 ///    Lagrange-MZT 3-point synth + mode-0 ASM closed form.
 ///
 /// **Status (2026-05-01)**: Closed-form path implemented but conformance
 /// regresses 60/108 → 12/108 vs. existing `cascade::highpass_s2_proq4`-per-
 /// section path. Only Q≈1 / low-fc rows pass; Q∈{0.5,4,10} all fail. The
 /// regression suggests one or more of (a) Q-loading on sec 0 needs to flow
-/// into sub-frequencies (current code keeps M_k Q-invariant), (b) sec 3..5
+/// into sub-frequencies (current code keeps `M_k` Q-invariant), (b) sec 3..5
 /// pole-pair pre-warp needs δ²-driven `ω₀/((k−1)t+1)` rewrite (currently
 /// just 0.7π Nyquist clamp), (c) Q≠1 flips the writer branch from
-/// peak_type3 to a sibling routine. Kept as `#[allow(dead_code)]`
+/// `peak_type3` to a sibling routine. Kept as `#[allow(dead_code)]`
 /// reference for next iteration.
+#[must_use]
 pub fn hp_slope8_section_biquad(
     sec_idx: usize,
     freq_hz: f64,
@@ -252,8 +255,8 @@ pub fn hp_slope8_section_biquad(
         w_eval,
     )
 }
-/// Sec 0 w_pole / ω_base multiplier. Q-dependent table interpolated in log10(Q).
-/// fc-invariant for fc < 14 kHz (per hp_s8_alpha_scratch_qdep.md).
+/// Sec 0 `w_pole` / `ω_base` multiplier. Q-dependent table interpolated in log10(Q).
+/// fc-invariant for fc < 14 kHz (per `hp_s8_alpha_scratch_qdep.md`).
 fn hp_s8_sec0_q_multiplier(q_user: f64) -> f64 {
     // Table from hp_s8_alpha_scratch_qdep.md (corrected, post-rewrite AF probe).
     const TABLE: [(f64, f64); 5] = [
@@ -283,12 +286,12 @@ fn hp_s8_sec0_q_multiplier(q_user: f64) -> f64 {
     }
     TABLE[TABLE.len() - 1].1
 }
-/// Sec 0 SOLVER (pre-rewrite) wp / ω_base multiplier. Q-dependent.
+/// Sec 0 SOLVER (pre-rewrite) wp / `ω_base` multiplier. Q-dependent.
 /// fc-invariant — verified bit-exact across all (fc,Q) in
-/// hp_s8_all_sections_subfreq.csv (2026-05-01). These are the multipliers
-/// used as INPUT to the `compute_peak_type3_parameters` w_eval formula
+/// `hp_s8_all_sections_subfreq.csv` (2026-05-01). These are the multipliers
+/// used as INPUT to the `compute_peak_type3_parameters` `w_eval` formula
 /// for sec 0; differs from the POST-rewrite multiplier
-/// (`hp_s8_sec0_q_multiplier`) which is applied to w_pole itself.
+/// (`hp_s8_sec0_q_multiplier`) which is applied to `w_pole` itself.
 fn hp_s8_sec0_solver_q_multiplier(q_user: f64) -> f64 {
     const TABLE: [(f64, f64); 5] = [
         (0.5, 1.07601),
@@ -317,7 +320,7 @@ fn hp_s8_sec0_solver_q_multiplier(q_user: f64) -> f64 {
     }
     TABLE[TABLE.len() - 1].1
 }
-/// Decoded `compute_peak_type3_parameters` w_eval formula for HP s=8 sec 0..2.
+/// Decoded `compute_peak_type3_parameters` `w_eval` formula for HP s=8 sec 0..2.
 /// f32 cast preserved for bit-exactness with binary's SS instructions.
 fn hp_s8_w_eval_sec_0_2(w_pole_solver: f64) -> f64 {
     const A: f64 = 0.442_097_064_144_153_73;
@@ -334,18 +337,21 @@ fn hp_s8_w_eval_sec_0_2(w_pole_solver: f64) -> f64 {
         wp_clamp
     }
 }
-///   k = 5-sec_idx. Q_eff = clamp(Q, 1e-6, 7.383) for sec 0; Q_eff = 1
+/// \*\*Helper params for LP s=8 sections 0..5.\*\*
+///
+/// Butterworth pole parameterization and scaling factors:
+///   k = 5-sec_idx. `Q_eff` = clamp(Q, 1e-6, 7.383) for sec 0; `Q_eff` = 1
 ///   otherwise. (This is the value that the synth kernel reads in place of
-///   `b1p` — confirmed from `SOLVE_BQ` E coefficient: E = (w_sf²−2)·ω².)
-/// - `w_pole = ω₀` (constant across all sections, fc-up-to-Nyquist)
-/// - `w_third = ω₀ · √max(1 − w_sf²/2, 0.25)` where w_sf = w_section_field
+///   `b1p` — confirmed from `SOLVE_BQ` E coefficient: E = (`w_sf²−2)·ω²`.)
+/// - `w_pole` = `ω₀` (constant across all sections, fc-up-to-Nyquist)
+/// - `w_third` = `ω₀ · √max(1 − w_sf²/2, 0.25)` where `w_sf` = `w_section_field`
 /// - `w_zero = w_third / 2`
 /// - `w_eval` slot is written 0; downstream JA at 0x18011041a substitutes π
 ///    (1-root branch — `proto[4]` table per `lp_hp_notch_bp_subfreq_decoded.md`).
 ///
 /// We pass `b1p = w_section_field` to the kernel because the kernel's
 /// `b1p` slot is what actually consumes the Butterworth damping —
-/// the literal `b1p=1` in LAG_PROTO_DETAIL is overridden inside the synth.
+/// the literal `b1p=1` in `LAG_PROTO_DETAIL` is overridden inside the synth.
 ///
 /// Verification (against captured `LAG_OUT` from FT=4 probe):
 /// - fc=10k Q=1: all 6 sections bit-exact (≤4e-7).
@@ -355,10 +361,11 @@ fn hp_s8_w_eval_sec_0_2(w_pole_solver: f64) -> f64 {
 ///   `s²+b1p·s+1` poles are still complex (b1p²<4). Pro-Q 4 uses a
 ///   different mapping in this regime that is NOT the byte[0x49] swap
 ///   branch (decompile of `compute_biquad_response_magnitude @ 0x1801103c0`
-///   shows that swap fires only when u_pole < 1e-10, which is far from
-///   the ~0.25-0.30 u_pole values seen here). The exact alternate mapping
+///   shows that swap fires only when `u_pole` < 1e-10, which is far from
+///   the ~0.25-0.30 `u_pole` values seen here). The exact alternate mapping
 ///   for sec 4-5 at fc≥14k remains undecoded — those cells correspond to
 ///   the 32 remaining LP s=8 conformance failures.
+#[must_use]
 pub fn lp_slope8_section_biquad(
     sec_idx: usize,
     freq_hz: f64,

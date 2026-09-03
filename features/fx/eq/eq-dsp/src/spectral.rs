@@ -400,6 +400,7 @@ pub struct SpectralEngine {
 
 impl SpectralEngine {
     /// `block` must be a power of two (512 / 1024 / 2048).
+    #[must_use]
     pub fn new(sample_rate: f64, block: usize) -> Self {
         let mut planner = RealFftPlanner::<f64>::new();
         let fft = planner.plan_fft_forward(block);
@@ -456,6 +457,7 @@ impl SpectralEngine {
     /// Latency in samples (one analysis block minus the sample that
     /// completes it — verified by impulse: a spike at t returns at
     /// t + block − 1).
+    #[must_use]
     pub fn latency(&self) -> usize {
         self.block - 1
     }
@@ -547,10 +549,12 @@ impl SpectralEngine {
     }
 
     /// The mean reduction each region is applying right now, in dB (positive).
+    #[must_use]
     pub fn region_reduction_db(&self, region: usize) -> f64 {
         self.region_reduction_db.get(region).copied().unwrap_or(0.0)
     }
 
+    #[must_use]
     pub fn has_regions(&self) -> bool {
         !self.regions.is_empty()
     }

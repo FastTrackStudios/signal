@@ -55,18 +55,18 @@ impl Tdf2Section {
     /// Process one sample through the biquad (TDF2).
     #[inline]
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
-        let output = input * self.c0 + self.s1.get(ch).copied().unwrap_or(0.0);
+        let output = input.mul_add(self.c0, self.s1.get(ch).copied().unwrap_or(0.0));
         if let Some(s1_ref) = self.s1.get_mut(ch) {
-            *s1_ref = input * self.c1 - output * self.c3 + self.s2.get(ch).copied().unwrap_or(0.0);
+            *s1_ref = input.mul_add(self.c1, -(output * self.c3)) + self.s2.get(ch).copied().unwrap_or(0.0);
         }
         if let Some(s2_ref) = self.s2.get_mut(ch) {
-            *s2_ref = input * self.c2 - output * self.c4;
+            *s2_ref = input.mul_add(self.c2, -(output * self.c4));
         }
         output
     }
 
     /// Reset all state to zero.
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.s1 = [0.0; MAX_CH];
         self.s2 = [0.0; MAX_CH];
     }
@@ -80,7 +80,7 @@ impl Default for Tdf2Section {
 
 /// Direct Form I biquad — numerically stable alternative to TDF2.
 ///
-/// From Pro-Q 4 binary (process_biquad_cascade_single_channel @ 0x18011ffc0).
+/// From Pro-Q 4 binary (`process_biquad_cascade_single_channel` @ 0x18011ffc0).
 /// Processes standard biquad H(z) = (b0+b1z^-1+b2z^-2)/(1+a1z^-1+a2z^-2)
 /// using Direct Form I which is more stable than TDF2 for high-Q near Nyquist.
 ///
@@ -100,6 +100,7 @@ pub struct Df1Section {
 }
 
 impl Df1Section {
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             b0: 1.0,
@@ -125,6 +126,7 @@ impl Df1Section {
     }
 
     /// The normalised coefficients, `[b0, b1, b2, a1, a2]` with `a0 = 1`.
+    #[must_use]
     pub fn coeffs(&self) -> [f64; 5] {
         [self.b0, self.b1, self.b2, self.a1, self.a2]
     }
@@ -172,10 +174,7 @@ mod tests {
             let output = sec.tick(input, 0);
             assert!(
                 (output - input).abs() < 1e-14,
-                "Passthrough failed at sample {}: input={}, output={}",
-                i,
-                input,
-                output
+                "Passthrough failed at sample {i}: input={input}, output={output}"
             );
         }
     }
@@ -189,9 +188,7 @@ mod tests {
             let out = sec.tick(v, 0);
             assert!(
                 (out - v).abs() < 1e-14,
-                "Default section not passthrough: {} != {}",
-                out,
-                v
+                "Default section not passthrough: {out} != {v}"
             );
         }
     }
@@ -240,9 +237,7 @@ mod tests {
         let out_fresh = fresh.tick(0.5, 0);
         assert!(
             (out_reset - out_fresh).abs() < 1e-14,
-            "Reset state should match fresh: {} != {}",
-            out_reset,
-            out_fresh
+            "Reset state should match fresh: {out_reset} != {out_fresh}"
         );
     }
 
@@ -256,10 +251,7 @@ mod tests {
             let output = sec.tick(input, 0);
             assert!(
                 (output - input).abs() < 1e-14,
-                "DF1 passthrough failed at sample {}: input={}, output={}",
-                i,
-                input,
-                output
+                "DF1 passthrough failed at sample {i}: input={input}, output={output}"
             );
         }
     }

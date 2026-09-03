@@ -41,6 +41,7 @@ pub fn notch_inner_pair(b_quartic: f64, c_quartic: f64) -> (f64, f64) {
     };
     (-2.0 * s_re, mag2)
 }
+#[must_use]
 pub fn notch_analog_sections(slope: usize, q: f64) -> Vec<(f64, f64)> {
     use std::f64::consts::SQRT_2;
     let q_user = q.max(1e-6);
@@ -48,7 +49,6 @@ pub fn notch_analog_sections(slope: usize, q: f64) -> Vec<(f64, f64)> {
     // (`u₁·u₂ = (√2/Q)²` regardless of LP-prototype angle).
     let c_quartic = 2.0 + 2.0 / (q_user * q_user);
     match slope {
-        2 => vec![(SQRT_2 / q_user, 1.0)],
         4 => {
             let b = 2.0 / q_user;
             vec![notch_inner_pair(b, c_quartic)]
@@ -71,7 +71,7 @@ pub fn notch_analog_sections(slope: usize, q: f64) -> Vec<(f64, f64)> {
             // the audio-path uses both inner and outer.
             let mut sections = Vec::with_capacity(6);
             for theta_deg in [105.0_f64, 135.0, 165.0] {
-                let theta = theta_deg * PI / 180.0;
+                let theta = theta_deg.to_radians();
                 let b = -2.0 * SQRT_2 * theta.cos() / q_user;
                 let (a1i, a2i) = notch_inner_pair(b, c_quartic);
                 sections.push((a1i, a2i));
@@ -89,6 +89,7 @@ pub fn notch_analog_sections(slope: usize, q: f64) -> Vec<(f64, f64)> {
 /// `α = √2/Q`, then prewarped BLT.  Per-section DC-gain compensation
 /// multiplies the numerator by `a2` so each section has unity DC and
 /// Nyquist gain (cancels across reciprocal pairs).
+#[must_use]
 pub fn notch_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usize) -> Vec<Coeffs> {
     let q_user = q.max(1e-6);
     let _omega0 = (2.0 * PI * freq_hz / sample_rate).min(PI - 0.01);
@@ -121,14 +122,14 @@ pub fn notch_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usize)
         .map(|(idx, (a1, a2))| {
             // iVar2 alternates 0/1 across reciprocal pair members
             // (inner=0, outer=1). Inner sections come first per pair.
-            let ivar2 = (idx % 2) as u8;
+            let ivar2 = u8::try_from(idx % 2).unwrap_or(1);
             notch_s8_section_biquad(freq_hz, q_user, sample_rate, a1, a2, ivar2)
         })
         .collect()
 }
 /// Pro-Q 4 Notch lagrange alt-path synth, parameterized.
 /// Used by both s=2 (single section) and s≥4 (per-section after applying
-/// compute_band_shelf_parameters transform).
+/// `compute_band_shelf_parameters` transform).
 fn notch_alt_path_kernel(
     omega0: f64,
     a1_sec: f64,
@@ -157,7 +158,7 @@ fn notch_alt_path_kernel(
 }
 /// Generic Pro-Q lagrange-MZT alt-path kernel.
 /// `(cap_a, cap_b, cap_c)` are the numerator polynomial coefficients of
-/// |H_a(jω)|² for the analog section: N(ω) = A·ω⁴ + B·ω² + C.
+/// `|H_a(jω)|²` for the analog section: N(ω) = A·ω⁴ + B·ω² + C.
 /// `(a1_sec, a2_sec)` define the denominator (1, a1, a2) → (1, E, F·g⁴).
 fn alt_path_kernel_generic(
     _omega0: f64,
@@ -251,7 +252,7 @@ fn alt_path_kernel_generic(
     [1.0, a1, a2, b0, b1, b2]
 }
 /// Pro-Q 4 Notch s=8 per-section synthesis — full pipeline:
-///   solve_biquad → compute_band_shelf transform (per iVar2/root_count) → alt-path synth
+///   `solve_biquad` → `compute_band_shelf` transform (per `iVar2/root_count`) → alt-path synth
 fn notch_s8_section_biquad(
     fc: f64,
     q_user: f64,
@@ -353,13 +354,13 @@ fn notch_s8_section_biquad(
 /// Pro-Q 4 Notch s=2 synthesis — decoded alt-path inside lagrange-MZT
 /// (`compute_audio_biquad_lagrange_mzt @ 0x1801103c0`, branch at 0x180110593).
 ///
-/// Trigger: byte[0x49]=1 AND |u_pole| < 1e-10. For Notch this fires
+/// Trigger: byte[0x49]=1 AND |`u_pole`| < 1e-10. For Notch this fires
 /// because the analog form (s²+1)/(s²+α·s+1) has |H(jω₀)|² = 0 exactly.
 ///
 /// Pipeline:
-///   1. Sub-frequencies from compute_band_shelf_parameters @ 0x18010d780.
+///   1. Sub-frequencies from `compute_band_shelf_parameters` @ 0x18010d780.
 ///   2. Alt-path computes p3, p4, sp5, sp6 via different formulas that
-///      avoid the u_pole=0 singularity.
+///      avoid the `u_pole=0` singularity.
 ///   3. Mode-0 ASM emits the biquad.
 fn notch_s2_alt_path_synth(freq_hz: f64, q_user: f64, sample_rate: f64) -> Coeffs {
     let alpha = std::f64::consts::SQRT_2 / q_user;
@@ -474,9 +475,10 @@ fn notch_s2_alt_path_synth(freq_hz: f64, q_user: f64, sample_rate: f64) -> Coeff
 /// Analog prototype: H(s) = (s² + ω₀²)/(s² + α·ω₀·s + ω₀²) with α = √2/Q.
 /// Discretized via prewarped BLT s ← (1/t)·(z−1)/(z+1) where t = tan(π·fc/sr).
 ///
-/// Verified against PROBE_HOOK_AUDIO_BIQUAD captures: matches Pro-Q 4
+/// Verified against `PROBE_HOOK_AUDIO_BIQUAD` captures: matches Pro-Q 4
 /// to ≤5e-3 across (fc, Q) grid; near-exact at low fc, small drift at
 /// high fc (likely a slight pole-prewarp variant — TBD).
+#[must_use]
 pub fn notch_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
     let q_user = q.max(1e-6);

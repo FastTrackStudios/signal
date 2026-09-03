@@ -53,7 +53,9 @@ fn highpass_slope7_section_q10_8k(sec: usize, freq_hz: f64, q_section: f64, samp
     }
 }
 
-fn highpass_slope7_section_freq_range_sec0_q05(fc_48k: f64) -> Option<Coeffs> {
+#[expect(clippy::cast_possible_truncation, reason = "float-to-int cast necessary for lookup")]
+#[expect(clippy::as_conversions, reason = "no std alternative for float-to-int cast")]
+const fn highpass_slope7_section_freq_range_sec0_q05(fc_48k: f64) -> Option<Coeffs> {
     match fc_48k as i32 {
         16000 => Some([1.0, 0.250_574_622_781, 0.222_161_990_220, 0.333_247_320_104, -0.666_396_938_362, 0.333_149_618_258]),
         17000 => Some([1.0, 0.323_550_284_850, 0.210_260_329_337, 0.306_776_579_629, -0.613_444_662_979, 0.306_668_083_351]),
@@ -66,7 +68,9 @@ fn highpass_slope7_section_freq_range_sec0_q05(fc_48k: f64) -> Option<Coeffs> {
     }
 }
 
-fn highpass_slope7_section_freq_range_sec0_q10(fc_48k: f64) -> Option<Coeffs> {
+#[expect(clippy::cast_possible_truncation, reason = "float-to-int cast necessary for lookup")]
+#[expect(clippy::as_conversions, reason = "no std alternative for float-to-int cast")]
+const fn highpass_slope7_section_freq_range_sec0_q10(fc_48k: f64) -> Option<Coeffs> {
     match fc_48k as i32 {
         16000 => Some([1.0, 0.956_124_208_141, 0.911_757_063_606, 0.651_347_446_985, -1.302_574_845_241, 0.651_227_398_255]),
         17000 => Some([1.0, 1.151_520_445_952, 0.903_542_155_728, 0.613_811_012_378, -1.227_482_168_924, 0.613_671_156_546]),
@@ -421,9 +425,9 @@ fn highpass_slope7_section(
 /// HP slope=8 cascade: 6 sections of `highpass_s2_proq4` with per-section
 /// Q values matching Pro-Q 4's internal N=12 Butterworth distribution.
 ///
-/// Status: 60/108 conformance @ SR=48000 with q_butter Q values.  The
+/// Status: 60/108 conformance @ SR=48000 with `q_butter` Q values.  The
 /// captured all-sections data (`hp_s8_all_sections_subfreq.csv`, 240 rows
-/// at SR=44100) shows the binary uses Q-independent w_pole multipliers per
+/// at SR=44100) shows the binary uses Q-independent `w_pole` multipliers per
 /// section (sec1: 1.03521, sec2: 1.05258, sec3-5: 0.91875) plus per-section
 /// analog Q values that do NOT match `highpass_s2_proq4`'s output: the
 /// Lagrange synth `proq4_s2_from_prototype_with_subfreq` cannot reproduce

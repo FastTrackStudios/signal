@@ -420,8 +420,8 @@ mod tests {
 
     /// RMS of a window of samples.
     fn rms(buf: &[f64]) -> f64 {
-        #[expect(clippy::as_conversions, reason = "int-to-float conversion; no std equivalent")]
-        (buf.iter().map(|x| x * x).sum::<f64>() / buf.len() as f64).sqrt()
+        let len_f = f64::from(u32::try_from(buf.len()).unwrap_or(1));
+        (buf.iter().map(|x| x * x).sum::<f64>() / len_f).sqrt()
     }
 
     #[test]
@@ -439,12 +439,12 @@ mod tests {
             b.update(SR);
             let n = 48_000;
             let mut out = vec![0.0; n];
-            for i in 0..n {
-                let mut l = amp * (core::f64::consts::TAU * 1000.0 * i as f64 / SR).sin();
+            for (i, output) in out.iter_mut().enumerate().take(n) {
+                let mut l = amp * (core::f64::consts::TAU * 1000.0 * (i as u32 as f64) / SR).sin();
                 let mut r = l;
                 let side = l;
                 b.tick(&mut l, &mut r, side);
-                out[i] = l;
+                *output = l;
             }
             20.0 * (rms(&out[n / 2..]) / (amp / 2.0f64.sqrt())).log10()
         };

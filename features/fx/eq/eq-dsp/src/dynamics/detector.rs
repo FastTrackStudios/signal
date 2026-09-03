@@ -341,6 +341,7 @@ impl Detector {
     /// relative mode) → drive d ∈ [0, 1].
     #[inline]
     pub fn tick(&mut self, side: f64, program: f64) -> f64 {
+        const RMS_TO_PEAK: f64 = std::f64::consts::SQRT_2;
         // Level: blend instantaneous |x| with a one-pole RMS.
         let sq = side * side;
         if self.ms_state <= 1.0e-18 {
@@ -354,9 +355,8 @@ impl Detector {
         // low and the threshold lands somewhere else than where it is marked:
         // measured against Pro-Q, our whole curve sat about 3.5 dB shy of its
         // at every input level, uniformly.
-        const RMS_TO_PEAK: f64 = std::f64::consts::SQRT_2;
         let rms = self.ms_state.sqrt() * RMS_TO_PEAK;
-        let level = peak + (rms - peak) * self.params.rms_mix.clamp(0.0, 1.0);
+        let level = (rms - peak).mul_add(self.params.rms_mix.clamp(0.0, 1.0), peak);
         let mut level_db = 20.0 * level.max(1.0e-10).log10();
 
         if self.params.relative {
@@ -378,7 +378,7 @@ impl Detector {
                 self.hist.push(level_db);
                 self.auto_conf += (1.0 - self.auto_conf) * self.auto_conf_coeff;
             }
-            self.push_countdown -= 1;
+            self.push_countdown = self.push_countdown.saturating_sub(1);
         }
 
         // dB over threshold, through a soft knee, scaled by the span.
@@ -412,11 +412,11 @@ impl Detector {
         self.ar_state += (drive - self.ar_state) * coeff;
 
         // Punch variant: release-tracked peak hold, then attack-smoothed.
-        self.hold_state = (self.hold_state - self.hold_state * self.release_coeff).max(drive);
-        let punched = self.ar_state + (self.hold_state - self.ar_state) * self.attack_coeff;
+        self.hold_state = self.hold_state.mul_add(-self.release_coeff, self.hold_state).max(drive);
+        let punched = (self.hold_state - self.ar_state).mul_add(self.attack_coeff, self.ar_state);
 
         let s = self.params.smooth.clamp(0.0, 1.0);
-        (self.ar_state + (punched - self.ar_state) * s).clamp(0.0, 1.0)
+        (punched - self.ar_state).mul_add(s, self.ar_state).clamp(0.0, 1.0)
     }
 
     pub fn reset(&mut self) {

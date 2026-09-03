@@ -78,10 +78,11 @@ pub fn design_high_shelf(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -
 /// Tilt shelf via MZT — Pro-Q 4 formulation.
 ///
 /// From RE (per `shelf_filters_formula.md` §3): symmetric — poles scale by A, zeros by 1/A:
-///   p2 = 1/gain, p3 = gain, p4 = t²·gain, sp5 = sp6 = t·√(2·gain)/Q_eff
+///   p2 = 1/gain, p3 = gain, p4 = t²·gain, sp5 = sp6 = `t·√(2·gain)/Q_eff`
 ///
-/// where Q_eff = Q^(5/10.644) is Pro-Q 4's UI Q → bandwidth mapping
-/// (verified bit-exact against tiltshelf_biquad_sweep.csv at fc ≤ 1 kHz).
+/// where `Q_eff` = Q^(5/10.644) is Pro-Q 4's UI Q → bandwidth mapping
+/// (verified bit-exact against `tiltshelf_biquad_sweep.csv` at fc ≤ 1 kHz).
+#[must_use]
 pub fn design_tilt_shelf(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Coeffs {
     if gain_db.abs() < 1e-9 {
         return [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
@@ -100,7 +101,7 @@ pub fn design_tilt_shelf(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -
 }
 /// First-order tilt shelf section — Pro-Q 4 odd-slope cascade tail.
 ///
-/// Analog prototype (decoded from `PROBE_HOOK_AUDIO_BIQUAD` SEC_PRE on
+/// Analog prototype (decoded from `PROBE_HOOK_AUDIO_BIQUAD` `SEC_PRE` on
 /// tilt slope=3,5,7 — sections with `b2z=0`):
 ///
 ///   B(s) = g·s + 1
@@ -113,6 +114,7 @@ pub fn design_tilt_shelf(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -
 ///   A(z) = t + g + (t − g)·z⁻¹         (denominator)
 ///
 /// Normalized so a0=1.  Returned as a biquad with b2 = a2 = 0.
+#[must_use]
 pub fn design_tilt_shelf_first_order(freq_hz: f64, gain_db: f64, sample_rate: f64) -> Coeffs {
     if gain_db.abs() < 1e-9 {
         return [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];

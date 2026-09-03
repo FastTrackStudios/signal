@@ -43,11 +43,13 @@ impl EqChain {
     }
 
     /// Get an immutable reference to a band by index.
+    #[must_use]
     pub fn band(&self, index: usize) -> Option<&Band> {
         self.bands.get(index)
     }
 
     /// Return the number of bands in the chain.
+    #[must_use]
     pub const fn num_bands(&self) -> usize {
         self.bands.len()
     }
@@ -79,6 +81,7 @@ impl EqChain {
     /// Each sample passes through all bands in series (left then right).
     /// True when at least one band would touch the signal.
     /// The whole chain's magnitude response at `hz`, in dB.
+    #[must_use]
     pub fn magnitude_db(&self, hz: f64, sample_rate: f64) -> f64 {
         self.bands
             .iter()
@@ -86,6 +89,7 @@ impl EqChain {
             .sum()
     }
 
+    #[must_use]
     pub fn has_active_bands(&self) -> bool {
         self.bands.iter().any(|b| !b.is_idle())
     }
@@ -174,7 +178,7 @@ mod placement_tests {
         let n = 4800;
         let (mut l, mut r) = (vec![0.0f64; n], vec![0.0f64; n]);
         for i in 0..n {
-            let x = (core::f64::consts::TAU * 100.0 * i as f64 / sr).sin();
+            let x = (core::f64::consts::TAU * 100.0 * (i as i32 as f64) / sr).sin();
             l[i] = x;
             r[i] = x;
         }

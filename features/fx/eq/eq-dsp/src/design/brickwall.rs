@@ -104,13 +104,14 @@ fn prototype() -> Zpk {
         let k_squared = mod_k * mod_k;
         let num = Complex::new(cn * c1, -sn * dn * s1 * d1);
         let den = Complex::new(dn * c1 * d1, -k_squared * sn * cn * s1);
-        num / den
+        let inv_den = den.inv();
+        num * inv_den
     };
 
     let mut zeros = Vec::with_capacity(ORDER);
     let mut poles = Vec::with_capacity(ORDER);
     for i in 1..=ORDER / 2 {
-        let u = (2 * i - 1) as f64 / ORDER as f64;
+        let u = 2.0f64.mul_add(i as i32 as f64, -1.0) / (ORDER as f64);
         let x = u * big_k;
 
         // Zero: purely imaginary, at 1/(k * cd(u K, k)) up the axis.

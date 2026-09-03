@@ -26,7 +26,8 @@ pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
         .map(|&z| {
             let num = Complex::new(1.0 + z.re / fs2, z.im / fs2);
             let den = Complex::new(1.0 - z.re / fs2, -z.im / fs2);
-            num * den.inv()
+            let inv_den = den.inv();
+            num * inv_den
         })
         .collect();
 
@@ -36,7 +37,8 @@ pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
         .map(|&p| {
             let num = Complex::new(1.0 + p.re / fs2, p.im / fs2);
             let den = Complex::new(1.0 - p.re / fs2, -p.im / fs2);
-            num * den.inv()
+            let inv_den = den.inv();
+            num * inv_den
         })
         .collect();
 
@@ -48,7 +50,8 @@ pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
     // Adjust gain: product of (fs2 - z) / product of (fs2 - p).
     let mut gain = Complex::new(zpk.gain, 0.0);
     for &z in &zpk.zeros {
-        gain = gain * (Complex::new(fs2, 0.0) - z);
+        let diff = Complex::new(fs2, 0.0) - z;
+        gain = gain * diff;
     }
     for &p in &zpk.poles {
         gain = gain / (Complex::new(fs2, 0.0) - p);
@@ -64,13 +67,14 @@ pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
 
 /// Allpass transform (transform type 4): negate real part of poles to get zeros.
 ///
-/// From Pro-Q 4 binary (design_filter_zpk_and_transform, transform type 4):
+/// From Pro-Q 4 binary (`design_filter_zpk_and_transform`, transform type 4):
 /// Each pole's REAL part is negated to create the corresponding zero:
 ///   zero = Complex(-pole.re, pole.im)
 ///
 /// This is equivalent to reflecting across the imaginary axis, which for
 /// z-plane poles inside the unit circle creates zeros outside it, giving
 /// |H(e^jw)| = 1 for all frequencies.
+#[must_use]
 pub fn make_allpass(zpk: &Zpk) -> Zpk {
     let zeros: Vec<Complex> = zpk
         .poles
@@ -145,8 +149,7 @@ mod tests {
         let z0 = z.zeros[0];
         assert!(
             (z0.re - 1.0).abs() < 1e-10 && z0.im.abs() < 1e-10,
-            "s=0 should map to z=1, got {:?}",
-            z0
+            "s=0 should map to z=1, got {z0:?}"
         );
     }
 

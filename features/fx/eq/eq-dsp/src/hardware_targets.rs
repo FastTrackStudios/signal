@@ -124,6 +124,7 @@ pub fn eq1979_raw_low_engaged_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn eq1979_low_110hz_7db_target() -> HardwareResponseSnapshot {
     csv_snapshot(
         HardwareTargetKind::Neve1073,
@@ -137,6 +138,7 @@ pub fn eq1979_low_110hz_7db_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn eq1979_mid_1600hz_14db_target() -> HardwareResponseSnapshot {
     csv_snapshot(
         HardwareTargetKind::Neve1073,
@@ -150,6 +152,7 @@ pub fn eq1979_mid_1600hz_14db_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn eq1979_high_shelf_14db_target() -> HardwareResponseSnapshot {
     csv_snapshot(
         HardwareTargetKind::Neve1073,
@@ -162,6 +165,7 @@ pub fn eq1979_high_shelf_14db_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn eq1979_hpf_160hz_target() -> HardwareResponseSnapshot {
     csv_snapshot(
         HardwareTargetKind::Neve1073,
@@ -174,6 +178,7 @@ pub fn eq1979_hpf_160hz_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn eq1979_hpf_330hz_target() -> HardwareResponseSnapshot {
     csv_snapshot(
         HardwareTargetKind::Neve1073,
@@ -186,6 +191,7 @@ pub fn eq1979_hpf_330hz_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn pultec_low_boost_atten_target() -> HardwareResponseSnapshot {
     let settings = PultecEqp1aSettings {
         low_freq_hz: 60.0,
@@ -211,6 +217,7 @@ pub fn pultec_low_boost_atten_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn pultec_high_boost_atten_target() -> HardwareResponseSnapshot {
     let settings = PultecEqp1aSettings {
         high_boost_freq_hz: 5_000.0,
@@ -238,6 +245,7 @@ pub fn pultec_high_boost_atten_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn neve_hpf_160_target() -> HardwareResponseSnapshot {
     let settings = Neve1073Settings {
         hpf: Neve1073Hpf::Hz160,
@@ -261,6 +269,7 @@ pub fn neve_hpf_160_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn neve_mid_1600_boost_target() -> HardwareResponseSnapshot {
     let settings = Neve1073Settings {
         mid_freq: Neve1073MidFreq::Hz1600,
@@ -285,6 +294,7 @@ pub fn neve_mid_1600_boost_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn api_mid_1500_boost_target() -> HardwareResponseSnapshot {
     let settings = Api550aSettings {
         mid_freq_hz: 1_500.0,
@@ -307,6 +317,7 @@ pub fn api_mid_1500_boost_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn api_low_high_smile_target() -> HardwareResponseSnapshot {
     let settings = Api550aSettings {
         low_freq_hz: 100.0,
@@ -331,6 +342,7 @@ pub fn api_low_high_smile_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn ssl_e_channel_boost_cut_target() -> HardwareResponseSnapshot {
     let settings = SslChannelSettings {
         hpf_hz: 80.0,
@@ -358,6 +370,7 @@ pub fn ssl_e_channel_boost_cut_target() -> HardwareResponseSnapshot {
     )
 }
 
+#[must_use]
 pub fn ssl_g_channel_broad_boost_target() -> HardwareResponseSnapshot {
     let settings = SslChannelSettings {
         lf_freq_hz: 100.0,

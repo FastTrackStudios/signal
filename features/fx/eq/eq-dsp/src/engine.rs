@@ -243,7 +243,7 @@ fn band_envelope(shape: crate::slope::FilterShape, f0: f64, q: f64, hz: f64) -> 
     }
     let ratio = hz / f0;
     match shape {
-        F::LowShelf => 1.0 / (1.0 + ratio * ratio),
+        F::LowShelf => 1.0 / ratio.mul_add(ratio, 1.0),
         F::HighShelf => {
             let x = ratio * ratio;
             x / (1.0 + x)
@@ -333,9 +333,9 @@ impl CharacterShaper {
     #[inline]
     fn tick(&mut self, x: f64) -> f64 {
         self.lp += (x - self.lp) * self.lp_coeff;
-        let drive = x + self.lift * self.lp;
+        let drive = self.lift.mul_add(self.lp, x);
         let second = CHARACTER_SQUARE * drive * drive;
-        let blocked = second - self.dc_x1 + self.dc_r * self.dc_y1;
+        let blocked = self.dc_r.mul_add(self.dc_y1, second - self.dc_x1);
         self.dc_x1 = second;
         self.dc_y1 = blocked;
         x + blocked
@@ -352,6 +352,7 @@ fn character_gain_db(mode: u32) -> f64 {
 }
 
 impl FtsEq {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let sample_rate = sample_rate.max(1.0);
         let mk_chain = || {
@@ -721,16 +722,19 @@ impl FtsEq {
     }
 
     /// The compensation Auto Gain is currently applying, in dB (0 when off).
+    #[must_use]
     pub fn auto_gain_db(&self) -> f64 {
         self.auto_gain_db
     }
 
     /// The Output Pan currently set, and its mode.
+    #[must_use]
     pub fn output_pan(&self) -> f64 {
         self.output_pan
     }
 
     /// Whether Output Pan balances mid against side rather than left/right.
+    #[must_use]
     pub fn output_pan_mid_side(&self) -> bool {
         self.output_pan_mid_side
     }
@@ -768,6 +772,7 @@ impl FtsEq {
     }
 
     /// The static chain's magnitude at `hz`, in dB.
+    #[must_use]
     pub fn static_magnitude_db(&self, hz: f64) -> f64 {
         self.eq.magnitude_db(hz, self.sample_rate)
     }
@@ -819,6 +824,7 @@ impl FtsEq {
     }
 
     /// Whether the spectral engine is currently in the signal path.
+    #[must_use]
     pub fn spectral_engaged(&self) -> bool {
         self.spectral.has_regions()
     }
@@ -845,10 +851,14 @@ impl FtsEq {
         };
         self.solo_filter.set(shape, sf, sq, 0.0);
     }
+    #[must_use]
     pub fn live_dyn_gain_db(&self, band: usize) -> Option<f64> {
         (band < EQ_BANDS && self.dyn_active[band]).then(|| self.dyn_bands[band].live_gain_db())
-    }    /// Added latency in samples — non-zero only while a spectral band puts
+    }
+
+    /// Added latency in samples — non-zero only while a spectral band puts
     /// the STFT in the path.
+    #[must_use]
     pub fn latency(&self) -> u32 {
         // Spectral bands put the STFT in the path; everything else is
         // zero-latency.
@@ -894,9 +904,11 @@ impl FtsEq {
         self.prepared = true;
     }
 
+    #[must_use]
     pub fn is_prepared(&self) -> bool {
         self.prepared
     }
+
     /// Process one block in place.
     pub fn process(&mut self, buf_l: &mut [f64], buf_r: &mut [f64]) {
         // Fully-idle block (no active bands, no dynamics, no spectral,
@@ -1087,21 +1099,18 @@ impl FtsEq {
                 // "transients of the soloed band" is stream solo +
                 // band solo together.
                 if let Some((_, mode)) = listen {
-                    match mode {
-                        1 => {
-                            for i in 0..left.len() {
-                                left[i] = solo_filter.tick(0, left[i]);
-                                right[i] = solo_filter.tick(1, right[i]);
-                            }
+                    if mode == 1 {
+                        for i in 0..left.len() {
+                            left[i] = solo_filter.tick(0, left[i]);
+                            right[i] = solo_filter.tick(1, right[i]);
                         }
-                        _ => {
-                            let ring = dry_ring[0].len();
-                            for i in 0..left.len() {
-                                let read = (*dry_pos + ring - dry_delay) % ring;
-                                left[i] -= dry_ring[0][read];
-                                right[i] -= dry_ring[1][read];
-                                *dry_pos = (*dry_pos + 1) % ring;
-                            }
+                    } else {
+                        let ring = dry_ring[0].len();
+                        for i in 0..left.len() {
+                            let read = (*dry_pos + ring - dry_delay) % ring;
+                            left[i] -= dry_ring[0][read];
+                            right[i] -= dry_ring[1][read];
+                            *dry_pos = (*dry_pos + 1) % ring;
                         }
                     }
                 }
@@ -1168,6 +1177,7 @@ impl FtsEq {
         }
     }
 
+    #[must_use]
     pub fn gain_scale(&self) -> f64 {
         self.gain_scale
     }
@@ -1224,15 +1234,18 @@ impl FtsEq {
         self.sync_listen();
     }
 
+    #[must_use]
     pub fn listen(&self) -> Option<(usize, u32)> {
         self.listen
     }
 
     /// Whether any band currently routes through the whole-band dynamics.
+    #[must_use]
     pub fn any_dynamic(&self) -> bool {
         self.dyn_active.iter().any(|&a| a)
     }
 
+    #[must_use]
     pub fn sample_rate(&self) -> f64 {
         self.sample_rate
     }

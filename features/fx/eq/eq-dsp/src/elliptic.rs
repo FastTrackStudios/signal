@@ -100,12 +100,14 @@ pub fn elliptic_sn(u_input: f64, modulus: f64) -> f64 {
     }
 
     // phi_N = 2^N * a_N * u
-    let two_pow_n = (1u64 << iter_count) as f64;
+    let two_pow_n = 2.0_f64.powi(i32::try_from(iter_count).unwrap_or(31));
     let mut phi = two_pow_n * agm_a * u_input;
 
     // Descend: phi_{n-1} = (phi_n + arcsin(c_n/a_n * sin(phi_n))) / 2
     for i in (1..=iter_count).rev() {
-        phi = (phi + (c_seq[i] / a_seq[i] * phi.sin()).asin()) * 0.5;
+        let c_i = c_seq.get(i).copied().unwrap_or(0.0);
+        let a_i = a_seq.get(i).copied().unwrap_or(1.0);
+        phi = (phi + (c_i / a_i * phi.sin()).asin()) * 0.5;
     }
 
     phi.sin()
@@ -117,6 +119,7 @@ pub fn elliptic_sn(u_input: f64, modulus: f64) -> f64 {
 /// f'(u) = cn(u,k) * dn(u,k).
 ///
 /// Matches Pro-Q 4 function at 0x18011e900.
+#[must_use]
 pub fn elliptic_asn(y: f64, k: f64) -> f64 {
     if k.abs() < TOL {
         return y.asin();
@@ -158,6 +161,7 @@ pub fn elliptic_asn(y: f64, k: f64) -> f64 {
 /// one descent keeps them consistent with each other. Deriving `cn` as
 /// `sqrt(1 - sn^2)` instead loses its sign, which matters here — the elliptic
 /// prototype evaluates `cd` at arguments past `K` where `cn` is negative.
+#[must_use]
 pub fn elliptic_sncndn(u_input: f64, modulus: f64) -> (f64, f64, f64) {
     if modulus.abs() < TOL {
         return (u_input.sin(), u_input.cos(), 1.0);
@@ -213,6 +217,7 @@ pub fn elliptic_sncndn(u_input: f64, modulus: f64) -> (f64, f64, f64) {
 /// `k1`, then `q = q1^(1/n)`, then `k` back out of `q` by the theta-series
 /// ratio. The series converge geometrically in `q`, which is tiny for any
 /// stopband worth having, so four terms are already at machine precision.
+#[must_use]
 pub fn ellipdeg(n: usize, k1: f64) -> f64 {
     let k1 = k1.clamp(1e-300, 1.0 - 1e-15);
     let big_k = elliptic_k_complete(k1 * k1);

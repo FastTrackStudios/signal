@@ -87,6 +87,7 @@ pub fn zpk_to_sos(zpk: &Zpk) -> Vec<Coeffs> {
 /// H(z) = (b0 + b1·z⁻¹ + b2·z⁻²) / (a0 + a1·z⁻¹ + a2·z⁻²)
 /// At z = e^(jw), z⁻¹ = e^(-jw), which is why we use negative exponent here.
 #[must_use]
+#[expect(clippy::arithmetic_side_effects, reason = "Complex arithmetic is inherently safe")]
 pub fn eval_sos(sections: &[Coeffs], w: f64) -> Complex {
     let ejw = Complex::from_polar(1.0, -w);
     let ejw2 = Complex::from_polar(1.0, -2.0 * w);
@@ -109,6 +110,7 @@ pub fn eval_sos(sections: &[Coeffs], w: f64) -> Complex {
 }
 
 /// Magnitude in dB of a cascade of second-order sections at frequency w.
+#[must_use]
 pub fn mag_db_sos(sections: &[Coeffs], w: f64) -> f64 {
     20.0 * eval_sos(sections, w).mag().log10()
 }
@@ -120,14 +122,14 @@ fn poles_to_den(poles: &[Complex]) -> [f64; 3] {
     match poles.len() {
         0 => [1.0, 0.0, 0.0],
         1 => {
-            let p = poles[0];
+            let p = *poles.get(0).unwrap_or(&Complex { re: 0.0, im: 0.0 });
             // (1 - p*z^-1) expanded: real coefficients only for real or paired poles.
             [1.0, -p.re, 0.0]
         }
         _ => {
             // Two poles: (1 - p0*z^-1)(1 - p1*z^-1)
-            let p0 = poles[0];
-            let p1 = poles[1];
+            let p0 = *poles.get(0).unwrap_or(&Complex { re: 0.0, im: 0.0 });
+            let p1 = *poles.get(1).unwrap_or(&Complex { re: 0.0, im: 0.0 });
             let sum = p0 + p1;
             let prod = p0 * p1;
             [1.0, -sum.re, prod.re]
@@ -163,8 +165,7 @@ mod tests {
         let mag = mag_db_sos(&[PASSTHROUGH], PI / 4.0);
         assert!(
             mag.abs() < 1e-10,
-            "Passthrough should be 0 dB, got {:.6}",
-            mag
+            "Passthrough should be 0 dB, got {mag:.6}"
         );
     }
 
@@ -175,7 +176,7 @@ mod tests {
         assert_eq!(sos.len(), 1);
         // With gain=1.0 and no poles/zeros, should act as passthrough.
         let mag = mag_db_sos(&sos, std::f64::consts::PI / 4.0);
-        assert!(mag.abs() < 1e-10, "Expected 0 dB, got {:.6}", mag);
+        assert!(mag.abs() < 1e-10, "Expected 0 dB, got {mag:.6}");
     }
 
     #[test]
@@ -228,10 +229,7 @@ mod tests {
             let diff = (from_zpk - from_sos).abs();
             assert!(
                 diff < 1e-8,
-                "Mismatch at w={:.3}: zpk={:.6}, sos={:.6}",
-                w,
-                from_zpk,
-                from_sos
+                "Mismatch at w={w:.3}: zpk={from_zpk:.6}, sos={from_sos:.6}"
             );
         }
     }
@@ -244,9 +242,7 @@ mod tests {
         let expected = 20.0 * 4.0_f64.log10();
         assert!(
             (mag - expected).abs() < 1e-8,
-            "Expected {:.4} dB, got {:.4} dB",
-            expected,
-            mag
+            "Expected {expected:.4} dB, got {mag:.4} dB"
         );
     }
 }

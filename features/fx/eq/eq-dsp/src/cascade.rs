@@ -31,9 +31,10 @@ pub use shelf_alt::*;
 ///
 /// Pro-Q 4 binary (`compute_cascade_coefficients` @ 0x1800fec20) uses a
 /// Butterworth zero cascade at angles `θ_k` = π(2k+1)/(2·order) with gain
-/// accumulation ∏ 0.25/cos²(θ_k). The exact multi-section Q mapping is
+/// accumulation ∏ `0.25/cos²(θ_k)`. The exact multi-section Q mapping is
 /// complex and not yet fully extracted. The Vicanek approach gives 99.3%
 /// parity for single/dual sections and ~65% for higher orders.
+#[must_use]
 pub fn compute_cascade_peak(
     freq_hz: f64,
     q: f64,
@@ -44,6 +45,7 @@ pub fn compute_cascade_peak(
     compute_cascade_peak_with_slope(freq_hz, q, gain_db, sample_rate, order, None)
 }
 
+#[must_use]
 pub fn compute_cascade_peak_with_slope(
     freq_hz: f64,
     q: f64,
@@ -93,14 +95,14 @@ pub fn compute_cascade_peak_with_slope(
 /// - The analog prototype is a Butterworth bandpass obtained via the
 ///   classical LP→BP transform `s → Q·(s/ω₀ + ω₀/s)` applied to a
 ///   Butterworth LP of order `N_LP = slope/2`.
-/// - For each LP-pole `p_LP_k = e^(j(π − θ_k))` (θ_k = π(2k+1)/(2·N_LP)),
+/// - For each LP-pole `p_LP_k = e^(j(π − θ_k))` (`θ_k` = `π(2k+1)/(2·N_LP)`),
 ///   the LP→BP transform yields *two* BP poles solving
 ///   `s² − (p_LP/Q')·s + 1 = 0`, with reciprocal magnitudes (one inside
 ///   the unit circle, one outside).  The two sections per LP-pole
 ///   correspond to the two reciprocal roots.
-/// - **Pole/zero gain split** (decoded from C/F = g_ref symmetry):
-///     - boost (g_dB > 0): `Q'_pole = Q`,  `Q'_zero = Q / √g_lin`
-///     - cut   (g_dB < 0): `Q'_pole = Q · √g_lin`, `Q'_zero = Q`
+/// - **Pole/zero gain split** (decoded from C/F = `g_ref` symmetry):
+///     - boost (`g_dB` > 0): `Q'_pole = Q`,  `Q'_zero = Q / √g_lin`
+///     - cut   (`g_dB` < 0): `Q'_pole = Q · √g_lin`, `Q'_zero = Q`
 /// - The `(A, B, C, D, E, F)` polynomial in `ω` (digital rad/sample)
 ///   is built from these analog s-plane (b2=1) quadratics with
 ///   `(A,D)=1`, `(B,E)=(b1²−2b0)·ω₀²`, `(C,F)=b0²·ω₀⁴`.
@@ -115,12 +117,12 @@ pub fn compute_cascade_peak_with_slope(
 ///   peak-finder quadratic in `u = ω²`:
 ///       `(A·E − B·D)·u² + 2(A·F − C·D)·u + (B·F − C·E) = 0`.
 /// - Verified bit-exact (≤ 1e-15) against `solve_bq_sweep.csv` for all
-///   captured slope=4 rows (root_count=2 column).  The smaller root is
+///   captured slope=4 rows (`root_count=2` column).  The smaller root is
 ///   `w_pole_solve`, the larger is `w_third_solve`.
 /// - **Caveat**: for some sections (e.g. sec=0 in fc=500/Q=1) the
 ///   `persec.w_pole` used by the audio synthesis is *not* the smaller
 ///   solve root.  An additional per-section selection layer maps the
-///   peak-finder roots into the (w_pole, w_zero, w_third) triple fed to
+///   peak-finder roots into the (`w_pole`, `w_zero`, `w_third`) triple fed to
 ///   the Lagrange synth.  This selection is undecoded; the captures
 ///   suggest a recipe involving `(w_pole, w_zero, w_third) ≈ ω₀·(α, α/100, α/10)`
 ///   for one branch and `(big_root, mid, big_root/10)` for the other.
@@ -1073,8 +1075,7 @@ pub(crate) fn bell_three_point_synth(
 ) -> Coeffs {
     if std::env::var("FTSEQ_TRACE_BELL_INPUTS").is_ok() {
         eprintln!(
-            "BELL_IN wp={:.6} wz={:.6} wt={:.6} we={:.6} G={:.6} A={:.6} B={:.6} C={:.6} D={:.6} E={:.6} F={:.6}",
-            w_pole, w_zero, w_third, w_eval, g_ref, cap_a, cap_b, cap_c, cap_d, cap_e, cap_f
+            "BELL_IN wp={w_pole:.6} wz={w_zero:.6} wt={w_third:.6} we={w_eval:.6} G={g_ref:.6} A={cap_a:.6} B={cap_b:.6} C={cap_c:.6} D={cap_d:.6} E={cap_e:.6} F={cap_f:.6}"
         );
     }
     // Caps decoded from bucket-B captures (slopes ≥ 3) at fc ∈ {15..22}
@@ -1234,17 +1235,17 @@ pub(crate) fn bell_three_point_synth(
 /// Each captured per-section biquad from
 /// `docs/reports/proq4/re/lagrange_brickwall_full.csv` was inverted via a
 /// 2-D Nelder-Mead search on `bell_s2_proq4(fc, Q_k, gdB_k)` to recover
-/// the (Q_k, gdB_k) the binary feeds into
+/// the (`Q_k`, `gdB_k`) the binary feeds into
 /// `compute_audio_biquad_lagrange_mzt` per section.  See
 /// `tools/proq4_probe/fit_brickwall_closed_form.py`.
 ///
 /// Slope=8 has 6 sections in 3 pairs.  Slope=6 has 3 sections (one pair +
-/// one real-pole section where Q_k=Q_user, gdB_k=±g_user/N_atoms exactly).
+/// one real-pole section where `Q_k=Q_user`, `gdB_k=±g_user/N_atoms` exactly).
 /// Slope=4 has 2 sections (one pair).
 ///
 /// Tables capture the recovered values at fc=500 Hz (low-fc, fits clean to
 /// residual ≤ 1e-3 in coefficient space).  Q-axis interpolated linearly in
-/// Q_user (clamped at table edges).  Gain magnitude scaled linearly:
+/// `Q_user` (clamped at table edges).  Gain magnitude scaled linearly:
 /// `gdB_k(g) = gdB_k(±12) · |g|/12`.  Sign of g picks `*_GP` vs `*_GN`
 /// table.
 fn bell_brickwall_proq4_n(
@@ -1261,7 +1262,7 @@ fn bell_brickwall_proq4_n(
         .collect()
 }
 
-/// Per-section `(Q_k, gdB_k)` lookup.  Returns N_sec entries per slope:
+/// Per-section `(Q_k, gdB_k)` lookup.  Returns `N_sec` entries per slope:
 /// slope=4 → 2, slope=6 → 3, slope=8 → 6.
 ///
 /// Recovered at fc=500 Hz (low-fc) by inverting `bell_s2_proq4` against
@@ -1414,10 +1415,10 @@ fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -> Ve
 ///
 /// This is the post-(u_*, w_*) tail of `compute_biquad_response_magnitude`
 /// @ 0x1801103c0 (the `byte[0x48] = 0` branch).  Given:
-///   - per-section sub-frequencies (w_pole, w_zero, w_third, w_eval) in
+///   - per-section sub-frequencies (`w_pole`, `w_zero`, `w_third`, `w_eval`) in
 ///     digital rad/sample,
-///   - the corresponding analog magnitude-squared values (u_pole, u_zero,
-///     u_third, u_eval) — typically `|H(jΩ)|²` evaluated at the warped
+///   - the corresponding analog magnitude-squared values (`u_pole`, `u_zero`,
+///     `u_third`, `u_eval`) — typically `|H(jΩ)|²` evaluated at the warped
 ///     `Ω = tan(w/2) / tan(ω₀/2)` for bucket-B sections, or directly at
 ///     digital ω scaled into bell-s2's normalized form,
 ///   - the per-section `g_ref` — `cap_c/cap_f` for bell-s2 (= 1) or
@@ -1429,6 +1430,7 @@ fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -> Ve
 /// Bit-exact against `compute_biquad_response_magnitude` for bucket-A
 /// (Bell s=2, validated via 100% conformance) and bucket-B (Bell s∈{3..9},
 /// validated via `bell_bucketB_synth_v3.py` to f64 noise floor at LF).
+#[must_use]
 pub fn lagrange3pt_synth_kernel(
     w_pole: f64,
     w_zero: f64,
@@ -1505,6 +1507,7 @@ pub fn lagrange3pt_synth_kernel(
 ///
 /// Validated bit-exact (≤ 1e-9 at LF, see
 /// `tools/proq4_probe/lookup_capture/bell_bucketB_synth_v3.py`).
+#[must_use]
 pub fn bell_bucket_b_section_from_analog(
     b2z: f64,
     b1z: f64,
@@ -1550,6 +1553,7 @@ pub fn bell_bucket_b_section_from_analog(
     )
 }
 
+#[must_use]
 pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
 
@@ -1728,7 +1732,7 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
 /// Verified bit-exact (≤ 1.9e-15 abs error across all 5 biquad
 /// coefficients) on 32 captured per-section rows from
 /// `lagrange_per_section_sweep.csv` joined with `solve_bq_sweep.csv`
-/// (slope=4, fc ∈ {500, 1000, 5000, 10000} Hz, Q_user ∈ {4, 10} plus
+/// (slope=4, fc ∈ {500, 1000, 5000, 10000} Hz, `Q_user` ∈ {4, 10} plus
 /// the Q=1 sec=1 fc∈{500,1000} cases).
 ///
 /// See `docs/reports/proq4/re/high_q_correction_decoded.md` for the
@@ -1847,6 +1851,7 @@ fn lagrange_synth_alt_path(
 /// the |H(jω₀)|²=0 case for Notch breaks the Bell-style Lagrange.
 /// Custom sub-frequency override version.
 #[doc(hidden)]
+#[must_use]
 pub fn proq4_s2_from_prototype_with_subfreq_pub(
     freq_hz: f64,
     sample_rate: f64,
@@ -2031,9 +2036,10 @@ fn proq4_s2_from_prototype_with_subfreq(
 /// Pro-Q 4 Lowpass slope-2 (audio-path Lagrange-MZT).
 ///
 /// Sub-frequencies decoded from runtime probe captures (ft=1):
-///   Q ≤ 1: w_pole = ω₀/2, w_zero = ω₀/10, w_third = ω₀·0.48
-///   Q ≥ 2: w_pole shifts up; complex pattern (TBD)
-///   w_eval = 0 at Q ≤ 1 (remapped to π−0.01), ≈ 2.45 at Q ≥ 2
+///   Q ≤ 1: `w_pole` = ω₀/2, `w_zero` = ω₀/10, `w_third` = ω₀·0.48
+///   Q ≥ 2: `w_pole` shifts up; complex pattern (TBD)
+///   `w_eval` = 0 at Q ≤ 1 (remapped to π−0.01), ≈ 2.45 at Q ≥ 2
+#[must_use]
 pub fn lowpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
     let q_user = q.max(1e-6);
@@ -2077,20 +2083,21 @@ pub fn lowpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
 /// Pro-Q 4 Highpass slope-2 (audio-path Lagrange-MZT).
 ///
 /// Analog prototype ZPK:
-///   numerator   = (1, 0, 0)        →  P_zero(s) = s²
-///   denominator = (1, √2/Q, 1)     →  P_pole(s) = s² + (√2/Q)·ω₀·s + ω₀²
+///   numerator   = (1, 0, 0)        →  `P_zero(s)` = s²
+///   denominator = (1, √2/Q, 1)     →  `P_pole(s)` = s² + (√2/Q)·ω₀·s + ω₀²
 ///
 /// Sub-frequencies decoded from runtime probe captures
 /// (`lp_hp_notch_bp_subfreq_capture.txt`, ft=2):
-///   w_pole = ω₀
-///   w_zero = 0.001 · ω₀
-///   w_third = 0.2 · ω₀
-///   w_eval = 0 at Q ≤ 1, ~2.45 at Q ≥ 2
-///   g_ref = 0
+///   `w_pole` = ω₀
+///   `w_zero` = 0.001 · ω₀
+///   `w_third` = 0.2 · ω₀
+///   `w_eval` = 0 at Q ≤ 1, ~2.45 at Q ≥ 2
+///   `g_ref` = 0
 /// HP section synthesis with Q-INDEPENDENT sub-frequencies.
 /// Used by slope ≥ 4 cascades where each section has different Q but
-/// all sections use w_pole = min(ω₀_user, 0.7π) per
+/// all sections use `w_pole` = `min(ω₀_user, 0.7π)` per
 /// `hp_high_fc_subfreq_analysis.md`.
+#[must_use]
 pub fn highpass_section_proq4(freq_hz: f64, q_section: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
     let q_sec = q_section.max(1e-6);
@@ -2120,6 +2127,7 @@ pub fn highpass_section_proq4(freq_hz: f64, q_section: f64, sample_rate: f64) ->
     )
 }
 
+#[must_use]
 pub fn highpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
     let q_user = q.max(1e-6);
@@ -2245,10 +2253,10 @@ fn mode0_forward(p2: f64, p3: f64, p4: f64, sp5_sq: f64, sp6_sq: f64) -> Coeffs 
     [1.0, a1, a2, b0, b1, b2]
 }
 
-/// Pro-Q 4 Bandpass-specific cascade values (a1_sec, a2_sec) per Q per
-/// section. Extracted from probe LAG_PROTO_DETAIL at fc=10 (matched-Z
+/// Pro-Q 4 Bandpass-specific cascade values (`a1_sec`, `a2_sec`) per Q per
+/// section. Extracted from probe `LAG_PROTO_DETAIL` at fc=10 (matched-Z
 /// near-bit-exact). Pro-Q's actual BP analog cascade differs from
-/// notch_inner_pair at Q≠1 due to floating-point arithmetic order.
+/// `notch_inner_pair` at Q≠1 due to floating-point arithmetic order.
 fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
     if matches!(slope, 3 | 5 | 7 | 9) {
         use std::f64::consts::SQRT_2;
@@ -2355,6 +2363,7 @@ fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
 /// sr to compute `Q_pre` exactly as the binary does.
 ///
 /// Output: final digital biquad in `[a0, a1, a2, b0, b1, b2]` order.
+#[must_use]
 pub fn apply_proq4_prewarp(
     captured: [f64; 6],
     freq_hz: f64,
@@ -2401,15 +2410,17 @@ pub fn apply_proq4_prewarp(
     [1.0, a1_new, a2_new, b0_new, b1_new, b2_new]
 }
 
-/// LP-prototype atoms per Pro-Q 4 slope index, for Bell / Notch / Bandpass
-/// at slope ≥ 4.  Returns (complex_angles_radians, real_pole_count).
+/// LP-prototype atoms per Pro-Q 4 slope index, for Bell / Notch / Bandpass at slope ≥ 4.
+/// Returns (`complex_angles_radians`, `real_pole_count`).
+///
 /// Each "atom" produces two biquad sections via reciprocal-magnitude
-/// doubling: pole-pair_high uses gain_lin^(+1/(2·N)), pole-pair_low uses
+/// doubling: pole-pair_high uses `gain_lin^(+1/(2·N))`, pole-pair_low uses
 /// gain_lin^(-1/(2·N)), where N = total atom count (complex + real).
 ///
 /// Captured from Pro-Q 4 BLT hook at gain≈0 dB / fc=1000 / Q=1.
 /// See `docs/reports/proq4/re/complete_pipeline.md` §4 and
 /// `bell_lp_prototype_captures.txt`.
+#[must_use]
 pub fn lp_atoms_for_slope(slope: usize) -> (&'static [f64], usize) {
     use std::f64::consts::PI;
     const A105: f64 = 105.0 * PI / 180.0;
@@ -2437,7 +2448,6 @@ pub fn lp_atoms_for_slope(slope: usize) -> (&'static [f64], usize) {
     match slope {
         1 | 2 => (&[], 1),
         3 => (&A_S3, 0),
-        4 => (&A_S4, 0),
         5 => (&A_S5, 1),
         6 => (&A_S6, 1),
         7 => (&A_S7, 0),
@@ -2578,7 +2588,7 @@ fn bell_brickwall_cascade(
     let cur_peak = (total_re * total_re + total_im * total_im).sqrt();
     if cur_peak > 1e-12 {
         let target_per_section = (g_lin / cur_peak).powf(1.0 / n as f64);
-        for s in sections.iter_mut() {
+        for s in &mut sections {
             s[3] *= target_per_section;
             s[4] *= target_per_section;
             s[5] *= target_per_section;
@@ -2656,8 +2666,7 @@ mod tests {
 
         assert!(
             max_err <= 1e-12,
-            "alt-path coefficient mismatch: max_err = {:.3e}",
-            max_err,
+            "alt-path coefficient mismatch: max_err = {max_err:.3e}"
         );
     }
 
@@ -2676,8 +2685,7 @@ mod tests {
         let mag = mag_db_sos(&sos, w0);
         assert!(
             (mag - 6.0).abs() < 0.5,
-            "peak should be ~6 dB at center, got {}",
-            mag
+            "peak should be ~6 dB at center, got {mag}"
         );
     }
 
@@ -2689,8 +2697,7 @@ mod tests {
         let mag = mag_db_sos(&sos, w0);
         assert!(
             (mag - 12.0).abs() < 1.0,
-            "cascade peak should be ~12 dB at center, got {}",
-            mag
+            "cascade peak should be ~12 dB at center, got {mag}"
         );
     }
 
@@ -2698,7 +2705,7 @@ mod tests {
     fn peak_dc_is_unity() {
         let sos = compute_cascade_peak(1000.0, 2.0, 6.0, 48000.0, 2);
         let dc = mag_db_sos(&sos, 0.001);
-        assert!(dc.abs() < 0.5, "DC should be ~0 dB, got {}", dc);
+        assert!(dc.abs() < 0.5, "DC should be ~0 dB, got {dc}");
     }
 
     #[test]
@@ -2720,10 +2727,7 @@ mod tests {
             for (j, &coeff) in section.iter().enumerate() {
                 assert!(
                     coeff.is_finite(),
-                    "section[{}][{}] is not finite: {}",
-                    i,
-                    j,
-                    coeff
+                    "section[{i}][{j}] is not finite: {coeff}"
                 );
             }
             assert_ne!(
@@ -2743,10 +2747,7 @@ mod tests {
             for (j, &coeff) in section.iter().enumerate() {
                 assert!(
                     coeff.is_finite(),
-                    "section[{}][{}] is not finite: {}",
-                    i,
-                    j,
-                    coeff
+                    "section[{i}][{j}] is not finite: {coeff}"
                 );
             }
         }

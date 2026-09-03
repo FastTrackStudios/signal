@@ -78,11 +78,12 @@ pub const fn squared_magnitude_poly(proto: &SPrototype) -> MagSqPoly {
 }
 
 /// Evaluate |`H(jw)`|² at frequency `w`.
+#[must_use]
 pub fn eval_mag_sq(poly: &MagSqPoly, w: f64) -> f64 {
     let w2 = w * w;
     let w4 = w2 * w2;
-    let num = w4 * poly.num_w4 + w2 * poly.num_w2 + poly.num_w0;
-    let den = w4 * poly.den_w4 + w2 * poly.den_w2 + poly.den_w0;
+    let num = w4.mul_add(poly.num_w4, w2 * poly.num_w2) + poly.num_w0;
+    let den = w4.mul_add(poly.den_w4, w2 * poly.den_w2) + poly.den_w0;
     if den.abs() > 1e-30 {
         num / den
     } else {
@@ -108,11 +109,12 @@ pub struct PoleFreqs {
 /// Binary: `solve_biquad_denominator_quadratic` @ 0x1800fd1b0
 /// Finds w where the numerator and denominator squared magnitudes have
 /// specific relationships (unity crossings for the peak filter).
+#[must_use]
 pub fn solve_pole_frequencies(poly: &MagSqPoly) -> PoleFreqs {
     // Cross-determinant quadratic: finds w² where |`H_num`|² / |`H_den`|² = 1
     // `A`·w⁴ + `B`·w² + `C` = 0 where:
-    let qa = poly.num_w4 * poly.den_w2 - poly.num_w2 * poly.den_w4;
-    let qb = 2.0 * (poly.num_w0 * poly.den_w4 - poly.den_w0 * poly.num_w4);
+    let qa = poly.num_w4.mul_add(poly.den_w2, -(poly.num_w2 * poly.den_w4));
+    let qb = 2.0 * poly.num_w0.mul_add(poly.den_w4, -(poly.den_w0 * poly.num_w4));
     let qc = poly.num_w0 * poly.den_w2 - poly.den_w0 * poly.num_w2;
 
     if qa.abs() < 1e-30 {
@@ -197,6 +199,7 @@ pub struct BandParams {
 /// Binary: `compute_peak_band_parameters` @ 0x18010de30 for type 0.
 /// For Peak filters, the quadratic solver results are OVERWRITTEN with
 /// bandwidth-based parameters derived from 1/Q and w0.
+#[must_use]
 pub fn peak_bandwidth_params(
     w0: f64,
     _q: f64,
@@ -246,6 +249,7 @@ pub struct PrewarpedFreqs {
 ///
 /// Binary: `compute_biquad_response_magnitude` applies tan(param*0.5)
 /// to each frequency parameter.
+#[must_use]
 pub fn prewarp_frequencies(params: &BandParams) -> PrewarpedFreqs {
     let clamp = |w: f64| w.clamp(1e-6, PI - 1e-6);
     PrewarpedFreqs {
@@ -274,6 +278,7 @@ pub struct GainEvals {
 /// Binary: `compute_biquad_response_magnitude` calls vtable[2]
 /// (`evaluate_biquad_squared_magnitude_scalar`) at each frequency,
 /// then takes sqrt for the gain factors.
+#[must_use]
 pub fn evaluate_s_domain_gain(
     poly: &MagSqPoly,
     prewarped: &PrewarpedFreqs,
@@ -303,9 +308,9 @@ pub fn evaluate_s_domain_gain(
 /// Parameters:
 ///   `p2` = sqrt(DC ratio) — gain multiplier for the cos-like term
 ///   `p3` = gain at pole frequency — baseline numerator level
-///   `p4` = tan²(w_pole/2) — frequency/cos-like parameter
-///   `sp5` = tan(w_pole/2) — pole alpha (bandwidth)
-///   `sp6` = `gain_at_zero` × tan(w_zero/2) — zero alpha (gain-scaled bandwidth)
+///   `p4` = `tan²(w_pole/2)` — frequency/cos-like parameter
+///   `sp5` = `tan(w_pole/2)` — pole alpha (bandwidth)
+///   `sp6` = `gain_at_zero` × `tan(w_zero/2)` — zero alpha (gain-scaled bandwidth)
 ///
 /// Formula:
 ///   `D` = 1 + `p4` + `sp5`
@@ -314,6 +319,7 @@ pub fn evaluate_s_domain_gain(
 ///   `b2` = (`p2`·`p4` + `p3` - `sp6`) / `D`
 ///   `a1` = -2·(1 - `p4`) / `D`
 ///   `a2` = (1 + `p4` - `sp5`) / `D`
+#[must_use]
 pub fn mode0_biquad(w0: f64, q: f64, _prewarped: &PrewarpedFreqs, gains: &GainEvals) -> Coeffs {
     let g = gains.g_linear;
     let a_val = g.sqrt();
@@ -385,6 +391,7 @@ pub fn mode0_biquad(w0: f64, q: f64, _prewarped: &PrewarpedFreqs, gains: &GainEv
 ///
 /// Chains all 7 steps to produce biquad [`a0`, `a1`, `a2`, `b0`, `b1`, `b2`]
 /// from frequency, Q, and linear gain.
+#[must_use]
 pub fn proq4_peak_boost(w0: f64, q: f64, g: f64) -> Coeffs {
     // Step 1: S-domain prototype
     let proto = s_domain_prototype(q, g);
@@ -410,6 +417,7 @@ pub fn proq4_peak_boost(w0: f64, q: f64, g: f64) -> Coeffs {
 
 /// Peak biquad for both boost and cut.
 /// For cuts: `H_cut` = 1/`H_boost`(1/`g`).
+#[must_use]
 pub fn proq4_peak(w0: f64, q: f64, gain_db: f64) -> Coeffs {
     let g = 10.0_f64.powf(gain_db / 20.0);
     if (g - 1.0).abs() < 1e-6 {

@@ -23,8 +23,10 @@ use crate::zpk::{Complex, Zpk};
 #[must_use]
 pub fn butterworth_lp(order: usize) -> Zpk {
     let mut poles = Vec::with_capacity(order);
+    let order_f64 = order as i32 as f64;
     for k in 0..order {
-        let angle = PI * (2.0f64.mul_add(k as f64, order as f64) + 1.0) / (2.0 * order as f64);
+        let k_f64 = k as i32 as f64;
+        let angle = PI * (2.0f64.mul_add(k_f64, order_f64) + 1.0) / (2.0 * order_f64);
         poles.push(Complex::from_polar(1.0, angle));
     }
     Zpk::new(vec![], poles, 1.0)
@@ -33,7 +35,8 @@ pub fn butterworth_lp(order: usize) -> Zpk {
 /// Generate Butterworth lowpass prototype with pre-warped cutoff.
 ///
 /// Pre-warps the analog cutoff frequency to compensate for bilinear transform
-/// frequency warping: w_a = 2*fs*tan(w_d / 2)
+/// frequency warping: `w_a` = 2*fs*`tan(w_d` / 2)
+#[must_use]
 pub fn butterworth_lp_prewarped(order: usize, freq_hz: f64, sample_rate: f64) -> Zpk {
     let w_d = 2.0 * PI * freq_hz / sample_rate;
     let w_a = 2.0 * sample_rate * (w_d / 2.0).tan();
@@ -48,12 +51,13 @@ pub fn butterworth_lp_prewarped(order: usize, freq_hz: f64, sample_rate: f64) ->
 
 /// Generate Butterworth bandpass prototype via standard LP→BP transformation.
 ///
-/// LP→BP transform: s -> Q_bp * (s/w0 + w0/s)
+/// LP→BP transform: s -> `Q_bp` * (s/w0 + w0/s)
 ///
-/// Each LP pole s_k maps to a PAIR of BP poles by solving:
-///   s^2 - s*(s_k*bw_a) + w0_a^2 = 0
+/// Each LP pole `s_k` maps to a PAIR of BP poles by solving:
+///   s^2 - s*(`s_k`*`bw_a`) + `w0_a^2` = 0
 ///
 /// Each LP pole also contributes a zero at s = 0 (DC).
+#[must_use]
 pub fn butterworth_bp(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Zpk {
     let w0 = 2.0 * PI * freq_hz / sample_rate;
     let w0_a = 2.0 * sample_rate * (w0 / 2.0).tan();
@@ -95,6 +99,7 @@ pub fn butterworth_bp(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Z
 ///   2. For each Butterworth prototype pole, use elliptic functions to map
 ///      the pole angle to exact BP pole positions
 ///   3. Each section gets unique pole/zero positions (NOT identical biquads)
+#[must_use]
 pub fn butterworth_bp_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Zpk {
     let w0 = 2.0 * PI * freq_hz / sample_rate;
     let w0_a = 2.0 * sample_rate * (w0 / 2.0).tan();
@@ -149,6 +154,7 @@ pub fn butterworth_bp_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
 ///
 /// LP→BS transform: reciprocal of LP→BP. Each LP pole maps to a pair of BS poles,
 /// and each contributes a pair of zeros at +/-jw0 (the notch frequencies).
+#[must_use]
 pub fn butterworth_bs(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Zpk {
     let w0 = 2.0 * PI * freq_hz / sample_rate;
     let w0_a = 2.0 * sample_rate * (w0 / 2.0).tan();
@@ -189,6 +195,7 @@ pub fn butterworth_bs(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Z
 ///   2. For each Butterworth prototype pole, use elliptic functions to map
 ///      the pole angle to exact BS pole positions
 ///   3. Each section gets unique pole/zero positions (NOT identical biquads)
+#[must_use]
 pub fn butterworth_bs_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Zpk {
     let w0 = 2.0 * PI * freq_hz / sample_rate;
     let w0_a = 2.0 * sample_rate * (w0 / 2.0).tan();
@@ -361,9 +368,7 @@ mod tests {
         let ratio = std_mag / (ell_mag + 1e-30);
         assert!(
             ratio > 0.1 && ratio < 10.0,
-            "standard and elliptic BP pole magnitudes should be comparable: std={}, ell={}",
-            std_mag,
-            ell_mag
+            "standard and elliptic BP pole magnitudes should be comparable: std={std_mag}, ell={ell_mag}"
         );
     }
 }

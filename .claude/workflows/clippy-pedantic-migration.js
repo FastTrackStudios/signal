@@ -22,6 +22,14 @@ export const meta = {
 //     several small files, instead of one agent per file.
 // }
 //
+// SCOPE: the fixers only ever see the MECHANICAL lint set (see the discover
+// script). Judgment lints in DSP code — indexing_slicing, as_conversions,
+// arithmetic_side_effects, cast_*, suboptimal_flops — are counted and reported
+// but never auto-fixed, because the correct rewrite depends on whether the code
+// sits on an audio callback. A cheap fixer cannot know that and refactors the
+// API instead. So a "clean" result from this workflow means "clean of the
+// mechanical set", NOT clean of the gate. Read withheldForHumanReview.
+//
 // WHY BIN-PACKING IS BY FILE, NEVER WITHIN A FILE:
 // Most offending files have 1-3 errors, so one-agent-per-file spent a whole
 // agent round-trip on a single doc backtick. Batching amortizes that. But a
@@ -107,10 +115,23 @@ import re, json, os, hashlib, shutil
 # safe — and twice now one has grouped a struct's pub fields and broken the
 # crate for everyone. These stay DENIED in Cargo.toml (the gate is honest);
 # they are simply withheld from the automated fixers and reported for a human.
-WITHHOLD = {
-    "struct_excessive_bools", "fn_params_excessive_bools", "too_many_arguments",
-    "needless_pass_by_value", "module_name_repetitions", "too_many_lines",
-    "similar_names", "many_single_char_names",
+# Only these lints are handed to the automated fixers. Everything else is
+# REPORTED, never touched. Two categories are deliberately excluded:
+#   - judgment lints in DSP code (indexing_slicing, as_conversions,
+#     arithmetic_side_effects, cast_*, suboptimal_flops): the right fix depends
+#     on whether the code is on an audio callback, which a cheap fixer cannot
+#     know. It reaches for an API refactor instead. Those go to a human.
+#   - missing_const_for_fn: fires only in the build where a cfg-gated body is
+#     the inert branch, so blanket-adding const breaks the other feature.
+MECHANICAL = {
+    "unreadable_literal", "doc_markdown", "must_use_candidate", "use_self",
+    "uninlined_format_args", "redundant_closure_for_method_calls",
+    "explicit_iter_loop", "ignored_unit_patterns", "semicolon_if_nothing_returned",
+    "redundant_pub_crate", "derive_partial_eq_without_eq", "map_unwrap_or",
+    "single_match_else", "too_long_first_doc_paragraph", "missing_errors_doc",
+    "missing_panics_doc", "format_push_string", "return_self_not_must_use",
+    "needless_for_each", "match_same_arms", "unnested_or_patterns",
+    "manual_let_else", "redundant_else", "unused_self", "doc_link_with_quotes",
 }
 OUT = "/tmp/clippy_migration_errors"
 shutil.rmtree(OUT, ignore_errors=True)
@@ -135,7 +156,7 @@ for b in blocks:
         if b.startswith("error"):
             compile_errors.append(b.strip()[:400])
         continue
-    if ln.group(1) in WITHHOLD:
+    if ln.group(1) not in MECHANICAL:
         withheld.setdefault(ln.group(1), 0)
         withheld[ln.group(1)] += 1
         continue
@@ -257,7 +278,7 @@ function withheldNote(d) {
   const keys = Object.keys(w)
   if (keys.length === 0) return ''
   const n = keys.reduce((s, k) => s + w[k], 0)
-  return ` | ${n} withheld from fixers for human review (${keys.map((k) => `${k}:${w[k]}`).join(', ')})`
+  return ` | ${n} left for human review (${keys.map((k) => `${k}:${w[k]}`).join(', ')})`
 }
 
 log(`Initial: ${discovery.totalErrors} errors across ${discovery.files.length} files${withheldNote(discovery)}`)

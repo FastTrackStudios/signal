@@ -45,9 +45,9 @@ impl DelayFilter {
         if let Some(slot) = self.buffer.get_mut(self.write_pos) {
             *slot = input;
         }
-        let read_pos = (self.write_pos + self.buffer.len() - self.delay_samples) & self.mask;
+        let read_pos = (self.write_pos.wrapping_add(self.buffer.len()).wrapping_sub(self.delay_samples)) & self.mask;
         let output = self.buffer.get(read_pos).copied().unwrap_or(0.0);
-        self.write_pos = (self.write_pos + 1) & self.mask;
+        self.write_pos = (self.write_pos.wrapping_add(1)) & self.mask;
         output
     }
 
@@ -61,8 +61,8 @@ impl DelayFilter {
 /// 3-level delay cascade for anti-cramping group delay compensation.
 ///
 /// Each level can independently compensate for the group delay of
-/// different frequency bands, providing up to NUM_DELAY_LEVELS *
-/// MAX_DELAY_SAMPLES_PER_LEVEL total delay.
+/// different frequency bands, providing up to `NUM_DELAY_LEVELS` *
+/// `MAX_DELAY_SAMPLES_PER_LEVEL` total delay.
 pub struct DelayFilterCascade {
     delays: [DelayFilter; NUM_DELAY_LEVELS],
 }
@@ -70,7 +70,8 @@ pub struct DelayFilterCascade {
 impl DelayFilterCascade {
     /// Create a new cascade with buffers sized for the given sample rate.
     ///
-    /// Each level uses MAX_DELAY_SAMPLES_PER_LEVEL as its maximum.
+    /// Each level uses `MAX_DELAY_SAMPLES_PER_LEVEL` as its maximum.
+    #[must_use]
     pub fn new(_sample_rate: f64) -> Self {
         Self {
             delays: [
@@ -83,7 +84,7 @@ impl DelayFilterCascade {
 
     /// Set the group delay for a specific cascade level.
     ///
-    /// `level` is 0..NUM_DELAY_LEVELS, `delay_samples` is the delay
+    /// `level` is `0..NUM_DELAY_LEVELS`, `delay_samples` is the delay
     /// in samples for that level.
     pub fn set_group_delay(&mut self, level: usize, delay_samples: usize) {
         if level < NUM_DELAY_LEVELS {

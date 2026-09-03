@@ -22,14 +22,15 @@ use crate::zpk::Zpk;
 /// Pro-Q 4 type 7: Butterworth LP prototype → `apply_shelf_gain_to_zpk`
 /// (scales zeros × gain, poles ÷ gain) → bilinear → biquads.
 ///
-/// From binary analysis of setup_eq_band_filter (0x1800fdf10):
-///   - For shelf types, bilinear_transform_zpk receives `1/Q_internal` as its
-///     frequency scaling parameter (param_3), which uniformly scales all prototype
+/// From binary analysis of `setup_eq_band_filter` (0x1800fdf10):
+///   - For shelf types, `bilinear_transform_zpk` receives `1/Q_internal` as its
+///     frequency scaling parameter (`param_3`), which uniformly scales all prototype
 ///     poles before the bilinear transform.
-///   - The biquad Q for shelves is always INV_SQRT2 (set at 0x1800fdfc0).
+///   - The biquad Q for shelves is always `INV_SQRT2` (set at 0x1800fdfc0).
 ///   - User Q controls the shelf transition steepness via this pole scaling.
 ///
 /// `n_sections` is the number of biquad sections (order / 2).
+#[must_use]
 pub fn design_low_shelf(
     n_sections: usize,
     freq_hz: f64,
@@ -47,7 +48,7 @@ pub fn design_low_shelf(
 
     (0..n)
         .map(|k| {
-            let section_gain = gain_db / n as f64;
+            let section_gain = gain_db / f64::from(u32::try_from(n).unwrap_or(1));
             // Pro-Q 4 uses Butterworth pole placement per section, then uniformly
             // scales all poles by 1/Q_internal in bilinear_transform_zpk.
             // In RBJ terms, the section Q is the Butterworth Q scaled by the
@@ -62,11 +63,12 @@ pub fn design_low_shelf(
 /// Design a high shelf filter via ZPK pipeline.
 ///
 /// Pro-Q 4 type 8: Butterworth LP prototype → bilinear → numerator normalization
-/// in zpk_sections_to_biquads to apply shelf gain.
+/// in `zpk_sections_to_biquads` to apply shelf gain.
 ///
-/// Same Q scaling as low shelf: bilinear_transform_zpk scales poles by 1/Q_internal.
+/// Same Q scaling as low shelf: `bilinear_transform_zpk` scales poles by `1/Q_internal`.
 ///
 /// `n_sections` is the number of biquad sections (order / 2).
+#[must_use]
 pub fn design_high_shelf(
     n_sections: usize,
     freq_hz: f64,
@@ -98,6 +100,7 @@ pub fn design_high_shelf(
 /// +gain below corner, -gain above (or vice versa).
 ///
 /// `n_sections` is the number of biquad sections.
+#[must_use]
 pub fn design_tilt_shelf(
     n_sections: usize,
     freq_hz: f64,
@@ -129,6 +132,7 @@ pub fn design_tilt_shelf(
 /// Boosts/cuts a band while leaving DC and Nyquist at 0 dB.
 ///
 /// `n_sections` is the number of biquad sections.
+#[must_use]
 pub fn design_band_shelf(
     n_sections: usize,
     freq_hz: f64,
@@ -164,7 +168,7 @@ pub fn design_band_shelf(
 /// Apply shelf gain to a ZPK filter representation.
 ///
 /// Pro-Q 4's `apply_shelf_gain_to_zpk` (0x1800fcce0):
-///   - is_low_type_shelf_gain (0x1800ffbc0) returns true for types {2, 5, 6, 7}
+///   - `is_low_type_shelf_gain` (0x1800ffbc0) returns true for types {2, 5, 6, 7}
 ///   - When true: zeros *= gain AND poles /= gain
 ///   - When false (types 8, 9, etc.): zeros *= gain only
 ///   - Type 6 (Flat Tilt): gain is squared
@@ -201,7 +205,7 @@ pub fn apply_shelf_gain(zpk: &mut Zpk, filter_type: u32, gain_linear: f64) {
 /// Butterworth Q factor for section k of n total sections.
 ///
 /// For a 2n-th order Butterworth, section k has:
-///   Q_k = 1 / (2 * sin(pi * (2k + 1) / (4n)))
+///   `Q_k` = 1 / (2 * sin(pi * (2k + 1) / (4n)))
 fn butterworth_section_q(k: usize, n: usize) -> f64 {
     let angle = PI * (2 * k + 1) as f64 / (4 * n) as f64;
     1.0 / (2.0 * angle.sin())
@@ -278,9 +282,7 @@ mod tests {
         let nyq = mag_db_sos(&sos, PI - 0.01);
         assert!(
             dc > nyq + 3.0,
-            "low shelf DC ({}) should be louder than Nyquist ({})",
-            dc,
-            nyq
+            "low shelf DC ({dc}) should be louder than Nyquist ({nyq})"
         );
     }
 
@@ -290,8 +292,7 @@ mod tests {
         let dc = mag_db_sos(&sos, 0.001);
         assert!(
             (dc - 6.0).abs() < 1.5,
-            "low shelf DC should be ~6 dB, got {}",
-            dc
+            "low shelf DC should be ~6 dB, got {dc}"
         );
     }
 
@@ -302,9 +303,7 @@ mod tests {
         let nyq = mag_db_sos(&sos, PI - 0.01);
         assert!(
             nyq > dc + 3.0,
-            "high shelf Nyquist ({}) should be louder than DC ({})",
-            nyq,
-            dc
+            "high shelf Nyquist ({nyq}) should be louder than DC ({dc})"
         );
     }
 
@@ -314,8 +313,7 @@ mod tests {
         let nyq = mag_db_sos(&sos, PI - 0.01);
         assert!(
             (nyq - 6.0).abs() < 1.5,
-            "high shelf Nyquist should be ~6 dB, got {}",
-            nyq
+            "high shelf Nyquist should be ~6 dB, got {nyq}"
         );
     }
 
@@ -333,9 +331,7 @@ mod tests {
         let high = mag_db_sos(&sos, PI - 0.1);
         assert!(
             low > high,
-            "tilt shelf should boost lows more than highs: low={}, high={}",
-            low,
-            high
+            "tilt shelf should boost lows more than highs: low={low}, high={high}"
         );
     }
 
@@ -347,9 +343,7 @@ mod tests {
         let dc = mag_db_sos(&sos, 0.001);
         assert!(
             center > dc + 2.0,
-            "band shelf center ({}) should be louder than DC ({})",
-            center,
-            dc
+            "band shelf center ({center}) should be louder than DC ({dc})"
         );
     }
 
@@ -416,8 +410,7 @@ mod tests {
         let q = butterworth_section_q(0, 1);
         assert!(
             (q - std::f64::consts::FRAC_1_SQRT_2).abs() < 0.01,
-            "2nd order Butterworth Q should be ~0.707, got {}",
-            q
+            "2nd order Butterworth Q should be ~0.707, got {q}"
         );
     }
 
@@ -426,7 +419,7 @@ mod tests {
         let q0 = butterworth_section_q(0, 2);
         let q1 = butterworth_section_q(1, 2);
         assert!(q0 > q1, "first section should have higher Q");
-        assert!(q0 > 1.0, "first section Q should be > 1.0, got {}", q0);
+        assert!(q0 > 1.0, "first section Q should be > 1.0, got {q0}");
     }
 
     #[test]
@@ -436,8 +429,7 @@ mod tests {
         let dc = mag_db_sos(&sos, 0.001);
         assert!(
             (dc - 6.0).abs() < 2.0,
-            "3-section low shelf DC should be ~6 dB, got {}",
-            dc
+            "3-section low shelf DC should be ~6 dB, got {dc}"
         );
     }
 }

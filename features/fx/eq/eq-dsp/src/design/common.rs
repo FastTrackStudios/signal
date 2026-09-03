@@ -57,12 +57,12 @@ pub fn ui_q_to_bandwidth_q(q: f64) -> f64 {
 /// giving a proper Butterworth cascade. For `user_q` != 1, the highest-Q section
 /// is scaled by `user_q^(1/N)` so that the cumulative effect of N sections matches
 /// Pro-Q 4's resonance amount (matches LP/HP cascade at fc=1k Q=10 to ~0.5 dB).
-pub(crate) fn cascade_qs(n: usize, user_q: f64) -> Vec<f64> {
-    let order = 2 * n;
+pub fn cascade_qs(n: usize, user_q: f64) -> Vec<f64> {
+    let order = (2_usize).saturating_mul(n);
     let sqrt2 = std::f64::consts::SQRT_2;
     let natural_qs: Vec<f64> = (0..n)
         .map(|k| {
-            let theta = PI * (2 * k + 1) as f64 / (2 * order) as f64;
+            let theta = PI * (2.0 * (k as f64) + 1.0) / (2.0 * (order as f64));
             sqrt2 / (2.0 * theta.cos())
         })
         .collect();
