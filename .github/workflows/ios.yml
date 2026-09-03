@@ -106,8 +106,8 @@ jobs:
           # Bundle id must match apps/desktop/Dioxus.toml.
           DX_BUNDLE_ID: app.fasttrackstudio.signal
           # Home-screen name. Without this the device shows the dx-derived
-          # bundle name; the crate is still called `fasttrackstudio` even
-          # though the product shipping from it is Signal.
+          # bundle name — `signal-desktop`, the crate name — rather than the
+          # product name.
           APP_DISPLAY_NAME: Signal
           # Own profile, or each product's build revokes the last one's.
           PROFILE_NAME: FTS Signal App Store

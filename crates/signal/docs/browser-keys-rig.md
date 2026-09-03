@@ -408,9 +408,9 @@ Grafana on top), the same `architect_telemetry` pattern as task-server.
   Unsetting the var silently disables all export; console logs are
   unaffected. `RUST_LOG` keeps working exactly as before (EnvFilter with
   the same per-binary defaults).
-- **Service names**: `fts-engine` (`fasttrackstudio --engine`, incl. the
+- **Service names**: `signal-engine` (`signal-desktop --engine`, incl. the
   systemd `signal-engine` unit, which now sets the endpoint in its
-  `Environment=`), `fts-app` (desktop GUI), `fts-patchbay`
+  `Environment=`), `signal` (desktop GUI), `fts-patchbay`
   (`fts-patchbay`), `fts-cli` (`fts`). The name is passed to
   `architect_telemetry` at init and wins over `OTEL_SERVICE_NAME`.
 - **Wide events**: architect's per-RPC span is the wide event
