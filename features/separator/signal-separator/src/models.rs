@@ -40,9 +40,12 @@ pub struct Asset {
     pub url: &'static str,
     /// Lowercase hex SHA-256 of the file's contents.
     ///
-    /// For Hugging Face LFS objects this is the ETag, which is the
-    /// content hash — so it can be checked against the server without
-    /// downloading first.
+    /// Computed from a verified download, **not** taken from the
+    /// server's ETag. A Hugging Face ETag matches the LFS object hash
+    /// only sometimes; for a CDN-served checkpoint it does not, and
+    /// trusting it here recorded a hash that rejected every good
+    /// download forever. Verify a fetch by size against the repository
+    /// listing, then hash the file that arrived.
     pub sha256: &'static str,
 }
 
@@ -85,7 +88,10 @@ pub const DRUMSEP: Model = Model {
     checkpoint: Asset {
         filename: "aufr33-jarredou_DrumSep_model_mdx23c_ep_141_sdr_10.8059.ckpt",
         url: "https://huggingface.co/lainlives/audio-separator-models/resolve/main/aufr33-jarredou_DrumSep_model_mdx23c_ep_141_sdr_10.8059.ckpt",
-        sha256: "d096076512c32100c0a89d7107e76a76028959c0933c78547d10eb771f5782b4",
+        // Verified: 437,652,699 bytes, matching the repository listing,
+        // and a fresh range request over the first megabyte reproduces
+        // the local copy byte for byte.
+        sha256: "d2a4aa53eb584d21eead358a4e66d1882ad182911be018f052b5da73be9096d0",
     },
     config: Some(Asset {
         filename: "aufr33-jarredou_DrumSep_model_mdx23c_ep_141_sdr_10.8059.yaml",
