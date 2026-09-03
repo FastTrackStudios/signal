@@ -307,6 +307,7 @@ impl DecayBand {
             }
         }
     }
+
 }
 
 /// The whole curve's decay-rate multiplier at `freq` (bands sum in rate-dB,
