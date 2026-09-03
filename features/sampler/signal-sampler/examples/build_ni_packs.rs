@@ -186,7 +186,7 @@ fn note_name(midi: u8) -> String {
     const N: [&str; 12] = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
     ];
-    format!("{}{}", N[midi as usize % 12], midi as i32 / 12 - 1)
+    format!("{}{}", N[midi as usize % 12], i32::from(midi) / 12 - 1)
 }
 
 fn styx_escape(s: &str) -> String {

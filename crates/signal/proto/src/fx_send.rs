@@ -59,7 +59,8 @@ impl core::str::FromStr for FxSendCategory {
 }
 
 impl FxSendCategory {
-    pub fn as_str(&self) -> &str {
+    #[must_use] 
+    pub const fn as_str(&self) -> &str {
         match self {
             Self::Reverb => "reverb",
             Self::Delay => "delay",
@@ -71,6 +72,7 @@ impl FxSendCategory {
     }
 
     /// Infer category from a track/FX name by looking for keywords.
+    #[must_use] 
     pub fn infer_from_name(name: &str) -> Self {
         let lower = name.to_lowercase();
         if lower.contains("reverb") || lower.contains("verb") {
@@ -93,7 +95,7 @@ impl FxSendCategory {
 
 /// A single send effect hosted on a dedicated DAW track.
 ///
-/// Examples: "Reverb: Reaverb - sweetverbo", "Delay: ReaDelay - Vocal Fattener"
+/// Examples: "Reverb: Reaverb - sweetverbo", "Delay: `ReaDelay` - Vocal Fattener"
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct FxSend {
     pub id: FxSendId,
@@ -127,7 +129,7 @@ impl FxSend {
     }
 
     #[must_use]
-    pub fn with_mix(mut self, mix: f32) -> Self {
+    pub const fn with_mix(mut self, mix: f32) -> Self {
         self.mix = mix.clamp(0.0, 1.0);
         self
     }
@@ -139,7 +141,7 @@ impl FxSend {
     }
 
     #[must_use]
-    pub fn disabled(mut self) -> Self {
+    pub const fn disabled(mut self) -> Self {
         self.enabled = false;
         self
     }

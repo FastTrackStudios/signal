@@ -11,7 +11,7 @@ use facet::Facet;
 // ── Wire types ──────────────────────────────────────────────────────────────
 
 /// One loadable keys preset (a Keyscape instrument / composition program).
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysPreset {
     /// Display name ("LA Custom C7 Grand", "Rhodes - Classic", …).
     pub name: String,
@@ -50,7 +50,7 @@ pub struct KeysNode {
     /// Whether this node currently produces sound (has a live backend).
     pub live: bool,
     /// Child nodes, in order.
-    pub children: Vec<KeysNode>,
+    pub children: Vec<Self>,
 }
 
 // ── Mixer (engines → layers) ────────────────────────────────────────────────
@@ -90,7 +90,7 @@ pub struct KeysLayerModel {
 /// A drone is not an instrument you perform: you pick a key, switch it on and
 /// it holds that note under the song until you switch it off. It takes no
 /// MIDI, so the keyboard belongs entirely to the engines above it.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysDrone {
     /// Pitch class being held, 0 = C … 11 = B.
     pub key: u32,
@@ -282,7 +282,7 @@ pub struct KeysEngineDetail {
 // ── Performance (stacks / scenes) ───────────────────────────────────────────
 
 /// One footswitch stack — a named scene over the mixer.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysStack {
     pub name: String,
     /// One-line description of the sound.
@@ -292,7 +292,7 @@ pub struct KeysStack {
 }
 
 /// The live performance model: the profile's stacks + grid mode.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysPerform {
     pub profile_name: String,
     pub stacks: Vec<KeysStack>,
@@ -353,7 +353,7 @@ pub struct KeysRealtime {
     /// Blocks the graph reported as an xrun since the engine opened.
     ///
     /// Unreliable on a follower node — it reads the DRIVER's clock and has
-    /// been measured at 0 while PipeWire counted 112 xruns on the same node
+    /// been measured at 0 while `PipeWire` counted 112 xruns on the same node
     /// in the same window. Read [`over_budget`](Self::over_budget) to know
     /// whether WE caused a dropout.
     #[facet(default)]
@@ -394,7 +394,7 @@ pub struct KeysRealtime {
 /// One `.signalpack` a lane program references — what a browser client must
 /// stream (over `signal-packs-proto`'s `PackLibrary`) and install before the
 /// referencing lane sounds.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysPackRef {
     /// The spec-path KEY the lane trees reference (`RigBlock.sample`) — the
     /// exact string to hand `signal_sampler::pack_registry::install`. On the
@@ -408,7 +408,7 @@ pub struct KeysPackRef {
 
 /// One lane of the program, for browser UI that treats `program_json` as
 /// opaque: which engine it belongs to and which pack makes it sound.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysLaneRef {
     pub engine: String,
     /// Layer/lane name ("Keys A") — also the daw track name in lane mode.
@@ -428,7 +428,7 @@ pub struct KeysLaneRef {
 /// Worklet track order (for `trackPeaks` / `setTrackVolume` indices): the
 /// rig folder first, then each engine's folder track followed by its lanes,
 /// engines and lanes in `lanes` order.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysLaneProgram {
     /// `signal_sampler::keys_rig::WireProgram` as facet-json.
     pub program_json: String,

@@ -10,7 +10,7 @@ pub struct Model {
     pub owner_id: String,
     /// Human-readable label (e.g., "Clean Scene - Amp params").
     pub name: String,
-    /// JSON-serialized `DawParameterSnapshot` (HashMap<String, DawParamValue>).
+    /// JSON-serialized `DawParameterSnapshot` (`HashMap`<String, `DawParamValue`>).
     pub params_json: String,
     pub created_at: String,
 }

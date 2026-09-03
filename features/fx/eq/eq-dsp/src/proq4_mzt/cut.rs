@@ -8,7 +8,7 @@ use super::biquad_from_mode0_params;
 
 /// Lowpass biquad — Pro-Q 4 form, MZT poles + DC unity.
 ///
-/// Analog prototype: `H(s) = 1 / (s² + (1/Q_bw)·s + 1)` with Q_bw = Q/√2.
+/// Analog prototype: `H(s) = 1 / (s² + (1/Q_bw)·s + 1)` with `Q_bw` = Q/√2.
 /// Verified at fc=1000 Q=1: |H(0)|=1, |H(e^{jw0})|=-3 dB, |H(π)|≈-55 dB
 /// (standard cutoff convention).
 pub fn design_lowpass(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
@@ -176,7 +176,7 @@ pub fn hp_slope8_section_biquad(
     // Post-rewrite w_pole multipliers from hp_s8_all_sections_subfreq.csv
     // (SR=48000, 240 rows, verified 2026-05-01). Sec 0 is Q-dependent,
     // sec 1, 2 are Q-invariant fixed multipliers, sec 3-5 = 1.0 (= ω_base).
-    const M_K_FIXED: [f64; 6] = [1.0, 1.1267645435, 1.1456678821, 1.0, 1.0, 1.0];
+    const M_K_FIXED: [f64; 6] = [1.0, 1.126_764_543_5, 1.145_667_882_1, 1.0, 1.0, 1.0];
 
     // Solver (pre-rewrite) wp multipliers, used as INPUT to the
     // compute_peak_type3 w_eval formula for sec 1, 2 only. Per
@@ -318,7 +318,7 @@ fn hp_s8_sec0_solver_q_multiplier(q_user: f64) -> f64 {
 /// Decoded `compute_peak_type3_parameters` w_eval formula for HP s=8 sec 0..2.
 /// f32 cast preserved for bit-exactness with binary's SS instructions.
 fn hp_s8_w_eval_sec_0_2(w_pole_solver: f64) -> f64 {
-    const A: f64 = 0.44209706414415373;
+    const A: f64 = 0.442_097_064_144_153_73;
     const B: f64 = 5.0 / 12.0;
     const K: f64 = 0.2;
     const D: f64 = 0.785;

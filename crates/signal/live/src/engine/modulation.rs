@@ -48,7 +48,7 @@ pub struct ParamWrite {
 #[derive(Debug, Clone)]
 pub struct ModulationRuntime {
     processor: ModulationProcessor,
-    /// Maps ParamTarget → DAW FX binding.
+    /// Maps `ParamTarget` → DAW FX binding.
     bindings: HashMap<ParamTarget, ParamBinding>,
     /// Base values for each target (the "dry" value before modulation).
     base_values: HashMap<ParamTarget, f64>,
@@ -61,6 +61,7 @@ const DEDUP_EPSILON: f64 = 1e-5;
 
 impl ModulationRuntime {
     /// Create a new runtime from modulation routes.
+    #[must_use] 
     pub fn new(routes: Vec<ModulationRoute>) -> Self {
         Self {
             processor: ModulationProcessor::new(routes),
@@ -90,7 +91,7 @@ impl ModulationRuntime {
     }
 
     /// Access the underlying processor for external input and trigger methods.
-    pub fn processor(&mut self) -> &mut ModulationProcessor {
+    pub const fn processor(&mut self) -> &mut ModulationProcessor {
         &mut self.processor
     }
 
@@ -159,12 +160,14 @@ impl ModulationRuntime {
     }
 
     /// Number of active bindings.
+    #[must_use] 
     pub fn binding_count(&self) -> usize {
         self.bindings.len()
     }
 
     /// Number of routes in the processor.
-    pub fn route_count(&self) -> usize {
+    #[must_use] 
+    pub const fn route_count(&self) -> usize {
         self.processor.route_count()
     }
 }
@@ -208,7 +211,7 @@ mod tests {
     #[test]
     fn unbound_target_produces_no_write() {
         let target = ParamTarget::new("amp", "gain");
-        let mut rt = ModulationRuntime::new(vec![cc_route("r1", 1, target.clone(), 1.0)]);
+        let mut rt = ModulationRuntime::new(vec![cc_route("r1", 1, target, 1.0)]);
         // No binding set
         rt.processor().set_midi_cc(1, 1.0);
         let writes = rt.tick(0.033, 120.0);

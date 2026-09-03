@@ -43,7 +43,7 @@ fn goertzel(buf: &[f64], freq: f64) -> f64 {
         s2 = s1;
         s1 = s0;
     }
-    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
 }
 
 /// A deterministic noise source — no rand dependency, and a fixed spectrum
@@ -65,7 +65,7 @@ fn stimulus(frames: usize) -> Vec<f64> {
     let ninc = std::f64::consts::TAU * NEIGHBOUR_HZ / SR;
     (0..frames)
         .map(|_| {
-            let s = 0.05 * rng.next() + 0.35 * phase.sin();
+            let s = 0.05f64.mul_add(rng.next(), 0.35 * phase.sin());
             phase += inc;
             let _ = (&mut nphase, ninc);
             s
@@ -84,7 +84,7 @@ fn render(eq: &mut NativeEq, input: &[f64]) -> Vec<f64> {
         let r = l.clone();
         let (mut ol, mut or) = (vec![0.0f32; n], vec![0.0f32; n]);
         eq.process_block(&l, &r, &mut ol, &mut or, &events).expect("process");
-        out.extend(ol.iter().map(|s| *s as f64));
+        out.extend(ol.iter().map(|s| f64::from(*s)));
         pos += n;
     }
     // The detector and the overlap-add both need to settle.
@@ -123,11 +123,10 @@ fn noise_floor(buf: &[f64], centre: f64) -> f64 {
     let n = 9;
     let mut sum = 0.0;
     for k in 0..n {
-        let f = centre - NEIGHBOUR_SPAN_HZ / 2.0
-            + NEIGHBOUR_SPAN_HZ * (k as f64 / (n - 1) as f64);
+        let f = NEIGHBOUR_SPAN_HZ.mul_add(f64::from(k) / f64::from(n - 1), centre - NEIGHBOUR_SPAN_HZ / 2.0);
         sum += goertzel(buf, f);
     }
-    sum / n as f64
+    sum / f64::from(n)
 }
 
 fn db(a: f64, b: f64) -> f64 {

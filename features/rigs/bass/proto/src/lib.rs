@@ -34,7 +34,7 @@ pub enum PresetKind {
 }
 
 /// One preset in the bass library — a complete tone the rig can switch to.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct BassPreset {
     /// Display name (e.g. "Bass", "Synth Bass").
     pub name: String,
@@ -48,7 +48,7 @@ pub struct BassPreset {
 }
 
 /// One block in the live active-preset chain.
-#[derive(Clone, PartialEq, Debug, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Facet)]
 pub struct BassBlock {
     /// Stable id used to address the block (bypass / param edits).
     pub id: String,

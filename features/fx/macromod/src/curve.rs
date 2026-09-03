@@ -3,7 +3,7 @@
 //! Each curve is a sorted list of `CurvePoint`s. Interpolation between points
 //! is linear. Values outside the curve range clamp to the nearest endpoint.
 //!
-//! A curve with two points at macro_value 0.0 and 1.0 is equivalent to the
+//! A curve with two points at `macro_value` 0.0 and 1.0 is equivalent to the
 //! classic min/max binding.
 
 use facet::Facet;
@@ -22,7 +22,8 @@ pub struct CurvePoint {
 }
 
 impl CurvePoint {
-    pub fn new(macro_value: f64, param_value: f64) -> Self {
+    #[must_use] 
+    pub const fn new(macro_value: f64, param_value: f64) -> Self {
         Self {
             macro_value: macro_value.clamp(0.0, 1.0),
             param_value: param_value.clamp(0.0, 1.0),
@@ -34,7 +35,7 @@ impl CurvePoint {
 ///
 /// Points are always kept sorted by `macro_value`. Interpolation between
 /// adjacent points is linear. Values below the first point clamp to
-/// that point's param_value; values above the last point clamp similarly.
+/// that point's `param_value`; values above the last point clamp similarly.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct MultiPointCurve {
     /// Control points, sorted by `macro_value` ascending.
@@ -51,6 +52,7 @@ impl Default for MultiPointCurve {
 
 impl MultiPointCurve {
     /// Create a curve from min/max values (equivalent to the classic binding).
+    #[must_use] 
     pub fn min_max(min: f64, max: f64) -> Self {
         Self {
             points: vec![CurvePoint::new(0.0, min), CurvePoint::new(1.0, max)],
@@ -58,13 +60,14 @@ impl MultiPointCurve {
     }
 
     /// Create a curve from a list of points. Points are sorted on creation.
+    #[must_use] 
     pub fn from_points(mut points: Vec<CurvePoint>) -> Self {
         points.sort_by(|a, b| a.macro_value.partial_cmp(&b.macro_value).unwrap());
         Self { points }
     }
 
     /// Add a point to the curve, maintaining sort order.
-    /// If a point at the same macro_value already exists, it is replaced.
+    /// If a point at the same `macro_value` already exists, it is replaced.
     pub fn set_point(&mut self, point: CurvePoint) {
         // Remove existing point at same position (within epsilon)
         self.points
@@ -76,7 +79,7 @@ impl MultiPointCurve {
         self.points.insert(idx, point);
     }
 
-    /// Remove the point nearest to the given macro_value.
+    /// Remove the point nearest to the given `macro_value`.
     /// Won't remove if fewer than 2 points remain.
     pub fn remove_nearest(&mut self, macro_value: f64) -> Option<CurvePoint> {
         if self.points.len() <= 2 {
@@ -96,6 +99,7 @@ impl MultiPointCurve {
     }
 
     /// Evaluate the curve at a given macro knob position using piecewise-linear interpolation.
+    #[must_use] 
     pub fn evaluate(&self, macro_value: f64) -> f64 {
         let macro_value = macro_value.clamp(0.0, 1.0);
 
@@ -126,7 +130,7 @@ impl MultiPointCurve {
                     return a.param_value;
                 }
                 let t = (macro_value - a.macro_value) / range;
-                return a.param_value + (b.param_value - a.param_value) * t;
+                return (b.param_value - a.param_value).mul_add(t, a.param_value);
             }
         }
 
@@ -135,12 +139,14 @@ impl MultiPointCurve {
     }
 
     /// Number of control points.
-    pub fn len(&self) -> usize {
+    #[must_use] 
+    pub const fn len(&self) -> usize {
         self.points.len()
     }
 
     /// Whether the curve has no points.
-    pub fn is_empty(&self) -> bool {
+    #[must_use] 
+    pub const fn is_empty(&self) -> bool {
         self.points.is_empty()
     }
 }

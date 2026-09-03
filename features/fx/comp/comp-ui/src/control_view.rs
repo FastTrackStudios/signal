@@ -79,11 +79,13 @@ fn bounds() -> ((u32, u32), (u32, u32)) {
     fts_audio_ui::EditorForm::size_bounds(RAIL_W, crate::faces::preferred_editor_size(0))
 }
 
+#[must_use] 
 pub fn min_editor_size() -> (f32, f32) {
     let ((w, h), _) = bounds();
     (w as f32, h as f32)
 }
 
+#[must_use] 
 pub fn max_editor_size() -> (f32, f32) {
     let (_, (w, h)) = bounds();
     // Room to stretch past the largest preset — a host may hand over a bigger
@@ -95,6 +97,7 @@ pub fn max_editor_size() -> (f32, f32) {
 
 /// How the host may resize this editor: freely on both axes between
 /// [`min_editor_size`] and [`max_editor_size`], no aspect-ratio lock.
+#[must_use] 
 pub fn resize_hint() -> ResizeHint {
     let (min_w, min_h) = min_editor_size();
     let (max_w, max_h) = max_editor_size();
@@ -123,7 +126,7 @@ pub fn App() -> Element {
     }
 }
 
-/// Inner shell component — runs after the ThemeProvider context is in scope
+/// Inner shell component — runs after the `ThemeProvider` context is in scope
 /// so themed primitives can resolve their tokens.
 /// The height of the preset strip across the top of the editor.
 ///
@@ -192,7 +195,7 @@ fn AppShell() -> Element {
     // through a plain Cell rather than an effect because the profile lives in
     // a plugin param, not a signal: this shell re-renders on the redraw tick
     // anyway, so comparing here also catches the host automating the param.
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     let last_profile: std::rc::Rc<
         std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm, usize, u64)>>,
     > = use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
@@ -269,7 +272,7 @@ fn AppShell() -> Element {
     // scales itself to the box through the `PanelBox` it is given.
     let (win_w, win_h) = fts_audio_ui::hardware::panel::window_logical_size().unwrap_or({
         let (w, h) = crate::faces::stack_editor_size_rows(params, &rows, form, sidecar_mask);
-        (w as f64, h as f64)
+        (f64::from(w), f64::from(h))
     });
     // The preset strip takes a fixed band off the top; the rows get what is
     // left, so nothing is hidden behind it.
@@ -306,13 +309,12 @@ fn AppShell() -> Element {
     let profile_handle = param_handle(stage.profile.as_ptr(), ctx.clone());
     let params_for_id = ui.params.clone();
     let params_for_form = ui.params.clone();
-    let ctx_for_rail = ctx.clone();
+    let ctx_for_rail = ctx;
     let profile_count = PROFILE_LABELS.len();
     // One rail entry per compressor family, badged with the active unit.
     let items = crate::faces::rail_items(profile_idx);
     let active_category = comp_profiles::category_of(profile_id)
-        .map(|(c, _)| c)
-        .unwrap_or(0);
+        .map_or(0, |(c, _)| c);
 
     rsx! {
         document::Style { {base_css} }
@@ -385,7 +387,7 @@ fn AppShell() -> Element {
                             title: format!("Editor size — {} (click to cycle)", form.label()),
                             active: form != fts_audio_ui::EditorForm::default(),
                             accent: skin.accent.to_string(),
-                            on_click: move |_| {
+                            on_click: move |()| {
                                 let forms = fts_audio_ui::EDITOR_FORMS;
                                 let index = forms.iter().position(|f| *f == form).unwrap_or(0);
                                 params_for_form.store_editor_form(forms[(index + 1) % forms.len()]);
@@ -400,7 +402,7 @@ fn AppShell() -> Element {
                             accent: skin.accent.to_string(),
                             on_click: {
                                 let mut sidecars = sidecars;
-                                move |_| {
+                                move |()| {
                                     let bit = 1u64 << focus.peek().0.min(63);
                                     let cur = *sidecars.peek();
                                     sidecars.set(cur ^ bit);
@@ -419,7 +421,7 @@ fn AppShell() -> Element {
                                 },
                                 active: is_advanced,
                                 accent: skin.accent.to_string(),
-                                on_click: move |_| advanced.toggle(),
+                                on_click: move |()| advanced.toggle(),
                             }
                         }
                     },
@@ -474,11 +476,11 @@ fn AppShell() -> Element {
                         browser: preset_browser,
                         browsing,
                         accent: skin.accent.to_string(),
-                        on_browse: move |_| preset_open.toggle(),
+                        on_browse: move |()| preset_open.toggle(),
                         on_apply: {
                             let handles = preset_handles.clone();
                             move |p: Vec<(String, f64)>| {
-                                crate::preset_view::apply(&p, &handles, preset_note)
+                                crate::preset_view::apply(&p, &handles, preset_note);
                             }
                         },
                     }
@@ -499,7 +501,7 @@ fn AppShell() -> Element {
                             crate::preset_view::CompPresetSidecar {
                                 browser: preset_browser,
                                 note: preset_note,
-                                handles: preset_handles.clone(),
+                                handles: preset_handles,
                                 ink: "#e8e6ef".to_string(),
                                 accent: skin.accent.to_string(),
                             }
@@ -536,7 +538,7 @@ fn StageRow(
     let params = ui.params.clone();
     // The ROOT focus signal, captured before this row shadows the context.
     let root_focus = crate::focus::use_focus_signal();
-    let focused = root_focus.map(|f| f.read().0 == stage).unwrap_or(true);
+    let focused = root_focus.is_none_or(|f| f.read().0 == stage);
     // The sidecar mask lives at the root (the same context the sizing read).
     let mut sidecars: Signal<u64> = use_context();
     let sidecar_open = *sidecars.read() & (1 << stage.min(63)) != 0;
@@ -669,6 +671,7 @@ fn StageRow(
 
 /// Re-exported so callers (and tests) can resolve a profile index to its skin
 /// the same way `AppShell` does.
+#[must_use] 
 pub fn skin_for_profile_index(index: usize) -> ProfileSkin {
     profile_skin(profile_id_for_index(index))
 }

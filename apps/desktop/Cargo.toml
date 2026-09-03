@@ -33,6 +33,9 @@ authors = ["FastTrackStudio"]
 name = "signal-desktop"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [features]
 # Three domain axes — Signal, Session, Charts — all on by default. Drop any
 # one for fast iteration or a focused `dx serve`; e.g.

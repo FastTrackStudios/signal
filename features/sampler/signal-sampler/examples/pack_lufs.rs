@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Mono sum for the meter: every pack is measured the same way, so
             // the comparison between them holds even though this is not a
             // full multichannel BS.1770 sum.
-            mono.push(0.5 * (f[0] as f64 + f[1] as f64));
+            mono.push(0.5 * (f64::from(f[0]) + f64::from(f[1])));
         }
     }
 
@@ -94,7 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  integrated  {lufs:>8.2} LUFS");
     println!(
         "  peak        {:>8.2} dBFS",
-        20.0 * (peak.max(1e-9) as f64).log10()
+        20.0 * f64::from(peak.max(1e-9)).log10()
     );
     println!("  trim to {target:>5.1}  {trim:>+8.2} dB");
     println!("\n  {{name \"{name}\", lufs {lufs:.2}}}");

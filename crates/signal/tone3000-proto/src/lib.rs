@@ -21,7 +21,7 @@
 use facet::Facet;
 
 /// Whether the engine currently holds a session.
-#[derive(Facet, Clone, Debug, Default, PartialEq)]
+#[derive(Facet, Clone, Debug, Default, PartialEq, Eq)]
 pub struct SignInStatus {
     pub signed_in: bool,
     /// The signed-in account, when known. Display only.

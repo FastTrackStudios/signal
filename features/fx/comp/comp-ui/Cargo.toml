@@ -6,6 +6,9 @@ license.workspace = true
 edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
 description = "Compressor GUI — control view (knobs + GR meter), params, and profile theme rendering"
 
+[lints]
+workspace = true
+
 [features]
 # Core-only by default in the signal workspace (wasm remotes). The plugin
 # builds enable `native` for the Blitz/nice-plug editor.

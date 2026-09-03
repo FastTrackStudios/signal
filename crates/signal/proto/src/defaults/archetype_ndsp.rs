@@ -1874,6 +1874,7 @@ const TIM_HENSON_MODULES: &[ModuleSpec] = &[
     },
 ];
 
+#[must_use] 
 pub fn archetype_cory_wong_x() -> PluginBlockDef {
     build_template(
         "VST3: Archetype Cory Wong X (Neural DSP)",
@@ -1883,6 +1884,7 @@ pub fn archetype_cory_wong_x() -> PluginBlockDef {
     )
 }
 
+#[must_use] 
 pub fn archetype_john_mayer_x_full() -> PluginBlockDef {
     build_template(
         "VST3: Archetype John Mayer X (Neural DSP)",
@@ -1892,6 +1894,7 @@ pub fn archetype_john_mayer_x_full() -> PluginBlockDef {
     )
 }
 
+#[must_use] 
 pub fn archetype_misha_mansoor_x() -> PluginBlockDef {
     build_template(
         "VST3: Archetype Misha Mansoor X (Neural DSP)",
@@ -1901,6 +1904,7 @@ pub fn archetype_misha_mansoor_x() -> PluginBlockDef {
     )
 }
 
+#[must_use] 
 pub fn archetype_nolly_x() -> PluginBlockDef {
     build_template(
         "VST3: Archetype Nolly X (Neural DSP)",
@@ -1910,6 +1914,7 @@ pub fn archetype_nolly_x() -> PluginBlockDef {
     )
 }
 
+#[must_use] 
 pub fn archetype_petrucci_x() -> PluginBlockDef {
     build_template(
         "VST3: Archetype Petrucci X (Neural DSP)",
@@ -1919,6 +1924,7 @@ pub fn archetype_petrucci_x() -> PluginBlockDef {
     )
 }
 
+#[must_use] 
 pub fn archetype_rabea_x() -> PluginBlockDef {
     build_template(
         "VST3: Archetype Rabea X (Neural DSP)",
@@ -1928,6 +1934,7 @@ pub fn archetype_rabea_x() -> PluginBlockDef {
     )
 }
 
+#[must_use] 
 pub fn archetype_tim_henson_x() -> PluginBlockDef {
     build_template(
         "VST3: Archetype Tim Henson X (Neural DSP)",
@@ -1937,6 +1944,7 @@ pub fn archetype_tim_henson_x() -> PluginBlockDef {
     )
 }
 
+#[must_use] 
 pub fn archetype_x_templates() -> Vec<PluginBlockDef> {
     vec![
         archetype_cory_wong_x(),
@@ -1961,6 +1969,7 @@ pub const NDSP_ARCHETYPE_X_PLUGIN_NAMES: &[&str] = &[
 ];
 
 /// User-facing short label (e.g. "Archetype Cory Wong X").
+#[must_use] 
 pub fn archetype_label(plugin_name: &str) -> String {
     plugin_name
         .trim_start_matches("VST3: ")
@@ -1969,21 +1978,24 @@ pub fn archetype_label(plugin_name: &str) -> String {
 }
 
 /// Stable seed slug used to derive deterministic IDs.
+#[must_use] 
 pub fn archetype_seed_slug(plugin_name: &str) -> String {
     slugify(&archetype_label(plugin_name))
 }
 
 /// Find which Archetype X plugin appears in an rfxchain text payload.
+#[must_use] 
 pub fn detect_archetype_plugin_in_rfxchain(rfxchain: &str) -> Option<String> {
     NDSP_ARCHETYPE_X_PLUGIN_NAMES
         .iter()
         .find(|name| rfxchain.contains(**name))
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
 }
 
 /// Deterministic module preset seed keys for a plugin, in virtual module order.
 ///
 /// Keys are suitable for `seed_id(key)` and match `signal-storage` NDSP module seeding.
+#[must_use] 
 pub fn archetype_module_seed_keys(plugin_name: &str) -> Option<Vec<String>> {
     let def = archetype_x_templates()
         .into_iter()

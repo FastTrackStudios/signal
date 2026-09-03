@@ -74,20 +74,20 @@ static CONSTRAINTS: &[Constraint] = &[
     },
 ];
 
-fn peak_reduction_threshold(x: f64) -> f64 {
-    -6.0 - x.clamp(0.0, 1.0) * 42.0
+const fn peak_reduction_threshold(x: f64) -> f64 {
+    x.clamp(0.0, 1.0).mul_add(-42.0, -6.0)
 }
 
-fn peak_reduction_ratio(x: f64) -> f64 {
-    2.0 + x.clamp(0.0, 1.0) * 4.0
+const fn peak_reduction_ratio(x: f64) -> f64 {
+    x.clamp(0.0, 1.0).mul_add(4.0, 2.0)
 }
 
-fn peak_reduction_knee(x: f64) -> f64 {
-    12.0 + x.clamp(0.0, 1.0) * 18.0
+const fn peak_reduction_knee(x: f64) -> f64 {
+    x.clamp(0.0, 1.0).mul_add(18.0, 12.0)
 }
 
-fn peak_reduction_range(x: f64) -> f64 {
-    12.0 + x.clamp(0.0, 1.0) * 24.0
+const fn peak_reduction_range(x: f64) -> f64 {
+    x.clamp(0.0, 1.0).mul_add(24.0, 12.0)
 }
 
 fn peak_reduction_drive(x: f64) -> f64 {

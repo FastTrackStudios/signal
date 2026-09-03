@@ -19,7 +19,7 @@ const SR: u32 = 48_000;
 fn render(set: &ModuleSettings, frames: usize) -> Vec<f32> {
     let tree = Container::layer("L").add(signal_module_with("M", set));
     let mut node = RenderNode::compile(&tree, SR);
-    node.prepare(SR as f64, 512);
+    node.prepare(f64::from(SR), 512);
     let (mut out_l, mut out_r) = (vec![0.0f32; 512], vec![0.0f32; 512]);
     let (silence_l, silence_r) = (vec![0.0f32; 512], vec![0.0f32; 512]);
     let mut all = Vec::with_capacity(frames);
@@ -77,7 +77,7 @@ fn main() {
     let slow = render(
         &ModuleSettings {
             amp_env: (500.0, 0.0, 1.0, 200.0),
-            ..base.clone()
+            ..base
         },
         SR as usize / 2,
     );

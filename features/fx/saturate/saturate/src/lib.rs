@@ -15,6 +15,7 @@ pub struct StereoSaturator {
 }
 
 impl StereoSaturator {
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
@@ -23,7 +24,7 @@ impl StereoSaturator {
         self.stage.set_drive(drive);
     }
 
-    pub fn set_curve(&mut self, curve: SaturationCurve) {
+    pub const fn set_curve(&mut self, curve: SaturationCurve) {
         self.stage.set_curve(curve);
     }
 
@@ -35,7 +36,7 @@ impl StereoSaturator {
         self.stage.set_output_db(db);
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.stage.reset();
     }
 
@@ -49,6 +50,7 @@ impl StereoSaturator {
     }
 
     #[inline]
+    #[must_use] 
     pub fn process_sample(&self, input: f32) -> f32 {
         self.stage.process(input)
     }

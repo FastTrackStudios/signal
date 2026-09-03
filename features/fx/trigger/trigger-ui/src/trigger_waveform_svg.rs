@@ -26,25 +26,29 @@ pub const DB_MARKERS: &[(f32, &str)] = &[
 
 /// dB (0 at the top … −[`RANGE_DB`] at the bottom) → y within a graph of
 /// height `h`.
+#[must_use] 
 pub fn db_to_y(db: f64, h: f64) -> f64 {
-    ((-db) / RANGE_DB as f64).clamp(0.0, 1.0) * h
+    ((-db) / f64::from(RANGE_DB)).clamp(0.0, 1.0) * h
 }
 
 /// Inverse of [`db_to_y`]: y within a graph of height `h` → dB (clamped to
 /// the display range, 0 … −[`RANGE_DB`]).
+#[must_use] 
 pub fn y_to_db(y: f64, h: f64) -> f64 {
-    -(y / h).clamp(0.0, 1.0) * RANGE_DB as f64
+    -(y / h).clamp(0.0, 1.0) * f64::from(RANGE_DB)
 }
 
 /// y of the threshold line for a threshold in dB.
+#[must_use] 
 pub fn threshold_line_y(threshold_db: f32, h: f64) -> f64 {
-    db_to_y(threshold_db as f64, h)
+    db_to_y(f64::from(threshold_db), h)
 }
 
 /// Linear peak sample (0..1) → normalized display amplitude (0..1) through
 /// dB, so the bar heights are log-scaled onto the same axis as the
 /// threshold line (a bar exactly reaches the line when its peak equals the
 /// threshold).
+#[must_use] 
 pub fn scale_peak(peak: f32) -> f32 {
     if peak <= 0.0 {
         0.0
@@ -55,6 +59,7 @@ pub fn scale_peak(peak: f32) -> f32 {
 }
 
 /// Map a slice of linear input peaks through [`scale_peak`].
+#[must_use] 
 pub fn scale_peaks(peaks: &[f32]) -> Vec<f32> {
     peaks.iter().map(|&p| scale_peak(p)).collect()
 }
@@ -63,6 +68,7 @@ pub fn scale_peaks(peaks: &[f32]) -> Vec<f32> {
 /// a rect subpath from the bottom edge up to its display amplitude. Columns
 /// get a 1-px-ish gap (20 % of the column) like the legacy bar rendering;
 /// near-silent columns are skipped so an idle display is an empty path.
+#[must_use] 
 pub fn bars_path(samples: &[f32], w: f64, h: f64) -> String {
     let n = samples.len();
     if n == 0 {
@@ -72,7 +78,7 @@ pub fn bars_path(samples: &[f32], w: f64, h: f64) -> String {
     let bar_w = (step * 0.8).max(0.5);
     let mut d = String::new();
     for (i, &s) in samples.iter().enumerate() {
-        let amp = s.clamp(0.0, 1.0) as f64;
+        let amp = f64::from(s.clamp(0.0, 1.0));
         if amp < 0.001 {
             continue;
         }
@@ -97,6 +103,7 @@ pub fn bars_path(samples: &[f32], w: f64, h: f64) -> String {
 /// (column `len − 1`), exactly aligned with the wave ring's oldest→newest
 /// snapshot; hits that scrolled out (or from the future — a torn read) are
 /// dropped.
+#[must_use] 
 pub fn marker_columns(hits: &[(u64, f32)], head: u64, len: usize, w: f64) -> Vec<(f64, f32)> {
     if len == 0 {
         return Vec::new();
@@ -161,7 +168,7 @@ mod tests {
         // A bar whose peak equals the threshold dB reaches exactly the
         // threshold line: display amp 1 − y/h.
         let thr = -18.0f32;
-        let amp = scale_peak(10f32.powf(thr / 20.0)) as f64;
+        let amp = f64::from(scale_peak(10f32.powf(thr / 20.0)));
         let bar_top = 260.0 - amp * 260.0;
         assert!((bar_top - threshold_line_y(thr, 260.0)).abs() < 1e-3);
     }
@@ -198,12 +205,12 @@ mod tests {
         assert_eq!(cols.len(), 2, "windowing wrong: {cols:?}");
         let step = w / len as f64;
         assert!(
-            (cols[0].0 - (255.5 * step)).abs() < 1e-9,
+            255.5f64.mul_add(-step, cols[0].0).abs() < 1e-9,
             "newest not at right edge"
         );
         assert!((cols[0].1 - 0.9).abs() < 1e-6);
         assert!(
-            (cols[1].0 - (0.5 * step)).abs() < 1e-9,
+            0.5f64.mul_add(-step, cols[1].0).abs() < 1e-9,
             "oldest not at left edge"
         );
         // Empty window / empty hits.

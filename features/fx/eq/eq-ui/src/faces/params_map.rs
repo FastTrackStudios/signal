@@ -3,7 +3,7 @@
 //! Each hardware model has its own parameters because each is its own circuit,
 //! so a panel control is exactly one parameter and this is the whole
 //! translation. Ids are the parameter names without their model prefix
-//! ("low_boost" on the Pultec panel is `pultec_low_boost_db`), which keeps the
+//! ("`low_boost`" on the Pultec panel is `pultec_low_boost_db`), which keeps the
 //! layout tables readable and stops a control on one panel from resolving
 //! against another model's parameter.
 

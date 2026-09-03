@@ -1,6 +1,6 @@
 //! Dump our drum-mixer layout (engines → channels/mics + sends, buses) for a
 //! given kit, so the MM2 mix matcher can be aligned to the real structure.
-//!   cargo run -p signal-drums --example layout_dump -- <kit.signalpreset>
+//!   cargo run -p signal-drums --example `layout_dump` -- <kit.signalpreset>
 
 use signal_sampler::SamplerRig;
 

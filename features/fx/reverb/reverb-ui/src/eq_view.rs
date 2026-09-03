@@ -32,7 +32,7 @@ pub enum EqViewMode {
     Decay,
 }
 
-fn post_shape_to_index(shape: EqBandShape) -> i32 {
+const fn post_shape_to_index(shape: EqBandShape) -> i32 {
     match shape {
         EqBandShape::LowShelf => 1,
         EqBandShape::HighShelf => 2,
@@ -42,7 +42,7 @@ fn post_shape_to_index(shape: EqBandShape) -> i32 {
     }
 }
 
-fn post_index_to_shape(i: i32) -> EqBandShape {
+const fn post_index_to_shape(i: i32) -> EqBandShape {
     match i {
         1 => EqBandShape::LowShelf,
         2 => EqBandShape::HighShelf,
@@ -52,7 +52,7 @@ fn post_index_to_shape(i: i32) -> EqBandShape {
     }
 }
 
-fn decay_shape_to_index(shape: EqBandShape) -> i32 {
+const fn decay_shape_to_index(shape: EqBandShape) -> i32 {
     match shape {
         EqBandShape::LowShelf | EqBandShape::LowCut => 1,
         EqBandShape::HighShelf | EqBandShape::HighCut => 2,
@@ -60,7 +60,7 @@ fn decay_shape_to_index(shape: EqBandShape) -> i32 {
     }
 }
 
-fn decay_index_to_shape(i: i32) -> EqBandShape {
+const fn decay_index_to_shape(i: i32) -> EqBandShape {
     match i {
         1 => EqBandShape::LowShelf,
         2 => EqBandShape::HighShelf,
@@ -128,7 +128,7 @@ pub fn ReverbEqSidecar(frame: u64) -> Element {
     }
 }
 
-/// One curve: an EqGraph over the chosen band set.
+/// One curve: an `EqGraph` over the chosen band set.
 #[component]
 pub fn ReverbEqView(mode_is_decay: bool, frame: u64) -> Element {
     let _ = frame;
@@ -186,8 +186,8 @@ pub fn ReverbEqView(mode_is_decay: bool, frame: u64) -> Element {
 
     let params_change: Arc<ReverbParams> = params.clone();
     let ctx_change = ctx.clone();
-    let params_remove = params.clone();
-    let ctx_remove = ctx.clone();
+    let params_remove = params;
+    let ctx_remove = ctx;
 
     let (label, db_range) = match mode {
         EqViewMode::Post => ("Post EQ — the reverb sound", 24.0),

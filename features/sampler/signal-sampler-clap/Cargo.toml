@@ -9,6 +9,9 @@ description = "CLAP instrument plugin hosting the signal-sampler engine on a REA
 [lib]
 crate-type = ["cdylib", "lib"]
 
+[lints]
+workspace = true
+
 [dependencies]
 # Plugin framework. `nice_plug` must be a DIRECT dep (not just via
 # `audiocore_core::prelude`) because `#[derive(Params)]` and `nice_export_clap!`

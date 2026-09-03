@@ -64,6 +64,7 @@ pub enum MidiActionTrigger {
 
 impl MidiActionTrigger {
     /// Convenience: omni CC trigger that fires on any value > 0.
+    #[must_use] 
     pub const fn cc_any(cc: u8) -> Self {
         Self::ControlChange {
             channel: None,
@@ -74,6 +75,7 @@ impl MidiActionTrigger {
 
     /// Convenience: channel-specific CC trigger that fires on any value > 0.
     /// `channel` is 0-based (0 = MIDI channel 1).
+    #[must_use] 
     pub const fn cc_ch(channel: u8, cc: u8) -> Self {
         Self::ControlChange {
             channel: Some(channel),
@@ -83,6 +85,7 @@ impl MidiActionTrigger {
     }
 
     /// Convenience: omni program change trigger.
+    #[must_use] 
     pub const fn program(program: u8) -> Self {
         Self::ProgramChange {
             channel: None,
@@ -91,6 +94,7 @@ impl MidiActionTrigger {
     }
 
     /// Convenience: omni note-on trigger.
+    #[must_use] 
     pub const fn note_on(note: u8) -> Self {
         Self::NoteOn {
             channel: None,
@@ -121,6 +125,7 @@ pub struct MidiActionBinding {
 }
 
 impl MidiActionBinding {
+    #[must_use] 
     pub fn new(trigger: MidiActionTrigger, action_id: &str) -> Self {
         Self {
             trigger,
@@ -148,7 +153,8 @@ impl Default for MidiActionMap {
 
 impl MidiActionMap {
     /// Create an empty map (no bindings).
-    pub fn empty() -> Self {
+    #[must_use] 
+    pub const fn empty() -> Self {
         Self {
             bindings: Vec::new(),
         }
@@ -157,6 +163,7 @@ impl MidiActionMap {
     /// Create a map pre-loaded with the default bindings (see module docs).
     ///
     /// Variants 1–8 on CH1 CC 101–108, navigation on CH1 CC 109–110.
+    #[must_use] 
     pub fn with_defaults() -> Self {
         let mut map = Self::empty();
 
@@ -195,6 +202,7 @@ impl MidiActionMap {
     }
 
     /// Find the action ID bound to a trigger, if any.
+    #[must_use] 
     pub fn find(&self, trigger: &MidiActionTrigger) -> Option<&str> {
         self.bindings
             .iter()
@@ -203,6 +211,7 @@ impl MidiActionMap {
     }
 
     /// All bindings in this map.
+    #[must_use] 
     pub fn bindings(&self) -> &[MidiActionBinding] {
         &self.bindings
     }

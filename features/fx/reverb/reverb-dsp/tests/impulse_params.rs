@@ -1,4 +1,4 @@
-//! BigSky MX Impulse live-parameter tests: decay/tail/attack/stretch/
+//! `BigSky` MX Impulse live-parameter tests: decay/tail/attack/stretch/
 //! direction re-shape the IR (synchronously here via `reprepare_now`;
 //! the async worker path is covered by `chain_reshape_worker_applies`),
 //! feedback recirculates at runtime.
@@ -23,7 +23,7 @@ fn test_ir() -> Vec<f64> {
         state ^= state << 13;
         state ^= state >> 17;
         state ^= state << 5;
-        (state as i32) as f64 / i32::MAX as f64
+        f64::from(state as i32) / f64::from(i32::MAX)
     };
     (0..n)
         .map(|i| rng() * 10f64.powf(-3.0 * i as f64 / n as f64))

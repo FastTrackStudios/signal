@@ -2,12 +2,12 @@
 //! REAPER integration test — verifies fts-macros CLAP plugin bootstrap.
 //!
 //! This test checks that the Helgobox-pattern eager loading works:
-//! 1. The extension loaded fts-macros.clap and called ReaperPluginEntry
-//! 2. The plugin bootstrapped reaper-rs, TaskSupport, daw-reaper, LocalCaller
+//! 1. The extension loaded fts-macros.clap and called `ReaperPluginEntry`
+//! 2. The plugin bootstrapped reaper-rs, `TaskSupport`, daw-reaper, `LocalCaller`
 //! 3. When instantiated as an FX, the plugin can access the REAPER API
 //!
 //! Run with:
-//!   cargo xtask reaper-test -- reaper_macros_bootstrap
+//!   cargo xtask reaper-test -- `reaper_macros_bootstrap`
 
 use std::time::Duration;
 
@@ -134,13 +134,11 @@ async fn instantiate_fts_macros_plugin(ctx: &daw::test::ReaperTestContext) -> ey
     tokio::time::sleep(Duration::from_millis(100)).await;
     let readback = param0.get().await?;
     println!(
-        "\n  Param 0 round-trip: original={:.4}, set=0.42, readback={:.4}",
-        original, readback
+        "\n  Param 0 round-trip: original={original:.4}, set=0.42, readback={readback:.4}"
     );
     assert!(
         (readback - 0.42).abs() < 0.02,
-        "parameter should be near 0.42, got {:.4}",
-        readback
+        "parameter should be near 0.42, got {readback:.4}"
     );
 
     // Restore

@@ -9,7 +9,7 @@ use signal_proto::{ModulePresetId, ModuleSnapshotId};
 use super::slot::InstanceHandle;
 
 /// The resolved target for a single module slot — what preset/snapshot to load.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleTarget {
     pub module_type: ModuleType,
     pub module_preset_id: ModulePresetId,
@@ -18,7 +18,7 @@ pub struct ModuleTarget {
 }
 
 /// What a slot is currently doing (input to the diff engine).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolvedSlot {
     /// Slot has an active module target loaded.
     Active(ModuleTarget),

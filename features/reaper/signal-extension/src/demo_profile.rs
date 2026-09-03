@@ -135,13 +135,13 @@ pub async fn load_demo_profile(daw: &Daw) -> Result<()> {
 /// Add stock REAPER FX to a layer track based on which module types are active.
 ///
 /// Module types and their stock plugin equivalents:
-///   input      → ReaGate + ReaComp (gate + input comp)
-///   drive      → ReaEQ (mid-boost as overdrive character)
-///   amp        → ReaEQ (4-band tone stack)
-///   dynamics   → ReaComp (dynamics processor)
-///   modulation → ReaDelay (short delay as chorus)
-///   time       → ReaDelay (delay) + ReaDelay (reverb)
-///   master     → ReaComp (limiter) + ReaEQ (final shape)
+///   input      → `ReaGate` + `ReaComp` (gate + input comp)
+///   drive      → `ReaEQ` (mid-boost as overdrive character)
+///   amp        → `ReaEQ` (4-band tone stack)
+///   dynamics   → `ReaComp` (dynamics processor)
+///   modulation → `ReaDelay` (short delay as chorus)
+///   time       → `ReaDelay` (delay) + `ReaDelay` (reverb)
+///   master     → `ReaComp` (limiter) + `ReaEQ` (final shape)
 pub async fn add_layer_fx(layer: &TrackHandle, module_types: &[&str]) -> Result<()> {
     let fx = layer.fx_chain();
 
@@ -230,6 +230,7 @@ pub async fn add_layer_fx(layer: &TrackHandle, module_types: &[&str]) -> Result<
 }
 
 /// Pick a color for each scene/section to visually distinguish them in REAPER.
+#[must_use] 
 pub fn scene_color(name: &str) -> u32 {
     match name {
         // Profile scenes

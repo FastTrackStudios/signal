@@ -6,6 +6,9 @@ license.workspace = true
 authors.workspace = true
 description = "Shared daw-backed host for signal live rigs — one project/track/engine bootstrap for every rig"
 
+[lints]
+workspace = true
+
 [features]
 # PipeWire is DEFAULT on Linux (target-gated in daw-audio-io); alias kept so
 # existing `signal-rig-host/pipewire` references parse.

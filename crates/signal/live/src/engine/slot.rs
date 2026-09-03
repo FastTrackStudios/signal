@@ -23,7 +23,8 @@ use super::target::ModuleTarget;
 pub struct InstanceHandle(pub u64);
 
 impl InstanceHandle {
-    pub fn new(id: u64) -> Self {
+    #[must_use] 
+    pub const fn new(id: u64) -> Self {
         Self(id)
     }
 }
@@ -47,7 +48,8 @@ pub enum InstanceState {
 
 impl InstanceState {
     /// Instance has resources allocated (not yet freed).
-    pub fn is_alive(self) -> bool {
+    #[must_use] 
+    pub const fn is_alive(self) -> bool {
         matches!(
             self,
             Self::Loading | Self::Ready | Self::Active | Self::Tailing
@@ -55,7 +57,8 @@ impl InstanceState {
     }
 
     /// Instance is producing audio output.
-    pub fn is_audible(self) -> bool {
+    #[must_use] 
+    pub const fn is_audible(self) -> bool {
         matches!(self, Self::Active | Self::Tailing)
     }
 }
@@ -87,7 +90,7 @@ pub enum ActivateResult {
 ///
 /// Implementors handle the DAW-specific FX chain manipulation. The trait
 /// defines the gapless switching protocol that `RigEngine` orchestrates.
-#[allow(async_fn_in_trait)]
+#[expect(async_fn_in_trait)]
 pub trait ModuleSlot: Send + Sync {
     /// Which processing stage this slot manages.
     fn module_type(&self) -> ModuleType;

@@ -63,9 +63,7 @@ fn collect_presets(root: &Path, out: &mut Vec<PathBuf>) {
 /// Run one preset and parse the summary line out of `eq_match`'s report.
 fn run_one(binary: &Path, plugin: &str, preset: &Path, extra: &[String]) -> Outcome {
     let name = preset
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "<unnamed>".into());
+        .file_stem().map_or_else(|| "<unnamed>".into(), |s| s.to_string_lossy().into_owned());
     let started = std::time::Instant::now();
 
     let mut cmd = Command::new(binary);
@@ -230,8 +228,8 @@ fn main() {
         println!(
             "  {:<44} {:>8} {:>8} {:>9}",
             o.name,
-            o.mean.map(|v| format!("{v:.2}")).unwrap_or_else(|| "—".into()),
-            o.worst.map(|v| format!("{v:.2}")).unwrap_or_else(|| "—".into()),
+            o.mean.map_or_else(|| "—".into(), |v| format!("{v:.2}")),
+            o.worst.map_or_else(|| "—".into(), |v| format!("{v:.2}")),
             o.worst_hz.map(|v| format!("{v:.0} Hz")).unwrap_or_default(),
         );
     }

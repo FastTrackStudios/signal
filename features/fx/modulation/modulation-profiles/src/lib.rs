@@ -68,11 +68,12 @@ pub enum Circuit {
 }
 
 impl Circuit {
-    pub fn chain(self) -> Chain {
+    #[must_use] 
+    pub const fn chain(self) -> Chain {
         match self {
-            Circuit::Delay { .. } => Chain::Delay,
-            Circuit::Tremolo { .. } => Chain::Tremolo,
-            Circuit::Wah { .. } => Chain::Wah,
+            Self::Delay { .. } => Chain::Delay,
+            Self::Tremolo { .. } => Chain::Tremolo,
+            Self::Wah { .. } => Chain::Wah,
         }
     }
 }
@@ -580,14 +581,17 @@ pub static CATEGORIES: &[Category] = &[
     },
 ];
 
+#[must_use] 
 pub fn profile_by_id(id: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.id == id)
 }
 
+#[must_use] 
 pub fn profile_index(id: &str) -> Option<usize> {
     PROFILES.iter().position(|p| p.id == id)
 }
 
+#[must_use] 
 pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
     CATEGORIES.iter().enumerate().find_map(|(ci, category)| {
         category
@@ -600,8 +604,9 @@ pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
 
 /// Clicking the family you are in advances through it and wraps; clicking
 /// another lands on its first.
+#[must_use] 
 pub fn rail_click_target(current_index: usize, clicked_category: usize) -> usize {
-    let current_id = PROFILES.get(current_index).map(|p| p.id).unwrap_or("");
+    let current_id = PROFILES.get(current_index).map_or("", |p| p.id);
     let Some(category) = CATEGORIES.get(clicked_category) else {
         return current_index;
     };
@@ -650,6 +655,7 @@ pub const RATE_MIN_HZ: f32 = 0.05;
 pub const RATE_MAX_HZ: f32 = 20.0;
 
 /// Normalised knob → Hz.
+#[must_use] 
 pub fn rate_hz_from(knob: f32) -> f32 {
     let k = knob.clamp(0.0, 1.0);
     // Clamped rather than trusted: the round trip through log/exp lands a
@@ -660,6 +666,7 @@ pub fn rate_hz_from(knob: f32) -> f32 {
 
 /// Hz → normalised knob, so a profile's resting rate can be shown on the
 /// same control the user turns.
+#[must_use] 
 pub fn rate_knob_from(hz: f32) -> f32 {
     let hz = hz.clamp(RATE_MIN_HZ, RATE_MAX_HZ);
     (log2(hz / RATE_MIN_HZ) / log2(RATE_MAX_HZ / RATE_MIN_HZ)).clamp(0.0, 1.0)
@@ -677,9 +684,9 @@ fn exp2(x: f32) -> f32 {
 fn trim(knob: f32, at_noon: f32, lo: f32, hi: f32) -> f32 {
     let k = knob.clamp(0.0, 1.0);
     if k >= 0.5 {
-        at_noon + (hi - at_noon) * (k - 0.5) * 2.0
+        ((hi - at_noon) * (k - 0.5)).mul_add(2.0, at_noon)
     } else {
-        lo + (at_noon - lo) * k * 2.0
+        ((at_noon - lo) * k).mul_add(2.0, lo)
     }
 }
 
@@ -749,14 +756,14 @@ pub fn apply(
     wah: &mut WahChain,
 ) {
     let v = profile.voicing;
-    let rate = rate_hz_from(controls.rate) as f64;
-    let depth = controls.depth.clamp(0.0, 1.0) as f64;
+    let rate = f64::from(rate_hz_from(controls.rate));
+    let depth = f64::from(controls.depth.clamp(0.0, 1.0));
     // A wet-only circuit ignores the mix knob rather than pretending: see
     // `Voicing::wet_only`.
     let mix = if v.wet_only {
         1.0
     } else {
-        controls.mix.clamp(0.0, 1.0) as f64
+        f64::from(controls.mix.clamp(0.0, 1.0))
     };
 
     match v.circuit {
@@ -827,7 +834,7 @@ pub fn apply(
 /// the other is how the panel ended up drawing a flat line for a tremolo.
 ///
 /// Tempo sync is a follow-up — the host transport is not plumbed through yet.
-fn free_running(trigger: &mut modulation::trem::fts_modulation::TriggerEngine, rate: f64) {
+const fn free_running(trigger: &mut modulation::trem::fts_modulation::TriggerEngine, rate: f64) {
     trigger.mode = modulation::trem::fts_modulation::TriggerMode::Free;
     trigger.sync_index = 0;
     trigger.rate_hz = rate;
@@ -844,37 +851,37 @@ fn apply_knob(
     match knob.role {
         Character::None => {}
         Character::Voices => {
-            chorus.num_voices = trim(v, knob.at_noon, 1.0, 4.0).round().clamp(1.0, 4.0) as usize
+            chorus.num_voices = trim(v, knob.at_noon, 1.0, 4.0).round().clamp(1.0, 4.0) as usize;
         }
-        Character::Colour => chorus.color = trim(v, knob.at_noon, 0.0, 1.0) as f64,
-        Character::Feedback => chorus.feedback = trim(v, knob.at_noon, 0.0, 0.95) as f64,
-        Character::Width => chorus.width = trim(v, knob.at_noon, 0.0, 1.0) as f64,
-        Character::Groove => trem.groove = trim(v, knob.at_noon, -1.0, 1.0) as f64,
-        Character::Feel => trem.feel = trim(v, knob.at_noon, -1.0, 1.0) as f64,
-        Character::Accent => trem.accent = trim(v, knob.at_noon, -1.0, 1.0) as f64,
+        Character::Colour => chorus.color = f64::from(trim(v, knob.at_noon, 0.0, 1.0)),
+        Character::Feedback => chorus.feedback = f64::from(trim(v, knob.at_noon, 0.0, 0.95)),
+        Character::Width => chorus.width = f64::from(trim(v, knob.at_noon, 0.0, 1.0)),
+        Character::Groove => trem.groove = f64::from(trim(v, knob.at_noon, -1.0, 1.0)),
+        Character::Feel => trem.feel = f64::from(trim(v, knob.at_noon, -1.0, 1.0)),
+        Character::Accent => trem.accent = f64::from(trim(v, knob.at_noon, -1.0, 1.0)),
         Character::Analog => {
             let style = ANALOG_STYLES[pick(v, knob.at_noon, ANALOG_STYLES.len())];
             trem.analog_l.style = style;
             trem.analog_r.style = style;
         }
         Character::Crossover => {
-            let hz = trim_ratio(v, knob.at_noon, 1.5, 100.0, 4_000.0) as f64;
+            let hz = f64::from(trim_ratio(v, knob.at_noon, 1.5, 100.0, 4_000.0));
             trem.tremolo_l.crossover_freq = hz;
             trem.tremolo_r.crossover_freq = hz;
         }
-        Character::Position => wah.base_position = trim(v, knob.at_noon, 0.0, 1.0) as f64,
+        Character::Position => wah.base_position = f64::from(trim(v, knob.at_noon, 0.0, 1.0)),
         Character::Resonance => {
-            let q = trim_ratio(v, knob.at_noon, 1.2, 1.0, 20.0) as f64;
+            let q = f64::from(trim_ratio(v, knob.at_noon, 1.2, 1.0, 20.0));
             wah.filter_l.q = q;
             wah.filter_r.q = q;
         }
-        Character::Sensitivity => wah.sensitivity = trim(v, knob.at_noon, 0.0, 1.0) as f64,
+        Character::Sensitivity => wah.sensitivity = f64::from(trim(v, knob.at_noon, 0.0, 1.0)),
         Character::Stages => {
             let n = trim(v, knob.at_noon, 1.0, 4.0).round().clamp(1.0, 4.0) as usize;
             wah.filter_l.stages = n;
             wah.filter_r.stages = n;
         }
-        Character::Pattern => wah.pattern_amount = trim(v, knob.at_noon, 0.0, 1.0) as f64,
+        Character::Pattern => wah.pattern_amount = f64::from(trim(v, knob.at_noon, 0.0, 1.0)),
         Character::Shape => {
             let shape = WAH_SHAPES[pick(v, knob.at_noon, WAH_SHAPES.len())];
             wah.filter_l.mode = shape;
@@ -958,7 +965,7 @@ pub fn shape(profile: &Profile, controls: &Controls, out: &mut [f64]) {
                 let transport = TransportInfo::default();
                 for slot in out.iter_mut() {
                     wah.modulator.tick(&transport, 0.0);
-                    *slot = wah.base_position + wah.modulator.output() * wah.pattern_amount;
+                    *slot = wah.modulator.output().mul_add(wah.pattern_amount, wah.base_position);
                 }
             }
         }
@@ -1231,8 +1238,8 @@ mod tests {
                 0.0,
                 &mut raw,
             );
-            raw.iter().cloned().fold(f64::MIN, f64::max)
-                - raw.iter().cloned().fold(f64::MAX, f64::min)
+            raw.iter().copied().fold(f64::MIN, f64::max)
+                - raw.iter().copied().fold(f64::MAX, f64::min)
         };
         assert!(
             span(0.9) > span(0.2) * 2.0,
@@ -1263,8 +1270,8 @@ mod tests {
             }
             let mut buf = [0.0f64; 128];
             shape(profile, &Controls::default(), &mut buf);
-            let lo = buf.iter().cloned().fold(f64::MAX, f64::min);
-            let hi = buf.iter().cloned().fold(f64::MIN, f64::max);
+            let lo = buf.iter().copied().fold(f64::MAX, f64::min);
+            let hi = buf.iter().copied().fold(f64::MIN, f64::max);
             assert!(
                 hi - lo > 0.25,
                 "{} drew a still line ({lo:.3}..{hi:.3}) — is its modulator running?",
@@ -1287,8 +1294,8 @@ mod tests {
             };
             let profile = profile_by_id("wah_auto").unwrap();
             shape(profile, &controls, &mut buf);
-            let lo = buf.iter().cloned().fold(f64::MAX, f64::min);
-            let hi = buf.iter().cloned().fold(f64::MIN, f64::max);
+            let lo = buf.iter().copied().fold(f64::MAX, f64::min);
+            let hi = buf.iter().copied().fold(f64::MIN, f64::max);
             assert!((hi - lo) < 1.0e-6, "auto-wah drew movement: {lo}..{hi}");
 
             // …and at the height the pedal is set to.

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// Stored rather than held in memory so that signing in once covers every
 /// later session and every plugin instance — the alternative is each of them
 /// running its own authorization dance against the same account.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tokens {
     pub access_token: String,
     pub refresh_token: String,
@@ -24,7 +24,8 @@ impl Tokens {
     /// The minute of slack covers a request that is issued just before expiry
     /// and arrives just after — the failure that would otherwise show up as an
     /// occasional, unreproducible 401.
-    pub fn needs_refresh(&self, now_unix: i64) -> bool {
+    #[must_use] 
+    pub const fn needs_refresh(&self, now_unix: i64) -> bool {
         self.expires_at - now_unix <= 60
     }
 }
@@ -43,6 +44,7 @@ impl TokenStore {
         Self { path: path.into() }
     }
 
+    #[must_use] 
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -88,7 +90,7 @@ impl TokenStore {
 }
 
 /// What a completed download produced.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DownloadOutcome {
     /// Where the file landed, absolute.
     pub path: PathBuf,

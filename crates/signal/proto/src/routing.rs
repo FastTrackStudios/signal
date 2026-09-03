@@ -7,7 +7,7 @@ use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 /// Audio source — where signal originates before entering the processing chain.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum AudioSource {
     /// Hardware audio input (e.g. guitar DI, microphone).
@@ -37,7 +37,8 @@ pub enum AudioSource {
 }
 
 impl AudioSource {
-    pub fn display_name(&self) -> &str {
+    #[must_use] 
+    pub const fn display_name(&self) -> &str {
         match self {
             Self::HardwareInput { label, .. } => label.as_str(),
             Self::VirtualInstrument { plugin_id, .. } => plugin_id.as_str(),
@@ -48,7 +49,7 @@ impl AudioSource {
 }
 
 /// Audio destination — where processed signal goes after the chain.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum AudioDestination {
     /// Hardware output (e.g. main L/R, headphone out).

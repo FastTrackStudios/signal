@@ -6,11 +6,11 @@
 //! is the thin host shell; all playback logic lives in `signal-sampler`:
 //!
 //! - **Document playback**: while the host transport is rolling and a
-//!   [`Schedule`](signal_sampler::Schedule) is loaded, process() delegates to
+//!   [`Schedule`](signal_sampler::Schedule) is loaded, `process()` delegates to
 //!   [`signal_sampler::RealtimeScheduler`] — the offline document walker
 //!   driven by the CLAP transport (prefires ahead of legato ticks,
 //!   seek/loop/stop discontinuity handling, late-start degradation).
-//! - **StrictLive**: otherwise incoming CLAP MIDI goes down the normal live
+//! - **`StrictLive`**: otherwise incoming CLAP MIDI goes down the normal live
 //!   path (live auto-divisi allocator + `low_latency` legato gates), the
 //!   zero-added-latency policy.
 //!

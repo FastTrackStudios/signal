@@ -15,6 +15,7 @@ pub struct EqChain {
 }
 
 impl EqChain {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             bands: Vec::new(),
@@ -178,9 +179,9 @@ mod placement_tests {
             r[i] = x;
         }
         chain.process(&mut l, &mut r);
-        let rms =
+        let calc_rms =
             |v: &[f64]| (v[n / 2..].iter().map(|x| x * x).sum::<f64>() / (n / 2) as f64).sqrt();
-        let (lrms, rrms) = (rms(&l), rms(&r));
+        let (lrms, rrms) = (calc_rms(&l), calc_rms(&r));
         // A unit sine's RMS is 1/√2 — spelled as the constant so the number
         // is the identity rather than a rounded literal.
         let unit_sine_rms = core::f64::consts::FRAC_1_SQRT_2;
@@ -224,10 +225,10 @@ mod placement_tests {
 
     #[test]
     fn mid_band_boosts_mono() {
-        let mut c = EqChain::new();
-        c.set_sample_rate(48000.0);
-        let idx = c.add_band();
-        if let Some(b) = c.band_mut(idx) {
+        let mut chain = EqChain::new();
+        chain.set_sample_rate(48000.0);
+        let idx = chain.add_band();
+        if let Some(b) = chain.band_mut(idx) {
             b.filter_type = FilterType::Peak;
             b.freq_hz = 1000.0;
             b.gain_db = 12.0;
@@ -235,20 +236,20 @@ mod placement_tests {
             b.placement = Placement::Mid;
             b.enabled = true;
         }
-        c.update_band(idx);
-        let n = 48_000;
-        let mut l: Vec<f64> = (0..n)
+        chain.update_band(idx);
+        let num_samples = 48_000;
+        let mut left_samples: Vec<f64> = (0..num_samples)
             .map(|i| 0.2 * (core::f64::consts::TAU * 1000.0 * i as f64 / 48000.0).sin())
             .collect();
-        let mut r = l.clone();
-        let dry = l.clone();
-        c.process(&mut l, &mut r);
-        let e_in: f64 = dry[n / 2..].iter().map(|x| x * x).sum();
-        let e_out: f64 = l[n / 2..].iter().map(|x| x * x).sum();
-        let g = 10.0 * (e_out / e_in).log10();
+        let mut right_samples = left_samples.clone();
+        let dry = left_samples.clone();
+        chain.process(&mut left_samples, &mut right_samples);
+        let e_in: f64 = dry[num_samples / 2..].iter().map(|x| x * x).sum();
+        let e_out: f64 = left_samples[num_samples / 2..].iter().map(|x| x * x).sum();
+        let gain_db = 10.0 * (e_out / e_in).log10();
         assert!(
-            (g - 12.0).abs() < 1.0,
-            "mid band boosts mono content: {g:.1} dB"
+            (gain_db - 12.0).abs() < 1.0,
+            "mid band boosts mono content: {gain_db:.1} dB"
         );
     }
 }

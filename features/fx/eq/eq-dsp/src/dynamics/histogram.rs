@@ -18,7 +18,8 @@ pub struct LoudnessHistogram {
 }
 
 impl LoudnessHistogram {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             bins: [0.0; N_BINS],
             decay: 0.999,
@@ -29,7 +30,7 @@ impl LoudnessHistogram {
     #[inline]
     fn bin_of(db: f64) -> usize {
         let t = (db - DB_MIN) / (DB_MAX - DB_MIN);
-        ((t * N_BINS as f64) as isize).clamp(0, N_BINS as i64 as isize - 1) as usize
+        ((t * N_BINS as f64) as isize).clamp(0, N_BINS as i64 as isize - 1).cast_unsigned()
     }
 
     /// Push one loudness observation (dB). Silence below the floor is

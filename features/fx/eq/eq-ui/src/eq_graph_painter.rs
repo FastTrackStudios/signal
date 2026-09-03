@@ -50,8 +50,8 @@ impl CoordMapper {
             freq_axis: fts_audio_ui::axis::FreqAxis::new(cfg.min_freq, cfg.max_freq),
             db_axis: fts_audio_ui::axis::DbAxis::symmetric(cfg.db_range),
             padding,
-            graph_w: cfg.rect_w - padding * 2.0,
-            graph_h: cfg.rect_h - padding * 2.0,
+            graph_w: padding.mul_add(-2.0, cfg.rect_w),
+            graph_h: padding.mul_add(-2.0, cfg.rect_h),
         }
     }
 
@@ -78,7 +78,7 @@ pub struct EqGraphWidget {
 }
 
 impl EqGraphWidget {
-    pub fn new(state: Arc<EqGraphRenderState>) -> Self {
+    pub const fn new(state: Arc<EqGraphRenderState>) -> Self {
         Self { state }
     }
 }
@@ -98,8 +98,8 @@ impl Widget for EqGraphWidget {
         // node's box in physical pixels, so we draw 1:1 with an identity transform.
         {
             let mut cfg = self.state.config.write();
-            cfg.rect_w = width as f64;
-            cfg.rect_h = height as f64;
+            cfg.rect_w = f64::from(width);
+            cfg.rect_h = f64::from(height);
             cfg.scale = scale.max(1.0);
         }
         paint_eq_graph_scene(&mut scene, &self.state, Affine::IDENTITY, width, height);
@@ -125,8 +125,8 @@ pub fn paint_eq_graph_scene(
     width: u32,
     height: u32,
 ) {
-    let elem_w = width as f64;
-    let elem_h = height as f64;
+    let elem_w = f64::from(width);
+    let elem_h = f64::from(height);
     if elem_w < 1.0 || elem_h < 1.0 {
         return;
     }
@@ -223,8 +223,8 @@ fn paint_cheatsheet_overlay(
     let w = cfg.rect_w;
     let h = cfg.rect_h;
     for zone in profile.zones {
-        let x0 = cm.freq_to_x(zone.lo_hz as f64).clamp(0.0, w);
-        let x1 = cm.freq_to_x(zone.hi_hz as f64).clamp(0.0, w);
+        let x0 = cm.freq_to_x(f64::from(zone.lo_hz)).clamp(0.0, w);
+        let x1 = cm.freq_to_x(f64::from(zone.hi_hz)).clamp(0.0, w);
         if x1 - x0 < 0.5 {
             continue;
         }
@@ -264,7 +264,7 @@ fn paint_cheatsheet_overlay(
     }
     // Suggested highpass marker.
     if let Some(hp) = profile.highpass_hz {
-        let x = cm.freq_to_x(hp as f64).clamp(0.0, w);
+        let x = cm.freq_to_x(f64::from(hp)).clamp(0.0, w);
         scene.stroke(
             &Stroke::new(1.5),
             transform,
@@ -366,7 +366,7 @@ fn paint_analyzer(
     let min_freq = cfg.min_freq;
     let max_freq = cfg.max_freq;
     let range = if snap.range_db > 0.0 {
-        snap.range_db as f64
+        f64::from(snap.range_db)
     } else {
         90.0
     };
@@ -456,7 +456,7 @@ fn paint_spectrum(
         let t = i as f64 / (num_bins - 1) as f64;
         let freq = 10.0_f64.powf(log_min + t * (log_max - log_min));
         let x = cm.freq_to_x(freq);
-        let clamped = (db_val as f64).clamp(-cfg.db_range, cfg.db_range);
+        let clamped = f64::from(db_val).clamp(-cfg.db_range, cfg.db_range);
         let y = cm.db_to_y(clamped);
         if i == 0 {
             path.move_to((x, y));
@@ -490,7 +490,7 @@ fn paint_band_curve(
     frequencies: &[f64],
     transform: Affine,
 ) {
-    let band_hex = freq_to_color(band.frequency as f64);
+    let band_hex = freq_to_color(f64::from(band.frequency));
     let band_color = hex_to_color(&band_hex);
     let fill_color = hex_to_color_alpha(&band_hex, 0.25);
     let zero_y = cm.db_to_y(0.0);
@@ -547,12 +547,12 @@ fn paint_connecting_lines(
         if !band.used || !band.enabled {
             continue;
         }
-        let db = calculate_band_response(band, band.frequency as f64, cfg.sample_rate);
+        let db = calculate_band_response(band, f64::from(band.frequency), cfg.sample_rate);
         if db.abs() <= 0.1 {
             continue;
         }
-        let bx = cm.freq_to_x(band.frequency as f64);
-        let node_y = cm.db_to_y(band.gain as f64);
+        let bx = cm.freq_to_x(f64::from(band.frequency));
+        let node_y = cm.db_to_y(f64::from(band.gain));
         let start_y = if node_y < zero_y {
             node_y + node_r
         } else {
@@ -560,7 +560,7 @@ fn paint_connecting_lines(
         };
 
         let line = Line::new((bx, start_y), (bx, zero_y));
-        let color = hex_to_color_alpha(&freq_to_color(band.frequency as f64), 0.5);
+        let color = hex_to_color_alpha(&freq_to_color(f64::from(band.frequency)), 0.5);
         scene.stroke(&Stroke::new(1.5), transform, color, None, &line);
     }
 }
@@ -624,7 +624,7 @@ fn paint_model_response_curve(
         let t = i as f64 / (response_db.len() - 1) as f64;
         let freq = 10.0_f64.powf(log_min + t * (log_max - log_min));
         let x = cm.freq_to_x(freq);
-        let y = cm.db_to_y(db as f64);
+        let y = cm.db_to_y(f64::from(db));
         if i == 0 {
             stroke_path.move_to((x, y));
         } else {
@@ -651,9 +651,9 @@ fn paint_band_node(
     is_focused: bool,
     transform: Affine,
 ) {
-    let x = cm.freq_to_x(band.frequency as f64);
-    let y = cm.db_to_y(band.gain as f64);
-    let band_color = hex_to_color(&freq_to_color(band.frequency as f64));
+    let x = cm.freq_to_x(f64::from(band.frequency));
+    let y = cm.db_to_y(f64::from(band.gain));
+    let band_color = hex_to_color(&freq_to_color(f64::from(band.frequency)));
     let inactive_color = Color::from_rgb8(85, 85, 85);
 
     let radius = if is_dragging {

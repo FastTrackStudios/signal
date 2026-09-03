@@ -36,6 +36,7 @@ pub enum Placement {
 }
 
 impl Placement {
+    #[must_use]
     pub fn from_index(idx: u32) -> Placement {
         match idx {
             1 => Placement::Left,
@@ -156,11 +157,11 @@ impl Band {
         let (effective_q, effective_gain) = match self.filter_type {
             FilterType::FlatTilt => {
                 // Type 6: clip Q to 1.885 (from binary constant TYPE_6_CLIP)
-                (q.min(1.884955592153876), self.gain_db)
+                (q.min(1.884_955_592_153_876), self.gain_db)
             }
             FilterType::ShelfAlt => {
                 // Type 12: same Q clipping as FlatTilt
-                (q.min(1.884955592153876), self.gain_db)
+                (q.min(1.884_955_592_153_876), self.gain_db)
             }
             _ => {
                 // All other types: pass through raw Q and gain

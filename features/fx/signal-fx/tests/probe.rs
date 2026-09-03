@@ -10,7 +10,7 @@ fn tone(f: f64, n: usize) -> Vec<f32> {
         .collect()
 }
 fn rms(b: &[f32]) -> f64 {
-    (b.iter().map(|s| (*s as f64).powi(2)).sum::<f64>() / b.len() as f64).sqrt()
+    (b.iter().map(|s| f64::from(*s).powi(2)).sum::<f64>() / b.len() as f64).sqrt()
 }
 fn resp(bands: &[&[(&str, f64)]], f: f64) -> f64 {
     let mut eq = NativeEq::new(SR);

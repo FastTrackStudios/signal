@@ -33,16 +33,16 @@ pub fn compute_cascade_shelf_alt(
     let gain_linear = 10.0_f64.powf(gain_db / 20.0);
 
     // Binary: param_4 = SQRT(param_4); dVar24 = sqrt(param_4)
-    // So gain_sqrt = gain^(1/2), gain_qrt = gain^(1/4)
+    // So gain_sqrt = gain^(1/2), gain_quarter = gain^(1/4)
     let gain_sqrt = gain_linear.sqrt();
-    let gain_qrt = gain_sqrt.sqrt();
-    let inv_gain_qrt = 1.0 / gain_qrt;
+    let gain_quarter = gain_sqrt.sqrt();
+    let inv_gain_quarter = 1.0 / gain_quarter;
 
     // Hardcoded constants from binary
-    const BASE_1: f64 = -0.01313900648833929; // DAT_180232030
-    const BASE_2: f64 = -0.07432544468767008; // DAT_180232038
+    const BASE_1: f64 = -0.013_139_006_488_339_29; // DAT_180232030
+    const BASE_2: f64 = -0.074_325_444_687_670_08; // DAT_180232038
     const SECTION_SPACING: f64 = 32.0; // DAT_180231c58
-    const INTER_GAIN: f64 = 5.656854249492381; // DAT_180231bd8 = 4*sqrt(2)
+    const INTER_GAIN: f64 = 5.656_854_249_492_381; // DAT_180231bd8 = 4*sqrt(2)
 
     // Build 3 sections, each with 2 real poles and 2 real zeros
     // Section k uses frequencies: base * SECTION_SPACING^k
@@ -53,10 +53,10 @@ pub fn compute_cascade_shelf_alt(
 
     for _ in 0..3 {
         // Zeros scaled by gain^(1/4), poles scaled by 1/gain^(1/4)
-        let z1 = freq_1 * gain_qrt;
-        let z2 = freq_2 * gain_qrt;
-        let p1 = freq_1 * inv_gain_qrt;
-        let p2 = freq_2 * inv_gain_qrt;
+        let z1 = freq_1 * gain_quarter;
+        let z2 = freq_2 * gain_quarter;
+        let p1 = freq_1 * inv_gain_quarter;
+        let p2 = freq_2 * inv_gain_quarter;
 
         // Convert 2-real-pole, 2-real-zero ZPK section to biquad
         // a0=1, a1=-(p1+p2), a2=p1*p2, b0=section_gain, b1=-(z1+z2)*section_gain, b2=z1*z2*section_gain
@@ -126,7 +126,7 @@ pub fn compute_cascade_flat_tilt(
     let a1_s0 = poly6(
         g,
         [
-            -1.9926925368603563,
+            -1.992_692_536_860_356_3,
             0.0002097530846773404,
             3.0021544318677385e-06,
             2.8487998210735834e-08,

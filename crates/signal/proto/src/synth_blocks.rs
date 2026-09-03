@@ -39,10 +39,12 @@ pub struct ParamRange {
 }
 
 impl ParamRange {
+    #[must_use] 
     pub const fn new(min: f32, max: f32, default: f32) -> Self {
         Self { min, max, default }
     }
     /// Unipolar `[0, 1]` with a default.
+    #[must_use] 
     pub const fn unipolar(default: f32) -> Self {
         Self {
             min: 0.0,
@@ -51,6 +53,7 @@ impl ParamRange {
         }
     }
     /// Bipolar `[-1, 1]` with a default.
+    #[must_use] 
     pub const fn bipolar(default: f32) -> Self {
         Self {
             min: -1.0,
@@ -509,7 +512,7 @@ pub fn process_envelope(_params: &EnvelopeParams, _out: &mut [f32]) {
 /// shape per segment + loopable region).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct MultisegEnvelopeParams {
-    /// Each stage: (level, time_ms, curve).
+    /// Each stage: (level, `time_ms`, curve).
     pub stages: Vec<MultisegStage>,
     /// Loop start segment index, or None.
     pub loop_start: Option<u8>,
@@ -627,7 +630,7 @@ pub fn process_lfo(_params: &LfoParams, _out: &mut [f32]) {
 ///
 /// **Note**: Signal already has [`signal_macromod::ModulationRouteSet`] at Layer
 /// and Engine levels — this Block is for **per-Module** matrix routing
-/// (within a Voice / SubEngine equivalent). Implementation should delegate
+/// (within a Voice / `SubEngine` equivalent). Implementation should delegate
 /// to or share infrastructure with `macromod`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct ModMatrixParams {
@@ -737,7 +740,7 @@ pub struct StepSeqParams {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Facet)]
 pub struct StepSeqStep {
-    /// MIDI note (when output_mode includes notes).
+    /// MIDI note (when `output_mode` includes notes).
     pub note: u8,
     /// Velocity / mod-amount [0..1].
     pub velocity: f32,

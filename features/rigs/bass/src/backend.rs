@@ -193,12 +193,12 @@ impl BassRigBackend {
             match ev {
                 MidiEvent::ProgramChange { program, .. } if map.program_change => {
                     tracing::info!("bass rig: program change → preset {}", u8::from(program));
-                    BassRigSvc::select_preset(self, u8::from(program) as u32);
+                    BassRigSvc::select_preset(self, u32::from(u8::from(program)));
                 }
                 MidiEvent::ControlChange {
                     controller, value, ..
                 } => {
-                    let (cc, down) = (u8::from(controller) as u32, u8::from(value) > 0);
+                    let (cc, down) = (u32::from(u8::from(controller)), u8::from(value) > 0);
                     if cc == map.prev_cc {
                         if down && !tick.prev_down {
                             BassRigSvc::prev_preset(self);
@@ -285,7 +285,7 @@ impl BassRigBackend {
                         tracing::info!(
                             "bass profile loaded ({} presets installed)",
                             prig.patches().len()
-                        )
+                        );
                     }
                     Err(e) => tracing::error!("bass profile load failed: {e}"),
                 }
@@ -318,8 +318,7 @@ impl BassRigBackend {
         let Some(prig) = guard.as_mut() else { return };
         let restored = wanted
             .as_deref()
-            .map(|name| prig.activate_named(name))
-            .unwrap_or(false);
+            .is_some_and(|name| prig.activate_named(name));
         if !restored {
             if let Some(w) = &wanted {
                 tracing::warn!("bass last-state: preset '{w}' no longer loadable");
@@ -334,7 +333,7 @@ impl BassRigBackend {
         let trim = *self.inner.master_trim.lock_ok();
         let guard = self.inner.rig.lock_ok();
         if let Some(prig) = guard.as_ref() {
-            let base = prig.active_patch().map(|p| p.output_trim_db).unwrap_or(0.0);
+            let base = prig.active_patch().map_or(0.0, |p| p.output_trim_db);
             prig.rig().set_output_trim_db(base + trim);
         }
     }
@@ -391,17 +390,14 @@ impl BassRigBackend {
         }
         {
             let mut guard = self.inner.rig.lock_ok();
-            match guard.as_mut() {
-                Some(prig) => {
-                    if !prig.activate_named(&name) {
-                        tracing::warn!("bass rig: preset '{name}' not installed");
-                        return;
-                    }
-                }
-                None => {
-                    tracing::info!("bass rig: not running — start it to switch presets");
+            if let Some(prig) = guard.as_mut() {
+                if !prig.activate_named(&name) {
+                    tracing::warn!("bass rig: preset '{name}' not installed");
                     return;
                 }
+            } else {
+                tracing::info!("bass rig: not running — start it to switch presets");
+                return;
             }
         }
         tracing::info!("bass rig: preset → {name}");

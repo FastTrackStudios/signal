@@ -40,6 +40,7 @@ fn bounds() -> ((u32, u32), (u32, u32)) {
     fts_audio_ui::EditorForm::size_bounds(fts_audio_ui::shell::RAIL_W, (EDITOR_W, EDITOR_H))
 }
 
+#[must_use] 
 pub fn min_editor_size() -> (f32, f32) {
     let ((w, h), _) = bounds();
     // The curve view is the floor on width: narrower than this and the graph
@@ -47,6 +48,7 @@ pub fn min_editor_size() -> (f32, f32) {
     (w as f32, h as f32)
 }
 
+#[must_use] 
 pub fn max_editor_size() -> (f32, f32) {
     let (_, (w, h)) = bounds();
     // Generous, but bounded — an unbounded hint rubber-stamps whatever a host
@@ -54,6 +56,7 @@ pub fn max_editor_size() -> (f32, f32) {
     ((w as f32 * 2.4).max(2400.0), (h as f32 * 1.4).max(1400.0))
 }
 
+#[must_use] 
 pub fn resize_hint() -> ResizeHint {
     let (min_w, min_h) = min_editor_size();
     let (max_w, max_h) = max_editor_size();
@@ -86,7 +89,7 @@ impl crate::cheatsheet::TrackInfoProvider for GuiContextTrackProvider {
     }
 }
 
-fn shape_to_int(shape: EqBandShape) -> i32 {
+const fn shape_to_int(shape: EqBandShape) -> i32 {
     match shape {
         EqBandShape::Bell => 0,
         EqBandShape::LowShelf => 1,
@@ -101,7 +104,7 @@ fn shape_to_int(shape: EqBandShape) -> i32 {
     }
 }
 
-fn int_to_shape(v: i32) -> EqBandShape {
+const fn int_to_shape(v: i32) -> EqBandShape {
     match v {
         0 => EqBandShape::Bell,
         1 => EqBandShape::LowShelf,
@@ -136,7 +139,7 @@ pub fn App() -> Element {
     }
 }
 
-/// Inner shell component — runs after the ThemeProvider context is in
+/// Inner shell component — runs after the `ThemeProvider` context is in
 /// scope so shadcn primitives can resolve their theme tokens.
 #[component]
 fn AppShell() -> Element {
@@ -225,7 +228,7 @@ fn AppShell() -> Element {
 
     let input_db = ui.input_peak_db.load(Ordering::Relaxed);
     let output_db = ui.output_peak_db.load(Ordering::Relaxed);
-    let sample_rate = ui.sample_rate.load(Ordering::Relaxed) as f64;
+    let sample_rate = f64::from(ui.sample_rate.load(Ordering::Relaxed));
 
     // One mapping for the display range (`fx.eq.display.defaults-agree`).
     let db_range_idx = params.db_range.value();
@@ -272,7 +275,7 @@ fn AppShell() -> Element {
     };
     let mut profile_sig = use_signal(|| profile_value.clone());
     if *profile_sig.read() != profile_value {
-        profile_sig.set(profile_value.clone());
+        profile_sig.set(profile_value);
     }
     let mut profile_tab: Signal<String> = use_signal(|| "default".to_string());
 
@@ -359,7 +362,7 @@ fn AppShell() -> Element {
                 subtitle: "Equalizer".to_string(),
                 brand: "EQ".to_string(),
                 items: crate::faces::rail_items(current_model),
-                selected: crate::faces::category_of(current_model).map(|(c, _)| c).unwrap_or(0),
+                selected: crate::faces::category_of(current_model).map_or(0, |(c, _)| c),
                 accent: "#8aa4ff".to_string(),
                 rail_footer: rsx! {
                     // Size presets, cycled from the foot cluster — chrome
@@ -372,7 +375,7 @@ fn AppShell() -> Element {
                         accent: "#8aa4ff".to_string(),
                         on_click: {
                             let params = params.clone();
-                            move |_| {
+                            move |()| {
                                 let forms = fts_audio_ui::EDITOR_FORMS;
                                 let index =
                                     forms.iter().position(|f| *f == current_form).unwrap_or(0);
@@ -402,11 +405,11 @@ fn AppShell() -> Element {
                 browser: preset_browser,
                 browsing,
                 accent: "#8aa4ff".to_string(),
-                on_browse: move |_| preset_open.toggle(),
+                on_browse: move |()| preset_open.toggle(),
                 on_apply: {
                     let handles = preset_handles.clone();
                     move |p: Vec<(String, f64)>| {
-                        crate::preset_view::apply(&p, &handles, preset_note)
+                        crate::preset_view::apply(&p, &handles, preset_note);
                     }
                 },
             }
@@ -426,7 +429,7 @@ fn AppShell() -> Element {
                     crate::preset_view::EqPresetSidecar {
                         browser: preset_browser,
                         note: preset_note,
-                        handles: preset_handles.clone(),
+                        handles: preset_handles,
                         ink: "#e8e6ef".to_string(),
                         accent: "#8aa4ff".to_string(),
                     }
@@ -688,8 +691,7 @@ fn AppShell() -> Element {
                                                 .parse::<usize>()
                                                 .ok()
                                                 .and_then(|i| crate::cheatsheet::PROFILES.get(i))
-                                                .map(OverlayChoice::Pick)
-                                                .unwrap_or(OverlayChoice::Off),
+                                                .map_or(OverlayChoice::Off, OverlayChoice::Pick),
                                         };
                                         overlay_sel.set(sel);
                                     },
@@ -728,7 +730,7 @@ fn AppShell() -> Element {
                                         let shape = int_to_shape(bp.filter_type.value());
                                         let enabled = bp.enabled.value() > 0.5;
                                         let solo = bp.solo.value() > 0.5;
-                                        let color = crate::eq_graph_model::freq_to_color(freq as f64);
+                                        let color = crate::eq_graph_model::freq_to_color(f64::from(freq));
                                         let freq_str = format_freq(freq);
                                         let current_shape_value = shape_to_int(shape).to_string();
                                         let mut shape_value_sig = use_signal(|| current_shape_value.clone());
@@ -756,12 +758,12 @@ fn AppShell() -> Element {
                                         let name_now = bp.name.read().clone();
                                         let mut name_sig = use_signal(|| name_now.clone());
                                         if *name_sig.read() != name_now {
-                                            name_sig.set(name_now.clone());
+                                            name_sig.set(name_now);
                                         }
                                         let notes_now = bp.notes.read().clone();
                                         let mut notes_sig = use_signal(|| notes_now.clone());
                                         if *notes_sig.read() != notes_now {
-                                            notes_sig.set(notes_now.clone());
+                                            notes_sig.set(notes_now);
                                         }
 
                                         let shape_options: Vec<(usize, String, String)> = EqBandShape::all()
@@ -1159,7 +1161,7 @@ fn AppShell() -> Element {
                     style: "display:flex; align-items:center; gap:8px;",
                     span { style: format!("{style_label}"), "Output" }
                     Knob {
-                        handle: param_handle(params.output_gain_db.as_ptr(), ctx.clone()),
+                        handle: param_handle(params.output_gain_db.as_ptr(), ctx),
                         size: KnobSize::Small,
                     }
                 }
@@ -1188,7 +1190,7 @@ fn model_value(model: i32) -> String {
     .to_string()
 }
 
-fn model_label(model: i32) -> &'static str {
+const fn model_label(model: i32) -> &'static str {
     match model {
         1 => "Pultec",
         2 => "Neve 1073",
@@ -1268,7 +1270,7 @@ fn PultecControls() -> Element {
             div { class: "grid grid-cols-3 gap-2",
                 InspectorKnob { label: "Atten".to_string(), value: format!("{:+.1}", params.pultec_high_atten_db.value()), handle: param_handle(params.pultec_high_atten_db.as_ptr(), ctx.clone()) }
                 InspectorKnob { label: "Drive".to_string(), value: format!("{:.0}%", params.pultec_drive.value()), handle: param_handle(params.pultec_drive.as_ptr(), ctx.clone()) }
-                InspectorKnob { label: "Trim".to_string(), value: format!("{:+.1}", params.pultec_trim_db.value()), handle: param_handle(params.pultec_trim_db.as_ptr(), ctx.clone()) }
+                InspectorKnob { label: "Trim".to_string(), value: format!("{:+.1}", params.pultec_trim_db.value()), handle: param_handle(params.pultec_trim_db.as_ptr(), ctx) }
             }
         }
     }
@@ -1307,7 +1309,7 @@ fn ApiControls() -> Element {
             InspectorKnob { label: "High Gain".to_string(), value: format!("{:+.1}", params.api_high_gain_db.value()), handle: param_handle(params.api_high_gain_db.as_ptr(), ctx.clone()) }
             div { class: "grid grid-cols-2 gap-2",
                 InspectorKnob { label: "Drive".to_string(), value: format!("{:.0}%", params.api_drive.value()), handle: param_handle(params.api_drive.as_ptr(), ctx.clone()) }
-                InspectorKnob { label: "Trim".to_string(), value: format!("{:+.1}", params.api_trim_db.value()), handle: param_handle(params.api_trim_db.as_ptr(), ctx.clone()) }
+                InspectorKnob { label: "Trim".to_string(), value: format!("{:+.1}", params.api_trim_db.value()), handle: param_handle(params.api_trim_db.as_ptr(), ctx) }
             }
         }
     }
@@ -1345,7 +1347,7 @@ fn SslControls(e_series: bool) -> Element {
             }
             div { class: "grid grid-cols-2 gap-2",
                 InspectorKnob { label: "Drive".to_string(), value: format!("{:.0}%", params.ssl_drive.value()), handle: param_handle(params.ssl_drive.as_ptr(), ctx.clone()) }
-                InspectorKnob { label: "Trim".to_string(), value: format!("{:+.1}", params.ssl_trim_db.value()), handle: param_handle(params.ssl_trim_db.as_ptr(), ctx.clone()) }
+                InspectorKnob { label: "Trim".to_string(), value: format!("{:+.1}", params.ssl_trim_db.value()), handle: param_handle(params.ssl_trim_db.as_ptr(), ctx) }
             }
         }
     }
@@ -1519,7 +1521,7 @@ fn Neve1073Controls() -> Element {
                     ],
                 }
                 InspectorKnob { label: "Mid Gain".to_string(), value: format!("{:+.1}", params.neve_mid_gain_db.value()), handle: param_handle(params.neve_mid_gain_db.as_ptr(), ctx.clone()) }
-                InspectorKnob { label: "High".to_string(), value: format!("{:+.1}", params.neve_high_gain_db.value()), handle: param_handle(params.neve_high_gain_db.as_ptr(), ctx.clone()) }
+                InspectorKnob { label: "High".to_string(), value: format!("{:+.1}", params.neve_high_gain_db.value()), handle: param_handle(params.neve_high_gain_db.as_ptr(), ctx) }
             }
         }
     }

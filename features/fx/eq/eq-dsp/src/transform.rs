@@ -15,6 +15,7 @@ use crate::zpk::{Complex, Zpk};
 ///   z = (1 + s/2fs) / (1 - s/2fs)
 ///
 /// Unmapped zeros are placed at z = -1 (Nyquist) to preserve filter order.
+#[must_use]
 pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
     let fs2 = 2.0 * sample_rate;
 
@@ -22,8 +23,8 @@ pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
         .zeros
         .iter()
         .map(|&z| {
-            let num = Complex::ONE + z / fs2;
-            let den = Complex::ONE - z / fs2;
+            let num = (Complex::new(fs2, 0.0) + z) / fs2;
+            let den = (Complex::new(fs2, 0.0) - z) / fs2;
             num / den
         })
         .collect();
@@ -32,8 +33,8 @@ pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
         .poles
         .iter()
         .map(|&p| {
-            let num = Complex::ONE + p / fs2;
-            let den = Complex::ONE - p / fs2;
+            let num = (Complex::new(fs2, 0.0) + p) / fs2;
+            let den = (Complex::new(fs2, 0.0) - p) / fs2;
             num / den
         })
         .collect();

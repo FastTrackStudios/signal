@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 /// Serialized with `#[serde(tag = "kind", content = "data")]` so a missing
 /// field deserializes as [`BlockKind::Native`] (back-compat) and the
 /// non-Native variants get a clean tagged-union JSON layout.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[serde(tag = "kind", content = "data")]
 #[repr(C)]
 #[derive(Default)]
@@ -33,7 +33,7 @@ pub enum BlockKind {
     #[default]
     Native,
     /// Neural Amp Modeler — a `.nam` model file processed by
-    /// `neural-amp-modeler` (FFI to NeuralAmpModelerCore). Works for any
+    /// `neural-amp-modeler` (FFI to `NeuralAmpModelerCore`). Works for any
     /// nonlinear/amplifier-shaped block (Amp, Drive, Cabinet, …).
     Nam(NamRef),
     /// Third-party CLAP / VST3 plugin loaded from disk.
@@ -46,6 +46,7 @@ pub enum BlockKind {
 
 impl BlockKind {
     /// Short identifier for the variant — used in UI tags and log lines.
+    #[must_use] 
     pub const fn tag(&self) -> &'static str {
         match self {
             Self::Native => "native",
@@ -86,6 +87,7 @@ pub enum SoundsourceKind {
 
 impl SoundsourceKind {
     /// Short identifier — used in UI tags, styx files, and log lines.
+    #[must_use] 
     pub const fn tag(self) -> &'static str {
         match self {
             Self::Oscillator => "oscillator",
@@ -96,6 +98,7 @@ impl SoundsourceKind {
     }
 
     /// Human-readable name for pickers.
+    #[must_use] 
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Oscillator => "Oscillator",
@@ -106,6 +109,7 @@ impl SoundsourceKind {
     }
 
     /// Parse a [`tag`](Self::tag) back into the kind.
+    #[must_use] 
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
             "oscillator" => Some(Self::Oscillator),
@@ -117,7 +121,8 @@ impl SoundsourceKind {
     }
 
     /// All kinds in display order (for source pickers).
-    pub const fn all() -> &'static [SoundsourceKind] {
+    #[must_use] 
+    pub const fn all() -> &'static [Self] {
         &[
             Self::Oscillator,
             Self::Sample,
@@ -137,13 +142,14 @@ impl crate::block::BlockType {
     /// `Harmonic` (City Grand waveguide) / `Formant` (City Wurli) the
     /// physically-modeled ones, and `Input` is the layer's live-audio
     /// source (the guitar DI).
+    #[must_use] 
     pub const fn soundsource_kind(self) -> Option<SoundsourceKind> {
-        use crate::block::BlockType as T;
+        
         match self {
-            T::Oscillator | T::Wavetable => Some(SoundsourceKind::Oscillator),
-            T::Sampler => Some(SoundsourceKind::Sample),
-            T::Harmonic | T::Formant => Some(SoundsourceKind::PhysicalModel),
-            T::Input => Some(SoundsourceKind::Audio),
+            Self::Oscillator | Self::Wavetable => Some(SoundsourceKind::Oscillator),
+            Self::Sampler => Some(SoundsourceKind::Sample),
+            Self::Harmonic | Self::Formant => Some(SoundsourceKind::PhysicalModel),
+            Self::Input => Some(SoundsourceKind::Audio),
             _ => None,
         }
     }
@@ -152,7 +158,7 @@ impl crate::block::BlockType {
 /// Reference to a `.nam` model file. `model_id` is an optional stable id
 /// (URL or hash) for content-addressed lookups; absent means "use the
 /// path as the id".
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct NamRef {
     pub model_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -163,7 +169,7 @@ pub struct NamRef {
 /// `daw::plugin::PluginFormat`'s variants by name (Clap / Vst3 / Lv2)
 /// and is stored as a string so a preset survives format additions
 /// without a schema bump.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct HostedPluginRef {
     pub format: String,
     pub path: String,
@@ -174,7 +180,7 @@ pub struct HostedPluginRef {
 }
 
 /// Caller-defined backend reference.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct CustomRef {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

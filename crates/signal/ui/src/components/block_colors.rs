@@ -19,6 +19,7 @@ pub struct BlockColor {
 }
 
 impl BlockColor {
+    #[must_use] 
     pub const fn new(bg: &'static str, fg: &'static str, border: &'static str) -> Self {
         Self { bg, fg, border }
     }
@@ -41,6 +42,7 @@ const FALLBACK: BlockColor = BlockColor::new("#A8A29E", "#FAFAF9", "#78716C");
 /// - Special/Utility = Gray/Pink
 ///
 /// Unknown keys return a neutral gray.
+#[must_use] 
 pub fn block_color(key: &str) -> BlockColor {
     match key.to_ascii_lowercase().as_str() {
         // Input/Output — Neutral gray
@@ -101,6 +103,7 @@ pub fn block_color(key: &str) -> BlockColor {
 /// Get a CSS inline style string for a block color key.
 ///
 /// Returns a `style` attribute value with background, color, and border-color.
+#[must_use] 
 pub fn block_style(key: &str) -> String {
     let color = block_color(key);
     format!(
@@ -110,6 +113,7 @@ pub fn block_style(key: &str) -> String {
 }
 
 /// Get a faded/bypassed CSS inline style string for a block color key.
+#[must_use] 
 pub fn block_bypassed_style(key: &str) -> String {
     let color = block_color(key);
     format!(
@@ -123,11 +127,12 @@ pub fn block_bypassed_style(key: &str) -> String {
 /// Takes the base color for a key and applies a subtle variation based on
 /// the instance identifier (e.g., "Drive 1", "Drive 2"). This helps
 /// distinguish between multiple blocks of the same type.
+#[must_use] 
 pub fn block_instance_color(key: &str, instance_id: &str) -> BlockColor {
     let base = block_color(key);
 
     // Generate a hash from the instance_id to get a consistent variation
-    let hash: u32 = instance_id.bytes().map(|b| b as u32).sum();
+    let hash: u32 = instance_id.bytes().map(u32::from).sum();
     let variation = (hash % 15) as i32 - 7; // -7 to +7 variation
 
     // Parse the hex color and apply variation

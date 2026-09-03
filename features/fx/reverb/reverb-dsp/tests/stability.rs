@@ -1,8 +1,8 @@
 //! Every algorithm stays bounded, and decays, across its whole knob range.
 //!
 //! This is the test that was missing when the preset library was built. Four
-//! of the translated VintageVerb "NL-" presets came out ~70 LU hot — not a
-//! calibration offset but self-oscillation: NonLinear repurposes PRE-DELAY as
+//! of the translated `VintageVerb` "NL-" presets came out ~70 LU hot — not a
+//! calibration offset but self-oscillation: `NonLinear` repurposes PRE-DELAY as
 //! a regeneration control (`effective_nonlinear`), the loop closes around an
 //! FDN whose peak gain is well above unity, and the only thing bounding it was
 //! a hard clamp on the feedback state. A hard clamp does not make a loop
@@ -20,7 +20,7 @@
 //! - **Finite**: no NaN, no infinity, anywhere.
 //!
 //! Swept across the knobs that close feedback loops — decay, and the
-//! PRE-DELAY-as-feedback remap that Magneto and NonLinear share.
+//! PRE-DELAY-as-feedback remap that Magneto and `NonLinear` share.
 
 use audiocore_dsp::{AudioConfig, Processor};
 use reverb_dsp::chain::ReverbChain;
@@ -36,11 +36,11 @@ const SR: f64 = 48_000.0;
 /// ([`AlgorithmType::wet_calibration_db`]), the ones that used to be quiet are
 /// no longer quiet — Bloom came up 23 dB — and the sparser voices reach a few
 /// units at their longest decays. The ceiling is set to leave those alone
-/// while still catching a loop that regenerates: the NonLinear failure this
+/// while still catching a loop that regenerates: the `NonLinear` failure this
 /// file was written for peaked at 17.5 and sustained there.
 const PEAK_CEILING: f64 = 8.0;
 
-fn config() -> AudioConfig {
+const fn config() -> AudioConfig {
     AudioConfig {
         sample_rate: SR,
         max_buffer_size: 512,
@@ -136,7 +136,7 @@ fn assert_bounded(label: &str, ir: &[f64]) {
 
 /// The sweep: every algorithm, over the knobs that close a feedback loop.
 ///
-/// PRE-DELAY is in the sweep because for Magneto and NonLinear it is not a
+/// PRE-DELAY is in the sweep because for Magneto and `NonLinear` it is not a
 /// pre-delay at all — the chain remaps it to the engine's feedback and
 /// disengages the delay line — so its top end is the most loop-gain those two
 /// algorithms can be asked for.
@@ -203,7 +203,7 @@ fn every_tail_eventually_decays() {
 
 /// The specific setting that shipped broken, kept as its own case.
 ///
-/// "NL-Snare Gut Punch" translated to predelay 125 ms, which NonLinear reads
+/// "NL-Snare Gut Punch" translated to predelay 125 ms, which `NonLinear` reads
 /// as 0.625 feedback. It rendered at peak 9.2 with an RMS of 3.0 sustained
 /// across the whole four-second buffer — a limiter oscillating against its own
 /// clamp, measured at +71 LU against the reference.

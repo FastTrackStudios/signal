@@ -16,7 +16,6 @@
 //! about whether the callback can be preempted by the allocator at a moment
 //! the player would hear.
 
-use std::alloc::{GlobalAlloc, Layout, System};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -34,7 +33,7 @@ thread_local! {
 
 /// True when this thread is being measured. Never allocates.
 fn armed() -> bool {
-    ARMED.try_with(|a| a.get()).unwrap_or(false)
+    ARMED.try_with(std::cell::Cell::get).unwrap_or(false)
 }
 
 fn bump() {
@@ -47,7 +46,7 @@ fn allocations_in(f: impl FnOnce()) -> usize {
     ARMED.with(|a| a.set(true));
     f();
     ARMED.with(|a| a.set(false));
-    ALLOCS.with(|c| c.get())
+    ALLOCS.with(std::cell::Cell::get)
 }
 
 /// A two-velocity-layer piano with real PCM behind both zones.

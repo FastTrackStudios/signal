@@ -16,7 +16,7 @@
 //! 5. ISTFT to reconstruct percussive signal
 //!
 //! For real-time use, the time-axis median filter is causal (one-sided),
-//! adding latency of (median_width / 2) * hop_size samples.
+//! adding latency of (`median_width` / 2) * `hop_size` samples.
 
 use rustfft::{num_complex::Complex, FftPlanner};
 
@@ -59,6 +59,7 @@ pub struct HpssProcessor {
 
 impl HpssProcessor {
     /// Create a new HPSS processor.
+    #[must_use] 
     pub fn new(
         fft_size: usize,
         hop_size: usize,
@@ -129,7 +130,8 @@ impl HpssProcessor {
     }
 
     /// Returns the latency in samples.
-    pub fn latency_samples(&self) -> usize {
+    #[must_use] 
+    pub const fn latency_samples(&self) -> usize {
         (self.time_median_width / 2) * self.hop_size + self.fft_size
     }
 
@@ -220,7 +222,7 @@ impl HpssProcessor {
 
         // `k` indexes four parallel buffers (harmonic/percussive/center_stft/fft_buf) in lockstep;
         // enumerate() over one would obscure the shared index.
-        #[allow(clippy::needless_range_loop)]
+        #[expect(clippy::needless_range_loop)]
         for k in 0..self.num_bins {
             let h2 = self.harmonic[k] * self.harmonic[k];
             let p2 = self.percussive[k] * self.percussive[k];
@@ -245,7 +247,7 @@ impl HpssProcessor {
         let ring_len = self.output_ring.len();
         // `i` indexes `frame`/`window` directly and `output_ring` via a wrapped offset;
         // the wraparound makes a plain enumerate() over one buffer insufficient.
-        #[allow(clippy::needless_range_loop)]
+        #[expect(clippy::needless_range_loop)]
         for i in 0..self.fft_size {
             let idx = (self.output_write_pos + i) % ring_len;
             self.output_ring[idx] += frame[i].re * scale * self.window[i];
@@ -306,8 +308,7 @@ mod tests {
         let peak = output.iter().map(|x| x.abs()).fold(0.0_f64, f64::max);
         assert!(
             peak > 0.001,
-            "HPSS should preserve percussive transient, peak={}",
-            peak
+            "HPSS should preserve percussive transient, peak={peak}"
         );
     }
 
@@ -315,10 +316,10 @@ mod tests {
     fn hpss_output_finite() {
         let mut hpss = HpssProcessor::new(1024, 256, 7, 31, 48000.0);
         for i in 0..24000 {
-            let t = i as f64 / 48000.0;
+            let t = f64::from(i) / 48000.0;
             let input = (440.0 * std::f64::consts::TAU * t).sin() * 0.5;
             let out = hpss.tick(input);
-            assert!(out.is_finite(), "Output must be finite at sample {}", i);
+            assert!(out.is_finite(), "Output must be finite at sample {i}");
         }
     }
 }

@@ -86,13 +86,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|p| {
             p.extension()
                 .and_then(|e| e.to_str())
-                .map(|e| {
+                .is_some_and(|e| {
                     matches!(
                         e.to_ascii_lowercase().as_str(),
                         "flac" | "wav" | "aif" | "aiff"
                     )
                 })
-                .unwrap_or(false)
         })
         .collect();
     paths.sort();

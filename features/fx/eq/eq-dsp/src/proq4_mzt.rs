@@ -159,7 +159,7 @@ pub(crate) fn mzt_quadratic(w0: f64, alpha: f64) -> (f64, f64) {
 /// LAG_PROTO template, which the binary overwrites at slot `+0x80` before
 /// calling this function.
 #[inline]
-#[allow(non_snake_case)]
+#[expect(non_snake_case, reason = "parameter names match Pro-Q 4 analog prototype")]
 pub fn zpk_section_to_AF(
     b2z: f64,
     b1z: f64,
@@ -167,31 +167,31 @@ pub fn zpk_section_to_AF(
     b2p: f64,
     b1p: f64,
     b0p: f64,
-    g: f64,
+    omega_scale: f64,
 ) -> (f64, f64, f64, f64, f64, f64) {
-    const EPS_F32: f32 = 1.1920929e-7; // captured at 0x18023161c
-    let abs_b2z_f32 = (b2z as f32).abs();
-    let abs_b2p_f32 = (b2p as f32).abs();
-    let second_order = abs_b2z_f32 > EPS_F32 || abs_b2p_f32 > EPS_F32;
-    let g2 = g * g;
+    const EPS_F32: f32 = 1.192_092_9e-7; // captured at 0x18023161c
+    let abs_b2_zero_f32 = (b2z as f32).abs();
+    let abs_b2_pole_f32 = (b2p as f32).abs();
+    let second_order = abs_b2_zero_f32 > EPS_F32 || abs_b2_pole_f32 > EPS_F32;
+    let g2 = omega_scale * omega_scale;
     let g4 = g2 * g2;
     if second_order {
-        let a = b2z * b2z;
-        let b = (b1z * b1z - 2.0 * b2z * b0z) * g2;
-        let c = b0z * b0z * g4;
-        let d = b2p * b2p;
-        let e = (b1p * b1p - 2.0 * b2p * b0p) * g2;
-        let f = b0p * b0p * g4;
-        (a, b, c, d, e, f)
+        let num_b2sq = b2z * b2z;
+        let num_cross = (b1z * b1z - 2.0 * b2z * b0z) * g2;
+        let num_b0sq = b0z * b0z * g4;
+        let den_b2sq = b2p * b2p;
+        let den_cross = (b1p * b1p - 2.0 * b2p * b0p) * g2;
+        let den_b0sq = b0p * b0p * g4;
+        (num_b2sq, num_cross, num_b0sq, den_b2sq, den_cross, den_b0sq)
     } else {
         // First-order section: B has no g², C/F have a single g².
-        let a = 0.0;
-        let b = b1z * b1z;
-        let c = b0z * b0z * g2;
-        let d = 0.0;
-        let e = b1p * b1p;
-        let f = b0p * b0p * g2;
-        (a, b, c, d, e, f)
+        let num_b2sq = 0.0;
+        let num_cross = b1z * b1z;
+        let num_b0sq = b0z * b0z * g2;
+        let den_b2sq = 0.0;
+        let den_cross = b1p * b1p;
+        let den_b0sq = b0p * b0p * g2;
+        (num_b2sq, num_cross, num_b0sq, den_b2sq, den_cross, den_b0sq)
     }
 }
 
@@ -212,7 +212,7 @@ pub fn zpk_section_to_AF(
 /// is in the post-(A..F) Lagrange synthesis, not in (A..F) itself). See
 /// `compute_zpk_transfer_function_coefficients_decoded.md` for the full
 /// analysis.
-#[allow(non_snake_case)]
+#[expect(non_snake_case, reason = "parameter names (A, B, C, D, E, F) match the zpk transfer-function coefficients")]
 pub fn proq4_s2_from_AF_with_subfreq(
     freq_hz: f64,
     sample_rate: f64,
@@ -232,7 +232,7 @@ pub fn proq4_s2_from_AF_with_subfreq(
 
     let g_ref = if F.abs() > 1e-300 { C / F } else { 0.0 };
 
-    const W_POLE_MAX: f64 = 3.078760800517997;
+    const W_POLE_MAX: f64 = 3.078_760_800_517_997;
     const W_ZERO_MAX: f64 = 2.827433388230814;
     const W_THIRD_MAX: f64 = 3.0633669965154073;
     let w_pole = w_pole.min(W_POLE_MAX);

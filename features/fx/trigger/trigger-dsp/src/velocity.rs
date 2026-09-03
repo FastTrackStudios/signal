@@ -11,7 +11,7 @@
 // r[impl trigger.velocity.curve]
 
 /// Velocity curve shape.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VelocityCurve {
     /// Linear mapping.
     Linear,
@@ -38,7 +38,8 @@ pub struct VelocityMapper {
 }
 
 impl VelocityMapper {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             dynamics: 0.5,
             fixed_velocity: 0.5,
@@ -55,7 +56,8 @@ impl VelocityMapper {
     /// - `threshold`: the detect threshold (linear, > 0)
     ///
     /// # Returns
-    /// Velocity in range [min_velocity, max_velocity].
+    /// Velocity in range [`min_velocity`, `max_velocity`].
+    #[must_use] 
     pub fn map(&self, peak_level: f64, threshold: f64) -> f64 {
         if matches!(self.curve, VelocityCurve::Fixed) || self.dynamics <= 0.0 {
             return self
@@ -96,7 +98,7 @@ impl VelocityMapper {
                 // Map 0..~2 raw range to 0..1 with log curve
                 // log(1 + x) / log(1 + max) normalized
                 let x = raw.clamp(0.0, 2.0);
-                (1.0 + x).ln() / (3.0_f64).ln()
+                x.ln_1p() / (3.0_f64).ln()
             }
             _ => shaped,
         };
@@ -105,13 +107,15 @@ impl VelocityMapper {
     }
 
     /// Convert velocity (0.0-1.0) to MIDI velocity (1-127).
-    pub fn to_midi(velocity: f64) -> u8 {
-        (1.0 + velocity.clamp(0.0, 1.0) * 126.0).round() as u8
+    #[must_use] 
+    pub const fn to_midi(velocity: f64) -> u8 {
+        velocity.clamp(0.0, 1.0).mul_add(126.0, 1.0).round() as u8
     }
 
     /// Convert MIDI velocity (1-127) to velocity (0.0-1.0).
+    #[must_use] 
     pub fn from_midi(midi_vel: u8) -> f64 {
-        ((midi_vel as f64) - 1.0) / 126.0
+        (f64::from(midi_vel) - 1.0) / 126.0
     }
 }
 

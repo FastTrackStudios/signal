@@ -42,7 +42,7 @@ struct Smf {
     seq: u32,
 }
 impl Smf {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             ev: Vec::new(),
             seq: 0,
@@ -114,7 +114,7 @@ impl Gen {
         s.cc(0.0, 11, 127);
         s.cc(0.0, 2, 0);
         s.cc(0.0, 1, 64);
-        Gen {
+        Self {
             s,
             man: Vec::new(),
             t: 1.0,
@@ -133,7 +133,7 @@ impl Gen {
         self.idx += 1;
     }
     /// One isolated held/short note. `hold` = note length, `win` = analysis window.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "one-off CSS-generation script; one positional arg per MIDI/articulation knob reads clearer than a params struct here"
     )]
@@ -158,7 +158,7 @@ impl Gen {
         self.t += win + GAP;
     }
     /// One isolated legato phrase A→B (single segment). `win` covers the phrase.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "one-off CSS-generation script; one positional arg per MIDI/articulation knob reads clearer than a params struct here"
     )]
@@ -292,10 +292,10 @@ fn main() -> std::io::Result<()> {
     }
     // 7. LEGATO intervals from G4 (vel85, LL), up 1/2/3/5/7/12, down 5.
     for &iv in &[1i8, 2, 3, 5, 7, 12, -5] {
-        let b = (67 + iv as i16) as u8;
+        let b = (67 + i16::from(iv)) as u8;
         g.leg(
             "LEG-INT",
-            &format!("G4->{} ({:+}st)", b, iv),
+            &format!("G4->{b} ({iv:+}st)"),
             LL_LEG,
             67,
             b,

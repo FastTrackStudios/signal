@@ -29,7 +29,7 @@ fn read_vlq(d: &[u8], p: &mut usize) -> u32 {
     loop {
         let b = d[*p];
         *p += 1;
-        v = (v << 7) | (b & 0x7f) as u32;
+        v = (v << 7) | u32::from(b & 0x7f);
         if b & 0x80 == 0 {
             break;
         }
@@ -39,7 +39,7 @@ fn read_vlq(d: &[u8], p: &mut usize) -> u32 {
 
 /// Minimal SMF parse → `(seconds, status, d1, d2)` channel events, in order.
 fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
-    let div = u16::from_be_bytes([d[12], d[13]]) as f64; // ticks/quarter
+    let div = f64::from(u16::from_be_bytes([d[12], d[13]])); // ticks/quarter
     let mut us_per_q = 500_000.0f64; // default 120 BPM
                                      // Locate MTrk.
     let mut p = 14;
@@ -55,7 +55,7 @@ fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
     let mut running = 0u8;
     let mut out = Vec::new();
     while p < end {
-        let dt = read_vlq(d, &mut p) as u64;
+        let dt = u64::from(read_vlq(d, &mut p));
         tick += dt;
         sec += dt as f64 * (us_per_q / 1_000_000.0) / div;
         let mut status = d[p];
@@ -72,7 +72,7 @@ fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
                 let len = read_vlq(d, &mut p) as usize;
                 if meta == 0x51 {
                     us_per_q =
-                        ((d[p] as f64) * 65536.0) + (d[p + 1] as f64) * 256.0 + d[p + 2] as f64;
+                        f64::from(d[p]).mul_add(65536.0, f64::from(d[p + 1]) * 256.0) + f64::from(d[p + 2]);
                 }
                 p += len;
             }
@@ -151,7 +151,7 @@ fn events_to_document(events: &[(f64, u8, u8, u8)]) -> TrackDocument {
         }
     }
     // Close any note left hanging at the end of the file.
-    let last = events.last().map(|e| e.0).unwrap_or(0.0) + 1.0;
+    let last = events.last().map_or(0.0, |e| e.0) + 1.0;
     for ((chan, pitch), (start, vel)) in active {
         notes.push(DocNote {
             start_qn: start,
@@ -212,7 +212,7 @@ fn main() -> eyre::Result<()> {
     write_wav(&outp, &res.audio)?;
     println!(
         "wrote {outp}  ({:.1}s, {} notes, {} transitions, {} reactive fallbacks)",
-        res.audio.len() as f64 / 2.0 / SR as f64,
+        res.audio.len() as f64 / 2.0 / f64::from(SR),
         res.note_count,
         res.transitions.len(),
         res.reactive_fallbacks,

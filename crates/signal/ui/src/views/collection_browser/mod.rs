@@ -47,7 +47,7 @@ pub use signal_browser::types::{EngineFlowData, LayerFlowData, ModuleChainData};
 
 /// Tailwind accent gradient classes for each `NavCategory`.
 /// Lives in signal-ui so signal-browser stays headless.
-fn nav_accent(cat: NavCategory) -> &'static str {
+const fn nav_accent(cat: NavCategory) -> &'static str {
     match cat {
         NavCategory::Presets => "from-amber-500 via-orange-400 to-red-500",
         NavCategory::Engines => "from-rose-500 via-pink-400 to-fuchsia-500",
@@ -59,7 +59,7 @@ fn nav_accent(cat: NavCategory) -> &'static str {
 
 /// Payload emitted when the user picks an item in "assign" mode.
 /// Maps to the corresponding `PatchTarget` variant.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserAssignment {
     /// Rig scene selected (Presets nav → col2 rig + col3 scene).
     RigScene { rig_id: String, scene_id: String },
@@ -98,7 +98,7 @@ pub async fn resolve_layer_engines(
 // region: --- Public API
 
 /// Which domain level to browse. Kept for external API compatibility.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowseLevel {
     Presets,
     Engines,
@@ -107,7 +107,8 @@ pub enum BrowseLevel {
 }
 
 impl BrowseLevel {
-    pub fn label(&self) -> &'static str {
+    #[must_use] 
+    pub const fn label(&self) -> &'static str {
         match self {
             Self::Presets => "Presets",
             Self::Engines => "Engines",
@@ -155,7 +156,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
 
     let mut expanded_folders = use_signal(std::collections::HashSet::<String>::new);
 
-    #[allow(
+    #[expect(
         clippy::redundant_closure,
         reason = "passing `nav` bare instead of `move || nav()` fails to typecheck against use_memo's FnMut + 'static bound on a dioxus Signal"
     )]
@@ -283,21 +284,21 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                         match focus_col() {
                             2 => {
                                 let len = col2_items().len();
-                                let idx = col2_selected().map(|i| i + 1).unwrap_or(0);
+                                let idx = col2_selected().map_or(0, |i| i + 1);
                                 if idx < len {
                                     col2_selected.set(Some(idx));
                                 }
                             }
                             3 => {
                                 let len = col3_items().len();
-                                let idx = col3_selected().map(|i| i + 1).unwrap_or(0);
+                                let idx = col3_selected().map_or(0, |i| i + 1);
                                 if idx < len {
                                     col3_selected.set(Some(idx));
                                 }
                             }
                             4 => {
                                 let len = col4_items().len();
-                                let idx = col4_selected().map(|i| i + 1).unwrap_or(0);
+                                let idx = col4_selected().map_or(0, |i| i + 1);
                                 if idx < len {
                                     col4_selected.set(Some(idx));
                                 }
@@ -368,10 +369,10 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
             // ── Toolbar: search + sort + filter ──
             Toolbar {
                 current_nav: current_nav,
-                current_search: current_search.clone(),
+                current_search: current_search,
                 current_sort: current_sort,
                 tag_panel_open: tag_panel_open,
-                active_filters: current_filters.clone(),
+                active_filters: current_filters,
                 available_tags: available_tags,
                 on_search_change: move |text: String| {
                     search_text.set(text);
@@ -379,7 +380,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                 on_sort_change: move |mode: SortMode| {
                     sort_mode.set(mode);
                 },
-                on_toggle_tag_panel: move |_| {
+                on_toggle_tag_panel: move |()| {
                     show_tag_panel.set(!tag_panel_open);
                 },
                 on_filters_change: move |filters: Vec<String>| {
@@ -543,7 +544,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                             col4_selected.set(None);
                                             if current_nav == NavCategory::Presets && child_engines_empty {
                                                 let signal = signal.clone();
-                                                let rig_id = col2_current_id().clone();
+                                                let rig_id = col2_current_id();
                                                 let scene_id = child_id.clone();
                                                 spawn(async move {
                                                     if let Some((engines, params)) =
@@ -766,7 +767,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
 
                 // ── Detail ──
                 DetailPanel {
-                    detail_name: detail_name.clone(),
+                    detail_name: detail_name,
                     detail_meta: detail_meta.cloned(),
                     detail_data: detail_data.cloned(),
                     param_lookup: param_lookup(),

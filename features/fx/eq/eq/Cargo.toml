@@ -5,6 +5,9 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 description = "eq — facade over eq-dsp; plugin UI + preset profiles are opt-in features."
 
+[lints]
+workspace = true
+
 [features]
 default = []
 # Opt-in plugin UI and preset profiles. Wired once the plugin shell

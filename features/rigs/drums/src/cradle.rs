@@ -20,35 +20,39 @@ pub enum Value {
     Num(f64),
     Bool(bool),
     /// A positional array (`{ a, b, c }`).
-    Arr(Vec<Value>),
+    Arr(Vec<Self>),
     /// A keyed table (`{ k = v, … }`). Insertion order is not preserved; use
     /// [`Value::get`].
-    Map(BTreeMap<String, Value>),
+    Map(BTreeMap<String, Self>),
 }
 
 impl Value {
-    pub fn get(&self, key: &str) -> Option<&Value> {
+    #[must_use] 
+    pub fn get(&self, key: &str) -> Option<&Self> {
         match self {
-            Value::Map(m) => m.get(key),
+            Self::Map(m) => m.get(key),
             _ => None,
         }
     }
-    pub fn as_f64(&self) -> Option<f64> {
+    #[must_use] 
+    pub const fn as_f64(&self) -> Option<f64> {
         match self {
-            Value::Num(n) => Some(*n),
-            Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
+            Self::Num(n) => Some(*n),
+            Self::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
             _ => None,
         }
     }
+    #[must_use] 
     pub fn as_str(&self) -> Option<&str> {
         match self {
-            Value::Str(s) => Some(s),
+            Self::Str(s) => Some(s),
             _ => None,
         }
     }
-    pub fn as_arr(&self) -> Option<&[Value]> {
+    #[must_use] 
+    pub fn as_arr(&self) -> Option<&[Self]> {
         match self {
-            Value::Arr(a) => Some(a),
+            Self::Arr(a) => Some(a),
             _ => None,
         }
     }
@@ -133,6 +137,7 @@ pub struct EqBand {
 
 impl Strip {
     /// The strip's FX chain as typed slots (order preserved).
+    #[must_use] 
     pub fn fx_slots(&self) -> Vec<FxSlot> {
         self.fx
             .iter()
@@ -243,7 +248,7 @@ impl Parser<'_> {
         match self.peek() {
             Some(b'{') => self.table(),
             Some(b'"') => Ok(Value::Str(self.string()?)),
-            Some(b't') | Some(b'f') => self.boolean(),
+            Some(b't' | b'f') => self.boolean(),
             Some(b'n') => {
                 // Lua `nil`.
                 if self.b[self.i..].starts_with(b"nil") {

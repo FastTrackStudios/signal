@@ -1,5 +1,5 @@
 //! Sanity-check that retag-packs leaves real packs parseable with new tags.
-//! Skips when the AudioHaven mount isn't present.
+//! Skips when the `AudioHaven` mount isn't present.
 
 use signal_sampler::read_pack_header;
 use std::path::Path;

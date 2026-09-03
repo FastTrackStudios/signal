@@ -6,6 +6,9 @@ license.workspace = true
 edition = "2021"
 description = "Modulation profiles — the five circuits, and what each one modulates"
 
+[lints]
+workspace = true
+
 [dependencies]
 # The facade, not the three DSP cores: this crate names engines and voices
 # them, and the facade is what says which engines exist.

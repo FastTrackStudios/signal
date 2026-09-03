@@ -1,7 +1,7 @@
 //! Data-driven conformance scanner across every filter type × every slope.
 //!
 //! Reports per-(filter, slope) pass / total + max error.  Useful for
-//! tracking algorithmic conformance progress (run with FTSEQ_BYPASS_LOOKUP
+//! tracking algorithmic conformance progress (run with `FTSEQ_BYPASS_LOOKUP`
 //! to bypass per-filter lookup tables) and for spot-checking lookup
 //! coverage.
 
@@ -18,7 +18,7 @@ const SR: f64 = 48000.0;
 // that exceeds 0.005 dB even with bit-exact coefficients (sub-audible).
 const SKIP_BELOW_DB: f64 = -100.0;
 
-fn slope_to_order(slope: usize) -> usize {
+const fn slope_to_order(slope: usize) -> usize {
     match slope {
         0 => 1,
         2 => 2,
@@ -47,7 +47,7 @@ const FILTERS: &[(&str, FilterType, bool)] = &[
 ];
 
 fn parse_filename(stem: &str, prefix: &str, has_gain: bool) -> Option<(f64, f64, f64, usize)> {
-    let s = stem.strip_prefix(&format!("{}_", prefix))?;
+    let s = stem.strip_prefix(&format!("{prefix}_"))?;
     let (fc_part, rest) = s.split_once("hz_")?;
     let fc: f64 = fc_part.parse().ok()?;
     if has_gain {
@@ -99,7 +99,7 @@ fn all_filters_all_slopes_scan() {
             None => continue,
         };
         for (prefix, ftype, has_gain) in FILTERS {
-            if !stem.starts_with(&format!("{}_", prefix)) {
+            if !stem.starts_with(&format!("{prefix}_")) {
                 continue;
             }
             let (fc, gain, q, slope) = match parse_filename(&stem, prefix, *has_gain) {
@@ -146,7 +146,7 @@ fn all_filters_all_slopes_scan() {
         }
     }
 
-    println!("\nFilter conformance per slope (TOL_DB={}):", TOL_DB);
+    println!("\nFilter conformance per slope (TOL_DB={TOL_DB}):");
     println!(
         "  {:>12}  {:>5}  {:>5}  {:>5}  {:>10}",
         "filter", "slope", "pass", "total", "max_err"
@@ -167,8 +167,7 @@ fn all_filters_all_slopes_scan() {
         }
         last_filter = prefix.clone();
         println!(
-            "  {:>12}  {:>5}  {:>5}  {:>5}  {:>10.4}",
-            prefix, slope, pass, total, max_err
+            "  {prefix:>12}  {slope:>5}  {pass:>5}  {total:>5}  {max_err:>10.4}"
         );
         filter_pass += pass;
         filter_total += total;

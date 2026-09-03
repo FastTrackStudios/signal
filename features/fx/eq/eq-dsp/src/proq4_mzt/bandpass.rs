@@ -43,12 +43,12 @@ pub fn design_bandpass_mzt(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     let t6 = t4 * t2;
     let t8 = t4 * t4;
     let t10 = t8 * t2;
-    let z_extra = -1.4353418643331e-01
-        + -5.1681616455089e-02 * t2
-        + 3.5155728635281e-02 * t4
-        + -1.7769301791135e-02 * t6
-        + 7.1849909782389e-03 * t8
-        + -1.3739788582112e-03 * t10;
+    let z_extra = -1.435_341_864_333_1e-01
+        + -5.168_161_645_508_9e-02 * t2
+        + 3.515_572_863_528_1e-02 * t4
+        + -1.776_930_179_113_5e-02 * t6
+        + 7.184_990_978_238_9e-03 * t8
+        + -1.373_978_858_211_2e-03 * t10;
     // Numerator polynomial: (z-1)(z-z_extra) = z² - (1+z_extra)·z + z_extra
     // Or in z⁻¹ form: 1 - (1+z_extra)·z⁻¹ + z_extra·z⁻²
     // Wait — that has zeros at z=1 and z=z_extra. Coefficients (b0, b1, b2)

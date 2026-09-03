@@ -1,7 +1,7 @@
 //! Visual-inspection harness: rasterize the real editor to PNGs.
 //!
 //! The same mount the plugin embeds, painted through `render_png` (anyrender +
-//! vello_cpu). Nothing here asserts — a wrong-looking panel is not a failing
+//! `vello_cpu`). Nothing here asserts — a wrong-looking panel is not a failing
 //! test, it is a picture you have to look at:
 //!
 //! ```sh
@@ -21,11 +21,9 @@ mod support;
 use support::{mount_with, Fixture};
 
 fn shots_dir() -> PathBuf {
-    let dir = std::env::var("FTS_SHOTS_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
+    let dir = std::env::var("FTS_SHOTS_DIR").map_or_else(|_| {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../target/gui-shots/saturate")
-        });
+        }, PathBuf::from);
     std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("create {}: {e}", dir.display()));
     dir
 }
@@ -81,9 +79,9 @@ async fn emphasis_strip_open() {
     let (ox, oy) = el.document_origin();
     let (bw, bh) = el.size();
     fx.tester
-        .pointer_down(ox + bw as f64 / 2.0, oy + bh as f64 / 2.0);
+        .pointer_down(ox + f64::from(bw) / 2.0, oy + f64::from(bh) / 2.0);
     fx.tester
-        .pointer_up(ox + bw as f64 / 2.0, oy + bh as f64 / 2.0);
+        .pointer_up(ox + f64::from(bw) / 2.0, oy + f64::from(bh) / 2.0);
     fx.settle().await;
     shot(&fx, "emphasis-strip-open");
 }

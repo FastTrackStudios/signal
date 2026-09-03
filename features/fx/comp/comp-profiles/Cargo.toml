@@ -6,6 +6,9 @@ license.workspace = true
 edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
 description = "Compressor hardware profiles — UREI 1176, LA-2A, SSL bus parameter mappings"
 
+[lints]
+workspace = true
+
 [dependencies]
 comp-dsp = { path = "../comp-dsp" }
 eq-profiles = { workspace = true }

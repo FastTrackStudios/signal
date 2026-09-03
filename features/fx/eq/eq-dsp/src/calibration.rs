@@ -15,6 +15,7 @@ pub struct ResponsePoint {
 }
 
 impl ResponsePoint {
+    #[must_use]
     pub const fn new(freq_hz: f64, magnitude_db: f64) -> Self {
         Self {
             freq_hz,
@@ -23,6 +24,7 @@ impl ResponsePoint {
         }
     }
 
+    #[must_use]
     pub const fn weighted(freq_hz: f64, magnitude_db: f64, weight: f64) -> Self {
         Self {
             freq_hz,
@@ -48,6 +50,7 @@ impl ResponseTarget {
         }
     }
 
+    #[must_use]
     pub fn frequencies(&self) -> Vec<f64> {
         self.points.iter().map(|point| point.freq_hz).collect()
     }

@@ -16,7 +16,8 @@ impl Complex {
     pub const ZERO: Self = Self { re: 0.0, im: 0.0 };
     pub const ONE: Self = Self { re: 1.0, im: 0.0 };
 
-    pub fn new(re: f64, im: f64) -> Self {
+    #[must_use]
+    pub const fn new(re: f64, im: f64) -> Self {
         Self { re, im }
     }
 
@@ -97,7 +98,6 @@ impl Mul for Complex {
 
 impl Div for Complex {
     type Output = Self;
-    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Self {
         // a / b = a * (1/b) for complex numbers — intentional.
         self * rhs.inv()

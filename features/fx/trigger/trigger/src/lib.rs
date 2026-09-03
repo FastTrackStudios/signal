@@ -7,7 +7,7 @@
 //!
 //! The engine is the legacy FTS-Trigger chain: sidechain HPF/LPF (`eq-dsp`)
 //! → onset detector (time-domain peak/RMS state machine or one of six FFT
-//! onset detection functions — spectral flux, SuperFlux, HFC, complex
+//! onset detection functions — spectral flux, `SuperFlux`, HFC, complex
 //! domain, rectified complex domain, modified KL) → velocity curve
 //! (linear/log/exp/fixed) → sample playback (velocity layers + round-robin)
 //! → mix (replace/layer/blend). MIDI-out shells drive

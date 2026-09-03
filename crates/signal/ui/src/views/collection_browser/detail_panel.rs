@@ -79,7 +79,7 @@ pub(super) fn render_param_bars(params: &[DetailParam]) -> Element {
         for param in params.iter() {
             {
                 let pct = (param.value * 100.0).round() as u32;
-                let width_pct = format!("{}%", pct);
+                let width_pct = format!("{pct}%");
                 let name = param.name.clone();
                 rsx! {
                     div { key: "{name}", class: "flex items-center gap-2",
@@ -235,7 +235,7 @@ pub(super) fn collect_available_tags(
 }
 
 /// Display name for a tag category.
-pub(super) fn tag_category_label(cat: signal_proto::tagging::TagCategory) -> &'static str {
+pub(super) const fn tag_category_label(cat: signal_proto::tagging::TagCategory) -> &'static str {
     match cat {
         signal_proto::tagging::TagCategory::Tone => "Tone",
         signal_proto::tagging::TagCategory::Character => "Character",
@@ -259,7 +259,7 @@ pub(super) fn tag_display_value(key: &str) -> &str {
     key.split_once(':').map_or(key, |(_, v)| v)
 }
 
-pub(super) fn rig_type_display(rt: signal_proto::rig::RigType) -> &'static str {
+pub(super) const fn rig_type_display(rt: signal_proto::rig::RigType) -> &'static str {
     match rt {
         signal_proto::rig::RigType::Guitar => "Guitar",
         signal_proto::rig::RigType::Bass => "Bass",

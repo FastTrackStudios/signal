@@ -7,7 +7,7 @@
 use dioxus::prelude::*;
 
 /// A snapshot entry in the list.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SnapshotEntry {
     pub id: String,
     pub name: String,
@@ -25,14 +25,14 @@ pub enum CaptureType {
 }
 
 impl CaptureType {
-    fn label(self) -> &'static str {
+    const fn label(self) -> &'static str {
         match self {
             Self::Quick => "Quick",
             Self::Full => "Full",
         }
     }
 
-    fn badge_class(self) -> &'static str {
+    const fn badge_class(self) -> &'static str {
         match self {
             Self::Quick => "bg-signal-quick/20 text-signal-quick",
             Self::Full => "bg-signal-full/20 text-signal-full",
@@ -90,7 +90,7 @@ pub fn SnapshotPanel(props: SnapshotPanelProps) -> Element {
                     placeholder: "Snapshot name...",
                     value: "{capture_name}",
                     oninput: move |evt: FormEvent| {
-                        capture_name.set(evt.value().clone());
+                        capture_name.set(evt.value());
                     },
                 }
 

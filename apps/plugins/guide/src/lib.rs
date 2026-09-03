@@ -74,8 +74,8 @@ pub enum Source {
 impl From<Source> for TriggerSource {
     fn from(source: Source) -> Self {
         match source {
-            Source::HostTransport => TriggerSource::HostTransport,
-            Source::Midi => TriggerSource::Midi,
+            Source::HostTransport => Self::HostTransport,
+            Source::Midi => Self::Midi,
         }
     }
 }
@@ -276,7 +276,7 @@ impl Plugin for FtsGuide {
         buffer_config: &BufferConfig,
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
 
         // (Re)build the click PCM at the render rate. Synthesized defaults
         // only fill EMPTY slots, so clear first for a rate change.

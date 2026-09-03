@@ -25,7 +25,7 @@ pub mod performance {
 
     /// Time window for "simultaneously" setting parameters in parallel.
     /// In milliseconds. All parameters set within this window are batched
-    /// in one join_all() for concurrent DAW RPC calls.
+    /// in one `join_all()` for concurrent DAW RPC calls.
     pub const PARALLEL_BATCH_WINDOW_MS: u64 = 5;
 }
 
@@ -71,7 +71,7 @@ pub mod logging {
 
 /// Macro system feature flags.
 pub mod features {
-    /// Enable parallel parameter updates using join_all().
+    /// Enable parallel parameter updates using `join_all()`.
     /// If false, updates are sequential (slower but simpler debugging).
     pub const ENABLE_PARALLEL_UPDATES: bool = true;
 

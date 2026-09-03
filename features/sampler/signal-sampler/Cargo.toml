@@ -6,6 +6,9 @@ authors.workspace = true
 license.workspace = true
 description = "Sample library playback engine for Signal — loads and plays orchestral, drum, and instrument libraries"
 
+[lints]
+workspace = true
+
 [features]
 # Native PipeWire backend (no JACK shim) — the live rig talks to PipeWire
 # directly via cpal's pipewire host. The rig picks the interface + input channel

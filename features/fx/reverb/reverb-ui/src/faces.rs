@@ -321,6 +321,7 @@ pub static SPECIAL: SpaceDesign = SpaceDesign {
 /// chosen the space.
 ///
 /// Empty for the engines whose personality the shared controls already cover.
+#[must_use] 
 pub fn extras_for(profile_id: &str) -> &'static [KnobSpec] {
     // Statics rather than a match arm building them: a `&[..]` literal inside
     // the arm is a temporary, and this has to outlive the call.
@@ -361,6 +362,7 @@ pub fn extras_for(profile_id: &str) -> &'static [KnobSpec] {
 /// something else — shimmer's amount and pitch, magneto's saturation and wow,
 /// non-linear's gate shape. A knob called "Character A" tells you nothing, so
 /// the panel prints what it actually does here.
+#[must_use] 
 pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
     match profile_id {
         "shimmer" => ("Amount", "Pitch"),
@@ -394,6 +396,7 @@ pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
 /// seven more panels that differ only in their silkscreen. The profile's name
 /// is printed on the panel, and its accent shifts with it, so you can still
 /// tell at a glance which one you are on.
+#[must_use] 
 pub fn design_for(profile_id: &str) -> &'static SpaceDesign {
     match reverb_profiles::category_of(profile_id).map(|(c, _)| reverb_profiles::CATEGORIES[c].id) {
         Some("ir") => &IR,
@@ -410,9 +413,10 @@ pub fn design_for(profile_id: &str) -> &'static SpaceDesign {
 /// How lit the centrepiece is for a given variant — the second plate is
 /// brighter than the first, the Arena brighter than the Concert hall. Small,
 /// but it means the variants are visibly different and not just re-labelled.
+#[must_use] 
 pub fn variant_lift(profile_id: &str) -> f64 {
     match reverb_profiles::category_of(profile_id) {
-        Some((_, index)) => 1.0 + index as f64 * 0.22,
+        Some((_, index)) => (index as f64).mul_add(0.22, 1.0),
         None => 1.0,
     }
 }
@@ -438,8 +442,7 @@ pub fn SpaceFace(
     let value = |name: &str| {
         handles
             .get(name)
-            .map(|h| h.normalized() as f64)
-            .unwrap_or(0.5)
+            .map_or(0.5, |h| f64::from(h.normalized()))
     };
     let (decay, size, damping) = (value("decay"), value("size"), value("damping"));
 
@@ -488,8 +491,7 @@ pub fn SpaceFace(
                 text: reverb_profiles::CATEGORIES
                     .iter()
                     .find(|c| c.profiles.contains(&profile.id))
-                    .map(|c| c.label)
-                    .unwrap_or("Reverb")
+                    .map_or("Reverb", |c| c.label)
                     .to_string(),
                 size: 8.0, color: design.dim_ink.to_string(),
             }
@@ -519,7 +521,7 @@ pub fn SpaceFace(
                         }
                     }
                     Silkscreen {
-                        scale, x: spec.x, y: spec.y + spec.d * 0.92 + 10.0, width: 130.0,
+                        scale, x: spec.x, y: spec.d.mul_add(0.92, spec.y) + 10.0, width: 130.0,
                         text: match spec.param {
                             "character_a" => character_legends(&profile_id).0.to_string(),
                             "character_b" => character_legends(&profile_id).1.to_string(),
@@ -616,7 +618,7 @@ fn IrBrowser(ink: String, accent: String) -> Element {
                 style: format!(
                     "font-size:10px; font-weight:700; white-space:nowrap; \
                      overflow:hidden; color:{};",
-                    if error.is_some() { "#e2603f".to_string() } else { accent.clone() },
+                    if error.is_some() { "#e2603f".to_string() } else { accent },
                 ),
                 if loading {
                     "Loading…"
@@ -651,7 +653,7 @@ fn IrBrowser(ink: String, accent: String) -> Element {
                         onclick: {
                             let state = state.clone();
                             let params = params.clone();
-                            let path = path.clone();
+                            let path = path;
                             move |_| {
                                 *params.ir_path.write() = path.display().to_string();
                                 state.load_ir(path.clone());
@@ -685,15 +687,15 @@ fn CentreView(
 ) -> Element {
     // Everything below draws in a 620x150 box, which is the slot it sits in.
     let (w, h) = (620.0, 150.0);
-    let glow = (0.28 + decay * 0.5).min(0.92) * lift.min(1.5);
-    let body = accent.to_string();
+    let glow = decay.mul_add(0.5, 0.28).min(0.92) * lift.min(1.5);
+    let body = accent;
 
     let inner = match kind {
         // A hall, seen end-on: the arch of the ceiling, with the tail as
         // light pooling under it. Size widens the arch; decay fills it.
         Centrepiece::Arch => {
-            let span = 150.0 + size * 300.0;
-            let rise = 40.0 + size * 70.0;
+            let span = size.mul_add(300.0, 150.0);
+            let rise = size.mul_add(70.0, 40.0);
             let (cx, base) = (w / 2.0, h - 18.0);
             let arch = format!(
                 "M {:.1} {:.1} Q {:.1} {:.1} {:.1} {:.1}",
@@ -758,7 +760,7 @@ fn CentreView(
         // A small room in perspective: the box, and the first reflections
         // bouncing inside it.
         Centrepiece::Room => {
-            let depth = 26.0 + size * 46.0;
+            let depth = size.mul_add(46.0, 26.0);
             let (x0, y0, rw, rh) = (170.0, 20.0, w - 340.0, h - 62.0);
             rsx! {
                 rect { x: "{x0:.1}", y: "{y0:.1}", width: "{rw:.1}", height: "{rh:.1}",
@@ -793,15 +795,15 @@ fn CentreView(
         Centrepiece::Coil => {
             let turns = 16;
             let (x0, span) = (70.0, w - 140.0);
-            let step = span / turns as f64;
-            let amp = 22.0 + decay * 30.0;
-            let sag = 6.0 + (1.0 - size) * 14.0;
+            let step = span / f64::from(turns);
+            let amp = decay.mul_add(30.0, 22.0);
+            let sag = (1.0 - size).mul_add(14.0, 6.0);
             let mut d = format!("M {:.1} {:.1}", x0, h / 2.0);
             let mut i = 0;
             while i < turns {
-                let x = x0 + step * (i as f64 + 1.0);
+                let x = x0 + step * (f64::from(i) + 1.0);
                 let dir = if i % 2 == 0 { -1.0 } else { 1.0 };
-                let mid = h / 2.0 + -(sag * ((i as f64 / turns as f64) * 2.0 - 1.0).abs()) + sag;
+                let mid = h / 2.0 + -(sag * (f64::from(i) / f64::from(turns)).mul_add(2.0, -1.0).abs()) + sag;
                 d.push_str(&format!(
                     " Q {:.1} {:.1} {:.1} {:.1}",
                     x - step / 2.0,
@@ -881,11 +883,11 @@ fn CentreView(
             rsx! {
                 for i in 0..bars {
                     {
-                        let t = i as f64 / bars as f64;
-                        let env = (-t * (7.0 - decay * 5.5)).exp();
+                        let t = f64::from(i) / f64::from(bars);
+                        let env = (-t * decay.mul_add(-5.5, 7.0)).exp();
                         // A fixed pseudo-random texture: the same every frame.
-                        let jitter = ((i as f64 * 12.9898).sin() * 43758.5453).fract().abs();
-                        let a = env * (0.45 + jitter * 0.55) * (1.0 - damping * 0.35);
+                        let jitter = ((f64::from(i) * 12.9898).sin() * 43758.5453).fract().abs();
+                        let a = env * (0.45 + jitter * 0.55) * damping.mul_add(-0.35, 1.0);
                         rsx! {
                             line {
                                 key: "{i}",
@@ -950,7 +952,7 @@ mod tests {
     fn every_legend_fits_on_the_panel() {
         for design in [&IR, &HALL, &PLATE, &ROOM, &SPRING, &AMBIENT, &SPECIAL] {
             for spec in design.knobs {
-                let legend_y = spec.y + spec.d * 0.92 + 10.0;
+                let legend_y = spec.d.mul_add(0.92, spec.y) + 10.0;
                 assert!(
                     legend_y + 6.0 <= H,
                     "{}'s {} legend sits at y={legend_y:.0} on a {H}px panel",

@@ -17,7 +17,7 @@ use signal_proto::traits::{Collection, Variant};
 use tracing::{info, warn};
 
 /// Result of a variation switch attempt.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SwitchResult {
     /// Successfully switched to the Nth variation.
     Switched {

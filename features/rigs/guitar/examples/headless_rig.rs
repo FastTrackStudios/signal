@@ -3,7 +3,7 @@
 //! `RigClient`, and watch `RigEvent`s arrive on the `#[subscribe]` stream —
 //! exactly what a desktop/browser GUI does, minus the pixels.
 //!
-//!   cargo run -p signal-guitar --features signal-sampler/pipewire --example headless_rig
+//!   cargo run -p signal-guitar --features signal-sampler/pipewire --example `headless_rig`
 
 use architect::rig::RigBackend as _;
 use architect::{LocalServer, Scope};

@@ -6,4 +6,7 @@ license.workspace = true
 authors.workspace = true
 description = "Reusable multiband splitter core — LR4 crossovers with phase-matched flat sum, for making any FTS effect multiband"
 
+[lints]
+workspace = true
+
 [dependencies]

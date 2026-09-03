@@ -15,7 +15,7 @@ use signal_proto::BlockType;
 use std::collections::HashMap;
 
 /// Raw state chunk data for a single FX plugin (RPP format in REAPER).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DawStateChunk {
     /// FX identifier (e.g. plugin GUID string).
     pub fx_id: String,
@@ -37,11 +37,13 @@ pub struct DawSceneSnapshot {
 }
 
 impl DawSceneSnapshot {
-    pub fn new(params: DawParameterSnapshot, chunks: Vec<DawStateChunk>) -> Self {
+    #[must_use] 
+    pub const fn new(params: DawParameterSnapshot, chunks: Vec<DawStateChunk>) -> Self {
         Self { params, chunks }
     }
 
-    pub fn params_only(params: DawParameterSnapshot) -> Self {
+    #[must_use] 
+    pub const fn params_only(params: DawParameterSnapshot) -> Self {
         Self {
             params,
             chunks: Vec::new(),
@@ -84,6 +86,7 @@ pub struct ParamDiff {
 }
 
 /// Diff two parameter snapshots to find which parameters differ.
+#[must_use] 
 pub fn diff_parameter_snapshots(
     a: &DawParameterSnapshot,
     b: &DawParameterSnapshot,
@@ -101,7 +104,7 @@ pub fn diff_parameter_snapshots(
         let key = (pa.fx_id.as_str(), pa.param_index);
         seen.insert((pa.fx_id.clone(), pa.param_index));
 
-        let value_b = b_lookup.get(&key).map(|pb| pb.value).unwrap_or(0.0);
+        let value_b = b_lookup.get(&key).map_or(0.0, |pb| pb.value);
 
         if (pa.value - value_b).abs() > f64::EPSILON {
             diffs.push(ParamDiff {
@@ -153,8 +156,8 @@ pub fn remap_chunk_guids(chunks: &mut [DawStateChunk], guid_map: &HashMap<String
 
 /// Trait abstracting DAW-specific FX chain operations.
 ///
-/// Implementors provide the actual DAW API calls (e.g. REAPER's GetFXChunk,
-/// TrackFX_GetParam, etc.). The engine calls these through the trait.
+/// Implementors provide the actual DAW API calls (e.g. REAPER's `GetFXChunk`,
+/// `TrackFX_GetParam`, etc.). The engine calls these through the trait.
 pub trait DawBridge: Send + Sync {
     /// Capture parameter values from the current FX chain.
     fn capture_parameters(&self, track_id: &str) -> DawParameterSnapshot;
@@ -193,7 +196,7 @@ pub trait DawBridge: Send + Sync {
 pub struct MockDawBridge {
     /// Stored snapshots keyed by track ID.
     snapshots: std::sync::Mutex<HashMap<String, DawParameterSnapshot>>,
-    /// Enabled/disabled state per (track_id, module_type).
+    /// Enabled/disabled state per (`track_id`, `module_type`).
     ///
     /// Absent key = enabled (default). Explicit `false` = disabled.
     enabled_modules:
@@ -207,6 +210,7 @@ impl Default for MockDawBridge {
 }
 
 impl MockDawBridge {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             snapshots: std::sync::Mutex::new(HashMap::new()),

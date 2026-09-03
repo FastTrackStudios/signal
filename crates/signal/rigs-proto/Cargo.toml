@@ -6,6 +6,9 @@ license.workspace = true
 authors.workspace = true
 description = "Shared live-rig wire contract — the RigCore service every rig mounts (instance-scoped)"
 
+[lints]
+workspace = true
+
 [features]
 default = ["vox"]
 vox = ["dep:vox", "architect/vox"]

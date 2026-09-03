@@ -5,6 +5,9 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 # PipeWire mode: audio via cpal's pipewire host AND MIDI via the
 # pipewire-jack backend (so hardware MIDI stays a routable graph node

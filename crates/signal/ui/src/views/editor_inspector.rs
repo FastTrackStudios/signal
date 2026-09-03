@@ -231,7 +231,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                         // ── Section 5: Save As New Preset (amber accent) ──
                         {
                             let on_save_as_new = props.on_save_as_new;
-                            let new_slot = slot_clone.clone();
+                            let new_slot = slot_clone;
                             let default_name = format!("{:?} Preset", slot.block_type);
                             rsx! {
                                 div { class: "relative overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/40",
@@ -259,7 +259,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                                                                 text-white font-medium \
                                                                 transition-all duration-150",
                                                         onclick: {
-                                                            let new_slot = new_slot.clone();
+                                                            let new_slot = new_slot;
                                                             move |_| {
                                                                 let name = save_as_new_name();
                                                                 if !name.trim().is_empty() {
@@ -317,13 +317,9 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
             let display_name = name.rsplit('/').next().unwrap_or(name);
             let mt_display = module_slots
                 .first()
-                .and_then(|s| s.module_type)
-                .map(|mt| format!("{mt:?}"))
-                .unwrap_or_else(|| "Custom".to_string());
+                .and_then(|s| s.module_type).map_or_else(|| "Custom".to_string(), |mt| format!("{mt:?}"));
             let color = module_slots
-                .first()
-                .map(|s| s.block_type.color())
-                .unwrap_or_else(|| signal_proto::BlockType::Custom.color());
+                .first().map_or_else(|| signal_proto::BlockType::Custom.color(), |s| s.block_type.color());
             let block_count = module_slots.len();
             let total_params: usize = module_slots.iter().map(|s| s.parameters.len()).sum();
 

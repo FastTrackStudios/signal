@@ -4,10 +4,10 @@
 //! HP/LP. The internal slope index (0..=9) maps to a dB/octave value the UI
 //! displays.
 //!
-//! Per-filter minimum slope (from FabFilter docs):
+//! Per-filter minimum slope (from `FabFilter` docs):
 //!   - HP / LP / BP: 0 dB/oct
 //!   - Bell / Notch: 12 dB/oct
-//!   - Shelves / TiltShelf / FlatTilt / AllPass: 6 dB/oct
+//!   - Shelves / `TiltShelf` / `FlatTilt` / `AllPass`: 6 dB/oct
 
 /// Pro-Q standard slope settings, named by their dB/oct value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

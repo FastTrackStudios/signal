@@ -2,7 +2,7 @@
 //! computes objective quality metrics.
 //!
 //! Run with:
-//!   cargo test -p reverb-dsp --release --test ir_metrics -- --nocapture
+//!   cargo test -p reverb-dsp --release --test `ir_metrics` -- --nocapture
 //!
 //! (Debug builds work but take ~10x longer; the suite is sized to stay
 //! under ~2 minutes in release.)
@@ -59,13 +59,13 @@ fn render_ir(alg: AlgorithmType, variant: usize) -> Ir {
         left.push(l);
         right.push(r);
 
-        let e = l * l + r * r;
+        let e = l.mul_add(l, r * r);
         peak = peak.max(e);
         window_energy += e;
         if n >= window {
             let l0 = left[n - window];
             let r0 = right[n - window];
-            window_energy -= l0 * l0 + r0 * r0;
+            window_energy -= l0.mul_add(l0, r0 * r0);
             window_energy = window_energy.max(0.0);
         }
         if n >= MIN_LEN && peak > 0.0 {
@@ -82,14 +82,14 @@ fn render_ir(alg: AlgorithmType, variant: usize) -> Ir {
 // Metric: RT60 (Schroeder backward integration)
 // ---------------------------------------------------------------------------
 
-/// Schroeder RT60 from stereo energy. Returns (rt60_seconds, reached_minus_60db).
+/// Schroeder RT60 from stereo energy. Returns (`rt60_seconds`, `reached_minus_60db`).
 /// Fits the -5..-35 dB region of the backward-integrated decay curve.
 fn rt60(left: &[f64], right: &[f64]) -> (f64, bool) {
     let n = left.len();
     let mut edc = vec![0.0f64; n];
     let mut acc = 0.0;
     for i in (0..n).rev() {
-        acc += left[i] * left[i] + right[i] * right[i];
+        acc += left[i].mul_add(left[i], right[i] * right[i]);
         edc[i] = acc;
     }
     let total = edc[0];
@@ -149,7 +149,7 @@ fn band_rt60(left: &[f64], right: &[f64], fc: f64) -> f64 {
 
 /// Echo density profile: fraction of samples in a sliding window that lie
 /// outside +/- one std deviation, normalized by the Gaussian expectation
-/// erfc(1/sqrt(2)) ~= 0.3173. Returns (time_to_dense_s, peak_density) where
+/// erfc(1/sqrt(2)) ~= 0.3173. Returns (`time_to_dense_s`, `peak_density`) where
 /// "dense" means profile >= 0.9 sustained for 3 consecutive hops.
 fn echo_density(left: &[f64], right: &[f64]) -> (f64, f64) {
     const WIN: usize = 1024;
@@ -209,7 +209,7 @@ fn welch_spectrum(x: &[f64], start: usize, end: usize) -> Vec<f64> {
     let mut planner = RealFftPlanner::<f64>::new();
     let fft = planner.plan_fft_forward(NFFT);
     let hann: Vec<f64> = (0..NFFT)
-        .map(|i| 0.5 - 0.5 * (2.0 * PI * i as f64 / NFFT as f64).cos())
+        .map(|i| 0.5f64.mul_add(-(2.0 * PI * i as f64 / NFFT as f64).cos(), 0.5))
         .collect();
 
     let mut acc = vec![0.0f64; NFFT / 2 + 1];
@@ -284,8 +284,8 @@ fn subsonic_ratio(left: &[f64], right: &[f64]) -> f64 {
     fft.process(&mut buf, &mut spec).unwrap();
     let bin_hz = SR / nfft as f64;
     let cutoff_bin = ((20.0 / bin_hz).ceil() as usize).min(spec.len());
-    let low: f64 = spec[..cutoff_bin].iter().map(|c| c.norm_sqr()).sum();
-    let total: f64 = spec.iter().map(|c| c.norm_sqr()).sum();
+    let low: f64 = spec[..cutoff_bin].iter().map(realfft::num_complex::Complex::norm_sqr).sum();
+    let total: f64 = spec.iter().map(realfft::num_complex::Complex::norm_sqr).sum();
     if total > 0.0 {
         low / total
     } else {
@@ -303,7 +303,7 @@ fn edc_crossing(left: &[f64], right: &[f64], db: f64) -> Option<usize> {
     let mut acc = 0.0;
     let mut edc = vec![0.0f64; n];
     for i in (0..n).rev() {
-        acc += left[i] * left[i] + right[i] * right[i];
+        acc += left[i].mul_add(left[i], right[i] * right[i]);
         edc[i] = acc;
     }
     let total = edc[0];
@@ -319,14 +319,14 @@ fn edc_crossing(left: &[f64], right: &[f64], db: f64) -> Option<usize> {
 /// of short IRs and bias tail metrics.
 /// Early Decay Time: RT extrapolated from the 0 → −10 dB EDC segment
 /// (ISO 3382). Tracks PERCEIVED reverberance better than T30 — the
-/// BigSky dial-in metric for "how long does it feel".
-#[allow(dead_code)]
+/// `BigSky` dial-in metric for "how long does it feel".
+#[expect(dead_code)]
 fn edt(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
     let n = left.len().min(right.len());
     let mut edc = vec![0.0f64; n];
     let mut acc = 0.0;
     for i in (0..n).rev() {
-        acc += left[i] * left[i] + right[i] * right[i];
+        acc += left[i].mul_add(left[i], right[i] * right[i]);
         edc[i] = acc;
     }
     let total = edc[0];
@@ -339,15 +339,15 @@ fn edt(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
     Some(6.0 * t10 as f64 / sample_rate)
 }
 
-/// Clarity index C_te (dB): early-vs-late energy split at `te` seconds
+/// Clarity index `C_te` (dB): early-vs-late energy split at `te` seconds
 /// (0.050 for speech C50, 0.080 for music C80).
-#[allow(dead_code)]
+#[expect(dead_code)]
 fn clarity_db(left: &[f64], right: &[f64], te: f64, sample_rate: f64) -> f64 {
     let split = (te * sample_rate) as usize;
     let n = left.len().min(right.len());
     let energy = |a: usize, b: usize| -> f64 {
         (a..b.min(n))
-            .map(|i| left[i] * left[i] + right[i] * right[i])
+            .map(|i| left[i].mul_add(left[i], right[i] * right[i]))
             .sum()
     };
     let early = energy(0, split);
@@ -357,7 +357,7 @@ fn clarity_db(left: &[f64], right: &[f64], te: f64, sample_rate: f64) -> f64 {
 
 /// Spectral centroid (Hz) of the late tail — the decay-brightness
 /// trajectory metric for damping dial-in.
-#[allow(dead_code)]
+#[expect(dead_code)]
 fn late_centroid(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
     let (start, end) = tail_window(left, right)?;
     let spec = welch_spectrum(left, start, end);
@@ -420,7 +420,7 @@ fn lr_correlation(left: &[f64], right: &[f64]) -> f64 {
 struct Report {
     name: String,
     rt60_s: f64,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     reached_60: bool,
     rt_250: f64,
     rt_1k: f64,
@@ -480,8 +480,8 @@ fn all_cases() -> Vec<(AlgorithmType, usize)> {
 /// - Reflections: early reflections only — sparse by design.
 /// - Velvet: velvet-noise FIR — sparse ternary impulses by design.
 /// - Spring: dispersive chirp character — density fluctuates ("boing").
-/// - NonLinear: gated/reverse envelopes truncate the late field.
-fn density_exempt(alg: AlgorithmType) -> bool {
+/// - `NonLinear`: gated/reverse envelopes truncate the late field.
+const fn density_exempt(alg: AlgorithmType) -> bool {
     matches!(
         alg,
         AlgorithmType::Reflections
@@ -498,7 +498,7 @@ fn density_exempt(alg: AlgorithmType) -> bool {
 /// - Chorale: formant-resonant choir synthesis — the vowel peak in the
 ///   tail is the effect (already tamed from +12 dB/Q5 to +8 dB/Q3;
 ///   mode 33.5 -> ~28 dB over local median).
-fn mode_exempt(alg: AlgorithmType) -> bool {
+const fn mode_exempt(alg: AlgorithmType) -> bool {
     matches!(alg, AlgorithmType::Spring | AlgorithmType::Chorale)
 }
 
@@ -506,7 +506,7 @@ fn mode_exempt(alg: AlgorithmType) -> bool {
 /// - Spring: a spring tank is a mono transducer; the L/R pair shares
 ///   most of its signal path.
 /// - Magneto: multi-head tape echo — one tape, one head stack.
-fn correlation_exempt(alg: AlgorithmType) -> bool {
+const fn correlation_exempt(alg: AlgorithmType) -> bool {
     matches!(alg, AlgorithmType::Spring | AlgorithmType::Magneto)
 }
 
@@ -538,7 +538,7 @@ fn probe_chamber() {
         let band = |lo: f64, hi: f64| -> f64 {
             let a = (lo / bin_hz) as usize;
             let b = ((hi / bin_hz) as usize).min(spec.len() - 1);
-            spec[a..=b].iter().map(|c| c.norm_sqr()).sum::<f64>()
+            spec[a..=b].iter().map(realfft::num_complex::Complex::norm_sqr).sum::<f64>()
         };
         let total = band(0.0, SR / 2.0);
         for (lo, hi) in [

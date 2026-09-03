@@ -1,7 +1,7 @@
 //! Verify the mix-import matcher: for a kit + an MM2 preset, show which of our
 //! channels/buses match an MM2 strip (so its level + FX get applied). Catches
 //! the id-scheme mismatch (Metal Monster `snare` vs Pound `snare-a`).
-//!   cargo run -p signal-drums --example match_probe -- <kit.signalpreset> <mm2.preset>
+//!   cargo run -p signal-drums --example `match_probe` -- <kit.signalpreset> <mm2.preset>
 
 use signal_drums::{cradle, library, mm2fx};
 use signal_sampler::SamplerRig;
@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         s.fx_slots().len()
                     );
                 }
-                None => println!("  ✗ {:<16} (no MM2 strip)", target),
+                None => println!("  ✗ {target:<16} (no MM2 strip)"),
             }
         }
     }

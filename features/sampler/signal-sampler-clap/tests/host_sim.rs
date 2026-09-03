@@ -7,7 +7,7 @@
 //! offline reference walker (`document::render_schedule`) **bit-exactly** at
 //! equal sample rate — the plan's hard determinism requirement. (The
 //! nice-plug `Buffer`/`ProcessContext` types cannot be constructed outside
-//! the host wrapper, so the thin process() adapter itself — transport
+//! the host wrapper, so the thin `process()` adapter itself — transport
 //! snapshot, event drain, de-interleave — is exercised in REAPER, while all
 //! scheduling/rendering behavior is asserted here.)
 //!
@@ -39,7 +39,7 @@ fn write_sine_wav(path: &Path, frames: usize, freq: f64, amp: f32) {
     };
     let mut w = hound::WavWriter::create(path, spec).expect("create wav");
     for i in 0..frames {
-        let t = i as f64 / SR as f64;
+        let t = i as f64 / f64::from(SR);
         let s = (t * freq * std::f64::consts::TAU).sin() as f32 * amp;
         w.write_sample(s).expect("write sample");
     }
@@ -55,7 +55,7 @@ fn build_fixture(dir: &Path) -> PathBuf {
     for rr in 0..4u32 {
         for dirn in ["up", "down"] {
             let f = format!("leg_{dirn}_{rr}.wav");
-            write_sine_wav(&dir.join(&f), SR as usize, 300.0 + 40.0 * rr as f64, 0.4);
+            write_sine_wav(&dir.join(&f), SR as usize, 40.0f64.mul_add(f64::from(rr), 300.0), 0.4);
             zones.push_str(&format!(
                 "    {{ file {f}, key_min 0, key_max 127, root_key 64, articulation Leg, direction {dirn}, rr_index {rr} }}\n"
             ));
@@ -64,7 +64,7 @@ fn build_fixture(dir: &Path) -> PathBuf {
         write_sine_wav(
             &dir.join(&f),
             SR as usize / 4,
-            500.0 + 60.0 * rr as f64,
+            60.0f64.mul_add(f64::from(rr), 500.0),
             0.4,
         );
         zones.push_str(&format!(
@@ -124,7 +124,7 @@ fn fixture_bank(tag: &str) -> (SamplerBank, Guard) {
     (bank, Guard(dir))
 }
 
-fn note(start_qn: f64, end_qn: f64, pitch: u8, vel: u8) -> DocNote {
+const fn note(start_qn: f64, end_qn: f64, pitch: u8, vel: u8) -> DocNote {
     DocNote {
         start_qn,
         end_qn,
@@ -441,7 +441,7 @@ fn stop_relocates_cleanly_and_restores_strict_live() {
 
     // Play 1 s from the top.
     let mut pos: i64 = 0;
-    while pos < SR as i64 {
+    while pos < i64::from(SR) {
         let t = BlockTransport {
             playing: true,
             pos_frame: pos,
@@ -472,7 +472,7 @@ fn stop_relocates_cleanly_and_restores_strict_live() {
     // Loop back: resume at 0.25 s (backwards jump = discontinuity). The
     // first note is ALIVE at that position, so reconstruction makes the
     // very first resumed block audible — mid-sample, exactly as the bounce.
-    let mut pos: i64 = SR as i64 / 4;
+    let mut pos: i64 = i64::from(SR) / 4;
     let t = BlockTransport {
         playing: true,
         pos_frame: pos,

@@ -6,6 +6,9 @@ license.workspace = true
 authors.workspace = true
 description = "TONE3000 tone library: OAuth session, model download into the NAM library"
 
+[lints]
+workspace = true
+
 [dependencies]
 # The wire client (OAuth2+PKCE, search, models, downloads). Upstream MIT.
 tone3000.workspace = true

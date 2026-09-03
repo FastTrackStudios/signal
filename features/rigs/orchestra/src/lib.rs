@@ -69,6 +69,7 @@ pub fn load_strings(
 /// assigned divisi channels, so `auto_divisi` stays off and channel N maps to
 /// engine line N. `seed` pins every stochastic choice (round-robin) — persist
 /// it to reproduce a render byte-identically.
+#[must_use] 
 pub fn part_to_document(po: &PartOutput, tempos: &[score::TempoPoint], seed: u64) -> TrackDocument {
     TrackDocument {
         version: 1,
@@ -105,7 +106,7 @@ pub fn part_to_document(po: &PartOutput, tempos: &[score::TempoPoint], seed: u64
     }
 }
 
-/// The full score → audio path for one part: MusicXML part → keyflow-orchestra
+/// The full score → audio path for one part: `MusicXML` part → keyflow-orchestra
 /// engine (score-time output) → [`TrackDocument`] → annotated schedule →
 /// [`SamplerRig::render_offline_document`] on an instrument already loaded
 /// under `id` (see [`load_strings`]). `rig` must be a

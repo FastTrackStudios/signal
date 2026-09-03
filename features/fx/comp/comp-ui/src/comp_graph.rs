@@ -2,7 +2,7 @@
 //! component for the Blitz plugin editor.
 //!
 //! Rendering is a port of the signal domain's `CompSurface`
-//! (features/rigs/guitar/ui/src/comp_surface.rs): the input waveform fills
+//! (`features/rigs/guitar/ui/src/comp_surface.rs)`: the input waveform fills
 //! the panel from the bottom (teal), the gain-reduction trace fills from the
 //! top (red), with the soft-knee transfer curve, threshold line + knee
 //! markers, and the live input ball overlaid. All path math lives in the
@@ -53,6 +53,7 @@ pub const GRAPH_H: f64 = 300.0;
 /// gets letterboxed. Feeding it the real pixel size makes the scale exactly 1,
 /// which both fills the surface and keeps pointer coordinates equal to viewBox
 /// coordinates.
+#[must_use] 
 pub fn graph_size() -> (f64, f64) {
     match crate::hardware::panel::window_logical_size() {
         Some((win_w, win_h)) => (
@@ -71,6 +72,7 @@ pub fn graph_size() -> (f64, f64) {
 /// container height and for the viewBox, so element-relative pointer y is
 /// still viewBox y at any size. Falls back to the design height when no host
 /// window size is in context (headless tests, non-plugin mounts).
+#[must_use] 
 pub fn graph_height() -> f64 {
     graph_size().1
 }
@@ -139,9 +141,9 @@ pub fn CompGraph(
 
     let tc = transfer_curve_path(threshold, ratio, knee, width, height);
     let ball = transfer_ball(in_db, threshold, ratio, knee, width, height);
-    let thresh_y = db_to_y(threshold as f64, height);
-    let knee_lo_y = db_to_y((threshold - knee * 0.5) as f64, height);
-    let knee_hi_y = db_to_y((threshold + knee * 0.5) as f64, height);
+    let thresh_y = db_to_y(f64::from(threshold), height);
+    let knee_lo_y = db_to_y(f64::from(knee.mul_add(-0.5, threshold)), height);
+    let knee_hi_y = db_to_y(f64::from(knee.mul_add(0.5, threshold)), height);
 
     rsx! {
         div {
@@ -155,7 +157,7 @@ pub fn CompGraph(
                 let ctx = ctx.clone();
                 move |evt: MouseEvent| {
                     let y = evt.element_coordinates().y;
-                    let ty = db_to_y(params.stage(stage_idx).threshold_db.value() as f64, height);
+                    let ty = db_to_y(f64::from(params.stage(stage_idx).threshold_db.value()), height);
                     if (y - ty).abs() < THRESHOLD_GRAB_PX {
                         ctx.begin_set_raw(params.stage(stage_idx).threshold_db.as_ptr());
                         dragging.set(Some(CompDrag::Threshold));
@@ -190,7 +192,7 @@ pub fn CompGraph(
                     let y = evt.element_coordinates().y;
                     match mode {
                         CompDrag::Threshold => {
-                            let db = y_to_db(y, height).clamp(-(RANGE_DB as f64), 0.0) as f32;
+                            let db = y_to_db(y, height).clamp(-f64::from(RANGE_DB), 0.0) as f32;
                             ctx.set_normalized_raw(
                                 params.stage(stage_idx).threshold_db.as_ptr(),
                                 params.stage(stage_idx).threshold_db.preview_normalized(db),
@@ -224,8 +226,8 @@ pub fn CompGraph(
                 }
             },
             onwheel: {
-                let params = params.clone();
-                let ctx = ctx.clone();
+                let params = params;
+                let ctx = ctx;
                 move |evt: WheelEvent| {
                     evt.prevent_default();
                     let delta = evt.delta().strip_units().y;

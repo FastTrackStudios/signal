@@ -15,7 +15,7 @@ use audiocore_dsp::envelope::EnvelopeFollower;
 use crate::spectral_flux::{FluxMode, SpectralFluxDetector, DEFAULT_FFT_SIZE, DEFAULT_HOP_SIZE};
 
 /// Sidechain detection mode — how the raw input is converted to a level.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetectMode {
     /// Peak envelope follower (fast attack, slower release).
     Peak,
@@ -24,13 +24,13 @@ pub enum DetectMode {
 }
 
 /// Detection algorithm selection.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetectAlgorithm {
     /// Time-domain envelope following (lowest latency, suitable for live).
     PeakEnvelope,
     /// Spectral flux onset detection (FFT-based).
     SpectralFlux,
-    /// SuperFlux with vibrato suppression (FFT-based, highest accuracy).
+    /// `SuperFlux` with vibrato suppression (FFT-based, highest accuracy).
     SuperFlux,
     /// High frequency content — best for percussive onsets.
     Hfc,
@@ -124,7 +124,8 @@ pub struct TriggerDetector {
 }
 
 impl TriggerDetector {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             state: State::Off,
             level: 0.0,
@@ -325,23 +326,27 @@ impl TriggerDetector {
     }
 
     /// Whether the trigger is currently active (On or Detect states).
-    pub fn is_active(&self) -> bool {
+    #[must_use] 
+    pub const fn is_active(&self) -> bool {
         matches!(self.state, State::On | State::Detect)
     }
 
     /// Get the current smoothed level (linear).
-    pub fn level(&self) -> f64 {
+    #[must_use] 
+    pub const fn level(&self) -> f64 {
         self.level
     }
 
     /// Get the current smoothed level in dB.
+    #[must_use] 
     pub fn level_db(&self) -> f64 {
         linear_to_db(self.level)
     }
 
     /// Returns the latency in samples introduced by the current algorithm.
-    /// PeakEnvelope has zero latency; spectral modes have FFT latency.
-    pub fn latency_samples(&self) -> usize {
+    /// `PeakEnvelope` has zero latency; spectral modes have FFT latency.
+    #[must_use] 
+    pub const fn latency_samples(&self) -> usize {
         match &self.spectral {
             Some(s) => s.latency_samples(),
             None => 0,
@@ -374,7 +379,7 @@ impl TriggerDetector {
                 } else {
                     self.release_coeff
                 };
-                self.level = coeff * (self.level - input_abs) + input_abs;
+                self.level = coeff.mul_add(self.level - input_abs, input_abs);
             }
             DetectMode::Rms => {
                 // Running RMS approximation

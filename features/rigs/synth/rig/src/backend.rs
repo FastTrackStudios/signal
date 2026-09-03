@@ -186,8 +186,7 @@ impl SynthRigBackend {
             .state
             .lock()
             .ok()
-            .map(|s| s.volume)
-            .unwrap_or(DEFAULT_VOLUME);
+            .map_or(DEFAULT_VOLUME, |s| s.volume);
         match KeysRig::open(&prefs, &tree) {
             Ok(r) => {
                 r.set_output_gain(volume); // pad the hot summed output
@@ -361,7 +360,7 @@ impl SynthRigSvc for SynthRigBackend {
                 .rig
                 .lock()
                 .ok()
-                .and_then(|r| r.as_ref().map(|r| r.output_peak()))
+                .and_then(|r| r.as_ref().map(signal_keys::KeysRig::output_peak))
                 .unwrap_or(0.0)
         } else {
             0.0
@@ -487,7 +486,7 @@ impl SynthRigSvc for SynthRigBackend {
                     .into_iter()
                     .find(|(n, _)| n == &soundsource)
                     .map(|(_, p)| p)
-                    .or_else(|| self.inner.index.find(&soundsource).map(|p| p.to_path_buf()))
+                    .or_else(|| self.inner.index.find(&soundsource).map(std::path::Path::to_path_buf))
             }
         };
         let Some(path) = path else {
@@ -523,9 +522,7 @@ impl SynthRigSvc for SynthRigBackend {
     fn globals(&self) -> SynthGlobals {
         self.inner
             .state
-            .lock()
-            .map(|s| s.globals.clone())
-            .unwrap_or_else(|_| SynthGlobals::neutral())
+            .lock().map_or_else(|_| SynthGlobals::neutral(), |s| s.globals.clone())
     }
 
     fn set_globals(&self, globals: SynthGlobals) {
@@ -563,10 +560,10 @@ impl SynthRigSvc for SynthRigBackend {
 /// stored in [`SynthGlobals`] and applied once their DSP lands (see the TODO).
 fn apply_globals_to_patch(patch: &mut OmniPatch, g: &SynthGlobals) {
     // 0.5 → 1× time; ±0.5 → ×2.8 / ×0.35 (perceptually even).
-    let envscale = |x: f32| 2f32.powf((x - 0.5) * 3.0);
-    for l in patch.layers.iter_mut() {
+    let envscale = |x: f32| ((x - 0.5) * 3.0).exp2();
+    for l in &mut patch.layers {
         // Filter cutoff / resonance offsets (Omnisphere-normalized 0..1).
-        l.filter_freq = (l.filter_freq + (g.filter_cutoff - 0.5) * 0.8).clamp(0.0, 1.0);
+        l.filter_freq = (g.filter_cutoff - 0.5).mul_add(0.8, l.filter_freq).clamp(0.0, 1.0);
         l.filter_res = (l.filter_res + (g.filter_reso - 0.5)).clamp(0.0, 1.0);
         // Filter-envelope amount (0.5 neutral → 1×).
         l.filter_env_depth *= (g.filter_env * 2.0).clamp(0.0, 2.0);
@@ -589,7 +586,7 @@ fn apply_globals_to_patch(patch: &mut OmniPatch, g: &SynthGlobals) {
         }
         // Unison: adds detuned voices (2..8).
         if g.unison_amount > 0.0 {
-            l.unison_count = (2.0 + g.unison_amount * 6.0).round() as u32;
+            l.unison_count = g.unison_amount.mul_add(6.0, 2.0).round() as u32;
             l.unison_detune = g.unison_detune;
         }
         // Effects off strips the layer FX rack.
@@ -624,7 +621,7 @@ impl Services for SynthRigBackend {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-fn note_ev(note: u8, velocity: u8) -> MidiEvent {
+const fn note_ev(note: u8, velocity: u8) -> MidiEvent {
     use midicore::{Channel, KeyNumber, Velocity};
     MidiEvent::NoteOn {
         channel: Channel::new(0),
@@ -635,7 +632,7 @@ fn note_ev(note: u8, velocity: u8) -> MidiEvent {
 
 /// Recursively scan the Omnisphere patch library for `.prt_omn` / `.mlt_omn`
 /// files. The patch's library folder becomes its `kind` (category); macOS
-/// AppleDouble sidecars (`._*`) are skipped. Env `FTS_OMNISPHERE_PATCHES`
+/// `AppleDouble` sidecars (`._*`) are skipped. Env `FTS_OMNISPHERE_PATCHES`
 /// overrides the root.
 fn scan_patches() -> (Vec<SynthPreset>, Vec<PathBuf>) {
     let root = std::env::var("FTS_OMNISPHERE_PATCHES").unwrap_or_else(|_| PATCHES_ROOT.into());
@@ -711,7 +708,7 @@ fn project_browse_item(e: &signal_browser::pack_registry::PackEntry) -> BrowseIt
         instrument: e.instrument.clone(),
         category: e.category.clone(),
         vendor: e.vendor.clone(),
-        tags: e.tags.values().map(|t| t.encode()).collect(),
+        tags: e.tags.values().map(signal_browser::StructuredTag::encode).collect(),
         style: e.style.clone(),
         folder: e.folder.clone(),
         sample_count: e.sample_count as u32,
@@ -851,7 +848,7 @@ fn sample_blocks(c: &Container, out: &mut Vec<(String, PathBuf)>) {
         match n {
             RigNode::Block { block } if !block.sample.is_empty() => {
                 out.push((
-                    block.display_name().to_string(),
+                    block.display_name().clone(),
                     PathBuf::from(&block.sample),
                 ));
             }

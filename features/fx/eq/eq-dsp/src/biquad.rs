@@ -35,6 +35,7 @@ pub struct Mode0Params {
 impl Mode0Params {
     /// Apply the mode-0 forward formula → `[a0, a1, a2, b0, b1, b2]` (a0 = 1).
     #[inline]
+    #[must_use]
     pub fn to_biquad(self) -> Coeffs {
         let Self {
             p2,
@@ -61,6 +62,7 @@ impl Mode0Params {
 ///
 /// Each section is a `Coeffs` array [a0, a1, a2, b0, b1, b2] where the
 /// transfer function is H(z) = (b0 + b1*z^-1 + b2*z^-2) / (a0 + a1*z^-1 + a2*z^-2).
+#[must_use]
 pub fn zpk_to_sos(zpk: &Zpk) -> Vec<Coeffs> {
     let sections = pair_conjugates(zpk);
     let mut sos = Vec::with_capacity(sections.len());
@@ -84,6 +86,7 @@ pub fn zpk_to_sos(zpk: &Zpk) -> Vec<Coeffs> {
 ///
 /// H(z) = (b0 + b1·z⁻¹ + b2·z⁻²) / (a0 + a1·z⁻¹ + a2·z⁻²)
 /// At z = e^(jw), z⁻¹ = e^(-jw), which is why we use negative exponent here.
+#[must_use]
 pub fn eval_sos(sections: &[Coeffs], w: f64) -> Complex {
     let ejw = Complex::from_polar(1.0, -w);
     let ejw2 = ejw * ejw;

@@ -5,6 +5,9 @@ edition = "2021"
 license.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 signal-packs-proto.workspace = true
 # The range-streaming planner (`signal_sampler::pack_plan`) — ranks a

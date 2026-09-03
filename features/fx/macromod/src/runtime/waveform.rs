@@ -17,6 +17,7 @@ use std::f64::consts::TAU;
 ///
 /// # Returns
 /// Bipolar value in `[-1.0, 1.0]`.
+#[must_use] 
 pub fn evaluate_waveform(
     waveform: LfoWaveform,
     phase: f64,
@@ -29,9 +30,9 @@ pub fn evaluate_waveform(
         LfoWaveform::Triangle => {
             // Rising 0→1 in first half, falling 1→-1 in second half
             if phase < 0.5 {
-                4.0 * phase - 1.0
+                4.0f64.mul_add(phase, -1.0)
             } else {
-                3.0 - 4.0 * phase
+                4.0f64.mul_add(-phase, 3.0)
             }
         }
 
@@ -44,9 +45,9 @@ pub fn evaluate_waveform(
             }
         }
 
-        LfoWaveform::Sawtooth => 2.0 * phase - 1.0,
+        LfoWaveform::Sawtooth => 2.0f64.mul_add(phase, -1.0),
 
-        LfoWaveform::InverseSawtooth => 1.0 - 2.0 * phase,
+        LfoWaveform::InverseSawtooth => 2.0f64.mul_add(-phase, 1.0),
 
         LfoWaveform::SampleAndHold => held_value,
 
@@ -149,8 +150,7 @@ mod tests {
                 let val = evaluate_waveform(*waveform, phase, PW, 0.5);
                 assert!(
                     (-1.0..=1.0).contains(&val),
-                    "{:?} at phase {phase} = {val}",
-                    waveform
+                    "{waveform:?} at phase {phase} = {val}"
                 );
             }
         }

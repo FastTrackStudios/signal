@@ -124,6 +124,7 @@ pub static WAH: ModDesign = ModDesign {
     knob: KnobStyle::Daka,
 };
 
+#[must_use] 
 pub fn design_for(profile_id: &str) -> &'static ModDesign {
     match modulation_profiles::category_of(profile_id)
         .map(|(c, _)| modulation_profiles::CATEGORIES[c].id)
@@ -140,6 +141,7 @@ pub fn design_for(profile_id: &str) -> &'static ModDesign {
 ///
 /// The *roles* live in `modulation-profiles`; these are only the words. A
 /// slot the profile leaves unwired gets no name because it gets no knob.
+#[must_use] 
 pub fn knob_legends(profile_id: &str) -> [&'static str; 4] {
     match profile_id {
         "juno" => ["Voices", "Brightness", "Feedback", "Width"],
@@ -176,6 +178,7 @@ pub struct Placed {
 /// per-profile fact: a Clean chorus has three and a Juno has four, and a
 /// static table would eventually place a knob the profile does not wire.
 /// [`modulation_profiles::Voicing::knobs`] is the single source for that.
+#[must_use] 
 pub fn placed_controls(profile_id: &str) -> Vec<Placed> {
     let profile =
         modulation_profiles::profile_by_id(profile_id).unwrap_or(&modulation_profiles::PROFILES[0]);
@@ -240,8 +243,7 @@ pub fn ModFace(
     let value = |name: &str, fallback: f32| {
         handles
             .get(name)
-            .map(|h| h.normalized())
-            .unwrap_or(fallback)
+            .map_or(fallback, fts_audio_ui::ParamHandle::normalized)
     };
     let defaults = modulation_profiles::Controls::default();
     let controls = modulation_profiles::Controls {
@@ -288,8 +290,7 @@ pub fn ModFace(
                 text: modulation_profiles::CATEGORIES
                     .iter()
                     .find(|c| c.profiles.contains(&profile.id))
-                    .map(|c| c.label)
-                    .unwrap_or("Modulation")
+                    .map_or("Modulation", |c| c.label)
                     .to_string(),
                 size: 8.0, color: design.dim_ink.to_string(),
             }
@@ -310,8 +311,8 @@ pub fn ModFace(
                         }
                     }
                     Silkscreen {
-                        scale, x: spec.x, y: 206.0 + spec.d * 0.92 + 10.0, width: 120.0,
-                        text: spec.legend.clone(),
+                        scale, x: spec.x, y: spec.d.mul_add(0.92, 206.0) + 10.0, width: 120.0,
+                        text: spec.legend,
                         size: 9.0,
                         color: design.ink.to_string(),
                     }
@@ -337,9 +338,9 @@ fn ShapeView(
     let (w, h) = (620.0, 150.0);
     let (cx, cy) = (w / 2.0, h / 2.0);
     let half = 52.0;
-    let body = accent.clone();
-    let depth = controls.depth as f64;
-    let glow = (0.4 + depth * 0.5).min(0.95);
+    let body = accent;
+    let depth = f64::from(controls.depth);
+    let glow = depth.mul_add(0.5, 0.4).min(0.95);
 
     let profile = modulation_profiles::profile_by_id(&profile_id)
         .unwrap_or(&modulation_profiles::PROFILES[0]);
@@ -354,8 +355,8 @@ fn ShapeView(
     let total = samples.len() * 2;
     for i in 0..=total {
         let s = samples[i % samples.len()];
-        let x = cx - span + (i as f64 / total as f64) * span * 2.0;
-        let y = cy + half - (s * half * 2.0);
+        let x = ((i as f64 / total as f64) * span).mul_add(2.0, cx - span);
+        let y = (s * half).mul_add(-2.0, cy + half);
         if i == 0 {
             path.push_str(&format!("M {x:.1} {y:.1}"));
             fill.push_str(&format!("M {x:.1} {:.1} L {x:.1} {y:.1}", cy + half));
@@ -511,7 +512,7 @@ mod tests {
     fn every_legend_fits_on_the_panel() {
         for profile in PROFILES {
             for spec in placed_controls(profile.id) {
-                let y = 206.0 + spec.d * 0.92 + 10.0;
+                let y = spec.d.mul_add(0.92, 206.0) + 10.0;
                 assert!(
                     y + 6.0 <= H,
                     "{}'s {} legend falls off",

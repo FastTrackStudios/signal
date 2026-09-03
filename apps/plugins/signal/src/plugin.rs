@@ -9,7 +9,7 @@
 //!
 //! - **Audio thread** (`process`): gain-stages the passthrough, `try_lock`s
 //!   the bank, dispatches MIDI at in-block offsets and renders the gaps
-//!   (StrictLive style), sums the rig onto the dry signal. No loading, no
+//!   (`StrictLive` style), sums the rig onto the dry signal. No loading, no
 //!   I/O. The interleaved scratch is sized in `initialize`.
 //! - **Loader thread** (spawned by `initialize`): resolves the rig config,
 //!   builds a fresh `SamplerBank`, loads the pack (`SamplerBank::load_pack`
@@ -162,7 +162,7 @@ impl Plugin for FtsSignal {
         main_output_channels: NonZeroU32::new(2),
         ..AudioIOLayout::const_default()
     }];
-    /// MidiCCs: rigs use CC dynamics/expression, not just notes.
+    /// `MidiCCs`: rigs use CC dynamics/expression, not just notes.
     const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
 
     // No editor yet — the host shows its generic parameter UI.
@@ -281,7 +281,7 @@ impl Plugin for FtsSignal {
             }
         }
         for ch in output.iter_mut() {
-            for sample in ch[..frames].iter_mut() {
+            for sample in &mut ch[..frames] {
                 *sample *= out_gain;
             }
         }

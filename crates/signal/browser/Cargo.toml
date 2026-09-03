@@ -5,6 +5,9 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 default = ["native"]
 # Filesystem pack scanning. Off for browser builds.

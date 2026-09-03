@@ -1,4 +1,5 @@
 //! Similarity queries — brute-force cosine over the packed feature matrix.
+//!
 //! At one-shot-library scale (10^4–10^5 items × ~56 dims) a full scan is
 //! sub-millisecond; no index structure earns its complexity yet.
 

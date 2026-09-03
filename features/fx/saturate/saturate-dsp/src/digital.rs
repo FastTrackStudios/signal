@@ -52,7 +52,8 @@ impl Default for DigitalStage {
 }
 
 impl DigitalStage {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             bits: BITS_OFF,
             rate: 1.0,
@@ -66,11 +67,12 @@ impl DigitalStage {
     /// True when the stage would pass audio through untouched — the caller
     /// can skip it entirely rather than paying for a bypass per sample.
     #[inline]
+    #[must_use] 
     pub fn is_transparent(&self) -> bool {
         self.bits >= BITS_OFF && self.rate <= 1.0
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.hold = [0.0; MAX_CHANNELS];
         self.phase = [0.0; MAX_CHANNELS];
     }

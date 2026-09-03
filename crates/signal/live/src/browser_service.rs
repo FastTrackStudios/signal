@@ -3,7 +3,7 @@
 //! Implements [`BrowserService`] on [`SignalLive`], providing structured
 //! tag extraction from entity names and hierarchical browsing queries.
 
-use super::*;
+use super::{TagSet, infer_tags_from_name, StructuredTag, TagCategory, BrowserEntityKind, BrowserEntry, BrowserNodeId, BrowserService, SignalLive, BlockRepo, ModuleRepo, LayerRepo, EngineRepo, RigRepo, ProfileRepo, SongRepo, SetlistRepo, SceneTemplateRepo, RackRepo, BrowserIndex, SignalServiceError, ALL_BLOCK_TYPES, LayerService, EngineService, RigService, ProfileService, SongService, SetlistService, BrowserQuery, BrowserHit, TagWeights};
 
 fn tags_from_name(name: &str) -> TagSet {
     infer_tags_from_name(name)

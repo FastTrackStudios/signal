@@ -1,4 +1,4 @@
-//! Song section grid -- domain-aware grid wrapping SceneTileGrid.
+//! Song section grid -- domain-aware grid wrapping `SceneTileGrid`.
 //!
 //! Fetches a song from the controller and maps its [`Section`] entries
 //! to [`TileData`] for the dumb [`SceneTileGrid`] component.
@@ -27,8 +27,8 @@ pub fn SongSectionGrid(
 
     // Fetch song when song_id changes.
     {
-        let signal = signal.clone();
-        let song_id = song_id.clone();
+        let signal = signal;
+        let song_id = song_id;
         use_effect(move || {
             let signal = signal.clone();
             let song_id = song_id.clone();

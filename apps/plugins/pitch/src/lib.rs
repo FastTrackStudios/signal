@@ -129,7 +129,7 @@ impl Plugin for FtsPitch {
         buffer_config: &BufferConfig,
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
         let cfg = AudioConfig {
             sample_rate: self.sample_rate,
             max_buffer_size: buffer_config.max_buffer_size as usize,
@@ -160,17 +160,17 @@ impl Plugin for FtsPitch {
             2 => Algorithm::Granular,
             _ => Algorithm::Psola,
         };
-        self.chain.semitones = (self.params.semitones.value() as f64
-            + self.params.cents.value() as f64 / 100.0)
+        self.chain.semitones = (f64::from(self.params.semitones.value())
+            + f64::from(self.params.cents.value()) / 100.0)
             .clamp(-24.0, 24.0);
         self.chain.mix = 1.0;
-        let mix = self.params.mix.value() as f64;
-        let out_gain = util::db_to_gain(self.params.output_db.value()) as f64;
+        let mix = f64::from(self.params.mix.value());
+        let out_gain = f64::from(util::db_to_gain(self.params.output_db.value()));
 
         for (i, frame) in buffer.iter_samples().enumerate() {
             let mut it = frame.into_iter();
-            let l = it.next().map(|s| *s as f64).unwrap_or(0.0);
-            let r = it.next().map(|s| *s as f64).unwrap_or(l);
+            let l = it.next().map_or(0.0, |s| f64::from(*s));
+            let r = it.next().map_or(l, |s| f64::from(*s));
             self.scratch_l[i] = l;
             self.scratch_r[i] = r;
         }
@@ -179,12 +179,12 @@ impl Plugin for FtsPitch {
         for (i, mut frame) in buffer.iter_samples().enumerate() {
             let mut it = frame.iter_mut();
             if let Some(s) = it.next() {
-                let dry = *s as f64;
-                *s = ((dry + (self.scratch_l[i] - dry) * mix) * out_gain) as f32;
+                let dry = f64::from(*s);
+                *s = ((self.scratch_l[i] - dry).mul_add(mix, dry) * out_gain) as f32;
             }
             if let Some(s) = it.next() {
-                let dry = *s as f64;
-                *s = ((dry + (self.scratch_r[i] - dry) * mix) * out_gain) as f32;
+                let dry = f64::from(*s);
+                *s = ((self.scratch_r[i] - dry).mul_add(mix, dry) * out_gain) as f32;
             }
         }
         context.set_latency_samples(self.chain.latency() as u32);

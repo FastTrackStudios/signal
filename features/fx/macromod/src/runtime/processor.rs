@@ -46,7 +46,8 @@ pub struct FollowerState {
 }
 
 impl FollowerState {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             level: 0.0,
             input_level: 0.0,
@@ -57,9 +58,9 @@ impl FollowerState {
     pub fn tick(&mut self, dt: f64, config: &FollowerConfig) -> f64 {
         let target = self.input_level;
         let tau = if target > self.level {
-            config.attack_ms as f64 / 1000.0
+            f64::from(config.attack_ms) / 1000.0
         } else {
-            config.release_ms as f64 / 1000.0
+            f64::from(config.release_ms) / 1000.0
         };
         // One-pole smoothing: coeff = 1 - e^(-dt/tau)
         let coeff = if tau > 0.0 {
@@ -86,6 +87,7 @@ pub struct RandomState {
 }
 
 impl RandomState {
+    #[must_use] 
     pub fn new(seed: Option<u64>) -> Self {
         let rng_state = seed.unwrap_or(0x12345678_9ABCDEF0);
         let mut s = Self {
@@ -113,11 +115,10 @@ impl RandomState {
             let beats_per_sec = bpm / 60.0;
             let div_beats = config
                 .sync_division
-                .map(|d| d.beats() as f64)
-                .unwrap_or(1.0);
+                .map_or(1.0, |d| f64::from(d.beats()));
             beats_per_sec / div_beats
         } else {
-            config.rate_hz as f64
+            f64::from(config.rate_hz)
         };
 
         self.phase += dt * rate;
@@ -129,14 +130,14 @@ impl RandomState {
         }
 
         // Interpolate between current and target based on smoothing
-        let smoothing = config.smoothing as f64;
+        let smoothing = f64::from(config.smoothing);
         if smoothing <= 0.0 {
             // Stepped: hold current value until next trigger
             self.current
         } else {
             // Smooth interpolation within the current period
             let t = self.phase * smoothing;
-            self.current + (self.target - self.current) * t.min(1.0)
+            (self.target - self.current).mul_add(t.min(1.0), self.current)
         }
     }
 }
@@ -173,7 +174,7 @@ pub struct ModulationProcessor {
     midi_cc_values: HashMap<u8, f64>,
     /// Expression pedal value [0, 1].
     expression_value: f64,
-    /// Macro knob values (keyed by knob_id), [0, 1].
+    /// Macro knob values (keyed by `knob_id`), [0, 1].
     macro_values: HashMap<String, f64>,
     /// Follower audio input levels (keyed by route index), [0, 1].
     follower_inputs: HashMap<usize, f64>,
@@ -181,6 +182,7 @@ pub struct ModulationProcessor {
 
 impl ModulationProcessor {
     /// Create a new processor from a set of modulation routes.
+    #[must_use] 
     pub fn new(routes: Vec<ModulationRoute>) -> Self {
         let states = routes
             .iter()
@@ -211,7 +213,8 @@ impl ModulationProcessor {
     }
 
     /// Number of routes.
-    pub fn route_count(&self) -> usize {
+    #[must_use] 
+    pub const fn route_count(&self) -> usize {
         self.routes.len()
     }
 
@@ -238,31 +241,31 @@ impl ModulationProcessor {
                 (ModulationSource::Lfo(config), SourceState::Lfo(ref mut state)) => {
                     // LFO tick returns bipolar [-1, 1]
                     let waveform_val = state.tick(ctx.dt, config, ctx.bpm);
-                    waveform_val * config.depth as f64
+                    waveform_val * f64::from(config.depth)
                 }
 
                 (ModulationSource::Pattern(config), SourceState::Pattern(ref mut state)) => {
                     // Pattern tick returns unipolar [0, 1], map to bipolar
                     let v = state.tick(ctx.dt, config, ctx.bpm);
-                    (v * 2.0 - 1.0) * config.depth as f64
+                    v.mul_add(2.0, -1.0) * f64::from(config.depth)
                 }
 
                 (ModulationSource::Envelope(config), SourceState::Envelope(ref mut state)) => {
                     // Envelope tick returns unipolar [0, 1]
                     let env_val = state.tick(ctx.dt, config);
-                    env_val * config.depth as f64
+                    env_val * f64::from(config.depth)
                 }
 
                 (ModulationSource::Follower(config), SourceState::Follower(ref mut state)) => {
                     // Follower tick returns unipolar [0, 1], map to bipolar
                     let follower_val = state.tick(ctx.dt, config);
-                    (follower_val * 2.0 - 1.0) * config.depth as f64
+                    follower_val.mul_add(2.0, -1.0) * f64::from(config.depth)
                 }
 
                 (ModulationSource::Random(config), SourceState::Random(ref mut state)) => {
                     // Random tick returns unipolar [0, 1], map to bipolar
                     let random_val = state.tick(ctx.dt, config, ctx.bpm);
-                    (random_val * 2.0 - 1.0) * config.depth as f64
+                    random_val.mul_add(2.0, -1.0) * f64::from(config.depth)
                 }
 
                 (ModulationSource::MidiCc { cc_number }, SourceState::External) => {
@@ -273,7 +276,7 @@ impl ModulationProcessor {
 
                 (ModulationSource::Expression, SourceState::External) => {
                     // Map [0, 1] to bipolar [-1, 1]
-                    self.expression_value * 2.0 - 1.0
+                    self.expression_value.mul_add(2.0, -1.0)
                 }
 
                 (ModulationSource::Macro { knob_id }, SourceState::External) => {
@@ -287,7 +290,7 @@ impl ModulationProcessor {
             };
 
             // Scale by route amount (-1..1, allows inversion)
-            let offset = raw_value * route.amount as f64;
+            let offset = raw_value * f64::from(route.amount);
 
             *target_offsets.entry(route.target.clone()).or_default() += offset;
         }
@@ -306,7 +309,7 @@ impl ModulationProcessor {
     }
 
     /// Set the expression pedal value (0.0–1.0).
-    pub fn set_expression(&mut self, value: f64) {
+    pub const fn set_expression(&mut self, value: f64) {
         self.expression_value = value.clamp(0.0, 1.0);
     }
 
@@ -459,7 +462,7 @@ mod tests {
     #[test]
     fn disabled_route_skipped() {
         let target = ParamTarget::new("amp", "gain");
-        let mut route = lfo_route("r1", target.clone(), 1.0);
+        let mut route = lfo_route("r1", target, 1.0);
         route.enabled = false;
 
         let mut proc = ModulationProcessor::new(vec![route]);
@@ -487,8 +490,8 @@ mod tests {
         let target_a = ParamTarget::new("amp", "gain");
         let target_b = ParamTarget::new("amp", "tone");
         let routes = vec![
-            lfo_route("r1", target_a.clone(), 0.5),
-            lfo_route("r2", target_b.clone(), 0.3),
+            lfo_route("r1", target_a, 0.5),
+            lfo_route("r2", target_b, 0.3),
         ];
         let mut proc = ModulationProcessor::new(routes);
 
@@ -499,7 +502,7 @@ mod tests {
     #[test]
     fn midi_cc_input() {
         let target = ParamTarget::new("amp", "gain");
-        let mut proc = ModulationProcessor::new(vec![cc_route("r1", 1, target.clone(), 1.0)]);
+        let mut proc = ModulationProcessor::new(vec![cc_route("r1", 1, target, 1.0)]);
 
         // CC at 0 → bipolar = -1 → offset = -1 * 1.0 = -1.0
         proc.set_midi_cc(1, 0.0);
@@ -524,7 +527,7 @@ mod tests {
         let mut proc = ModulationProcessor::new(vec![ModulationRoute::new(
             "r1",
             ModulationSource::Expression,
-            target.clone(),
+            target,
             1.0,
         )]);
 
@@ -542,7 +545,7 @@ mod tests {
             ModulationSource::Macro {
                 knob_id: "drive".into(),
             },
-            target.clone(),
+            target,
             1.0,
         )]);
 
@@ -555,7 +558,7 @@ mod tests {
     #[test]
     fn envelope_requires_gate() {
         let target = ParamTarget::new("amp", "gain");
-        let mut proc = ModulationProcessor::new(vec![envelope_route("r1", target.clone(), 1.0)]);
+        let mut proc = ModulationProcessor::new(vec![envelope_route("r1", target, 1.0)]);
 
         // Without gate_on, envelope is idle → output 0
         let outputs = proc.tick(ctx(0.033));
@@ -577,7 +580,7 @@ mod tests {
         let mut proc = ModulationProcessor::new(vec![ModulationRoute::new(
             "r1",
             ModulationSource::Expression,
-            target.clone(),
+            target,
             -1.0, // inverted
         )]);
 
@@ -590,7 +593,7 @@ mod tests {
     #[test]
     fn reset_clears_state() {
         let target = ParamTarget::new("amp", "gain");
-        let mut proc = ModulationProcessor::new(vec![cc_route("r1", 1, target.clone(), 1.0)]);
+        let mut proc = ModulationProcessor::new(vec![cc_route("r1", 1, target, 1.0)]);
 
         proc.set_midi_cc(1, 0.8);
         proc.reset();
@@ -612,7 +615,7 @@ mod tests {
                 depth: 1.0,
                 ..Default::default()
             }),
-            target.clone(),
+            target,
             1.0,
         )]);
 
@@ -638,7 +641,7 @@ mod tests {
                 seed: Some(42),
                 ..Default::default()
             }),
-            target.clone(),
+            target,
             1.0,
         )]);
 
@@ -666,7 +669,7 @@ mod tests {
         let mut proc2 = ModulationProcessor::new(vec![ModulationRoute::new(
             "r1",
             ModulationSource::Random(config),
-            target.clone(),
+            target,
             1.0,
         )]);
 

@@ -10,6 +10,9 @@ description = "FTS Tune — CLAP/VST3 monophonic pitch-correction plugin (YIN de
 # cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
 crate-type = ["cdylib", "lib"]
 
+[lints]
+workspace = true
+
 [dependencies]
 # Plugin framework (`vst3` on by default). Must be a direct dep — the export
 # macros expand to absolute `::nice_plug::…` paths.

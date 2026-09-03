@@ -76,6 +76,7 @@ impl Default for EkitBackend {
 }
 
 impl EkitBackend {
+    #[must_use] 
     pub fn new() -> Self {
         let pads = (0..DEFAULT_ROWS * DEFAULT_COLS)
             .map(|i| Pad {
@@ -114,6 +115,7 @@ impl EkitBackend {
 
     /// An offline rig (no audio device) for tests + the pad probe: every
     /// other path is identical, only `render_offline` pulls the blocks.
+    #[must_use] 
     pub fn new_offline(sample_rate: u32) -> Self {
         let b = Self::new();
         *b.inner.rig.lock().unwrap() = Some(SamplerRig::new_offline(sample_rate));
@@ -121,6 +123,7 @@ impl EkitBackend {
     }
 
     /// Trigger `pad` and render ~0.4 s, returning the peak. Offline only.
+    #[must_use] 
     pub fn render_hit(&self, pad: u32, velocity: u32) -> f32 {
         // Note-on/off inline: `trigger` takes the same (non-reentrant) rig
         // lock this function holds across the render.
@@ -143,7 +146,7 @@ impl EkitBackend {
             if rig.render_offline(&mut buf).is_err() {
                 break;
             }
-            for &s in buf.iter() {
+            for &s in &buf {
                 peak = peak.max(s.abs());
             }
         }
@@ -151,6 +154,7 @@ impl EkitBackend {
         peak
     }
 
+    #[must_use] 
     pub fn router(&self) -> architect::LayerRouter {
         self.clone().into_router()
     }
@@ -173,7 +177,7 @@ impl EkitBackend {
             rows: DEFAULT_ROWS,
             cols: DEFAULT_COLS,
             last_error: s.last_error.clone(),
-            base_note: crate::BASE_NOTE as u32,
+            base_note: u32::from(crate::BASE_NOTE),
         }
     }
 
@@ -203,11 +207,10 @@ impl EkitBackend {
 
     /// Locate + load a built space by name (shared, depth-bounded discovery).
     fn load_space(&self, name: &str) -> Option<Arc<LoadedSpace>> {
-        if let Some(cur) = self.inner.space.lock().unwrap().as_ref() {
-            if cur.space.name == name {
+        if let Some(cur) = self.inner.space.lock().unwrap().as_ref()
+            && cur.space.name == name {
                 return Some(cur.clone());
             }
-        }
         let (_, space, features) = signal_space::find_space(name)?;
         let loaded = Arc::new(LoadedSpace { space, features });
         *self.inner.space.lock().unwrap() = Some(loaded.clone());
@@ -352,11 +355,10 @@ fn velocity_rank(name: &str) -> i64 {
     let mut best = 0i64;
     for tok in name.split(|c: char| !c.is_ascii_alphanumeric()) {
         for prefix in ["vl", "v"] {
-            if let Some(rest) = tok.strip_prefix(prefix) {
-                if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+            if let Some(rest) = tok.strip_prefix(prefix)
+                && !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
                     best = best.max(rest.parse().unwrap_or(0));
                 }
-            }
         }
     }
     best
@@ -503,7 +505,7 @@ impl EkitRig for EkitBackend {
             let s = self.inner.state.lock().unwrap();
             let p = s.pads.get(pad as usize);
             (
-                p.map(|p| p.item_idx as usize).unwrap_or(0),
+                p.map_or(0, |p| p.item_idx as usize),
                 p.map(|p| p.category.clone()).unwrap_or_default(),
                 s.cursors.get(pad as usize).copied().unwrap_or(0),
             )
@@ -657,15 +659,12 @@ impl EkitBackend {
         let rig = self.inner.rig.lock().unwrap();
         let Some(rig) = rig.as_ref() else { return };
         rig.set_muted(&id, p.muted || (any_solo && !p.soloed));
-        if reinstall && !p.path.is_empty() {
-            if let Some(space) = space {
-                if let Some(path) = resolve_audio(&space.space, p.item_idx as usize) {
-                    if let Err(e) = install_pad_engine(rig, &id, &path, &p) {
+        if reinstall && !p.path.is_empty()
+            && let Some(space) = space
+                && let Some(path) = resolve_audio(&space.space, p.item_idx as usize)
+                    && let Err(e) = install_pad_engine(rig, &id, &path, &p) {
                         tracing::warn!("ekit: pad {pad} param re-install failed: {e}");
                     }
-                }
-            }
-        }
     }
 }
 
@@ -698,7 +697,7 @@ impl RigBackend for EkitBackend {
         // Meter pump: pull the per-pad peaks off the rig and publish.
         let meters = {
             let rig = self.inner.rig.lock().unwrap();
-            rig.as_ref().map(|r| r.meters_bank())
+            rig.as_ref().map(signal_sampler::SamplerRig::meters_bank)
         }; // rig lock dropped before touching state
         let pads = {
             let mut s = self.inner.state.lock().unwrap();
@@ -706,8 +705,7 @@ impl RigBackend for EkitBackend {
                 p.peak = meters
                     .as_ref()
                     .and_then(|m| m.cell(i))
-                    .map(|c| c.peak(0).max(c.peak(1)))
-                    .unwrap_or(0.0);
+                    .map_or(0.0, |c| c.peak(0).max(c.peak(1)));
             }
             s.pads.clone()
         };

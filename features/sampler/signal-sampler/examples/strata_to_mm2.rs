@@ -97,14 +97,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // kick on 1 & the "and" of 3; a tom fill in bar 2.
     let mut ev: Vec<(f64, Hit)> = Vec::new();
     for bar in 0..2 {
-        let base = bar as f64 * 4.0;
+        let base = f64::from(bar) * 4.0;
         // crash opens bar 1
         if bar == 0 {
             ev.push((base, Hit::Note(S_CRASH_L, 118)));
         }
         // hats every 8th (open the off-beats a touch)
         for i in 0..8 {
-            let t = base + i as f64 * 0.5;
+            let t = f64::from(i).mul_add(0.5, base);
             ev.push((t - 0.001, Hit::HatCc(if i % 2 == 0 { 120 } else { 70 })));
             ev.push((t, Hit::Note(S_HAT_BOW, if i % 2 == 0 { 96 } else { 82 })));
         }
@@ -117,13 +117,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // bar 2: fill on beats 3-4
             ev.push((base + 1.0, Hit::Note(S_SNARE, 118)));
             for (i, &n) in [S_SNARE, S_TOM1, S_TOM2, S_TOM3, S_TOM4].iter().enumerate() {
-                ev.push((base + 2.0 + i as f64 * 0.25, Hit::Note(n, 112)));
+                ev.push(((i as f64).mul_add(0.25, base + 2.0), Hit::Note(n, 112)));
             }
         }
     }
 
     let bpm = 120.0;
-    let spb = 60.0 / bpm * SR as f64;
+    let spb = 60.0 / bpm * f64::from(SR);
     let mut sched: Vec<(usize, Hit)> = ev
         .into_iter()
         .map(|(qn, h)| ((qn * spb) as usize, h))
@@ -135,10 +135,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ch = Channel::new(CH);
     let dispatch = |rig: &SamplerRig, e: &MidiEvent| match e {
         MidiEvent::NoteOn { key, velocity, .. } => {
-            rig.midi_message(CH, 0x90, key.get(), velocity.get())
+            rig.midi_message(CH, 0x90, key.get(), velocity.get());
         }
         MidiEvent::NoteOff { key, velocity, .. } => {
-            rig.midi_message(CH, 0x80, key.get(), velocity.get())
+            rig.midi_message(CH, 0x80, key.get(), velocity.get());
         }
         MidiEvent::ControlChange {
             controller, value, ..
@@ -147,7 +147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let tail = SR as usize;
-    let total = sched.last().map(|e| e.0).unwrap_or(0) + tail;
+    let total = sched.last().map_or(0, |e| e.0) + tail;
     const BLK: usize = 256;
     let mut out_buf: Vec<f32> = Vec::with_capacity(total * 2);
     let mut block = vec![0.0f32; BLK * 2];
@@ -175,9 +175,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             i += 1;
         }
-        for s in block.iter_mut() {
-            *s = 0.0;
-        }
+        block.fill(0.0);
         rig.render_offline(&mut block)?;
         for &s in &block {
             peak = peak.max(s.abs());

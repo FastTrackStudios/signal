@@ -1,4 +1,4 @@
-//! Minimal XML parser for the Spectrasonics "AmberPart" dialect —
+//! Minimal XML parser for the Spectrasonics "`AmberPart`" dialect —
 //! attribute-only elements, IEEE-754 hex-bit floats, basic entities.
 
 // ── Minimal XML ──────────────────────────────────────────────────────────────
@@ -9,10 +9,11 @@
 pub struct XmlNode {
     pub tag: String,
     pub attrs: Vec<(String, String)>,
-    pub children: Vec<XmlNode>,
+    pub children: Vec<Self>,
 }
 
 impl XmlNode {
+    #[must_use] 
     pub fn attr(&self, name: &str) -> Option<&str> {
         self.attrs
             .iter()
@@ -25,16 +26,18 @@ impl XmlNode {
         self.attr(name).map(omni_num)
     }
 
-    pub fn child(&self, tag: &str) -> Option<&XmlNode> {
+    #[must_use] 
+    pub fn child(&self, tag: &str) -> Option<&Self> {
         self.children.iter().find(|c| c.tag == tag)
     }
 
-    pub fn children_tagged<'a>(&'a self, tag: &'a str) -> impl Iterator<Item = &'a XmlNode> {
+    pub fn children_tagged<'a>(&'a self, tag: &'a str) -> impl Iterator<Item = &'a Self> {
         self.children.iter().filter(move |c| c.tag == tag)
     }
 
     /// Depth-first search for the first element with `tag`.
-    pub fn find(&self, tag: &str) -> Option<&XmlNode> {
+    #[must_use] 
+    pub fn find(&self, tag: &str) -> Option<&Self> {
         if self.tag == tag {
             return Some(self);
         }
@@ -44,6 +47,7 @@ impl XmlNode {
 
 /// Decode an attribute value: 8 hex digits → `f32` from bits; otherwise a
 /// plain decimal number; otherwise 0.
+#[must_use] 
 pub fn omni_num(s: &str) -> f32 {
     let t = s.trim();
     if t.len() == 8 && t.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -100,7 +104,7 @@ fn decode_entities(s: &str) -> String {
     out
 }
 
-/// Parse the AmberPart XML dialect (elements + attributes only; comments,
+/// Parse the `AmberPart` XML dialect (elements + attributes only; comments,
 /// PIs and text content are skipped).
 pub fn parse_xml(input: &str) -> Result<XmlNode, String> {
     let b = input.as_bytes();
@@ -142,12 +146,9 @@ pub fn parse_xml(input: &str) -> Result<XmlNode, String> {
                 .ok_or("unterminated close tag")?;
             i += end + 1;
             let done = stack.pop().ok_or("unbalanced close tag")?;
-            match stack.last_mut() {
-                Some(parent) => parent.children.push(done),
-                None => {
-                    root = Some(done);
-                    break;
-                }
+            if let Some(parent) = stack.last_mut() { parent.children.push(done) } else {
+                root = Some(done);
+                break;
             }
             continue;
         }

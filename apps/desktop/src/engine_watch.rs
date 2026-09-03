@@ -1,6 +1,6 @@
 //! `engine_watch.rs` — the HTTP + SSE bridge for watchOS remotes.
 //!
-//! watchOS forbids WebSockets outside audio-streaming sessions (Apple
+//! watchOS forbids `WebSockets` outside audio-streaming sessions (Apple
 //! TN3135), so the watch cannot speak vox directly. This bridge exposes the
 //! guitar rig's perform surface as plain JSON over URLSession-compatible
 //! HTTP, mounted on the engine's existing axum app via
@@ -133,7 +133,7 @@ async fn events(State(b): State<Bridge>) -> Result<axum::response::Response, Sta
                 let mut perf: Option<PerformanceModel> = None;
                 let _ = event.map(|ev| {
                     if let RigEvent::Perf(p) = ev {
-                        perf = Some(p.clone());
+                        perf = Some(p);
                     }
                 });
                 if let Some(p) = perf
@@ -145,7 +145,7 @@ async fn events(State(b): State<Bridge>) -> Result<axum::response::Response, Sta
         };
         // The subscribe call resolving means the subscription ended.
         tokio::select! {
-            _ = pump => {}
+            () = pump => {}
             _ = call => {}
         }
     });
@@ -158,7 +158,7 @@ async fn events(State(b): State<Bridge>) -> Result<axum::response::Response, Sta
 
 /// A `Stream` over the bridge's mpsc receiver — avoids pulling a
 /// tokio-stream dep for one adapter.
-pub(crate) struct SseStream(pub(crate) tokio::sync::mpsc::Receiver<String>);
+pub struct SseStream(pub(crate) tokio::sync::mpsc::Receiver<String>);
 
 impl futures_util::Stream for SseStream {
     type Item = Result<Event, std::convert::Infallible>;

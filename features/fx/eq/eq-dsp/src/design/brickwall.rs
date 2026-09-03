@@ -84,28 +84,28 @@ const STOPBAND_DB: f64 = 90.0;
 /// fixed by the passband ripple.
 fn prototype() -> Zpk {
     let ep = (10.0f64.powf(PASSBAND_RIPPLE_DB / 10.0) - 1.0).sqrt();
-    let es = (10.0f64.powf(STOPBAND_DB / 10.0) - 1.0).sqrt();
+    let es = (10.0f64.powi(9) - 1.0).sqrt();
     let k1 = ep / es;
-    let k = ellipdeg(ORDER, k1);
-    let kp = (1.0 - k * k).max(0.0).sqrt();
-    let big_k = elliptic_k_complete(k * k);
+    let mod_k = ellipdeg(ORDER, k1);
+    let kp = (1.0 - mod_k * mod_k).max(0.0).sqrt();
+    let big_k = elliptic_k_complete(mod_k * mod_k);
 
     // v0 solves sn(j v0 N K1, k1) = j/ep. Rather than an inverse sn of an
     // imaginary argument, use sn(jx, k) = j sc(x, k'): the condition becomes
     // sc(w, k1') = 1/ep, which is a real sn of a real value.
     let k1p = (1.0 - k1 * k1).max(0.0).sqrt();
-    let w = elliptic_asn(1.0 / (1.0 + ep * ep).sqrt(), k1p);
-    let v0 = w / (ORDER as f64 * elliptic_k_complete(k1 * k1));
+    let v0_param = elliptic_asn(1.0 / (1.0 + ep * ep).sqrt(), k1p);
+    let v0 = v0_param / (ORDER as u32 as f64 * elliptic_k_complete(k1 * k1));
 
     // cd(x + jy, k) = cn(x + jy) / dn(x + jy); the shared denominator of the
     // complex-argument formulas cancels, leaving only real sn/cn/dn at x
     // (modulus k) and y (modulus k').
     let cd = |x: f64, y: f64| -> Complex {
-        let (s, c, d) = elliptic_sncndn(x, k);
+        let (sn, cn, dn) = elliptic_sncndn(x, mod_k);
         let (s1, c1, d1) = elliptic_sncndn(y, kp);
-        let m = k * k;
-        let num = Complex::new(c * c1, -s * d * s1 * d1);
-        let den = Complex::new(d * c1 * d1, -m * s * c * s1);
+        let k_squared = mod_k * mod_k;
+        let num = Complex::new(cn * c1, -sn * dn * s1 * d1);
+        let den = Complex::new(dn * c1 * d1, -k_squared * sn * cn * s1);
         num / den
     };
 
@@ -116,9 +116,9 @@ fn prototype() -> Zpk {
         let x = u * big_k;
 
         // Zero: purely imaginary, at 1/(k * cd(u K, k)) up the axis.
-        let (_, c, d) = elliptic_sncndn(x, k);
-        let zeta = c / d;
-        let z = 1.0 / (k * zeta);
+        let (_, cn_zero, dn_zero) = elliptic_sncndn(x, mod_k);
+        let zeta = cn_zero / dn_zero;
+        let z = 1.0 / (mod_k * zeta);
         zeros.push(Complex::new(0.0, z));
         zeros.push(Complex::new(0.0, -z));
 

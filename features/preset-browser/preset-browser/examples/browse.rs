@@ -52,9 +52,7 @@ fn main() {
     for &i in browser.visible().iter().take(12) {
         let p = &browser.all()[i];
         let quality = p
-            .match_error
-            .map(|e| format!("{e:.3}"))
-            .unwrap_or_else(|| "—".into());
+            .match_error.map_or_else(|| "—".into(), |e| format!("{e:.3}"));
         println!(
             "  {:<34} {:<18} err {:<6} {} params",
             p.name.chars().take(34).collect::<String>(),

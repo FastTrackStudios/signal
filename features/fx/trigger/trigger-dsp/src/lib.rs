@@ -9,7 +9,7 @@
 //!
 //! - Onset detection: time-domain peak/RMS envelope state machine (LSP-style
 //!   four-state with confirmation windows), plus six FFT onset detection
-//!   functions (spectral flux, SuperFlux, HFC, complex domain, rectified
+//!   functions (spectral flux, `SuperFlux`, HFC, complex domain, rectified
 //!   complex domain, modified KL divergence)
 //! - Velocity extraction with configurable curves (linear/log/exp/fixed)
 //! - Retrigger prevention with configurable minimum interval

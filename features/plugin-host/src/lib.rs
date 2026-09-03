@@ -84,6 +84,7 @@ impl HostedPlugin {
     /// `signal-fx` `NativeEq`/`NativeComp`/`NativeReverb` — so the host's
     /// FX-chain machinery can run it exactly like a loaded CLAP/VST3. Prepare it
     /// before processing (the drum mixer's `install_plugin` does this).
+    #[must_use] 
     pub fn from_instance(mut inner: Box<dyn PluginInstance>) -> Self {
         let descriptor = inner.descriptor();
         Self {
@@ -97,11 +98,11 @@ impl HostedPlugin {
         }
     }
 
-    pub fn descriptor(&self) -> &PluginDescriptor {
+    pub const fn descriptor(&self) -> &PluginDescriptor {
         &self.descriptor
     }
 
-    pub fn format(&self) -> PluginFormat {
+    pub const fn format(&self) -> PluginFormat {
         self.descriptor.format
     }
 
@@ -321,6 +322,7 @@ pub fn standard_dirs(format: PluginFormat) -> Vec<std::path::PathBuf> {
 /// entries. Recurses up to `max_depth` levels into subdirectories (CLAP
 /// vendors commonly nest plugins one level deep; VST3 is a directory
 /// bundle itself so depth 1 suffices). Duplicates by path are dropped.
+#[must_use] 
 pub fn scan_plugins(formats: &[PluginFormat], max_depth: usize) -> Vec<PluginEntry> {
     use std::collections::HashSet;
     let mut seen: HashSet<std::path::PathBuf> = HashSet::new();

@@ -55,8 +55,8 @@ pub struct AutomationLaneProps {
 
 #[component]
 pub fn AutomationLane(props: AutomationLaneProps) -> Element {
-    let wf = props.width as f64;
-    let hf = props.height as f64;
+    let wf = f64::from(props.width);
+    let hf = f64::from(props.height);
     let (t_start, t_end) = props.time_range;
     let t_range = (t_end - t_start).max(0.001);
 

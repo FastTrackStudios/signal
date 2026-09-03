@@ -92,7 +92,7 @@ impl FtsSaturate {
         // unchanged values inside the biquad design's own cheapness — the
         // whole table is a handful of arithmetic).
         let bands = std::array::from_fn(|i| self.params.emph[i].to_band());
-        for emph in self.emph.iter_mut() {
+        for emph in &mut self.emph {
             if *emph.bands() != bands {
                 emph.set_bands(&bands);
             }
@@ -153,7 +153,7 @@ impl Plugin for FtsSaturate {
             pre.reset();
             quantiser.reset();
         }
-        for emph in self.emph.iter_mut() {
+        for emph in &mut self.emph {
             emph.set_sample_rate(buffer_config.sample_rate);
         }
         // Land the settings before the first block, so the tilt filters and
@@ -168,7 +168,7 @@ impl Plugin for FtsSaturate {
             pre.reset();
             quantiser.reset();
         }
-        for emph in self.emph.iter_mut() {
+        for emph in &mut self.emph {
             emph.reset();
         }
     }
@@ -204,7 +204,7 @@ impl Plugin for FtsSaturate {
                     wet = self.quantiser[ch].process(ch, wet);
                 }
                 wet = self.emph[ch].post(wet);
-                let out = (dry + (wet - dry) * mix) * output;
+                let out = (wet - dry).mul_add(mix, dry) * output;
                 output_peak = output_peak.max(out.abs());
                 *sample = out;
             }

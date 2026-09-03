@@ -8,7 +8,7 @@ use signal_plugin_host::{PluginEvents, PluginInstance};
 const SR: f64 = 48000.0;
 const N: usize = 96_000;
 
-fn no_events() -> PluginEvents<'static> {
+const fn no_events() -> PluginEvents<'static> {
     PluginEvents {
         params: &[],
         midi: &[],
@@ -133,9 +133,7 @@ fn spectral_band_toggle_suppresses_resonance_in_range_only() {
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
             let noise = ((seed >> 33) as f64 / (1u64 << 31) as f64) - 1.0;
-            (0.02 * noise
-                + 0.5 * (core::f64::consts::TAU * 2000.0 * i as f64 / SR).sin()
-                + 0.1 * (core::f64::consts::TAU * 6000.0 * i as f64 / SR).sin()) as f32
+            0.1f64.mul_add((core::f64::consts::TAU * 6000.0 * i as f64 / SR).sin(), 0.02f64.mul_add(noise, 0.5 * (core::f64::consts::TAU * 2000.0 * i as f64 / SR).sin())) as f32
         })
         .collect();
     let out = run(&mut eq, &input);
@@ -159,7 +157,7 @@ fn spectral_band_toggle_suppresses_resonance_in_range_only() {
 fn transient_mode_null_and_stream_routing() {
     let input: Vec<f32> = (0..48_000)
         .map(|i| {
-            let tone = 0.2 * (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin();
+            let tone = 0.2 * (core::f64::consts::TAU * 220.0 * f64::from(i) / SR).sin();
             let click = if i % 12000 < 48 { 0.7 } else { 0.0 };
             (tone + click) as f32
         })
@@ -514,7 +512,7 @@ fn listen_delta_reveals_spectral_action() {
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
             let noise = ((seed >> 33) as f64 / (1u64 << 31) as f64) - 1.0;
-            (0.05 * noise + 0.5 * (core::f64::consts::TAU * 2000.0 * i as f64 / SR).sin()) as f32
+            0.05f64.mul_add(noise, 0.5 * (core::f64::consts::TAU * 2000.0 * i as f64 / SR).sin()) as f32
         })
         .collect();
     let out = run(&mut eq, &input);

@@ -1,7 +1,7 @@
 //! Parse every sample stem in a Keyscape extraction and report how each
 //! articulation maps — to catch mis-parsed release / pedal / mechanical-noise
 //! samples.
-//!   cargo run -p signal-sampler --example keyscape_parse -- "<extraction dir>"
+//!   cargo run -p signal-sampler --example `keyscape_parse` -- "<extraction dir>"
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -54,10 +54,9 @@ fn main() {
         "articulation", "dir", "count", "note range", "#notes"
     );
     for ((artic, dir), (count, lo, hi)) in &by_artic {
-        let nn = notes.get(artic).map(|s| s.len()).unwrap_or(0);
+        let nn = notes.get(artic).map_or(0, std::collections::BTreeSet::len);
         println!(
-            "{:<28} {:<8} {:>6} {:>4}..{:<4} {:>10}",
-            artic, dir, count, lo, hi, nn
+            "{artic:<28} {dir:<8} {count:>6} {lo:>4}..{hi:<4} {nn:>10}"
         );
     }
     let parsed: usize = by_artic.values().map(|(c, ..)| *c).sum();

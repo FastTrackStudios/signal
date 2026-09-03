@@ -6,10 +6,10 @@
 //! (pack markers for those zones).
 //!
 //! Prints a per-join table: position, from→to, direction, fired zone info
-//! (from the LegatoFireEvent), predicted arrival err vs grid, and — the
+//! (from the `LegatoFireEvent`), predicted arrival err vs grid, and — the
 //! ground truth — the EMITTED arrival marker err vs grid.
 //!
-//!   cargo run --release -p signal-orchestra --example render_scale_matrix -- listen/scale-matrix
+//!   cargo run --release -p signal-orchestra --example `render_scale_matrix` -- listen/scale-matrix
 
 use std::io::Write as _;
 use std::path::PathBuf;
@@ -172,14 +172,12 @@ fn main() -> eyre::Result<()> {
             let emitted = res
                 .emitted_markers
                 .iter()
-                .find(|m| m.note == t.to_note && (m.frame as i64 - grid).abs() < (SR as i64 / 2))
-                .map(|m| {
+                .find(|m| m.note == t.to_note && (m.frame as i64 - grid).abs() < (i64::from(SR) / 2)).map_or_else(|| "  (none)".into(), |m| {
                     format!(
                         "{:+7.1}ms",
                         (m.frame as i64 - grid) as f64 * 1000.0 / f64::from(SR)
                     )
-                })
-                .unwrap_or_else(|| "  (none)".into());
+                });
             let line = format!(
                 "  pos {} {:>3}→{:<3} {dir} predicted {:+7.1}ms emitted {emitted}",
                 i + 2,

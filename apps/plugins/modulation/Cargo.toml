@@ -10,6 +10,9 @@ description = "FTS Modulation — CLAP/VST3 multi-mode modulation plugin (chorus
 # cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
 crate-type = ["cdylib", "lib"]
 
+[lints]
+workspace = true
+
 [dependencies]
 audiocore-core = { workspace = true }
 # What each circuit IS, and the only place that knows how a knob reaches the

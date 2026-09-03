@@ -50,8 +50,7 @@ fn lanes(peaks: &[(String, f32)], names: &[String]) -> String {
             let peak = peaks
                 .iter()
                 .find(|(m, _)| m == n)
-                .map(|(_, p)| *p)
-                .unwrap_or(0.0);
+                .map_or(0.0, |(_, p)| *p);
             if peak <= 1e-5 {
                 format!("{n}: —")
             } else {
@@ -112,8 +111,7 @@ fn main() {
         .iter()
         .filter(|(n, _)| live.contains(n))
         .max_by(|a, b| a.1.total_cmp(&b.1))
-        .map(|(n, _)| n.clone())
-        .unwrap_or(first);
+        .map_or(first, |(n, _)| n.clone());
 
     KeysRigSvc::set_layer_mute(&backend, first.clone(), true);
     println!("mute {first:<9} {}", lanes(&strike(&backend, 60), &live));
@@ -121,7 +119,7 @@ fn main() {
 
     KeysRigSvc::set_layer_solo(&backend, first.clone(), true);
     println!("solo {first:<9} {}", lanes(&strike(&backend, 60), &live));
-    KeysRigSvc::set_layer_solo(&backend, first.clone(), false);
+    KeysRigSvc::set_layer_solo(&backend, first, false);
 
     println!("clear          {}", lanes(&strike(&backend, 60), &live));
     KeysRigSvc::stop(&backend);

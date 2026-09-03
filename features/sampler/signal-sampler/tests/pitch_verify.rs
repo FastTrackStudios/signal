@@ -64,8 +64,8 @@ fn detect_midi(mono: &[f32], sr: u32, start: usize, win: usize) -> Option<f64> {
     if best < 0.4 || best_lag == 0 {
         return None;
     }
-    let hz = sr as f64 / best_lag as f64;
-    Some(69.0 + 12.0 * (hz / 440.0).log2())
+    let hz = f64::from(sr) / best_lag as f64;
+    Some(12.0f64.mul_add((hz / 440.0).log2(), 69.0))
 }
 
 /// Median detected pitch across windows spread over [10%, 70%] of the slot —
@@ -75,14 +75,14 @@ fn note_pitch(mono: &[f32], sr: u32, t0_sec: f64, dur_sec: f64) -> Option<f64> {
     let mut ests: Vec<f64> = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
         .iter()
         .filter_map(|f| {
-            let start = ((t0_sec + f * dur_sec) * sr as f64) as usize;
+            let start = ((t0_sec + f * dur_sec) * f64::from(sr)) as usize;
             detect_midi(mono, sr, start, 3072)
         })
         .collect();
     if ests.is_empty() {
         return None;
     }
-    ests.sort_by(|a, b| a.total_cmp(b));
+    ests.sort_by(f64::total_cmp);
     Some(ests[ests.len() / 2])
 }
 
@@ -142,7 +142,7 @@ fn run_case(rig: &SamplerRig, name: &str, steps: &[(u8, f64, f64)]) -> Vec<Strin
     for &(pitch, start, dur) in steps {
         match note_pitch(&mono, SR, start * qn_sec, dur * qn_sec) {
             Some(m) => {
-                let cents = (m - pitch as f64) * 100.0;
+                let cents = (m - f64::from(pitch)) * 100.0;
                 if cents.abs() > TOLERANCE_CENTS {
                     failures.push(format!(
                         "{name}: note {pitch} @ {start} QN detected {m:.2} ({cents:+.0} cents)"
@@ -222,7 +222,7 @@ fn css_legato_renders_are_in_tune() {
         .map(|i| {
             (
                 60 + i as u8,
-                1.0 + 0.5 * i as f64,
+                0.5f64.mul_add(f64::from(i), 1.0),
                 if i == 12 { 4.0 } else { 0.5 },
             )
         })

@@ -1,8 +1,8 @@
 //! Pro-Q 4 shelf filter design — ZPK pipeline matching the binary.
 //!
-//! Pro-Q 4 shelf pipeline (from design_filter_zpk_and_transform at 0x1800ff6f0):
-//!   1. Butterworth LP prototype (filter_type_dispatcher, iVar9==2 path)
-//!   2. apply_shelf_gain_to_zpk (0x1800fcce0) — for type 7 (low shelf) only
+//! Pro-Q 4 shelf pipeline (from `design_filter_zpk_and_transform` at 0x1800ff6f0):
+//!   1. Butterworth LP prototype (`filter_type_dispatcher`, iVar9==2 path)
+//!   2. `apply_shelf_gain_to_zpk` (0x1800fcce0) — for type 7 (low shelf) only
 //!   3. Bilinear transform (transform type 2)
 //!   4. zpk_to_biquad_coefficients (0x1800fe040)
 //!

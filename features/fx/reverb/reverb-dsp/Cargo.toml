@@ -6,6 +6,9 @@ license.workspace = true
 edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
 description = "Reverb processing engine — plate, shimmer, hall/room algorithms with input/output EQ"
 
+[lints]
+workspace = true
+
 [dependencies]
 audiocore-dsp = { workspace = true }
 fts-modulation = { workspace = true }

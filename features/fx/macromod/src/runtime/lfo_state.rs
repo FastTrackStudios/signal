@@ -12,7 +12,7 @@ use super::waveform::evaluate_waveform;
 pub struct LfoState {
     /// Current phase position [0.0, 1.0).
     phase: f64,
-    /// Held value for S&H / StepSequence waveforms (bipolar [-1, 1]).
+    /// Held value for S&H / `StepSequence` waveforms (bipolar [-1, 1]).
     held_value: f64,
     /// xorshift64 PRNG state.
     rng_state: u64,
@@ -20,26 +20,30 @@ pub struct LfoState {
 
 impl LfoState {
     /// Create a new LFO state with the given initial phase offset (degrees).
+    #[must_use] 
     pub fn new(phase_offset_degrees: f32) -> Self {
         Self {
-            phase: (phase_offset_degrees as f64 / 360.0).fract().abs(),
+            phase: (f64::from(phase_offset_degrees) / 360.0).fract().abs(),
             held_value: 0.0,
             rng_state: 0x5A5A_5A5A_5A5A_5A5A,
         }
     }
 
-    /// Create from an LFO config, using its phase_offset.
+    /// Create from an LFO config, using its `phase_offset`.
+    #[must_use] 
     pub fn from_config(config: &LfoConfig) -> Self {
         Self::new(config.phase_offset)
     }
 
     /// Current phase position.
-    pub fn phase(&self) -> f64 {
+    #[must_use] 
+    pub const fn phase(&self) -> f64 {
         self.phase
     }
 
-    /// Current held value (for S&H / StepSequence).
-    pub fn held_value(&self) -> f64 {
+    /// Current held value (for S&H / `StepSequence`).
+    #[must_use] 
+    pub const fn held_value(&self) -> f64 {
         self.held_value
     }
 
@@ -53,10 +57,10 @@ impl LfoState {
             // One cycle spans `division.beats()` beats.
             // BPM → beats per second = bpm / 60.
             // Frequency = beats_per_second / beats_per_cycle.
-            let beats_per_cycle = division.beats() as f64;
+            let beats_per_cycle = f64::from(division.beats());
             (bpm / 60.0) / beats_per_cycle
         } else {
-            config.rate_hz as f64
+            f64::from(config.rate_hz)
         };
 
         let phase_delta = freq * dt_seconds;
@@ -93,26 +97,26 @@ impl LfoState {
         evaluate_waveform(
             config.waveform,
             self.phase,
-            config.pulse_width as f64,
+            f64::from(config.pulse_width),
             self.held_value,
         )
     }
 
-    /// Reset phase to the configured offset. Called on note-on when retrigger is NoteOn.
+    /// Reset phase to the configured offset. Called on note-on when retrigger is `NoteOn`.
     pub fn retrigger(&mut self, config: &LfoConfig) {
         if config.retrigger == RetriggerMode::NoteOn {
-            self.phase = (config.phase_offset as f64 / 360.0).fract().abs();
+            self.phase = (f64::from(config.phase_offset) / 360.0).fract().abs();
         }
     }
 
     /// Force-reset phase to zero (or offset). Useful for scene changes.
     pub fn reset(&mut self, phase_offset_degrees: f32) {
-        self.phase = (phase_offset_degrees as f64 / 360.0).fract().abs();
+        self.phase = (f64::from(phase_offset_degrees) / 360.0).fract().abs();
         self.held_value = 0.0;
     }
 
     /// xorshift64 PRNG — returns next random u64.
-    fn next_random_u64(&mut self) -> u64 {
+    const fn next_random_u64(&mut self) -> u64 {
         let mut x = self.rng_state;
         x ^= x << 13;
         x ^= x >> 7;
@@ -126,7 +130,7 @@ impl LfoState {
         let raw = self.next_random_u64();
         // Map u64 to [0, 1] then to [-1, 1]
         let normalized = (raw as f64) / (u64::MAX as f64);
-        normalized * 2.0 - 1.0
+        normalized.mul_add(2.0, -1.0)
     }
 }
 

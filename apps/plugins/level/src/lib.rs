@@ -117,20 +117,20 @@ impl FtsLevel {
     /// Push the current params into every channel's chain (no allocation).
     fn sync_params(&mut self) {
         let gate = GateConfig {
-            threshold_db: self.params.gate_threshold.value() as f64,
+            threshold_db: f64::from(self.params.gate_threshold.value()),
             ..GateConfig::default()
         };
         let debreath = DeBreathConfig {
-            reduction_db: self.params.debreath_db.value() as f64,
+            reduction_db: f64::from(self.params.debreath_db.value()),
             ..DeBreathConfig::default()
         };
         let rider = RiderConfig {
-            target_db: self.params.ride_target.value() as f64,
-            amount: self.params.ride_amount.value() as f64,
+            target_db: f64::from(self.params.ride_target.value()),
+            amount: f64::from(self.params.ride_amount.value()),
             ..RiderConfig::default()
         };
         let deess = DeEssConfig {
-            threshold_db: self.params.deess_threshold.value() as f64,
+            threshold_db: f64::from(self.params.deess_threshold.value()),
             ..DeEssConfig::default()
         };
         for ch in &mut self.channels {
@@ -168,11 +168,10 @@ impl Plugin for FtsLevel {
         buffer_config: &BufferConfig,
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
         let ch = audio_io_layout
             .main_output_channels
-            .map(|n| n.get() as usize)
-            .unwrap_or(2)
+            .map_or(2, |n| n.get() as usize)
             .max(1);
         self.channels = (0..ch)
             .map(|_| VocalLeveler::new(self.sample_rate, LevelerConfig::default()))
@@ -200,7 +199,7 @@ impl Plugin for FtsLevel {
         for mut frame in buffer.iter_samples() {
             for (c, sample) in frame.iter_mut().enumerate() {
                 if let Some(ch) = self.channels.get_mut(c) {
-                    *sample = ch.process_sample(*sample as f64) as f32;
+                    *sample = ch.process_sample(f64::from(*sample)) as f32;
                 }
             }
         }

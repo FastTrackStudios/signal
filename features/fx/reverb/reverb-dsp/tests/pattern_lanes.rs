@@ -38,9 +38,9 @@ fn gate_modulator(sync_index: usize) -> Box<Modulator> {
     m
 }
 
-/// SYNC_TABLE index for a one-beat (1/4 note) cycle.
+/// `SYNC_TABLE` index for a one-beat (1/4 note) cycle.
 const SYNC_1_BEAT: usize = 7;
-/// SYNC_TABLE index for a two-beat (1/2 note) cycle.
+/// `SYNC_TABLE` index for a two-beat (1/2 note) cycle.
 const SYNC_2_BEATS: usize = 8;
 
 #[test]
@@ -52,7 +52,7 @@ fn wet_lane_duty_cycles_the_output() {
     // half-beat (12000-sample) boundary.
     let n = 96_000;
     let mut l: Vec<f64> = (0..n)
-        .map(|i| (core::f64::consts::TAU * 300.0 * i as f64 / SR).sin() * 0.4)
+        .map(|i| (core::f64::consts::TAU * 300.0 * f64::from(i) / SR).sin() * 0.4)
         .collect();
     let mut r = l.clone();
     c.process(&mut l, &mut r);

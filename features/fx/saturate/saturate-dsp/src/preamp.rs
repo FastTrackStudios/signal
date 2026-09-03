@@ -46,35 +46,37 @@ pub enum SideShaper {
 }
 
 impl SideShaper {
-    pub fn from_index(idx: u32) -> Self {
+    #[must_use] 
+    pub const fn from_index(idx: u32) -> Self {
         match idx {
-            1 => SideShaper::OpAmp,
-            2 => SideShaper::Tube,
-            3 => SideShaper::Transformer,
-            4 => SideShaper::Diode,
-            5 => SideShaper::Hard,
-            _ => SideShaper::Clean,
+            1 => Self::OpAmp,
+            2 => Self::Tube,
+            3 => Self::Transformer,
+            4 => Self::Diode,
+            5 => Self::Hard,
+            _ => Self::Clean,
         }
     }
 
     /// Static transfer (stateless): input in shaper units.
     #[inline]
+    #[must_use] 
     pub fn shape(self, x: f32) -> f32 {
         match self {
-            SideShaper::Clean => x,
-            SideShaper::OpAmp => tanh_approx(x),
-            SideShaper::Tube => x / (1.0 + x.abs()),
-            SideShaper::Transformer => {
+            Self::Clean => x,
+            Self::OpAmp => tanh_approx(x),
+            Self::Tube => x / (1.0 + x.abs()),
+            Self::Transformer => {
                 let soft = x - (x * x * x) / 3.0;
                 let t = (x.abs() * 0.5).clamp(0.0, 1.0);
                 soft * (1.0 - t) + tanh_approx(x) * t
             }
-            SideShaper::Diode => {
+            Self::Diode => {
                 // Faster knee than tanh: rational fold with 1.5x onset.
                 let v = x * 1.5;
                 (v / (1.0 + v * v).max(1.0)) + x * 0.2 / (1.0 + x * x)
             }
-            SideShaper::Hard => x.clamp(-1.0, 1.0),
+            Self::Hard => x.clamp(-1.0, 1.0),
         }
     }
 }
@@ -204,6 +206,7 @@ pub struct ClassAPreamp {
 }
 
 impl ClassAPreamp {
+    #[must_use] 
     pub fn new(sample_rate: f32) -> Self {
         let mut p = Self {
             drive: 1.0,
@@ -261,7 +264,8 @@ impl ClassAPreamp {
         self.sag_coeff = x / (1.0 + x);
     }
 
-    pub fn sag_ms(&self) -> f32 {
+    #[must_use] 
+    pub const fn sag_ms(&self) -> f32 {
         self.sag_ms
     }
 
@@ -294,7 +298,8 @@ impl ClassAPreamp {
         );
     }
 
-    pub fn tilt_db(&self) -> f32 {
+    #[must_use] 
+    pub const fn tilt_db(&self) -> f32 {
         self.tilt_db
     }
 
@@ -302,7 +307,7 @@ impl ClassAPreamp {
     /// this preamp does to the level the shaper sees
     /// (`fx.sat.emphasis.makeup`). Call before [`Self::refresh_makeup`]
     /// (profiles' `apply` runs that last).
-    pub fn set_emphasis_sigma_gain(&mut self, gain: f32) {
+    pub const fn set_emphasis_sigma_gain(&mut self, gain: f32) {
         self.emphasis_sigma_gain = gain.clamp(0.05, 20.0);
     }
 
@@ -368,6 +373,7 @@ impl ClassAPreamp {
     /// single transfer curve to draw. Everything a panel *can* draw is
     /// here, and it is the same arithmetic `process` runs.
     #[inline]
+    #[must_use] 
     pub fn transfer(&self, x: f32) -> f32 {
         let v = self.deadband(x * self.drive) + self.q_point;
         self.shape_side(v) - self.shape_side(self.q_point)
@@ -428,6 +434,7 @@ impl ClassAPreamp {
     /// The makeup as a plain multiplier — what the display has to divide by
     /// to draw the curve the listener will actually hear.
     #[inline]
+    #[must_use] 
     pub fn makeup_gain(&self) -> f32 {
         match self.makeup {
             Makeup::InverseDrive => 1.0 / self.drive.max(1.0e-3),
@@ -498,7 +505,7 @@ impl ClassAPreamp {
         y
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.dc_x1 = [0.0; MAX_CHANNELS];
         self.dc_y1 = [0.0; MAX_CHANNELS];
         self.sag_env = [0.0; MAX_CHANNELS];
@@ -645,7 +652,7 @@ mod tests {
                 mean += f64::from(y);
             }
         }
-        mean /= (n / 2) as f64;
+        mean /= f64::from(n / 2);
         assert!(
             mean.abs() < 1.0e-3,
             "output DC must be blocked: mean={mean:e}"

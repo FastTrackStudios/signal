@@ -31,9 +31,9 @@ use std::f64::consts::PI;
 /// ```text
 ///   q_bw = 32^(cos(Q) * 0.1355 + 0.5) * 0.125
 /// ```
-/// Sanity: at Q = π/2, cos(Q)=0 → q_bw = 32^0.5 · 0.125 = √32/8 = 1/√2 ≈ 0.707.
+/// Sanity: at Q = π/2, cos(Q)=0 → `q_bw` = 32^0.5 · 0.125 = √32/8 = 1/√2 ≈ 0.707.
 fn q_to_bandwidth(q: f64) -> f64 {
-    let exponent = q.cos() * Q_BW_SCALE + Q_BW_OFFSET;
+    let exponent = q.cos().mul_add(Q_BW_SCALE, Q_BW_OFFSET);
     Q_BW_BASE.powf(exponent) * Q_BW_MULT
 }
 
@@ -48,7 +48,7 @@ fn q_to_bandwidth(q: f64) -> f64 {
 /// User Q is converted via the cos/pow Q→BW formula from the binary.
 ///
 /// RBJ analog prototype:
-///   H(s) = A · (s² + (√A · w0/Q_bw) · s + A·w0²) / (A·s² + (√A · w0/Q_bw) · s + w0²)
+///   H(s) = A · (s² + (√A · `w0/Q_bw`) · s + A·w0²) / (A·s² + (√A · `w0/Q_bw`) · s + w0²)
 /// where A = √(linear_gain).
 pub fn design_low_shelf_zpk(
     n_sections: usize,

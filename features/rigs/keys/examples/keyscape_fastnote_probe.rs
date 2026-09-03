@@ -3,7 +3,7 @@
 //! fast repeated strikes + a fast scale with the structured render trace on,
 //! then prints exactly what each strike spawned: sample file, voice kind,
 //! note→root pitch rate, and gain.
-//!   cargo run -p signal-keys --example keyscape_fastnote_probe
+//!   cargo run -p signal-keys --example `keyscape_fastnote_probe`
 
 use std::path::Path;
 

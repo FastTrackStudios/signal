@@ -58,7 +58,9 @@ pub(super) fn mzt_notch_simple_cascade(
     // 1.11, an effective Q of 2.86 against 8.1.
     (0..n_sections)
         .map(|k| {
-            let theta = PI * (2 * k + 1) as f64 / (2 * n_sections) as f64;
+            let k_f = k as f64;
+            let n_sections_f = n_sections as f64;
+            let theta = PI * (2.0f64.mul_add(k_f, 1.0)) / (2.0 * n_sections_f);
             let q_section =
                 (q_user * theta.sin() * std::f64::consts::FRAC_1_SQRT_2).max(1e-6);
             rbj_notch_section(freq_hz, q_section, sample_rate)

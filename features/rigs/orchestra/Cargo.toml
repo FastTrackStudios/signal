@@ -5,6 +5,9 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 # The shared sampler engine implements the CSS articulation behaviour; orchestra
 # is the strings definition + spec + A/B tests on top.

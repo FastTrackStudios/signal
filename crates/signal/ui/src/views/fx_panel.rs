@@ -21,7 +21,7 @@ pub fn FxView() -> Element {
             style: "display:flex; flex-direction:row; gap:16px; width:100%; height:100%; \
                     padding:16px; box-sizing:border-box; overflow:auto;",
             EqPanel { chain: chain.clone() }
-            CompPanel { chain: chain.clone() }
+            CompPanel { chain: chain }
         }
     }
 }
@@ -69,12 +69,12 @@ fn EqPanel(chain: ProcessingChain) -> Element {
     let mut on_band_change = move |(idx, band): (usize, EqBand)| {
         let mut bs = bands.write();
         if idx < bs.len() {
-            bs[idx] = band.clone();
+            bs[idx] = band;
         }
     };
 
     let on_band_add = move |band: EqBand| {
-        let mut new_band = band.clone();
+        let mut new_band = band;
         new_band.index = bands.read().len();
         bands.write().push(new_band);
     };
@@ -234,7 +234,7 @@ fn ParamRow(
     unit: &'static str,
     on_change: EventHandler<f64>,
 ) -> Element {
-    let display = format!("{:.1}{unit}", value);
+    let display = format!("{value:.1}{unit}");
 
     rsx! {
         div {

@@ -2,13 +2,13 @@
 //! REAPER integration tests: Load block + module presets onto real DAW tracks.
 //!
 //! Tests the full resolve → add FX → apply params → rename pipeline against
-//! a running REAPER instance with the FabFilter Pro-Q 4 CLAP plugin.
+//! a running REAPER instance with the `FabFilter` Pro-Q 4 CLAP plugin.
 //!
 //! The Pro-Q 4 seed presets use real CLAP parameter names (via `daw_name`),
 //! so the param-by-param application works against the actual plugin.
 //!
 //! Run with:
-//!   cargo xtask reaper-test signal_load
+//!   cargo xtask reaper-test `signal_load`
 
 use std::time::Duration;
 

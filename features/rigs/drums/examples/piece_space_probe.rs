@@ -1,18 +1,16 @@
 //! Build the drum library's piece similarity space and query it (#77 M4).
-//!   cargo run --release -p signal-drums --example piece_space_probe [library-root]
+//!   cargo run --release -p signal-drums --example `piece_space_probe` [library-root]
 
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("warn").init();
     let root = std::env::args()
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
+        .nth(1).map_or_else(|| {
             PathBuf::from(
                 "/run/media/AudioHaven/Signal/Libraries/Drum Kits/GGD Modern and Massive 2",
             )
-        });
+        }, PathBuf::from);
     let t0 = std::time::Instant::now();
     let (dir, analyzed, skipped) = signal_drums::piece_space::build(&root)?;
     println!(

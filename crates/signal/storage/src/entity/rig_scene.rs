@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
 use signal_proto::rig::RigSceneId;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "rig_scenes")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -14,6 +14,7 @@ pub struct Model {
 }
 
 impl Model {
+    #[must_use] 
     pub fn variant_id_branded(&self) -> RigSceneId {
         RigSceneId::from(self.id.clone())
     }

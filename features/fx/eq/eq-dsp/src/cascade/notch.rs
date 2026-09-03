@@ -20,23 +20,23 @@ pub fn notch_inner_pair(b_quartic: f64, c_quartic: f64) -> (f64, f64) {
     } else {
         (-half_b, (-disc).sqrt())
     };
-    let u2_re = u_re * u_re - u_im * u_im;
-    let u2_im = 2.0 * u_re * u_im;
-    let d_re = u2_re - 4.0;
-    let d_im = u2_im;
+    let u_sq_re = u_re * u_re - u_im * u_im;
+    let u_sq_im = 2.0 * u_re * u_im;
+    let d_re = u_sq_re - 4.0;
+    let d_im = u_sq_im;
     let d_mag = (d_re * d_re + d_im * d_im).sqrt();
     let sqrt_re = ((d_mag + d_re) * 0.5).max(0.0).sqrt();
     let sqrt_im = ((d_mag - d_re) * 0.5).max(0.0).sqrt() * d_im.signum();
-    let sp_re = 0.5 * (u_re + sqrt_re);
-    let sp_im = 0.5 * (u_im + sqrt_im);
-    let sm_re = 0.5 * (u_re - sqrt_re);
-    let sm_im = 0.5 * (u_im - sqrt_im);
-    let mag_p = sp_re * sp_re + sp_im * sp_im;
-    let mag_m = sm_re * sm_re + sm_im * sm_im;
+    let s_plus_re = 0.5 * (u_re + sqrt_re);
+    let s_plus_im = 0.5 * (u_im + sqrt_im);
+    let s_minus_re = 0.5 * (u_re - sqrt_re);
+    let s_minus_im = 0.5 * (u_im - sqrt_im);
+    let mag_p = s_plus_re * s_plus_re + s_plus_im * s_plus_im;
+    let mag_m = s_minus_re * s_minus_re + s_minus_im * s_minus_im;
     let (s_re, mag2) = if mag_p < mag_m {
-        (sp_re, mag_p)
+        (s_plus_re, mag_p)
     } else {
-        (sm_re, mag_m)
+        (s_minus_re, mag_m)
     };
     (-2.0 * s_re, mag2)
 }
@@ -199,7 +199,7 @@ fn alt_path_kernel_generic(
 
     let p2 = g_ref.sqrt();
 
-    let term1 = t1s * t1s * (t2s - t3s) * u_third * u_zero;
+    let term1 = t2s * t1s * (t2s - t3s) * u_third * u_zero;
     let term2 = g_ref * u_zero * t2s * (t1s - t3s).powi(2);
     let term3 = g_ref * u_third * t3s * (t1s - t2s).powi(2);
     let discr = term1 - term2 + term3;
@@ -330,7 +330,7 @@ fn notch_s8_section_biquad(
             // (constant param_1[0xf] set inside compute_band_shelf, used by
             // prepare_band's post-clamp). This matters when solve_w_third
             // is close to π.
-            const W_ZERO_CLAMP: f64 = 2.9845130209103035;
+            const W_ZERO_CLAMP: f64 = 2.984_513_020_910_303_5;
             if solve_w_third > 0.98 * PI {
                 alt_path()
             } else {
@@ -412,7 +412,7 @@ fn notch_s2_alt_path_synth(freq_hz: f64, q_user: f64, sample_rate: f64) -> Coeff
     let p2 = g_ref.sqrt();
 
     // Alt-path discriminant
-    let term1 = t1s * t1s * (t2s - t3s) * u_third * u_zero;
+    let term1 = t2s * t1s * (t2s - t3s) * u_third * u_zero;
     let term2 = g_ref * u_zero * t2s * (t1s - t3s).powi(2);
     let term3 = g_ref * u_third * t3s * (t1s - t2s).powi(2);
     let discr = term1 - term2 + term3;

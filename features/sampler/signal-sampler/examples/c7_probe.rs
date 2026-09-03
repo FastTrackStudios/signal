@@ -30,8 +30,7 @@ fn rss_anon_mb() -> f64 {
                 .parse::<f64>()
                 .ok()
         })
-        .map(|kb| kb / 1024.0)
-        .unwrap_or(f64::NAN)
+        .map_or(f64::NAN, |kb| kb / 1024.0)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -121,8 +120,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-            for &s in buf.iter() {
-                rms += (s as f64) * (s as f64);
+            for &s in &buf {
+                rms += f64::from(s) * f64::from(s);
                 n += 1;
             }
             // Real time — the streamer gets the wall clock a live rig gives it.

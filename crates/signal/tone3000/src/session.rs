@@ -40,10 +40,12 @@ pub struct AuthStart {
 }
 
 impl AuthStart {
-    pub fn new(authorize_url: String, verifier: String, state: String) -> Self {
+    #[must_use] 
+    pub const fn new(authorize_url: String, verifier: String, state: String) -> Self {
         Self { authorize_url, verifier, state }
     }
 
+    #[must_use] 
     pub fn verifier(&self) -> &str {
         &self.verifier
     }
@@ -79,10 +81,12 @@ impl Session {
         Self { tokens, library_root: library_root.into() }
     }
 
-    pub fn token_store(&self) -> &TokenStore {
+    #[must_use] 
+    pub const fn token_store(&self) -> &TokenStore {
         &self.tokens
     }
 
+    #[must_use] 
     pub fn library_root(&self) -> &Path {
         &self.library_root
     }
@@ -90,6 +94,7 @@ impl Session {
     /// Whether a session is stored. Not whether it is still valid — that is
     /// only knowable by spending a request, and the caller's next step (start
     /// the flow, or try and refresh) is the same either way.
+    #[must_use] 
     pub fn is_signed_in(&self) -> bool {
         matches!(self.tokens.load(), Ok(Some(_)))
     }
@@ -109,6 +114,7 @@ impl Session {
     /// between a file we may re-fetch and one we must never touch. The name is
     /// sanitised because it comes from a public catalog: a creator-supplied
     /// name containing a separator would otherwise choose its own directory.
+    #[must_use] 
     pub fn destination(&self, tone_id: &str, filename: &str) -> PathBuf {
         self.library_root
             .join("tone3000")

@@ -20,7 +20,7 @@ fn goertzel(buf: &[f64], freq: f64) -> f64 {
         s2 = s1;
         s1 = s0;
     }
-    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
 }
 
 fn tone(freq: f64, amplitude: f64, frames: usize) -> Vec<f64> {

@@ -28,3 +28,12 @@ disallowed-methods = [
 # Anything above this is a heap allocation the audio thread cannot afford to
 # make per block. Tuned to the largest scratch a DSP node legitimately keeps.
 too-large-for-stack = 4096
+
+# Fast prototyping belongs in tests, so panicking is allowed there. Note that
+# `allow-panic-in-tests` does NOT cover `panic_in_result_fn` — a test fn that
+# returns Result and asserts still trips it; the fix is to drop the Result
+# return type, never to allow the lint.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true

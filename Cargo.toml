@@ -909,38 +909,32 @@ private_intra_doc_links = "allow"
 redundant_explicit_links = "allow"
 
 [workspace.lints.clippy]
-field_reassign_with_default = "allow"
-redundant_closure = "allow"
-nonminimal_bool = "allow"
-clone_on_copy = "allow"
-useless_vec = "allow"
-type_complexity = "allow"
-# from the dissolved daw workspace
-manual_clamp = "allow"
-needless_range_loop = "allow"
-not_unsafe_ptr_arg_deref = "allow"
-only_used_in_recursion = "allow"
-unnecessary_sort_by = "allow"
-unusual_byte_groupings = "allow"
-# from the dissolved session workspace
-manual_c_str_literals = "allow"
-branches_sharing_code = "allow"
-needless_borrow = "allow"
-needless_borrows_for_generic_args = "allow"
-collapsible_if = "allow"
-map_clone = "allow"
-unnecessary_map_or = "allow"
-if_same_then_else = "allow"
-redundant_locals = "allow"
-# from the dissolved keyflow workspace
-large_enum_variant = "allow"
-explicit_counter_loop = "allow"
-manual_strip = "allow"
-too_many_arguments = "allow"
-double_must_use = "allow"
-vec_init_then_push = "allow"
-collapsible_match = "allow"
-filter_next = "allow"
+# The strict policy (namtao.com/rust), adopted 2026-09-02. There is NO
+# blanket allow-list under this block, and that absence is the point: the
+# curated legacy allows this replaced are WHY the violations accumulated.
+# A lint that fires gets a real rewrite, never a suppression.
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+
+# Panics — every one of these is a crash the type system could have caught.
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
+unreachable = "deny"
+unimplemented = "deny"
+unchecked_time_subtraction = "deny"
+todo = "deny"
+string_slice = "deny"
+panic_in_result_fn = "deny"
+panic = "deny"
+exit = "deny"
+as_conversions = "deny"
+
+# Suppressions must be deliberate and self-deleting: `#[expect(.., reason = "..")]`
+# fails the build once it stops being needed, `#[allow]` rots silently.
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
 
 # ── Dev profile (carried from the dissolved signal workspace) ──────────
 # The live rig runs from `fasttrackstudio --engine` (formerly signal-engine/signal-rigd): the vendored NAM C++
@@ -1108,3 +1102,4 @@ opt-level = 3
 # COOP/COEP headers that unlock SharedArrayBuffer. Developing against the
 # local checkout per CLAUDE.md; the release path is: land in architect,
 # tag, bump the rev here, delete this block.
+

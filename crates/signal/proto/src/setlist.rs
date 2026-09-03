@@ -27,7 +27,7 @@ crate::impl_collection! {
 }
 
 /// A setlist entry variant pointing to a song.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct SetlistEntry {
     pub id: SetlistEntryId,
     pub name: String,
@@ -98,6 +98,7 @@ impl Setlist {
         self.entries.push(entry);
     }
 
+    #[must_use] 
     pub fn entry(&self, id: &SetlistEntryId) -> Option<&SetlistEntry> {
         self.entries.iter().find(|e| &e.id == id)
     }

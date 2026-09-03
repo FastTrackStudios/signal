@@ -28,13 +28,14 @@ pub enum BlockDetailTab {
 }
 
 impl BlockDetailTab {
-    pub const ALL: &'static [BlockDetailTab] = &[
+    pub const ALL: &'static [Self] = &[
         Self::CustomGui,
         Self::RawParams,
         Self::Macros,
         Self::Modulation,
     ];
 
+    #[must_use] 
     pub const fn label(self) -> &'static str {
         match self {
             Self::CustomGui => "Custom",
@@ -53,10 +54,10 @@ pub struct BlockDetailPanelProps {
     /// Block type for color theming.
     #[props(default)]
     pub block_type: signal_proto::BlockType,
-    /// Callback when a parameter value changes: (param_id, new_value).
+    /// Callback when a parameter value changes: (`param_id`, `new_value`).
     #[props(default)]
     pub on_param_change: Option<EventHandler<(String, f32)>>,
-    /// Callback when a macro knob value changes: (knob_id, new_value).
+    /// Callback when a macro knob value changes: (`knob_id`, `new_value`).
     #[props(default)]
     pub on_macro_change: Option<EventHandler<(String, f32)>>,
     /// Callback to save the block.
@@ -166,7 +167,7 @@ pub fn BlockDetailPanel(props: BlockDetailPanelProps) -> Element {
                     },
                     BlockDetailTab::Modulation => rsx! {
                         BlockModulation {
-                            block: props.block.clone(),
+                            block: props.block,
                         }
                     },
                 }

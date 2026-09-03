@@ -297,8 +297,8 @@ fn region_envelope(r: &SpectralRegion, hz: f64) -> f64 {
             let a = 10.0f64.powf(-depth / 40.0);
             let qs = (r.q * SPECTRAL_Q_SCALE).max(0.02);
             let u = 1.0 / ratio - ratio;
-            let num = u * u + (a / qs) * (a / qs);
-            let den = u * u + 1.0 / (a * qs) / (a * qs);
+            let num = a * u + (a / qs) * (a / qs);
+            let den = a * u + 1.0 / (a * qs) / (a * qs);
             let db = 10.0 * (num / den).max(1.0e-30).log10();
             (db / -depth).clamp(0.0, 1.0)
         }
@@ -842,8 +842,8 @@ mod tests {
     /// Deterministic noise.
     fn noise(seed: &mut u64) -> f64 {
         *seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         ((*seed >> 33) as f64 / (1u64 << 31) as f64) - 1.0
     }
 

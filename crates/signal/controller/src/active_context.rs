@@ -16,7 +16,7 @@ use signal_proto::{profile::ProfileId, rig::RigId, song::SongId};
 /// - `Profile` → activate the Nth patch
 /// - `Rig` → switch to the Nth scene
 /// - `Song` → jump to the Nth section
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ActiveContext {
     /// No context active — variation actions are no-ops.
     #[default]
@@ -46,23 +46,24 @@ pub enum ActiveContext {
 
 impl ActiveContext {
     /// Get the 0-based active variation index, if any context is set.
-    pub fn active_index(&self) -> Option<usize> {
+    #[must_use] 
+    pub const fn active_index(&self) -> Option<usize> {
         match self {
-            ActiveContext::None => None,
-            ActiveContext::Profile { active_index, .. }
-            | ActiveContext::Rig { active_index, .. }
-            | ActiveContext::Song { active_index, .. } => Some(*active_index),
+            Self::None => None,
+            Self::Profile { active_index, .. }
+            | Self::Rig { active_index, .. }
+            | Self::Song { active_index, .. } => Some(*active_index),
         }
     }
 
     /// Set the active variation index within the current context.
     /// Returns `false` if context is `None`.
-    pub fn set_active_index(&mut self, index: usize) -> bool {
+    pub const fn set_active_index(&mut self, index: usize) -> bool {
         match self {
-            ActiveContext::None => false,
-            ActiveContext::Profile { active_index, .. }
-            | ActiveContext::Rig { active_index, .. }
-            | ActiveContext::Song { active_index, .. } => {
+            Self::None => false,
+            Self::Profile { active_index, .. }
+            | Self::Rig { active_index, .. }
+            | Self::Song { active_index, .. } => {
                 *active_index = index;
                 true
             }
@@ -70,8 +71,9 @@ impl ActiveContext {
     }
 
     /// Returns `true` if no context is set.
-    pub fn is_none(&self) -> bool {
-        matches!(self, ActiveContext::None)
+    #[must_use] 
+    pub const fn is_none(&self) -> bool {
+        matches!(self, Self::None)
     }
 }
 
@@ -85,6 +87,7 @@ pub struct ActiveContextState {
 
 impl ActiveContextState {
     /// Read the current context.
+    #[must_use] 
     pub fn get(&self) -> ActiveContext {
         self.inner.read().expect("lock poisoned").clone()
     }
@@ -96,6 +99,7 @@ impl ActiveContextState {
 
     /// Update the active index within the current context.
     /// Returns `false` if context is `None`.
+    #[must_use] 
     pub fn set_active_index(&self, index: usize) -> bool {
         self.inner
             .write()

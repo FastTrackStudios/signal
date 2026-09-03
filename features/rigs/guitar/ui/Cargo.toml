@@ -11,6 +11,9 @@ authors.workspace = true
 # signal domain, no platform I/O. Consumed by signal-ui (desktop) and
 # apps/web (browser) alike.
 
+[lints]
+workspace = true
+
 [dependencies]
 dioxus.workspace = true
 # Shared audio-gui widgets (knob + arc geometry) — one copy for every rig UI.

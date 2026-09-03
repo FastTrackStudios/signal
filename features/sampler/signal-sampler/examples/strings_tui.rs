@@ -87,12 +87,12 @@ fn main() -> eyre::Result<()> {
     let css_root = PathBuf::from(arg(&args, "--lib").unwrap_or_else(|| CSS_ROOT.to_string()));
     let section = arg(&args, "--section").unwrap_or_else(|| "1st Violins".to_string());
     // The per-section zone spec carries the actual sample paths.
-    let spec_path = arg(&args, "--spec").map(PathBuf::from).unwrap_or_else(|| {
+    let spec_path = arg(&args, "--spec").map_or_else(|| {
         css_root
             .join("_patches")
             .join(&section)
             .join("library.styx")
-    });
+    }, PathBuf::from);
     let mut mic_idx = MICS
         .iter()
         .position(|m| Some(*m) == arg(&args, "--mic").as_deref())
@@ -124,9 +124,7 @@ fn main() -> eyre::Result<()> {
     // Load the zones WITH the descriptive engine config so articulations,
     // keyswitches and CC58 work. Falls back to zones-only if the config is
     // missing (articulation switching then disabled).
-    let config_path = arg(&args, "--config")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(CSS_CONFIG));
+    let config_path = arg(&args, "--config").map_or_else(|| PathBuf::from(CSS_CONFIG), PathBuf::from);
     if config_path.exists() {
         rig.load_instrument_with_config(
             INSTRUMENT_ID,
@@ -276,7 +274,7 @@ fn note_name(note: u8) -> String {
     const NAMES: [&str; 12] = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
     ];
-    let octave = note as i32 / 12 - 1;
+    let octave = i32::from(note) / 12 - 1;
     format!("{}{}", NAMES[note as usize % 12], octave)
 }
 
@@ -318,7 +316,7 @@ impl WarmJob {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn run(
     term: &mut ratatui::DefaultTerminal,
     rig: &SamplerRig,
@@ -356,7 +354,7 @@ fn run(
                 attack_ms,
                 release_ms,
                 &warm,
-            )
+            );
         })?;
 
         if live_artic != last_artic || MICS[*mic_idx] != last_mic {
@@ -392,7 +390,7 @@ fn run(
                     }
                     // Cycle the MIDI input device: drop the old connection, open
                     // the next. `I` goes backwards.
-                    KeyCode::Char('i') | KeyCode::Char('I') => {
+                    KeyCode::Char('i' | 'I') => {
                         let n = midi_choices.len();
                         *midi_idx = if k.code == KeyCode::Char('I') {
                             (*midi_idx + n - 1) % n
@@ -435,7 +433,7 @@ fn rearm(rig: &SamplerRig, prev: &WarmJob) -> WarmJob {
     WarmJob::spawn(rig)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn ui(
     f: &mut Frame,
     rig: &SamplerRig,
@@ -604,7 +602,7 @@ fn meter_color(db: f64) -> Color {
 }
 
 /// Point stderr at `$TMPDIR/fts-signal-rig.log` so stray engine/library logs
-/// can't scribble over the ratatui render (it owns stdout). Mirrors guitar_tui.
+/// can't scribble over the ratatui render (it owns stdout). Mirrors `guitar_tui`.
 fn redirect_stderr_to_log() {
     use std::os::fd::AsRawFd;
     let path = std::env::temp_dir().join("fts-signal-rig.log");

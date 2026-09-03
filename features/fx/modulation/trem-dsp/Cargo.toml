@@ -6,6 +6,9 @@ authors.workspace = true
 license.workspace = true
 description = "Tremolo DSP engine — amplitude modulation with pattern/LFO control"
 
+[lints]
+workspace = true
+
 [dependencies]
 audiocore-dsp = { workspace = true }
 fts-modulation = { workspace = true }

@@ -70,7 +70,7 @@ fn web_bundle() -> Option<WebBundle> {
     {
         let exe_dir = std::env::current_exe()
             .ok()
-            .and_then(|p| p.parent().map(|d| d.to_path_buf()))?;
+            .and_then(|p| p.parent().map(std::path::Path::to_path_buf))?;
         let candidates = [
             // Legacy deployed layout: bundle beside the binary.
             exe_dir.join("signal-web"),
@@ -88,7 +88,7 @@ fn web_bundle() -> Option<WebBundle> {
 
 /// If the desktop app spawned this engine (it sets `FTS_SUPERVISOR_PID`), poll
 /// that pid and exit when it disappears — the cross-platform guarantee that
-/// closing the app takes its engine down too, even when the app is SIGKILLed
+/// closing the app takes its engine down too, even when the app is `SIGKILLed`
 /// and never gets to reap us. No-op when run standalone (systemd unit,
 /// `fts signal engine`, or a manual `--engine`): no supervisor, nothing to
 /// watch, so those lifetimes are unaffected.

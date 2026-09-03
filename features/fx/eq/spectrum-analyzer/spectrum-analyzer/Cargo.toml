@@ -16,6 +16,9 @@ description = "Spectrum analyzer feature facade for FTS-EQ"
 # The audio engine (eq-plugin, eq-standalone) depends on this with default
 # features (dsp only). The GUI (eq-ui) enables `ui`.
 
+[lints]
+workspace = true
+
 [features]
 default = ["dsp"]
 dsp = ["dep:spectrum-analyzer-dsp"]

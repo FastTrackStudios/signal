@@ -1,4 +1,4 @@
-//! FastTrackStudio — the unified app.
+//! `FastTrackStudio` — the unified app.
 //!
 //! One binary over the whole stack: chart writing (keyflow), setlist
 //! creation, daw integration (Session domain) and the live guitar rig
@@ -31,7 +31,7 @@ mod engine_watch;
 mod engines;
 /// In-memory log ring (tracing capture + panic hook) — rendered by the
 /// keys Logs tab on the phone, harmless elsewhere.
-#[allow(dead_code)]
+#[expect(dead_code)]
 #[cfg(not(target_arch = "wasm32"))]
 mod log_ring;
 mod prefs;
@@ -40,12 +40,12 @@ mod prefs;
 /// Pack downloads — list + fetch `.signalpack`s from a pack host (the
 /// studio engine or a hosted mirror) over the shared remote plumbing.
 /// (Dead-code allowed: only the iOS keys shell drives it today.)
-#[allow(dead_code)]
+#[expect(dead_code)]
 #[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
 mod pack_client;
 /// (Dead-code allowed: which of these dialers get used depends on which rig
 /// surfaces are compiled in — the guitar-only phone build needs a subset.)
-#[allow(dead_code)]
+#[expect(dead_code)]
 #[cfg(any(feature = "signal", feature = "signal-guitar"))]
 mod remote;
 #[cfg(feature = "signal")]
@@ -53,7 +53,7 @@ mod rig_view;
 /// The instrument menu — the app's front door, shared by the desktop
 /// workspace and the phone shell. (Dead-code allowed: a `signal-guitar`-only
 /// build that is not iOS compiles neither shell that renders it.)
-#[allow(dead_code)]
+#[expect(dead_code)]
 #[cfg(any(feature = "signal", feature = "signal-guitar"))]
 mod rigs;
 // Browser keys rig (/rigs/keys/:profile): the keys AudioWorklet + streamed
@@ -104,7 +104,7 @@ mod mobile_view;
 /// child); desktop uses it by default because a rig that needs a second
 /// process and a free port to make a sound is a worse default than one that
 /// just plays. The supervised child is still there behind a preference.
-#[allow(dead_code)]
+#[expect(dead_code)]
 #[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
 mod rig_engine;
 
@@ -329,13 +329,12 @@ impl Workspace {
         Self::all()
             .into_iter()
             .find(|(w, _)| *w == self)
-            .map(|(_, l)| l)
-            .unwrap_or("?")
+            .map_or("?", |(_, l)| l)
     }
 
     /// The rail glyph. The rail is icon-only, so this is how a workspace is
     /// recognised — labels are tooltips.
-    fn icon(self) -> fts_chrome::Icon {
+    const fn icon(self) -> fts_chrome::Icon {
         match self {
             #[cfg(feature = "signal")]
             Self::Signal => fts_chrome::Icon::Signal,
@@ -468,7 +467,7 @@ fn App() -> Element {
                             (
                                 label.to_string(),
                                 w == here,
-                                Callback::new(move |_| go.call(w)),
+                                Callback::new(move |()| go.call(w)),
                             )
                         })
                         .collect(),
@@ -490,7 +489,7 @@ fn App() -> Element {
                 label,
                 w.icon(),
                 current() == Some(w),
-                Callback::new(move |_| go.call(w)),
+                Callback::new(move |()| go.call(w)),
             )
         })
         .collect();
@@ -518,8 +517,8 @@ fn App() -> Element {
                         }
                     },
                     trailing: rsx! { WindowControls {} },
-                    on_drag: move |_| drag_window(),
-                    on_expand: move |_| toggle_maximize(),
+                    on_drag: move |()| drag_window(),
+                    on_expand: move |()| toggle_maximize(),
                 }
             },
             rail: rsx! {
@@ -577,18 +576,18 @@ fn WindowControls() -> Element {
             WindowButton {
                 icon: Icon::Minimize,
                 title: "Minimize".to_string(),
-                on_click: move |_| dioxus::desktop::window().set_minimized(true),
+                on_click: move |()| dioxus::desktop::window().set_minimized(true),
             }
             WindowButton {
                 icon: Icon::Maximize,
                 title: "Maximize".to_string(),
-                on_click: move |_| toggle_maximize(),
+                on_click: move |()| toggle_maximize(),
             }
             WindowButton {
                 icon: Icon::Close,
                 title: "Close".to_string(),
                 danger: true,
-                on_click: move |_| dioxus::desktop::window().close(),
+                on_click: move |()| dioxus::desktop::window().close(),
             }
         }
     }
@@ -753,7 +752,7 @@ fn EnginesArea() -> Element {
 
 #[component]
 fn SettingsPanel() -> Element {
-    #[allow(unused_mut)]
+    #[expect(unused_mut)]
     let mut update_msg = use_signal(String::new);
 
     rsx! {

@@ -42,11 +42,11 @@ fn power_at(buf: &[f32], freq: f64) -> f64 {
     let coeff = 2.0 * w.cos();
     let (mut s1, mut s2) = (0.0f64, 0.0f64);
     for &x in buf {
-        let s0 = x as f64 + coeff * s1 - s2;
+        let s0 = f64::from(x) + coeff * s1 - s2;
         s2 = s1;
         s1 = s0;
     }
-    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
 }
 
 /// Phase of the Goertzel bin at `freq`, in degrees.
@@ -59,8 +59,8 @@ fn phase_at(buf: &[f32], freq: f64) -> f64 {
     let (mut re, mut im) = (0.0f64, 0.0f64);
     for (i, &x) in buf.iter().enumerate() {
         let a = w * i as f64;
-        re += x as f64 * a.cos();
-        im -= x as f64 * a.sin();
+        re += f64::from(x) * a.cos();
+        im -= f64::from(x) * a.sin();
     }
     im.atan2(re).to_degrees()
 }
@@ -92,7 +92,7 @@ fn noise(amplitude: f64, frames: usize) -> Vec<f32> {
 
 /// Pro-Q's normalized Q for a real Q.
 fn proq_q(q: f64) -> f32 {
-    ((q / 0.025).ln() / (40.0f64 / 0.025).ln()) as f32
+    (q / 0.025).log(40.0f64 / 0.025) as f32
 }
 
 /// Pro-Q's normalized threshold for a dB value — the inverse of the
@@ -108,7 +108,7 @@ fn proq_threshold(db: f64) -> f32 {
 }
 
 /// One band of Pro-Q state, everything else unused.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn proq_state(
     freq: f64,
     q: f64,
@@ -206,12 +206,9 @@ fn main() {
     let auto = std::env::args().any(|a| a == "--auto");
     let use_noise = std::env::args().any(|a| a == "--noise");
 
-    let mut plugin = match HostedPlugin::load(&plugin_path) {
-        Ok(Some(p)) => p,
-        _ => {
-            eprintln!("{plugin_path}: could not load");
-            std::process::exit(1);
-        }
+    let mut plugin = if let Ok(Some(p)) = HostedPlugin::load(&plugin_path) { p } else {
+        eprintln!("{plugin_path}: could not load");
+        std::process::exit(1);
     };
     plugin.prepare(SR, BLOCK as u32).expect("prepare");
 
@@ -221,7 +218,7 @@ fn main() {
     let native_shape = match proq_shape as i32 {
         2 => 3.0,
         3 => 2.0,
-        other => other as f64,
+        other => f64::from(other),
     };
     let static_gain = num("--gain", 0.0);
     // Pro-Q placement: 0 Left, 1 Right, 2 Stereo, 3 Mid, 4 Side — verified
@@ -232,7 +229,7 @@ fn main() {
         0 => 1.0,
         1 => 2.0,
         2 => 0.0,
-        other => other as f64,
+        other => f64::from(other),
     };
     // Pro-Q's slope index: 0..9 are 0/6/12/18/24/30/36/48/72/96 dB per octave
     // and 10 is Brickwall — which is not "96 and a bit". Left at the default
@@ -308,7 +305,7 @@ fn main() {
     // match a static curve exactly and still measure a decibel or two out on
     // noise.
     if std::env::args().any(|a| a == "--ballistics") {
-        let quiet = 10.0f64.powf(-60.0 / 20.0);
+        let quiet = 10.0f64.powi(-3);
         let loud = 10.0f64.powf(-6.0 / 20.0);
         // 0.3 s quiet, then 0.7 s loud, then 0.7 s quiet again.
         let seg = |amp: f64, secs: f64| tone(freq, amp, (SR * secs) as usize);
@@ -451,7 +448,7 @@ fn main() {
                 worst = d.abs();
             }
             println!("  {probe:>7.0}  {r:>9.2}  {o:>9.2}  {d:>9.2}");
-            probe *= 2.0f64.powf(1.0 / steps);
+            probe *= (1.0 / steps).exp2();
         }
         println!(
             "\nworst difference {worst:.2} {}",

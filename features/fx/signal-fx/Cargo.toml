@@ -5,6 +5,9 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 description = "Built-in FX for signal — PluginInstance wrappers over the vendored FX DSP cores (eq-dsp, comp-dsp, …)."
 
+[lints]
+workspace = true
+
 [dependencies]
 fts-sample = { workspace = true, features = ["load"] }
 signal-plugin-host = { workspace = true }

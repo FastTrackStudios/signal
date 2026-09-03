@@ -12,7 +12,7 @@ use trigger_dsp::velocity::{VelocityCurve, VelocityMapper};
 
 const SR: f64 = 48_000.0;
 
-fn config() -> AudioConfig {
+const fn config() -> AudioConfig {
     AudioConfig {
         sample_rate: SR,
         max_buffer_size: 512,
@@ -66,7 +66,7 @@ fn sub_threshold_noise_never_fires() {
     let mut det = detector();
     // A steady tone well under the -30 dB threshold (~-46 dBFS).
     let buf: Vec<f64> = (0..24_000)
-        .map(|i| 0.005 * (i as f64 * 0.05).sin())
+        .map(|i| 0.005 * (f64::from(i) * 0.05).sin())
         .collect();
     assert!(collect_hits(&mut det, &buf).is_empty());
 }

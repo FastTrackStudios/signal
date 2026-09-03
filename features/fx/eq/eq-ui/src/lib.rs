@@ -1,7 +1,7 @@
 //! EQ GUI — Dioxus components for the EQ plugin.
 //!
 //! Hosts the EQ-specific Dioxus root component, the EQ graph viz, the
-//! nice_plug parameter tree, and the bridging glue from `nice_plug` parameters
+//! `nice_plug` parameter tree, and the bridging glue from `nice_plug` parameters
 //! to [`fts_audio_ui`] widgets. EQ-specific visualizations live here. General-
 //! purpose widgets (knobs, sliders, meters) come from [`fts_audio_ui`];
 //! general layout primitives come from [`architect_ui`].
@@ -11,8 +11,8 @@
 //! - [`faces`]: one front panel per hardware model — Pultec, SSL, API, 1073 —
 //!   drawn from the shared kit in [`fts_audio_ui::hardware`]
 //! - [`profile_view`]: profile-driven layouts (Pultec knob layout, etc.)
-//! - [`params`]: nice_plug parameter tree + shared UI state
-//! - [`param_adapter`]: nice_plug `ParamPtr` → [`fts_audio_ui::ParamHandle`]
+//! - [`params`]: `nice_plug` parameter tree + shared UI state
+//! - [`param_adapter`]: `nice_plug` `ParamPtr` → [`fts_audio_ui::ParamHandle`]
 
 // ── Portable core (compiles for wasm; the detached remotes build on it) ──
 pub mod cheatsheet;

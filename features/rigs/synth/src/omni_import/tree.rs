@@ -20,14 +20,14 @@ use signal_sampler::rig_node::Container;
 
 // ── Patch → composition tree ─────────────────────────────────────────────────
 
-pub(crate) const LAYER_NAMES: [&str; 4] = ["Layer A", "Layer B", "Layer C", "Layer D"];
+pub const LAYER_NAMES: [&str; 4] = ["Layer A", "Layer B", "Layer C", "Layer D"];
 
 fn fx_rack_from(name: &str, types: &[String]) -> Container {
     let mut rack = Container::module(name);
     for slot in 0..4 {
         let label = types
             .get(slot)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             .filter(|s| !s.is_empty() && *s != "No Effect");
         rack = match label {
             // Realize to native DSP when we recognize the unit; otherwise keep
@@ -45,7 +45,7 @@ fn fx_rack_from(name: &str, types: &[String]) -> Container {
 /// Returns `(layer_index, source, target, depth)` — `layer_index` scopes the
 /// route to a layer (`A freq` targets Layer A's filter); part-wide routes use
 /// the layer the target names.
-pub(crate) fn translate_route(
+pub fn translate_route(
     route: &OmniModRoute,
     filter_labels: &[String],
 ) -> Option<(usize, String, String, f32)> {
@@ -190,40 +190,37 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             }
             osc.add(wt)
         } else {
-            match index.find(&layer.soundsource) {
-                Some(spec) => {
-                    // Sample mode: unison + amp attack/release ride the
-                    // Sampler block (the engine handles them at trigger time;
-                    // decay/sustain need a full per-voice ADSR — pending).
-                    let mut sb = RigBlock::sample_lib(spec.to_string_lossy().to_string())
-                        .named(&layer.soundsource);
-                    if layer.unison_count > 1 {
-                        sb = sb
-                            .with_param("unison_voices", layer.unison_count.to_string())
-                            // Calibrated: udpth → ~185 cents total spread (measured
-                            // 189/184/182 across a 3-point sweep). Our param is
-                            // cents/100, so scale by 1.85.
-                            .with_param(
-                                "unison_detune",
-                                format!("{:.4}", layer.unison_detune * 1.85),
-                            )
-                            .with_param("unison_width", format!("{:.4}", layer.unison_width));
-                    }
-                    if let Some((a, _d, _s, r)) = layer.amp_env {
-                        sb = sb
-                            .with_param("amp_attack", format!("{a:.4}"))
-                            .with_param("amp_release", format!("{r:.4}"));
-                    }
-                    osc.add(sb)
+            if let Some(spec) = index.find(&layer.soundsource) {
+                // Sample mode: unison + amp attack/release ride the
+                // Sampler block (the engine handles them at trigger time;
+                // decay/sustain need a full per-voice ADSR — pending).
+                let mut sb = RigBlock::sample_lib(spec.to_string_lossy().to_string())
+                    .named(&layer.soundsource);
+                if layer.unison_count > 1 {
+                    sb = sb
+                        .with_param("unison_voices", layer.unison_count.to_string())
+                        // Calibrated: udpth → ~185 cents total spread (measured
+                        // 189/184/182 across a 3-point sweep). Our param is
+                        // cents/100, so scale by 1.85.
+                        .with_param(
+                            "unison_detune",
+                            format!("{:.4}", layer.unison_detune * 1.85),
+                        )
+                        .with_param("unison_width", format!("{:.4}", layer.unison_width));
                 }
-                None => {
-                    tracing::warn!(
-                        soundsource = %layer.soundsource,
-                        library = %layer.ss_library,
-                        "omni import: soundsource not in the local extraction — placeholder"
-                    );
-                    osc.block(BlockType::Sampler, &layer.soundsource)
+                if let Some((a, _d, _s, r)) = layer.amp_env {
+                    sb = sb
+                        .with_param("amp_attack", format!("{a:.4}"))
+                        .with_param("amp_release", format!("{r:.4}"));
                 }
+                osc.add(sb)
+            } else {
+                tracing::warn!(
+                    soundsource = %layer.soundsource,
+                    library = %layer.ss_library,
+                    "omni import: soundsource not in the local extraction — placeholder"
+                );
+                osc.block(BlockType::Sampler, &layer.soundsource)
             }
         };
         // The oscillator sub-modules chain in SERIES after the source. The LIVE

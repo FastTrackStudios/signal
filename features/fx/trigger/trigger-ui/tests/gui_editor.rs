@@ -112,7 +112,7 @@ mod support {
 
     /// Root component: the real editor `App`, plus its stylesheets re-hosted
     /// as body `<style>` elements (see module docs — `document::Style` head
-    /// elements are dropped by the headless harness's NoOpDocument fallback).
+    /// elements are dropped by the headless harness's `NoOpDocument` fallback).
     #[component]
     pub fn Harness() -> Element {
         rsx! {
@@ -149,7 +149,7 @@ mod support {
         // Seed the display: a ramp of audible peaks + two hits with distinct
         // velocities inside the visible window.
         for k in 0..256u32 {
-            ui_state.input_wave.push(0.05 + 0.9 * (k as f32 / 255.0));
+            ui_state.input_wave.push(0.9f32.mul_add(k as f32 / 255.0, 0.05));
         }
         ui_state.hits.push(200, 0.9);
         ui_state.hits.push(250, 0.4);
@@ -173,7 +173,7 @@ mod support {
 
     impl Fixture {
         /// Document-space origin of the analysis-waveform interaction
-        /// surface. The graph container is pinned to GRAPH_H CSS px, so
+        /// surface. The graph container is pinned to `GRAPH_H` CSS px, so
         /// element y IS viewBox y — points computed with
         /// `db_to_y(.., GRAPH_H)` plus this origin land exactly where the
         /// component hit-tests them.
@@ -272,7 +272,7 @@ async fn editor_mounts_headless_with_waveform_and_controls() -> dioxus_test::Res
     let (w, h) = el.size();
     assert!(w > 300.0, "graph too narrow: {w}px");
     assert!(
-        (h as f64 - GRAPH_H).abs() < 1.0,
+        (f64::from(h) - GRAPH_H).abs() < 1.0,
         "graph height {h}px != pinned {GRAPH_H}px — pointer↔viewBox mapping broken"
     );
 
@@ -304,9 +304,9 @@ async fn editor_mounts_headless_with_waveform_and_controls() -> dioxus_test::Res
     Ok(())
 }
 
-/// THE drag test: grab the threshold line (drawn at db_to_y(−30 dB)) and
+/// THE drag test: grab the threshold line (drawn at `db_to_y(−30` dB)) and
 /// drag it 45 px down. The threshold must fall to the dB the pointer lands
-/// on (60 dB over GRAPH_H px), through recorded host gestures — begin, one
+/// on (60 dB over `GRAPH_H` px), through recorded host gestures — begin, one
 /// monotonically-falling set per move, end.
 #[tokio::test]
 async fn dragging_threshold_line_lowers_threshold_to_pointer_db() -> dioxus_test::Result<()> {
@@ -320,13 +320,13 @@ async fn dragging_threshold_line_lowers_threshold_to_pointer_db() -> dioxus_test
     );
 
     let (gx, gy) = fx.graph_origin();
-    let ty = db_to_y(before as f64, GRAPH_H); // 130 px for −30 dB
+    let ty = db_to_y(f64::from(before), GRAPH_H); // 130 px for −30 dB
     let (sx, sy) = (gx + 180.0, gy + ty);
 
     fx.tester.pointer_down(sx, sy);
     let _ = fx.tester.pump().await;
     for step in 1..=3 {
-        fx.tester.pointer_move(sx, sy + 15.0 * step as f64, true);
+        fx.tester.pointer_move(sx, 15.0f64.mul_add(f64::from(step), sy), true);
         let _ = fx.tester.pump().await;
     }
     fx.tester.pointer_up(sx, sy + 45.0);
@@ -395,7 +395,7 @@ async fn clicking_without_dragging_changes_nothing() -> dioxus_test::Result<()> 
     let before = tp.value();
 
     let (gx, gy) = fx.graph_origin();
-    let ty = db_to_y(before as f64, GRAPH_H);
+    let ty = db_to_y(f64::from(before), GRAPH_H);
 
     // Click ON the line: a grab, but no movement → begin/end only, no Set.
     fx.tester.pointer_down(gx + 180.0, gy + ty);

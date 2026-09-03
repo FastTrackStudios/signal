@@ -32,7 +32,7 @@
 use serde::Deserialize;
 use signal_sampler::{DocCc, DocNote, TempoPoint, TrackDocument};
 
-/// Env var pointing at a watched TrackDocument JSON file (dev-only).
+/// Env var pointing at a watched `TrackDocument` JSON file (dev-only).
 pub const DOC_ENV: &str = "SIGNAL_SAMPLER_CLAP_DOC";
 
 // Serde mirrors of the signal-sampler document types (which stay serde-free).
@@ -78,7 +78,7 @@ struct DocJson {
     tempo: Vec<TempoJson>,
 }
 
-/// Parse a TrackDocument from the dev JSON format.
+/// Parse a `TrackDocument` from the dev JSON format.
 pub fn parse_document_json(text: &str) -> eyre::Result<TrackDocument> {
     let d: DocJson = serde_json::from_str(text)?;
     Ok(TrackDocument {

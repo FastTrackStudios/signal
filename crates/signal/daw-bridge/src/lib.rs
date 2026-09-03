@@ -35,7 +35,7 @@
 //! - Depth-0 flat plugin -> standalone block
 //! - Depth-0 container -> Module (type inferred from `[M]`/`[B]` naming convention)
 //! - Parallel routing -> `SignalChain` with a `Split` node
-//! - Plugin names matched against the FabFilter registry and FTS naming conventions
+//! - Plugin names matched against the `FabFilter` registry and FTS naming conventions
 
 use daw::service::fx::tree::{FxNode, FxNodeKind, FxRoutingMode, FxTree};
 use signal_proto::plugin_block::FxRole;
@@ -71,7 +71,7 @@ pub struct InferredModule {
 pub struct InferredBlock {
     pub name: String,
     pub block_type: BlockType,
-    /// Raw REAPER plugin identifier (e.g. "CLAP: Pro-Q 4 (FabFilter)").
+    /// Raw REAPER plugin identifier (e.g. "CLAP: Pro-Q 4 (`FabFilter`)").
     pub plugin_name: String,
     pub enabled: bool,
 }
@@ -87,6 +87,7 @@ pub struct InferredBlock {
 ///   - Depth-1 **sub-container** → Block (multi-FX); its children are ignored
 /// - `FxRoutingMode::Parallel` → `SignalChain` with a `Split` node
 /// - `FxRoutingMode::Serial` → sequential `SignalChain`
+#[must_use] 
 pub fn infer_chain_from_fx_tree(tree: &FxTree) -> InferredChain {
     let mut modules = Vec::new();
     let mut standalone_blocks = Vec::new();
@@ -180,7 +181,7 @@ fn build_module_chain(children: &[FxNode], routing: &FxRoutingMode) -> (SignalCh
 /// Infer block type from REAPER plugin identifiers.
 ///
 /// Priority:
-/// 1. FabFilter registry (matches "CLAP: Pro-Q 4 (FabFilter)" etc.)
+/// 1. `FabFilter` registry (matches "CLAP: Pro-Q 4 (`FabFilter`)" etc.)
 /// 2. FTS naming convention ("EQ Block: ...")
 /// 3. Fallback → Custom
 fn infer_block_type(plugin_name: &str, display_name: &str) -> BlockType {
@@ -219,7 +220,7 @@ fn infer_block_type_from_name(container_name: &str) -> BlockType {
 /// Infer module type from a container name.
 ///
 /// Handles two naming conventions:
-/// - `"[M] DRIVE Module: Hype"` → parsed by FxRole::parse directly
+/// - `"[M] DRIVE Module: Hype"` → parsed by `FxRole::parse` directly
 /// - `"[M] Drive: Hype"` → strip prefix, parse type before `:`
 /// - `"DRIVE"` → synthetic "DRIVE Module: _" parse
 fn infer_module_type(container_name: &str) -> ModuleType {
@@ -254,7 +255,7 @@ fn strip_role_prefix(name: &str) -> &str {
         .unwrap_or(name)
 }
 
-/// Parse "Type: name" and return the BlockType from the prefix before `:`.
+/// Parse "Type: name" and return the `BlockType` from the prefix before `:`.
 fn parse_type_colon_prefix(s: &str) -> Option<BlockType> {
     let (type_part, _) = s.split_once(':')?;
     let prefix = type_part.trim();

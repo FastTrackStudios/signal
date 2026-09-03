@@ -2,6 +2,7 @@
 
 use super::eq_graph_model::{EqBand, EqBandShape};
 
+#[must_use] 
 pub fn calculate_combined_response(bands: &[EqBand], freq: f64, sample_rate: f64) -> f64 {
     let mut total_db = 0.0;
 
@@ -17,13 +18,13 @@ pub fn calculate_combined_response(bands: &[EqBand], freq: f64, sample_rate: f64
 
 fn biquad_magnitude_squared(coeff: &[f64; 6], w: f64) -> f64 {
     let w2 = w * w;
-    let denom_real = coeff[0] - coeff[2] * w2;
+    let denom_real = coeff[2].mul_add(-w2, coeff[0]);
     let denom_imag = coeff[1] * w;
-    let denominator = denom_real * denom_real + denom_imag * denom_imag;
+    let denominator = denom_real.mul_add(denom_real, denom_imag * denom_imag);
 
-    let numer_real = coeff[3] - coeff[5] * w2;
+    let numer_real = coeff[5].mul_add(-w2, coeff[3]);
     let numer_imag = coeff[4] * w;
-    let numerator = numer_real * numer_real + numer_imag * numer_imag;
+    let numerator = numer_real.mul_add(numer_real, numer_imag * numer_imag);
 
     if denominator > 1e-30 {
         numerator / denominator
@@ -150,10 +151,11 @@ fn cascaded_magnitude_db(freq: f64, f0: f64, order: usize, filter_type: &EqBandS
     10.0 * total_mag_sq.max(1e-30).log10()
 }
 
+#[must_use] 
 pub fn calculate_band_response(band: &EqBand, freq: f64, _sample_rate: f64) -> f64 {
-    let f0 = band.frequency as f64;
-    let gain = band.gain as f64;
-    let q = band.q as f64;
+    let f0 = f64::from(band.frequency);
+    let gain = f64::from(band.gain);
+    let q = f64::from(band.q);
 
     let w = 2.0 * std::f64::consts::PI * freq;
     let w0 = 2.0 * std::f64::consts::PI * f0;
@@ -195,7 +197,7 @@ pub fn calculate_band_response(band: &EqBand, freq: f64, _sample_rate: f64) -> f
             let mag_sq = biquad_magnitude_squared(&coeffs, w);
             let peak_mag_sq = biquad_magnitude_squared(&coeffs, w0);
             let normalized = mag_sq / peak_mag_sq.max(1e-30);
-            gain + 10.0 * normalized.max(1e-30).log10()
+            10.0f64.mul_add(normalized.max(1e-30).log10(), gain)
         }
         EqBandShape::TiltShelf | EqBandShape::FlatTilt => {
             let octaves = (freq / f0).log2();

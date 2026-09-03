@@ -4,7 +4,7 @@
 //! The output is a configurable mix of lowpass, bandpass, and highpass,
 //! allowing classic wah, mutron, and phaser-like tones.
 //!
-//! Techniques from: ZynAddSubFX (SVF topology), rkrlv2/RyanWah (mix mode,
+//! Techniques from: `ZynAddSubFX` (SVF topology), rkrlv2/RyanWah (mix mode,
 //! variable Q tracking, exponential frequency mapping).
 
 use std::f64::consts::PI;
@@ -24,12 +24,12 @@ pub enum WahMode {
 
 impl WahMode {
     /// LP, BP, HP mix weights for this mode.
-    fn mix_weights(&self) -> (f64, f64, f64) {
+    const fn mix_weights(&self) -> (f64, f64, f64) {
         match self {
-            WahMode::Classic => (0.2, 0.8, 0.0),
-            WahMode::Mutron => (0.0, 1.0, 0.0),
-            WahMode::Lowpass => (1.0, 0.2, 0.0),
-            WahMode::Phaser => (0.0, 0.5, 0.5),
+            Self::Classic => (0.2, 0.8, 0.0),
+            Self::Mutron => (0.0, 1.0, 0.0),
+            Self::Lowpass => (1.0, 0.2, 0.0),
+            Self::Phaser => (0.0, 0.5, 0.5),
         }
     }
 }
@@ -74,6 +74,7 @@ impl WahFilter {
     /// Exponential mapping base (from rkrlv2).
     const FREQ_BASE: f64 = 7.0;
 
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             mode: WahMode::Classic,
@@ -120,8 +121,8 @@ impl WahFilter {
         self.set_position(pos);
         if self.variq > 0.0 {
             // Q varies inversely with envelope: louder = less resonant
-            let q_scale = 2.0_f64.powf(2.0 * (1.0 - env_level) + 1.0);
-            let varied_q = self.q * (1.0 - self.variq) + q_scale * self.variq;
+            let q_scale = 2.0f64.mul_add(1.0 - env_level, 1.0).exp2();
+            let varied_q = self.q.mul_add(1.0 - self.variq, q_scale * self.variq);
             self.update_q(varied_q);
         }
     }
@@ -144,19 +145,20 @@ impl WahFilter {
             let s = &mut self.states[ch][stage];
 
             // Chamberlin SVF topology
-            s.low = audiocore_dsp::denormal::flush(s.low + self.f_coeff * s.band);
-            s.high = smp - s.low - self.q_coeff * s.band;
-            s.band = audiocore_dsp::denormal::flush(s.band + self.f_coeff * s.high);
+            s.low = audiocore_dsp::denormal::flush(self.f_coeff.mul_add(s.band, s.low));
+            s.high = self.q_coeff.mul_add(-s.band, smp - s.low);
+            s.band = audiocore_dsp::denormal::flush(self.f_coeff.mul_add(s.high, s.band));
 
             // Mix LP/BP/HP
-            smp = lp_gain * s.low + bp_gain * s.band + hp_gain * s.high;
+            smp = hp_gain.mul_add(s.high, lp_gain.mul_add(s.low, bp_gain * s.band));
         }
 
         smp
     }
 
     /// Get the current cutoff frequency.
-    pub fn freq(&self) -> f64 {
+    #[must_use] 
+    pub const fn freq(&self) -> f64 {
         self.current_freq
     }
 
@@ -175,7 +177,7 @@ impl Default for WahFilter {
 ///
 /// Three first-order lowpass smoothers in series create a 3rd-order
 /// characteristic with natural, lag-free response.
-/// Based on rkrlv2's RyanWah envelope smoothing (20ms time constant).
+/// Based on rkrlv2's `RyanWah` envelope smoothing (20ms time constant).
 pub struct TripleSmoother {
     s1: f64,
     s2: f64,
@@ -184,7 +186,8 @@ pub struct TripleSmoother {
 }
 
 impl TripleSmoother {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             s1: 0.0,
             s2: 0.0,
@@ -212,11 +215,12 @@ impl TripleSmoother {
         self.s3
     }
 
-    pub fn value(&self) -> f64 {
+    #[must_use] 
+    pub const fn value(&self) -> f64 {
         self.s3
     }
 
-    pub fn reset(&mut self, val: f64) {
+    pub const fn reset(&mut self, val: f64) {
         self.s1 = val;
         self.s2 = val;
         self.s3 = val;
@@ -260,7 +264,7 @@ mod tests {
         // Feed 1000 Hz sine — should pass well
         let mut energy_pass: f64 = 0.0;
         for i in 0..4800 {
-            let s = (2.0 * PI * 1000.0 * i as f64 / SR).sin();
+            let s = (2.0 * PI * 1000.0 * f64::from(i) / SR).sin();
             let out = f.tick(s, 0);
             energy_pass += out * out;
         }
@@ -269,7 +273,7 @@ mod tests {
         f.reset();
         let mut energy_reject: f64 = 0.0;
         for i in 0..4800 {
-            let s = (2.0 * PI * 100.0 * i as f64 / SR).sin();
+            let s = (2.0 * PI * 100.0 * f64::from(i) / SR).sin();
             let out = f.tick(s, 0);
             energy_reject += out * out;
         }
@@ -286,9 +290,9 @@ mod tests {
         f.update(SR);
 
         for i in 0..48000 {
-            let pos = i as f64 / 48000.0;
+            let pos = f64::from(i) / 48000.0;
             f.set_position(pos);
-            let s = (2.0 * PI * 440.0 * i as f64 / SR).sin();
+            let s = (2.0 * PI * 440.0 * f64::from(i) / SR).sin();
             let out = f.tick(s, 0);
             assert!(out.is_finite(), "NaN at sample {i}");
         }
@@ -389,7 +393,7 @@ mod tests {
         let mut energy1: f64 = 0.0;
         let mut energy2: f64 = 0.0;
         for i in 0..4800 {
-            let s = (2.0 * PI * 200.0 * i as f64 / SR).sin();
+            let s = (2.0 * PI * 200.0 * f64::from(i) / SR).sin();
             let o1 = f1.tick(s, 0);
             let o2 = f2.tick(s, 0);
             energy1 += o1 * o1;

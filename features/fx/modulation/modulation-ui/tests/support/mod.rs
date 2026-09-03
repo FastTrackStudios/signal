@@ -84,7 +84,7 @@ impl GuiContextInner for RecordingGuiContext {
 
 /// Root component: the real editor `App`, plus its stylesheets re-hosted
 /// as body `<style>` elements (see module docs — `document::Style` head
-/// elements are dropped by the headless harness's NoOpDocument fallback).
+/// elements are dropped by the headless harness's `NoOpDocument` fallback).
 #[component]
 pub fn Harness() -> Element {
     rsx! {
@@ -140,8 +140,8 @@ pub fn mount_with(params: Arc<ModParams>, width: u32, height: u32) -> Fixture {
         // mount has no window, so state the size explicitly — without it
         // every mount looks like the design size and nothing scales.
         .with_root_context(fts_audio_ui::hardware::panel::EditorSize(
-            width as f64,
-            height as f64,
+            f64::from(width),
+            f64::from(height),
         ))
         .with_root_context(param_ctx)
         .with_root_context(SharedState::new(Arc::new(ModUi {
@@ -160,7 +160,7 @@ pub fn mount_with(params: Arc<ModParams>, width: u32, height: u32) -> Fixture {
 
 impl Fixture {
     /// Let the editor re-render *and* re-lay-out after a change: `pump()`
-    /// drives the VirtualDom but does not recompute layout, so anything it
+    /// drives the `VirtualDom` but does not recompute layout, so anything it
     /// creates keeps a 0x0 box until the document is resolved.
     pub async fn settle(&mut self) {
         for _ in 0..10 {
@@ -181,7 +181,7 @@ impl Fixture {
             .unwrap_or_else(|e| panic!("rail entry {id} not in DOM: {e:?}"));
         let (ox, oy) = el.document_origin();
         let (w, h) = el.size();
-        let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+        let (x, y) = (ox + f64::from(w) / 2.0, oy + f64::from(h) / 2.0);
         self.tester.pointer_down(x, y);
         let _ = self.tester.pump().await;
         self.tester.pointer_up(x, y);

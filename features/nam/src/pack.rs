@@ -68,22 +68,24 @@ pub enum PackCategory {
 }
 
 impl PackCategory {
-    pub fn as_str(&self) -> &'static str {
+    #[must_use] 
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            PackCategory::Amp => "amp",
-            PackCategory::Drive => "drive",
-            PackCategory::Ir => "ir",
-            PackCategory::Archetype => "archetype",
+            Self::Amp => "amp",
+            Self::Drive => "drive",
+            Self::Ir => "ir",
+            Self::Archetype => "archetype",
         }
     }
 
     /// The subdirectory in signal-library/nam/ for this category.
-    pub fn directory(&self) -> &'static str {
+    #[must_use] 
+    pub const fn directory(&self) -> &'static str {
         match self {
-            PackCategory::Amp => "amps",
-            PackCategory::Drive => "drives",
-            PackCategory::Ir => "ir",
-            PackCategory::Archetype => "archetypes",
+            Self::Amp => "amps",
+            Self::Drive => "drives",
+            Self::Ir => "ir",
+            Self::Archetype => "archetypes",
         }
     }
 }
@@ -115,10 +117,10 @@ pub fn load_packs(packs_dir: &Path) -> Result<Vec<PackDefinition>, NamError> {
     }
 
     let mut entries: Vec<_> = std::fs::read_dir(packs_dir)?
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
         .collect();
-    entries.sort_by_key(|e| e.path());
+    entries.sort_by_key(std::fs::DirEntry::path);
 
     for entry in entries {
         let contents = std::fs::read_to_string(entry.path())?;
@@ -131,7 +133,8 @@ pub fn load_packs(packs_dir: &Path) -> Result<Vec<PackDefinition>, NamError> {
     Ok(packs)
 }
 
-/// Build a TagSet from a pack definition for a specific file.
+/// Build a `TagSet` from a pack definition for a specific file.
+#[must_use] 
 pub fn tags_for_file(pack: &PackDefinition, filename: &str) -> TagSet {
     let mut tags = TagSet::default();
 
@@ -218,6 +221,7 @@ pub fn tags_for_file(pack: &PackDefinition, filename: &str) -> TagSet {
 
 /// Given a filename, find the pack that owns it.
 /// Matches against both the pack's `files` map and the pack's directory.
+#[must_use] 
 pub fn find_pack_for_file<'a>(
     packs: &'a [PackDefinition],
     relative_path: &str,

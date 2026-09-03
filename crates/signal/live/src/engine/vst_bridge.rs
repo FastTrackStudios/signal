@@ -54,7 +54,7 @@ pub trait VstParameterBridge: Send + Sync {
 /// Tracks which parameters have been modified from each side and resolves
 /// conflicts (latest write wins).
 pub struct ParameterSyncManager {
-    /// Last known parameter values (fx_id, param_index) → value.
+    /// Last known parameter values (`fx_id`, `param_index`) → value.
     known_values: HashMap<(String, u32), f64>,
     /// Parameters that need to be pushed to the DAW.
     pending_to_plugin: Vec<ParameterSync>,
@@ -69,6 +69,7 @@ impl Default for ParameterSyncManager {
 }
 
 impl ParameterSyncManager {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             known_values: HashMap::new(),
@@ -133,6 +134,7 @@ impl ParameterSyncManager {
     }
 
     /// Get the last known value for a parameter.
+    #[must_use] 
     pub fn known_value(&self, fx_id: &str, param_index: u32) -> Option<f64> {
         self.known_values
             .get(&(fx_id.to_string(), param_index))
@@ -159,6 +161,7 @@ impl Default for MockVstBridge {
 }
 
 impl MockVstBridge {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             params: std::sync::Mutex::new(HashMap::new()),

@@ -185,6 +185,7 @@ pub static FACTORY_PRESETS: &[FactoryPreset] = &[
     ),
 ];
 
+#[must_use] 
 pub fn all_factory_presets() -> &'static [FactoryPreset] {
     FACTORY_PRESETS
 }

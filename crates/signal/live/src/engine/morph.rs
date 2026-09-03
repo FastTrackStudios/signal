@@ -1,7 +1,7 @@
 //! Morph engine for parameter interpolation between two snapshots.
 //!
 //! Pre-computes a diff of only the parameters that differ between A and B,
-//! so `morph(t)` runs in O(diff_count), not O(total_params).
+//! so `morph(t)` runs in `O(diff_count)`, not `O(total_params)`.
 
 use serde::{Deserialize, Serialize};
 use signal_proto::easing::EasingCurve;
@@ -53,7 +53,8 @@ pub struct DawParameterSnapshot {
 }
 
 impl DawParameterSnapshot {
-    pub fn new(params: Vec<DawParamValue>) -> Self {
+    #[must_use] 
+    pub const fn new(params: Vec<DawParamValue>) -> Self {
         Self { params }
     }
 }
@@ -83,7 +84,8 @@ impl Default for MorphEngine {
 }
 
 impl MorphEngine {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             snapshot_a: None,
             snapshot_b: None,
@@ -104,16 +106,19 @@ impl MorphEngine {
     }
 
     /// Whether both endpoints are set and ready to morph.
-    pub fn is_ready(&self) -> bool {
+    #[must_use] 
+    pub const fn is_ready(&self) -> bool {
         self.snapshot_a.is_some() && self.snapshot_b.is_some()
     }
 
     /// Number of parameters that differ between A and B.
-    pub fn diff_count(&self) -> usize {
+    #[must_use] 
+    pub const fn diff_count(&self) -> usize {
         self.diffs.len()
     }
 
     /// The pre-computed diffs (for UI display of which params will change).
+    #[must_use] 
     pub fn diffs(&self) -> &[MorphDiffEntry] {
         &self.diffs
     }
@@ -121,14 +126,15 @@ impl MorphEngine {
     /// Interpolate between A and B at position `t` (0.0 = A, 1.0 = B).
     ///
     /// Returns only the parameters that differ, with their interpolated values.
-    /// Runs in O(diff_count), not O(total_params).
+    /// Runs in `O(diff_count)`, not `O(total_params)`.
+    #[must_use] 
     pub fn morph(&self, t: f64, easing: EasingCurve) -> Vec<MorphParamChange> {
         let eased_t = easing.apply(t);
 
         self.diffs
             .iter()
             .map(|d| {
-                let current = d.value_a + eased_t * (d.value_b - d.value_a);
+                let current = eased_t.mul_add(d.value_b - d.value_a, d.value_a);
                 MorphParamChange {
                     fx_id: d.fx_id.clone(),
                     param_index: d.param_index,
@@ -170,7 +176,7 @@ impl MorphEngine {
             let key = (pa.fx_id.as_str(), pa.param_index);
             seen.insert((pa.fx_id.clone(), pa.param_index));
 
-            let value_b = b_lookup.get(&key).map(|pb| pb.value).unwrap_or(0.0); // param only in A → morph toward 0
+            let value_b = b_lookup.get(&key).map_or(0.0, |pb| pb.value); // param only in A → morph toward 0
 
             if (pa.value - value_b).abs() > f64::EPSILON {
                 self.diffs.push(MorphDiffEntry {

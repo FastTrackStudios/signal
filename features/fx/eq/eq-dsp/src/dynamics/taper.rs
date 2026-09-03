@@ -10,11 +10,13 @@ pub struct LogMidTaper {
 }
 
 impl LogMidTaper {
+    #[must_use]
     pub const fn new(min: f64, mid: f64, max: f64) -> Self {
         Self { min, mid, max }
     }
 
     /// Normalized 0..1 → value.
+    #[must_use]
     pub fn value(&self, t: f64) -> f64 {
         let t = t.clamp(0.0, 1.0);
         if t < 0.5 {
@@ -25,6 +27,7 @@ impl LogMidTaper {
     }
 
     /// Value → normalized 0..1.
+    #[must_use]
     pub fn normalized(&self, v: f64) -> f64 {
         let v = v.clamp(self.min, self.max);
         if v < self.mid {

@@ -1,4 +1,4 @@
-//! BigSky MX pass-E: Voice pairs (MX/Classic), Hall Mid EQ + Swell,
+//! `BigSky` MX pass-E: Voice pairs (MX/Classic), Hall Mid EQ + Swell,
 //! named-Size selection. Defaults must be bit-transparent.
 
 use reverb_dsp::algorithm::{ReverbVoice, SwellType};
@@ -9,7 +9,7 @@ use audiocore_dsp::{AudioConfig, Processor};
 
 const SR: f64 = 48000.0;
 
-fn config() -> AudioConfig {
+const fn config() -> AudioConfig {
     AudioConfig {
         sample_rate: SR,
         max_buffer_size: 512,
@@ -37,7 +37,7 @@ fn goertzel(buf: &[f64], freq: f64) -> f64 {
         s2 = s1;
         s1 = s0;
     }
-    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
 }
 
 fn render_burst(chain: &mut ReverbChain, secs: f64) -> (Vec<f64>, Vec<f64>) {
@@ -128,7 +128,7 @@ fn voice_classic_retunes_hall_and_room() {
 
         let (ml, _) = render_burst(&mut mx, 2.0);
         let (cl, _) = render_burst(&mut classic, 2.0);
-        for v in cl.iter() {
+        for v in &cl {
             assert!(v.is_finite());
         }
         let diff: f64 = ml.iter().zip(cl.iter()).map(|(a, b)| (a - b).abs()).sum();
@@ -189,7 +189,7 @@ fn hall_swell_ramps_the_wet() {
 
     let plain = render(0.0);
     let swelled = render(0.8); // ~1.65 s rise
-    for v in swelled.iter() {
+    for v in &swelled {
         assert!(v.is_finite());
     }
     // Early wet (during the first 150 ms) is suppressed by the swell;

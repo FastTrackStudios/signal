@@ -6,7 +6,7 @@
 //! track hierarchy, module FX loading, and scene override data.
 //!
 //! Run with:
-//!   cargo xtask reaper-test worship_rig
+//!   cargo xtask reaper-test `worship_rig`
 
 use std::time::Duration;
 

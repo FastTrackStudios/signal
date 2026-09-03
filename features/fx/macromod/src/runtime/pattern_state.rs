@@ -26,17 +26,18 @@ fn config_fingerprint(config: &PatternConfig) -> u64 {
         h = h.wrapping_mul(0x1000_0000_01b3);
     };
     for p in &config.points {
-        eat(p.x.to_bits() as u64);
-        eat(p.y.to_bits() as u64);
-        eat(p.tension.to_bits() as u64);
+        eat(u64::from(p.x.to_bits()));
+        eat(u64::from(p.y.to_bits()));
+        eat(u64::from(p.tension.to_bits()));
         eat(u64::from(p.curve_type));
         eat(u64::from(p.clear_tails));
     }
-    eat(config.tension_mult.to_bits() as u64);
+    eat(u64::from(config.tension_mult.to_bits()));
     h
 }
 
 impl PatternState {
+    #[must_use] 
     pub fn from_config(config: &PatternConfig) -> Self {
         Self {
             phase: (f64::from(config.phase_offset) / 360.0).fract().abs(),
@@ -45,7 +46,8 @@ impl PatternState {
         }
     }
 
-    pub fn phase(&self) -> f64 {
+    #[must_use] 
+    pub const fn phase(&self) -> f64 {
         self.phase
     }
 
@@ -57,7 +59,7 @@ impl PatternState {
             self.built_from = fp;
         }
         let rate = f64::from(config.effective_rate_hz(bpm as f32));
-        self.phase = (self.phase + dt * rate).rem_euclid(1.0);
+        self.phase = dt.mul_add(rate, self.phase).rem_euclid(1.0);
         self.pattern.get_y(self.phase)
     }
 

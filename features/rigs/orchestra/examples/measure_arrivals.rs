@@ -13,7 +13,7 @@
 //! What "arrival" means per zone class (matching the acoustic cross-check in
 //! `tests/legato_arrival.rs`, so the verification loop closes):
 //!
-//! * **legato transition** (`interval > 0`: Leg / NVLeg / Port) — the
+//! * **legato transition** (`interval > 0`: Leg / `NVLeg` / Port) — the
 //!   destination-pitch settle: the first sustained crossing of the
 //!   destination's harmonic-energy share past 50% ([`pitch_share_curve`]).
 //!   The source and destination pitches are known from the zone identity
@@ -90,8 +90,7 @@ fn classify(spec: &LibrarySpec, z: &ZoneSpec) -> Class {
     }
     let kind = spec
         .articulation(&z.articulation)
-        .map(|a| a.kind.clone())
-        .unwrap_or(ArticulationKind::Sustain);
+        .map_or(ArticulationKind::Sustain, |a| a.kind.clone());
     match kind {
         ArticulationKind::Release => Class::Skip,
         ArticulationKind::Legato if z.interval > 0 => Class::Transition,
@@ -228,7 +227,7 @@ fn measure_settle(audio: &[f32], sr: u32, from: u8, to: u8) -> (Option<f64>, Opt
         if std::env::var_os("ARRIVAL_DEBUG").is_some() {
             eprintln!(
                 "  candidate {:.0} ms: mean {mean:.2}, below-0.5 {:.0} ms -> {}",
-                (curve.t0 + i as f64 * curve.hop_sec) * 1000.0,
+                (i as f64).mul_add(curve.hop_sec, curve.t0) * 1000.0,
                 below_sec * 1000.0,
                 if mean < mean_min || below_sec > below_max {
                     "reject"
@@ -255,7 +254,7 @@ fn measure_settle(audio: &[f32], sr: u32, from: u8, to: u8) -> (Option<f64>, Opt
     let frac = f64::from(
         ((0.5 - curve.v[idx - 1]) / (curve.v[idx] - curve.v[idx - 1]).max(1e-9)).clamp(0.0, 1.0),
     );
-    let t = curve.t0 + ((idx - 1) as f64 + frac) * curve.hop_sec;
+    let t = ((idx - 1) as f64 + frac).mul_add(curve.hop_sec, curve.t0);
     let ms = t * 1000.0;
     if ms > MAX_ARRIVAL_MS {
         return (
@@ -303,7 +302,7 @@ fn measure_onset(
     flux.v[0] = 0.0;
     let hi = (((t1 - flux.t0) / flux.hop_sec).max(1.0) as usize).min(flux.v.len());
     let window = &flux.v[..hi];
-    let peak_v = window.iter().cloned().fold(f32::MIN, f32::max);
+    let peak_v = window.iter().copied().fold(f32::MIN, f32::max);
     if peak_v <= 0.0 {
         return (None, Some("flat flux (silence?)".into()));
     }
@@ -333,7 +332,7 @@ fn measure_onset(
         // A short's rhythmic peak must stand clear of the window's median
         // activity — a verby room mic can smear the attack into the tail.
         let mut sorted: Vec<f32> = window.to_vec();
-        sorted.sort_by(|a, b| a.total_cmp(b));
+        sorted.sort_by(f32::total_cmp);
         let median = sorted[sorted.len() / 2];
         if median > 0.0 && peak_v / median < 2.0 {
             return (
@@ -379,7 +378,7 @@ fn measure_zone(spec: &LibrarySpec, z: &ZoneSpec, path: &Path) -> Measurement {
             // late bias of tens of ms. Same ramp law as
             // `Voice::next_frame`: `gain += (1 − gain) / frames_left`.
             let attack_ms = spec.performance.attack_ms.unwrap_or(0);
-            let mut shaped = audio.clone();
+            let mut shaped = audio;
             if attack_ms > 0 {
                 let ramp = (f64::from(attack_ms) / 1000.0 * f64::from(sr)) as usize;
                 let mut gain = 0.0f32;
@@ -457,12 +456,9 @@ fn rewrite_zones_styx(text: &str, arrivals: &BTreeMap<String, f64>) -> String {
                 let after_lead = block
                     .iter()
                     .position(|l| l.trim_start().starts_with("lead_in_ms"));
-                match after_lead {
-                    Some(i) => block.insert(i + 1, arrival_line),
-                    None => {
-                        let close = block.len() - 1;
-                        block.insert(close, arrival_line);
-                    }
+                if let Some(i) = after_lead { block.insert(i + 1, arrival_line) } else {
+                    let close = block.len() - 1;
+                    block.insert(close, arrival_line);
                 }
             }
             out.append(&mut block);
@@ -487,7 +483,7 @@ fn main() -> Result<(), String> {
     let mut write = false;
     let mut report_path: Option<PathBuf> = None;
     let mut threads = std::thread::available_parallelism()
-        .map(|n| n.get())
+        .map(std::num::NonZero::get)
         .unwrap_or(8)
         .min(16);
     let mut inspect: Option<String> = None;
@@ -538,7 +534,7 @@ fn main() -> Result<(), String> {
                 let dur = audio.len() as f64 / 2.0 / f64::from(sr);
                 let curve = pitch_share_curve(&audio, sr, from, to, 0.02, SCAN_SEC.min(dur - 0.05));
                 for (i, v) in curve.v.iter().enumerate().step_by(8) {
-                    let t = curve.t0 + i as f64 * curve.hop_sec;
+                    let t = (i as f64).mul_add(curve.hop_sec, curve.t0);
                     let bar = "#".repeat((v * 50.0) as usize);
                     eprintln!("  {:6.0} ms  {v:.2} {bar}", t * 1000.0);
                 }
@@ -550,9 +546,9 @@ fn main() -> Result<(), String> {
                     flux.v[0] = 0.0;
                 }
                 let n = flux.v.len().min((1.0 / flux.hop_sec) as usize);
-                let peak = flux.v[..n].iter().cloned().fold(1e-9f32, f32::max);
+                let peak = flux.v[..n].iter().copied().fold(1e-9f32, f32::max);
                 for (i, v) in flux.v[..n].iter().enumerate().step_by(8) {
-                    let t = flux.t0 + i as f64 * flux.hop_sec;
+                    let t = (i as f64).mul_add(flux.hop_sec, flux.t0);
                     let bar = "#".repeat((v / peak * 50.0) as usize);
                     eprintln!("  {:6.0} ms  {bar}", t * 1000.0);
                 }
@@ -645,7 +641,7 @@ fn main() -> Result<(), String> {
     ));
     for (cname, (n, vals)) in &per_class {
         let mut v = vals.clone();
-        v.sort_by(|a, b| a.total_cmp(b));
+        v.sort_by(f64::total_cmp);
         let med = v[v.len() / 2];
         report.push_str(&format!(
             "  {cname}: {n} measured, arrival min {:.0} / median {med:.0} / p95 {:.0} / max {:.0} ms\n",

@@ -4,9 +4,9 @@
 //!
 //! Inputs: the per-note-alignable A/B pair (see `gen_css_ab.rs`):
 //! * `css_ab_css.wav` — the real CSS-in-Kontakt export of `css_ab.mid`;
-//! * `css_ab_ours.wav` — our StrictLive render of the same MIDI (note-ons
+//! * `css_ab_ours.wav` — our `StrictLive` render of the same MIDI (note-ons
 //!   placed at exact MIDI times by construction);
-//! * `css_ab_manifest.tsv` — unit index (t_start, pitch, category).
+//! * `css_ab_manifest.tsv` — unit index (`t_start`, pitch, category).
 //!
 //! Method:
 //! 1. The Kontakt export's global offset `g` is estimated from the SHORT
@@ -109,7 +109,7 @@ fn main() -> eyre::Result<()> {
         }
     }
     eyre::ensure!(!deltas.is_empty(), "no short units matched");
-    deltas.sort_by(|a, b| a.total_cmp(b));
+    deltas.sort_by(f64::total_cmp);
     let g = deltas[deltas.len() / 2];
     eprintln!(
         "global Kontakt-export offset g = {:+.1} ms (median over {} shorts, spread {:+.1}..{:+.1})",
@@ -212,7 +212,7 @@ fn main() -> eyre::Result<()> {
         let curve = dest_energy_curve(&css, sr, from, to, w0, w1);
         let n = curve.v.len();
         let med = |sl: &mut Vec<f32>| -> f64 {
-            sl.sort_by(|a, b| a.total_cmp(b));
+            sl.sort_by(f32::total_cmp);
             f64::from(sl[sl.len() / 2])
         };
         let head_n = ((0.10 / curve.hop_sec) as usize).min(n);
@@ -223,12 +223,12 @@ fn main() -> eyre::Result<()> {
             if plateau <= floor {
                 return None;
             }
-            let th = floor + (plateau - floor) * frac;
+            let th = (plateau - floor).mul_add(frac, floor);
             curve
                 .v
                 .iter()
                 .position(|&e| f64::from(e) >= th)
-                .map(|i| (curve.t0 + i as f64 * curve.hop_sec - g - noteon) * 1000.0)
+                .map(|i| ((i as f64).mul_add(curve.hop_sec, curve.t0) - g - noteon) * 1000.0)
         };
         let (k_e25, k_e50) = (rise(0.25), rise(0.50));
 
@@ -236,8 +236,7 @@ fn main() -> eyre::Result<()> {
         // primary perceptual estimate; the table shows all three).
         let k_true50 = k_e50.map(|a| lt_off + a);
         let (zone, our_marker) = marker_of(from, to)
-            .map(|(f, m)| (f, f64::from(m)))
-            .unwrap_or(("?".into(), 0.0));
+            .map_or(("?".into(), 0.0), |(f, m)| (f, f64::from(m)));
         let delta = k_true50.map(|t| our_marker - t);
         let arr_ours = pitch_arrival(&ours, sr, noteon + 0.225, from, to, 0.375)
             .map(|t| (t - noteon) * 1000.0);
@@ -272,7 +271,7 @@ fn main() -> eyre::Result<()> {
 delta = ourMarker − Kontakt-true (positive = our marker sits DEEPER than perception):"
     );
     for (class, mut v) in deltas_by_class {
-        v.sort_by(|a, b| a.total_cmp(b));
+        v.sort_by(f64::total_cmp);
         let median = v[v.len() / 2];
         println!(
             "  {:<10} n={:<2} median {:+7.1} ms  range {:+7.1}..{:+7.1}",

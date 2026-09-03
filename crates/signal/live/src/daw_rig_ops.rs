@@ -46,7 +46,7 @@ pub struct RigLoadResult {
     /// Layer module results, flattened in engine-first, layer-second order.
     ///
     /// Index `i` corresponds to the `i`-th layer across all engines,
-    /// enumerated in engine_selections order → layer_selections order.
+    /// enumerated in `engine_selections` order → `layer_selections` order.
     pub layer_results: Vec<LayerLoadResult>,
 }
 

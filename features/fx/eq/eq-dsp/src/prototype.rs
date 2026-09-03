@@ -17,7 +17,7 @@ use crate::zpk::{Complex, Zpk};
 /// Generate Butterworth lowpass prototype poles in the s-domain.
 ///
 /// An N-th order Butterworth LP has N poles on the unit circle in the left half-plane:
-///   s_k = exp(j * pi * (2k + N + 1) / (2N))  for k = 0..N-1
+///   `s_k` = exp(j * pi * (2k + N + 1) / (2N))  for k = 0..N-1
 ///
 /// All poles have |s_k| = 1 (unit circle), and the prototype has cutoff w = 1.
 pub fn butterworth_lp(order: usize) -> Zpk {
@@ -101,7 +101,7 @@ pub fn butterworth_bp_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
 
     // Selectivity parameter for elliptic functions: k = bw / (2 * w0)
     // Controls how "narrow" the bandpass is. Clamped for numerical stability.
-    let k = (bw_a / (2.0 * w0_a)).min(0.9999999);
+    let k = (bw_a / (2.0 * w0_a)).min(0.999_999_9);
 
     // Complete elliptic integral K(k) for normalization
     let kk = elliptic::elliptic_k_complete(k);
@@ -195,7 +195,7 @@ pub fn butterworth_bs_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
 
     // Selectivity parameter for elliptic functions: k = bw / (2 * w0)
     // Controls how "narrow" the notch is. Clamped for numerical stability.
-    let k = (bw_a / (2.0 * w0_a)).min(0.9999999);
+    let k = (bw_a / (2.0 * w0_a)).min(0.999_999_9);
 
     // Complete elliptic integral K(k) for normalization
     let kk = elliptic::elliptic_k_complete(k);

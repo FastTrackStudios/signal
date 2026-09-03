@@ -29,7 +29,7 @@ mod tests {
     /// Build a minimal valid WAV file in memory.
     fn make_test_wav(sample_rate: u32, channels: u16, bits: u16, num_samples: u32) -> Vec<u8> {
         let bytes_per_sample = bits / 8;
-        let data_size = num_samples * channels as u32 * bytes_per_sample as u32;
+        let data_size = num_samples * u32::from(channels) * u32::from(bytes_per_sample);
         let file_size = 36 + data_size;
 
         let mut buf = Vec::with_capacity(44 + data_size as usize);
@@ -41,7 +41,7 @@ mod tests {
         buf.extend_from_slice(&1u16.to_le_bytes()); // PCM
         buf.extend_from_slice(&channels.to_le_bytes());
         buf.extend_from_slice(&sample_rate.to_le_bytes());
-        let byte_rate = sample_rate * channels as u32 * bytes_per_sample as u32;
+        let byte_rate = sample_rate * u32::from(channels) * u32::from(bytes_per_sample);
         buf.extend_from_slice(&byte_rate.to_le_bytes());
         let block_align = channels * bytes_per_sample;
         buf.extend_from_slice(&block_align.to_le_bytes());

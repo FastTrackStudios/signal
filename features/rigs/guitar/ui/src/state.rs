@@ -10,7 +10,7 @@ use crate::meters::meter_level;
 
 /// The signals a rig view renders from. `Copy` (signals are handles), so it
 /// passes freely into closures and children.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct RigViewState {
     /// Audio engine open and processing.
     pub running: Signal<bool>,
@@ -63,7 +63,7 @@ pub fn use_rig_state() -> RigViewState {
     // Seed once — the event stream only carries *changes*; a fresh
     // subscriber needs the current state to start from.
     {
-        let rig = rig.clone();
+        let rig = rig;
         use_future(move || {
             let rig = rig.clone();
             async move {
@@ -95,7 +95,7 @@ pub fn use_rig_state() -> RigViewState {
 
     // Live updates — meters at meter rate, perf/chain on mutation.
     {
-        let rig_stream = rig_stream.clone();
+        let rig_stream = rig_stream;
         architect::use_stream(
             move |sink| {
                 let rig_stream = rig_stream.clone();
@@ -162,7 +162,7 @@ pub fn use_rig_state() -> RigViewState {
                         for i in 0..n {
                             let (a, b, c) =
                                 (bins[i.saturating_sub(1)], bins[i], bins[(i + 1).min(n - 1)]);
-                            let fresh = (a + 2.0 * b + c) / 4.0;
+                            let fresh = (2.0f32.mul_add(b, a) + c) / 4.0;
                             let fallen = prev.get(i).copied().unwrap_or(-90.0) - 1.3; // per frame at ~30 Hz ≈ 40 dB/s
                             out.push(fresh.max(fallen).max(-90.0));
                         }
@@ -175,7 +175,7 @@ pub fn use_rig_state() -> RigViewState {
                             let n = v.len();
                             (0..n)
                                 .map(|k| {
-                                    (v[k.saturating_sub(1)] + 2.0 * v[k] + v[(k + 1).min(n - 1)])
+                                    (2.0f32.mul_add(v[k], v[k.saturating_sub(1)]) + v[(k + 1).min(n - 1)])
                                         / 4.0
                                 })
                                 .collect()

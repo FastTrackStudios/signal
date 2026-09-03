@@ -14,7 +14,7 @@ use eq_ui::eq_graph_model::{EqBand, EqBandShape};
 
 use crate::params::{CompParams, CompUiState, SC_EQ_BANDS};
 
-fn shape_to_index(shape: EqBandShape) -> i32 {
+const fn shape_to_index(shape: EqBandShape) -> i32 {
     match shape {
         EqBandShape::LowShelf => 1,
         EqBandShape::HighShelf => 2,
@@ -24,7 +24,7 @@ fn shape_to_index(shape: EqBandShape) -> i32 {
     }
 }
 
-fn index_to_shape(i: i32) -> EqBandShape {
+const fn index_to_shape(i: i32) -> EqBandShape {
     match i {
         1 => EqBandShape::LowShelf,
         2 => EqBandShape::HighShelf,
@@ -67,8 +67,8 @@ pub fn SidechainEqView(stage: usize, frame: u64, accent: String) -> Element {
 
     let params_change = params.clone();
     let ctx_change = ctx.clone();
-    let params_remove = params.clone();
-    let ctx_remove = ctx.clone();
+    let params_remove = params;
+    let ctx_remove = ctx;
 
     rsx! {
         div {

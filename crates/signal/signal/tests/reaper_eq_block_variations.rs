@@ -3,12 +3,12 @@
 //!
 //! Tests the end-to-end flow of:
 //! 1. Capturing real Pro-Q 4 (CLAP) state as block snapshots
-//! 2. Building ResolvedGraphs with state_data
-//! 3. Applying each variation via ReaperPatchApplier
+//! 2. Building `ResolvedGraphs` with `state_data`
+//! 3. Applying each variation via `ReaperPatchApplier`
 //! 4. Verifying FX parameters change in REAPER
 //!
 //! Run with:
-//!   cargo xtask reaper-test reaper_eq_block_variations
+//!   cargo xtask reaper-test `reaper_eq_block_variations`
 
 use std::time::Duration;
 
@@ -20,7 +20,7 @@ use signal::resolve::{
 };
 use signal::{seed_id, Block, BlockType, DawPatchApplier};
 
-/// REAPER's CLAP plugin identifier for FabFilter Pro-Q 4.
+/// REAPER's CLAP plugin identifier for `FabFilter` Pro-Q 4.
 const CLAP_PROQ4: &str = "CLAP: Pro-Q 4 (FabFilter)";
 
 /// Small sleep to let REAPER/CLAP process changes.
@@ -36,7 +36,7 @@ async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
     }
 }
 
-/// Build a minimal ResolvedGraph containing a single EQ block with state_data.
+/// Build a minimal `ResolvedGraph` containing a single EQ block with `state_data`.
 ///
 /// The `fx_id` in the graph must match the `fx_id` passed to `set_target` so
 /// that `graph_state_chunks` can extract the chunk data.

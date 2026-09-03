@@ -44,8 +44,8 @@ fn read_wav(path: &str, start_s: f64, dur_s: f64) -> (Vec<f32>, u32) {
     let ch = ch as usize;
     let bytes = (bits / 8) as usize;
     let total = data.len() / (bytes * ch);
-    let start = ((start_s * sr as f64) as usize).min(total);
-    let n = (((dur_s * sr as f64) as usize).min(total - start)).max(0);
+    let start = ((start_s * f64::from(sr)) as usize).min(total);
+    let n = (((dur_s * f64::from(sr)) as usize).min(total - start)).max(0);
     let mut mono = Vec::with_capacity(n);
     for f in start..start + n {
         let mut acc = 0.0f32;
@@ -53,11 +53,11 @@ fn read_wav(path: &str, start_s: f64, dur_s: f64) -> (Vec<f32>, u32) {
             let o = (f * ch + c) * bytes;
             let s = match (format, bits) {
                 (3, 32) => f32::from_le_bytes([data[o], data[o + 1], data[o + 2], data[o + 3]]),
-                (1, 16) => i16::from_le_bytes([data[o], data[o + 1]]) as f32 / 32768.0,
+                (1, 16) => f32::from(i16::from_le_bytes([data[o], data[o + 1]])) / 32768.0,
                 (1, 24) => {
-                    let v = (data[o] as i32)
-                        | ((data[o + 1] as i32) << 8)
-                        | ((data[o + 2] as i32) << 16);
+                    let v = i32::from(data[o])
+                        | (i32::from(data[o + 1]) << 8)
+                        | (i32::from(data[o + 2]) << 16);
                     let v = if v & 0x80_0000 != 0 {
                         v | !0xFF_FFFF
                     } else {
@@ -91,7 +91,7 @@ fn null_depth_db(a: &[f32], b: &[f32], max_lag: i64) -> (f32, i64) {
     while lag <= max_lag {
         let mut dot = 0.0f32;
         let mut bb = 0.0f32;
-        #[allow(
+        #[expect(
             clippy::needless_range_loop,
             reason = "index i drives a lag-shifted second index j into b; not expressible as a single zip/enumerate"
         )]
@@ -105,7 +105,7 @@ fn null_depth_db(a: &[f32], b: &[f32], max_lag: i64) -> (f32, i64) {
         if bb > 0.0 {
             let g = dot / bb;
             let mut resid = 0.0f32;
-            #[allow(
+            #[expect(
                 clippy::needless_range_loop,
                 reason = "index i drives a lag-shifted second index j into b; not expressible as a single zip/enumerate"
             )]
@@ -116,7 +116,7 @@ fn null_depth_db(a: &[f32], b: &[f32], max_lag: i64) -> (f32, i64) {
                 } else {
                     0.0
                 };
-                let e = a[i] - g * bv;
+                let e = g.mul_add(-bv, a[i]);
                 resid += e * e;
             }
             if resid < best {

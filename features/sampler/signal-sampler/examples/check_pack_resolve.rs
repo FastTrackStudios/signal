@@ -3,7 +3,7 @@
 //! declared dynamic. A pack that resolves everywhere the styx declares is
 //! playable (the engine reaches exactly these map entries). Bypasses the audio
 //! render path.
-//!   cargo run -p signal-sampler --release --example check_pack_resolve -- "<pack>"
+//!   cargo run -p signal-sampler --release --example `check_pack_resolve` -- "<pack>"
 
 use std::path::Path;
 
@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let section = spec.sections.first().ok_or("no sections")?;
-    let mic = spec.mics.first().map(|m| m.id.as_str()).unwrap_or("");
+    let mic = spec.mics.first().map_or("", |m| m.id.as_str());
     let lo = note_name_midi(&section.lowest_note);
     let hi = note_name_midi(&section.highest_note);
     println!(

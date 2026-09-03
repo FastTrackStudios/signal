@@ -200,7 +200,7 @@ fn collect_routing(tree: &Container) -> (Vec<Band>, Vec<VelLayer>) {
 
 // ── Computer-keyboard → note mapping (tracker layout, like the sampler TUI) ──
 
-fn key_to_semitone(c: char) -> Option<i32> {
+const fn key_to_semitone(c: char) -> Option<i32> {
     Some(match c {
         'z' => 0,
         's' => 1,
@@ -240,7 +240,7 @@ fn key_to_semitone(c: char) -> Option<i32> {
     })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn run(
     term: &mut ratatui::DefaultTerminal,
     rig: &mut KeysRig,
@@ -259,7 +259,7 @@ fn run(
     let preset_names = registry
         .names()
         .iter()
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect::<Vec<_>>();
 
     loop {
@@ -287,7 +287,7 @@ fn run(
                 midi_label,
                 midi_open,
                 status.as_deref(),
-            )
+            );
         })?;
 
         if !event::poll(Duration::from_millis(20))? {
@@ -305,7 +305,7 @@ fn run(
                     KeyCode::Char('[') => octave = (octave - 12).max(0),
                     KeyCode::Char(']') => octave = (octave + 12).min(108),
                     // Cycle the MIDI input device (i forward / I back) — re-attach.
-                    KeyCode::Char('i') | KeyCode::Char('I') => {
+                    KeyCode::Char('i' | 'I') => {
                         let n = midi_choices.len();
                         *midi_idx = if k.code == KeyCode::Char('I') {
                             (*midi_idx + n - 1) % n
@@ -373,7 +373,7 @@ fn fold_monitor_held(monitor: &signal_sampler::MidiMonitor, held: &mut HashSet<u
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn ui(
     f: &mut Frame,
     preset_name: &str,
@@ -430,7 +430,7 @@ fn ui(
     } else {
         20.0 * peak.log10()
     };
-    let ratio = (((db + 60.0) / 60.0) as f64).clamp(0.0, 1.0);
+    let ratio = f64::from((db + 60.0) / 60.0).clamp(0.0, 1.0);
     let color = if db >= -1.0 {
         Color::Red
     } else if db >= -6.0 {
@@ -587,7 +587,7 @@ fn note_name(n: u8) -> String {
     const NAMES: [&str; 12] = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
     ];
-    format!("{}{}", NAMES[(n % 12) as usize], n as i32 / 12 - 1)
+    format!("{}{}", NAMES[(n % 12) as usize], i32::from(n) / 12 - 1)
 }
 
 /// Send stray stderr (engine logs) to a file so they can't corrupt the TUI. (fn below)

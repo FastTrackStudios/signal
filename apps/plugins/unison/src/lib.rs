@@ -154,7 +154,7 @@ impl Plugin for FtsUnison {
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         self.engine.prepare(
-            buffer_config.sample_rate as f64,
+            f64::from(buffer_config.sample_rate),
             buffer_config.max_buffer_size as usize,
         );
         let cap = buffer_config.max_buffer_size as usize;
@@ -178,23 +178,23 @@ impl Plugin for FtsUnison {
             return ProcessStatus::Normal;
         }
         self.engine.config.voices = self.params.voices.value() as usize;
-        self.engine.config.detune_cents = self.params.detune.value() as f64;
-        self.engine.config.spread = self.params.spread.value() as f64;
-        self.engine.config.delay_ms = self.params.delay_ms.value() as f64;
-        self.engine.config.dry_level = self.params.dry.value() as f64;
-        self.engine.config.wet_level = self.params.wet.value() as f64;
+        self.engine.config.detune_cents = f64::from(self.params.detune.value());
+        self.engine.config.spread = f64::from(self.params.spread.value());
+        self.engine.config.delay_ms = f64::from(self.params.delay_ms.value());
+        self.engine.config.dry_level = f64::from(self.params.dry.value());
+        self.engine.config.wet_level = f64::from(self.params.wet.value());
         self.engine.config.algorithm = match self.params.algo.value() {
             1 => Algorithm::Wsola,
             2 => Algorithm::Granular,
             _ => Algorithm::Psola,
         };
         self.engine.update_voicing();
-        let out_gain = util::db_to_gain(self.params.output_db.value()) as f64;
+        let out_gain = f64::from(util::db_to_gain(self.params.output_db.value()));
 
         for (i, frame) in buffer.iter_samples().enumerate() {
             let mut it = frame.into_iter();
-            let l = it.next().map(|s| *s as f64).unwrap_or(0.0);
-            let r = it.next().map(|s| *s as f64).unwrap_or(l);
+            let l = it.next().map_or(0.0, |s| f64::from(*s));
+            let r = it.next().map_or(l, |s| f64::from(*s));
             self.left[i] = l;
             self.right[i] = r;
         }

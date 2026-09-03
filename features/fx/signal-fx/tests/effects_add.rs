@@ -38,7 +38,7 @@ fn add_builtin_creates_live_instance_with_real_params() {
     );
 
     // Add by display name — the session mixer's "add Reverb" gesture.
-    let chain = FxChainContext::Track(track.clone());
+    let chain = FxChainContext::Track(track);
     let fx_guid = Effects::add(&daw, ctx.clone(), chain.clone(), "Reverb").expect("add Reverb");
 
     // A live instance backs the entry (this is what the render loop
@@ -50,7 +50,7 @@ fn add_builtin_creates_live_instance_with_real_params() {
 
     // Parameters resolve against the DSP (real names, not "Param N").
     let target = FxTarget {
-        context: chain.clone(),
+        context: chain,
         fx: FxRef::Guid(fx_guid.clone()),
     };
     let params = Effects::parameters(&daw, ctx.clone(), target.clone());
@@ -61,7 +61,7 @@ fn add_builtin_creates_live_instance_with_real_params() {
     );
 
     // Removing the FX also drops the live instance.
-    Effects::remove(&daw, ctx.clone(), target).expect("remove");
+    Effects::remove(&daw, ctx, target).expect("remove");
     assert!(daw.with_plugin_instance(&fx_guid, |_| ()).is_none());
 }
 
@@ -75,7 +75,7 @@ fn add_by_ident_and_unknown_falls_back_to_synthetic() {
     assert!(daw.with_plugin_instance(&eq, |_| ()).is_some());
 
     // Unknown names still create the synthetic placeholder (no DSP).
-    let synth = Effects::add(&daw, ctx.clone(), chain, "TotallyUnknownFx").expect("synthetic add");
+    let synth = Effects::add(&daw, ctx, chain, "TotallyUnknownFx").expect("synthetic add");
     assert!(daw.with_plugin_instance(&synth, |_| ()).is_none());
 }
 

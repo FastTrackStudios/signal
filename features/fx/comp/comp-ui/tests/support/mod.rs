@@ -84,7 +84,7 @@ impl GuiContextInner for RecordingGuiContext {
 
 /// Root component: the real editor `App`, plus its stylesheets re-hosted
 /// as body `<style>` elements (see module docs — `document::Style` head
-/// elements are dropped by the headless harness's NoOpDocument fallback).
+/// elements are dropped by the headless harness's `NoOpDocument` fallback).
 #[component]
 pub fn Harness() -> Element {
     rsx! {
@@ -138,8 +138,8 @@ pub fn mount_with(params: Arc<CompParams>, width: u32, height: u32) -> Fixture {
         // mount has no window, so state the size explicitly — without it
         // every mount looks like the design size and nothing scales.
         .with_root_context(comp_ui::hardware::panel::EditorSize(
-            width as f64,
-            height as f64,
+            f64::from(width),
+            f64::from(height),
         ))
         .with_root_context(param_ctx)
         .with_root_context(SharedState::new(ui_state.clone()))
@@ -163,7 +163,7 @@ impl Fixture {
             .unwrap_or_else(|e| panic!("knob {testid} not in DOM: {e:?}"));
         let (ox, oy) = el.document_origin();
         let (w, h) = el.size();
-        (ox + w as f64 / 2.0, oy + h as f64 / 2.0)
+        (ox + f64::from(w) / 2.0, oy + f64::from(h) / 2.0)
     }
 
     /// Let the editor re-render *and* re-lay-out after a change.
@@ -176,7 +176,7 @@ impl Fixture {
     ///   `DragProvider` signal) re-renders itself immediately but does not
     ///   re-render the shell. In the plugin the ~30 Hz tick thread picks
     ///   the change up within ~33 ms; here we have to wait for one.
-    /// - `pump()` only drives the VirtualDom. It does **not** recompute
+    /// - `pump()` only drives the `VirtualDom`. It does **not** recompute
     ///   layout, so nodes created by the re-render keep a 0×0 box and every
     ///   size / hit-test assertion against them fails. `advance_time()` is
     ///   the call that resolves the document, so it has to follow.
@@ -198,12 +198,12 @@ impl Fixture {
     /// also the SVG's viewBox height, which is what keeps element y and
     /// viewBox y the same thing.
     pub fn graph_h(&self) -> f64 {
-        self.tester
+        f64::from(self.tester
             .query(by_testid("comp-graph"))
             .immediately()
             .expect("comp-graph container not in DOM")
             .size()
-            .1 as f64
+            .1)
     }
 
     /// Document-space origin of the compressor-graph interaction surface.

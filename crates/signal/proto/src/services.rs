@@ -28,7 +28,7 @@ use crate::tagging;
 ///
 /// Replaces opaque `String` errors with structured variants that can be
 /// pattern-matched for error handling, logging, and user-facing messages.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet, thiserror::Error)]
 #[repr(C)]
 pub enum SignalServiceError {
     /// Entity not found by ID.
@@ -53,7 +53,7 @@ pub enum SignalServiceError {
 }
 
 impl SignalServiceError {
-    /// Convenience for creating a NotFound error.
+    /// Convenience for creating a `NotFound` error.
     pub fn not_found(entity: impl Into<String>, id: impl ToString) -> Self {
         Self::NotFound {
             entity: entity.into(),

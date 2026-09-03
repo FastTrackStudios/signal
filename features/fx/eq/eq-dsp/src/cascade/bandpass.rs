@@ -470,7 +470,7 @@ pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usi
             }
 
             if slope == 5 && sec_idx == 2 {
-                let phi_conj = 0.6180339887498948;
+                let phi_conj = 0.618_033_988_749_894_8;
                 let x = (omega0 / PI).clamp(0.0, 1.0);
                 // Live MODE01/eval traces show the tail uses the alt-path
                 // algebra below. The w_eval exponent follows the same helper
@@ -508,7 +508,7 @@ pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usi
             } else if is_slope5_tail {
                 // Slope-5's real-pole tail uses a nonzero numerator floor:
                 // the captured p2 is the golden-ratio conjugate across Q/fc.
-                0.6180339887498948
+                0.618_033_988_749_894_8
             } else {
                 0.0
             };
@@ -548,7 +548,7 @@ pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usi
                     };
                     (sp6 / SQRT_2) * hf_tail_scale * (1.0 + 0.034 * low * q_one) * q_half_tail
                         + 0.45 * omega0 * omega0 / q_user
-                        + 0.000134 * low * q_low
+                        + 0.000_134 * low * q_low
                         + 0.00016 * low * q_mid
                 } else if slope == 4 && freq_hz <= 1000.0 {
                     let x = (freq_hz / 1000.0).clamp(0.0, 1.0);
@@ -587,12 +587,12 @@ pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usi
                 let w_pole_eff = omega0;
                 let w_eval = (w_pole_eff * 1.5).clamp(0.9 * PI, 0.99 * PI);
                 let dz_mag_sq = |w: f64| -> f64 {
-                    let cosw = w.cos();
-                    let sinw = w.sin();
-                    let cos2w = (2.0 * w).cos();
-                    let sin2w = (2.0 * w).sin();
-                    let re = 1.0 + a1_dig * cosw + a2_dig * cos2w;
-                    let im = -a1_dig * sinw - a2_dig * sin2w;
+                    let cos_w = w.cos();
+                    let sin_w = w.sin();
+                    let cos_double_w = (2.0 * w).cos();
+                    let sin_double_w = (2.0 * w).sin();
+                    let re = 1.0 + a1_dig * cos_w + a2_dig * cos_double_w;
+                    let im = -a1_dig * sin_w - a2_dig * sin_double_w;
                     re * re + im * im
                 };
                 let t_eval = (w_eval * 0.5).tan();
@@ -642,8 +642,8 @@ fn bp_s3_tail_p3_for_q(q: f64) -> f64 {
     // Q={0.5,1,4,10}. This is the same mode-0 parameter family as the
     // p2 fit above, not a coefficient lookup.
     let q = q.max(0.5);
-    (0.7082823596815021 * q * q + 0.0715511960334658 * q + 0.047750333818323)
-        / (q * q - 0.22770802249856914 * q)
+    (0.708_282_359_681_502_1 * q * q + 0.071_551_196_033_465_8 * q + 0.047_750_333_818_323)
+        / (q * q - 0.227_708_022_498_569_14 * q)
 }
 fn bp_s3_tail_p2_for_q(q: f64) -> f64 {
     let q = q.max(0.5);
@@ -652,7 +652,7 @@ fn bp_s3_tail_p2_for_q(q: f64) -> f64 {
         .max(0.0)
 }
 fn bp_s5_tail_p3_for_q(q: f64, omega0: f64) -> f64 {
-    let phi_conj = 0.6180339887498948;
+    let phi_conj = 0.618_033_988_749_894_8;
     let q = q.max(0.5);
     // Captures show p3 approaches p2 at low frequency and high Q, with a
     // small frequency-squared lift that scales as 1/Q² for the real tail.

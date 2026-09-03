@@ -46,11 +46,11 @@ fn power_at(buf: &[f32], hz: f64) -> f64 {
     let coeff = 2.0 * w.cos();
     let (mut s1, mut s2) = (0.0f64, 0.0f64);
     for &x in buf {
-        let s0 = x as f64 + coeff * s1 - s2;
+        let s0 = f64::from(x) + coeff * s1 - s2;
         s2 = s1;
         s1 = s0;
     }
-    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
 }
 
 fn render(eq: &mut NativeEq, input: &[f32]) -> Vec<f32> {

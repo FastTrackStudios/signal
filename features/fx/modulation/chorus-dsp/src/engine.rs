@@ -17,19 +17,21 @@ pub enum EffectType {
 }
 
 impl EffectType {
-    pub fn base_delay_ms(&self) -> f64 {
+    #[must_use] 
+    pub const fn base_delay_ms(&self) -> f64 {
         match self {
-            EffectType::Chorus => 10.0,
-            EffectType::Flanger => 2.0,
-            EffectType::Vibrato => 5.0,
+            Self::Chorus => 10.0,
+            Self::Flanger => 2.0,
+            Self::Vibrato => 5.0,
         }
     }
 
-    pub fn max_depth_ms(&self) -> f64 {
+    #[must_use] 
+    pub const fn max_depth_ms(&self) -> f64 {
         match self {
-            EffectType::Chorus => 12.0,
-            EffectType::Flanger => 4.0,
-            EffectType::Vibrato => 8.0,
+            Self::Chorus => 12.0,
+            Self::Flanger => 4.0,
+            Self::Vibrato => 8.0,
         }
     }
 }
@@ -42,7 +44,7 @@ pub enum EngineType {
     Tape,
     Orbit,
     /// Juno-style chorus with triangle LFO + allpass interpolation.
-    /// Based on TAL-NoiseMaker / YKChorus (SpotlightKid) algorithm.
+    /// Based on TAL-NoiseMaker / `YKChorus` (`SpotlightKid`) algorithm.
     Juno,
 }
 
@@ -82,6 +84,7 @@ pub struct CubicVoice {
 
 impl CubicVoice {
     const MAX_DELAY: usize = 192000 / 20 + 64;
+    #[must_use] 
     pub fn new(phase_offset: f64) -> Self {
         Self {
             last_delay_ms: 0.0,
@@ -115,7 +118,7 @@ impl ChorusEngine for CubicVoice {
         let lfo = ((self.lfo_phase + self.phase_offset) * 2.0 * PI).sin();
         let base_ms = effect_type.base_delay_ms();
         let depth_ms = effect_type.max_depth_ms() * depth;
-        let delay_samples = ((base_ms + depth_ms * lfo) * 0.001 * self.sample_rate)
+        let delay_samples = (depth_ms.mul_add(lfo, base_ms) * 0.001 * self.sample_rate)
             .clamp(1.0, self.delay.len() as f64 - 4.0);
         self.last_delay_ms = delay_samples * 1000.0 / self.sample_rate;
         let delayed = self.delay.read_cubic(delay_samples);
@@ -152,6 +155,7 @@ pub struct BbdVoice {
 
 impl BbdVoice {
     const DEFAULT_STAGES: usize = 512;
+    #[must_use] 
     pub fn new(phase_offset: f64) -> Self {
         Self {
             last_delay_ms: 0.0,
@@ -186,7 +190,7 @@ impl ChorusEngine for BbdVoice {
         let lfo = ((self.lfo_phase + self.phase_offset) * 2.0 * PI).sin();
         let base_ms = effect_type.base_delay_ms();
         let depth_ms = effect_type.max_depth_ms() * depth;
-        let target_delay_ms = base_ms + depth_ms * lfo;
+        let target_delay_ms = depth_ms.mul_add(lfo, base_ms);
         self.last_delay_ms = target_delay_ms;
         let target_delay_s = (target_delay_ms * 0.001).max(0.0005);
         let clock_freq = self.num_stages as f64 / (2.0 * target_delay_s);
@@ -196,7 +200,7 @@ impl ChorusEngine for BbdVoice {
         let input_lp_coeff = (2.0 * PI * (clock_freq / 6.0) / self.sample_rate)
             .sin()
             .clamp(0.0, 0.99);
-        self.input_lp = flush(self.input_lp + (input - self.input_lp) * input_lp_coeff);
+        self.input_lp = flush((input - self.input_lp).mul_add(input_lp_coeff, self.input_lp));
         let clock_inc = clock_freq / self.sample_rate;
         self.clock_phase += clock_inc;
         let mut output = self.prev_output;
@@ -211,13 +215,13 @@ impl ChorusEngine for BbdVoice {
             output = *self.buckets.last().unwrap_or(&0.0);
         }
         let frac = self.clock_phase.clamp(0.0, 1.0);
-        let held = self.prev_output * (1.0 - frac) + output * frac;
+        let held = self.prev_output.mul_add(1.0 - frac, output * frac);
         self.prev_output = output;
-        let output_cutoff = clock_freq / (6.0 - color * 4.0).max(1.5);
+        let output_cutoff = clock_freq / color.mul_add(-4.0, 6.0).max(1.5);
         let output_lp_coeff = (2.0 * PI * output_cutoff / self.sample_rate)
             .sin()
             .clamp(0.0, 0.99);
-        self.output_lp = flush(self.output_lp + (held - self.output_lp) * output_lp_coeff);
+        self.output_lp = flush((held - self.output_lp).mul_add(output_lp_coeff, self.output_lp));
         self.output_lp
     }
 
@@ -251,6 +255,7 @@ pub struct TapeVoice {
 
 impl TapeVoice {
     const MAX_DELAY: usize = 192000 / 20 + 64;
+    #[must_use] 
     pub fn new(phase_offset: f64) -> Self {
         Self {
             last_delay_ms: 0.0,
@@ -288,27 +293,25 @@ impl ChorusEngine for TapeVoice {
         self.wow_phase = (self.wow_phase + 0.33 / self.sample_rate).fract();
         let wow = (self.wow_phase * 2.0 * PI).sin() * depth * 0.3;
         self.flutter_phase = (self.flutter_phase + 5.8 / self.sample_rate).fract();
-        let flutter = ((self.flutter_phase * 2.0 * PI).sin() * 0.6
-            + (self.flutter_phase * 4.0 * PI).sin() * 0.3
-            + (self.flutter_phase * 6.0 * PI).sin() * 0.1)
+        let flutter = (self.flutter_phase * 6.0 * PI).sin().mul_add(0.1, (self.flutter_phase * 2.0 * PI).sin().mul_add(0.6, (self.flutter_phase * 4.0 * PI).sin() * 0.3))
             * depth
             * 0.15;
         let base_ms = effect_type.base_delay_ms();
         let depth_ms = effect_type.max_depth_ms() * depth;
-        let delay_ms = base_ms + depth_ms * lfo + wow + flutter;
+        let delay_ms = depth_ms.mul_add(lfo, base_ms) + wow + flutter;
         self.last_delay_ms = delay_ms;
         let delay_samples =
             (delay_ms * 0.001 * self.sample_rate).clamp(1.0, self.delay.len() as f64 - 4.0);
         let delayed = self.delay.read_cubic(delay_samples);
-        let drive = 1.0 + color * 2.0;
+        let drive = color.mul_add(2.0, 1.0);
         let saturated_input = (input * drive).tanh();
         let fb = (delayed * feedback).tanh();
         self.delay.write(saturated_input + fb.clamp(-1.5, 1.5));
-        let cutoff = 3000.0 + color * 11000.0;
+        let cutoff = color.mul_add(11000.0, 3000.0);
         let lp_coeff = (2.0 * PI * cutoff / self.sample_rate)
             .sin()
             .clamp(0.0, 0.99);
-        self.tone_lp = flush(self.tone_lp + (delayed - self.tone_lp) * lp_coeff);
+        self.tone_lp = flush((delayed - self.tone_lp).mul_add(lp_coeff, self.tone_lp));
         self.tone_lp
     }
 
@@ -339,6 +342,7 @@ pub struct OrbitVoice {
 
 impl OrbitVoice {
     const MAX_DELAY: usize = 192000 / 20 + 64;
+    #[must_use] 
     pub fn new(phase_offset: f64) -> Self {
         Self {
             last_delay_ms: 0.0,
@@ -381,12 +385,12 @@ impl ChorusEngine for OrbitVoice {
         let x = phi.sin();
         let y = (1.0 - eccentricity) * phi.cos();
         let proj = x * theta_rad.cos() + y * theta_rad.sin();
-        let proj2 = x * (theta_rad + PI * 0.5).cos() + y * (theta_rad + PI * 0.5).sin();
+        let proj2 = x * PI.mul_add(0.5, theta_rad).cos() + y * PI.mul_add(0.5, theta_rad).sin();
         let base_ms = effect_type.base_delay_ms();
         let depth_ms = effect_type.max_depth_ms() * depth;
-        let delay1_ms = base_ms + depth_ms * proj * 0.7;
+        let delay1_ms = (depth_ms * proj).mul_add(0.7, base_ms);
         self.last_delay_ms = delay1_ms;
-        let delay2_ms = base_ms + depth_ms * proj2 * 0.5;
+        let delay2_ms = (depth_ms * proj2).mul_add(0.5, base_ms);
         let max_delay = self.delay.len() as f64 - 4.0;
         let d1 = (delay1_ms * 0.001 * self.sample_rate).clamp(1.0, max_delay);
         let d2 = (delay2_ms * 0.001 * self.sample_rate).clamp(1.0, max_delay);
@@ -412,7 +416,7 @@ impl ChorusEngine for OrbitVoice {
 // ─── Juno Engine ───────────────────────────────────────────────────
 
 /// Juno-style chorus: triangle LFO + allpass interpolation + DC blocking.
-/// Based on TAL-NoiseMaker / YKChorus (SpotlightKid, GPL-2.0).
+/// Based on TAL-NoiseMaker / `YKChorus` (`SpotlightKid`, GPL-2.0).
 ///
 /// Keeps first-order allpass interpolation (not cubic) on purpose — the
 /// allpass state `z1` is part of the original BBD-flavored character and
@@ -437,8 +441,9 @@ impl JunoVoice {
     /// Original fixed DC-blocker pole (R = 0.995 at 48 kHz).
     const DC_R: f64 = 0.995;
 
+    #[must_use] 
     pub fn new(phase_offset: f64) -> Self {
-        let lfo_phase = phase_offset * 2.0 - 1.0;
+        let lfo_phase = phase_offset.mul_add(2.0, -1.0);
         let mut voice = Self {
             last_delay_ms: 0.0,
             delay: DelayLine::new(2048),
@@ -508,7 +513,7 @@ impl ChorusEngine for JunoVoice {
             EffectType::Flanger => Self::DELAY_MS * self.sample_rate * 0.001 * 0.3,
         };
 
-        let offset = (lfo * 0.3 * depth + 0.4) * base_delay;
+        let offset = (lfo * 0.3).mul_add(depth, 0.4) * base_delay;
         let offset = offset.clamp(1.0, (self.buf_len.saturating_sub(2)) as f64);
         self.last_delay_ms = offset * 1000.0 / self.sample_rate;
         let int_offset = offset.floor() as usize;
@@ -525,9 +530,9 @@ impl ChorusEngine for JunoVoice {
         self.z1 = delayed;
 
         // One-pole lowpass post-filter (color controls brightness)
-        let cutoff_param = Self::LP_CUTOFF * (0.5 + color * 0.5);
+        let cutoff_param = Self::LP_CUTOFF * color.mul_add(0.5, 0.5);
         let p = (cutoff_param * 0.98).powi(4);
-        self.lp_state = flush((1.0 - p) * delayed + p * self.lp_state);
+        self.lp_state = flush((1.0 - p).mul_add(delayed, p * self.lp_state));
 
         self.dc.tick(self.lp_state)
     }
@@ -538,7 +543,7 @@ impl ChorusEngine for JunoVoice {
 
     fn reset(&mut self) {
         self.delay.clear();
-        self.lfo_phase = self.phase_offset * 2.0 - 1.0;
+        self.lfo_phase = self.phase_offset.mul_add(2.0, -1.0);
         self.lfo_sign = if self.lfo_phase >= 0.0 { 1.0 } else { -1.0 };
         self.z1 = 0.0;
         self.lp_state = 0.0;
@@ -547,6 +552,7 @@ impl ChorusEngine for JunoVoice {
 }
 
 /// Create a vector of engines for one channel.
+#[must_use] 
 pub fn create_voices(engine: EngineType, count: usize) -> Vec<Box<dyn ChorusEngine>> {
     (0..count)
         .map(|i| {
@@ -572,7 +578,7 @@ mod tests {
         voice.update(SR);
         let mut has_output = false;
         for i in 0..9600 {
-            let s = (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5;
+            let s = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let out = voice.tick(s, 1.0, 0.5, 0.0, 0.5, EffectType::Chorus);
             if out.abs() > 0.01 {
                 has_output = true;
@@ -584,7 +590,7 @@ mod tests {
     fn test_engine_no_nan(mut voice: Box<dyn ChorusEngine>) {
         voice.update(SR);
         for i in 0..48000 {
-            let s = (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.8;
+            let s = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.8;
             let out = voice.tick(s, 3.0, 1.0, 0.8, 0.5, EffectType::Flanger);
             assert!(out.is_finite(), "NaN at {i}");
         }
@@ -639,7 +645,7 @@ mod tests {
         voice_r.update(SR);
         let mut diff_sum: f64 = 0.0;
         for i in 0..4800 {
-            let s = (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5;
+            let s = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let l = voice_l.tick(s, 0.5, 0.5, 0.0, 0.5, EffectType::Chorus);
             let r = voice_r.tick(s, 0.5, 0.5, 0.0, 0.5, EffectType::Chorus);
             diff_sum += (l - r).abs();
@@ -666,7 +672,7 @@ mod tests {
         let mut out_tape = Vec::new();
         let mut out_orbit = Vec::new();
         for i in 0..9600 {
-            let s = (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5;
+            let s = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5;
             out_cubic.push(cubic.tick(s, 1.0, 0.5, 0.0, 0.5, EffectType::Chorus));
             out_bbd.push(bbd.tick(s, 1.0, 0.5, 0.0, 0.5, EffectType::Chorus));
             out_tape.push(tape.tick(s, 1.0, 0.5, 0.0, 0.5, EffectType::Chorus));
@@ -704,7 +710,7 @@ mod tests {
         let mut energy_dark: f64 = 0.0;
         let mut energy_bright: f64 = 0.0;
         for i in 0..9600 {
-            let s = (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5;
+            let s = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let d = dark.tick(s, 1.0, 0.5, 0.0, 0.0, EffectType::Chorus);
             let b = bright.tick(s, 1.0, 0.5, 0.0, 1.0, EffectType::Chorus);
             energy_dark += d * d;

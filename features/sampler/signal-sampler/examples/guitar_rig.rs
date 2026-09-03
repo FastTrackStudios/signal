@@ -200,9 +200,9 @@ fn print_status(prig: &ProfileRig) {
         rig.underruns(),
         rig.overruns(),
     );
-    let bf = rig.block_frames().max(1) as f64;
-    let sr = rig.sample_rate.max(1) as f64;
-    let ring = rig.ring_frames() as f64;
+    let bf = f64::from(rig.block_frames().max(1));
+    let sr = f64::from(rig.sample_rate.max(1));
+    let ring = f64::from(rig.ring_frames());
     println!(
         "  buffer {} fr | ring {:.0} fr | ~{:.1} ms software round-trip (+ interface)",
         rig.block_frames(),

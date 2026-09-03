@@ -48,6 +48,7 @@ pub struct Tremolo {
 }
 
 impl Tremolo {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             depth: 0.5,
@@ -79,15 +80,15 @@ impl Tremolo {
     pub fn tick(&mut self, sample: f64, mod_val: f64, ch: usize) -> f64 {
         // Convert 0..1 modulation to gain: at depth=1, gain ranges 0..1
         // at depth=0, gain is always 1 (no modulation)
-        let gain = 1.0 - self.depth * (1.0 - mod_val);
-        let gain_inv = 1.0 - self.depth * mod_val;
+        let gain = self.depth.mul_add(-(1.0 - mod_val), 1.0);
+        let gain_inv = self.depth.mul_add(-mod_val, 1.0);
 
         match self.mode {
             TremMode::Mono | TremMode::Stereo => sample * gain,
             TremMode::Harmonic => {
                 let low = self.lp.tick(sample, ch);
                 let high = self.hp.tick(sample, ch);
-                low * gain + high * gain_inv
+                low.mul_add(gain, high * gain_inv)
             }
         }
     }
@@ -137,6 +138,7 @@ pub struct AnalogProcessor {
 }
 
 impl AnalogProcessor {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             style: AnalogStyle::Clean,
@@ -264,8 +266,8 @@ mod tests {
 
         let mut has_output = false;
         for i in 0..4800 {
-            let s = (2.0 * PI * 440.0 * i as f64 / SR).sin();
-            let mod_val = (2.0 * PI * 5.0 * i as f64 / SR).sin() * 0.5 + 0.5;
+            let s = (2.0 * PI * 440.0 * f64::from(i) / SR).sin();
+            let mod_val = (2.0 * PI * 5.0 * f64::from(i) / SR).sin().mul_add(0.5, 0.5);
             let out = t.tick(s, mod_val, 0);
             if out.abs() > 0.01 {
                 has_output = true;
@@ -352,7 +354,7 @@ mod tests {
 
             for &x in &[0.0, 0.5, 1.0, -0.5, -1.0, 2.0, -2.0] {
                 let out = ap.tick(x, 0);
-                assert!(out.is_finite(), "NaN for {:?} at {x}: {out}", style);
+                assert!(out.is_finite(), "NaN for {style:?} at {x}: {out}");
             }
         }
     }

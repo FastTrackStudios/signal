@@ -38,7 +38,7 @@ pub struct NamVstChunk {
 
 const HEADER_SIZE: usize = 0x44;
 
-/// Offset of the total outer size field (u32 LE): data.len() - 0x3C.
+/// Offset of the total outer size field (u32 LE): `data.len()` - 0x3C.
 const OUTER_SIZE_OFFSET: usize = 0x30;
 
 /// Offset of the component state size field (u32 LE).
@@ -48,7 +48,7 @@ const COMPONENT_SIZE_OFFSET: usize = 0x3C;
 pub fn decode_chunk(base64_data: &str) -> Result<NamVstChunk, NamError> {
     let data = BASE64
         .decode(base64_data.trim())
-        .map_err(|e| NamError::ParseError(format!("base64 decode: {}", e)))?;
+        .map_err(|e| NamError::ParseError(format!("base64 decode: {e}")))?;
 
     if data.len() < HEADER_SIZE {
         return Err(NamError::ParseError(format!(
@@ -103,8 +103,9 @@ pub fn decode_chunk(base64_data: &str) -> Result<NamVstChunk, NamError> {
 /// Encode a NAM VST3 state chunk back to base64.
 ///
 /// Patches both size fields in the REAPER VST3 header:
-/// - Offset 0x30: total outer size = data.len() - 0x3C
-/// - Offset 0x3C: component state size = (data after header) - controller_tail_size
+/// - Offset 0x30: total outer size = `data.len()` - 0x3C
+/// - Offset 0x3C: component state size = (data after header) - `controller_tail_size`
+#[must_use] 
 pub fn encode_chunk(chunk: &NamVstChunk) -> String {
     let mut data = Vec::with_capacity(
         HEADER_SIZE
@@ -146,6 +147,7 @@ pub fn encode_chunk(chunk: &NamVstChunk) -> String {
 /// is zero-initialized (size fields are patched on `encode_chunk`), and
 /// the tail contains default NAM parameter data (8 bytes of zeros,
 /// matching the controller state seen in live captures).
+#[must_use] 
 pub fn create_default_chunk() -> NamVstChunk {
     let header = vec![0u8; HEADER_SIZE];
 
@@ -182,8 +184,7 @@ pub fn rewrite_paths(
 fn read_length_prefixed_string(data: &[u8], cursor: &mut usize) -> Result<String, NamError> {
     if *cursor + 4 > data.len() {
         return Err(NamError::ParseError(format!(
-            "unexpected end of chunk at offset {} reading string length",
-            cursor
+            "unexpected end of chunk at offset {cursor} reading string length"
         )));
     }
 
@@ -225,6 +226,7 @@ fn write_length_prefixed_string(buf: &mut Vec<u8>, s: &str) {
 ///
 /// For VST/VST3, extracts lines between header and footer.
 /// For CLAP, extracts lines from within the `<STATE` block.
+#[must_use] 
 pub fn extract_state_base64(chunk: &str) -> Option<Vec<String>> {
     let lines: Vec<&str> = chunk.lines().collect();
     if lines.len() < 3 {
@@ -272,6 +274,7 @@ pub fn extract_state_base64(chunk: &str) -> Option<Vec<String>> {
 }
 
 /// Extract the first base64 segment (up to and including the `=`-padded line).
+#[must_use] 
 pub fn first_base64_segment(segments: &[String]) -> String {
     let mut result = String::new();
     for line in segments {
@@ -287,10 +290,11 @@ pub fn first_base64_segment(segments: &[String]) -> String {
 ///
 /// Handles two chunk formats:
 /// - **VST/VST3**: flat structure — header, base64 data, optional trailing metadata, `>`
-/// - **CLAP**: nested structure — header, CFG/IN_PINS/etc., `<STATE` block with base64, `>`
+/// - **CLAP**: nested structure — header, `CFG/IN_PINS/etc`., `<STATE` block with base64, `>`
 ///
 /// For CLAP chunks, only the `<STATE>` block content is replaced; everything else
-/// (CFG, IN_PINS, etc.) is preserved.
+/// (CFG, `IN_PINS`, etc.) is preserved.
+#[must_use] 
 pub fn rebuild_chunk_with_state(chunk: &str, new_b64: &str) -> String {
     let lines: Vec<&str> = chunk.lines().collect();
     let header = lines.first().copied().unwrap_or("");
@@ -346,6 +350,7 @@ pub fn rebuild_chunk_with_state(chunk: &str, new_b64: &str) -> String {
 ///   >
 /// >
 /// ```
+#[must_use] 
 pub fn rebuild_clap_chunk_with_state(lines: &[&str], new_b64: &str) -> String {
     let mut result = String::new();
 
@@ -384,7 +389,12 @@ pub fn rebuild_clap_chunk_with_state(lines: &[&str], new_b64: &str) -> String {
     }
 
     // If no STATE block was found, fall back to appending state before the final >
-    if !state_replaced {
+    if state_replaced {
+        // Remove trailing newline added by the loop
+        if result.ends_with('\n') {
+            result.pop();
+        }
+    } else {
         // Remove trailing > and newline, add STATE block, re-add >
         let trimmed = result.trim_end().trim_end_matches('>').to_string();
         result = trimmed;
@@ -396,11 +406,6 @@ pub fn rebuild_clap_chunk_with_state(lines: &[&str], new_b64: &str) -> String {
         }
         result.push_str("  >\n");
         result.push('>');
-    } else {
-        // Remove trailing newline added by the loop
-        if result.ends_with('\n') {
-            result.pop();
-        }
     }
 
     result

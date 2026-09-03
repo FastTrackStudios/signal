@@ -5,6 +5,9 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 tracing.workspace = true
 # The shared sampler engine expresses the Omnisphere routing tree + render

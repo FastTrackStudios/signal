@@ -3,12 +3,12 @@
 //! Covers:
 //!   - Profile / Patch CRUD and persistence
 //!   - Song / Section CRUD (Patch-sourced and RigScene-sourced)
-//!   - resolve_target() — the DAW integration path that compiles any target
-//!     (RigScene / ProfilePatch / SongSection) into a flat ResolvedGraph with
+//!   - `resolve_target()` — the DAW integration path that compiles any target
+//!     (`RigScene` / `ProfilePatch` / `SongSection`) into a flat `ResolvedGraph` with
 //!     merged overrides and final parameter values
 //!
 //! Run with:
-//!   cargo test -p signal --test signal_patches_songs -- --nocapture
+//!   cargo test -p signal --test `signal_patches_songs` -- --nocapture
 
 mod fixtures;
 
@@ -398,7 +398,7 @@ async fn update_section_override_persists() {
 //  Resolve / DAW integration tests
 // ─────────────────────────────────────────────────────────────
 
-/// Resolve a bare RigScene — verifies the basic resolution pipeline works.
+/// Resolve a bare `RigScene` — verifies the basic resolution pipeline works.
 #[tokio::test]
 async fn resolve_rig_scene_produces_graph() {
     let signal = controller().await;
@@ -435,7 +435,7 @@ async fn resolve_rig_scene_produces_graph() {
     }
 }
 
-/// Resolve a ProfilePatch and verify override merging: patch override should
+/// Resolve a `ProfilePatch` and verify override merging: patch override should
 /// modify the final resolved block value.
 #[tokio::test]
 async fn resolve_profile_patch_applies_gain_override() {
@@ -458,7 +458,7 @@ async fn resolve_profile_patch_applies_gain_override() {
 
     // Find the amp block's gain parameter in the resolved graph
     let gain = graph.find_param("amp", "gain");
-    println!("  Resolved amp gain: {:?}", gain);
+    println!("  Resolved amp gain: {gain:?}");
 
     // Patch sets gain to 0.18; default is 0.45 — must be overridden
     if let Some(gain_val) = gain {
@@ -493,7 +493,7 @@ async fn resolve_lead_patch_has_higher_gain_than_clean() {
     let clean_gain = clean_graph.find_param("amp", "gain");
     let lead_gain = lead_graph.find_param("amp", "gain");
 
-    println!("Resolved gain: clean={:?} lead={:?}", clean_gain, lead_gain);
+    println!("Resolved gain: clean={clean_gain:?} lead={lead_gain:?}");
 
     if let (Some(c), Some(l)) = (clean_gain, lead_gain) {
         assert!(
@@ -503,7 +503,7 @@ async fn resolve_lead_patch_has_higher_gain_than_clean() {
     }
 }
 
-/// Resolve a SongSection backed by a Patch and confirm the graph is equivalent
+/// Resolve a `SongSection` backed by a Patch and confirm the graph is equivalent
 /// to resolving that patch directly.
 #[tokio::test]
 async fn resolve_song_section_via_patch_matches_direct_patch() {
@@ -566,8 +566,8 @@ async fn resolve_song_section_via_patch_matches_direct_patch() {
     );
 }
 
-/// Resolve a SectionSource::RigScene directly — verifies it resolves identically
-/// to the equivalent RigScene target.
+/// Resolve a `SectionSource::RigScene` directly — verifies it resolves identically
+/// to the equivalent `RigScene` target.
 #[tokio::test]
 async fn resolve_rig_scene_section_equals_direct_rig_scene() {
     let signal = controller().await;
@@ -655,7 +655,7 @@ async fn patch_overrides_stack_on_top_of_rig_scene_overrides() {
 
     // Solo patch sets gain=0.72 and delay mix=0.30
     let solo_gain = patch_graph.find_param("amp", "gain");
-    println!("Solo resolved gain: {:?}", solo_gain);
+    println!("Solo resolved gain: {solo_gain:?}");
     if let Some(g) = solo_gain {
         assert!(
             (g - 0.72).abs() < 0.01,
@@ -668,7 +668,7 @@ async fn patch_overrides_stack_on_top_of_rig_scene_overrides() {
 //  Patch cycle detection
 // ─────────────────────────────────────────────────────────────
 
-/// Self-referencing patch (A → A) should return CycleDetected.
+/// Self-referencing patch (A → A) should return `CycleDetected`.
 #[tokio::test]
 async fn resolve_self_referencing_patch_detects_cycle() {
     let signal = controller().await;
@@ -697,7 +697,7 @@ async fn resolve_self_referencing_patch_detects_cycle() {
     );
 }
 
-/// Two-patch cycle (A → B → A) should return CycleDetected.
+/// Two-patch cycle (A → B → A) should return `CycleDetected`.
 #[tokio::test]
 async fn resolve_two_patch_cycle_detects_cycle() {
     let signal = controller().await;
@@ -728,7 +728,7 @@ async fn resolve_two_patch_cycle_detects_cycle() {
     );
 }
 
-/// Three-patch cycle (A → B → C → A) should return CycleDetected.
+/// Three-patch cycle (A → B → C → A) should return `CycleDetected`.
 #[tokio::test]
 async fn resolve_three_patch_cycle_detects_cycle() {
     let signal = controller().await;
@@ -762,7 +762,7 @@ async fn resolve_three_patch_cycle_detects_cycle() {
     );
 }
 
-/// Valid chain (A → B → RigScene) should resolve successfully.
+/// Valid chain (A → B → `RigScene`) should resolve successfully.
 #[tokio::test]
 async fn resolve_valid_patch_chain_succeeds() {
     let signal = controller().await;
@@ -799,7 +799,7 @@ async fn resolve_valid_patch_chain_succeeds() {
     );
 }
 
-/// SongSection referencing a cyclic patch should also detect the cycle.
+/// `SongSection` referencing a cyclic patch should also detect the cycle.
 #[tokio::test]
 async fn resolve_song_section_with_cyclic_patch_detects_cycle() {
     let signal = controller().await;
@@ -844,11 +844,11 @@ async fn resolve_song_section_with_cyclic_patch_detects_cycle() {
 //  All-Around profile — activate_patch for every slot
 // ─────────────────────────────────────────────────────────────
 
-/// Activate each patch in the All-Around profile via activate_patch().
+/// Activate each patch in the All-Around profile via `activate_patch()`.
 ///
 /// The All-Around profile draws from 4 different NDSP plugins + a
-/// profile-level RfxChain. Each patch targets a BlockSnapshot. This test
-/// verifies that activate_patch resolves successfully for every slot,
+/// profile-level `RfxChain`. Each patch targets a `BlockSnapshot`. This test
+/// verifies that `activate_patch` resolves successfully for every slot,
 /// including the default (None) path.
 #[tokio::test]
 async fn all_around_activate_each_patch() {
@@ -941,8 +941,7 @@ async fn create_song_from_profile_generates_sections() {
         let expected_patch = &profile.patches[i];
         assert_eq!(
             section.name, expected_patch.name,
-            "section {} name should match patch name",
-            i
+            "section {i} name should match patch name"
         );
         match &section.source {
             SectionSource::Patch { patch_id } => {
@@ -952,7 +951,7 @@ async fn create_song_from_profile_generates_sections() {
                     i, expected_patch.name
                 );
             }
-            _ => panic!("section {} should be Patch-sourced", i),
+            _ => panic!("section {i} should be Patch-sourced"),
         }
     }
 
@@ -976,7 +975,7 @@ async fn create_song_from_profile_generates_sections() {
     );
 }
 
-/// create_from_profile with a nonexistent profile should return NotFound.
+/// `create_from_profile` with a nonexistent profile should return `NotFound`.
 #[tokio::test]
 async fn create_song_from_missing_profile_returns_error() {
     let signal = controller().await;

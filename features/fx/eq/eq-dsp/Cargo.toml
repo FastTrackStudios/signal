@@ -5,6 +5,9 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 description = "EQ filter design and biquad-cascade DSP for FTS-EQ"
 
+[lints]
+workspace = true
+
 [dependencies]
 audiocore-dsp = { workspace = true }
 realfft = { workspace = true }

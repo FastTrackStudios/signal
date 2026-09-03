@@ -10,6 +10,9 @@ crate-type = ["cdylib", "rlib"]
 name = "reaper_signal_extension"
 path = "src/lib.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 daw = { workspace = true, features = ["reaper"] }
 daw-extension-runtime.workspace = true

@@ -35,7 +35,7 @@ const SONGS_DIR: &str = "05-Songs";
 
 // ─── Instrument ───────────────────────────────────────────────
 
-/// Instrument folder for the TrackTemplates directory.
+/// Instrument folder for the `TrackTemplates` directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instrument {
     Guitar,
@@ -47,7 +47,8 @@ pub enum Instrument {
 }
 
 impl Instrument {
-    pub fn folder_name(self) -> &'static str {
+    #[must_use] 
+    pub const fn folder_name(self) -> &'static str {
         match self {
             Self::Guitar => "Guitar",
             Self::Bass => "Bass",
@@ -72,7 +73,7 @@ pub enum TemplateTier {
 }
 
 impl TemplateTier {
-    fn dir_name(self) -> &'static str {
+    const fn dir_name(self) -> &'static str {
         match self {
             Self::Layer => LAYERS_DIR,
             Self::Engine => ENGINES_DIR,
@@ -82,7 +83,7 @@ impl TemplateTier {
         }
     }
 
-    fn to_preset_kind(self) -> PresetKind {
+    const fn to_preset_kind(self) -> PresetKind {
         match self {
             Self::Layer => PresetKind::Layer,
             Self::Engine => PresetKind::Engine,
@@ -95,7 +96,8 @@ impl TemplateTier {
 
 // ─── TrackTemplateWriter ──────────────────────────────────────
 
-/// Resolve the FTS-Signal TrackTemplates root directory.
+/// Resolve the FTS-Signal `TrackTemplates` root directory.
+#[must_use] 
 pub fn track_templates_root() -> PathBuf {
     utils::paths::reaper_track_templates().join(FTS_SIGNAL_DIR)
 }
@@ -128,7 +130,7 @@ pub fn track_templates_root() -> PathBuf {
 ///
 /// # Returns
 /// The path to the written `.RTrackTemplate` file.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub fn save_track_template(
     preset_name: &str,
     variation_name: &str,
@@ -228,6 +230,7 @@ pub struct ScannedTemplate {
 ///
 /// Handles the nested structure:
 /// `{instrument}/{tier}/{preset_name}/{variation_name}.RTrackTemplate`
+#[must_use] 
 pub fn scan_track_templates(root: &Path) -> Vec<ScannedTemplate> {
     let mut results = Vec::new();
 

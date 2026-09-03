@@ -6,6 +6,9 @@ license.workspace = true
 edition = "2021"
 description = "Saturation profiles — the five circuits, and the curve each one clips with"
 
+[lints]
+workspace = true
+
 [dependencies]
 saturate-dsp = { path = "../saturate-dsp" }
 

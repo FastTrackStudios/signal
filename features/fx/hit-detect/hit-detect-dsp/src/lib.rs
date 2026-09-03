@@ -59,14 +59,14 @@ pub enum Band {
 }
 
 impl Band {
-    pub const ALL: [Band; 3] = [Band::Low, Band::Mid, Band::High];
+    pub const ALL: [Self; 3] = [Self::Low, Self::Mid, Self::High];
 
     /// The band's filter, as (kind, corner frequency in Hz).
-    fn filter(self) -> (Shape, f64) {
+    const fn filter(self) -> (Shape, f64) {
         match self {
-            Band::Low => (Shape::LowPass, 120.0),
-            Band::Mid => (Shape::BandPass, 700.0),
-            Band::High => (Shape::HighPass, 4000.0),
+            Self::Low => (Shape::LowPass, 120.0),
+            Self::Mid => (Shape::BandPass, 700.0),
+            Self::High => (Shape::HighPass, 4000.0),
         }
     }
 }
@@ -100,6 +100,7 @@ impl Analysis {
     /// Interpolated rather than nearest-frame because this drives light
     /// levels: stepping between frames at ~86 Hz is visible as a stutter
     /// on a slow fade, which is exactly what this curve is for.
+    #[must_use] 
     pub fn dynamics_at(&self, secs: f64) -> f32 {
         if self.dynamics.is_empty() {
             return 0.0;
@@ -110,10 +111,11 @@ impl Analysis {
             return *self.dynamics.last().expect("non-empty");
         }
         let t = (frame - i as f64) as f32;
-        self.dynamics[i] * (1.0 - t) + self.dynamics[i + 1] * t
+        self.dynamics[i].mul_add(1.0 - t, self.dynamics[i + 1] * t)
     }
 
     /// The strongest hit in a window, if any — "was there a hit here?"
+    #[must_use] 
     pub fn strongest_between(&self, from: f64, to: f64) -> Option<&Hit> {
         self.hits
             .iter()
@@ -147,7 +149,8 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn for_rate(sample_rate: f64) -> Self {
+    #[must_use] 
+    pub const fn for_rate(sample_rate: f64) -> Self {
         Self {
             sample_rate,
             fft_size: 2048,
@@ -163,6 +166,7 @@ impl Config {
 ///
 /// Stereo should be summed to mono first: hits are not a stereo
 /// phenomenon, and summing halves the work.
+#[must_use] 
 pub fn analyze(samples: &[f32], config: &Config) -> Analysis {
     let frame_rate = config.sample_rate / config.hop_size as f64;
 
@@ -181,7 +185,7 @@ pub fn analyze(samples: &[f32], config: &Config) -> Analysis {
     let mut hits = pick(&curve, frame_rate, config);
 
     let energy = band_energy(samples, config);
-    for hit in hits.iter_mut() {
+    for hit in &mut hits {
         hit.band = classify(&energy, hit.secs, frame_rate);
     }
 
@@ -218,13 +222,13 @@ fn band_energy(samples: &[f32], config: &Config) -> Vec<(Band, Vec<f32>)> {
                 })
                 .collect();
             let mut sorted = frames.clone();
-            sorted.sort_by(|a, b| a.total_cmp(b));
+            sorted.sort_by(f32::total_cmp);
             let median = sorted
                 .get(sorted.len() / 2)
                 .copied()
                 .unwrap_or(0.0)
                 .max(1e-9);
-            for value in frames.iter_mut() {
+            for value in &mut frames {
                 *value /= median;
             }
             (band, frames)
@@ -255,8 +259,7 @@ fn classify(energy: &[(Band, Vec<f32>)], secs: f64, frame_rate: f64) -> Band {
             };
             score(a).total_cmp(&score(b))
         })
-        .map(|(band, _)| *band)
-        .unwrap_or(Band::Mid)
+        .map_or(Band::Mid, |(band, _)| *band)
 }
 
 /// The onset detection function, one value per hop.
@@ -366,7 +369,7 @@ fn dynamics(samples: &[f32], config: &Config) -> Vec<f32> {
     let frame_rate = config.sample_rate / hop as f64;
     let coeff = (-1.0 / (config.dynamics_smoothing_secs * frame_rate)).exp() as f32;
     let mut state = rms[0];
-    for value in rms.iter_mut() {
+    for value in &mut rms {
         state = *value + coeff * (state - *value);
         *value = state;
     }
@@ -377,9 +380,9 @@ fn dynamics(samples: &[f32], config: &Config) -> Vec<f32> {
     }
 
     let mut sorted = rms.clone();
-    sorted.sort_by(|a, b| a.total_cmp(b));
+    sorted.sort_by(f32::total_cmp);
     let reference = sorted[sorted.len() * 95 / 100].max(f32::EPSILON);
-    for value in rms.iter_mut() {
+    for value in &mut rms {
         *value = (*value / reference).clamp(0.0, 1.0);
     }
     rms
@@ -388,7 +391,7 @@ fn dynamics(samples: &[f32], config: &Config) -> Vec<f32> {
 /// Filter shapes this crate needs.
 // LowPass/BandPass/HighPass is the filter vocabulary; the shared postfix is
 // the point, not a naming slip.
-#[allow(clippy::enum_variant_names)]
+#[expect(clippy::enum_variant_names)]
 #[derive(Clone, Copy)]
 enum Shape {
     LowPass,
@@ -425,7 +428,7 @@ impl Biquad {
         let a0 = 1.0 + alpha;
         let (b0, b1, b2) = match shape {
             Shape::LowPass => ((1.0 - cos) / 2.0, 1.0 - cos, (1.0 - cos) / 2.0),
-            Shape::HighPass => ((1.0 + cos) / 2.0, -(1.0 + cos), (1.0 + cos) / 2.0),
+            Shape::HighPass => (f64::midpoint(1.0, cos), -(1.0 + cos), f64::midpoint(1.0, cos)),
             Shape::BandPass => (alpha, 0.0, -alpha),
         };
         Self {
@@ -442,9 +445,7 @@ impl Biquad {
     }
 
     fn tick(&mut self, x: f64) -> f64 {
-        let y = self.b0 * x + self.b1 * self.x1 + self.b2 * self.x2
-            - self.a1 * self.y1
-            - self.a2 * self.y2;
+        let y = self.a2.mul_add(-self.y2, self.a1.mul_add(-self.y1, self.b2.mul_add(self.x2, self.b0.mul_add(x, self.b1 * self.x1))));
         self.x2 = self.x1;
         self.x1 = x;
         self.y2 = self.y1;

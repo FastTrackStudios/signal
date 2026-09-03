@@ -4,9 +4,9 @@
 //! rigs → profiles → songs → setlists, plus reorder, resolve, smart diff,
 //! and morph engine.
 //!
-//! Uses an in-memory SQLite database — no REAPER required.
+//! Uses an in-memory `SQLite` database — no REAPER required.
 //!
-//!   cargo test -p signal --test signal_guitar_rig_api -- --nocapture
+//!   cargo test -p signal --test `signal_guitar_rig_api` -- --nocapture
 
 mod fixtures;
 
@@ -166,7 +166,7 @@ async fn add_snapshot_to_existing_collection() {
     assert!((high_gain.first_value().unwrap() - 0.9).abs() < 0.001);
 }
 
-/// Verify update_snapshot_params increments the version.
+/// Verify `update_snapshot_params` increments the version.
 #[tokio::test]
 async fn update_snapshot_params_increments_version() {
     let signal = controller().await;
@@ -398,7 +398,7 @@ async fn add_variant_to_module_collection() {
     assert_eq!(heavy.module().blocks().len(), 1);
 }
 
-/// Module block sources (PresetDefault, PresetSnapshot) round-trip correctly.
+/// Module block sources (`PresetDefault`, `PresetSnapshot`) round-trip correctly.
 #[tokio::test]
 async fn module_block_source_references() {
     let signal = controller().await;
@@ -526,7 +526,7 @@ async fn module_signal_chain_with_split() {
 //  Group C: Layer Construction
 // ═════════════════════════════════════════════════════════════
 
-/// Build a layer from scratch with module_refs.
+/// Build a layer from scratch with `module_refs`.
 #[tokio::test]
 async fn build_layer_from_scratch() {
     let signal = controller().await;
@@ -759,7 +759,7 @@ async fn build_rig_with_scenes() {
     assert_eq!(solo_loaded.overrides.len(), 2);
 }
 
-/// Rig scene overrides at different NodePath depths are preserved.
+/// Rig scene overrides at different `NodePath` depths are preserved.
 #[tokio::test]
 async fn rig_scene_overrides_stack() {
     let signal = controller().await;
@@ -792,7 +792,7 @@ async fn rig_scene_overrides_stack() {
     let paths: Vec<String> = loaded.variants[0]
         .overrides
         .iter()
-        .map(|o| o.path.as_str().to_string())
+        .map(|o| o.path.as_str())
         .collect();
     assert!(paths.iter().any(|p| p.contains("mix")));
     assert!(paths.iter().any(|p| p.contains("level")));
@@ -1164,7 +1164,7 @@ async fn patch_targets_correct_rig_scene() {
     }
 }
 
-/// Retarget a patch to a different rig scene via set_patch_preset.
+/// Retarget a patch to a different rig scene via `set_patch_preset`.
 #[tokio::test]
 async fn retarget_patch_via_set_patch_preset() {
     let signal = controller().await;
@@ -1497,7 +1497,7 @@ async fn full_hierarchy_resolve_sweep() {
 //  Group I: Smart Scene Switching (SlotDiff)
 // ═════════════════════════════════════════════════════════════
 
-/// Same preset + same snapshot → NoChange.
+/// Same preset + same snapshot → `NoChange`.
 #[tokio::test]
 async fn scene_switch_same_snapshot_no_change() {
     let preset_id = ModulePresetId::new();
@@ -1505,8 +1505,8 @@ async fn scene_switch_same_snapshot_no_change() {
 
     let target = ModuleTarget {
         module_type: ModuleType::Amp,
-        module_preset_id: preset_id.clone(),
-        module_snapshot_id: Some(snapshot_id.clone()),
+        module_preset_id: preset_id,
+        module_snapshot_id: Some(snapshot_id),
     };
 
     let slot = SlotState {
@@ -1524,7 +1524,7 @@ async fn scene_switch_same_snapshot_no_change() {
     assert!(matches!(diffs[0], SlotDiff::NoChange { .. }));
 }
 
-/// Same preset, different snapshot → ApplySnapshot (params only, no reload).
+/// Same preset, different snapshot → `ApplySnapshot` (params only, no reload).
 #[tokio::test]
 async fn scene_switch_different_snapshot_params_only() {
     let preset_id = ModulePresetId::new();
@@ -1538,7 +1538,7 @@ async fn scene_switch_different_snapshot_params_only() {
     };
     let new_target = ModuleTarget {
         module_type: ModuleType::Amp,
-        module_preset_id: preset_id.clone(),
+        module_preset_id: preset_id,
         module_snapshot_id: Some(snap_b),
     };
 
@@ -1561,7 +1561,7 @@ async fn scene_switch_different_snapshot_params_only() {
     );
 }
 
-/// Different preset → LoadAndActivate (full load).
+/// Different preset → `LoadAndActivate` (full load).
 #[tokio::test]
 async fn scene_switch_different_preset_full_load() {
     let preset_a = ModulePresetId::new();
@@ -1656,7 +1656,7 @@ async fn morph_between_resolved_graphs() {
     assert_eq!(changes.len(), 3);
 
     for change in &changes {
-        let expected_mid = (change.from_value + change.to_value) / 2.0;
+        let expected_mid = f64::midpoint(change.from_value, change.to_value);
         assert!(
             (change.current_value - expected_mid).abs() < 1e-10,
             "param '{}' at t=0.5 should be midpoint {expected_mid}, got {}",

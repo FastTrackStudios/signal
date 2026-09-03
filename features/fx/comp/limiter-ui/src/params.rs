@@ -1,4 +1,4 @@
-//! nice_plug parameter definitions and shared UI state.
+//! `nice_plug` parameter definitions and shared UI state.
 //!
 //! Lives in `limiter-ui` (not `limiter-plugin`) so [`crate::control_view`] can
 //! render against the param tree without a circular dep — same split as
@@ -57,7 +57,7 @@ pub struct LimiterParams {
     #[id = "release"]
     pub release_ms: FloatParam,
     /// Ceiling-stage morph: 0 = transparent hard clip (ADClip-style golden
-    /// ratio), 1 = full ClipSoftly sine shaping (rounder, adds harmonics).
+    /// ratio), 1 = full `ClipSoftly` sine shaping (rounder, adds harmonics).
     #[id = "character"]
     pub character: FloatParam,
     /// True-peak mode: the gain computer detects INTER-SAMPLE peaks

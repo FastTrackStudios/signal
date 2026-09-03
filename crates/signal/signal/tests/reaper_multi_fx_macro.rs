@@ -2,16 +2,16 @@
 //! REAPER integration test: Single macro drives parameters across multiple plugins.
 //!
 //! Tests that one FTS Macros knob can simultaneously control:
-//!   - ReaComp: Threshold (inverted) + Ratio (direct)
-//!   - ReaEQ:   Band 1 Gain (direct) + Band 1 Frequency (direct)
+//!   - `ReaComp`: Threshold (inverted) + Ratio (direct)
+//!   - `ReaEQ`:   Band 1 Gain (direct) + Band 1 Frequency (direct)
 //!
 //! This validates the real-world use case of a "tone shaper" macro that
 //! tightens compression and brightens EQ in one knob turn.
 //!
-//! Mapping config is stored in track P_EXT (`P_EXT:FTS_MACROS:mapping_config`).
+//! Mapping config is stored in track `P_EXT` (`P_EXT:FTS_MACROS:mapping_config`).
 //!
 //! Run with:
-//!   cargo xtask reaper-test multi_fx_macro
+//!   cargo xtask reaper-test `multi_fx_macro`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::{Duration, Instant};
@@ -30,8 +30,8 @@ const POLL_INTERVAL: Duration = Duration::from_millis(50);
 ///
 /// FX layout on track:
 ///   FX 0 = FTS Macros (source)
-///   FX 1 = ReaComp   (target)
-///   FX 2 = ReaEQ     (target)
+///   FX 1 = `ReaComp`   (target)
+///   FX 2 = `ReaEQ`     (target)
 fn build_mapping_json(
     comp_threshold_idx: u32,
     comp_ratio_idx: u32,
@@ -151,8 +151,7 @@ async fn multi_fx_macro_drives_comp_and_eq(ctx: &daw::test::ReaperTestContext) -
     let comp_threshold = find_param(&comp_params, "thresh")?;
     let comp_ratio = find_param(&comp_params, "ratio")?;
     ctx.log(&format!(
-        "ReaComp: Threshold={}, Ratio={}",
-        comp_threshold, comp_ratio
+        "ReaComp: Threshold={comp_threshold}, Ratio={comp_ratio}"
     ));
 
     let eq_params = eq_fx.parameters().await?;
@@ -168,7 +167,7 @@ async fn multi_fx_macro_drives_comp_and_eq(ctx: &daw::test::ReaperTestContext) -
 
     let eq_gain = find_param(&eq_params, "gain")?;
     let eq_freq = find_param(&eq_params, "freq")?;
-    ctx.log(&format!("ReaEQ: Gain={}, Freq={}", eq_gain, eq_freq));
+    ctx.log(&format!("ReaEQ: Gain={eq_gain}, Freq={eq_freq}"));
 
     // ─── 3. Store mapping config in track P_EXT ─────────────────────
 
@@ -185,8 +184,7 @@ async fn multi_fx_macro_drives_comp_and_eq(ctx: &daw::test::ReaperTestContext) -
     let fx_count = track.fx_chain().count().await?;
     assert_eq!(
         fx_count, 3,
-        "should have 3 FX (macros + comp + eq), got {}",
-        fx_count
+        "should have 3 FX (macros + comp + eq), got {fx_count}"
     );
 
     // ─── 4. Macro 0 = 0.0 → all targets at min ──────────────────────
@@ -201,8 +199,8 @@ async fn multi_fx_macro_drives_comp_and_eq(ctx: &daw::test::ReaperTestContext) -
     let eg0 = poll_param_value(&eq_fx, eq_gain, 0.50, 0.05, POLL_TIMEOUT).await?;
     let ef0 = poll_param_value(&eq_fx, eq_freq, 0.30, 0.05, POLL_TIMEOUT).await?;
 
-    ctx.log(&format!("  Comp: Threshold={:.4}, Ratio={:.4}", ct0, cr0));
-    ctx.log(&format!("  EQ:   Gain={:.4}, Freq={:.4}", eg0, ef0));
+    ctx.log(&format!("  Comp: Threshold={ct0:.4}, Ratio={cr0:.4}"));
+    ctx.log(&format!("  EQ:   Gain={eg0:.4}, Freq={ef0:.4}"));
     ctx.log("PASS: All 4 targets at minimum position");
 
     // ─── 5. Macro 0 = 1.0 → all targets at max ──────────────────────
@@ -217,8 +215,8 @@ async fn multi_fx_macro_drives_comp_and_eq(ctx: &daw::test::ReaperTestContext) -
     let eg1 = poll_param_value(&eq_fx, eq_gain, 1.00, 0.05, POLL_TIMEOUT).await?;
     let ef1 = poll_param_value(&eq_fx, eq_freq, 0.90, 0.05, POLL_TIMEOUT).await?;
 
-    ctx.log(&format!("  Comp: Threshold={:.4}, Ratio={:.4}", ct1, cr1));
-    ctx.log(&format!("  EQ:   Gain={:.4}, Freq={:.4}", eg1, ef1));
+    ctx.log(&format!("  Comp: Threshold={ct1:.4}, Ratio={cr1:.4}"));
+    ctx.log(&format!("  EQ:   Gain={eg1:.4}, Freq={ef1:.4}"));
     ctx.log("PASS: All 4 targets at maximum position");
 
     // ─── 6. Sweep and verify all 4 targets move monotonically ────────
@@ -232,7 +230,7 @@ async fn multi_fx_macro_drives_comp_and_eq(ctx: &daw::test::ReaperTestContext) -
     let mut prev_ef = -1.0_f64;
 
     for step in 0..=4 {
-        let v = step as f64 / 4.0;
+        let v = f64::from(step) / 4.0;
 
         let exp_ct = 0.8 + v * (0.1 - 0.8); // inverted: 0.8 → 0.1
         let exp_cr = v * 0.8; // direct:   0.0 → 0.8
@@ -247,38 +245,25 @@ async fn multi_fx_macro_drives_comp_and_eq(ctx: &daw::test::ReaperTestContext) -
         let ef = poll_param_value(&eq_fx, eq_freq, exp_ef, 0.05, POLL_TIMEOUT).await?;
 
         ctx.log(&format!(
-            "  Macro={:.2} → Thresh={:.3}, Ratio={:.3}, Gain={:.3}, Freq={:.3}",
-            v, ct, cr, eg, ef
+            "  Macro={v:.2} → Thresh={ct:.3}, Ratio={cr:.3}, Gain={eg:.3}, Freq={ef:.3}"
         ));
 
         if step > 0 {
             assert!(
                 ct <= prev_ct + 0.02,
-                "Threshold should decrease (step {}): {:.4} → {:.4}",
-                step,
-                prev_ct,
-                ct
+                "Threshold should decrease (step {step}): {prev_ct:.4} → {ct:.4}"
             );
             assert!(
                 cr >= prev_cr - 0.02,
-                "Ratio should increase (step {}): {:.4} → {:.4}",
-                step,
-                prev_cr,
-                cr
+                "Ratio should increase (step {step}): {prev_cr:.4} → {cr:.4}"
             );
             assert!(
                 eg >= prev_eg - 0.02,
-                "EQ Gain should increase (step {}): {:.4} → {:.4}",
-                step,
-                prev_eg,
-                eg
+                "EQ Gain should increase (step {step}): {prev_eg:.4} → {eg:.4}"
             );
             assert!(
                 ef >= prev_ef - 0.02,
-                "EQ Freq should increase (step {}): {:.4} → {:.4}",
-                step,
-                prev_ef,
-                ef
+                "EQ Freq should increase (step {step}): {prev_ef:.4} → {ef:.4}"
             );
         }
 

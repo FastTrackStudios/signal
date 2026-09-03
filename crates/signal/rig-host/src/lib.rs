@@ -65,7 +65,7 @@ pub mod store;
 /// A realtime engine the host can run on — implemented by daw's cpal
 /// [`AudioEngine`] and (on Linux with the `pipewire` feature) the native
 /// duplex `pw_filter` engine. The engine type is a [`RigHost`] type parameter
-/// so output-only hosts stay `Sync` (the duplex engine owns raw PipeWire
+/// so output-only hosts stay `Sync` (the duplex engine owns raw `PipeWire`
 /// pointers and is `Send`-only — rigs that use it already serialize through a
 /// `Mutex`).
 #[cfg(not(target_arch = "wasm32"))]
@@ -92,11 +92,11 @@ impl HostedEngine for AudioEngine {
         shared: Arc<TransportShared>,
         prefs: &AudioIoPrefs,
     ) -> eyre::Result<Self> {
-        AudioEngine::with_project_prefs(daw, project_guid, shared, prefs)
+        Self::with_project_prefs(daw, project_guid, shared, prefs)
             .map_err(|e| eyre::eyre!("rig host: audio engine failed: {e}"))
     }
     fn sample_rate(&self) -> u32 {
-        AudioEngine::sample_rate(self)
+        Self::sample_rate(self)
     }
 }
 
@@ -108,18 +108,18 @@ impl HostedEngine for DuplexAudioEngine {
         shared: Arc<TransportShared>,
         prefs: &AudioIoPrefs,
     ) -> eyre::Result<Self> {
-        DuplexAudioEngine::with_project_prefs(daw, project_guid, shared, prefs)
+        Self::with_project_prefs(daw, project_guid, shared, prefs)
             .map_err(|e| eyre::eyre!("rig host: audio engine failed: {e}"))
     }
     fn sample_rate(&self) -> u32 {
-        DuplexAudioEngine::sample_rate(self)
+        Self::sample_rate(self)
     }
     fn stats(&self) -> Option<Arc<EngineStats>> {
-        Some(DuplexAudioEngine::stats(self))
+        Some(Self::stats(self))
     }
 }
 
-/// The duplex host's engine: the native PipeWire `pw_filter` engine where
+/// The duplex host's engine: the native `PipeWire` `pw_filter` engine where
 /// available, the cpal engine (with a live input stream) elsewhere.
 #[cfg(all(not(target_arch = "wasm32"), target_os = "linux"))]
 pub type DuplexEngine = DuplexAudioEngine;
@@ -127,7 +127,7 @@ pub type DuplexEngine = DuplexAudioEngine;
 pub type DuplexEngine = AudioEngine;
 
 /// A running duplex (live-input) rig host — `Send`-only under the native
-/// PipeWire engine; serialize access through a `Mutex` like the guitar rig.
+/// `PipeWire` engine; serialize access through a `Mutex` like the guitar rig.
 #[cfg(not(target_arch = "wasm32"))]
 pub type DuplexRigHost = RigHost<DuplexEngine>;
 
@@ -142,6 +142,7 @@ pub struct RigProject {
 impl RigProject {
     /// Seed a fresh one-off project named `project_name` and make it current
     /// (so the track/FX services target it).
+    #[must_use] 
     pub fn new(project_name: &str) -> Self {
         let daw = Standalone::new();
         let project_guid = uuid_string();
@@ -159,6 +160,7 @@ impl RigProject {
     /// [`new`](Self::new): the caller owns the backend (e.g. the browser
     /// worklet's `WebRenderer` daw) and drives rendering itself — no engine
     /// is ever started on this project.
+    #[must_use] 
     pub fn on(daw: &Standalone, project_name: &str) -> Self {
         let daw = daw.clone();
         let project_guid = uuid_string();
@@ -172,11 +174,13 @@ impl RigProject {
     }
 
     /// The underlying daw service handle (cheap to clone).
-    pub fn daw(&self) -> &Standalone {
+    #[must_use] 
+    pub const fn daw(&self) -> &Standalone {
         &self.daw
     }
 
     /// The seeded project's guid.
+    #[must_use] 
     pub fn project_guid(&self) -> &str {
         &self.project_guid
     }
@@ -213,7 +217,7 @@ impl RigProject {
         self.start_with::<AudioEngine>(&io)
     }
 
-    /// Open the output-only engine on the **native** backend — the PipeWire
+    /// Open the output-only engine on the **native** backend — the `PipeWire`
     /// `pw_filter` engine on Linux, the cpal engine elsewhere.
     ///
     /// Prefer this to [`start_output`](Self::start_output) for any instrument
@@ -247,7 +251,7 @@ impl RigProject {
     }
 
     /// Open the duplex (live input → FX chain → output) engine — the native
-    /// PipeWire `pw_filter` engine on Linux with the `pipewire` feature, the
+    /// `PipeWire` `pw_filter` engine on Linux with the `pipewire` feature, the
     /// cpal engine elsewhere. `want_input` is forced on.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn start_duplex(self, prefs: &AudioIoPrefs) -> eyre::Result<DuplexRigHost> {
@@ -304,7 +308,7 @@ pub struct RigHost<E: HostedEngine = AudioEngine> {
 impl<E: HostedEngine> RigHost<E> {
     /// The underlying daw service handle (cheap to clone) — insert plugin
     /// instances, push live MIDI, drive `Tracks`/`FxChains`/`Routing` here.
-    pub fn daw(&self) -> &Standalone {
+    pub const fn daw(&self) -> &Standalone {
         &self.daw
     }
 
@@ -313,7 +317,7 @@ impl<E: HostedEngine> RigHost<E> {
     }
 
     /// The engine's resolved sample rate.
-    pub fn sample_rate(&self) -> u32 {
+    pub const fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
 
@@ -344,7 +348,7 @@ impl<E: HostedEngine> RigHost<E> {
     }
 
     /// The shared transport handle.
-    pub fn transport(&self) -> &Arc<TransportShared> {
+    pub const fn transport(&self) -> &Arc<TransportShared> {
         &self.shared
     }
 
@@ -377,16 +381,16 @@ fn add_fx_slot(daw: &Standalone, track_guid: &str, label: &str) -> eyre::Result<
     daw.current()
         .track(track_guid)
         .add_fx_slot(label)
-        .map(|slot| slot.into_guid())
+        .map(daw::service::handle::FxSlotHandle::into_guid)
         .map_err(|e| eyre::eyre!("rig host: reserve fx slot '{label}' failed: {e}"))
 }
 
-/// Low latency under the JACK/PipeWire shim: ask PipeWire for the quantum
+/// Low latency under the JACK/PipeWire shim: ask `PipeWire` for the quantum
 /// before the JACK client connects (the client can't set the buffer there).
 /// No-op unless built with the `jack` feature, or when `PIPEWIRE_LATENCY` is
 /// already set / no buffer size is requested.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn request_low_latency_quantum(prefs: &AudioIoPrefs) {
+pub const fn request_low_latency_quantum(prefs: &AudioIoPrefs) {
     #[cfg(feature = "jack")]
     {
         if prefs.buffer_size != 0 && std::env::var_os("PIPEWIRE_LATENCY").is_none() {
@@ -406,6 +410,7 @@ pub fn request_low_latency_quantum(prefs: &AudioIoPrefs) {
 
 /// Process-unique guid string for rig project guids — shared by every rig
 /// host so ids never collide within one engine process.
+#[must_use] 
 pub fn uuid_string() -> String {
     uuid::new_v4_string()
 }
@@ -427,7 +432,7 @@ mod uuid {
             .map(|d| d.as_nanos() as u64)
             .unwrap_or(0);
         let c = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let pid = std::process::id() as u64;
+        let pid = u64::from(std::process::id());
         format!("signal-rig-{nanos:x}-{pid:x}-{c:x}")
     }
 

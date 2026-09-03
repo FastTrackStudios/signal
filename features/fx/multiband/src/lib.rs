@@ -1,4 +1,4 @@
-//! Multiband splitter core — make ANY effect multiband (ShaperBox
+//! Multiband splitter core — make ANY effect multiband (`ShaperBox`
 //! model: N frequency bands, an independent processor per band,
 //! recombine to a flat sum).
 //!
@@ -16,7 +16,7 @@
 //! `Multiband` is the generic host: `process(l, r, |band, bl, br| …)`
 //! hands each band's buffers to the caller's closure — wrap any inner
 //! effect (a compressor per band, a pattern modulator per band à la
-//! ShaperBox, a saturator per band…). One band = bit-exact
+//! `ShaperBox`, a saturator per band…). One band = bit-exact
 //! passthrough of the closure over the raw buffers (zero split cost).
 
 /// Maximum supported bands (5 crossovers).
@@ -37,13 +37,13 @@ struct Sos {
 impl Sos {
     #[inline]
     fn tick(&mut self, ch: usize, x: f64) -> f64 {
-        let y = self.b0 * x + self.z1[ch];
-        self.z1[ch] = self.b1 * x - self.a1 * y + self.z2[ch];
-        self.z2[ch] = self.b2 * x - self.a2 * y;
+        let y = self.b0.mul_add(x, self.z1[ch]);
+        self.z1[ch] = self.b1.mul_add(x, -(self.a1 * y)) + self.z2[ch];
+        self.z2[ch] = self.b2.mul_add(x, -(self.a2 * y));
         y
     }
 
-    fn reset(&mut self) {
+    const fn reset(&mut self) {
         self.z1 = [0.0; 2];
         self.z2 = [0.0; 2];
     }
@@ -72,9 +72,9 @@ fn lowpass(freq: f64, sample_rate: f64) -> Sos {
 fn highpass(freq: f64, sample_rate: f64) -> Sos {
     let (cw, alpha, a0) = rbj(freq, Q_BUTTERWORTH, sample_rate);
     Sos {
-        b0: (1.0 + cw) / 2.0 / a0,
+        b0: f64::midpoint(1.0, cw) / a0,
         b1: -(1.0 + cw) / a0,
-        b2: (1.0 + cw) / 2.0 / a0,
+        b2: f64::midpoint(1.0, cw) / a0,
         a1: -2.0 * cw / a0,
         a2: (1.0 - alpha) / a0,
         ..Default::default()
@@ -134,6 +134,7 @@ pub struct BandSplitter {
 }
 
 impl BandSplitter {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         Self {
             crossovers: Vec::with_capacity(MAX_BANDS - 1),
@@ -142,7 +143,7 @@ impl BandSplitter {
     }
 
     /// Configure crossover frequencies (unsorted OK; deduped, clamped,
-    /// capped at MAX_BANDS−1). Allocation-free after the first call at
+    /// capped at `MAX_BANDS−1`). Allocation-free after the first call at
     /// full size. Resets filter state.
     pub fn set_crossovers(&mut self, freqs: &[f64]) {
         let mut sorted: [f64; MAX_BANDS - 1] = [0.0; MAX_BANDS - 1];
@@ -153,7 +154,7 @@ impl BandSplitter {
         }
         sorted[..n].sort_by(|a, b| a.partial_cmp(b).unwrap());
         self.crossovers.clear();
-        for &f in sorted[..n].iter() {
+        for &f in &sorted[..n] {
             // Skip near-duplicates (< 1/12 octave apart).
             if self.crossovers.last().is_some_and(|c| f / c.freq < 1.06) {
                 continue;
@@ -168,12 +169,13 @@ impl BandSplitter {
         self.set_crossovers(&freqs);
     }
 
-    pub fn num_bands(&self) -> usize {
+    #[must_use] 
+    pub const fn num_bands(&self) -> usize {
         self.crossovers.len() + 1
     }
 
     /// Split one stereo sample into `bands` (caller slices sized ≥
-    /// num_bands). Band 0 = lowest.
+    /// `num_bands`). Band 0 = lowest.
     #[inline]
     pub fn tick(&mut self, l: f64, r: f64, bands_l: &mut [f64], bands_r: &mut [f64]) {
         let (mut rem_l, mut rem_r) = (l, r);
@@ -251,6 +253,7 @@ pub struct Multiband {
 }
 
 impl Multiband {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         Self {
             splitter: BandSplitter::new(sample_rate),
@@ -269,7 +272,8 @@ impl Multiband {
         }
     }
 
-    pub fn num_bands(&self) -> usize {
+    #[must_use] 
+    pub const fn num_bands(&self) -> usize {
         self.splitter.num_bands()
     }
 

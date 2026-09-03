@@ -1,6 +1,6 @@
-//! Engine repository — data access for Engine collections and EngineScene variants.
+//! Engine repository — data access for Engine collections and `EngineScene` variants.
 
-use sea_orm::*;
+use sea_orm::{ConnectionTrait, Schema, ActiveModelBehavior, StatementBuilder, QueryTrait, Iterable, ColIdx, IdenStatic, ActiveEnum, QueryOrder, QueryFilter, EntityTrait, ColumnTrait, Iden, ActiveModelTrait, Set};
 use signal_proto::engine::{Engine, EngineId, EngineScene, EngineSceneId, LayerSelection};
 use signal_proto::layer::LayerId;
 use signal_proto::metadata::Metadata;
@@ -35,7 +35,8 @@ pub struct EngineRepoLive {
 }
 
 impl EngineRepoLive {
-    pub fn new(db: DatabaseConnection) -> Self {
+    #[must_use] 
+    pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
 
@@ -69,7 +70,7 @@ impl EngineRepoLive {
     }
 
     fn layer_ids_to_json(ids: &[LayerId]) -> StorageResult<String> {
-        let strs: Vec<&str> = ids.iter().map(|id| id.as_str()).collect();
+        let strs: Vec<&str> = ids.iter().map(signal_proto::layer::LayerId::as_str).collect();
         serde_json::to_string(&strs)
             .map_err(|e| StorageError::Data(format!("failed to serialize layer_ids: {e}")))
     }

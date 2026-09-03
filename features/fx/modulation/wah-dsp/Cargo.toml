@@ -6,6 +6,9 @@ authors.workspace = true
 license.workspace = true
 description = "Auto-wah DSP engine — envelope/pattern-driven resonant filter"
 
+[lints]
+workspace = true
+
 [dependencies]
 audiocore-dsp = { workspace = true }
 fts-modulation = { workspace = true }

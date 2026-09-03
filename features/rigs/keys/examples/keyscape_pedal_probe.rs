@@ -4,7 +4,7 @@
 //! pedal-down BODY and swap the whole keymap to — so every note held under the
 //! pedal played the pedal clunk instead of the Rhodes tone. This probe holds a
 //! note with the pedal down and confirms the body still sounds at full level.
-//!   cargo run -p signal-keys --example keyscape_pedal_probe
+//!   cargo run -p signal-keys --example `keyscape_pedal_probe`
 //!
 //! Also exercises the pedal-noise one-shots (CC64 up/down with no notes) and
 //! the pedal-aware release tail.

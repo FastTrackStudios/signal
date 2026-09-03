@@ -21,7 +21,7 @@ pub type ParamLookup = HashMap<(String, String), Vec<(String, f32)>>;
 ///
 /// 1. For `Inline { block }` sources, read parameters directly.
 /// 2. For `PresetSnapshot` sources, look up in the pre-resolved map.
-/// 3. For `PresetDefault` sources, look up with snapshot_id = "default".
+/// 3. For `PresetDefault` sources, look up with `snapshot_id` = "default".
 /// 4. Apply any overrides on top.
 fn extract_block_params(
     mb: &signal_proto::ModuleBlock,
@@ -65,7 +65,7 @@ fn extract_block_params(
 const SOFT_MAX_COLS: usize = 14;
 
 /// Max columns before layers wrap to the next vertical band.
-/// Wider than SOFT_MAX_COLS because horizontal scrolling handles overflow,
+/// Wider than `SOFT_MAX_COLS` because horizontal scrolling handles overflow,
 /// and side-by-side layers are much more compact than stacking vertically.
 const LAYER_PACK_MAX_COLS: usize = 24;
 
@@ -80,6 +80,7 @@ const ROW_BAND_STRIDE: usize = 2;
 
 /// Flatten the full rig hierarchy (engines → layers → modules → blocks)
 /// into a single `Vec<GridSlot>` for the interactive `DynamicGridView`.
+#[must_use] 
 pub fn engines_to_grid_slots(engines: &[EngineFlowData], params: &ParamLookup) -> Vec<GridSlot> {
     let mut slots = Vec::new();
     let mut occupied = HashSet::new();
@@ -181,6 +182,7 @@ pub fn engines_to_grid_slots(engines: &[EngineFlowData], params: &ParamLookup) -
 }
 
 /// Convert a list of module chains into grid slots for `DynamicGridView`.
+#[must_use] 
 pub fn module_chains_to_grid_slots(
     chains: &[ModuleChainData],
     params: &ParamLookup,
@@ -217,6 +219,7 @@ pub fn module_chains_to_grid_slots(
 }
 
 /// Convert a single signal chain into grid slots for `DynamicGridView`.
+#[must_use] 
 pub fn signal_chain_to_grid_slots(
     chain: &SignalChain,
     module_name: &str,
@@ -259,8 +262,8 @@ fn count_chain_width(nodes: &[signal_proto::SignalNode]) -> usize {
     width
 }
 
-/// Recursively flatten SignalNodes into GridSlots, handling splits.
-#[allow(clippy::too_many_arguments)]
+/// Recursively flatten `SignalNodes` into `GridSlots`, handling splits.
+#[expect(clippy::too_many_arguments)]
 fn flatten_chain_nodes(
     nodes: &[signal_proto::SignalNode],
     module_key: &str,
@@ -296,8 +299,8 @@ fn flatten_chain_nodes(
                     row: base_row,
                     module_group: Some(module_key.to_string()),
                     module_type,
-                    layer_group: layer_key.map(|s| s.to_string()),
-                    engine_group: engine_key.map(|s| s.to_string()),
+                    layer_group: layer_key.map(std::string::ToString::to_string),
+                    engine_group: engine_key.map(std::string::ToString::to_string),
                     is_template: false,
                     bypassed: false,
                     is_phantom: false,
@@ -341,7 +344,7 @@ fn flatten_chain_nodes(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn place_module(
     nodes: &[signal_proto::SignalNode],
     module_key: &str,
@@ -437,6 +440,7 @@ fn find_free_module_row(
 /// `SOFT_MAX_COLS`, and `Split` nodes fan their wet lanes into parallel rows.
 /// Empty lanes (dry pass-through) are skipped, exactly as in
 /// `flatten_chain_nodes`.
+#[must_use] 
 pub fn template_to_grid_slots(rig: &RigTemplate) -> Vec<GridSlot> {
     let mut slots = Vec::new();
     let mut engine_base_row: usize = 0;
@@ -517,7 +521,7 @@ fn count_template_width(nodes: &[SignalNodeTemplate]) -> usize {
 /// Recursively flatten template nodes into template placeholder slots. Mirror of
 /// [`flatten_chain_nodes`] but reads `SignalNodeTemplate` and emits
 /// `is_template = true` slots with no parameters.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn flatten_template_nodes(
     nodes: &[SignalNodeTemplate],
     module_key: &str,
@@ -540,8 +544,8 @@ fn flatten_template_nodes(
                     row: base_row,
                     module_group: Some(module_key.to_string()),
                     module_type,
-                    layer_group: layer_key.map(|s| s.to_string()),
-                    engine_group: engine_key.map(|s| s.to_string()),
+                    layer_group: layer_key.map(std::string::ToString::to_string),
+                    engine_group: engine_key.map(std::string::ToString::to_string),
                     is_template: true,
                     bypassed: false,
                     is_phantom: false,

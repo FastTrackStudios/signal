@@ -7,7 +7,7 @@
 //! The loading pipeline is split into two phases:
 //!
 //! 1. **Resolve** — look up the preset, extract the plugin name from metadata tags,
-//!    select the snapshot, and gather block state. Testable with in-memory SQLite.
+//!    select the snapshot, and gather block state. Testable with in-memory `SQLite`.
 //! 2. **Execute** — add the FX to a DAW track, apply state, and rename. Requires a
 //!    running DAW instance.
 
@@ -87,6 +87,7 @@ impl ResolvedSignalChain {
     ///
     /// Used by callers that only need a flat list regardless of topology —
     /// e.g., existing tests or simple serial modules.
+    #[must_use] 
     pub fn all_fx_loads(&self) -> Vec<&ResolvedFxLoad> {
         let mut out = Vec::new();
         self.collect_fx_loads(&mut out);
@@ -120,6 +121,7 @@ impl ResolvedModuleLoad {
     /// Flat list of all resolved FX loads in depth-first order.
     ///
     /// Backward-compatible accessor for callers that don't need topology.
+    #[must_use] 
     pub fn fx_loads(&self) -> Vec<&ResolvedFxLoad> {
         self.chain.all_fx_loads()
     }
@@ -133,7 +135,7 @@ fn raw_plugin_name(item: &impl HasMetadata) -> Option<String> {
         .tags
         .as_slice()
         .iter()
-        .find_map(|t| t.strip_prefix("source:").map(|s| s.to_string()))
+        .find_map(|t| t.strip_prefix("source:").map(std::string::ToString::to_string))
 }
 
 // ─── Plugin parameter mapping ──────────────────────────────────
@@ -163,9 +165,9 @@ fn apply_plugin_param_mapping(plugin_name: &str, block: &Block) -> Block {
     }
 }
 
-/// Map abstract 5-band EQ params to FabFilter Pro-Q 4 CLAP parameters.
+/// Map abstract 5-band EQ params to `FabFilter` Pro-Q 4 CLAP parameters.
 ///
-/// Abstract params: low, low_mid, mid, high_mid, high, output
+/// Abstract params: low, `low_mid`, mid, `high_mid`, high, output
 /// Each gain value (0.0–1.0, 0.5 = flat) is mapped to a Pro-Q 4 band with:
 ///   - Band N Used = 1.0 (enable the band)
 ///   - Band N Enabled = 1.0
@@ -174,8 +176,8 @@ fn apply_plugin_param_mapping(plugin_name: &str, block: &Block) -> Block {
 ///   - Band N Q = default (0.10 normalized = Q of 1.0)
 ///   - Band N Shape (Low/High = shelf, others = bell)
 ///
-/// Normalization matches signal-import's FabFilter parser:
-///   freq_norm = (log2(Hz) - 3.32) / (14.29 - 3.32)
+/// Normalization matches signal-import's `FabFilter` parser:
+///   `freq_norm` = (log2(Hz) - 3.32) / (14.29 - 3.32)
 ///   gain is passed through (already 0.0–1.0 where 0.5 = 0 dB)
 fn map_proq4_params(block: &Block) -> Block {
     use signal_proto::BlockParameter as BP;
@@ -197,8 +199,7 @@ fn map_proq4_params(block: &Block) -> Block {
         let gain = params
             .iter()
             .find(|p| p.id() == abstract_id)
-            .map(|p| p.value().get())
-            .unwrap_or(0.5);
+            .map_or(0.5, |p| p.value().get());
 
         let freq_norm = ((freq_hz.log2() - 3.32) / (14.29 - 3.32)).clamp(0.0, 1.0);
         let q_norm: f32 = 0.10; // Q=1.0 default bell width
@@ -233,8 +234,7 @@ fn map_proq4_params(block: &Block) -> Block {
     let output = params
         .iter()
         .find(|p| p.id() == "output")
-        .map(|p| p.value().get())
-        .unwrap_or(0.5);
+        .map_or(0.5, |p| p.value().get());
     daw_params.push(BP::new("output", "Output", output).with_daw_name("Output Level"));
 
     Block::from_parameters(daw_params)
@@ -247,7 +247,7 @@ fn map_proq4_params(block: &Block) -> Block {
 ///
 /// REAPER normalizes sliders linearly over their declared range, so
 /// the normalized value for unity (1.0 on a [0,4] slider) is 0.25.
-/// We scale: reaper_norm = abstract_level / 2.0
+/// We scale: `reaper_norm` = `abstract_level` / 2.0
 fn map_js_volume_params(block: &Block) -> Block {
     use signal_proto::BlockParameter as BP;
 
@@ -255,8 +255,7 @@ fn map_js_volume_params(block: &Block) -> Block {
         .parameters()
         .iter()
         .find(|p| p.id() == "level")
-        .map(|p| p.value().get())
-        .unwrap_or(0.5);
+        .map_or(0.5, |p| p.value().get());
 
     // abstract 0.5 (unity) → REAPER normalized 0.25 (slider value 1.0 on [0,4])
     let volume_norm = (level / 2.0).clamp(0.0, 1.0);
@@ -327,7 +326,7 @@ where
         };
 
         let block = snapshot.block();
-        let state_data = snapshot.state_data().map(|d| d.to_vec());
+        let state_data = snapshot.state_data().map(<[u8]>::to_vec);
 
         // 4. Build display name — include snapshot name for non-default.
         let name = if is_default {
@@ -489,7 +488,7 @@ where
         })?;
 
         let block = snapshot_to_apply.block();
-        let state_data = snapshot_to_apply.state_data().map(|d| d.to_vec());
+        let state_data = snapshot_to_apply.state_data().map(<[u8]>::to_vec);
 
         let role = FxRole::Block {
             block_type: module_block.block_type(),
@@ -676,34 +675,31 @@ async fn configure_fx_free(
             match fx.set_state_chunk(data.clone()).await {
                 Ok(()) => {
                     // Re-acquire by index — fallback may have changed the GUID.
-                    match track.fx_chain().by_index(fx_index).await {
-                        Ok(Some(reacquired)) => {
-                            fx = reacquired;
-                            eprintln!(
-                                "[signal]   ✓ state chunk applied for '{}' (guid={})",
-                                resolved.display_name,
-                                fx.guid(),
-                            );
-                        }
-                        _ => {
-                            // FX disappeared — fallback corrupted the track chunk.
-                            // Re-add the plugin with default state.
-                            eprintln!(
-                                "[signal]   ✗ FX disappeared after state chunk for '{}', re-adding",
-                                resolved.display_name,
-                            );
-                            fx =
-                                track
-                                    .fx_chain()
-                                    .add(&resolved.plugin_name)
-                                    .await
-                                    .map_err(|e| {
-                                        format!(
-                                            "Failed to re-add FX '{}': {e}",
-                                            resolved.display_name
-                                        )
-                                    })?;
-                        }
+                    if let Ok(Some(reacquired)) = track.fx_chain().by_index(fx_index).await {
+                        fx = reacquired;
+                        eprintln!(
+                            "[signal]   ✓ state chunk applied for '{}' (guid={})",
+                            resolved.display_name,
+                            fx.guid(),
+                        );
+                    } else {
+                        // FX disappeared — fallback corrupted the track chunk.
+                        // Re-add the plugin with default state.
+                        eprintln!(
+                            "[signal]   ✗ FX disappeared after state chunk for '{}', re-adding",
+                            resolved.display_name,
+                        );
+                        fx =
+                            track
+                                .fx_chain()
+                                .add(&resolved.plugin_name)
+                                .await
+                                .map_err(|e| {
+                                    format!(
+                                        "Failed to re-add FX '{}': {e}",
+                                        resolved.display_name
+                                    )
+                                })?;
                     }
                 }
                 Err(e) => {
@@ -733,7 +729,7 @@ async fn configure_fx_free(
         for param in mapped.parameters() {
             if let Err(e) = fx
                 .param_by_name(param.effective_daw_name())
-                .set(param.value().get() as f64)
+                .set(f64::from(param.value().get()))
                 .await
             {
                 eprintln!(
@@ -747,7 +743,7 @@ async fn configure_fx_free(
 
     for ovr in &resolved.overrides {
         fx.param_by_name(ovr.parameter_id())
-            .set(ovr.value().get() as f64)
+            .set(f64::from(ovr.value().get()))
             .await
             .map_err(|e| format!("Failed to apply override '{}': {e}", ovr.parameter_id()))?;
     }
@@ -850,7 +846,7 @@ fn execute_chain_nodes<'a>(
     })
 }
 
-/// Load a NAM model into an already-added NeuralAmpModeler FX instance.
+/// Load a NAM model into an already-added `NeuralAmpModeler` FX instance.
 ///
 /// Follows the proven approach from `reaper_nam_load.rs`:
 /// 1. Get the FX's default REAPER chunk (has valid VST3 header)

@@ -28,8 +28,8 @@ const FFT_N: usize = 8192; // ~0.17s analysis window
 const BANDS: usize = 48; // log-spaced bands
 const SHORT_KS: &[u8] = &[13, 18, 23, 28, 33, 38, 43, 68];
 
-/// CC58 keyswitch → articulation name (from gen_css_test_midi's SHORTS table).
-fn ks_name(ks: u8) -> &'static str {
+/// CC58 keyswitch → articulation name (from `gen_css_test_midi`'s SHORTS table).
+const fn ks_name(ks: u8) -> &'static str {
     match ks {
         13 => "Spiccato",
         18 => "Staccatissimo",
@@ -48,7 +48,7 @@ fn read_vlq(d: &[u8], p: &mut usize) -> u32 {
     loop {
         let b = d[*p];
         *p += 1;
-        v = (v << 7) | (b & 0x7f) as u32;
+        v = (v << 7) | u32::from(b & 0x7f);
         if b & 0x80 == 0 {
             break;
         }
@@ -57,7 +57,7 @@ fn read_vlq(d: &[u8], p: &mut usize) -> u32 {
 }
 
 fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
-    let div = u16::from_be_bytes([d[12], d[13]]) as f64;
+    let div = f64::from(u16::from_be_bytes([d[12], d[13]]));
     let mut us_per_q = 500_000.0f64;
     let mut p = 14;
     while &d[p..p + 4] != b"MTrk" {
@@ -71,7 +71,7 @@ fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
     let mut running = 0u8;
     let mut out = Vec::new();
     while p < end {
-        let dt = read_vlq(d, &mut p) as u64;
+        let dt = u64::from(read_vlq(d, &mut p));
         sec += dt as f64 * (us_per_q / 1_000_000.0) / div;
         let mut status = d[p];
         if status & 0x80 != 0 {
@@ -87,7 +87,7 @@ fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
                 let len = read_vlq(d, &mut p) as usize;
                 if meta == 0x51 {
                     us_per_q =
-                        (d[p] as f64) * 65536.0 + (d[p + 1] as f64) * 256.0 + d[p + 2] as f64;
+                        f64::from(d[p]).mul_add(65536.0, f64::from(d[p + 1]) * 256.0) + f64::from(d[p + 2]);
                 }
                 p += len;
             }
@@ -144,11 +144,11 @@ fn read_wav(path: &str) -> (Vec<f32>, u32) {
             let o = (f * ch + c) * bytes;
             let s = match (format, bits) {
                 (3, 32) => f32::from_le_bytes([data[o], data[o + 1], data[o + 2], data[o + 3]]),
-                (1, 16) => i16::from_le_bytes([data[o], data[o + 1]]) as f32 / 32768.0,
+                (1, 16) => f32::from(i16::from_le_bytes([data[o], data[o + 1]])) / 32768.0,
                 (1, 24) => {
-                    let v = (data[o] as i32)
-                        | ((data[o + 1] as i32) << 8)
-                        | ((data[o + 2] as i32) << 16);
+                    let v = i32::from(data[o])
+                        | (i32::from(data[o + 1]) << 8)
+                        | (i32::from(data[o + 2]) << 16);
                     let v = if v & 0x80_0000 != 0 {
                         v | !0xFF_FFFF
                     } else {
@@ -195,14 +195,14 @@ fn fft(re: &mut [f32], im: &mut [f32]) {
             for k in 0..len / 2 {
                 let a = i + k;
                 let b = i + k + len / 2;
-                let tr = cr * re[b] - ci * im[b];
-                let ti = cr * im[b] + ci * re[b];
+                let tr = cr.mul_add(re[b], -(ci * im[b]));
+                let ti = cr.mul_add(im[b], ci * re[b]);
                 re[b] = re[a] - tr;
                 im[b] = im[a] - ti;
                 re[a] += tr;
                 im[a] += ti;
-                let ncr = cr * wr - ci * wi;
-                ci = cr * wi + ci * wr;
+                let ncr = cr.mul_add(wr, -(ci * wi));
+                ci = cr.mul_add(wi, ci * wr);
                 cr = ncr;
             }
             i += len;
@@ -218,7 +218,7 @@ fn band_spectrum(sig: &[f32]) -> [f32; BANDS] {
     let mut im = vec![0.0f32; FFT_N];
     let n = sig.len().min(FFT_N);
     for i in 0..n {
-        let w = 0.5 - 0.5 * (2.0 * PI * i as f32 / (FFT_N as f32 - 1.0)).cos();
+        let w = 0.5f32.mul_add(-(2.0 * PI * i as f32 / (FFT_N as f32 - 1.0)).cos(), 0.5);
         re[i] = sig[i] * w;
     }
     fft(&mut re, &mut im);
@@ -232,17 +232,17 @@ fn band_spectrum(sig: &[f32]) -> [f32; BANDS] {
         if f < f_lo || f > f_hi {
             continue;
         }
-        let frac = (f / f_lo).ln() / (f_hi / f_lo).ln();
+        let frac = (f / f_lo).log(f_hi / f_lo);
         let band = ((frac * BANDS as f32) as usize).min(BANDS - 1);
-        bands[band] += re[bin] * re[bin] + im[bin] * im[bin];
+        bands[band] += re[bin].mul_add(re[bin], im[bin] * im[bin]);
     }
     // Per-band dB relative to this window's peak band, FLOORED at -50 dB.
     // dB is perceptual; the floor clamps near-silent bands (e.g. a spiccato's
     // post-transient tail) to a constant instead of letting their noise floor
     // swing a mean-centered cosine — without over-weighting exact harmonic peaks
     // the way a raw-magnitude cosine does.
-    let max = bands.iter().cloned().fold(0.0f32, f32::max).max(1e-12);
-    for b in bands.iter_mut() {
+    let max = bands.iter().copied().fold(0.0f32, f32::max).max(1e-12);
+    for b in &mut bands {
         *b = (10.0 * (*b / max).max(1e-12).log10()).max(-50.0);
     }
     bands
@@ -316,7 +316,7 @@ fn main() -> eyre::Result<()> {
         if !(status & 0xF0 == 0x90 && *d2 > 0 && SHORT_KS.contains(&cur_cc58)) {
             continue;
         }
-        let start = (*sec * css_sr as f64) as usize;
+        let start = (*sec * f64::from(css_sr)) as usize;
         if start + FFT_N >= css.len() {
             continue;
         }
@@ -394,7 +394,7 @@ fn main() -> eyre::Result<()> {
             println!("  {:<16} {:.3}  {bar}", ks_name(*ks), m);
         }
         let mean = sims.iter().sum::<f32>() / sims.len() as f32;
-        let worst = sims.iter().cloned().fold(1.0f32, f32::min);
+        let worst = sims.iter().copied().fold(1.0f32, f32::min);
         println!(
             "\n{} short notes  ·  overall mean = {mean:.3}  ·  worst = {worst:.3}",
             sims.len()

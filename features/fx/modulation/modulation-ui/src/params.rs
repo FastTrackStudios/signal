@@ -105,9 +105,7 @@ impl Default for ModParams {
             )
             .with_value_to_string(Arc::new(|v| {
                 modulation_profiles::PROFILES
-                    .get(v.max(0) as usize)
-                    .map(|p| p.name.to_string())
-                    .unwrap_or_else(|| "—".to_string())
+                    .get(v.max(0) as usize).map_or_else(|| "—".to_string(), |p| p.name.to_string())
             })),
 
             // Shown in Hz, stored normalised: the taper belongs to the
@@ -181,8 +179,7 @@ impl ModParams {
     pub fn store_profile_id(&self, index: usize) {
         let id = modulation_profiles::PROFILES
             .get(index)
-            .map(|p| p.id)
-            .unwrap_or("juno");
+            .map_or("juno", |p| p.id);
         *self.profile_id.write() = id.to_string();
     }
 

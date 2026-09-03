@@ -1,4 +1,4 @@
-//! BigSky MX pass-D input-analysis generators: Cloud Ensemble,
+//! `BigSky` MX pass-D input-analysis generators: Cloud Ensemble,
 //! Bloom Harmonics, Chorale Choir/Voice/Mod. Defaults must be
 //! bit-transparent; the generators must be audible, pitch-relevant,
 //! and numerically stable when engaged.
@@ -11,7 +11,7 @@ use audiocore_dsp::{AudioConfig, Processor};
 
 const SR: f64 = 48000.0;
 
-fn config() -> AudioConfig {
+const fn config() -> AudioConfig {
     AudioConfig {
         sample_rate: SR,
         max_buffer_size: 512,
@@ -39,7 +39,7 @@ fn goertzel(buf: &[f64], freq: f64) -> f64 {
         s2 = s1;
         s1 = s0;
     }
-    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
 }
 
 /// Sustained sine (whole render) so pitch trackers can lock.
@@ -92,7 +92,7 @@ fn cloud_ensemble_adds_synth_layer() {
 
     let off = render(0.0);
     let on = render(1.0);
-    for v in on.iter() {
+    for v in &on {
         assert!(v.is_finite(), "ensemble produced non-finite output");
     }
     // The two renders share every deterministic reverb path, so the
@@ -170,7 +170,7 @@ fn bloom_harmonics_adds_octave_partial() {
 
     let off = render(0.0);
     let on = render(1.0);
-    for v in on.iter() {
+    for v in &on {
         assert!(v.is_finite(), "harmonics produced non-finite output");
     }
     let body = (SR * 1.0) as usize..(SR * 2.8) as usize;
@@ -204,7 +204,7 @@ fn chorale_choir_level_overrides_and_scales() {
         choir_level: Some(1.0),
         ..Default::default()
     });
-    for v in loud.iter() {
+    for v in &loud {
         assert!(v.is_finite());
     }
     // The choir voice recirculates — max level rings noticeably harder

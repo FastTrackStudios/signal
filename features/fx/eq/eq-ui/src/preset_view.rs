@@ -19,6 +19,7 @@ use crate::param_adapter::param_handle;
 use crate::params::{FtsEqParams, NUM_BANDS};
 
 /// Where the EQ's presets live.
+#[must_use] 
 pub fn preset_library_root() -> std::path::PathBuf {
     preset_browser_ui::library_root(
         "FTS_EQ_PRESETS",
@@ -27,6 +28,7 @@ pub fn preset_library_root() -> std::path::PathBuf {
 }
 
 /// The EQ's library: every bank under the root, as one list.
+#[must_use] 
 pub fn load_library() -> (PresetBrowser, String) {
     preset_browser_ui::load_library_tree(&preset_library_root())
 }
@@ -34,7 +36,7 @@ pub fn load_library() -> (PresetBrowser, String) {
 /// Every parameter a preset can name, by the name it uses.
 ///
 /// The names are the engine's — `b1_freq`, `b1_gain`, `b1_dyn_range` and so
-/// on, one-based — which is what the translated FabFilter presets are written
+/// on, one-based — which is what the translated `FabFilter` presets are written
 /// against.
 ///
 /// The dynamics and placement entries are the point of the consolidation: the
@@ -101,6 +103,7 @@ const BAND_FIELDS: [&str; 18] = [
 /// `ParamContext`), which would put the one thing worth asserting — that the
 /// plugin can recall what the library writes — out of reach of a plain test.
 /// This is the same list, derived the same way.
+#[must_use] 
 pub fn preset_handle_names() -> Vec<String> {
     let mut names = Vec::new();
     for i in 0..NUM_BANDS {
@@ -154,8 +157,8 @@ pub fn EqPresetSidecar(
             }
             preset_browser_ui::PresetBrowserPanel {
                 browser,
-                ink: ink.clone(),
-                accent: accent.clone(),
+                ink: ink,
+                accent: accent,
                 title: "EQ Presets".to_string(),
                 on_apply: move |p: Vec<(String, f64)>| apply(&p, &handles, note),
             }

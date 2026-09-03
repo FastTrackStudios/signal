@@ -17,7 +17,7 @@ pub enum BindingHealth {
 }
 
 impl BindingHealth {
-    fn color_class(self) -> &'static str {
+    const fn color_class(self) -> &'static str {
         match self {
             Self::Connected => "bg-signal-safe",
             Self::Partial => "bg-signal-warn",
@@ -25,7 +25,7 @@ impl BindingHealth {
         }
     }
 
-    fn label(self) -> &'static str {
+    const fn label(self) -> &'static str {
         match self {
             Self::Connected => "Connected",
             Self::Partial => "Partial",
@@ -35,7 +35,7 @@ impl BindingHealth {
 }
 
 /// A single FX binding row in the status panel.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct FxBindingRow {
     pub module_name: String,
     pub fx_name: String,

@@ -17,7 +17,7 @@ use crate::constants::LN10_OVER_20;
 /// Returns `None` for pole counts outside the Pro-Q 4 grid (slopes 0..9
 /// correspond to pole counts {1, 2, 3, 4, 5, 6, 7, 12, 16}).
 #[inline]
-pub(crate) fn slope_from_pole_count(pole_count: usize) -> Option<usize> {
+pub const fn slope_from_pole_count(pole_count: usize) -> Option<usize> {
     match pole_count {
         1 => Some(0),
         2 => Some(2),
@@ -38,7 +38,7 @@ pub(crate) fn slope_from_pole_count(pole_count: usize) -> Option<usize> {
 /// across `proq4_mzt::design_*`).  Kept inline so the compiler can fold it
 /// into a single `exp` call at the call site.
 #[inline]
-pub(crate) fn db_to_linear(gain_db: f64) -> f64 {
+pub fn db_to_linear(gain_db: f64) -> f64 {
     (gain_db * LN10_OVER_20).exp()
 }
 

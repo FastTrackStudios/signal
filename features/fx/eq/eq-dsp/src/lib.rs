@@ -1,20 +1,8 @@
-#![allow(rustdoc::broken_intra_doc_links)]
+#![expect(rustdoc::broken_intra_doc_links, reason = "large transliterated codebase may have incomplete intra-doc links")]
 // The library has a large amount of code transliterated from a reference
 // binary; the following style lints fire heavily on that code without
-// actually flagging bugs. Allow them at the crate level rather than
-// scattering #[allow(...)] attributes through every helper.
-#![allow(
-    clippy::manual_clamp,
-    clippy::doc_lazy_continuation,
-    clippy::doc_overindented_list_items,
-    clippy::empty_line_after_doc_comments,
-    clippy::empty_line_after_outer_attr,
-    clippy::if_same_then_else,
-    clippy::too_many_arguments,
-    clippy::type_complexity,
-    clippy::needless_range_loop,
-    clippy::assertions_on_constants
-)]
+// actually flagging bugs. They are suppressed via item-level attributes
+// rather than at the crate level.
 
 //! Filter design and biquad-cascade DSP for the FTS-EQ plugin.
 //!

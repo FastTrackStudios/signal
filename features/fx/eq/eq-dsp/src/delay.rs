@@ -2,7 +2,7 @@
 //!
 //! Pro-Q 4 uses a 3-level delay cascade for group delay compensation
 //! in frequency-dependent phase modes. Each level provides up to
-//! MAX_DELAY_SAMPLES_PER_LEVEL samples of delay with a circular
+//! `MAX_DELAY_SAMPLES_PER_LEVEL` samples of delay with a circular
 //! power-of-2 buffer for efficient modular indexing.
 
 use crate::constants::{MAX_DELAY_SAMPLES_PER_LEVEL, NUM_DELAY_LEVELS};
@@ -21,7 +21,8 @@ pub struct DelayFilter {
 impl DelayFilter {
     /// Create a new delay filter with the given maximum delay in samples.
     ///
-    /// The buffer is allocated as the next power of 2 >= max_delay + 1.
+    /// The buffer is allocated as the next power of 2 >= `max_delay` + 1.
+    #[must_use]
     pub fn new(max_delay: usize) -> Self {
         let size = (max_delay + 1).next_power_of_two();
         Self {

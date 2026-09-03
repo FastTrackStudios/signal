@@ -8,7 +8,7 @@
 //! Uses the seeded keys-megarig (4 engines: Keys, Synth, Organ, Pad) as a base,
 //! and also builds custom engine/layer/rig structures from scratch.
 //!
-//!   cargo test -p signal --test signal_keys_engine_api -- --nocapture
+//!   cargo test -p signal --test `signal_keys_engine_api` -- --nocapture
 
 mod fixtures;
 
@@ -440,7 +440,7 @@ async fn layer_with_multiple_ref_types() {
     assert!(alt.module_refs[0].variant_id.is_some());
 }
 
-/// Layer with layer_refs (cross-layer embedding) round-trips.
+/// Layer with `layer_refs` (cross-layer embedding) round-trips.
 #[tokio::test]
 async fn layer_with_layer_refs() {
     let signal = controller().await;
@@ -503,7 +503,7 @@ async fn layer_snapshot_block_param_overrides() {
     let paths: Vec<String> = loaded.variants[0]
         .overrides
         .iter()
-        .map(|o| o.path.as_str().to_string())
+        .map(|o| o.path.as_str())
         .collect();
     assert!(paths.iter().any(|p| p.contains("threshold")));
     assert!(paths.iter().any(|p| p.contains("ratio")));
@@ -885,7 +885,7 @@ async fn multi_level_overrides_in_rig_scene() {
     let paths: Vec<String> = loaded.variants[0]
         .overrides
         .iter()
-        .map(|o| o.path.as_str().to_string())
+        .map(|o| o.path.as_str())
         .collect();
     // Deepest path: engine.layer.block.param (4 segments)
     assert!(paths.iter().any(|p| p.contains("mix")));
@@ -895,7 +895,7 @@ async fn multi_level_overrides_in_rig_scene() {
     assert!(paths.iter().any(|p| p.contains("volume")));
 }
 
-/// ReplaceRef override: replace a layer variant within a rig scene.
+/// `ReplaceRef` override: replace a layer variant within a rig scene.
 #[tokio::test]
 async fn replace_ref_override_in_rig_scene() {
     let signal = controller().await;

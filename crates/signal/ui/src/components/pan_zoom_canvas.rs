@@ -187,8 +187,8 @@ pub fn PanZoomCanvas(
                     let local_y = evt.client_coordinates().y - viewport_top();
                     let canvas_x = (local_x - pan_x()) / old_zoom;
                     let canvas_y = (local_y - pan_y()) / old_zoom;
-                    pan_x.set(local_x - canvas_x * new_zoom);
-                    pan_y.set(local_y - canvas_y * new_zoom);
+                    pan_x.set(canvas_x.mul_add(-new_zoom, local_x));
+                    pan_y.set(canvas_y.mul_add(-new_zoom, local_y));
                     zoom.set(new_zoom);
                 } else if is_shift {
                     // Shift+scroll → horizontal pan

@@ -55,6 +55,7 @@ pub struct Saturator {
 }
 
 impl Saturator {
+    #[must_use] 
     pub fn new() -> Self {
         let mut s = Self {
             curve: SaturationCurve::Tanh,
@@ -77,20 +78,22 @@ impl Saturator {
         self.makeup = 1.0 / sqrt_approx(self.drive_gain);
     }
 
-    pub fn drive(&self) -> f32 {
+    #[must_use] 
+    pub const fn drive(&self) -> f32 {
         self.drive
     }
 
-    pub fn set_curve(&mut self, curve: SaturationCurve) {
+    pub const fn set_curve(&mut self, curve: SaturationCurve) {
         self.curve = curve;
     }
 
-    pub fn curve(&self) -> SaturationCurve {
+    #[must_use] 
+    pub const fn curve(&self) -> SaturationCurve {
         self.curve
     }
 
     /// Dry/wet mix: 0 = bypass, 1 = fully wet.
-    pub fn set_mix(&mut self, mix: f32) {
+    pub const fn set_mix(&mut self, mix: f32) {
         self.mix = clamp01(mix);
     }
 
@@ -101,10 +104,11 @@ impl Saturator {
 
     /// Reset internal state. The saturator is memoryless, so this is a no-op;
     /// it exists so the stage slots into `reset()`-driven chains.
-    pub fn reset(&mut self) {}
+    pub const fn reset(&mut self) {}
 
     /// Shape one sample.
     #[inline]
+    #[must_use] 
     pub fn process(&self, input: f32) -> f32 {
         if self.drive == 0.0 && self.mix >= 1.0 {
             return input * self.output_gain;
@@ -137,7 +141,7 @@ impl Default for Saturator {
 }
 
 #[inline]
-fn clamp01(x: f32) -> f32 {
+const fn clamp01(x: f32) -> f32 {
     x.clamp(0.0, 1.0)
 }
 

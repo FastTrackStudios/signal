@@ -2,7 +2,7 @@
 //! REAPER integration test: capture full live parameter lists for NDSP archetypes.
 //!
 //! Run with:
-//!   cargo xtask reaper-test reaper_ndsp_param_inventory
+//!   cargo xtask reaper-test `reaper_ndsp_param_inventory`
 
 use std::fs;
 use std::path::PathBuf;
@@ -71,7 +71,7 @@ async fn capture_ndsp_full_parameter_lists(ctx: &ReaperTestContext) -> eyre::Res
         );
 
         let mut plugin_report = String::new();
-        plugin_report.push_str(&format!("# {}\n", plugin_name));
+        plugin_report.push_str(&format!("# {plugin_name}\n"));
         plugin_report.push_str(&format!(
             "- plugin_name: {}\n- parameter_count: {}\n\n",
             info.plugin_name,
@@ -90,7 +90,7 @@ async fn capture_ndsp_full_parameter_lists(ctx: &ReaperTestContext) -> eyre::Res
         let plugin_path = report_dir.join(file_name);
         fs::write(&plugin_path, &plugin_report)?;
 
-        combined_report.push_str(&format!("## {}\n", plugin_name));
+        combined_report.push_str(&format!("## {plugin_name}\n"));
         combined_report.push_str(&format!("- parameter_count: {}\n", params.len()));
         combined_report.push_str(&format!("- report: {}\n\n", plugin_path.to_string_lossy()));
     }

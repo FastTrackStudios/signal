@@ -136,7 +136,7 @@ impl FtsTune {
             Some(hz) => {
                 let detected = hz_to_midi(hz);
                 let snapped = self.current_scale().snap(detected);
-                (snapped - detected) * self.params.strength.value() as f64
+                (snapped - detected) * f64::from(self.params.strength.value())
             }
             None => 0.0, // unvoiced: relax toward no shift
         };
@@ -145,7 +145,7 @@ impl FtsTune {
         // buffer-size-independent (the old per-sample coefficient
         // applied once per block made retune ~8x faster at 64-sample
         // buffers than at 512).
-        let t = (self.params.retune_ms.value() as f64 / 1000.0).max(1e-4);
+        let t = (f64::from(self.params.retune_ms.value()) / 1000.0).max(1e-4);
         let coeff = (-(block_len as f64) / (t * self.sample_rate)).exp();
         self.shift_semitones = target_shift + coeff * (self.shift_semitones - target_shift);
     }
@@ -179,7 +179,7 @@ impl Plugin for FtsTune {
         buffer_config: &BufferConfig,
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
         self.detector = YinDetector::new(self.sample_rate, YinConfig::default());
         self.hist = vec![0.0; self.detector.window()];
         let max = (buffer_config.max_buffer_size as usize).max(1);
@@ -220,8 +220,8 @@ impl Plugin for FtsTune {
         // Copy channels into f64 scratch; build the block's mono for detection.
         let ch0 = &channels[0];
         for i in 0..frames {
-            let l = ch0[i] as f64;
-            let r = channels.get(1).map(|c| c[i] as f64).unwrap_or(l);
+            let l = f64::from(ch0[i]);
+            let r = channels.get(1).map_or(l, |c| f64::from(c[i]));
             self.left[i] = l;
             self.right[i] = r;
         }
@@ -244,7 +244,7 @@ impl Plugin for FtsTune {
         // Detect + update the shift once per block, then drive the chain.
         self.update_shift(frames);
         self.chain.semitones = self.shift_semitones;
-        self.chain.mix = self.params.mix.value() as f64;
+        self.chain.mix = f64::from(self.params.mix.value());
         context.set_latency_samples(self.chain.latency() as u32);
 
         self.chain

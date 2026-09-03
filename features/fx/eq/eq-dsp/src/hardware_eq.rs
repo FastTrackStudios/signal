@@ -229,7 +229,8 @@ pub struct SslChannelSettings {
 }
 
 impl SslChannelSettings {
-    pub fn e_series() -> Self {
+    #[must_use]
+    pub const fn e_series() -> Self {
         Self {
             eq_in: true,
             e_series: true,
@@ -248,6 +249,7 @@ impl SslChannelSettings {
         }
     }
 
+    #[must_use]
     pub fn g_series() -> Self {
         Self {
             e_series: false,
@@ -694,7 +696,7 @@ pub fn build_ssl_channel_sections_with_calibration(
         );
     }
 
-    let (lf_q, lmf_q, hmf_q, hf_q, skirt) = if settings.e_series {
+    let (low_q, lmid_q, hmid_q, high_q, skirt) = if settings.e_series {
         (0.72, 1.25, 1.35, 0.74, calibration.ssl_e_skirt_factor)
     } else {
         (0.58, 0.85, 0.95, 0.58, calibration.ssl_g_skirt_factor)
@@ -704,7 +706,7 @@ pub fn build_ssl_channel_sections_with_calibration(
         &mut sections,
         FilterType::LowShelf,
         settings.lf_freq_hz,
-        lf_q,
+        low_q,
         settings.lf_gain_db,
         sample_rate,
     );
@@ -712,7 +714,7 @@ pub fn build_ssl_channel_sections_with_calibration(
         &mut sections,
         FilterType::Peak,
         settings.lmf_freq_hz,
-        lmf_q,
+        lmid_q,
         settings.lmf_gain_db,
         sample_rate,
     );
@@ -720,7 +722,7 @@ pub fn build_ssl_channel_sections_with_calibration(
         &mut sections,
         FilterType::Peak,
         settings.hmf_freq_hz,
-        hmf_q,
+        hmid_q,
         settings.hmf_gain_db,
         sample_rate,
     );
@@ -728,7 +730,7 @@ pub fn build_ssl_channel_sections_with_calibration(
         &mut sections,
         FilterType::HighShelf,
         settings.hf_freq_hz,
-        hf_q,
+        high_q,
         settings.hf_gain_db,
         sample_rate,
     );

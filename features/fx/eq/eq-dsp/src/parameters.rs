@@ -8,22 +8,22 @@
 //! Magic constants extracted from binary @ 0x18010de30 (compute_peak_band_parameters).
 
 /// Magic constant: Shelf frequency bound
-const SHELF_FREQ_BOUND_1: f64 = 2.607521902479528;
+const SHELF_FREQ_BOUND_1: f64 = 2.607_521_902_479_528;
 
 /// Magic constant: π upper bound (3.14... instead of full π)
-const PI_BOUND: f64 = 3.141278494324434;
+const PI_BOUND: f64 = 3.141_278_494_324_434;
 
 /// Magic constant: Shelf special scaling
 const SHELF_SCALE_1: f64 = 1.8; // From DAT_180231b10
 
 /// Magic constant: Type 6 clipping bound
-const TYPE_6_CLIP: f64 = 1.884955592153876;
+const TYPE_6_CLIP: f64 = 1.884_955_592_153_876;
 
 /// Magic constant: Q constraint high
 const Q_CONSTRAINT_HIGH: f64 = 0.9998;
 
 /// Magic constant: Q² adjustment bounds
-const Q_SQ_EPSILON: f64 = 0.000000000065670;
+const Q_SQ_EPSILON: f64 = 0.000_000_000_065_670;
 
 const MODE_SCALE_0_05: f64 = 0.05;
 
@@ -40,7 +40,7 @@ const SQ_SCALE_1_5: f64 = 1.5;
 const PI: f64 = std::f64::consts::PI;
 
 /// Magic constant: 9π/10
-const NINE_PI_OVER_10: f64 = 2.827433388230814;
+const NINE_PI_OVER_10: f64 = 2.827_433_388_230_814;
 
 /// Transformed parameters output from compute_peak_band_parameters
 #[derive(Debug, Clone, Copy)]

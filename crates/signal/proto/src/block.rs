@@ -34,7 +34,8 @@ pub enum BlockCategory {
 
 impl BlockCategory {
     /// All categories in display order.
-    pub const fn all() -> &'static [BlockCategory] {
+    #[must_use] 
+    pub const fn all() -> &'static [Self] {
         &[
             Self::Utility,
             Self::Dynamics,
@@ -52,6 +53,7 @@ impl BlockCategory {
         ]
     }
 
+    #[must_use] 
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Utility => "utility",
@@ -70,6 +72,7 @@ impl BlockCategory {
         }
     }
 
+    #[must_use] 
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Utility => "Utility",
@@ -163,7 +166,7 @@ macro_rules! block_types {
             }
 
             /// Parse from lowercase kebab-case storage string.
-            #[allow(clippy::should_implement_trait)]
+            #[expect(clippy::should_implement_trait)]
             pub fn from_str(value: &str) -> Option<Self> {
                 Some(match value {
                     $default_storage => Self::$default_variant,
@@ -322,6 +325,7 @@ impl BlockType {
     /// Parse with legacy/alias support on top of the macro-generated `from_str`.
     ///
     /// Use this when accepting user or external input that may use older names.
+    #[must_use] 
     pub fn from_str_lenient(value: &str) -> Option<Self> {
         Self::from_str(value).or_else(|| {
             Some(match value {
@@ -385,7 +389,7 @@ mod tests {
     fn block_type_every_variant_has_category() {
         for &bt in ALL_BLOCK_TYPES {
             let cat = bt.category();
-            assert!(!cat.as_str().is_empty(), "empty category for {:?}", bt);
+            assert!(!cat.as_str().is_empty(), "empty category for {bt:?}");
         }
     }
 
@@ -448,8 +452,7 @@ mod tests {
         for &bt in ALL_BLOCK_TYPES {
             assert!(
                 all.contains(&bt.category()),
-                "{:?} category not in all()",
-                bt
+                "{bt:?} category not in all()"
             );
         }
     }

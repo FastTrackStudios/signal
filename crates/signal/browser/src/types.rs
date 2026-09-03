@@ -17,7 +17,7 @@ pub enum NavCategory {
 }
 
 impl NavCategory {
-    pub const ALL: &[NavCategory] = &[
+    pub const ALL: &[Self] = &[
         Self::Presets,
         Self::Engines,
         Self::Layers,
@@ -25,7 +25,8 @@ impl NavCategory {
         Self::Blocks,
     ];
 
-    pub fn label(self) -> &'static str {
+    #[must_use] 
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Presets => "Presets",
             Self::Engines => "Engines",
@@ -45,9 +46,10 @@ pub enum SortMode {
 }
 
 impl SortMode {
-    pub const ALL: &[SortMode] = &[Self::Name, Self::NameDesc, Self::Variants, Self::BlockType];
+    pub const ALL: &[Self] = &[Self::Name, Self::NameDesc, Self::Variants, Self::BlockType];
 
-    pub fn label(self) -> &'static str {
+    #[must_use] 
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Name => "A \u{2192} Z",
             Self::NameDesc => "Z \u{2192} A",
@@ -56,7 +58,8 @@ impl SortMode {
         }
     }
 
-    pub fn value(self) -> &'static str {
+    #[must_use] 
+    pub const fn value(self) -> &'static str {
         match self {
             Self::Name => "name",
             Self::NameDesc => "name_desc",
@@ -65,6 +68,7 @@ impl SortMode {
         }
     }
 
+    #[must_use] 
     pub fn from_value(s: &str) -> Self {
         match s {
             "name_desc" => Self::NameDesc,

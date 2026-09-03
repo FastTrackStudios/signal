@@ -1,6 +1,6 @@
-//! Real drum multitrack tests using RomanStyx_SevenFeel WAV files.
+//! Real drum multitrack tests using `RomanStyx_SevenFeel` WAV files.
 //!
-//! All tests are `#[ignore]` — they require WAV files in ~/Downloads/RomanStyx_SevenFeel/.
+//! All tests are `#[ignore]` — they require WAV files in ~/`Downloads/RomanStyx_SevenFeel`/.
 //! Run with: cargo test --package trigger-dsp -- --ignored
 
 use audiocore_dsp::{AudioConfig, Processor};
@@ -55,7 +55,7 @@ fn load_wav(filename: &str) -> Option<Audio> {
     let mut reader = probed.format;
     let track = reader.default_track().expect("default track");
     let track_id = track.id;
-    let sample_rate = track.codec_params.sample_rate.expect("sample rate") as f64;
+    let sample_rate = f64::from(track.codec_params.sample_rate.expect("sample rate"));
 
     let mut decoder = symphonia::default::get_codecs()
         .make(&track.codec_params, &DecoderOptions::default())
@@ -79,7 +79,7 @@ fn load_wav(filename: &str) -> Option<Audio> {
                 for frame in 0..frames {
                     let mut sum = 0.0;
                     for ch in 0..channels {
-                        sum += buf.chan(ch)[frame] as f64;
+                        sum += f64::from(buf.chan(ch)[frame]);
                     }
                     samples.push(sum / channels as f64);
                 }
@@ -90,7 +90,7 @@ fn load_wav(filename: &str) -> Option<Audio> {
                 for frame in 0..frames {
                     let mut sum = 0.0;
                     for ch in 0..channels {
-                        sum += buf.chan(ch)[frame] as f64 / 32768.0;
+                        sum += f64::from(buf.chan(ch)[frame]) / 32768.0;
                     }
                     samples.push(sum / channels as f64);
                 }
@@ -101,7 +101,7 @@ fn load_wav(filename: &str) -> Option<Audio> {
                 for frame in 0..frames {
                     let mut sum = 0.0;
                     for ch in 0..channels {
-                        sum += buf.chan(ch)[frame] as f64 / 2147483648.0;
+                        sum += f64::from(buf.chan(ch)[frame]) / 2147483648.0;
                     }
                     samples.push(sum / channels as f64);
                 }
@@ -234,21 +234,21 @@ fn kick_velocity_distribution() {
     assert!(!events.is_empty(), "No triggers detected");
 
     let velocities: Vec<f64> = events.iter().map(|e| e.velocity).collect();
-    let min_vel = velocities.iter().cloned().fold(f64::MAX, f64::min);
-    let max_vel = velocities.iter().cloned().fold(f64::MIN, f64::max);
+    let min_vel = velocities.iter().copied().fold(f64::MAX, f64::min);
+    let max_vel = velocities.iter().copied().fold(f64::MIN, f64::max);
 
-    println!("Velocity range: {:.3} - {:.3}", min_vel, max_vel);
+    println!("Velocity range: {min_vel:.3} - {max_vel:.3}");
 
     // Check MIDI velocity spread
     let midi_vels: Vec<u8> = velocities
         .iter()
         .map(|&v| trigger_dsp::velocity::VelocityMapper::to_midi(v))
         .collect();
-    let mut unique: Vec<u8> = midi_vels.clone();
-    unique.sort();
+    let mut unique: Vec<u8> = midi_vels;
+    unique.sort_unstable();
     unique.dedup();
 
-    println!("Unique MIDI velocities: {:?}", unique);
+    println!("Unique MIDI velocities: {unique:?}");
 
     assert!(
         unique.len() >= 3,
@@ -307,7 +307,7 @@ fn kick_replacement_output_finite() {
     let click_len = 4800; // 0.1s at 48kHz
     let click_data: Vec<[f64; 2]> = (0..click_len)
         .map(|i| {
-            let t = i as f64 / 48000.0;
+            let t = f64::from(i) / 48000.0;
             let env = (-t * 50.0).exp();
             let s = (t * 200.0 * std::f64::consts::TAU).sin() * env * 0.8;
             [s, s]
@@ -322,7 +322,7 @@ fn kick_replacement_output_finite() {
     });
 
     let mut left = audio.samples.clone();
-    let mut right = audio.samples.clone();
+    let mut right = audio.samples;
     chain.process(&mut left, &mut right);
 
     // Verify output is finite
@@ -331,8 +331,8 @@ fn kick_replacement_output_finite() {
 
     // Verify there's audible content at trigger points (not all zeros)
     let rms: f64 = (left.iter().map(|s| s * s).sum::<f64>() / left.len() as f64).sqrt();
-    println!("Output RMS: {:.6}", rms);
-    assert!(rms > 1e-6, "Output is silent (RMS = {})", rms);
+    println!("Output RMS: {rms:.6}");
+    assert!(rms > 1e-6, "Output is silent (RMS = {rms})");
 }
 
 #[test]

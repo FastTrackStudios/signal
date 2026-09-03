@@ -6,4 +6,7 @@ license.workspace = true
 edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
 description = "EQ hardware profiles — Pultec, Neve 1073, SSL-E, API 550A parameter mappings"
 
+[lints]
+workspace = true
+
 [dependencies]

@@ -154,7 +154,7 @@ pub fn PresetBrowserPanel(props: PresetBrowserProps) -> Element {
                     label: "All".to_string(),
                     active: active_category.is_none(),
                     accent: accent.clone(),
-                    onpick: move |_| browser.write().set_category_filter(None),
+                    onpick: move |()| browser.write().set_category_filter(None),
                 }
                 for category in categories {
                     CategoryChip {
@@ -164,7 +164,7 @@ pub fn PresetBrowserPanel(props: PresetBrowserProps) -> Element {
                         accent: accent.clone(),
                         onpick: {
                             let category = category.clone();
-                            move |_| browser.write().set_category_filter(Some(category.clone()))
+                            move |()| browser.write().set_category_filter(Some(category.clone()))
                         },
                     }
                 }
@@ -227,7 +227,7 @@ fn CategoryChip(
                  letter-spacing:0.06em; text-transform:uppercase; \
                  background:{}; border:1px solid {};",
                 if active { format!("{accent}33") } else { "rgba(255,255,255,0.05)".into() },
-                if active { accent.clone() } else { "rgba(255,255,255,0.10)".into() },
+                if active { accent } else { "rgba(255,255,255,0.10)".into() },
             ),
             onclick: move |_| onpick.call(()),
             "{label}"
@@ -260,7 +260,7 @@ fn PresetRow(
                  cursor:pointer; font-size:10px; padding:2px 4px; border-radius:2px; \
                  background:{}; color:{};",
                 if selected { format!("{accent}2e") } else { "transparent".into() },
-                if selected { accent.clone() } else { ink.clone() },
+                if selected { accent } else { ink },
             ),
             onclick: move |_| onpick.call(preset_index),
             span {
@@ -318,6 +318,7 @@ mod tests {
 /// Lives here rather than in each `*-ui` crate deliberately: the adapter this
 /// builds on carries a note that it was copied verbatim into seven crates
 /// before being lifted, and the copies drifted.
+#[must_use] 
 pub fn apply_to_handles(
     parameters: &[(String, f64)],
     handles: &std::collections::HashMap<String, fts_audio_ui::ParamHandle>,
@@ -354,14 +355,14 @@ mod apply_tests {
         let n = name.to_string();
         let begin_log = log.clone();
         let set_log = log.clone();
-        let end_log = log.clone();
+        let end_log = log;
         let (b, s, e) = (n.clone(), n.clone(), n.clone());
         ParamHandle::new(
             || 0.0,
             move || begin_log.lock().unwrap().push((format!("begin:{b}"), 0.0)),
             move |v| set_log.lock().unwrap().push((format!("set:{s}"), v)),
             move || end_log.lock().unwrap().push((format!("end:{e}"), 0.0)),
-            || String::new(),
+            String::new,
             move || n.clone(),
             // Stands in for a 0..4 parameter: the preset stores plain units
             // and only the parameter knows how to normalize them. Asserting
@@ -423,7 +424,7 @@ mod apply_tests {
                 || {},
                 |_| {},
                 || {},
-                || String::new(),
+                String::new,
                 || "mix".to_string(),
                 |_| None,
             ),
@@ -537,7 +538,7 @@ pub fn PresetBar(
                      text-transform:uppercase; padding:2px 6px; border-radius:2px; \
                      background:{}; border:1px solid {};",
                     if browsing { format!("{accent}33") } else { "rgba(255,255,255,0.05)".into() },
-                    if browsing { accent.clone() } else { "rgba(255,255,255,0.10)".into() },
+                    if browsing { accent } else { "rgba(255,255,255,0.10)".into() },
                 ),
                 onclick: move |_| on_browse.call(()),
                 "Browse"
@@ -558,6 +559,7 @@ pub fn PresetBar(
 /// load — an empty library, or files that could not be read. Shared rather
 /// than written per plugin, because "where are my presets" has the same answer
 /// everywhere and only the root differs.
+#[must_use] 
 pub fn load_library_tree(root: &std::path::Path) -> (PresetBrowser, String) {
     let mut presets = Vec::new();
     let mut skipped = 0usize;
@@ -594,6 +596,7 @@ pub fn load_library_tree(root: &std::path::Path) -> (PresetBrowser, String) {
 ///
 /// Every plugin wants the same escape hatch — the tests point it at a fixture,
 /// and a user can point it at a library that is not on the default path.
+#[must_use] 
 pub fn library_root(env_var: &str, default: &str) -> std::path::PathBuf {
     match std::env::var_os(env_var) {
         Some(dir) => std::path::PathBuf::from(dir),

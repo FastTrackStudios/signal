@@ -3,11 +3,11 @@
 use crate::biquad::Coeffs;
 use crate::cascade;
 
-/// Peak/Bell cascade. For N=1 (slope-2): 7-step proq4_peak pipeline (Vicanek
+/// Peak/Bell cascade. For N=1 (slope-2): 7-step `proq4_peak` pipeline (Vicanek
 /// matched-magnitude on numerator + impulse-invariance denominator). For N>1:
-/// per-section gain/N dB + Butterworth-distributed Q via proq4_peak.
+/// per-section gain/N dB + Butterworth-distributed Q via `proq4_peak`.
 ///
-/// Verified via instrumented Pro-Q 4 (commit 2b500c27 — proq4_probe hooks):
+/// Verified via instrumented Pro-Q 4 (commit 2b500c27 — `proq4_probe` hooks):
 ///   compute_cascade_coefficients(order=2, type=0, gain) emits ONE section with
 ///   pole pair at (-sin(π/4), ±cos(π/4)) = (-0.707, ±0.707) on the unit circle
 ///   (analog) and zeros at +∞.  Section_gain = 1.0.  fc-dependence enters

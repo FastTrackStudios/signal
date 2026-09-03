@@ -18,6 +18,7 @@ use crate::zpk::Zpk;
 /// * `sections` - Cascade of biquad coefficient arrays
 /// * `frequencies` - Frequencies in Hz to evaluate at
 /// * `sample_rate` - Sample rate in Hz
+#[must_use]
 pub fn compute_magnitude_response(
     sections: &[Coeffs],
     frequencies: &[f64],
@@ -41,6 +42,7 @@ pub fn compute_magnitude_response(
 /// * `sections` - Cascade of biquad coefficient arrays
 /// * `frequencies` - Frequencies in Hz to evaluate at
 /// * `sample_rate` - Sample rate in Hz
+#[must_use]
 pub fn compute_phase_response(
     sections: &[Coeffs],
     frequencies: &[f64],
@@ -67,6 +69,7 @@ pub fn compute_phase_response(
 /// * `sections` - Cascade of biquad coefficient arrays
 /// * `freq_hz` - Frequency in Hz to evaluate at
 /// * `sample_rate` - Sample rate in Hz
+#[must_use]
 pub fn compute_group_delay(sections: &[Coeffs], freq_hz: f64, sample_rate: f64) -> f64 {
     let w = 2.0 * PI * freq_hz / sample_rate;
 

@@ -85,7 +85,7 @@ fn voicing(base: &[u8], want: usize) -> Vec<u8> {
             if out.len() >= want {
                 return out;
             }
-            let v = n as i16 + 12 * oct;
+            let v = i16::from(n) + 12 * oct;
             if (21..=108).contains(&v) {
                 out.push(v as u8);
             }
@@ -142,7 +142,7 @@ fn main() {
     // would drag the average down until it meant nothing.
     let (mean_blocks0, mean_total0) = {
         let r = KeysRigSvc::status(&backend).rt;
-        (r.blocks, r.mean_render_ms as f64 * r.blocks as f64)
+        (r.blocks, f64::from(r.mean_render_ms) * r.blocks as f64)
     };
     let faults0 = major_faults();
     let minor0 = minor_faults();
@@ -179,7 +179,7 @@ fn main() {
         KeysRigSvc::reset_rt_peak(&backend);
         let notes = voicing(chord, max_notes);
         for &n in &notes {
-            KeysRigSvc::trigger(&backend, n as u32, 100);
+            KeysRigSvc::trigger(&backend, u32::from(n), 100);
         }
         std::thread::sleep(Duration::from_millis(400));
         let st = KeysRigSvc::status(&backend);
@@ -194,16 +194,16 @@ fn main() {
         // that climbs because nothing was ever let go is a property of the
         // test, not of the rig.
         for &n in &notes {
-            KeysRigSvc::trigger(&backend, n as u32, 0);
+            KeysRigSvc::trigger(&backend, u32::from(n), 0);
         }
         std::thread::sleep(Duration::from_millis(150));
         // Every third chord, a fast run over the top — single-note attacks in
         // quick succession, the other shape that starts voices in a hurry.
         if i % 3 == 2 {
-            for &n in RUN.iter() {
-                KeysRigSvc::trigger(&backend, n as u32, 96);
+            for &n in &RUN {
+                KeysRigSvc::trigger(&backend, u32::from(n), 96);
                 std::thread::sleep(Duration::from_millis(60));
-                KeysRigSvc::trigger(&backend, n as u32, 0);
+                KeysRigSvc::trigger(&backend, u32::from(n), 0);
                 peak = peak.max(KeysRigSvc::status(&backend).master_peak);
             }
         }
@@ -233,7 +233,7 @@ fn main() {
     let over = s.rt.over_budget.saturating_sub(over_baseline);
     let play_blocks = s.rt.blocks.saturating_sub(mean_blocks0);
     let play_mean = if play_blocks > 0 {
-        (s.rt.mean_render_ms as f64 * s.rt.blocks as f64 - mean_total0) / play_blocks as f64
+        f64::from(s.rt.mean_render_ms).mul_add(s.rt.blocks as f64, -mean_total0) / play_blocks as f64
     } else {
         0.0
     };
@@ -242,7 +242,7 @@ fn main() {
         "per-chord voices: {}",
         per_chord_voices
             .iter()
-            .map(|v| v.to_string())
+            .map(std::string::ToString::to_string)
             .collect::<Vec<_>>()
             .join(" ")
     );
@@ -250,7 +250,7 @@ fn main() {
         "per-chord dropped notes: {}",
         per_chord_drops
             .iter()
-            .map(|v| v.to_string())
+            .map(std::string::ToString::to_string)
             .collect::<Vec<_>>()
             .join(" ")
     );
@@ -274,7 +274,7 @@ fn main() {
          render_peak={:.2}ms (open_peak={open_peak:.2}ms)",
         over as f64 / played.max(0.001),
         s.rt.block_frames,
-        100.0 * play_mean / budget_ms.max(0.001) as f64,
+        100.0 * play_mean / f64::from(budget_ms.max(0.001)),
         s.rt.peak_render_ms,
     );
 

@@ -83,7 +83,7 @@ fn combine(a: [f64; 3], b: [f64; 3]) -> Coeffs {
         a[2] + b[2],
         a[2] * b[2],
         a[0] * b[0],
-        a[0] * b[1] + a[1] * b[0],
+        a[0].mul_add(b[1], a[1] * b[0]),
         a[1] * b[1],
     ]
 }
@@ -93,6 +93,7 @@ fn combine(a: [f64; 3], b: [f64; 3]) -> Coeffs {
 /// The cascade designs start at second order and returned a pass-through below
 /// it, so a 6 dB/oct low or high cut did nothing at all. 28 bands in the Pro-Q
 /// factory library ask for one.
+#[must_use]
 pub fn first_order_cut(freq_hz: f64, sample_rate: f64, high_pass: bool) -> Coeffs {
     let nyquist = sample_rate * 0.5;
     let hz = freq_hz.clamp(1.0, nyquist * 0.999);
@@ -120,6 +121,7 @@ pub fn first_order_cut(freq_hz: f64, sample_rate: f64, high_pass: bool) -> Coeff
 ///
 /// The gain is normalised to unity in the pass band, so adding this to an
 /// integer-order design changes its slope and not its level.
+#[must_use]
 pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) -> Vec<Coeffs> {
     let f = fraction.clamp(0.0, 1.0);
     if f <= 1.0e-6 {

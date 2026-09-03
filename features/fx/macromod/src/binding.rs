@@ -20,6 +20,7 @@ pub struct MacroBinding {
 }
 
 impl MacroBinding {
+    #[must_use] 
     pub fn new(target: ParamTarget, min: f32, max: f32) -> Self {
         Self {
             target,
@@ -29,7 +30,7 @@ impl MacroBinding {
         }
     }
 
-    /// Convenience: create from block_id + param_id strings (backward-compatible API).
+    /// Convenience: create from `block_id` + `param_id` strings (backward-compatible API).
     pub fn from_ids(
         target_block_id: impl Into<String>,
         target_param_id: impl Into<String>,
@@ -60,6 +61,7 @@ impl MacroBinding {
     }
 
     /// Whether this binding runs in reverse (min > max).
+    #[must_use] 
     pub fn is_inverted(&self) -> bool {
         self.min > self.max
     }

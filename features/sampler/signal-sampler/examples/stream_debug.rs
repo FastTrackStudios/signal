@@ -49,7 +49,7 @@ fn main() -> eyre::Result<()> {
         if block % 4 == 0 {
             println!(
                 "  t={:>5.2}s frame {:>7}  nonzero {:>3}/512  resident {:>8} B",
-                block as f64 * 512.0 / entry.sample_rate() as f64,
+                f64::from(block) * 512.0 / f64::from(entry.sample_rate()),
                 frame,
                 nonzero,
                 s.resident_bytes(),

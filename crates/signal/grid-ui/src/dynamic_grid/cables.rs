@@ -1,4 +1,4 @@
-//! Cable resolution, SVG path generation, and CableLayer component.
+//! Cable resolution, SVG path generation, and `CableLayer` component.
 
 use dioxus::prelude::*;
 
@@ -11,7 +11,7 @@ use super::types::GridSlot;
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Clone, PartialEq)]
-pub(crate) struct Cable {
+pub struct Cable {
     pub(crate) from: (f64, f64),
     pub(crate) to: (f64, f64),
     pub(crate) color: String,
@@ -21,7 +21,7 @@ pub(crate) struct Cable {
 }
 
 impl Cable {
-    pub(crate) fn new(from: (f64, f64), to: (f64, f64), color: String, bypassed: bool) -> Self {
+    pub(crate) const fn new(from: (f64, f64), to: (f64, f64), color: String, bypassed: bool) -> Self {
         Self {
             from,
             to,
@@ -32,7 +32,7 @@ impl Cable {
         }
     }
 
-    pub(crate) fn routed(
+    pub(crate) const fn routed(
         from: (f64, f64),
         to: (f64, f64),
         color: String,
@@ -55,13 +55,13 @@ impl Cable {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Clone, PartialEq)]
-pub(crate) struct ModulePort {
+pub struct ModulePort {
     pub(crate) pos: (f64, f64),
     pub(crate) color: String,
     pub(crate) bypassed: bool,
 }
 
-pub(crate) fn compute_module_ports(chain: &[GridSlot]) -> Vec<ModulePort> {
+pub fn compute_module_ports(chain: &[GridSlot]) -> Vec<ModulePort> {
     use std::collections::BTreeMap;
 
     let mut ports = Vec::new();
@@ -72,7 +72,7 @@ pub(crate) fn compute_module_ports(chain: &[GridSlot]) -> Vec<ModulePort> {
     let mut group_map: Vec<(String, usize, usize, usize, usize, String)> = Vec::new();
     let mut seen: BTreeMap<String, usize> = BTreeMap::new();
 
-    for s in chain.iter() {
+    for s in chain {
         let Some(ref g) = s.module_group else {
             continue;
         };
@@ -99,17 +99,17 @@ pub(crate) fn compute_module_ports(chain: &[GridSlot]) -> Vec<ModulePort> {
             !slots.is_empty() && slots.iter().all(|s| s.bypassed)
         };
 
-        let in_x = *min_c as f64 * step - GROUP_PAD;
+        let in_x = (*min_c as f64).mul_add(step, -GROUP_PAD);
         let top = *min_r as f64 * step;
-        let bottom = *max_r as f64 * step + CELL_SIZE as f64;
-        let center_y = (top + bottom) / 2.0;
+        let bottom = (*max_r as f64).mul_add(step, CELL_SIZE as f64);
+        let center_y = f64::midpoint(top, bottom);
         ports.push(ModulePort {
             pos: (in_x, center_y),
             color: color.clone(),
             bypassed: all_bypassed,
         });
 
-        let out_x = *max_c as f64 * step + CELL_SIZE as f64 + GROUP_PAD;
+        let out_x = (*max_c as f64).mul_add(step, CELL_SIZE as f64) + GROUP_PAD;
         ports.push(ModulePort {
             pos: (out_x, center_y),
             color: color.clone(),
@@ -127,7 +127,7 @@ pub(crate) fn compute_module_ports(chain: &[GridSlot]) -> Vec<ModulePort> {
 struct ModuleIO {
     name: String,
     layer_group: Option<String>,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     left_edge: Vec<(usize, usize)>,
     right_edge: Vec<(usize, usize)>,
     min_col: usize,
@@ -140,21 +140,21 @@ struct ModuleIO {
 impl ModuleIO {
     fn input_point(&self) -> (f64, f64) {
         let step = (CELL_SIZE + CELL_GAP) as f64;
-        let x = self.min_col as f64 * step - GROUP_PAD;
+        let x = (self.min_col as f64).mul_add(step, -GROUP_PAD);
         let top = self.min_row as f64 * step;
-        let bottom = self.max_row as f64 * step + CELL_SIZE as f64;
-        (x, (top + bottom) / 2.0)
+        let bottom = (self.max_row as f64).mul_add(step, CELL_SIZE as f64);
+        (x, f64::midpoint(top, bottom))
     }
 
     fn output_point(&self) -> (f64, f64) {
         let step = (CELL_SIZE + CELL_GAP) as f64;
-        let x = self.max_col as f64 * step + CELL_SIZE as f64 + GROUP_PAD;
+        let x = (self.max_col as f64).mul_add(step, CELL_SIZE as f64) + GROUP_PAD;
         let top = self.min_row as f64 * step;
-        let bottom = self.max_row as f64 * step + CELL_SIZE as f64;
-        (x, (top + bottom) / 2.0)
+        let bottom = (self.max_row as f64).mul_add(step, CELL_SIZE as f64);
+        (x, f64::midpoint(top, bottom))
     }
 
-    fn is_multi_row(&self) -> bool {
+    const fn is_multi_row(&self) -> bool {
         self.min_row != self.max_row
     }
 }
@@ -163,7 +163,7 @@ impl ModuleIO {
 // Cable resolution
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub(crate) fn resolve_cables(chain: &[GridSlot]) -> Vec<Cable> {
+pub fn resolve_cables(chain: &[GridSlot]) -> Vec<Cable> {
     use std::collections::BTreeMap;
 
     let mut cables = Vec::new();
@@ -172,12 +172,12 @@ pub(crate) fn resolve_cables(chain: &[GridSlot]) -> Vec<Cable> {
     }
 
     // (name, min_col, max_col, min_row, max_row, color, layer_group)
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     let mut group_map: Vec<(String, usize, usize, usize, usize, String, Option<String>)> =
         Vec::new();
     let mut seen: BTreeMap<String, usize> = BTreeMap::new();
 
-    for s in chain.iter() {
+    for s in chain {
         let Some(ref g) = s.module_group else {
             continue;
         };
@@ -238,11 +238,11 @@ pub(crate) fn resolve_cables(chain: &[GridSlot]) -> Vec<Cable> {
         .collect();
 
     // 1. Intra-module horizontal adjacency
-    for a in chain.iter() {
+    for a in chain {
         if a.is_phantom {
             continue;
         }
-        for b in chain.iter() {
+        for b in chain {
             if b.is_phantom {
                 continue;
             }
@@ -348,17 +348,13 @@ pub(crate) fn resolve_cables(chain: &[GridSlot]) -> Vec<Cable> {
                     let is_wrap = to_pt.0 < from_pt.0 && to_pt.1 > from_pt.1;
 
                     if is_wrap {
-                        let channel_y = from_mod.max_row as f64 * step
-                            + CELL_SIZE as f64
-                            + CELL_GAP as f64 * 0.12;
+                        let channel_y = (CELL_GAP as f64).mul_add(0.12, (from_mod.max_row as f64).mul_add(step, CELL_SIZE as f64));
                         let mut c = Cable::new(from_pt, to_pt, color, both_bypassed);
                         c.route_y = Some(channel_y);
                         cables.push(c);
                     } else {
                         let upper_bottom_row = from_mod.max_row.min(to_mod.max_row);
-                        let channel_y = upper_bottom_row as f64 * step
-                            + CELL_SIZE as f64
-                            + CELL_GAP as f64 * 0.25;
+                        let channel_y = (CELL_GAP as f64).mul_add(0.25, (upper_bottom_row as f64).mul_add(step, CELL_SIZE as f64));
 
                         cables.push(Cable::routed(
                             from_pt,
@@ -376,7 +372,7 @@ pub(crate) fn resolve_cables(chain: &[GridSlot]) -> Vec<Cable> {
     cables
 }
 
-pub(crate) fn resolve_cables_or_connections(
+pub fn resolve_cables_or_connections(
     chain: &[GridSlot],
     connections: &[GridConnection],
 ) -> Vec<Cable> {
@@ -403,7 +399,7 @@ pub(crate) fn resolve_cables_or_connections(
 // SVG path generation
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub(crate) fn routed_cable_path(from: (f64, f64), to: (f64, f64), channel_y: f64) -> String {
+pub fn routed_cable_path(from: (f64, f64), to: (f64, f64), channel_y: f64) -> String {
     let r = 10.0f64;
     let (fx, fy) = from;
     let (tx, ty) = to;
@@ -451,7 +447,7 @@ pub(crate) fn routed_cable_path(from: (f64, f64), to: (f64, f64), channel_y: f64
     )
 }
 
-pub(crate) fn cable_path_d(from: (f64, f64), to: (f64, f64)) -> String {
+pub fn cable_path_d(from: (f64, f64), to: (f64, f64)) -> String {
     let dx = to.0 - from.0;
     let dy = to.1 - from.1;
     let abs_dx = dx.abs();
@@ -462,8 +458,8 @@ pub(crate) fn cable_path_d(from: (f64, f64), to: (f64, f64)) -> String {
     if is_row_wrap {
         let r = 12.0;
         let channel_y = (from.1 + to.1) * 0.5;
-        let right_x = from.0 + (CELL_GAP as f64) * 0.5;
-        let left_x = to.0 - (CELL_GAP as f64) * 0.5;
+        let right_x = (CELL_GAP as f64).mul_add(0.5, from.0);
+        let left_x = (CELL_GAP as f64).mul_add(-0.5, to.0);
 
         format!(
             "M {fx},{fy} \

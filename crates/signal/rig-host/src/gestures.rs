@@ -49,6 +49,7 @@ pub struct FootswitchEngine {
 impl FootswitchEngine {
     /// `switches` gesture switches + up to `directs` direct slots, firing
     /// holds at `hold` (the pedalboard convention is 500 ms).
+    #[must_use] 
     pub fn new(switches: usize, directs: usize, hold: Duration) -> Self {
         Self {
             hold,
@@ -63,11 +64,11 @@ impl FootswitchEngine {
     /// gesture press returns nothing — its Tap/Hold comes on release or via
     /// [`poll_holds`](Self::poll_holds)).
     pub fn on_cc(&mut self, map: &FootswitchMap, cc: u8, value: u8) -> Option<FootswitchAction> {
-        let gesture = map.tap_ccs.iter().position(|c| *c == cc as u32);
+        let gesture = map.tap_ccs.iter().position(|c| *c == u32::from(cc));
         let direct = map
             .direct
             .iter()
-            .find(|(dc, _)| *dc == cc as u32)
+            .find(|(dc, _)| *dc == u32::from(cc))
             .map(|(_, slot)| *slot);
         let idx = gesture.or_else(|| direct.map(|s| self.switches + s as usize))?;
         let idx = idx.min(self.cc_down.len().saturating_sub(1));

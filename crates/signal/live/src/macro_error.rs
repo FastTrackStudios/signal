@@ -50,10 +50,10 @@ pub enum MacroError {
 impl fmt::Display for MacroError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MacroError::FxParametersFailed(reason) => {
-                write!(f, "Failed to get FX parameters: {}", reason)
+            Self::FxParametersFailed(reason) => {
+                write!(f, "Failed to get FX parameters: {reason}")
             }
-            MacroError::ParameterNotFound {
+            Self::ParameterNotFound {
                 fx_name,
                 sought,
                 available,
@@ -66,13 +66,13 @@ impl fmt::Display for MacroError {
                     available.join(", ")
                 )
             }
-            MacroError::NoBindings => write!(f, "No bindings in macro bank"),
-            MacroError::NoMacroBank => write!(f, "No macro bank on block"),
-            MacroError::InvalidKnobRef(knob_id) => {
-                write!(f, "Invalid knob reference: '{}'", knob_id)
+            Self::NoBindings => write!(f, "No bindings in macro bank"),
+            Self::NoMacroBank => write!(f, "No macro bank on block"),
+            Self::InvalidKnobRef(knob_id) => {
+                write!(f, "Invalid knob reference: '{knob_id}'")
             }
-            MacroError::ResolutionFailed(reason) => {
-                write!(f, "Macro resolution failed: {}", reason)
+            Self::ResolutionFailed(reason) => {
+                write!(f, "Macro resolution failed: {reason}")
             }
         }
     }

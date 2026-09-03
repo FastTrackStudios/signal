@@ -3,7 +3,7 @@
 //! prints the parsed articulation per line ("" if the stem doesn't parse).
 //! Used by the release-kind fixer to map .db samples -> styx articulation ids
 //! without re-guessing the (scheme-specific) id derivation.
-//!   … | cargo run -p signal-sampler --release --example articulation_of
+//!   … | cargo run -p signal-sampler --release --example `articulation_of`
 
 use std::io::{BufRead, Write};
 

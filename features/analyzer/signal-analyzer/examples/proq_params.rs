@@ -219,7 +219,7 @@ fn main() {
         info.name, info.min, info.max
     );
     for k in 0..=steps {
-        let v = info.min + (info.max - info.min) * (k as f64 / steps as f64);
+        let v = (info.max - info.min).mul_add(k as f64 / steps as f64, info.min);
         plugin.set_param(info.id, v);
         scratch.iter_mut().for_each(|s| *s = 0.0);
         if plugin.process_interleaved(&mut scratch, &[], &[]).is_err() {

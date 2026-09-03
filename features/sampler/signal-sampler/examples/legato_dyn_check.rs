@@ -108,10 +108,10 @@ fn main() -> eyre::Result<()> {
             let f = t.frame as usize;
             // sustain just before the transition arrival (200 ms ending 30 ms
             // before) vs the arrival peak (0..80 ms after).
-            let sus_a = f.saturating_sub((0.23 * SR as f64) as usize);
-            let sus_b = f.saturating_sub((0.03 * SR as f64) as usize);
+            let sus_a = f.saturating_sub((0.23 * f64::from(SR)) as usize);
+            let sus_b = f.saturating_sub((0.03 * f64::from(SR)) as usize);
             let arr_a = f;
-            let arr_b = (f + (0.08 * SR as f64) as usize).min(nframes);
+            let arr_b = (f + (0.08 * f64::from(SR)) as usize).min(nframes);
             if sus_b <= sus_a || arr_b <= arr_a {
                 continue;
             }
@@ -122,13 +122,12 @@ fn main() -> eyre::Result<()> {
             }
             arr_levels.push(arr);
         }
-        ratios.sort_by(|a, b| a.total_cmp(b));
+        ratios.sort_by(f32::total_cmp);
         let median = ratios.get(ratios.len() / 2).copied().unwrap_or(0.0);
         let maxr = ratios.last().copied().unwrap_or(0.0);
         let mean_arr = arr_levels.iter().sum::<f32>() / arr_levels.len().max(1) as f32;
         println!(
-            "   arrival/sustain ratio: median={:.2}×  max={:.2}×   mean arrival level={:.4}",
-            median, maxr, mean_arr
+            "   arrival/sustain ratio: median={median:.2}×  max={maxr:.2}×   mean arrival level={mean_arr:.4}"
         );
     }
     println!(

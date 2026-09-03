@@ -20,7 +20,7 @@ pub enum DiffDirection {
 }
 
 impl DiffDirection {
-    fn color_class(self) -> &'static str {
+    const fn color_class(self) -> &'static str {
         match self {
             Self::HigherInA => "text-signal-safe",
             Self::HigherInB => "text-signal-danger",
@@ -28,7 +28,7 @@ impl DiffDirection {
         }
     }
 
-    fn bg_class(self) -> &'static str {
+    const fn bg_class(self) -> &'static str {
         match self {
             Self::HigherInA => "bg-signal-safe/5",
             Self::HigherInB => "bg-signal-danger/5",
@@ -51,7 +51,7 @@ pub struct ComparisonRow {
 }
 
 /// Header info for a preset side.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PresetHeader {
     pub name: String,
     pub scene_name: Option<String>,
@@ -215,7 +215,7 @@ pub enum DiffFilter {
 }
 
 impl DiffFilter {
-    fn label(self) -> &'static str {
+    const fn label(self) -> &'static str {
         match self {
             Self::All => "All",
             Self::DiffsOnly => "Diffs",
@@ -346,7 +346,7 @@ pub fn ABComparison(props: ABComparisonProps) -> Element {
 
                 span {
                     class: "ml-auto text-[10px] text-muted-foreground",
-                    {format!("{} diffs / {} total", diff_count, total)}
+                    {format!("{diff_count} diffs / {total} total")}
                 }
             }
 

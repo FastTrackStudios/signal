@@ -1,7 +1,7 @@
 //! Tests for setlists, scene templates, browser/search, reorder APIs,
-//! delete, and the set_section_source / set_patch_preset mutation helpers.
+//! delete, and the `set_section_source` / `set_patch_preset` mutation helpers.
 //!
-//!   cargo test -p signal --test signal_setlists_browser -- --nocapture
+//!   cargo test -p signal --test `signal_setlists_browser` -- --nocapture
 
 mod fixtures;
 
@@ -196,7 +196,7 @@ async fn reorder_profile_patches() {
         .expect("worship not found after reorder");
     let new_names: Vec<String> = worship.patches.iter().map(|p| p.name.clone()).collect();
 
-    println!("Patch order: {:?} → {:?}", original_order, new_names);
+    println!("Patch order: {original_order:?} → {new_names:?}");
     assert_ne!(original_order, new_names, "order should have changed");
     // First element after rotate should be what was last
     assert_eq!(new_names[0], original_order[original_order.len() - 1]);
@@ -249,7 +249,7 @@ async fn reorder_song_sections() {
         .unwrap()
         .expect("song not found");
     let names: Vec<&str> = song.sections.iter().map(|s| s.name.as_str()).collect();
-    println!("Sections after reorder: {:?}", names);
+    println!("Sections after reorder: {names:?}");
     assert_eq!(names, ["Bridge", "Verse", "Chorus"]);
 }
 
@@ -317,7 +317,7 @@ async fn set_patch_preset_retargets_rig_scene() {
 
     match &before.target {
         PatchTarget::RigScene { scene_id, .. } => {
-            println!("Before retarget: scene={}", scene_id);
+            println!("Before retarget: scene={scene_id}");
             assert_eq!(
                 scene_id.to_string(),
                 seed_id("guitar-megarig-default").to_string()
@@ -346,7 +346,7 @@ async fn set_patch_preset_retargets_rig_scene() {
 
     match &after.target {
         PatchTarget::RigScene { scene_id, .. } => {
-            println!("After retarget: scene={}", scene_id);
+            println!("After retarget: scene={scene_id}");
             assert_eq!(
                 scene_id.to_string(),
                 seed_id("guitar-megarig-lead").to_string(),
@@ -548,7 +548,7 @@ async fn reorder_scene_templates() {
         })
         .collect();
 
-    println!("Template positions after reorder: {:?}", positions);
+    println!("Template positions after reorder: {positions:?}");
     assert_eq!(positions.len(), 3);
     // Gamma should come before Alpha, Alpha before Beta
     let gamma_pos = positions.iter().find(|(_, n)| *n == "Gamma").unwrap().0;
@@ -611,8 +611,7 @@ async fn browse_by_text_finds_jm_amp() {
             .entries()
             .iter()
             .find(|e| e.node == h.node)
-            .map(|e| e.name.as_str())
-            .unwrap_or("?");
+            .map_or("?", |e| e.name.as_str());
         println!("  {:?} — {} (score={:.2})", h.node.kind, name, h.score);
     }
     assert!(!hits.is_empty(), "should find hits for 'JM Amp'");
@@ -624,13 +623,12 @@ async fn browse_by_text_finds_jm_amp() {
         .filter_map(|h| index.entries().iter().find(|e| e.node == h.node))
         .map(|e| e.name.as_str())
         .collect();
-    println!("Top 10 hit names: {:?}", hit_names);
+    println!("Top 10 hit names: {hit_names:?}");
     assert!(
         hit_names
             .iter()
             .any(|n| n.contains("JM") || n.contains("Amp")),
-        "some top hits should reference JM or Amp, got: {:?}",
-        hit_names
+        "some top hits should reference JM or Amp, got: {hit_names:?}"
     );
 }
 

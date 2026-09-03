@@ -4,8 +4,8 @@
 //! own drum samples.
 //!
 //! Coverage: EQ (parametric bands), Modern/Vintage Compressor, Limiter (→ comp
-//! with a brick-wall ratio), Reverb, Transient (NativeTransient dual-envelope
-//! designer), Drive (→ NativeSaturate voiced by MM2's Soft/Tape/Hard mode).
+//! with a brick-wall ratio), Reverb, Transient (`NativeTransient` dual-envelope
+//! designer), Drive (→ `NativeSaturate` voiced by MM2's Soft/Tape/Hard mode).
 
 use signal_fx::{NativeComp, NativeEq, NativeReverb, NativeSaturate, NativeTransient};
 use signal_plugin_host::{HostedPlugin, PluginInstance};
@@ -26,12 +26,14 @@ fn tokens(name: &str) -> Vec<String> {
 }
 
 /// Find the MM2 strip whose name matches `target` (token-set equality).
+#[must_use] 
 pub fn match_strip<'a>(mixer: &'a Mixer, target: &str) -> Option<&'a Strip> {
     let want = tokens(target);
     mixer.strips.iter().find(|s| tokens(&s.name) == want)
 }
 
 /// Linear level → dB (MM2 `level` is a linear fader value).
+#[must_use] 
 pub fn level_to_db(level: f32) -> f32 {
     if level > 0.0 {
         20.0 * level.log10()
@@ -79,9 +81,9 @@ fn build_eq(slot: &FxSlot, sr: f64) -> NativeEq {
         let n = i + 1; // signal-fx bands are 1-indexed
         eq.set_named(&format!("b{n}_used"), 1.0);
         eq.set_named(&format!("b{n}_on"), 1.0);
-        eq.set_named(&format!("b{n}_freq"), band.freq as f64);
-        eq.set_named(&format!("b{n}_gain"), band.gain as f64);
-        eq.set_named(&format!("b{n}_q"), band.q as f64);
+        eq.set_named(&format!("b{n}_freq"), f64::from(band.freq));
+        eq.set_named(&format!("b{n}_gain"), f64::from(band.gain));
+        eq.set_named(&format!("b{n}_q"), f64::from(band.q));
         eq.set_named(&format!("b{n}_shape"), eq_shape_code(&band.mode));
     }
     eq

@@ -1,4 +1,4 @@
-//! Survey a folder of FabFilter `.ffp` presets: what the parameters are
+//! Survey a folder of `FabFilter` `.ffp` presets: what the parameters are
 //! called, in what order, and what range of each the factory library
 //! actually uses.
 //!

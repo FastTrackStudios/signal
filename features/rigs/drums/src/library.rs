@@ -11,6 +11,7 @@ use signal_sampler::{EngineSpec, PresetSpec};
 /// Recursively collect every `.signalengine` under `root` as a [`LibraryPiece`]
 /// (name + absolute path + engine type). Engines whose type is empty/`effects`
 /// are still listed under their raw type so nothing is silently dropped.
+#[must_use] 
 pub fn scan_engines(root: &Path) -> Vec<LibraryPiece> {
     let mut out = Vec::new();
     collect(root, &mut out);
@@ -58,6 +59,7 @@ fn stem(p: &Path) -> String {
 
 /// The engine directory of a library root (kits keep engines in `Engines/`;
 /// fall back to the root so a flat library still scans).
+#[must_use] 
 pub fn engines_dir(library_root: &Path) -> PathBuf {
     let e = library_root.join("Engines");
     if e.is_dir() {
@@ -72,6 +74,7 @@ pub fn engines_dir(library_root: &Path) -> PathBuf {
 /// schemes across presets: Metal Monster uses `rtom1`/`hats`/`snare`, while
 /// Pound/Organic use `rtom-a`/`hh-o`/`snare-a`/`kick-b`. Tom numbering comes
 /// from a trailing `1`/`2` or `-a`/`-b`.
+#[must_use] 
 pub fn slot_label(slot_id: &str) -> String {
     let s = slot_id.to_ascii_lowercase();
     // Which of a pair of same-type pieces: `-b`/`2`/`3` → 2/3, else 1.
@@ -126,6 +129,7 @@ fn title_case(s: &str) -> String {
 
 /// Infer a slot's engine *kind* (for matching library pieces) from the slot id
 /// when the current engine's type can't be read.
+#[must_use] 
 pub fn kind_from_slot(slot_id: &str) -> &'static str {
     let s = slot_id.to_ascii_lowercase();
     if s.contains("kick") {
@@ -151,6 +155,7 @@ pub fn kind_from_slot(slot_id: &str) -> &'static str {
 
 /// Read a preset's engine slots (id + current engine path/name). `preset_dir`
 /// resolves the relative engine refs to absolute paths.
+#[must_use] 
 pub fn preset_slots(spec: &PresetSpec, preset_dir: &Path) -> Vec<(String, PathBuf)> {
     spec.engines
         .iter()

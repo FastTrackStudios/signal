@@ -20,7 +20,7 @@ const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
 
 /// (CC58 value, label, expected zone-articulation tag the engine should spawn).
-/// MeasuredTremolo has no dedicated samples (KSP-scripted) → falls back to
+/// `MeasuredTremolo` has no dedicated samples (KSP-scripted) → falls back to
 /// Tremolo, which is the closest correct behavior.
 const ARTICS: &[(u8, &str, &str)] = &[
     (3, "Legato-LowLatency", "Nonvib"),
@@ -86,7 +86,7 @@ fn main() -> eyre::Result<()> {
 
     // Render helper: advance the engine `secs` seconds into `out`.
     let render = |rig: &SamplerRig, out: &mut Vec<f32>, secs: f64| -> eyre::Result<()> {
-        let frames = (secs * SR as f64) as usize;
+        let frames = (secs * f64::from(SR)) as usize;
         let mut buf = vec![0.0f32; frames * 2];
         rig.render_offline(&mut buf)?;
         out.extend_from_slice(&buf);
@@ -123,7 +123,7 @@ fn main() -> eyre::Result<()> {
     println!(
         "wrote {} ({:.1}s)\n\n{:>7} {:<3} {:<18} {:<14} {:>8}  status",
         out.display(),
-        audio.len() as f64 / 2.0 / SR as f64,
+        audio.len() as f64 / 2.0 / f64::from(SR),
         "time",
         "cc",
         "articulation",
@@ -134,8 +134,8 @@ fn main() -> eyre::Result<()> {
     for (i, (ks, label, expect)) in ARTICS.iter().enumerate() {
         let base = i as f64 * SLOT_S;
         let (a, b) = (
-            (base * SR as f64) as u64,
-            ((base + SLOT_S) * SR as f64) as u64,
+            (base * f64::from(SR)) as u64,
+            ((base + SLOT_S) * f64::from(SR)) as u64,
         );
         // Best (loudest) spawn whose articulation matches the expected tag.
         let hit = trace
@@ -150,15 +150,12 @@ fn main() -> eyre::Result<()> {
             })
             .max_by(|x, y| x.1.total_cmp(&y.1));
         let e = rms(
-            ((base + 0.15) * SR as f64) as usize,
-            ((base + 2.1) * SR as f64) as usize,
+            ((base + 0.15) * f64::from(SR)) as usize,
+            ((base + 2.1) * f64::from(SR)) as usize,
         );
-        let (spawned, status) = match hit {
-            Some((art, g)) => (format!("{art} g={g:.2}"), "✓ ok"),
-            None => {
-                broken.push(*label);
-                ("(none)".to_string(), "✗ BROKEN")
-            }
+        let (spawned, status) = if let Some((art, g)) = hit { (format!("{art} g={g:.2}"), "✓ ok") } else {
+            broken.push(*label);
+            ("(none)".to_string(), "✗ BROKEN")
         };
         println!("{base:>6.1}s {ks:<3} {label:<18} {spawned:<14} {e:>8.4}  {status}");
     }

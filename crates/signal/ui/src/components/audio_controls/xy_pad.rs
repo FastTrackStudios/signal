@@ -51,7 +51,7 @@ pub struct XYPadProps {
 #[component]
 pub fn XYPad(props: XYPadProps) -> Element {
     let s = props.size;
-    let sf = s as f64;
+    let sf = f64::from(s);
     let px = (props.x.clamp(0.0, 1.0) * sf) as u32;
     let py = ((1.0 - props.y.clamp(0.0, 1.0)) * sf) as u32; // Flip Y (top=1)
 

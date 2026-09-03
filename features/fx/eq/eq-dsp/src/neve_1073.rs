@@ -22,7 +22,8 @@ pub enum Neve1073Hpf {
 }
 
 impl Neve1073Hpf {
-    pub fn hz(self) -> Option<f64> {
+    #[must_use]
+    pub const fn hz(self) -> Option<f64> {
         match self {
             Self::Off => None,
             Self::Hz50 => Some(50.0),
@@ -43,6 +44,7 @@ pub enum Neve1073LowFreq {
 }
 
 impl Neve1073LowFreq {
+    #[must_use]
     pub fn hz(self) -> Option<f64> {
         match self {
             Self::Off => None,

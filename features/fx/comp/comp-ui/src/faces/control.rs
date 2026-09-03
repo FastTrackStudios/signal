@@ -153,7 +153,7 @@ pub fn ControlFace(
                         handle: param_handle(params.character_mode.as_ptr(), ctx.clone()),
                         testid: "charmode".to_string(),
                         label: "Shape".to_string(),
-                        options: CHARACTER_LABELS.iter().map(|s| s.to_string()).collect(),
+                        options: CHARACTER_LABELS.iter().map(std::string::ToString::to_string).collect(),
                         skin,
                     }
                     ParamKnob {
@@ -170,7 +170,7 @@ pub fn ControlFace(
                         "data-testid": "toggle-automake",
                         style: "align-self:center;",
                         Toggle {
-                            handle: param_handle(params.auto_makeup.as_ptr(), ctx.clone()),
+                            handle: param_handle(params.auto_makeup.as_ptr(), ctx),
                             color: skin.accent.to_string(),
                         }
                     }
@@ -206,7 +206,7 @@ pub fn ControlFace(
                         handle: param_handle(params.style.as_ptr(), ctx.clone()),
                         testid: "style".to_string(),
                         label: "Style".to_string(),
-                        options: STYLE_LABELS.iter().map(|s| s.to_string()).collect(),
+                        options: STYLE_LABELS.iter().map(std::string::ToString::to_string).collect(),
                         skin,
                     }
                     ParamKnob {
@@ -231,7 +231,7 @@ pub fn ControlFace(
                         testid: "makeup".to_string(),
                     }
                     ParamKnob {
-                        handle: param_handle(params.mix.as_ptr(), ctx.clone()),
+                        handle: param_handle(params.mix.as_ptr(), ctx),
                         testid: "mix".to_string(),
                     }
                 }

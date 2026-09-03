@@ -5,7 +5,7 @@
 //! programmatic setup, verifying the full signal-extension pipeline.
 //!
 //! Run with:
-//!   cargo xtask reaper-test reaper_macro_learn
+//!   cargo xtask reaper-test `reaper_macro_learn`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
@@ -34,7 +34,7 @@ async fn add_signal_controller(track: &daw::rpc::TrackHandle) -> eyre::Result<da
     Err(eyre::eyre!("FTS Signal Controller not available"))
 }
 
-/// Wait for signal-extension to be ready (it writes "ready" to ExtState on startup).
+/// Wait for signal-extension to be ready (it writes "ready" to `ExtState` on startup).
 async fn wait_for_signal_extension(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let ext = ctx.daw.ext_state();
     let start = std::time::Instant::now();
@@ -279,7 +279,7 @@ async fn macro_drives_reacomp_via_fx_params(
         poll_interval,
     )
     .await?;
-    ctx.log(&format!("  Threshold={:.4}, Ratio={:.4}", t0, r0));
+    ctx.log(&format!("  Threshold={t0:.4}, Ratio={r0:.4}"));
 
     // 4. Set Macro 0 = 1.0 via FX param
     ctx.log("--- Macro 0 = 1.0 ---");
@@ -303,7 +303,7 @@ async fn macro_drives_reacomp_via_fx_params(
         poll_interval,
     )
     .await?;
-    ctx.log(&format!("  Threshold={:.4}, Ratio={:.4}", t1, r1));
+    ctx.log(&format!("  Threshold={t1:.4}, Ratio={r1:.4}"));
 
     ctx.log("=== PASS: Macro drives ReaComp via FX params ===");
     Ok(())
@@ -531,7 +531,7 @@ async fn z_demo_setlist_action_creates_tracks(
     // MIDI items are at bar 0=Clean, bar 1=Ambient, bar 2=Rhythm.
     let transport = project.transport();
     let state = transport.get_state().await?;
-    let beats_per_bar = state.time_signature.numerator as f64;
+    let beats_per_bar = f64::from(state.time_signature.numerator);
     let beat_duration = 60.0 / state.tempo.bpm;
     let bar_duration = beat_duration * beats_per_bar;
 
@@ -580,12 +580,11 @@ async fn z_demo_setlist_action_creates_tracks(
     transport.set_position(0.5).await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
     let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
-    ctx.log(&format!("  pos=0.5s: unmuted = {:?}", unmuted));
+    ctx.log(&format!("  pos=0.5s: unmuted = {unmuted:?}"));
     assert_eq!(
         unmuted,
         vec!["Clean"],
-        "At pos 0.5s, ONLY 'Clean' should be unmuted. Got: {:?}",
-        unmuted
+        "At pos 0.5s, ONLY 'Clean' should be unmuted. Got: {unmuted:?}"
     );
 
     // Position at bar 1 + 0.5s → should be ONLY "Ambient" unmuted
@@ -593,25 +592,23 @@ async fn z_demo_setlist_action_creates_tracks(
     transport.set_position(ambient_pos).await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
     let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
-    ctx.log(&format!("  pos={ambient_pos:.1}s: unmuted = {:?}", unmuted));
+    ctx.log(&format!("  pos={ambient_pos:.1}s: unmuted = {unmuted:?}"));
     assert_eq!(
         unmuted,
         vec!["Ambient"],
-        "At pos {ambient_pos:.1}s, ONLY 'Ambient' should be unmuted. Got: {:?}",
-        unmuted
+        "At pos {ambient_pos:.1}s, ONLY 'Ambient' should be unmuted. Got: {unmuted:?}"
     );
 
     // Position at bar 2 + 0.5s → should be ONLY "Rhythm" unmuted
-    let rhythm_pos = 2.0 * bar_duration + 0.5;
+    let rhythm_pos = 2.0f64.mul_add(bar_duration, 0.5);
     transport.set_position(rhythm_pos).await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
     let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
-    ctx.log(&format!("  pos={rhythm_pos:.1}s: unmuted = {:?}", unmuted));
+    ctx.log(&format!("  pos={rhythm_pos:.1}s: unmuted = {unmuted:?}"));
     assert_eq!(
         unmuted,
         vec!["Rhythm"],
-        "At pos {rhythm_pos:.1}s, ONLY 'Rhythm' should be unmuted. Got: {:?}",
-        unmuted
+        "At pos {rhythm_pos:.1}s, ONLY 'Rhythm' should be unmuted. Got: {unmuted:?}"
     );
 
     // Verify section tracks are NOT muted (sends control routing, not track mute)
@@ -622,7 +619,7 @@ async fn z_demo_setlist_action_creates_tracks(
         if let Some(st) = sec_track {
             let track = project.tracks().by_guid(&st.guid).await?.unwrap();
             let muted = track.is_muted().await?;
-            assert!(!muted, "Section track '{}' should NOT be muted", sec);
+            assert!(!muted, "Section track '{sec}' should NOT be muted");
         }
     }
 

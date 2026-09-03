@@ -30,10 +30,10 @@ pub struct SpectrumAnalyzerProps {
 pub fn SpectrumAnalyzer(props: SpectrumAnalyzerProps) -> Element {
     let w = props.width;
     let h = props.height;
-    let hf = h as f64;
+    let hf = f64::from(h);
     let count = props.bins.len().max(1);
-    let gap = props.gap as f64;
-    let bar_w = ((w as f64 - gap * (count as f64 - 1.0)) / count as f64).max(1.0);
+    let gap = f64::from(props.gap);
+    let bar_w = (gap.mul_add(-(count as f64 - 1.0), f64::from(w)) / count as f64).max(1.0);
 
     rsx! {
         div {

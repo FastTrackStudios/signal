@@ -6,7 +6,7 @@
 use dioxus::prelude::*;
 
 /// A section within a song.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SectionEntry {
     pub id: String,
     pub name: String,
@@ -21,7 +21,7 @@ pub struct SectionEntry {
 }
 
 /// A song in the setlist.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SongEntry {
     pub id: String,
     pub name: String,
@@ -30,7 +30,7 @@ pub struct SongEntry {
 }
 
 /// A setlist entry.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SetlistEntry {
     pub id: String,
     pub name: String,

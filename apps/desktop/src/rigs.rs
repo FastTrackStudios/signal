@@ -34,7 +34,7 @@ pub fn available(rig: Rig) -> bool {
 
 /// See the iOS arm above.
 #[cfg(not(target_os = "ios"))]
-pub fn available(rig: Rig) -> bool {
+pub const fn available(rig: Rig) -> bool {
     match rig {
         // No vocal chain engine exists yet.
         Rig::Vocals => false,
@@ -44,7 +44,7 @@ pub fn available(rig: Rig) -> bool {
 
 /// The rail glyph. `fts_chrome` has no vocal glyph yet, so Vocals borrows the
 /// perform icon until one lands in that repo.
-pub fn icon(rig: Rig) -> fts_chrome::Icon {
+pub const fn icon(rig: Rig) -> fts_chrome::Icon {
     use fts_chrome::Icon;
     match rig {
         Rig::Guitar => Icon::Guitar,
@@ -141,7 +141,7 @@ pub fn RigMenu(on_pick: EventHandler<Rig>, phone: bool) -> Element {
                         key: "{kind.slug()}",
                         kind,
                         phone,
-                        on_pick: move |_| on_pick.call(kind),
+                        on_pick: move |()| on_pick.call(kind),
                     }
                 }
             }

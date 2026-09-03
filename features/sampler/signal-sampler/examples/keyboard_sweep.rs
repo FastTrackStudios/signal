@@ -49,14 +49,14 @@ const NN: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
 fn nm(p: u8) -> String {
-    format!("{}{}", NN[(p % 12) as usize], (p / 12) as i32 - 1)
+    format!("{}{}", NN[(p % 12) as usize], i32::from(p / 12) - 1)
 }
 
 #[derive(Default)]
 struct Failures {
     no_body: Vec<(u8, u8)>,
     not_loaded: Vec<(u8, u8)>,
-    /// (note, velocity, root_key, semitones stretched)
+    /// (note, velocity, `root_key`, semitones stretched)
     pitch: Vec<(u8, u8, u8, i16)>,
     /// What the engine actually asked the map for when it missed —
     /// (note, velocity, articulation, dynamic, rr). Without this a miss says
@@ -335,7 +335,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None => fails.no_body.push((note, vel)),
                 Some((_, root, rate)) => {
                     roots.insert(note, root);
-                    let stretch = note as i16 - root as i16;
+                    let stretch = i16::from(note) - i16::from(root);
                     if stretch.abs() > max_stretch {
                         fails.pitch.push((note, vel, root, stretch));
                     }

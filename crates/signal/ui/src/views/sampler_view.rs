@@ -138,7 +138,7 @@ enum InstrTab {
 }
 
 impl InstrTab {
-    fn label(self) -> &'static str {
+    const fn label(self) -> &'static str {
         match self {
             Self::Groups => "GROUPS",
             Self::Instrument => "INSTRUMENT",
@@ -361,7 +361,7 @@ fn midi_note_name(n: u8) -> String {
     let names = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
     ];
-    let oct = (n as i32 / 12) - 1;
+    let oct = (i32::from(n) / 12) - 1;
     format!("{}{}", names[(n % 12) as usize], oct)
 }
 
@@ -418,7 +418,7 @@ fn LibraryBrowser(
                                 key: "{lib_id}",
                                 lib,
                                 active_patch,
-                                on_toggle: move |_| tog.call(lib_id),
+                                on_toggle: move |()| tog.call(lib_id),
                                 on_select: move |patch_id| sel.call((lib_id, patch_id)),
                             }
                         }

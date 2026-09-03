@@ -90,7 +90,7 @@ pub struct SnapshotParamBuilder {
 }
 
 impl SnapshotParamBuilder {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self { params: Vec::new() }
     }
 
@@ -108,7 +108,7 @@ pub struct BuiltBlockPreset {
     pub preset: Preset,
     pub preset_id: PresetId,
     pub default_snapshot_id: SnapshotId,
-    /// Maps snapshot name → SnapshotId (including the default).
+    /// Maps snapshot name → `SnapshotId` (including the default).
     pub snapshot_ids: Vec<(String, SnapshotId)>,
 }
 
@@ -127,14 +127,15 @@ pub struct BuiltRig {
     pub rig_id: RigId,
     pub profile: Option<Profile>,
     pub profile_id: Option<ProfileId>,
-    /// Maps scene name → RigSceneId.
+    /// Maps scene name → `RigSceneId`.
     pub scene_ids: Vec<(String, RigSceneId)>,
-    /// Maps patch name → PatchId (only populated if profile was built).
+    /// Maps patch name → `PatchId` (only populated if profile was built).
     pub patch_ids: Vec<(String, PatchId)>,
 }
 
 impl BuiltRig {
     /// Look up a scene ID by name.
+    #[must_use] 
     pub fn scene_id(&self, name: &str) -> Option<&RigSceneId> {
         self.scene_ids
             .iter()
@@ -143,6 +144,7 @@ impl BuiltRig {
     }
 
     /// Look up a patch ID by name.
+    #[must_use] 
     pub fn patch_id(&self, name: &str) -> Option<&PatchId> {
         self.patch_ids
             .iter()
@@ -151,6 +153,7 @@ impl BuiltRig {
     }
 
     /// Look up a block preset's snapshot ID by preset name and snapshot name.
+    #[must_use] 
     pub fn snapshot_id(&self, preset_name: &str, snapshot_name: &str) -> Option<&SnapshotId> {
         self.block_presets
             .iter()
@@ -202,14 +205,14 @@ impl RigBuilder {
 
     /// Set the rig type (default: Guitar).
     #[must_use]
-    pub fn rig_type(mut self, rig_type: RigType) -> Self {
+    pub const fn rig_type(mut self, rig_type: RigType) -> Self {
         self.rig_type = rig_type;
         self
     }
 
     /// Set the engine type (default: Guitar).
     #[must_use]
-    pub fn engine_type(mut self, engine_type: EngineType) -> Self {
+    pub const fn engine_type(mut self, engine_type: EngineType) -> Self {
         self.engine_type = engine_type;
         self
     }
@@ -257,7 +260,7 @@ impl RigBuilder {
 
     /// Also build a Profile with patches for each scene.
     #[must_use]
-    pub fn with_profile(mut self) -> Self {
+    pub const fn with_profile(mut self) -> Self {
         self.with_profile = true;
         self
     }
@@ -271,6 +274,7 @@ impl RigBuilder {
     }
 
     /// Build all domain entities. No I/O — returns pure domain objects.
+    #[must_use] 
     pub fn build(self) -> BuiltRig {
         // Ensure at least one scene
         let scenes = if self.scenes.is_empty() {
@@ -346,7 +350,7 @@ impl RigBuilder {
         let module_preset_id = ModulePresetId::new();
         let module_snap_id = ModuleSnapshotId::new();
         let module = Module::from_blocks(module_blocks);
-        let module_snap = ModuleSnapshot::new(module_snap_id.clone(), "Default", module);
+        let module_snap = ModuleSnapshot::new(module_snap_id, "Default", module);
         let module_type = match self.engine_type {
             EngineType::Guitar | EngineType::Bass => ModuleType::Amp,
             EngineType::Keys => ModuleType::Custom,
@@ -381,7 +385,7 @@ impl RigBuilder {
         engine_scene_ids.push((first_scene_name.clone(), first_engine_scene_id.clone()));
 
         let default_engine_scene =
-            EngineScene::new(first_engine_scene_id.clone(), first_scene_name.as_str())
+            EngineScene::new(first_engine_scene_id, first_scene_name.as_str())
                 .with_layer(LayerSelection::new(layer_id.clone(), layer_snap_id.clone()));
 
         let mut engine = Engine::new(
@@ -409,7 +413,7 @@ impl RigBuilder {
         rig_scene_ids.push((scenes[0].clone(), first_rig_scene_id.clone()));
 
         let default_rig_scene =
-            RigScene::new(first_rig_scene_id.clone(), scenes[0].as_str()).with_engine(
+            RigScene::new(first_rig_scene_id, scenes[0].as_str()).with_engine(
                 EngineSelection::new(engine_id.clone(), engine_scene_ids[0].1.clone()),
             );
 
@@ -572,7 +576,7 @@ mod tests {
             .block_preset("New Amp", BlockType::Amp, |bp| {
                 bp.param("gain", "Gain", 0.5)
             })
-            .existing_block_preset(existing_id.clone(), "External Drive", BlockType::Drive)
+            .existing_block_preset(existing_id, "External Drive", BlockType::Drive)
             .scene("Clean")
             .build();
 

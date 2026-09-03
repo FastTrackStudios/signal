@@ -1,5 +1,5 @@
 //! Sanity-check the AIFF decoder against a real Stylus RMX loop, when
-//! the AudioHaven extraction tree is mounted. Skipped otherwise so CI
+//! the `AudioHaven` extraction tree is mounted. Skipped otherwise so CI
 //! without the data doesn't fail.
 
 use signal_sampler::engine::cache::load_sample;

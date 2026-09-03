@@ -1,7 +1,7 @@
 //! Response curves — generalized shaping for macro bindings and modulation.
 //!
 //! `ResponseCurve` extends `EasingCurve` with a `Power` variant inspired by
-//! ReaMotionPad's binding curve, providing single-slider response control.
+//! `ReaMotionPad`'s binding curve, providing single-slider response control.
 
 use facet::Facet;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use crate::easing::EasingCurve;
 /// A response curve for mapping input → output values.
 ///
 /// Two families:
-/// - `Easing(EasingCurve)` — the existing named curves (Linear, EaseIn, etc.)
+/// - `Easing(EasingCurve)` — the existing named curves (Linear, `EaseIn`, etc.)
 /// - `Power { exponent }` — a power curve `t^exponent` for continuous control
 #[derive(Debug, Clone, Copy, PartialEq, Facet)]
 #[repr(C)]
@@ -31,7 +31,8 @@ impl Default for ResponseCurve {
 
 impl ResponseCurve {
     /// Human-readable display name.
-    pub fn display_name(self) -> &'static str {
+    #[must_use] 
+    pub const fn display_name(self) -> &'static str {
         match self {
             Self::Easing(curve) => curve.display_name(),
             Self::Power { .. } => "Power",
@@ -39,11 +40,12 @@ impl ResponseCurve {
     }
 
     /// Apply the response curve to a normalized `t` in `[0.0, 1.0]`.
+    #[must_use] 
     pub fn apply(self, t: f64) -> f64 {
         let t = t.clamp(0.0, 1.0);
         match self {
             Self::Easing(curve) => curve.apply(t),
-            Self::Power { exponent } => t.powf(exponent as f64),
+            Self::Power { exponent } => t.powf(f64::from(exponent)),
         }
     }
 }

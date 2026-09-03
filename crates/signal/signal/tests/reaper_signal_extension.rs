@@ -2,10 +2,10 @@
 //! REAPER integration test for the signal-extension SHM guest.
 //!
 //! Verifies that the signal-extension binary was loaded by daw-bridge,
-//! connected over SHM, and wrote its health beacon to ExtState.
+//! connected over SHM, and wrote its health beacon to `ExtState`.
 //!
 //! Run with:
-//!   cargo xtask reaper-test -- signal_extension_health
+//!   cargo xtask reaper-test -- `signal_extension_health`
 
 use std::time::Duration;
 

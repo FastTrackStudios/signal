@@ -55,6 +55,7 @@ pub struct FingerprintMatcher {
 }
 
 impl FingerprintMatcher {
+    #[must_use] 
     pub fn new(fft_size: usize, sample_rate: f64) -> Self {
         let window: Vec<f64> = (0..fft_size)
             .map(|i| 0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / fft_size as f64).cos()))
@@ -136,7 +137,8 @@ impl FingerprintMatcher {
     }
 
     /// Check if a template has been learned.
-    pub fn has_template(&self) -> bool {
+    #[must_use] 
+    pub const fn has_template(&self) -> bool {
         self.template.is_some()
     }
 
@@ -144,6 +146,7 @@ impl FingerprintMatcher {
     ///
     /// Returns `Some(similarity)` where similarity is 0.0-1.0
     /// (normalized cross-correlation). Returns `None` if no template.
+    #[must_use] 
     pub fn match_hit(&self, audio: &[f64]) -> Option<f64> {
         let template = self.template.as_ref()?;
 
@@ -165,6 +168,7 @@ impl FingerprintMatcher {
     }
 
     /// Check if a hit matches the template above the threshold.
+    #[must_use] 
     pub fn is_match(&self, audio: &[f64]) -> bool {
         match self.match_hit(audio) {
             Some(sim) => sim >= self.threshold,
@@ -242,8 +246,7 @@ mod tests {
         let sim = matcher.match_hit(&kick).unwrap();
         assert!(
             sim > 0.95,
-            "Same sound should have high similarity: {}",
-            sim
+            "Same sound should have high similarity: {sim}"
         );
         assert!(matcher.is_match(&kick));
     }
@@ -264,8 +267,7 @@ mod tests {
         let sim = matcher.match_hit(&cymbal).unwrap();
         assert!(
             sim < 0.5,
-            "Different sounds should have low similarity: {}",
-            sim
+            "Different sounds should have low similarity: {sim}"
         );
         assert!(!matcher.is_match(&cymbal));
     }
@@ -296,8 +298,7 @@ mod tests {
         let sim = matcher.match_hit(&test).unwrap();
         assert!(
             sim > 0.9,
-            "Learned average should match center frequency well: {}",
-            sim
+            "Learned average should match center frequency well: {sim}"
         );
     }
 

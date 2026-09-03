@@ -26,17 +26,17 @@ where
     let mut path = BezPath::new();
     let mut started = false;
     for (&f, &d) in freq_hz.iter().zip(db.iter()) {
-        let f = f as f64;
+        let f = f64::from(f);
         if f < min_freq || f > max_freq {
             continue;
         }
         let x = freq_to_x(f);
-        let y = db_to_y(d as f64);
-        if !started {
+        let y = db_to_y(f64::from(d));
+        if started {
+            path.line_to((x, y));
+        } else {
             path.move_to((x, y));
             started = true;
-        } else {
-            path.line_to((x, y));
         }
     }
     if started {
@@ -47,7 +47,7 @@ where
 }
 
 /// Paint a spectrum as a stroked line plus a translucent fill down to `bottom_y`.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub fn paint_spectrum_fill<FX, FY>(
     scene: &mut Scene,
     freq_hz: &[f32],
@@ -72,13 +72,13 @@ pub fn paint_spectrum_fill<FX, FY>(
 
     // Close the path down to the bottom for the fill.
     let mut fill_path = path.clone();
-    let first_x = freq_to_x(min_freq.max(freq_hz.first().copied().unwrap_or(0.0) as f64));
-    let last_visible = freq_hz
+    let first_x = freq_to_x(min_freq.max(f64::from(freq_hz.first().copied().unwrap_or(0.0))));
+    let last_visible = f64::from(freq_hz
         .iter()
         .rev()
-        .find(|&&f| (f as f64) <= max_freq)
+        .find(|&&f| f64::from(f) <= max_freq)
         .copied()
-        .unwrap_or(0.0) as f64;
+        .unwrap_or(0.0));
     fill_path.line_to((freq_to_x(last_visible), bottom_y));
     fill_path.line_to((first_x, bottom_y));
     fill_path.close_path();
@@ -87,7 +87,7 @@ pub fn paint_spectrum_fill<FX, FY>(
 
 /// Paint a spectrum as a stroked line only (no fill) — use for overlays such as
 /// the external/sidechain spectrum.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub fn paint_spectrum_line<FX, FY>(
     scene: &mut Scene,
     freq_hz: &[f32],
@@ -110,7 +110,7 @@ pub fn paint_spectrum_line<FX, FY>(
 
 /// Paint collision regions as translucent red vertical bands. `strength` is the
 /// per-bin collision value (0..0.9) aligned with `freq_hz`.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub fn paint_collisions<FX>(
     scene: &mut Scene,
     freq_hz: &[f32],
@@ -130,13 +130,13 @@ pub fn paint_collisions<FX>(
         if s <= 0.0 {
             continue;
         }
-        let f = freq_hz[i] as f64;
+        let f = f64::from(freq_hz[i]);
         if f < min_freq || f > max_freq {
             continue;
         }
         let x = freq_to_x(f);
         // Width spans to the next bin so adjacent collisions merge visually.
-        let next_f = freq_hz.get(i + 1).map(|&v| v as f64).unwrap_or(max_freq);
+        let next_f = freq_hz.get(i + 1).map_or(max_freq, |&v| f64::from(v));
         let x2 = freq_to_x(next_f.min(max_freq));
         let alpha = (s / 0.9).clamp(0.0, 1.0) * 0.5;
         let color = Color::from_rgba8(255, 60, 60, (alpha * 255.0) as u8);

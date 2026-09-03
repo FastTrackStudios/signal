@@ -52,12 +52,10 @@ fn variant_name(algo: u32, variant: usize) -> String {
     VARIANT_NAMES
         .get(algo as usize)
         .and_then(|v| v.get(variant))
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| variant.to_string())
+        .filter(|s| !s.is_empty()).map_or_else(|| variant.to_string(), std::string::ToString::to_string)
 }
 
-/// Render an impulse through NativeReverb at one setting, return the RT60.
+/// Render an impulse through `NativeReverb` at one setting, return the RT60.
 fn measure(algorithm: u32, variant: usize, decay_param: f64) -> Option<f64> {
     measure_with(algorithm, variant, decay_param, None, &[])
 }
@@ -73,7 +71,7 @@ fn measure_with(
 ) -> Option<f64> {
     let mut rev = NativeReverb::new(SAMPLE_RATE);
     // Algorithm and variant first — both rebuild the chain.
-    rev.set_named("algorithm", algorithm as f64);
+    rev.set_named("algorithm", f64::from(algorithm));
     rev.set_named("variant", variant as f64);
     rev.set_named("mix", 1.0);
     rev.set_named("size", 0.5);
@@ -141,7 +139,7 @@ fn render_burst_inner(
     band_filter: bool,
 ) -> Vec<f32> {
     let mut rev = NativeReverb::new(SAMPLE_RATE);
-    rev.set_named("algorithm", algorithm as f64);
+    rev.set_named("algorithm", f64::from(algorithm));
     rev.set_named("variant", variant as f64);
     rev.set_named("mix", 1.0);
     rev.set_named("size", 0.5);
@@ -216,7 +214,7 @@ fn render_ir(
     extra: &[(&str, f64)],
 ) -> Vec<f32> {
     let mut rev = NativeReverb::new(SAMPLE_RATE);
-    rev.set_named("algorithm", algorithm as f64);
+    rev.set_named("algorithm", f64::from(algorithm));
     rev.set_named("variant", variant as f64);
     rev.set_named("mix", 1.0);
     rev.set_named("size", 0.5);
@@ -358,7 +356,7 @@ fn main() {
             let bands = signal_analyzer::filters::octave_bands(&tail, SAMPLE_RATE);
             let e: Vec<f64> = bands
                 .iter()
-                .map(|b| b.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>())
+                .map(|b| b.iter().map(|&s| f64::from(s) * f64::from(s)).sum::<f64>())
                 .collect();
             let total: f64 = e.iter().sum::<f64>().max(1e-30);
             print!("  {label:<22}");

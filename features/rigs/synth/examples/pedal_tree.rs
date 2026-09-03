@@ -23,7 +23,7 @@ Packs/LA Custom C7 Grand.signalpack";
 fn main() {
     let pack = std::env::args().nth(1).unwrap_or_else(|| PACK.to_string());
     let set = ModuleSettings {
-        source: Source::Sample(pack.clone()),
+        source: Source::Sample(pack),
         ..ModuleSettings::default()
     };
     let tree = Container::parallel("Rig").add(signal_layer_with("Keys A", &[set]));

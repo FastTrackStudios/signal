@@ -1,4 +1,4 @@
-//! nice_plug parameter definitions and shared UI state.
+//! `nice_plug` parameter definitions and shared UI state.
 //!
 //! Lives in `eq-ui` (not `eq-plugin`) so the [`crate::control_view`] component
 //! can render against the param tree without forcing a circular dep.
@@ -167,6 +167,7 @@ pub struct BandParams {
 }
 
 impl BandParams {
+    #[must_use] 
     pub fn new(idx: usize) -> Self {
         // Gregory Scott baseline, default on every instance: band 0 is a low
         // shelf cornered ~400 Hz and band 1 a high shelf ~2.5 kHz — both enabled
@@ -237,7 +238,7 @@ impl BandParams {
                 if v >= 1000.0 {
                     format!("{:.1}k", v / 1000.0)
                 } else {
-                    format!("{:.0}", v)
+                    format!("{v:.0}")
                 }
             })),
 
@@ -276,7 +277,7 @@ impl BandParams {
                 if v <= 6.0 {
                     let db = v * 6.0;
                     if (db - db.round()).abs() < 0.05 {
-                        format!("{:.0} dB/oct", db)
+                        format!("{db:.0} dB/oct")
                     } else {
                         format!("{db:.1} dB/oct")
                     }

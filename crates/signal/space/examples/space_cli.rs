@@ -102,7 +102,7 @@ fn audit(space: &Space) {
     }
 }
 
-fn tracing_subscriber_init() {
+const fn tracing_subscriber_init() {
     // Keep the example dependency-light: env_logger-style output via tracing
     // is unnecessary here; stderr prints suffice.
 }

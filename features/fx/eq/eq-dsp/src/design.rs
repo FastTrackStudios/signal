@@ -6,10 +6,10 @@
 //!   - LP/HP: Butterworth prototype -> bilinear -> Q adjustment
 //!   - BP: Butterworth LP -> LP->BP transform -> bilinear -> normalize
 //!   - Notch: Butterworth LP -> LP->BS transform -> bilinear -> normalize
-//!   - Peak: cascade::compute_cascade_peak
+//!   - Peak: `cascade::compute_cascade_peak`
 //!   - Shelves: shelf module functions
 //!   - Allpass: Butterworth -> bilinear -> reflect zeros
-//!   - ShelfAlt: cascade::compute_cascade_shelf_alt
+//!   - `ShelfAlt`: `cascade::compute_cascade_shelf_alt`
 
 use std::f64::consts::PI;
 

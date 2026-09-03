@@ -41,6 +41,7 @@ pub struct Svf {
 }
 
 impl Svf {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut s = Self {
             shape: SvfShape::Bell,
@@ -68,7 +69,7 @@ impl Svf {
         self.retune();
     }
 
-    /// Full parameter set (computes tan()).
+    /// Full parameter set (computes `tan()`).
     pub fn set(&mut self, shape: SvfShape, freq_hz: f64, q: f64, gain_db: f64) {
         self.shape = shape;
         self.freq_hz = freq_hz.clamp(10.0, self.sample_rate * 0.49);
@@ -87,6 +88,7 @@ impl Svf {
         self.apply_gain();
     }
 
+    #[must_use]
     pub fn gain_db(&self) -> f64 {
         self.gain_db
     }

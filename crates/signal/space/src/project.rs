@@ -3,6 +3,7 @@
 //! euclidean) down to the map plane, normalized to 0..1.
 
 /// Reduce `data` (row-major, `count` x `dim`) to `k` principal components.
+#[must_use] 
 pub fn pca(data: &[f32], count: usize, dim: usize, k: usize) -> Vec<f32> {
     assert_eq!(data.len(), count * dim);
     let k = k.min(dim).min(count.max(1));
@@ -10,16 +11,16 @@ pub fn pca(data: &[f32], count: usize, dim: usize, k: usize) -> Vec<f32> {
     let mut mean = vec![0.0f64; dim];
     for row in data.chunks_exact(dim) {
         for (m, &v) in mean.iter_mut().zip(row) {
-            *m += v as f64;
+            *m += f64::from(v);
         }
     }
-    for m in mean.iter_mut() {
+    for m in &mut mean {
         *m /= count.max(1) as f64;
     }
     let mut centered = vec![0.0f64; count * dim];
     for (r, row) in data.chunks_exact(dim).enumerate() {
         for (c, &v) in row.iter().enumerate() {
-            centered[r * dim + c] = v as f64 - mean[c];
+            centered[r * dim + c] = f64::from(v) - mean[c];
         }
     }
     // Top-k eigenvectors of X^T X by power iteration + deflation.
@@ -79,6 +80,7 @@ pub fn pca(data: &[f32], count: usize, dim: usize, k: usize) -> Vec<f32> {
 
 /// Project to 2D map coordinates (0..1). PCA-compact → t-SNE for real sets;
 /// small sets (< 32) fall straight through PCA-2D.
+#[must_use] 
 pub fn project_2d(data: &[f32], count: usize, dim: usize) -> Vec<(f32, f32)> {
     if count == 0 {
         return Vec::new();

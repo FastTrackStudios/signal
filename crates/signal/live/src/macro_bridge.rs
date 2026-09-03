@@ -3,16 +3,16 @@
 //! When a module with a `MacroBank` is loaded onto a REAPER track, this module:
 //! 1. Adds an fts-macros CLAP plugin instance to the track (after all block FX)
 //! 2. Converts resolved `LiveMacroBinding`s into the fts-macros JSON mapping format
-//! 3. Stores the config in track P_EXT (`P_EXT:FTS_MACROS:mapping_config`)
+//! 3. Stores the config in track `P_EXT` (`P_EXT:FTS_MACROS:mapping_config`)
 //!
-//! The fts-macros plugin reads mapping config from its own track's P_EXT on each
-//! timer tick — no global ExtState IPC or acknowledgment polling needed.
+//! The fts-macros plugin reads mapping config from its own track's `P_EXT` on each
+//! timer tick — no global `ExtState` IPC or acknowledgment polling needed.
 
 use daw::rpc::{FxHandle, TrackHandle};
 
 use crate::daw_block_ops::LoadBlockResult;
 
-/// P_EXT section used by fts-macros for track-scoped config storage.
+/// `P_EXT` section used by fts-macros for track-scoped config storage.
 const EXT_STATE_SECTION: &str = "FTS_MACROS";
 
 /// CLAP plugin identifier for fts-macros.
@@ -28,6 +28,7 @@ const FTS_MACROS_NAME: &str = "FTS Macros";
 /// if no macros are present.
 ///
 /// This is a pure function — no DAW calls needed.
+#[must_use] 
 pub fn build_mapping_bank_json(
     track_index: u32,
     fx_indices: &[(usize, u32)], // (loaded_fx index, actual FX index in chain)
@@ -68,7 +69,7 @@ pub fn build_mapping_bank_json(
 /// 1. Checks if any loaded FX have macro bindings — returns `Ok(None)` if not
 /// 2. Resolves the actual FX index for each block via its GUID
 /// 3. Adds an fts-macros CLAP instance to the track
-/// 4. Stores the mapping config JSON in the track's P_EXT
+/// 4. Stores the mapping config JSON in the track's `P_EXT`
 ///
 /// The fts-macros plugin reads `P_EXT:FTS_MACROS:mapping_config` from its own
 /// track on each timer tick, so no acknowledgment polling is needed.

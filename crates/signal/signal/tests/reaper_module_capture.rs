@@ -5,11 +5,11 @@
 //! the resulting FX chain chunk, and writes it as a `.RfxChain` file to
 //! `FXChains/FTS-Signal/02-Modules/`.
 //!
-//! This is a migration harness — run once to populate the FXChains directory
+//! This is a migration harness — run once to populate the `FXChains` directory
 //! with native REAPER module presets from the database.
 //!
 //! Run with:
-//!   cargo xtask reaper-test module_capture
+//!   cargo xtask reaper-test `module_capture`
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -31,7 +31,7 @@ async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
     }
 }
 
-/// Output directory for captured module RfxChains.
+/// Output directory for captured module `RfxChains`.
 fn modules_output_dir() -> PathBuf {
     utils::paths::reaper_fxchains().join("FTS-Signal/02-Modules")
 }

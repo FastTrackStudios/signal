@@ -38,7 +38,7 @@ use fts_audio_ui::hardware::button::{Lamp, LedBar, LedMeter, LedSelect, PanelBut
 /// the word INPUT.) Same function the EQ's faces use.
 fn legend_drop(d: f64, label_r: f64) -> f64 {
     let numerals = d * (label_r / 60.0) * 0.866;
-    let text = d * (7.0 / 110.0) * 0.5 + 5.5;
+    let text = (d * (7.0 / 110.0)).mul_add(0.5, 5.5);
     (numerals + text + 4.0).max(30.0)
 }
 /// Legend text box width. Narrow enough that neighbouring legends on a
@@ -111,7 +111,7 @@ pub fn RackFace(
                     // diff a stable node to land on.
                     match item {
                         RackItem::Vu { x, y, w, mode, legend } => rsx! {
-                            PanelSlot { scale, x, y, w: w + 30.0, h: w * 0.72 + if design.vu_bezel { 34.0 } else { 0.0 },
+                            PanelSlot { scale, x, y, w: w + 30.0, h: w.mul_add(0.72, if design.vu_bezel { 34.0 } else { 0.0 }),
                                 VuMeter {
                                     scale,
                                     width: w,
@@ -168,7 +168,7 @@ pub fn RackFace(
                                     handle: face.handle(id),
                                     testid: id.replace('_', "-"),
                                     scale,
-                                    labels: labels.iter().map(|s| s.to_string()).collect(),
+                                    labels: labels.iter().map(std::string::ToString::to_string).collect(),
                                     ink: design.ink.to_string(),
                                     reverse,
                                     cap_h: 30.0,
@@ -210,7 +210,7 @@ pub fn RackFace(
                             }
                         },
                         RackItem::LedBar { x, y, steps, pitch } => rsx! {
-                            PanelSlot { scale, x, y, w: steps.len() as f64 * pitch + 8.0, h: 34.0,
+                            PanelSlot { scale, x, y, w: (steps.len() as f64).mul_add(pitch, 8.0), h: 34.0,
                                 LedBar {
                                     scale,
                                     value_db: gr_db,
@@ -221,12 +221,12 @@ pub fn RackFace(
                             }
                         },
                         RackItem::LedSelect { id, x, y, labels, pitch } => rsx! {
-                            PanelSlot { scale, x, y, w: labels.len() as f64 * pitch + 8.0, h: 34.0,
+                            PanelSlot { scale, x, y, w: (labels.len() as f64).mul_add(pitch, 8.0), h: 34.0,
                                 LedSelect {
                                     handle: face.handle(id),
                                     testid: id.replace('_', "-"),
                                     scale,
-                                    labels: labels.iter().map(|s| s.to_string()).collect(),
+                                    labels: labels.iter().map(std::string::ToString::to_string).collect(),
                                     pitch,
                                     ink: design.ink.to_string(),
                                 }
@@ -355,7 +355,7 @@ fn fit_cells(cells: usize, avail_w: f64, avail_h: f64) -> CompactFit {
     const GAP: f64 = 12.0;
     const PAD: f64 = 16.0;
 
-    let (inner_w, inner_h) = ((avail_w - PAD * 2.0).max(1.0), (avail_h - PAD).max(1.0));
+    let (inner_w, inner_h) = (PAD.mul_add(-2.0, avail_w).max(1.0), (avail_h - PAD).max(1.0));
     let flow = if avail_h < 200.0 {
         CompactFlow::Row
     } else if avail_w < avail_h {
@@ -370,7 +370,7 @@ fn fit_cells(cells: usize, avail_w: f64, avail_h: f64) -> CompactFit {
         flow,
     };
     for step in 0..=30 {
-        let knob_d = 46.0 - step as f64;
+        let knob_d = 46.0 - f64::from(step);
         let box_px = knob_d * KNOB_BOX_RATIO;
         for show_legends in [true, false] {
             let cell_w = box_px + GAP;
@@ -584,7 +584,7 @@ fn CompactRack(design: RackDesign, profile_id: String, avail_w: f64, avail_h: f6
                                     handle: face.handle(id),
                                     testid: id.replace('_', "-"),
                                     scale: 0.8,
-                                    labels: labels.iter().map(|s| s.to_string()).collect(),
+                                    labels: labels.iter().map(std::string::ToString::to_string).collect(),
                                     ink: design.ink.to_string(),
                                 }
                                 if show_legends {

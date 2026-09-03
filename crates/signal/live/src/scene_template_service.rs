@@ -3,7 +3,7 @@
 //! Implements [`SceneTemplateService`] on [`SignalLive`], delegating persistence
 //! to the underlying [`SceneTemplateRepo`].
 
-use super::*;
+use super::{SceneTemplateService, SignalLive, BlockRepo, ModuleRepo, LayerRepo, EngineRepo, RigRepo, ProfileRepo, SongRepo, SetlistRepo, SceneTemplateRepo, RackRepo, SceneTemplate, SignalServiceError, SceneTemplateId};
 
 impl<B, M, L, E, R, P, So, Se, St, Ra> SceneTemplateService
     for SignalLive<B, M, L, E, R, P, So, Se, St, Ra>

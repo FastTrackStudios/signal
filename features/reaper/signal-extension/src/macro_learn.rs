@@ -1,16 +1,16 @@
 //! Macro learn action handlers.
 //!
-//! Stateless set_min / set_max workflow:
+//! Stateless `set_min` / `set_max` workflow:
 //!
 //! 1. User moves a macro knob on the signal controller → signal-controller's
-//!    macro_timer writes `last_macro_index` to global ExtState
-//! 2. User touches an FX parameter (e.g. turns ReaComp Threshold)
+//!    `macro_timer` writes `last_macro_index` to global `ExtState`
+//! 2. User touches an FX parameter (e.g. turns `ReaComp` Threshold)
 //! 3. User sets the param to their desired minimum, runs **Set Min**
 //! 4. User sets the param to their desired maximum, runs **Set Max**
 //!
 //! Each action reads `last_macro_index` + `last_touched_fx`, then immediately
 //! persists the binding to the track's `P_EXT:FTS_MACROS:mapping_config`.
-//! The signal-controller's macro_timer picks it up and starts driving the param.
+//! The signal-controller's `macro_timer` picks it up and starts driving the param.
 
 use crate::daw_compat::TrackHandleCompat;
 use daw::rpc::Daw;
@@ -19,7 +19,7 @@ use tracing::info;
 
 const EXT_SECTION: &str = "FTS_MACROS";
 
-/// Log to REAPER console via global ExtState → signal-controller ShowConsoleMsg.
+/// Log to REAPER console via global `ExtState` → signal-controller `ShowConsoleMsg`.
 async fn console_log(daw: &Daw, msg: &str) {
     info!("[macro-learn] {msg}");
     let _ = daw
@@ -28,7 +28,7 @@ async fn console_log(daw: &Daw, msg: &str) {
         .await;
 }
 
-/// Read the last-moved macro index from global ExtState (written by macro_timer).
+/// Read the last-moved macro index from global `ExtState` (written by `macro_timer`).
 async fn last_macro_index(daw: &Daw) -> Result<u8> {
     let val = daw
         .ext_state()
@@ -44,7 +44,7 @@ async fn last_macro_index(daw: &Daw) -> Result<u8> {
 
 /// Poll last touched FX param and return all the info we need.
 struct TouchedParam {
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     track_guid: String,
     fx_index: u32,
     param_index: u32,
@@ -91,10 +91,10 @@ async fn poll_last_touched(daw: &Daw) -> Result<TouchedParam> {
     })
 }
 
-/// Update the mapping_config on a track, setting a specific point for a binding.
+/// Update the `mapping_config` on a track, setting a specific point for a binding.
 ///
-/// Finds or creates a mapping for (source_param, target_fx, target_param),
-/// then sets the given curve point (macro_value, param_value).
+/// Finds or creates a mapping for (`source_param`, `target_fx`, `target_param`),
+/// then sets the given curve point (`macro_value`, `param_value`).
 async fn update_mapping(
     track: &daw::rpc::TrackHandle,
     source_param: u8,
@@ -118,9 +118,9 @@ async fn update_mapping(
 
     // Find existing mapping for this (source_param, fx_index, param_index)
     let existing_idx = mappings.iter().position(|m| {
-        m["source_param"].as_u64() == Some(source_param as u64)
-            && m["target_fx"]["ByIndex"].as_u64() == Some(fx_index as u64)
-            && m["target_param_index"].as_u64() == Some(param_index as u64)
+        m["source_param"].as_u64() == Some(u64::from(source_param))
+            && m["target_fx"]["ByIndex"].as_u64() == Some(u64::from(fx_index))
+            && m["target_param_index"].as_u64() == Some(u64::from(param_index))
     });
 
     if let Some(idx) = existing_idx {
@@ -292,7 +292,7 @@ pub async fn handle_macro_clear(daw: &Daw) -> Result<()> {
         if let Ok(mut config) = serde_json::from_str::<serde_json::Value>(&json) {
             if let Some(mappings) = config["mappings"].as_array_mut() {
                 let before = mappings.len();
-                mappings.retain(|m| m["source_param"].as_u64() != Some(macro_idx as u64));
+                mappings.retain(|m| m["source_param"].as_u64() != Some(u64::from(macro_idx)));
                 let removed = before - mappings.len();
 
                 let config_json = config.to_string();
@@ -301,7 +301,7 @@ pub async fn handle_macro_clear(daw: &Daw) -> Result<()> {
                     .set_ext_state(EXT_SECTION, "mapping_config", &config_json)
                     .await?;
 
-                let msg = format!("Cleared {} mapping(s) for Macro {}", removed, macro_idx);
+                let msg = format!("Cleared {removed} mapping(s) for Macro {macro_idx}");
                 console_log(daw, &msg).await;
                 return Ok(());
             }
@@ -310,7 +310,7 @@ pub async fn handle_macro_clear(daw: &Daw) -> Result<()> {
 
     console_log(
         daw,
-        &format!("No mappings to clear for Macro {}", macro_idx),
+        &format!("No mappings to clear for Macro {macro_idx}"),
     )
     .await;
     Ok(())

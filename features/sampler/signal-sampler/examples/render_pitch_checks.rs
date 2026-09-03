@@ -30,7 +30,7 @@ const NOTE_NAMES: [&str; 12] = [
 ];
 
 fn name(p: u8) -> String {
-    format!("{}{}", NOTE_NAMES[(p % 12) as usize], (p / 12) as i32 - 1)
+    format!("{}{}", NOTE_NAMES[(p % 12) as usize], i32::from(p / 12) - 1)
 }
 
 /// Build a mono legato line from (pitch, duration-QN) pairs; a pitch of 0
@@ -99,7 +99,7 @@ fn main() -> eyre::Result<()> {
         .iter()
         .map(|&p| (p, q))
         .collect();
-    let mut scale = up.clone();
+    let mut scale = up;
     scale.push((0, q)); // breath
     scale.extend([72u8, 71, 69, 67, 65, 64, 62, 60].iter().map(|&p| (p, q)));
     // hold the final tonic
@@ -219,7 +219,7 @@ fn main() -> eyre::Result<()> {
             "    → {} ({} transitions, {:.1}s)",
             out.display(),
             res.transitions.len(),
-            res.audio.len() as f64 / 2.0 / SR as f64
+            res.audio.len() as f64 / 2.0 / f64::from(SR)
         );
     }
     Ok(())

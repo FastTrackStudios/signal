@@ -14,7 +14,7 @@ use facet::Facet;
 // ── Wire types ────────────────────────────────────────────────────────────
 
 /// One selectable kit (a `.signalpreset` in the library).
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KitInfo {
     /// Display name (the preset `name`, else the file stem).
     pub name: String,
@@ -25,7 +25,7 @@ pub struct KitInfo {
 }
 
 /// One drum piece in the loaded kit (an engine + its trigger note).
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct PieceInfo {
     /// Engine id within the kit (e.g. "kick", "snare-a").
     pub id: String,
@@ -90,7 +90,7 @@ pub struct SendInfo {
 
 /// One selectable instrument from the sample library — an engine of some type
 /// (kick, snare, tom, …) that can fill a matching kit slot.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct LibraryPiece {
     /// Display name (the engine's name, else the file stem).
     pub name: String,
@@ -103,7 +103,7 @@ pub struct LibraryPiece {
 /// One piece slot in the loaded kit and the library instrument currently in it.
 /// The kit designer shows one section per slot; a slot accepts any
 /// [`LibraryPiece`] whose `kind` matches [`KitSlot::kind`].
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KitSlot {
     /// Preset engine id (`"kick"`, `"rtom1"`, …) — addresses `swap_piece`.
     pub slot_id: String,

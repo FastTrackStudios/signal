@@ -16,7 +16,7 @@ use crate::prefs;
 /// the engine that served this page also serves /vox — falling back to
 /// the local default under a dev server.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn server_url() -> String {
+pub fn server_url() -> String {
     std::env::var("SIGNAL_ENGINE_URL")
         .or_else(|_| std::env::var("RIGD_URL"))
         .ok()
@@ -71,7 +71,7 @@ const DEFAULT_ENGINE_IROH_ID: &str =
 /// A saved remote engine: `SIGNAL_ENGINE_IROH_ID` at runtime (native),
 /// else the id stored from the connect screen. When set, remotes dial
 /// p2p over iroh instead of the WebSocket.
-pub(crate) fn engine_iroh_id() -> Option<iroh::EndpointId> {
+pub fn engine_iroh_id() -> Option<iroh::EndpointId> {
     #[cfg(not(target_arch = "wasm32"))]
     if let Ok(raw) = std::env::var("SIGNAL_ENGINE_IROH_ID") {
         return raw.trim().parse().ok();
@@ -91,15 +91,15 @@ pub(crate) fn engine_iroh_id() -> Option<iroh::EndpointId> {
 // Only the signal rig views expose a connect form today; a session-only
 // build keeps the saved-id read path but never writes one.
 #[cfg_attr(not(feature = "signal"), allow(dead_code))]
-pub(crate) fn store_engine_iroh_id(id: Option<&str>) {
+pub fn store_engine_iroh_id(id: Option<&str>) {
     match id {
         Some(id) => prefs::set("signal-engine-iroh-id", id.trim()),
         None => prefs::remove("signal-engine-iroh-id"),
     }
 }
 
-#[derive(Clone, PartialEq)]
-pub(crate) enum EngineTarget {
+#[derive(Clone, PartialEq, Eq)]
+pub enum EngineTarget {
     Ws(String),
     Iroh(iroh::EndpointId),
 }
@@ -172,7 +172,7 @@ async fn app_endpoint() -> Result<iroh::Endpoint, String> {
 
 /// Establish one typed client over its own link (a vox caller is
 /// service-bound once constructed, so sibling services don't share one).
-pub(crate) async fn establish<C: vox_core::FromVoxLane>(target: &EngineTarget) -> Option<C> {
+pub async fn establish<C: vox_core::FromVoxLane>(target: &EngineTarget) -> Option<C> {
     establish_verbose(target)
         .await
         .map_err(|e| tracing::debug!("establish {}: {e}", target.label()))
@@ -181,7 +181,7 @@ pub(crate) async fn establish<C: vox_core::FromVoxLane>(target: &EngineTarget) -
 
 /// [`establish`] with the failure reason kept — surfaces (e.g. in the
 /// phone's pack Library note) instead of vanishing into a debug log.
-pub(crate) async fn establish_verbose<C: vox_core::FromVoxLane>(
+pub async fn establish_verbose<C: vox_core::FromVoxLane>(
     target: &EngineTarget,
 ) -> Result<C, String> {
     match target {

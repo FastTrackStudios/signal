@@ -3,7 +3,7 @@
 //! Implements [`EngineService`] on [`SignalLive`], with an in-memory cache
 //! for fast repeated reads.
 
-use super::*;
+use super::{EngineService, SignalLive, BlockRepo, ModuleRepo, LayerRepo, EngineRepo, RigRepo, ProfileRepo, SongRepo, SetlistRepo, SceneTemplateRepo, RackRepo, Engine, SignalServiceError, EngineId, LayerService, EngineSceneId, EngineScene};
 
 impl<B, M, L, E, R, P, So, Se, St, Ra> EngineService
     for SignalLive<B, M, L, E, R, P, So, Se, St, Ra>

@@ -13,11 +13,13 @@ use serde::{Deserialize, Serialize};
 pub struct Tags(Vec<String>);
 
 impl Tags {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self(Vec::new())
     }
 
-    pub fn from_vec(tags: Vec<String>) -> Self {
+    #[must_use] 
+    pub const fn from_vec(tags: Vec<String>) -> Self {
         Self(tags)
     }
 
@@ -32,19 +34,23 @@ impl Tags {
         self.0.retain(|t| t != tag);
     }
 
+    #[must_use] 
     pub fn contains(&self, tag: &str) -> bool {
         self.0.iter().any(|t| t == tag)
     }
 
+    #[must_use] 
     pub fn as_slice(&self) -> &[String] {
         &self.0
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use] 
+    pub const fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    pub fn len(&self) -> usize {
+    #[must_use] 
+    pub const fn len(&self) -> usize {
         self.0.len()
     }
 }
@@ -52,7 +58,7 @@ impl Tags {
 // ─── Metadata ───────────────────────────────────────────────────
 
 /// Shared metadata for any domain entity.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, Facet)]
 pub struct Metadata {
     pub tags: Tags,
     pub description: Option<String>,
@@ -72,6 +78,7 @@ pub struct Metadata {
 }
 
 impl Metadata {
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }

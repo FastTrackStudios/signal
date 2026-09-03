@@ -9,7 +9,7 @@
 //! - [`rig_engine`] — Top-level orchestrator trait for all module slots
 //! - [`commands`] — Command dispatch and event streaming
 //! - [`daw_bridge`] — DAW FX chain snapshot types and capture/apply
-//! - [`param_bridge`] — Signal domain Block/Graph → DawParameterSnapshot mapping
+//! - [`param_bridge`] — Signal domain Block/Graph → `DawParameterSnapshot` mapping
 //! - [`vst_bridge`] — VST parameter bridge for bidirectional sync
 //! - [`modulation`] — Real-time modulation runtime (LFO, envelope, MIDI CC → DAW params)
 //! - [`error`] — Engine error types

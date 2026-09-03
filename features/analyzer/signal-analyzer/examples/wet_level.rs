@@ -42,7 +42,7 @@ fn render(alg: f64, decay_time: f64, frames: usize, extra: &[(&str, f64)]) -> Ve
 
 fn report(label: &str, ir: &[f32]) {
     let peak = ir.iter().fold(0.0f32, |a, s| a.max(s.abs()));
-    let energy: f64 = ir.iter().map(|s| (*s as f64) * (*s as f64)).sum();
+    let energy: f64 = ir.iter().map(|s| f64::from(*s) * f64::from(*s)).sum();
     let rms = (energy / ir.len() as f64).sqrt();
     let nan = ir.iter().filter(|s| !s.is_finite()).count();
     println!(
@@ -162,7 +162,7 @@ fn main() {
         for t in [0.5f64, 1.0, 2.0, 4.0, 8.0] {
             let n = (SR * (t * 3.0).max(1.0)) as usize;
             let Some(ir) = render_t60(i as f64, t, n) else { continue };
-            let e: f64 = ir.iter().map(|s| (*s as f64) * (*s as f64)).sum();
+            let e: f64 = ir.iter().map(|s| f64::from(*s) * f64::from(*s)).sum();
             let ideal = t / 13.8155;
             if e <= 1e-12 {
                 line.push_str(&format!(" {t:>4.1}s:  silent"));

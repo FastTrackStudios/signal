@@ -61,29 +61,29 @@ pub(super) enum InteractionMode {
 }
 
 impl InteractionMode {
-    pub fn is_idle(&self) -> bool {
+    pub const fn is_idle(&self) -> bool {
         matches!(self, Self::Idle)
     }
 
-    pub fn is_any_drag(&self) -> bool {
+    pub const fn is_any_drag(&self) -> bool {
         !matches!(self, Self::Idle)
     }
 
-    pub fn dragged_slot_id(&self) -> Option<Uuid> {
+    pub const fn dragged_slot_id(&self) -> Option<Uuid> {
         match self {
             Self::BlockDrag(d) => Some(d.slot_id),
             _ => None,
         }
     }
 
-    pub fn group_drag(&self) -> Option<&GroupDragState> {
+    pub const fn group_drag(&self) -> Option<&GroupDragState> {
         match self {
             Self::GroupDrag(gd) => Some(gd),
             _ => None,
         }
     }
 
-    pub fn wire_draft(&self) -> Option<&GridWireDraft> {
+    pub const fn wire_draft(&self) -> Option<&GridWireDraft> {
         match self {
             Self::WireDraft(wd) => Some(wd),
             _ => None,
@@ -95,7 +95,7 @@ impl InteractionMode {
 // Selection and connections
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GridConnection {
     pub from_slot_id: Uuid,
     pub to_slot_id: Uuid,
@@ -103,7 +103,7 @@ pub struct GridConnection {
 
 pub static GRID_CONNECTIONS: GlobalSignal<Vec<GridConnection>> = Signal::global(Vec::new);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GridSelection {
     Block(Uuid),
     Module(String),

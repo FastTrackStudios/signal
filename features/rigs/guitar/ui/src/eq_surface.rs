@@ -58,8 +58,7 @@ fn bands_of(block: &LiveBlock) -> Vec<EqBand> {
             .params
             .iter()
             .find(|p| p.name == name)
-            .map(|p| p.value)
-            .unwrap_or(dflt)
+            .map_or(dflt, |p| p.value)
     };
     (0..NUM_BANDS)
         .map(|i| {
@@ -139,7 +138,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
         for (i, db) in spectrum.iter().enumerate() {
             let f = 20.0 * (1000.0f64).powf(i as f64 / (n - 1).max(1) as f64);
             let x = mapper.freq_to_x(f);
-            let y = H - ((*db + 90.0) as f64 / 90.0 * H).clamp(0.0, H);
+            let y = H - (f64::from(*db + 90.0) / 90.0 * H).clamp(0.0, H);
             pts.push_str(&format!("{x:.1},{y:.1} "));
         }
         pts.push_str(&format!("{:.1},{H}", mapper.freq_to_x(20000.0)));
@@ -200,7 +199,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                 ondoubleclick: {
                     let rig = rig.clone();
                     let block_id = block.id.clone();
-                    let bands = bands.clone();
+                    let bands = bands;
                     move |e: MouseEvent| {
                         let free = bands.iter().position(|b| !b.used);
                         let (rig, block_id) = (rig.clone(), block_id.clone());
@@ -261,8 +260,8 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
 
                 // Q on the wheel — shape-aware steps (slope for cuts).
                 onwheel: {
-                    let rig = rig.clone();
-                    let block_id = block.id.clone();
+                    let rig = rig;
+                    let block_id = block.id;
                     move |e: WheelEvent| {
                         let target = dragging().or(selected());
                         let Some(i) = target else { return };
@@ -304,7 +303,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                 // Per-band curves (selected band gets its fill).
                 for (bi, stroke, fill) in curves.band_curves.iter() {
                     {
-                        let color = freq_to_color(bands.get(*bi).map(|b| b.frequency as f64).unwrap_or(1000.0));
+                        let color = freq_to_color(bands.get(*bi).map_or(1000.0, |b| f64::from(b.frequency)));
                         let is_sel = sel == Some(*bi);
                         rsx! {
                             if is_sel {
@@ -326,9 +325,9 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                 // Band nodes.
                 for b in bands.iter().filter(|b| b.used) {
                     {
-                        let color = freq_to_color(b.frequency as f64);
-                        let cx = mapper.freq_to_x(b.frequency as f64);
-                        let cy = mapper.db_to_y(if b.shape.uses_gain() { b.gain as f64 } else { 0.0 });
+                        let color = freq_to_color(f64::from(b.frequency));
+                        let cx = mapper.freq_to_x(f64::from(b.frequency));
+                        let cy = mapper.db_to_y(if b.shape.uses_gain() { f64::from(b.gain) } else { 0.0 });
                         let is_sel = sel == Some(b.index);
                         rsx! {
                             circle {
@@ -440,7 +439,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                 if let Some(b) = sel_band {
                     {
                         let i = b.index;
-                        let color = freq_to_color(b.frequency as f64);
+                        let color = freq_to_color(f64::from(b.frequency));
                         let rig1 = rig.clone();
                         let rig2 = rig.clone();
                         let rig3 = rig.clone();

@@ -1,7 +1,7 @@
 //! Portable compressor-graph math + SVG path generation.
 //!
 //! The pure core of the comp graph — ported from the signal domain's
-//! `CompSurface` (features/rigs/guitar/ui/src/comp_surface.rs, itself a 1:1
+//! `CompSurface` (`features/rigs/guitar/ui/src/comp_surface.rs`, itself a 1:1
 //! port of the audio-gui vello painter): the soft-knee `compress_transfer`
 //! curve, the Catmull-Rom `smooth_path` waveform fills, and the dB ↔ y
 //! coordinate mapping. No plugin framework, no Dioxus — compiles for every
@@ -15,11 +15,12 @@
 pub const RANGE_DB: f32 = 60.0;
 
 /// Soft-knee transfer function — same math as audio-gui's
-/// `compress_transfer` / CompSurface.
+/// `compress_transfer` / `CompSurface`.
 ///
 /// Below `threshold − knee/2` the output equals the input; above
 /// `threshold + knee/2` the output follows the ratio slope; inside the knee
 /// a quadratic blends the two with continuous value and first derivative.
+#[must_use] 
 pub fn compress_transfer(input_db: f32, threshold_db: f32, ratio: f32, knee_db: f32) -> f32 {
     if ratio <= 1.0 {
         return input_db;
@@ -38,24 +39,28 @@ pub fn compress_transfer(input_db: f32, threshold_db: f32, ratio: f32, knee_db: 
 
 /// dB (0 at the top … −[`RANGE_DB`] at the bottom) → y within a graph of
 /// height `h`.
+#[must_use] 
 pub fn db_to_y(db: f64, h: f64) -> f64 {
-    ((-db) / RANGE_DB as f64).clamp(0.0, 1.0) * h
+    ((-db) / f64::from(RANGE_DB)).clamp(0.0, 1.0) * h
 }
 
 /// Inverse of [`db_to_y`]: y within a graph of height `h` → dB (clamped to
 /// the display range, 0 … −[`RANGE_DB`]).
+#[must_use] 
 pub fn y_to_db(y: f64, h: f64) -> f64 {
-    -(y / h).clamp(0.0, 1.0) * RANGE_DB as f64
+    -(y / h).clamp(0.0, 1.0) * f64::from(RANGE_DB)
 }
 
 /// Input dB (−[`RANGE_DB`] at the left … 0 at the right) → x within a graph
 /// of width `w`.
+#[must_use] 
 pub fn db_to_x(db: f64, w: f64) -> f64 {
-    ((db + RANGE_DB as f64) / RANGE_DB as f64).clamp(0.0, 1.0) * w
+    ((db + f64::from(RANGE_DB)) / f64::from(RANGE_DB)).clamp(0.0, 1.0) * w
 }
 
 /// Linear peak sample (0..1) → normalized display amplitude (0..1) through
 /// dB, so the waveform is log-scaled like the painter's.
+#[must_use] 
 pub fn scale_input_peak(peak: f32) -> f32 {
     if peak <= 0.0 {
         0.0
@@ -67,16 +72,19 @@ pub fn scale_input_peak(peak: f32) -> f32 {
 
 /// Gain reduction in dB (positive = reducing) → normalized display fraction
 /// of the graph height (0..1), painted downward from the top.
+#[must_use] 
 pub fn scale_gr_db(gr_db: f32) -> f32 {
     (gr_db / RANGE_DB).clamp(0.0, 1.0)
 }
 
 /// Map a slice of linear input peaks through [`scale_input_peak`].
+#[must_use] 
 pub fn scale_input_wave(peaks: &[f32]) -> Vec<f32> {
     peaks.iter().map(|&p| scale_input_peak(p)).collect()
 }
 
 /// Map a slice of GR dB values through [`scale_gr_db`].
+#[must_use] 
 pub fn scale_gr_wave(gr_db: &[f32]) -> Vec<f32> {
     gr_db.iter().map(|&g| scale_gr_db(g)).collect()
 }
@@ -85,6 +93,7 @@ pub fn scale_gr_wave(gr_db: &[f32]) -> Vec<f32> {
 /// the painter's `build_smooth_path`), optionally closed to `baseline` for a
 /// fill. `from_bottom = true` draws amplitude up from the bottom edge (the
 /// input waveform); `false` draws downward from the top (the GR trace).
+#[must_use] 
 pub fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) -> String {
     let n = samples.len();
     if n == 0 {
@@ -94,7 +103,7 @@ pub fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bo
     let ys: Vec<f64> = samples
         .iter()
         .map(|&s| {
-            let amp = s.clamp(0.0, 1.0) as f64;
+            let amp = f64::from(s.clamp(0.0, 1.0));
             if from_bottom {
                 h - amp * h
             } else {
@@ -135,11 +144,12 @@ pub fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bo
 
 /// SVG polyline path of the transfer curve across the full display range
 /// (input −[`RANGE_DB`]..0 dB left→right), 61 sample points.
+#[must_use] 
 pub fn transfer_curve_path(threshold_db: f32, ratio: f32, knee_db: f32, w: f64, h: f64) -> String {
     let mut d = String::new();
     for i in 0..=60 {
-        let input = -(RANGE_DB as f64) + (i as f64 / 60.0) * RANGE_DB as f64;
-        let output = compress_transfer(input as f32, threshold_db, ratio, knee_db) as f64;
+        let input = (f64::from(i) / 60.0).mul_add(f64::from(RANGE_DB), -f64::from(RANGE_DB));
+        let output = f64::from(compress_transfer(input as f32, threshold_db, ratio, knee_db));
         let x = db_to_x(input, w);
         let y = db_to_y(output, h);
         d.push_str(if i == 0 { "M " } else { "L " });
@@ -149,6 +159,7 @@ pub fn transfer_curve_path(threshold_db: f32, ratio: f32, knee_db: f32, w: f64, 
 }
 
 /// Graph position of the live input "ball" riding the transfer curve.
+#[must_use] 
 pub fn transfer_ball(
     in_db: f32,
     threshold_db: f32,
@@ -158,8 +169,8 @@ pub fn transfer_ball(
     h: f64,
 ) -> (f64, f64) {
     let level = in_db.clamp(-RANGE_DB, 0.0);
-    let out = compress_transfer(level, threshold_db, ratio, knee_db) as f64;
-    (db_to_x(level as f64, w), db_to_y(out, h))
+    let out = f64::from(compress_transfer(level, threshold_db, ratio, knee_db));
+    (db_to_x(f64::from(level), w), db_to_y(out, h))
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -202,7 +213,7 @@ mod tests {
         let lo = thr - knee / 2.0;
         let hi = thr + knee / 2.0;
         assert!((compress_transfer(lo, thr, ratio, knee) - lo).abs() < 1e-4);
-        let hard_hi = hi - (1.0 - 1.0 / ratio) * (hi - thr);
+        let hard_hi = (1.0 - 1.0 / ratio).mul_add(-(hi - thr), hi);
         assert!((compress_transfer(hi, thr, ratio, knee) - hard_hi).abs() < 1e-3);
         // At the threshold itself the soft knee sits between identity and
         // the hard-knee output, exactly slope·knee/8 below the input.
@@ -215,7 +226,7 @@ mod tests {
         // Monotonic non-decreasing across the knee (no dents).
         let mut prev = f32::MIN;
         for i in 0..=100 {
-            let x = lo - 2.0 + (i as f32 / 100.0) * (knee + 4.0);
+            let x = (i as f32 / 100.0).mul_add(knee + 4.0, lo - 2.0);
             let y = compress_transfer(x, thr, ratio, knee);
             assert!(y >= prev - 1e-4, "transfer not monotonic at {x}");
             prev = y;

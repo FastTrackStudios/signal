@@ -3,7 +3,7 @@
 //! Built on [`fts_plug_ui`]'s shared chrome, so this crate carries only what
 //! is limiter-specific:
 //!
-//! - [`params`]: the nice_plug parameter tree + the audio→UI metering state
+//! - [`params`]: the `nice_plug` parameter tree + the audio→UI metering state
 //! - [`gr_trace_svg`]: portable geometry for the gain-reduction trace
 //! - [`gr_trace`]: the Dioxus component that renders it
 //! - [`control_view`]: the editor root the plugin shell embeds

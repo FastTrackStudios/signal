@@ -1,7 +1,7 @@
 //! Offline proof of the kit-designer swap: load a kit, replace the kick slot's
 //! engine with a *different* kick engine from the library, reload via the
-//! in-memory PresetSpec path, and confirm the kick still triggers.
-//!   cargo run -p signal-drums --example swap_probe
+//! in-memory `PresetSpec` path, and confirm the kick still triggers.
+//!   cargo run -p signal-drums --example `swap_probe`
 
 use std::path::{Path, PathBuf};
 
@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .find(|e| e.id == "kick")
         .map(|e| e.engine.clone());
-    println!("current kick engine: {:?}", cur_kick);
+    println!("current kick engine: {cur_kick:?}");
 
     // Find a *different* kick engine in the library (engine_type == "kick").
     let engines_dir = PathBuf::from(LIB).join("Engines");
@@ -73,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Build the swapped spec and reload — exactly what do_swap_piece does.
     let mut spec2 = PresetSpec::from_file(&preset_path)?;
-    for e in spec2.engines.iter_mut() {
+    for e in &mut spec2.engines {
         if e.id == "kick" {
             e.engine = alt_kick.display().to_string(); // absolute path
         }
@@ -97,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .unwrap_or_default();
     let new_stem = alt_kick.file_stem().unwrap().to_string_lossy().to_string();
-    println!("\n{} vs {}", orig_stem, new_stem);
+    println!("\n{orig_stem} vs {new_stem}");
     if after > 0.001 && orig_stem != new_stem {
         println!("PASS — swapped kick loads and plays");
     } else {

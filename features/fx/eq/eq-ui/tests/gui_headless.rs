@@ -1,6 +1,6 @@
 //! Headless behavioral GUI tests via the vendored dioxus-test harness.
 //!
-//! Unlike tests/gui_smoke.rs (SSR markup assertions), these mount the EQ
+//! Unlike `tests/gui_smoke.rs` (SSR markup assertions), these mount the EQ
 //! graph on a real headless Blitz DOM (`dioxus-test` → blitz-dom) and drive
 //! it with REAL events — clicks go through the document's hit-testing path,
 //! exactly like a pointer in the plugin editor window. No GPU, no window:

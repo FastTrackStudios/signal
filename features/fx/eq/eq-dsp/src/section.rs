@@ -19,6 +19,7 @@ pub struct Tdf2Section {
 }
 
 impl Tdf2Section {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             c0: 1.0,
@@ -206,10 +207,10 @@ mod tests {
         );
 
         // Second sample: channel states should be independent.
-        let out2_ch0 = sec.tick(0.0, 0);
-        let out2_ch1 = sec.tick(1.0, 1);
+        let result2_ch0 = sec.tick(0.0, 0);
+        let result2_ch1 = sec.tick(1.0, 1);
         assert!(
-            (out2_ch0 - out2_ch1).abs() > 1e-10,
+            (result2_ch0 - result2_ch1).abs() > 1e-10,
             "Channel states should be independent"
         );
     }

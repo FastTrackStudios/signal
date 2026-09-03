@@ -314,7 +314,7 @@ fn PortCircle(props: PortCircleProps) -> Element {
                 }
             },
             onmouseenter: {
-                let port_id = port_id.clone();
+                let port_id = port_id;
                 move |_| {
                     if wire_active {
                         if let Some(ref cb) = on_hover {

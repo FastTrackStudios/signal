@@ -19,7 +19,7 @@ fn probe_shelf() {
         let mut acc_in = 0.0;
         let mut acc_out = 0.0;
         for i in 0..n {
-            let x = (inc * i as f64).sin();
+            let x = (inc * f64::from(i)).sin();
             let y = b.tick(x, 0);
             if i > n / 2 {
                 acc_in += x * x;

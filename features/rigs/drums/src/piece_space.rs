@@ -45,7 +45,7 @@ fn render_engine(rig: &SamplerRig, engine_path: &Path, note: u8) -> Option<Vec<f
     rig.note_off_instrument(id, note, 0);
     // Resample to the analysis rate (the analyzer's contract).
     if sr != analyze::ANALYSIS_SR as usize {
-        let ratio = sr as f64 / analyze::ANALYSIS_SR as f64;
+        let ratio = sr as f64 / f64::from(analyze::ANALYSIS_SR);
         let out_len = (mono.len() as f64 / ratio) as usize;
         let mut out = Vec::with_capacity(out_len);
         for i in 0..out_len {
@@ -54,7 +54,7 @@ fn render_engine(rig: &SamplerRig, engine_path: &Path, note: u8) -> Option<Vec<f
             let frac = (pos - i0 as f64) as f32;
             let a = mono.get(i0).copied().unwrap_or(0.0);
             let b = mono.get(i0 + 1).copied().unwrap_or(a);
-            out.push(a + (b - a) * frac);
+            out.push((b - a).mul_add(frac, a));
         }
         mono = out;
     }

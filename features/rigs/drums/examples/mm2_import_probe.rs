@@ -1,7 +1,7 @@
 //! End-to-end proof of the MM2 → signal-fx import: load our kit, parse an MM2
 //! Cradle preset, build the kick strip's FX chain (comp + EQ) with our DSP,
 //! install it on the kick channel, and confirm the rendered kick changes.
-//!   cargo run -p signal-drums --example mm2_import_probe -- <MM2.preset>
+//!   cargo run -p signal-drums --example `mm2_import_probe` -- <MM2.preset>
 
 use signal_drums::{cradle, mm2fx};
 use signal_sampler::{FxTarget, SamplerRig};
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _ = rig.render_offline(buf);
             for &s in buf.iter() {
                 pk = pk.max(s.abs());
-                rms += (s as f64) * (s as f64);
+                rms += f64::from(s) * f64::from(s);
                 n += 1;
             }
         }
@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut installed = 0;
     for fx in kick_strip.fx_slots() {
-        if let Some(plugin) = mm2fx::build_processor(&fx, sr as f64) {
+        if let Some(plugin) = mm2fx::build_processor(&fx, f64::from(sr)) {
             rig.install_mixer_plugin(KIT, FxTarget::Channel(kick_ch), plugin)?;
             println!("  installed {}", fx.fx_type);
             installed += 1;

@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use crate::analyze::{self, DIM};
 use crate::{SPACE_VERSION, Space, SpaceItem};
 
-/// Progress callback: (analyzed_so_far, total_to_analyze).
+/// Progress callback: (`analyzed_so_far`, `total_to_analyze`).
 pub type Progress = dyn Fn(usize, usize) + Sync;
 
 /// Node granularity for the built space.
@@ -87,11 +87,10 @@ fn is_variant_component(c: &str) -> bool {
 /// rr3 / vl2 / v10 / velocity buckets.
 fn regex_like_rr_vl(s: &str) -> bool {
     for prefix in ["rr", "vl", "v"] {
-        if let Some(rest) = s.strip_prefix(prefix) {
-            if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+        if let Some(rest) = s.strip_prefix(prefix)
+            && !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
                 return true;
             }
-        }
     }
     false
 }
@@ -141,6 +140,7 @@ pub struct BuildReport {
 }
 
 /// Build (or incrementally rebuild) a space over every `.wav` under `root`.
+///
 /// `previous` supplies reusable analyses keyed by (rel path, size, mtime) —
 /// in `Piece` mode the key is (piece key, total bytes, max mtime).
 pub fn build(
@@ -154,7 +154,7 @@ pub fn build(
     let mut files: Vec<(PathBuf, u64, u64)> = walkdir::WalkDir::new(root)
         .follow_links(false)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| e.file_type().is_file())
         .filter(|e| {
             e.path()
@@ -361,7 +361,7 @@ fn build_pieces(
                 }) {
                     Ok(a) => {
                         for (dst, src) in acc.iter_mut().zip(a.features.iter()) {
-                            *dst += *src as f64;
+                            *dst += f64::from(*src);
                         }
                         scal.0 += a.duration_s;
                         scal.1 += a.centroid_hz;
@@ -392,8 +392,7 @@ fn build_pieces(
             let hint = key.to_lowercase();
             let class = rep_a
                 .as_ref()
-                .map(|a| crate::classify::classify(a, &hint))
-                .unwrap_or("perc");
+                .map_or("perc", |a| crate::classify::classify(a, &hint));
             Out::Ok(
                 Box::new(SpaceItem {
                     path: key.clone(),

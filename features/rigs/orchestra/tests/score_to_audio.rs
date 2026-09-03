@@ -1,5 +1,5 @@
-//! End-to-end bridge tests: MusicXML score → keyflow-orchestra engine →
-//! TrackDocument → annotated Schedule → (with CSS on disk) offline audio.
+//! End-to-end bridge tests: `MusicXML` score → keyflow-orchestra engine →
+//! `TrackDocument` → annotated Schedule → (with CSS on disk) offline audio.
 //!
 //! The schedule-level tests run unconditionally; the full-audio render is
 //! gated on the Cinematic Studio Strings library + config being present on

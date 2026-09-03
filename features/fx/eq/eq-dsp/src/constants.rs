@@ -1,4 +1,4 @@
-#![allow(clippy::approx_constant)]
+#![expect(clippy::approx_constant, reason = "These constants are exact values extracted from Pro-Q 4 binary and must match precisely; they appear as approximations but are intentional binary extracts")]
 
 //! Magic constants extracted from Pro-Q 4 binary.
 //!
@@ -33,11 +33,11 @@ pub const LOG2_E: f64 = std::f64::consts::LOG2_E;
 
 pub const SCALE_0_5: f64 = 0.5;
 pub const SCALE_0_54: f64 = 0.54;
-pub const SCALE_0_628: f64 = 0.628318530717959; // π/5
-pub const SCALE_0_637: f64 = 0.636619772367581; // 1/π
+pub const SCALE_0_628: f64 = 0.628_318_530_717_959; // π/5
+pub const SCALE_0_637: f64 = 0.636_619_772_367_581; // 1/π
 pub const SCALE_0_65: f64 = 0.65;
-pub const SCALE_0_667: f64 = 0.666666666666667; // 2/3
-pub const SCALE_0_693: f64 = 0.693147180559945; // ln(2)
+pub const SCALE_0_667: f64 = 0.666_666_666_666_667; // 2/3
+pub const SCALE_0_693: f64 = 0.693_147_180_559_945; // ln(2)
 pub const SCALE_0_7: f64 = 0.7;
 pub const SCALE_0_766: f64 = 0.76609;
 pub const SCALE_0_784: f64 = 0.783594;

@@ -55,7 +55,8 @@ impl LearnState {
     }
 
     /// Whether a macro is currently armed.
-    pub fn is_armed(&self) -> bool {
+    #[must_use] 
+    pub const fn is_armed(&self) -> bool {
         self.armed_knob_id.is_some()
     }
 

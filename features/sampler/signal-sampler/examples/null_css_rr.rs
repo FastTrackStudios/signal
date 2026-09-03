@@ -24,7 +24,7 @@ const SR: u32 = 48_000;
 const MAX_RR: u32 = 6; // sweep slots 0..MAX_RR (clamped per articulation)
 
 /// CC58 keyswitch values the test MIDI uses for **short** articulations (from
-/// gen_css_test_midi). These are the RR-bearing, non-overlapping triggers.
+/// `gen_css_test_midi`). These are the RR-bearing, non-overlapping triggers.
 const SHORT_KS: &[u8] = &[13, 18, 23, 28, 33, 38, 43, 68];
 
 fn read_vlq(d: &[u8], p: &mut usize) -> u32 {
@@ -32,7 +32,7 @@ fn read_vlq(d: &[u8], p: &mut usize) -> u32 {
     loop {
         let b = d[*p];
         *p += 1;
-        v = (v << 7) | (b & 0x7f) as u32;
+        v = (v << 7) | u32::from(b & 0x7f);
         if b & 0x80 == 0 {
             break;
         }
@@ -41,7 +41,7 @@ fn read_vlq(d: &[u8], p: &mut usize) -> u32 {
 }
 
 fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
-    let div = u16::from_be_bytes([d[12], d[13]]) as f64;
+    let div = f64::from(u16::from_be_bytes([d[12], d[13]]));
     let mut us_per_q = 500_000.0f64;
     let mut p = 14;
     while &d[p..p + 4] != b"MTrk" {
@@ -55,7 +55,7 @@ fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
     let mut running = 0u8;
     let mut out = Vec::new();
     while p < end {
-        let dt = read_vlq(d, &mut p) as u64;
+        let dt = u64::from(read_vlq(d, &mut p));
         sec += dt as f64 * (us_per_q / 1_000_000.0) / div;
         let mut status = d[p];
         if status & 0x80 != 0 {
@@ -71,7 +71,7 @@ fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
                 let len = read_vlq(d, &mut p) as usize;
                 if meta == 0x51 {
                     us_per_q =
-                        (d[p] as f64) * 65536.0 + (d[p + 1] as f64) * 256.0 + d[p + 2] as f64;
+                        f64::from(d[p]).mul_add(65536.0, f64::from(d[p + 1]) * 256.0) + f64::from(d[p + 2]);
                 }
                 p += len;
             }
@@ -129,11 +129,11 @@ fn read_wav(path: &str) -> (Vec<f32>, u32) {
             let o = (f * ch + c) * bytes;
             let s = match (format, bits) {
                 (3, 32) => f32::from_le_bytes([data[o], data[o + 1], data[o + 2], data[o + 3]]),
-                (1, 16) => i16::from_le_bytes([data[o], data[o + 1]]) as f32 / 32768.0,
+                (1, 16) => f32::from(i16::from_le_bytes([data[o], data[o + 1]])) / 32768.0,
                 (1, 24) => {
-                    let v = (data[o] as i32)
-                        | ((data[o + 1] as i32) << 8)
-                        | ((data[o + 2] as i32) << 16);
+                    let v = i32::from(data[o])
+                        | (i32::from(data[o + 1]) << 8)
+                        | (i32::from(data[o + 2]) << 16);
                     let v = if v & 0x80_0000 != 0 {
                         v | !0xFF_FFFF
                     } else {
@@ -171,7 +171,7 @@ fn null_depth_db(a: &[f32], b: &[f32], max_lag: i64) -> f32 {
     while lag <= max_lag {
         let mut dot = 0.0f32;
         let mut bb = 0.0f32;
-        #[allow(
+        #[expect(
             clippy::needless_range_loop,
             reason = "index i drives a lag-shifted second index j into b; not expressible as a single zip/enumerate"
         )]
@@ -187,7 +187,7 @@ fn null_depth_db(a: &[f32], b: &[f32], max_lag: i64) -> f32 {
         if bb > 0.0 {
             let g = dot / bb; // optimal gain
             let mut resid = 0.0f32;
-            #[allow(
+            #[expect(
                 clippy::needless_range_loop,
                 reason = "index i drives a lag-shifted second index j into b; not expressible as a single zip/enumerate"
             )]
@@ -198,7 +198,7 @@ fn null_depth_db(a: &[f32], b: &[f32], max_lag: i64) -> f32 {
                 } else {
                     0.0
                 };
-                let e = a[i] - g * bv;
+                let e = g.mul_add(-bv, a[i]);
                 resid += e * e;
             }
             if resid < best {
@@ -255,8 +255,8 @@ fn main() -> eyre::Result<()> {
     rig.set_legato_mode(ID, true, true);
 
     let win_s = 0.45f64; // short-note window
-    let win = (win_s * SR as f64) as usize;
-    let max_lag = (0.060 * SR as f64) as i64; // ±60ms alignment search
+    let win = (win_s * f64::from(SR)) as usize;
+    let max_lag = (0.060 * f64::from(SR)) as i64; // ±60ms alignment search
     let mut cur_cc58 = 0u8;
 
     println!("\n# Short-note RR null sweep (window {win_s}s, lag ±10ms)");
@@ -272,7 +272,7 @@ fn main() -> eyre::Result<()> {
             continue;
         }
         // CSS reference window for this note.
-        let start = (*sec * css_sr as f64) as usize;
+        let start = (*sec * f64::from(css_sr)) as usize;
         let a = &css[start.min(css.len())..(start + win).min(css.len())];
         if a.len() < win / 2 {
             continue;
@@ -304,15 +304,14 @@ fn main() -> eyre::Result<()> {
             .collect::<Vec<_>>()
             .join(" ");
         println!(
-            "  {:<4} {:6.1} {:>4}   RR{best_rr}   {best_db:7.1}dB   ourPk={our_peak:.3} cssPk={css_peak:.3}  [{slots}]",
-            d1, sec, d2
+            "  {d1:<4} {sec:6.1} {d2:>4}   RR{best_rr}   {best_db:7.1}dB   ourPk={our_peak:.3} cssPk={css_peak:.3}  [{slots}]"
         );
     }
     rig.set_forced_rr(ID, None);
 
     if !depths.is_empty() {
         let mean = depths.iter().sum::<f32>() / depths.len() as f32;
-        let best = depths.iter().cloned().fold(f32::INFINITY, f32::min);
+        let best = depths.iter().copied().fold(f32::INFINITY, f32::min);
         println!(
             "\n{} short notes  ·  mean best-RR null = {mean:.1}dB  ·  deepest = {best:.1}dB",
             depths.len()

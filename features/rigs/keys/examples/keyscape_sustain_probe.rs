@@ -2,7 +2,7 @@
 //! Rhodes. For each key: strike it (no note-off), hold ~2 s, and compare the
 //! attack peak to the level still sounding at ~1.5 s. A healthy long Rhodes
 //! sample should still be clearly audible; a "died" note collapses to ~0.
-//!   cargo run -p signal-keys --example keyscape_sustain_probe
+//!   cargo run -p signal-keys --example `keyscape_sustain_probe`
 
 use std::path::Path;
 
@@ -67,9 +67,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                               // Audible at 1 s = still ≥1% of the attack and above the noise floor.
         let ok = sustain >= 0.002 && sustain >= 0.01 * attack;
         if ok {
-            alive += 1
+            alive += 1;
         } else {
-            died.push(note)
+            died.push(note);
         }
         if note % 3 == 0 {
             println!(

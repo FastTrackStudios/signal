@@ -57,7 +57,7 @@ pub struct StageSlot<S> {
 }
 
 impl<S> StageSlot<S> {
-    pub fn new(stage: S) -> Self {
+    pub const fn new(stage: S) -> Self {
         Self {
             stage,
             enabled: true,
@@ -103,6 +103,7 @@ impl<S: Stage> Lane<S> {
 
     /// Sum of the enabled stages' latencies — serial stages add
     /// (`fx.stack.latency`).
+    #[must_use] 
     pub fn latency(&self) -> usize {
         self.stages
             .iter()
@@ -135,8 +136,8 @@ impl<S: Stage> Lane<S> {
             let mut fade = slot.fade;
             for i in 0..frames {
                 fade = (fade + dir).clamp(0.0, 1.0);
-                scratch_l[i] = scratch_l[i] * fade + self.fade_l[i] * (1.0 - fade);
-                scratch_r[i] = scratch_r[i] * fade + self.fade_r[i] * (1.0 - fade);
+                scratch_l[i] = scratch_l[i].mul_add(fade, self.fade_l[i] * (1.0 - fade));
+                scratch_r[i] = scratch_r[i].mul_add(fade, self.fade_r[i] * (1.0 - fade));
             }
             slot.fade = fade;
             if slot.fade == 0.0 {
@@ -210,12 +211,13 @@ pub enum SumMode {
 
 impl SumMode {
     /// The normalization factor for `n` active lanes.
+    #[must_use] 
     pub fn norm(self, n: usize) -> f64 {
         let n = n.max(1) as f64;
         match self {
-            SumMode::Coherent => 1.0 / n,
-            SumMode::Power => 1.0 / sqrt(n),
-            SumMode::Raw => 1.0,
+            Self::Coherent => 1.0 / n,
+            Self::Power => 1.0 / sqrt(n),
+            Self::Raw => 1.0,
         }
     }
 }
@@ -418,14 +420,14 @@ mod tests {
     impl Stage for S {
         fn process(&mut self, l: &mut [f64], r: &mut [f64]) {
             match self {
-                S::Gain(g) => g.process(l, r),
-                S::Delayed(d) => d.process(l, r),
+                Self::Gain(g) => g.process(l, r),
+                Self::Delayed(d) => d.process(l, r),
             }
         }
         fn latency(&self) -> usize {
             match self {
-                S::Gain(_) => 0,
-                S::Delayed(d) => d.latency(),
+                Self::Gain(_) => 0,
+                Self::Delayed(d) => d.latency(),
             }
         }
     }
@@ -445,7 +447,7 @@ mod tests {
         let (dl, _) = ramp(64);
         stack.process(&mut l, &mut r);
         for i in 0..64 {
-            assert!((l[i] - dl[i] * 6.0).abs() < 1e-12);
+            assert!(dl[i].mul_add(-6.0, l[i]).abs() < 1e-12);
         }
     }
 

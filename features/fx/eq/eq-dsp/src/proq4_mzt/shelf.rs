@@ -1,4 +1,4 @@
-//! Pro-Q 4 single-section shelf MZT biquads (low_shelf, high_shelf, tilt_shelf).
+//! Pro-Q 4 single-section shelf MZT biquads (`low_shelf`, `high_shelf`, `tilt_shelf`).
 
 use std::f64::consts::PI;
 

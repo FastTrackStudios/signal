@@ -9,7 +9,7 @@
 //! Uses `LazyLock<RwLock<HashMap>>` for:
 //! - **Lock-free reads**: Multiple readers can access targets concurrently
 //! - **Atomic writes**: Registry updates via `register()` are atomic
-//! - **Safe initialization**: LazyLock ensures initialization on first access
+//! - **Safe initialization**: `LazyLock` ensures initialization on first access
 //!
 //! # Lifecycle
 //!
@@ -21,7 +21,7 @@
 //!
 //! - **Registration**: O(n) where n = number of bindings in setup result
 //! - **Lookup**: O(1) hash map access + O(m) clone where m = targets per knob
-//! - **Clear**: O(1) — replaces entire HashMap atomically
+//! - **Clear**: O(1) — replaces entire `HashMap` atomically
 //!
 //! Typical performance: <1ms for lookup + parameter setting across multiple targets
 
@@ -50,7 +50,7 @@ pub struct MacroParamTarget {
 static BINDINGS: LazyLock<RwLock<HashMap<String, Vec<MacroParamTarget>>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
-/// Register all bindings from a MacroSetupResult into the global registry.
+/// Register all bindings from a `MacroSetupResult` into the global registry.
 ///
 /// Merges new bindings into existing ones (if a knob already has targets,
 /// new targets are added). This allows multiple blocks to share the same macro knob.
@@ -101,11 +101,11 @@ pub fn clear() {
 ///
 /// # Returns
 ///
-/// Tuple of (total_knobs, total_targets, avg_targets_per_knob)
+/// Tuple of (`total_knobs`, `total_targets`, `avg_targets_per_knob`)
 pub fn stats() -> (usize, usize, f32) {
     let map = BINDINGS.read().expect("lock poisoned");
     let knob_count = map.len();
-    let target_count: usize = map.values().map(|targets| targets.len()).sum();
+    let target_count: usize = map.values().map(std::vec::Vec::len).sum();
     let avg = if knob_count > 0 {
         target_count as f32 / knob_count as f32
     } else {

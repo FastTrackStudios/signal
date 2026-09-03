@@ -411,8 +411,7 @@ impl GuitarRigBackend {
             .rig
             .lock_ok()
             .as_ref()
-            .map(|p| p.sample_rate() as f64)
-            .unwrap_or(48_000.0);
+            .map_or(48_000.0, |p| f64::from(p.sample_rate()));
         let Some((in_db, out_db)) = signal_sampler::nam_calibrate::drive_compensation(
             std::path::Path::new(&path),
             sr,
@@ -451,8 +450,7 @@ impl GuitarRigBackend {
                     .params
                     .iter()
                     .find(|p| p.name == "drive")
-                    .map(|p| p.value)
-                    .unwrap_or(0.5);
+                    .map_or(0.5, |p| p.value);
                 (b.id.clone(), b.name.clone(), drive)
             })
             .collect();
@@ -471,8 +469,7 @@ impl GuitarRigBackend {
                 .rig
                 .lock_ok()
                 .as_ref()
-                .map(|p| p.sample_rate() as f64)
-                .unwrap_or(48_000.0);
+                .map_or(48_000.0, |p| f64::from(p.sample_rate()));
             let mut paths: Vec<String> = Vec::new();
             for p in backend.drive_presets.lock_ok().iter() {
                 for o in &p.options {
@@ -566,8 +563,7 @@ impl GuitarRigBackend {
         *self.song_index.lock_ok() = if resolved.is_empty() { 0 } else { song };
         let parts = resolved
             .get(song)
-            .map(|(_, _, _, _, parts)| parts.len())
-            .unwrap_or(0);
+            .map_or(0, |(_, _, _, _, parts)| parts.len());
         *self.part_index.lock_ok() = (st.part_index as usize).min(parts.saturating_sub(1));
         if st.tempo_bpm > 0.0 {
             *self.tempo.lock_ok() = Some(st.tempo_bpm.clamp(40.0, 300.0));
@@ -597,7 +593,7 @@ impl GuitarRigBackend {
         {
             let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
-                let base = prig.active_patch().map(|p| p.output_trim_db).unwrap_or(0.0);
+                let base = prig.active_patch().map_or(0.0, |p| p.output_trim_db);
                 prig.rig()
                     .set_output_trim_db(base + trim + if mute { -96.0 } else { 0.0 });
             }
@@ -711,7 +707,7 @@ impl GuitarRigBackend {
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
-    /// Recall the active patch's boost setting (PatchDef.boost_db): a patch
+    /// Recall the active patch's boost setting (`PatchDef.boost_db)`: a patch
     /// like Lead carries its +3 dB engaged; 0 means boost off.
     fn recall_patch_boost(&self) {
         let active = {
@@ -727,8 +723,7 @@ impl GuitarRigBackend {
             .patches
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(&name))
-            .map(|p| p.boost_db)
-            .unwrap_or(0.0);
+            .map_or(0.0, |p| p.boost_db);
         *self.boost_on.lock_ok() = boost != 0.0;
         if boost != 0.0 {
             *self.boost_level.lock_ok() = boost;
@@ -799,11 +794,11 @@ impl GuitarRigBackend {
                     e.key.clone()
                 };
                 let bpm = if e.bpm == 0 {
-                    song.map(|s| s.bpm).unwrap_or(120)
+                    song.map_or(120, |s| s.bpm)
                 } else {
                     e.bpm
                 };
-                let stack = song.map(|s| s.stack).unwrap_or(0);
+                let stack = song.map_or(0, |s| s.stack);
                 let parts = song.map(|s| s.parts.clone()).unwrap_or_default();
                 (e.song.clone(), key, bpm, stack, parts)
             })
@@ -846,15 +841,14 @@ impl GuitarRigBackend {
                 .rig
                 .lock_ok()
                 .as_ref()
-                .map(|prig| {
+                .is_some_and(|prig| {
                     prig.stacks().get(stack).is_some_and(|st| {
                         st.patches.iter().any(|p| {
                             prig.active_patch()
                                 .is_some_and(|a| a.name.eq_ignore_ascii_case(p))
                         })
                     })
-                })
-                .unwrap_or(false);
+                });
             if already_active {
                 self.publish_state();
             } else {
@@ -1112,7 +1106,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
 }
 
 /// The primary dialable param for a block type: `(name, min, max, default)`.
-fn primary_param(bt: BlockType) -> Option<(&'static str, f32, f32, f32)> {
+const fn primary_param(bt: BlockType) -> Option<(&'static str, f32, f32, f32)> {
     match bt {
         BlockType::Reverb | BlockType::Delay => Some(("mix", 0.0, 0.10, 0.08)),
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("mix", 0.0, 1.0, 0.4)),
@@ -1161,7 +1155,7 @@ fn build_perf_model_static(def: &ProfileDef) -> PerformanceModel {
                 available: false,
                 is_active: false,
                 preset: patch_def.map(|p| p.preset.clone()).unwrap_or_default(),
-                override_modules: patch_def.map(|p| p.override_modules()).unwrap_or_default(),
+                override_modules: patch_def.map(super::profiles::PatchDef::override_modules).unwrap_or_default(),
             }
         })
         .collect();
@@ -1187,8 +1181,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
             let available = patches
                 .iter()
                 .position(|p| p.name.eq_ignore_ascii_case(&cur))
-                .map(|i| prig.is_patch_available(i))
-                .unwrap_or(false);
+                .is_some_and(|i| prig.is_patch_available(i));
             let patch_def = def
                 .patches
                 .iter()
@@ -1201,7 +1194,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
                 available,
                 is_active: active_stack == Some(si),
                 preset: patch_def.map(|p| p.preset.clone()).unwrap_or_default(),
-                override_modules: patch_def.map(|p| p.override_modules()).unwrap_or_default(),
+                override_modules: patch_def.map(super::profiles::PatchDef::override_modules).unwrap_or_default(),
             }
         })
         .collect();
@@ -1400,9 +1393,7 @@ impl Rig for GuitarRigBackend {
             // render before the device opens (iOS with no interface yet).
             self.rig
                 .lock_ok()
-                .as_ref()
-                .map(|prig| build_perf_model(prig, &def))
-                .unwrap_or_else(|| build_perf_model_static(&def))
+                .as_ref().map_or_else(|| build_perf_model_static(&def), |prig| build_perf_model(prig, &def))
         };
         m.boost_db = self.current_boost_db();
         m.tempo_bpm = self.tempo_bpm().round() as u32;
@@ -1498,8 +1489,7 @@ impl Rig for GuitarRigBackend {
             let last = self
                 .resolved_setlist()
                 .get(i)
-                .map(|(_, _, _, _, parts)| parts.len().saturating_sub(1))
-                .unwrap_or(0);
+                .map_or(0, |(_, _, _, _, parts)| parts.len().saturating_sub(1));
             (i, last)
         };
         let idx = (index as usize).min(last);
@@ -1575,8 +1565,7 @@ impl Rig for GuitarRigBackend {
                 let stack = stack_entry.map(|st| st.name.clone()).unwrap_or_default();
                 let default_in_stack = stack_entry
                     .and_then(|st| st.patches.first())
-                    .map(|first| first.eq_ignore_ascii_case(&p.name))
-                    .unwrap_or(false);
+                    .is_some_and(|first| first.eq_ignore_ascii_case(&p.name));
                 let (preset, override_modules) = {
                     let def = self.profile_def.lock_ok();
                     def.patches
@@ -1721,8 +1710,7 @@ impl Rig for GuitarRigBackend {
                 .lock_ok()
                 .iter()
                 .find(|p| p.name.eq_ignore_ascii_case(&slot.preset))
-                .map(|p| p.options.len())
-                .unwrap_or(0);
+                .map_or(0, |p| p.options.len());
             if n_options == 0 {
                 return;
             }
@@ -1911,7 +1899,7 @@ impl Rig for GuitarRigBackend {
                 return;
             };
             p.name = new_name.clone();
-            for patch in def.patches.iter_mut() {
+            for patch in &mut def.patches {
                 if patch.preset.eq_ignore_ascii_case(&old) {
                     patch.preset = new_name.clone();
                 }
@@ -1956,8 +1944,8 @@ impl Rig for GuitarRigBackend {
                 return;
             };
             p.name = new_name.clone();
-            for st in def.stacks.iter_mut() {
-                for slot in st.patches.iter_mut() {
+            for st in &mut def.stacks {
+                for slot in &mut st.patches {
                     if slot.eq_ignore_ascii_case(&old) {
                         *slot = new_name.clone();
                     }
@@ -1979,7 +1967,7 @@ impl Rig for GuitarRigBackend {
             if def.patches.len() == before {
                 return;
             }
-            for st in def.stacks.iter_mut() {
+            for st in &mut def.stacks {
                 st.patches.retain(|p| !p.eq_ignore_ascii_case(&name));
             }
             RigLibrary::save_profile(&def);
@@ -2291,8 +2279,7 @@ impl Rig for GuitarRigBackend {
                     let guard = backend.rig.lock_ok();
                     guard
                         .as_ref()
-                        .map(|p| p.rig().di_capture_state().1 == 0)
-                        .unwrap_or(true)
+                        .is_none_or(|p| p.rig().di_capture_state().1 == 0)
                 };
                 if done {
                     break;
@@ -2388,8 +2375,7 @@ impl Rig for GuitarRigBackend {
                 let next = BOOST_LEVELS
                     .iter()
                     .position(|l| (*l - *level).abs() < 0.01)
-                    .map(|i| BOOST_LEVELS[(i + 1) % BOOST_LEVELS.len()])
-                    .unwrap_or(BOOST_LEVELS[0]);
+                    .map_or(BOOST_LEVELS[0], |i| BOOST_LEVELS[(i + 1) % BOOST_LEVELS.len()]);
                 *level = next;
             } else {
                 // Engage at the remembered level.
@@ -2700,7 +2686,7 @@ fn detect_pitch(samples: &[f32], rate: f32) -> Option<f32> {
     }
     // Parabolic interpolation around the chosen lag.
     let (ym1, y0, yp1) = (acf(lag - 1), norms[lag].max(acf(lag)), acf(lag + 1));
-    let denom = ym1 - 2.0 * y0 + yp1;
+    let denom = 2.0f32.mul_add(-y0, ym1) + yp1;
     let delta = if denom.abs() > f32::EPSILON {
         (0.5 * (ym1 - yp1) / denom).clamp(-0.5, 0.5)
     } else {
@@ -2714,7 +2700,7 @@ fn note_and_cents(freq: f32) -> (String, f32) {
     const NAMES: [&str; 12] = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
     ];
-    let midi = 69.0 + 12.0 * (freq / 440.0).log2();
+    let midi = 12.0f32.mul_add((freq / 440.0).log2(), 69.0);
     let nearest = midi.round();
     let cents = ((midi - nearest) * 100.0).clamp(-50.0, 50.0);
     let n = nearest as i32;
@@ -2734,7 +2720,7 @@ fn spectrum_bins(samples: &[f32], rate: f32, bins: usize) -> Vec<f32> {
     // Hann window into complex buffer.
     let mut re: Vec<f32> = (0..n)
         .map(|i| {
-            let w = 0.5 - 0.5 * (2.0 * std::f32::consts::PI * i as f32 / n as f32).cos();
+            let w = 0.5f32.mul_add(-(2.0 * std::f32::consts::PI * i as f32 / n as f32).cos(), 0.5);
             samples[i] * w
         })
         .collect();
@@ -2759,7 +2745,7 @@ fn spectrum_bins(samples: &[f32], rate: f32, bins: usize) -> Vec<f32> {
                 let ang = step * k as f32;
                 let (wr, wi) = (ang.cos(), ang.sin());
                 let (i, j) = (start + k, start + k + half);
-                let (tr, ti) = (re[j] * wr - im[j] * wi, re[j] * wi + im[j] * wr);
+                let (tr, ti) = (re[j].mul_add(wr, -(im[j] * wi)), re[j].mul_add(wi, im[j] * wr));
                 re[j] = re[i] - tr;
                 im[j] = im[i] - ti;
                 re[i] += tr;
@@ -2780,7 +2766,7 @@ fn spectrum_bins(samples: &[f32], rate: f32, bins: usize) -> Vec<f32> {
         );
         let mut peak = 0.0f32;
         for k in k0..=k1 {
-            let mag = (re[k] * re[k] + im[k] * im[k]).sqrt() / (n as f32 / 4.0);
+            let mag = re[k].hypot(im[k]) / (n as f32 / 4.0);
             peak = peak.max(mag);
         }
         *slot = if peak > 0.0 {

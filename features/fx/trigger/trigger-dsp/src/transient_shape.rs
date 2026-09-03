@@ -32,6 +32,7 @@ pub struct TransientShaper {
 }
 
 impl TransientShaper {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         let mut s = Self {
             fast_env: 0.0,
@@ -55,7 +56,7 @@ impl TransientShaper {
     }
 
     /// Reset envelope followers.
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.fast_env = 0.0;
         self.slow_env = 0.0;
     }
@@ -75,7 +76,7 @@ impl TransientShaper {
         } else {
             self.fast_release
         };
-        self.fast_env = fast_coeff * self.fast_env + (1.0 - fast_coeff) * abs;
+        self.fast_env = fast_coeff.mul_add(self.fast_env, (1.0 - fast_coeff) * abs);
 
         // Slow envelope: moderate attack, slow release
         let slow_coeff = if abs > self.slow_env {
@@ -83,7 +84,7 @@ impl TransientShaper {
         } else {
             self.slow_release
         };
-        self.slow_env = slow_coeff * self.slow_env + (1.0 - slow_coeff) * abs;
+        self.slow_env = slow_coeff.mul_add(self.slow_env, (1.0 - slow_coeff) * abs);
 
         // Transient ratio
         let eps = 1e-10;
@@ -126,7 +127,7 @@ mod tests {
         let mut ts = TransientShaper::new(48000.0);
         ts.enabled = false;
         for i in 0..100 {
-            let input = (i as f64 * 0.1).sin();
+            let input = (f64::from(i) * 0.1).sin();
             assert_eq!(ts.tick(input), input);
         }
     }
@@ -153,7 +154,7 @@ mod tests {
             sustained_outputs.push(ts.tick(0.5));
         }
 
-        let transient_peak = transient_outputs.iter().cloned().fold(0.0_f64, f64::max);
+        let transient_peak = transient_outputs.iter().copied().fold(0.0_f64, f64::max);
         let sustained_avg: f64 = sustained_outputs[sustained_outputs.len() - 100..]
             .iter()
             .sum::<f64>()
@@ -161,9 +162,7 @@ mod tests {
 
         assert!(
             transient_peak > sustained_avg * 1.2,
-            "Transient should be boosted: peak={:.3}, sustained_avg={:.3}",
-            transient_peak,
-            sustained_avg
+            "Transient should be boosted: peak={transient_peak:.3}, sustained_avg={sustained_avg:.3}"
         );
     }
 
@@ -176,7 +175,7 @@ mod tests {
         for &s in &signals {
             for _ in 0..100 {
                 let out = ts.tick(s);
-                assert!(out.is_finite(), "Output must be finite for input {}", s);
+                assert!(out.is_finite(), "Output must be finite for input {s}");
             }
         }
     }

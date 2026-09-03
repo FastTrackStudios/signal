@@ -8,7 +8,7 @@ use signal_guitar_proto::LiveBlock;
 use signal_proto::block::BlockType;
 
 /// Chip accent color by block type.
-fn block_accent(bt: BlockType) -> &'static str {
+const fn block_accent(bt: BlockType) -> &'static str {
     match bt {
         BlockType::Amp => "#f97316",        // orange
         BlockType::Compressor => "#22c55e", // green

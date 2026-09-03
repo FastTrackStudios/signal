@@ -242,7 +242,7 @@ fn render_block_menu(
                         class: "flex-1 px-2 py-0.5 text-[10px] rounded bg-primary text-primary-foreground hover:bg-primary/90 font-medium",
                         disabled: is_name_empty,
                         onclick: {
-                            let slot = slot.clone();
+                            let slot = slot;
                             move |_| {
                                 let name = name_for_btn.clone();
                                 if !name.is_empty() {
@@ -387,7 +387,7 @@ fn render_module_menu(
                         class: "flex-1 px-2 py-0.5 text-[10px] rounded bg-primary text-primary-foreground hover:bg-primary/90 font-medium",
                         disabled: is_name_empty,
                         onclick: {
-                            let slots = module_slots.clone();
+                            let slots = module_slots;
                             move |_| {
                                 let name = name_for_btn.clone();
                                 if !name.is_empty() {

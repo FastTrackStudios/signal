@@ -34,7 +34,7 @@ fn noise(n: usize) -> Vec<f32> {
 }
 
 fn rms(b: &[f32]) -> f64 {
-    (b.iter().map(|s| (*s as f64) * (*s as f64)).sum::<f64>() / b.len() as f64).sqrt()
+    (b.iter().map(|s| f64::from(*s) * f64::from(*s)).sum::<f64>() / b.len() as f64).sqrt()
 }
 
 #[test]

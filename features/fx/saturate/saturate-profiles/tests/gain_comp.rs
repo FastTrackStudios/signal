@@ -57,7 +57,7 @@ impl SatStage {
             saturate_dsp::emphasis::EmphasisEq::new(48_000.0),
             saturate_dsp::emphasis::EmphasisEq::new(48_000.0),
         ];
-        for e in emph.iter_mut() {
+        for e in &mut emph {
             e.set_bands(&bands);
         }
         pre.set_emphasis_sigma_gain(emph[0].sigma_gain());
@@ -82,17 +82,14 @@ impl Stage for SatStage {
     fn process(&mut self, l: &mut [f64], r: &mut [f64]) {
         let _ = &self.digital; // analogue profiles leave the quantiser transparent
         for i in 0..l.len() {
-            match &mut self.emph {
-                Some(emph) => {
-                    let el = emph[0].pre(l[i] as f32);
-                    let er = emph[1].pre(r[i] as f32);
-                    l[i] = emph[0].post(self.pre.process(0, el)) as f64;
-                    r[i] = emph[1].post(self.pre.process(1, er)) as f64;
-                }
-                None => {
-                    l[i] = self.pre.process(0, l[i] as f32) as f64;
-                    r[i] = self.pre.process(1, r[i] as f32) as f64;
-                }
+            if let Some(emph) = &mut self.emph {
+                let el = emph[0].pre(l[i] as f32);
+                let er = emph[1].pre(r[i] as f32);
+                l[i] = f64::from(emph[0].post(self.pre.process(0, el)));
+                r[i] = f64::from(emph[1].post(self.pre.process(1, er)));
+            } else {
+                l[i] = f64::from(self.pre.process(0, l[i] as f32));
+                r[i] = f64::from(self.pre.process(1, r[i] as f32));
             }
         }
     }

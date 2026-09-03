@@ -7,7 +7,7 @@
 //! | Target | Waterfall rendering |
 //! |---|---|
 //! | **Blitz / VST** (`not(wasm32)`, production) | Vello [`VelloCanvas`] foreground overlay — GPU-accelerated, layered glow |
-//! | **WebKit / WRY** (`not(wasm32)`, dev)        | VelloCanvas no-ops (transparent); SVG note blocks with CSS `drop-shadow` show through |
+//! | **`WebKit` / WRY** (`not(wasm32)`, dev)        | `VelloCanvas` no-ops (transparent); SVG note blocks with CSS `drop-shadow` show through |
 //! | **WASM / browser** (`wasm32`)                | SVG note blocks with CSS `drop-shadow`; no Vello import |
 //!
 //! The SVG note blocks are **always** present in the DOM.  In Blitz the
@@ -98,13 +98,14 @@ const BLACK_SEMITONES: [u8; 5] = [1, 3, 6, 8, 10];
 /// White-key boundary indices where black keys sit.
 const BLACK_BOUNDARIES: [u8; 5] = [1, 2, 4, 5, 6];
 
-pub fn is_black(semitone: u8) -> bool {
+#[must_use] 
+pub const fn is_black(semitone: u8) -> bool {
     matches!(semitone % 12, 1 | 3 | 6 | 8 | 10)
 }
 
 /// Count of white keys from MIDI note 0 up to (but not including) `note`.
 fn white_key_count_before(note: u8) -> u32 {
-    let octave = note as u32 / 12;
+    let octave = u32::from(note) / 12;
     let semitone = note % 12;
     let whites_in_full_octaves = octave * 7;
     let partial = WHITE_SEMITONES.iter().filter(|&&s| s < semitone).count() as u32;
@@ -123,12 +124,12 @@ fn black_x(note: u8, origin_white: u32) -> Option<f64> {
         .zip(BLACK_BOUNDARIES.iter())
         .find(|(&s, _)| s == semitone)
         .map(|(_, &b)| b)?;
-    let octave = note as u32 / 12;
-    let abs_boundary = octave * 7 + boundary as u32;
+    let octave = u32::from(note) / 12;
+    let abs_boundary = octave * 7 + u32::from(boundary);
     if abs_boundary < origin_white {
         return None;
     }
-    let x = (abs_boundary as f64 * WW) - (BW / 2.0) - (origin_white as f64 * WW);
+    let x = f64::from(origin_white).mul_add(-WW, (f64::from(abs_boundary) * WW) - (BW / 2.0));
     Some(x)
 }
 
@@ -195,7 +196,8 @@ impl Default for WaterfallPainter {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl WaterfallPainter {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             notes: Vec::new(),
             num_white: 52,
@@ -262,7 +264,7 @@ impl CanvasPainter for WaterfallPainter {
         );
 
         // ── Coordinate scale (SVG user units → CSS pixels) ────────────
-        let key_w_px = width / self.num_white as f64;
+        let key_w_px = width / f64::from(self.num_white);
         let scale = key_w_px / WW;
 
         // ── Clip layer — prevents glow bleed beyond canvas edges ───────
@@ -289,7 +291,7 @@ impl CanvasPainter for WaterfallPainter {
                 (x_svg * scale, BW * scale)
             } else {
                 let wi = white_key_count_before(note).saturating_sub(self.origin_white);
-                (wi as f64 * key_w_px + scale, (WW - 2.0) * scale)
+                (f64::from(wi).mul_add(key_w_px, scale), (WW - 2.0) * scale)
             };
 
             let block_h = (wn.height_frac * height).max(6.0);
@@ -338,9 +340,9 @@ impl CanvasPainter for WaterfallPainter {
             // Layer 3: solid body with vertical gradient
             let body_top = Color::from_rgba8(r, g, b, 230);
             let body_bot = Color::from_rgba8(
-                (r as f64 * 0.7) as u8,
-                (g as f64 * 0.7) as u8,
-                (b as f64 * 0.7) as u8,
+                (f64::from(r) * 0.7) as u8,
+                (f64::from(g) * 0.7) as u8,
+                (f64::from(b) * 0.7) as u8,
                 210,
             );
             let body_grad = Gradient::new_linear((0.0, block_y), (0.0, block_y + block_h))
@@ -356,7 +358,7 @@ impl CanvasPainter for WaterfallPainter {
             // Layer 4: top shine stripe
             let inset = (2.0 * scale).max(1.5);
             let shine_h = (3.0 * scale).max(2.0).min(block_h * 0.35);
-            if note_w - 2.0 * inset > 1.0 && shine_h > 0.5 {
+            if 2.0f64.mul_add(-inset, note_w) > 1.0 && shine_h > 0.5 {
                 scene.fill(
                     Fill::NonZero,
                     transform,
@@ -405,12 +407,12 @@ const WATERFALL_FRAC: f64 = FALL_H / (FALL_H + WH); // ≈ 0.60
 /// ## Waterfall rendering
 ///
 /// SVG note blocks with CSS `drop-shadow` are **always rendered** as the
-/// base layer — they work in every target (WebKit, WASM, Blitz).
+/// base layer — they work in every target (`WebKit`, WASM, Blitz).
 ///
 /// On native targets (Blitz / VST plugin), a [`VelloCanvas`] foreground
 /// overlay (`z-index:1`) sits in front of the SVG and repaints the
 /// waterfall zone with GPU-accelerated Vello glow.  The SVG blocks below
-/// are visually covered.  In WebKit dev mode the canvas is a no-op
+/// are visually covered.  In `WebKit` dev mode the canvas is a no-op
 /// transparent div, so the SVG blocks show through.
 #[component]
 pub fn Piano(
@@ -440,12 +442,12 @@ pub fn Piano(
     /// CSS height of the piano container (e.g. "280px", "35vh").
     #[props(default = "280px".to_string())]
     height: String,
-    #[props(default = "".to_string())] style: String,
+    #[props(default = String::new())] style: String,
 ) -> Element {
     let origin_white = white_key_count_before(start_note);
     let end_white = white_key_count_before(end_note.saturating_add(1));
     let num_white = (end_white.saturating_sub(origin_white)).max(1);
-    let svg_w = num_white as f64 * WW;
+    let svg_w = f64::from(num_white) * WW;
     // Keys-only when no waterfall: drop the falling-note zone so the keyboard
     // fills the height, and lay keys at the top (y=0) instead of below FALL_H.
     let fall_h = if waterfall { FALL_H } else { 0.0 };
@@ -459,7 +461,7 @@ pub fn Piano(
     let black_notes: Vec<u8> = notes.iter().copied().filter(|&n| is_black(n)).collect();
 
     let accent = accent_color.clone();
-    let active = active_notes.clone();
+    let active = active_notes;
 
     // ── Vello waterfall painter (native only) ─────────────────────────
     #[cfg(not(target_arch = "wasm32"))]
@@ -479,7 +481,7 @@ pub fn Piano(
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    let dyn_painter: Rc<RefCell<dyn CanvasPainter>> = painter.clone();
+    let dyn_painter: Rc<RefCell<dyn CanvasPainter>> = painter;
 
     #[cfg(not(target_arch = "wasm32"))]
     let waterfall_pct = WATERFALL_FRAC * 100.0;
@@ -506,7 +508,7 @@ pub fn Piano(
     // These render in ALL targets.  In Blitz the VelloCanvas foreground
     // overlay (below) covers this zone with GPU rendering, making these
     // invisible.  In WebKit / WASM they are what the user sees.
-    let wf_notes = waterfall_notes.clone();
+    let wf_notes = waterfall_notes;
     let svg_note_blocks = wf_notes.iter().filter_map(|wn| {
         if wn.note < start_note || wn.note > end_note {
             return None;
@@ -518,7 +520,7 @@ pub fn Piano(
             (x, BW)
         } else {
             let wi = white_key_count_before(note).saturating_sub(origin_white);
-            (wi as f64 * WW + 1.0, WW - 2.0)
+            (f64::from(wi).mul_add(WW, 1.0), WW - 2.0)
         };
 
         let block_h_svg = (wn.height_frac * FALL_H).max(2.0);
@@ -578,7 +580,7 @@ pub fn Piano(
                         if (note % 7) != (origin_white % 7) {
                             return rsx! { g { key: "grid-{i}" } };
                         }
-                        let x = i as f64 * WW;
+                        let x = f64::from(i) * WW;
                         rsx! {
                             line { key: "grid-{i}",
                                 x1: "{x}", y1: "0",
@@ -602,7 +604,7 @@ pub fn Piano(
                 // ── White keys ──────────────────────────────────────────
                 {white_notes.iter().map(|&note| {
                     let wi = white_key_count_before(note).saturating_sub(origin_white);
-                    let x = wi as f64 * WW;
+                    let x = f64::from(wi) * WW;
                     let y = key_y;
                     let pressed = active.contains(&note);
                     let is_c = note % 12 == 0;
@@ -625,7 +627,7 @@ pub fn Piano(
 
                     let label = labels.get(&note).cloned().unwrap_or_else(|| {
                         if show_labels && is_c {
-                            format!("C{}", (note as i32 / 12) - 1)
+                            format!("C{}", (i32::from(note) / 12) - 1)
                         } else {
                             String::new()
                         }
@@ -860,7 +862,7 @@ pub fn MiniKeyboard(
     on_note_on: EventHandler<u8>,
     on_note_off: EventHandler<u8>,
     #[props(default = "#3b82f6".to_string())] accent_color: String,
-    #[props(default = "".to_string())] style: String,
+    #[props(default = String::new())] style: String,
 ) -> Element {
     rsx! {
         Piano {

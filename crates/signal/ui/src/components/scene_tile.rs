@@ -22,7 +22,7 @@ const TILE_COLORS: [&str; 8] = [
 ];
 
 /// Data for a single tile in the grid.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct TileData {
     /// Display name for the tile.
     pub name: String,
@@ -82,7 +82,7 @@ pub fn SceneTileGrid(
                                 loading: tile.loading,
                                 disabled: tile.disabled,
                                 color,
-                                on_click: move |_| {
+                                on_click: move |()| {
                                     on_tile_click.call(i);
                                 },
                             }

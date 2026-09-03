@@ -1,6 +1,3 @@
-#![allow(clippy::eq_op)]
-#![allow(unused_assignments)]
-
 //! Pro-Q 4 per-section sub-frequency helpers.
 //!
 //! Decompiled from Pro-Q 4 binary; see
@@ -415,7 +412,7 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
             if proto.mode > 0 {
                 let wp_in = proto.wp;
                 // f32 lane: ((wp · 0.44209706…) - 5/12)
-                let fv2_a = ((wp_in * 0.4420970641441537 - 5.0 / 12.0) as f32) as f64;
+                let fv2_a = ((wp_in * 0.442_097_064_144_153_7 - 5.0 / 12.0) as f32) as f64;
                 let mut fv2_sq_part = fv2_a * fv2_a * 0.20 + 0.785;
                 let mut fv2_b = fv2_sq_part as f32 as f64;
                 if (fv2_b as f32 as f64) > 0.96 {
@@ -552,7 +549,7 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
             proto.wt = (1.0 - fv8_005) * d6;
         } else {
             // type=6 static path: clamp band_omega_ref to 0.6π, then split.
-            const ZERO_POINT_SIX_PI: f64 = 1.8849555921538759;
+            const ZERO_POINT_SIX_PI: f64 = 1.884_955_592_153_875_9;
             if d6 > ZERO_POINT_SIX_PI {
                 d6 = ZERO_POINT_SIX_PI;
             }
@@ -565,7 +562,7 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
 
     // mode == 2 (complex-roots path)
     let mut wp_in = proto.wp; // wp from upstream solve_biquad
-    const TWO_NINE_EIGHT_FOUR_FIVE: f64 = 2.9845130209103035; // ≈ 0.95·π
+    const TWO_NINE_EIGHT_FOUR_FIVE: f64 = 2.984_513_020_910_303_5; // ≈ 0.95·π
 
     if matches!(proto.section_type, 2 | 5) && proto.wz < TWO_NINE_EIGHT_FOUR_FIVE {
         std::mem::swap(&mut proto.wp, &mut proto.wz);
@@ -635,9 +632,9 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
         // stored_e_new = stored_e_old - (fv7·0.15)·π
         let stored_e_new = proto.stored_e - (fv7 as f64 * WT_OFFSET) * PI;
         proto.stored_e = stored_e_new;
-        let stored_f_new = stored_e_new * STORED_F_SCALE;
-        proto.stored_f = stored_f_new;
-        proto.stored_g = stored_f_new * STORED_G_SCALE;
+        let stored_f_val = stored_e_new * STORED_F_SCALE;
+        proto.stored_f = stored_f_val;
+        proto.stored_g = stored_f_val * STORED_G_SCALE;
 
         // wt = (1 - fv8·0.05) · wz  (wz untouched — uses upstream value)
         proto.wt = (1.0 - fv8_005) * proto.wz;
@@ -828,7 +825,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
         if dvar11.abs() < proto.prev_wp * CONST_0_01 {
             let dvar10 = proto.prev_wz * CONST_0_25;
             let diff_wz = (proto.prev_wz - proto.band_edge_high).abs();
-            if dvar10 <= diff_wz && diff_wz != dvar10 {
+            if dvar10 < diff_wz {
                 proto.wp = proto.wz;
                 proto.mode = 1;
                 iv5 = 1;
@@ -1505,7 +1502,7 @@ pub fn apply_inline_section_defaults(proto: &mut Prototype) {
     proto.wt = proto.wp * 0.5;
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "placeholder for potential future use in decompilation helpers")]
 const _CONST_PI: f64 = PI;
 
 #[cfg(test)]

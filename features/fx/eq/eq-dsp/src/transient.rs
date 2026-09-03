@@ -3,7 +3,7 @@
 //! `input → splitter → EQ_A(transient) + EQ_B(steady) → sum`. The
 //! splitter is complementary by construction (`steady = input −
 //! transient`), so with both EQs flat the engine is a null — exactly
-//! SplitEQ's reconstruction guarantee, via a different (unpatented)
+//! `SplitEQ`'s reconstruction guarantee, via a different (unpatented)
 //! split: the zero-latency dual-window relative-energy mask
 //! (ZL-Splitter's "Peak/Steady" concept, clean-room from the published
 //! parameter model). The HQ spectral split (Fitzgerald median-filter
@@ -59,6 +59,7 @@ pub struct PeakSteadySplitter {
 }
 
 impl PeakSteadySplitter {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut s = Self {
             params: SplitParams::default(),
@@ -150,6 +151,7 @@ pub struct TransientEq {
 }
 
 impl TransientEq {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let _ = sample_rate;
         Self {

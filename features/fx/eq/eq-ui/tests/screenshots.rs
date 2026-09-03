@@ -88,8 +88,8 @@ fn mount_with(params: Arc<FtsEqParams>, width: u32, height: u32) -> Fixture {
         // The panels size themselves from the window `nice-plug-dioxus` puts
         // in context on resize; a headless mount has no window, so state it.
         .with_root_context(fts_audio_ui::hardware::panel::EditorSize(
-            width as f64,
-            height as f64,
+            f64::from(width),
+            f64::from(height),
         ))
         .with_root_context(param_ctx)
         .with_root_context(SharedState::new(ui_state))
@@ -112,11 +112,9 @@ impl Fixture {
 }
 
 fn shots_dir() -> PathBuf {
-    let dir = std::env::var("FTS_SHOTS_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
+    let dir = std::env::var("FTS_SHOTS_DIR").map_or_else(|_| {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../target/gui-shots/eq")
-        });
+        }, PathBuf::from);
     std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("create {}: {e}", dir.display()));
     dir
 }
@@ -136,7 +134,7 @@ async fn click_testid(fx: &mut Fixture, testid: &str) {
         .unwrap_or_else(|e| panic!("{testid} missing: {e:?}"));
     let (ox, oy) = el.document_origin();
     let (w, h) = el.size();
-    let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    let (x, y) = (ox + f64::from(w) / 2.0, oy + f64::from(h) / 2.0);
     fx.tester.pointer_down(x, y);
     let _ = fx.tester.pump().await;
     fx.tester.pointer_up(x, y);

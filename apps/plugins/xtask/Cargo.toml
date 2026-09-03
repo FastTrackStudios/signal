@@ -10,5 +10,8 @@ description = "Bundler for the FTS plugin suite — wraps nice-plug-xtask (`carg
 name = "fts-plugin-xtask"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 nice-plug-xtask.workspace = true

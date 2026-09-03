@@ -12,7 +12,7 @@ use facet::Facet;
 // ── Wire types ──────────────────────────────────────────────────────────────
 
 /// One loadable synth preset (an imported Omnisphere `.prt_omn` / `.mlt_omn`).
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct SynthPreset {
     /// Display name (the patch file's stem).
     pub name: String,
@@ -29,7 +29,7 @@ pub struct SynthPreset {
 /// client-side. `tags` are encoded `"category:value"` keys
 /// (`signal_proto::tagging::StructuredTag::encode`); re-parse them with
 /// `StructuredTag::parse` into a `TagSet` to reuse the faceted-filter engine.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct BrowseItem {
     /// Absolute path to the loadable file — the stable item id.
     pub id: String,
@@ -66,7 +66,7 @@ pub struct SynthNode {
     /// Whether this node currently produces sound (has a live backend).
     pub live: bool,
     /// Child nodes, in order.
-    pub children: Vec<SynthNode>,
+    pub children: Vec<Self>,
 }
 
 /// Live transport + meter snapshot — the high-rate poll payload.
@@ -129,7 +129,7 @@ pub struct SynthZone {
 }
 
 /// A microphone position in a multi-mic soundsource.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct SynthMic {
     pub id: String,
     pub label: String,
@@ -140,11 +140,11 @@ pub struct SynthMic {
 }
 
 /// An articulation (Sustain, Staccato, …) grouping zones.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct SynthArticulation {
     pub id: String,
     pub label: String,
-    /// ArticulationKind name (Sustain/Short/Legato/Release/…).
+    /// `ArticulationKind` name (Sustain/Short/Legato/Release/…).
     pub kind: String,
     /// Round-robin count per note per dynamic.
     pub rr: u32,
@@ -267,7 +267,8 @@ pub struct SynthGlobals {
 
 impl SynthGlobals {
     /// The neutral state — every control at its no-effect value.
-    pub fn neutral() -> Self {
+    #[must_use] 
+    pub const fn neutral() -> Self {
         Self {
             vibrato_rate: 0.0,
             vibrato_depth: 0.0,

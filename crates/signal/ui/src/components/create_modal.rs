@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 // region: --- Config & Data Types
 
 /// Configuration for the create modal's labels and theming.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ModalConfig {
     /// Modal title (e.g. "New Preset", "New Profile").
     pub title: String,
@@ -34,7 +34,7 @@ impl Default for ModalConfig {
 }
 
 /// Data submitted when the user clicks Create.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateModalData {
     pub name: String,
     pub category: String,
@@ -45,7 +45,7 @@ pub struct CreateModalData {
 }
 
 /// A selectable template card option.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct TemplateOption {
     /// Display name for the template.
     pub name: String,
@@ -147,7 +147,7 @@ pub fn CreateModal(
     );
 
     let do_submit = {
-        move |_: ()| {
+        move |(): ()| {
             if name().trim().is_empty() {
                 return;
             }
@@ -238,7 +238,7 @@ pub fn CreateModal(
                                         description: opt.description.clone(),
                                         icon: opt.icon.clone(),
                                         is_selected: selected_template_idx() == i,
-                                        on_click: move |_| selected_template_idx.set(i),
+                                        on_click: move |()| selected_template_idx.set(i),
                                     }
                                 }
                             }
@@ -255,7 +255,7 @@ pub fn CreateModal(
                             placeholder: "{config.name_placeholder}",
                             value: "{name}",
                             "autofocus": true,
-                            oninput: move |e| name.set(e.value().clone()),
+                            oninput: move |e| name.set(e.value()),
                             onkeydown: {
                                 let mut do_submit = do_submit;
                                 move |e| {
@@ -276,7 +276,7 @@ pub fn CreateModal(
                             r#type: "text",
                             placeholder: "{config.category_placeholder}",
                             value: "{category}",
-                            oninput: move |e| category.set(e.value().clone()),
+                            oninput: move |e| category.set(e.value()),
                         }
                     }
 
@@ -289,7 +289,7 @@ pub fn CreateModal(
                             r#type: "text",
                             placeholder: "Comma-separated, e.g. favorite, worship, sunday",
                             value: "{tags_input}",
-                            oninput: move |e| tags_input.set(e.value().clone()),
+                            oninput: move |e| tags_input.set(e.value()),
                         }
                         {
                             let tags: Vec<String> = tags_input()
@@ -297,7 +297,9 @@ pub fn CreateModal(
                                 .map(|t| t.trim().to_string())
                                 .filter(|t| !t.is_empty())
                                 .collect();
-                            if !tags.is_empty() {
+                            if tags.is_empty() {
+                                rsx! {}
+                            } else {
                                 rsx! {
                                     div { class: "flex flex-wrap gap-1.5 mt-2",
                                         for tag in tags.iter() {
@@ -309,8 +311,6 @@ pub fn CreateModal(
                                         }
                                     }
                                 }
-                            } else {
-                                rsx! {}
                             }
                         }
                     }
@@ -324,7 +324,7 @@ pub fn CreateModal(
                             rows: "3",
                             placeholder: "Optional description...",
                             value: "{description}",
-                            oninput: move |e| description.set(e.value().clone()),
+                            oninput: move |e| description.set(e.value()),
                         }
                     }
                 }

@@ -166,7 +166,7 @@ fn disabled_band_drops_its_curve_but_boosts_still_bend_the_response() {
 }
 
 /// The interaction layer (what pointer events feed in the real editor):
-/// hit-test a node through the same GraphMapper the component uses, and
+/// hit-test a node through the same `GraphMapper` the component uses, and
 /// infer a filter shape from a double-click position.
 #[test]
 fn graph_interaction_hit_test_and_shape_inference() {

@@ -122,9 +122,7 @@ impl EmphBandParams {
             shape: IntParam::new("Emph Shape", 0, IntRange::Linear { min: 0, max: 2 })
                 .with_value_to_string(Arc::new(|v| {
                     EMPH_SHAPE_LABELS
-                        .get(v.max(0) as usize)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| v.to_string())
+                        .get(v.max(0) as usize).map_or_else(|| v.to_string(), std::string::ToString::to_string)
                 })),
             freq_hz: FloatParam::new(
                 "Emph Freq",
@@ -190,9 +188,7 @@ impl Default for SatParams {
             )
             .with_value_to_string(Arc::new(|v| {
                 saturate_profiles::PROFILES
-                    .get(v.max(0) as usize)
-                    .map(|p| p.name.to_string())
-                    .unwrap_or_else(|| "—".to_string())
+                    .get(v.max(0) as usize).map_or_else(|| "—".to_string(), |p| p.name.to_string())
             })),
 
             drive: FloatParam::new("Drive", 0.25, FloatRange::Linear { min: 0.0, max: 1.0 })
@@ -264,8 +260,7 @@ impl SatParams {
     pub fn store_profile_id(&self, index: usize) {
         let id = saturate_profiles::PROFILES
             .get(index)
-            .map(|p| p.id)
-            .unwrap_or("triode");
+            .map_or("triode", |p| p.id);
         *self.profile_id.write() = id.to_string();
     }
 

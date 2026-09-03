@@ -47,13 +47,13 @@ fn param(block: &LiveBlock, name: &str) -> Option<BlockParam> {
 }
 
 fn param_v(block: &LiveBlock, name: &str, dflt: f32) -> f32 {
-    param(block, name).map(|p| p.value).unwrap_or(dflt)
+    param(block, name).map_or(dflt, |p| p.value)
 }
 
 /// Approximate reverb tail (RT60, seconds) for a decay setting — the Hall
 /// algorithm's feedback law (g = 0.5 + 0.48·d) over an ~80 ms loop.
 fn decay_t60_secs(decay: f32) -> f64 {
-    let g = (0.5 + 0.48 * decay.clamp(0.0, 1.0) as f64).min(0.995);
+    let g = 0.48f64.mul_add(f64::from(decay.clamp(0.0, 1.0)), 0.5).min(0.995);
     0.08 * (0.001f64).ln() / g.ln()
 }
 
@@ -231,7 +231,7 @@ fn div_factor(idx: f32) -> f32 {
     [1.0, 0.75, 0.5, 1.0 / 3.0, 0.25, 0.618, 0.414, 0.0][(idx as usize).min(7)]
 }
 
-/// `delay::DelayStyle` order — the TimeLine MX machines.
+/// `delay::DelayStyle` order — the `TimeLine` MX machines.
 /// `chorus::EngineType` order — the modulation algorithms.
 const MOD_ENGINES: [&str; 5] = ["Cubic", "BBD", "Tape", "Orbit", "Juno"];
 /// `TremMode` order.
@@ -294,7 +294,7 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
             spawn(async move {
                 if let Some(r) = rig {
                     let _ = r
-                        .set_block_param(id, "threshold".into(), frac.clamp(0.0, 1.0) * 90.0 - 90.0)
+                        .set_block_param(id, "threshold".into(), frac.clamp(0.0, 1.0).mul_add(90.0, -90.0))
                         .await;
                 }
             });
@@ -308,7 +308,7 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
                 class: "relative flex-1 w-full max-w-10 bg-black/60 border border-border overflow-hidden min-h-0 cursor-ns-resize touch-none",
                 onmounted: move |e| el.set(Some(e.data())),
                 onpointerdown: {
-                    let set_thr = set_thr.clone();
+                    let set_thr = set_thr;
                     move |e: PointerEvent| {
                         let y = e.client_coordinates().y;
                         let el = el();
@@ -457,7 +457,7 @@ pub fn MidiMonitorButton() -> Element {
     let mut log = use_signal(Vec::<String>::new);
     let mut open = use_signal(|| false);
     {
-        let rig = rig.clone();
+        let rig = rig;
         use_future(move || {
             let rig = rig.clone();
             async move {
@@ -776,7 +776,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                     PKnob { block_id: cur_id.clone(), name: "pan", label: "Pan", p }
                 }
                 if let Some(p) = param(&cur, "mix") {
-                    PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
+                    PKnob { block_id: cur_id, name: "mix", label: "Mix", p }
                 }
             }
 
@@ -817,18 +817,17 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                     // Real time axis (log, 0.1–20 s): the tail is the RT60
                     // estimate rendered in dB (straight to −60 at t60), the
                     // size opening the early bloom.
-                    let t60 = decay_t60_secs(decay) * (0.6 + 0.8 * size as f64);
+                    let t60 = decay_t60_secs(decay) * 0.8f64.mul_add(f64::from(size), 0.6);
                     let x_of_t = |t: f64| -> f32 {
                         let (t_min, t_max) = (0.1f64, 20.0f64);
-                        (4.0 + ((t.max(t_min) / t_min).ln() / (t_max / t_min).ln()).clamp(0.0, 1.0)
-                            * (W as f64 - 8.0)) as f32
+                        (t.max(t_min) / t_min).log(t_max / t_min).clamp(0.0, 1.0).mul_add(f64::from(W) - 8.0, 4.0) as f32
                     };
                     let mut top = String::from("M 4 28 ");
                     let mut bot = String::from("M 4 28 ");
                     for px in 0..=96 {
-                        let frac = px as f64 / 96.0;
+                        let frac = f64::from(px) / 96.0;
                         let t = 0.1 * (20.0f64 / 0.1).powf(frac);
-                        let wig = 1.0 + ((t * 12.0) as f32).sin() * md * 0.18;
+                        let wig = (((t * 12.0) as f32).sin() * md).mul_add(0.18, 1.0);
                         // dB-linear tail: 1 at t=0 → 0 at t60.
                         let a = (1.0 - t / t60).max(0.0) as f32;
                         let h = mix * a * wig * 26.0;
@@ -946,7 +945,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                     PKnob { block_id: cur_id.clone(), name: "modulation", label: "Mod", p }
                 }
                 if let Some(p) = param(&cur, "pan_a") {
-                    PKnob { block_id: cur_id.clone(), name: "pan_a", label: "Pan", p }
+                    PKnob { block_id: cur_id, name: "pan_a", label: "Pan", p }
                 }
             }
 
@@ -1006,7 +1005,7 @@ fn ModGroupPanel(
     for px in 0..=96 {
         let t = px as f32 / 96.0;
         // Two seconds of LFO at the actual rate.
-        let y = 26.0 - (t * rate * 2.0 * std::f32::consts::TAU).sin() * depth * 18.0;
+        let y = ((t * rate * 2.0 * std::f32::consts::TAU).sin() * depth).mul_add(-18.0, 26.0);
         d.push_str(if px == 0 { "M " } else { "L " });
         d.push_str(&format!("{:.1} {:.1} ", 4.0 + t * 192.0, y));
     }
@@ -1022,8 +1021,7 @@ fn ModGroupPanel(
         .iter()
         .enumerate()
         .min_by(|a, b| (a.1 - rate).abs().partial_cmp(&(b.1 - rate).abs()).unwrap())
-        .map(|(i, _)| i)
-        .unwrap_or(0);
+        .map_or(0, |(i, _)| i);
 
     rsx! {
         div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
@@ -1034,7 +1032,7 @@ fn ModGroupPanel(
                     title: if engaged { "Bypass group" } else { "Engage" },
                     onclick: {
                         let rig = rig.clone();
-                        let members = members.clone();
+                        let members = members;
                         move |_| {
                             let (rig, members) = (rig.clone(), members.clone());
                             spawn(async move {
@@ -1069,8 +1067,8 @@ fn ModGroupPanel(
                     style: if engaged { "background-color: #f472b6; color: #000;" } else { "" },
                     // Tap the name to engage/bypass the shown member.
                     onclick: {
-                        let rig = rig.clone();
-                        let id = cur.id.clone();
+                        let rig = rig;
+                        let id = cur.id;
                         move |_| {
                             if let Some(r) = rig.clone() {
                                 let id = id.clone();
@@ -1270,8 +1268,8 @@ fn DriveChunk(
                 }
             },
             onpointerup: {
-                let rig = rig.clone();
-                let block_id = block_id.clone();
+                let rig = rig;
+                let block_id = block_id;
                 move |_| {
                     if let Some((_, moved)) = gesture() {
                         if !moved {
@@ -1399,7 +1397,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             DriveChunk {
                                 key: "{b.id}",
                                 name: if b.preset.is_empty() { b.name.clone() } else { b.preset.clone() },
-                                level: b.params.iter().find(|p| p.name == "drive").map(|p| p.value).unwrap_or(0.5),
+                                level: b.params.iter().find(|p| p.name == "drive").map_or(0.5, |p| p.value),
                                 engaged: !b.bypassed,
                                 block_id: Some(b.id.clone()),
                                 options: b.options.clone(),
@@ -1408,11 +1406,11 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                         if let Some(amp) = amp_l {
                             DriveChunk {
-                                name: amp_preset.clone(),
+                                name: amp_preset,
                                 // Constant-loudness drive: the bar pushes the
                                 // capture harder while calibration holds the
                                 // level; center = the capture at unity.
-                                level: amp.params.iter().find(|p| p.name == "drive").map(|p| p.value).unwrap_or(0.5),
+                                level: amp.params.iter().find(|p| p.name == "drive").map_or(0.5, |p| p.value),
                                 engaged: !amp.bypassed,
                                 block_id: Some(amp.id.clone()),
                                 amp_style: true,
@@ -1493,7 +1491,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 on_power: Some(Callback::new({
                                     let rig = rig.clone();
                                     let blocks = blocks.clone();
-                                    move |_: ()| {
+                                    move |(): ()| {
                                         let ids: Vec<(String, bool)> = blocks
                                             .iter()
                                             .filter(|b| b.block_type == BlockType::Delay)
@@ -1519,7 +1517,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                 on_power: Some(Callback::new({
                                     let rig = rig.clone();
                                     let blocks = blocks.clone();
-                                    move |_: ()| {
+                                    move |(): ()| {
                                         let ids: Vec<(String, bool)> = blocks
                                             .iter()
                                             .filter(|b| b.block_type == BlockType::Reverb)
@@ -1557,7 +1555,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     },
                     style: if hp.main_mute { "background-color: #ef4444; color: #fff;" } else { "" },
                     onclick: {
-                        let rig = rig.clone();
+                        let rig = rig;
                         move |_| {
                             if let Some(r) = rig.clone() {
                                 spawn(async move { let _ = r.toggle_main_mute().await; });
@@ -1575,7 +1573,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             let rig = rig.clone();
                             move |v: f32| {
                                 if let Some(r) = rig.clone() {
-                                    spawn(async move { let _ = r.set_master_trim(v * 36.0 - 24.0).await; });
+                                    spawn(async move { let _ = r.set_master_trim(v.mul_add(36.0, -24.0)).await; });
                                 }
                             }
                         }),
@@ -1604,8 +1602,8 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                     StereoMeter {
                         label: "Phns",
-                        l_db: out_l + 20.0 * hp.volume.max(0.001).log10(),
-                        r_db: out_r + 20.0 * hp.volume.max(0.001).log10(),
+                        l_db: 20.0f32.mul_add(hp.volume.max(0.001).log10(), out_l),
+                        r_db: 20.0f32.mul_add(hp.volume.max(0.001).log10(), out_r),
                     }
                     VFader {
                         label: "Gtr",

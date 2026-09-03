@@ -6,7 +6,7 @@ use signal_plugin_host::{PluginEvents, PluginInstance};
 const SR: f64 = 48000.0;
 const N: usize = 96_000;
 
-fn no_events() -> PluginEvents<'static> {
+const fn no_events() -> PluginEvents<'static> {
     PluginEvents {
         params: &[],
         midi: &[],
@@ -43,7 +43,7 @@ fn tone(buf: &[f32], freq: f64) -> f64 {
         re += f64::from(x) * ph.cos();
         im += f64::from(x) * ph.sin();
     }
-    ((re * re + im * im).sqrt() / buf.len() as f64).max(1e-12)
+    (re.hypot(im) / buf.len() as f64).max(1e-12)
 }
 
 fn sine(freq: f64, amp: f64) -> Vec<f32> {

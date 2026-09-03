@@ -14,7 +14,7 @@
 //! ```
 //!
 //! Run with:
-//!   cargo xtask reaper-test all_around_profile
+//!   cargo xtask reaper-test `all_around_profile`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
@@ -162,8 +162,7 @@ async fn all_around_profile(ctx: &ReaperTestContext) -> eyre::Result<()> {
                 variant_name.to_lowercase(),
             ],
             Some(&format!(
-                "{variant_name} — {} modules, {} FX",
-                loaded, fx_count
+                "{variant_name} — {loaded} modules, {fx_count} FX"
             )),
         )?;
 

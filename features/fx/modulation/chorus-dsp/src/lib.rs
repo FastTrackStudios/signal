@@ -11,10 +11,10 @@
 //!
 //! Credits:
 //! - Cubic interpolation: standard Catmull-Rom (fts-dsp)
-//! - BBD topology: Choroboros (EsotericShadow), clock-driven S&H chain
-//! - Tape modulation: ChowDSP AnalogTapeModel (wow/flutter), qdelay (tiagolr)
-//! - Orbit modulation: Choroboros (EsotericShadow), elliptical 2D LFO
-//! - Juno: TAL-NoiseMaker / YKChorus (SpotlightKid), allpass delay + DC block
+//! - BBD topology: Choroboros (`EsotericShadow`), clock-driven S&H chain
+//! - Tape modulation: `ChowDSP` `AnalogTapeModel` (wow/flutter), qdelay (tiagolr)
+//! - Orbit modulation: Choroboros (`EsotericShadow`), elliptical 2D LFO
+//! - Juno: TAL-NoiseMaker / `YKChorus` (`SpotlightKid`), allpass delay + DC block
 
 pub mod chain;
 pub mod engine;
@@ -78,7 +78,7 @@ pub mod analysis {
     /// close the loop exactly. That is not an artefact of the sampling — it is
     /// the thing those engines are for, and the panel should show it.
     // One knob per argument; a struct here would just move the list.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn delay_cycle(
         engine: EngineType,
         effect: EffectType,

@@ -127,8 +127,8 @@ impl AmpEngine {
 // `AmpEngine` is `Send` (movable across threads) but not `Sync` — with the
 // pipewire backend it owns a `*mut pw_thread_loop`. Front-ends share it as
 // `Arc<Mutex<AmpEngine>>`, which is `Send + Sync` because `AmpEngine: Send`.
-#[allow(dead_code)]
-fn _assert_send() {
-    fn is_send<T: Send>() {}
+#[expect(dead_code)]
+const fn _assert_send() {
+    const fn is_send<T: Send>() {}
     is_send::<AmpEngine>();
 }

@@ -41,6 +41,7 @@ pub struct HardwareResponseSnapshot {
 }
 
 impl HardwareResponseSnapshot {
+    #[must_use]
     pub fn evaluate_current_model(&self) -> CalibrationError {
         match self.settings {
             HardwareTargetSettings::Pultec(settings) => self.target.evaluate_sections(
@@ -59,6 +60,7 @@ impl HardwareResponseSnapshot {
     }
 }
 
+#[must_use]
 pub fn hardware_response_snapshots() -> Vec<HardwareResponseSnapshot> {
     let mut snapshots = eq1979_digitized_snapshots();
     snapshots.extend([

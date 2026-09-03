@@ -5,6 +5,9 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 # PipeWire mode: route this rig's hardware MIDI through the pipewire-jack
 # backend (routable graph node, not an exclusive ALSA grab).

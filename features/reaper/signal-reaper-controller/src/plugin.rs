@@ -14,7 +14,7 @@ use crate::param_queue::{self, ParamQueueConsumer, ParamQueueProducer};
 use signal_proto::ParamWriteRequest;
 
 /// Base MIDI note for scene switching (C1 = note 36).
-/// Scene N uses note (BASE + N - 1), matching scene_midi.rs.
+/// Scene N uses note (BASE + N - 1), matching `scene_midi.rs`.
 const SCENE_SWITCH_BASE_NOTE: u8 = 36;
 
 /// Maximum number of scenes we support.
@@ -97,7 +97,7 @@ impl Default for ControllerParams {
 }
 
 impl ControllerParams {
-    pub fn macros(&self) -> [&FloatParam; NUM_MACROS] {
+    pub const fn macros(&self) -> [&FloatParam; NUM_MACROS] {
         [
             &self.macro_0,
             &self.macro_1,
@@ -110,11 +110,11 @@ impl ControllerParams {
         ]
     }
 
-    pub fn apply_bank(&self, _bank: &MacroBank) {
+    pub const fn apply_bank(&self, _bank: &MacroBank) {
         // TODO: Restore when audiocore-core re-adds set_display_name to FloatParam
     }
 
-    pub fn clear_bank(&self) {
+    pub const fn clear_bank(&self) {
         // TODO: Restore when audiocore-core re-adds clear_display_name to FloatParam
     }
 }
@@ -229,6 +229,7 @@ impl Default for FtsSignalController {
 }
 
 impl FtsSignalController {
+    #[must_use] 
     pub fn queue_producer(&self) -> ParamQueueProducer {
         self.queue_producer.clone()
     }
@@ -329,7 +330,7 @@ impl Plugin for FtsSignalController {
         while let Some(event) = context.next_event() {
             if let NoteEvent::NoteOn { note, .. } = event {
                 if (SCENE_SWITCH_BASE_NOTE..SCENE_SWITCH_BASE_NOTE + MAX_SCENES).contains(&note) {
-                    let scene = (note - SCENE_SWITCH_BASE_NOTE + 1) as i32;
+                    let scene = i32::from(note - SCENE_SWITCH_BASE_NOTE + 1);
                     self.ui_state
                         .requested_scene
                         .store(scene, Ordering::Relaxed);

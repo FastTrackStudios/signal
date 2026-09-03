@@ -229,6 +229,7 @@ fn ar_coeff(ms: f64, sample_rate: f64) -> f64 {
 }
 
 impl Detector {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut d = Self {
             params: DetectorParams::default(),
@@ -262,6 +263,7 @@ impl Detector {
     }
 
     /// Effective (threshold, knee) — learned values while auto is on.
+    #[must_use]
     pub fn effective_threshold(&self) -> (f64, f64) {
         if self.params.auto {
             if self.params.adaptive {
@@ -287,7 +289,7 @@ impl Detector {
                     // library's dynamic bands are band-limited enough to sit
                     // near that edge.
                     let learned =
-                        AUTO_TRACKING * tracking + (1.0 - AUTO_TRACKING) * absolute;
+                        AUTO_TRACKING.mul_add(tracking, (1.0 - AUTO_TRACKING) * absolute);
                     // A cold band sits a little SHY of where it will end up —
                     // the plugin walks up into its engagement, it does not
                     // fall back into it. So the handover is a threshold that
@@ -295,7 +297,7 @@ impl Detector {
                     // crossfade from the absolute fallback: that fallback is
                     // the more engaged of the two and ramping from it moves
                     // the band the wrong way.
-                    let blended = learned + (1.0 - self.auto_conf) * AUTO_COLD_OFFSET_DB;
+                    let blended = (1.0 - self.auto_conf).mul_add(AUTO_COLD_OFFSET_DB, learned);
                     return (
                         blended + self.params.threshold_db * 0.25,
                         self.params.knee_db,

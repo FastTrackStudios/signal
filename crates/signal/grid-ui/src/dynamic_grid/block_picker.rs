@@ -196,7 +196,7 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
     let panel_style = format!("position: fixed; left: {left}px; top: {top}px; z-index: 9999;");
 
     let focus_js = format!(
-        r#"(function(){{ var el = document.getElementById('{iid}'); if(el) el.focus(); }})()"#
+        r"(function(){{ var el = document.getElementById('{iid}'); if(el) el.focus(); }})()"
     );
 
     rsx! {
@@ -265,7 +265,7 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                         "Search blocks & modules..."
                     },
                     value: "{search}",
-                    oninput: move |evt| search.set(evt.value().clone()),
+                    oninput: move |evt| search.set(evt.value()),
                 }
             }
             script { "{focus_js}" }
@@ -375,7 +375,7 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                                                 let new_slot = GridSlot {
                                                     id: Uuid::new_v4(),
                                                     block_type: BlockType::Custom,
-                                                    block_preset_name: Some(format!("{} Module", name)),
+                                                    block_preset_name: Some(format!("{name} Module")),
                                                     plugin_name: Some(format!("module:{}", mt.display_name())),
                                                     col,
                                                     row,

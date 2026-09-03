@@ -26,7 +26,7 @@ enum Mode {
     Control,
     /// Full-screen footswitch grid (Preset/Profile/Setlist select this
     /// view AND the grid's perform mode).
-    #[allow(
+    #[expect(
         dead_code,
         reason = "not yet wired to a page switch — reserved for the Preset/Profile/Setlist full-screen perform view"
     )]
@@ -84,7 +84,7 @@ pub fn GuitarRigRemote() -> Element {
     // Apply = update shared state, persist, and re-open the live rig so
     // device / buffer changes take effect immediately.
     let apply = {
-        let settings = settings.clone();
+        let settings = settings;
         let rig_for_apply = rig.clone();
         use_callback(move |p: AudioPrefs| {
             prefs.set(p.clone());
@@ -105,7 +105,7 @@ pub fn GuitarRigRemote() -> Element {
         devices
             .read()
             .as_ref()
-            .and_then(|d| d.clone())
+            .and_then(std::clone::Clone::clone)
             .map(|d| AudioSettingsBridge {
                 inputs: d.inputs,
                 outputs: d.outputs,
@@ -125,8 +125,7 @@ pub fn GuitarRigRemote() -> Element {
     let perf_now = perf();
     let active_stack = perf_now.stacks.iter().find(|s| s.is_active);
     let (lens_bg, lens_fg) = active_stack
-        .map(|s| crate::perform::folder_color(&s.name))
-        .unwrap_or(("#27272a", "#e4e4e7"));
+        .map_or(("#27272a", "#e4e4e7"), |s| crate::perform::folder_color(&s.name));
     let lens_label = match active_stack {
         Some(s) => {
             // Folder-as-main naming: the stack IS the sound; variations
@@ -168,7 +167,7 @@ pub fn GuitarRigRemote() -> Element {
             }),
             Callback::new({
                 let r = r.clone();
-                move |_: ()| {
+                move |(): ()| {
                     let r = r.clone();
                     spawn(async move {
                         let _ = r.toggle_fx().await;
@@ -177,7 +176,7 @@ pub fn GuitarRigRemote() -> Element {
             }),
             Callback::new({
                 let r = r.clone();
-                move |_: ()| {
+                move |(): ()| {
                     let r = r.clone();
                     spawn(async move {
                         let _ = r.toggle_boost().await;
@@ -186,7 +185,7 @@ pub fn GuitarRigRemote() -> Element {
             }),
             Callback::new({
                 let r = r.clone();
-                move |_: ()| {
+                move |(): ()| {
                     let r = r.clone();
                     spawn(async move {
                         let _ = r.cycle_boost().await;
@@ -195,7 +194,7 @@ pub fn GuitarRigRemote() -> Element {
             }),
             Callback::new({
                 let r = r.clone();
-                move |_: ()| {
+                move |(): ()| {
                     let r = r.clone();
                     spawn(async move {
                         let _ = r.tap_tempo().await;
@@ -204,7 +203,7 @@ pub fn GuitarRigRemote() -> Element {
             }),
             Callback::new({
                 let r = r.clone();
-                move |_: ()| {
+                move |(): ()| {
                     let r = r.clone();
                     spawn(async move {
                         let _ = r.prev_song().await;
@@ -213,7 +212,7 @@ pub fn GuitarRigRemote() -> Element {
             }),
             Callback::new({
                 let r = r.clone();
-                move |_: ()| {
+                move |(): ()| {
                     let r = r.clone();
                     spawn(async move {
                         let _ = r.next_song().await;
@@ -221,7 +220,7 @@ pub fn GuitarRigRemote() -> Element {
                 }
             }),
             Callback::new({
-                let r = r.clone();
+                let r = r;
                 move |i: usize| {
                     let r = r.clone();
                     spawn(async move {
@@ -447,7 +446,7 @@ pub fn GuitarRigRemote() -> Element {
                     class: "flex items-center justify-center w-7 h-7 rounded-md border border-border text-muted-foreground hover:text-foreground text-[10px] font-bold",
                     title: "Record 15 s of your guitar as the loudness-calibration reference",
                     onclick: {
-                        let rig = rig.clone();
+                        let rig = rig;
                         move |_| {
                             if let Some(r) = rig.clone() {
                                 spawn(async move { let _ = r.capture_di_reference(15).await; });
@@ -548,7 +547,7 @@ pub fn GuitarRigRemote() -> Element {
             crate::perform::TunerOverlay {
                 on_close: {
                     let rig = rig.clone();
-                    move |_| {
+                    move |()| {
                         if let Some(r) = rig.clone() {
                             spawn(async move { let _ = r.toggle_tuner().await; });
                         }
@@ -559,10 +558,10 @@ pub fn GuitarRigRemote() -> Element {
 
         // Audio settings modal
         if audio_open() {
-            if let Some(bridge) = live_bridge.clone() {
+            if let Some(bridge) = live_bridge {
                 AudioSettingsModal {
                     bridge: bridge,
-                    on_close: move |_| audio_open.set(false),
+                    on_close: move |()| audio_open.set(false),
                 }
             }
         }

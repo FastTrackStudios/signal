@@ -23,8 +23,7 @@ fn rss_anon_mb() -> f64 {
         .find(|l| l.starts_with("RssAnon:"))
         .and_then(|l| l.split_whitespace().nth(1))
         .and_then(|kb| kb.parse::<f64>().ok())
-        .map(|kb| kb / 1024.0)
-        .unwrap_or(f64::NAN)
+        .map_or(f64::NAN, |kb| kb / 1024.0)
 }
 
 fn main() -> eyre::Result<()> {
@@ -50,7 +49,7 @@ fn main() -> eyre::Result<()> {
 
     let cache = SampleCache::with_pack(pack);
     let t0 = std::time::Instant::now();
-    let stats = cache.preload(paths.iter().map(|p| p.as_path()));
+    let stats = cache.preload(paths.iter().map(std::path::PathBuf::as_path));
     let load_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
     // Touch every frame the way a voice would, so mapped pages are actually
@@ -61,7 +60,7 @@ fn main() -> eyre::Result<()> {
         if let Some(data) = cache.get_loaded(p) {
             for f in 0..data.num_frames {
                 let (l, r) = data.frame(f);
-                acc += (l + r) as f64;
+                acc += f64::from(l + r);
             }
         }
     }
@@ -74,9 +73,9 @@ fn main() -> eyre::Result<()> {
             if let Some(d) = cache.get_loaded(p) {
                 bytes += d.decoded_bytes();
                 if d.is_streamed() {
-                    streamed += 1
+                    streamed += 1;
                 } else {
-                    other += 1
+                    other += 1;
                 }
             }
         }

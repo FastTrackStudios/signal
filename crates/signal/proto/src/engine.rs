@@ -38,7 +38,7 @@ crate::impl_collection! {
 // ─── Layer selection ────────────────────────────────────────────
 
 /// Which variant to use for a specific layer within an engine scene.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct LayerSelection {
     pub layer_id: LayerId,
     pub variant_id: LayerSnapshotId,
@@ -170,16 +170,19 @@ impl Engine {
         Some(self.variants.remove(pos))
     }
 
+    #[must_use] 
     pub fn default_variant(&self) -> Option<&EngineScene> {
         self.variants
             .iter()
             .find(|v| v.id == self.default_variant_id)
     }
 
+    #[must_use] 
     pub fn variant(&self, id: &EngineSceneId) -> Option<&EngineScene> {
         self.variants.iter().find(|v| &v.id == id)
     }
 
+    #[must_use] 
     pub fn is_layer_type_compatible(&self, layer_type: EngineType) -> bool {
         self.engine_type == layer_type
     }

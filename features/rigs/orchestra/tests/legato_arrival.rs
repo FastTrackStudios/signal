@@ -107,7 +107,7 @@ keyswitch {
 /// Assert the schedule-level arrival identity for every note of `case`:
 /// the k-th trigger event on the (single) line is the k-th note, and its
 /// heard arrival — trigger frame + prefire lead (legato), trigger frame
-/// (fresh attack), or trigger frame + pre_delay (short) — is the note's
+/// (fresh attack), or trigger frame + `pre_delay` (short) — is the note's
 /// grid frame, EXACTLY (error 0).
 fn assert_schedule_identities(case: &TimingCase, spec: &LibrarySpec) {
     let sched = annotate(&case.doc, spec, SR);
@@ -599,7 +599,7 @@ fn rendered_arrivals_land_on_grid_with_css() {
                     if octave {
                         octave_errs_ms.push(err);
                     } else {
-                        legato_errs_ms.push(err)
+                        legato_errs_ms.push(err);
                     }
                 }
                 OnsetKind::Short => short_errs_ms.push(err),
@@ -633,7 +633,7 @@ fn rendered_arrivals_land_on_grid_with_css() {
     //    presence check for the bow change near the tick.
     let stats = |v: &[f64]| -> (f64, f64, f64) {
         let mut s: Vec<f64> = v.iter().map(|e| e.abs()).collect();
-        s.sort_by(|a, b| a.total_cmp(b));
+        s.sort_by(f64::total_cmp);
         let n = s.len();
         (
             v.iter().map(|e| e.abs()).sum::<f64>() / n as f64,
@@ -654,11 +654,11 @@ fn rendered_arrivals_land_on_grid_with_css() {
     eprintln!(
         "fresh-attack leading edges over {} notes: min {:.1} ms, max {:.1} ms; re-bow flux peaks over {}: min {:.1} max {:.1}; engine-arrival worst {} frames",
         edge_errs_ms.len(),
-        edge_errs_ms.iter().cloned().fold(f64::INFINITY, f64::min),
-        edge_errs_ms.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+        edge_errs_ms.iter().copied().fold(f64::INFINITY, f64::min),
+        edge_errs_ms.iter().copied().fold(f64::NEG_INFINITY, f64::max),
         rebow_errs_ms.len(),
-        rebow_errs_ms.iter().cloned().fold(f64::INFINITY, f64::min),
-        rebow_errs_ms.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+        rebow_errs_ms.iter().copied().fold(f64::INFINITY, f64::min),
+        rebow_errs_ms.iter().copied().fold(f64::NEG_INFINITY, f64::max),
         worst_frames
     );
     // Post-marker gates (per-zone MEASURED `arrival_ms` in the pack,

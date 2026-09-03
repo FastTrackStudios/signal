@@ -129,6 +129,7 @@ pub struct FxSendGroupTemplate {
 impl RigTemplate {
     /// Keys megarig: 3 engines (Keys, Synth, Organ) with 2-3 layers each,
     /// engine-level and rig-level FX sends.
+    #[must_use] 
     pub fn keys_megarig() -> Self {
         Self {
             name: "Keys Rig".into(),
@@ -206,6 +207,7 @@ impl RigTemplate {
     }
 
     /// Simple guitar rig: 1 engine, 1 layer, no FX sends.
+    #[must_use] 
     pub fn guitar_rig() -> Self {
         Self {
             name: "Guitar Rig".into(),
@@ -222,13 +224,14 @@ impl RigTemplate {
 
     /// Single vocal rig channel with 4 FX sends.
     /// `index` is 1-based (Vocal 1, Vocal 2, etc.).
+    #[must_use] 
     pub fn vocal_rig(index: u8) -> Self {
         Self {
-            name: format!("Vocal {} Rig", index),
+            name: format!("Vocal {index} Rig"),
             engines: vec![EngineTemplate {
-                name: format!("Vocal {} Engine", index),
+                name: format!("Vocal {index} Engine"),
                 layers: vec![LayerTemplate {
-                    name: format!("Vocal {}", index),
+                    name: format!("Vocal {index}"),
                 }],
                 fx_sends: vec![
                     FxSendTemplate {
@@ -252,6 +255,7 @@ impl RigTemplate {
 
 impl RackTemplate {
     /// Vocal rack: 3 vocal rigs with shared AUX + TIME send groups.
+    #[must_use] 
     pub fn vocal_rack() -> Self {
         Self {
             name: "Vocal Rack".into(),

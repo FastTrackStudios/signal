@@ -6,6 +6,9 @@ authors.workspace = true
 license.workspace = true
 description = "hit-detect-dsp — offline musical hit detection: per-band onset strength and a 0-1 dynamics envelope over a whole recording, for charting a song rather than triggering a sample."
 
+[lints]
+workspace = true
+
 [dependencies]
 # The onset detection functions themselves. `trigger-dsp` already carries a
 # referenced implementation of the spectral flux family (SuperFlux et al.)

@@ -51,7 +51,7 @@ fn slot_uuid(id: &str) -> uuid::Uuid {
 /// template placeholders.
 fn resolve_template(base: &[GridSlot], live: &[LiveBlock]) -> Vec<GridSlot> {
     let mut slots = base.to_vec();
-    for slot in slots.iter_mut() {
+    for slot in &mut slots {
         let Some(slot_name) = slot.block_preset_name.clone() else {
             continue;
         };
@@ -156,7 +156,7 @@ pub fn GuitarRigView() -> Element {
     // Apply = update shared state, persist, and re-open the live rig so device /
     // buffer changes take effect immediately (the engine is always running).
     let apply = {
-        let settings = settings.clone();
+        let settings = settings;
         let rig_for_apply = rig.clone();
         use_callback(move |p: AudioPrefs| {
             prefs.set(p.clone());
@@ -180,7 +180,7 @@ pub fn GuitarRigView() -> Element {
         devices
             .read()
             .as_ref()
-            .and_then(|d| d.clone())
+            .and_then(std::clone::Clone::clone)
             .map(|d| AudioSettingsBridge {
                 inputs: d.inputs,
                 outputs: d.outputs,
@@ -223,7 +223,7 @@ pub fn GuitarRigView() -> Element {
     // meters at meter rate, perf/chain on mutation. No polling; a remote
     // (WebSocket) GUI gets the same pushes.
     {
-        let rig_stream = rig_stream.clone();
+        let rig_stream = rig_stream;
         architect::use_stream(
             move |sink| {
                 let rig_stream = rig_stream.clone();
@@ -255,7 +255,7 @@ pub fn GuitarRigView() -> Element {
     let block_count = live_blocks().len();
     // The template grid with live blocks resolved into their matching slots.
     let slots = {
-        let base = base_slots.clone();
+        let base = base_slots;
         use_memo(move || resolve_template(&base, &live_blocks()))
     };
 
@@ -339,7 +339,7 @@ pub fn GuitarRigView() -> Element {
                     class: "flex-1 min-h-0 flex flex-row overflow-hidden outline-none",
                     tabindex: "0",
                     onkeydown: {
-                        let rig = rig.clone();
+                        let rig = rig;
                         move |e: KeyboardEvent| {
                             if e.code() == Code::Space {
                                 e.prevent_default();
@@ -383,7 +383,7 @@ pub fn GuitarRigView() -> Element {
                 }
             } else {
                 div { class: "flex-1 min-h-0 overflow-hidden p-4",
-                    if let Some(r) = rig.clone() {
+                    if let Some(r) = rig {
                         PerformGrid {
                             model: perf(),
                             on_press: Callback::new({
@@ -395,48 +395,48 @@ pub fn GuitarRigView() -> Element {
                             }),
                             on_toggle_fx: Callback::new({
                                 let r = r.clone();
-                                move |_: ()| {
+                                move |(): ()| {
                                     let r = r.clone();
                                     spawn(async move { let _ = r.toggle_fx().await; });
                                 }
                             }),
                             on_toggle_boost: Callback::new({
                                 let r = r.clone();
-                                move |_: ()| {
+                                move |(): ()| {
                                     let r = r.clone();
                                     spawn(async move { let _ = r.toggle_boost().await; });
                                 }
                             }),
                             on_cycle_boost: Callback::new({
                                 let r = r.clone();
-                                move |_: ()| {
+                                move |(): ()| {
                                     let r = r.clone();
                                     spawn(async move { let _ = r.cycle_boost().await; });
                                 }
                             }),
                             on_tap_tempo: Callback::new({
                                 let r = r.clone();
-                                move |_: ()| {
+                                move |(): ()| {
                                     let r = r.clone();
                                     spawn(async move { let _ = r.tap_tempo().await; });
                                 }
                             }),
                             on_prev_song: Callback::new({
                                 let r = r.clone();
-                                move |_: ()| {
+                                move |(): ()| {
                                     let r = r.clone();
                                     spawn(async move { let _ = r.prev_song().await; });
                                 }
                             }),
                             on_next_song: Callback::new({
                                 let r = r.clone();
-                                move |_: ()| {
+                                move |(): ()| {
                                     let r = r.clone();
                                     spawn(async move { let _ = r.next_song().await; });
                                 }
                             }),
                             on_select_song: Callback::new({
-                                let r = r.clone();
+                                let r = r;
                                 move |i: usize| {
                                     let r = r.clone();
                                     spawn(async move { let _ = r.select_song(i as u32).await; });
@@ -454,13 +454,13 @@ pub fn GuitarRigView() -> Element {
 
         // Audio settings modal
         if audio_open() {
-            if let Some(bridge) = live_bridge.clone() {
+            if let Some(bridge) = live_bridge {
                 AudioSettingsModal {
                     bridge: bridge,
-                    on_close: move |_| audio_open.set(false),
+                    on_close: move |()| audio_open.set(false),
                 }
             } else {
-                AudioUnavailableModal { on_close: move |_| audio_open.set(false) }
+                AudioUnavailableModal { on_close: move |()| audio_open.set(false) }
             }
         }
     }
@@ -472,7 +472,7 @@ fn QuickInputPicker(bridge: AudioSettingsBridge) -> Element {
     let current = bridge.prefs.input_device.clone();
     let inputs = bridge.inputs.clone();
     let on_save = bridge.on_save;
-    let base = bridge.prefs.clone();
+    let base = bridge.prefs;
 
     rsx! {
         Dropdown {

@@ -21,9 +21,9 @@ pub enum RigSceneApplyError {
 impl std::fmt::Display for RigSceneApplyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RigSceneApplyError::NoTarget(msg) => write!(f, "no target: {msg}"),
-            RigSceneApplyError::DawError(msg) => write!(f, "DAW error: {msg}"),
-            RigSceneApplyError::LoadError(msg) => write!(f, "load error: {msg}"),
+            Self::NoTarget(msg) => write!(f, "no target: {msg}"),
+            Self::DawError(msg) => write!(f, "DAW error: {msg}"),
+            Self::LoadError(msg) => write!(f, "load error: {msg}"),
         }
     }
 }

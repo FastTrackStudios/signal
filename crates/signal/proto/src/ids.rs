@@ -17,7 +17,7 @@ pub trait IdFactory: Send + Sync {
     fn new_uuid(&self) -> Uuid;
 }
 
-/// Default runtime ID factory. Uses UUIDv7 for sortable, globally unique IDs.
+/// Default runtime ID factory. Uses `UUIDv7` for sortable, globally unique IDs.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct RuntimeIdFactory;
 
@@ -36,6 +36,7 @@ pub const SEED_UUID_NS: Uuid = Uuid::from_bytes([
 
 /// Generate a deterministic UUID from a human-readable name.
 /// Same name always produces same UUID — used for seed data and tests.
+#[must_use] 
 pub fn seed_id(name: &str) -> Uuid {
     Uuid::new_v5(&SEED_UUID_NS, name.as_bytes())
 }

@@ -10,6 +10,9 @@ description = "FTS EQ — standalone Blitz-native iteration app (no DAW host req
 name = "eq-standalone"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 nice-plug = { workspace = true }
 nice-plug-dioxus = { workspace = true }

@@ -17,9 +17,9 @@
 //! # Sub-module organization
 //!
 //! - [`ids`] -- ID macros (`typed_uuid_id!`, `typed_string_id!`), seed helpers, core ID types
-//! - [`model`] -- Core data structures: Block, Snapshot, Preset, Module, ModulePreset
-//! - [`traits`] -- Collection/Variant architecture, HasMetadata, Tagged, Described
-//! - [`services`] -- Async service trait definitions (BlockService, LayerService, etc.)
+//! - [`model`] -- Core data structures: Block, Snapshot, Preset, Module, `ModulePreset`
+//! - [`traits`] -- Collection/Variant architecture, `HasMetadata`, Tagged, Described
+//! - [`services`] -- Async service trait definitions (`BlockService`, `LayerService`, etc.)
 //!
 //! All types are re-exported at the crate root for convenience.
 //!

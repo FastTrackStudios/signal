@@ -3,9 +3,9 @@
 //! History (440 Hz sine, ratio 2.0, full shimmer mix, no feedback;
 //! inharmonicity = mean Goertzel energy at 8 non-harmonic probe bins /
 //! energy at 880 Hz over the last second):
-//!   - local GrainReader (pre-pitch-dsp):        ratio 0.0051
-//!   - pitch-dsp GranularShifter (dual grains):  ratio 0.0261 (rejected)
-//!   - pitch-dsp WsolaShifter (current):         ratio 0.0001
+//!   - local `GrainReader` (pre-pitch-dsp):        ratio 0.0051
+//!   - pitch-dsp `GranularShifter` (dual grains):  ratio 0.0261 (rejected)
+//!   - pitch-dsp `WsolaShifter` (current):         ratio 0.0001
 //!
 //! The bound below holds the WSOLA-level quality; a regression back to
 //! grain-level artifacts fails loudly.
@@ -24,7 +24,7 @@ fn goertzel(signal: &[f64], freq: f64) -> f64 {
         s2 = s1;
         s1 = s0;
     }
-    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / signal.len() as f64
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / signal.len() as f64
 }
 
 #[test]

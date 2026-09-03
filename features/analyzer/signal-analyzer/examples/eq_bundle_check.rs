@@ -52,15 +52,12 @@ fn main() {
     let path = arg("--plugin").unwrap_or_else(|| {
         format!("{}/.clap/FTS EQ.clap", std::env::var("HOME").unwrap_or_default())
     });
-    let mut plugin = match HostedPlugin::load(&path) {
-        Ok(Some(mut p)) => {
-            p.prepare(SR, BLOCK as u32).expect("prepare");
-            p
-        }
-        _ => {
-            eprintln!("{path}: could not load");
-            std::process::exit(1);
-        }
+    let mut plugin = if let Ok(Some(mut p)) = HostedPlugin::load(&path) {
+        p.prepare(SR, BLOCK as u32).expect("prepare");
+        p
+    } else {
+        eprintln!("{path}: could not load");
+        std::process::exit(1);
     };
     plugin.load_state(&one_bell()).expect("load_state");
 

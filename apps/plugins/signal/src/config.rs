@@ -67,6 +67,7 @@ impl RigConfig {
     }
 
     /// Default config location: `~/.config/signal/plugin/rig.styx`.
+    #[must_use] 
     pub fn default_path() -> Option<PathBuf> {
         std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/signal/plugin/rig.styx"))
     }
@@ -104,6 +105,7 @@ impl RigConfig {
         Self::from_styx(&text)
     }
 
+    #[must_use] 
     pub fn cache_budget_bytes(&self) -> Option<usize> {
         Some((self.cache_budget_mb.unwrap_or(8192) as usize) * 1024 * 1024)
     }

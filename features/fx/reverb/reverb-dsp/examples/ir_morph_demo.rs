@@ -5,8 +5,8 @@
 //! with a touch of Motion on the tail. Output is a stereo WAV.
 //!
 //! Usage:
-//!   cargo run -p reverb-dsp --release --example ir_morph_demo -- \
-//!     <ir_a.wav> <ir_b.wav> <out.wav> [seconds=16]
+//!   cargo run -p reverb-dsp --release --example `ir_morph_demo` -- \
+//!     <`ir_a.wav`> <`ir_b.wav`> <out.wav> [seconds=16]
 
 use audiocore_dsp::{AudioConfig, Processor};
 use reverb_dsp::algorithm::AlgorithmType;
@@ -31,7 +31,7 @@ fn pluck_pattern(n: usize) -> Vec<f64> {
         seed ^= seed << 13;
         seed ^= seed >> 17;
         seed ^= seed << 5;
-        (seed as i32) as f64 / i32::MAX as f64
+        f64::from(seed as i32) / f64::from(i32::MAX)
     };
     let mut start = 0usize;
     let mut idx = 0usize;
@@ -86,7 +86,7 @@ fn main() {
         eprintln!("usage: ir_morph_demo <ir_a.wav> <ir_b.wav> <out.wav> [seconds]");
         std::process::exit(1);
     }
-    let seconds: f64 = args.get(3).map(|s| s.parse().unwrap()).unwrap_or(16.0);
+    let seconds: f64 = args.get(3).map_or(16.0, |s| s.parse().unwrap());
     let n = (SR * seconds) as usize;
 
     let (a_l, a_r) = load_ir(&args[0]);

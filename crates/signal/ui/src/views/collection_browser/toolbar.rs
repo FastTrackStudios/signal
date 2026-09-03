@@ -40,7 +40,7 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
                     placeholder: "Search {props.current_nav.label().to_ascii_lowercase()}...",
                     value: "{props.current_search}",
                     oninput: move |evt: Event<FormData>| {
-                        props.on_search_change.call(evt.value().clone());
+                        props.on_search_change.call(evt.value());
                     },
                 }
                 if has_active_filters {

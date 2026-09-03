@@ -1,9 +1,9 @@
 //! Regression guard: an MM2 `.signalpreset` loaded via `load_preset_kit`
 //! actually produces audio when driven on the GM percussion channel.
 //!
-//! Skips when the AudioHaven library isn't mounted (CI / other machines).
+//! Skips when the `AudioHaven` library isn't mounted (CI / other machines).
 //! This is the test the canonical `bench_drum_load` example lacked — it would
-//! have caught the "note_on dispatches on channel 0, preset mapped to none →
+//! have caught the "`note_on` dispatches on channel 0, preset mapped to none →
 //! silence" footgun.
 
 use std::time::{Duration, Instant};
@@ -53,7 +53,7 @@ fn mm2_metal_monster_plays_on_gm_channel() {
     let mut block = vec![0.0f32; 512 * 2];
     let mut peak = 0.0f32;
     for _ in 0..40 {
-        for s in block.iter_mut() {
+        for s in &mut block {
             *s = 0.0;
         }
         rig.render_offline(&mut block).expect("render");

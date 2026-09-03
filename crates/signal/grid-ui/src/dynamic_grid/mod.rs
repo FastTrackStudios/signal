@@ -1,6 +1,6 @@
 //! Dynamic Grid View — auto-expanding 2D grid for block composition.
 //!
-//! Renders GridSlots on a CSS grid that grows as blocks are added.
+//! Renders `GridSlots` on a CSS grid that grows as blocks are added.
 //! Empty cells show a faint dashed border with hover highlight and click-to-add
 //! via a searchable block type picker dropdown.
 
@@ -23,7 +23,7 @@ use uuid::Uuid;
 
 pub use types::GridSlot;
 
-use interaction::*;
+use interaction::{InteractionMode, GroupDropTarget, GridDragState, GridWireDraft, GroupDragState};
 pub use interaction::{
     GridConnection, GridContextMenuEvent, GridSelection, GRID_CONNECTIONS, PICKER_CELL,
     PICKER_CLICK_POS,
@@ -227,7 +227,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
         let step = (CELL_SIZE + CELL_GAP) as f64;
         let cs = CELL_SIZE as f64;
         let mut blocked = std::collections::HashSet::new();
-        for cg in container_groups.iter() {
+        for cg in &container_groups {
             if cg.level != ContainerLevel::Layer {
                 continue;
             }
@@ -285,10 +285,10 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
         let _row_delta = (dy_px / step).round() as isize;
 
         if let Some(dragged) = module_groups.iter().find(|g| g.name == gd.group_name) {
-            let target_cx = dragged.x + dragged.w * 0.5;
-            let target_cy = dragged.y + dragged.h * 0.5;
+            let target_cx = dragged.w.mul_add(0.5, dragged.x);
+            let target_cy = dragged.h.mul_add(0.5, dragged.y);
 
-            for g in module_groups.iter() {
+            for g in &module_groups {
                 if g.name != gd.group_name
                     && target_cx >= g.x
                     && target_cx <= g.x + g.w
@@ -312,7 +312,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
         let mut max_y = 0.0f64;
 
         let step = (CELL_SIZE + CELL_GAP) as f64;
-        for slot in chain_snapshot.iter() {
+        for slot in &chain_snapshot {
             let cx = slot.col as f64 * step;
             let cy = slot.row as f64 * step;
             min_x = min_x.min(cx);
@@ -366,8 +366,8 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                 .clamp(0.1, 3.0);
             let scaled_w = content_w * fit_zoom;
             let scaled_h = content_h * fit_zoom;
-            pan_x.set((vw - scaled_w) / 2.0 - content_offset_x * fit_zoom);
-            pan_y.set((vh - scaled_h) / 2.0 - content_offset_y * fit_zoom);
+            pan_x.set(content_offset_x.mul_add(-fit_zoom, (vw - scaled_w) / 2.0));
+            pan_y.set(content_offset_y.mul_add(-fit_zoom, (vh - scaled_h) / 2.0));
             zoom.set(fit_zoom);
         }
     }
@@ -530,7 +530,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                                     let dc = target_min_col as isize - dragged_min_col as isize;
                                     let dr = target_min_row as isize - dragged_min_row as isize;
 
-                                    for s in new_chain.iter_mut() {
+                                    for s in &mut new_chain {
                                         if s.module_group.as_deref() == Some(&gd.group_name) {
                                             s.col = (s.col as isize + dc).max(0) as usize;
                                             s.row = (s.row as isize + dr).max(0) as usize;
@@ -625,8 +625,8 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                     let local_y = evt.client_coordinates().y - viewport_top();
                     let canvas_x = (local_x - pan_x()) / old_zoom;
                     let canvas_y = (local_y - pan_y()) / old_zoom;
-                    pan_x.set(local_x - canvas_x * new_zoom);
-                    pan_y.set(local_y - canvas_y * new_zoom);
+                    pan_x.set(canvas_x.mul_add(-new_zoom, local_x));
+                    pan_y.set(canvas_y.mul_add(-new_zoom, local_y));
                     zoom.set(new_zoom);
                 } else if is_shift {
                     pan_x.set(pan_x() - raw_dy);
@@ -648,8 +648,8 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
 
                 // Layer 0: SVG cables + port dots
                 CableLayer {
-                    cables: cables.clone(),
-                    module_ports: module_ports.clone(),
+                    cables: cables,
+                    module_ports: module_ports,
                     nat_w: nat_w as f64,
                     nat_h: nat_h as f64,
                 }
@@ -851,22 +851,22 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                                                     mouse_pos: (evt.client_coordinates().x, evt.client_coordinates().y),
                                                 }));
                                             },
-                                            on_left_port_enter: move |_| {
+                                            on_left_port_enter: move |()| {
                                                 if interaction().wire_draft().is_some() {
                                                     hovered_port_slot.set(Some((slot_id, true)));
                                                 }
                                             },
-                                            on_left_port_leave: move |_| {
+                                            on_left_port_leave: move |()| {
                                                 if hovered_port_slot() == Some((slot_id, true)) {
                                                     hovered_port_slot.set(None);
                                                 }
                                             },
-                                            on_right_port_enter: move |_| {
+                                            on_right_port_enter: move |()| {
                                                 if interaction().wire_draft().is_some() {
                                                     hovered_port_slot.set(Some((slot_id, false)));
                                                 }
                                             },
-                                            on_right_port_leave: move |_| {
+                                            on_right_port_leave: move |()| {
                                                 if hovered_port_slot() == Some((slot_id, false)) {
                                                     hovered_port_slot.set(None);
                                                 }
@@ -950,7 +950,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                                 },
                                 oncontextmenu: {
                                     let on_ctx = props.on_context_menu;
-                                    let ctx_name = gname.clone();
+                                    let ctx_name = gname;
                                     move |evt: MouseEvent| {
                                         if !is_this_module_selected {
                                             props.on_select.call(Some(GridSelection::Module(ctx_name.clone())));
@@ -993,8 +993,8 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                                 .clamp(0.1, 3.0);
                             let scaled_w = fit_content_w * fz;
                             let scaled_h = fit_content_h * fz;
-                            pan_x.set((viewport_w() - scaled_w) / 2.0 - fit_content_offset_x * fz);
-                            pan_y.set((viewport_h() - scaled_h) / 2.0 - fit_content_offset_y * fz);
+                            pan_x.set(fit_content_offset_x.mul_add(-fz, (viewport_w() - scaled_w) / 2.0));
+                            pan_y.set(fit_content_offset_y.mul_add(-fz, (viewport_h() - scaled_h) / 2.0));
                             zoom.set(fz);
                         }
                     },

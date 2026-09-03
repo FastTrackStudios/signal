@@ -1,13 +1,13 @@
 #![cfg(feature = "daw")]
 //! REAPER integration test: Fast-path rig open + variation save/load.
 //!
-//! Uses stock REAPER plugins (ReaEQ, ReaComp, ReaDelay) — no seed data required.
+//! Uses stock REAPER plugins (`ReaEQ`, `ReaComp`, `ReaDelay`) — no seed data required.
 //!
 //! Tests the full pipeline:
-//! 1. Add stock FX to a source track, capture raw_block state
-//! 2. Import as a rig into the signal DB (with state_data)
+//! 1. Add stock FX to a source track, capture `raw_block` state
+//! 2. Import as a rig into the signal DB (with `state_data`)
 //! 3. Clear all tracks
-//! 4. Re-open via fast path: build FXCHAIN from stored state → single set_chunk
+//! 4. Re-open via fast path: build FXCHAIN from stored state → single `set_chunk`
 //! 5. Randomize all plugin parameters
 //! 6. Save randomized state as a named variation (snapshot per block preset)
 //! 7. Reload original rig
@@ -15,7 +15,7 @@
 //! 9. Verify round-trip: applied state matches randomized, differs from original
 //!
 //! Run with:
-//!   cargo xtask reaper-test fast_path_variation
+//!   cargo xtask reaper-test `fast_path_variation`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::collections::HashMap;
@@ -40,7 +40,7 @@ async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
     }
 }
 
-/// Parse a raw_block byte slice back into an FxChainNode.
+/// Parse a `raw_block` byte slice back into an `FxChainNode`.
 fn parse_raw_block_bytes(source_bytes: &[u8]) -> Option<daw::file::types::FxChainNode> {
     let source_str = std::str::from_utf8(source_bytes).ok()?;
     let source_chain = daw::file::FxChain::parse(&format!(
@@ -50,14 +50,14 @@ fn parse_raw_block_bytes(source_bytes: &[u8]) -> Option<daw::file::types::FxChai
     source_chain.nodes.into_iter().next()
 }
 
-/// Flatten FxChainNodes to raw_block strings in document order (depth-first).
+/// Flatten `FxChainNodes` to `raw_block` strings in document order (depth-first).
 fn flatten_to_raw_blocks(nodes: &[daw::file::types::FxChainNode]) -> Vec<&str> {
     let mut out = Vec::new();
     for node in nodes {
         match node {
             daw::file::types::FxChainNode::Plugin(p) => out.push(p.raw_block.as_str()),
             daw::file::types::FxChainNode::Container(c) => {
-                out.extend(flatten_to_raw_blocks(&c.children))
+                out.extend(flatten_to_raw_blocks(&c.children));
             }
         }
     }
@@ -79,7 +79,7 @@ async fn randomize_all_fx(track: &daw::rpc::TrackHandle, seed: u64) -> eyre::Res
         state = state
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        ((state >> 33) as f64) / (u32::MAX as f64)
+        ((state >> 33) as f64) / f64::from(u32::MAX)
     };
     for (_depth, node) in tree.iter_depth_first() {
         if let daw::service::FxNodeKind::Plugin(fx) = &node.kind {
@@ -121,7 +121,7 @@ async fn randomize_all_fx(track: &daw::rpc::TrackHandle, seed: u64) -> eyre::Res
 }
 
 /// Capture the current FX state from the track chunk and save each plugin's
-/// raw_block as a named snapshot on its corresponding block preset.
+/// `raw_block` as a named snapshot on its corresponding block preset.
 async fn save_variation(
     track: &daw::rpc::TrackHandle,
     block_preset_ids: &[(signal_proto::PresetId, signal_proto::BlockType)],
@@ -171,8 +171,8 @@ async fn save_variation(
     Ok(result)
 }
 
-/// Fetch each snapshot's state_data and rebuild the track chunk with those
-/// raw_blocks, replacing the current FX state via a single `set_chunk` call.
+/// Fetch each snapshot's `state_data` and rebuild the track chunk with those
+/// `raw_blocks`, replacing the current FX state via a single `set_chunk` call.
 async fn apply_variation(
     track: &daw::rpc::TrackHandle,
     variation: &[(
@@ -646,7 +646,7 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
             daw::file::FxChain::parse(randomized_fxc).map_err(|e| eyre::eyre!("parse: {e}"))?;
         flatten_to_raw_blocks(&parsed.nodes)
             .into_iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     };
 
@@ -658,7 +658,7 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
     let layer_track = fast_path_open(&project, &rig.name, &layer_name, &module_refs).await?;
     let reload_ms = t_reload.elapsed().as_secs_f64() * 1000.0;
     settle().await;
-    ctx.log(&format!("Reloaded original rig in {:.1}ms", reload_ms));
+    ctx.log(&format!("Reloaded original rig in {reload_ms:.1}ms"));
 
     // ── 10. Apply variation ──
     let t_apply = Instant::now();
@@ -674,8 +674,7 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
     ));
     assert_eq!(
         applied_count, 3,
-        "should have applied all 3 blocks, got {}",
-        applied_count
+        "should have applied all 3 blocks, got {applied_count}"
     );
 
     // ── 11. Verify ──
@@ -705,8 +704,7 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
     for (i, rb) in applied_raw_blocks.iter().enumerate() {
         assert!(
             !rb.is_empty(),
-            "block {} should have non-empty raw_block after apply",
-            i
+            "block {i} should have non-empty raw_block after apply"
         );
     }
 
@@ -746,11 +744,11 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
 
     // ── Timing summary ──
     ctx.log("────────────────────────────────────────────");
-    ctx.log(&format!("  Fast-path open:      {:.1}ms", open_ms));
-    ctx.log(&format!("  Randomize params:    {:.1}ms", randomize_ms));
-    ctx.log(&format!("  Save variation:      {:.1}ms", save_ms));
-    ctx.log(&format!("  Reload original:     {:.1}ms", reload_ms));
-    ctx.log(&format!("  Apply variation:     {:.1}ms", apply_ms));
+    ctx.log(&format!("  Fast-path open:      {open_ms:.1}ms"));
+    ctx.log(&format!("  Randomize params:    {randomize_ms:.1}ms"));
+    ctx.log(&format!("  Save variation:      {save_ms:.1}ms"));
+    ctx.log(&format!("  Reload original:     {reload_ms:.1}ms"));
+    ctx.log(&format!("  Apply variation:     {apply_ms:.1}ms"));
     ctx.log("────────────────────────────────────────────");
 
     ctx.log("fast_path_variation_save_load: PASS");

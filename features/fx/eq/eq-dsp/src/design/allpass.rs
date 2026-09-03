@@ -26,7 +26,7 @@ pub(super) fn design_allpass_with_lookup(
 ///   H_k(s) = (s² − α_k·s + 1) / (s² + α_k·s + 1)
 /// ```
 ///
-/// where α_k uses Butterworth pole spacing, with the **first section
+/// where `α_k` uses Butterworth pole spacing, with the **first section
 /// alone** Q-modulated:
 ///
 /// ```text
@@ -49,7 +49,7 @@ pub(super) fn design_allpass(n: usize, freq_hz: f64, q: f64, sample_rate: f64) -
     //   slope=4 → n=2 → N=4
     //   slope=6 → n=3 → N=6
     //   slope=8 → n=4 → N=12 (Pro-Q 4 doubles the cascade order at slope=8)
-    let n_filter = if n >= 4 { 12 } else { (2 * n).max(2) };
+    let n_filter = if n >= 4 { 12 } else { n.saturating_mul(2).max(2) };
     let n_sec = n_filter.div_ceil(2);
     let q_user = q.max(1e-6);
 
@@ -58,7 +58,7 @@ pub(super) fn design_allpass(n: usize, freq_hz: f64, q: f64, sample_rate: f64) -
 
     let mut sections = Vec::with_capacity(n_sec);
     for k in 0..n_sec {
-        let alpha_butter = 2.0 * ((2 * k + 1) as f64 * PI / (2.0 * n_filter as f64)).sin();
+        let alpha_butter = 2.0 * ((k.saturating_mul(2).saturating_add(1)) as f64 * PI / (2.0 * n_filter as f64)).sin();
         // Section-0 Q modulation. At slope=8 (N=12) Pro-Q clamps Q_eff to
         // ~7.4 (verified bit-exact via PROBE_HOOK_AUDIO_BIQUAD across fc).
         // Slopes 2/4/6 (N=2/4/6) use plain butter/Q for all Q.

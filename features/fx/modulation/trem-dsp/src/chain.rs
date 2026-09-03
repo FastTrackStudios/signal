@@ -1,4 +1,4 @@
-//! TremChain — complete tremolo processor with modulation engine.
+//! `TremChain` — complete tremolo processor with modulation engine.
 //!
 //! Wraps the Tremolo with a Modulator from fts-modulation and
 //! implements the Processor trait.
@@ -42,7 +42,7 @@ fn groove_warp(phase: f64, groove: f64) -> f64 {
     // At groove=0: split=0.5 (even)
     // At groove=+1 (swing): split=2/3 (first beat longer)
     // At groove=-1 (shuffle): split=1/3 (first beat shorter)
-    let split = 0.5 + groove * (1.0 / 6.0); // maps -1..1 to 1/3..2/3
+    let split = groove.mul_add(1.0 / 6.0, 0.5); // maps -1..1 to 1/3..2/3
 
     if phase < split {
         // First half: remap [0, split) -> [0, 0.5)
@@ -78,7 +78,7 @@ fn accent_scale(beat_in_bar: f64, accent: f64) -> f64 {
         (1.0 + accent).clamp(0.0, 2.0)
     } else {
         // On other beats: positive accent = less depth, negative = more
-        (1.0 - accent * 0.5).clamp(0.0, 2.0)
+        accent.mul_add(-0.5, 1.0).clamp(0.0, 2.0)
     }
 }
 
@@ -122,6 +122,7 @@ pub struct TremChain {
 }
 
 impl TremChain {
+    #[must_use] 
     pub fn new() -> Self {
         let mut modulator = Modulator::new();
         // Default: sine-like LFO at 1/4 note
@@ -175,24 +176,24 @@ impl TremChain {
     }
 
     /// Set transport info (call per-block from the plugin).
-    pub fn set_transport(&mut self, transport: TransportInfo) {
+    pub const fn set_transport(&mut self, transport: TransportInfo) {
         self.transport = transport;
     }
 
     /// Set tremolo mode on both channels.
-    pub fn set_mode(&mut self, mode: TremMode) {
+    pub const fn set_mode(&mut self, mode: TremMode) {
         self.tremolo_l.mode = mode;
         self.tremolo_r.mode = mode;
     }
 
     /// Set depth on both channels.
-    pub fn set_depth(&mut self, depth: f64) {
+    pub const fn set_depth(&mut self, depth: f64) {
         self.tremolo_l.depth = depth;
         self.tremolo_r.depth = depth;
     }
 
     /// Set the analog style on both channels.
-    pub fn set_analog_style(&mut self, style: crate::tremolo::AnalogStyle) {
+    pub const fn set_analog_style(&mut self, style: crate::tremolo::AnalogStyle) {
         self.analog_l.style = style;
         self.analog_r.style = style;
     }
@@ -245,7 +246,7 @@ impl Processor for TremChain {
 
         for i in 0..len {
             // Advance transport position
-            let pos = self.transport.position_qn + i as f64 * bps;
+            let pos = (i as f64).mul_add(bps, self.transport.position_qn);
             let t = TransportInfo {
                 position_qn: pos,
                 ..self.transport
@@ -298,7 +299,7 @@ impl Processor for TremChain {
                 } else {
                     raw_y
                 };
-                (self.modulator.min + (self.modulator.max - self.modulator.min) * inverted)
+                (self.modulator.max - self.modulator.min).mul_add(inverted, self.modulator.min)
                     .clamp(0.0, 1.0)
             } else {
                 mod_l
@@ -320,7 +321,7 @@ impl Processor for TremChain {
                 } else {
                     raw_y
                 };
-                (self.modulator.min + (self.modulator.max - self.modulator.min) * inverted)
+                (self.modulator.max - self.modulator.min).mul_add(inverted, self.modulator.min)
                     .clamp(0.0, 1.0)
             } else {
                 mod_r
@@ -332,8 +333,8 @@ impl Processor for TremChain {
             let accent_r = accent_l; // Same accent on both channels
 
             // Scale the modulation depth by accent (push mod toward or away from center)
-            let mod_l = 0.5 + (mod_l - 0.5) * accent_l;
-            let mod_r = 0.5 + (mod_r - 0.5) * accent_r;
+            let mod_l = (mod_l - 0.5).mul_add(accent_l, 0.5);
+            let mod_r = (mod_r - 0.5).mul_add(accent_r, 0.5);
 
             // 5. Apply tremolo amplitude modulation
             let dry_l = left[i];
@@ -347,8 +348,8 @@ impl Processor for TremChain {
             let wet_r = self.analog_r.tick(wet_r, 1);
 
             // 7. Mix dry/wet
-            left[i] = dry_l * (1.0 - self.mix) + wet_l * self.mix;
-            right[i] = dry_r * (1.0 - self.mix) + wet_r * self.mix;
+            left[i] = dry_l.mul_add(1.0 - self.mix, wet_l * self.mix);
+            right[i] = dry_r.mul_add(1.0 - self.mix, wet_r * self.mix);
 
             // Restore base depth (dynamics modulation is per-sample)
             self.tremolo_l.depth = base_depth_l;
@@ -440,7 +441,7 @@ mod tests {
 
         use std::f64::consts::PI;
         let mut l: Vec<f64> = (0..48000)
-            .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut r = l.clone();
         c.process(&mut l, &mut r);
@@ -455,7 +456,7 @@ mod tests {
     #[test]
     fn groove_warp_zero_is_identity() {
         for i in 0..100 {
-            let p = i as f64 / 100.0;
+            let p = f64::from(i) / 100.0;
             let warped = groove_warp(p, 0.0);
             assert!(
                 (warped - p).abs() < 1e-10,
@@ -594,7 +595,7 @@ mod tests {
 
         use std::f64::consts::PI;
         let mut l: Vec<f64> = (0..48000)
-            .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut r = l.clone();
         c.process(&mut l, &mut r);

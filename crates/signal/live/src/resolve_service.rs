@@ -4,7 +4,7 @@
 //! a resolve target (rig scene, profile patch, or song section) down to concrete
 //! block parameter values with the override stack applied.
 
-use super::*;
+use super::{Block, BlockParameterOverride, HashMap, ResolveError, NodePathSegment, ResolvedGraph, NodeOverrideOp, SignalLive, BlockRepo, ModuleRepo, LayerRepo, EngineRepo, RigRepo, ProfileRepo, SongRepo, SetlistRepo, SceneTemplateRepo, RackRepo, BlockType, PresetId, SnapshotId, ResolvedBlock, ALL_BLOCK_TYPES, ModuleSnapshot, ResolvedModule, ModuleBlockSource, ModulePresetId, ModuleSnapshotId, EngineId, LayerId, LayerSnapshotId, LayerSource, ResolvedLayer, HashSet, Layer, LayerSnapshot, LayerService, validate_overrides, SnapshotPolicy, PatchTarget, RigId, RigSceneId, ProfileService, ResolveTarget, RigService, ScenePolicy, FreePolicy, SongService, ResolvedEngine, EngineSceneId, Snapshot, ResolveService, EngineService};
 
 fn apply_block_parameter_overrides(block: &mut Block, overrides: &[BlockParameterOverride]) {
     for ov in overrides {
@@ -238,7 +238,7 @@ where
             source_preset_id: Some(preset_id.clone()),
             source_variant_id: Some(snap.id().clone()),
             block: snap.block(),
-            state_data: snap.state_data().map(|d| d.to_vec()),
+            state_data: snap.state_data().map(<[u8]>::to_vec),
             stale,
         })
     }
@@ -267,12 +267,10 @@ where
         }
         Err(ResolveError::InvalidReference(match snapshot_id {
             Some(variant_id) => format!(
-                "standalone block variant not found for any block type: preset={} variant={}",
-                preset_id, variant_id
+                "standalone block variant not found for any block type: preset={preset_id} variant={variant_id}"
             ),
             None => format!(
-                "standalone block default variant not found for any block type: preset={}",
-                preset_id
+                "standalone block default variant not found for any block type: preset={preset_id}"
             ),
         }))
     }
@@ -354,8 +352,7 @@ where
         .ok_or_else(|| {
             ResolveError::InvalidReference(match variant_id {
                 Some(variant_id) => format!(
-                    "missing module variant: preset={} variant={}",
-                    preset_id, variant_id
+                    "missing module variant: preset={preset_id} variant={variant_id}"
                 ),
                 None => format!("missing module default variant: preset={preset_id}"),
             })
@@ -604,7 +601,7 @@ where
         Ok(resolved)
     }
 
-    /// Resolve a PatchTarget to a (rig_id, scene_id, overrides) triple.
+    /// Resolve a `PatchTarget` to a (`rig_id`, `scene_id`, overrides) triple.
     async fn resolve_patch_target(
         &self,
         target: &PatchTarget,
@@ -653,8 +650,7 @@ where
                 Box::pin(self.resolve_patch_target_inner(&referenced.target, merged, visited)).await
             }
             _ => Err(ResolveError::InvalidReference(format!(
-                "sub-rig patch targets ({:?}) not yet resolvable to rig scene",
-                target
+                "sub-rig patch targets ({target:?}) not yet resolvable to rig scene"
             ))),
         }
     }
@@ -676,7 +672,7 @@ where
                 })?;
                 validate_overrides::<ScenePolicy>(&scene.overrides)
                     .map_err(|e| map_policy_err("rig scene", e))?;
-                Ok((rig.id.clone(), scene.id.clone(), scene.overrides.clone()))
+                Ok((rig.id, scene.id.clone(), scene.overrides))
             }
             ResolveTarget::ProfilePatch {
                 profile_id,
@@ -872,7 +868,7 @@ where
             block_type: BlockType::Custom,
             source_preset_id: Some(preset_id.clone()),
             source_variant_id: Some(snapshot_id.clone()),
-            state_data: snapshot.state_data().map(|d| d.to_vec()),
+            state_data: snapshot.state_data().map(<[u8]>::to_vec),
             block: snapshot.block(),
             stale: false,
         };

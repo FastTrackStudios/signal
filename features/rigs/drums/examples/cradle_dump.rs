@@ -1,7 +1,7 @@
 //! Dump the mixer of a GGD Cradle preset (MM2 `.preset` export or a snapshot
 //! decoded from a Reaper RPP). Proves we can read MM2's per-piece
 //! level/pan/mute/solo/sends/fx.
-//!   cargo run -p signal-drums --example cradle_dump -- <path-to.preset>
+//!   cargo run -p signal-drums --example `cradle_dump` -- <path-to.preset>
 
 use signal_drums::cradle;
 

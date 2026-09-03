@@ -30,8 +30,9 @@ use signal_sampler::SamplerRig;
 
 /// Inverse of [`qn_to_sec`]: QN position at `sec`, integrating the
 /// piecewise-constant tempo map (empty map = 120 BPM).
+#[must_use] 
 pub fn sec_to_qn(tempo: &[TempoPoint], sec: f64) -> f64 {
-    let mut bpm = tempo.first().map(|t| t.bpm).unwrap_or(120.0);
+    let mut bpm = tempo.first().map_or(120.0, |t| t.bpm);
     let mut seg_sec = 0.0;
     let mut seg_qn = 0.0;
     for t in tempo {
@@ -49,9 +50,10 @@ pub fn sec_to_qn(tempo: &[TempoPoint], sec: f64) -> f64 {
 }
 
 /// Tempo (BPM) in effect at `sec`.
+#[must_use] 
 pub fn bpm_at_sec(tempo: &[TempoPoint], sec: f64) -> f64 {
     let qn = sec_to_qn(tempo, sec);
-    let mut bpm = tempo.first().map(|t| t.bpm).unwrap_or(120.0);
+    let mut bpm = tempo.first().map_or(120.0, |t| t.bpm);
     for t in tempo {
         if t.qn > qn {
             break;
@@ -65,10 +67,10 @@ pub fn bpm_at_sec(tempo: &[TempoPoint], sec: f64) -> f64 {
 
 /// Synthesized click: a short sine burst with exponential decay.
 fn click_sample(freq: f64, dur_sec: f64, amp: f32, sr: u32) -> session_guide::AudioSample {
-    let n = (dur_sec * sr as f64).round() as usize;
+    let n = (dur_sec * f64::from(sr)).round() as usize;
     let samples: Vec<f32> = (0..n)
         .map(|i| {
-            let t = i as f64 / sr as f64;
+            let t = i as f64 / f64::from(sr);
             let env = (-t * 10.0 / dur_sec).exp() as f32;
             // Cosine phase: sample 0 is the peak, so the burst's very first
             // sample marks the beat (a sine's first sample would be 0).
@@ -92,6 +94,7 @@ pub struct CountIn {
 /// optional count-in on its own voice. Sample-accurate: the guide engine
 /// places each hit from the `BlockClock` beat grid this function derives
 /// from the map (see `features/guide/tests/guide_engine.rs`).
+#[must_use] 
 pub fn render_click(
     tempo: &[TempoPoint],
     total_frames: usize,
@@ -136,7 +139,7 @@ pub fn render_click(
         for b in [&mut cl, &mut cr, &mut nl, &mut nr, &mut gl, &mut gr] {
             b[..n].fill(0.0);
         }
-        let pos_seconds = start as f64 / sr as f64;
+        let pos_seconds = start as f64 / f64::from(sr);
         let clock = session_guide::BlockClock {
             playing: true,
             pos_seconds,
@@ -144,7 +147,7 @@ pub fn render_click(
             tempo_bpm: bpm_at_sec(tempo, pos_seconds),
             time_sig_num: 4,
             time_sig_den: 4,
-            sample_rate: sr as f64,
+            sample_rate: f64::from(sr),
         };
         let mut buses = session_guide::GuideBuses {
             click_l: &mut cl[..n],
@@ -168,6 +171,7 @@ pub fn render_click(
 /// the longer input). The click is gain-scaled and panned toward the right
 /// (`pan` 0.5 = center, 1.0 = hard right) so it reads clearly against the
 /// music.
+#[must_use] 
 pub fn mix_click(music: &[f32], click: &[f32], click_gain: f32, pan: f32) -> Vec<f32> {
     let frames = music.len().max(click.len()).div_ceil(2);
     let (gl, gr) = (
@@ -184,8 +188,8 @@ pub fn mix_click(music: &[f32], click: &[f32], click_gain: f32, pan: f32) -> Vec
             click.get(f * 2).copied().unwrap_or(0.0),
             click.get(f * 2 + 1).copied().unwrap_or(0.0),
         );
-        out[f * 2] = ml + cl * gl;
-        out[f * 2 + 1] = mr + cr * gr;
+        out[f * 2] = cl.mul_add(gl, ml);
+        out[f * 2 + 1] = cr.mul_add(gr, mr);
     }
     out
 }
@@ -238,15 +242,15 @@ fn fft_inplace(re: &mut [f64], im: &mut [f64]) {
             for k in 0..len / 2 {
                 let (ur, ui) = (re[i + k], im[i + k]);
                 let (vr, vi) = (
-                    re[i + k + len / 2] * cr - im[i + k + len / 2] * ci,
-                    re[i + k + len / 2] * ci + im[i + k + len / 2] * cr,
+                    re[i + k + len / 2].mul_add(cr, -(im[i + k + len / 2] * ci)),
+                    re[i + k + len / 2].mul_add(ci, im[i + k + len / 2] * cr),
                 );
                 re[i + k] = ur + vr;
                 im[i + k] = ui + vi;
                 re[i + k + len / 2] = ur - vr;
                 im[i + k + len / 2] = ui - vi;
-                let ncr = cr * wr - ci * wi;
-                ci = cr * wi + ci * wr;
+                let ncr = cr.mul_add(wr, -(ci * wi));
+                ci = cr.mul_add(wi, ci * wr);
                 cr = ncr;
             }
             i += len;
@@ -256,10 +260,11 @@ fn fft_inplace(re: &mut [f64], im: &mut [f64]) {
 }
 
 /// Compute the spectral-flux curve of interleaved stereo `audio`.
+#[must_use] 
 pub fn spectral_flux(audio: &[f32], sr: u32) -> FluxCurve {
     let frames = audio.len() / 2;
     let mono: Vec<f64> = (0..frames)
-        .map(|f| (audio[f * 2] as f64 + audio[f * 2 + 1] as f64) * 0.5)
+        .map(|f| (f64::from(audio[f * 2]) + f64::from(audio[f * 2 + 1])) * 0.5)
         .collect();
     let hann: Vec<f64> = (0..FFT_N)
         .map(|i| 0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / (FFT_N - 1) as f64).cos()))
@@ -269,7 +274,7 @@ pub fn spectral_flux(audio: &[f32], sr: u32) -> FluxCurve {
     } else {
         0
     };
-    let mut prev_mag = vec![0.0f64; FFT_N / 2];
+    let mut prev_mag = [0.0f64; FFT_N / 2];
     let mut v = Vec::with_capacity(n_hops);
     let mut re = vec![0.0f64; FFT_N];
     let mut im = vec![0.0f64; FFT_N];
@@ -282,15 +287,15 @@ pub fn spectral_flux(audio: &[f32], sr: u32) -> FluxCurve {
         fft_inplace(&mut re, &mut im);
         let mut flux = 0.0f64;
         for k in 1..FFT_N / 2 {
-            let mag = (re[k] * re[k] + im[k] * im[k]).sqrt();
+            let mag = re[k].hypot(im[k]);
             flux += (mag - prev_mag[k]).max(0.0);
             prev_mag[k] = mag;
         }
         v.push(flux as f32);
     }
     FluxCurve {
-        hop_sec: HOP as f64 / sr as f64,
-        t0: (FFT_N / 2) as f64 / sr as f64,
+        hop_sec: HOP as f64 / f64::from(sr),
+        t0: (FFT_N / 2) as f64 / f64::from(sr),
         v,
     }
 }
@@ -299,6 +304,7 @@ impl FluxCurve {
     /// Time (sec) of the strongest flux peak within `±search` of
     /// `expected`, refined by parabolic interpolation around the peak bin.
     /// `None` when the window is empty or flat (silence).
+    #[must_use] 
     pub fn onset_near(&self, expected: f64, search: f64) -> Option<f64> {
         let lo = (((expected - search - self.t0) / self.hop_sec)
             .floor()
@@ -322,16 +328,16 @@ impl FluxCurve {
         let mut idx = best as f64;
         if best > 0 && best + 1 < self.v.len() {
             let (a, b, c) = (
-                self.v[best - 1] as f64,
-                self.v[best] as f64,
-                self.v[best + 1] as f64,
+                f64::from(self.v[best - 1]),
+                f64::from(self.v[best]),
+                f64::from(self.v[best + 1]),
             );
-            let den = a - 2.0 * b + c;
+            let den = 2.0f64.mul_add(-b, a) + c;
             if den.abs() > 1e-12 {
                 idx += 0.5 * (a - c) / den;
             }
         }
-        Some(self.t0 + idx * self.hop_sec)
+        Some(idx.mul_add(self.hop_sec, self.t0))
     }
 }
 
@@ -347,7 +353,7 @@ impl FluxCurve {
         if lo + 1 >= hi {
             return None;
         }
-        let peak = self.v[lo..hi].iter().cloned().fold(f32::MIN, f32::max);
+        let peak = self.v[lo..hi].iter().copied().fold(f32::MIN, f32::max);
         if peak <= 0.0 {
             return None;
         }
@@ -355,12 +361,12 @@ impl FluxCurve {
         for i in lo..hi {
             if self.v[i] >= thresh {
                 let frac = if i > lo && self.v[i] > self.v[i - 1] {
-                    ((thresh - self.v[i - 1]) / (self.v[i] - self.v[i - 1])).clamp(0.0, 1.0) as f64
+                    f64::from(((thresh - self.v[i - 1]) / (self.v[i] - self.v[i - 1])).clamp(0.0, 1.0))
                         - 1.0
                 } else {
                     0.0
                 };
-                return Some(self.t0 + (i as f64 + frac) * self.hop_sec);
+                return Some((i as f64 + frac).mul_add(self.hop_sec, self.t0));
             }
         }
         None
@@ -370,7 +376,7 @@ impl FluxCurve {
 // ── Pitch-crossing arrival (legato) ──────────────────────────────────────────
 
 fn midi_to_hz(m: u8) -> f64 {
-    440.0 * 2f64.powf((f64::from(m) - 69.0) / 12.0)
+    440.0 * ((f64::from(m) - 69.0) / 12.0).exp2()
 }
 
 /// Goertzel power of `freq` over `n` mono samples at `off` (Hann-windowed).
@@ -383,11 +389,11 @@ fn goertzel(mono: &[f64], off: usize, n: usize, sr: u32, freq: f64) -> f64 {
     let (mut s1, mut s2) = (0.0f64, 0.0f64);
     for i in 0..n {
         let hann = 0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / (n - 1) as f64).cos());
-        let s0 = mono[off + i] * hann + coeff * s1 - s2;
+        let s0 = mono[off + i].mul_add(hann, coeff * s1) - s2;
         s2 = s1;
         s1 = s0;
     }
-    s1 * s1 + s2 * s2 - coeff * s1 * s2
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2))
 }
 
 /// Acoustic PITCH-ARRIVAL time of a legato transition: the moment the
@@ -397,6 +403,7 @@ fn goertzel(mono: &[f64], off: usize, n: usize, sr: u32, freq: f64) -> f64 {
 /// the destination's share first crosses 50% and holds. This measures
 /// exactly what the schedule promises ("the pitch change lands ON the
 /// tick"), independent of bow noise or the pre-bow swell.
+#[must_use] 
 pub fn pitch_arrival(
     audio: &[f32],
     sr: u32,
@@ -410,7 +417,7 @@ pub fn pitch_arrival(
     }
     let frames = audio.len() / 2;
     let mono: Vec<f64> = (0..frames)
-        .map(|f| (audio[f * 2] as f64 + audio[f * 2 + 1] as f64) * 0.5)
+        .map(|f| (f64::from(audio[f * 2]) + f64::from(audio[f * 2 + 1])) * 0.5)
         .collect();
     let (f_from, f_to) = (midi_to_hz(from), midi_to_hz(to));
     // Harmonics of each side, pruned where they collide with any harmonic
@@ -505,6 +512,7 @@ pub struct PitchShareCurve {
 }
 
 /// Compute the [`PitchShareCurve`] for a `from → to` pitch pair.
+#[must_use] 
 pub fn pitch_share_curve(
     audio: &[f32],
     sr: u32,
@@ -517,7 +525,7 @@ pub fn pitch_share_curve(
     const HOP_PA: usize = 128;
     let frames = audio.len() / 2;
     let mono: Vec<f64> = (0..frames)
-        .map(|f| (audio[f * 2] as f64 + audio[f * 2 + 1] as f64) * 0.5)
+        .map(|f| (f64::from(audio[f * 2]) + f64::from(audio[f * 2 + 1])) * 0.5)
         .collect();
     let (f_from, f_to) = (midi_to_hz(from), midi_to_hz(to));
     // Same harmonic policy as [`pitch_arrival`] — including the SEMITONE
@@ -546,7 +554,7 @@ pub fn pitch_share_curve(
     let n_hops = (((t1 - t0) / hop_sec).max(0.0)) as usize;
     let mut v = Vec::with_capacity(n_hops);
     for h in 0..n_hops {
-        let center = t0 + h as f64 * hop_sec;
+        let center = (h as f64).mul_add(hop_sec, t0);
         let off = ((center * f64::from(sr)) as isize - (N as isize) / 2).max(0) as usize;
         let e_from: f64 = hf_from
             .iter()
@@ -572,6 +580,7 @@ pub fn pitch_share_curve(
 /// appear and grow" — independent of everything else in the mix. Used by
 /// the join analyzer (`examples/analyze_joins.rs`) as the independent
 /// cross-measurement.
+#[must_use] 
 pub fn dest_energy_curve(
     audio: &[f32],
     sr: u32,
@@ -584,7 +593,7 @@ pub fn dest_energy_curve(
     const HOP_PA: usize = 128;
     let frames = audio.len() / 2;
     let mono: Vec<f64> = (0..frames)
-        .map(|f| (audio[f * 2] as f64 + audio[f * 2 + 1] as f64) * 0.5)
+        .map(|f| (f64::from(audio[f * 2]) + f64::from(audio[f * 2 + 1])) * 0.5)
         .collect();
     let (f_from, f_to) = (midi_to_hz(from), midi_to_hz(to));
     let h_lo: u32 = if from.abs_diff(to) <= 1 { 2 } else { 1 };
@@ -604,7 +613,7 @@ pub fn dest_energy_curve(
     let n_hops = (((t1 - t0) / hop_sec).max(0.0)) as usize;
     let mut v = Vec::with_capacity(n_hops);
     for h in 0..n_hops {
-        let center = t0 + h as f64 * hop_sec;
+        let center = (h as f64).mul_add(hop_sec, t0);
         let off = ((center * f64::from(sr)) as isize - (N as isize) / 2).max(0) as usize;
         let e: f64 = hf_to.iter().map(|&f| goertzel(&mono, off, N, sr, f)).sum();
         v.push(e as f32);
@@ -753,6 +762,7 @@ fn legato_line(b: &mut CaseBuilder, vel: u8) {
 /// The deterministic legato-timing showcase corpus. Every case is a
 /// standalone [`TrackDocument`] (single channel/line) whose every note has
 /// a grid-time arrival expectation.
+#[must_use] 
 pub fn timing_corpus() -> Vec<TimingCase> {
     let mut cases = Vec::new();
 
@@ -835,7 +845,7 @@ pub fn timing_corpus() -> Vec<TimingCase> {
     // 4. Repeated notes (re-bow): same pitch, abutted quarters.
     let mut b = CaseBuilder::new(90.0, KS_EXPR, 90);
     for i in 0..8 {
-        let start = COUNT_IN_QN + i as f64;
+        let start = COUNT_IN_QN + f64::from(i);
         let kind = if i == 0 {
             OnsetKind::PhraseStart
         } else {
@@ -852,7 +862,7 @@ pub fn timing_corpus() -> Vec<TimingCase> {
     //    fresh-attack baseline and the calibration anchor for sustains.
     let mut b = CaseBuilder::new(90.0, KS_EXPR, 90);
     for i in 0..8 {
-        let start = COUNT_IN_QN + 2.0 * i as f64;
+        let start = 2.0f64.mul_add(f64::from(i), COUNT_IN_QN);
         b.note(start, start + 1.0, 67, 85, OnsetKind::PhraseStart);
     }
     cases.push(b.build(
@@ -864,7 +874,7 @@ pub fn timing_corpus() -> Vec<TimingCase> {
     //    case (known 60 ms pre-delay compensation → peak on the grid).
     let mut b = CaseBuilder::new(120.0, KS_STACCATO, 90);
     for i in 0..8 {
-        let start = COUNT_IN_QN + 2.0 * i as f64;
+        let start = 2.0f64.mul_add(f64::from(i), COUNT_IN_QN);
         b.note(start, start + 0.25, 67, 100, OnsetKind::Short);
     }
     cases.push(b.build(
@@ -884,6 +894,7 @@ pub fn timing_corpus() -> Vec<TimingCase> {
 /// plus the Overlap-Delay), so arrivals are EXPECTED to sit late of the
 /// grid by roughly the velocity-zone delay — rendering both paths side by
 /// side makes that difference audible and measurable.
+#[must_use] 
 pub fn render_live_replay(
     rig: &SamplerRig,
     id: &str,
@@ -918,7 +929,7 @@ pub fn render_live_replay(
     let mut audio: Vec<f32> = Vec::new();
     let mut cursor_frames = 0i64;
     let render_to = |rig: &SamplerRig, audio: &mut Vec<f32>, cursor: &mut i64, sec: f64| {
-        let target = (sec * sr as f64).round() as i64;
+        let target = (sec * f64::from(sr)).round() as i64;
         if target > *cursor {
             let mut buf = vec![0.0f32; ((target - *cursor) as usize) * 2];
             rig.render_offline(&mut buf).expect("render_offline");
@@ -937,7 +948,7 @@ pub fn render_live_replay(
             Ev::Off(p) => rig.note_off(id, *p),
         }
     }
-    let end = events.last().map(|e| e.0).unwrap_or(0.0) + tail_sec;
+    let end = events.last().map_or(0.0, |e| e.0) + tail_sec;
     render_to(rig, &mut audio, &mut cursor_frames, end);
     audio
 }
@@ -1011,10 +1022,9 @@ mod tests {
         // 30 ms linear crossfade from G4 to A4 centered at 1.0 s.
         let xfade = 0.03;
         for i in 0..frames {
-            let t = i as f64 / sr as f64;
+            let t = i as f64 / f64::from(sr);
             let mix = ((t - (1.0 - xfade / 2.0)) / xfade).clamp(0.0, 1.0);
-            let s = ((2.0 * std::f64::consts::PI * f1 * t).sin() * (1.0 - mix)
-                + (2.0 * std::f64::consts::PI * f2 * t).sin() * mix) as f32
+            let s = (2.0 * std::f64::consts::PI * f1 * t).sin().mul_add(1.0 - mix, (2.0 * std::f64::consts::PI * f2 * t).sin() * mix) as f32
                 * 0.5;
             audio[i * 2] = s;
             audio[i * 2 + 1] = s;
@@ -1028,10 +1038,9 @@ mod tests {
         let mut audio8 = vec![0.0f32; frames * 2];
         let f3 = midi_to_hz(79);
         for i in 0..frames {
-            let t = i as f64 / sr as f64;
+            let t = i as f64 / f64::from(sr);
             let mix = ((t - (1.0 - xfade / 2.0)) / xfade).clamp(0.0, 1.0);
-            let s = ((2.0 * std::f64::consts::PI * f1 * t).sin() * (1.0 - mix)
-                + (2.0 * std::f64::consts::PI * f3 * t).sin() * mix) as f32
+            let s = (2.0 * std::f64::consts::PI * f1 * t).sin().mul_add(1.0 - mix, (2.0 * std::f64::consts::PI * f3 * t).sin() * mix) as f32
                 * 0.5;
             audio8[i * 2] = s;
             audio8[i * 2 + 1] = s;
@@ -1046,9 +1055,9 @@ mod tests {
         let mut audio = vec![0.0f32; sr as usize * 2 * 2];
         // 40 ms 2 kHz bursts at 0.5 s and 1.25 s.
         for &at in &[0.5f64, 1.25] {
-            let start = (at * sr as f64) as usize;
+            let start = (at * f64::from(sr)) as usize;
             for i in 0..(sr as usize / 25) {
-                let t = i as f64 / sr as f64;
+                let t = i as f64 / f64::from(sr);
                 let s = (2.0 * std::f64::consts::PI * 2000.0 * t).sin() as f32
                     * (-t * 60.0).exp() as f32;
                 audio[(start + i) * 2] = s;

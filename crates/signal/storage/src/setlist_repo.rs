@@ -1,6 +1,6 @@
-//! Setlist repository — data access for Setlist collections and SetlistEntry variants.
+//! Setlist repository — data access for Setlist collections and `SetlistEntry` variants.
 
-use sea_orm::*;
+use sea_orm::{ConnectionTrait, Schema, ActiveModelBehavior, StatementBuilder, QueryTrait, ColIdx, IdenStatic, ActiveEnum, QueryOrder, QueryFilter, EntityTrait, ColumnTrait, Iden, ActiveModelTrait, Set, Iterable};
 use signal_proto::metadata::Metadata;
 use signal_proto::setlist::{Setlist, SetlistEntry, SetlistEntryId, SetlistId};
 use signal_proto::song::SongId;
@@ -27,7 +27,8 @@ pub struct SetlistRepoLive {
 }
 
 impl SetlistRepoLive {
-    pub fn new(db: DatabaseConnection) -> Self {
+    #[must_use] 
+    pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
 

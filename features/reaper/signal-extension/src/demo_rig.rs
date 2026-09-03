@@ -9,7 +9,7 @@
 //! ```
 //!
 //! The layer track holds the entire signal chain as a flat FX list:
-//!   ReaGate → ReaComp → ReaEQ(drive) → ReaEQ(amp) → ReaDelay(mod)
+//!   `ReaGate` → `ReaComp` → ReaEQ(drive) → ReaEQ(amp) → ReaDelay(mod)
 //!   → ReaDelay(delay) → ReaDelay(reverb) → ReaComp(output) → ReaEQ(output)
 
 use crate::daw_compat::TrackHandleCompat;

@@ -10,6 +10,9 @@ description = "FTS Guide — CLAP/VST3 click/guide generator over the session-gu
 # cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
 crate-type = ["cdylib", "lib"]
 
+[lints]
+workspace = true
+
 [dependencies]
 # Plugin framework. `nice_plug` must be a DIRECT dep: `#[derive(Params)]` and
 # `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`

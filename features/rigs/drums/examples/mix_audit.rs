@@ -1,7 +1,7 @@
 //! Audit every MM2 Cradle mix in a library's `Mixes/` dir: parse, count
 //! strips/cables/fx, inventory FX types (mapped vs unmapped DSP), and check
 //! kit-name pairing against `Presets/*.signalpreset`.
-//!   cargo run -p signal-drums --example mix_audit [library-dir]
+//!   cargo run -p signal-drums --example `mix_audit` [library-dir]
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -10,20 +10,18 @@ use signal_drums::{cradle, mm2fx};
 
 fn norm(s: &str) -> String {
     s.chars()
-        .filter(|c| c.is_ascii_alphanumeric())
+        .filter(char::is_ascii_alphanumeric)
         .collect::<String>()
         .to_lowercase()
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lib = std::env::args()
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
+        .nth(1).map_or_else(|| {
             PathBuf::from(
                 "/run/media/AudioHaven/Signal/Libraries/Drum Kits/GGD Modern and Massive 2",
             )
-        });
+        }, PathBuf::from);
     let kits: Vec<String> = std::fs::read_dir(lib.join("Presets"))?
         .flatten()
         .filter_map(|e| {

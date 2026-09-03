@@ -272,7 +272,7 @@ fn bell_brickwall_proq4(
         ScaleByOmega(f64),
     }
     let hi_corner: Option<(usize, HiCorner)> =
-        if matches!(slope_idx, Some(7) | Some(8) | Some(9)) && n_sections >= 4 {
+        if matches!(slope_idx, Some(7 | 8 | 9)) && n_sections >= 4 {
             let q_max = match slope_idx {
                 Some(7) => 3.0,
                 Some(8) => 5.0,
@@ -290,9 +290,9 @@ fn bell_brickwall_proq4(
                 };
                 let p_lp = Complex::new(-theta_lp.sin(), theta_lp.cos());
                 let (_, bp_hi) = lp_to_bp(p_lp, b_pole);
-                let b0p_hi = bp_hi.mag_sq();
-                if b0p_hi > 1.0 + 1e-12 && b0p_hi < min_b0p {
-                    min_b0p = b0p_hi;
+                let bp_mag_sq = bp_hi.mag_sq();
+                if bp_mag_sq > 1.0 + 1e-12 && bp_mag_sq < min_b0p {
+                    min_b0p = bp_mag_sq;
                     min_pair = p;
                 }
             }
@@ -365,13 +365,13 @@ fn bell_brickwall_proq4(
         };
         let p_lp = Complex::new(-theta_lp.sin(), theta_lp.cos());
 
-        let (bp_p_a, bp_p_b) = lp_to_bp(p_lp, b_pole);
-        let (bp_z_a, bp_z_b) = lp_to_bp(p_lp, b_zero);
+        let (bp_pole_lo, bp_pole_hi) = lp_to_bp(p_lp, b_pole);
+        let (bp_zero_lo, bp_zero_hi) = lp_to_bp(p_lp, b_zero);
 
-        // bp_*_a is lo (|s|<1), bp_*_b is hi (|s|>1, reciprocal).
+        // bp_*_lo is lo (|s|<1), bp_*_hi is hi (|s|>1, reciprocal).
         // `inner = sec % 2 == 0` selects lo for even sections within a pair.
-        let p_sec = if inner { bp_p_a } else { bp_p_b };
-        let z_sec = if inner { bp_z_a } else { bp_z_b };
+        let p_sec = if inner { bp_pole_lo } else { bp_pole_hi };
+        let z_sec = if inner { bp_zero_lo } else { bp_zero_hi };
 
         // Analog quadratic (s−p)(s−p̄) = s² + b1·s + b0 with b2=1.
         // Real-LP-pole pair (odd N_LP, last pair_idx, p_lp = -1+0j):
@@ -527,7 +527,7 @@ fn bell_brickwall_proq4(
             && (1.8 * u_hi_signed.sqrt()) > 0.83 * PI;
         let w_eval = if matches!(
             slope_idx,
-            Some(3) | Some(4) | Some(5) | Some(6) | Some(7) | Some(8) | Some(9)
+            Some(3 | 4 | 5 | 6 | 7 | 8 | 9)
         ) {
             if force_uhi_pocket {
                 (1.8 * u_hi_signed.sqrt()).clamp(w_eval_default, PI)
@@ -570,7 +570,7 @@ fn bell_brickwall_proq4(
         // hi sections at Q ∈ {0.7, 0.85}.  Gated to bucket-B slopes
         // (7/8/9) — slope-3 has a different fallback we have not yet
         // decoded.
-        let is_bucket_b_multi = matches!(slope_idx, Some(7) | Some(8) | Some(9));
+        let is_bucket_b_multi = matches!(slope_idx, Some(7 | 8 | 9));
         let w_pole = if !w_pole_root_in_range && p_sec_b0p > 1.0 {
             if is_bucket_b_multi && u_lo_signed <= 0.0 && u_hi_signed > 0.0 {
                 u_hi_signed.sqrt().min(omega0) * q_user
@@ -604,8 +604,8 @@ fn bell_brickwall_proq4(
         {
             let t = ((freq_hz - 12000.0) / 10000.0).clamp(0.0, 1.0);
             let g_abs = gain_db.abs();
-            let wp_g12 = 0.5637618888 + (1.0335632346 - 0.5637618888) * t;
-            let wp_g6 = 0.5637618888 + (1.0326629488 - 0.5637618888) * t;
+            let wp_g12 = 0.563_761_888_8 + (1.033_563_234_6 - 0.563_761_888_8) * t;
+            let wp_g6 = 0.563_761_888_8 + (1.032_662_948_8 - 0.563_761_888_8) * t;
             wp_g6 + (wp_g12 - wp_g6) * ((g_abs - 6.0) / 6.0).clamp(0.0, 1.0)
         } else {
             w_pole
@@ -641,18 +641,18 @@ fn bell_brickwall_proq4(
         let (alpha_eff, beta_eff, w_eval_eff) = if is_center {
             let mut a = (1.0 - 1.0 / q_user).max(0.2);
             let mut b = 1.0 - (1.0 - a) / 20.0;
-            if matches!(slope_idx, Some(5) | Some(6)) && freq_hz >= 21000.0 {
+            if matches!(slope_idx, Some(5 | 6)) && freq_hz >= 21000.0 {
                 let t = ((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0);
                 if (q_user - 10.0).abs() < 1e-6 {
-                    let wz_cap = 2.4604056871 + (2.5084429445 - 2.4604056871) * t;
-                    let wt_cap = 2.7344693353 + (2.8612254295 - 2.7344693353) * t;
-                    a = a.min(wz_cap / omega0);
-                    b = b.min(wt_cap / omega0);
+                    let w_zero_cap = 2.4604056871 + (2.5084429445 - 2.4604056871) * t;
+                    let w_pole_cap = 2.7344693353 + (2.8612254295 - 2.7344693353) * t;
+                    a = a.min(w_zero_cap / omega0);
+                    b = b.min(w_pole_cap / omega0);
                 } else if (q_user - 4.0).abs() < 1e-6 {
-                    let wz_cap = 2.0480673295 + (2.0764694393 - 2.0480673295) * t;
-                    let wt_cap = 2.7138524174 + (2.8396267542 - 2.7138524174) * t;
-                    a = a.min(wz_cap / omega0);
-                    b = b.min(wt_cap / omega0);
+                    let w_zero_cap = 2.0480673295 + (2.0764694393 - 2.0480673295) * t;
+                    let w_pole_cap = 2.7138524174 + (2.8396267542 - 2.7138524174) * t;
+                    a = a.min(w_zero_cap / omega0);
+                    b = b.min(w_pole_cap / omega0);
                 }
             }
             // w_eval_center = clamp(1.2·ω₀, 0.9π, π) — verified bit-exact
@@ -665,12 +665,12 @@ fn bell_brickwall_proq4(
         };
         let (cap_a, cap_b, cap_c, cap_d, cap_e, cap_f, g_ref) = if is_center && is_slope5 {
             let gp = gain_lin.powf(1.0 / 10.0);
-            let b1p_c = SQRT_2 / (q_user * gp);
-            let b1z_c = SQRT_2 * gp / q_user;
+            let b_pole = SQRT_2 / (q_user * gp);
+            let b_zero = SQRT_2 * gp / q_user;
             // b0p_c = b0z_c = 1
-            let cb = (b1z_c * b1z_c - 2.0) * g_om2;
+            let cb = (b_zero * b_zero - 2.0) * g_om2;
             let cc = g_om4;
-            let ce = (b1p_c * b1p_c - 2.0) * g_om2;
+            let ce = (b_pole * b_pole - 2.0) * g_om2;
             let cf = g_om4;
             let gr = if cf.abs() > 1e-300 { cc / cf } else { 0.0 };
             (1.0_f64, cb, cc, 1.0_f64, ce, cf, gr)
@@ -1058,7 +1058,6 @@ fn bell_brickwall_proq4(
 /// Bell 3-point Lagrange synthesis — extracted from `bell_s2_proq4` body
 /// (post-sub-frequency selection).  Verified ≤ 1.5e-13 bit-exact on
 /// captured `lagrange_per_section_sweep.csv` rows where `w_third != 0`.
-#[allow(dead_code, clippy::too_many_arguments)]
 pub(crate) fn bell_three_point_synth(
     cap_a: f64,
     cap_b: f64,
@@ -1182,11 +1181,11 @@ pub(crate) fn bell_three_point_synth(
         let tt = tt2.sqrt();
         let rsp_68 = tp * tz * tt;
         let xmm5 = xmm5_in.unwrap_or_else(|| xmm4.max(0.0).sqrt() * rsp_68);
-        let xmm15 = (mp - mz) * tp2 * tz2;
+        let mp_mz_coeff = (mp - mz) * tp2 * tz2;
         let xmm0 = xmm5 * sqrt_g;
         let xmm3 = tz2 * xmm13_v - xmm0;
         let xmm2 = tp2 * xmm13_v - xmm0;
-        let xmm1 = if xmm15 == 0.0 {
+        let xmm1 = if mp_mz_coeff == 0.0 {
             0.0
         } else {
             let xmm4_local = (tp2 - tz2) * mz;
@@ -1199,7 +1198,7 @@ pub(crate) fn bell_three_point_synth(
             let xmm3_b = xmm3_sq * tp2;
             let xmm8_b = (xmm8 - xmm0_sq) * xmm4_local + xmm3_b;
             let xmm8_c = xmm8_b * mp;
-            ((xmm1_b - xmm8_c) / xmm15).max(0.0)
+            ((xmm1_b - xmm8_c) / mp_mz_coeff).max(0.0)
         };
         let xmm4_2 = tp2 * mp;
         let xmm0 = if xmm4_2 == 0.0 {
@@ -2393,13 +2392,13 @@ pub fn apply_proq4_prewarp(
     let inv_d = 1.0 / d_a;
     let two_t2m1 = 2.0 * (a2 * t2 - 1.0);
 
-    let new_a1 = two_t2m1 * inv_d;
-    let new_a2 = (1.0 - a1 * t + a2 * t2) * inv_d;
-    let new_b0 = (b0 + b1 * t + b2 * t2) * inv_d;
-    let new_b1 = 2.0 * (b2 * t2 - b0) * inv_d;
-    let new_b2 = (b0 - b1 * t + b2 * t2) * inv_d;
+    let a1_new = two_t2m1 * inv_d;
+    let a2_new = (1.0 - a1 * t + a2 * t2) * inv_d;
+    let b0_new = (b0 + b1 * t + b2 * t2) * inv_d;
+    let b1_new = 2.0 * (b2 * t2 - b0) * inv_d;
+    let b2_new = (b0 - b1 * t + b2 * t2) * inv_d;
 
-    [1.0, new_a1, new_a2, new_b0, new_b1, new_b2]
+    [1.0, a1_new, a2_new, b0_new, b1_new, b2_new]
 }
 
 /// LP-prototype atoms per Pro-Q 4 slope index, for Bell / Notch / Bandpass
@@ -2546,13 +2545,13 @@ fn bell_brickwall_cascade(
         let theta = PI * (2 * k + 1) as f64 / (2 * n_bp) as f64;
         let bp_pole_a = lp_to_bp_local(pole_mag, theta);
         let bp_zero_a = lp_to_bp_local(zero_mag, theta);
-        let (zp_re, zp_im) = blt(bp_pole_a.0, bp_pole_a.1);
-        let (zz_re, zz_im) = blt(bp_zero_a.0, bp_zero_a.1);
-        let a1 = -2.0 * zp_re;
-        let a2 = zp_re * zp_re + zp_im * zp_im;
+        let (pole_re, pole_im) = blt(bp_pole_a.0, bp_pole_a.1);
+        let (zero_re, zero_im) = blt(bp_zero_a.0, bp_zero_a.1);
+        let a1 = -2.0 * pole_re;
+        let a2 = pole_re * pole_re + pole_im * pole_im;
         let b0 = 1.0;
-        let b1 = -2.0 * zz_re;
-        let b2 = zz_re * zz_re + zz_im * zz_im;
+        let b1 = -2.0 * zero_re;
+        let b2 = zero_re * zero_re + zero_im * zero_im;
         sections.push([1.0, a1, a2, b0, b1, b2]);
     }
 

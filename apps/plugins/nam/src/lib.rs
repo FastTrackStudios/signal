@@ -144,7 +144,7 @@ impl Plugin for FtsNam {
         buffer_config: &BufferConfig,
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
         let max_block = buffer_config.max_buffer_size as usize;
 
         // Preallocate the mono scratch buffers — process() never allocates.
@@ -153,23 +153,20 @@ impl Plugin for FtsNam {
 
         // Stopgap model load (see module docs): env var / default path, on the
         // main thread. Failure is non-fatal — the plugin becomes a dry insert.
-        self.model = match Self::model_path() {
-            Some(path) => match NamModel::load(&path) {
-                Ok(mut model) => {
-                    model.reset(self.sample_rate, max_block);
-                    Some(model)
-                }
-                Err(e) => {
-                    eprintln!("[{PLUGIN_NAME}] failed to load NAM model {path:?}: {e} — passing audio through dry");
-                    None
-                }
-            },
-            None => {
-                eprintln!(
-                    "[{PLUGIN_NAME}] no model path ({MODEL_ENV_VAR} unset, no $HOME) — passing audio through dry"
-                );
+        self.model = if let Some(path) = Self::model_path() { match NamModel::load(&path) {
+            Ok(mut model) => {
+                model.reset(self.sample_rate, max_block);
+                Some(model)
+            }
+            Err(e) => {
+                eprintln!("[{PLUGIN_NAME}] failed to load NAM model {path:?}: {e} — passing audio through dry");
                 None
             }
+        } } else {
+            eprintln!(
+                "[{PLUGIN_NAME}] no model path ({MODEL_ENV_VAR} unset, no $HOME) — passing audio through dry"
+            );
+            None
         };
 
         true
@@ -208,9 +205,9 @@ impl Plugin for FtsNam {
             let gain = self.params.input_db.smoothed.next();
             let mut sum = 0.0f64;
             for ch in channels.iter() {
-                sum += ch[i] as f64;
+                sum += f64::from(ch[i]);
             }
-            *slot = sum * inv_ch * util::db_to_gain(gain) as f64;
+            *slot = sum * inv_ch * f64::from(util::db_to_gain(gain));
         }
 
         // One inference pass over the mono block.

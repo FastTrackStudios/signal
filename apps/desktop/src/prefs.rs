@@ -15,9 +15,9 @@ pub fn get(key: &str) -> Option<String> {
 }
 
 pub fn set(key: &str, value: &str) {
-    utils::prefs::set_raw(key, value)
+    utils::prefs::set_raw(key, value);
 }
 
 pub fn remove(key: &str) {
-    utils::prefs::remove(key)
+    utils::prefs::remove(key);
 }

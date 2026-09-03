@@ -1,4 +1,4 @@
-//! Shelf cascade builder (LowShelf, HighShelf) — Pro-Q 4 algorithmic path.
+//! Shelf cascade builder (`LowShelf`, `HighShelf`) — Pro-Q 4 algorithmic path.
 //!
 //! Single entry point [`shelf_universal_synth_cascade`] builds the section
 //! cascade via the universal per-section synth helper using the decoded
@@ -195,8 +195,8 @@ pub(super) fn shelf_universal_synth_cascade(
                 omega_scale,
             );
             if effective_order == 2 && matches!(section_type, 2 | 5) {
-                const SHELF_ORDER2_HIGH_ROOT: f64 = 2.6075219024795286; // 0.83*pi
-                const NOTCH46_UPPER_ROOT: f64 = 2.9845130209103035;
+                const SHELF_ORDER2_HIGH_ROOT: f64 = 2.607_521_902_479_528_6; // 0.83*pi
+                const NOTCH46_UPPER_ROOT: f64 = 2.984_513_020_910_303_5;
                 if proto.wp > SHELF_ORDER2_HIGH_ROOT && proto.wp < NOTCH46_UPPER_ROOT {
                     let wz = proto.wz;
                     let wt = (1.0 - (helper_alpha as f64) * 0.05) * wz;

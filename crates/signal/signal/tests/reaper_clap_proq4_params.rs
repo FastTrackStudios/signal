@@ -1,18 +1,18 @@
 #![cfg(feature = "daw")]
-//! REAPER integration test: CLAP FabFilter Pro-Q 4 parameter manipulation.
+//! REAPER integration test: CLAP `FabFilter` Pro-Q 4 parameter manipulation.
 //!
 //! Tests loading a CLAP Pro-Q 4 instance and exercising every parameter control
 //! path: by-index set/get, by-name set/get, and state chunk save/restore.
 //!
 //! Run with:
-//!   cargo xtask reaper-test reaper_clap_proq4_params
+//!   cargo xtask reaper-test `reaper_clap_proq4_params`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::test::reaper_test;
 
-/// REAPER's CLAP plugin identifier for FabFilter Pro-Q 4.
+/// REAPER's CLAP plugin identifier for `FabFilter` Pro-Q 4.
 const CLAP_PROQ4: &str = "CLAP: Pro-Q 4 (FabFilter)";
 
 /// Small sleep to let REAPER/CLAP process changes.
@@ -115,18 +115,16 @@ async fn proq4_set_param_by_index(ctx: &ReaperTestContext) -> eyre::Result<()> {
 
     // Read back
     let readback = fx.param(output_level.index).get().await?;
-    println!("[proq4] Readback after set: {:.6}", readback);
+    println!("[proq4] Readback after set: {readback:.6}");
 
     let delta = (readback - target_value).abs();
     if delta < 0.01 {
         println!(
-            "[proq4] SUCCESS: param set by index works (delta={:.6})",
-            delta
+            "[proq4] SUCCESS: param set by index works (delta={delta:.6})"
         );
     } else {
         println!(
-            "[proq4] FAIL: param set by index did NOT take effect. Expected {:.6}, got {:.6} (delta={:.6})",
-            target_value, readback, delta
+            "[proq4] FAIL: param set by index did NOT take effect. Expected {target_value:.6}, got {readback:.6} (delta={delta:.6})"
         );
     }
 
@@ -175,8 +173,7 @@ async fn proq4_set_param_by_name(ctx: &ReaperTestContext) -> eyre::Result<()> {
 
         let status = if delta < 0.01 { "OK" } else { "FAIL" };
         println!(
-            "[proq4] {}: original={:.4} target={:.4} readback={:.4} delta={:.4} [{}]",
-            name, original, target, readback, delta, status
+            "[proq4] {name}: original={original:.4} target={target:.4} readback={readback:.4} delta={delta:.4} [{status}]"
         );
 
         ctx.log(&format!(
@@ -231,12 +228,11 @@ async fn proq4_bulk_param_set(ctx: &ReaperTestContext) -> eyre::Result<()> {
         let delta = (readback - target).abs();
         if delta < 0.02 {
             pass_count += 1;
-            println!("[proq4]   {}: {:.4} -> {:.4} OK", name, target, readback);
+            println!("[proq4]   {name}: {target:.4} -> {readback:.4} OK");
         } else {
             fail_count += 1;
             println!(
-                "[proq4]   {}: expected {:.4}, got {:.4} FAIL (delta={:.4})",
-                name, target, readback, delta
+                "[proq4]   {name}: expected {target:.4}, got {readback:.4} FAIL (delta={delta:.4})"
             );
         }
     }
@@ -287,8 +283,7 @@ async fn proq4_state_chunk_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()
     let output_idx = params
         .iter()
         .find(|p| p.name == "Output Level")
-        .map(|p| p.index)
-        .unwrap_or(0);
+        .map_or(0, |p| p.index);
 
     fx.param(output_idx).set(0.2).await?;
     settle().await;
@@ -306,8 +301,7 @@ async fn proq4_state_chunk_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()
     // Check if state actually changed
     let chunks_differ = default_chunk != modified_chunk;
     println!(
-        "[proq4] State chunks differ after param set: {}",
-        chunks_differ
+        "[proq4] State chunks differ after param set: {chunks_differ}"
     );
 
     // Restore original state
@@ -321,7 +315,7 @@ async fn proq4_state_chunk_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()
         .ok_or_else(|| eyre::eyre!("Failed to get restored state chunk"))?;
 
     let restore_matches = default_chunk == restored_chunk;
-    println!("[proq4] State restored to original: {}", restore_matches);
+    println!("[proq4] State restored to original: {restore_matches}");
 
     if restore_matches {
         println!("[proq4] SUCCESS: state chunk roundtrip works");
@@ -363,12 +357,10 @@ async fn proq4_state_chunk_reflects_in_params(ctx: &ReaperTestContext) -> eyre::
     let output_idx = default_params
         .iter()
         .find(|p| p.name == "Output Level")
-        .map(|p| p.index)
-        .unwrap_or(0);
+        .map_or(0, |p| p.index);
     let default_output = fx.param(output_idx).get().await?;
     println!(
-        "[proq4] Default Output Level (idx {}): {:.6}",
-        output_idx, default_output
+        "[proq4] Default Output Level (idx {output_idx}): {default_output:.6}"
     );
 
     // Save default chunk
@@ -383,8 +375,7 @@ async fn proq4_state_chunk_reflects_in_params(ctx: &ReaperTestContext) -> eyre::
     settle().await;
     let after_set = fx.param(output_idx).get().await?;
     println!(
-        "[proq4] After param set to {:.4}: readback={:.6}",
-        new_value, after_set
+        "[proq4] After param set to {new_value:.4}: readback={after_set:.6}"
     );
 
     // Now save this (possibly changed) chunk
@@ -398,8 +389,7 @@ async fn proq4_state_chunk_reflects_in_params(ctx: &ReaperTestContext) -> eyre::
     settle().await;
     let after_restore = fx.param(output_idx).get().await?;
     println!(
-        "[proq4] After restoring default chunk: Output Level={:.6} (expected {:.6})",
-        after_restore, default_output
+        "[proq4] After restoring default chunk: Output Level={after_restore:.6} (expected {default_output:.6})"
     );
 
     // Restore changed chunk
@@ -407,13 +397,11 @@ async fn proq4_state_chunk_reflects_in_params(ctx: &ReaperTestContext) -> eyre::
     settle().await;
     let after_reapply = fx.param(output_idx).get().await?;
     println!(
-        "[proq4] After restoring changed chunk: Output Level={:.6}",
-        after_reapply
+        "[proq4] After restoring changed chunk: Output Level={after_reapply:.6}"
     );
 
     ctx.log(&format!(
-        "chunk_params: default={:.6} after_set={:.6} after_restore={:.6} after_reapply={:.6}",
-        default_output, after_set, after_restore, after_reapply
+        "chunk_params: default={default_output:.6} after_set={after_set:.6} after_restore={after_restore:.6} after_reapply={after_reapply:.6}"
     ));
 
     Ok(())
@@ -452,7 +440,7 @@ async fn proq4_encoded_chunk_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<
         .ok_or_else(|| eyre::eyre!("No encoded chunk after restore"))?;
 
     let matches = encoded == after;
-    println!("[proq4] Encoded chunk roundtrip matches: {}", matches);
+    println!("[proq4] Encoded chunk roundtrip matches: {matches}");
 
     ctx.log(&format!(
         "encoded_chunk: len={} roundtrip_matches={}",
@@ -514,7 +502,7 @@ async fn proq4_param_sweep(ctx: &ReaperTestContext) -> eyre::Result<()> {
         test_count
     );
     for (idx, name) in &responsive {
-        println!("[proq4]   OK [{:3}] {}", idx, name);
+        println!("[proq4]   OK [{idx:3}] {name}");
     }
 
     println!(
@@ -524,8 +512,7 @@ async fn proq4_param_sweep(ctx: &ReaperTestContext) -> eyre::Result<()> {
     );
     for (idx, name, orig, target, readback) in &unresponsive {
         println!(
-            "[proq4]   FAIL [{:3}] {} (orig={:.4} target={:.4} readback={:.4})",
-            idx, name, orig, target, readback
+            "[proq4]   FAIL [{idx:3}] {name} (orig={orig:.4} target={target:.4} readback={readback:.4})"
         );
     }
 
@@ -562,7 +549,7 @@ async fn proq4_dump_track_chunk(ctx: &ReaperTestContext) -> eyre::Result<()> {
     } else {
         &track_chunk
     };
-    println!("[proq4] Track chunk ({} chars):\n{}", chunk_len, preview);
+    println!("[proq4] Track chunk ({chunk_len} chars):\n{preview}");
     if chunk_len > 3000 {
         println!("[proq4] ... ({} more chars truncated)", chunk_len - 3000);
     }
@@ -572,7 +559,7 @@ async fn proq4_dump_track_chunk(ctx: &ReaperTestContext) -> eyre::Result<()> {
         Some(chunk) => {
             println!("[proq4] state_chunk() returned {} bytes", chunk.len());
             let preview = String::from_utf8_lossy(&chunk[..chunk.len().min(500)]);
-            println!("[proq4] state_chunk preview:\n{}", preview);
+            println!("[proq4] state_chunk preview:\n{preview}");
         }
         None => {
             println!("[proq4] state_chunk() returned None");
@@ -590,6 +577,6 @@ async fn proq4_dump_track_chunk(ctx: &ReaperTestContext) -> eyre::Result<()> {
         }
     }
 
-    ctx.log(&format!("track_chunk: {} chars", chunk_len));
+    ctx.log(&format!("track_chunk: {chunk_len} chars"));
     Ok(())
 }

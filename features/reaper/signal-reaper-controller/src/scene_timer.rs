@@ -31,7 +31,7 @@ struct ControllerCache {
     /// Map of section track name → send index on the input track.
     /// Built by matching send destinations to child track names.
     name_to_send_index: HashMap<String, u32>,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     controller_guid: String,
     name: String,
     timeline: Vec<TimelineEntry>,
@@ -82,13 +82,13 @@ pub fn poll() {
             .playhead_position
             .time
             .as_ref()
-            .map(|t| t.as_seconds())
+            .map(daw::service::PositionInSeconds::as_seconds)
     } else {
         transport
             .edit_position
             .time
             .as_ref()
-            .map(|t| t.as_seconds())
+            .map(daw::service::PositionInSeconds::as_seconds)
     };
     let Some(position) = position else { return };
 
@@ -98,7 +98,7 @@ pub fn poll() {
             .timeline
             .iter()
             .find(|e| position >= e.start && position < e.end);
-        let target_name = entry.map(|e| e.name.as_str()).unwrap_or("");
+        let target_name = entry.map_or("", |e| e.name.as_str());
 
         // Skip if nothing changed
         if target_name == ctrl.active_scene {
@@ -166,7 +166,7 @@ fn scan_controllers(state: &mut SceneState) {
         match daw.track_get_ext_state(&track_info.guid, SCENE_COUNT_SECTION, SCENE_COUNT_KEY) {
             Some(s) if s.parse::<u32>().is_ok() => {}
             _ => continue,
-        };
+        }
 
         // Find the input track:
         // 1. Check this folder's P_EXT for input_track_guid

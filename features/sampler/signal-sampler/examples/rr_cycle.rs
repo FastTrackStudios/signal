@@ -67,11 +67,11 @@ fn read_wav(path: &str) -> (Vec<f32>, u32) {
             let o = (f * ch + c) * by;
             let s = match (format, bits) {
                 (3, 32) => f32::from_le_bytes([data[o], data[o + 1], data[o + 2], data[o + 3]]),
-                (1, 16) => i16::from_le_bytes([data[o], data[o + 1]]) as f32 / 32768.0,
+                (1, 16) => f32::from(i16::from_le_bytes([data[o], data[o + 1]])) / 32768.0,
                 (1, 24) => {
-                    let v = (data[o] as i32)
-                        | ((data[o + 1] as i32) << 8)
-                        | ((data[o + 2] as i32) << 16);
+                    let v = i32::from(data[o])
+                        | (i32::from(data[o + 1]) << 8)
+                        | (i32::from(data[o + 2]) << 16);
                     let v = if v & 0x80_0000 != 0 {
                         v | !0xFF_FFFF
                     } else {
@@ -117,14 +117,14 @@ fn fft(re: &mut [f32], im: &mut [f32]) {
             for k in 0..len / 2 {
                 let a = i + k;
                 let b = i + k + len / 2;
-                let tr = cr * re[b] - ci * im[b];
-                let ti = cr * im[b] + ci * re[b];
+                let tr = cr.mul_add(re[b], -(ci * im[b]));
+                let ti = cr.mul_add(im[b], ci * re[b]);
                 re[b] = re[a] - tr;
                 im[b] = im[a] - ti;
                 re[a] += tr;
                 im[a] += ti;
-                let ncr = cr * wr - ci * wi;
-                ci = cr * wi + ci * wr;
+                let ncr = cr.mul_add(wr, -(ci * wi));
+                ci = cr.mul_add(wi, ci * wr);
                 cr = ncr;
             }
             i += len;
@@ -138,7 +138,7 @@ fn band_spectrum(sig: &[f32]) -> [f32; BANDS] {
     let mut im = vec![0.0f32; FFT_N];
     let n = sig.len().min(FFT_N);
     for i in 0..n {
-        let w = 0.5 - 0.5 * (2.0 * PI * i as f32 / (FFT_N as f32 - 1.0)).cos();
+        let w = 0.5f32.mul_add(-(2.0 * PI * i as f32 / (FFT_N as f32 - 1.0)).cos(), 0.5);
         re[i] = sig[i] * w;
     }
     fft(&mut re, &mut im);
@@ -149,12 +149,12 @@ fn band_spectrum(sig: &[f32]) -> [f32; BANDS] {
         if !(40.0..=18_000.0).contains(&f) {
             continue;
         }
-        let frac = (f / 40.0).ln() / (18_000.0f32 / 40.0).ln();
+        let frac = (f / 40.0).log(18_000.0f32 / 40.0);
         let band = ((frac * BANDS as f32) as usize).min(BANDS - 1);
-        bands[band] += re[bin] * re[bin] + im[bin] * im[bin];
+        bands[band] += re[bin].mul_add(re[bin], im[bin] * im[bin]);
     }
-    let max = bands.iter().cloned().fold(0.0f32, f32::max).max(1e-12);
-    for b in bands.iter_mut() {
+    let max = bands.iter().copied().fold(0.0f32, f32::max).max(1e-12);
+    for b in &mut bands {
         *b = (10.0 * (*b / max).max(1e-12).log10()).max(-50.0);
     }
     bands
@@ -185,7 +185,7 @@ fn main() -> eyre::Result<()> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(13);
     let block = SHORT_KS_ORDER.iter().position(|&k| k == ks).unwrap_or(0);
-    let sec_start = RR_SECTION_START + block as f64 * 10.6 + 0.2; // first note time
+    let sec_start = (block as f64).mul_add(10.6, RR_SECTION_START) + 0.2; // first note time
     let (css, css_sr) = read_wav(&refp);
 
     let css_root = PathBuf::from(CSS_ROOT);
@@ -239,8 +239,8 @@ fn main() -> eyre::Result<()> {
     println!("CSS hit → best-matching our slot (and full row):");
     let mut seq = Vec::new();
     for hit in 0..12 {
-        let t = sec_start + hit as f64 * 0.8;
-        let start = (t * css_sr as f64) as usize;
+        let t = f64::from(hit).mul_add(0.8, sec_start);
+        let start = (t * f64::from(css_sr)) as usize;
         if start + FFT_N >= css.len() {
             break;
         }
@@ -255,7 +255,7 @@ fn main() -> eyre::Result<()> {
         let margin = bv
             - sims
                 .iter()
-                .cloned()
+                .copied()
                 .filter(|&v| v < bv)
                 .fold(0.0f32, f32::max);
         seq.push(best);

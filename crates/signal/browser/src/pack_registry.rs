@@ -34,7 +34,8 @@ pub enum EntryKind {
 }
 
 impl EntryKind {
-    pub fn icon(self) -> &'static str {
+    #[must_use] 
+    pub const fn icon(self) -> &'static str {
         match self {
             Self::Preset => "🎚️",
             Self::Engine => "⚙️",
@@ -44,7 +45,8 @@ impl EntryKind {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    #[must_use] 
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Preset => "preset",
             Self::Engine => "engine",
@@ -54,6 +56,7 @@ impl EntryKind {
         }
     }
 
+    #[must_use] 
     pub fn from_extension(ext: &str) -> Option<Self> {
         match ext {
             "signalpack" => Some(Self::Pack),
@@ -87,11 +90,13 @@ pub struct ScanReport {
 }
 
 impl ScanReport {
-    pub fn loaded_count(&self) -> usize {
+    #[must_use] 
+    pub const fn loaded_count(&self) -> usize {
         self.entries.len()
     }
 
-    pub fn has_failures(&self) -> bool {
+    #[must_use] 
+    pub const fn has_failures(&self) -> bool {
         self.skipped_walk_entries > 0 || self.failed_loadables > 0
     }
 }
@@ -128,6 +133,7 @@ pub struct PackEntry {
 
 impl PackEntry {
     /// Convert to a `ColumnItem` for rendering in the multi-column browser.
+    #[must_use] 
     pub fn to_column_item(&self) -> ColumnItem {
         let subtitle = match (&self.instrument, &self.category) {
             (i, c) if !i.is_empty() && !c.is_empty() => Some(format!("{i} · {c}")),
@@ -157,6 +163,7 @@ impl PackEntry {
 ///
 /// Renamed conceptually to "loadables" but keeps the name `scan_packs`
 /// for back-compat. Use [`scan_loadables`] (alias) if you prefer.
+#[must_use] 
 pub fn scan_packs(root: &Path) -> Vec<PackEntry> {
     scan_packs_report(root).entries
 }
@@ -174,7 +181,6 @@ pub fn scan_packs_report(root: &Path) -> ScanReport {
     for item in walkdir::WalkDir::new(root)
         .follow_links(false)
         .max_depth(12)
-        .into_iter()
     {
         let entry = match item {
             Ok(entry) => entry,
@@ -232,11 +238,13 @@ pub fn scan_packs_report(root: &Path) -> ScanReport {
 }
 
 /// Alias for `scan_packs` — mirrors the new "loadables" terminology.
+#[must_use] 
 pub fn scan_loadables(root: &Path) -> Vec<PackEntry> {
     scan_packs(root)
 }
 
 /// Alias for [`scan_packs_report`] using the newer loadables terminology.
+#[must_use] 
 pub fn scan_loadables_report(root: &Path) -> ScanReport {
     scan_packs_report(root)
 }
@@ -260,7 +268,7 @@ fn folder_segments(path: &Path, root: &Path) -> Vec<String> {
         .and_then(|p| p.strip_prefix(root).ok())
         .map(|rel| {
             rel.components()
-                .filter_map(|c| c.as_os_str().to_str().map(|s| s.to_string()))
+                .filter_map(|c| c.as_os_str().to_str().map(std::string::ToString::to_string))
                 .filter(|s| !s.is_empty())
                 .collect::<Vec<_>>()
         })
@@ -406,7 +414,7 @@ fn build_pack_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_sample
         .and_then(|p| p.strip_prefix(root).ok())
         .map(|rel| {
             rel.components()
-                .filter_map(|c| c.as_os_str().to_str().map(|s| s.to_string()))
+                .filter_map(|c| c.as_os_str().to_str().map(std::string::ToString::to_string))
                 .filter(|s| !s.is_empty())
                 .collect::<Vec<_>>()
         })
@@ -435,6 +443,7 @@ fn tag_missing(tags: &TagSet, category_str: &str, value: &str) -> bool {
 
 /// Filter packs by an instrument substring (case-insensitive).
 /// Empty `q` returns all entries unchanged.
+#[must_use] 
 pub fn filter_instrument<'a>(entries: &'a [PackEntry], q: &str) -> Vec<&'a PackEntry> {
     if q.is_empty() {
         return entries.iter().collect();
@@ -447,6 +456,7 @@ pub fn filter_instrument<'a>(entries: &'a [PackEntry], q: &str) -> Vec<&'a PackE
 }
 
 /// Filter packs by category (case-insensitive exact match).
+#[must_use] 
 pub fn filter_category<'a>(entries: &'a [PackEntry], category: &str) -> Vec<&'a PackEntry> {
     if category.is_empty() {
         return entries.iter().collect();
@@ -459,6 +469,7 @@ pub fn filter_category<'a>(entries: &'a [PackEntry], category: &str) -> Vec<&'a 
 }
 
 /// Free-text search across name + folder + tags.
+#[must_use] 
 pub fn search<'a>(entries: &'a [PackEntry], q: &str) -> Vec<&'a PackEntry> {
     if q.is_empty() {
         return entries.iter().collect();

@@ -38,7 +38,7 @@ fn to_engine(points: &[PatternPoint]) -> Vec<Point> {
         .collect()
 }
 
-fn curve_label(curve_type: u8) -> &'static str {
+const fn curve_label(curve_type: u8) -> &'static str {
     match curve_type {
         0 => "Hold",
         1 => "Curve",
@@ -316,7 +316,7 @@ pub fn PatternEditor(
                         },
                         onclick: {
                             let on_change = on_change;
-                            let pts = points_for_rail.clone();
+                            let pts = points_for_rail;
                             move |_| {
                                 let Some(i) = sel else { return };
                                 let mut next = pts.clone();

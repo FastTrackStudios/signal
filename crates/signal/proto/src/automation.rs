@@ -93,6 +93,7 @@ impl AutomationLane {
     }
 
     /// Get all events in a time range (inclusive start, exclusive end).
+    #[must_use] 
     pub fn events_in_range(&self, start_beats: f64, end_beats: f64) -> Vec<&AutomationEvent> {
         self.events
             .iter()
@@ -110,7 +111,8 @@ pub struct SnapshotAutomation {
 }
 
 impl SnapshotAutomation {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self { lanes: Vec::new() }
     }
 
@@ -119,6 +121,7 @@ impl SnapshotAutomation {
     }
 
     /// All events across all lanes in a time range, sorted by position.
+    #[must_use] 
     pub fn all_events_in_range(&self, start_beats: f64, end_beats: f64) -> Vec<&AutomationEvent> {
         let mut events: Vec<&AutomationEvent> = self
             .lanes

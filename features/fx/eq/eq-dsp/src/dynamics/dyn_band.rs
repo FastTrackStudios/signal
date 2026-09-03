@@ -148,6 +148,7 @@ pub struct DynBand {
 }
 
 impl DynBand {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut b = Self {
             params: DynBandParams::default(),
@@ -294,10 +295,10 @@ impl DynBand {
                 _ => self.params.freq_hz,
             };
             // Second-order Butterworth magnitudes at `watch`.
-            let r_hp = watch / lo.max(1.0);
-            let r_lp = watch / hi.max(1.0);
-            let hp = r_hp * r_hp / (1.0 + r_hp.powi(4)).sqrt();
-            let lp = 1.0 / (1.0 + r_lp.powi(4)).sqrt();
+            let highpass_ratio = watch / lo.max(1.0);
+            let lowpass_ratio = watch / hi.max(1.0);
+            let hp = highpass_ratio * highpass_ratio / (1.0 + highpass_ratio.powi(4)).sqrt();
+            let lp = 1.0 / (1.0 + lowpass_ratio.powi(4)).sqrt();
             // Squared, because each shape is applied twice.
             self.side_makeup = 1.0 / (hp * hp * lp * lp).max(1.0e-4);
         } else {
@@ -307,6 +308,7 @@ impl DynBand {
     }
 
     /// Current live gain in dB (for metering / the yellow bar).
+    #[must_use]
     pub fn live_gain_db(&self) -> f64 {
         self.applied_gain_db
     }
