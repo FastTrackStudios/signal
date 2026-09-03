@@ -80,6 +80,12 @@ impl IrEngine {
         let stop = Arc::new(AtomicBool::new(false));
         let stop_w = stop.clone();
 
+        #[expect(
+            clippy::expect_used,
+            reason = "one-time thread spawn at init; a rig that cannot start its IR
+                     worker has no working reverb, so failing loudly here is correct —
+                     see the `# Panics` note on this function"
+        )]
         let worker = thread::Builder::new()
             .name("reverb-ir-loader".into())
             .spawn(move || {
@@ -176,6 +182,12 @@ impl IrEngine {
     pub fn spawn_processed_relay(&self) -> Receiver<ProcessedIr> {
         let (tx, rx) = unbounded::<ProcessedIr>();
         let src = self.rx_results.clone();
+        #[expect(
+            clippy::expect_used,
+            reason = "one-time thread spawn at init; a rig that cannot start its IR
+                     worker has no working reverb, so failing loudly here is correct —
+                     see the `# Panics` note on this function"
+        )]
         thread::Builder::new()
             .name("reverb-ir-relay".into())
             .spawn(move || {
@@ -209,6 +221,12 @@ impl IrEngine {
     pub fn spawn_prepared_relay(&self) -> Receiver<PreparedIrPair> {
         let (tx, rx) = unbounded::<PreparedIrPair>();
         let src = self.rx_results.clone();
+        #[expect(
+            clippy::expect_used,
+            reason = "one-time thread spawn at init; a rig that cannot start its IR
+                     worker has no working reverb, so failing loudly here is correct —
+                     see the `# Panics` note on this function"
+        )]
         thread::Builder::new()
             .name("reverb-ir-prepare".into())
             .spawn(move || {
@@ -311,6 +329,12 @@ impl ImpulseReshaper {
         let stop = Arc::new(AtomicBool::new(false));
         let stop_w = stop.clone();
 
+        #[expect(
+            clippy::expect_used,
+            reason = "one-time thread spawn at init; a rig that cannot start its IR
+                     worker has no working reverb, so failing loudly here is correct —
+                     see the `# Panics` note on this function"
+        )]
         let worker = thread::Builder::new()
             .name("reverb-ir-reshape".into())
             .spawn(move || {

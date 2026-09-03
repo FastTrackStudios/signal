@@ -3,6 +3,28 @@
 //! All tests are `#[ignore]` — they require WAV files in ~/`Downloads/RomanStyx_SevenFeel`/.
 //! Run with: cargo test --package trigger-dsp -- --ignored
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::default_trait_access,
+    clippy::expect_used,
+    clippy::ignore_without_reason,
+    clippy::indexing_slicing,
+    clippy::option_if_let_else,
+    clippy::similar_names,
+    reason = "pending the DSP algorithm rewrite; the panic lints here are \
+              test/example code, where panicking on bad input is the point"
+)]
+
+
 use audiocore_dsp::{AudioConfig, Processor};
 use trigger_dsp::detector::{DetectMode, TriggerDetector};
 use trigger_dsp::sampler::{MixMode, Sample};

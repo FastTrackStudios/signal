@@ -1,5 +1,19 @@
 //! Trigger DSP tests — verify detection, velocity, sample playback, and signal flow.
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    reason = "pending the DSP algorithm rewrite"
+)]
+
+
 use audiocore_dsp::{AudioConfig, Processor};
 use trigger_dsp::chain::TriggerChain;
 use trigger_dsp::detector::{DetectAlgorithm, DetectMode, TriggerDetector};

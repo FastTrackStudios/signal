@@ -1,5 +1,18 @@
 //! Pattern-lane behavior on the reverb chain (fts-modulation lanes).
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::as_conversions,
+    clippy::cast_precision_loss,
+    clippy::many_single_char_names,
+    reason = "pending the DSP algorithm rewrite"
+)]
+
+
 use audiocore_dsp::{AudioConfig, Processor};
 use fts_modulation::curves::CurveType;
 use fts_modulation::{Modulator, Point};

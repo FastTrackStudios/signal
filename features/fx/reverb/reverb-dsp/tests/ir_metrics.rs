@@ -14,6 +14,28 @@
 //! - L/R decorrelation (normalized cross-correlation peak, late tail)
 //! - DC/subsonic energy ratio (< 20 Hz)
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::ignore_without_reason,
+    clippy::indexing_slicing,
+    clippy::items_after_statements,
+    clippy::many_single_char_names,
+    clippy::unwrap_used,
+    reason = "pending the DSP algorithm rewrite; the panic lints here are \
+              test/example code, where panicking on bad input is the point"
+)]
+
+
 use std::f64::consts::PI;
 
 use realfft::RealFftPlanner;

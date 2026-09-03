@@ -6,6 +6,10 @@ use crate::cascade;
 fn get_ftseq_bell_slope() -> Option<usize> {
     use std::sync::OnceLock;
     static FTSEQ_BELL_SLOPE: OnceLock<Option<usize>> = OnceLock::new();
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "read exactly once through OnceLock, not per call"
+    )]
     *FTSEQ_BELL_SLOPE.get_or_init(|| {
         std::env::var("FTSEQ_BELL_SLOPE")
             .ok()

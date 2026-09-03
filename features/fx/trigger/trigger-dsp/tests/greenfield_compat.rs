@@ -5,6 +5,22 @@
 //! hits map to higher velocities, and per-sample detection places onsets
 //! accurately inside a block.
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    reason = "pending the DSP algorithm rewrite"
+)]
+
+
 use audiocore_dsp::{AudioConfig, Processor};
 use trigger_dsp::chain::TriggerChain;
 use trigger_dsp::detector::TriggerDetector;

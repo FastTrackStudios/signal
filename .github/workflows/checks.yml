@@ -53,3 +53,30 @@ jobs:
             --target wasm32-unknown-unknown --no-default-features --features signal
       - name: cargo nextest
         run: ${NIX_DEV} cargo nextest run --workspace --no-fail-fast
+
+      # Advisory only — DOES NOT BLOCK. The strict clippy config (pedantic +
+      # nursery + the panic denies, with no allow-list underneath) is adopted
+      # in Cargo.toml, but the tree does not pass it yet: 84 of 116 packages
+      # still have findings, overwhelmingly casts, indexing and integer
+      # arithmetic in per-sample DSP math. Those are slated for an algorithm
+      # rewrite rather than thousands of individual edits, so failing the gate
+      # on them would block every unrelated PR for months.
+      #
+      # The point of running it anyway is that the number stays visible and can
+      # only go down. Read the job summary for the per-crate and per-lint
+      # breakdown, and note the crash-safety section — panics and audio-thread
+      # hazards are called out separately from style findings.
+      #
+      # `--cap-lints warn` is REQUIRED, not a softening: under `deny` a crate
+      # aborts at its first error and every crate downstream of it goes
+      # unlinted, so a deny-level count is a floor rather than a total. The same
+      # tree measured 1,615 that way and 14,356 capped to warn.
+      #
+      # When a crate is genuinely clean, add it to a blocking `-p` list here so
+      # it cannot regress. That ratchet is the migration path off this step.
+      - name: cargo clippy (advisory, does not block)
+        continue-on-error: true
+        run: |
+          ${NIX_DEV} cargo clippy --workspace --no-deps --all-targets --keep-going \
+            --message-format=json -- --cap-lints warn \
+            | python3 .github/scripts/clippy-report.py

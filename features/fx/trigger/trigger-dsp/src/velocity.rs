@@ -75,7 +75,10 @@ impl VelocityMapper {
 
         // Apply curve shaping
         let shaped = match self.curve {
-            VelocityCurve::Linear => raw,
+            // Fixed is filtered out by the `matches!(self.curve, Fixed)` early
+            // return above; it shares Linear's identity body rather than
+            // panicking on the audio path.
+            VelocityCurve::Linear | VelocityCurve::Fixed => raw,
             VelocityCurve::Logarithmic => {
                 // Log curve: more sensitivity at low levels
                 if raw <= 0.0 {
@@ -89,7 +92,6 @@ impl VelocityMapper {
                 // Exponential: more sensitivity at high levels
                 raw * raw
             }
-            VelocityCurve::Fixed => unreachable!(),
         };
 
         // For logarithmic, use a cleaner formulation

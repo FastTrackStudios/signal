@@ -234,7 +234,7 @@ impl Sampler {
                 return;
             }
             // Find layer with closest velocity range
-            let idx = self
+            let Some(idx) = self
                 .layers
                 .iter()
                 .enumerate()
@@ -248,7 +248,10 @@ impl Sampler {
                     dist_a.total_cmp(&dist_b)
                 })
                 .map(|(i, _)| i)
-                .unwrap();
+            else {
+                // Unreachable: the is_empty check above already returned.
+                return;
+            };
             &mut self.layers[idx]
         };
 

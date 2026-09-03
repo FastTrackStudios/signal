@@ -3,6 +3,23 @@
 //! late stage. All defaults must be bit-transparent against a chain
 //! that never touched the new param structs.
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::default_trait_access,
+    clippy::indexing_slicing,
+    clippy::many_single_char_names,
+    reason = "pending the DSP algorithm rewrite"
+)]
+
+
 use reverb_dsp::algorithm::{ShimmerFeedbackMode, ShimmerParams};
 use reverb_dsp::chain::ReverbChain;
 use reverb_dsp::AlgorithmType;

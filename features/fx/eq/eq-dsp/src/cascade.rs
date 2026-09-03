@@ -140,6 +140,20 @@ pub fn compute_cascade_peak_with_slope(
 /// dispatches into the legacy `bell_brickwall_cascade` table-based
 /// path (68/416 baseline on s=5/s=8) until the (a) elliptic-corrected
 /// `Q'`, and (b) per-section sub-frequency selection are decoded.
+/// Whether the `FTSEQ_TRACE_BELL_INPUTS` debug trace is on.
+///
+/// Read once. The raw `env::var` was on the per-call bell path, where it takes
+/// a process-wide lock and allocates every time a coefficient is designed.
+fn trace_bell_inputs() -> bool {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "read exactly once through OnceLock, not per call"
+    )]
+    *ON.get_or_init(|| std::env::var("FTSEQ_TRACE_BELL_INPUTS").is_ok())
+}
+
 fn bell_brickwall_proq4(
     freq_hz: f64,
     q: f64,
@@ -1073,7 +1087,7 @@ pub(crate) fn bell_three_point_synth(
     w_eval: f64,
     g_ref: f64,
 ) -> Coeffs {
-    if std::env::var("FTSEQ_TRACE_BELL_INPUTS").is_ok() {
+    if trace_bell_inputs() {
         eprintln!(
             "BELL_IN wp={w_pole:.6} wz={w_zero:.6} wt={w_third:.6} we={w_eval:.6} G={g_ref:.6} A={cap_a:.6} B={cap_b:.6} C={cap_c:.6} D={cap_d:.6} E={cap_e:.6} F={cap_f:.6}"
         );

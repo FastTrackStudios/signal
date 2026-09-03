@@ -5,6 +5,23 @@
 //! Loads each file via `IrAsset` -> `IrTransforms` -> Convolution, renders a
 //! unit impulse, and prints length / peak / RT60-style decay stats.
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::items_after_statements,
+    clippy::many_single_char_names,
+    reason = "pending the DSP algorithm rewrite"
+)]
+
+
 use reverb_dsp::algorithms::convolution::Convolution;
 use reverb_dsp::ir::{IrAsset, IrTransforms};
 

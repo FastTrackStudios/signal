@@ -253,9 +253,11 @@ impl PartitionedConv {
 
         // Forward FFT.
         let spec = &mut self.input_history[self.history_head];
-        self.fft_fwd
-            .process(&mut self.input_block.clone(), spec)
-            .unwrap();
+        // Buffer lengths are fixed at construction, so this cannot fail.
+        // Ignore rather than panic: this runs on the render callback.
+        let _ = self
+            .fft_fwd
+            .process(&mut self.input_block.clone(), spec);
 
         // Accumulate Σ_k IR[k] * Input[t - k]. Ring modulus is the
         // history length so differently-sized partition sets (during a
@@ -298,9 +300,9 @@ impl PartitionedConv {
 
         // Inverse FFT.
         self.spectrum_scratch.copy_from_slice(&self.accumulator);
-        self.fft_inv
-            .process(&mut self.spectrum_scratch, &mut self.ifft_out)
-            .unwrap();
+        // Fixed-length buffers; cannot fail. Never panic on the render path.
+        let _ = self.fft_inv
+            .process(&mut self.spectrum_scratch, &mut self.ifft_out);
 
         // Take the second half — discard wrap-around (overlap-save).
         // Gains are already folded into the accumulation weights (the

@@ -3,6 +3,21 @@
 //! the async worker path is covered by `chain_reshape_worker_applies`),
 //! feedback recirculates at runtime.
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    reason = "pending the DSP algorithm rewrite"
+)]
+
+
 use reverb_dsp::algorithm::{ImpulseDirection, ImpulseParams, ImpulseTail, ReverbAlgorithm};
 use reverb_dsp::algorithms::convolution::Convolution;
 use reverb_dsp::chain::ReverbChain;

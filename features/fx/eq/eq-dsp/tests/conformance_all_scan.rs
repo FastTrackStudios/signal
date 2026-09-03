@@ -5,6 +5,19 @@
 //! to bypass per-filter lookup tables) and for spot-checking lookup
 //! coverage.
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    as_conversions,
+    cast_precision_loss,
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    indexing_slicing,
+    reason = "pending the DSP algorithm rewrite"
+)]
+
+
 use eq_dsp::design::{design_filter, FilterType};
 use eq_dsp::response::compute_magnitude_response;
 use std::collections::BTreeMap;

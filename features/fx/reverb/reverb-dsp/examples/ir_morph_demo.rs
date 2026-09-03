@@ -8,6 +8,28 @@
 //!   cargo run -p reverb-dsp --release --example `ir_morph_demo` -- \
 //!     <`ir_a.wav`> <`ir_b.wav`> <out.wav> [seconds=16]
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::items_after_statements,
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "pending the DSP algorithm rewrite; the panic lints here are \
+              test/example code, where panicking on bad input is the point"
+)]
+
+
 use audiocore_dsp::{AudioConfig, Processor};
 use reverb_dsp::algorithm::AlgorithmType;
 use reverb_dsp::chain::ReverbChain;

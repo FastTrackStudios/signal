@@ -1,5 +1,18 @@
 //! True-stereo (4-leg) convolution behavior.
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::as_conversions,
+    clippy::cast_precision_loss,
+    clippy::indexing_slicing,
+    reason = "pending the DSP algorithm rewrite"
+)]
+
+
 use reverb_dsp::algorithm::ReverbAlgorithm;
 use reverb_dsp::algorithms::convolution::Convolution;
 

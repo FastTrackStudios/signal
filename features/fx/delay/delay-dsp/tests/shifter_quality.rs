@@ -10,6 +10,20 @@
 //! The bound below holds the WSOLA-level quality; a regression back to
 //! grain-level artifacts fails loudly.
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    as_conversions,
+    cast_possible_truncation,
+    cast_precision_loss,
+    cast_sign_loss,
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "pending the DSP algorithm rewrite"
+)]
+
+
 use delay_dsp::shimmer_delay::ShimmerDelay;
 use std::f64::consts::PI;
 

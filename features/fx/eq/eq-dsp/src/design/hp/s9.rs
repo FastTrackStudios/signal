@@ -708,11 +708,13 @@ fn highpass_slope9_sec_q(freq_hz: f64, sample_rate: f64, sec: usize) -> f64 {
         (21000.0, 1.000_000_000),
         (22000.0, 1.147_587_856),
     ];
+    // Slope 9 remaps only sections 1-3, and every caller passes a literal
+    // 1, 2 or 3. Section 3 doubles as the fallback so an out-of-range value
+    // cannot panic on the audio thread.
     let table = match sec {
         1 => SEC1_48K,
         2 => SEC2_48K,
-        3 => SEC3_48K,
-        _ => unreachable!("highpass slope 9 remaps only sections 1-3"),
+        _ => SEC3_48K,
     };
     interp_48k_table(freq_hz, sample_rate, table)
 }

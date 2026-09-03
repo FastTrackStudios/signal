@@ -5,6 +5,23 @@
 //! ids and no host in the way, so a failure here is the engine's and not a
 //! mapping's.
 
+// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
+// A test/example target is its own crate, so the crate-root allow there does
+// not reach this file and it needs its own copy.
+#![allow(
+    arithmetic_side_effects,
+    as_conversions,
+    cast_possible_truncation,
+    cast_precision_loss,
+    cast_sign_loss,
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    indexing_slicing,
+    many_single_char_names,
+    reason = "pending the DSP algorithm rewrite"
+)]
+
+
 use eq_dsp::band::Placement;
 use eq_dsp::engine::{BandConfig, BandDynamics, FtsEq};
 

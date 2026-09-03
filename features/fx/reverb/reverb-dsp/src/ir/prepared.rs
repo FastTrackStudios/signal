@@ -87,6 +87,12 @@ impl PreparedIr {
             // process() consumes the input buffer in place; we hand it
             // a clone so `padded` survives for the next iteration.
             let mut input = padded.clone();
+            #[expect(
+                clippy::expect_used,
+                reason = "IR preparation, not the render path; buffer lengths are \
+                          fixed at construction so this cannot fail, and a silently \
+                          zeroed partition would be a worse failure than a panic"
+            )]
             fft_fwd.process(&mut input, &mut spec).expect("FFT failed");
             partitions.push(spec);
         }
