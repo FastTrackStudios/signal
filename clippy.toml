@@ -1,0 +1,30 @@
+# Realtime-audio safety, enforced by the linter.
+#
+# Every entry here is a call that can BLOCK for an unbounded time — allocate,
+# take a lock, touch the filesystem, or ask the OS for something. None of them
+# may appear on an audio callback, and each has cost real debugging here:
+#
+#   - a `Mutex::lock` on the render path is a priority inversion waiting for a
+#     background thread to finish decoding;
+#   - `env::var` takes a process-wide lock and was being called per sample in
+#     one path;
+#   - allocation is the classic one, and `assert_no_alloc` catches what the
+#     linter cannot see through.
+#
+# This is workspace-wide and advisory: `disallowed_methods` fires wherever the
+# call appears, and plenty of these are perfectly fine off the audio thread.
+# The value is that a NEW one on a DSP path has to be argued for in review
+# rather than discovered by ear six months later. Crates that legitimately use
+# them allow the lint locally with a reason.
+disallowed-methods = [
+    { path = "std::sync::Mutex::lock", reason = "blocks; use try_lock on an audio thread, or a lock-free structure" },
+    { path = "std::sync::RwLock::read", reason = "blocks; the audio thread must not wait on a writer" },
+    { path = "std::sync::RwLock::write", reason = "blocks; never on an audio thread" },
+    { path = "std::env::var", reason = "takes a process-wide lock and allocates; read it once at init" },
+    { path = "std::env::var_os", reason = "takes a process-wide lock; read it once at init" },
+    { path = "std::thread::sleep", reason = "never on an audio thread" },
+]
+
+# Anything above this is a heap allocation the audio thread cannot afford to
+# make per block. Tuned to the largest scratch a DSP node legitimately keeps.
+too-large-for-stack = 4096

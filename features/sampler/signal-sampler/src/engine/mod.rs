@@ -133,6 +133,29 @@ const RELEASE_MAX_LIFETIME_MS: u32 = 2_000;
 // crossfading) and reads every number from `patch.spec`.
 // r[impl signal.soundsource.declarative]
 
+/// Debug switches, read ONCE.
+///
+/// `std::env::var_os` takes a process-wide lock and walks the environment
+/// block. Both of these were being read from the audio thread — one per
+/// legato decision, one per voice spawn — which is a blocking call on the
+/// realtime path to answer a question whose answer cannot change. Clippy's
+/// `disallowed_methods` found them; that is why the lint is denied for this
+/// module.
+// The one read is inside a `OnceLock`: it happens once for the process, and
+// every call after it is an atomic load. This is the shape the lint exists to
+// push code INTO, so the exception is the point rather than a hole in it.
+#[allow(clippy::disallowed_methods, reason = "read once into a OnceLock")]
+pub(crate) fn legato_debug() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("SIGNAL_LEGATO_DEBUG").is_some())
+}
+
+#[allow(clippy::disallowed_methods, reason = "read once into a OnceLock")]
+pub(crate) fn loop_debug() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("SIGNAL_LOOP_DEBUG").is_some())
+}
+
 /// Minimum attack fade (ms) for a synthesized-loop sustain that starts mid-sample
 /// at full level — just enough to avoid an onset click without slowing the attack.
 const SUSTAIN_DECLICK_MS: u32 = 12;
@@ -1871,6 +1894,10 @@ fn queue_loop_analysis(key: LoopKey, data: Arc<SampleData>) {
                 while let Ok((key, data)) = rx.recv() {
                     let (_, lo, hi, min_len) = key;
                     let found = steady_loop_region(&data, lo, hi, min_len);
+                    // Worker thread, not the audio thread: blocking here is
+                    // correct, and the audio side reads the same map with
+                    // `try_lock` precisely so it never waits on this.
+                    #[allow(clippy::disallowed_methods, reason = "analysis worker, not the audio thread")]
                     if let Ok(mut map) = LOOP_REGIONS.lock() {
                         map.get_or_insert_with(HashMap::new)
                             .insert(key, LoopScan::Done(found));

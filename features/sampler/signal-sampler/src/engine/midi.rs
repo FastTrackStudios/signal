@@ -1366,7 +1366,7 @@ impl SampleEngine {
         self.spawn_arrival_override_ms = None;
         self.spawn_align_lead = restore;
         self.transition_fade = None;
-        if std::env::var_os("SIGNAL_LEGATO_DEBUG").is_some() {
+        if crate::engine::legato_debug() {
             eprintln!(
                 "LEGATO {}→{} zone={} root={} int={} dir={} lead_ms={} sched={:?} offset={} pitch_off={} spawned={}",
                 from,
@@ -2127,7 +2127,7 @@ impl SampleEngine {
                 // indefinitely. Loop the sample's steady plateau (found above),
                 // crossfaded at the wrap so the held note neither pulses nor
                 // clicks.
-                if k == 0 && std::env::var_os("SIGNAL_LOOP_DEBUG").is_some() {
+                if k == 0 && crate::engine::loop_debug() {
                     eprintln!(
                         "SYNTH_LOOP note={note} len={num_frames} loop={sus_lo}..{sus_hi} \
                          ({:.0}%..{:.0}%) xf={loop_xfade}",
