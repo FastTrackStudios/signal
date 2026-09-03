@@ -23,6 +23,7 @@ pub const CLASSES: &[&str] = &[
 ];
 
 /// Classify one analyzed asset. `name` = lowercase filename (hint source).
+#[must_use] 
 pub fn classify(a: &Analysis, name: &str) -> &'static str {
     // Filename hints first — they encode ground truth more reliably than
     // any acoustic rule when present.

@@ -19,12 +19,12 @@
 //! # Bootstrap functions
 //!
 //! - [`bootstrap_in_memory_controller`] / [`bootstrap_in_memory_controller_async`] --
-//!   creates a controller with an in-memory SQLite database pre-seeded with
+//!   creates a controller with an in-memory `SQLite` database pre-seeded with
 //!   default content. Useful for tests and development.
-//! - [`connect_db`] -- connects to a file-based SQLite database with schema
+//! - [`connect_db`] -- connects to a file-based `SQLite` database with schema
 //!   initialization (no seed data).
-//! - [`connect_db_seeded`] -- connects to a file-based SQLite database, seeds
-//!   default data on first run, and refreshes RfxChain presets from disk on
+//! - [`connect_db_seeded`] -- connects to a file-based `SQLite` database, seeds
+//!   default data on first run, and refreshes `RfxChain` presets from disk on
 //!   every startup.
 //! - [`mock_guitar`], [`mock_bass`], etc. -- convenience constructors for
 //!   instrument-specific mock controllers.
@@ -101,7 +101,7 @@ pub mod track_template {
     pub use signal_storage::track_template::*;
 }
 
-/// FXChains directory scanner and paths for REAPER-native signal presets.
+/// `FXChains` directory scanner and paths for REAPER-native signal presets.
 pub mod fxchains {
     pub use signal_storage::seed_data::fxchains_scan::*;
 }
@@ -110,13 +110,13 @@ pub mod fxchains {
 ///
 /// REAPER's `.RfxChain` format is the *inner* content only — no `<FXCHAIN>` delimiters.
 /// This function removes the header line and closing `>`, returning just the bare FX blocks.
+#[must_use] 
 pub fn strip_fxchain_wrapper(chunk: &str) -> String {
     let trimmed = chunk.trim();
     if trimmed.starts_with("<FXCHAIN") {
         let after_header = trimmed
             .find('\n')
-            .map(|i| &trimmed[i + 1..])
-            .unwrap_or(trimmed);
+            .map_or(trimmed, |i| &trimmed[i + 1..]);
         let inner = after_header.trim_end();
         if let Some(stripped) = inner.strip_suffix('>') {
             stripped.trim_end().to_string()
@@ -206,12 +206,12 @@ pub fn bootstrap_in_memory_controller() -> Result<SignalController, StorageError
 
 // region: --- DB connection factory
 
-/// Connect to a file-based SQLite database and return a controller with initialized schemas.
+/// Connect to a file-based `SQLite` database and return a controller with initialized schemas.
 ///
 /// Creates the database file if it doesn't exist. All table schemas are created
 /// with `IF NOT EXISTS` so this is safe to call on existing databases.
 pub async fn connect_db(path: &str) -> Result<SignalController, StorageError> {
-    let url = format!("sqlite:{}?mode=rwc", path);
+    let url = format!("sqlite:{path}?mode=rwc");
     let db = Database::connect(&url).await?;
     init_all_schemas(&db).await?;
     let service = Arc::new(SignalLive::from_db(db));
@@ -224,7 +224,7 @@ pub async fn connect_db(path: &str) -> Result<SignalController, StorageError> {
 /// are always refreshed from disk on every startup, so swapping `.RfxChain`
 /// files takes effect immediately without deleting the database.
 pub async fn connect_db_seeded(path: &str) -> Result<SignalController, StorageError> {
-    let url = format!("sqlite:{}?mode=rwc", path);
+    let url = format!("sqlite:{path}?mode=rwc");
     let db = Database::connect(&url).await?;
     init_all_schemas(&db).await?;
 
@@ -289,7 +289,7 @@ async fn refresh_rfxchain_presets(block_repo: &BlockRepoLive) -> Result<(), Stor
     Ok(())
 }
 
-/// Re-import block presets from the REAPER-native FXChains directory.
+/// Re-import block presets from the REAPER-native `FXChains` directory.
 ///
 /// Scans `FXChains/FTS-Signal/01-Blocks/` for `.RfxChain` files with
 /// optional `.signal.styx` sidecars, refreshing on every startup.

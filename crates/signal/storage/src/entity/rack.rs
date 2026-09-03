@@ -11,6 +11,7 @@ pub struct Model {
 }
 
 impl Model {
+    #[must_use] 
     pub fn rack_id_branded(&self) -> RackId {
         RackId::from(self.id.clone())
     }

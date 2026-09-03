@@ -5,7 +5,7 @@
 //! - **Spectral Flux**: Sum of positive magnitude differences.
 //!   Reference: Dixon (2006) "Onset Detection Revisited"
 //!
-//! - **SuperFlux**: Spectral flux with maximum filter vibrato suppression.
+//! - **`SuperFlux`**: Spectral flux with maximum filter vibrato suppression.
 //!   Reference: Böck & Widmer (2013) "Maximum Filter Vibrato Suppression
 //!   for Onset Detection", DAFx-13.
 //!
@@ -28,11 +28,11 @@
 use rustfft::{num_complex::Complex, FftPlanner};
 
 /// Onset detection function selection.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FluxMode {
     /// Standard spectral flux: positive magnitude differences.
     SpectralFlux,
-    /// SuperFlux: spectral flux with maximum filter vibrato suppression
+    /// `SuperFlux`: spectral flux with maximum filter vibrato suppression
     /// and log-filtered spectrogram (24 bands/octave).
     SuperFlux,
     /// High frequency content: frequency-weighted spectral energy.
@@ -87,7 +87,7 @@ pub struct SpectralFluxDetector {
 
     // Config
     sample_rate: f64,
-    /// Maximum filter width in frequency bins (SuperFlux).
+    /// Maximum filter width in frequency bins (`SuperFlux`).
     pub max_filter_size: usize,
 }
 
@@ -104,6 +104,7 @@ const FMAX: f64 = 17000.0;
 const ODF_RING_LEN: usize = 31; // ~150ms at 200fps
 
 impl SpectralFluxDetector {
+    #[must_use] 
     pub fn new(mode: FluxMode, fft_size: usize, hop_size: usize, sample_rate: f64) -> Self {
         let num_bins = fft_size / 2 + 1;
 
@@ -193,12 +194,14 @@ impl SpectralFluxDetector {
     }
 
     /// Returns the latency in samples introduced by this detector.
-    pub fn latency_samples(&self) -> usize {
+    #[must_use] 
+    pub const fn latency_samples(&self) -> usize {
         self.fft_size
     }
 
     /// Returns the hop size in samples.
-    pub fn hop_size(&self) -> usize {
+    #[must_use] 
+    pub const fn hop_size(&self) -> usize {
         self.hop_size
     }
 
@@ -247,7 +250,7 @@ impl SpectralFluxDetector {
         flux
     }
 
-    /// SuperFlux: log-filtered spectral flux with maximum filter vibrato suppression.
+    /// `SuperFlux`: log-filtered spectral flux with maximum filter vibrato suppression.
     fn compute_superflux(&mut self) -> f64 {
         let num_bins = self.fft_size / 2 + 1;
 
@@ -291,7 +294,7 @@ impl SpectralFluxDetector {
     }
 
     /// HFC: frequency-weighted spectral energy.
-    /// sum_k(k * |X(k)|²) — emphasizes high-frequency transient energy.
+    /// `sum_k(k` * |X(k)|²) — emphasizes high-frequency transient energy.
     fn compute_hfc(&mut self) -> f64 {
         let num_bins = self.fft_size / 2 + 1;
         let mut hfc = 0.0;
@@ -328,7 +331,7 @@ impl SpectralFluxDetector {
 
         for k in 0..num_bins {
             // Predict phase by linear extrapolation from two previous frames
-            let predicted_phase = 2.0 * self.prev_phase[k] - self.prev_prev_phase[k];
+            let predicted_phase = 2.0f64.mul_add(self.prev_phase[k], -self.prev_prev_phase[k]);
 
             // Predicted complex value: previous magnitude at predicted phase
             let predicted = Complex::new(
@@ -369,7 +372,7 @@ impl SpectralFluxDetector {
 
         for k in 0..num_bins {
             let ratio = self.magnitude[k] / (self.prev_magnitude[k] + eps);
-            mkl += (1.0 + ratio).ln();
+            mkl += ratio.ln_1p();
         }
 
         // Subtract the baseline (when spectra are identical, each bin contributes ln(2))
@@ -516,20 +519,17 @@ mod tests {
         assert_eq!(
             last_odf.unwrap(),
             0.0,
-            "mode {:?} should be zero on silence",
-            mode
+            "mode {mode:?} should be zero on silence"
         );
     }
 
     fn assert_detects_transient(mode: FluxMode) {
         let mut det = SpectralFluxDetector::new(mode, FFT, HOP, SR);
         let odfs = silence_then_transient(&mut det, FFT * 2, 440.0);
-        let max_odf = odfs.iter().cloned().fold(0.0_f64, f64::max);
+        let max_odf = odfs.iter().copied().fold(0.0_f64, f64::max);
         assert!(
             max_odf > 0.01,
-            "mode {:?}: expected ODF spike on transient, got max={}",
-            mode,
-            max_odf
+            "mode {mode:?}: expected ODF spike on transient, got max={max_odf}"
         );
     }
 
@@ -564,13 +564,13 @@ mod tests {
             }
         }
         for i in 0..441 {
-            let s = (i as f64 * 200.0 * std::f64::consts::TAU / 44100.0).sin() * 0.9;
+            let s = (f64::from(i) * 200.0 * std::f64::consts::TAU / 44100.0).sin() * 0.9;
             if let Some(odf) = det.tick(s) {
                 odfs.push(odf);
             }
         }
-        let max_odf = odfs.iter().cloned().fold(0.0_f64, f64::max);
-        assert!(max_odf > 0.01, "SuperFlux: expected spike, got {}", max_odf);
+        let max_odf = odfs.iter().copied().fold(0.0_f64, f64::max);
+        assert!(max_odf > 0.01, "SuperFlux: expected spike, got {max_odf}");
     }
 
     #[test]
@@ -618,7 +618,7 @@ mod tests {
         );
         assert_eq!(fb.len(), num_bands);
         for (i, band) in fb.iter().enumerate() {
-            assert!(!band.is_empty(), "Band {} is empty", i);
+            assert!(!band.is_empty(), "Band {i} is empty");
         }
     }
 

@@ -29,7 +29,7 @@ crate::typed_uuid_id!(
 // ─── Module reference ───────────────────────────────────────────
 
 /// A reference to a specific module variant within a layer.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct ModuleRef {
     /// Which module collection to pull from.
     pub collection_id: ModulePresetId,
@@ -55,7 +55,7 @@ impl ModuleRef {
 // ─── Block reference ────────────────────────────────────────────
 
 /// A reference to a specific standalone block variant within a layer.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct BlockRef {
     /// Which block collection to pull from.
     pub collection_id: PresetId,
@@ -82,7 +82,7 @@ impl BlockRef {
 
 /// A reference to another layer preset/variant, enabling
 /// "preset-as-layer" composition for simple and complex sounds.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct LayerRef {
     /// Which layer collection to pull from.
     pub collection_id: LayerId,
@@ -119,7 +119,8 @@ pub struct PluginRef {
 }
 
 impl PluginRef {
-    pub fn new(def: crate::plugin_block::PluginBlockDef) -> Self {
+    #[must_use] 
+    pub const fn new(def: crate::plugin_block::PluginBlockDef) -> Self {
         Self { def }
     }
 }
@@ -265,12 +266,14 @@ impl Layer {
         Some(self.variants.remove(pos))
     }
 
+    #[must_use] 
     pub fn default_variant(&self) -> Option<&LayerSnapshot> {
         self.variants
             .iter()
             .find(|v| v.id == self.default_variant_id)
     }
 
+    #[must_use] 
     pub fn variant(&self, id: &LayerSnapshotId) -> Option<&LayerSnapshot> {
         self.variants.iter().find(|v| &v.id == id)
     }

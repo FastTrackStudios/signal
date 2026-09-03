@@ -8,11 +8,13 @@ use serde::{Deserialize, Serialize};
 pub struct ParameterValue(f32);
 
 impl ParameterValue {
-    pub fn new(value: f32) -> Self {
+    #[must_use] 
+    pub const fn new(value: f32) -> Self {
         Self(value.clamp(0.0, 1.0))
     }
 
-    pub fn get(self) -> f32 {
+    #[must_use] 
+    pub const fn get(self) -> f32 {
         self.0
     }
 }
@@ -47,19 +49,22 @@ impl BlockParameter {
         }
     }
 
+    #[must_use] 
     pub fn id(&self) -> &str {
         &self.id
     }
 
+    #[must_use] 
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn value(&self) -> ParameterValue {
+    #[must_use] 
+    pub const fn value(&self) -> ParameterValue {
         self.value
     }
 
-    pub fn set_value(&mut self, value: f32) {
+    pub const fn set_value(&mut self, value: f32) {
         self.value = ParameterValue::new(value);
     }
 
@@ -70,6 +75,7 @@ impl BlockParameter {
     }
 
     /// The original DAW parameter name, if it differs from the display name.
+    #[must_use] 
     pub fn daw_name(&self) -> Option<&str> {
         self.daw_name.as_deref()
     }
@@ -77,6 +83,7 @@ impl BlockParameter {
     /// The name to use when setting parameters in the DAW.
     ///
     /// Returns `daw_name` if set, otherwise falls back to `name`.
+    #[must_use] 
     pub fn effective_daw_name(&self) -> &str {
         self.daw_name.as_deref().unwrap_or(&self.name)
     }

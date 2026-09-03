@@ -80,6 +80,7 @@ pub enum NamError {
 
 /// Slugify a string for use as a directory name.
 /// Converts to lowercase, replaces non-alphanumeric chars with hyphens, collapses runs.
+#[must_use] 
 pub fn slugify(s: &str) -> String {
     s.to_lowercase()
         .chars()
@@ -226,8 +227,8 @@ pub fn generate_pack_skeletons(
             };
 
             let json = serde_json::to_string_pretty(&pack)
-                .map_err(|e| NamError::ParseError(format!("serializing pack: {}", e)))?;
-            let out_path = packs_output_dir.join(format!("{}.json", pack_id));
+                .map_err(|e| NamError::ParseError(format!("serializing pack: {e}")))?;
+            let out_path = packs_output_dir.join(format!("{pack_id}.json"));
             std::fs::write(&out_path, &json)?;
 
             generated.push(pack_id);
@@ -258,7 +259,7 @@ fn discover_model_dirs(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>,
     // Check children
     let children: Vec<_> = std::fs::read_dir(dir)
         .map_err(NamError::IoError)?
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| e.path().is_dir())
         .collect();
 
@@ -300,7 +301,7 @@ fn dir_has_audio_files(dir: &std::path::Path) -> bool {
             e.path().is_file()
                 && matches!(
                     e.path().extension().and_then(|ext| ext.to_str()),
-                    Some("nam") | Some("wav")
+                    Some("nam" | "wav")
                 )
         })
 }
@@ -310,12 +311,12 @@ fn collect_pack_files(dir: &std::path::Path) -> Vec<String> {
     walkdir::WalkDir::new(dir)
         .follow_links(true)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| {
             e.path().is_file()
                 && matches!(
                     e.path().extension().and_then(|ext| ext.to_str()),
-                    Some("nam") | Some("wav")
+                    Some("nam" | "wav")
                 )
         })
         .map(|e| {
@@ -434,7 +435,7 @@ pub fn full_rig_models_by_pack(
         for entry in walkdir::WalkDir::new(root)
             .follow_links(true)
             .into_iter()
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
         {
             let path = entry.path();
             if path.is_file() && path.extension().is_some_and(|e| e == "nam") {
@@ -515,7 +516,7 @@ pub fn drive_models_by_pack(
         for entry in walkdir::WalkDir::new(root)
             .follow_links(true)
             .into_iter()
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
         {
             let path = entry.path();
             if path.is_file() && path.extension().is_some_and(|e| e == "nam") {
@@ -668,7 +669,7 @@ mod tests {
         let generated = generate_pack_skeletons(source, output).unwrap();
         eprintln!("Generated {} pack definitions:", generated.len());
         for id in &generated {
-            eprintln!("  - {}.json", id);
+            eprintln!("  - {id}.json");
         }
     }
 }

@@ -58,7 +58,7 @@ fn main() {
     print!("{out}");
 }
 
-/// Field list in declaration order: (rust_name, swift_type).
+/// Field list in declaration order: (`rust_name`, `swift_type`).
 type StructBody = Vec<(String, String)>;
 
 /// Recursively collect every user struct reachable from `shape`.
@@ -110,7 +110,7 @@ fn swift_type(shape: &'static Shape, out: &mut BTreeMap<String, StructBody>) -> 
     }
 }
 
-/// snake_case → camelCase (Swift field convention).
+/// `snake_case` → camelCase (Swift field convention).
 fn camel(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut upper_next = false;

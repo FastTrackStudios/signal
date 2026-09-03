@@ -41,6 +41,7 @@ pub struct Svf {
 }
 
 impl Svf {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut s = Self {
             shape: SvfShape::Bell,
@@ -68,7 +69,7 @@ impl Svf {
         self.retune();
     }
 
-    /// Full parameter set (computes tan()).
+    /// Full parameter set (computes `tan()`).
     pub fn set(&mut self, shape: SvfShape, freq_hz: f64, q: f64, gain_db: f64) {
         self.shape = shape;
         self.freq_hz = freq_hz.clamp(10.0, self.sample_rate * 0.49);
@@ -87,7 +88,8 @@ impl Svf {
         self.apply_gain();
     }
 
-    pub fn gain_db(&self) -> f64 {
+    #[must_use]
+    pub const fn gain_db(&self) -> f64 {
         self.gain_db
     }
 
@@ -108,7 +110,7 @@ impl Svf {
                 (self.g_base, self.k_base)
             }
         };
-        self.a1 = 1.0 / (1.0 + g * (g + k));
+        self.a1 = 1.0 / g.mul_add(g + k, 1.0);
         self.a2 = g * self.a1;
         self.a3 = g * self.a2;
         match self.shape {
@@ -148,11 +150,17 @@ impl Svf {
 
     #[inline]
     pub fn tick(&mut self, ch: usize, x: f64) -> f64 {
-        let v3 = x - self.ic2[ch];
-        let v1 = self.a1 * self.ic1[ch] + self.a2 * v3;
-        let v2 = self.ic2[ch] + self.a2 * self.ic1[ch] + self.a3 * v3;
-        self.ic1[ch] = 2.0 * v1 - self.ic1[ch];
-        self.ic2[ch] = 2.0 * v2 - self.ic2[ch];
+        let v3 = x - self.ic2[..].get(ch).copied().unwrap_or(0.0);
+        let ic1_ch = self.ic1.get(ch).copied().unwrap_or(0.0);
+        let ic2_ch = self.ic2.get(ch).copied().unwrap_or(0.0);
+        let v1 = self.a1.mul_add(ic1_ch, self.a2 * v3);
+        let v2 = self.a3.mul_add(v3, self.a2.mul_add(ic1_ch, ic2_ch));
+        if let Some(ic1) = self.ic1.get_mut(ch) {
+            *ic1 = 2.0f64.mul_add(v1, -*ic1);
+        }
+        if let Some(ic2) = self.ic2.get_mut(ch) {
+            *ic2 = 2.0f64.mul_add(v2, -*ic2);
+        }
         self.m0 * x + self.m1 * v1 + self.m2 * v2
     }
 

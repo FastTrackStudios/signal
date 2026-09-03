@@ -11,7 +11,7 @@
 //! 6. Items are named and the name is preserved
 //!
 //! Run with:
-//!   cargo xtask reaper-test scene_switching
+//!   cargo xtask reaper-test `scene_switching`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;

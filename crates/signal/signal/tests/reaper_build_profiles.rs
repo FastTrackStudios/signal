@@ -5,7 +5,7 @@
 //! `.RTrackTemplate` files under `TrackTemplates/FTS-Signal/Guitar/04-Profiles/`.
 //!
 //! Run with:
-//!   cargo xtask reaper-test build_profiles
+//!   cargo xtask reaper-test `build_profiles`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
@@ -29,7 +29,7 @@ async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
     }
 }
 
-/// A profile definition: name + list of (variation_name, module_types).
+/// A profile definition: name + list of (`variation_name`, `module_types`).
 struct ProfileDef {
     name: &'static str,
     tag: &'static str,
@@ -128,7 +128,7 @@ async fn build_profiles(ctx: &ReaperTestContext) -> eyre::Result<()> {
 
             let track = project
                 .tracks()
-                .add(&format!("[L] {}", variant_name), None)
+                .add(&format!("[L] {variant_name}"), None)
                 .await?;
             settle().await;
 

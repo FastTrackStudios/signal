@@ -18,7 +18,7 @@ fn strip_filters(c: &Container) -> Container {
     out.children.retain(
         |ch| !matches!(ch, RigNode::Container { container } if container.name == "Filters"),
     );
-    for ch in out.children.iter_mut() {
+    for ch in &mut out.children {
         if let RigNode::Container { container } = ch {
             *container = strip_filters(container);
         }
@@ -36,7 +36,7 @@ fn sample_only_osc(c: &Container) -> Container {
             |ch| matches!(ch, RigNode::Block { block } if block.block_type == BlockType::Sampler),
         );
     }
-    for ch in out.children.iter_mut() {
+    for ch in &mut out.children {
         if let RigNode::Container { container } = ch {
             *container = sample_only_osc(container);
         }

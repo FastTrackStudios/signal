@@ -26,9 +26,13 @@ unexpected_cfgs = { level = "allow", check-cfg = ['cfg(melange_precise_exp)'] }
 unused_variables = "allow"
 
 [lints.clippy]
-# Melange-generated solvers (gen_preamp.rs, gen_tremolo.rs) emit idiomatic
-# MNA/NR code that triggers these lints. Suppressing crate-wide is simpler
-# than patching generated output.
+# DELIBERATELY NOT `workspace = true`. 19k of this crate's 28k lines are
+# emitted by melange-solver (gen_power_amp.rs, gen_preamp.rs, gen_tremolo.rs,
+# mlp_weights.rs, tables.rs) and account for ~11k of the workspace's clippy
+# findings. Hand-fixing generated output is wasted work — the next solver run
+# overwrites it. The real fix is to teach melange-solver to emit clean code;
+# until then this crate keeps its own local policy and the strict workspace
+# policy stops at its boundary. Every OTHER crate inherits `[lints] workspace`.
 needless_range_loop = "allow"
 too_many_arguments = "allow"
 approx_constant = "allow"

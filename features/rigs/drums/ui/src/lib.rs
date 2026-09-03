@@ -19,7 +19,7 @@ use signal_ui::components::Piano;
 #[derive(Clone, Copy)]
 struct DrumState {
     status: Signal<DrumStatus>,
-    #[allow(
+    #[expect(
         dead_code,
         reason = "seeded from the rig snapshot but not yet read by any view — kit picker UI isn't wired up here yet"
     )]
@@ -97,7 +97,7 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
 
     // Live updates.
     {
-        let stream = stream.clone();
+        let stream = stream;
         architect::use_stream(
             move |sink| {
                 let stream = stream.clone();
@@ -171,7 +171,7 @@ pub fn DrumRigRemote() -> Element {
     // releases it. So the light tracks press/release, not the last-N struck.
     let lit: Vec<u8> = {
         let mut held = std::collections::BTreeSet::<u8>::new();
-        for e in midi.iter() {
+        for e in &midi {
             match e {
                 MidiEvent::NoteOn { key, velocity, .. } if velocity.get() > 0 => {
                     held.insert(key.get());
@@ -275,7 +275,7 @@ pub fn DrumRigRemote() -> Element {
                         {
                             let rig = rig.clone();
                             let name = preset.clone();
-                            let loaded = status.loaded_kit.as_deref().map(|k| k.eq_ignore_ascii_case(&name)).unwrap_or(false);
+                            let loaded = status.loaded_kit.as_deref().is_some_and(|k| k.eq_ignore_ascii_case(&name));
                             rsx!{ button {
                                 key: "{preset}",
                                 style: kit_btn(loaded),
@@ -308,8 +308,8 @@ pub fn DrumRigRemote() -> Element {
                                 waterfall: false,
                                 accent_color: "#22c55e".to_string(),
                                 height: "132px",
-                                on_note_on: move |n: u8| { let rig = rig_on.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 110).await; } }); },
-                                on_note_off: move |n: u8| { let rig = rig_off.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 0).await; } }); },
+                                on_note_on: move |n: u8| { let rig = rig_on.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(u32::from(n), 110).await; } }); },
+                                on_note_off: move |n: u8| { let rig = rig_off.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(u32::from(n), 0).await; } }); },
                             } }
                         }
                     }
@@ -365,9 +365,9 @@ pub fn DrumRigRemote() -> Element {
                             let notes: Vec<(String, u32)> = pieces.iter().map(|p| (p.id.clone(), p.note)).collect();
                             let rig_hit = rig.clone();
                             rsx!{ DrumKit {
-                                slots: slots.clone(),
+                                slots: slots,
                                 notes: notes,
-                                lit: lit.clone(),
+                                lit: lit,
                                 on_hit: EventHandler::new(move |note: u32| {
                                     let rig = rig_hit.clone();
                                     spawn(async move { if let Some(r) = rig {
@@ -445,7 +445,7 @@ pub fn DrumRigRemote() -> Element {
                                                 }
                                             }
                                         }
-                                        span { style: "font-size:8px; color:#71717a;", {format!("{:+.0} dB", gain_db)} }
+                                        span { style: "font-size:8px; color:#71717a;", {format!("{gain_db:+.0} dB")} }
                                         // solo / mute
                                         div { style: "display:flex; gap:3px;",
                                             button {
@@ -554,7 +554,7 @@ fn kit_btn(loaded: bool) -> String {
     format!("text-align:left; padding:6px 8px; border-radius:6px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:12px; cursor:pointer;")
 }
 
-#[allow(dead_code, reason = "pad-grid styling helper, not yet wired to a view")]
+#[expect(dead_code, reason = "pad-grid styling helper, not yet wired to a view")]
 fn pad_btn(ready: bool) -> String {
     let border = if ready { "#3f3f46" } else { "#52341a" };
     format!("display:flex; flex-direction:column; align-items:center; gap:2px; width:78px; height:56px; justify-content:center; border-radius:8px; background:#161618; color:#e4e4e7; border:1px solid {border}; cursor:pointer;")
@@ -583,8 +583,7 @@ fn DrumKit(
         notes
             .iter()
             .find(|(i, _)| i == id)
-            .map(|(_, n)| *n)
-            .unwrap_or(0)
+            .map_or(0, |(_, n)| *n)
     };
     rsx! {
         div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",

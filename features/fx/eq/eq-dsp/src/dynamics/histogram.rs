@@ -18,7 +18,8 @@ pub struct LoudnessHistogram {
 }
 
 impl LoudnessHistogram {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             bins: [0.0; N_BINS],
             decay: 0.999,
@@ -27,9 +28,16 @@ impl LoudnessHistogram {
     }
 
     #[inline]
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        reason = "float-to-int cast after safe clamp to [0, N_BINS-1]"
+    )]
     fn bin_of(db: f64) -> usize {
         let t = (db - DB_MIN) / (DB_MAX - DB_MIN);
-        ((t * N_BINS as f64) as isize).clamp(0, N_BINS as i64 as isize - 1) as usize
+        (t * f64::from(N_BINS as u32)).clamp(0.0, f64::from(N_BINS as u32) - 1.0) as usize
     }
 
     /// Push one loudness observation (dB). Silence below the floor is
@@ -43,11 +51,15 @@ impl LoudnessHistogram {
             *b *= self.decay;
             self.total += *b;
         }
-        self.bins[Self::bin_of(db)] += 1.0;
+        let bin_idx = Self::bin_of(db);
+        if let Some(slot) = self.bins.get_mut(bin_idx) {
+            *slot += 1.0;
+        }
         self.total += 1.0;
     }
 
     /// dB value at the given percentile (0..1), or None while empty.
+    #[must_use]
     pub fn percentile(&self, p: f64) -> Option<f64> {
         if self.total <= 0.0 {
             return None;
@@ -57,7 +69,7 @@ impl LoudnessHistogram {
         for (i, &b) in self.bins.iter().enumerate() {
             acc += b;
             if acc >= target {
-                let frac = (i as f64 + 0.5) / N_BINS as f64;
+                let frac = ((i as i32 as f64) + 0.5) / (N_BINS as i32 as f64);
                 return Some(DB_MIN + frac * (DB_MAX - DB_MIN));
             }
         }
@@ -66,6 +78,7 @@ impl LoudnessHistogram {
 
     /// Learned (threshold, knee): threshold = P50; knee = half the
     /// P10..P90 spread, floored at 5 dB.
+    #[must_use]
     pub fn learned(&self) -> Option<(f64, f64)> {
         let thr = self.percentile(0.5)?;
         let lo = self.percentile(0.1)?;

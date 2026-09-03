@@ -1,11 +1,11 @@
 #![cfg(feature = "daw")]
 //! REAPER integration test: Batch-load a full guitar setlist from profile templates.
 //!
-//! Reads all needed .RTrackTemplate files upfront, then creates all tracks
-//! back-to-back with no settle() delays — as fast as the DAW API allows.
+//! Reads all needed .`RTrackTemplate` files upfront, then creates all tracks
+//! back-to-back with no `settle()` delays — as fast as the DAW API allows.
 //!
 //! Run with:
-//!   cargo xtask reaper-test guitar_setlist
+//!   cargo xtask reaper-test `guitar_setlist`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
@@ -129,7 +129,7 @@ const SETLIST: &[SongDef] = &[
 
 // ─── Batch-load setlist ──────────────────────────────────────
 
-/// Build the list of (track_name, chunk) entries for the entire setlist.
+/// Build the list of (`track_name`, chunk) entries for the entire setlist.
 fn build_track_list(
     setlist: &[SongDef],
     cache: &std::collections::HashMap<(String, String), String>,
@@ -220,7 +220,7 @@ async fn guitar_setlist(ctx: &ReaperTestContext) -> eyre::Result<()> {
         // set_chunk immediately — no settle needed, the daw service dispatches
         // to main thread synchronously
         if let Err(e) = track.set_chunk(chunk.clone()).await {
-            ctx.log(&format!("  ✗ {name}: {:?}", e));
+            ctx.log(&format!("  ✗ {name}: {e:?}"));
         } else {
             created += 1;
         }

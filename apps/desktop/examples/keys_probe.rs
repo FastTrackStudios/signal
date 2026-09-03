@@ -1,4 +1,4 @@
-//! Probe the engine's KeysRig service over the wire — the same establish the
+//! Probe the engine's `KeysRig` service over the wire — the same establish the
 //! browser remote does, with the error printed instead of swallowed.
 //!
 //! ```bash
@@ -106,19 +106,17 @@ async fn main() -> eyre::Result<()> {
             d.macros
                 .iter()
                 .find(|x| x.id == id)
-                .map(|x| x.value)
-                .unwrap_or(f32::NAN)
+                .map_or(f32::NAN, |x| x.value)
         };
         println!(
             "  Pad module {} → {:<30} {:+.1} dB  cutoff={:.0} reso={:.2} uni={:.0} A/D/S/R={:.0}/{:.0}/{:.2}/{:.0}",
-            m.map(|m| m.slot.clone())
-                .unwrap_or_else(|| slot.to_string()),
+            m.map_or_else(|| slot.to_string(), |m| m.slot.clone()),
             if d.patch.is_empty() {
                 "—".into()
             } else {
                 d.patch.clone()
             },
-            m.map(|m| m.gain_db).unwrap_or(0.0),
+            m.map_or(0.0, |m| m.gain_db),
             show("filter.cutoff"),
             show("filter.reso"),
             show("source.unison"),

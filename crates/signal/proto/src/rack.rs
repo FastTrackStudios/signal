@@ -25,7 +25,7 @@ crate::typed_uuid_id!(
 );
 
 /// A slot in a Rack that references a Rig.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct RackSlot {
     /// Position index within the rack.
     pub position: u32,
@@ -68,6 +68,7 @@ impl Rack {
         self
     }
 
+    #[must_use] 
     pub fn active_rig_id(&self) -> Option<&crate::rig::RigId> {
         self.active_slot
             .and_then(|idx| self.slots.iter().find(|s| s.position == idx && s.active))
@@ -79,7 +80,7 @@ impl Rack {
 ///
 /// Contains multiple racks (e.g. Guitar Rack, Bass Rack, Keys Rack)
 /// and controls global routing between them.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct Director {
     pub id: DirectorId,
     pub name: String,

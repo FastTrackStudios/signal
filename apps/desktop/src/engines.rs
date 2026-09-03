@@ -1,6 +1,6 @@
 //! Engine supervisor — the app as engine *manager*.
 //!
-//! FastTrackStudio's domains run as detachable headless engines; the app
+//! `FastTrackStudio`'s domains run as detachable headless engines; the app
 //! is a remote that can also *launch* them. This module supervises the
 //! signal-engine child — this same binary re-spawned as
 //! `fasttrackstudio --engine` (spawn / stop / restart, discovery via
@@ -63,12 +63,9 @@ pub fn signal_owned() -> bool {
         let mut owned = OWNED.lock().unwrap();
         match owned.as_mut() {
             // `try_wait` reaps a crashed child and clears ownership.
-            Some(child) => match child.try_wait() {
-                Ok(None) => true,
-                _ => {
-                    *owned = None;
-                    false
-                }
+            Some(child) => if matches!(child.try_wait(), Ok(None)) { true } else {
+                *owned = None;
+                false
             },
             None => false,
         }
@@ -143,7 +140,7 @@ pub fn stop_signal() -> Result<(), String> {
 
 /// Best-effort teardown when the app is shutting down: SIGTERM the owned
 /// engine's process group so it doesn't outlive the window. The engine's own
-/// watchdog (FTS_SUPERVISOR_PID) is the backstop if we're killed before this
+/// watchdog (`FTS_SUPERVISOR_PID`) is the backstop if we're killed before this
 /// runs. Safe to call when nothing is owned.
 pub fn shutdown() {
     // systemd-managed engines are intentionally left running (a stop is final
@@ -155,7 +152,7 @@ pub fn shutdown() {
 }
 
 /// Restart the signal engine (stop if owned, then start).
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub fn restart_signal() -> Result<String, String> {
     if signal_owned() {
         stop_signal()?;

@@ -10,8 +10,8 @@ use super::mzt_quadratic;
 /// Peak/Bell biquad — Pro-Q 4's analog peak EQ with matched Z-transform (MZT).
 ///
 /// Analog prototype:
-///   H(s) = (s² + (A/Q_bw)·w0·s + w0²) / (s² + (1/(A·Q_bw))·w0·s + w0²)
-/// with A = 10^(gain_dB/40), Q_bw = Q/√2.
+///   H(s) = (s² + (A/`Q_bw`)·`w0`·s + `w0`²) / (s² + (1/(A·`Q_bw`))·`w0`·s + `w0`²)
+/// with A = 10^(`gain_dB`/40), `Q_bw` = Q/√2.
 ///
 /// Both poles and zeros map via z = e^{sT} (matched Z, not BLT). After mapping,
 /// the numerator is rescaled to enforce |H(z=1)| = 1 (DC unity gain).
@@ -19,7 +19,8 @@ use super::mzt_quadratic;
 /// Identified via 64-point ground-truth biquad sweep through live Pro-Q 4
 /// (probe.exe LSQ extraction). MZT yields ~7× lower fit error than standard
 /// BLT (median 2.4e-3 vs 1.8e-2 across the test grid). See
-/// docs/reports/proq4/re/bell_analog_model_identified.md.
+/// `docs/reports/proq4/re/bell_analog_model_identified.md`.
+#[must_use]
 pub fn design_peak(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Coeffs {
     if gain_db.abs() < 1e-9 {
         return [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];

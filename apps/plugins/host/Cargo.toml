@@ -10,6 +10,9 @@ description = "fts-clap-host — launch any CLAP plugin's embedded GUI in a wind
 name = "fts-clap-host"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 # The clack-based CLAP host (bundle loading, embedded GUI, main-thread pump).
 # `decode` papers over a daw-standalone feature-gating gap: `clap-host`

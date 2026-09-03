@@ -38,7 +38,7 @@ use crate::{BlockType, PresetId};
 
 /// A slot that may or may not be filled. Template placeholders use
 /// `Unassigned` until the user picks a concrete value.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum Assignment<T> {
     /// Not yet assigned — a placeholder slot.
@@ -48,22 +48,22 @@ pub enum Assignment<T> {
 }
 
 impl<T> Assignment<T> {
-    pub fn is_unassigned(&self) -> bool {
+    pub const fn is_unassigned(&self) -> bool {
         matches!(self, Self::Unassigned)
     }
 
-    pub fn is_assigned(&self) -> bool {
+    pub const fn is_assigned(&self) -> bool {
         matches!(self, Self::Assigned(_))
     }
 
-    pub fn as_ref(&self) -> Assignment<&T> {
+    pub const fn as_ref(&self) -> Assignment<&T> {
         match self {
             Self::Unassigned => Assignment::Unassigned,
             Self::Assigned(v) => Assignment::Assigned(v),
         }
     }
 
-    pub fn assigned(&self) -> Option<&T> {
+    pub const fn assigned(&self) -> Option<&T> {
         match self {
             Self::Unassigned => None,
             Self::Assigned(v) => Some(v),
@@ -109,7 +109,7 @@ impl fmt::Display for AssignmentLevel {
 }
 
 /// A single missing assignment within a template.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissingAssignment {
     /// Which hierarchy level the missing assignment belongs to.
     pub level: AssignmentLevel,
@@ -125,7 +125,7 @@ impl fmt::Display for MissingAssignment {
 
 /// Error returned when `instantiate()` fails because required assignments
 /// are still `Unassigned`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstantiateError {
     pub missing: Vec<MissingAssignment>,
 }
@@ -146,7 +146,8 @@ impl fmt::Display for InstantiateError {
 impl std::error::Error for InstantiateError {}
 
 impl InstantiateError {
-    pub fn new(missing: Vec<MissingAssignment>) -> Self {
+    #[must_use] 
+    pub const fn new(missing: Vec<MissingAssignment>) -> Self {
         Self { missing }
     }
 }
@@ -157,7 +158,7 @@ impl InstantiateError {
 ///
 /// Separate from [`Metadata`] to allow templates to carry independent
 /// metadata that doesn't transfer to instantiated instances.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, Facet)]
 pub struct TemplateMetadata {
     pub tags: Tags,
     pub description: Option<String>,
@@ -165,6 +166,7 @@ pub struct TemplateMetadata {
 }
 
 impl TemplateMetadata {
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
@@ -218,7 +220,7 @@ pub trait Templateable: Sized {
 // ─── BlockTemplate ──────────────────────────────────────────────
 
 /// A block slot — knows what type of DSP it needs but not which plugin.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct BlockTemplate {
     pub block_type: BlockType,
     pub name: String,
@@ -282,7 +284,8 @@ pub struct SignalChainTemplate {
 }
 
 impl SignalChainTemplate {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self { nodes: Vec::new() }
     }
 
@@ -306,6 +309,7 @@ impl SignalChainTemplate {
     }
 
     /// Collect missing assignments recursively.
+    #[must_use] 
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         for node in &self.nodes {
@@ -384,6 +388,7 @@ impl ModuleTemplate {
     }
 
     /// Collect missing assignments from all blocks in the chain.
+    #[must_use] 
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         self.chain.missing_assignments()
     }
@@ -428,6 +433,7 @@ impl LayerTemplate {
         self
     }
 
+    #[must_use] 
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         if self.layer_id.is_unassigned() {
@@ -482,6 +488,7 @@ impl EngineTemplate {
         self
     }
 
+    #[must_use] 
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         if self.engine_id.is_unassigned() {
@@ -544,6 +551,7 @@ impl RigTemplate {
         self
     }
 
+    #[must_use] 
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         if self.rig_id.is_unassigned() {
@@ -606,6 +614,7 @@ impl ProfileTemplate {
         self
     }
 
+    #[must_use] 
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         if self.profile_id.is_unassigned() {
@@ -624,7 +633,7 @@ impl ProfileTemplate {
 // ─── SongTemplate ───────────────────────────────────────────────
 
 /// A song template — structure for a performance with named sections.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct SongTemplate {
     pub name: String,
     pub song_id: Assignment<SongId>,
@@ -668,6 +677,7 @@ impl SongTemplate {
         self
     }
 
+    #[must_use] 
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         if self.song_id.is_unassigned() {
@@ -703,7 +713,7 @@ impl Templateable for crate::Block {
             }]));
         }
         // With an assigned preset, create a default block
-        Ok(crate::Block::default())
+        Ok(Self::default())
     }
 }
 
@@ -789,7 +799,7 @@ impl Templateable for crate::Module {
 
         let mut counter = 0;
         let chain = instantiate_chain(&template.chain, &mut counter);
-        Ok(crate::Module::from_chain(chain))
+        Ok(Self::from_chain(chain))
     }
 }
 

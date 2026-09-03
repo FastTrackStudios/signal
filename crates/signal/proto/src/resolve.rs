@@ -25,7 +25,7 @@ pub enum ResolveError {
     CycleDetected(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum ResolveTarget {
     RigScene {
@@ -42,7 +42,7 @@ pub enum ResolveTarget {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum LayerSource {
     LayerPreset {
@@ -102,7 +102,7 @@ pub struct ResolvedGraph {
 }
 
 /// A block reference whose `saved_at_version` is behind the current snapshot version.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct StaleReference {
     /// The block's `node_id` in the resolved graph.
     pub block_node_id: String,
@@ -162,6 +162,7 @@ impl ResolvedGraph {
     /// the value of the parameter whose id matches `param_id`.
     ///
     /// Walks engines → layers → modules → blocks and standalone blocks.
+    #[must_use] 
     pub fn find_param(&self, block_id_fragment: &str, param_id: &str) -> Option<f32> {
         for engine in &self.engines {
             for layer in &engine.layers {

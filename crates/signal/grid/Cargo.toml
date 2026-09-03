@@ -10,6 +10,9 @@ authors.workspace = true
 # grid UI can run on wasm — this crate depends only on the wasm-clean
 # proto layer (no facade, no filesystem, no threads).
 
+[lints]
+workspace = true
+
 [dependencies]
 signal-proto.workspace = true
 uuid = { version = "1", features = ["v4"] }

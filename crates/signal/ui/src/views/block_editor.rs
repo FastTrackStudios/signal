@@ -98,8 +98,8 @@ mod cg_cursor {
 
 #[cfg(not(target_os = "macos"))]
 mod cg_cursor {
-    pub fn grab() {}
-    pub fn release() {}
+    pub const fn grab() {}
+    pub const fn release() {}
 }
 
 // endregion: --- Cursor warp (macOS)
@@ -212,7 +212,7 @@ pub fn BlockCard(
     parameters: Vec<(String, f32)>,
     /// Callback when bypass is toggled.
     on_toggle_bypass: EventHandler<()>,
-    /// Callback when a parameter changes: (param_index, new_value).
+    /// Callback when a parameter changes: (`param_index`, `new_value`).
     on_param_change: EventHandler<(usize, f32)>,
 ) -> Element {
     let color = block_color(&block_type_key);
@@ -444,7 +444,7 @@ pub fn MiniKnob(
 
     let value_path = if bipolar {
         let center_angle = angle_for_value(0.5);
-        let val_angle = angle_for_value(display as f64);
+        let val_angle = angle_for_value(f64::from(display));
         if display > 0.501 {
             svg_arc(center, center, radius, center_angle, val_angle)
         } else if display < 0.499 {
@@ -458,7 +458,7 @@ pub fn MiniKnob(
             center,
             radius,
             angle_for_value(0.0),
-            angle_for_value(display as f64),
+            angle_for_value(f64::from(display)),
         )
     } else {
         String::new()
@@ -468,8 +468,8 @@ pub fn MiniKnob(
     let (tick_x, tick_y) = arc_point(center, center, radius + 2.0, angle_for_value(0.5));
     let (tick_x2, tick_y2) = arc_point(center, center, radius - 1.0, angle_for_value(0.5));
 
-    let value_angle = 135.0 + (display * 270.0);
-    let end_angle = (value_angle as f64).to_radians();
+    let value_angle = display.mul_add(270.0, 135.0);
+    let end_angle = f64::from(value_angle).to_radians();
 
     let accent = color.as_deref().unwrap_or("#3B82F6");
 
@@ -623,7 +623,7 @@ pub fn MiniKnob(
                         );
 
                         // Send start value so JS can compute clamp bounds
-                        let _ = eval.send(start_val as f64);
+                        let _ = eval.send(f64::from(start_val));
 
                         // "done" sentinel (fails f64 parse) or channel closed ends the drag.
                         while let Ok(acc) = eval.recv::<f64>().await {

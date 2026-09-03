@@ -1,8 +1,8 @@
 //! Demo: paint an MM2 kit's mapping onto the S88 Light Guide (kick=red,
 //! snare=yellow, hats=green, toms=orange, cymbals=blue/purple), then play a
 //! groove so the mapped keys flash. Run with sudo (hidraw needs it):
-//!   cargo build -p signal-drums --example kit_lights
-//!   sudo ./target/debug/examples/kit_lights
+//!   cargo build -p signal-drums --example `kit_lights`
+//!   sudo ./`target/debug/examples/kit_lights`
 
 use std::thread::sleep;
 use std::time::Duration;
@@ -24,8 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .note_routing
                 .iter()
                 .find(|nr| nr.targets.iter().any(|t| t == &e.id))
-                .map(|nr| nr.note)
-                .unwrap_or(0);
+                .map_or(0, |nr| nr.note);
             (note, e.id.clone())
         })
         .collect();

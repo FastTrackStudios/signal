@@ -202,7 +202,7 @@ fn render_source_config(source: &ModulationSource) -> Element {
 }
 
 /// Icon character for a modulation source type.
-fn source_icon(source: &ModulationSource) -> &'static str {
+const fn source_icon(source: &ModulationSource) -> &'static str {
     match source {
         ModulationSource::Lfo(_) => "\u{223F}",        // ∿ sine wave
         ModulationSource::Envelope(_) => "\u{25B3}",   // △ triangle
@@ -216,7 +216,7 @@ fn source_icon(source: &ModulationSource) -> &'static str {
 }
 
 /// Accent color for a modulation source type.
-fn source_color(source: &ModulationSource) -> &'static str {
+const fn source_color(source: &ModulationSource) -> &'static str {
     match source {
         ModulationSource::Lfo(_) => "#A855F7",        // purple
         ModulationSource::Envelope(_) => "#F97316",   // orange

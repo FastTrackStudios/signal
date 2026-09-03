@@ -6,6 +6,9 @@ license.workspace = true
 edition = "2021"
 description = "Saturation GUI — the five circuits, each with its own panel"
 
+[lints]
+workspace = true
+
 [features]
 default = []
 native = [

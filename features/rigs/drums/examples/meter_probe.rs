@@ -1,6 +1,6 @@
 //! Offline probe: load an MM2 kit, hit the kick, render blocks, and read the
 //! drum-mixer meters — proves the per-channel/bus/master peak plumbing.
-//!   cargo run -p signal-drums --example meter_probe
+//!   cargo run -p signal-drums --example `meter_probe`
 
 use signal_sampler::{PresetSpec, SamplerRig};
 
@@ -73,8 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .note_routing
                 .iter()
                 .find(|nr| nr.targets.iter().any(|t| t == &e.label))
-                .map(|nr| nr.note)
-                .unwrap_or(0);
+                .map_or(0, |nr| nr.note);
             (e.engine_idx, note)
         })
         .collect();

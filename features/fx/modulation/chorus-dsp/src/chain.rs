@@ -1,4 +1,4 @@
-//! ChorusChain — multi-engine stereo chorus processor.
+//! `ChorusChain` — multi-engine stereo chorus processor.
 //!
 //! Supports 4 engine types (Cubic, BBD, Tape, Orbit) with
 //! 1–4 voices per channel. Implements the Processor trait.
@@ -36,6 +36,7 @@ pub struct ChorusChain {
 }
 
 impl ChorusChain {
+    #[must_use] 
     pub fn new() -> Self {
         let engine = EngineType::Cubic;
         Self {
@@ -65,7 +66,7 @@ impl ChorusChain {
 
 /// Create right-channel voices with stereo phase offset.
 fn create_voices_stereo(engine: EngineType, count: usize) -> Vec<Box<dyn ChorusEngine>> {
-    use crate::engine::*;
+    use crate::engine::{ChorusEngine, EngineType, CubicVoice, BbdVoice, TapeVoice, OrbitVoice, JunoVoice};
     (0..count)
         .map(|i| {
             let offset = i as f64 / count as f64 + 0.25; // +90° for stereo
@@ -141,16 +142,16 @@ impl Processor for ChorusChain {
 
             // Stereo width
             let mono_wet = (wet_l + wet_r) * 0.5;
-            wet_l = mono_wet + (wet_l - mono_wet) * self.width;
-            wet_r = mono_wet + (wet_r - mono_wet) * self.width;
+            wet_l = (wet_l - mono_wet).mul_add(self.width, mono_wet);
+            wet_r = (wet_r - mono_wet).mul_add(self.width, mono_wet);
 
             // Vibrato: wet only
             if self.effect_type == EffectType::Vibrato {
                 left[i] = wet_l;
                 right[i] = wet_r;
             } else {
-                left[i] = dry_l * (1.0 - self.mix) + wet_l * self.mix;
-                right[i] = dry_r * (1.0 - self.mix) + wet_r * self.mix;
+                left[i] = dry_l.mul_add(1.0 - self.mix, wet_l * self.mix);
+                right[i] = dry_r.mul_add(1.0 - self.mix, wet_r * self.mix);
             }
         }
     }
@@ -191,7 +192,7 @@ mod tests {
         c.update(config());
 
         let input: Vec<f64> = (0..4800)
-            .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut l = input.clone();
         let mut r = input.clone();
@@ -223,14 +224,14 @@ mod tests {
             c.update(config());
 
             let mut l: Vec<f64> = (0..48000)
-                .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+                .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
                 .collect();
             let mut r = l.clone();
 
             c.process(&mut l, &mut r);
 
             for (i, &s) in l.iter().enumerate() {
-                assert!(s.is_finite(), "NaN in {:?} at {i}", engine);
+                assert!(s.is_finite(), "NaN in {engine:?} at {i}");
             }
         }
     }
@@ -254,14 +255,14 @@ mod tests {
                 c.update(config());
 
                 let mut l: Vec<f64> = (0..24000)
-                    .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+                    .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
                     .collect();
                 let mut r = l.clone();
 
                 c.process(&mut l, &mut r);
 
                 for (i, &s) in l.iter().enumerate() {
-                    assert!(s.is_finite(), "NaN in {:?}/{:?} at {i}", engine, effect);
+                    assert!(s.is_finite(), "NaN in {engine:?}/{effect:?} at {i}");
                 }
             }
         }
@@ -291,7 +292,7 @@ mod tests {
     #[test]
     fn different_engines_produce_different_output() {
         let input: Vec<f64> = (0..9600)
-            .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
 
         let mut outputs = Vec::new();

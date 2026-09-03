@@ -4,7 +4,7 @@ use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 /// Easing curve for smooth transitions between parameter values.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum EasingCurve {
     /// Constant-speed interpolation.
@@ -28,6 +28,7 @@ impl EasingCurve {
     /// Apply the easing function to a normalized time value `t` in `[0.0, 1.0]`.
     ///
     /// Returns a normalized output in `[0.0, 1.0]` representing the eased position.
+    #[must_use] 
     pub fn apply(self, t: f64) -> f64 {
         let t = t.clamp(0.0, 1.0);
         match self {
@@ -38,27 +39,27 @@ impl EasingCurve {
                 if t < 0.5 {
                     2.0 * t * t
                 } else {
-                    -1.0 + (4.0 - 2.0 * t) * t
+                    2.0f64.mul_add(-t, 4.0).mul_add(t, -1.0)
                 }
             }
             Self::CubicIn => t * t * t,
             Self::CubicOut => {
                 let t1 = t - 1.0;
-                t1 * t1 * t1 + 1.0
+                (t1 * t1).mul_add(t1, 1.0)
             }
             Self::CubicInOut => {
                 if t < 0.5 {
                     4.0 * t * t * t
                 } else {
-                    let t1 = 2.0 * t - 2.0;
-                    0.5 * t1 * t1 * t1 + 1.0
+                    let t1 = 2.0f64.mul_add(t, -2.0);
+                    (0.5 * t1 * t1).mul_add(t1, 1.0)
                 }
             }
         }
     }
 
     /// All available easing curves.
-    pub const ALL: &'static [EasingCurve] = &[
+    pub const ALL: &'static [Self] = &[
         Self::Linear,
         Self::EaseIn,
         Self::EaseOut,
@@ -69,6 +70,7 @@ impl EasingCurve {
     ];
 
     /// Human-readable display name.
+    #[must_use] 
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Linear => "Linear",
@@ -83,9 +85,10 @@ impl EasingCurve {
 }
 
 /// Linearly interpolate between two values using an eased `t`.
+#[must_use] 
 pub fn lerp_eased(from: f64, to: f64, t: f64, curve: EasingCurve) -> f64 {
     let eased = curve.apply(t);
-    from + (to - from) * eased
+    (to - from).mul_add(eased, from)
 }
 
 #[cfg(test)]
@@ -104,8 +107,8 @@ mod tests {
         for curve in EasingCurve::ALL {
             let start = curve.apply(0.0);
             let end = curve.apply(1.0);
-            assert!((start - 0.0).abs() < 1e-10, "{:?} start = {}", curve, start);
-            assert!((end - 1.0).abs() < 1e-10, "{:?} end = {}", curve, end);
+            assert!((start - 0.0).abs() < 1e-10, "{curve:?} start = {start}");
+            assert!((end - 1.0).abs() < 1e-10, "{curve:?} end = {end}");
         }
     }
 

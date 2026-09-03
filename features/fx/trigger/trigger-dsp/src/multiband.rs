@@ -66,6 +66,7 @@ pub struct MultibandDetector {
 }
 
 impl MultibandDetector {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         let config = AudioConfig {
             sample_rate,
@@ -198,6 +199,7 @@ impl MultibandDetector {
 
     /// Get the dominant band from a set of simultaneous triggers.
     /// Returns the band with the highest ODF value.
+    #[must_use] 
     pub fn dominant_band(triggers: &[BandTrigger]) -> Option<usize> {
         triggers
             .iter()
@@ -210,7 +212,8 @@ impl MultibandDetector {
     }
 
     /// Classify a trigger based on which band fired.
-    pub fn classify(band: usize) -> &'static str {
+    #[must_use] 
+    pub const fn classify(band: usize) -> &'static str {
         match band {
             0 => "kick",
             1 => "snare",
@@ -254,7 +257,7 @@ mod tests {
         // Feed low-frequency content (80Hz kick drum)
         let mut got_trigger = false;
         for i in 0..4096 {
-            let t = i as f64 / SR;
+            let t = f64::from(i) / SR;
             let sample = (80.0 * std::f64::consts::TAU * t).sin() * 0.8;
             let triggers = mb.tick(sample);
             if let Some(t) = triggers.iter().flatten().next() {
@@ -280,7 +283,7 @@ mod tests {
         // Feed high-frequency content (8kHz cymbal)
         let mut got_trigger = false;
         for i in 0..4096 {
-            let t = i as f64 / SR;
+            let t = f64::from(i) / SR;
             let sample = (8000.0 * std::f64::consts::TAU * t).sin() * 0.8;
             let triggers = mb.tick(sample);
             if let Some(t) = triggers.iter().flatten().next() {

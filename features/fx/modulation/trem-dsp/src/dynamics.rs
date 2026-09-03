@@ -8,10 +8,10 @@ use audiocore_dsp::envelope::EnvelopeFollower;
 /// Dynamics mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DynMode {
-    /// Proportional: mod_amount scales with how far the level is above threshold.
+    /// Proportional: `mod_amount` scales with how far the level is above threshold.
     #[default]
     Env,
-    /// Gate: mod_amount is 1.0 above threshold, 0.0 below.
+    /// Gate: `mod_amount` is 1.0 above threshold, 0.0 below.
     Gate,
 }
 
@@ -33,7 +33,7 @@ pub struct TremDynamics {
 
     /// Level envelope follower (tracks input RMS/peak).
     level_env: EnvelopeFollower,
-    /// Smoothing envelope for mod_amount (attack/release).
+    /// Smoothing envelope for `mod_amount` (attack/release).
     mod_env: EnvelopeFollower,
     /// Current smoothed modulation amount (0..1).
     mod_amount: f64,
@@ -42,6 +42,7 @@ pub struct TremDynamics {
 }
 
 impl TremDynamics {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             threshold_db: -30.0,
@@ -106,7 +107,7 @@ impl TremDynamics {
         self.mod_amount = self.mod_env.tick(raw);
 
         // Compute outputs
-        let rate_scale = 2.0_f64.powf(self.rate_mod * self.mod_amount);
+        let rate_scale = (self.rate_mod * self.mod_amount).exp2();
         let depth_offset = self.depth_mod * self.mod_amount;
 
         (rate_scale, depth_offset)
@@ -114,13 +115,15 @@ impl TremDynamics {
 
     /// Get the current smoothed mod amount (0..1).
     #[inline]
-    pub fn mod_amount(&self) -> f64 {
+    #[must_use] 
+    pub const fn mod_amount(&self) -> f64 {
         self.mod_amount
     }
 
     /// Returns true if dynamics processing is effectively bypassed
-    /// (both rate_mod and depth_mod are zero).
+    /// (both `rate_mod` and `depth_mod` are zero).
     #[inline]
+    #[must_use] 
     pub fn is_bypassed(&self) -> bool {
         self.rate_mod.abs() < 1e-10 && self.depth_mod.abs() < 1e-10
     }

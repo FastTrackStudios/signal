@@ -1,4 +1,4 @@
-//! nice_plug parameter definitions and shared UI state.
+//! `nice_plug` parameter definitions and shared UI state.
 //!
 //! Lives in `trigger-ui` (not `trigger-plugin`) so the
 //! [`crate::control_view`] component can render against the param tree
@@ -40,6 +40,7 @@ impl Default for WaveRing {
 }
 
 impl WaveRing {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             buf: std::array::from_fn(|_| AtomicF32::new(0.0)),
@@ -92,6 +93,7 @@ impl Default for HitRing {
 }
 
 impl HitRing {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             buf: std::array::from_fn(|_| AtomicU64::new(0)),

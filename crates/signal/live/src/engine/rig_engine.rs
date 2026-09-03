@@ -63,7 +63,8 @@ pub struct TransitionResult {
 }
 
 impl TransitionResult {
-    pub fn completed() -> Self {
+    #[must_use] 
+    pub const fn completed() -> Self {
         Self {
             outcome: SwitchOutcome::Completed,
             slot_errors: Vec::new(),
@@ -79,11 +80,13 @@ impl TransitionResult {
         }
     }
 
-    pub fn is_completed(&self) -> bool {
+    #[must_use] 
+    pub const fn is_completed(&self) -> bool {
         matches!(self.outcome, SwitchOutcome::Completed)
     }
 
-    pub fn has_errors(&self) -> bool {
+    #[must_use] 
+    pub const fn has_errors(&self) -> bool {
         !self.slot_errors.is_empty()
     }
 }
@@ -92,7 +95,7 @@ impl TransitionResult {
 ///
 /// Scene transitions flow through: resolve → diff → execute per-slot.
 /// The engine also manages preloading and periodic tail cleanup.
-#[allow(async_fn_in_trait)]
+#[expect(async_fn_in_trait)]
 pub trait RigEngine: Send + Sync {
     /// Apply parameter changes to a specific slot (no instance switch).
     async fn apply_snapshot(
@@ -143,7 +146,8 @@ pub enum TweenState {
 }
 
 impl SnapshotTween {
-    pub fn new(duration_ms: f64, curve: signal_proto::easing::EasingCurve) -> Self {
+    #[must_use] 
+    pub const fn new(duration_ms: f64, curve: signal_proto::easing::EasingCurve) -> Self {
         Self {
             duration_ms,
             curve,
@@ -153,7 +157,7 @@ impl SnapshotTween {
     }
 
     /// Start or restart the tween.
-    pub fn start(&mut self) {
+    pub const fn start(&mut self) {
         self.elapsed_ms = 0.0;
         self.state = TweenState::Running;
     }
@@ -184,20 +188,23 @@ impl SnapshotTween {
         self.curve.apply(t)
     }
 
-    pub fn state(&self) -> TweenState {
+    #[must_use] 
+    pub const fn state(&self) -> TweenState {
         self.state
     }
 
+    #[must_use] 
     pub fn is_running(&self) -> bool {
         self.state == TweenState::Running
     }
 
+    #[must_use] 
     pub fn is_complete(&self) -> bool {
         self.state == TweenState::Complete
     }
 
     /// Reset to idle state.
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.elapsed_ms = 0.0;
         self.state = TweenState::Idle;
     }

@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 // ---------------------------------------------------------------------------
 
 /// A scene tile in the performance grid.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PerfSceneTile {
     pub id: String,
     pub name: String,
@@ -20,7 +20,7 @@ pub struct PerfSceneTile {
 }
 
 /// A snapshot slot in the 8-slot bank.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SnapshotSlot {
     pub index: usize,
     pub name: Option<String>,
@@ -30,7 +30,7 @@ pub struct SnapshotSlot {
 }
 
 /// Song/section navigation state.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SongNavState {
     pub song_name: String,
     pub section_name: String,
@@ -41,7 +41,7 @@ pub struct SongNavState {
 }
 
 /// Current rig status summary.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct RigStatus {
     pub rig_name: String,
     pub engine_count: usize,
@@ -147,7 +147,7 @@ pub fn MorphSlider(props: MorphSliderProps) -> Element {
                 }
                 span {
                     class: "text-xs text-muted-foreground",
-                    {format!("{}%", pct)}
+                    {format!("{pct}%")}
                 }
                 span {
                     class: "text-sm font-semibold text-primary",
@@ -324,7 +324,7 @@ pub fn SongNav(props: SongNavProps) -> Element {
                     }
                     span { class: "font-mono", "{section_display}" }
                     if let Some(tempo) = s.tempo {
-                        span { class: "font-mono", {format!("\u{266A} {} BPM", tempo)} }
+                        span { class: "font-mono", {format!("\u{266A} {tempo} BPM")} }
                     }
                     if let Some(key) = &s.key_signature {
                         span { "Key: {key}" }
@@ -351,7 +351,7 @@ pub fn SongNav(props: SongNavProps) -> Element {
 // Rig Status Banner
 // ---------------------------------------------------------------------------
 
-#[derive(Props, Clone, PartialEq)]
+#[derive(Props, Clone, PartialEq, Eq)]
 pub struct RigStatusBannerProps {
     status: RigStatus,
 

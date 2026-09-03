@@ -1,12 +1,12 @@
 #![cfg(feature = "daw")]
-//! REAPER integration test: Load FabFilter presets onto a DAW track.
+//! REAPER integration test: Load `FabFilter` presets onto a DAW track.
 //!
-//! Imports all FabFilter plugins into an in-memory signal controller, then loads
+//! Imports all `FabFilter` plugins into an in-memory signal controller, then loads
 //! one specific preset per plugin onto a single track — testing both the binary
 //! state injection path (most plugins) and the parameter-based path (Pro-C 3).
 //!
 //! Run with:
-//!   cargo xtask reaper-test --keep-open fabfilter_load
+//!   cargo xtask reaper-test --keep-open `fabfilter_load`
 
 use std::time::{Duration, Instant};
 
@@ -31,8 +31,8 @@ async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
     }
 }
 
-/// FabFilter plugins to load, with specific snapshot names.
-/// (plugin_name, block_type, snapshot_name)
+/// `FabFilter` plugins to load, with specific snapshot names.
+/// (`plugin_name`, `block_type`, `snapshot_name`)
 const FABFILTER_CHAIN: &[(&str, BlockType, &str)] = &[
     ("Pro-Q 4", BlockType::Eq, "Bell Surgical"),
     ("Pro-C 3", BlockType::Compressor, "Controlled Sides"),
@@ -45,7 +45,7 @@ const FABFILTER_CHAIN: &[(&str, BlockType, &str)] = &[
     ("Volcano 3", BlockType::Filter, "Simple Triggered Notch bM"),
 ];
 
-/// Compute a deterministic snapshot ID for a FabFilter preset snapshot.
+/// Compute a deterministic snapshot ID for a `FabFilter` preset snapshot.
 fn fabfilter_snapshot_id(
     plugin_name: &str,
     snapshot_name: &str,
@@ -169,8 +169,7 @@ async fn fabfilter_load_full_chain(ctx: &ReaperTestContext) -> eyre::Result<()> 
     let fx_count = track.fx_chain().count().await?;
     assert_eq!(
         fx_count, loaded_count,
-        "expected {} FX on track, got {}",
-        loaded_count, fx_count
+        "expected {loaded_count} FX on track, got {fx_count}"
     );
 
     // ── Diagnostic dump: parameters for each loaded plugin ──
@@ -182,7 +181,7 @@ async fn fabfilter_load_full_chain(ctx: &ReaperTestContext) -> eyre::Result<()> 
             .await?
             .ok_or_else(|| eyre::eyre!("FX at index {i} not found"))?;
 
-        eprintln!("── {} ('{}') ──", plugin_name, snapshot_name);
+        eprintln!("── {plugin_name} ('{snapshot_name}') ──");
 
         if let Ok(Some(preset_info)) = fx.preset_index().await {
             eprintln!(
@@ -219,7 +218,7 @@ async fn fabfilter_load_full_chain(ctx: &ReaperTestContext) -> eyre::Result<()> 
         "\nAll {} FabFilter plugins loaded in {:.1}s (avg {:.1}s/plugin)\n",
         loaded_count,
         total_elapsed.as_secs_f64(),
-        total_elapsed.as_secs_f64() / loaded_count as f64,
+        total_elapsed.as_secs_f64() / f64::from(loaded_count),
     );
 
     ctx.log(&format!(

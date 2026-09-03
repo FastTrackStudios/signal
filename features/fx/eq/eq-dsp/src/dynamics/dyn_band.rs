@@ -148,6 +148,7 @@ pub struct DynBand {
 }
 
 impl DynBand {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut b = Self {
             params: DynBandParams::default(),
@@ -294,10 +295,10 @@ impl DynBand {
                 _ => self.params.freq_hz,
             };
             // Second-order Butterworth magnitudes at `watch`.
-            let r_hp = watch / lo.max(1.0);
-            let r_lp = watch / hi.max(1.0);
-            let hp = r_hp * r_hp / (1.0 + r_hp.powi(4)).sqrt();
-            let lp = 1.0 / (1.0 + r_lp.powi(4)).sqrt();
+            let highpass_ratio = watch / lo.max(1.0);
+            let lowpass_ratio = watch / hi.max(1.0);
+            let hp = highpass_ratio * highpass_ratio / (1.0 + highpass_ratio.powi(4)).sqrt();
+            let lp = 1.0 / (1.0 + lowpass_ratio.powi(4)).sqrt();
             // Squared, because each shape is applied twice.
             self.side_makeup = 1.0 / (hp * hp * lp * lp).max(1.0e-4);
         } else {
@@ -307,7 +308,8 @@ impl DynBand {
     }
 
     /// Current live gain in dB (for metering / the yellow bar).
-    pub fn live_gain_db(&self) -> f64 {
+    #[must_use]
+    pub const fn live_gain_db(&self) -> f64 {
         self.applied_gain_db
     }
 
@@ -327,13 +329,12 @@ impl DynBand {
             Placement::Mid => 0.5 * (left + right),
             Placement::Side => 0.5 * (left - right),
         };
-        let filtered_side = match self.params.side_mode {
-            SideMode::Wide => side,
-            _ => {
-                let hp = self.side_hp2.tick(0, self.side_hp.tick(0, component));
-                let lp = self.side_lp2.tick(0, self.side_lp.tick(0, hp));
-                lp * self.side_makeup
-            }
+        let filtered_side = if self.params.side_mode == SideMode::Wide {
+            side
+        } else {
+            let hp = self.side_hp2.tick(0, self.side_hp.tick(0, component));
+            let lp = self.side_lp2.tick(0, self.side_lp.tick(0, hp));
+            lp * self.side_makeup
         };
         let d = self.detector.tick(filtered_side, side);
         let target = self.params.base_gain_db + d * self.params.range_db;
@@ -361,13 +362,12 @@ impl DynBand {
             Placement::Side => 0.5 * (*left - *right),
         };
         // Side path: band-limit, detect.
-        let filtered_side = match self.params.side_mode {
-            SideMode::Wide => side,
-            _ => {
-                let hp = self.side_hp2.tick(0, self.side_hp.tick(0, component));
-                let lp = self.side_lp2.tick(0, self.side_lp.tick(0, hp));
-                lp * self.side_makeup
-            }
+        let filtered_side = if self.params.side_mode == SideMode::Wide {
+            side
+        } else {
+            let hp = self.side_hp2.tick(0, self.side_hp.tick(0, component));
+            let lp = self.side_lp2.tick(0, self.side_lp.tick(0, hp));
+            lp * self.side_makeup
         };
         let d = self.detector.tick(filtered_side, side);
 
@@ -420,7 +420,8 @@ mod tests {
 
     /// RMS of a window of samples.
     fn rms(buf: &[f64]) -> f64 {
-        (buf.iter().map(|x| x * x).sum::<f64>() / buf.len() as f64).sqrt()
+        let len_f = f64::from(u32::try_from(buf.len()).unwrap_or(1));
+        (buf.iter().map(|x| x * x).sum::<f64>() / len_f).sqrt()
     }
 
     #[test]
@@ -438,12 +439,12 @@ mod tests {
             b.update(SR);
             let n = 48_000;
             let mut out = vec![0.0; n];
-            for i in 0..n {
-                let mut l = amp * (core::f64::consts::TAU * 1000.0 * i as f64 / SR).sin();
+            for (i, output) in out.iter_mut().enumerate().take(n) {
+                let mut l = amp * (core::f64::consts::TAU * 1000.0 * (i as u32 as f64) / SR).sin();
                 let mut r = l;
                 let side = l;
                 b.tick(&mut l, &mut r, side);
-                out[i] = l;
+                *output = l;
             }
             20.0 * (rms(&out[n / 2..]) / (amp / 2.0f64.sqrt())).log10()
         };

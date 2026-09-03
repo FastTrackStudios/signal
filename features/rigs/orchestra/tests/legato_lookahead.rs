@@ -6,7 +6,7 @@
 //! - the document path PRE-ROLLS every legato transition (fires BEFORE the
 //!   destination tick, by the measured-arrival − start-offset lead) and
 //!   never degrades to the reactive path;
-//! - live (StrictLive) playing of the same phrase commits reactively — the
+//! - live (`StrictLive`) playing of the same phrase commits reactively — the
 //!   transition fires only AT/AFTER the note-on (bounded latency, no
 //!   lookahead) — r[signal.soundsource.legato.live];
 //! - the rendered legato joins are CONTINUOUS: no dropout and no doubled
@@ -40,7 +40,7 @@ fn rms_db(audio: &[f32], start_frame: usize, len: usize) -> f32 {
     if b <= a {
         return -120.0;
     }
-    let s: f64 = audio[a..b].iter().map(|&x| (x as f64) * (x as f64)).sum();
+    let s: f64 = audio[a..b].iter().map(|&x| f64::from(x) * f64::from(x)).sum();
     let rms = (s / (b - a) as f64).sqrt();
     if rms <= 1e-9 {
         -120.0
@@ -92,7 +92,7 @@ fn lookahead_prerolls_transitions_and_joins_continuously() {
     // by a sane lead (< 500 ms — the measured arrival minus the start
     // offset), not merely at the tick.
     // 120 BPM ⇒ 1 QN = 0.5 s: destination ticks at QN 1.0 / 2.0.
-    let ticks = [SR as u64 / 2, SR as u64];
+    let ticks = [u64::from(SR) / 2, u64::from(SR)];
     for (t, &tick) in res.transitions.iter().zip(&ticks) {
         assert!(
             t.frame < tick,
@@ -106,7 +106,7 @@ fn lookahead_prerolls_transitions_and_joins_continuously() {
         // so the pitch change still lands ON the tick. Sanity-bound only —
         // the join-continuity asserts below carry the musical requirement.
         assert!(
-            tick - t.frame <= 2 * SR as u64,
+            tick - t.frame <= 2 * u64::from(SR),
             "pre-roll lead is sane: {} frames",
             tick - t.frame
         );
@@ -171,7 +171,7 @@ fn lookahead_prerolls_transitions_and_joins_continuously() {
     }
 }
 
-/// The SAME phrase played live (StrictLive, reactive path): transitions
+/// The SAME phrase played live (`StrictLive`, reactive path): transitions
 /// commit only when the note-on arrives — at/after the destination's
 /// wall-clock position, never before (no lookahead in live mode) — and the
 /// engine counts them as reactive fires. This is the live/offline mode
@@ -187,7 +187,7 @@ fn strict_live_commits_reactively_not_early() {
     rig.cc(ID, 1, 90);
     rig.set_legato_fire_log_enabled(ID, true);
     let render_secs = |secs: f64| {
-        let frames = (secs * SR as f64).round() as usize;
+        let frames = (secs * f64::from(SR)).round() as usize;
         let mut buf = vec![0.0f32; frames * 2];
         rig.render_offline(&mut buf).expect("render");
         buf
@@ -224,12 +224,12 @@ fn strict_live_commits_reactively_not_early() {
     // Bounded latency: the reactive commit happens within the Overlap-Delay
     // ceiling (~85 ms) of the note-on.
     assert!(
-        fire.frame - second_on_frame <= (SR as u64) / 10,
+        fire.frame - second_on_frame <= u64::from(SR) / 10,
         "live latency bounded: {} frames",
         fire.frame - second_on_frame
     );
     // And it sounds.
-    let s: f64 = audio.iter().map(|&x| (x as f64) * (x as f64)).sum();
+    let s: f64 = audio.iter().map(|&x| f64::from(x) * f64::from(x)).sum();
     assert!(
         (s / audio.len() as f64).sqrt() > 1e-4,
         "live phrase audible"

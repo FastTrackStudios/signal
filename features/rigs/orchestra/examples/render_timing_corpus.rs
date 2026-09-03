@@ -3,7 +3,7 @@
 //! a click generated from THE SAME tempo map, for the owner's ears:
 //!
 //! * `<case>_doc_click.wav` — offline document (Lookahead) render + click
-//! * `<case>_live_click.wav` — StrictLive reactive replay + click
+//! * `<case>_live_click.wav` — `StrictLive` reactive replay + click
 //! * `<case>_doc.wav` / `<case>_live.wav` — dry solo renders
 //! * `click_only_<bpm>bpm.wav` — the click by itself
 //! * `manifest.tsv` — per-note map: case, path, note index, qn,
@@ -80,7 +80,7 @@ fn main() -> eyre::Result<()> {
         let peak = res.audio.iter().fold(0.0f32, |m, s| m.max(s.abs()));
         println!(
             "   doc: {:.1}s, peak {:.3}, {} transitions, {} reactive fallbacks",
-            res.audio.len() as f64 / 2.0 / SR as f64,
+            res.audio.len() as f64 / 2.0 / f64::from(SR),
             peak,
             res.transitions.len(),
             res.reactive_fallbacks
@@ -159,9 +159,7 @@ fn main() -> eyre::Result<()> {
                 }
                 OnsetKind::PhraseStart => (flux.leading_edge(exp.sec, 0.10, 0.25), "flux-edge"),
             };
-            let err = measured
-                .map(|t| format!("{:+.1} ms", (t - exp.sec) * 1000.0))
-                .unwrap_or_else(|| "n/a".into());
+            let err = measured.map_or_else(|| "n/a".into(), |t| format!("{:+.1} ms", (t - exp.sec) * 1000.0));
             prev_pitch = Some(exp.pitch);
             println!(
                 "   note {i:2} qn {:5.2} pitch {:3} {:12} {label:9} err {err}",
@@ -183,7 +181,7 @@ fn main() -> eyre::Result<()> {
             click_bpms.push(bpm);
             let solo = render_click(
                 &case.doc.tempo,
-                (qn_to_sec(&case.doc.tempo, 16.0) * SR as f64) as usize,
+                (qn_to_sec(&case.doc.tempo, 16.0) * f64::from(SR)) as usize,
                 SR,
                 Some(CountIn {
                     start_qn: 0.0,

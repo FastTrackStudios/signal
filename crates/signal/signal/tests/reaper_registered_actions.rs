@@ -5,7 +5,7 @@
 //! system and discoverable via `is_registered` / `lookup_command_id`.
 //!
 //! Run with:
-//!   cargo xtask reaper-test -- registered_actions
+//!   cargo xtask reaper-test -- `registered_actions`
 
 use daw::test::reaper_test;
 

@@ -9,6 +9,9 @@ description = "Replace third-party plugin instances in a REAPER project with FTS
 name = "fts-convert"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 signal-import.workspace = true
 

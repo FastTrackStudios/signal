@@ -56,33 +56,33 @@ impl CompStage {
     /// early-outs on an unchanged value).
     fn sync(&mut self, p: &CompStageParams) {
         let c = &mut self.chain.comp;
-        c.set_threshold(p.threshold_db.value() as f64);
-        c.set_ratio(p.ratio.value() as f64);
-        c.set_attack_ms(p.attack_ms.value() as f64);
-        c.set_release_ms(p.release_ms.value() as f64);
-        c.set_knee(p.knee_db.value() as f64);
-        c.set_fold(p.mix.value() as f64);
-        c.output_gain_db = p.makeup_db.value() as f64;
-        c.channel_link = p.stereo_link.value() as f64;
+        c.set_threshold(f64::from(p.threshold_db.value()));
+        c.set_ratio(f64::from(p.ratio.value()));
+        c.set_attack_ms(f64::from(p.attack_ms.value()));
+        c.set_release_ms(f64::from(p.release_ms.value()));
+        c.set_knee(f64::from(p.knee_db.value()));
+        c.set_fold(f64::from(p.mix.value()));
+        c.output_gain_db = f64::from(p.makeup_db.value());
+        c.channel_link = f64::from(p.stereo_link.value());
 
         // Extended surface — set_style / set_range_db mirror into the gain
         // curve; the rest are plain fields the core smooths itself.
         c.set_style(p.style.value());
-        c.set_range_db(p.range_db.value() as f64);
+        c.set_range_db(f64::from(p.range_db.value()));
         c.character_mode = p.character_mode.value();
-        c.drive = p.drive.value() as f64;
-        c.input_gain_db = p.input_gain_db.value() as f64;
+        c.drive = f64::from(p.drive.value());
+        c.input_gain_db = f64::from(p.input_gain_db.value());
         c.auto_makeup = p.auto_makeup.value();
-        c.detector_rms_mix = p.detector_rms_mix.value() as f64;
-        c.feedback = p.feedback.value() as f64;
-        c.hold_ms = p.hold_ms.value() as f64;
-        c.inertia = p.inertia.value() as f64;
-        c.inertia_decay = p.inertia_decay.value() as f64;
-        c.expander_threshold_db = p.expander_threshold_db.value() as f64;
-        c.expander_ratio = p.expander_ratio.value() as f64;
-        c.upward_threshold_db = p.upward_threshold_db.value() as f64;
-        c.upward_ratio = p.upward_ratio.value() as f64;
-        c.ceiling = p.ceiling.value() as f64;
+        c.detector_rms_mix = f64::from(p.detector_rms_mix.value());
+        c.feedback = f64::from(p.feedback.value());
+        c.hold_ms = f64::from(p.hold_ms.value());
+        c.inertia = f64::from(p.inertia.value());
+        c.inertia_decay = f64::from(p.inertia_decay.value());
+        c.expander_threshold_db = f64::from(p.expander_threshold_db.value());
+        c.expander_ratio = f64::from(p.expander_ratio.value());
+        c.upward_threshold_db = f64::from(p.upward_threshold_db.value());
+        c.upward_ratio = f64::from(p.upward_ratio.value());
+        c.ceiling = f64::from(p.ceiling.value());
         c.update(self.sample_rate);
 
         // The stage's sidecar: the 6-band sidechain EQ on the detector key
@@ -91,9 +91,9 @@ impl CompStage {
             let b = &p.sc_eq[i];
             comp::chain::SidechainBand {
                 shape: b.shape.value().max(0) as u32,
-                freq_hz: b.freq_hz.value() as f64,
-                gain_db: b.gain_db.value() as f64,
-                q: b.q.value() as f64,
+                freq_hz: f64::from(b.freq_hz.value()),
+                gain_db: f64::from(b.gain_db.value()),
+                q: f64::from(b.q.value()),
             }
         }));
 
@@ -101,11 +101,11 @@ impl CompStage {
         // frequency; `set_lookahead` only reallocates when the sample count
         // moves, so the buffer alloc happens on an actual edit.
         self.chain
-            .set_sidechain_freq(p.sidechain_freq.value() as f64);
+            .set_sidechain_freq(f64::from(p.sidechain_freq.value()));
         self.chain
-            .set_sidechain_lowpass_freq(p.sidechain_lowpass_freq.value() as f64);
+            .set_sidechain_lowpass_freq(f64::from(p.sidechain_lowpass_freq.value()));
         self.chain
-            .set_lookahead((p.lookahead_ms.value() as f64).min(MAX_LOOKAHEAD_MS));
+            .set_lookahead(f64::from(p.lookahead_ms.value()).min(MAX_LOOKAHEAD_MS));
     }
 }
 
@@ -189,7 +189,7 @@ impl FtsComp {
             self.pool.set_lane(
                 l,
                 LaneCtl {
-                    gain: db_to_gain_f64(lp.gain_db.value() as f64),
+                    gain: db_to_gain_f64(f64::from(lp.gain_db.value())),
                     mute: lp.mute.value(),
                     solo: lp.solo.value(),
                 },
@@ -200,7 +200,7 @@ impl FtsComp {
             2 => SumMode::Raw,
             _ => SumMode::Coherent,
         };
-        self.pool.output_trim = db_to_gain_f64(self.params.output_trim_db.value() as f64);
+        self.pool.output_trim = db_to_gain_f64(f64::from(self.params.output_trim_db.value()));
         self.pool.update_alignment();
     }
 }
@@ -247,7 +247,7 @@ impl Plugin for FtsComp {
         buffer_config: &BufferConfig,
         context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
         self.ui_state
             .sample_rate
             .store(buffer_config.sample_rate, Ordering::Relaxed);
@@ -294,8 +294,8 @@ impl Plugin for FtsComp {
                 let (Some(l), r) = (it.next(), it.next()) else {
                     continue;
                 };
-                let left = *l as f64;
-                let right = r.map(|s| *s as f64).unwrap_or(left);
+                let left = f64::from(*l);
+                let right = r.map_or(left, |s| f64::from(*s));
                 input_peak = input_peak.max(left.abs().max(right.abs()) as f32);
                 self.buf_l[i] = left;
                 self.buf_r[i] = right;
@@ -335,8 +335,7 @@ impl Plugin for FtsComp {
         let gr_db = self
             .pool
             .stage(focused)
-            .map(|s| s.chain.comp.gain_reduction_db() as f32)
-            .unwrap_or(0.0);
+            .map_or(0.0, |s| s.chain.comp.gain_reduction_db() as f32);
         self.ui_state
             .gain_reduction_db
             .store(gr_db, Ordering::Relaxed);

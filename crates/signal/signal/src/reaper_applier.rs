@@ -43,7 +43,7 @@ struct PreloadedPatchTrack {
 /// The folder rig structure managed by the applier.
 struct FolderRigState {
     /// The "Guitar Rig" folder track.
-    #[allow(
+    #[expect(
         dead_code,
         reason = "kept as the folder-track handle for future folder-level ops (rename/move); not yet read anywhere"
     )]
@@ -54,13 +54,13 @@ struct FolderRigState {
     current_patch: Option<PatchTrackState>,
     /// Previous patch (tail ringing out, muted send).
     tail_patch: Option<PatchTrackState>,
-    /// FX identifier for graph_state_chunks matching.
+    /// FX identifier for `graph_state_chunks` matching.
     fx_id: String,
     /// Project handle for creating/removing child tracks.
     project: Project,
     /// Preloaded patch tracks keyed by patch name, ready for instant switching.
     preloaded_patches: HashMap<String, PreloadedPatchTrack>,
-    /// True once preloading has started. When set, apply_graph will NOT fall
+    /// True once preloading has started. When set, `apply_graph` will NOT fall
     /// through to the cold path for patches that aren't preloaded yet —
     /// it returns Ok(false) instead, avoiding track creation gaps.
     preloading_active: bool,
@@ -82,6 +82,7 @@ impl Default for ReaperPatchApplier {
 }
 
 impl ReaperPatchApplier {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             state: RwLock::new(None),
@@ -103,49 +104,43 @@ impl ReaperPatchApplier {
         let input_track_name = format!("Input: {fx_id}");
 
         // Look for existing folder or create it
-        let folder_track = match tracks.by_name(&fx_id).await {
-            Ok(Some(t)) => t,
-            _ => {
-                let t = tracks
-                    .add(&fx_id, None)
-                    .await
-                    .map_err(|e| PatchApplyError::DawError(format!("create folder track: {e}")))?;
-                t.set_folder_depth(1)
-                    .await
-                    .map_err(|e| PatchApplyError::DawError(format!("set folder start: {e}")))?;
-                t
-            }
+        let folder_track = if let Ok(Some(t)) = tracks.by_name(&fx_id).await { t } else {
+            let t = tracks
+                .add(&fx_id, None)
+                .await
+                .map_err(|e| PatchApplyError::DawError(format!("create folder track: {e}")))?;
+            t.set_folder_depth(1)
+                .await
+                .map_err(|e| PatchApplyError::DawError(format!("set folder start: {e}")))?;
+            t
         };
 
         // Look for existing input track or create it
-        let input_track = match tracks.by_name(&input_track_name).await {
-            Ok(Some(t)) => t,
-            _ => {
-                // Make sure folder track has depth +1 (is a folder)
-                folder_track
-                    .set_folder_depth(1)
-                    .await
-                    .map_err(|e| PatchApplyError::DawError(format!("set folder depth: {e}")))?;
+        let input_track = if let Ok(Some(t)) = tracks.by_name(&input_track_name).await { t } else {
+            // Make sure folder track has depth +1 (is a folder)
+            folder_track
+                .set_folder_depth(1)
+                .await
+                .map_err(|e| PatchApplyError::DawError(format!("set folder depth: {e}")))?;
 
-                // Insert child after the folder track
-                let folder_info = folder_track
-                    .info()
-                    .await
-                    .map_err(|e| PatchApplyError::DawError(format!("folder info: {e}")))?;
-                let input = tracks
-                    .add(&input_track_name, Some(folder_info.index + 1))
-                    .await
-                    .map_err(|e| PatchApplyError::DawError(format!("create input track: {e}")))?;
+            // Insert child after the folder track
+            let folder_info = folder_track
+                .info()
+                .await
+                .map_err(|e| PatchApplyError::DawError(format!("folder info: {e}")))?;
+            let input = tracks
+                .add(&input_track_name, Some(folder_info.index + 1))
+                .await
+                .map_err(|e| PatchApplyError::DawError(format!("create input track: {e}")))?;
 
-                // REAPER automatically sets the child's depth to close the folder
-                // No manual depth management needed!
+            // REAPER automatically sets the child's depth to close the folder
+            // No manual depth management needed!
 
-                // Disable parent send — audio goes through explicit sends, not folder bus
-                input.set_parent_send(false).await.map_err(|e| {
-                    PatchApplyError::DawError(format!("disable parent send on input: {e}"))
-                })?;
-                input
-            }
+            // Disable parent send — audio goes through explicit sends, not folder bus
+            input.set_parent_send(false).await.map_err(|e| {
+                PatchApplyError::DawError(format!("disable parent send on input: {e}"))
+            })?;
+            input
         };
 
         // Recover existing child tracks from a previous session.
@@ -172,8 +167,7 @@ impl ReaperPatchApplier {
                 let send_muted = input_sends
                     .iter()
                     .find(|s| s.dest_track_guid.as_deref() == Some(&track_info.guid))
-                    .map(|s| s.muted)
-                    .unwrap_or(true); // No send found = treat as muted/preloaded
+                    .is_none_or(|s| s.muted); // No send found = treat as muted/preloaded
 
                 let handle = match tracks.by_guid(&track_info.guid).await {
                     Ok(Some(h)) => h,
@@ -209,7 +203,7 @@ impl ReaperPatchApplier {
         }
 
         let recovered_count =
-            recovered_preloaded.len() + if recovered_current.is_some() { 1 } else { 0 };
+            recovered_preloaded.len() + usize::from(recovered_current.is_some());
         if recovered_count > 0 {
             eprintln!("[INFO] Recovered {recovered_count} existing patch track(s) from REAPER");
         }
@@ -237,7 +231,7 @@ impl ReaperPatchApplier {
     /// and enable input monitoring.
     ///
     /// `channel_index` is the 0-based mono hardware input index
-    /// (matching REAPER's I_RECINPUT encoding for mono inputs).
+    /// (matching REAPER's `I_RECINPUT` encoding for mono inputs).
     pub async fn configure_input(&self, channel_index: u32) -> Result<(), PatchApplyError> {
         let guard = self.state.read().await;
         let state = guard
@@ -271,7 +265,7 @@ impl ReaperPatchApplier {
     ///
     /// Each patch gets a child track with its FX chain loaded and a muted send
     /// from the input track. Patches are loaded sequentially to avoid overwhelming
-    /// REAPER. Skips patches that are already the current_patch or already preloaded.
+    /// REAPER. Skips patches that are already the `current_patch` or already preloaded.
     pub async fn preload_patches(
         &self,
         patches: Vec<(String, ResolvedGraph)>,
@@ -566,8 +560,7 @@ async fn rename_fx_on_track(track: &TrackHandle, chunk: &DawStateChunk, patch_na
 fn splice_fxchain(track_chunk: &str, rfxchain_content: &str) -> Option<String> {
     // Build the replacement FXCHAIN block
     let new_fxchain = format!(
-        "<FXCHAIN\nSHOW 0\nLASTSEL 0\nDOCKED 0\n{}\n>",
-        rfxchain_content
+        "<FXCHAIN\nSHOW 0\nLASTSEL 0\nDOCKED 0\n{rfxchain_content}\n>"
     );
 
     if let Some(fxchain_start) = track_chunk.find("<FXCHAIN") {

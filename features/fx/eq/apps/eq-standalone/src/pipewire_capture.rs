@@ -1,11 +1,11 @@
-//! Native PipeWire capture for the spectrum analyzer.
+//! Native `PipeWire` capture for the spectrum analyzer.
 //!
 //! Creates an audio *input* stream with `stream.capture.sink = true`, which
-//! tells PipeWire to auto-connect it to the default sink's monitor. The result:
+//! tells `PipeWire` to auto-connect it to the default sink's monitor. The result:
 //! the analyzer shows whatever is playing on the system with zero manual routing
 //! (this is the mechanism cava uses). Output is never touched.
 //!
-//! The PipeWire main loop is not `Send`, so the whole client lives on its own
+//! The `PipeWire` main loop is not `Send`, so the whole client lives on its own
 //! thread; only the (Send) analyzer feed + handle are moved in.
 
 use std::sync::Arc;
@@ -15,9 +15,9 @@ use pipewire as pw;
 use pw::spa;
 use spectrum_analyzer::dsp::{Analyzer, AudioFeed};
 
-/// Spawn the PipeWire capture thread. Returns an error only on setup that can be
+/// Spawn the `PipeWire` capture thread. Returns an error only on setup that can be
 /// observed synchronously (feed already taken, thread spawn failure); the actual
-/// PipeWire connection happens on the thread and logs its own errors.
+/// `PipeWire` connection happens on the thread and logs its own errors.
 pub fn spawn(ui: &Arc<EqUiState>) -> anyhow::Result<()> {
     let feed = ui
         .take_audio_feed()

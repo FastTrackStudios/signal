@@ -27,13 +27,13 @@ pub const FEED_URL: &str =
     "https://codeberg.org/api/v1/repos/FastTrackStudios/FastTrackStudio/releases?limit=1";
 
 /// The running app's version (workspace version at build time).
-pub fn current_version() -> &'static str {
+pub const fn current_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
 /// A downloadable release, as reported by the feed.
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub struct UpdateInfo {
     pub version: String,
     /// Asset download URL for this platform.
@@ -45,9 +45,9 @@ pub struct UpdateInfo {
 #[derive(Clone, Debug)]
 pub enum UpdateStatus {
     UpToDate,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     Available(UpdateInfo),
-    #[allow(
+    #[expect(
         dead_code,
         reason = "STUB — no code path produces a network failure yet; the network half is deliberately unimplemented"
     )]
@@ -56,7 +56,7 @@ pub enum UpdateStatus {
 
 /// The update pipeline. One real implementation will exist
 /// ([`CodebergUpdater`]); the trait keeps the UI testable.
-#[allow(
+#[expect(
     dead_code,
     reason = "STUB trait — download/apply are the not-yet-implemented network/install halves described at the top of this file"
 )]

@@ -5,6 +5,9 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 description = "modulation — facade over chorus/trem/wah DSP; UI + profiles opt-in."
 
+[lints]
+workspace = true
+
 [features]
 default = []
 ui = []

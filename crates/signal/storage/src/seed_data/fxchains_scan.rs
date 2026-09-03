@@ -1,4 +1,4 @@
-//! FXChains directory scanner for REAPER-native signal presets.
+//! `FXChains` directory scanner for REAPER-native signal presets.
 //!
 //! Scans `FXChains/FTS-Signal/01-Blocks/` and `02-Modules/` for `.RfxChain`
 //! files, optionally enriched by `.signal.styx` sidecars.
@@ -31,16 +31,17 @@ use signal_proto::{
 
 use crate::sidecar::{self, PresetKind};
 
-/// Root directory name under FXChains/.
+/// Root directory name under `FXChains`/.
 const FTS_SIGNAL_DIR: &str = "FTS-Signal";
 /// Block presets subfolder.
 const BLOCKS_DIR: &str = "01-Blocks";
 /// Module presets subfolder.
 const MODULES_DIR: &str = "02-Modules";
 
-/// Resolve the FTS-Signal FXChains root directory.
+/// Resolve the FTS-Signal `FXChains` root directory.
 ///
 /// Looks under `<fts_home>/Reaper/FXChains/FTS-Signal/`.
+#[must_use] 
 pub fn fxchains_root() -> PathBuf {
     utils::paths::reaper_fxchains().join(FTS_SIGNAL_DIR)
 }
@@ -52,6 +53,7 @@ pub fn fxchains_root() -> PathBuf {
 /// files are individual block presets.
 ///
 /// Returns `Preset` values with `BlockType::Custom` (refined by sidecar if present).
+#[must_use] 
 pub fn scan_blocks(root: &Path) -> Vec<Preset> {
     let blocks_dir = root.join(BLOCKS_DIR);
     if !blocks_dir.is_dir() {
@@ -67,6 +69,7 @@ pub fn scan_blocks(root: &Path) -> Vec<Preset> {
 ///
 /// Module presets are FX chains (ordered sequences of blocks). Each `.RfxChain`
 /// file is a complete module preset.
+#[must_use] 
 pub fn scan_modules(root: &Path) -> Vec<ModulePreset> {
     let modules_dir = root.join(MODULES_DIR);
     if !modules_dir.is_dir() {
@@ -246,7 +249,7 @@ fn read_dir_sorted(dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
-    let mut paths: Vec<PathBuf> = entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
+    let mut paths: Vec<PathBuf> = entries.filter_map(std::result::Result::ok).map(|e| e.path()).collect();
     paths.sort();
     paths
 }

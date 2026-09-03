@@ -1393,7 +1393,14 @@ impl State {
                     // the band when a player asks for one, and a drone that
                     // switched itself on at boot would be a fault, not a
                     // feature.
-                    muted: is_drone(&engine.name),
+                    //
+                    // Aux and Pad start muted too, TEMPORARILY, so the piano
+                    // can be judged on its own while the keys rig is being
+                    // worked on — a pad under everything hides exactly the
+                    // attack detail you need to hear. Unmute them in the
+                    // mixer; this only decides where the faders START.
+                    muted: is_drone(&engine.name)
+                        || matches!(engine.name.as_str(), "Aux" | "Pad"),
                     ..EngineState::default()
                 },
             );
@@ -1527,8 +1534,7 @@ impl KeysRigBackend {
             .iter()
             .flat_map(|e| e.layers.iter())
             .find(|l| l.name == layer)
-            .map(|l| l.exclude_global)
-            .unwrap_or(false)
+            .is_some_and(|l| l.exclude_global)
     }
 
     fn scope_targets(s: &State, lanes: &[String]) -> Vec<(String, usize)> {
@@ -1630,7 +1636,7 @@ impl KeysRigBackend {
                         spread: fmt_value(value, def.unit),
                     }
                 } else {
-                    let offset = spans.get(&id).map(|(o, _)| *o).unwrap_or(0.0);
+                    let offset = spans.get(&id).map_or(0.0, |(o, _)| *o);
                     KeysMacro {
                         id,
                         name: def.name.to_string(),
@@ -1689,7 +1695,7 @@ impl KeysRigBackend {
         let agree =
             span.is_none() && (values.is_empty() || (hi - lo).abs() <= (def.max - def.min) * 1e-4);
         let tdef = macro_def(target);
-        let (tmin, tmax) = tdef.map(|d| (d.min, d.max)).unwrap_or((def.min, def.max));
+        let (tmin, tmax) = tdef.map_or((def.min, def.max), |d| (d.min, d.max));
         let write = |s: &mut State, lane: &str, index: usize, v: f32| {
             if let Some(m) = s.lanes.get_mut(lane).and_then(|l| l.modules.get_mut(index)) {
                 m.macros.insert(target.to_string(), v.clamp(tmin, tmax));
@@ -1722,7 +1728,7 @@ impl KeysRigBackend {
         // other module travels by the same ratio (frequencies, times) or the
         // same amount (everything else). Nothing converges, so sweeping out
         // and back is lossless.
-        let ratio = matches!(tdef.map(|d| d.unit), Some("Hz") | Some("ms"));
+        let ratio = matches!(tdef.map(|d| d.unit), Some("Hz" | "ms"));
         let k = offset.abs();
         let edge = if offset >= 0.0 { tmax } else { tmin };
         let leader = base
@@ -1826,13 +1832,13 @@ impl KeysRigBackend {
             let render = inst.render_mut();
             // Filter block params (normalized on the block's own scale).
             let cutoff_norm =
-                signal_sampler::native::NativeFilter::norm_from_cutoff(cutoff_hz) as f64;
+                f64::from(signal_sampler::native::NativeFilter::norm_from_cutoff(cutoff_hz));
             let mut applied = render.set_leaf_param(&module, "Filter 1", "cutoff", cutoff_norm);
             applied |= render.set_leaf_param(
                 &module,
                 "Filter 1",
                 "resonance",
-                reso.clamp(0.0, 1.0) as f64,
+                f64::from(reso.clamp(0.0, 1.0)),
             );
             // Envelope sources + the env→cutoff amount (synth modules; a
             // sampler module has no env sources — its voices carry their
@@ -1855,14 +1861,14 @@ impl KeysRigBackend {
             // Per-voice synth engine (the oscillator source): full amp +
             // filter ADSRs, its own lowpass, vibrato. Times map onto the
             // voice's 8 s segment range, normalized.
-            let seg = |ms: f32| ((ms.max(0.0) / 1000.0) / 8.0).clamp(0.0, 1.0) as f64;
+            let seg = |ms: f32| f64::from(((ms.max(0.0) / 1000.0) / 8.0).clamp(0.0, 1.0));
             applied |= render.set_leaf_param(&module, "Soundsource", "amp_attack", seg(a1));
             render.set_leaf_param(&module, "Soundsource", "amp_decay", seg(d1));
             render.set_leaf_param(
                 &module,
                 "Soundsource",
                 "amp_sustain",
-                s1.clamp(0.0, 1.0) as f64,
+                f64::from(s1.clamp(0.0, 1.0)),
             );
             render.set_leaf_param(&module, "Soundsource", "amp_release", seg(r1));
             render.set_leaf_param(&module, "Soundsource", "filter_attack", seg(a2));
@@ -1871,7 +1877,7 @@ impl KeysRigBackend {
                 &module,
                 "Soundsource",
                 "filter_sustain",
-                s2.clamp(0.0, 1.0) as f64,
+                f64::from(s2.clamp(0.0, 1.0)),
             );
             render.set_leaf_param(&module, "Soundsource", "filter_release", seg(r2));
             render.set_leaf_param(&module, "Soundsource", "cutoff", cutoff_norm);
@@ -1879,25 +1885,25 @@ impl KeysRigBackend {
                 &module,
                 "Soundsource",
                 "resonance",
-                reso.clamp(0.0, 1.0) as f64,
+                f64::from(reso.clamp(0.0, 1.0)),
             );
             render.set_leaf_param(
                 &module,
                 "Soundsource",
                 "env_amt",
-                ((env_amt.clamp(-1.0, 1.0) + 1.0) / 2.0) as f64,
+                f64::from(f32::midpoint(env_amt.clamp(-1.0, 1.0), 1.0)),
             );
             render.set_leaf_param(
                 &module,
                 "Soundsource",
                 "vib_rate",
-                (vib_rate.clamp(0.1, 12.0) / 12.0) as f64,
+                f64::from(vib_rate.clamp(0.1, 12.0) / 12.0),
             );
             render.set_leaf_param(
                 &module,
                 "Soundsource",
                 "vib_depth",
-                vib_depth.clamp(0.0, 1.0) as f64,
+                f64::from(vib_depth.clamp(0.0, 1.0)),
             );
 
             // Sampler source: per-voice amp attack/release + unison.
@@ -2019,8 +2025,7 @@ impl KeysRigBackend {
             presets = presets.len(),
             default = default_idx
                 .and_then(|i| presets.get(i))
-                .map(|p| p.name.as_str())
-                .unwrap_or("<first>"),
+                .map_or("<first>", |p| p.name.as_str()),
             "keys rig: scanned library"
         );
         // The rig boots as a PROFILE — engines, layers, stacks — not a single
@@ -2070,16 +2075,13 @@ impl KeysRigBackend {
                 .map(str::to_string)
         };
         for lane in state.lanes.values_mut() {
-            for m in lane.modules.iter_mut() {
+            for m in &mut lane.modules {
                 if m.patch.is_empty() {
                     continue;
                 }
-                match canonical(&m.patch) {
-                    Some(name) => m.patch = name,
-                    None => {
-                        tracing::info!(patch = %m.patch, "keys rig: profile patch not in library — module starts empty");
-                        m.patch.clear();
-                    }
+                if let Some(name) = canonical(&m.patch) { m.patch = name } else {
+                    tracing::info!(patch = %m.patch, "keys rig: profile patch not in library — module starts empty");
+                    m.patch.clear();
                 }
             }
         }
@@ -2222,7 +2224,7 @@ impl KeysRigBackend {
             return;
         };
         if rig.is_lanes() {
-            for (name, lane) in s.lanes.iter() {
+            for (name, lane) in &s.lanes {
                 rig.set_lane_volume(Role::Layer, name, db_to_linear(lane.gain_db));
                 rig.set_lane_mute(Role::Layer, name, lane.muted);
                 rig.set_lane_solo(Role::Layer, name, lane.soloed);
@@ -2235,7 +2237,7 @@ impl KeysRigBackend {
                     }
                 }
             }
-            for (name, e) in s.engines.iter() {
+            for (name, e) in &s.engines {
                 rig.set_lane_volume(Role::Engine, name, db_to_linear(e.gain_db));
                 rig.set_lane_mute(Role::Engine, name, e.muted);
             }
@@ -2245,7 +2247,7 @@ impl KeysRigBackend {
             // named after its lane ("Pad" holding "Pad"), and a flat name map
             // gave both the same cell — the engine's trim, written second,
             // put the lane's mute and solo straight back.
-            for (name, lane) in s.lanes.iter() {
+            for (name, lane) in &s.lanes {
                 cells.set(Role::Layer, name, s.lane_gain(name));
                 // Modules are named "<layer> <slot>" in the tree.
                 for i in 0..lane.modules.len() {
@@ -2283,7 +2285,7 @@ impl KeysRigBackend {
             .rig
             .lock()
             .ok()
-            .and_then(|r| r.as_ref().map(|r| r.is_lanes()))
+            .and_then(|r| r.as_ref().map(signal_sampler::KeysRig::is_lanes))
             .unwrap_or(false)
             .then(|| self.profile_lane_program())
             .flatten();
@@ -2439,15 +2441,15 @@ impl KeysRigBackend {
                             KeysLayerModel {
                                 name: layer.name.clone(),
                                 engine: engine.name.clone(),
-                                patch: lane.map(|l| l.primary_patch()).unwrap_or_default(),
+                                patch: lane.map(LaneState::primary_patch).unwrap_or_default(),
                                 preset: lane.map(|l| l.preset.clone()).unwrap_or_default(),
-                                gain_db: lane.map(|l| l.gain_db).unwrap_or(0.0),
+                                gain_db: lane.map_or(0.0, |l| l.gain_db),
                                 muted: lane.is_some_and(|l| l.muted),
                                 exclude_global: layer.exclude_global,
                                 soloed: lane.is_some_and(|l| l.soloed),
-                                live: lane.is_some_and(|l| l.any_live()),
-                                key_lo: layer.key_lo as u32,
-                                key_hi: layer.key_hi as u32,
+                                live: lane.is_some_and(LaneState::any_live),
+                                key_lo: u32::from(layer.key_lo),
+                                key_hi: u32::from(layer.key_hi),
                                 modules: lane
                                     .map(|lane| {
                                         lane.modules
@@ -2543,7 +2545,7 @@ impl KeysRigBackend {
                     is_active: s.active_stack == Some(i),
                 })
                 .collect(),
-            active_stack: s.active_stack.map(|i| i as u32).unwrap_or(u32::MAX),
+            active_stack: s.active_stack.map_or(u32::MAX, |i| i as u32),
             perform_mode: s.perform_mode,
         }
     }
@@ -2616,7 +2618,7 @@ impl KeysRigBackend {
         .unwrap_or_else(|p| {
             let msg = p
                 .downcast_ref::<&str>()
-                .map(|s| s.to_string())
+                .map(std::string::ToString::to_string)
                 .or_else(|| p.downcast_ref::<String>().cloned())
                 .unwrap_or_else(|| "<non-string panic>".into());
             Err(eyre::eyre!("audio open panicked: {msg}"))
@@ -2888,14 +2890,51 @@ impl KeysRigSvc for KeysRigBackend {
         } else {
             (0.0, Vec::new())
         };
+        let rt = if running {
+            self.inner
+                .rig
+                .lock()
+                .ok()
+                .and_then(|r| r.as_ref().and_then(signal_sampler::KeysRig::engine_stats))
+                .map(|st| {
+                    use std::sync::atomic::Ordering::Relaxed;
+                    let (last_ms, peak_ms) = st.render_ms();
+                    signal_keys_proto::KeysRealtime {
+                        xruns: st.xruns.load(Relaxed),
+                        over_budget: st.over_budget.load(Relaxed),
+                        mean_render_ms: st.mean_render_ms() as f32,
+                        blocks: st.calls.load(Relaxed),
+                        block_frames: st.block_frames.load(Relaxed),
+                        peak_render_ms: peak_ms as f32,
+                        render_ms: last_ms as f32,
+                    }
+                })
+                .unwrap_or_default()
+        } else {
+            Default::default()
+        };
+        // `KeysRig::active_voices` has existed all along; the status reported
+        // a hardcoded 0, which made the one number that explains a render
+        // spike invisible to every UI and every test.
+        let voices = if running {
+            self.inner
+                .rig
+                .lock()
+                .ok()
+                .and_then(|r| r.as_ref().map(|r| r.active_voices() as u32))
+                .unwrap_or(0)
+        } else {
+            0
+        };
         KeysStatus {
             running,
             loaded_preset,
             master_peak,
             meters,
-            voices: 0,
+            voices,
             midi_port: s.midi_port.clone(),
             last_error: s.last_error.clone(),
+            rt,
         }
     }
 
@@ -2939,7 +2978,7 @@ impl KeysRigSvc for KeysRigBackend {
             .name("keys-load".into())
             .spawn(move || {
                 let _rt = keys_runtime().enter();
-                b.do_load_preset(index as usize)
+                b.do_load_preset(index as usize);
             });
     }
 
@@ -2991,6 +3030,14 @@ impl KeysRigSvc for KeysRigBackend {
                 } else {
                     rig.note_off(note);
                 }
+            }
+        }
+    }
+
+    fn reset_rt_peak(&self) {
+        if let Ok(r) = self.inner.rig.lock() {
+            if let Some(st) = r.as_ref().and_then(signal_sampler::KeysRig::engine_stats) {
+                st.reset_peak();
             }
         }
     }
@@ -3198,8 +3245,7 @@ impl KeysRigSvc for KeysRigBackend {
         let (key_lo, key_hi) = s
             .profile
             .layer(&layer)
-            .map(|(_, l)| (l.key_lo as u32, l.key_hi as u32))
-            .unwrap_or((0, 127));
+            .map_or((0, 127), |(_, l)| (u32::from(l.key_lo), u32::from(l.key_hi)));
         let modules = lane
             .modules
             .iter()
@@ -3333,7 +3379,7 @@ impl KeysRigSvc for KeysRigBackend {
             .filter(|n| s.lanes.get(*n).is_some_and(|l| l.any_live() && !l.muted))
             .count() as u32;
         KeysEngineDetail {
-            engine: engine.clone(),
+            engine,
             gain_db: est.gain_db,
             muted: est.muted,
             macros: Self::global_models(&s, ENGINE, &targets, &est.globals, &est.spans),
@@ -3463,7 +3509,7 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn set_drone(&self, engine: String, key: u32, octave: i32, playing: bool) {
         if let Ok(mut s) = self.inner.state.lock() {
-            let est = s.engines.entry(engine.clone()).or_default();
+            let est = s.engines.entry(engine).or_default();
             let mut d = est.drone.clone().unwrap_or_default();
             d.key = key.min(11);
             d.playing = playing;
@@ -3774,7 +3820,7 @@ fn lane_refs_for(
     out
 }
 
-fn note_ev(note: u8, velocity: u8) -> MidiEvent {
+const fn note_ev(note: u8, velocity: u8) -> MidiEvent {
     use midicore::{Channel, KeyNumber, Velocity};
     MidiEvent::NoteOn {
         channel: Channel::new(0),
@@ -4117,7 +4163,7 @@ fn scan_packs(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
 /// Broad category for grouping in the browser.
 /// Whether an engine is a drone — a pad player rather than something the
 /// keyboard reaches. Named, because the profile has no flag for it yet.
-fn is_drone(engine: &str) -> bool {
+const fn is_drone(engine: &str) -> bool {
     engine.eq_ignore_ascii_case("drone")
 }
 
@@ -4395,7 +4441,7 @@ mod tests {
 
     // ── The browser boot payload (lane_program_wire's two halves) ────────
 
-    /// The worship profile's lane program survives the WireProgram JSON
+    /// The worship profile's lane program survives the `WireProgram` JSON
     /// round trip — the exact bytes `lane_program_wire` serves and the keys
     /// worklet's `openLanes` parses.
     #[test]
@@ -4435,7 +4481,7 @@ mod tests {
             .engines
             .iter()
             .flat_map(|e| e.layers.iter())
-            .flat_map(|l| l.module_patches())
+            .flat_map(super::super::profile::LayerDef::module_patches)
             .filter(|p| !p.is_empty())
             .collect();
         assert!(patches.len() > 2, "worship profile references patches");

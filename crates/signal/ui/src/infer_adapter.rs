@@ -9,6 +9,7 @@ use crate::views::{EngineFlowData, LayerFlowData, ModuleChainData};
 use signal::{Block, ModuleBlock, ModuleBlockSource, SignalChain, SignalNode};
 
 /// Convert an inferred chain into a flat list of module chain data for grid rendering.
+#[must_use] 
 pub fn inferred_chain_to_module_chains(chain: &InferredChain) -> Vec<ModuleChainData> {
     let mut out = Vec::new();
 
@@ -48,6 +49,7 @@ pub fn inferred_chain_to_module_chains(chain: &InferredChain) -> Vec<ModuleChain
 }
 
 /// Wrap an inferred chain as a single-layer engine flow for the grid renderer.
+#[must_use] 
 pub fn inferred_chain_to_engine_flow(chain: &InferredChain, track_name: &str) -> EngineFlowData {
     EngineFlowData {
         name: track_name.to_string(),

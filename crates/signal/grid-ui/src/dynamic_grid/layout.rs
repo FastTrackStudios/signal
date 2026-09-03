@@ -9,32 +9,32 @@ use super::types::GridSlot;
 // Grid sizing constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub(crate) const CELL_SIZE: usize = 76;
-pub(crate) const CELL_GAP: usize = 20;
-pub(crate) const PORT_SIZE: f64 = 10.0;
+pub const CELL_SIZE: usize = 76;
+pub const CELL_GAP: usize = 20;
+pub const PORT_SIZE: f64 = 10.0;
 
 const MIN_COLS: usize = 14;
 const MIN_ROWS: usize = 1;
 
 // Module-level container padding + title
-pub(crate) const GROUP_PAD: f64 = CELL_GAP as f64 * 0.25;
-pub(crate) const GROUP_TITLE_H: f64 = 12.0;
+pub const GROUP_PAD: f64 = CELL_GAP as f64 * 0.25;
+pub const GROUP_TITLE_H: f64 = 12.0;
 
 // Layer-level: left-side label, no top title bar needed.
 // Extra left padding to fit the rotated label.
-pub(crate) const LAYER_PAD: f64 = GROUP_PAD + 8.0;
-pub(crate) const LAYER_LEFT_PAD: f64 = 36.0;
-pub(crate) const LAYER_TITLE_H: f64 = 0.0;
+pub const LAYER_PAD: f64 = GROUP_PAD + 8.0;
+pub const LAYER_LEFT_PAD: f64 = 36.0;
+pub const LAYER_TITLE_H: f64 = 0.0;
 
 // Engine-level: top label with enough height for clear separation.
-pub(crate) const ENGINE_PAD: f64 = LAYER_PAD + 8.0;
-pub(crate) const ENGINE_TITLE_H: f64 = 14.0;
+pub const ENGINE_PAD: f64 = LAYER_PAD + 8.0;
+pub const ENGINE_TITLE_H: f64 = 14.0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Grid bounds
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub(crate) fn compute_grid_bounds(chain: &[GridSlot]) -> (usize, usize) {
+pub fn compute_grid_bounds(chain: &[GridSlot]) -> (usize, usize) {
     if chain.is_empty() {
         return (MIN_COLS, MIN_ROWS);
     }
@@ -45,11 +45,11 @@ pub(crate) fn compute_grid_bounds(chain: &[GridSlot]) -> (usize, usize) {
     (cols, rows)
 }
 
-pub(crate) fn grid_natural_width(cols: usize) -> usize {
+pub const fn grid_natural_width(cols: usize) -> usize {
     cols * CELL_SIZE + cols.saturating_sub(1) * CELL_GAP
 }
 
-pub(crate) fn grid_natural_height(rows: usize) -> usize {
+pub const fn grid_natural_height(rows: usize) -> usize {
     rows * CELL_SIZE + rows.saturating_sub(1) * CELL_GAP
 }
 
@@ -57,13 +57,13 @@ pub(crate) fn grid_natural_height(rows: usize) -> usize {
 // Port positions
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub(crate) fn output_port_pos(col: usize, row: usize) -> (f64, f64) {
+pub fn output_port_pos(col: usize, row: usize) -> (f64, f64) {
     let x = (col * (CELL_SIZE + CELL_GAP) + CELL_SIZE) as f64;
     let y = (row * (CELL_SIZE + CELL_GAP)) as f64 + CELL_SIZE as f64 / 2.0;
     (x, y)
 }
 
-pub(crate) fn input_port_pos(col: usize, row: usize) -> (f64, f64) {
+pub fn input_port_pos(col: usize, row: usize) -> (f64, f64) {
     let x = (col * (CELL_SIZE + CELL_GAP)) as f64;
     let y = (row * (CELL_SIZE + CELL_GAP)) as f64 + CELL_SIZE as f64 / 2.0;
     (x, y)
@@ -73,7 +73,7 @@ pub(crate) fn input_port_pos(col: usize, row: usize) -> (f64, f64) {
 // Module group bounding boxes
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub(crate) struct ModuleGroupRect {
+pub struct ModuleGroupRect {
     /// Full group key (e.g. "Engine/Layer/Module") — used for matching.
     pub(crate) name: String,
     /// Short label for display (last path segment).
@@ -85,7 +85,7 @@ pub(crate) struct ModuleGroupRect {
     pub(crate) h: f64,
 }
 
-pub(crate) fn compute_module_groups(chain: &[GridSlot]) -> Vec<ModuleGroupRect> {
+pub fn compute_module_groups(chain: &[GridSlot]) -> Vec<ModuleGroupRect> {
     use std::collections::BTreeMap;
 
     struct GroupInfo {
@@ -128,8 +128,8 @@ pub(crate) fn compute_module_groups(chain: &[GridSlot]) -> Vec<ModuleGroupRect> 
             let step = (CELL_SIZE + CELL_GAP) as f64;
             let cell_x = g.min_col as f64 * step;
             let cell_y = g.min_row as f64 * step;
-            let cell_x2 = g.max_col as f64 * step + CELL_SIZE as f64;
-            let cell_y2 = g.max_row as f64 * step + CELL_SIZE as f64;
+            let cell_x2 = (g.max_col as f64).mul_add(step, CELL_SIZE as f64);
+            let cell_y2 = (g.max_row as f64).mul_add(step, CELL_SIZE as f64);
 
             let color = module_type_color(g.module_type);
             let display_name = g.name.rsplit('/').next().unwrap_or(&g.name).to_string();
@@ -140,8 +140,8 @@ pub(crate) fn compute_module_groups(chain: &[GridSlot]) -> Vec<ModuleGroupRect> 
                 color,
                 x: cell_x - GROUP_PAD,
                 y: cell_y - GROUP_PAD - GROUP_TITLE_H,
-                w: (cell_x2 - cell_x) + GROUP_PAD * 2.0,
-                h: (cell_y2 - cell_y) + GROUP_PAD * 2.0 + GROUP_TITLE_H,
+                w: GROUP_PAD.mul_add(2.0, cell_x2 - cell_x),
+                h: GROUP_PAD.mul_add(2.0, cell_y2 - cell_y) + GROUP_TITLE_H,
             }
         })
         .collect()
@@ -151,7 +151,7 @@ pub(crate) fn compute_module_groups(chain: &[GridSlot]) -> Vec<ModuleGroupRect> 
 // Collision detection
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub(crate) fn group_move_is_valid(
+pub fn group_move_is_valid(
     chain: &[GridSlot],
     group_name: &str,
     col_delta: isize,
@@ -165,7 +165,7 @@ pub(crate) fn group_move_is_valid(
         .map(|s| (s.col, s.row))
         .collect();
 
-    for s in chain.iter() {
+    for s in chain {
         if s.module_group.as_deref() != Some(group_name) {
             continue;
         }
@@ -190,17 +190,17 @@ pub(crate) fn group_move_is_valid(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Visual nesting level for container backgrounds.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum ContainerLevel {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContainerLevel {
     Engine,
     Layer,
     Module,
 }
 
 /// A computed container bounding box at any nesting level.
-pub(crate) struct ContainerGroupRect {
+pub struct ContainerGroupRect {
     /// Full group key (e.g. "Engine/Layer/Module").
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub(crate) key: String,
     /// Short display label (last path segment).
     pub(crate) display_name: String,
@@ -216,7 +216,7 @@ pub(crate) struct ContainerGroupRect {
 ///
 /// Returns containers sorted outermost-first (Engine, then Layer, then Module)
 /// so they render in correct z-order.
-pub(crate) fn compute_container_groups(chain: &[GridSlot]) -> Vec<ContainerGroupRect> {
+pub fn compute_container_groups(chain: &[GridSlot]) -> Vec<ContainerGroupRect> {
     use std::collections::BTreeMap;
 
     let step = (CELL_SIZE + CELL_GAP) as f64;
@@ -271,8 +271,8 @@ pub(crate) fn compute_container_groups(chain: &[GridSlot]) -> Vec<ContainerGroup
             .map(|(key, b)| {
                 let cell_x = b.min_col as f64 * step;
                 let cell_y = b.min_row as f64 * step;
-                let cell_x2 = b.max_col as f64 * step + cell_size;
-                let cell_y2 = b.max_row as f64 * step + cell_size;
+                let cell_x2 = (b.max_col as f64).mul_add(step, cell_size);
+                let cell_y2 = (b.max_row as f64).mul_add(step, cell_size);
 
                 let color = module_type_color(b.module_type);
                 let display_name = key.rsplit('/').next().unwrap_or(&key).to_string();
@@ -284,8 +284,8 @@ pub(crate) fn compute_container_groups(chain: &[GridSlot]) -> Vec<ContainerGroup
                     color,
                     x: cell_x - pad - left_extra,
                     y: cell_y - pad - title_h,
-                    w: (cell_x2 - cell_x) + pad * 2.0 + left_extra,
-                    h: (cell_y2 - cell_y) + pad * 2.0 + title_h,
+                    w: pad.mul_add(2.0, cell_x2 - cell_x) + left_extra,
+                    h: pad.mul_add(2.0, cell_y2 - cell_y) + title_h,
                 }
             })
             .collect()
@@ -336,8 +336,8 @@ pub(crate) fn compute_container_groups(chain: &[GridSlot]) -> Vec<ContainerGroup
             // Start with the engine's own cell bounds
             let cell_x = eb.min_col as f64 * step;
             let cell_y = eb.min_row as f64 * step;
-            let cell_x2 = eb.max_col as f64 * step + cell_size;
-            let cell_y2 = eb.max_row as f64 * step + cell_size;
+            let cell_x2 = (eb.max_col as f64).mul_add(step, cell_size);
+            let cell_y2 = (eb.max_row as f64).mul_add(step, cell_size);
             let mut min_x = cell_x;
             let mut min_y = cell_y;
             let mut max_x = cell_x2;
@@ -367,8 +367,8 @@ pub(crate) fn compute_container_groups(chain: &[GridSlot]) -> Vec<ContainerGroup
                 color,
                 x: min_x - ENGINE_PAD,
                 y: min_y - ENGINE_PAD - ENGINE_TITLE_H,
-                w: (max_x - min_x) + ENGINE_PAD * 2.0,
-                h: (max_y - min_y) + ENGINE_PAD * 2.0 + ENGINE_TITLE_H,
+                w: ENGINE_PAD.mul_add(2.0, max_x - min_x),
+                h: ENGINE_PAD.mul_add(2.0, max_y - min_y) + ENGINE_TITLE_H,
             });
         }
     }
@@ -389,8 +389,8 @@ pub(crate) fn compute_container_groups(chain: &[GridSlot]) -> Vec<ContainerGroup
     result
 }
 
-/// Map a ModuleType to its display color using the ModuleType's own color palette.
-pub(crate) fn module_type_color(mt: ModuleType) -> BlockColor {
+/// Map a `ModuleType` to its display color using the `ModuleType`'s own color palette.
+pub const fn module_type_color(mt: ModuleType) -> BlockColor {
     let mc = mt.color();
     BlockColor {
         bg: mc.bg,

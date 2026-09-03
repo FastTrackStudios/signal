@@ -76,7 +76,7 @@ pub fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                                             let name = name.clone();
                                             let label = name.clone();
                                             let slot_id = slot.id;
-                                            let val = *value as f64;
+                                            let val = f64::from(*value);
                                             let accent = color.bg.to_string();
                                             let on_change = props.on_param_change;
                                             rsx! {
@@ -125,7 +125,7 @@ pub fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                         // Save As New Preset
                         {
                             let on_save_as_new = props.on_save_as_new;
-                            let new_slot = slot_clone.clone();
+                            let new_slot = slot_clone;
                             let default_name = format!("{:?} Preset", slot.block_type);
                             rsx! {
                                 div { class: "px-3 py-2",
@@ -148,7 +148,7 @@ pub fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                                                             bg-amber-600 hover:bg-amber-500 text-white \
                                                             transition-colors duration-150",
                                                     onclick: {
-                                                        let new_slot = new_slot.clone();
+                                                        let new_slot = new_slot;
                                                         move |_| {
                                                             let name = save_as_new_name();
                                                             if !name.trim().is_empty() {
@@ -202,13 +202,9 @@ pub fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
             let display_name = name.rsplit('/').next().unwrap_or(name);
             let mt_display = module_slots
                 .first()
-                .and_then(|s| s.module_type)
-                .map(|mt| format!("{mt:?}"))
-                .unwrap_or_else(|| "Custom".to_string());
+                .and_then(|s| s.module_type).map_or_else(|| "Custom".to_string(), |mt| format!("{mt:?}"));
             let color = module_slots
-                .first()
-                .map(|s| s.block_type.color())
-                .unwrap_or_else(|| signal_proto::BlockType::Custom.color());
+                .first().map_or_else(|| signal_proto::BlockType::Custom.color(), |s| s.block_type.color());
 
             rsx! {
                 div { class: "mt-3 rounded overflow-hidden",

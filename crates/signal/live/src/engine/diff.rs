@@ -38,7 +38,8 @@ pub enum SlotDiff {
 }
 
 impl SlotDiff {
-    pub fn module_type(&self) -> ModuleType {
+    #[must_use] 
+    pub const fn module_type(&self) -> ModuleType {
         match self {
             Self::LoadAndActivate { module_type, .. }
             | Self::Activate { module_type, .. }
@@ -76,10 +77,10 @@ pub fn compute_diff(
 
             // Target is explicitly disabled.
             Some(ResolvedSlot::Disabled) => {
-                if !slot.is_disabled {
-                    diffs.push(SlotDiff::Disable { module_type: mt });
-                } else {
+                if slot.is_disabled {
                     diffs.push(SlotDiff::NoChange { module_type: mt });
+                } else {
+                    diffs.push(SlotDiff::Disable { module_type: mt });
                 }
             }
 

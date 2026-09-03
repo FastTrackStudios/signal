@@ -50,9 +50,7 @@ fn main() -> eyre::Result<()> {
     // Library root for the Preset / Profile / Song browser — the same root the
     // rig loaded its profile from (so browser + rig agree). `--library <dir>`
     // overrides.
-    let lib_root = arg(&args, "--library")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| mgr.library_root());
+    let lib_root = arg(&args, "--library").map_or_else(|| mgr.library_root(), PathBuf::from);
     let mut browser = Browser::load(lib_root);
 
     // If the rig opened with no profile (e.g. a fresh "Guitar Rig"), seed it with
@@ -91,25 +89,25 @@ enum Pane {
 }
 
 impl Pane {
-    fn title(self) -> &'static str {
+    const fn title(self) -> &'static str {
         match self {
-            Pane::Presets => "Presets",
-            Pane::Profiles => "Profiles",
-            Pane::Songs => "Songs",
+            Self::Presets => "Presets",
+            Self::Profiles => "Profiles",
+            Self::Songs => "Songs",
         }
     }
-    fn next(self) -> Self {
+    const fn next(self) -> Self {
         match self {
-            Pane::Presets => Pane::Profiles,
-            Pane::Profiles => Pane::Songs,
-            Pane::Songs => Pane::Presets,
+            Self::Presets => Self::Profiles,
+            Self::Profiles => Self::Songs,
+            Self::Songs => Self::Presets,
         }
     }
-    fn prev(self) -> Self {
+    const fn prev(self) -> Self {
         match self {
-            Pane::Presets => Pane::Songs,
-            Pane::Profiles => Pane::Presets,
-            Pane::Songs => Pane::Profiles,
+            Self::Presets => Self::Songs,
+            Self::Profiles => Self::Presets,
+            Self::Songs => Self::Profiles,
         }
     }
 }
@@ -159,7 +157,7 @@ impl Browser {
         self.load_selected(prig);
     }
 
-    fn state_for(&mut self, pane: Pane) -> &mut ListState {
+    const fn state_for(&mut self, pane: Pane) -> &mut ListState {
         match pane {
             Pane::Presets => &mut self.presets,
             Pane::Profiles => &mut self.profiles,
@@ -167,7 +165,7 @@ impl Browser {
         }
     }
 
-    fn len_for(&self, pane: Pane) -> usize {
+    const fn len_for(&self, pane: Pane) -> usize {
         match pane {
             Pane::Presets => self.lib.presets.len(),
             Pane::Profiles => self.lib.profiles.len(),
@@ -275,13 +273,13 @@ struct Settings {
     /// Sample rates the server allows forcing (`clock.allowed-rates`).
     rates: Vec<u32>,
     sel_rate: usize,
-    /// Staged per-device ALSA buffering (applied on Enter via a WirePlumber
+    /// Staged per-device ALSA buffering (applied on Enter via a `WirePlumber`
     /// drop-in + session-manager restart — not live).
     headroom: u32,
     period_num: u32,
     period_size: u32,
     /// True once a device-buffering field was changed, so Enter knows to write
-    /// the drop-in + restart WirePlumber (a brief audio drop).
+    /// the drop-in + restart `WirePlumber` (a brief audio drop).
     device_dirty: bool,
     /// Live readouts for the latency breakdown (the input/output ALSA nodes and
     /// the global clock), refreshed when the panel opens.
@@ -375,7 +373,7 @@ impl Settings {
         s
     }
 
-    /// Re-read the live PipeWire state: clock settings + allowed rates, and the
+    /// Re-read the live `PipeWire` state: clock settings + allowed rates, and the
     /// input/output devices' ALSA buffering (which seeds the editable headroom /
     /// period fields). Clears the dirty flag.
     fn reload_pw(&mut self, mgr: &RigManager) {
@@ -402,7 +400,7 @@ impl Settings {
     }
 
     /// Re-enumerate devices (interfaces may have been plugged in/out), resync the
-    /// buffer from the manager, and re-read the live PipeWire state.
+    /// buffer from the manager, and re-read the live `PipeWire` state.
     fn refresh(&mut self, mgr: &RigManager) {
         self.inputs = device_choices(&GuitarRig::input_devices(), 2);
         self.outputs = device_choices(&GuitarRig::output_devices(), 2);
@@ -416,7 +414,7 @@ impl Settings {
     }
 
     /// The currently selected buffer size in frames.
-    fn buffer(&self) -> u32 {
+    const fn buffer(&self) -> u32 {
         BUFFERS[self.sel_buffer]
     }
 
@@ -463,7 +461,7 @@ impl Settings {
     }
 
     /// Write the routing + clock selection into the manager's prefs (device
-    /// buffering is applied separately via the WirePlumber drop-in).
+    /// buffering is applied separately via the `WirePlumber` drop-in).
     fn apply_to(&self, mgr: &mut RigManager) {
         if let Some(c) = self.inputs.get(self.sel_input) {
             mgr.audio.input_device = c.device.clone();
@@ -480,7 +478,7 @@ impl Settings {
 }
 
 /// Wrap `i` by `dir` within `[0, len)` (no-op when empty).
-fn wrap(i: usize, len: usize, dir: i32) -> usize {
+const fn wrap(i: usize, len: usize, dir: i32) -> usize {
     if len == 0 {
         return 0;
     }
@@ -492,13 +490,12 @@ fn wrap(i: usize, len: usize, dir: i32) -> usize {
 fn channel_max(inputs: &[DeviceChoice], idx: usize) -> usize {
     inputs
         .get(idx)
-        .map(|c| c.channels.max(1) as usize - 1)
-        .unwrap_or(0)
+        .map_or(0, |c| c.channels.max(1) as usize - 1)
 }
 
 /// Collapse daw's raw device list into pickable choices: a `"(system default)"`
 /// head entry (empty device string) followed by named devices, deduped by name
-/// keeping the highest channel count, dropping PipeWire's synthetic `*default`
+/// keeping the highest channel count, dropping `PipeWire`'s synthetic `*default`
 /// nodes. `default_channels` is the channel count assumed for the default entry.
 fn device_choices(devs: &[DeviceInfo], default_channels: u16) -> Vec<DeviceChoice> {
     let mut out = vec![DeviceChoice {
@@ -536,7 +533,7 @@ fn reopen(prig: &mut ProfileRig, mgr: &RigManager) -> eyre::Result<()> {
 }
 
 /// Commit the settings panel: persist routing/buffer/rate prefs; if a device
-/// buffering field changed, write the WirePlumber drop-in and restart the
+/// buffering field changed, write the `WirePlumber` drop-in and restart the
 /// session manager (re-creating the device nodes — a brief audio drop) before
 /// re-opening the rig. Returns a one-line status for the footer.
 fn apply_settings(settings: &Settings, prig: &mut ProfileRig, mgr: &mut RigManager) -> String {
@@ -608,7 +605,7 @@ fn run(
                         KeyCode::Down | KeyCode::Char('j') => browser.move_sel(1),
                         KeyCode::Enter => {
                             term.draw(|f| {
-                                ui(f, prig, mgr, settings, browser, rig_name, Some("loading…"))
+                                ui(f, prig, mgr, settings, browser, rig_name, Some("loading…"));
                             })?;
                             browser.load_selected(prig);
                             status = browser.status.clone();
@@ -634,7 +631,7 @@ fn run(
                         KeyCode::Char('r') => settings.refresh(mgr),
                         KeyCode::Enter => {
                             term.draw(|f| {
-                                ui(f, prig, mgr, settings, browser, rig_name, Some("applying…"))
+                                ui(f, prig, mgr, settings, browser, rig_name, Some("applying…"));
                             })?;
                             status = Some(apply_settings(settings, prig, mgr));
                             settings.refresh(mgr);
@@ -653,13 +650,13 @@ fn run(
                         settings.refresh(mgr);
                         settings.open = true;
                     }
-                    KeyCode::Char('b') | KeyCode::Char(' ') => {
+                    KeyCode::Char('b' | ' ') => {
                         let b = !prig.rig().is_bypassed();
                         prig.rig().set_bypass(b);
                     }
                     // 0 = global time-bypass (kills the Time module on the active
                     // patch — delay/reverb). The "Funk switch". (`t` alias.)
-                    KeyCode::Char('0') | KeyCode::Char('t') => {
+                    KeyCode::Char('0' | 't') => {
                         let on = prig.toggle_fx_bypass();
                         status = Some(if on {
                             "time bypass ON".into()
@@ -683,10 +680,10 @@ fn run(
                     }
                     // Buffer = the rig node's latency request; changing it
                     // re-opens (only the rig's device follows, not the graph).
-                    KeyCode::Char('[') | KeyCode::Char(']') => {
+                    KeyCode::Char('[' | ']') => {
                         step_buffer(mgr, if k.code == KeyCode::Char('[') { -1 } else { 1 });
                         term.draw(|f| {
-                            ui(f, prig, mgr, settings, browser, rig_name, Some("applying…"))
+                            ui(f, prig, mgr, settings, browser, rig_name, Some("applying…"));
                         })?;
                         status = Some(match reopen(prig, mgr) {
                             Ok(()) => format!("buffer {} fr", mgr.audio.buffer_size),
@@ -706,7 +703,7 @@ fn run(
 }
 
 /// Short device label for status text (`"system default"` when empty).
-fn dev_label(device: &str) -> &str {
+const fn dev_label(device: &str) -> &str {
     if device.is_empty() {
         "system default"
     } else {
@@ -838,11 +835,11 @@ fn ui(
     meter(f, rows[4], "OUTPUT (to speakers)", rig.output_peak());
 
     // DSP load — render time vs the per-block budget (buffer / sample-rate).
-    let bf = rig.block_frames().max(1) as f64;
-    let sr = rig.sample_rate.max(1) as f64;
+    let bf = f64::from(rig.block_frames().max(1));
+    let sr = f64::from(rig.sample_rate.max(1));
     let budget_us = bf / sr * 1e6;
-    let render_us = rig.render_us() as f64;
-    let peak_us = rig.peak_render_us() as f64;
+    let render_us = f64::from(rig.render_us());
+    let peak_us = f64::from(rig.peak_render_us());
     let load = (render_us / budget_us).clamp(0.0, 1.0);
     let load_color = if load >= 0.85 {
         Color::Red
@@ -866,7 +863,7 @@ fn ui(
 
     // Stats — buffer + honest latency estimate + xruns.
     let ms = |frames: f64| frames / sr * 1000.0;
-    let ring = rig.ring_frames() as f64;
+    let ring = f64::from(rig.ring_frames());
     let sw_ms = ms(bf + ring + bf); // in-block + ring + out-block
     let xruns = rig.underruns() + rig.overruns();
     let stats = vec![
@@ -1138,13 +1135,11 @@ fn settings_overlay(f: &mut Frame, s: &Settings, rate: u32, ring: u32) {
     let cap_fr = s
         .cap
         .as_ref()
-        .map(|c| c.headroom + c.period_size)
-        .unwrap_or(0);
+        .map_or(0, |c| c.headroom + c.period_size);
     let play_fr = s
         .play
         .as_ref()
-        .map(|p| p.headroom + p.period_size)
-        .unwrap_or(0);
+        .map_or(0, |p| p.headroom + p.period_size);
     let total_fr = cap_fr + s.buffer() + ring + play_fr;
     let cap_d = s.cap.clone().unwrap_or_default();
     let play_d = s.play.clone().unwrap_or_default();
@@ -1233,7 +1228,7 @@ fn settings_overlay(f: &mut Frame, s: &Settings, rate: u32, ring: u32) {
 
 /// One processing block's duration in milliseconds (`frames / rate`).
 fn block_ms(frames: u32, sample_rate: u32) -> f64 {
-    frames as f64 / sample_rate.max(1) as f64 * 1000.0
+    f64::from(frames) / f64::from(sample_rate.max(1)) * 1000.0
 }
 
 /// A centered `w`×`h` rect within `area` (clamped).
@@ -1255,7 +1250,7 @@ fn meter(f: &mut Frame, area: Rect, title: &str, peak: f32) {
     } else {
         20.0 * peak.log10()
     };
-    let ratio = (((db + 60.0) / 60.0) as f64).clamp(0.0, 1.0);
+    let ratio = f64::from((db + 60.0) / 60.0).clamp(0.0, 1.0);
     let color = if db >= -1.0 {
         Color::Red
     } else if db >= -6.0 {

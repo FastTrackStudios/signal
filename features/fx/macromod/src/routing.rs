@@ -45,7 +45,8 @@ pub struct ModulationRouteSet {
 }
 
 impl ModulationRouteSet {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self { routes: Vec::new() }
     }
 
@@ -58,6 +59,7 @@ impl ModulationRouteSet {
     }
 
     /// All active routes targeting a specific parameter.
+    #[must_use] 
     pub fn routes_for_param(&self, block_id: &str, param_id: &str) -> Vec<&ModulationRoute> {
         self.routes
             .iter()

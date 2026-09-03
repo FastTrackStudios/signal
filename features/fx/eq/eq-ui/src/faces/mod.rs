@@ -75,7 +75,8 @@ pub use units::design_for as design_for_model;
 
 /// The stable id for a `model` value — what a session persists instead of the
 /// number. See `FtsEqParams::model_id`.
-pub fn model_id(model: i32) -> &'static str {
+#[must_use] 
+pub const fn model_id(model: i32) -> &'static str {
     match model {
         1 => "pultec",
         2 => "neve_1073",
@@ -87,6 +88,7 @@ pub fn model_id(model: i32) -> &'static str {
 }
 
 /// The `model` value an id names, if this build knows it.
+#[must_use] 
 pub fn model_for_id(id: &str) -> Option<i32> {
     (0..=5).find(|m| model_id(*m) == id)
 }
@@ -111,6 +113,7 @@ pub fn store_form(params: &crate::params::FtsEqParams, form: fts_audio_ui::Edito
 
 /// The editor size for a model *and* a chosen form: the form decides, except
 /// for Responsive, which defers to the face.
+#[must_use] 
 pub fn editor_size_for(model: i32, form: fts_audio_ui::EditorForm) -> (u32, u32) {
     form.editor_size(fts_audio_ui::shell::RAIL_W, preferred_editor_size(model))
 }
@@ -121,6 +124,7 @@ pub fn store_model_id(params: &crate::params::FtsEqParams, model: i32) {
 }
 
 /// The category a `model` value belongs to, and its position within it.
+#[must_use] 
 pub fn category_of(model: i32) -> Option<(usize, usize)> {
     CATEGORIES.iter().enumerate().find_map(|(ci, category)| {
         category
@@ -132,6 +136,7 @@ pub fn category_of(model: i32) -> Option<(usize, usize)> {
 }
 
 /// The rail, badged with the active model when its family is the active one.
+#[must_use] 
 pub fn rail_items(model: i32) -> Vec<ShellItem> {
     let active = category_of(model);
     CATEGORIES
@@ -151,6 +156,7 @@ pub fn rail_items(model: i32) -> Vec<ShellItem> {
 
 /// The `model` value a rail click selects: clicking the active family cycles
 /// the models inside it, clicking another lands on its first.
+#[must_use] 
 pub fn rail_click_target(model: i32, clicked_category: usize) -> i32 {
     let Some(category) = CATEGORIES.get(clicked_category) else {
         return model;
@@ -167,6 +173,7 @@ pub fn rail_click_target(model: i32, clicked_category: usize) -> i32 {
 ///
 /// The curve editor wants height; a rack unit is a wide, short drawing and
 /// given a tall window just paints black above and below itself.
+#[must_use] 
 pub fn preferred_editor_size(model: i32) -> (u32, u32) {
     match units::design_for(model) {
         Some(design) => (

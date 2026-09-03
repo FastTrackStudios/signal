@@ -5,7 +5,7 @@
 //! triggers what it should. SKIPs when the pack isn't present (CI / other
 //! machines), like the CSS pitch tests.
 //!
-//!   cargo test -p signal-sampler --test keyscape_rhodes
+//!   cargo test -p signal-sampler --test `keyscape_rhodes`
 
 use std::path::Path;
 
@@ -209,8 +209,7 @@ fn release_tail_tracks_strike_velocity_not_note_off() {
             .spawns_of_note(72)
             .into_iter()
             .find(|v| v.voice_kind == "Release")
-            .map(|v| v.gain)
-            .unwrap_or(0.0)
+            .map_or(0.0, |v| v.gain)
     };
 
     let soft = release_gain(20);

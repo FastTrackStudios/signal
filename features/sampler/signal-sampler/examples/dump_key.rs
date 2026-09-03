@@ -1,7 +1,7 @@
-//! Dump the full parsed SampleKey for stems on stdin (one per line):
+//! Dump the full parsed `SampleKey` for stems on stdin (one per line):
 //!   articulation \t mic \t dynamic \t note \t direction \t rr
 //! Reveals how the runtime maps Keyscape filenames (mic collisions, wrong root
-//! notes, etc.).  … | cargo run -p signal-sampler --release --example dump_key
+//! notes, etc.).  … | cargo run -p signal-sampler --release --example `dump_key`
 
 use std::io::{BufRead, Write};
 

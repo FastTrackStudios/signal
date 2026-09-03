@@ -89,7 +89,7 @@ fn RigGridDockPanel() -> Element {
     let mut loaded = use_signal(|| false);
 
     {
-        let signal = signal.clone();
+        let signal = signal;
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {
@@ -169,7 +169,7 @@ fn SongPartsDockPanel() -> Element {
     let mut selected_section = use_signal(|| None::<String>);
 
     {
-        let signal = signal.clone();
+        let signal = signal;
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {
@@ -227,7 +227,7 @@ fn SongSelectorDockPanel() -> Element {
     let mut selected_song = use_signal(|| None::<String>);
 
     {
-        let signal = signal.clone();
+        let signal = signal;
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {
@@ -303,7 +303,7 @@ fn SceneGridDockPanel() -> Element {
     let mut active_scene = use_signal(|| None::<String>);
 
     {
-        let signal = signal.clone();
+        let signal = signal;
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {
@@ -357,7 +357,7 @@ fn RigGridEditorDockPanel() -> Element {
     let mut loaded = use_signal(|| false);
 
     {
-        let signal = signal.clone();
+        let signal = signal;
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {

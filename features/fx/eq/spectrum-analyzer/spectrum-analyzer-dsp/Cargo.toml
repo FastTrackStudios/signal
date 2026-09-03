@@ -6,6 +6,9 @@ authors.workspace = true
 license.workspace = true
 description = "Realtime FFT spectrum-analysis engine for FTS-EQ (Pro-Q 4 parity)"
 
+[lints]
+workspace = true
+
 [dependencies]
 realfft = "3"
 rtrb = "0.3"

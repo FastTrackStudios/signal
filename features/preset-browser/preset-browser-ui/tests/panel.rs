@@ -93,7 +93,7 @@ async fn click(tester: &mut DocumentTester, testid: &str) -> dioxus_test::Result
     let el = tester.query(by_testid(testid)).immediately()?;
     let (ox, oy) = el.document_origin();
     let (w, h) = el.size();
-    let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    let (x, y) = (ox + f64::from(w) / 2.0, oy + f64::from(h) / 2.0);
     tester.pointer_down(x, y);
     let _ = tester.pump().await;
     tester.pointer_up(x, y);
@@ -163,9 +163,9 @@ async fn a_category_narrows_the_list() -> dioxus_test::Result<()> {
     let el = &chips[1]; // Chamber
     let (ox, oy) = el.document_origin();
     let (w, h) = el.size();
-    tester.pointer_down(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    tester.pointer_down(ox + f64::from(w) / 2.0, oy + f64::from(h) / 2.0);
     let _ = tester.pump().await;
-    tester.pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    tester.pointer_up(ox + f64::from(w) / 2.0, oy + f64::from(h) / 2.0);
     let _ = tester.pump().await;
 
     let rows: Vec<_> = tester
@@ -205,7 +205,7 @@ fn BarDisplayHarness() -> Element {
         preset_browser_ui::PresetBar {
             browser,
             on_apply: move |_: Vec<(String, f64)>| {},
-            on_browse: move |_| {},
+            on_browse: move |()| {},
         }
     }
 }
@@ -225,7 +225,7 @@ fn BarHarness() -> Element {
             on_apply: move |params: Vec<(String, f64)>| {
                 bar_log().lock().unwrap().push(params);
             },
-            on_browse: move |_| {},
+            on_browse: move |()| {},
         }
     }
 }

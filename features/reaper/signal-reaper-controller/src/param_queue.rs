@@ -26,6 +26,7 @@ pub struct ParamQueueConsumer {
 }
 
 /// Create a linked producer/consumer pair.
+#[must_use] 
 pub fn param_queue() -> (ParamQueueProducer, ParamQueueConsumer) {
     let (tx, rx) = crossbeam_channel::bounded(QUEUE_CAPACITY);
     (ParamQueueProducer { tx }, ParamQueueConsumer { rx })

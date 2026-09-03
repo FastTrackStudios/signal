@@ -20,7 +20,7 @@ use signal_proto::block::BlockType;
 // ── Wire types ────────────────────────────────────────────────────────────
 
 /// One selectable audio device.
-#[derive(Clone, PartialEq, Debug, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Facet)]
 pub struct AudioDevice {
     pub name: String,
     pub channels: u16,
@@ -28,7 +28,7 @@ pub struct AudioDevice {
 }
 
 /// Enumerated inputs + outputs, fetched in one call.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct AudioDevices {
     pub inputs: Vec<AudioDevice>,
     pub outputs: Vec<AudioDevice>,
@@ -36,7 +36,7 @@ pub struct AudioDevices {
 
 /// Audio I/O preferences. Empty-string / `0` mean "use the system/backend
 /// default" (not `Option`), matching the persisted styx representation.
-#[derive(Clone, PartialEq, Debug, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Facet)]
 pub struct AudioPrefs {
     pub input_device: String,
     pub input_channel: u32,
@@ -80,7 +80,7 @@ pub struct RigStatus {
 }
 
 /// One keyboard binding for the remotes to interpret.
-#[derive(Debug, Default, Clone, PartialEq, Facet)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Facet)]
 pub struct KeyBinding {
     pub keys: String,
     pub action: String,
@@ -88,7 +88,7 @@ pub struct KeyBinding {
 
 /// One footswitch stack (folder) in the performance grid — a named rotation
 /// of patches plus its live cursor/active state.
-#[derive(Clone, PartialEq, Debug, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Facet)]
 pub struct PerfStack {
     /// Folder / footswitch name (e.g. "Clean", "Lead").
     pub name: String,
@@ -153,7 +153,7 @@ pub struct PerformanceModel {
 }
 
 /// One patch in the loaded profile — the preset browser's row.
-#[derive(Clone, PartialEq, Debug, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Facet)]
 pub struct PatchInfo {
     /// Patch name (globally unique in the profile).
     pub name: String,
@@ -173,7 +173,7 @@ pub struct PatchInfo {
 }
 
 /// One preset in the pool — a complete tone patches point at.
-#[derive(Clone, PartialEq, Debug, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Facet)]
 pub struct PresetInfo {
     pub name: String,
     /// The active patch points at this preset.
@@ -184,7 +184,7 @@ pub struct PresetInfo {
 
 /// One song slot in the active setlist — key/tempo already resolved
 /// (per-set override or the song's default).
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct SongSlot {
     pub name: String,
     /// Key for this set (e.g. "G").

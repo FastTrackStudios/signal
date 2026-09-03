@@ -795,7 +795,7 @@ mod tests {
         // still-loud sustain region.
         let total = (44_100.0 * 1.0) as usize;
         let mut out = Vec::with_capacity(total);
-        let mut buf = vec![0.0f32; 1024];
+        let mut buf = [0.0f32; 1024];
         let mut pos = 0;
         while pos < total {
             let len = 1024.min(total - pos);
@@ -837,7 +837,7 @@ mod tests {
             e.note_on(60, 0.95);
             let total = (44_100.0 * 0.5) as usize;
             let mut out = Vec::with_capacity(total);
-            let mut buf = vec![0.0f32; 1024];
+            let mut buf = [0.0f32; 1024];
             let mut pos = 0;
             while pos < total {
                 let len = 1024.min(total - pos);

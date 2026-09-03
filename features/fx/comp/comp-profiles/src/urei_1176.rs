@@ -95,12 +95,12 @@ static CONSTRAINTS: &[Constraint] = &[
     },
 ];
 
-fn input_gain(x: f64) -> f64 {
-    -6.0 + x.clamp(0.0, 1.0) * 30.0
+const fn input_gain(x: f64) -> f64 {
+    x.clamp(0.0, 1.0).mul_add(30.0, -6.0)
 }
 
-fn input_threshold(x: f64) -> f64 {
-    -8.0 - x.clamp(0.0, 1.0) * 36.0
+const fn input_threshold(x: f64) -> f64 {
+    x.clamp(0.0, 1.0).mul_add(-36.0, -8.0)
 }
 
 fn input_drive(x: f64) -> f64 {

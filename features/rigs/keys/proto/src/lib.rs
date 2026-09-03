@@ -11,7 +11,7 @@ use facet::Facet;
 // ── Wire types ──────────────────────────────────────────────────────────────
 
 /// One loadable keys preset (a Keyscape instrument / composition program).
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysPreset {
     /// Display name ("LA Custom C7 Grand", "Rhodes - Classic", …).
     pub name: String,
@@ -50,7 +50,7 @@ pub struct KeysNode {
     /// Whether this node currently produces sound (has a live backend).
     pub live: bool,
     /// Child nodes, in order.
-    pub children: Vec<KeysNode>,
+    pub children: Vec<Self>,
 }
 
 // ── Mixer (engines → layers) ────────────────────────────────────────────────
@@ -90,7 +90,7 @@ pub struct KeysLayerModel {
 /// A drone is not an instrument you perform: you pick a key, switch it on and
 /// it holds that note under the song until you switch it off. It takes no
 /// MIDI, so the keyboard belongs entirely to the engines above it.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysDrone {
     /// Pitch class being held, 0 = C … 11 = B.
     pub key: u32,
@@ -282,7 +282,7 @@ pub struct KeysEngineDetail {
 // ── Performance (stacks / scenes) ───────────────────────────────────────────
 
 /// One footswitch stack — a named scene over the mixer.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysStack {
     pub name: String,
     /// One-line description of the sound.
@@ -292,7 +292,7 @@ pub struct KeysStack {
 }
 
 /// The live performance model: the profile's stacks + grid mode.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysPerform {
     pub profile_name: String,
     pub stacks: Vec<KeysStack>,
@@ -338,6 +338,55 @@ pub struct KeysStatus {
     /// The last audio-open / preset-load failure, if the engine isn't
     /// running because of one (surfaced by phone UIs with no log access).
     pub last_error: Option<String>,
+    /// Realtime health of the audio callback. A rig can be "running", audible
+    /// on the meters, and still unplayable because it misses its deadline
+    /// several times a second — that is invisible without these, and it is
+    /// what "the keys rig glitches" actually means. Zero when the backend
+    /// does not report them.
+    #[facet(default)]
+    pub rt: KeysRealtime,
+}
+
+/// What the audio callback is actually doing, per block.
+#[derive(Clone, Debug, Default, PartialEq, Facet)]
+pub struct KeysRealtime {
+    /// Blocks the graph reported as an xrun since the engine opened.
+    ///
+    /// Unreliable on a follower node — it reads the DRIVER's clock and has
+    /// been measured at 0 while `PipeWire` counted 112 xruns on the same node
+    /// in the same window. Read [`over_budget`](Self::over_budget) to know
+    /// whether WE caused a dropout.
+    #[facet(default)]
+    pub xruns: u64,
+    /// Blocks whose render overran the block's own realtime budget.
+    ///
+    /// The honest dropout count: a callback that misses its deadline has made
+    /// the next block late, which is the click a player hears. Measured from
+    /// our own render timing, so it cannot be silent about our own overruns.
+    #[facet(default)]
+    pub over_budget: u64,
+    /// Block size the callback is running at, frames.
+    #[facet(default)]
+    pub block_frames: u32,
+    /// Worst render time seen since the last reset, milliseconds. Compare
+    /// against the block budget (`block_frames / sample_rate`): over it means
+    /// a guaranteed dropout, and a mean well under it with xruns anyway means
+    /// the spike is elsewhere (a lock, an allocation, disk).
+    #[facet(default)]
+    pub peak_render_ms: f32,
+    /// Most recent block's render time, milliseconds.
+    #[facet(default)]
+    pub render_ms: f32,
+    /// MEAN render time per block since the engine opened, milliseconds.
+    ///
+    /// The number to optimise against. Worst-case moves by milliseconds when
+    /// something else on the machine preempts one block, which says nothing
+    /// about whether the DSP got cheaper.
+    #[facet(default)]
+    pub mean_render_ms: f32,
+    /// Blocks rendered — the denominator behind the mean.
+    #[facet(default)]
+    pub blocks: u64,
 }
 
 // ── Browser lane program (the worklet boot payload) ─────────────────────────
@@ -345,7 +394,7 @@ pub struct KeysStatus {
 /// One `.signalpack` a lane program references — what a browser client must
 /// stream (over `signal-packs-proto`'s `PackLibrary`) and install before the
 /// referencing lane sounds.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysPackRef {
     /// The spec-path KEY the lane trees reference (`RigBlock.sample`) — the
     /// exact string to hand `signal_sampler::pack_registry::install`. On the
@@ -359,7 +408,7 @@ pub struct KeysPackRef {
 
 /// One lane of the program, for browser UI that treats `program_json` as
 /// opaque: which engine it belongs to and which pack makes it sound.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysLaneRef {
     pub engine: String,
     /// Layer/lane name ("Keys A") — also the daw track name in lane mode.
@@ -379,7 +428,7 @@ pub struct KeysLaneRef {
 /// Worklet track order (for `trackPeaks` / `setTrackVolume` indices): the
 /// rig folder first, then each engine's folder track followed by its lanes,
 /// engines and lanes in `lanes` order.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysLaneProgram {
     /// `signal_sampler::keys_rig::WireProgram` as facet-json.
     pub program_json: String,
@@ -530,6 +579,13 @@ pub mod keys {
         fn capture_stack(&self, index: u32);
         /// Trigger a note from the UI (velocity 0 = note-off).
         fn trigger(&self, note: u32, velocity: u32);
+
+        /// Clear the worst-case render time in [`KeysRealtime`], so the next
+        /// reading measures a fresh window. The meter equivalent of a peak
+        /// reset — without it the number is "worst since the engine opened",
+        /// which is dominated by the first blocks after a preset install and
+        /// says nothing about how the rig is behaving now.
+        fn reset_rt_peak(&self);
         /// Pitch wheel (14-bit raw, 8192 = center) — for remotes with an
         /// on-screen wheel; hardware wheels ride the MIDI stream directly.
         fn pitch_bend(&self, raw: u32);

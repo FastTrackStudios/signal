@@ -133,7 +133,7 @@ pub fn RigGridPanel(props: RigGridPanelProps) -> Element {
                 on_save_module_preset_as: on_save_module_preset_as_prop,
                 on_save_module_snapshot: on_save_module_snapshot_prop,
                 on_save_module_snapshot_as: on_save_module_snapshot_as_prop,
-                on_close: move |_| { ctx_menu_target.set(None); },
+                on_close: move |()| { ctx_menu_target.set(None); },
             }
         }
 
@@ -155,7 +155,7 @@ pub fn RigGridPanel(props: RigGridPanelProps) -> Element {
                     chain.set(current);
                     *PICKER_CELL.write() = None;
                 },
-                on_close: move |_| {
+                on_close: move |()| {
                     *PICKER_CELL.write() = None;
                 },
             }

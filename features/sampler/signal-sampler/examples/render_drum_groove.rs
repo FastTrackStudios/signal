@@ -59,7 +59,7 @@ fn bar(events: &mut Vec<(f64, u8, u8)>, base_qn: f64, first_bar: bool, jitter: &
 
     // hats on every 8th
     for i in 0..8 {
-        events.push((base_qn + i as f64 * 0.5, HH_CLOSED, vel(96)));
+        events.push((f64::from(i).mul_add(0.5, base_qn), HH_CLOSED, vel(96)));
     }
     // open hat accent on the "and" of 4
     events.push((base_qn + 3.5, HH_OPEN, vel(110)));
@@ -87,14 +87,14 @@ fn fill(events: &mut Vec<(f64, u8, u8)>, base_qn: f64, jitter: &mut u64) {
         (center + j).clamp(1, 127) as u8
     };
     for i in 0..8 {
-        events.push((base_qn + i as f64 * 0.5, HH_CLOSED, vel(88)));
+        events.push((f64::from(i).mul_add(0.5, base_qn), HH_CLOSED, vel(88)));
     }
     events.push((base_qn + 0.0, KICK, vel(115)));
     events.push((base_qn + 1.0, SNARE, vel(118)));
     // 16th-note tom roll across beats 3-4
     let toms = [SNARE, SNARE, RTOM_HI, RTOM_HI, RTOM_LO, RTOM_LO, FTOM, FTOM];
     for (i, &n) in toms.iter().enumerate() {
-        events.push((base_qn + 2.0 + i as f64 * 0.25, n, vel(112 + (i as i32))));
+        events.push(((i as f64).mul_add(0.25, base_qn + 2.0), n, vel(112 + (i as i32))));
     }
 }
 
@@ -175,7 +175,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     // qn -> sample position
-    let spb = 60.0 / bpm * SR as f64; // samples per quarter note
+    let spb = 60.0 / bpm * f64::from(SR); // samples per quarter note
     let mut sched: Vec<(usize, u8, u8)> = events
         .iter()
         .map(|&(qn, n, v)| ((qn * spb) as usize, n, v))
@@ -185,7 +185,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── render, firing notes at their sample positions ──
     let tail = SR as usize; // 1 s tail so cymbals ring out
-    let total_samples = sched.last().map(|e| e.0).unwrap_or(0) + tail;
+    let total_samples = sched.last().map_or(0, |e| e.0) + tail;
     const BLK: usize = 256;
     let mut out_buf: Vec<f32> = Vec::with_capacity(total_samples * 2);
     let mut block = vec![0.0f32; BLK * 2];
@@ -198,9 +198,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             rig.note_on("kit", sched[ev].1, sched[ev].2);
             ev += 1;
         }
-        for s in block.iter_mut() {
-            *s = 0.0;
-        }
+        block.fill(0.0);
         rig.render_offline(&mut block)?;
         for &s in &block {
             peak = peak.max(s.abs());
@@ -211,7 +209,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!(
         "rendered {:.2} s, master peak {peak:.4}",
-        out_buf.len() as f64 / 2.0 / SR as f64
+        out_buf.len() as f64 / 2.0 / f64::from(SR)
     );
     let outp = std::path::Path::new(&out);
     if let Some(dir) = outp.parent() {

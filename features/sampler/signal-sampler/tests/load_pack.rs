@@ -1,7 +1,7 @@
 //! Integration test: load a real `.signalpack`, dispatch a note-on, render
 //! a block of audio, and assert the output is non-silent.
 //!
-//! Skipped (with a printed reason) when the AudioHaven sample tree isn't
+//! Skipped (with a printed reason) when the `AudioHaven` sample tree isn't
 //! mounted, mirroring the `aiff_real.rs` skip pattern.
 
 use signal_sampler::{read_pack_header, SamplerBank};
@@ -51,7 +51,7 @@ fn load_stylus_pack_renders_audio() {
     let mut out = vec![0.0f32; 1024 * 2];
     bank.render(&mut out);
 
-    let rms = (out.iter().map(|&s| s as f64 * s as f64).sum::<f64>() / out.len() as f64).sqrt();
+    let rms = (out.iter().map(|&s| f64::from(s) * f64::from(s)).sum::<f64>() / out.len() as f64).sqrt();
     assert!(
         rms > 1e-5,
         "expected non-zero RMS after note_on; got {rms} (peak={})",

@@ -654,7 +654,17 @@ impl SampleEngine {
         // full-gain stacked ornament doubled the same pitch for ~2.5 s — the
         // audible "phasy overlap". The attack sample is bounded: it rings its
         // attack (~300 ms) then fades over the re-bow retire time (~550 ms).
-        let fresh_vz = if !self.legato_sustain {
+        // ONLY for libraries that authored a legato engine — i.e. the ones
+        // that actually ship the attack ornament this compensates for.
+        //
+        // The swap mutes the body for 40 ms and fades it in over 180-230 ms
+        // BECAUSE a separate attack sample is sounding over that window. A
+        // library without those zones gets the mute and the fade and nothing
+        // on top: 40 ms of silence, then a slow rise. On a piano that removes
+        // the hammer and most of the note's identity — measured on The
+        // Grandeur as a first non-zero sample 1940 frames (40 ms) after
+        // note-on against 1 frame in the source recording.
+        let fresh_vz = if !self.legato_sustain && self.cs_family() {
             self.patch
                 .spec
                 .legato_cfg()
@@ -667,9 +677,19 @@ impl SampleEngine {
             let fade = ms_to_frames(if fresh_vz == 3 { 180 } else { 230 }, self.sample_rate);
             self.sustain_fade_in = Some((mute, fade, fade, 0));
         }
-        self.spawn_sustain_layers(&nv_id, false, nv_scale, &direction, note, rr);
+        if nv_scale > 0.0 || self.cc_driven_layers() {
+            self.spawn_sustain_layers(&nv_id, false, nv_scale, &direction, note, rr);
+        }
         if let Some(vib_id) = vib_id {
-            self.spawn_sustain_layers(&vib_id, true, vb_scale, &direction, note, rr);
+            // A layer at gain 0 costs a full voice render every block and can
+            // never be heard. CSS still needs it: CC2 can sweep the vibrato
+            // side up under a held note, and `update_sustain_gains` can only
+            // ramp a voice that exists. A velocity-layered library has no such
+            // control — nothing will ever raise this voice — so spawning it is
+            // pure waste, and on a piano it is HALF the voices.
+            if vb_scale > 0.0 || self.cc_driven_layers() {
+                self.spawn_sustain_layers(&vib_id, true, vb_scale, &direction, note, rr);
+            }
         }
         if fresh_vz >= 2 {
             self.sustain_fade_in = None;
@@ -815,6 +835,37 @@ impl SampleEngine {
     /// gained by the current CC1 crossfade. Holding all layers — even the silent
     /// ones — is what lets a held note swell the full dynamic range as CC1 moves
     /// (`update_sustain_gains` re-levels them live), the way CSS does.
+    /// Whether this library is a Cinematic-Studio-family instrument — i.e. it
+    /// authored a `legato_engine`.
+    ///
+    /// That declaration is what marks the libraries the engine's bowed-string
+    /// behaviours were decoded FROM, and they travel together: a sparse pitch
+    /// grid (so transposition must preserve duration), sustains with no loop
+    /// points and a slow bow swell (so bodies loop the steady plateau), an
+    /// attack ornament over the first 40 ms, and CC-driven dynamic layers.
+    /// Applied to a struck, chromatically-sampled instrument every one of them
+    /// is wrong, and each was individually making the piano unplayable.
+    ///
+    /// Keyed off the declaration rather than a per-behaviour flag because the
+    /// flags have to be set on every CS spec and it is too easy to miss one —
+    /// which is exactly what happened: `cinematic-brass`,
+    /// `cinematic-woodwinds` and `pacific-ensemble-strings` all author a
+    /// legato engine and would have silently lost the plateau start.
+    pub(crate) fn cs_family(&self) -> bool {
+        self.patch.spec.legato_engine.is_some()
+    }
+
+    /// Whether a CC can raise a layer that is currently silent.
+    ///
+    /// True for libraries that authored a legato engine (the Cinematic Studio
+    /// family), where CC1 crossfades dynamics and CC2 the vibrato pair, so a
+    /// gain-0 voice is a voice waiting to be swept in. False elsewhere: a
+    /// velocity-layered instrument picks its layer when the key is struck and
+    /// nothing afterwards changes it.
+    pub(crate) fn cc_driven_layers(&self) -> bool {
+        self.cs_family()
+    }
+
     pub(crate) fn spawn_sustain_layers(
         &mut self,
         artic: &str,
@@ -1315,7 +1366,7 @@ impl SampleEngine {
         self.spawn_arrival_override_ms = None;
         self.spawn_align_lead = restore;
         self.transition_fade = None;
-        if std::env::var_os("SIGNAL_LEGATO_DEBUG").is_some() {
+        if crate::engine::legato_debug() {
             eprintln!(
                 "LEGATO {}→{} zone={} root={} int={} dir={} lead_ms={} sched={:?} offset={} pitch_off={} spawned={}",
                 from,
@@ -1472,7 +1523,11 @@ impl SampleEngine {
         note: u8,
         rr: usize,
     ) -> Option<usize> {
+        // Zones whose velocity band contains the played velocity, kept apart
+        // from the rest so a band miss can fall back rather than go silent.
         let mut matches: Vec<usize> = Vec::new();
+        let mut off_band: Vec<usize> = Vec::new();
+        let velocity = self.last_velocity;
         // Nearest single-key zone when no zone spans the note: CSS records a
         // whole-tone grid (every other semitone) and pitch-shifts ±1 to fill,
         // and the extracted zones are single-key (key_min == key_max), so even
@@ -1500,7 +1555,21 @@ impl SampleEngine {
                 }
             }
             if note >= z.key_min && note <= z.key_max {
-                matches.push(i);
+                // VELOCITY-BANDED zones pick by how hard the key was struck.
+                //
+                // Without this the dynamic layer was chosen by round-robin
+                // across every band, so an NI piano — 28 velocity layers per
+                // key — played an arbitrary one, very often the `pp` sample,
+                // at any velocity. That is a piano with no hammer, no core
+                // tone and no dynamics: "it plays samples but sounds nothing
+                // like a piano". CSS is untouched, because its sustain zones
+                // span the full range and select by CC1 dynamic LABEL, so
+                // every candidate is in band and this changes nothing.
+                if velocity >= z.vel_min && velocity <= z.vel_max {
+                    matches.push(i);
+                } else {
+                    off_band.push(i);
+                }
             } else {
                 let dist = (z.root_key as i32 - note as i32).unsigned_abs() as u8;
                 if nearest.is_none_or(|(d, _)| dist < d) {
@@ -1510,6 +1579,22 @@ impl SampleEngine {
         }
         if !matches.is_empty() {
             return Some(matches[rr % matches.len()]);
+        }
+        // The key is covered but no band claims this velocity (a library with
+        // gaps in its velocity map). Sounding the nearest band beats silence.
+        if !off_band.is_empty() {
+            let nearest = off_band
+                .iter()
+                .min_by_key(|&&i| {
+                    let z = &self.patch.spec.zones[i];
+                    let lo = z.vel_min as i32 - velocity as i32;
+                    let hi = velocity as i32 - z.vel_max as i32;
+                    lo.max(hi).max(0)
+                })
+                .copied();
+            if nearest.is_some() {
+                return nearest;
+            }
         }
         // No exact zone — use the nearest recorded pitch within range and let
         // spawn_zone_voice pitch-shift it (note - root_key semitones).
@@ -1589,11 +1674,41 @@ impl SampleEngine {
         };
         let line = self.cur_line as u8;
         let path = self.patch.zone_paths[idx].clone();
+        // Which zone actually sounded, and for which velocity — the question
+        // "why did it play THAT sample" needs answering from a running rig,
+        // not just a test harness.
+        tracing::debug!(
+            target: "signal_sampler::trigger",
+            note,
+            velocity = self.last_velocity,
+            zone = idx,
+            vel_min = self.patch.spec.zones[idx].vel_min,
+            vel_max = self.patch.spec.zones[idx].vel_max,
+            root = self.patch.spec.zones[idx].root_key,
+            file = %path.file_name().and_then(|s| s.to_str()).unwrap_or_default(),
+            "zoned spawn"
+        );
 
         let Some(data) = self.cache.get_loaded(&path) else {
             self.cache_misses
                 .set(self.cache_misses.get().saturating_add(1));
             self.record_cache_miss(&path);
+            // This is a note the player pressed that produced NO SOUND, and
+            // until now the zoned path dropped it in silence: no trace event,
+            // and no bump of the process-wide counter — so `notes_dropped()`
+            // read zero while a whole keyboard went dead, and the render trace
+            // showed a note-on with nothing after it. The convention path has
+            // always recorded both; matching it here is what lets anyone tell
+            // "this zone is not resident yet" from "this note is unmapped",
+            // which are different faults with different fixes.
+            crate::engine::note_dropped();
+            self.trace_push(TraceKind::SampleMiss {
+                note,
+                articulation: zone_artic.clone(),
+                dynamic: String::new(),
+                rr: 0,
+                reason: MissReason::NotLoaded,
+            });
             // Warm it off-thread so the next hit of this note sounds.
             self.cache.warm_async(&path);
             return false;
@@ -1610,9 +1725,25 @@ impl SampleEngine {
         // timing; only TUNING (per-zone + master, tiny) rides `rate`, which
         // now carries just tuning × SR-conversion. `transpose_cents == 0` on
         // the recorded grid → no shifter, byte-identical to before.
-        let transpose_cents = semitones * 100.0;
+        // Time-preserving transposition is a CS-family need: those libraries
+        // sample 6 of 12 pitch classes, so a transposed note must still last
+        // exactly as recorded or its legato arrival lands off the grid. The
+        // barberpole shifter that buys it costs two cubic-interpolated reads
+        // and a crossfade PER SAMPLE — measured at roughly 10x a plain voice,
+        // and on the keys rig 9 transposed voices out of 432 were ~19% of the
+        // audio thread.
+        //
+        // A chromatically sampled library needs none of it: transposition is
+        // rare (a release tail reaching past its sampled range) and nobody
+        // minds it running a few milliseconds short. Fold it into the playback
+        // rate instead, which is free.
+        let (transpose_cents, resample_semitones) = if self.cs_family() {
+            (semitones * 100.0, 0.0)
+        } else {
+            (0.0, semitones)
+        };
         let tune_cents_total = tune_cents as f64 + self.master_tune_cents();
-        let rate = 2.0f64.powf(tune_cents_total / 1200.0);
+        let rate = 2.0f64.powf(tune_cents_total / 1200.0 + resample_semitones / 12.0);
 
         // Marker position for playback emission (FILE frames): the zone's
         // heard-arrival CLAIM, exactly the ladder the alignment uses —
@@ -1803,7 +1934,13 @@ impl SampleEngine {
         // CSS-style sustains ship no loop points but have a slow ~0.8s natural
         // attack pre-roll that CSS skips (Kontakt sample-start) for a fast attack.
         // Start such bodies at the loud steady region so onsets aren't sluggish.
-        let synth_loop = is_sustain_layer
+        // Opt-in only: see `sustain_starts_at_plateau`. "No loop points" is
+        // not evidence that an instrument wants its attack skipped — the NI
+        // pianos have none either, and skipping a piano's attack removes the
+        // hammer and the core of the tone while leaving a plausible-sounding
+        // note behind.
+        let synth_loop = self.cs_family()
+            && is_sustain_layer
             && loop_end <= loop_start
             && playback_mode.is_empty()
             && !alternating
@@ -1818,7 +1955,7 @@ impl SampleEngine {
             // Search the body only — keep clear of the recorded end-swell /
             // bow-off in the final ~15%, which would otherwise skew the peak.
             let search_hi = (num_frames as f32 * 0.85) as usize;
-            steady_loop_region(data.as_ref(), num_frames / 12, search_hi, min_len).unwrap_or_else(
+            steady_loop_region_cached(&data, num_frames / 12, search_hi, min_len).unwrap_or_else(
                 || {
                     let lo = num_frames / 6;
                     (lo, ((num_frames as f32 * 0.55) as usize).max(lo + 2))
@@ -1863,8 +2000,20 @@ impl SampleEngine {
             // envelope here. Connected sustains keep the authored attack.
             if self.legato_sustain {
                 self.attack_frames
-            } else {
+            } else if start_offset > 0 {
+                // Mid-sample entry starts at a non-zero sample value and WILL
+                // click without a ramp — which is the only thing the declick
+                // is for; see `SUSTAIN_DECLICK_MS`, "starts mid-sample at full
+                // level".
                 ms_to_frames(crate::engine::SUSTAIN_DECLICK_MS.max(20), self.sample_rate)
+            } else {
+                // True sample start: the recording begins at silence, so there
+                // is nothing to declick and the ramp only destroys the onset.
+                // Applying it unconditionally put a >=20 ms fade-in on every
+                // fresh note — inaudible on a bow, fatal on a hammer, whose
+                // whole transient lives in the first few milliseconds. It is
+                // what "the piano fades in and has no attack" was.
+                0
             }
         } else if start_offset > 0 {
             // Deep mid-sample entry (skipped-swell Low-Latency prefire): fade
@@ -1978,7 +2127,7 @@ impl SampleEngine {
                 // indefinitely. Loop the sample's steady plateau (found above),
                 // crossfaded at the wrap so the held note neither pulses nor
                 // clicks.
-                if k == 0 && std::env::var_os("SIGNAL_LOOP_DEBUG").is_some() {
+                if k == 0 && crate::engine::loop_debug() {
                     eprintln!(
                         "SYNTH_LOOP note={note} len={num_frames} loop={sus_lo}..{sus_hi} \
                          ({:.0}%..{:.0}%) xf={loop_xfade}",

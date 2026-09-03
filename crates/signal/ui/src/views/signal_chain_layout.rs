@@ -21,7 +21,7 @@ pub fn layout_signal_chain(chain: &SignalChain) -> (Vec<FlowBlock>, usize, usize
     (blocks, total_cols, total_lanes)
 }
 
-/// Recursive helper: lay out a slice of nodes starting at (base_lane, start_col).
+/// Recursive helper: lay out a slice of nodes starting at (`base_lane`, `start_col`).
 /// Returns the column index after the last placed node.
 fn layout_nodes(
     nodes: &[SignalNode],
@@ -80,7 +80,7 @@ fn layout_nodes(
 /// wires connecting them — matching the Helix / Quad Cortex single-chain view.
 ///
 /// Returns `(blocks, total_columns, total_lanes)`.
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub fn layout_rig_engines(engines: &[EngineFlowData]) -> (Vec<FlowBlock>, usize, usize) {
     let mut blocks = Vec::new();
     let mut max_lane: usize = 0;
@@ -103,7 +103,7 @@ pub fn layout_rig_engines(engines: &[EngineFlowData]) -> (Vec<FlowBlock>, usize,
 /// Lay out a list of module chains into a single unified grid.
 ///
 /// Returns `(blocks, total_columns, total_lanes)`.
-#[allow(
+#[expect(
     dead_code,
     reason = "unified multi-chain grid layout, not yet wired to a view — sibling of layout_signal_chain/layout_rig_engines"
 )]

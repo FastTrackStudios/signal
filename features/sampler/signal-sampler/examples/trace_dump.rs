@@ -28,7 +28,7 @@ const NN: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
 fn nm(p: u8) -> String {
-    format!("{}{}", NN[(p % 12) as usize], (p / 12) as i32 - 1)
+    format!("{}{}", NN[(p % 12) as usize], i32::from(p / 12) - 1)
 }
 
 fn line_notes(steps: &[(u8, f64)]) -> Vec<DocNote> {
@@ -113,7 +113,7 @@ fn main() -> eyre::Result<()> {
     let _res = rig.render_offline_document(ID, &doc, &DocumentRenderOptions::default())?;
     let trace = rig.render_trace(ID);
 
-    let t = |f: u64| f as f64 / SR as f64;
+    let t = |f: u64| f as f64 / f64::from(SR);
     println!("── {which} trace: {} events ──\n", trace.events.len());
     for e in &trace.events {
         match &e.kind {
@@ -189,7 +189,7 @@ fn main() -> eyre::Result<()> {
             _ => None,
         })
         .collect();
-    let win = (0.060 * SR as f64) as u64;
+    let win = (0.060 * f64::from(SR)) as u64;
     let mut flagged = 0;
     for i in 0..spawns.len() {
         for j in (i + 1)..spawns.len() {
@@ -211,7 +211,7 @@ fn main() -> eyre::Result<()> {
                     ki,
                     t(fj),
                     kj,
-                    (fj - fi) as f64 / SR as f64 * 1000.0,
+                    (fj - fi) as f64 / f64::from(SR) * 1000.0,
                 );
                 flagged += 1;
             }

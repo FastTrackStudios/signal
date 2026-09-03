@@ -28,7 +28,7 @@ pub struct BlobView {
     pub modulation_amount: f64,
 }
 
-/// Edits the surface emits; the host applies them to the PitchDoc.
+/// Edits the surface emits; the host applies them to the `PitchDoc`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BlobEdit {
     /// Set the blob's pitch center (already snapped if snapping is on).
@@ -70,7 +70,7 @@ impl ViewMap {
     }
 }
 
-fn is_black_key(midi: i32) -> bool {
+const fn is_black_key(midi: i32) -> bool {
     matches!(midi.rem_euclid(12), 1 | 3 | 6 | 8 | 10)
 }
 
@@ -183,7 +183,7 @@ pub fn PitchEditor(
                             .iter()
                             .map(|&(f, m)| format!("{:.1},{:.1} ", map.x(f as f64), map.y(m)))
                             .collect();
-                        let alpha = 0.35 + 0.4 * b.weight.clamp(0.0, 1.0);
+                        let alpha = 0.4f64.mul_add(b.weight.clamp(0.0, 1.0), 0.35);
                         let center0 = b.center_midi;
                         rsx! {
                             // Blob body: a rounded bar one semitone tall

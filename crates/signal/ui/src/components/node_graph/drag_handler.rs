@@ -6,7 +6,7 @@ use super::models::NodeGraph;
 
 // ── Selection ────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Selection {
     None,
     Module(Uuid),
@@ -53,12 +53,14 @@ pub enum CanvasViewMode {
 
 pub const GRID_SNAP: f64 = 20.0;
 
+#[must_use] 
 pub fn snap_to_grid(val: f64) -> f64 {
     (val / GRID_SNAP).round() * GRID_SNAP
 }
 
 // ── Canvas Bounds ────────────────────────────────────────────────────
 
+#[must_use] 
 pub fn calculate_canvas_bounds(graph: &NodeGraph) -> (f64, f64) {
     let mut max_x = 0.0f64;
     let mut max_y = 0.0f64;
@@ -78,6 +80,7 @@ pub fn calculate_canvas_bounds(graph: &NodeGraph) -> (f64, f64) {
 
 // ── Fit Calculation ──────────────────────────────────────────────────
 
+#[must_use] 
 pub fn calculate_fit(
     canvas_w: f64,
     canvas_h: f64,

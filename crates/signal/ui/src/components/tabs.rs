@@ -44,7 +44,7 @@ pub fn Tabs(props: TabsProps) -> Element {
     }
 }
 
-/// Internal context shared between Tabs, TabList, TabTrigger, TabContent.
+/// Internal context shared between Tabs, `TabList`, `TabTrigger`, `TabContent`.
 #[derive(Clone, Copy)]
 struct TabContext {
     selected: Signal<String>,

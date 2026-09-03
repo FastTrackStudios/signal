@@ -1,7 +1,7 @@
 //! Verify that real packs load and produce non-zero audio when triggered.
 //!
-//! Skips when AudioHaven isn't mounted. Walks one representative pack from
-//! each library family, calls `SamplerRig::load_pack`, fires note_on, and
+//! Skips when `AudioHaven` isn't mounted. Walks one representative pack from
+//! each library family, calls `SamplerRig::load_pack`, fires `note_on`, and
 //! asserts the rendered audio buffer has non-zero RMS.
 
 use signal_sampler::{read_pack_header, PlayerPatch, SampleEngine, SamplerBank, SamplerRig};
@@ -94,11 +94,11 @@ fn keyscape_resolves_a_sample() {
     // Mirror the engine's velocity → dynamic mapping.
     let artic_spec = patch.spec.articulation(&artic).unwrap();
     let dynamics = &artic_spec.dynamics;
-    eprintln!("dynamics list: {:?}", dynamics);
+    eprintln!("dynamics list: {dynamics:?}");
     // Mirror the engine's velocity → dynamic mapping.
     let artic_spec = patch.spec.articulation(&artic).unwrap();
     let dynamics = &artic_spec.dynamics;
-    eprintln!("dynamics list: {:?}", dynamics);
+    eprintln!("dynamics list: {dynamics:?}");
     for note in [48u8, 60u8, 72u8] {
         for vel in [40u8, 80u8, 100u8, 120u8] {
             let n = dynamics.len();
@@ -261,7 +261,7 @@ fn rhodes_silence_sweep() {
     eprintln!("PROBE note=36 vel=30: voices={}", bank.active_voices("tui"));
     let mut p = 0.0f32;
     for _ in 0..40 {
-        for s in buf.iter_mut() {
+        for s in &mut buf {
             *s = 0.0;
         }
         bank.render(&mut buf);
@@ -272,7 +272,7 @@ fn rhodes_silence_sweep() {
     eprintln!("PROBE peak={p}");
     bank.note_off("tui", 36);
     for _ in 0..40 {
-        for s in buf.iter_mut() {
+        for s in &mut buf {
             *s = 0.0;
         }
         bank.render(&mut buf);
@@ -287,7 +287,7 @@ fn rhodes_silence_sweep() {
             }
             let mut peak = 0.0f32;
             for _ in 0..40 {
-                for s in buf.iter_mut() {
+                for s in &mut buf {
                     *s = 0.0;
                 }
                 bank.render(&mut buf);
@@ -297,7 +297,7 @@ fn rhodes_silence_sweep() {
             }
             bank.note_off("tui", note);
             for _ in 0..30 {
-                for s in buf.iter_mut() {
+                for s in &mut buf {
                     *s = 0.0;
                 }
                 bank.render(&mut buf);
@@ -327,7 +327,7 @@ fn rhodes_silence_sweep() {
     }
 }
 
-/// Headless repro of TUI silence bug. Builds a SamplerBank directly (no
+/// Headless repro of TUI silence bug. Builds a `SamplerBank` directly (no
 /// cpal), loads Rhodes pack, fires note 60, renders, asserts non-zero peak.
 #[test]
 fn rhodes_tui_path_produces_audio() {
@@ -365,7 +365,7 @@ fn rhodes_tui_path_produces_audio() {
     let mut buf = vec![0.0f32; 256 * 2];
     let mut hold_peak = 0.0f32;
     for _ in 0..50 {
-        for s in buf.iter_mut() {
+        for s in &mut buf {
             *s = 0.0;
         }
         bank.render(&mut buf);
@@ -376,7 +376,7 @@ fn rhodes_tui_path_produces_audio() {
     bank.note_off("tui", 60);
     let mut release_peak = 0.0f32;
     for _ in 0..30 {
-        for s in buf.iter_mut() {
+        for s in &mut buf {
             *s = 0.0;
         }
         bank.render(&mut buf);
@@ -491,7 +491,7 @@ fn keyscape_via_player_full_chain() {
     assert_eq!(stats.callback_overruns, 0, "overruns after preload");
 }
 
-/// Verify the Kontakt-style background preloader: load_pack returns
+/// Verify the Kontakt-style background preloader: `load_pack` returns
 /// quickly while a worker thread fills the cache, and notes become audible
 /// shortly afterwards once enough samples are decoded.
 #[test]
@@ -594,9 +594,9 @@ fn keyscape_middle_out_priority() {
         if let Some(note_str) = stem.split_whitespace().nth(1) {
             if let Ok(n) = note_str.parse::<i32>() {
                 if (n - 60).abs() <= 24 {
-                    near += 1
+                    near += 1;
                 } else {
-                    far += 1
+                    far += 1;
                 }
             }
         }
@@ -857,8 +857,8 @@ fn module_input_mute_works() {
     );
 }
 
-/// Reproduce what the TUI does: load_pack via SamplerBank, fire note_on, mix.
-/// Catches integration issues that don't show up loading via PlayerPatch alone.
+/// Reproduce what the TUI does: `load_pack` via `SamplerBank`, fire `note_on`, mix.
+/// Catches integration issues that don't show up loading via `PlayerPatch` alone.
 #[test]
 fn keyscape_via_bank_renders_audio() {
     let path = Path::new(

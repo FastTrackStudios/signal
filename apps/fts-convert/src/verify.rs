@@ -2,7 +2,7 @@
 //!
 //! A converter that only rewrites text is asking to be trusted on the
 //! strength of its author's confidence. This is the part that earns it: each
-//! converted instance is loaded back into the real FabFilter plugin, the
+//! converted instance is loaded back into the real `FabFilter` plugin, the
 //! parameters we wrote are loaded into the real FTS EQ, both are fed the same
 //! stimulus, and the two are compared band by band.
 //!
@@ -66,16 +66,16 @@ pub enum RigError {
 impl std::fmt::Display for RigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RigError::NotFound(p) => write!(f, "no plugin at {p}"),
-            RigError::Load(p) => write!(f, "could not load {p}"),
+            Self::NotFound(p) => write!(f, "no plugin at {p}"),
+            Self::Load(p) => write!(f, "could not load {p}"),
         }
     }
 }
 
 impl Rig {
     /// Open with no plugins loaded; each family is bridged on first use.
-    pub fn new() -> Rig {
-        Rig {
+    pub fn new() -> Self {
+        Self {
             pairs: Vec::new(),
             dry: eq_transfer::stimulus(
                 eq_transfer::frames_needed(),
@@ -88,13 +88,11 @@ impl Rig {
 
     /// Where a family's two plugins live, unless overridden.
     ///
-    /// FabFilter ship Windows binaries, so on Linux theirs are reached
+    /// `FabFilter` ship Windows binaries, so on Linux theirs are reached
     /// through yabridge; ours are native and sit directly in `~/.clap`.
     fn paths(family: Family) -> (String, String) {
         let home = |rest: &str| {
-            std::env::var("HOME")
-                .map(|h| format!("{h}/{rest}"))
-                .unwrap_or_else(|_| rest.to_string())
+            std::env::var("HOME").map_or_else(|_| rest.to_string(), |h| format!("{h}/{rest}"))
         };
         match family {
             Family::ProQ4 => (
@@ -238,7 +236,7 @@ impl Rig {
 /// True when a render carries essentially no energy — a plugin that declined
 /// to process rather than one that processed to nothing.
 fn silent(v: &[f32]) -> bool {
-    let e: f64 = v.iter().map(|x| (*x as f64) * (*x as f64)).sum();
+    let e: f64 = v.iter().map(|x| f64::from(*x) * f64::from(*x)).sum();
     e / v.len().max(1) as f64 <= 1.0e-12
 }
 

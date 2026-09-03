@@ -3,7 +3,7 @@
 //! The picker chooses which rig to load (guitar is the only real one so
 //! far; the rest of the swarm — tracks, keys, drums, bass, vocals — are
 //! listed as coming). The guitar rig connects to a running signal engine
-//! over a vox WebSocket (ws://127.0.0.1:4040/vox by default) and mounts
+//! over a vox WebSocket (<ws://127.0.0.1:4040/vox> by default) and mounts
 //! the same `GuitarRigRemote` the browser remote uses — the desktop
 //! app is just another remote of the headless core. Connection lifecycle
 //! is lifted from `apps/signal-web`: retry until the core answers,
@@ -25,7 +25,7 @@ use signal_synth_ui::SynthRigRemote;
 
 /// Compiled Tailwind for the signal UI components (built by `just
 /// tailwind` from ../input.css). This is the app's single comprehensive
-/// sheet — SessionChrome inlines the same file for the session UI.
+/// sheet — `SessionChrome` inlines the same file for the session UI.
 const SIGNAL_TAILWIND: &str = include_str!("../assets/tailwind-signal.css");
 
 use architect::iroh_link::iroh;
@@ -40,7 +40,7 @@ use crate::rigs::{Rig, RigMenu, available};
 /// one exposes. The core cannot tell which it is — the detachable-GUI rule
 /// holds either way, and every view below here is unchanged.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum EngineMode {
+pub enum EngineMode {
     /// In-process. No child, no port, no discovery — opening a rig plays it.
     Embedded,
     /// A separate `signal-desktop --engine`, supervised or already running.
@@ -136,7 +136,7 @@ pub fn SignalWorkspace() -> Element {
                     k.label(),
                     crate::rigs::icon(k),
                     selected() == Some(k),
-                    Callback::new(move |_| pick.call(Some(k))),
+                    Callback::new(move |()| pick.call(Some(k))),
                 )
             })
             .collect(),
@@ -153,7 +153,7 @@ pub fn SignalWorkspace() -> Element {
 
     // The rig crumb picks any sibling rig, and "Rigs" goes back to the picker.
     level.crumbs(vec![
-        fts_chrome::Crumb::new("Rigs", Callback::new(move |_| pick.call(None))),
+        fts_chrome::Crumb::new("Rigs", Callback::new(move |()| pick.call(None))),
         fts_chrome::Crumb::here(kind.label()).with_menu(
             Rig::ALL
                 .iter()
@@ -163,7 +163,7 @@ pub fn SignalWorkspace() -> Element {
                     (
                         k.label().to_string(),
                         k == kind,
-                        Callback::new(move |_| pick.call(Some(k))),
+                        Callback::new(move |()| pick.call(Some(k))),
                     )
                 })
                 .collect(),

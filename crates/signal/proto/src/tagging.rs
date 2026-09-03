@@ -37,6 +37,7 @@ pub enum TagCategory {
 }
 
 impl TagCategory {
+    #[must_use] 
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::RigType => "rig_type",
@@ -56,6 +57,7 @@ impl TagCategory {
         }
     }
 
+    #[must_use] 
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "rig_type" | "rigtype" => Some(Self::RigType),
@@ -107,25 +109,28 @@ impl StructuredTag {
     }
 
     #[must_use]
-    pub fn with_source(mut self, source: TagSource) -> Self {
+    pub const fn with_source(mut self, source: TagSource) -> Self {
         self.source = source;
         self
     }
 
     #[must_use]
-    pub fn with_weight(mut self, weight: u8) -> Self {
+    pub const fn with_weight(mut self, weight: u8) -> Self {
         self.weight = weight;
         self
     }
 
+    #[must_use] 
     pub fn key(&self) -> String {
         format!("{}:{}", self.category.as_str(), self.value)
     }
 
+    #[must_use] 
     pub fn encode(&self) -> String {
         self.key()
     }
 
+    #[must_use] 
     pub fn parse(raw: &str) -> Self {
         let raw = raw.trim();
         let Some((left, right)) = raw.split_once(':') else {
@@ -142,10 +147,12 @@ impl StructuredTag {
 pub struct TagSet(BTreeMap<String, StructuredTag>);
 
 impl TagSet {
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use] 
     pub fn from_tags(tags: &Tags) -> Self {
         let mut set = Self::new();
         for raw in tags.as_slice() {
@@ -162,6 +169,7 @@ impl TagSet {
         self.0.insert(tag.key(), tag);
     }
 
+    #[must_use] 
     pub fn contains_key(&self, key: &str) -> bool {
         self.0.contains_key(key)
     }
@@ -170,6 +178,7 @@ impl TagSet {
         self.0.values()
     }
 
+    #[must_use] 
     pub fn by_category(&self, category: TagCategory) -> Vec<&StructuredTag> {
         self.0
             .values()
@@ -177,13 +186,14 @@ impl TagSet {
             .collect::<Vec<_>>()
     }
 
-    pub fn merge(&mut self, other: &TagSet) {
+    pub fn merge(&mut self, other: &Self) {
         for tag in other.values() {
             self.insert(tag.clone());
         }
     }
 
-    pub fn weighted_overlap(&self, other: &TagSet, weights: &TagWeights) -> f32 {
+    #[must_use] 
+    pub fn weighted_overlap(&self, other: &Self, weights: &TagWeights) -> f32 {
         let mut score = 0.0;
         for tag in self.values() {
             if other.contains_key(&tag.key()) {
@@ -219,6 +229,7 @@ impl Default for TagWeights {
 }
 
 impl TagWeights {
+    #[must_use] 
     pub fn weight_for(&self, category: TagCategory) -> f32 {
         *self.0.get(&category).unwrap_or(&1.0)
     }
@@ -257,7 +268,8 @@ pub enum BrowserEntityKind {
     SetlistVariant,
 }
 
-pub fn browser_columns(mode: BrowserMode, rig_type: Option<RigType>) -> &'static [TagCategory] {
+#[must_use] 
+pub const fn browser_columns(mode: BrowserMode, rig_type: Option<RigType>) -> &'static [TagCategory] {
     match (mode, rig_type) {
         (BrowserMode::Semantic, Some(RigType::Keys)) => &[
             TagCategory::Instrument,
@@ -293,7 +305,8 @@ pub fn browser_columns(mode: BrowserMode, rig_type: Option<RigType>) -> &'static
     }
 }
 
-pub fn fallback_categories(
+#[must_use] 
+pub const fn fallback_categories(
     kind: BrowserEntityKind,
     rig_type: Option<RigType>,
 ) -> &'static [TagCategory] {
@@ -354,7 +367,7 @@ pub struct BrowserNodeId {
     pub id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct BrowserEntry {
     pub node: BrowserNodeId,
     pub name: String,
@@ -362,7 +375,7 @@ pub struct BrowserEntry {
     pub aliases: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct BrowserQuery {
     pub mode: BrowserMode,
     pub rig_type: Option<RigType>,
@@ -393,16 +406,18 @@ pub struct BrowserHit {
     pub score: f32,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet, Default)]
 pub struct BrowserIndex {
     entries: Vec<BrowserEntry>,
 }
 
 impl BrowserIndex {
-    pub fn with_entries(entries: Vec<BrowserEntry>) -> Self {
+    #[must_use] 
+    pub const fn with_entries(entries: Vec<BrowserEntry>) -> Self {
         Self { entries }
     }
 
+    #[must_use] 
     pub fn entries(&self) -> &[BrowserEntry] {
         &self.entries
     }
@@ -411,6 +426,7 @@ impl BrowserIndex {
         self.entries.push(entry);
     }
 
+    #[must_use] 
     pub fn query(&self, query: &BrowserQuery, weights: &TagWeights) -> Vec<BrowserHit> {
         let text = query.text.as_ref().map(|s| s.to_ascii_lowercase());
         let mut include = TagSet::new();
@@ -484,7 +500,7 @@ impl BrowserIndex {
 
 // ─── Inference ──────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet, Default)]
 pub struct TagInferenceHints {
     pub rig_type: Option<RigType>,
     pub section: Option<String>,
@@ -494,6 +510,7 @@ pub struct TagInferenceHints {
     pub performer: Option<String>,
 }
 
+#[must_use] 
 pub fn infer_tags_from_hints(hints: &TagInferenceHints) -> TagSet {
     let mut out = TagSet::new();
 
@@ -537,6 +554,7 @@ pub fn infer_tags_from_hints(hints: &TagInferenceHints) -> TagSet {
     out
 }
 
+#[must_use] 
 pub fn infer_tags_from_name(name: &str) -> TagSet {
     let mut out = TagSet::new();
     let lower = name.to_ascii_lowercase();

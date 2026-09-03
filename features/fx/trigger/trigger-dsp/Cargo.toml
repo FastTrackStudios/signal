@@ -6,6 +6,9 @@ authors.workspace = true
 license.workspace = true
 description = "trigger-dsp — drum trigger engine: transient/onset detection (envelope state machine + spectral flux family), velocity extraction, sidechain filtering, and sample playback. Imported from the legacy FTS-Trigger."
 
+[lints]
+workspace = true
+
 [dependencies]
 # fts-dsp's monorepo successor (AudioConfig, Processor, db, EnvelopeFollower).
 audiocore-dsp = { workspace = true }

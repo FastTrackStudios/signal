@@ -11,7 +11,7 @@ use super::star_rating::StarRating;
 // region: --- ReviewCard
 
 /// Data for a single review to display.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ReviewData {
     pub author_name: String,
     pub score: u8,

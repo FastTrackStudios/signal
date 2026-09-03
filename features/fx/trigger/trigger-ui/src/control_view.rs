@@ -35,7 +35,7 @@ pub fn App() -> Element {
     }
 }
 
-/// Inner shell component — runs after the ThemeProvider context is in scope
+/// Inner shell component — runs after the `ThemeProvider` context is in scope
 /// so themed primitives can resolve their tokens.
 #[component]
 fn AppShell() -> Element {
@@ -230,7 +230,7 @@ fn AppShell() -> Element {
                                     div { "data-testid": "note-inc",
                                         class: "w-6 h-6 flex items-center justify-center rounded border border-border cursor-pointer text-sm",
                                         onclick: {
-                                            let ctx = ctx.clone();
+                                            let ctx = ctx;
                                             let params = params.clone();
                                             move |_| {
                                                 let ptr = params.note.as_ptr();

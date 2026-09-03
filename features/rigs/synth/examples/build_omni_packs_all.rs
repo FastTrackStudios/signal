@@ -115,8 +115,7 @@ fn already_looped(out: &Path) -> bool {
     out.exists()
         && signal_sampler::read_pack_header(out)
             .ok()
-            .map(|h| h.spec.zones.iter().any(|z| z.loop_end > z.loop_start))
-            .unwrap_or(false)
+            .is_some_and(|h| h.spec.zones.iter().any(|z| z.loop_end > z.loop_start))
 }
 
 /// Tags from the extraction path components (`Core Soundsources/<family>/<name>`):

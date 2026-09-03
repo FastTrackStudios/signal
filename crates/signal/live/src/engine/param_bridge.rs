@@ -27,7 +27,7 @@ use super::daw_bridge::DawStateChunk;
 use super::morph::{DawParamValue, DawParameterSnapshot};
 
 /// A single DAW parameter as seen by the bridge: just a name and a value.
-/// Callers provide a slice of these; the actual type (FxParameter, etc.)
+/// Callers provide a slice of these; the actual type (`FxParameter`, etc.)
 /// stays in the DAW-specific crate.
 pub struct LiveParam {
     /// Parameter index within the FX plugin (used as the `param_index` in the snapshot).
@@ -44,16 +44,17 @@ pub struct LiveParam {
 /// comparing after stripping separators (spaces, hyphens, underscores).
 /// This handles camelCase fingerprint names like `"dumbleGain"` matching
 /// DAW-exposed names like `"Dumble Gain"`.
+#[must_use] 
 pub fn param_name_matches(signal_id: &str, daw_name: &str) -> bool {
     let norm_daw: String = daw_name
         .chars()
         .filter(|c| !matches!(c, ' ' | '-' | '_'))
-        .flat_map(|c| c.to_lowercase())
+        .flat_map(char::to_lowercase)
         .collect();
     let norm_sig: String = signal_id
         .chars()
         .filter(|c| !matches!(c, ' ' | '-' | '_'))
-        .flat_map(|c| c.to_lowercase())
+        .flat_map(char::to_lowercase)
         .collect();
     norm_daw.contains(&norm_sig)
 }
@@ -63,6 +64,7 @@ pub fn param_name_matches(signal_id: &str, daw_name: &str) -> bool {
 ///
 /// Only parameters that match by name are included. Returns the snapshot and
 /// the count of parameters that were matched and applied.
+#[must_use] 
 pub fn block_to_snapshot(
     block: &Block,
     live: &[LiveParam],
@@ -75,7 +77,7 @@ pub fn block_to_snapshot(
                 fx_id: fx_id.to_string(),
                 param_index: lp.index,
                 param_name: lp.name.clone(),
-                value: sp.value().get() as f64,
+                value: f64::from(sp.value().get()),
             });
         }
     }
@@ -87,6 +89,7 @@ pub fn block_to_snapshot(
 /// all engines → layers → modules → blocks and collecting every matched param.
 ///
 /// Returns the combined snapshot and the total count of matched parameters.
+#[must_use] 
 pub fn graph_to_snapshot(
     graph: &ResolvedGraph,
     live: &[LiveParam],
@@ -104,7 +107,7 @@ pub fn graph_to_snapshot(
                                 fx_id: fx_id.to_string(),
                                 param_index: lp.index,
                                 param_name: lp.name.clone(),
-                                value: sp.value().get() as f64,
+                                value: f64::from(sp.value().get()),
                             });
                         }
                     }
@@ -125,6 +128,7 @@ pub fn graph_to_snapshot(
 /// Returns an empty `Vec` when no blocks carry state data (the normal case
 /// for rig-based resolution). For `BlockSnapshot` targets pointing at catalog
 /// presets with `.bin` files, this returns one chunk per block.
+#[must_use] 
 pub fn graph_state_chunks(graph: &ResolvedGraph, fx_id: &str) -> Vec<DawStateChunk> {
     let mut chunks = Vec::new();
     for engine in &graph.engines {
@@ -153,6 +157,7 @@ pub fn graph_state_chunks(graph: &ResolvedGraph, fx_id: &str) -> Vec<DawStateChu
 /// match are left unchanged.
 ///
 /// Returns the updated block.
+#[must_use] 
 pub fn live_params_into_block(mut block: Block, live: &[LiveParam]) -> Block {
     let updates: Vec<(usize, f32)> = block
         .parameters()
@@ -173,6 +178,7 @@ pub fn live_params_into_block(mut block: Block, live: &[LiveParam]) -> Block {
 /// Find a parameter in a live snapshot by name (case-insensitive substring match).
 ///
 /// Returns the first matching `param_index`, or `None` if not found.
+#[must_use] 
 pub fn find_param_index(live: &[LiveParam], name: &str) -> Option<u32> {
     live.iter()
         .find(|p| param_name_matches(name, &p.name))

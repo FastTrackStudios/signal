@@ -23,7 +23,7 @@ enum CompDrag {
     /// Vertical drag on the threshold line.
     Threshold,
     /// Vertical drag on the transfer curve above the knee — tilts the slope
-    /// (ratio). Stores (start_y_graph, start_ratio).
+    /// (ratio). Stores (`start_y_graph`, `start_ratio`).
     Ratio(f32, f32),
 }
 
@@ -38,7 +38,7 @@ fn param(block: &LiveBlock, name: &str) -> Option<BlockParam> {
 }
 
 fn param_v(block: &LiveBlock, name: &str, dflt: f32) -> f32 {
-    param(block, name).map(|p| p.value).unwrap_or(dflt)
+    param(block, name).map_or(dflt, |p| p.value)
 }
 
 /// Soft-knee transfer function — same math as audio-gui's `compress_transfer`.
@@ -69,7 +69,7 @@ fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) 
     let ys: Vec<f64> = samples
         .iter()
         .map(|&s| {
-            let amp = s.clamp(0.0, 1.0) as f64;
+            let amp = f64::from(s.clamp(0.0, 1.0));
             if from_bottom {
                 h - amp * h
             } else {
@@ -108,7 +108,7 @@ fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) 
     d
 }
 
-/// dB (0 top of range … −RANGE_DB) → y within the waveform area.
+/// dB (0 top of range … −`RANGE_DB`) → y within the waveform area.
 fn db_to_y(db: f64, h: f64) -> f64 {
     ((-db) / RANGE_DB).clamp(0.0, 1.0) * h
 }
@@ -159,13 +159,13 @@ pub fn CompSurface(
     let gr_fill = smooth_path(&gr_scaled, W, H, false, true);
     let gr_edge = smooth_path(&gr_scaled, W, H, false, false);
 
-    let thresh_y = db_to_y(threshold as f64, H);
+    let thresh_y = db_to_y(f64::from(threshold), H);
 
     // Transfer curve overlay across the panel (yellow-green, Pro-C 3).
     let mut tc = String::new();
     for i in 0..=60 {
-        let input = -(RANGE_DB) + (i as f64 / 60.0) * RANGE_DB;
-        let output = compress_transfer(input as f32, threshold, ratio, knee) as f64;
+        let input = (f64::from(i) / 60.0).mul_add(RANGE_DB, -(RANGE_DB));
+        let output = f64::from(compress_transfer(input as f32, threshold, ratio, knee));
         let x = (input + RANGE_DB) / RANGE_DB * W;
         let y = db_to_y(output, H);
         tc.push_str(if i == 0 { "M " } else { "L " });
@@ -173,8 +173,8 @@ pub fn CompSurface(
     }
     let ball = {
         let level = in_db.clamp(-(RANGE_DB as f32), 0.0);
-        let out = compress_transfer(level, threshold, ratio, knee) as f64;
-        let x = (level as f64 + RANGE_DB) / RANGE_DB * W;
+        let out = f64::from(compress_transfer(level, threshold, ratio, knee));
+        let x = (f64::from(level) + RANGE_DB) / RANGE_DB * W;
         (x, db_to_y(out, H))
     };
 
@@ -233,7 +233,7 @@ pub fn CompSurface(
                             let Ok(rect) = el.get_client_rect().await else { return };
                             svg_rect.set(Some((rect.origin.y, rect.height(), rect.width())));
                             let y = (coords.y / rect.height()) as f32 * H as f32;
-                            let ty = db_to_y(thr as f64, H) as f32;
+                            let ty = db_to_y(f64::from(thr), H) as f32;
                             if (y - ty).abs() < 22.0 {
                                 dragging.set(Some(CompDrag::Threshold));
                             } else if y < ty {

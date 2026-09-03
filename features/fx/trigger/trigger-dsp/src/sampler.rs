@@ -28,7 +28,8 @@ pub struct Sample {
 }
 
 impl Sample {
-    pub fn new(data: Vec<[f64; 2]>, sample_rate: f64) -> Self {
+    #[must_use] 
+    pub const fn new(data: Vec<[f64; 2]>, sample_rate: f64) -> Self {
         Self {
             data,
             sample_rate,
@@ -38,6 +39,7 @@ impl Sample {
     }
 
     /// Create a mono sample from a single channel.
+    #[must_use] 
     pub fn from_mono(data: &[f64], sample_rate: f64) -> Self {
         Self {
             data: data.iter().map(|&s| [s, s]).collect(),
@@ -47,11 +49,13 @@ impl Sample {
         }
     }
 
-    pub fn len(&self) -> usize {
+    #[must_use] 
+    pub const fn len(&self) -> usize {
         self.data.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use] 
+    pub const fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
 }
@@ -69,7 +73,8 @@ pub struct VelocityLayer {
 }
 
 impl VelocityLayer {
-    pub fn new(min_velocity: f64, max_velocity: f64) -> Self {
+    #[must_use] 
+    pub const fn new(min_velocity: f64, max_velocity: f64) -> Self {
         Self {
             min_velocity,
             max_velocity,
@@ -100,7 +105,7 @@ impl VelocityLayer {
 }
 
 /// Mix mode for combining triggered samples with the original signal.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MixMode {
     /// Replace the original signal entirely with the triggered sample.
     Replace,
@@ -147,8 +152,8 @@ impl Voice {
             [0.0; 2]
         };
 
-        let left = (s0[0] + (s1[0] - s0[0]) * frac) * self.gain;
-        let right = (s0[1] + (s1[1] - s0[1]) * frac) * self.gain;
+        let left = (s1[0] - s0[0]).mul_add(frac, s0[0]) * self.gain;
+        let right = (s1[1] - s0[1]).mul_add(frac, s0[1]) * self.gain;
 
         self.position += self.rate;
 
@@ -160,7 +165,7 @@ impl Voice {
 ///
 /// Manages velocity layers, round-robin selection, and polyphonic playback.
 pub struct Sampler {
-    /// Velocity layers, sorted by min_velocity.
+    /// Velocity layers, sorted by `min_velocity`.
     pub layers: Vec<VelocityLayer>,
     /// Active playback voices.
     voices: Vec<Voice>,
@@ -175,6 +180,7 @@ pub struct Sampler {
 }
 
 impl Sampler {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             layers: Vec::new(),
@@ -186,7 +192,7 @@ impl Sampler {
         }
     }
 
-    pub fn set_sample_rate(&mut self, sample_rate: f64) {
+    pub const fn set_sample_rate(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
     }
 
@@ -214,31 +220,28 @@ impl Sampler {
         // Find matching layer
         let layer = self.layers.iter_mut().find(|l| l.matches(velocity));
 
-        let layer = match layer {
-            Some(l) => l,
-            None => {
-                // No matching layer — find nearest
-                if self.layers.is_empty() {
-                    return;
-                }
-                // Find layer with closest velocity range
-                let idx = self
-                    .layers
-                    .iter()
-                    .enumerate()
-                    .min_by(|(_, a), (_, b)| {
-                        let dist_a = (a.min_velocity - velocity)
-                            .abs()
-                            .min((a.max_velocity - velocity).abs());
-                        let dist_b = (b.min_velocity - velocity)
-                            .abs()
-                            .min((b.max_velocity - velocity).abs());
-                        dist_a.partial_cmp(&dist_b).unwrap()
-                    })
-                    .map(|(i, _)| i)
-                    .unwrap();
-                &mut self.layers[idx]
+        let layer = if let Some(l) = layer { l } else {
+            // No matching layer — find nearest
+            if self.layers.is_empty() {
+                return;
             }
+            // Find layer with closest velocity range
+            let idx = self
+                .layers
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| {
+                    let dist_a = (a.min_velocity - velocity)
+                        .abs()
+                        .min((a.max_velocity - velocity).abs());
+                    let dist_b = (b.min_velocity - velocity)
+                        .abs()
+                        .min((b.max_velocity - velocity).abs());
+                    dist_a.partial_cmp(&dist_b).unwrap()
+                })
+                .map(|(i, _)| i)
+                .unwrap();
+            &mut self.layers[idx]
         };
 
         let sample = match layer.next_sample() {
@@ -295,19 +298,21 @@ impl Sampler {
                 let wet = self.mix_amount;
                 let dry = 1.0 - wet;
                 (
-                    dry_left * dry + sample_l * wet,
-                    dry_right * dry + sample_r * wet,
+                    dry_left.mul_add(dry, sample_l * wet),
+                    dry_right.mul_add(dry, sample_r * wet),
                 )
             }
         }
     }
 
     /// Check if any voices are currently playing.
+    #[must_use] 
     pub fn is_playing(&self) -> bool {
         self.voices.iter().any(|v| v.active)
     }
 
     /// Get the number of active voices.
+    #[must_use] 
     pub fn active_voice_count(&self) -> usize {
         self.voices.iter().filter(|v| v.active).count()
     }

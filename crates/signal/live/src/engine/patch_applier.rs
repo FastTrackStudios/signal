@@ -20,8 +20,8 @@ pub enum PatchApplyError {
 impl std::fmt::Display for PatchApplyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PatchApplyError::NoTarget(msg) => write!(f, "no target: {msg}"),
-            PatchApplyError::DawError(msg) => write!(f, "DAW error: {msg}"),
+            Self::NoTarget(msg) => write!(f, "no target: {msg}"),
+            Self::DawError(msg) => write!(f, "DAW error: {msg}"),
         }
     }
 }

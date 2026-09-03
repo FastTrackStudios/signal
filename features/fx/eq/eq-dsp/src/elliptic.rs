@@ -19,12 +19,13 @@ const TOL: f64 = 1e-15;
 /// Complete elliptic integral of the first kind K(m), where m = k^2.
 ///
 /// Uses the arithmetic-geometric mean (AGM) method:
-///   a_0 = 1,  b_0 = sqrt(1 - m)
-///   a_n = (a_{n-1} + b_{n-1}) / 2
-///   b_n = sqrt(a_{n-1} * b_{n-1})
-///   K(m) = pi / (2 * a_final)
+///   `a_0` = 1,  `b_0` = `sqrt(1 - m)`
+///   `a_n` = (`a_{n-1}` + `b_{n-1}`) / 2
+///   `b_n` = `sqrt(a_{n-1} * b_{n-1})`
+///   `K(m)` = pi / (2 * `a_final`)
 ///
 /// Matches Pro-Q 4 function at 0x18011eb50.
+#[must_use]
 pub fn elliptic_k_complete(m: f64) -> f64 {
     if m >= 1.0 {
         return f64::INFINITY;
@@ -53,57 +54,60 @@ pub fn elliptic_k_complete(m: f64) -> f64 {
 
 /// Jacobi elliptic function sn(u, k) via AGM descent (Abramowitz & Stegun 16.4).
 ///
-/// 1. Compute AGM sequence: a_0=1, b_0=sqrt(1-m), c_0=k
-/// 2. Compute phi_N = 2^N * a_N * u, then descend:
-///    phi_{n-1} = (phi_n + arcsin(c_n / a_n * sin(phi_n))) / 2
-/// 3. sn(u,k) = sin(phi_0)
+/// 1. Compute AGM sequence: `a_0`=1, `b_0`=`sqrt(1-m)`, `c_0`=k
+/// 2. Compute `phi_N` = 2^N * `a_N` * u, then descend:
+///    `phi_{n-1}` = (`phi_n` + `arcsin(c_n / a_n * sin(phi_n))`) / 2
+/// 3. `sn(u,k)` = `sin(phi_0)`
 ///
 /// Matches Pro-Q 4 function at 0x18011e6f0.
-pub fn elliptic_sn(u: f64, k: f64) -> f64 {
-    if k.abs() < TOL {
-        return u.sin();
+#[must_use]
+pub fn elliptic_sn(u_input: f64, modulus: f64) -> f64 {
+    if modulus.abs() < TOL {
+        return u_input.sin();
     }
-    if (k.abs() - 1.0).abs() < TOL {
-        return u.tanh();
+    if (modulus.abs() - 1.0).abs() < TOL {
+        return u_input.tanh();
     }
 
-    let m = k * k;
+    let m_param = modulus * modulus;
 
     // Build AGM sequences.
     let mut a_seq = Vec::with_capacity(MAX_ITER);
     let mut c_seq = Vec::with_capacity(MAX_ITER);
 
-    let mut a = 1.0;
-    let mut b = (1.0 - m).sqrt();
+    let mut agm_a = 1.0;
+    let mut agm_b = (1.0 - m_param).sqrt();
 
-    a_seq.push(a);
-    c_seq.push(k.abs());
+    a_seq.push(agm_a);
+    c_seq.push(modulus.abs());
 
-    let mut n = 0;
+    let mut iter_count: usize = 0;
     for _ in 0..MAX_ITER {
-        let a_next = (a + b) * 0.5;
-        let c_next = (a - b) * 0.5;
-        let b_next = (a * b).sqrt();
-        n += 1;
+        let a_next = (agm_a + agm_b) * 0.5;
+        let c_next = (agm_a - agm_b) * 0.5;
+        let b_next = (agm_a * agm_b).sqrt();
+        iter_count = iter_count.saturating_add(1);
         a_seq.push(a_next);
         c_seq.push(c_next);
 
         if c_next.abs() < TOL {
-            a = a_next;
+            agm_a = a_next;
             break;
         }
 
-        a = a_next;
-        b = b_next;
+        agm_a = a_next;
+        agm_b = b_next;
     }
 
     // phi_N = 2^N * a_N * u
-    let two_pow_n = (1u64 << n) as f64;
-    let mut phi = two_pow_n * a * u;
+    let two_pow_n = 2.0_f64.powi(i32::try_from(iter_count).unwrap_or(31));
+    let mut phi = two_pow_n * agm_a * u_input;
 
     // Descend: phi_{n-1} = (phi_n + arcsin(c_n/a_n * sin(phi_n))) / 2
-    for i in (1..=n).rev() {
-        phi = (phi + (c_seq[i] / a_seq[i] * phi.sin()).asin()) * 0.5;
+    for i in (1..=iter_count).rev() {
+        let c_i = c_seq.get(i).copied().unwrap_or(0.0);
+        let a_i = a_seq.get(i).copied().unwrap_or(1.0);
+        phi = (phi + (c_i / a_i * phi.sin()).asin()) * 0.5;
     }
 
     phi.sin()
@@ -115,6 +119,7 @@ pub fn elliptic_sn(u: f64, k: f64) -> f64 {
 /// f'(u) = cn(u,k) * dn(u,k).
 ///
 /// Matches Pro-Q 4 function at 0x18011e900.
+#[must_use]
 pub fn elliptic_asn(y: f64, k: f64) -> f64 {
     if k.abs() < TOL {
         return y.asin();
@@ -156,48 +161,49 @@ pub fn elliptic_asn(y: f64, k: f64) -> f64 {
 /// one descent keeps them consistent with each other. Deriving `cn` as
 /// `sqrt(1 - sn^2)` instead loses its sign, which matters here — the elliptic
 /// prototype evaluates `cd` at arguments past `K` where `cn` is negative.
-pub fn elliptic_sncndn(u: f64, k: f64) -> (f64, f64, f64) {
-    if k.abs() < TOL {
-        return (u.sin(), u.cos(), 1.0);
+#[must_use]
+pub fn elliptic_sncndn(u_input: f64, modulus: f64) -> (f64, f64, f64) {
+    if modulus.abs() < TOL {
+        return (u_input.sin(), u_input.cos(), 1.0);
     }
-    if (k.abs() - 1.0).abs() < TOL {
-        let t = u.tanh();
-        let sech = 1.0 / u.cosh();
+    if (modulus.abs() - 1.0).abs() < TOL {
+        let t = u_input.tanh();
+        let sech = 1.0 / u_input.cosh();
         return (t, sech, sech);
     }
 
-    let m = k * k;
+    let m_param = modulus * modulus;
     let mut a_seq = Vec::with_capacity(MAX_ITER);
     let mut c_seq = Vec::with_capacity(MAX_ITER);
-    let mut a = 1.0;
-    let mut b = (1.0 - m).sqrt();
-    a_seq.push(a);
-    c_seq.push(k.abs());
+    let mut agm_a = 1.0;
+    let mut agm_b = (1.0 - m_param).sqrt();
+    a_seq.push(agm_a);
+    c_seq.push(modulus.abs());
 
-    let mut n = 0;
+    let mut iter_count = 0;
     for _ in 0..MAX_ITER {
-        let a_next = (a + b) * 0.5;
-        let c_next = (a - b) * 0.5;
-        let b_next = (a * b).sqrt();
-        n += 1;
+        let a_next = (agm_a + agm_b) * 0.5;
+        let c_next = (agm_a - agm_b) * 0.5;
+        let b_next = (agm_a * agm_b).sqrt();
+        iter_count += 1;
         a_seq.push(a_next);
         c_seq.push(c_next);
         if c_next.abs() < TOL {
-            a = a_next;
+            agm_a = a_next;
             break;
         }
-        a = a_next;
-        b = b_next;
+        agm_a = a_next;
+        agm_b = b_next;
     }
 
-    let mut phi = (1u64 << n) as f64 * a * u;
-    for i in (1..=n).rev() {
+    let mut phi = (1u64 << iter_count) as f64 * agm_a * u_input;
+    for i in (1..=iter_count).rev() {
         phi = (phi + (c_seq[i] / a_seq[i] * phi.sin()).asin()) * 0.5;
     }
     let sn = phi.sin();
     let cn = phi.cos();
     // dn is strictly positive for real u, so the square root is unambiguous.
-    let dn = (1.0 - m * sn * sn).max(0.0).sqrt();
+    let dn = (1.0 - m_param * sn * sn).max(0.0).sqrt();
     (sn, cn, dn)
 }
 
@@ -211,6 +217,7 @@ pub fn elliptic_sncndn(u: f64, k: f64) -> (f64, f64, f64) {
 /// `k1`, then `q = q1^(1/n)`, then `k` back out of `q` by the theta-series
 /// ratio. The series converge geometrically in `q`, which is tiny for any
 /// stopband worth having, so four terms are already at machine precision.
+#[must_use]
 pub fn ellipdeg(n: usize, k1: f64) -> f64 {
     let k1 = k1.clamp(1e-300, 1.0 - 1e-15);
     let big_k = elliptic_k_complete(k1 * k1);
@@ -250,7 +257,7 @@ mod tests {
     #[test]
     fn k_at_half() {
         // K(0.5) = 1.8540746773013719...
-        assert_approx(elliptic_k_complete(0.5), 1.854074677301372, 1e-12, "K(0.5)");
+        assert_approx(elliptic_k_complete(0.5), 1.854_074_677_301_372, 1e-12, "K(0.5)");
     }
 
     #[test]
@@ -269,7 +276,7 @@ mod tests {
         // K(0.99) = 3.695637362989874...
         assert_approx(
             elliptic_k_complete(0.99),
-            3.695637362989874,
+            3.695_637_362_989_874,
             1e-12,
             "K(0.99)",
         );
@@ -277,7 +284,7 @@ mod tests {
 
     #[test]
     fn k_approaches_infinity_near_one() {
-        let k = elliptic_k_complete(0.999999999);
+        let k = elliptic_k_complete(0.999_999_999);
         assert!(k > 10.0, "K near 1 should be large, got {k}");
     }
 

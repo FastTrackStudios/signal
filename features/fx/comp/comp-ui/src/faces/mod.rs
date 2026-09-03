@@ -27,6 +27,7 @@ use crate::profile_handle::handle_for;
 
 /// Profile ids in `comp_profiles::all_profiles()` order — which is the order
 /// the `profile` parameter's values are in.
+#[must_use] 
 pub fn profile_ids() -> Vec<&'static str> {
     comp_profiles::all_profiles()
         .iter()
@@ -35,14 +36,15 @@ pub fn profile_ids() -> Vec<&'static str> {
 }
 
 /// The profile id a `profile` param index selects.
+#[must_use] 
 pub fn profile_id_for_index(index: usize) -> &'static str {
     comp_profiles::all_profiles()
         .get(index)
-        .map(|p| p.id())
-        .unwrap_or("control")
+        .map_or("control", |p| p.id())
 }
 
 /// The profile a `profile` param index selects.
+#[must_use] 
 pub fn profile_for_index(index: usize) -> &'static (dyn Profile + Sync) {
     comp_profiles::all_profiles()
         .get(index)
@@ -51,6 +53,7 @@ pub fn profile_for_index(index: usize) -> &'static (dyn Profile + Sync) {
 }
 
 /// The rail badge for a profile — how the unit is named on its own panel.
+#[must_use] 
 pub fn profile_badge(profile_id: &str) -> &'static str {
     match profile_id {
         "control" => "MAIN",
@@ -73,6 +76,7 @@ pub fn profile_badge(profile_id: &str) -> &'static str {
 ///
 /// A family with more than one unit says so in its tooltip, because a button
 /// that changes on a second click is not discoverable otherwise.
+#[must_use] 
 pub fn rail_items(profile_index: usize) -> Vec<ShellItem> {
     let active_id = profile_id_for_index(profile_index);
     let active = comp_profiles::category_of(active_id).map(|(c, _)| c);
@@ -90,7 +94,7 @@ pub fn rail_items(profile_index: usize) -> Vec<ShellItem> {
             let names: Vec<&str> = category
                 .profiles
                 .iter()
-                .filter_map(|id| comp_profiles::profile_by_id(id).map(|p| p.name()))
+                .filter_map(|id| comp_profiles::profile_by_id(id).map(comp_profiles::Profile::name))
                 .collect();
             let label = if names.len() > 1 {
                 format!(
@@ -106,8 +110,7 @@ pub fn rail_items(profile_index: usize) -> Vec<ShellItem> {
             // nothing on the rail admitted that a family of three existed.
             let at = if is_active {
                 comp_profiles::category_of(active_id)
-                    .map(|(_, v)| v)
-                    .unwrap_or(0)
+                    .map_or(0, |(_, v)| v)
             } else {
                 0
             };
@@ -122,6 +125,7 @@ pub fn rail_items(profile_index: usize) -> Vec<ShellItem> {
 ///
 /// Clicking the family you are already on advances to the next unit inside it
 /// and wraps; clicking any other family lands on its first unit.
+#[must_use] 
 pub fn rail_click_target(profile_index: usize, clicked_category: usize) -> usize {
     let active_id = profile_id_for_index(profile_index);
     let Some(category) = comp_profiles::CATEGORIES.get(clicked_category) else {
@@ -143,7 +147,8 @@ pub fn rail_click_target(profile_index: usize, clicked_category: usize) -> usize
 /// height. A rack unit is 4:1 and wants none — given a tall window it just
 /// draws black above and below itself. So switching profile asks the host to
 /// resize, the same way the plugin asks on open.
-pub fn preferred_editor_size(_profile_index: usize) -> (u32, u32) {
+#[must_use] 
+pub const fn preferred_editor_size(_profile_index: usize) -> (u32, u32) {
     // Every face asks for the same box: the panel's 900x300 drawing plus the
     // rail, with a little air around it.
     //
@@ -157,6 +162,7 @@ pub fn preferred_editor_size(_profile_index: usize) -> (u32, u32) {
 
 /// The editor size for a profile *and* a chosen form: the form decides, except
 /// for Responsive, which defers to the face.
+#[must_use] 
 pub fn editor_size_for(profile_index: usize, form: fts_audio_ui::EditorForm) -> (u32, u32) {
     form.editor_size(
         crate::control_view::RAIL_W,
@@ -176,6 +182,7 @@ pub const SIDECAR_W: f64 = 560.0;
 /// panel's row is its design aspect at full width (the drawing's own
 /// proportions, rack ears to rack ears), the FTS surface's is the graph's
 /// standard height.
+#[must_use] 
 pub fn preferred_row_height(profile_index: usize, row_w: f64) -> f64 {
     let face_w = (row_w - crate::control_view::RAIL_W).max(1.0);
     match units::design_for(profile_id_for_index(profile_index)) {
@@ -187,7 +194,7 @@ pub fn preferred_row_height(profile_index: usize, row_w: f64) -> f64 {
             (design.h * scale).max(160.0)
         }
         // The FTS surface (graph) is flexible; give it its standard box.
-        None => crate::control_view::EDITOR_H as f64,
+        None => f64::from(crate::control_view::EDITOR_H),
     }
 }
 
@@ -222,7 +229,7 @@ pub fn stack_row_heights(
         })
         .collect();
     let total: f64 = heights.iter().sum();
-    let max_h = crate::control_view::max_editor_size().1 as f64;
+    let max_h = f64::from(crate::control_view::max_editor_size().1);
     if total > max_h {
         let k = max_h / total;
         for h in &mut heights {
@@ -254,7 +261,7 @@ pub fn stack_editor_size_rows(
     if rows.len() <= 1 && sidecar_mask == 0 {
         return (w, single_h);
     }
-    let (_, total) = stack_row_heights(params, rows, w as f64, sidecar_mask);
+    let (_, total) = stack_row_heights(params, rows, f64::from(w), sidecar_mask);
     (w, (total.ceil() as u32).max(single_h))
 }
 
@@ -314,6 +321,7 @@ impl FaceContext {
     /// the DSP does not yet: it draws and does not move. Which controls those
     /// are is pinned by `the_unwired_controls_are_the_ones_we_know_about`, so
     /// a typo still lands in the panic above rather than here.
+    #[must_use] 
     pub fn handle(&self, control_id: &str) -> ParamHandle {
         if control_id.is_empty() {
             return ParamHandle::inert("Not wired", 0.5);

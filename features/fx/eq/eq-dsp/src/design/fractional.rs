@@ -83,7 +83,7 @@ fn combine(a: [f64; 3], b: [f64; 3]) -> Coeffs {
         a[2] + b[2],
         a[2] * b[2],
         a[0] * b[0],
-        a[0] * b[1] + a[1] * b[0],
+        a[0].mul_add(b[1], a[1] * b[0]),
         a[1] * b[1],
     ]
 }
@@ -93,6 +93,7 @@ fn combine(a: [f64; 3], b: [f64; 3]) -> Coeffs {
 /// The cascade designs start at second order and returned a pass-through below
 /// it, so a 6 dB/oct low or high cut did nothing at all. 28 bands in the Pro-Q
 /// factory library ask for one.
+#[must_use]
 pub fn first_order_cut(freq_hz: f64, sample_rate: f64, high_pass: bool) -> Coeffs {
     let nyquist = sample_rate * 0.5;
     let hz = freq_hz.clamp(1.0, nyquist * 0.999);
@@ -120,6 +121,7 @@ pub fn first_order_cut(freq_hz: f64, sample_rate: f64, high_pass: bool) -> Coeff
 ///
 /// The gain is normalised to unity in the pass band, so adding this to an
 /// integer-order design changes its slope and not its level.
+#[must_use]
 pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) -> Vec<Coeffs> {
     let f = fraction.clamp(0.0, 1.0);
     if f <= 1.0e-6 {
@@ -136,23 +138,23 @@ pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) 
     let ceiling = sample_rate * 0.45;
     // And below the band there is nothing left to attenuate; a cell under this
     // is pinned by `first_order`'s own clamp into a degenerate pass-through.
-    const FLOOR_HZ: f64 = 5.0;
+    let floor_hz: f64 = 5.0;
     let mut first_orders = Vec::with_capacity(CELLS);
     for cell in 0..CELLS {
         let (zero, pole) = if high_pass {
             // March down from the corner. Attenuate below, unity above: the
             // zero sits under the pole and the top asymptote stays at 1.
-            let upper = freq_hz * 2.0f64.powf(-(cell as f64) * CELL_OCTAVES);
-            let lower = upper * 2.0f64.powf(-separation);
-            if lower <= FLOOR_HZ {
+            let upper = freq_hz * (-(f64::from(i32::try_from(cell).unwrap_or(0))) * CELL_OCTAVES).exp2();
+            let lower = upper * (-separation).exp2();
+            if lower <= floor_hz {
                 break;
             }
             (lower, upper)
         } else {
             // March up from the corner. Unity below, attenuate above: the
             // pole sits under the zero and the DC asymptote is normalised.
-            let lower = freq_hz * 2.0f64.powf(cell as f64 * CELL_OCTAVES);
-            let upper = lower * 2.0f64.powf(separation);
+            let lower = freq_hz * (f64::from(i32::try_from(cell).unwrap_or(0)) * CELL_OCTAVES).exp2();
+            let upper = lower * separation.exp2();
             // BOTH ends have to fit. Keeping a cell whose zero lands past
             // Nyquist does not give a gentler slope — the pre-warp pins the
             // zero at the edge and the pole/zero ratio comes out far larger

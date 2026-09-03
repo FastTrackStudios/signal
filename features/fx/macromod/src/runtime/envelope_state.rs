@@ -1,7 +1,7 @@
 //! Envelope runtime state machine.
 //!
 //! Stage progression: Idle → Attack → Hold → Decay → Sustain → Release → Idle.
-//! Supports three modes: Sustain (standard ADSR), OneShot, and Loop.
+//! Supports three modes: Sustain (standard ADSR), `OneShot`, and Loop.
 
 use crate::easing::EasingCurve;
 use crate::sources::envelope::{EnvelopeConfig, EnvelopeMode};
@@ -38,7 +38,8 @@ pub struct EnvelopeState {
 }
 
 impl EnvelopeState {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             stage: EnvelopeStage::Idle,
             stage_time: 0.0,
@@ -49,22 +50,25 @@ impl EnvelopeState {
     }
 
     /// Current stage.
-    pub fn stage(&self) -> EnvelopeStage {
+    #[must_use] 
+    pub const fn stage(&self) -> EnvelopeStage {
         self.stage
     }
 
     /// Current envelope level [0.0, 1.0].
-    pub fn level(&self) -> f64 {
+    #[must_use] 
+    pub const fn level(&self) -> f64 {
         self.level
     }
 
     /// Whether the envelope is producing a non-zero output.
+    #[must_use] 
     pub fn is_active(&self) -> bool {
         self.stage != EnvelopeStage::Idle
     }
 
     /// Trigger the envelope (note-on / gate open).
-    pub fn gate_on(&mut self) {
+    pub const fn gate_on(&mut self) {
         self.gate_held = true;
         self.stage = EnvelopeStage::Attack;
         self.stage_time = 0.0;
@@ -96,7 +100,7 @@ impl EnvelopeState {
             EnvelopeStage::Idle => {}
 
             EnvelopeStage::Attack => {
-                let duration = config.attack_s as f64;
+                let duration = f64::from(config.attack_s);
                 if duration <= 0.0 || self.stage_time >= duration {
                     self.level = 1.0;
                     self.advance_from_attack(config);
@@ -107,7 +111,7 @@ impl EnvelopeState {
             }
 
             EnvelopeStage::Hold => {
-                let duration = config.hold_s as f64;
+                let duration = f64::from(config.hold_s);
                 if duration <= 0.0 || self.stage_time >= duration {
                     self.level = 1.0;
                     self.enter_stage(EnvelopeStage::Decay);
@@ -116,8 +120,8 @@ impl EnvelopeState {
             }
 
             EnvelopeStage::Decay => {
-                let duration = config.decay_s as f64;
-                let sustain = config.sustain as f64;
+                let duration = f64::from(config.decay_s);
+                let sustain = f64::from(config.sustain);
                 if duration <= 0.0 || self.stage_time >= duration {
                     self.level = sustain;
                     self.advance_from_decay(config);
@@ -125,17 +129,17 @@ impl EnvelopeState {
                     let t = self.stage_time / duration;
                     let eased = apply_curve(t, config.decay_curve);
                     // Decay goes from 1.0 down to sustain level
-                    self.level = 1.0 - eased * (1.0 - sustain);
+                    self.level = eased.mul_add(-(1.0 - sustain), 1.0);
                 }
             }
 
             EnvelopeStage::Sustain => {
                 // Hold at sustain level until gate_off
-                self.level = config.sustain as f64;
+                self.level = f64::from(config.sustain);
             }
 
             EnvelopeStage::Release => {
-                let duration = config.release_s as f64;
+                let duration = f64::from(config.release_s);
                 if duration <= 0.0 || self.stage_time >= duration {
                     self.level = 0.0;
                     self.stage = EnvelopeStage::Idle;
@@ -152,7 +156,7 @@ impl EnvelopeState {
         self.level
     }
 
-    /// Transition from Attack completion based on hold_s.
+    /// Transition from Attack completion based on `hold_s`.
     fn advance_from_attack(&mut self, config: &EnvelopeConfig) {
         if config.hold_s > 0.0 {
             self.enter_stage(EnvelopeStage::Hold);
@@ -162,7 +166,7 @@ impl EnvelopeState {
     }
 
     /// Transition from Decay completion based on mode.
-    fn advance_from_decay(&mut self, config: &EnvelopeConfig) {
+    const fn advance_from_decay(&mut self, config: &EnvelopeConfig) {
         match config.mode {
             EnvelopeMode::Sustain => {
                 self.enter_stage(EnvelopeStage::Sustain);
@@ -185,7 +189,7 @@ impl EnvelopeState {
         }
     }
 
-    fn enter_stage(&mut self, stage: EnvelopeStage) {
+    const fn enter_stage(&mut self, stage: EnvelopeStage) {
         self.stage = stage;
         self.stage_time = 0.0;
     }

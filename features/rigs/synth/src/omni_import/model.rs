@@ -1,4 +1,4 @@
-//! The parsed **patch model** (`OmniPatch` / `OmniLayer`) and the AmberPart
+//! The parsed **patch model** (`OmniPatch` / `OmniLayer`) and the `AmberPart`
 //! element walk that fills it.
 
 use signal_proto::block::BlockType;
@@ -64,7 +64,7 @@ pub struct OmniLayer {
     pub harmonia: Vec<(f32, f32, f32, f32)>,
     /// Waveshaper when engaged: (drive, crush, reduce, mix).
     pub shaper: Option<(f32, f32, f32, f32)>,
-    /// Dual Frequency Shifter when engaged: (hz_a, mix_a, hz_b, mix_b, parallel).
+    /// Dual Frequency Shifter when engaged: (`hz_a`, `mix_a`, `hz_b`, `mix_b`, parallel).
     pub dfs: Option<(f32, f32, f32, f32, bool)>,
     /// Layer FX rack: the four `EFFMODULE Type=` names ("No Effect" ⇒ empty).
     pub fx: Vec<String>,
@@ -106,7 +106,7 @@ fn rack_types(rack: &XmlNode) -> Vec<String> {
     // silent). Empty/"No Effect" slots are dropped downstream by name.
     rack.children_tagged("EFFMODULE")
         .map(|m| {
-            let active = m.attr("Active").map(super::omni_num).unwrap_or(0.0) > 0.5;
+            let active = m.attr("Active").map_or(0.0, super::omni_num) > 0.5;
             if active {
                 m.attr("Type").unwrap_or("").to_string()
             } else {
@@ -127,7 +127,7 @@ fn rack_types(rack: &XmlNode) -> Vec<String> {
 /// Retroplex, amp/console sims, backward FX) stay placeholders until they have
 /// DSP. Parameter fidelity is a later pass — this only picks the block type, so
 /// units realize with sensible native defaults.
-pub(crate) fn classify_effect(name: &str) -> Option<BlockType> {
+pub fn classify_effect(name: &str) -> Option<BlockType> {
     let k = name.to_ascii_lowercase();
     let has = |subs: &[&str]| subs.iter().any(|s| k.contains(s));
     Some(if has(&["echo", "delay"]) {
@@ -230,7 +230,7 @@ const TYPE1_TABLE: [(&str, u32); 50] = [
 
 /// Look a `type1` value up in the measured table. `None` for "allpass"
 /// (gain/color) slots — callers leave the filter transparent.
-pub(crate) fn classify_type1(v: f32) -> Option<(&'static str, u32)> {
+pub fn classify_type1(v: f32) -> Option<(&'static str, u32)> {
     let slot = (v * 50.0).round() as usize;
     let (mode, poles) = *TYPE1_TABLE.get(slot.checked_sub(1)?)?;
     (mode != "allpass").then_some((mode, poles))
@@ -238,8 +238,9 @@ pub(crate) fn classify_type1(v: f32) -> Option<(&'static str, u32)> {
 
 /// Filter cutoff: normalized → Hz, measured through the real engine
 /// (knee sweep with keytracking off): **cutoff ≈ 15 Hz × 2^(9.55·v)**.
+#[must_use] 
 pub fn omni_cutoff_hz(v: f32) -> f32 {
-    15.0 * 2f32.powf(9.55 * v.clamp(0.0, 1.0))
+    15.0 * (9.55 * v.clamp(0.0, 1.0)).exp2()
 }
 
 /// Coarse filter classification from the factory preset name (`NameStr`) —
@@ -249,6 +250,7 @@ pub fn omni_cutoff_hz(v: f32) -> f32 {
 /// Classification including the engine character: the saturating families
 /// (Juicy / Moogie / OB / Jupiter / FATBOY / Sauce / Beefy / Warm / Power /
 /// French / Brit) map onto the ladder engine.
+#[must_use] 
 pub fn classify_filter_full(name: &str) -> (&'static str, u32, &'static str) {
     let (mode, poles) = classify_filter_inner(name);
     let k = name.to_ascii_lowercase();
@@ -284,7 +286,7 @@ fn classify_filter_inner(name: &str) -> (&'static str, u32) {
             let digits: String = k[..pos]
                 .chars()
                 .rev()
-                .take_while(|c| c.is_ascii_digit())
+                .take_while(char::is_ascii_digit)
                 .collect::<Vec<_>>()
                 .into_iter()
                 .rev()
@@ -306,7 +308,7 @@ fn classify_filter_inner(name: &str) -> (&'static str, u32) {
 /// power fit through those points gives `t = 20 · v^3.32` (exponent
 /// `ln(0.1)/ln(0.5)`), i.e. 0→0 s, 0.5→2 s, 1.0→20 s. Sustain is a level, not
 /// a time, so it never passes through here.
-pub(crate) fn env_seconds(v: f32) -> f32 {
+pub fn env_seconds(v: f32) -> f32 {
     // ln(0.1)/ln(0.5) == log2(10) — the same exponent either way.
     20.0 * v.clamp(0.0, 1.0).powf(std::f32::consts::LOG2_10)
 }
@@ -373,7 +375,7 @@ pub fn parse_patch(xml: &str) -> Result<OmniPatch, String> {
 
 /// Parse one part from any node containing a `SYNTHENG` (a patch document
 /// root, or one `SynthEngine` inside a Multi).
-pub(crate) fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
+pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
     let engine = root
         .find("SYNTHENG")
         .ok_or("no SYNTHENG element (not an Omnisphere patch?)")?;
@@ -477,7 +479,7 @@ pub(crate) fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
                         if act && level > 0.0 {
                             // smi normalized 0..1 → ±24 semitones; pan 0..1 → ±1.
                             let smi = (h.num(&format!("smi{i}")).unwrap_or(0.5) - 0.5) * 48.0;
-                            let pan = h.num(&format!("pan{i}")).unwrap_or(0.5) * 2.0 - 1.0;
+                            let pan = h.num(&format!("pan{i}")).unwrap_or(0.5).mul_add(2.0, -1.0);
                             let shape = h.num(&format!("wfm{i}")).unwrap_or(0.0).clamp(0.0, 1.0);
                             layer
                                 .harmonia

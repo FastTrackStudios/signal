@@ -31,7 +31,7 @@ fn write_sine_wav(path: &Path, frames: usize, freq: f64, amp: f32) {
     };
     let mut w = hound::WavWriter::create(path, spec).expect("create wav");
     for i in 0..frames {
-        let t = i as f64 / SR as f64;
+        let t = i as f64 / f64::from(SR);
         let s = (t * freq * std::f64::consts::TAU).sin() as f32 * amp;
         w.write_sample(s).expect("write sample");
     }
@@ -51,7 +51,7 @@ fn build_fixture(dir: &Path) -> PathBuf {
         for dirn in ["up", "down"] {
             let f = format!("leg_{dirn}_{rr}.wav");
             // Distinct frequency per RR slot so slot choice is audible.
-            write_sine_wav(&dir.join(&f), SR as usize, 300.0 + 40.0 * rr as f64, 0.4);
+            write_sine_wav(&dir.join(&f), SR as usize, 40.0f64.mul_add(f64::from(rr), 300.0), 0.4);
             zones.push_str(&format!(
                 "    {{ file {f}, key_min 0, key_max 127, root_key 64, articulation Leg, direction {dirn}, rr_index {rr} }}\n"
             ));
@@ -60,7 +60,7 @@ fn build_fixture(dir: &Path) -> PathBuf {
         write_sine_wav(
             &dir.join(&f),
             SR as usize / 4,
-            500.0 + 60.0 * rr as f64,
+            60.0f64.mul_add(f64::from(rr), 500.0),
             0.4,
         );
         zones.push_str(&format!(
@@ -123,11 +123,11 @@ mod tempdir {
     }
 }
 
-fn note(start_qn: f64, end_qn: f64, pitch: u8, vel: u8) -> DocNote {
+const fn note(start_qn: f64, end_qn: f64, pitch: u8, vel: u8) -> DocNote {
     note_ch(0, start_qn, end_qn, pitch, vel)
 }
 
-fn note_ch(chan: u8, start_qn: f64, end_qn: f64, pitch: u8, vel: u8) -> DocNote {
+const fn note_ch(chan: u8, start_qn: f64, end_qn: f64, pitch: u8, vel: u8) -> DocNote {
     DocNote {
         start_qn,
         end_qn,
@@ -243,7 +243,7 @@ fn divisi_document_prefires_every_line_with_zero_reactive_fallbacks() {
     assert_eq!(t0.to_note, 65);
     assert_eq!(t0.frame + SLOW_DELAY_FRAMES, 48_000);
     assert_eq!(t1.to_note, 53);
-    assert_eq!(t1.frame + 100 * SR as u64 / 1000, 60_000);
+    assert_eq!(t1.frame + 100 * u64::from(SR) / 1000, 60_000);
 
     // Determinism holds for multi-line documents too.
     let (rig2, _g2) = fixture_rig("divisi-b");
@@ -434,7 +434,7 @@ fn class_bus_split_sums_to_main_and_isolates_shorts() {
     // and none in `longs`; the legato region (first 4 s) is the reverse.
     let stac_start = 2 * (10 * SR as usize - 60 * SR as usize / 1000); // interleaved index
     let legato_end = 2 * 4 * SR as usize;
-    let energy = |buf: &[f32]| -> f64 { buf.iter().map(|s| (*s as f64) * (*s as f64)).sum() };
+    let energy = |buf: &[f32]| -> f64 { buf.iter().map(|s| f64::from(*s) * f64::from(*s)).sum() };
     assert!(
         energy(&shorts[stac_start..]) > 0.0,
         "staccato energy in the Shorts bus"
@@ -543,7 +543,7 @@ fn auto_divisi_counterpoint_is_deterministic_from_mid_piece() {
         notes,
         ..Default::default()
     };
-    let phrase2_frame: u64 = 16 * SR as u64 / 2; // QN 16 at 120 BPM
+    let phrase2_frame: u64 = 16 * u64::from(SR) / 2; // QN 16 at 120 BPM
 
     let (rig_full, _gf) = fixture_rig("autodiv-full");
     let sched = annotate(&doc, &rig_full.instrument_spec("fixture").unwrap(), SR);
@@ -599,7 +599,7 @@ fn strict_live_uses_low_latency_tables_and_lookahead_uses_expressive() {
     // Live default (PlayMode::StrictLive) must take the low_latency value —
     // no exceptions — while the document path keeps the expressive lead.
     let block: usize = 64;
-    let fast_frames: u64 = 100 * SR as u64 / 1000;
+    let fast_frames: u64 = 100 * u64::from(SR) / 1000;
     let tick: u64 = 48_000;
 
     let (live, _g) = fixture_rig("strict-live");

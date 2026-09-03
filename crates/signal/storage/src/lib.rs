@@ -1,4 +1,4 @@
-//! Signal storage layer -- SQLite persistence for the signal domain, built on SeaORM.
+//! Signal storage layer -- `SQLite` persistence for the signal domain, built on `SeaORM`.
 //!
 //! Provides repository traits and their live implementations for every signal
 //! entity (blocks, modules, layers, engines, rigs, profiles, songs, setlists,

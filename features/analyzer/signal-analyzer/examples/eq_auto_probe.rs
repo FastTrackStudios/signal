@@ -38,7 +38,7 @@ fn num(name: &str, d: f64) -> f64 {
 }
 
 fn proq_q(q: f64) -> f32 {
-    ((q / 0.025).ln() / (40.0f64 / 0.025).ln()) as f32
+    (q / 0.025).log(40.0f64 / 0.025) as f32
 }
 
 /// Power at `hz`, via Goertzel.
@@ -47,11 +47,11 @@ fn power_at(buf: &[f32], hz: f64) -> f64 {
     let coeff = 2.0 * w.cos();
     let (mut s1, mut s2) = (0.0f64, 0.0f64);
     for &x in buf {
-        let s0 = x as f64 + coeff * s1 - s2;
+        let s0 = f64::from(x) + coeff * s1 - s2;
         s2 = s1;
         s1 = s0;
     }
-    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
 }
 
 /// Noise at `rms`, plus any context partials.
@@ -108,7 +108,7 @@ fn set_native(eq: &mut NativeEq, idx: usize, b: Band) {
     let shape = match b.shape as i32 {
         2 => 3.0,
         3 => 2.0,
-        other => other as f64,
+        other => f64::from(other),
     };
     for (name, v) in [
         ("used", 1.0),
@@ -214,7 +214,7 @@ fn measure(
 /// to be made explicit before anything is read off it.
 // Not called by the probe as it currently runs, but it documents how the
 // analyser's history has to be primed before a reading means anything.
-#[allow(dead_code)]
+#[expect(dead_code)]
 fn settle(plugin: &mut HostedPlugin, ours: &mut NativeEq, input: &[f32], seconds: f64) {
     let want = (SR * seconds) as usize;
     let mut done = 0;
@@ -233,12 +233,9 @@ fn main() {
     };
     let rms = 10.0f64.powf(num("--level", -18.8) / 20.0);
 
-    let mut plugin = match HostedPlugin::load(&path) {
-        Ok(Some(p)) => p,
-        _ => {
-            eprintln!("{path}: could not load");
-            std::process::exit(1);
-        }
+    let mut plugin = if let Ok(Some(p)) = HostedPlugin::load(&path) { p } else {
+        eprintln!("{path}: could not load");
+        std::process::exit(1);
     };
     plugin.prepare(SR, BLOCK as u32).expect("prepare");
 
@@ -308,8 +305,7 @@ fn main() {
                 ours.prepare(SR, BLOCK as u32).expect("prepare");
 
                 println!(
-                    "  range {:+.1} dB, noise at {:.1} dBFS RMS  (0 dB = fully engaged)",
-                    range, level_db
+                    "  range {range:+.1} dB, noise at {level_db:.1} dBFS RMS  (0 dB = fully engaged)"
                 );
                 println!(
                     "  {:<10} {:>9} {:>9} {:>9}",

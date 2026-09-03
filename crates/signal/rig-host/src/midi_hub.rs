@@ -132,7 +132,7 @@ impl MidiHub {
         sink: impl Fn(TimedEvent) + Send + Sync + 'static,
     ) -> Subscription {
         let id = {
-            let mut n = self.next_id.lock().unwrap_or_else(|e| e.into_inner());
+            let mut n = self.next_id.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             *n += 1;
             *n
         };
@@ -154,9 +154,9 @@ impl MidiHub {
     pub fn ports(&self) -> Vec<String> {
         self.input
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .as_ref()
-            .map(|i| i.ports())
+            .map(midicore::pipewire::MidiInput::ports)
             .unwrap_or_default()
     }
 
@@ -179,26 +179,23 @@ impl MidiHub {
             Err(_) => return,
         };
 
-        let mut input = self.input.lock().unwrap_or_else(|e| e.into_inner());
-        match input.as_ref() {
-            Some(existing) => existing.set_selectors(selectors),
-            None => {
-                if selectors.is_empty() {
-                    return; // Nothing to listen for yet.
+        let mut input = self.input.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(existing) = input.as_ref() { existing.set_selectors(selectors) } else {
+            if selectors.is_empty() {
+                return; // Nothing to listen for yet.
+            }
+            let started = std::time::Instant::now();
+            match MidiInput::open(PortSelector::All, self.make_sink()) {
+                Ok(new) => {
+                    new.set_selectors(selectors);
+                    tracing::info!(
+                        midi.node = midicore::pipewire::DEFAULT_NODE_NAME,
+                        midi.elapsed_ms = started.elapsed().as_millis(),
+                        "midi hub: opened"
+                    );
+                    *input = Some(new);
                 }
-                let started = std::time::Instant::now();
-                match MidiInput::open(PortSelector::All, self.make_sink()) {
-                    Ok(new) => {
-                        new.set_selectors(selectors);
-                        tracing::info!(
-                            midi.node = midicore::pipewire::DEFAULT_NODE_NAME,
-                            midi.elapsed_ms = started.elapsed().as_millis(),
-                            "midi hub: opened"
-                        );
-                        *input = Some(new);
-                    }
-                    Err(e) => tracing::error!("midi hub: open failed: {e}"),
-                }
+                Err(e) => tracing::error!("midi hub: open failed: {e}"),
             }
         }
     }

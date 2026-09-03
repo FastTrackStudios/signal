@@ -204,6 +204,7 @@ pub static DIGITAL: SatDesign = SatDesign {
     knobs: DIGITAL_KNOBS,
 };
 
+#[must_use] 
 pub fn design_for(profile_id: &str) -> &'static SatDesign {
     match saturate_profiles::category_of(profile_id)
         .map(|(c, _)| saturate_profiles::CATEGORIES[c].id)
@@ -216,14 +217,16 @@ pub fn design_for(profile_id: &str) -> &'static SatDesign {
     }
 }
 
+#[must_use] 
 pub fn variant_lift(profile_id: &str) -> f64 {
     match saturate_profiles::category_of(profile_id) {
-        Some((_, index)) => 1.0 + index as f64 * 0.25,
+        Some((_, index)) => (index as f64).mul_add(0.25, 1.0),
         None => 1.0,
     }
 }
 
 /// What this profile's circuit does with `character_a` / `character_b`.
+#[must_use] 
 pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
     match profile_id {
         "triode" => ("Heat", "Grid"),
@@ -260,8 +263,7 @@ pub fn SatFace(
     let value = |name: &str, fallback: f32| {
         handles
             .get(name)
-            .map(|h| h.normalized())
-            .unwrap_or(fallback)
+            .map_or(fallback, fts_audio_ui::ParamHandle::normalized)
     };
     // The curve is drawn from what actually shapes it — the same struct the
     // plugin hands to `saturate_profiles::apply` on the audio thread.
@@ -307,8 +309,7 @@ pub fn SatFace(
                 text: saturate_profiles::CATEGORIES
                     .iter()
                     .find(|c| c.profiles.contains(&profile.id))
-                    .map(|c| c.label)
-                    .unwrap_or("Saturate")
+                    .map_or("Saturate", |c| c.label)
                     .to_string(),
                 size: 8.0, color: design.dim_ink.to_string(),
             }
@@ -329,7 +330,7 @@ pub fn SatFace(
                         }
                     }
                     Silkscreen {
-                        scale, x: spec.x, y: spec.y + spec.d * 0.92 + 10.0, width: 120.0,
+                        scale, x: spec.x, y: spec.d.mul_add(0.92, spec.y) + 10.0, width: 120.0,
                         text: match spec.param {
                             "character_a" => character_legends(&profile_id).0.to_string(),
                             "character_b" => character_legends(&profile_id).1.to_string(),
@@ -372,10 +373,10 @@ fn CurveView(
     let (w, h) = (620.0, 150.0);
     let (cx, cy) = (w / 2.0, h / 2.0);
     let half = 62.0;
-    let drive = controls.drive as f64;
-    let mix = controls.mix as f64;
-    let glow = (0.35 + drive * 0.5).min(0.95) * lift.min(1.5);
-    let body = accent.clone();
+    let drive = f64::from(controls.drive);
+    let mix = f64::from(controls.mix);
+    let glow = drive.mul_add(0.5, 0.35).min(0.95) * lift.min(1.5);
+    let body = accent;
 
     let profile =
         saturate_profiles::profile_by_id(&profile_id).unwrap_or(&saturate_profiles::PROFILES[0]);
@@ -397,10 +398,10 @@ fn CurveView(
     let mut path = String::new();
     let samples = 200;
     for i in 0..=samples {
-        let x = -1.0 + 2.0 * i as f64 / samples as f64;
+        let x = -1.0 + 2.0 * f64::from(i) / f64::from(samples);
         let shaped = pre.transfer(x as f32) * makeup;
-        let y = (quantiser.process(0, shaped) as f64).clamp(-1.0, 1.0);
-        let (px, py) = (cx + x * half * 2.0, cy - y * half);
+        let y = f64::from(quantiser.process(0, shaped)).clamp(-1.0, 1.0);
+        let (px, py) = ((x * half).mul_add(2.0, cx), cy - y * half);
         path.push_str(&format!(
             "{}{:.1} {:.1}",
             if i == 0 { "M " } else { " L " },
@@ -410,7 +411,7 @@ fn CurveView(
     }
     // The corner markers on the solid-state panel sit where the curve gives
     // up, which is the drive it takes to reach the rail.
-    let gain = pre.drive.max(1.0) as f64;
+    let gain = f64::from(pre.drive.max(1.0));
 
     rsx! {
         svg {
@@ -535,7 +536,7 @@ mod tests {
     fn every_legend_fits_on_the_panel() {
         for design in ALL {
             for spec in design.knobs {
-                let y = spec.y + spec.d * 0.92 + 10.0;
+                let y = spec.d.mul_add(0.92, spec.y) + 10.0;
                 assert!(
                     y + 6.0 <= H,
                     "{}'s {} legend falls off",

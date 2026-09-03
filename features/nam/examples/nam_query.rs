@@ -1,5 +1,5 @@
 //! Query a built NAM space (#77 M5).
-//!   cargo run --release -p signal-nam --example nam_query -- <nam-root> <substr> [k]
+//!   cargo run --release -p signal-nam --example `nam_query` -- <nam-root> <substr> [k]
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);

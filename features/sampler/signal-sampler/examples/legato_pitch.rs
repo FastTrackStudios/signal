@@ -1,5 +1,5 @@
 //! Detect the start vs end pitch of a CSS legato sample via FFT, to settle
-//! whether "up_A4" means A4→(up) [source-labeled] or (up)→A4 [dest-labeled].
+//! whether "`up_A4`" means A4→(up) [source-labeled] or (up)→A4 [dest-labeled].
 //!
 //! ```text
 //! cargo run --release -p signal-sampler --example legato_pitch -- "<path to ff_up_A4_1.wav>"
@@ -43,11 +43,11 @@ fn read_wav(path: &str) -> (Vec<f32>, u32) {
             let o = (f * ch + c) * by;
             let s = match (format, bits) {
                 (3, 32) => f32::from_le_bytes([data[o], data[o + 1], data[o + 2], data[o + 3]]),
-                (1, 16) => i16::from_le_bytes([data[o], data[o + 1]]) as f32 / 32768.0,
+                (1, 16) => f32::from(i16::from_le_bytes([data[o], data[o + 1]])) / 32768.0,
                 (1, 24) => {
-                    let v = (data[o] as i32)
-                        | ((data[o + 1] as i32) << 8)
-                        | ((data[o + 2] as i32) << 16);
+                    let v = i32::from(data[o])
+                        | (i32::from(data[o + 1]) << 8)
+                        | (i32::from(data[o + 2]) << 16);
                     let v = if v & 0x80_0000 != 0 {
                         v | !0xFF_FFFF
                     } else {
@@ -93,14 +93,14 @@ fn fft(re: &mut [f32], im: &mut [f32]) {
             for k in 0..len / 2 {
                 let a = i + k;
                 let b = i + k + len / 2;
-                let tr = cr * re[b] - ci * im[b];
-                let ti = cr * im[b] + ci * re[b];
+                let tr = cr.mul_add(re[b], -(ci * im[b]));
+                let ti = cr.mul_add(im[b], ci * re[b]);
                 re[b] = re[a] - tr;
                 im[b] = im[a] - ti;
                 re[a] += tr;
                 im[a] += ti;
-                let ncr = cr * wr - ci * wi;
-                ci = cr * wi + ci * wr;
+                let ncr = cr.mul_add(wr, -(ci * wi));
+                ci = cr.mul_add(wi, ci * wr);
                 cr = ncr;
             }
             i += len;
@@ -113,7 +113,7 @@ fn note_name(hz: f32) -> String {
     if hz <= 0.0 {
         return "?".into();
     }
-    let midi = (69.0 + 12.0 * (hz / 440.0).log2()).round() as i32;
+    let midi = 12.0f32.mul_add((hz / 440.0).log2(), 69.0).round() as i32;
     const N: [&str; 12] = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
     ];

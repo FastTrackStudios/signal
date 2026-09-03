@@ -356,8 +356,8 @@ pub fn NodeGraphView(props: NodeGraphViewProps) -> Element {
                 let local_y = evt.client_coordinates().y - viewport_top();
                 let canvas_x = (local_x - pan_x()) / old_zoom;
                 let canvas_y = (local_y - pan_y()) / old_zoom;
-                pan_x.set(local_x - canvas_x * new_zoom);
-                pan_y.set(local_y - canvas_y * new_zoom);
+                pan_x.set(canvas_x.mul_add(-new_zoom, local_x));
+                pan_y.set(canvas_y.mul_add(-new_zoom, local_y));
                 zoom.set(new_zoom);
             },
 
@@ -374,7 +374,7 @@ pub fn NodeGraphView(props: NodeGraphViewProps) -> Element {
                             title: "Collapse all modules",
                             onclick: move |_| {
                                 let mut g = graph.write();
-                                for m in g.modules.iter_mut() {
+                                for m in &mut g.modules {
                                     m.collapsed = true;
                                 }
                                 drop(g);
@@ -389,7 +389,7 @@ pub fn NodeGraphView(props: NodeGraphViewProps) -> Element {
                             title: "Expand all modules",
                             onclick: move |_| {
                                 let mut g = graph.write();
-                                for m in g.modules.iter_mut() {
+                                for m in &mut g.modules {
                                     m.collapsed = false;
                                 }
                                 drop(g);
@@ -519,7 +519,7 @@ pub fn NodeGraphView(props: NodeGraphViewProps) -> Element {
                                 }
                             },
                             on_port_hover_end: {
-                                move |_: ()| {
+                                move |(): ()| {
                                     hovered_port.set(None);
                                 }
                             },
@@ -580,7 +580,7 @@ pub fn NodeGraphView(props: NodeGraphViewProps) -> Element {
                                 }
                             },
                             on_port_hover_end: {
-                                move |_: ()| {
+                                move |(): ()| {
                                     hovered_port.set(None);
                                 }
                             },
@@ -595,7 +595,7 @@ pub fn NodeGraphView(props: NodeGraphViewProps) -> Element {
                     WireLayer {
                         canvas_w: canvas_w,
                         canvas_h: canvas_h,
-                        wires: wires.clone(),
+                        wires: wires,
                         wire_draft: wire_draft(),
                         hovered_port: hovered_port(),
                         selected_wire_id: selected_wire_id,
@@ -691,7 +691,9 @@ pub fn NodeGraphView(props: NodeGraphViewProps) -> Element {
                     Selection::Wire(_) => "Wire -- Del: remove, Esc: deselect".to_string(),
                     Selection::None => String::new(),
                 };
-                if !info_text.is_empty() {
+                if info_text.is_empty() {
+                    rsx! {}
+                } else {
                     rsx! {
                         div {
                             class: "absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg \
@@ -700,8 +702,6 @@ pub fn NodeGraphView(props: NodeGraphViewProps) -> Element {
                             "{info_text}"
                         }
                     }
-                } else {
-                    rsx! {}
                 }
             }
         }

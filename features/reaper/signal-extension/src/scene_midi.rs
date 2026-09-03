@@ -22,7 +22,7 @@ pub const SCENE_SWITCH_BASE_NOTE: u8 = 36; // C1
 
 /// Generate MIDI items for all scenes found in the profile structure.
 ///
-/// Scans tracks for the profile folder (has `fts_signal/scene_count` ext_state),
+/// Scans tracks for the profile folder (has `fts_signal/scene_count` `ext_state`),
 /// then creates one MIDI item per scene on the profile folder track.
 pub async fn generate_scene_midi_items(daw: &Daw) -> Result<()> {
     let project = daw.current_project().await.wrap_err("no current project")?;
@@ -93,7 +93,7 @@ pub async fn generate_scene_midi_items(daw: &Daw) -> Result<()> {
     // Get tempo to calculate bar duration
     let transport = project.transport();
     let state = transport.get_state().await?;
-    let beats_per_bar = state.time_signature.numerator as f64;
+    let beats_per_bar = f64::from(state.time_signature.numerator);
     let beat_duration = 60.0 / state.tempo.bpm; // seconds per beat
     let bar_duration = beat_duration * beats_per_bar;
 

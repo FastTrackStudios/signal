@@ -26,7 +26,7 @@ pub enum LoadError {
 impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LoadError::Unreadable { path, source } => {
+            Self::Unreadable { path, source } => {
                 write!(f, "could not read {}: {source}", path.display())
             }
         }
@@ -44,7 +44,8 @@ pub struct LoadReport {
 }
 
 impl LoadReport {
-    pub fn is_empty(&self) -> bool {
+    #[must_use] 
+    pub const fn is_empty(&self) -> bool {
         self.presets.is_empty()
     }
 }

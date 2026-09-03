@@ -22,7 +22,8 @@ pub enum Neve1073Hpf {
 }
 
 impl Neve1073Hpf {
-    pub fn hz(self) -> Option<f64> {
+    #[must_use]
+    pub const fn hz(self) -> Option<f64> {
         match self {
             Self::Off => None,
             Self::Hz50 => Some(50.0),
@@ -43,7 +44,8 @@ pub enum Neve1073LowFreq {
 }
 
 impl Neve1073LowFreq {
-    pub fn hz(self) -> Option<f64> {
+    #[must_use]
+    pub const fn hz(self) -> Option<f64> {
         match self {
             Self::Off => None,
             Self::Hz35 => Some(35.0),
@@ -66,7 +68,8 @@ pub enum Neve1073MidFreq {
 }
 
 impl Neve1073MidFreq {
-    pub fn hz(self) -> Option<f64> {
+    #[must_use]
+    pub const fn hz(self) -> Option<f64> {
         match self {
             Self::Off => None,
             Self::Hz360 => Some(360.0),
@@ -295,6 +298,7 @@ impl CalibrationParameters for Neve1073Calibration {
     }
 }
 
+#[must_use]
 pub fn fit_neve_1073_response(
     initial: Neve1073Calibration,
     settings: Neve1073Settings,
@@ -314,6 +318,7 @@ pub struct Neve1073Model {
 }
 
 impl Neve1073Model {
+    #[must_use]
     pub fn new(sample_rate: f64, settings: Neve1073Settings) -> Self {
         let mut model = Self {
             settings,
@@ -325,7 +330,8 @@ impl Neve1073Model {
         model
     }
 
-    pub fn settings(&self) -> Neve1073Settings {
+    #[must_use]
+    pub const fn settings(&self) -> Neve1073Settings {
         self.settings
     }
 
@@ -339,10 +345,12 @@ impl Neve1073Model {
         self.rebuild();
     }
 
+    #[must_use]
     pub fn coeffs(&self) -> &[Coeffs] {
         &self.coeffs
     }
 
+    #[must_use]
     pub fn magnitude_response_db(&self, frequencies: &[f64]) -> Vec<f64> {
         compute_magnitude_response(&self.coeffs, frequencies, self.sample_rate)
     }
@@ -393,6 +401,7 @@ impl Neve1073Model {
     }
 }
 
+#[must_use]
 pub fn apply_gain_compensated_arctan(sample: f64, drive_percent: f64, trim_db: f64) -> f64 {
     let trim = db_to_gain(trim_db.clamp(-24.0, 24.0));
     let drive = drive_percent.clamp(0.0, 100.0) / 100.0;
@@ -405,6 +414,7 @@ pub fn apply_gain_compensated_arctan(sample: f64, drive_percent: f64, trim_db: f
     (sample * trim * amount).atan() / compensation
 }
 
+#[must_use]
 pub fn build_neve_1073_sections(settings: Neve1073Settings, sample_rate: f64) -> Vec<Coeffs> {
     build_neve_1073_sections_with_calibration(
         settings,
@@ -413,6 +423,7 @@ pub fn build_neve_1073_sections(settings: Neve1073Settings, sample_rate: f64) ->
     )
 }
 
+#[must_use]
 pub fn build_neve_1073_sections_with_calibration(
     settings: Neve1073Settings,
     sample_rate: f64,

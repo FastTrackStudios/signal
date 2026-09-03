@@ -37,7 +37,7 @@ fn slot_uuid(id: &str) -> uuid::Uuid {
 /// `preset_id`) for control. Unmatched slots stay dashed placeholders.
 fn resolve_template(base: &[GridSlot], live: &[LiveBlock]) -> Vec<GridSlot> {
     let mut slots = base.to_vec();
-    for slot in slots.iter_mut() {
+    for slot in &mut slots {
         let Some(slot_name) = slot.block_preset_name.clone() else {
             continue;
         };
@@ -80,7 +80,7 @@ pub fn RigGraph(blocks: Vec<LiveBlock>) -> Element {
             initial_slots: slots,
             on_selection_change: move |_sel: Option<GridSelection>| {},
             on_param_change: {
-                let rig = rig.clone();
+                let rig = rig;
                 move |(uuid, name, value): (uuid::Uuid, String, f32)| {
                     if let (Some(r), Some(id)) = (rig.clone(), by_uuid.get(&uuid).cloned()) {
                         spawn(async move {

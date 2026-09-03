@@ -18,7 +18,7 @@
 //! [`Preset::parameters`] is a plain list of `(name, value)` pairs, which is
 //! exactly what `NativeEq::set_named` / `NativeReverb::set_named` take. That
 //! keeps one library type usable for every processor, and it is already the
-//! shape the translated Valhalla and FabFilter presets are stored in.
+//! shape the translated Valhalla and `FabFilter` presets are stored in.
 
 use std::collections::BTreeSet;
 
@@ -42,7 +42,7 @@ pub struct Preset {
     #[serde(default)]
     pub tags: Vec<String>,
     /// Where this came from, for provenance in the UI ("from Valhalla
-    /// VintageVerb / Plates").
+    /// `VintageVerb` / Plates").
     #[serde(default)]
     pub origin: Option<String>,
     /// The parameter set to apply, by name.
@@ -92,20 +92,22 @@ pub enum SortMode {
 }
 
 impl SortMode {
-    pub fn label(self) -> &'static str {
+    #[must_use] 
+    pub const fn label(self) -> &'static str {
         match self {
-            SortMode::Name => "Name",
-            SortMode::Category => "Category",
-            SortMode::Library => "Library",
+            Self::Name => "Name",
+            Self::Category => "Category",
+            Self::Library => "Library",
         }
     }
 
     /// The next mode, for a control that cycles rather than opening a menu.
-    pub fn cycle(self) -> Self {
+    #[must_use] 
+    pub const fn cycle(self) -> Self {
         match self {
-            SortMode::Name => SortMode::Category,
-            SortMode::Category => SortMode::Library,
-            SortMode::Library => SortMode::Name,
+            Self::Name => Self::Category,
+            Self::Category => Self::Library,
+            Self::Library => Self::Name,
         }
     }
 }
@@ -127,6 +129,7 @@ pub struct PresetBrowser {
 }
 
 impl PresetBrowser {
+    #[must_use] 
     pub fn new(presets: Vec<Preset>) -> Self {
         Self {
             presets,
@@ -135,15 +138,18 @@ impl PresetBrowser {
     }
 
     /// Every preset, unfiltered.
+    #[must_use] 
     pub fn all(&self) -> &[Preset] {
         &self.presets
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use] 
+    pub const fn is_empty(&self) -> bool {
         self.presets.is_empty()
     }
 
     /// Every category present, sorted, for a filter control.
+    #[must_use] 
     pub fn categories(&self) -> Vec<String> {
         self.presets
             .iter()
@@ -155,6 +161,7 @@ impl PresetBrowser {
 
     // ── Filtering ──────────────────────────────────────────────────────────
 
+    #[must_use] 
     pub fn query(&self) -> &str {
         &self.query
     }
@@ -170,6 +177,7 @@ impl PresetBrowser {
         self.query = query.into();
     }
 
+    #[must_use] 
     pub fn category_filter(&self) -> Option<&str> {
         self.category.as_deref()
     }
@@ -178,11 +186,12 @@ impl PresetBrowser {
         self.category = category;
     }
 
-    pub fn sort_mode(&self) -> SortMode {
+    #[must_use] 
+    pub const fn sort_mode(&self) -> SortMode {
         self.sort
     }
 
-    pub fn set_sort_mode(&mut self, sort: SortMode) {
+    pub const fn set_sort_mode(&mut self, sort: SortMode) {
         self.sort = sort;
     }
 
@@ -210,6 +219,7 @@ impl PresetBrowser {
     ///
     /// Indices rather than references so a caller can pair them with
     /// [`Self::select`] without borrowing the browser for the whole render.
+    #[must_use] 
     pub fn visible(&self) -> Vec<usize> {
         let mut out: Vec<usize> = (0..self.presets.len())
             .filter(|&i| self.matches(&self.presets[i]))
@@ -231,16 +241,19 @@ impl PresetBrowser {
         out
     }
 
+    #[must_use] 
     pub fn visible_count(&self) -> usize {
         self.presets.iter().filter(|p| self.matches(p)).count()
     }
 
     // ── Selection ──────────────────────────────────────────────────────────
 
-    pub fn selected_index(&self) -> Option<usize> {
+    #[must_use] 
+    pub const fn selected_index(&self) -> Option<usize> {
         self.selected
     }
 
+    #[must_use] 
     pub fn selected(&self) -> Option<&Preset> {
         self.selected.and_then(|i| self.presets.get(i))
     }
@@ -251,7 +264,7 @@ impl PresetBrowser {
         self.selected()
     }
 
-    pub fn clear_selection(&mut self) {
+    pub const fn clear_selection(&mut self) {
         self.selected = None;
     }
 
@@ -287,8 +300,9 @@ impl PresetBrowser {
     }
 
     /// The parameters of the current selection, ready for `set_named`.
+    #[must_use] 
     pub fn selected_parameters(&self) -> &[(String, f64)] {
-        self.selected().map(|p| p.parameters.as_slice()).unwrap_or(&[])
+        self.selected().map_or(&[], |p| p.parameters.as_slice())
     }
 }
 
@@ -301,7 +315,7 @@ mod tests {
             name: name.into(),
             category: Some(category.into()),
             author: None,
-            tags: tags.iter().map(|s| s.to_string()).collect(),
+            tags: tags.iter().map(std::string::ToString::to_string).collect(),
             origin: None,
             parameters: vec![("decay_time".into(), 2.0)],
             match_error: None,

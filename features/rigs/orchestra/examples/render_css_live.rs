@@ -20,7 +20,7 @@ fn read_vlq(d: &[u8], p: &mut usize) -> u32 {
     loop {
         let b = d[*p];
         *p += 1;
-        v = (v << 7) | (b & 0x7f) as u32;
+        v = (v << 7) | u32::from(b & 0x7f);
         if b & 0x80 == 0 {
             break;
         }
@@ -30,7 +30,7 @@ fn read_vlq(d: &[u8], p: &mut usize) -> u32 {
 
 /// Minimal SMF parse → `(seconds, status, d1, d2)` channel events, in order.
 fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
-    let div = u16::from_be_bytes([d[12], d[13]]) as f64;
+    let div = f64::from(u16::from_be_bytes([d[12], d[13]]));
     let mut us_per_q = 500_000.0f64;
     let mut p = 14;
     while &d[p..p + 4] != b"MTrk" {
@@ -44,7 +44,7 @@ fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
     let mut running = 0u8;
     let mut out = Vec::new();
     while p < end {
-        let dt = read_vlq(d, &mut p) as u64;
+        let dt = u64::from(read_vlq(d, &mut p));
         sec += dt as f64 * (us_per_q / 1_000_000.0) / div;
         let mut status = d[p];
         if status & 0x80 != 0 {
@@ -60,7 +60,7 @@ fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
                 let len = read_vlq(d, &mut p) as usize;
                 if meta == 0x51 {
                     us_per_q =
-                        ((d[p] as f64) * 65536.0) + (d[p + 1] as f64) * 256.0 + d[p + 2] as f64;
+                        f64::from(d[p]).mul_add(65536.0, f64::from(d[p + 1]) * 256.0) + f64::from(d[p + 2]);
                 }
                 p += len;
             }
@@ -121,7 +121,7 @@ fn main() -> eyre::Result<()> {
     .map_err(|e| eyre::eyre!(e))?;
 
     let render = |rig: &SamplerRig, out: &mut Vec<f32>, secs: f64| -> eyre::Result<()> {
-        let frames = (secs * SR as f64).round().max(0.0) as usize;
+        let frames = (secs * f64::from(SR)).round().max(0.0) as usize;
         if frames == 0 {
             return Ok(());
         }
@@ -153,7 +153,7 @@ fn main() -> eyre::Result<()> {
     write_wav(&outp, &audio)?;
     println!(
         "wrote {outp}  ({:.1}s, {} events)",
-        audio.len() as f64 / 2.0 / SR as f64,
+        audio.len() as f64 / 2.0 / f64::from(SR),
         events.len()
     );
     Ok(())

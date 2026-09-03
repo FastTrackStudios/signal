@@ -3,7 +3,7 @@
 //! Per-section Qs decoded from probe sweep
 //! (`docs/reports/proq4/re/hp_slope8_per_section.csv` +
 //! `hp_slope8_recovered.csv`). Each section uses the Lagrange-MZT formula
-//! with `alpha = √2/Q_section`, where the recovered Q_section values equal
+//! with `alpha = √2/Q_section`, where the recovered `Q_section` values equal
 //! the textbook Butterworth pole-Q values for N=12 (poles in conjugate
 //! pairs) times √2:
 //!
@@ -12,7 +12,7 @@
 //! ```
 //!
 //! for k = 5, 4, 3, 2, 1, 0 (highest-Q section first). The highest-Q
-//! section (sec0) is additionally scaled by Q_user, clamped to 40.
+//! section (sec0) is additionally scaled by `Q_user`, clamped to 40.
 
 use crate::biquad::Coeffs;
 

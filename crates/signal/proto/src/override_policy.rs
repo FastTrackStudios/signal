@@ -27,7 +27,7 @@ fn is_parameter_target(path: &NodePath) -> bool {
     matches!(path.segments().last(), Some(NodePathSegment::Parameter(_)))
 }
 
-fn is_flow_mutation(op: &NodeOverrideOp) -> bool {
+const fn is_flow_mutation(op: &NodeOverrideOp) -> bool {
     matches!(
         op,
         NodeOverrideOp::InsertBefore(_) | NodeOverrideOp::InsertAfter(_) | NodeOverrideOp::Remove

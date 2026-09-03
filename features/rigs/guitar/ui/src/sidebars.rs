@@ -202,7 +202,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                 // The folder IS the stack's main patch —
                                 // clickable, default, no "Clean Clean" names.
                                 let main = patches.first().cloned();
-                                let main_active = main.as_ref().map(|(_, p)| p.active).unwrap_or(false);
+                                let main_active = main.as_ref().is_some_and(|(_, p)| p.active);
                                 let main_idx = main.as_ref().map(|(i, _)| *i);
                                 let main_preset = main.as_ref().map(|(_, p)| p.preset.clone()).unwrap_or_default();
                                 rsx! {
@@ -231,7 +231,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                     title: "Delete stack (patches stay)",
                                     onclick: {
                                         let rig = rig.clone();
-                                        let name = stack_label.clone();
+                                        let name = stack_label;
                                         move |_| {
                                             let name = name.clone();
                                             if let Some(r) = rig.clone() {
@@ -348,7 +348,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                                 title: "Delete patch",
                                                 onclick: {
                                                     let rig = rig.clone();
-                                                    let name = name.clone();
+                                                    let name = name;
                                                     move |e: MouseEvent| {
                                                         e.stop_propagation();
                                                         let name = name.clone();
@@ -491,7 +491,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                         title: "Delete preset",
                                         onclick: {
                                             let rig = rig.clone();
-                                            let name = name.clone();
+                                            let name = name;
                                             move |e: MouseEvent| {
                                                 e.stop_propagation();
                                                 let name = name.clone();
@@ -741,7 +741,7 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
                     button {
                         class: "text-xs px-1.5 rounded border border-border hover:bg-accent/40",
                         onclick: {
-                            let rig = rig.clone();
+                            let rig = rig;
                             let setlist = model.setlist_index;
                             move |_| {
                                 let song = add_song_sel.peek().clone();

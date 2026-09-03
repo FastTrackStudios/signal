@@ -6,6 +6,9 @@ license.workspace = true
 edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
 description = "EQ GUI — control view (spectrum + nodes) and profile theme rendering"
 
+[lints]
+workspace = true
+
 [features]
 # Core-only by default in the signal workspace (wasm remotes). The plugin
 # builds enable `native` for the vello/nice-plug editor.

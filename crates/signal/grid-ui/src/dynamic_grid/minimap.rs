@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 
 /// Minimap data for a single slot (simplified view).
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct MinimapSlot {
     pub col: usize,
     pub row: usize,
@@ -38,7 +38,7 @@ pub struct MinimapProps {
 #[component]
 pub fn Minimap(props: MinimapProps) -> Element {
     let s = props.size;
-    let sf = s as f64;
+    let sf = f64::from(s);
     let cols = props.cols.max(1) as f64;
     let rows = props.rows.max(1) as f64;
 

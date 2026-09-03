@@ -119,10 +119,7 @@ fn run(
 
     // The rig bridges each plugin pair the first time it meets one, and
     // keeps them for the whole project.
-    let mut rig = match verifying {
-        false => None,
-        true => Some(verify::Rig::new()),
-    };
+    let mut rig = if verifying { Some(verify::Rig::new()) } else { None };
 
     let mut worst_seen = 0.0f64;
     if !quiet || rig.is_some() {

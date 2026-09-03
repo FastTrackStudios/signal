@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
 use signal_proto::{PresetId, SnapshotId};
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "snapshots")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -20,10 +20,12 @@ pub struct Model {
 }
 
 impl Model {
+    #[must_use] 
     pub fn snapshot_id_branded(&self) -> SnapshotId {
         SnapshotId::from(self.id.clone())
     }
 
+    #[must_use] 
     pub fn preset_id_branded(&self) -> PresetId {
         PresetId::from(self.preset_id.clone())
     }

@@ -10,7 +10,8 @@ use super::models::{GraphModule, Node, NodeGraph, NodePosition, NodeSize, NodeWi
 
 impl NodeGraph {
     /// Get the appropriate widget and size for a block type.
-    pub fn widget_for_block_type(block_type: BlockType) -> (NodeWidget, NodeSize) {
+    #[must_use] 
+    pub const fn widget_for_block_type(block_type: BlockType) -> (NodeWidget, NodeSize) {
         match block_type {
             BlockType::Eq => (NodeWidget::EqGraph, NodeSize::xlarge()),
             BlockType::Compressor => (NodeWidget::CompressorGraph, NodeSize::large()),
@@ -48,6 +49,7 @@ impl NodeGraph {
     }
 
     /// Find an open position to place a new module.
+    #[must_use] 
     pub fn find_open_position(&self) -> NodePosition {
         if self.modules.is_empty() && self.nodes.is_empty() {
             return NodePosition::new(100.0, 100.0);
@@ -81,6 +83,7 @@ impl NodeGraph {
     /// Creates a `GraphModule` per module chain within each engine/layer,
     /// with child `Node`s for each block in the signal chain. Modules are
     /// laid out vertically with auto-chained inter-module wires.
+    #[must_use] 
     pub fn build_from_engines(engines: &[EngineData]) -> Self {
         let mut graph = Self::new();
         let mut y_offset = 80.0;
@@ -116,7 +119,7 @@ impl NodeGraph {
     }
 }
 
-/// Minimal data structures for the builder (mirrors collection_browser types).
+/// Minimal data structures for the builder (mirrors `collection_browser` types).
 #[derive(Clone)]
 pub struct EngineData {
     pub name: String,
@@ -135,13 +138,12 @@ pub struct ModuleChainInput {
     pub chain: SignalChain,
 }
 
-/// Infer the primary BlockType from a signal chain (first block's type).
+/// Infer the primary `BlockType` from a signal chain (first block's type).
 fn infer_block_type_from_chain(chain: &SignalChain) -> BlockType {
     chain
         .blocks()
         .first()
-        .map(|b| b.block_type())
-        .unwrap_or(BlockType::Custom)
+        .map_or(BlockType::Custom, |b| b.block_type())
 }
 
 /// Build a `GraphModule` from a `SignalChain`, creating child nodes for each block.
@@ -158,7 +160,7 @@ fn build_module_from_chain(
 
     let blocks: Vec<&ModuleBlock> = chain.blocks();
     let block_count = blocks.len();
-    let content_height = header_height + (block_count as f64) * (node_height + node_gap) + 20.0;
+    let content_height = (block_count as f64).mul_add(node_height + node_gap, header_height) + 20.0;
     let module_height = content_height.max(120.0);
 
     let mut gm = GraphModule::new(name, block_type, position)
@@ -170,7 +172,7 @@ fn build_module_from_chain(
         let node = Node::new(
             mb.label(),
             mb.block_type(),
-            NodePosition::new(20.0, header_height + (i as f64) * (node_height + node_gap)),
+            NodePosition::new(20.0, (i as f64).mul_add(node_height + node_gap, header_height)),
         )
         .with_size(NodeSize::new(module_width - 40.0, node_height))
         .with_widget(widget);

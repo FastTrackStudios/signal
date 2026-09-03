@@ -1,4 +1,4 @@
-//! Profile patch grid -- domain-aware grid wrapping SceneTileGrid.
+//! Profile patch grid -- domain-aware grid wrapping `SceneTileGrid`.
 //!
 //! Fetches a profile from the controller and maps its [`Patch`] entries
 //! to [`TileData`] for the dumb [`SceneTileGrid`] component.
@@ -28,8 +28,8 @@ pub fn ProfilePatchGrid(
 
     // Fetch profile when profile_id changes.
     {
-        let signal = signal.clone();
-        let profile_id = profile_id.clone();
+        let signal = signal;
+        let profile_id = profile_id;
         use_effect(move || {
             let signal = signal.clone();
             let profile_id = profile_id.clone();

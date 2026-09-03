@@ -1,4 +1,4 @@
-//! NativeTune: correction accuracy, retune independence, MIDI targets.
+//! `NativeTune`: correction accuracy, retune independence, MIDI targets.
 
 use signal_fx::NativeTune;
 use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent};
@@ -19,7 +19,7 @@ fn tone(buf: &[f32], freq: f64) -> f64 {
         re += f64::from(x) * ph.cos();
         im += f64::from(x) * ph.sin();
     }
-    (re * re + im * im).sqrt() / buf.len() as f64
+    re.hypot(im) / buf.len() as f64
 }
 
 fn run(t: &mut NativeTune, input: &[f32], block: usize, midi_at: Option<(usize, u8)>) -> Vec<f32> {

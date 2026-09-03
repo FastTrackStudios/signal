@@ -15,7 +15,7 @@ use super::block_colors::block_color;
 
 // region: --- Constants
 
-/// Cell size in pixels — matches the legacy SignalFlowGridView CELL_SIZE.
+/// Cell size in pixels — matches the legacy `SignalFlowGridView` `CELL_SIZE`.
 const CELL_SIZE: u32 = 64;
 /// Gap between cells.
 const CELL_GAP: u32 = 4;
@@ -66,19 +66,19 @@ struct Wire {
 fn block_right_x(col: usize) -> f32 {
     let grid_col_start = col as f32 * COLS_PER_BLOCK as f32;
 
-    CELL_GAP as f32 + (grid_col_start + BLOCK_SPAN as f32) * (CELL_SIZE + CELL_GAP) as f32
+    (grid_col_start + BLOCK_SPAN as f32).mul_add((CELL_SIZE + CELL_GAP) as f32, CELL_GAP as f32)
         - CELL_GAP as f32
 }
 
 /// Pixel X of the left edge of a block at logical column `col`.
 fn block_left_x(col: usize) -> f32 {
     let grid_col_start = col as f32 * COLS_PER_BLOCK as f32;
-    CELL_GAP as f32 + grid_col_start * (CELL_SIZE + CELL_GAP) as f32
+    grid_col_start.mul_add((CELL_SIZE + CELL_GAP) as f32, CELL_GAP as f32)
 }
 
 /// Pixel Y center of a lane.
 fn lane_center_y(lane: usize) -> f32 {
-    CELL_GAP as f32 + lane as f32 * (CELL_SIZE + CELL_GAP) as f32 + CELL_SIZE as f32 / 2.0
+    (lane as f32).mul_add((CELL_SIZE + CELL_GAP) as f32, CELL_GAP as f32) + CELL_SIZE as f32 / 2.0
 }
 
 /// Compute SVG routing wires between blocks.
@@ -111,7 +111,7 @@ fn compute_wires(blocks: &[FlowBlock], cols: usize, rows: usize) -> Vec<Wire> {
             if s.lane == t.lane {
                 wires.push(Wire { x1, y1, x2, y2 });
             } else {
-                let mid_x = (x1 + x2) / 2.0;
+                let mid_x = f32::midpoint(x1, x2);
                 wires.push(Wire {
                     x1,
                     y1,
@@ -136,7 +136,7 @@ fn compute_wires(blocks: &[FlowBlock], cols: usize, rows: usize) -> Vec<Wire> {
             let s = &blocks[sources[0]];
             let sx = block_right_x(s.column);
             let sy = lane_center_y(s.lane);
-            let mid_x = (sx + block_left_x(col + 1)) / 2.0;
+            let mid_x = f32::midpoint(sx, block_left_x(col + 1));
 
             wires.push(Wire {
                 x1: sx,
@@ -176,7 +176,7 @@ fn compute_wires(blocks: &[FlowBlock], cols: usize, rows: usize) -> Vec<Wire> {
             let t = &blocks[targets[0]];
             let tx = block_left_x(t.column);
             let ty = lane_center_y(t.lane);
-            let mid_x = (block_right_x(col) + tx) / 2.0;
+            let mid_x = f32::midpoint(block_right_x(col), tx);
 
             for &si in &sources {
                 let s = &blocks[si];
@@ -373,7 +373,7 @@ pub fn SignalChainGrid(
 
 /// Render a single block cell — ported from legacy `GridBlockCell` + `BlockHeader`.
 ///
-/// Each block spans 2 grid columns (BLOCK_SPAN) giving ~132px width for labels.
+/// Each block spans 2 grid columns (`BLOCK_SPAN`) giving ~132px width for labels.
 /// Structure:
 /// - `rounded-lg border-2` outer div with full-opacity `block_color()` background
 /// - Dark overlay header bar (24px) with block name (truncated)

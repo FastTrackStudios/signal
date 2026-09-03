@@ -5,7 +5,7 @@
 //! hierarchies with proper folder depth, naming prefixes, and send routing.
 //!
 //! Run with:
-//!   cargo xtask reaper-test rig_structure
+//!   cargo xtask reaper-test `rig_structure`
 
 use std::time::Duration;
 

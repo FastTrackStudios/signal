@@ -38,7 +38,8 @@ pub enum ModulationSource {
 }
 
 impl ModulationSource {
-    pub fn display_name(&self) -> &'static str {
+    #[must_use] 
+    pub const fn display_name(&self) -> &'static str {
         match self {
             Self::Lfo(_) => "LFO",
             Self::Envelope(_) => "Envelope",

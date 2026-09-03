@@ -1,5 +1,5 @@
 //! Document-mode end-to-end proof (phase 1, see docs/plan/document-mode.md):
-//! MusicXML score → TrackDocument → annotated Schedule →
+//! `MusicXML` score → `TrackDocument` → annotated Schedule →
 //! `render_offline_document` with the Cinematic Studio Strings Violin 1
 //! patch → WAV — legato transition ARRIVALS land on the grid with no
 //! negative track delay, byte-identical across runs (seeded).
@@ -49,7 +49,7 @@ fn audio_hash(samples: &[f32]) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for s in samples {
         for b in s.to_bits().to_le_bytes() {
-            h ^= b as u64;
+            h ^= u64::from(b);
             h = h.wrapping_mul(0x1_0000_01b3);
         }
     }
@@ -174,7 +174,7 @@ fn main() -> eyre::Result<()> {
     let opts = DocumentRenderOptions::default();
     let t0 = std::time::Instant::now();
     let res = rig.render_offline_document(ID, &doc, &opts)?;
-    let dur = res.audio.len() as f64 / 2.0 / SR as f64;
+    let dur = res.audio.len() as f64 / 2.0 / f64::from(SR);
     println!(
         "rendered {:.1}s in {:.1}s: {} notes, {} legato transitions fired, seed {:#x}",
         dur,

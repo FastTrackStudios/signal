@@ -69,42 +69,42 @@ impl FtsDelay {
         c.set_style(p.resolved_profile().style);
 
         // Time — free-running ms; Link mirrors L onto R.
-        let time_l = p.time_l.value() as f64;
+        let time_l = f64::from(p.time_l.value());
         c.delay_l.time_ms = time_l;
         c.delay_r.time_ms = if p.link.value() {
             time_l
         } else {
-            p.time_r.value() as f64
+            f64::from(p.time_r.value())
         };
 
-        let fb = p.feedback.value() as f64;
+        let fb = f64::from(p.feedback.value());
         c.delay_l.feedback = fb;
         c.delay_r.feedback = fb;
 
         // Tone = feedback-loop hi-cut.
-        let tone = p.tone.value() as f64;
+        let tone = f64::from(p.tone.value());
         c.delay_l.hicut_freq = tone;
         c.delay_r.hicut_freq = tone;
 
-        let drive = p.drive.value() as f64;
+        let drive = f64::from(p.drive.value());
         c.delay_l.drive = drive;
         c.delay_r.drive = drive;
 
         // Wobble (rates stay at the engine defaults).
-        let wow = p.wow.value() as f64;
+        let wow = f64::from(p.wow.value());
         c.delay_l.wow_depth = wow;
         c.delay_r.wow_depth = wow;
-        let flutter = p.flutter.value() as f64;
+        let flutter = f64::from(p.flutter.value());
         c.delay_l.flutter_depth = flutter;
         c.delay_r.flutter_depth = flutter;
 
         // Ducking: the amount knob doubles as the enable (0 = off).
-        let duck = p.duck.value() as f64;
+        let duck = f64::from(p.duck.value());
         c.ducking_enabled = duck > 0.001;
         c.ducker.amount = duck;
         c.ducker.threshold = 0.1;
 
-        c.mix = p.mix.value() as f64;
+        c.mix = f64::from(p.mix.value());
 
         c.update(AudioConfig {
             sample_rate: self.sample_rate,
@@ -153,7 +153,7 @@ impl Plugin for FtsDelay {
         buffer_config: &BufferConfig,
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
         self.max_buffer_size = buffer_config.max_buffer_size as usize;
         // First update at the real sample rate provisions every delay line
         // (the engines size for their 5 s maximum) so process() never
@@ -193,8 +193,8 @@ impl Plugin for FtsDelay {
             {
                 let slices = buffer.as_slice();
                 for i in 0..len {
-                    left[i] = slices[0][offset + i] as f64;
-                    right[i] = slices[1][offset + i] as f64;
+                    left[i] = f64::from(slices[0][offset + i]);
+                    right[i] = f64::from(slices[1][offset + i]);
                 }
             }
 

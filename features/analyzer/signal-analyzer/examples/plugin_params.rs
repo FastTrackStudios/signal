@@ -53,15 +53,12 @@ fn main() {
     let only: Option<Vec<String>> =
         arg("--only").map(|s| s.split(',').map(|p| p.trim().to_lowercase()).collect());
 
-    let mut plugin = match HostedPlugin::load(&path) {
-        Ok(Some(mut p)) => {
-            p.prepare(SR, BLOCK as u32).expect("prepare");
-            p
-        }
-        _ => {
-            eprintln!("{path}: could not load");
-            std::process::exit(1);
-        }
+    let mut plugin = if let Ok(Some(mut p)) = HostedPlugin::load(&path) {
+        p.prepare(SR, BLOCK as u32).expect("prepare");
+        p
+    } else {
+        eprintln!("{path}: could not load");
+        std::process::exit(1);
     };
 
     let all = plugin.params();
@@ -78,7 +75,7 @@ fn main() {
     for (index, p) in &params {
         let samples: Vec<(f64, String)> = (0..=steps)
             .map(|step| {
-                let stored = p.min + (p.max - p.min) * (step as f64 / steps as f64);
+                let stored = (p.max - p.min).mul_add(step as f64 / steps as f64, p.min);
                 (stored, plugin.value_to_text(p.id, stored).unwrap_or_default())
             })
             .collect();

@@ -248,6 +248,15 @@ pub struct Voice {
     /// families with no decoded envelope).
     flex: Option<FlexEnv>,
 
+    /// This voice's private window into a streamed sample.
+    ///
+    /// The whole point of streaming architecture (HISE's two swapped buffers
+    /// per voice, JUCE's per-voice fill) is that the audio thread reads from
+    /// something the VOICE owns. Asking a shared chunk index per sample —
+    /// what this did before — put an arc-swap guard and contended atomics on
+    /// every sample of every voice, and cost a chord hundreds of
+    /// milliseconds in a 5.33 ms callback.
+    stream_cursor: fts_sample::stream::StreamCursor,
     /// True once the voice has produced audible output. Gates auto-retirement
     /// so a voice still in its silent attack pre-roll / fade-in-under handoff
     /// is never mistaken for a decayed one.
@@ -415,6 +424,7 @@ impl Voice {
             reverse: false,
             alternating_loop: false,
             stream_pin: None,
+            stream_cursor: Default::default(),
             loop_xfade: 0,
             rate,
             bend: 1.0,
@@ -482,6 +492,7 @@ impl Voice {
             reverse: false,
             alternating_loop: false,
             stream_pin: None,
+            stream_cursor: Default::default(),
             loop_xfade: 0,
             rate,
             bend: 1.0,
@@ -572,6 +583,10 @@ impl Voice {
     ///
     /// Call once after the builder chain (needs `start_frame` set). No-op
     /// without a shifter.
+    ///
+    /// Reads through [`SampleData::read_frames`] into thread-local scratch:
+    /// this runs on the audio thread at every note-on, so it must neither
+    /// allocate nor read a streamed sample frame-by-frame.
     pub fn prime_pitch_shifters(&mut self) {
         let Some(startup) = self.pitch.as_ref().map(|p| p[0].startup_frames()) else {
             return;
@@ -582,12 +597,29 @@ impl Voice {
         if n == 0 {
             return;
         }
-        let hl: Vec<f32> = (start..start + n).map(|f| data.frame(f).0).collect();
-        let hr: Vec<f32> = (start..start + n).map(|f| data.frame(f).1).collect();
-        if let Some(shift) = self.pitch.as_mut() {
-            shift[0].prime(&hl);
-            shift[1].prime(&hr);
-        }
+        // Bulk read into REUSED scratch, through this voice's cursor.
+        //
+        // The obvious spelling — two `collect()`s over `data.frame(f)` — was
+        // the single most expensive thing the audio thread did. It allocated
+        // two vectors per voice at note-on and, for a streamed sample, took
+        // an arc-swap guard per channel per frame: ~16,000 guarded reads per
+        // voice across ~4-8k priming frames. A chord's worth of voices made
+        // that ~590,000 guarded reads inside one callback, which is where the
+        // 200-600 ms stalls came from. `read_frames` resolves a chunk once
+        // per chunk crossed, and the scratch is per-thread, so a note-on
+        // after the first allocates nothing.
+        PRIME_SCRATCH.with(|scratch| {
+            let (hl, hr) = &mut *scratch.borrow_mut();
+            hl.clear();
+            hr.clear();
+            hl.resize(n, 0.0);
+            hr.resize(n, 0.0);
+            data.read_frames(start, hl, hr, &mut self.stream_cursor);
+            if let Some(shift) = self.pitch.as_mut() {
+                shift[0].prime(hl);
+                shift[1].prime(hr);
+            }
+        });
         // Only the read CURSOR moves past what priming consumed; `start_frame`
         // stays put, since it is the window floor a loop crossfade reads back
         // into, not the cursor.
@@ -892,13 +924,17 @@ impl Voice {
     /// Linearly-interpolated stereo read at fractional frame `pos`. Does not
     /// advance state; `pos` must be within the playable window.
     #[inline]
-    fn read_interp(&self, pos: f64) -> (f32, f32) {
+    fn read_interp(&mut self, pos: f64) -> (f32, f32) {
         let idx = pos as usize;
         let frac = (pos - idx as f64) as f32;
-        let (l0, r0) = self.data.frame(idx);
-        let (l1, r1) = self
-            .data
-            .frame((idx + 1).min(self.end_frame.saturating_sub(1)));
+        // Through this voice's own cursor: while the playhead stays inside
+        // the chunk it already holds — thousands of consecutive samples —
+        // this is four slice indexes and no atomics.
+        let ((l0, r0), (l1, r1)) = self.data.frame_pair_cursored(
+            idx,
+            self.end_frame.saturating_sub(1),
+            &mut self.stream_cursor,
+        );
         (l0 + (l1 - l0) * frac, r0 + (r1 - r0) * frac)
     }
 
@@ -1174,6 +1210,18 @@ impl Voice {
     pub fn env_peak(&self) -> f32 {
         self.env_peak
     }
+}
+
+thread_local! {
+    /// Scratch for [`Voice::prime_pitch_shifters`], reused across note-ons.
+    ///
+    /// Priming needs a few thousand frames of history per channel. Allocating
+    /// that per voice put two heap allocations in the note-on path on the
+    /// audio thread; one buffer per thread costs ~64 KB and removes them.
+    /// Thread-local rather than per-voice because only the audio thread
+    /// primes, and it primes one voice at a time.
+    static PRIME_SCRATCH: std::cell::RefCell<(Vec<f32>, Vec<f32>)> =
+        std::cell::RefCell::new((Vec::new(), Vec::new()));
 }
 
 /// Flush denormals to zero. On `no_std`/embedded and WASM targets the host may

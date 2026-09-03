@@ -35,7 +35,7 @@ pub struct ImportModule {
 pub struct ImportBlock {
     pub label: String,
     pub block_type: BlockType,
-    /// Raw DAW plugin identifier (e.g. "CLAP: Pro-Q 4 (FabFilter)").
+    /// Raw DAW plugin identifier (e.g. "CLAP: Pro-Q 4 (`FabFilter`)").
     /// Stored as a `source:` metadata tag so `rigs open` can load the plugin.
     pub plugin_name: Option<String>,
     /// Binary plugin state captured from the live DAW.

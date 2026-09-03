@@ -26,7 +26,7 @@ crate::typed_uuid_id!(
 // ─── Section source ─────────────────────────────────────────────
 
 /// What a song section references — either a Patch or a direct Rig variant.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum SectionSource {
     /// Reference a Patch from a Profile.
@@ -138,16 +138,19 @@ impl Song {
     }
 
     /// Semantic alias for `variants()` — returns all sections in this song.
+    #[must_use] 
     pub fn sections(&self) -> &[Section] {
         &self.sections
     }
 
+    #[must_use] 
     pub fn default_section(&self) -> Option<&Section> {
         self.sections
             .iter()
             .find(|s| s.id == self.default_section_id)
     }
 
+    #[must_use] 
     pub fn section(&self, id: &SectionId) -> Option<&Section> {
         self.sections.iter().find(|s| &s.id == id)
     }
@@ -372,7 +375,7 @@ mod tests {
             Patch::from_rig_scene(PatchId::new(), "Clean", rig_id.clone(), scene_id.clone());
         let crunch =
             Patch::from_rig_scene(PatchId::new(), "Crunch", rig_id.clone(), scene_id.clone());
-        let lead = Patch::from_rig_scene(PatchId::new(), "Lead", rig_id.clone(), scene_id.clone());
+        let lead = Patch::from_rig_scene(PatchId::new(), "Lead", rig_id, scene_id);
 
         let clean_pid = clean.id.clone();
         let crunch_pid = crunch.id.clone();
@@ -394,7 +397,7 @@ mod tests {
                 SectionSource::Patch { patch_id } => {
                     assert_eq!(patch_id, expected_ids[i]);
                 }
-                _ => panic!("expected Patch source for section {}", i),
+                _ => panic!("expected Patch source for section {i}"),
             }
         }
 
@@ -439,7 +442,7 @@ mod tests {
         let new_solo =
             Patch::from_rig_scene(PatchId::new(), "Solo", rig_id.clone(), scene_id.clone());
         let new_ambient =
-            Patch::from_rig_scene(PatchId::new(), "Ambient", rig_id.clone(), scene_id.clone());
+            Patch::from_rig_scene(PatchId::new(), "Ambient", rig_id, scene_id);
         let new_shimmer_pid = new_shimmer.id.clone();
         let _new_funk_pid = new_funk.id.clone();
         let new_solo_pid = new_solo.id.clone();

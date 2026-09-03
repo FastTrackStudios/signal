@@ -462,8 +462,7 @@ async fn test_live_browser_index_load_time_smoke() -> Result<()> {
     assert!(!index.entries().is_empty());
     assert!(
         elapsed < Duration::from_secs(5),
-        "browser index build exceeded smoke budget: {:?}",
-        elapsed
+        "browser index build exceeded smoke budget: {elapsed:?}"
     );
     Ok(())
 }
@@ -490,7 +489,7 @@ async fn test_live_browser_index_load_time_benchmark() -> Result<()> {
         assert!(!index.entries().is_empty());
     }
 
-    let mut micros: Vec<u128> = runs.iter().map(|d| d.as_micros()).collect();
+    let mut micros: Vec<u128> = runs.iter().map(std::time::Duration::as_micros).collect();
     micros.sort_unstable();
     let p95_idx = ((micros.len().saturating_sub(1)) * 95) / 100;
     let p95 = micros[p95_idx];
@@ -498,18 +497,14 @@ async fn test_live_browser_index_load_time_benchmark() -> Result<()> {
     let avg = micros.iter().sum::<u128>() / micros.len() as u128;
 
     println!(
-        "browser-index benchmark: iterations={}, avg={}us, p95={}us, max={}us",
-        iterations, avg, p95, max
+        "browser-index benchmark: iterations={iterations}, avg={avg}us, p95={p95}us, max={max}us"
     );
 
     if let Some(max_budget_ms) = max_budget_ms {
-        let max_budget_us = (max_budget_ms as u128) * 1_000;
+        let max_budget_us = u128::from(max_budget_ms) * 1_000;
         assert!(
             p95 <= max_budget_us,
-            "browser index p95 {}us exceeded configured budget {}us ({}ms)",
-            p95,
-            max_budget_us,
-            max_budget_ms
+            "browser index p95 {p95}us exceeded configured budget {max_budget_us}us ({max_budget_ms}ms)"
         );
     }
     Ok(())

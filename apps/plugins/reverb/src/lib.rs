@@ -9,7 +9,7 @@
 //! size, pre-delay, damping, tone, width, and dry/wet mix. Decay/damping
 //! automation is click-free — the chain ramps those coefficients internally
 //! (30 ms smoothers); we just push targets via `update_params()` every block.
-//! Per-algorithm variants, the BigSky MX per-engine params, convolution IR
+//! Per-algorithm variants, the `BigSky` MX per-engine params, convolution IR
 //! loading, ducking, and saturation are chain features not yet surfaced here.
 //!
 //! GUI is deliberately absent for now (headless, host-generic params), matching
@@ -84,38 +84,38 @@ impl FtsReverb {
         self.chain
             .set_algorithm_variant(profile.algorithm, profile.variant);
 
-        self.chain.params.decay = self.params.decay.value() as f64;
-        self.chain.params.size = self.params.size.value() as f64;
-        self.chain.params.damping = self.params.damping.value() as f64;
-        self.chain.params.tone = self.params.tone.value() as f64;
-        self.chain.params.diffusion = self.params.diffusion.value() as f64;
-        self.chain.params.modulation = self.params.modulation.value() as f64;
+        self.chain.params.decay = f64::from(self.params.decay.value());
+        self.chain.params.size = f64::from(self.params.size.value());
+        self.chain.params.damping = f64::from(self.params.damping.value());
+        self.chain.params.tone = f64::from(self.params.tone.value());
+        self.chain.params.diffusion = f64::from(self.params.diffusion.value());
+        self.chain.params.modulation = f64::from(self.params.modulation.value());
         // Frequency-dependent decay: the low band rings longer or shorter
         // than the rest, which is most of what separates a warm hall from a
         // plate. The high band moves the other way, so one control does the
         // tilt rather than two that have to be kept in step.
-        let bass = self.params.bass.value() as f64;
+        let bass = f64::from(self.params.bass.value());
         self.chain.params.low_decay_mult = bass;
         self.chain.params.high_decay_mult = (2.0 - bass).clamp(0.0, 2.0);
         // The engine's own two controls. What they mean is the algorithm's
         // business — the panel is what names them.
-        self.chain.params.extra_a = self.params.character_a.value() as f64;
-        self.chain.params.extra_b = self.params.character_b.value() as f64;
+        self.chain.params.extra_a = f64::from(self.params.character_a.value());
+        self.chain.params.extra_b = f64::from(self.params.character_b.value());
 
         // …and the per-engine settings the shared pair cannot express. Each
         // struct is only read by its own algorithm, so setting them all every
         // block costs nothing and means switching profiles never lands on a
         // stale value from the last one.
-        self.chain.shimmer.shift1_semitones = Some(self.params.shimmer_interval.value() as f64);
+        self.chain.shimmer.shift1_semitones = Some(f64::from(self.params.shimmer_interval.value()));
         self.chain.spring.springs = self.params.springs.value().clamp(1, 3) as u8;
-        self.chain.bloom.harmonics = self.params.harmonics.value() as f64;
-        self.chain.chorale.mod_amount = self.params.singers.value() as f64;
-        self.chain.magneto.feedback = self.params.regen.value() as f64;
-        self.chain.nonlinear.chop_depth = self.params.chop.value() as f64;
+        self.chain.bloom.harmonics = f64::from(self.params.harmonics.value());
+        self.chain.chorale.mod_amount = f64::from(self.params.singers.value());
+        self.chain.magneto.feedback = f64::from(self.params.regen.value());
+        self.chain.nonlinear.chop_depth = f64::from(self.params.chop.value());
 
-        self.chain.predelay_ms = self.params.predelay.value() as f64;
-        self.chain.width = self.params.width.value() as f64;
-        self.chain.mix = self.params.mix.value() as f64;
+        self.chain.predelay_ms = f64::from(self.params.predelay.value());
+        self.chain.width = f64::from(self.params.width.value());
+        self.chain.mix = f64::from(self.params.mix.value());
 
         // The two embedded EQs (docs/spec/fx/embedded-eq.md): the Post EQ on
         // the wet output, the Decay Rate EQ into the algorithm's feedback
@@ -171,7 +171,7 @@ impl Plugin for FtsReverb {
         buffer_config: &BufferConfig,
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
         // The worker resamples to whatever the host is running at.
         self.ui_state.sample_rate.store(
             buffer_config.sample_rate,
@@ -215,8 +215,8 @@ impl Plugin for FtsReverb {
             {
                 let ch = buffer.as_slice();
                 for i in 0..len {
-                    self.scratch_l[i] = ch[0][offset + i] as f64;
-                    self.scratch_r[i] = ch[1][offset + i] as f64;
+                    self.scratch_l[i] = f64::from(ch[0][offset + i]);
+                    self.scratch_r[i] = f64::from(ch[1][offset + i]);
                 }
             }
             self.chain

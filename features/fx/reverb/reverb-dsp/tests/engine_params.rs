@@ -1,5 +1,5 @@
-//! BigSky MX pass-C in-algorithm params: Shimmer dual shift +
-//! feedback modes, Magneto ping-pong, NonLinear chop / gate speed /
+//! `BigSky` MX pass-C in-algorithm params: Shimmer dual shift +
+//! feedback modes, Magneto ping-pong, `NonLinear` chop / gate speed /
 //! late stage. All defaults must be bit-transparent against a chain
 //! that never touched the new param structs.
 
@@ -11,7 +11,7 @@ use audiocore_dsp::{AudioConfig, Processor};
 
 const SR: f64 = 48000.0;
 
-fn config() -> AudioConfig {
+const fn config() -> AudioConfig {
     AudioConfig {
         sample_rate: SR,
         max_buffer_size: 512,
@@ -40,7 +40,7 @@ fn goertzel(buf: &[f64], freq: f64) -> f64 {
         s2 = s1;
         s1 = s0;
     }
-    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
 }
 
 /// Render `secs` of a 440 Hz sine burst (first 0.5 s) through the chain.
@@ -192,7 +192,7 @@ fn magneto_ping_pong_alternates_heads() {
         c
     };
 
-    let head = ((0.1 + 0.5 * 1.4) / 4.0 * SR) as usize;
+    let head = (0.5f64.mul_add(1.4, 0.1) / 4.0 * SR) as usize;
     let n = head * 5;
 
     let (l, r) = render_impulse(&mut make(true), n);
@@ -259,11 +259,11 @@ fn nonlinear_chop_modulates_decay() {
     let chopped = render(1.0);
     let mut checked = 0usize;
     for i in 0..flat.len() {
-        let trem = 0.5 + 0.5 * (std::f64::consts::TAU * rate * i as f64 / SR).cos();
+        let trem = 0.5f64.mul_add((std::f64::consts::TAU * rate * i as f64 / SR).cos(), 0.5);
         let expect = flat[i] * trem;
         if flat[i].abs() > 1e-9 {
             assert!(
-                (chopped[i] - expect).abs() < 1e-9 + expect.abs() * 1e-6,
+                (chopped[i] - expect).abs() < expect.abs().mul_add(1e-6, 1e-9),
                 "chop AM mismatch at {i}: got {} want {expect}",
                 chopped[i]
             );
@@ -276,7 +276,7 @@ fn nonlinear_chop_modulates_decay() {
     );
     // And the troughs actually silence the decay.
     let trough = (SR / 16.0) as usize; // half period at 8 Hz
-    assert!(chopped[trough].abs() < flat[trough].abs() * 1e-3 + 1e-12);
+    assert!(chopped[trough].abs() < flat[trough].abs().mul_add(1e-3, 1e-12));
 }
 
 #[test]
@@ -291,7 +291,7 @@ fn nonlinear_gate_speed_shortens_hold() {
         l
     };
 
-    let env_len = (0.1 + 0.5 * 1.9) * SR; // matches size mapping
+    let env_len = 0.5f64.mul_add(1.9, 0.1) * SR; // matches size mapping
                                           // Window between the fast hold point (0.5) and the slow one (0.9):
                                           // slow (speed 1) is still at full level there, fast (speed 0) has
                                           // released.
@@ -321,7 +321,7 @@ fn nonlinear_late_stage_adds_tail() {
 
     let off = render(0.0);
     let on = render(1.0);
-    for v in on.iter() {
+    for v in &on {
         assert!(v.is_finite(), "late stage produced non-finite output");
     }
     // Well after the nonlinear burst window, the late tail dominates.

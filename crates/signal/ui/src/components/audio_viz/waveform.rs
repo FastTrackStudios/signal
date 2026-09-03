@@ -30,10 +30,10 @@ pub struct WaveformDisplayProps {
 pub fn WaveformDisplay(props: WaveformDisplayProps) -> Element {
     let w = props.width;
     let h = props.height;
-    let hf = h as f64;
+    let hf = f64::from(h);
     let mid = hf / 2.0;
     let count = props.samples.len().max(1);
-    let bar_w = (w as f64 / count as f64).max(1.0);
+    let bar_w = (f64::from(w) / count as f64).max(1.0);
 
     rsx! {
         div {

@@ -5,6 +5,9 @@ edition = "2021"
 license.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 architect.workspace = true
 vox = { workspace = true, optional = true }

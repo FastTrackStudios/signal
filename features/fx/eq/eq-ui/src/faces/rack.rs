@@ -38,7 +38,7 @@ fn legend_drop(d: f64, label_r: f64) -> f64 {
     // print at different radii — a fixed drop that clears a Pultec's tight
     // numerals strikes the SSL's wider ones.
     let numerals = d * (label_r / 60.0) * 0.866;
-    let text = d * (7.0 / 110.0) * 0.5 + 5.5;
+    let text = (d * (7.0 / 110.0)).mul_add(0.5, 5.5);
     (numerals + text + 4.0).max(30.0)
 }
 /// Legend box width — narrow enough that neighbours on a seven-control row do
@@ -152,7 +152,7 @@ pub fn EqRackFace(
                                     handle: handle(id),
                                     testid: id.replace('_', "-"),
                                     scale,
-                                    labels: labels.iter().map(|s| s.to_string()).collect(),
+                                    labels: labels.iter().map(std::string::ToString::to_string).collect(),
                                     ink: design.ink.to_string(),
                                     reverse,
                                 }
@@ -210,7 +210,7 @@ pub fn EqRackFace(
                                     handle: handle(id),
                                     testid: id.replace('_', "-"),
                                     scale,
-                                    labels: labels.iter().map(|s| s.to_string()).collect(),
+                                    labels: labels.iter().map(std::string::ToString::to_string).collect(),
                                     unit: unit.to_string(),
                                     ink: design.ink.to_string(),
                                 }
@@ -462,7 +462,7 @@ fn CompactEqRack(design: RackDesign, model: i32, avail_h: f64) -> Element {
                                 handle: handle(id),
                                 testid: id.replace('_', "-"),
                                 scale: 0.8,
-                                labels: labels.iter().map(|s| s.to_string()).collect(),
+                                labels: labels.iter().map(std::string::ToString::to_string).collect(),
                                 ink: design.ink.to_string(),
                             }
                         }),

@@ -87,7 +87,7 @@ impl FtsEqPlugin {
     fn sync_params(&mut self) {
         // Solo: while any band is soloed the rest are muted.
         let any_solo = (0..NUM_BANDS).any(|i| self.params.bands[i].solo.value() > 0.5);
-        let scale = self.params.gain_scale.value() as f64 / 100.0;
+        let scale = f64::from(self.params.gain_scale.value()) / 100.0;
 
         for i in 0..NUM_BANDS {
             let bp = &self.params.bands[i];
@@ -106,12 +106,12 @@ impl FtsEqPlugin {
                     // whether it sounds.
                     used: true,
                     enabled,
-                    freq_hz: bp.freq_hz.value() as f64,
-                    gain_db: bp.gain_db.value() as f64,
+                    freq_hz: f64::from(bp.freq_hz.value()),
+                    gain_db: f64::from(bp.gain_db.value()),
                     // Pro-Q 4 convention: display Q=1.0 = Butterworth.
-                    q: bp.q.value() as f64 * std::f64::consts::FRAC_1_SQRT_2,
+                    q: f64::from(bp.q.value()) * std::f64::consts::FRAC_1_SQRT_2,
                     shape: bp.filter_type.value().max(0) as u32,
-                    slope: bp.slope.value().max(0.0) as f64,
+                    slope: f64::from(bp.slope.value().max(0.0)),
                     placement: eq_dsp::band::Placement::from_index(
                         bp.placement.value().max(0) as u32,
                     ),
@@ -121,18 +121,18 @@ impl FtsEqPlugin {
             self.engine.set_band_dynamics(
                 i,
                 eq_dsp::engine::BandDynamics {
-                    range_db: bp.dyn_range_db.value() as f64,
-                    threshold_db: bp.dyn_threshold_db.value() as f64,
-                    attack_pct: bp.dyn_attack.value() as f64,
-                    release_pct: bp.dyn_release.value() as f64,
+                    range_db: f64::from(bp.dyn_range_db.value()),
+                    threshold_db: f64::from(bp.dyn_threshold_db.value()),
+                    attack_pct: f64::from(bp.dyn_attack.value()),
+                    release_pct: f64::from(bp.dyn_release.value()),
                     auto: bp.dyn_auto.value() > 0.5,
                     relative: false,
                     spectral: bp.spectral.value() > 0.5,
-                    spectral_density: bp.spectral_density.value() as f64,
+                    spectral_density: f64::from(bp.spectral_density.value()),
                     spectral_tilt: bp.spectral_tilt.value() > 0.5,
                     side_filtered: bp.side_filtered.value() > 0.5,
-                    side_lo_hz: bp.side_lo_hz.value() as f64,
-                    side_hi_hz: bp.side_hi_hz.value() as f64,
+                    side_lo_hz: f64::from(bp.side_lo_hz.value()),
+                    side_hi_hz: f64::from(bp.side_hi_hz.value()),
                 },
             );
         }
@@ -149,7 +149,7 @@ impl FtsEqPlugin {
         self.engine
             .set_character(self.params.character.value().max(0) as u32);
         self.engine.set_output_pan(
-            self.params.output_pan.value() as f64,
+            f64::from(self.params.output_pan.value()),
             self.params.output_pan_mid_side.value() > 0.5,
         );
     }
@@ -158,8 +158,8 @@ impl FtsEqPlugin {
         let settings = Neve1073Settings {
             eq_in: self.params.neve_eq_in.value() > 0.5,
             phase_invert: self.params.neve_phase.value() > 0.5,
-            trim_db: self.params.neve_trim_db.value() as f64,
-            drive_percent: self.params.neve_drive.value() as f64,
+            trim_db: f64::from(self.params.neve_trim_db.value()),
+            drive_percent: f64::from(self.params.neve_drive.value()),
             hpf: match self.params.neve_hpf.value() {
                 1 => Neve1073Hpf::Hz50,
                 2 => Neve1073Hpf::Hz80,
@@ -174,7 +174,7 @@ impl FtsEqPlugin {
                 4 => Neve1073LowFreq::Hz220,
                 _ => Neve1073LowFreq::Off,
             },
-            low_gain_db: self.params.neve_low_gain_db.value() as f64,
+            low_gain_db: f64::from(self.params.neve_low_gain_db.value()),
             mid_freq: match self.params.neve_mid_freq.value() {
                 1 => Neve1073MidFreq::Hz360,
                 2 => Neve1073MidFreq::Hz700,
@@ -184,8 +184,8 @@ impl FtsEqPlugin {
                 6 => Neve1073MidFreq::Hz7200,
                 _ => Neve1073MidFreq::Off,
             },
-            mid_gain_db: self.params.neve_mid_gain_db.value() as f64,
-            high_gain_db: self.params.neve_high_gain_db.value() as f64,
+            mid_gain_db: f64::from(self.params.neve_mid_gain_db.value()),
+            high_gain_db: f64::from(self.params.neve_high_gain_db.value()),
         };
 
         if self.neve_1073.settings() != settings {
@@ -198,46 +198,46 @@ impl FtsEqPlugin {
             1 => HardwareEqSettings::Pultec(PultecEqp1aSettings {
                 eq_in: self.params.pultec_eq_in.value() > 0.5,
                 low_freq_hz: pultec_low_freq(self.params.pultec_low_freq.value()),
-                low_boost_db: self.params.pultec_low_boost_db.value() as f64,
-                low_atten_db: self.params.pultec_low_atten_db.value() as f64,
+                low_boost_db: f64::from(self.params.pultec_low_boost_db.value()),
+                low_atten_db: f64::from(self.params.pultec_low_atten_db.value()),
                 high_boost_freq_hz: pultec_high_boost_freq(
                     self.params.pultec_high_boost_freq.value(),
                 ),
-                high_boost_db: self.params.pultec_high_boost_db.value() as f64,
-                high_bandwidth: self.params.pultec_bandwidth.value() as f64,
+                high_boost_db: f64::from(self.params.pultec_high_boost_db.value()),
+                high_bandwidth: f64::from(self.params.pultec_bandwidth.value()),
                 high_atten_freq_hz: pultec_high_atten_freq(
                     self.params.pultec_high_atten_freq.value(),
                 ),
-                high_atten_db: self.params.pultec_high_atten_db.value() as f64,
-                drive_percent: self.params.pultec_drive.value() as f64,
-                trim_db: self.params.pultec_trim_db.value() as f64,
+                high_atten_db: f64::from(self.params.pultec_high_atten_db.value()),
+                drive_percent: f64::from(self.params.pultec_drive.value()),
+                trim_db: f64::from(self.params.pultec_trim_db.value()),
             }),
             3 => HardwareEqSettings::Api(Api550aSettings {
                 eq_in: self.params.api_eq_in.value() > 0.5,
                 low_freq_hz: api_low_freq(self.params.api_low_freq.value()),
-                low_gain_db: self.params.api_low_gain_db.value() as f64,
+                low_gain_db: f64::from(self.params.api_low_gain_db.value()),
                 mid_freq_hz: api_mid_freq(self.params.api_mid_freq.value()),
-                mid_gain_db: self.params.api_mid_gain_db.value() as f64,
+                mid_gain_db: f64::from(self.params.api_mid_gain_db.value()),
                 high_freq_hz: api_high_freq(self.params.api_high_freq.value()),
-                high_gain_db: self.params.api_high_gain_db.value() as f64,
-                drive_percent: self.params.api_drive.value() as f64,
-                trim_db: self.params.api_trim_db.value() as f64,
+                high_gain_db: f64::from(self.params.api_high_gain_db.value()),
+                drive_percent: f64::from(self.params.api_drive.value()),
+                trim_db: f64::from(self.params.api_trim_db.value()),
             }),
             4 | 5 => HardwareEqSettings::Ssl(SslChannelSettings {
                 eq_in: self.params.ssl_eq_in.value() > 0.5,
                 e_series: model == 4,
-                hpf_hz: self.params.ssl_hpf_hz.value() as f64,
-                lpf_hz: self.params.ssl_lpf_hz.value() as f64,
-                lf_freq_hz: self.params.ssl_lf_freq_hz.value() as f64,
-                lf_gain_db: self.params.ssl_lf_gain_db.value() as f64,
-                lmf_freq_hz: self.params.ssl_lmf_freq_hz.value() as f64,
-                lmf_gain_db: self.params.ssl_lmf_gain_db.value() as f64,
-                hmf_freq_hz: self.params.ssl_hmf_freq_hz.value() as f64,
-                hmf_gain_db: self.params.ssl_hmf_gain_db.value() as f64,
-                hf_freq_hz: self.params.ssl_hf_freq_hz.value() as f64,
-                hf_gain_db: self.params.ssl_hf_gain_db.value() as f64,
-                drive_percent: self.params.ssl_drive.value() as f64,
-                trim_db: self.params.ssl_trim_db.value() as f64,
+                hpf_hz: f64::from(self.params.ssl_hpf_hz.value()),
+                lpf_hz: f64::from(self.params.ssl_lpf_hz.value()),
+                lf_freq_hz: f64::from(self.params.ssl_lf_freq_hz.value()),
+                lf_gain_db: f64::from(self.params.ssl_lf_gain_db.value()),
+                lmf_freq_hz: f64::from(self.params.ssl_lmf_freq_hz.value()),
+                lmf_gain_db: f64::from(self.params.ssl_lmf_gain_db.value()),
+                hmf_freq_hz: f64::from(self.params.ssl_hmf_freq_hz.value()),
+                hmf_gain_db: f64::from(self.params.ssl_hmf_gain_db.value()),
+                hf_freq_hz: f64::from(self.params.ssl_hf_freq_hz.value()),
+                hf_gain_db: f64::from(self.params.ssl_hf_gain_db.value()),
+                drive_percent: f64::from(self.params.ssl_drive.value()),
+                trim_db: f64::from(self.params.ssl_trim_db.value()),
             }),
             _ => return,
         };
@@ -351,7 +351,7 @@ impl Plugin for FtsEqPlugin {
         buffer_config: &BufferConfig,
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
         self.ui_state
             .sample_rate
             .store(buffer_config.sample_rate, Ordering::Relaxed);
@@ -397,7 +397,7 @@ impl Plugin for FtsEqPlugin {
         self.publish_model_response(model);
 
         let output_gain =
-            audiocore_dsp::db::db_to_linear(self.params.output_gain_db.value() as f64);
+            audiocore_dsp::db::db_to_linear(f64::from(self.params.output_gain_db.value()));
         let n = buffer.samples();
 
         // Ensure scratch buffers are large enough
@@ -414,8 +414,8 @@ impl Plugin for FtsEqPlugin {
         // Convert f32 buffer → f64 scratch, track input peak, capture pre-EQ mono
         let mut input_peak: f32 = 0.0;
         for (i, mut frame) in buffer.iter_samples().enumerate() {
-            let l = *frame.get_mut(0).unwrap() as f64;
-            let r = *frame.get_mut(1).unwrap() as f64;
+            let l = f64::from(*frame.get_mut(0).unwrap());
+            let r = f64::from(*frame.get_mut(1).unwrap());
             input_peak = input_peak.max(l.abs().max(r.abs()) as f32);
             self.left_buf[i] = l;
             self.right_buf[i] = r;

@@ -3,7 +3,7 @@
 //! Implements [`BlockService`] on [`SignalLive`], delegating persistence
 //! to the underlying [`BlockRepo`].
 
-use super::*;
+use super::{BlockService, SignalLive, BlockRepo, ModuleRepo, LayerRepo, EngineRepo, RigRepo, ProfileRepo, SongRepo, SetlistRepo, SceneTemplateRepo, RackRepo, BlockType, Block, SignalServiceError, Preset, PresetId, Snapshot, SnapshotId, ModulePreset, ModulePresetId, ModuleSnapshot, ModuleSnapshotId};
 
 impl<B, M, L, E, R, P, So, Se, St, Ra> BlockService for SignalLive<B, M, L, E, R, P, So, Se, St, Ra>
 where

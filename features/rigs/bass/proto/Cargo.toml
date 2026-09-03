@@ -10,6 +10,9 @@ authors.workspace = true
 # detachable-GUI boundary — it must stay wasm-clean (no audio backend, no
 # Dioxus, no platform I/O) so browser/plugin/embedded remotes can all speak it.
 
+[lints]
+workspace = true
+
 [dependencies]
 architect.workspace = true
 vox = { workspace = true, optional = true }

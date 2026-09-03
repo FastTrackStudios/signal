@@ -1,6 +1,6 @@
 //! REAPER integration test: Place switch actions.
 //!
-//! Verifies the place_section_switch, place_song_switch, and place_scene_switch
+//! Verifies the `place_section_switch`, `place_song_switch`, and `place_scene_switch`
 //! actions correctly:
 //! 1. Walk up the parent chain to find the right controller track
 //! 2. Place a named MIDI item at the edit cursor position
@@ -8,7 +8,7 @@
 //! 4. Produce items that the scene timer can use for switching
 //!
 //! Run with:
-//!   cargo xtask reaper-test place_switch
+//!   cargo xtask reaper-test `place_switch`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
@@ -40,7 +40,7 @@ struct TestSetlist {
     belief_folder: daw::rpc::TrackHandle,
     /// Section tracks: Clean, Ambient, Rhythm (direct children of song folder)
     belief_sections: Vec<daw::rpc::TrackHandle>,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     vienna_folder: daw::rpc::TrackHandle,
     /// Section tracks: Clean, Drive
     vienna_sections: Vec<daw::rpc::TrackHandle>,

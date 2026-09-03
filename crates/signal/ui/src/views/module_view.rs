@@ -96,10 +96,10 @@ pub fn ModuleView(
                         parameters: block.parameters.clone(),
                         on_toggle_bypass: {
                             let id = block.id.clone();
-                            move |_| on_toggle_bypass.call(id.clone())
+                            move |()| on_toggle_bypass.call(id.clone())
                         },
                         on_param_change: {
-                            let id = block.id.clone();
+                            let id = block.id;
                             move |(idx, val): (usize, f32)| {
                                 on_param_change.call(ParamChange {
                                     block_id: id.clone(),
@@ -142,7 +142,7 @@ fn CompactBlockPill(
                     border transition-all cursor-pointer hover:brightness-110 active:brightness-90",
             style: "{style}",
             onclick: {
-                let id = id.clone();
+                let id = id;
                 move |_| on_toggle_bypass.call(id.clone())
             },
             title: "{label}",

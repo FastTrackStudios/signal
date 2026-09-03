@@ -2,7 +2,7 @@
 //!
 //! A pure layout component shared by all entity editors.
 //! Provides: accent strip (optional), left/center/right panels, and status bar.
-//! Each editor slots in its own panel content -- the EntityEditor only owns
+//! Each editor slots in its own panel content -- the `EntityEditor` only owns
 //! the outer layout structure.
 
 use dioxus::prelude::*;

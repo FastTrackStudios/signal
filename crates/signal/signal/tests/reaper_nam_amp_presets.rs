@@ -7,7 +7,7 @@
 //! onto the corresponding layer track — all in parallel.
 //!
 //! Run with:
-//!   cargo xtask reaper-test --keep-open nam_amp_load
+//!   cargo xtask reaper-test --keep-open `nam_amp_load`
 
 use std::time::Instant;
 
@@ -107,7 +107,7 @@ async fn nam_amp_load_guitar_rig(ctx: &ReaperTestContext) -> eyre::Result<()> {
             let result = svc
                 .load_block_to_track(BlockType::Amp, &preset_id, None, &track)
                 .await
-                .map_err(|e| format!("Failed to load '{}': {e}", preset_name))?;
+                .map_err(|e| format!("Failed to load '{preset_name}': {e}"))?;
 
             let elapsed = start.elapsed();
             eprintln!(
@@ -132,8 +132,7 @@ async fn nam_amp_load_guitar_rig(ctx: &ReaperTestContext) -> eyre::Result<()> {
                 let fx_count = track.fx_chain().count().await.unwrap_or(0);
                 assert_eq!(
                     fx_count, 1,
-                    "'{}' should have exactly 1 FX, got {}",
-                    name, fx_count
+                    "'{name}' should have exactly 1 FX, got {fx_count}"
                 );
             }
             Ok(Err(e)) => load_errors.push(e),
@@ -271,7 +270,7 @@ async fn nam_amp_load_eq_plus_fender(ctx: &ReaperTestContext) -> eyre::Result<()
 
     // 5. Verify FX chain: EQ module container + NAM amp.
     let fx_count = layer_track.fx_chain().count().await?;
-    eprintln!("FX count on layer: {}", fx_count);
+    eprintln!("FX count on layer: {fx_count}");
 
     ctx.log(&format!(
         "nam_amp_load_eq_plus_fender: PASS — EQ + Fender Deluxe in {:.1}s",

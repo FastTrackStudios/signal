@@ -3,7 +3,7 @@
 //! This module bridges the gap between Signal's abstract macro definitions
 //! and REAPER's concrete FX parameter indices. When a block is loaded:
 //!
-//! 1. Collect bindings from the MacroBank (including sub-macros)
+//! 1. Collect bindings from the `MacroBank` (including sub-macros)
 //! 2. Query the target FX plugin for available parameters
 //! 3. Match parameter names using semantic name resolution
 //! 4. Return resolved bindings ready for registration in the global registry
@@ -21,8 +21,8 @@
 //! ```
 //!
 //! **Process**:
-//! - Recursive knob tree traversal (collect_knob_bindings)
-//! - Parameter name matching (param_name_matches from engine)
+//! - Recursive knob tree traversal (`collect_knob_bindings`)
+//! - Parameter name matching (`param_name_matches` from engine)
 //! - Index resolution from FX parameter list
 //!
 //! **Output**: `MacroSetupResult` with concrete indices:
@@ -37,7 +37,7 @@
 //!
 //! # Design Principles
 //!
-//! - **No side effects**: setup_macros_for_block is pure, returns result for caller to register
+//! - **No side effects**: `setup_macros_for_block` is pure, returns result for caller to register
 //! - **No JSFX/MIDI**: Direct API, no middleware injection
 //! - **Fail gracefully**: Missing parameters are skipped (logged as warnings)
 //! - **Recursive**: Supports nested sub-macros (children in knob tree)
@@ -90,7 +90,7 @@ struct CollectedBinding<'a> {
 ///
 /// Returns `None` if the block has no macro bank or no bindings.
 /// Otherwise resolves bindings to parameter indices and returns
-/// a MacroSetupResult that can be registered in the global registry.
+/// a `MacroSetupResult` that can be registered in the global registry.
 ///
 /// No JSFX insertion, no MIDI CC assignment, no plink configuration.
 pub async fn setup_macros_for_block(
@@ -149,7 +149,7 @@ pub async fn setup_macros_for_block(
 
 // ─── Binding collection ────────────────────────────────────────
 
-/// Recursively collect all bindings from a MacroBank's knobs and their children.
+/// Recursively collect all bindings from a `MacroBank`'s knobs and their children.
 fn collect_all_bindings(bank: &MacroBank) -> Vec<CollectedBinding<'_>> {
     let mut result = Vec::new();
     for (idx, knob) in bank.knobs.iter().enumerate() {

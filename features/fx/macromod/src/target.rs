@@ -41,7 +41,7 @@ mod tests {
         assert_ne!(a, c);
 
         let mut map = HashMap::new();
-        map.insert(a.clone(), 42);
+        map.insert(a, 42);
         assert_eq!(map.get(&b), Some(&42));
         assert_eq!(map.get(&c), None);
     }

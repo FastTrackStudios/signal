@@ -192,10 +192,10 @@ pub fn PerformGrid(
     // (identical to the physical footswitch): 1→Ambient, 2→FX Toggle,
     // 3→Song (reserved), 4→Boost on/off. 5→Tuner is wired on the tile.
     let hold_actions: [Option<Callback<()>>; 4] = [
-        Some(Callback::new(move |_: ()| on_press.call(4))),
-        Some(Callback::new(move |_: ()| on_toggle_fx.call(()))),
-        Some(Callback::new(move |_: ()| song_layer.set(true))),
-        Some(Callback::new(move |_: ()| on_toggle_boost.call(()))),
+        Some(Callback::new(move |(): ()| on_press.call(4))),
+        Some(Callback::new(move |(): ()| on_toggle_fx.call(()))),
+        Some(Callback::new(move |(): ()| song_layer.set(true))),
+        Some(Callback::new(move |(): ()| on_toggle_boost.call(()))),
     ];
 
     let current_song = model
@@ -222,7 +222,7 @@ pub fn PerformGrid(
                 select {
                     class: "bg-background border border-border rounded px-2 py-1 text-sm",
                     onchange: {
-                        let rig = rig.clone();
+                        let rig = rig;
                         move |e: FormEvent| {
                             if let (Some(r), Ok(i)) = (rig.clone(), e.value().parse::<u32>()) {
                                 spawn(async move { let _ = r.play_preset(i).await; });
@@ -354,7 +354,7 @@ pub fn PerformGrid(
                 active: song_layer(),
                 switch_no: 8,
                 compact: true,
-                onclick: Callback::new(move |_: ()| song_layer.toggle()),
+                onclick: Callback::new(move |(): ()| song_layer.toggle()),
             }
             // Switch 9 (hold 4): Boost — tap on/off, hold rotates the level.
             BoostTile {
@@ -369,7 +369,7 @@ pub fn PerformGrid(
                 switch_no: 10,
                 onclick: Callback::new({
                     let rig = rig.clone();
-                    move |_: ()| {
+                    move |(): ()| {
                         if let Some(r) = rig.clone() {
                             spawn(async move { let _ = r.toggle_tuner().await; });
                         }
@@ -429,7 +429,7 @@ pub fn PerformGrid(
                 HoldButton {
                     class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full bg-card border border-border hover:bg-accent/40".to_string(),
                     style: String::new(),
-                    on_tap: Callback::new(move |_: ()| song_layer.set(false)),
+                    on_tap: Callback::new(move |(): ()| song_layer.set(false)),
                     SwitchNo { no: 5 }
                     span { class: "text-xl font-bold", "Back" }
                     span { class: "text-xs text-muted-foreground", "to the rig" }
@@ -456,8 +456,8 @@ pub fn PerformGrid(
                 tempo_bpm: model.tempo_bpm,
                 on_tap: on_tap_tempo,
                 on_hold: Callback::new({
-                    let rig = rig.clone();
-                    move |_: ()| {
+                    let rig = rig;
+                    move |(): ()| {
                         if let Some(r) = rig.clone() {
                             spawn(async move { let _ = r.toggle_tuner().await; });
                         }
@@ -497,7 +497,7 @@ fn StackTile(
         HoldButton {
             class: format!("{layout_cls} transition-all h-full {state_cls}"),
             style: format!("background-color: {bg}; color: {text};"),
-            on_tap: Callback::new(move |_: ()| on_press.call(index)),
+            on_tap: Callback::new(move |(): ()| on_press.call(index)),
             on_hold,
             SwitchNo { no: switch_no }
             // Amber dot while the current patch is still loading.
@@ -644,7 +644,7 @@ fn TapTempoTile(tempo_bpm: u32, on_tap: Callback<()>, on_hold: Callback<()>) -> 
     // Flash the ring on the beat: on for the front edge, off for the rest.
     // `use_resource` re-runs (dropping the old loop) when `bpm_sig` changes.
     let _blink = use_resource(move || async move {
-        let bpm = bpm_sig().max(40) as u64;
+        let bpm = u64::from(bpm_sig().max(40));
         loop {
             let beat_ms = 60_000 / bpm;
             lit.set(true);
@@ -678,7 +678,7 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut reading = use_signal(TunerReading::default);
     {
-        let rig = rig.clone();
+        let rig = rig;
         use_future(move || {
             let rig = rig.clone();
             async move {
@@ -737,7 +737,7 @@ pub fn TunerOverlay(on_close: EventHandler<()>) -> Element {
     let mut smooth_cents = use_signal(|| 0.0f32);
 
     {
-        let rig = rig.clone();
+        let rig = rig;
         use_future(move || {
             let rig = rig.clone();
             async move {
@@ -746,7 +746,7 @@ pub fn TunerOverlay(on_close: EventHandler<()>) -> Element {
                     if let Ok(r) = rig.tuner().await {
                         if r.active {
                             let prev = *smooth_cents.peek();
-                            smooth_cents.set(prev + (r.cents - prev) * 0.35);
+                            smooth_cents.set((r.cents - prev).mul_add(0.35, prev));
                         }
                         reading.set(r);
                     }

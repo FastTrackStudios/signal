@@ -37,7 +37,7 @@ fn steady_state_rms(eq: &mut NativeEq, amplitude: f64, seconds: f64) -> f64 {
     while pos < frames {
         let len = BLOCK.min(frames - pos);
         let mut l = vec![0.0f32; len];
-        for s in l.iter_mut() {
+        for s in &mut l {
             *s = (amplitude * phase.sin()) as f32;
             phase += inc;
         }
@@ -47,7 +47,7 @@ fn steady_state_rms(eq: &mut NativeEq, amplitude: f64, seconds: f64) -> f64 {
             .expect("process");
         for (i, s) in ol.iter().enumerate() {
             if pos + i >= measure_from {
-                sum += (*s as f64) * (*s as f64);
+                sum += f64::from(*s) * f64::from(*s);
                 n += 1;
             }
         }

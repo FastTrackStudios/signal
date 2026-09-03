@@ -10,6 +10,9 @@ description = "FTS Delay — CLAP/VST3 stereo delay plugin (tape/digital/BBD/...
 # cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
 crate-type = ["cdylib", "lib"]
 
+[lints]
+workspace = true
+
 [dependencies]
 # Plugin framework. Must be a direct dep — the export macros expand to
 # absolute `::nice_plug::…` paths.

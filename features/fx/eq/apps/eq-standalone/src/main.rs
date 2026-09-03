@@ -174,7 +174,7 @@ fn animate_demo_bands(ui: Arc<EqUiState>) {
         }
         if NUM_BANDS > 1 {
             let bp = &params.bands[1];
-            let gain = 4.0 * (t * 0.45 + 1.5).sin() - 1.0;
+            let gain = 4.0f32.mul_add(t.mul_add(0.45, 1.5).sin(), -1.0);
             unsafe {
                 bp.enabled
                     .as_ptr()
@@ -206,7 +206,7 @@ fn animate_demo_bands(ui: Arc<EqUiState>) {
         }
         if NUM_BANDS > 3 {
             let bp = &params.bands[3];
-            let gain = 3.0 * (t * 0.6 + 2.5).sin();
+            let gain = 3.0 * t.mul_add(0.6, 2.5).sin();
             unsafe {
                 bp.enabled
                     .as_ptr()
@@ -252,9 +252,7 @@ fn start_system_capture(ui: &Arc<EqUiState>) -> anyhow::Result<cpal::Stream> {
         eprintln!("available audio inputs:");
         for d in inputs {
             let name = d
-                .description()
-                .map(|desc| desc.name().to_string())
-                .unwrap_or_else(|_| "<unknown>".into());
+                .description().map_or_else(|_| "<unknown>".into(), |desc| desc.name().to_string());
             eprintln!("  - {name}");
             let lname = name.to_lowercase();
             if let Some(want) = &env_dev {
@@ -276,9 +274,7 @@ fn start_system_capture(ui: &Arc<EqUiState>) -> anyhow::Result<cpal::Stream> {
         .or_else(|| host.default_input_device())
         .ok_or_else(|| anyhow::anyhow!("no input device available"))?;
     let dev_name = device
-        .description()
-        .map(|desc| desc.name().to_string())
-        .unwrap_or_else(|_| "<unknown>".into());
+        .description().map_or_else(|_| "<unknown>".into(), |desc| desc.name().to_string());
     eprintln!("capturing from: {dev_name}");
     eprintln!(
         "  ↳ to visualize system audio: open `pavucontrol` → Recording tab and set\n     this app's source to \"Monitor of <your output>\", or connect the sink\n     monitor to this node in `qpwgraph`. Override the device with\n     FTS_EQ_AUDIO_INPUT=\"<name>\"."
@@ -331,7 +327,7 @@ fn start_system_capture(ui: &Arc<EqUiState>) -> anyhow::Result<cpal::Stream> {
                 config.into(),
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
                     buf.clear();
-                    buf.extend(data.iter().map(|&s| s as f32 / i16::MAX as f32));
+                    buf.extend(data.iter().map(|&s| f32::from(s) / f32::from(i16::MAX)));
                     push(&buf);
                 },
                 err_fn,
@@ -347,7 +343,7 @@ fn start_system_capture(ui: &Arc<EqUiState>) -> anyhow::Result<cpal::Stream> {
                     buf.clear();
                     buf.extend(
                         data.iter()
-                            .map(|&s| (s as f32 / u16::MAX as f32) * 2.0 - 1.0),
+                            .map(|&s| (f32::from(s) / f32::from(u16::MAX)).mul_add(2.0, -1.0)),
                     );
                     push(&buf);
                 },
@@ -369,7 +365,7 @@ fn animate_spectrum(ui: Arc<EqUiState>) {
     let start = std::time::Instant::now();
     loop {
         let t = start.elapsed().as_secs_f32();
-        let peak_freq = 200.0 * (1.0 + 6.0 * (0.5 * (t * 0.3).sin() + 0.5));
+        let peak_freq = 200.0 * 6.0f32.mul_add(0.5f32.mul_add((t * 0.3).sin(), 0.5), 1.0);
         for i in 0..SPECTRUM_BINS {
             let u = i as f32 / (SPECTRUM_BINS - 1) as f32;
             let freq = 10.0_f32.powf(log_min + u * (log_max - log_min));
@@ -381,8 +377,8 @@ fn animate_spectrum(ui: Arc<EqUiState>) {
             let db = -28.0 + pink + bump + wobble;
             ui.spectrum_bins[i].store(db, Ordering::Relaxed);
         }
-        let in_db = -16.0 + 4.0 * (t * 1.7).sin();
-        let out_db = -18.0 + 4.0 * (t * 1.7 + 0.3).sin();
+        let in_db = 4.0f32.mul_add((t * 1.7).sin(), -16.0);
+        let out_db = 4.0f32.mul_add(t.mul_add(1.7, 0.3).sin(), -18.0);
         ui.input_peak_db.store(in_db, Ordering::Relaxed);
         ui.output_peak_db.store(out_db, Ordering::Relaxed);
         std::thread::sleep(std::time::Duration::from_millis(16));

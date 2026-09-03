@@ -1,19 +1,19 @@
 //! Live runtime integration tests for the signal domain.
 //!
 //! Covers the "performing live" side of the signal stack that the authoring tests
-//! (signal_guitar_rig_api.rs, signal_keys_engine_api.rs) don't touch:
+//! (`signal_guitar_rig_api.rs`, `signal_keys_engine_api.rs`) don't touch:
 //!
-//! - **RigControlCommand pipeline** — LoadPatch, LoadScene, NextSong, NextSection, etc.
-//! - **MockRigEngine slot lifecycle** — load_scene_targets, apply_snapshot, disable/enable
-//! - **Scene diff integration** — compute_diff with realistic resolved graphs
-//! - **Morph + SnapshotTween** — end-to-end crossfade animation between scenes
+//! - **`RigControlCommand` pipeline** — `LoadPatch`, `LoadScene`, `NextSong`, `NextSection`, etc.
+//! - **`MockRigEngine` slot lifecycle** — `load_scene_targets`, `apply_snapshot`, disable/enable
+//! - **Scene diff integration** — `compute_diff` with realistic resolved graphs
+//! - **Morph + `SnapshotTween`** — end-to-end crossfade animation between scenes
 //! - **Error handling** — nonexistent IDs, missing entities, broken references
 //! - **Empty collections** — empty rigs, engines, layers, profiles, songs, setlists
-//! - **Event bus** — subscribe() and event delivery on controller operations
-//! - **Untested controller methods** — get_block/set_block, delete_*, scene templates, etc.
+//! - **Event bus** — `subscribe()` and event delivery on controller operations
+//! - **Untested controller methods** — `get_block/set_block`, delete_*, scene templates, etc.
 //! - **Concurrent resolve** — simultaneous resolve operations
 //!
-//!   cargo test -p signal --test signal_live_runtime -- --nocapture
+//!   cargo test -p signal --test `signal_live_runtime` -- --nocapture
 
 mod fixtures;
 
@@ -80,7 +80,7 @@ fn make_target(mt: ModuleType) -> ModuleTarget {
     }
 }
 
-fn make_target_with_snapshot(
+const fn make_target_with_snapshot(
     mt: ModuleType,
     preset_id: ModulePresetId,
     snap_id: ModuleSnapshotId,
@@ -105,7 +105,7 @@ fn param(fx: &str, idx: u32, name: &str, val: f64) -> DawParamValue {
 //  Group A: RigControlCommand Pipeline (7 tests)
 // ═════════════════════════════════════════════════════════════
 
-/// LoadPatch command records in history and emits SceneTransitioned event.
+/// `LoadPatch` command records in history and emits `SceneTransitioned` event.
 #[tokio::test]
 async fn command_load_patch_emits_scene_transitioned() {
     let svc = MockRigControlService::new();
@@ -127,7 +127,7 @@ async fn command_load_patch_emits_scene_transitioned() {
     assert!(matches!(history[0], RigControlCommand::LoadPatch { .. }));
 }
 
-/// LoadScene command emits SceneTransitioned event.
+/// `LoadScene` command emits `SceneTransitioned` event.
 #[tokio::test]
 async fn command_load_scene_emits_scene_transitioned() {
     let svc = MockRigControlService::new();
@@ -144,7 +144,7 @@ async fn command_load_scene_emits_scene_transitioned() {
     ));
 }
 
-/// LoadSongSection records in history (mock returns empty events for this).
+/// `LoadSongSection` records in history (mock returns empty events for this).
 #[tokio::test]
 async fn command_load_song_section_records_history() {
     let svc = MockRigControlService::new();
@@ -162,7 +162,7 @@ async fn command_load_song_section_records_history() {
     ));
 }
 
-/// Navigation commands (NextSong, PreviousSong, NextSection, PreviousSection) record correctly.
+/// Navigation commands (`NextSong`, `PreviousSong`, `NextSection`, `PreviousSection`) record correctly.
 #[tokio::test]
 async fn command_navigation_records_all_four() {
     let svc = MockRigControlService::new();
@@ -212,7 +212,7 @@ async fn command_disable_enable_slot_events() {
     ));
 }
 
-/// SetMorphPosition emits position event with correct value.
+/// `SetMorphPosition` emits position event with correct value.
 #[tokio::test]
 async fn command_morph_position_event() {
     let svc = MockRigControlService::new();
@@ -361,11 +361,11 @@ async fn engine_shutdown_clears_all() {
 //  Group C: Scene Diff Integration (6 tests)
 // ═════════════════════════════════════════════════════════════
 
-fn no_preload(_: &ModuleTarget) -> Option<signal_live::engine::InstanceHandle> {
+const fn no_preload(_: &ModuleTarget) -> Option<signal_live::engine::InstanceHandle> {
     None
 }
 
-/// Diff from empty state to a scene: all slots should LoadAndActivate.
+/// Diff from empty state to a scene: all slots should `LoadAndActivate`.
 #[test]
 fn diff_empty_to_full_scene() {
     let mut targets = HashMap::new();
@@ -389,12 +389,12 @@ fn diff_empty_to_full_scene() {
         .all(|d| matches!(d, SlotDiff::LoadAndActivate { .. })));
 }
 
-/// Diff same preset + same snapshot = NoChange.
+/// Diff same preset + same snapshot = `NoChange`.
 #[test]
 fn diff_identical_scene_no_change() {
     let preset_id = ModulePresetId::new();
     let snap_id = ModuleSnapshotId::new();
-    let target = make_target_with_snapshot(ModuleType::Amp, preset_id.clone(), snap_id.clone());
+    let target = make_target_with_snapshot(ModuleType::Amp, preset_id, snap_id);
 
     let current = vec![SlotState {
         module_type: ModuleType::Amp,
@@ -411,7 +411,7 @@ fn diff_identical_scene_no_change() {
     assert!(matches!(diffs[0], SlotDiff::NoChange { .. }));
 }
 
-/// Diff same preset, different snapshot = ApplySnapshot.
+/// Diff same preset, different snapshot = `ApplySnapshot`.
 #[test]
 fn diff_same_preset_different_snapshot() {
     let preset_id = ModulePresetId::new();
@@ -436,7 +436,7 @@ fn diff_same_preset_different_snapshot() {
     assert!(matches!(diffs[0], SlotDiff::ApplySnapshot { .. }));
 }
 
-/// Diff different preset = LoadAndActivate.
+/// Diff different preset = `LoadAndActivate`.
 #[test]
 fn diff_different_preset_full_reload() {
     let target_a = make_target(ModuleType::Amp);
@@ -475,7 +475,7 @@ fn diff_slot_removed_becomes_disabled() {
     assert!(matches!(diffs[0], SlotDiff::Disable { .. }));
 }
 
-/// Multi-slot diff: mix of NoChange, ApplySnapshot, LoadAndActivate, and Disable.
+/// Multi-slot diff: mix of `NoChange`, `ApplySnapshot`, `LoadAndActivate`, and Disable.
 #[test]
 fn diff_multi_slot_mixed_transitions() {
     let shared_preset = ModulePresetId::new();
@@ -596,7 +596,7 @@ fn morph_full_cycle_linear() {
     assert!((gain_one.current_value - 0.9).abs() < 1e-10);
 }
 
-/// Morph with EaseInOut produces proper S-curve values.
+/// Morph with `EaseInOut` produces proper S-curve values.
 #[test]
 fn morph_ease_in_out_s_curve() {
     let mut engine = MorphEngine::new();
@@ -614,7 +614,7 @@ fn morph_ease_in_out_s_curve() {
     assert!(val > 0.75, "EaseInOut(0.75) = {val}, expected > 0.75");
 }
 
-/// SnapshotTween drives morph position over time (60fps simulation).
+/// `SnapshotTween` drives morph position over time (60fps simulation).
 #[test]
 fn tween_drives_morph_over_time() {
     let mut tween = SnapshotTween::new(500.0, EasingCurve::Linear);
@@ -1250,7 +1250,7 @@ async fn event_bus_multiple_subscribers() {
     assert!(signal.event_bus().subscriber_count() >= 2);
 }
 
-/// Event bus emits CollectionSaved when we save via the event bus directly.
+/// Event bus emits `CollectionSaved` when we save via the event bus directly.
 #[tokio::test]
 async fn event_bus_emit_and_receive() {
     let signal = controller().await;
@@ -1418,7 +1418,7 @@ fn rapid_diff_chain_four_scenes() {
     assert!(matches!(diffs_4[0], SlotDiff::NoChange { .. }));
 }
 
-/// MockRigEngine handles rapid scene switches without panicking.
+/// `MockRigEngine` handles rapid scene switches without panicking.
 #[tokio::test]
 async fn engine_rapid_scene_switches() {
     let engine = MockRigEngine::new();

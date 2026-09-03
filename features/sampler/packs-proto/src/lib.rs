@@ -15,7 +15,7 @@ use facet::Facet;
 use thiserror::Error;
 
 /// One distributable `.signalpack` in the host's library.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct PackInfo {
     /// Instrument name — the pack's file stem ("LA Custom C7 Grand").
     pub name: String,
@@ -34,7 +34,7 @@ pub struct PackInfo {
 /// One streamed slice of a pack file. Chunks arrive in order with
 /// contiguous, monotonically increasing `offset`s; the stream closing
 /// without error marks the end of the file.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct PackChunk {
     /// Absolute byte offset of this chunk within the pack file.
     pub offset: u64,
@@ -67,7 +67,7 @@ impl std::str::FromStr for PackRange {
         let (start, len) = s
             .split_once('+')
             .ok_or_else(|| format!("range {s:?} is not start+len"))?;
-        Ok(PackRange {
+        Ok(Self {
             start: start
                 .trim()
                 .parse()
@@ -114,15 +114,15 @@ pub enum PackError {
 // which needs the plain-data Reborrow witness — same as media-proto.
 #[cfg(feature = "vox")]
 unsafe impl vox_types::Reborrow for PackInfo {
-    type Ref<'a> = PackInfo;
+    type Ref<'a> = Self;
 }
 #[cfg(feature = "vox")]
 unsafe impl vox_types::Reborrow for PackChunk {
-    type Ref<'a> = PackChunk;
+    type Ref<'a> = Self;
 }
 #[cfg(feature = "vox")]
 unsafe impl vox_types::Reborrow for PackError {
-    type Ref<'a> = PackError;
+    type Ref<'a> = Self;
 }
 
 #[cfg(feature = "vox")]

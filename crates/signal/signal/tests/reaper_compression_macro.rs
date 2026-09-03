@@ -1,38 +1,38 @@
 #![cfg(feature = "daw")]
-//! REAPER integration test: Compression macro — FTS Macros autonomously drives ReaComp.
+//! REAPER integration test: Compression macro — FTS Macros autonomously drives `ReaComp`.
 //!
 //! Tests the full macro pipeline end-to-end:
 //!   1. FTS Macros loaded FIRST (FX index 0) — always present in real workflow
-//!   2. ReaComp loaded SECOND as the compressor target (FX index 1)
-//!   3. Mapping config stored in track P_EXT (`P_EXT:FTS_MACROS:mapping_config`)
-//!   4. Setting FTS Macros parameter values drives ReaComp's Threshold + Ratio
+//!   2. `ReaComp` loaded SECOND as the compressor target (FX index 1)
+//!   3. Mapping config stored in track `P_EXT` (`P_EXT:FTS_MACROS:mapping_config`)
+//!   4. Setting FTS Macros parameter values drives `ReaComp`'s Threshold + Ratio
 //!
 //! The test sets macro values via the FX parameter API (so the plugin knobs
-//! visually move) and reads back ReaComp values. The plugin's timer callback
+//! visually move) and reads back `ReaComp` values. The plugin's timer callback
 //! picks up the parameter changes and drives the targets.
 //!
 //! ## Synchronization
 //!
 //! No arbitrary sleeps. The test uses deterministic polling:
-//! - **Mapping config:** stored via track P_EXT, plugin reads on next timer tick
+//! - **Mapping config:** stored via track `P_EXT`, plugin reads on next timer tick
 //! - **Param values:** polls target FX params until they reach expected values (with tolerance)
 //!
 //! Run with:
-//!   cargo xtask reaper-test compression_macro
+//!   cargo xtask reaper-test `compression_macro`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::{Duration, Instant};
 
 use daw::test::reaper_test;
 
-/// ReaComp plugin name in REAPER's FX browser.
+/// `ReaComp` plugin name in REAPER's FX browser.
 const REACOMP: &str = "VST: ReaComp (Cockos)";
 
 /// FTS Macros CLAP plugin name — try CLAP ID first, then display name.
 const FTS_MACROS_CLAP: &str = "CLAP: FTS Macros";
 const FTS_MACROS_NAME: &str = "FTS Macros";
 
-/// P_EXT section used by fts-macros for track-scoped config.
+/// `P_EXT` section used by fts-macros for track-scoped config.
 const EXT_STATE_SECTION: &str = "FTS_MACROS";
 
 /// Default timeout for polling operations.
@@ -43,9 +43,9 @@ const POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 /// Build the mapping config JSON for the compression macro.
 ///
-/// Maps Macro 0 (source_param=0) to two ReaComp targets at FX index 1:
-///   - Threshold: inverted ScaleRange {0.8, 0.1} — macro up = threshold down
-///   - Ratio:     direct  ScaleRange {0.0, 0.8} — macro up = ratio up
+/// Maps Macro 0 (`source_param=0`) to two `ReaComp` targets at FX index 1:
+///   - Threshold: inverted `ScaleRange` {0.8, 0.1} — macro up = threshold down
+///   - Ratio:     direct  `ScaleRange` {0.0, 0.8} — macro up = ratio up
 fn build_mapping_json(threshold_param_idx: u32, ratio_param_idx: u32) -> String {
     serde_json::json!({
         "version": "0.1",
@@ -176,8 +176,7 @@ async fn compression_macro_drives_threshold_and_ratio(
     let fx_count = track.fx_chain().count().await?;
     assert!(
         fx_count >= 2,
-        "Track should have at least 2 FX (FTS Macros + ReaComp), got {}",
-        fx_count
+        "Track should have at least 2 FX (FTS Macros + ReaComp), got {fx_count}"
     );
 
     // ─── 5. Macro 0 = 0.0 → verify ReaComp at low compression ───────
@@ -193,8 +192,7 @@ async fn compression_macro_drives_threshold_and_ratio(
     let ratio_at_0 =
         poll_param_value(&target_fx, ratio_param.index, 0.00, 0.05, POLL_TIMEOUT).await?;
     ctx.log(&format!(
-        "ReaComp: Threshold={:.4}, Ratio={:.4}",
-        thresh_at_0, ratio_at_0
+        "ReaComp: Threshold={thresh_at_0:.4}, Ratio={ratio_at_0:.4}"
     ));
     ctx.log("PASS: Low compression — high threshold, low ratio");
 
@@ -210,8 +208,7 @@ async fn compression_macro_drives_threshold_and_ratio(
     let ratio_at_1 =
         poll_param_value(&target_fx, ratio_param.index, 0.80, 0.05, POLL_TIMEOUT).await?;
     ctx.log(&format!(
-        "ReaComp: Threshold={:.4}, Ratio={:.4}",
-        thresh_at_1, ratio_at_1
+        "ReaComp: Threshold={thresh_at_1:.4}, Ratio={ratio_at_1:.4}"
     ));
     ctx.log("PASS: Heavy compression — low threshold, high ratio");
 
@@ -224,7 +221,7 @@ async fn compression_macro_drives_threshold_and_ratio(
     let mut prev_ratio = -1.0_f64;
 
     for step in 0..=4 {
-        let macro_val = step as f64 / 4.0;
+        let macro_val = f64::from(step) / 4.0;
 
         // Expected values from the ScaleRange mappings
         let expected_thresh = 0.8 + macro_val * (0.1 - 0.8); // inverted
@@ -250,24 +247,17 @@ async fn compression_macro_drives_threshold_and_ratio(
         )
         .await?;
         ctx.log(&format!(
-            "  Macro 0={:.2} → Threshold={:.4}, Ratio={:.4}",
-            macro_val, thresh, ratio
+            "  Macro 0={macro_val:.2} → Threshold={thresh:.4}, Ratio={ratio:.4}"
         ));
 
         if step > 0 {
             assert!(
                 thresh <= prev_threshold + 0.02,
-                "Threshold should decrease (step {}): prev={:.4}, now={:.4}",
-                step,
-                prev_threshold,
-                thresh
+                "Threshold should decrease (step {step}): prev={prev_threshold:.4}, now={thresh:.4}"
             );
             assert!(
                 ratio >= prev_ratio - 0.02,
-                "Ratio should increase (step {}): prev={:.4}, now={:.4}",
-                step,
-                prev_ratio,
-                ratio
+                "Ratio should increase (step {step}): prev={prev_ratio:.4}, now={ratio:.4}"
             );
         }
         prev_threshold = thresh;

@@ -62,12 +62,13 @@ pub const SPACE_VERSION: u32 = 1;
 const FEATURES_MAGIC: &[u8; 8] = b"SIGSPACE";
 
 impl Space {
+    #[must_use] 
     pub fn space_dir(library_root: &Path, name: &str) -> PathBuf {
         library_root.join("Space").join(format!("{name}.space"))
     }
 
     pub fn load(dir: &Path) -> Result<(Self, Vec<f32>), String> {
-        let space: Space = serde_json::from_slice(
+        let space: Self = serde_json::from_slice(
             &std::fs::read(dir.join("space.json")).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
@@ -135,6 +136,7 @@ pub fn space_roots() -> Vec<PathBuf> {
 /// walks DIRECTORIES ONLY and never descends past [`MAX_SPACE_DEPTH`] —
 /// sample trees hold millions of files, and a walker that reads even one
 /// level too deep stalls for minutes (learned the hard way).
+#[must_use] 
 pub fn discover_spaces() -> Vec<PathBuf> {
     let mut out = Vec::new();
     for root in space_roots() {
@@ -171,6 +173,7 @@ fn collect_spaces(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
 }
 
 /// Locate a built space by name and load it.
+#[must_use] 
 pub fn find_space(name: &str) -> Option<(PathBuf, Space, Vec<f32>)> {
     discover_spaces()
         .into_iter()

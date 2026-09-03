@@ -133,6 +133,29 @@ const RELEASE_MAX_LIFETIME_MS: u32 = 2_000;
 // crossfading) and reads every number from `patch.spec`.
 // r[impl signal.soundsource.declarative]
 
+/// Debug switches, read ONCE.
+///
+/// `std::env::var_os` takes a process-wide lock and walks the environment
+/// block. Both of these were being read from the audio thread — one per
+/// legato decision, one per voice spawn — which is a blocking call on the
+/// realtime path to answer a question whose answer cannot change. Clippy's
+/// `disallowed_methods` found them; that is why the lint is denied for this
+/// module.
+// The one read is inside a `OnceLock`: it happens once for the process, and
+// every call after it is an atomic load. This is the shape the lint exists to
+// push code INTO, so the exception is the point rather than a hole in it.
+#[allow(clippy::disallowed_methods, reason = "read once into a OnceLock")]
+pub(crate) fn legato_debug() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("SIGNAL_LEGATO_DEBUG").is_some())
+}
+
+#[allow(clippy::disallowed_methods, reason = "read once into a OnceLock")]
+pub(crate) fn loop_debug() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("SIGNAL_LOOP_DEBUG").is_some())
+}
+
 /// Minimum attack fade (ms) for a synthesized-loop sustain that starts mid-sample
 /// at full level — just enough to avoid an onset click without slowing the attack.
 const SUSTAIN_DECLICK_MS: u32 = 12;
@@ -1828,6 +1851,98 @@ pub fn frames_to_ms(frames: u64, sample_rate: u32) -> f32 {
         return 0.0;
     }
     frames as f32 * 1000.0 / sample_rate as f32
+}
+
+/// Cached loop-plateau analyses, keyed by (sample identity, search window).
+///
+/// [`steady_loop_region`] reads EVERY frame of its search range — for a
+/// sustain that is ~73% of a multi-second sample. Running it per note-on, on
+/// the audio thread, meant hundreds of thousands of sample reads per voice
+/// (and, for a streamed sample, a guarded chunk lookup for each of them plus
+/// a request for every chunk in the file). Measured: ~250 ms of callback time
+/// per chord against a 5.33 ms budget — the keys rig's glitch.
+///
+/// The answer depends only on the sample and the window, so it is computed
+/// ONCE, on a worker, and published here. Read with a single arc-swap load
+/// and a hash lookup per note-on.
+type LoopKey = (usize, usize, usize, usize);
+
+/// What we know about one (sample, window).
+#[derive(Clone, Copy)]
+enum LoopScan {
+    /// Handed to the worker; not answered yet.
+    Pending,
+    Done(Option<(usize, usize)>),
+}
+
+static LOOP_REGIONS: std::sync::Mutex<Option<HashMap<LoopKey, LoopScan>>> =
+    std::sync::Mutex::new(None);
+
+/// Work queued for the loop-analysis worker.
+#[cfg(not(target_arch = "wasm32"))]
+static LOOP_QUEUE: std::sync::OnceLock<std::sync::mpsc::Sender<(LoopKey, Arc<SampleData>)>> =
+    std::sync::OnceLock::new();
+
+/// Hand `data` to the worker for analysis, once.
+#[cfg(not(target_arch = "wasm32"))]
+fn queue_loop_analysis(key: LoopKey, data: Arc<SampleData>) {
+    let tx = LOOP_QUEUE.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<(LoopKey, Arc<SampleData>)>();
+        let _ = std::thread::Builder::new()
+            .name("signal-loopscan".into())
+            .spawn(move || {
+                while let Ok((key, data)) = rx.recv() {
+                    let (_, lo, hi, min_len) = key;
+                    let found = steady_loop_region(&data, lo, hi, min_len);
+                    // Worker thread, not the audio thread: blocking here is
+                    // correct, and the audio side reads the same map with
+                    // `try_lock` precisely so it never waits on this.
+                    #[allow(clippy::disallowed_methods, reason = "analysis worker, not the audio thread")]
+                    if let Ok(mut map) = LOOP_REGIONS.lock() {
+                        map.get_or_insert_with(HashMap::new)
+                            .insert(key, LoopScan::Done(found));
+                    }
+                }
+            });
+        tx
+    });
+    let _ = tx.send((key, data));
+}
+
+#[cfg(target_arch = "wasm32")]
+fn queue_loop_analysis(_key: LoopKey, _data: Arc<SampleData>) {}
+
+/// The steady loop region for `data`, if it has already been analysed.
+///
+/// **Audio-thread safe**: never scans. A miss queues the analysis and returns
+/// `None`, so the caller takes its documented fractional fallback for now and
+/// the real plateau is used from the next note on.
+pub(crate) fn steady_loop_region_cached(
+    data: &Arc<SampleData>,
+    lo: usize,
+    hi: usize,
+    min_len: usize,
+) -> Option<(usize, usize)> {
+    // Identity by pointer: stable while the sample is resident, and a reload
+    // at a new address costs one re-analysis, never a wrong answer.
+    let key = (Arc::as_ptr(data) as usize, lo, hi, min_len);
+    // `try_lock`, never `lock`: this runs on the audio thread, and losing the
+    // race to the worker costs one fallback note, not a dropout. The worker
+    // holds it only long enough to insert.
+    let Ok(mut guard) = LOOP_REGIONS.try_lock() else {
+        return None;
+    };
+    let map = guard.get_or_insert_with(HashMap::new);
+    match map.get(&key) {
+        Some(LoopScan::Done(found)) => *found,
+        Some(LoopScan::Pending) => None,
+        None => {
+            map.insert(key, LoopScan::Pending);
+            drop(guard);
+            queue_loop_analysis(key, Arc::clone(data));
+            None
+        }
+    }
 }
 
 /// Locate the steady-state sustain **plateau** of a decoded sample so a hold

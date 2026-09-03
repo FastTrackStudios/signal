@@ -18,10 +18,12 @@ pub enum ModuleCategory {
 }
 
 impl ModuleCategory {
-    pub const fn all() -> &'static [ModuleCategory] {
+    #[must_use] 
+    pub const fn all() -> &'static [Self] {
         &[Self::Vocal, Self::Instrument, Self::Other]
     }
 
+    #[must_use] 
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Vocal => "vocal",
@@ -30,6 +32,7 @@ impl ModuleCategory {
         }
     }
 
+    #[must_use] 
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Vocal => "Vocal",
@@ -105,7 +108,7 @@ macro_rules! module_types {
             }
 
             /// Parse from lowercase kebab-case storage string.
-            #[allow(clippy::should_implement_trait)]
+            #[expect(clippy::should_implement_trait)]
             pub fn from_str(value: &str) -> Option<Self> {
                 Some(match value {
                     $default_storage => Self::$default_variant,
@@ -194,6 +197,7 @@ module_types! {
 
 impl ModuleType {
     /// Parse with legacy/alias support on top of the macro-generated `from_str`.
+    #[must_use] 
     pub fn from_str_lenient(value: &str) -> Option<Self> {
         Self::from_str(value).or_else(|| {
             Some(match value {
@@ -264,7 +268,7 @@ mod tests {
     fn module_type_every_variant_has_category() {
         for &mt in ALL_MODULE_TYPES {
             let cat = mt.category();
-            assert!(!cat.as_str().is_empty(), "empty category for {:?}", mt);
+            assert!(!cat.as_str().is_empty(), "empty category for {mt:?}");
         }
     }
 
@@ -341,8 +345,7 @@ mod tests {
         for &mt in ALL_MODULE_TYPES {
             assert!(
                 all.contains(&mt.category()),
-                "{:?} category not in all()",
-                mt
+                "{mt:?} category not in all()"
             );
         }
     }

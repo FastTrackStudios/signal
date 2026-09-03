@@ -2,7 +2,7 @@
 //! the detached remotes: same 270° arc geometry (135° start), same 3D body
 //! with the arc ring + indicator line, same label/value stack and drag feel
 //! (150 px per sweep, wheel steps). The nih-plug `ParamPtr` binding is
-//! replaced by plain value/on_change props writing over the vox link.
+//! replaced by plain `value/on_change` props writing over the vox link.
 
 use dioxus::prelude::*;
 
@@ -20,7 +20,7 @@ pub enum KnobSize {
 }
 
 impl KnobSize {
-    fn diameter(self) -> f64 {
+    const fn diameter(self) -> f64 {
         match self {
             Self::Tiny => 24.0,
             Self::Small => 32.0,
@@ -28,7 +28,7 @@ impl KnobSize {
             Self::Large => 64.0,
         }
     }
-    fn body_diameter(self) -> f64 {
+    const fn body_diameter(self) -> f64 {
         match self {
             Self::Tiny => 15.0,
             Self::Small => 20.0,
@@ -36,7 +36,7 @@ impl KnobSize {
             Self::Large => 42.0,
         }
     }
-    fn arc_stroke(self) -> f64 {
+    const fn arc_stroke(self) -> f64 {
         match self {
             Self::Tiny => 2.5,
             Self::Small => 3.0,
@@ -44,7 +44,7 @@ impl KnobSize {
             Self::Large => 4.0,
         }
     }
-    fn track_stroke(self) -> f64 {
+    const fn track_stroke(self) -> f64 {
         match self {
             Self::Tiny => 2.0,
             Self::Small => 2.5,
@@ -106,7 +106,7 @@ pub fn Knob(
     let mut drag = use_signal(|| None::<(f64, f64)>);
 
     let range = (max - min).max(1e-6);
-    let val = ((value - min) / range).clamp(0.0, 1.0) as f64;
+    let val = f64::from(((value - min) / range).clamp(0.0, 1.0));
 
     let d = size.diameter();
     let body_d = size.body_diameter();
@@ -143,7 +143,7 @@ pub fn Knob(
     };
 
     let apply = move |norm: f64| {
-        on_change.call(min + (norm.clamp(0.0, 1.0) as f32) * range);
+        on_change.call((norm.clamp(0.0, 1.0) as f32).mul_add(range, min));
     };
 
     rsx! {

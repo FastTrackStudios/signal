@@ -110,9 +110,7 @@ impl Default for DelayParams {
             )
             .with_value_to_string(Arc::new(|v| {
                 delay_profiles::PROFILES
-                    .get(v.max(0) as usize)
-                    .map(|p| p.name.to_string())
-                    .unwrap_or_else(|| "—".to_string())
+                    .get(v.max(0) as usize).map_or_else(|| "—".to_string(), |p| p.name.to_string())
             })),
 
             time_l: FloatParam::new(
@@ -203,8 +201,7 @@ impl DelayParams {
     pub fn store_profile_id(&self, index: usize) {
         let id = delay_profiles::PROFILES
             .get(index)
-            .map(|p| p.id)
-            .unwrap_or("digital");
+            .map_or("digital", |p| p.id);
         *self.profile_id.write() = id.to_string();
     }
 

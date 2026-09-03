@@ -2,7 +2,7 @@
 //!
 //! Same mount as the behavioural tests — `comp_ui::control_view::App` on the
 //! headless Blitz DOM — but painted through `DocumentTester::render_png`
-//! (anyrender + vello_cpu, the CPU path blitz's own screenshot tests use). So
+//! (anyrender + `vello_cpu`, the CPU path blitz's own screenshot tests use). So
 //! these are pixels from the actual editor, not a mock-up, and you can look at
 //! a faceplate without opening a DAW.
 //!
@@ -32,11 +32,9 @@ use support::{mount_sized, mount_with, Fixture};
 /// Where the PNGs land. `target/gui-shots/comp` by default so they are
 /// gitignored and easy to find; `FTS_SHOTS_DIR` overrides it.
 fn shots_dir() -> PathBuf {
-    let dir = std::env::var("FTS_SHOTS_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
+    let dir = std::env::var("FTS_SHOTS_DIR").map_or_else(|_| {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../target/gui-shots/comp")
-        });
+        }, PathBuf::from);
     std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("create {}: {e}", dir.display()));
     dir
 }
@@ -183,7 +181,7 @@ async fn click_testid(fx: &mut Fixture, testid: &str) {
         .unwrap_or_else(|e| panic!("{testid} missing: {e:?}"));
     let (ox, oy) = el.document_origin();
     let (w, h) = el.size();
-    let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    let (x, y) = (ox + f64::from(w) / 2.0, oy + f64::from(h) / 2.0);
     fx.tester.pointer_down(x, y);
     let _ = fx.tester.pump().await;
     fx.tester.pointer_up(x, y);

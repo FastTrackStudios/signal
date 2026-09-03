@@ -20,7 +20,7 @@ pub enum LfoWaveform {
 }
 
 impl LfoWaveform {
-    pub const ALL: &'static [LfoWaveform] = &[
+    pub const ALL: &'static [Self] = &[
         Self::Sine,
         Self::Triangle,
         Self::Square,
@@ -30,6 +30,7 @@ impl LfoWaveform {
         Self::StepSequence,
     ];
 
+    #[must_use] 
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Sine => "Sine",
@@ -63,6 +64,7 @@ pub enum TempoDiv {
 
 impl TempoDiv {
     /// Duration as a fraction of a whole note.
+    #[must_use] 
     pub const fn beats(self) -> f32 {
         match self {
             Self::Whole => 4.0,
@@ -79,6 +81,7 @@ impl TempoDiv {
         }
     }
 
+    #[must_use] 
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Whole => "1/1",
@@ -134,7 +137,7 @@ pub struct LfoConfig {
     pub steps: Option<Vec<f32>>,
 }
 
-fn default_pulse_width() -> f32 {
+const fn default_pulse_width() -> f32 {
     0.5
 }
 

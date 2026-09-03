@@ -13,7 +13,7 @@ use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::PerformanceModel;
 
 /// What an action does when executed.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Effect {
     /// Fire-and-forget service call.
     SelectStack(u32),
@@ -41,7 +41,7 @@ pub enum Effect {
     ImportPreset,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Action {
     pub label: String,
     /// Section header shown dim next to the label.
@@ -50,7 +50,7 @@ pub struct Action {
 }
 
 /// Whether this effect needs the argument step, and its prompt.
-fn arg_prompt(e: &Effect) -> Option<&'static str> {
+const fn arg_prompt(e: &Effect) -> Option<&'static str> {
     match e {
         Effect::NewSong => Some("Song name (append \"@ G 74\" for key/bpm)…"),
         Effect::NewSetlist => Some("Setlist name (venue + date)…"),
@@ -101,7 +101,7 @@ fn actions(
             Effect::SelectSong(i as u32),
         ));
     }
-    for s in model.library_songs.iter() {
+    for s in &model.library_songs {
         out.push(cmd(
             &format!("Add to set: {}", s.name),
             "setlist",
@@ -184,7 +184,7 @@ pub fn CommandPalette(model: PerformanceModel, open: Signal<bool>) -> Element {
 
     // Execute a non-argument effect (or stage an argument step).
     let run = {
-        let rig = rig.clone();
+        let rig = rig;
         move |effect: Effect, arg: Option<String>| {
             if arg.is_none() && arg_prompt(&effect).is_some() {
                 pending.set(Some(effect));
@@ -226,8 +226,8 @@ pub fn CommandPalette(model: PerformanceModel, open: Signal<bool>) -> Element {
                         cursor.set(0);
                     },
                     onkeydown: {
-                        let mut run = run.clone();
-                        let filtered = filtered.clone();
+                        let mut run = run;
+                        let filtered = filtered;
                         move |e: KeyboardEvent| match e.key() {
                             Key::Escape => {
                                 if pending().is_some() {
@@ -353,16 +353,14 @@ pub fn execute(r: RigClient, effect: Effect, arg: String) {
             }
             Effect::ImportPreset => {
                 let name = std::path::Path::new(arg.trim())
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "Imported".to_string());
+                    .file_stem().map_or_else(|| "Imported".to_string(), |s| s.to_string_lossy().to_string());
                 drop(r.add_preset(name, arg.trim().to_string()).await);
             }
         }
     });
 }
 
-/// Parse a keymap action string ("stack:0", "toggle_fx", "song:next",
+/// Parse a keymap action string ("stack:0", "`toggle_fx`", "song:next",
 /// "mode:profile", "patch:3", …) into an executable effect.
 pub fn effect_from_action(action: &str) -> Option<Effect> {
     let (verb, arg) = match action.split_once(':') {

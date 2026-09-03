@@ -51,6 +51,7 @@ impl Default for PackLibraryBackend {
 impl PackLibraryBackend {
     /// Scan `FTS_PACK_LIBRARY` (default the studio library root) and
     /// start the background hasher.
+    #[must_use] 
     pub fn new() -> Self {
         let root = std::env::var("FTS_PACK_LIBRARY").unwrap_or_else(|_| LIBRARY_ROOT.into());
         Self::with_root(root)
@@ -70,6 +71,7 @@ impl PackLibraryBackend {
     }
 
     /// The composed service router — mount on any vox transport.
+    #[must_use] 
     pub fn router(&self) -> architect::LayerRouter {
         self.clone().into_router()
     }
@@ -117,7 +119,7 @@ impl PackLibraryBackend {
                             }
                         }
                         Err(e) => {
-                            tracing::warn!(pack = %entry.path.display(), "pack hash failed: {e}")
+                            tracing::warn!(pack = %entry.path.display(), "pack hash failed: {e}");
                         }
                     }
                 }
@@ -274,39 +276,36 @@ impl PackLibrary for PackLibraryBackend {
         let key = (name, variant);
         let cached = self.plans.lock().ok().and_then(|p| p.get(&key).cloned());
         architect_telemetry::wide::set("pack.plan_cached", cached.is_some());
-        let json = match cached {
-            Some(json) => json,
-            None => {
-                let path = entry.path.clone();
-                let planned = tokio::task::spawn_blocking(move || {
-                    signal_sampler::pack_plan::plan_pack_file(&path)
-                })
-                .await
-                .map_err(|e| PackError::Io(e.to_string()))?
-                .map_err(|e| PackError::Io(e.to_string()))?;
-                if planned.total != total {
-                    return Err(PackError::Io(format!(
-                        "pack size changed under the library ({} planned vs {total} listed)",
-                        planned.total
-                    )));
-                }
-                let segments: Vec<PackSegment> = planned
-                    .segments
-                    .into_iter()
-                    .map(|s| PackSegment {
-                        start: s.start,
-                        len: s.len,
-                        rank: u64::from(s.rank),
-                        label: s.label,
-                    })
-                    .collect();
-                let json = facet_json::to_string(&segments)
-                    .map_err(|e| PackError::Io(format!("plan json: {e}")))?;
-                if let Ok(mut plans) = self.plans.lock() {
-                    plans.insert(key, json.clone());
-                }
-                json
+        let json = if let Some(json) = cached { json } else {
+            let path = entry.path.clone();
+            let planned = tokio::task::spawn_blocking(move || {
+                signal_sampler::pack_plan::plan_pack_file(&path)
+            })
+            .await
+            .map_err(|e| PackError::Io(e.to_string()))?
+            .map_err(|e| PackError::Io(e.to_string()))?;
+            if planned.total != total {
+                return Err(PackError::Io(format!(
+                    "pack size changed under the library ({} planned vs {total} listed)",
+                    planned.total
+                )));
             }
+            let segments: Vec<PackSegment> = planned
+                .segments
+                .into_iter()
+                .map(|s| PackSegment {
+                    start: s.start,
+                    len: s.len,
+                    rank: u64::from(s.rank),
+                    label: s.label,
+                })
+                .collect();
+            let json = facet_json::to_string(&segments)
+                .map_err(|e| PackError::Io(format!("plan json: {e}")))?;
+            if let Ok(mut plans) = self.plans.lock() {
+                plans.insert(key, json.clone());
+            }
+            json
         };
         let bytes = json.as_bytes();
         let len = bytes.len() as u64;

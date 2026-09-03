@@ -49,9 +49,7 @@ fn main() {
         .engines
         .iter()
         .flat_map(|e| e.layers.iter())
-        .find(|l| l.live)
-        .map(|l| l.name.clone())
-        .unwrap_or_else(|| "Keys 1".into());
+        .find(|l| l.live).map_or_else(|| "Keys 1".into(), |l| l.name.clone());
     println!("probe: driving lane {lane:?}");
 
     let chord = [60u32, 64, 67];
@@ -101,7 +99,7 @@ fn main() {
     sleep(Duration::from_millis(700));
     off(&b);
     sleep(Duration::from_millis(800)); // short tail
-    Svc::set_layer_macro(&b, lane.clone(), 0, "env1.release".into(), 2500.0);
+    Svc::set_layer_macro(&b, lane, 0, "env1.release".into(), 2500.0);
     on(&b);
     sleep(Duration::from_millis(700));
     off(&b);

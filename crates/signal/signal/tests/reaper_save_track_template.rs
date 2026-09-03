@@ -6,7 +6,7 @@
 //! Then builds a full rig (folder track + layer tracks) and saves as a rig template.
 //!
 //! Run with:
-//!   cargo xtask reaper-test save_track_template
+//!   cargo xtask reaper-test `save_track_template`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;

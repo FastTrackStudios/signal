@@ -5,7 +5,7 @@ use nice_plug_dioxus::prelude::*;
 
 use super::eq_graph_model::{q_to_slope_db, EqBand, EqBandShape, StereoMode, MAX_BANDS};
 
-fn shape_to_int(s: EqBandShape) -> i32 {
+const fn shape_to_int(s: EqBandShape) -> i32 {
     match s {
         EqBandShape::Bell => 0,
         EqBandShape::LowShelf => 1,
@@ -41,7 +41,7 @@ pub fn EmptyGraphContextMenu(
     let freq_str = if frequency >= 1000.0 {
         format!("{:.1}k", frequency / 1000.0)
     } else {
-        format!("{:.0}", frequency)
+        format!("{frequency:.0}")
     };
 
     rsx! {
@@ -112,7 +112,7 @@ pub fn EmptyGraphContextMenu(
     }
 }
 
-fn int_to_shape(v: i32) -> EqBandShape {
+const fn int_to_shape(v: i32) -> EqBandShape {
     match v {
         1 => EqBandShape::LowShelf,
         2 => EqBandShape::LowCut,
@@ -127,7 +127,7 @@ fn int_to_shape(v: i32) -> EqBandShape {
     }
 }
 
-fn shape_icon(s: EqBandShape) -> &'static str {
+const fn shape_icon(s: EqBandShape) -> &'static str {
     match s {
         EqBandShape::Bell => "Bell",
         EqBandShape::LowShelf => "LS",
@@ -152,6 +152,7 @@ const POPUP_REGION_PAD: f64 = 10.0;
 ///
 /// Shared with `EqGraph`'s focus logic — the graph needs the same rect to know
 /// that a pointer heading for the panel has not left the band.
+#[must_use] 
 pub fn band_popup_rect(
     bx: f64,
     by: f64,
@@ -177,6 +178,7 @@ pub fn band_popup_rect(
 /// the empty [`POPUP_GAP`] the pointer must cross to reach the panel is part
 /// of it. Without this the panel fades out from under the cursor on the way
 /// there and its controls can never be clicked.
+#[must_use] 
 pub fn point_in_popup_region(
     px: f64,
     py: f64,
@@ -194,7 +196,7 @@ pub fn point_in_popup_region(
     px >= x0 && px <= x1 && py >= y0 && py <= y1
 }
 
-fn next_stereo_mode(mode: StereoMode) -> StereoMode {
+const fn next_stereo_mode(mode: StereoMode) -> StereoMode {
     match mode {
         StereoMode::Stereo => StereoMode::Left,
         StereoMode::Left => StereoMode::Right,
@@ -237,7 +239,7 @@ pub fn BandPopup(
     } else {
         format!("Q {:.2}", band.q)
     };
-    let band_color = crate::eq_graph_model::freq_to_color(band.frequency as f64);
+    let band_color = crate::eq_graph_model::freq_to_color(f64::from(band.frequency));
     let band_enabled = band.enabled;
     let band_solo = band.solo;
     let band_gain = band.gain;
@@ -482,11 +484,11 @@ pub fn BandContextMenu(
     let shapes = EqBandShape::all();
     let menu_w: f64 = 130.0;
     let item_h: f64 = 20.0;
-    let menu_h = (5.0 + shapes.len() as f64) * item_h + 16.0;
+    let menu_h = (5.0 + shapes.len() as f64).mul_add(item_h, 16.0);
     let menu_x = x.min((graph_w - menu_w).max(0.0));
     let menu_y = y.min((graph_h - menu_h).max(0.0));
 
-    let band_color = crate::eq_graph_model::freq_to_color(band.frequency as f64);
+    let band_color = crate::eq_graph_model::freq_to_color(f64::from(band.frequency));
     let is_enabled = band.enabled;
     let is_solo = band.solo;
     let cur_shape = band.shape;

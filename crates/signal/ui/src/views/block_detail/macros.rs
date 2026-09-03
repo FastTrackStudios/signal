@@ -74,7 +74,7 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
                 div { class: "flex items-center gap-2 mb-2",
                     for group in bank.groups.iter() {
                         {
-                            let is_active = active_group.map(|g| g.id == group.id).unwrap_or(false);
+                            let is_active = active_group.is_some_and(|g| g.id == group.id);
                             let color = group.color.clone();
                             rsx! {
                                 div {
@@ -121,9 +121,7 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
                             let binding_count = knob.bindings.len();
                             let is_selector = selector_knob_id.as_deref() == Some(knob_id.as_str());
                             let readout = if is_selector {
-                                bank.active_group_for(value)
-                                    .map(|g| g.label.clone())
-                                    .unwrap_or_else(|| format!("{:.0}%", value * 100.0))
+                                bank.active_group_for(value).map_or_else(|| format!("{:.0}%", value * 100.0), |g| g.label.clone())
                             } else {
                                 format!("{:.0}%", value * 100.0)
                             };
@@ -140,7 +138,7 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
                                         "flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-zinc-800/40 cursor-pointer"
                                     },
                                     onclick: {
-                                        let kid = knob_id.clone();
+                                        let kid = knob_id;
                                         move |_| {
                                             if selected_knob() == Some(kid.clone()) {
                                                 selected_knob.set(None);
@@ -169,7 +167,7 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
                                         "{readout}"
                                     }
                                     {
-                                        let suffix = if binding_count != 1 { "s" } else { "" };
+                                        let suffix = if binding_count == 1 { "" } else { "s" };
                                         rsx! {
                                             span { class: "text-[9px] text-zinc-600",
                                                 "{binding_count} binding{suffix}"

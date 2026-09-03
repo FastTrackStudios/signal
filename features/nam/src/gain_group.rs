@@ -22,19 +22,20 @@ pub struct GainStage {
     pub ordinal: u8,
     /// Human label, e.g. "aggr0", "Gain 03", "Clean"
     pub label: String,
-    /// Content hash → NamFileEntry
+    /// Content hash → `NamFileEntry`
     pub model_hash: String,
     /// Gain value from .nam metadata, if available
     pub gain_value: Option<f64>,
 }
 
-/// Result of auto-grouping: a group key → list of (ordinal, label, hash, gain_value).
+/// Result of auto-grouping: a group key → list of (ordinal, label, hash, `gain_value`).
 type GroupMap = HashMap<String, Vec<(u8, String, String, Option<f64>)>>;
 
 /// Auto-detect gain stage groups from a collection of NAM entries.
 ///
 /// Applies pattern-matching heuristics to filenames to identify families
 /// of captures that represent the same amp at different gain settings.
+#[must_use] 
 pub fn auto_group(entries: &HashMap<String, NamFileEntry>) -> HashMap<String, GainStageGroup> {
     let amp_entries: Vec<&NamFileEntry> = entries
         .values()
@@ -70,7 +71,7 @@ pub fn auto_group(entries: &HashMap<String, NamFileEntry>) -> HashMap<String, Ga
         if let Some(caps) = revv_re.captures(&entry.filename) {
             let group_key = format!("{}_{}_{}", &caps[1], &caps[3], &caps[4]);
             let aggr: u8 = caps[2].parse().unwrap_or(0);
-            let label = format!("aggr{}", aggr);
+            let label = format!("aggr{aggr}");
             groups.entry(slugify(&group_key)).or_default().push((
                 aggr,
                 label,
@@ -90,7 +91,7 @@ pub fn auto_group(entries: &HashMap<String, NamFileEntry>) -> HashMap<String, Ga
         if let Some(caps) = name_gain_re.captures(&entry.filename) {
             let prefix = caps[1].to_string();
             let num: u8 = caps[2].parse().unwrap_or(0);
-            let label = format!("Gain {}", num);
+            let label = format!("Gain {num}");
             groups.entry(slugify(&prefix)).or_default().push((
                 num,
                 label,
@@ -225,7 +226,7 @@ mod tests {
             provenance: None,
             hash: hash.into(),
             kind: NamFileKind::AmpModel,
-            relative_path: format!("amps/{}", filename),
+            relative_path: format!("amps/{filename}"),
             filename: filename.into(),
             nam_version: None,
             architecture: None,
@@ -248,9 +249,9 @@ mod tests {
     fn group_gain_number_pattern() {
         let mut entries = HashMap::new();
         for i in 1..=10 {
-            let name = format!("APP-6505Plus-Clean-Gain-{:02}.nam", i);
-            let hash = format!("hash_clean_{}", i);
-            entries.insert(hash.clone(), make_entry(&hash, &name, Some(i as f64)));
+            let name = format!("APP-6505Plus-Clean-Gain-{i:02}.nam");
+            let hash = format!("hash_clean_{i}");
+            entries.insert(hash.clone(), make_entry(&hash, &name, Some(f64::from(i))));
         }
 
         let groups = auto_group(&entries);
@@ -266,11 +267,11 @@ mod tests {
     fn group_revv_pattern() {
         let mut entries = HashMap::new();
         for aggr in 0..=2 {
-            let name = format!("Revv_Red_aggr{}_mid_noPedal.nam", aggr);
-            let hash = format!("revv_{}", aggr);
+            let name = format!("Revv_Red_aggr{aggr}_mid_noPedal.nam");
+            let hash = format!("revv_{aggr}");
             entries.insert(
                 hash.clone(),
-                make_entry(&hash, &name, Some(aggr as f64 * 3.0)),
+                make_entry(&hash, &name, Some(f64::from(aggr) * 3.0)),
             );
         }
 
@@ -284,8 +285,8 @@ mod tests {
     fn group_blue_gain_pattern() {
         let mut entries = HashMap::new();
         for i in 1..=6 {
-            let name = format!("BLUE GAIN {}.nam", i);
-            let hash = format!("blue_{}", i);
+            let name = format!("BLUE GAIN {i}.nam");
+            let hash = format!("blue_{i}");
             entries.insert(hash.clone(), make_entry(&hash, &name, None));
         }
 

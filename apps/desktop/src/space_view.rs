@@ -1,7 +1,7 @@
 //! Sample-space map view (#77 M2): pan-zoom scatter of a built `.space`,
 //! class-colored, click-to-audition, similarity side list, class + text
 //! filters that re-scope BOTH the map and the list (the XO rule — the
-//! filter is sent to the engine, which applies it to map() and similar()).
+//! filter is sent to the engine, which applies it to `map()` and `similar()`).
 
 use dioxus::prelude::*;
 use signal_space_proto::space::SampleSpaceClient;
@@ -26,8 +26,7 @@ fn class_color(class: &str) -> &'static str {
     CLASS_COLORS
         .iter()
         .find(|(c, _)| *c == class)
-        .map(|(_, col)| *col)
-        .unwrap_or("#8a8fa3")
+        .map_or("#8a8fa3", |(_, col)| *col)
 }
 
 #[component]

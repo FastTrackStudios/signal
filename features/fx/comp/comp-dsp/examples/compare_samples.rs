@@ -7,11 +7,11 @@
 //! 4. Reports detailed sample-by-sample statistics
 //!
 //! Usage:
-//!   cargo run --example compare_samples -- <reference.wav> [--threshold 0.01dB]
-//!   cargo run --example compare_samples -- --generate-only
+//!   cargo run --example `compare_samples` -- <reference.wav> [--threshold 0.01dB]
+//!   cargo run --example `compare_samples` -- --generate-only
 //!
 //! Example with reference file:
-//!   cargo run --example compare_samples -- ~/pro-c3-reference.wav --threshold 1.0
+//!   cargo run --example `compare_samples` -- ~/pro-c3-reference.wav --threshold 1.0
 
 use audiocore_dsp::db::linear_to_db;
 use comp_dsp::ProC3Compressor;
@@ -30,7 +30,7 @@ fn main() {
 
     println!("\n[SIGNAL GENERATION]");
     println!("Sample rate: {} Hz", sample_rate as u32);
-    println!("Duration: {} s ({} samples)", duration_s, num_samples);
+    println!("Duration: {duration_s} s ({num_samples} samples)");
 
     // Create test signal: sine wave + transient
     let mut input = vec![0.0f64; num_samples];
@@ -71,7 +71,7 @@ fn main() {
         gr_values[i] = comp.gain_reduction_db();
     }
 
-    println!("✓ Processed {} samples", num_samples);
+    println!("✓ Processed {num_samples} samples");
 
     // Analyze output
     println!("\n[OUTPUT ANALYSIS]");
@@ -94,10 +94,10 @@ fn main() {
     );
 
     let reduction = linear_to_db(input_peak) - linear_to_db(output_peak);
-    println!("Gain Reduction: {:.2} dB (peak)", reduction);
+    println!("Gain Reduction: {reduction:.2} dB (peak)");
 
     let max_gr = gr_values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    println!("Max GR: {:.2} dB", max_gr);
+    println!("Max GR: {max_gr:.2} dB");
 
     // Display waveform sections
     println!("\n[WAVEFORM SAMPLES]");
@@ -213,13 +213,13 @@ fn read_wav(path: &str) -> std::io::Result<Vec<f64>> {
         for i in 0..num_samples {
             let bytes = &temp[i * bytes_per_sample..(i + 1) * bytes_per_sample];
             let f32_bytes = [bytes[0], bytes[1], bytes[2], bytes[3]];
-            samples[i] = f32::from_le_bytes(f32_bytes) as f64;
+            samples[i] = f64::from(f32::from_le_bytes(f32_bytes));
         }
     } else {
         // PCM (16-bit)
         for i in 0..num_samples {
             let bytes = &temp[i * 2..(i + 1) * 2];
-            let i16_val = i16::from_le_bytes([bytes[0], bytes[1]]) as f64;
+            let i16_val = f64::from(i16::from_le_bytes([bytes[0], bytes[1]]));
             samples[i] = i16_val / 32768.0;
         }
     }
@@ -251,9 +251,9 @@ fn compare_outputs(fts_output: &[f64], reference: &[f64]) {
         (min_len as f64 / reference.len() as f64 * 100.0) as u32
     );
     println!("\nDifference Statistics:");
-    println!("  Max difference:    {:.9}", max_diff);
-    println!("  Mean difference:   {:.9}", mean_diff);
-    println!("  RMS difference:    {:.9}", rms_diff);
+    println!("  Max difference:    {max_diff:.9}");
+    println!("  Mean difference:   {mean_diff:.9}");
+    println!("  RMS difference:    {rms_diff:.9}");
     println!(
         "  Max diff in dB:    {:.3}",
         linear_to_db(1.0 + max_diff.min(1.0))
@@ -265,7 +265,7 @@ fn compare_outputs(fts_output: &[f64], reference: &[f64]) {
     for threshold in thresholds {
         let count = abs_diffs.iter().filter(|d| **d > threshold).count();
         let pct = (count as f64 / min_len as f64 * 100.0) as u32;
-        println!("  >{}: {} samples ({}%)", threshold, count, pct);
+        println!("  >{threshold}: {count} samples ({pct}%)");
     }
 
     // Display sample comparison at key points

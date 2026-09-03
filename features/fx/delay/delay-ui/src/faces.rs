@@ -241,6 +241,7 @@ pub static SPECIAL: EchoDesign = EchoDesign {
 
 /// The panel a profile is drawn on — per family, with the profile's name
 /// silkscreened and its accent shifted so the variants are still distinct.
+#[must_use] 
 pub fn design_for(profile_id: &str) -> &'static EchoDesign {
     match delay_profiles::category_of(profile_id).map(|(c, _)| delay_profiles::CATEGORIES[c].id) {
         Some("digital") => &DIGITAL,
@@ -253,9 +254,10 @@ pub fn design_for(profile_id: &str) -> &'static EchoDesign {
 }
 
 /// How lit the centrepiece is for a variant inside its family.
+#[must_use] 
 pub fn variant_lift(profile_id: &str) -> f64 {
     match delay_profiles::category_of(profile_id) {
-        Some((_, index)) => 1.0 + index as f64 * 0.22,
+        Some((_, index)) => (index as f64).mul_add(0.22, 1.0),
         None => 1.0,
     }
 }
@@ -264,6 +266,7 @@ pub fn variant_lift(profile_id: &str) -> f64 {
 ///
 /// The pair reaches every engine and each reads it differently. A knob called
 /// "Character A" tells you nothing, so the panel prints what it does here.
+#[must_use] 
 pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
     match profile_id {
         "digital" => ("Width", "Sync"),
@@ -302,8 +305,7 @@ pub fn EchoFace(
     let value = |name: &str| {
         handles
             .get(name)
-            .map(|h| h.normalized() as f64)
-            .unwrap_or(0.5)
+            .map_or(0.5, |h| f64::from(h.normalized()))
     };
     let (feedback, time, tone) = (value("feedback"), value("time_l"), value("tone"));
 
@@ -339,8 +341,7 @@ pub fn EchoFace(
                 text: delay_profiles::CATEGORIES
                     .iter()
                     .find(|c| c.profiles.contains(&profile.id))
-                    .map(|c| c.label)
-                    .unwrap_or("Delay")
+                    .map_or("Delay", |c| c.label)
                     .to_string(),
                 size: 8.0, color: design.dim_ink.to_string(),
             }
@@ -361,7 +362,7 @@ pub fn EchoFace(
                         }
                     }
                     Silkscreen {
-                        scale, x: spec.x, y: spec.y + spec.d * 0.92 + 10.0, width: 120.0,
+                        scale, x: spec.x, y: spec.d.mul_add(0.92, spec.y) + 10.0, width: 120.0,
                         text: match spec.param {
                             "character_a" => character_legends(&profile_id).0.to_string(),
                             "character_b" => character_legends(&profile_id).1.to_string(),
@@ -392,13 +393,13 @@ fn CentreView(
     lift: f64,
 ) -> Element {
     let (w, h) = (620.0, 150.0);
-    let body = accent.clone();
-    let glow = (0.30 + feedback * 0.55).min(0.95) * lift.min(1.5);
+    let body = accent;
+    let glow = feedback.mul_add(0.55, 0.30).min(0.95) * lift.min(1.5);
     // How many repeats survive. Feedback near the top runs away, which is a
     // real setting on most of these and worth showing as "more than fits".
     let repeats = ((feedback * 11.0).round() as usize).clamp(1, 11);
     // Where they land: a long time setting spaces them out.
-    let spacing = 26.0 + time * 46.0;
+    let spacing = time.mul_add(46.0, 26.0);
 
     let inner = match kind {
         // Exact repeats on a ruled line — a digital delay is arithmetic, and
@@ -443,8 +444,8 @@ fn CentreView(
                         key: "s{i}",
                         x: "{w / 2.0 - 54.0 + i as f64 * 30.0:.1}", y: "{cy - r + 2.0:.1}",
                         width: "10", height: "22", rx: "2",
-                        fill: if (i as f64) < 1.0 + feedback * 3.0 { "{body}" } else { "{ink}" },
-                        opacity: if (i as f64) < 1.0 + feedback * 3.0 { "{glow:.3}" } else { "0.30" },
+                        fill: if f64::from(i) < feedback.mul_add(3.0, 1.0) { "{body}" } else { "{ink}" },
+                        opacity: if f64::from(i) < feedback.mul_add(3.0, 1.0) { "{glow:.3}" } else { "0.30" },
                     }
                 }
             }
@@ -502,7 +503,7 @@ fn CentreView(
         Centrepiece::Grid => {
             let steps = 16;
             let (x0, span) = (54.0, w - 108.0);
-            let step = span / steps as f64;
+            let step = span / f64::from(steps);
             rsx! {
                 for i in 0..=steps {
                     line {
@@ -537,11 +538,11 @@ fn CentreView(
                     stroke: "{ink}", stroke_width: "0.8", opacity: "0.4" }
                 for i in 0..bars {
                     {
-                        let t = i as f64 / bars as f64;
+                        let t = f64::from(i) / f64::from(bars);
                         // Backwards: quiet first, loudest at the end.
-                        let env = t.powf(1.6 + (1.0 - feedback) * 1.5);
-                        let jitter = ((i as f64 * 7.3319).sin() * 21_337.0).fract().abs();
-                        let a = env * (0.5 + jitter * 0.5) * (0.5 + tone * 0.5);
+                        let env = t.powf((1.0 - feedback).mul_add(1.5, 1.6));
+                        let jitter = ((f64::from(i) * 7.3319).sin() * 21_337.0).fract().abs();
+                        let a = env * (0.5 + jitter * 0.5) * tone.mul_add(0.5, 0.5);
                         rsx! {
                             line {
                                 key: "{i}",
@@ -591,7 +592,7 @@ mod tests {
     fn every_legend_fits_on_the_panel() {
         for design in [&DIGITAL, &TAPE, &ANALOG, &PITCH, &RHYTHMIC, &SPECIAL] {
             for spec in design.knobs {
-                let legend_y = spec.y + spec.d * 0.92 + 10.0;
+                let legend_y = spec.d.mul_add(0.92, spec.y) + 10.0;
                 assert!(
                     legend_y + 6.0 <= H,
                     "{}'s {} legend falls off",

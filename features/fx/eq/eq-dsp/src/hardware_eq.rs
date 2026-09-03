@@ -229,7 +229,8 @@ pub struct SslChannelSettings {
 }
 
 impl SslChannelSettings {
-    pub fn e_series() -> Self {
+    #[must_use]
+    pub const fn e_series() -> Self {
         Self {
             eq_in: true,
             e_series: true,
@@ -248,7 +249,8 @@ impl SslChannelSettings {
         }
     }
 
-    pub fn g_series() -> Self {
+    #[must_use]
+    pub const fn g_series() -> Self {
         Self {
             e_series: false,
             ..Self::e_series()
@@ -273,6 +275,7 @@ pub struct HardwareEqModel {
 }
 
 impl HardwareEqModel {
+    #[must_use]
     pub fn new(sample_rate: f64, settings: HardwareEqSettings) -> Self {
         let mut model = Self {
             settings,
@@ -286,7 +289,8 @@ impl HardwareEqModel {
         model
     }
 
-    pub fn settings(&self) -> HardwareEqSettings {
+    #[must_use]
+    pub const fn settings(&self) -> HardwareEqSettings {
         self.settings
     }
 
@@ -302,10 +306,12 @@ impl HardwareEqModel {
         self.rebuild();
     }
 
+    #[must_use]
     pub fn coeffs(&self) -> &[Coeffs] {
         &self.coeffs
     }
 
+    #[must_use]
     pub fn magnitude_response_db(&self, frequencies: &[f64]) -> Vec<f64> {
         compute_magnitude_response(&self.coeffs, frequencies, self.sample_rate)
     }
@@ -326,9 +332,9 @@ impl HardwareEqModel {
     }
 
     pub fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
-        for i in 0..left.len().min(right.len()) {
-            left[i] = self.process_sample(left[i], 0);
-            right[i] = self.process_sample(right[i], 1);
+        for (i, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
+            *l = self.process_sample(*l, 0);
+            *r = self.process_sample(*r, 1);
         }
     }
 
@@ -366,67 +372,19 @@ impl HardwareEqModel {
     }
 }
 
-pub fn build_pultec_eqp1a_sections(settings: PultecEqp1aSettings, sample_rate: f64) -> Vec<Coeffs> {
-    build_pultec_eqp1a_sections_with_calibration(
-        settings,
-        sample_rate,
-        &HardwareEqCalibration::default(),
-    )
-}
-
-pub fn build_pultec_eqp1a_sections_with_calibration(
-    settings: PultecEqp1aSettings,
-    sample_rate: f64,
+fn add_pultec_low_sections(
+    sections: &mut Vec<Coeffs>,
+    settings: &PultecEqp1aSettings,
     calibration: &HardwareEqCalibration,
-) -> Vec<Coeffs> {
-    let mut sections = Vec::new();
-    push(
-        &mut sections,
-        FilterType::Highpass,
-        14.0,
-        0.58,
-        0.0,
-        sample_rate,
-        2,
-    );
-    push(
-        &mut sections,
-        FilterType::Lowpass,
-        28000.0,
-        0.62,
-        0.0,
-        sample_rate,
-        2,
-    );
-    push(
-        &mut sections,
-        FilterType::Peak,
-        900.0,
-        0.45,
-        -0.18,
-        sample_rate,
-        2,
-    );
-
-    if !settings.eq_in {
-        return sections;
-    }
-
+    sample_rate: f64,
+) {
     let low_freq = settings.low_freq_hz.clamp(20.0, 200.0);
     let low_boost = settings.low_boost_db.clamp(0.0, 13.0);
     let low_atten = settings.low_atten_db.clamp(0.0, 13.0);
     if low_boost > 1.0e-9 {
+        push(sections, FilterType::LowShelf, low_freq, 0.52, low_boost, sample_rate, 2);
         push(
-            &mut sections,
-            FilterType::LowShelf,
-            low_freq,
-            0.52,
-            low_boost,
-            sample_rate,
-            2,
-        );
-        push(
-            &mut sections,
+            sections,
             FilterType::Peak,
             low_freq * 2.2,
             0.62,
@@ -437,7 +395,7 @@ pub fn build_pultec_eqp1a_sections_with_calibration(
     }
     if low_atten > 1.0e-9 {
         push(
-            &mut sections,
+            sections,
             FilterType::LowShelf,
             low_freq * 1.55,
             0.82,
@@ -446,35 +404,27 @@ pub fn build_pultec_eqp1a_sections_with_calibration(
             2,
         );
         if low_boost > 1.0e-9 {
-            push(
-                &mut sections,
-                FilterType::Peak,
-                low_freq * 5.0,
-                0.55,
-                -0.10 * low_atten,
-                sample_rate,
-                2,
-            );
+            push(sections, FilterType::Peak, low_freq * 5.0, 0.55, -0.10 * low_atten, sample_rate, 2);
         }
     }
+}
 
+fn add_pultec_high_sections(
+    sections: &mut Vec<Coeffs>,
+    settings: &PultecEqp1aSettings,
+    calibration: &HardwareEqCalibration,
+    sample_rate: f64,
+) {
     let high_boost = settings.high_boost_db.clamp(0.0, 16.0);
     if high_boost > 1.0e-9 {
         let bandwidth = settings.high_bandwidth.clamp(0.0, 10.0);
         let q = 0.35 + bandwidth * 0.115;
+        let freq = settings.high_boost_freq_hz.clamp(1000.0, 16000.0);
+        push(sections, FilterType::Peak, freq, q, high_boost, sample_rate, 2);
         push(
-            &mut sections,
-            FilterType::Peak,
-            settings.high_boost_freq_hz.clamp(1000.0, 16000.0),
-            q,
-            high_boost,
-            sample_rate,
-            2,
-        );
-        push(
-            &mut sections,
+            sections,
             FilterType::HighShelf,
-            settings.high_boost_freq_hz.clamp(1000.0, 16000.0) * 1.2,
+            freq * 1.2,
             0.58,
             calibration.pultec_high_air_factor * high_boost,
             sample_rate,
@@ -485,7 +435,7 @@ pub fn build_pultec_eqp1a_sections_with_calibration(
     let high_atten = settings.high_atten_db.clamp(0.0, 16.0);
     if high_atten > 1.0e-9 {
         push(
-            &mut sections,
+            sections,
             FilterType::HighShelf,
             settings.high_atten_freq_hz.clamp(4000.0, 20000.0),
             0.55,
@@ -494,10 +444,39 @@ pub fn build_pultec_eqp1a_sections_with_calibration(
             2,
         );
     }
+}
+
+#[must_use]
+pub fn build_pultec_eqp1a_sections(settings: PultecEqp1aSettings, sample_rate: f64) -> Vec<Coeffs> {
+    build_pultec_eqp1a_sections_with_calibration(
+        settings,
+        sample_rate,
+        &HardwareEqCalibration::default(),
+    )
+}
+
+#[must_use]
+pub fn build_pultec_eqp1a_sections_with_calibration(
+    settings: PultecEqp1aSettings,
+    sample_rate: f64,
+    calibration: &HardwareEqCalibration,
+) -> Vec<Coeffs> {
+    let mut sections = Vec::new();
+    push(&mut sections, FilterType::Highpass, 14.0, 0.58, 0.0, sample_rate, 2);
+    push(&mut sections, FilterType::Lowpass, 28000.0, 0.62, 0.0, sample_rate, 2);
+    push(&mut sections, FilterType::Peak, 900.0, 0.45, -0.18, sample_rate, 2);
+
+    if !settings.eq_in {
+        return sections;
+    }
+
+    add_pultec_low_sections(&mut sections, &settings, calibration, sample_rate);
+    add_pultec_high_sections(&mut sections, &settings, calibration, sample_rate);
 
     sections
 }
 
+#[must_use]
 pub fn fit_pultec_eqp1a_response(
     initial: HardwareEqCalibration,
     settings: PultecEqp1aSettings,
@@ -509,6 +488,7 @@ pub fn fit_pultec_eqp1a_response(
     })
 }
 
+#[must_use]
 pub fn build_api_550a_sections(settings: Api550aSettings, sample_rate: f64) -> Vec<Coeffs> {
     build_api_550a_sections_with_calibration(
         settings,
@@ -517,6 +497,7 @@ pub fn build_api_550a_sections(settings: Api550aSettings, sample_rate: f64) -> V
     )
 }
 
+#[must_use]
 pub fn build_api_550a_sections_with_calibration(
     settings: Api550aSettings,
     sample_rate: f64,
@@ -627,6 +608,7 @@ pub fn build_api_550a_sections_with_calibration(
     sections
 }
 
+#[must_use]
 pub fn fit_api_550a_response(
     initial: HardwareEqCalibration,
     settings: Api550aSettings,
@@ -638,6 +620,7 @@ pub fn fit_api_550a_response(
     })
 }
 
+#[must_use]
 pub fn build_ssl_channel_sections(settings: SslChannelSettings, sample_rate: f64) -> Vec<Coeffs> {
     build_ssl_channel_sections_with_calibration(
         settings,
@@ -646,6 +629,7 @@ pub fn build_ssl_channel_sections(settings: SslChannelSettings, sample_rate: f64
     )
 }
 
+#[must_use]
 pub fn build_ssl_channel_sections_with_calibration(
     settings: SslChannelSettings,
     sample_rate: f64,
@@ -694,7 +678,7 @@ pub fn build_ssl_channel_sections_with_calibration(
         );
     }
 
-    let (lf_q, lmf_q, hmf_q, hf_q, skirt) = if settings.e_series {
+    let (low_q, lmid_q, hmid_q, high_q, skirt) = if settings.e_series {
         (0.72, 1.25, 1.35, 0.74, calibration.ssl_e_skirt_factor)
     } else {
         (0.58, 0.85, 0.95, 0.58, calibration.ssl_g_skirt_factor)
@@ -704,7 +688,7 @@ pub fn build_ssl_channel_sections_with_calibration(
         &mut sections,
         FilterType::LowShelf,
         settings.lf_freq_hz,
-        lf_q,
+        low_q,
         settings.lf_gain_db,
         sample_rate,
     );
@@ -712,7 +696,7 @@ pub fn build_ssl_channel_sections_with_calibration(
         &mut sections,
         FilterType::Peak,
         settings.lmf_freq_hz,
-        lmf_q,
+        lmid_q,
         settings.lmf_gain_db,
         sample_rate,
     );
@@ -720,7 +704,7 @@ pub fn build_ssl_channel_sections_with_calibration(
         &mut sections,
         FilterType::Peak,
         settings.hmf_freq_hz,
-        hmf_q,
+        hmid_q,
         settings.hmf_gain_db,
         sample_rate,
     );
@@ -728,7 +712,7 @@ pub fn build_ssl_channel_sections_with_calibration(
         &mut sections,
         FilterType::HighShelf,
         settings.hf_freq_hz,
-        hf_q,
+        high_q,
         settings.hf_gain_db,
         sample_rate,
     );
@@ -752,6 +736,7 @@ pub fn build_ssl_channel_sections_with_calibration(
     sections
 }
 
+#[must_use]
 pub fn fit_ssl_channel_response(
     initial: HardwareEqCalibration,
     settings: SslChannelSettings,

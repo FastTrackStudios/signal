@@ -12,7 +12,7 @@ pub fn resolve_path(
 ) -> Result<PathBuf, NamError> {
     let entry = catalog
         .get_entry(hash)
-        .ok_or_else(|| NamError::ContentError(format!("no entry with hash {}", hash)))?;
+        .ok_or_else(|| NamError::ContentError(format!("no entry with hash {hash}")))?;
 
     let absolute = nam_root.join(&entry.relative_path);
 
@@ -35,7 +35,7 @@ pub fn resolve_path_unchecked(
 ) -> Result<PathBuf, NamError> {
     let entry = catalog
         .get_entry(hash)
-        .ok_or_else(|| NamError::ContentError(format!("no entry with hash {}", hash)))?;
+        .ok_or_else(|| NamError::ContentError(format!("no entry with hash {hash}")))?;
 
     Ok(nam_root.join(&entry.relative_path))
 }
@@ -45,9 +45,7 @@ pub fn resolve_path_unchecked(
 /// Checks `NAM_LIBRARY_PATH` env var first, then falls back to the provided default.
 pub fn nam_root_from_env(default: &Path) -> PathBuf {
     std::env::var("NAM_LIBRARY_PATH")
-        .ok()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| default.to_path_buf())
+        .ok().map_or_else(|| default.to_path_buf(), PathBuf::from)
 }
 
 #[cfg(test)]

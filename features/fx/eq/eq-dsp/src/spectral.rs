@@ -121,12 +121,12 @@ const SPREAD_RANGE_OCT: f64 = 0.15;
 /// is what the plugin traces: at Density 25 a bin 0.149 octaves out is at full
 /// depth and one 0.166 octaves out is at 0.42 of it. A gentler `1 - x^3` gives
 /// up depth far too early and measured 6.1 dB shallow at Density 0.
-const SPREAD_TAPER_EXP: f64 = 6.0;
+const SPREAD_TAPER_EXP: i32 = 6;
 
 #[inline]
 fn spread_taper(x: f64) -> f64 {
     let x = x.clamp(0.0, 1.0);
-    1.0 - x.powf(SPREAD_TAPER_EXP)
+    1.0 - x.powi(SPREAD_TAPER_EXP)
 }
 
 /// Spectral Tilt: how much a bin's trigger is weighted per octave, and about
@@ -297,8 +297,8 @@ fn region_envelope(r: &SpectralRegion, hz: f64) -> f64 {
             let a = 10.0f64.powf(-depth / 40.0);
             let qs = (r.q * SPECTRAL_Q_SCALE).max(0.02);
             let u = 1.0 / ratio - ratio;
-            let num = u * u + (a / qs) * (a / qs);
-            let den = u * u + 1.0 / (a * qs) / (a * qs);
+            let num = a * u + (a / qs) * (a / qs);
+            let den = a * u + 1.0 / (a * qs) / (a * qs);
             let db = 10.0 * (num / den).max(1.0e-30).log10();
             (db / -depth).clamp(0.0, 1.0)
         }
@@ -400,6 +400,7 @@ pub struct SpectralEngine {
 
 impl SpectralEngine {
     /// `block` must be a power of two (512 / 1024 / 2048).
+    #[must_use]
     pub fn new(sample_rate: f64, block: usize) -> Self {
         let mut planner = RealFftPlanner::<f64>::new();
         let fft = planner.plan_fft_forward(block);
@@ -456,6 +457,7 @@ impl SpectralEngine {
     /// Latency in samples (one analysis block minus the sample that
     /// completes it — verified by impulse: a spike at t returns at
     /// t + block − 1).
+    #[must_use]
     pub fn latency(&self) -> usize {
         self.block - 1
     }
@@ -515,7 +517,7 @@ impl SpectralEngine {
         // and with their own profile.
         let (mut peak, mut reach, mut from) = (0.0f64, 1.0f64, f64::NEG_INFINITY);
         for i in 0..bins {
-            let t = self.target_db[i];
+            let t = self.target_db.get(i).copied().unwrap_or(0.0);
             let dist = self.bin_log2[i] - from;
             let carried = if dist < reach { peak * spread_taper(dist / reach) } else { 0.0 };
             if t >= carried {
@@ -547,10 +549,12 @@ impl SpectralEngine {
     }
 
     /// The mean reduction each region is applying right now, in dB (positive).
+    #[must_use]
     pub fn region_reduction_db(&self, region: usize) -> f64 {
         self.region_reduction_db.get(region).copied().unwrap_or(0.0)
     }
 
+    #[must_use]
     pub fn has_regions(&self) -> bool {
         !self.regions.is_empty()
     }
@@ -842,8 +846,8 @@ mod tests {
     /// Deterministic noise.
     fn noise(seed: &mut u64) -> f64 {
         *seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         ((*seed >> 33) as f64 / (1u64 << 31) as f64) - 1.0
     }
 

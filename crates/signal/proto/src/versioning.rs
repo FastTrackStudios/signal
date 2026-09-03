@@ -41,7 +41,7 @@ pub struct Versioned<T, State = Draft> {
 
 impl<T> Versioned<T, Draft> {
     /// Create a new draft (version 0 = never committed).
-    pub fn draft(inner: T) -> Self {
+    pub const fn draft(inner: T) -> Self {
         Self {
             inner,
             version: 0,
@@ -59,12 +59,12 @@ impl<T> Versioned<T, Draft> {
     }
 
     /// Access the inner entity.
-    pub fn inner(&self) -> &T {
+    pub const fn inner(&self) -> &T {
         &self.inner
     }
 
     /// Mutably access the inner entity (only available on drafts).
-    pub fn inner_mut(&mut self) -> &mut T {
+    pub const fn inner_mut(&mut self) -> &mut T {
         &mut self.inner
     }
 
@@ -74,14 +74,14 @@ impl<T> Versioned<T, Draft> {
     }
 
     /// Whether this is a fresh draft (never committed).
-    pub fn is_new(&self) -> bool {
+    pub const fn is_new(&self) -> bool {
         self.version == 0
     }
 }
 
 impl<T> Versioned<T, Committed> {
     /// Reconstruct a committed entity from storage.
-    pub fn from_storage(inner: T, version: u32) -> Self {
+    pub const fn from_storage(inner: T, version: u32) -> Self {
         Self {
             inner,
             version,
@@ -90,12 +90,12 @@ impl<T> Versioned<T, Committed> {
     }
 
     /// The committed version number.
-    pub fn version(&self) -> u32 {
+    pub const fn version(&self) -> u32 {
         self.version
     }
 
     /// Access the inner entity (read-only on committed).
-    pub fn inner(&self) -> &T {
+    pub const fn inner(&self) -> &T {
         &self.inner
     }
 
@@ -125,7 +125,7 @@ impl<T: PartialEq, S> PartialEq for Versioned<T, S> {
 // ---------------------------------------------------------------------------
 
 /// Metadata for device/cloud synchronization.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct SyncMetadata {
     /// Device ID that last modified this entity.
     pub device_id: String,
@@ -156,7 +156,7 @@ impl SyncMetadata {
     }
 
     /// Mark as locally modified.
-    pub fn mark_dirty(&mut self, timestamp: u64) {
+    pub const fn mark_dirty(&mut self, timestamp: u64) {
         self.local_modified_at = timestamp;
         self.dirty = true;
     }
@@ -169,7 +169,8 @@ impl SyncMetadata {
     }
 
     /// Whether this entity needs to be pushed to remote.
-    pub fn needs_sync(&self) -> bool {
+    #[must_use] 
+    pub const fn needs_sync(&self) -> bool {
         self.dirty
     }
 }

@@ -48,6 +48,6 @@ fn probe_mic_data_across_packs() {
         for z in &h.spec.zones {
             *mic_count.entry(z.mic.clone()).or_insert(0) += 1;
         }
-        eprintln!("  zone-mic distribution: {:?}", mic_count);
+        eprintln!("  zone-mic distribution: {mic_count:?}");
     }
 }

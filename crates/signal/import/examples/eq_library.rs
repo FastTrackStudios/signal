@@ -1,4 +1,4 @@
-//! Build the FTS-EQ preset library from a bank of FabFilter Pro-Q 4 presets.
+//! Build the FTS-EQ preset library from a bank of `FabFilter` Pro-Q 4 presets.
 //!
 //! Walks a directory of `.ffp` files, translates each to `signal_fx::NativeEq`
 //! parameters, and writes one JSON per preset in the same shape the reverb
@@ -43,7 +43,7 @@ fn collect(dir: &Path, out: &mut Vec<PathBuf>) {
 
 /// Read a preset file into the flat parameter vector Pro-Q's decoder wants.
 ///
-/// The tags come back too: a text preset carries the ones FabFilter filed it
+/// The tags come back too: a text preset carries the ones `FabFilter` filed it
 /// under, which are better category material than the folder it sits in.
 fn read_state(path: &Path) -> Result<(ffbs::FfbsState, Vec<String>, Option<String>), String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;

@@ -36,13 +36,14 @@ pub enum Placement {
 }
 
 impl Placement {
-    pub fn from_index(idx: u32) -> Placement {
+    #[must_use]
+    pub const fn from_index(idx: u32) -> Self {
         match idx {
-            1 => Placement::Left,
-            2 => Placement::Right,
-            3 => Placement::Mid,
-            4 => Placement::Side,
-            _ => Placement::Stereo,
+            1 => Self::Left,
+            2 => Self::Right,
+            3 => Self::Mid,
+            4 => Self::Side,
+            _ => Self::Stereo,
         }
     }
 }
@@ -80,6 +81,7 @@ pub struct Band {
 }
 
 impl Band {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             filter_type: FilterType::Peak,
@@ -156,11 +158,11 @@ impl Band {
         let (effective_q, effective_gain) = match self.filter_type {
             FilterType::FlatTilt => {
                 // Type 6: clip Q to 1.885 (from binary constant TYPE_6_CLIP)
-                (q.min(1.884955592153876), self.gain_db)
+                (q.min(1.884_955_592_153_876), self.gain_db)
             }
             FilterType::ShelfAlt => {
                 // Type 12: same Q clipping as FlatTilt
-                (q.min(1.884955592153876), self.gain_db)
+                (q.min(1.884_955_592_153_876), self.gain_db)
             }
             _ => {
                 // All other types: pass through raw Q and gain
@@ -218,9 +220,11 @@ impl Band {
             let stable = coeffs.iter().all(|c| c.is_finite() && c.abs() < 1e12);
             let coeffs = if stable { *coeffs } else { PASSTHROUGH };
             if self.use_df1 {
-                self.df1_sections[i].set_coeffs(coeffs);
-            } else {
-                self.sections[i].set_coeffs(coeffs);
+                if let Some(section) = self.df1_sections.get_mut(i) {
+                    section.set_coeffs(coeffs);
+                }
+            } else if let Some(section) = self.sections.get_mut(i) {
+                section.set_coeffs(coeffs);
             }
         }
     }
@@ -230,6 +234,7 @@ impl Band {
     /// Read off the coefficients the band is actually running, so it costs no
     /// redesign and cannot drift from what the audio hears. A disabled band
     /// contributes nothing.
+    #[must_use]
     pub fn magnitude_db(&self, hz: f64, sample_rate: f64) -> f64 {
         if !self.enabled || self.num_sections == 0 {
             return if self.enabled {
@@ -243,18 +248,21 @@ impl Band {
         let (c2w, s2w) = ((2.0 * w).cos(), (2.0 * w).sin());
         let mut db = 20.0 * self.output_gain.max(1.0e-12).log10();
         for i in 0..self.num_sections {
-            let [b0, b1, b2, a1, a2] = if self.use_df1 {
-                self.df1_sections[i].coeffs()
+            let coeffs = if self.use_df1 {
+                self.df1_sections.get(i).map(super::section::Df1Section::coeffs)
             } else {
-                self.sections[i].coeffs()
+                self.sections.get(i).map(super::section::Tdf2Section::coeffs)
+            };
+            let Some([b0, b1, b2, a1, a2]) = coeffs else {
+                continue;
             };
             // H(e^jw) with z^-1 = cos w - j sin w.
-            let num_re = b0 + b1 * cw + b2 * c2w;
+            let num_re = b2.mul_add(c2w, b0 + b1 * cw);
             let num_im = -(b1 * sw + b2 * s2w);
             let den_re = 1.0 + a1 * cw + a2 * c2w;
             let den_im = -(a1 * sw + a2 * s2w);
-            let num = (num_re * num_re + num_im * num_im).max(1.0e-30);
-            let den = (den_re * den_re + den_im * den_im).max(1.0e-30);
+            let num: f64 = (num_re * num_re + num_im * num_im).max(1.0e-30);
+            let den: f64 = (den_re * den_re + den_im * den_im).max(1.0e-30);
             db += 10.0 * (num / den).log10();
         }
         db
@@ -313,7 +321,8 @@ impl Band {
     /// True when the band contributes nothing to the signal (disabled
     /// and the bypass ramp fully settled) — the chain skips it.
     #[inline]
-    pub fn is_idle(&self) -> bool {
+    #[must_use]
+    pub const fn is_idle(&self) -> bool {
         !self.enabled && self.bypass_ramp == 0.0
     }
 

@@ -1,6 +1,6 @@
 //! Rack repository — data access for Rack collections.
 
-use sea_orm::*;
+use sea_orm::{ConnectionTrait, Schema, ActiveModelBehavior, StatementBuilder, QueryTrait, ActiveEnum, QueryOrder, EntityTrait, Iterable, Iden, ColIdx, IdenStatic, ActiveModelTrait, Set};
 use signal_proto::fx_send::FxSendBus;
 use signal_proto::rack::{Rack, RackId, RackSlot};
 
@@ -27,7 +27,8 @@ pub struct RackRepoLive {
 }
 
 impl RackRepoLive {
-    pub fn new(db: DatabaseConnection) -> Self {
+    #[must_use] 
+    pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
 

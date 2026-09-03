@@ -55,6 +55,7 @@ impl SpaceBackend {
         }
     }
 
+    #[must_use] 
     pub fn router(&self) -> architect::LayerRouter {
         self.clone().into_router()
     }
@@ -98,9 +99,9 @@ impl SpaceBackend {
         let mut wavs: Vec<PathBuf> = walkdir::WalkDir::new(root.join(&item.path))
             .follow_links(false)
             .into_iter()
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
             .filter(|e| e.file_type().is_file())
-            .map(|e| e.into_path())
+            .map(walkdir::DirEntry::into_path)
             .filter(|p| {
                 p.extension()
                     .and_then(|x| x.to_str())

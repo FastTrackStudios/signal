@@ -21,10 +21,12 @@ pub struct GridPosition {
 }
 
 impl GridPosition {
+    #[must_use] 
     pub const fn new(row: usize, col: usize) -> Self {
         Self { row, col }
     }
 
+    #[must_use] 
     pub const fn is_valid(&self) -> bool {
         self.row < GRID_ROWS && self.col < GRID_COLS
     }
@@ -38,26 +40,32 @@ pub struct GridSize {
 }
 
 impl GridSize {
+    #[must_use] 
     pub const fn new(width: usize, height: usize) -> Self {
         Self { width, height }
     }
 
+    #[must_use] 
     pub const fn single() -> Self {
         Self::new(1, 1)
     }
 
+    #[must_use] 
     pub const fn wide() -> Self {
         Self::new(2, 1)
     }
 
+    #[must_use] 
     pub const fn large() -> Self {
         Self::new(3, 2)
     }
 
+    #[must_use] 
     pub const fn xlarge() -> Self {
         Self::new(4, 2)
     }
 
+    #[must_use] 
     pub const fn square() -> Self {
         Self::new(2, 2)
     }
@@ -87,7 +95,7 @@ pub enum BlockWidget {
 }
 
 /// A block placed on the grid.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GridBlock {
     pub id: Uuid,
     pub name: String,
@@ -118,22 +126,26 @@ impl GridBlock {
         }
     }
 
-    pub fn with_size(mut self, size: GridSize) -> Self {
+    #[must_use] 
+    pub const fn with_size(mut self, size: GridSize) -> Self {
         self.size = size;
         self
     }
 
-    pub fn with_widget(mut self, widget: BlockWidget) -> Self {
+    #[must_use] 
+    pub const fn with_widget(mut self, widget: BlockWidget) -> Self {
         self.widget = widget;
         self
     }
 
-    pub fn with_bypassed(mut self, bypassed: bool) -> Self {
+    #[must_use] 
+    pub const fn with_bypassed(mut self, bypassed: bool) -> Self {
         self.bypassed = bypassed;
         self
     }
 
-    pub fn occupies(&self, pos: GridPosition) -> bool {
+    #[must_use] 
+    pub const fn occupies(&self, pos: GridPosition) -> bool {
         pos.col >= self.position.col
             && pos.col < self.position.col + self.size.width
             && pos.row >= self.position.row
@@ -149,13 +161,14 @@ pub struct GridConnection {
 }
 
 impl GridConnection {
+    #[must_use] 
     pub const fn new(from: GridPosition, to: GridPosition) -> Self {
         Self { from, to }
     }
 }
 
 /// Input/output jack on the grid edge.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GridJack {
     pub label: String,
     pub row: usize,
@@ -181,7 +194,7 @@ impl GridJack {
 }
 
 /// The complete grid state.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SignalFlowGrid {
     pub blocks: Vec<GridBlock>,
     pub connections: Vec<GridConnection>,
@@ -190,6 +203,7 @@ pub struct SignalFlowGrid {
 }
 
 impl SignalFlowGrid {
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
@@ -210,12 +224,14 @@ impl SignalFlowGrid {
         self.outputs.push(GridJack::output(label, row));
     }
 
+    #[must_use] 
     pub fn block_at(&self, pos: GridPosition) -> Option<&GridBlock> {
         self.blocks.iter().find(|b| b.occupies(pos))
     }
 
     /// Map a `BlockType` to the appropriate widget + grid size.
-    pub fn widget_for_block_type(bt: BlockType) -> (BlockWidget, GridSize) {
+    #[must_use] 
+    pub const fn widget_for_block_type(bt: BlockType) -> (BlockWidget, GridSize) {
         match bt {
             BlockType::Eq => (BlockWidget::EqGraph, GridSize::xlarge()),
             BlockType::Compressor => (BlockWidget::CompressorGraph, GridSize::large()),
@@ -236,6 +252,7 @@ impl SignalFlowGrid {
 
     /// Build a `SignalFlowGrid` from a `SignalChain`, auto-positioning blocks
     /// with appropriate widgets and sizes.
+    #[must_use] 
     pub fn from_signal_chain(chain: &signal_proto::SignalChain) -> Self {
         let mut grid = Self::new();
         grid.add_input("In", 0);
@@ -265,6 +282,7 @@ impl SignalFlowGrid {
     /// Lays out modules row-by-row with blocks proceeding horizontally.
     /// (Native-only: `EngineGridData` comes from the Vello-backed flow grid.)
     #[cfg(not(target_arch = "wasm32"))]
+    #[must_use] 
     pub fn from_engines(engines: &[super::signal_flow_grid_view::EngineGridData]) -> Self {
         let mut grid = Self::new();
         grid.add_input("In", 0);

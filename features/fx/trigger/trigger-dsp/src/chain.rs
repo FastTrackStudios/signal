@@ -1,4 +1,4 @@
-//! TriggerChain — complete trigger processing chain with sidechain EQ.
+//! `TriggerChain` — complete trigger processing chain with sidechain EQ.
 //!
 //! Signal flow:
 //! - Audio path: Input → dry signal preserved → mix with sample playback
@@ -65,11 +65,12 @@ pub struct TriggerChain {
 
     /// Last trigger velocity (for metering).
     pub last_velocity: f64,
-    /// Whether a trigger fired in the last process() call.
+    /// Whether a trigger fired in the last `process()` call.
     pub triggered_this_block: bool,
 }
 
 impl TriggerChain {
+    #[must_use] 
     pub fn new() -> Self {
         let mut sc_hpf = Band::new();
         sc_hpf.filter_type = FilterType::Highpass;
@@ -138,9 +139,10 @@ impl TriggerChain {
         }
     }
 
-    /// Get the number of trigger events in the last process() call.
+    /// Get the number of trigger events in the last `process()` call.
     /// (Check `triggered_this_block` for boolean, or this for count.)
-    pub fn last_trigger_velocity(&self) -> f64 {
+    #[must_use] 
+    pub const fn last_trigger_velocity(&self) -> f64 {
         self.last_velocity
     }
 
@@ -180,7 +182,8 @@ impl TriggerChain {
 
     /// Latency (in samples) of the current detection algorithm — zero for
     /// the time-domain peak envelope, FFT-sized for spectral modes.
-    pub fn latency_samples(&self) -> usize {
+    #[must_use] 
+    pub const fn latency_samples(&self) -> usize {
         self.detector.latency_samples()
     }
 }

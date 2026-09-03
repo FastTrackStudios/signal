@@ -6,7 +6,7 @@
 //! ## Protocol
 //!
 //! 1. Add new FX to chain (silenced via zero output pin mappings)
-//! 2. Wait for FX to be fully loaded (poll `info()` for parameter_count > 0)
+//! 2. Wait for FX to be fully loaded (poll `info()` for `parameter_count` > 0)
 //! 3. Atomically swap: silence old FX pins, restore new FX pins
 //! 4. Clean up old FX (remove or leave silenced)
 //!
@@ -15,9 +15,9 @@
 //! Bypassing an FX causes an audible click/gap because REAPER crossfades the
 //! bypass transition. Zeroing output pin mappings suppresses all output routing
 //! without any crossfade artifact — the FX simply has no output pins mapped.
-//! This is the same technique used by ParanormalFX for parallel routing lanes.
+//! This is the same technique used by `ParanormalFX` for parallel routing lanes.
 //!
-//! ## Why pin mappings instead of channel_config?
+//! ## Why pin mappings instead of `channel_config`?
 //!
 //! REAPER's `TrackFX_SetNamedConfigParm("channel_config", ...)` silently fails —
 //! `channel_config` is read-only via `GetNamedConfigParm` but not writable via
@@ -82,13 +82,15 @@ pub struct GaplessSwapEngine {
 }
 
 impl GaplessSwapEngine {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             config: SwapConfig::default(),
         }
     }
 
-    pub fn with_config(config: SwapConfig) -> Self {
+    #[must_use] 
+    pub const fn with_config(config: SwapConfig) -> Self {
         Self { config }
     }
 
@@ -103,7 +105,7 @@ impl GaplessSwapEngine {
         let new_fx = match chain.add(new_fx_name).await {
             Ok(fx) => fx,
             Err(e) => {
-                return SwapResult::Failed(format!("Failed to add FX '{}': {}", new_fx_name, e));
+                return SwapResult::Failed(format!("Failed to add FX '{new_fx_name}': {e}"));
             }
         };
 
@@ -113,7 +115,7 @@ impl GaplessSwapEngine {
             Ok(saved) => saved,
             Err(e) => {
                 let _ = new_fx.remove().await;
-                return SwapResult::Failed(format!("Failed to silence new FX: {}", e));
+                return SwapResult::Failed(format!("Failed to silence new FX: {e}"));
             }
         };
 
@@ -129,13 +131,13 @@ impl GaplessSwapEngine {
         // Order matters: activate new FIRST so there's never a gap where neither is outputting.
         if let Err(e) = self.activate_fx(&new_fx, new_fx_saved_pins).await {
             let _ = new_fx.remove().await;
-            return SwapResult::Failed(format!("Failed to activate new FX: {}", e));
+            return SwapResult::Failed(format!("Failed to activate new FX: {e}"));
         }
 
         let old_guid = old_fx.guid().to_string();
 
         if let Err(e) = self.silence_fx(old_fx).await {
-            return SwapResult::Failed(format!("Failed to silence old FX: {}", e));
+            return SwapResult::Failed(format!("Failed to silence old FX: {e}"));
         }
 
         // Step 5: Cleanup old FX if configured.
@@ -160,7 +162,7 @@ impl GaplessSwapEngine {
         let new_fx = match chain.add(new_fx_name).await {
             Ok(fx) => fx,
             Err(e) => {
-                return SwapResult::Failed(format!("Failed to add FX '{}': {}", new_fx_name, e));
+                return SwapResult::Failed(format!("Failed to add FX '{new_fx_name}': {e}"));
             }
         };
 
@@ -168,7 +170,7 @@ impl GaplessSwapEngine {
             Ok(saved) => saved,
             Err(e) => {
                 let _ = new_fx.remove().await;
-                return SwapResult::Failed(format!("Failed to silence new FX: {}", e));
+                return SwapResult::Failed(format!("Failed to silence new FX: {e}"));
             }
         };
 
@@ -177,7 +179,7 @@ impl GaplessSwapEngine {
             .await
         {
             let _ = new_fx.remove().await;
-            return SwapResult::Failed(format!("Failed to apply state chunk: {}", e));
+            return SwapResult::Failed(format!("Failed to apply state chunk: {e}"));
         }
 
         if !self.wait_for_fx_ready(&new_fx).await {
@@ -189,13 +191,13 @@ impl GaplessSwapEngine {
 
         if let Err(e) = self.activate_fx(&new_fx, new_fx_saved_pins).await {
             let _ = new_fx.remove().await;
-            return SwapResult::Failed(format!("Failed to activate new FX: {}", e));
+            return SwapResult::Failed(format!("Failed to activate new FX: {e}"));
         }
 
         let old_guid = old_fx.guid().to_string();
 
         if let Err(e) = self.silence_fx(old_fx).await {
-            return SwapResult::Failed(format!("Failed to silence old FX: {}", e));
+            return SwapResult::Failed(format!("Failed to silence old FX: {e}"));
         }
 
         if self.config.remove_old {
@@ -218,11 +220,11 @@ impl GaplessSwapEngine {
     ) -> SwapResult {
         let count_before = match chain.count().await {
             Ok(c) => c,
-            Err(e) => return SwapResult::Failed(format!("Failed to count FX: {}", e)),
+            Err(e) => return SwapResult::Failed(format!("Failed to count FX: {e}")),
         };
 
         if let Err(e) = chain.insert_chunk(new_container_chunk).await {
-            return SwapResult::Failed(format!("Failed to insert container chunk: {}", e));
+            return SwapResult::Failed(format!("Failed to insert container chunk: {e}"));
         }
 
         let new_container = match chain.by_index(count_before).await {
@@ -230,12 +232,12 @@ impl GaplessSwapEngine {
             Ok(None) => {
                 return SwapResult::Failed("New container not found after insert".to_string());
             }
-            Err(e) => return SwapResult::Failed(format!("Failed to find new container: {}", e)),
+            Err(e) => return SwapResult::Failed(format!("Failed to find new container: {e}")),
         };
         let new_container_id = FxNodeId::container(count_before.to_string());
 
         if let Err(e) = self.silence_container(chain, &new_container_id).await {
-            return SwapResult::Failed(format!("Failed to silence new container: {}", e));
+            return SwapResult::Failed(format!("Failed to silence new container: {e}"));
         }
 
         if !self.wait_for_fx_ready(&new_container).await {
@@ -245,13 +247,13 @@ impl GaplessSwapEngine {
         }
 
         if let Err(e) = self.activate_container(chain, &new_container_id).await {
-            return SwapResult::Failed(format!("Failed to activate new container: {}", e));
+            return SwapResult::Failed(format!("Failed to activate new container: {e}"));
         }
 
         let old_guid = old_fx.guid().to_string();
 
         if let Err(e) = self.silence_container(chain, old_container_id).await {
-            return SwapResult::Failed(format!("Failed to silence old container: {}", e));
+            return SwapResult::Failed(format!("Failed to silence old container: {e}"));
         }
 
         if self.config.remove_old {

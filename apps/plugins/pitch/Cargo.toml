@@ -9,6 +9,9 @@ description = "FTS Pitch — pitch shifter + stereo doubler over the pitch-dsp e
 [lib]
 crate-type = ["cdylib", "lib"]
 
+[lints]
+workspace = true
+
 [dependencies]
 nice-plug.workspace = true
 pitch-dsp = { workspace = true }

@@ -33,11 +33,13 @@ fn bounds() -> ((u32, u32), (u32, u32)) {
     fts_audio_ui::EditorForm::size_bounds(RAIL_W, (EDITOR_W, EDITOR_H))
 }
 
+#[must_use] 
 pub fn min_editor_size() -> (f32, f32) {
     let ((w, h), _) = bounds();
     (w as f32, h as f32)
 }
 
+#[must_use] 
 pub fn max_editor_size() -> (f32, f32) {
     let (_, (w, h)) = bounds();
     ((w as f32 * 2.0).max(1960.0), (h as f32 * 1.4).max(1320.0))
@@ -45,6 +47,7 @@ pub fn max_editor_size() -> (f32, f32) {
 
 /// Freely resizable between the extremes of the size presets — a bound tighter
 /// than a preset the rail offers is a button that does nothing.
+#[must_use] 
 pub fn resize_hint() -> ResizeHint {
     let (min_w, min_h) = min_editor_size();
     let (max_w, max_h) = max_editor_size();
@@ -62,6 +65,7 @@ pub struct SatUi {
 }
 
 /// The editor's size for a profile and a chosen form.
+#[must_use] 
 pub fn editor_size_for(_profile_index: usize, form: fts_audio_ui::EditorForm) -> (u32, u32) {
     form.editor_size(RAIL_W, (EDITOR_W, EDITOR_H))
 }
@@ -73,6 +77,7 @@ pub const EQ_SIDECAR_W: u32 = 560;
 
 /// The editor size with the emphasis sidecar open: the face's box plus the
 /// column, capped at the resize bounds.
+#[must_use] 
 pub fn editor_size_with_eq(
     profile_index: usize,
     form: fts_audio_ui::EditorForm,
@@ -123,7 +128,7 @@ pub fn App() -> Element {
     // Profile / form / EQ-strip change → ask the host to resize. A plain
     // Cell rather than an effect: the profile lives in a plugin param, not a
     // signal, so comparing here also catches the host automating it.
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     let last: std::rc::Rc<std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm, bool)>>> =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
     if last.get() != Some((profile_index, form, emphasis_on)) {
@@ -153,10 +158,10 @@ pub fn App() -> Element {
     // Faces scale themselves to the `PanelBox` they are given.
     let (win_w, win_h) = fts_audio_ui::hardware::panel::window_logical_size().unwrap_or({
         let (w, h) = editor_size_with_eq(profile_index, form, emphasis_on);
-        (w as f64, h as f64)
+        (f64::from(w), f64::from(h))
     });
     let sidecar_w = if emphasis_on {
-        (EQ_SIDECAR_W as f64).min(win_w * 0.45)
+        f64::from(EQ_SIDECAR_W).min(win_w * 0.45)
     } else {
         0.0
     };
@@ -179,8 +184,7 @@ pub fn App() -> Element {
 
     // One rail entry per family, badged with the space that is active in it.
     let active_category = saturate_profiles::category_of(profile.id)
-        .map(|(c, _)| c)
-        .unwrap_or(0);
+        .map_or(0, |(c, _)| c);
     let items: Vec<ShellItem> = saturate_profiles::CATEGORIES
         .iter()
         .enumerate()
@@ -195,8 +199,7 @@ pub fn App() -> Element {
             // on the rail admits that.
             let at = if index == active_category {
                 saturate_profiles::category_of(profile.id)
-                    .map(|(_, v)| v)
-                    .unwrap_or(0)
+                    .map_or(0, |(_, v)| v)
             } else {
                 0
             };
@@ -206,7 +209,7 @@ pub fn App() -> Element {
         })
         .collect();
 
-    let profile_handle = param_handle(params.profile.as_ptr(), ctx.clone());
+    let profile_handle = param_handle(params.profile.as_ptr(), ctx);
     let params_for_id = ui.params.clone();
     let params_for_form = ui.params.clone();
     let profile_count = saturate_profiles::PROFILES.len();
@@ -231,7 +234,7 @@ pub fn App() -> Element {
                 brand: "SAT".to_string(),
                 items,
                 selected: active_category,
-                accent: accent.clone(),
+                accent: accent,
                 on_select: move |category: usize| {
                     let index = saturate_profiles::rail_click_target(profile_index, category);
                     let normalized = if profile_count > 1 {
@@ -254,16 +257,16 @@ pub fn App() -> Element {
                             "Emphasis EQ — shapes what distorts, mirrored out".to_string()
                         },
                         active: emphasis_on,
-                        accent: accent_for_eq.clone(),
-                        on_click: move |_| emphasis_view.toggle(),
+                        accent: accent_for_eq,
+                        on_click: move |()| emphasis_view.toggle(),
                     }
                     RailButton {
                         testid: "form-cycle".to_string(),
                         label: form.badge().to_string(),
                         title: format!("Editor size — {} (click to cycle)", form.label()),
                         active: form != fts_audio_ui::EditorForm::default(),
-                        accent: accent_for_form.clone(),
-                        on_click: move |_| {
+                        accent: accent_for_form,
+                        on_click: move |()| {
                             let forms = fts_audio_ui::EDITOR_FORMS;
                             let index = forms.iter().position(|f| *f == form).unwrap_or(0);
                             params_for_form.store_editor_form(forms[(index + 1) % forms.len()]);
@@ -335,6 +338,7 @@ fn FaceInBox(
 }
 
 /// The rail badge for a space: short enough for a 48px rail.
+#[must_use] 
 pub fn profile_badge(profile_id: &str) -> String {
     match profile_id {
         "triode" => "TRI",

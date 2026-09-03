@@ -4,14 +4,14 @@
 //! gain drives the signal into a brickwall gain computer (instant attack,
 //! program-release), and a Character-blended ceiling stage — golden-ratio hard
 //! clip ([`comp::limiter::GoldenClip`], ClipOnly2/ADClip8 lineage) morphing
-//! into the ClipSoftly sine waveshaper ([`comp::limiter::sin_clip`]) —
+//! into the `ClipSoftly` sine waveshaper ([`comp::limiter::sin_clip`]) —
 //! guarantees no sample ever exceeds the ceiling.
 //!
-//! Once `limiter-dsp`'s `LimiterChain` (AdClip → ClipSoftly → BlockParty →
+//! Once `limiter-dsp`'s `LimiterChain` (`AdClip` → `ClipSoftly` → `BlockParty` →
 //! Loud) is implemented and re-exported by the `comp` facade, the per-channel
 //! engine below moves behind it; the param surface here is designed to map
 //! onto that chain (Input → drive, Ceiling → output ceiling, Release →
-//! BlockParty release, Character → clip-stage morph).
+//! `BlockParty` release, Character → clip-stage morph).
 //!
 //! Params + shared UI state live in [`limiter_ui::params`] (like `comp-ui`),
 //! so the Dioxus editor ([`limiter_ui::control_view::App`]) renders against
@@ -30,7 +30,7 @@ const PLUGIN_NAME: &str = "FTS Limiter";
 /// 4-point Catmull-Rom inter-sample peak estimate over the last four
 /// input samples — a cheap, allocation-free stand-in for full 4x
 /// polyphase upsampling that catches the overwhelming majority of ISPs
-/// (the same estimator family meter-dsp's TruePeakDetector uses).
+/// (the same estimator family meter-dsp's `TruePeakDetector` uses).
 #[derive(Default)]
 struct IspEstimator {
     h: [f64; 4],
@@ -48,16 +48,13 @@ impl IspEstimator {
             let t2 = t * t;
             let t3 = t2 * t;
             let v = 0.5
-                * ((2.0 * b)
-                    + (-a + c) * t
-                    + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2
-                    + (-a + 3.0 * b - 3.0 * c + d) * t3);
+                * (3.0f64.mul_add(-c, 3.0f64.mul_add(b, -a)) + d).mul_add(t3, (4.0f64.mul_add(c, 2.0f64.mul_add(a, -(5.0 * b))) - d).mul_add(t2, 2.0f64.mul_add(b, (-a + c) * t)));
             peak = peak.max(v.abs());
         }
         peak
     }
 
-    fn reset(&mut self) {
+    const fn reset(&mut self) {
         self.h = [0.0; 4];
     }
 }
@@ -111,14 +108,14 @@ impl Channel {
         if target < self.envelope {
             self.envelope = target;
         } else {
-            self.envelope = target + (self.envelope - target) * release_coeff;
+            self.envelope = (self.envelope - target).mul_add(release_coeff, target);
         }
         let limited = normalized * self.envelope;
 
         // Safety/character ceiling stage in the unity domain.
         let hard = self.clip.tick(limited, 0);
         let soft = sin_clip(limited);
-        hard + (soft - hard) * character
+        (soft - hard).mul_add(character, hard)
     }
 }
 
@@ -189,11 +186,10 @@ impl Plugin for FtsLimiter {
         buffer_config: &BufferConfig,
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
         let ch = audio_io_layout
             .main_output_channels
-            .map(|n| n.get() as usize)
-            .unwrap_or(2)
+            .map_or(2, |n| n.get() as usize)
             .max(1);
         self.channels = (0..ch).map(|_| Channel::new()).collect();
         self.ui_state
@@ -219,10 +215,10 @@ impl Plugin for FtsLimiter {
         }
 
         // Per-block param snapshot (no allocation on the hot path).
-        let in_gain = util::db_to_gain(self.params.input_gain.value()) as f64;
-        let ceiling = util::db_to_gain(self.params.ceiling.value()) as f64;
-        let character = self.params.character.value() as f64;
-        let release_s = (self.params.release_ms.value() as f64 / 1_000.0).max(1e-4);
+        let in_gain = f64::from(util::db_to_gain(self.params.input_gain.value()));
+        let ceiling = f64::from(util::db_to_gain(self.params.ceiling.value()));
+        let character = f64::from(self.params.character.value());
+        let release_s = (f64::from(self.params.release_ms.value()) / 1_000.0).max(1e-4);
         let true_peak = self.params.true_peak.value();
         // One-pole release: per-sample coefficient toward full recovery.
         let release_coeff = (-1.0 / (self.sample_rate * release_s)).exp();
@@ -238,7 +234,7 @@ impl Plugin for FtsLimiter {
             for (c, sample) in frame.iter_mut().enumerate() {
                 if let Some(ch) = self.channels.get_mut(c) {
                     input_peak = input_peak.max(sample.abs());
-                    let normalized = *sample as f64 * in_gain * inv_ceiling;
+                    let normalized = f64::from(*sample) * in_gain * inv_ceiling;
                     *sample =
                         (ch.tick(normalized, release_coeff, character, true_peak) * ceiling) as f32;
                     output_peak = output_peak.max(sample.abs());

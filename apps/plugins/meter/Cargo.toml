@@ -9,6 +9,9 @@ description = "FTS Meter — LUFS / true-peak / correlation / goniometer / spect
 [lib]
 crate-type = ["cdylib", "lib"]
 
+[lints]
+workspace = true
+
 [dependencies]
 nice-plug.workspace = true
 nice-plug-dioxus.workspace = true

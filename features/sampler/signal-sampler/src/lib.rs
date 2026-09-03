@@ -73,6 +73,10 @@
 //! # Ok::<(), eyre::Error>(())
 //! ```
 
+// Off the audio path these are ordinary, correct code; see the `deny` on
+// `mod engine`, which is where they must never appear.
+#![allow(clippy::disallowed_methods)]
+
 // Native-only modules (audio devices, hardware MIDI, the NAM C++ core,
 // filesystem scans, the pack CLI). The wasm32 build keeps the pure engine +
 // tree renderer + the keys lane machinery — see `keys_rig::KeysRig::
@@ -89,6 +93,14 @@ pub mod built_lanes;
 pub mod convolver;
 pub mod document;
 pub mod document_rt;
+/// The audio path. `disallowed_methods` is DENIED here and allowed at the
+/// crate root: everything in `clippy.toml` can block for an unbounded time,
+/// which is fine in a loader and fatal in a render callback. Scoping it this
+/// way keeps the lint meaningful — workspace-wide it fires 171 times in this
+/// crate alone, almost all of them legitimate control-surface code, and a
+/// lint that noisy gets ignored. It found two `env::var_os` calls on the
+/// audio thread the first time it ran.
+#[deny(clippy::disallowed_methods)]
 pub mod engine;
 pub mod engine_spec;
 pub mod instrument;

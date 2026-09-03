@@ -90,7 +90,7 @@ fn main() -> eyre::Result<()> {
             let curve = dest_energy_curve(&res.audio, SR, from, exp.pitch, w0, w1);
             let n = curve.v.len();
             let med = |sl: &mut [f32]| -> f64 {
-                sl.sort_by(|a, b| a.total_cmp(b));
+                sl.sort_by(f32::total_cmp);
                 f64::from(sl[sl.len() / 2])
             };
             let head_n = ((0.100 / curve.hop_sec) as usize).min(n);
@@ -101,10 +101,10 @@ fn main() -> eyre::Result<()> {
                 if plateau <= floor {
                     return None;
                 }
-                let thresh = floor + (plateau - floor) * frac;
+                let thresh = (plateau - floor).mul_add(frac, floor);
                 for (i, &e) in curve.v.iter().enumerate() {
                     if f64::from(e) >= thresh {
-                        return Some((curve.t0 + i as f64 * curve.hop_sec - tick) * 1000.0);
+                        return Some(((i as f64).mul_add(curve.hop_sec, curve.t0) - tick) * 1000.0);
                     }
                 }
                 None

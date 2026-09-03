@@ -32,7 +32,7 @@ pub struct RigEngine {
     pub keys: KeysRigClient,
     #[cfg(feature = "signal-keys-rig")]
     pub keys_stream: KeysRigStreamClient,
-    /// Keeps the LocalServer acceptor tasks alive for the app's lifetime.
+    /// Keeps the `LocalServer` acceptor tasks alive for the app's lifetime.
     _scope: Arc<architect::Scope>,
 }
 
@@ -48,7 +48,7 @@ pub fn engine() -> Option<&'static RigEngine> {
 /// non-fatal (the rig view shows its offline notice).
 ///
 /// Owns a dedicated leaked multi-thread runtime (the same shape as the
-/// session engine): the LocalServer acceptors and vox pumps live on it for
+/// session engine): the `LocalServer` acceptors and vox pumps live on it for
 /// the process lifetime, independent of the GUI's runtime.
 pub fn bootstrap_blocking() -> eyre::Result<()> {
     if ENGINE.get().is_some() {

@@ -12,9 +12,7 @@ const SR: f64 = 48000.0;
 /// pre-change baseline capture exactly).
 fn probe_input(i: usize) -> f64 {
     let t = i as f64 / SR;
-    (if i == 0 { 1.0 } else { 0.0 })
-        + 0.25 * (2.0 * PI * 440.0 * t).sin()
-        + 0.1 * (2.0 * PI * 1337.0 * t).sin()
+    0.1f64.mul_add((2.0 * PI * 1337.0 * t).sin(), 0.25f64.mul_add((2.0 * PI * 440.0 * t).sin(), if i == 0 { 1.0 } else { 0.0 }))
 }
 
 /// All mod params at defaults must reproduce the pre-modulation
@@ -51,7 +49,7 @@ fn defaults_are_bit_transparent() {
     for i in 0..9600usize {
         let x = probe_input(i);
         let (l, r) = c.tick(x, x * 0.8);
-        energy += l * l + r * r;
+        energy += l.mul_add(l, r * r);
         if i % 1000 == 0 {
             probes.push((i, l, r));
         }
@@ -132,7 +130,7 @@ fn motion_moves_and_is_finite() {
 }
 
 /// Envelope ducking: wet output during a loud burst is quieter with
-/// duck_wet_depth engaged than without.
+/// `duck_wet_depth` engaged than without.
 #[test]
 fn duck_reduces_wet_during_burst() {
     let run = |duck: f64| -> f64 {
@@ -155,7 +153,7 @@ fn duck_reduces_wet_during_burst() {
             };
             let (l, r) = c.tick(x, x);
             if i > 30000 {
-                burst_energy += l * l + r * r;
+                burst_energy += l.mul_add(l, r * r);
             }
         }
         burst_energy
@@ -334,8 +332,8 @@ fn wet_gain_lfo_breathes() {
             ratios.push(rm / rb);
         }
     }
-    let max = ratios.iter().cloned().fold(0.0, f64::max);
-    let min = ratios.iter().cloned().fold(f64::MAX, f64::min);
+    let max = ratios.iter().copied().fold(0.0, f64::max);
+    let min = ratios.iter().copied().fold(f64::MAX, f64::min);
     assert!(
         max > 1.2 && min < 0.85,
         "wet gain should breathe with the LFO: min={min}, max={max}"

@@ -26,7 +26,7 @@ use signal_sampler::rig_node::Container;
 pub const AUX_RACK: &str = "Aux Rack";
 
 /// What realizes a layer's source block.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Source {
     /// Nothing loaded — the lane is silent but fully structured.
     #[default]
@@ -41,6 +41,7 @@ pub enum Source {
 
 impl Source {
     /// A sample source from an optional spec path.
+    #[must_use] 
     pub fn sample(spec: Option<String>) -> Self {
         match spec {
             Some(s) => Self::Sample(s),
@@ -56,6 +57,7 @@ pub const MODULES_PER_LAYER: usize = 4;
 
 /// Slot label for module `index`: A..Z, then A1, B1, … so a layer can grow
 /// past the alphabet without ambiguity.
+#[must_use] 
 pub fn module_slot(index: usize) -> String {
     const LETTERS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     let letter = LETTERS[index % LETTERS.len()] as char;
@@ -129,6 +131,7 @@ impl Default for ModuleSettings {
 
 impl ModuleSettings {
     /// Settings for a bare source, everything else at its default.
+    #[must_use] 
     pub fn from_source(source: Source) -> Self {
         Self {
             source,
@@ -148,11 +151,13 @@ fn envelope(name: &str, (a, d, s, r): (f32, f32, f32, f32)) -> RigBlock {
         .with_param("release", format!("{:.4}", r.max(0.0) / 1000.0))
 }
 
+#[must_use] 
 pub fn signal_module(name: &str, source: Source) -> Container {
     signal_module_with(name, &ModuleSettings::from_source(source))
 }
 
 /// Build one module from its settings — the version that carries sound.
+#[must_use] 
 pub fn signal_module_with(name: &str, set: &ModuleSettings) -> Container {
     with_module_envelopes(module_shell(name, set), set)
 }
@@ -277,7 +282,7 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
 /// release of one note takes the others with it). A sampler's amplitude
 /// envelope belongs to its voices, and it has one: `amp_attack` /
 /// `amp_release` on the Source block above.
-fn with_module_envelopes(module: Container, _set: &ModuleSettings) -> Container {
+const fn with_module_envelopes(module: Container, _set: &ModuleSettings) -> Container {
     // Envelopes are PER-VOICE now, inside each source (the sampler's voices
     // carry their own amp envelope; the oscillator carries amp + filter
     // envelopes and a per-voice lowpass). The old paraphonic routes —
@@ -302,6 +307,7 @@ pub fn signal_layer(name: &str, sources: &[Source]) -> Container {
 
 /// A layer whose modules carry their settings — the version the rig builds
 /// when its macros have been moved.
+#[must_use] 
 pub fn signal_layer_with(name: &str, settings: &[ModuleSettings]) -> Container {
     let mut modules = Container::parallel(format!("{name} Modules"));
     for (i, set) in settings.iter().enumerate() {
@@ -315,12 +321,14 @@ pub fn signal_layer_with(name: &str, settings: &[ModuleSettings]) -> Container {
 
 /// A layer holding a single module — the common "one patch in this lane"
 /// case. More modules are added by handing `signal_layer` more sources.
+#[must_use] 
 pub fn signal_layer_single(name: &str, source: Source) -> Container {
     signal_layer(name, &[source])
 }
 
 /// A 4-slot FX rack — every rack in the engine (Layer / Common / Aux /
 /// Master) is exactly four slots.
+#[must_use] 
 pub fn fx_rack(name: &str) -> Container {
     let mut rack = Container::module(name);
     for slot in 1..=4 {
@@ -381,7 +389,7 @@ pub struct ImportedPatch {
 /// the free-run range) until it's swept against the real engine like the
 /// filter knee was.
 fn omni_lfo_hz(v: f32) -> f32 {
-    0.05 * 2f32.powf(9.6 * v.clamp(0.0, 1.0))
+    0.05 * (9.6 * v.clamp(0.0, 1.0)).exp2()
 }
 
 /// Read an Omnisphere `.prt_omn` patch and flatten its layers onto module
@@ -444,7 +452,7 @@ pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String
         })
         .collect();
     Ok(ImportedPatch {
-        name: patch.name.clone(),
+        name: patch.name,
         modules,
         lfos,
     })

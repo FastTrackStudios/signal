@@ -58,10 +58,10 @@
 //! # Macro System
 //!
 //! Real-time parameter automation via hierarchical macro knobs:
-//! - **macro_setup**: Resolve abstract bindings to concrete FX parameters
-//! - **macro_registry**: Global thread-safe binding store
-//! - **macro_recorder**: Real-time knob movement recording
-//! - **macro_system**: Architecture overview and integration patterns
+//! - **`macro_setup`**: Resolve abstract bindings to concrete FX parameters
+//! - **`macro_registry`**: Global thread-safe binding store
+//! - **`macro_recorder`**: Real-time knob movement recording
+//! - **`macro_system`**: Architecture overview and integration patterns
 //!
 //! See `macro_integration_guide.md` for complete integration documentation.
 
@@ -260,7 +260,7 @@ where
     St: SceneTemplateRepo + 'static,
     Ra: RackRepo + 'static,
 {
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "one Arc<Repo> per repo trait param on SignalLive<B, M, L, E, R, P, So, Se, St, Ra>; \
                   each argument is a distinct required dependency, not a group that a builder \
@@ -308,6 +308,7 @@ impl
         RackRepoLive,
     >
 {
+    #[must_use] 
     pub fn from_db(db: DatabaseConnection) -> Self {
         Self::new(
             Arc::new(BlockRepoLive::new(db.clone())),

@@ -15,7 +15,8 @@ pub struct EqChain {
 }
 
 impl EqChain {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             bands: Vec::new(),
             sample_rate: 48000.0,
@@ -24,10 +25,10 @@ impl EqChain {
 
     /// Add a new band and return its index.
     ///
-    /// Returns the last valid index if the chain is already at MAX_BANDS.
+    /// Returns the last valid index if the chain is already at `MAX_BANDS`.
     pub fn add_band(&mut self) -> usize {
         if self.bands.len() >= MAX_BANDS {
-            return self.bands.len() - 1;
+            return self.bands.len().saturating_sub(1);
         }
         let idx = self.bands.len();
         let mut band = Band::new();
@@ -42,12 +43,14 @@ impl EqChain {
     }
 
     /// Get an immutable reference to a band by index.
+    #[must_use]
     pub fn band(&self, index: usize) -> Option<&Band> {
         self.bands.get(index)
     }
 
     /// Return the number of bands in the chain.
-    pub fn num_bands(&self) -> usize {
+    #[must_use]
+    pub const fn num_bands(&self) -> usize {
         self.bands.len()
     }
 
@@ -78,6 +81,7 @@ impl EqChain {
     /// Each sample passes through all bands in series (left then right).
     /// True when at least one band would touch the signal.
     /// The whole chain's magnitude response at `hz`, in dB.
+    #[must_use]
     pub fn magnitude_db(&self, hz: f64, sample_rate: f64) -> f64 {
         self.bands
             .iter()
@@ -85,6 +89,7 @@ impl EqChain {
             .sum()
     }
 
+    #[must_use]
     pub fn has_active_bands(&self) -> bool {
         self.bands.iter().any(|b| !b.is_idle())
     }
@@ -95,17 +100,17 @@ impl EqChain {
         if !self.has_active_bands() {
             return;
         }
-        for i in 0..left.len().min(right.len()) {
+        for (li, ri) in left.iter_mut().zip(right.iter_mut()) {
             for band in &mut self.bands {
                 if band.is_idle() {
                     continue;
                 }
                 match band.placement {
                     Placement::Stereo => {
-                        left[i] = band.tick(left[i], 0);
-                        right[i] = band.tick(right[i], 1);
+                        *li = band.tick(*li, 0);
+                        *ri = band.tick(*ri, 1);
                     }
-                    Placement::Left => left[i] = band.tick(left[i], 0),
+                    Placement::Left => *li = band.tick(*li, 0),
                     // Channel slot 0, not 1. A Right band only ever sees one
                     // channel, and `Band::tick` advances its enable ramp on
                     // slot 0 alone — driven on slot 1 the ramp never left
@@ -113,20 +118,20 @@ impl EqChain {
                     // library was silently inert**. Its own filter state has
                     // nowhere else to live either, so slot 0 is where it
                     // belongs.
-                    Placement::Right => right[i] = band.tick(right[i], 0),
+                    Placement::Right => *ri = band.tick(*ri, 0),
                     Placement::Mid => {
-                        let m = 0.5 * (left[i] + right[i]);
-                        let s = 0.5 * (left[i] - right[i]);
+                        let m = 0.5 * (*li + *ri);
+                        let s = 0.5 * (*li - *ri);
                         let m = band.tick(m, 0);
-                        left[i] = m + s;
-                        right[i] = m - s;
+                        *li = m + s;
+                        *ri = m - s;
                     }
                     Placement::Side => {
-                        let m = 0.5 * (left[i] + right[i]);
-                        let s = 0.5 * (left[i] - right[i]);
+                        let m = 0.5 * (*li + *ri);
+                        let s = 0.5 * (*li - *ri);
                         let s = band.tick(s, 0);
-                        left[i] = m + s;
-                        right[i] = m - s;
+                        *li = m + s;
+                        *ri = m - s;
                     }
                 }
             }
@@ -173,14 +178,14 @@ mod placement_tests {
         let n = 4800;
         let (mut l, mut r) = (vec![0.0f64; n], vec![0.0f64; n]);
         for i in 0..n {
-            let x = (core::f64::consts::TAU * 100.0 * i as f64 / sr).sin();
+            let x = (core::f64::consts::TAU * 100.0 * (i as i32 as f64) / sr).sin();
             l[i] = x;
             r[i] = x;
         }
         chain.process(&mut l, &mut r);
-        let rms =
+        let calc_rms =
             |v: &[f64]| (v[n / 2..].iter().map(|x| x * x).sum::<f64>() / (n / 2) as f64).sqrt();
-        let (lrms, rrms) = (rms(&l), rms(&r));
+        let (lrms, rrms) = (calc_rms(&l), calc_rms(&r));
         // A unit sine's RMS is 1/√2 — spelled as the constant so the number
         // is the identity rather than a rounded literal.
         let unit_sine_rms = core::f64::consts::FRAC_1_SQRT_2;
@@ -224,10 +229,10 @@ mod placement_tests {
 
     #[test]
     fn mid_band_boosts_mono() {
-        let mut c = EqChain::new();
-        c.set_sample_rate(48000.0);
-        let idx = c.add_band();
-        if let Some(b) = c.band_mut(idx) {
+        let mut chain = EqChain::new();
+        chain.set_sample_rate(48000.0);
+        let idx = chain.add_band();
+        if let Some(b) = chain.band_mut(idx) {
             b.filter_type = FilterType::Peak;
             b.freq_hz = 1000.0;
             b.gain_db = 12.0;
@@ -235,20 +240,20 @@ mod placement_tests {
             b.placement = Placement::Mid;
             b.enabled = true;
         }
-        c.update_band(idx);
-        let n = 48_000;
-        let mut l: Vec<f64> = (0..n)
+        chain.update_band(idx);
+        let num_samples = 48_000;
+        let mut left_samples: Vec<f64> = (0..num_samples)
             .map(|i| 0.2 * (core::f64::consts::TAU * 1000.0 * i as f64 / 48000.0).sin())
             .collect();
-        let mut r = l.clone();
-        let dry = l.clone();
-        c.process(&mut l, &mut r);
-        let e_in: f64 = dry[n / 2..].iter().map(|x| x * x).sum();
-        let e_out: f64 = l[n / 2..].iter().map(|x| x * x).sum();
-        let g = 10.0 * (e_out / e_in).log10();
+        let mut right_samples = left_samples.clone();
+        let dry = left_samples.clone();
+        chain.process(&mut left_samples, &mut right_samples);
+        let e_in: f64 = dry[num_samples / 2..].iter().map(|x| x * x).sum();
+        let e_out: f64 = left_samples[num_samples / 2..].iter().map(|x| x * x).sum();
+        let gain_db = 10.0 * (e_out / e_in).log10();
         assert!(
-            (g - 12.0).abs() < 1.0,
-            "mid band boosts mono content: {g:.1} dB"
+            (gain_db - 12.0).abs() < 1.0,
+            "mid band boosts mono content: {gain_db:.1} dB"
         );
     }
 }

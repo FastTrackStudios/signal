@@ -43,8 +43,7 @@ fn main() -> Result<(), String> {
         let env = (-t * 3.0).exp(); // pluck decay
         let s = 0.25
             * env
-            * ((2.0 * std::f32::consts::PI * 110.0 * t).sin()
-                + 0.3 * (2.0 * std::f32::consts::PI * 220.0 * t).sin());
+            * 0.3f32.mul_add((2.0 * std::f32::consts::PI * 220.0 * t).sin(), (2.0 * std::f32::consts::PI * 110.0 * t).sin());
         inter[2 * i] = s;
         inter[2 * i + 1] = s;
     }

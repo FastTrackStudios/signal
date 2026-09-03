@@ -34,9 +34,7 @@ pub fn Section(
     flat: bool,
     children: Element,
 ) -> Element {
-    let width_style = width
-        .map(|w| format!("width:{w}px;"))
-        .unwrap_or_else(|| "".to_string());
+    let width_style = width.map_or_else(String::new, |w| format!("width:{w}px;"));
     let chrome = if flat {
         "padding:0;".to_string()
     } else {

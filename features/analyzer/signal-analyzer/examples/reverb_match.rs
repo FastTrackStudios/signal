@@ -48,9 +48,7 @@ fn arg(name: &str) -> Option<String> {
 fn cache_path_for(preset_path: &str) -> Option<std::path::PathBuf> {
     let dir = arg("--reference-cache")?;
     let stem = Path::new(preset_path)
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "preset".into());
+        .file_stem().map_or_else(|| "preset".into(), |s| s.to_string_lossy().into_owned());
     Some(Path::new(&dir).join(format!("{stem}.reference.wav")))
 }
 
@@ -140,7 +138,7 @@ fn enumerate(plugin: &mut HostedPlugin, param_name: &str) {
     if let Some(n) = slots {
         println!("{} — {n} slots", info.name);
         for k in 0..=n {
-            let v = info.min + (info.max - info.min) * (k as f64 / n as f64);
+            let v = (info.max - info.min).mul_add(k as f64 / n as f64, info.min);
             match probe(plugin, v) {
                 Some(text) => println!("  slot {k:>3}  value={v:.6}  {text}"),
                 None => println!("  slot {k:>3}  value={v:.6}  <no text>"),
@@ -154,7 +152,7 @@ fn enumerate(plugin: &mut HostedPlugin, param_name: &str) {
     const STEPS: usize = 400;
     let mut seen: BTreeMap<String, f64> = BTreeMap::new();
     for i in 0..=STEPS {
-        let v = info.min + (info.max - info.min) * (i as f64 / STEPS as f64);
+        let v = (info.max - info.min).mul_add(i as f64 / STEPS as f64, info.min);
         match probe(plugin, v) {
             Some(text) => {
                 seen.entry(text).or_insert(v);
@@ -195,7 +193,7 @@ fn write_wav(path: &Path, samples: &[f32]) -> std::io::Result<()> {
 /// Read a render written by [`write_wav`].
 fn read_wav(path: &Path) -> Option<Vec<f32>> {
     let mut r = hound::WavReader::open(path).ok()?;
-    Some(r.samples::<f32>().filter_map(|s| s.ok()).collect())
+    Some(r.samples::<f32>().filter_map(std::result::Result::ok).collect())
 }
 
 /// Blocks of silence to run before the impulse.
@@ -367,9 +365,7 @@ fn run_comparison(
     // promise: the reference is re-rendered every run).
     let cache_path = arg("--reference-cache").map(|dir| {
         let stem = Path::new(preset_path)
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "preset".into());
+            .file_stem().map_or_else(|| "preset".into(), |s| s.to_string_lossy().into_owned());
         Path::new(&dir).join(format!("{stem}.reference.wav"))
     });
     if let Some(p) = &cache_path {
@@ -645,9 +641,7 @@ fn run_comparison(
                             DecayFit::T20,
                         );
                         let worst = cmp
-                            .worst_ratio_error
-                            .map(|e| format!("{e:.3}"))
-                            .unwrap_or_else(|| "n/a".into());
+                            .worst_ratio_error.map_or_else(|| "n/a".into(), |e| format!("{e:.3}"));
                         println!(
                         "tuned    : target {target:.3} s  round {round}  length {request:.3} s  worst band error {worst}"
                     );
@@ -689,7 +683,7 @@ fn run_comparison(
                             }
                             let mean = responsible.iter().sum::<f64>() / responsible.len() as f64;
                             if mean > 0.0 {
-                                rates[slot] = (rates[slot] / mean.powf(RELAXATION)).clamp(0.1, 4.0);
+                                rates[slot] = (rates[slot] / mean.sqrt()).clamp(0.1, 4.0);
                             }
                         }
 
@@ -705,7 +699,7 @@ fn run_comparison(
                             rates.iter().map(|r| r.ln()).sum::<f64>() / rates.len() as f64;
                         let norm = log_mean.exp();
                         if norm.is_finite() && norm > 0.0 {
-                            for r in rates.iter_mut() {
+                            for r in &mut rates {
                                 *r = (*r / norm).clamp(0.1, 4.0);
                             }
                         }
@@ -732,8 +726,7 @@ fn run_comparison(
                             params
                                 .iter()
                                 .find(|(n, _)| n == k)
-                                .map(|(_, v)| *v)
-                                .unwrap_or(1.0)
+                                .map_or(1.0, |(_, v)| *v)
                         };
                         let curve: Vec<String> = (1..=BAND_PLAN.len())
                             .map(|n| format!("{:.2}", show(&format!("dband{n}_rate"))))
@@ -789,8 +782,7 @@ fn run_comparison(
             let current = params
                 .iter()
                 .find(|(n, _)| n == "wet_gain")
-                .map(|(_, v)| *v)
-                .unwrap_or(0.0);
+                .map_or(0.0, |(_, v)| *v);
             let trim = (current - diff).clamp(-36.0, 36.0);
             if trim.abs() > 1e-6 {
                 match params.iter_mut().find(|(n, _)| n == "wet_gain") {
@@ -829,9 +821,7 @@ fn run_comparison(
     // justify it, so a preset can be trusted or re-examined later.
     if let Some(dir) = arg("--save-dir") {
         let stem = Path::new(preset_path)
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "preset".into());
+            .file_stem().map_or_else(|| "preset".into(), |s| s.to_string_lossy().into_owned());
         let _ = std::fs::create_dir_all(&dir);
         let out = Path::new(&dir).join(format!("{stem}.json"));
 

@@ -5,7 +5,7 @@
 
 use comp_profiles::{map_control_value, ParamMapping, Profile};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ProfileSkin {
     pub profile_id: &'static str,
     pub macro_group_label: &'static str,
@@ -134,6 +134,7 @@ pub struct ProfileParamWrite {
     pub value: f64,
 }
 
+#[must_use] 
 pub fn profile_skin(profile_id: &str) -> ProfileSkin {
     // The FET limiter's three finishes are one unit as far as the rail is
     // concerned, so they share a skin — but not a colour. The rail badge is
@@ -142,19 +143,16 @@ pub fn profile_skin(profile_id: &str) -> ProfileSkin {
     // on the natural-aluminium one, the plum anodising on the LN.
     if let "urei_1176_silver" | "urei_1176_ln" = profile_id {
         let mut skin = profile_skin("urei_1176");
-        match profile_id {
-            "urei_1176_silver" => {
-                skin.profile_id = "urei_1176_silver";
-                skin.accent = "#4fb0d6";
-                skin.border = "rgba(79,176,214,0.40)";
-                skin.highlight = "rgba(150,216,240,0.13)";
-            }
-            _ => {
-                skin.profile_id = "urei_1176_ln";
-                skin.accent = "#b085b8";
-                skin.border = "rgba(176,133,184,0.40)";
-                skin.highlight = "rgba(214,180,220,0.13)";
-            }
+        if profile_id == "urei_1176_silver" {
+            skin.profile_id = "urei_1176_silver";
+            skin.accent = "#4fb0d6";
+            skin.border = "rgba(79,176,214,0.40)";
+            skin.highlight = "rgba(150,216,240,0.13)";
+        } else {
+            skin.profile_id = "urei_1176_ln";
+            skin.accent = "#b085b8";
+            skin.border = "rgba(176,133,184,0.40)";
+            skin.highlight = "rgba(214,180,220,0.13)";
         }
         return skin;
     }
@@ -309,6 +307,7 @@ impl ProfileView {
         }
     }
 
+    #[must_use] 
     pub fn control(&self, id: &str) -> Option<&ProfileControlView> {
         self.groups
             .iter()
@@ -340,7 +339,7 @@ fn map_writes(
 }
 
 fn lerp(min: f64, max: f64, normalized: f64) -> f64 {
-    min + (max - min) * normalized.clamp(0.0, 1.0)
+    (max - min).mul_add(normalized.clamp(0.0, 1.0), min)
 }
 
 #[cfg(test)]

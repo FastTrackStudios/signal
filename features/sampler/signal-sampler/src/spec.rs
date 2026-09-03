@@ -513,7 +513,17 @@ pub struct PerformanceSpec {
     /// Output makeup (dB) applied to looping sustain-layer voices — the flat
     /// level offset between a looped-plateau playback and the vendor
     /// instrument's rendered level (CSS: +6 dB, see the A/B calibration).
-    #[facet(default = 6.0f32)]
+    /// Default 0: a library plays at the level it was mastered at unless it
+    /// says otherwise.
+    ///
+    /// This used to default to 6.0 — CSS's looped-plateau→Kontakt-render
+    /// offset — which meant every library that does not author a
+    /// `performance` block inherited one library's A/B calibration. Generated
+    /// packs (the NI pianos, the Keyscape extractions) write no such block, so
+    /// they were all running +6 dB into the pack-level normalisation that is
+    /// supposed to be the single place level is decided. Every spec that
+    /// actually cares sets its own value.
+    #[facet(default)]
     pub sustain_makeup_db: f32,
     /// Global master tune in cents, applied on top of the per-note transpose.
     /// CSS ships `tune=1.00521` ≈ +9.0 cents on every playable group; other
@@ -562,7 +572,7 @@ impl Default for PerformanceSpec {
     fn default() -> Self {
         Self {
             sustain_noteoff_ms: 400,
-            sustain_makeup_db: 6.0,
+            sustain_makeup_db: 0.0,
             master_tune_cents: 0.0,
             loop_xfade_ms: 150,
             zone_pitch_tolerance: 2,

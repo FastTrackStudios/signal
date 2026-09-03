@@ -25,7 +25,7 @@ const MIRROR_BASE_URL: &str = "https://fasttrackstudio.app/org/fasttrackstudios/
 /// Where a download comes from: a vox pack host (studio engine over
 /// iroh/ws) or the HTTPS mirror.
 #[derive(Clone)]
-pub(crate) enum PackSource {
+pub enum PackSource {
     Vox(EngineTarget),
     Mirror,
 }
@@ -41,7 +41,7 @@ impl PackSource {
 
 /// One download's progress stream.
 #[derive(Clone, Debug)]
-pub(crate) enum DownloadEvent {
+pub enum DownloadEvent {
     /// Bytes on disk so far (monotonic; starts at the resume point).
     Progress {
         done: u64,
@@ -79,7 +79,7 @@ struct MirrorIndex {
 /// (`FTS_KEYSCAPE_PACKS`, which the iOS shell points inside
 /// Documents/FastTrackStudio). Desktop fallback matches the keys
 /// backend's studio default, so a desktop build lists the local library.
-pub(crate) fn keys_packs_dir() -> PathBuf {
+pub fn keys_packs_dir() -> PathBuf {
     if let Ok(p) = std::env::var("FTS_KEYSCAPE_PACKS") {
         return p.into();
     }
@@ -101,7 +101,7 @@ fn runtime() -> &'static tokio::runtime::Runtime {
 }
 
 /// List the host's packs. Resolves to `Err` on dial/handshake failure.
-pub(crate) fn fetch_packs(
+pub fn fetch_packs(
     target: EngineTarget,
 ) -> futures_channel::oneshot::Receiver<Result<Vec<PackInfo>, String>> {
     let (tx, rx) = futures_channel::oneshot::channel();
@@ -128,7 +128,7 @@ pub(crate) fn fetch_packs(
 
 /// List the HTTPS mirror's packs. Resolves to `Err` with the reason on
 /// any network/parse failure.
-pub(crate) fn fetch_mirror_packs()
+pub fn fetch_mirror_packs()
 -> futures_channel::oneshot::Receiver<Result<Vec<PackInfo>, String>> {
     let (tx, rx) = futures_channel::oneshot::channel();
     runtime().spawn(async move {
@@ -158,7 +158,7 @@ pub(crate) fn fetch_mirror_packs()
 /// file. Events arrive on the returned channel; the terminal event is
 /// `Paused`/`Done`/`Failed`. Flip the returned cancel flag to pause —
 /// the `.part` stays and a fresh `start_download` resumes.
-pub(crate) fn start_download(
+pub fn start_download(
     source: PackSource,
     info: PackInfo,
     dest_dir: PathBuf,
@@ -392,7 +392,7 @@ impl Drop for InFlightGuard {
         }
     }
 }
-fn scopeguard(name: String) -> InFlightGuard {
+const fn scopeguard(name: String) -> InFlightGuard {
     InFlightGuard(name)
 }
 

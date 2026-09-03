@@ -66,7 +66,7 @@ struct Smf {
 }
 
 impl Smf {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             ev: Vec::new(),
             seq: 0,
@@ -94,9 +94,9 @@ impl Smf {
     fn cc_ramp(&mut self, t0: f64, dur: f64, ctrl: u8, a: u8, b: u8) {
         let steps = 96;
         for i in 0..=steps {
-            let f = i as f64 / steps as f64;
-            let v = (a as f64 + (b as f64 - a as f64) * f).round() as u8;
-            self.cc(t0 + dur * f, ctrl, v);
+            let f = f64::from(i) / f64::from(steps);
+            let v = (f64::from(b) - f64::from(a)).mul_add(f, f64::from(a)).round() as u8;
+            self.cc(dur.mul_add(f, t0), ctrl, v);
         }
     }
     fn write(mut self, path: &str) -> std::io::Result<()> {
@@ -174,11 +174,10 @@ fn main() -> std::io::Result<()> {
         m.cc(t, 59, 0); // RR reset → deterministic cycle from slot 0
         let start = t + 0.2;
         println!(
-            "{:7.2}  SHORT-VEL {name:<14} G4 @ vel 1,9,..127 (15 notes, 1.0s apart)",
-            start
+            "{start:7.2}  SHORT-VEL {name:<14} G4 @ vel 1,9,..127 (15 notes, 1.0s apart)"
         );
         for (i, vel) in (1u8..=127).step_by(9).enumerate() {
-            m.note(start + i as f64 * 1.0, 0.35, NOTE, vel.max(1));
+            m.note((i as f64).mul_add(1.0, start), 0.35, NOTE, vel.max(1));
         }
         t = start + 16.0 + 1.0;
     }
@@ -190,13 +189,12 @@ fn main() -> std::io::Result<()> {
         m.cc(t, 59, 0);
         let start = t + 0.2;
         println!(
-            "{:7.2}  SHORT-RR  {name:<14} G4 vel100 ×12 @ 0.8s (RR0..11 in cycle order)",
-            start
+            "{start:7.2}  SHORT-RR  {name:<14} G4 vel100 ×12 @ 0.8s (RR0..11 in cycle order)"
         );
         for i in 0..12 {
-            m.note(start + i as f64 * 0.8, 0.35, NOTE, 100);
+            m.note(f64::from(i).mul_add(0.8, start), 0.35, NOTE, 100);
         }
-        t = start + 12.0 * 0.8 + 1.0;
+        t = 12.0f64.mul_add(0.8, start) + 1.0;
     }
 
     // ── 4. SHORTS: range consistency across recorded keys ──
@@ -211,13 +209,12 @@ fn main() -> std::io::Result<()> {
             .collect::<Vec<_>>()
             .join(",");
         println!(
-            "{:7.2}  SHORT-RANGE {name:<14} {keys} @ vel100 (0.9s apart)",
-            start
+            "{start:7.2}  SHORT-RANGE {name:<14} {keys} @ vel100 (0.9s apart)"
         );
         for (i, (key, _)) in RECORDED_RANGE.iter().enumerate() {
-            m.note(start + i as f64 * 0.9, 0.4, *key, 100);
+            m.note((i as f64).mul_add(0.9, start), 0.4, *key, 100);
         }
-        t = start + RECORDED_RANGE.len() as f64 * 0.9 + 1.0;
+        t = (RECORDED_RANGE.len() as f64).mul_add(0.9, start) + 1.0;
     }
 
     // ── 5. SHORTS: pitch-shift probe (off-grid keys, neighbours of G4) ──
@@ -226,11 +223,10 @@ fn main() -> std::io::Result<()> {
     m.cc(t, 59, 0);
     let start = t + 0.2;
     println!(
-        "{:7.2}  SHORT-INTERP Spiccato G#4(68),A#4(70),F#4(66),D4(62) vel100",
-        start
+        "{start:7.2}  SHORT-INTERP Spiccato G#4(68),A#4(70),F#4(66),D4(62) vel100"
     );
     for (i, key) in [68u8, 70, 66, 62].iter().enumerate() {
-        m.note(start + i as f64 * 0.9, 0.4, *key, 100);
+        m.note((i as f64).mul_add(0.9, start), 0.4, *key, 100);
     }
     t = start + 4.0 + 1.0;
 
@@ -244,7 +240,7 @@ fn main() -> std::io::Result<()> {
             let s = t + 0.1;
             m.note(s, 10.0, key, 90);
             m.cc_ramp(s, 10.0, 1, 0, 127);
-            println!("{:7.2}  SUS-CC1 {label} {vlabel:<6} held 10s, CC1 0→127", s);
+            println!("{s:7.2}  SUS-CC1 {label} {vlabel:<6} held 10s, CC1 0→127");
             t += 11.5;
         }
     }
@@ -258,7 +254,7 @@ fn main() -> std::io::Result<()> {
         let s = t + 0.1;
         m.note(s, 8.0, NOTE, 90);
         m.cc_ramp(s, 8.0, 2, 0, 127);
-        println!("{:7.2}  SUS-CC2 G4 CC1={cc1} fixed, CC2 0→127 held 8s", s);
+        println!("{s:7.2}  SUS-CC2 G4 CC1={cc1} fixed, CC2 0→127 held 8s");
         t += 9.5;
     }
 
@@ -271,8 +267,7 @@ fn main() -> std::io::Result<()> {
         let s = t + 0.1;
         m.note(s, 3.0, NOTE, 90);
         println!(
-            "{:7.2}  SUS-ENV G4 CC1={cc1} hold 3s + 4s tail (attack+release)",
-            s
+            "{s:7.2}  SUS-ENV G4 CC1={cc1} hold 3s + 4s tail (attack+release)"
         );
         t += 7.5;
     }
@@ -291,8 +286,7 @@ fn main() -> std::io::Result<()> {
         m.note(s, 8.0, NOTE, 90);
         m.cc_ramp(s, 8.0, 1, 0, 127);
         println!(
-            "{:7.2}  LONG {name:<10} G4 held 8s, CC1 0→127 (+3s tail)",
-            s
+            "{s:7.2}  LONG {name:<10} G4 held 8s, CC1 0→127 (+3s tail)"
         );
         t += 12.0;
     }
@@ -305,7 +299,7 @@ fn main() -> std::io::Result<()> {
         m.raw(s + 0.005, vec![0x90, b, 90]); // <25ms apart → trill triggers
         m.raw(s + 5.0, vec![0x80, NOTE, 0]);
         m.raw(s + 5.0, vec![0x80, b, 0]);
-        println!("{:7.2}  TRILL {lbl} held 5s", s);
+        println!("{s:7.2}  TRILL {lbl} held 5s");
         t += 7.5;
     }
 
@@ -324,8 +318,7 @@ fn main() -> std::io::Result<()> {
                 _ => "fast~100",
             };
             println!(
-                "{:7.2}  LEG-LAT {mode:<10} vel{vel:<3} G4→A4 (Expr zone {zone}ms)",
-                s
+                "{s:7.2}  LEG-LAT {mode:<10} vel{vel:<3} G4→A4 (Expr zone {zone}ms)"
             );
             t += 4.5;
         }
@@ -359,7 +352,7 @@ fn main() -> std::io::Result<()> {
         m.cc(t, 2, 90);
         let s = t + 0.1;
         m.legato(s, NOTE, 72, vel, 3.0);
-        println!("{:7.2}  PORTA vel{vel} CC5={cc5} G4→C5 (slide)", s);
+        println!("{s:7.2}  PORTA vel{vel} CC5={cc5} G4→C5 (slide)");
         t += 5.5;
     }
 
@@ -371,9 +364,9 @@ fn main() -> std::io::Result<()> {
     m.cc(t, 64, 127); // pedal down
     let s = t + 0.2;
     for i in 0..4 {
-        m.note(s + i as f64 * 1.2, 1.0, NOTE, 90);
+        m.note(f64::from(i).mul_add(1.2, s), 1.0, NOTE, 90);
     }
-    println!("{:7.2}  REBOW G4 ×4 @1.2s, pedal held", s);
+    println!("{s:7.2}  REBOW G4 ×4 @1.2s, pedal held");
     m.cc(s + 5.0, 64, 0); // pedal up
     t += 6.5;
 

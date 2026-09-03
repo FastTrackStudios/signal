@@ -38,7 +38,7 @@ fn num(name: &str, d: f64) -> f64 {
 }
 
 fn proq_q(q: f64) -> f32 {
-    ((q / 0.025).ln() / (40.0f64 / 0.025).ln()) as f32
+    (q / 0.025).log(40.0f64 / 0.025) as f32
 }
 
 /// Pro-Q's normalized threshold for a dB value.
@@ -57,11 +57,11 @@ fn power_at(buf: &[f32], freq: f64) -> f64 {
     let coeff = 2.0 * w.cos();
     let (mut s1, mut s2) = (0.0f64, 0.0f64);
     for &x in buf {
-        let s0 = x as f64 + coeff * s1 - s2;
+        let s0 = f64::from(x) + coeff * s1 - s2;
         s2 = s1;
         s1 = s0;
     }
-    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
 }
 
 fn tone(freq: f64, amplitude: f64, frames: usize) -> Vec<f32> {
@@ -195,17 +195,12 @@ fn main() {
     let ours_only = std::env::args().any(|a| a == "--ours-only");
     let mut plugin = if ours_only {
         None
+    } else if let Ok(Some(mut p)) = HostedPlugin::load(&path) {
+        p.prepare(SR, BLOCK as u32).expect("prepare");
+        Some(p)
     } else {
-        match HostedPlugin::load(&path) {
-            Ok(Some(mut p)) => {
-                p.prepare(SR, BLOCK as u32).expect("prepare");
-                Some(p)
-            }
-            _ => {
-                eprintln!("{path}: could not load");
-                std::process::exit(1);
-            }
-        }
+        eprintln!("{path}: could not load");
+        std::process::exit(1);
     };
 
     /// Pro-Q's effective noise bandwidth, in dB, at the Q values swept below.
@@ -233,7 +228,7 @@ fn main() {
         "Q", "tone", "noise", "Pro-Q BW", "tone", "noise", "ours BW", "diff"
     );
 
-    let levels: Vec<f64> = (0..=20).map(|i| -60.0 + 3.0 * i as f64).collect();
+    let levels: Vec<f64> = (0..=20).map(|i| 3.0f64.mul_add(f64::from(i), -60.0)).collect();
     let frames = (SR * SECONDS) as usize;
     let mut worst = 0.0f64;
 
@@ -280,7 +275,7 @@ fn main() {
         }
 
         let half = range * 0.5;
-        let fmt = |v: Option<f64>| v.map(|x| format!("{x:.1}")).unwrap_or_else(|| "—".into());
+        let fmt = |v: Option<f64>| v.map_or_else(|| "—".into(), |x| format!("{x:.1}"));
         let bw = |c: &[Vec<(f64, f64)>; 2]| match (crossing(&c[0], half), crossing(&c[1], half)) {
             (Some(t), Some(n)) => Some(t - n),
             _ => None,

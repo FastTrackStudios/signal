@@ -1,4 +1,4 @@
-//! Browser keys rig — the AudioWorklet entry.
+//! Browser keys rig — the `AudioWorklet` entry.
 //!
 //! Wraps daw-standalone's [`WebRenderer`] (the wasm worklet renderer) and
 //! signal-sampler's headless [`KeysRig`]: the rig's `Hosting::Lanes`

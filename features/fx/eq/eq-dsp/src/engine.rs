@@ -243,7 +243,7 @@ fn band_envelope(shape: crate::slope::FilterShape, f0: f64, q: f64, hz: f64) -> 
     }
     let ratio = hz / f0;
     match shape {
-        F::LowShelf => 1.0 / (1.0 + ratio * ratio),
+        F::LowShelf => 1.0 / ratio.mul_add(ratio, 1.0),
         F::HighShelf => {
             let x = ratio * ratio;
             x / (1.0 + x)
@@ -333,9 +333,9 @@ impl CharacterShaper {
     #[inline]
     fn tick(&mut self, x: f64) -> f64 {
         self.lp += (x - self.lp) * self.lp_coeff;
-        let drive = x + self.lift * self.lp;
+        let drive = self.lift.mul_add(self.lp, x);
         let second = CHARACTER_SQUARE * drive * drive;
-        let blocked = second - self.dc_x1 + self.dc_r * self.dc_y1;
+        let blocked = self.dc_r.mul_add(self.dc_y1, second - self.dc_x1);
         self.dc_x1 = second;
         self.dc_y1 = blocked;
         x + blocked
@@ -352,6 +352,7 @@ fn character_gain_db(mode: u32) -> f64 {
 }
 
 impl FtsEq {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let sample_rate = sample_rate.max(1.0);
         let mk_chain = || {
@@ -721,16 +722,19 @@ impl FtsEq {
     }
 
     /// The compensation Auto Gain is currently applying, in dB (0 when off).
+    #[must_use]
     pub fn auto_gain_db(&self) -> f64 {
         self.auto_gain_db
     }
 
     /// The Output Pan currently set, and its mode.
+    #[must_use]
     pub fn output_pan(&self) -> f64 {
         self.output_pan
     }
 
     /// Whether Output Pan balances mid against side rather than left/right.
+    #[must_use]
     pub fn output_pan_mid_side(&self) -> bool {
         self.output_pan_mid_side
     }
@@ -768,6 +772,7 @@ impl FtsEq {
     }
 
     /// The static chain's magnitude at `hz`, in dB.
+    #[must_use]
     pub fn static_magnitude_db(&self, hz: f64) -> f64 {
         self.eq.magnitude_db(hz, self.sample_rate)
     }
@@ -819,6 +824,7 @@ impl FtsEq {
     }
 
     /// Whether the spectral engine is currently in the signal path.
+    #[must_use]
     pub fn spectral_engaged(&self) -> bool {
         self.spectral.has_regions()
     }
@@ -845,10 +851,14 @@ impl FtsEq {
         };
         self.solo_filter.set(shape, sf, sq, 0.0);
     }
+    #[must_use]
     pub fn live_dyn_gain_db(&self, band: usize) -> Option<f64> {
         (band < EQ_BANDS && self.dyn_active[band]).then(|| self.dyn_bands[band].live_gain_db())
-    }    /// Added latency in samples — non-zero only while a spectral band puts
+    }
+
+    /// Added latency in samples — non-zero only while a spectral band puts
     /// the STFT in the path.
+    #[must_use]
     pub fn latency(&self) -> u32 {
         // Spectral bands put the STFT in the path; everything else is
         // zero-latency.
@@ -894,9 +904,11 @@ impl FtsEq {
         self.prepared = true;
     }
 
+    #[must_use]
     pub fn is_prepared(&self) -> bool {
         self.prepared
     }
+
     /// Process one block in place.
     pub fn process(&mut self, buf_l: &mut [f64], buf_r: &mut [f64]) {
         // Fully-idle block (no active bands, no dynamics, no spectral,
@@ -938,8 +950,8 @@ impl FtsEq {
         let out_gain = audiocore_dsp::db::db_to_linear(
             self.output_gain_db + self.auto_gain_db + character_gain_db(self.character),
         );
-        let scratch_sl = &mut self.scratch_sl;
-        let scratch_sr = &mut self.scratch_sr;
+        let scratch_left = &mut self.scratch_sl;
+        let scratch_right = &mut self.scratch_sr;
         let listen = self.listen;
         let solo_filter = &mut self.solo_filter;
         let dry_ring = &mut self.dry_ring;
@@ -962,49 +974,49 @@ impl FtsEq {
         let side_ref = &self.side_ref;
 
         {
-            let l: &mut [f64] = buf_l;
-            let r: &mut [f64] = buf_r;
+            let left: &mut [f64] = buf_l;
+            let right: &mut [f64] = buf_r;
             {
                 // Record dry for delta listening (cheap ring write,
                 // only while a delta listen is active).
                 if matches!(listen, Some((_, 2))) {
                     let ring = dry_ring[0].len();
                     let mut p = *dry_pos;
-                    for i in 0..l.len() {
-                        dry_ring[0][p] = l[i];
-                        dry_ring[1][p] = r[i];
+                    for i in 0..left.len() {
+                        dry_ring[0][p] = left[i];
+                        dry_ring[1][p] = right[i];
                         p = (p + 1) % ring;
                     }
                 }
                 if transient_mode {
                     // Split the whole block, run each stream's chain
-                    // block-wise (l/r become the transient stream, the
+                    // block-wise (left/right become the transient stream, the
                     // steady stream rides the dedicated scratch), then
                     // recombine. Complementary split keeps flat
                     // settings a null.
-                    let n = l.len();
+                    let n = left.len();
                     for i in 0..n {
-                        let mask = splitter.tick_mask(0.5 * (l[i] + r[i]));
-                        let tl = l[i] * mask;
-                        let tr = r[i] * mask;
-                        scratch_sl[i] = l[i] - tl;
-                        scratch_sr[i] = r[i] - tr;
-                        l[i] = tl;
-                        r[i] = tr;
+                        let mask = splitter.tick_mask(0.5 * (left[i] + right[i]));
+                        let tl = left[i] * mask;
+                        let tr = right[i] * mask;
+                        scratch_left[i] = left[i] - tl;
+                        scratch_right[i] = right[i] - tr;
+                        left[i] = tl;
+                        right[i] = tr;
                     }
-                    eq.process(l, r);
-                    eq_b.process(&mut scratch_sl[..n], &mut scratch_sr[..n]);
+                    eq.process(left, right);
+                    eq_b.process(&mut scratch_left[..n], &mut scratch_right[..n]);
                     for i in 0..n {
                         let (ol, or) = match split_solo {
-                            1 => (l[i] * tg, r[i] * tg),
-                            2 => (scratch_sl[i] * sg, scratch_sr[i] * sg),
+                            1 => (left[i] * tg, right[i] * tg),
+                            2 => (scratch_left[i] * sg, scratch_right[i] * sg),
                             _ => (
-                                l[i] * tg + scratch_sl[i] * sg,
-                                r[i] * tg + scratch_sr[i] * sg,
+                                left[i] * tg + scratch_left[i] * sg,
+                                right[i] * tg + scratch_right[i] * sg,
                             ),
                         };
-                        l[i] = ol;
-                        r[i] = or;
+                        left[i] = ol;
+                        right[i] = or;
                     }
                 } else {
                     // Bands whose dynamics ride the static design run their
@@ -1016,35 +1028,35 @@ impl FtsEq {
                         if !dyn_modulated[bi] {
                             continue;
                         }
-                        for i in 0..l.len() {
-                            d.observe(l[i], r[i], side_ref[i]);
+                        for i in 0..left.len() {
+                            d.observe(left[i], right[i], side_ref[i]);
                         }
                         let g = d.live_gain_db();
                         if !(g - dyn_modulated_gain[bi]).abs().lt(&0.1) {
                             dyn_modulated_gain[bi] = g;
-                            if let Some(b) = eq.band_mut(bi) {
-                                b.gain_db = g;
+                            if let Some(band) = eq.band_mut(bi) {
+                                band.gain_db = g;
                             }
                             eq.update_band(bi);
                         }
                     }
-                    eq.process(l, r);
+                    eq.process(left, right);
                 }
                 for (bi, d) in dyn_bands.iter_mut().enumerate() {
                     if !dyn_active[bi] {
                         continue;
                     }
-                    for i in 0..l.len() {
-                        d.tick(&mut l[i], &mut r[i], side_ref[i]);
+                    for i in 0..left.len() {
+                        d.tick(&mut left[i], &mut right[i], side_ref[i]);
                     }
                 }
                 // Per-band spectral dynamics (engaged only while at
                 // least one band has its spectral toggle on).
                 if spectral.has_regions() {
-                    for i in 0..l.len() {
-                        let (sl, sr) = spectral.tick(l[i], r[i]);
-                        l[i] = sl;
-                        r[i] = sr;
+                    for i in 0..left.len() {
+                        let (sl, sr) = spectral.tick(left[i], right[i]);
+                        left[i] = sl;
+                        right[i] = sr;
                     }
                 }
                 // Character's waveshaper sits at the OUTPUT — its own makeup
@@ -1053,31 +1065,31 @@ impl FtsEq {
                 // programme material: "Production Ready Vocals" 1.49 dB to
                 // 1.81, "Kick - IN 01" 1.65 to 1.82.
                 if character == 2 {
-                    for i in 0..l.len() {
-                        l[i] = character_shaper[0].tick(l[i]);
-                        r[i] = character_shaper[1].tick(r[i]);
+                    for i in 0..left.len() {
+                        left[i] = character_shaper[0].tick(left[i]);
+                        right[i] = character_shaper[1].tick(right[i]);
                     }
                 }
                 if (out_gain - 1.0).abs() > 1.0e-9 {
-                    for i in 0..l.len() {
-                        l[i] *= out_gain;
-                        r[i] *= out_gain;
+                    for i in 0..left.len() {
+                        left[i] *= out_gain;
+                        right[i] *= out_gain;
                     }
                 }
                 // Output Pan: turn one side down, never boost the other.
                 if pan.abs() > 1.0e-9 {
-                    let (a, b) = (1.0 + pan.min(0.0), 1.0 - pan.max(0.0));
+                    let (pan_neg, pan_pos) = (1.0 + pan.min(0.0), 1.0 - pan.max(0.0));
                     if pan_mid_side {
-                        for i in 0..l.len() {
-                            let (m, sd) = (0.5 * (l[i] + r[i]), 0.5 * (l[i] - r[i]));
-                            let (m, sd) = (m * b, sd * a);
-                            l[i] = m + sd;
-                            r[i] = m - sd;
+                        for i in 0..left.len() {
+                            let (mid, side_diff) = (0.5 * (left[i] + right[i]), 0.5 * (left[i] - right[i]));
+                            let (mid, side_diff) = (mid * pan_pos, side_diff * pan_neg);
+                            left[i] = mid + side_diff;
+                            right[i] = mid - side_diff;
                         }
                     } else {
-                        for i in 0..l.len() {
-                            l[i] *= a;
-                            r[i] *= b;
+                        for i in 0..left.len() {
+                            left[i] *= pan_neg;
+                            right[i] *= pan_pos;
                         }
                     }
                 }
@@ -1087,21 +1099,18 @@ impl FtsEq {
                 // "transients of the soloed band" is stream solo +
                 // band solo together.
                 if let Some((_, mode)) = listen {
-                    match mode {
-                        1 => {
-                            for i in 0..l.len() {
-                                l[i] = solo_filter.tick(0, l[i]);
-                                r[i] = solo_filter.tick(1, r[i]);
-                            }
+                    if mode == 1 {
+                        for i in 0..left.len() {
+                            left[i] = solo_filter.tick(0, left[i]);
+                            right[i] = solo_filter.tick(1, right[i]);
                         }
-                        _ => {
-                            let ring = dry_ring[0].len();
-                            for i in 0..l.len() {
-                                let read = (*dry_pos + ring - dry_delay) % ring;
-                                l[i] -= dry_ring[0][read];
-                                r[i] -= dry_ring[1][read];
-                                *dry_pos = (*dry_pos + 1) % ring;
-                            }
+                    } else {
+                        let ring = dry_ring[0].len();
+                        for i in 0..left.len() {
+                            let read = (*dry_pos + ring - dry_delay) % ring;
+                            left[i] -= dry_ring[0][read];
+                            right[i] -= dry_ring[1][read];
+                            *dry_pos = (*dry_pos + 1) % ring;
                         }
                     }
                 }
@@ -1168,6 +1177,7 @@ impl FtsEq {
         }
     }
 
+    #[must_use]
     pub fn gain_scale(&self) -> f64 {
         self.gain_scale
     }
@@ -1224,15 +1234,18 @@ impl FtsEq {
         self.sync_listen();
     }
 
+    #[must_use]
     pub fn listen(&self) -> Option<(usize, u32)> {
         self.listen
     }
 
     /// Whether any band currently routes through the whole-band dynamics.
+    #[must_use]
     pub fn any_dynamic(&self) -> bool {
         self.dyn_active.iter().any(|&a| a)
     }
 
+    #[must_use]
     pub fn sample_rate(&self) -> f64 {
         self.sample_rate
     }

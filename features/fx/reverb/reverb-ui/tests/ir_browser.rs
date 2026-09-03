@@ -15,7 +15,7 @@ mod support;
 
 use support::{mount_with, Fixture};
 
-fn library_dir() -> &'static str {
+const fn library_dir() -> &'static str {
     concat!(env!("CARGO_MANIFEST_DIR"), "/tests/irs")
 }
 
@@ -72,10 +72,10 @@ async fn clicking_an_impulse_records_it_and_hands_it_to_the_loader() -> dioxus_t
     let (ox, oy) = el.document_origin();
     let (w, h) = el.size();
     fx.tester
-        .pointer_down(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+        .pointer_down(ox + f64::from(w) / 2.0, oy + f64::from(h) / 2.0);
     let _ = fx.tester.pump().await;
     fx.tester
-        .pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+        .pointer_up(ox + f64::from(w) / 2.0, oy + f64::from(h) / 2.0);
     fx.settle().await;
 
     let path = fx.params.ir_path.read().clone();

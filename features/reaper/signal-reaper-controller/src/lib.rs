@@ -5,8 +5,8 @@
 //!
 //! # Timer callbacks
 //!
-//! - **scene_timer**: reads timeline MIDI items, mutes/unmutes child tracks
-//! - **macro_timer**: reads macro values + mapping config from P_EXT, drives FX params
+//! - **`scene_timer`**: reads timeline MIDI items, mutes/unmutes child tracks
+//! - **`macro_timer`**: reads macro values + mapping config from `P_EXT`, drives FX params
 
 pub mod macro_timer;
 pub mod param_queue;

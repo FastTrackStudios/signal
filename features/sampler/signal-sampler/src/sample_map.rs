@@ -72,16 +72,112 @@ pub struct SampleQuery<'a> {
 pub struct SampleMap {
     /// Primary index.
     map: HashMap<SampleKey, PathBuf>,
+    /// Nearest-dynamic index: every sample grouped by
+    /// (section, articulation, mic, note), keyed by a hash of that tuple.
+    ///
+    /// This exists because [`SampleMap::nearest_dynamic_path`] runs on the
+    /// AUDIO THREAD, once per note-on per layer per alias, and it used to
+    /// answer by scanning the whole map — four `String` comparisons and a
+    /// `str::parse` per entry, across every sample in the library. On a
+    /// Keyscape-sized map that is tens of millions of string compares per
+    /// note: measured at 50-110 ms of callback time PER NOTE, scaling
+    /// linearly with the notes in a chord, against a 5.33 ms block budget.
+    /// A four-note chord therefore stalled the audio thread for ~400 ms,
+    /// which is what "the keys rig glitches" meant.
+    ///
+    /// Grouping collapses that scan to a hash lookup plus a walk of the few
+    /// candidates that share a note. The dynamic is parsed once here, at
+    /// build time, rather than per entry per note-on.
+    ///
+    /// Keyed by hash rather than by the owned tuple so the lookup allocates
+    /// nothing: the group carries its own identity and is verified on hit,
+    /// so a collision is a miss, never a wrong sample.
+    by_note: HashMap<u64, Vec<NoteGroup>>,
     /// Total files indexed.
     total: usize,
+}
+
+/// Every sample sharing a (section, articulation, mic, note).
+#[derive(Clone)]
+struct NoteGroup {
+    section: String,
+    articulation: String,
+    mic: String,
+    note: u8,
+    candidates: Vec<Candidate>,
+}
+
+/// One sample within a [`NoteGroup`], with its dynamic already parsed.
+#[derive(Clone)]
+struct Candidate {
+    direction: String,
+    dynamic: i16,
+    rr: usize,
+    path: PathBuf,
+}
+
+/// Hash of a group's identity. Cheap, and computed from borrowed strs so the
+/// audio-thread lookup never builds an owned key.
+fn group_hash(section: &str, articulation: &str, mic: &str, note: u8) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    section.hash(&mut h);
+    articulation.hash(&mut h);
+    mic.hash(&mut h);
+    note.hash(&mut h);
+    h.finish()
 }
 
 impl SampleMap {
     /// Build an empty map. Useful in tests.
     pub fn empty() -> Self {
+        Self::from_map(HashMap::new())
+    }
+
+    /// Build both indexes from the primary map. Every constructor goes
+    /// through here so the nearest-dynamic index can never drift out of step
+    /// with the map it answers for.
+    fn from_map(map: HashMap<SampleKey, PathBuf>) -> Self {
+        let total = map.len();
+        let mut by_note: HashMap<u64, Vec<NoteGroup>> = HashMap::new();
+        for (key, path) in &map {
+            // A dynamic that is not a number has no distance to anything, so
+            // it can never be the NEAREST one; leaving it out keeps the
+            // audio-thread walk to candidates that can actually be chosen.
+            let Ok(dynamic) = key.dynamic.parse::<i16>() else {
+                continue;
+            };
+            let h = group_hash(&key.section, &key.articulation, &key.mic, key.note);
+            let groups = by_note.entry(h).or_default();
+            let idx = match groups.iter().position(|g| {
+                g.section == key.section
+                    && g.articulation == key.articulation
+                    && g.mic == key.mic
+                    && g.note == key.note
+            }) {
+                Some(i) => i,
+                None => {
+                    groups.push(NoteGroup {
+                        section: key.section.clone(),
+                        articulation: key.articulation.clone(),
+                        mic: key.mic.clone(),
+                        note: key.note,
+                        candidates: Vec::new(),
+                    });
+                    groups.len() - 1
+                }
+            };
+            groups[idx].candidates.push(Candidate {
+                direction: key.direction.clone(),
+                dynamic,
+                rr: key.rr,
+                path: path.clone(),
+            });
+        }
         Self {
-            map: HashMap::new(),
-            total: 0,
+            map,
+            by_note,
+            total,
         }
     }
 
@@ -111,8 +207,7 @@ impl SampleMap {
                 insert_sample(&mut map, key, path);
             }
         }
-        let total = map.len();
-        Self { map, total }
+        Self::from_map(map)
     }
 
     /// Scan `root_dir` and build a sample map.
@@ -123,8 +218,7 @@ impl SampleMap {
     pub fn scan(root_dir: &Path) -> Result<Self, SamplerError> {
         let mut map = HashMap::new();
         scan_dir(root_dir, &mut map)?;
-        let total = map.len();
-        Ok(Self { map, total })
+        Ok(Self::from_map(map))
     }
 
     /// Total number of sample files indexed.
@@ -211,12 +305,24 @@ impl SampleMap {
 
     fn nearest_dynamic_path(&self, key: &SampleKey) -> Option<&PathBuf> {
         let wanted = key.dynamic.parse::<i16>().ok()?;
+        // `lacr` releases are direction-agnostic: they are damper noise, not a
+        // legato transition, so an empty direction must match any recorded one
+        // rather than only the empty string.
         let direction =
             if key.direction.is_empty() && key.articulation.to_ascii_lowercase().contains("lacr") {
                 None
             } else {
                 Some(key.direction.as_str())
             };
+        // Hash lookup, then a walk of the handful of samples that share this
+        // note — NOT a scan of the library. See `by_note`.
+        let h = group_hash(&key.section, &key.articulation, &key.mic, key.note);
+        let group = self.by_note.get(&h)?.iter().find(|g| {
+            g.section == key.section
+                && g.articulation == key.articulation
+                && g.mic == key.mic
+                && g.note == key.note
+        })?;
         // Rank by dynamic distance FIRST, then round-robin distance. The RR
         // index is decorative variation; the velocity layer decides the
         // sample's loudness AND length. Filtering by exact RR (as an earlier
@@ -228,22 +334,17 @@ impl SampleMap {
         // so the note dies right after the attack. Keeping the dynamic and
         // relaxing the RR fixes that while leaving properly-RR'd dynamics
         // (which exact-match before this fallback runs) untouched.
-        self.map
+        group
+            .candidates
             .iter()
-            .filter(|(candidate, _)| {
-                candidate.section == key.section
-                    && candidate.articulation == key.articulation
-                    && candidate.mic == key.mic
-                    && candidate.note == key.note
-                    && direction.is_none_or(|direction| candidate.direction == direction)
+            .filter(|c| direction.is_none_or(|d| c.direction == d))
+            .min_by_key(|c| {
+                (
+                    (c.dynamic - wanted).abs(),
+                    (c.rr as i32 - key.rr as i32).unsigned_abs(),
+                )
             })
-            .filter_map(|(candidate, path)| {
-                let dynamic = candidate.dynamic.parse::<i16>().ok()?;
-                let rr_distance = (candidate.rr as i32 - key.rr as i32).unsigned_abs();
-                Some(((dynamic - wanted).abs(), rr_distance, path))
-            })
-            .min_by_key(|(dyn_distance, rr_distance, _)| (*dyn_distance, *rr_distance))
-            .map(|(_, _, path)| path)
+            .map(|c| &c.path)
     }
 
     /// Iterate all indexed sample keys.
@@ -1047,7 +1148,7 @@ mod tests {
         map.insert(key.clone(), PathBuf::from("RR02 lacrm 66 126.flac"));
 
         key.dynamic = "106".to_string();
-        let sample_map = SampleMap { map, total: 2 };
+        let sample_map = SampleMap::from_map(map);
         assert_eq!(
             sample_map.nearest_dynamic_path(&key),
             Some(&PathBuf::from("RR02 lacrm 66 126.flac"))

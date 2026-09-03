@@ -112,18 +112,15 @@ fn to_song(g: &GigSong, patches: &PatchIndex) -> (Song, Option<String>) {
     // C Major there would discard real information.
     let key = match g.key_from_name().map(str::parse) {
         Some(Ok(k)) => k,
-        _ => match g.stored_key().parse() {
-            Ok(k) => {
-                warning = Some(format!(
-                    "no key in the title; used rootNote {}",
-                    g.stored_key()
-                ));
-                k
-            }
-            Err(_) => {
-                warning = Some("no usable key — defaulting to C Major".to_string());
-                song::Key::c_major()
-            }
+        _ => if let Ok(k) = g.stored_key().parse() {
+            warning = Some(format!(
+                "no key in the title; used rootNote {}",
+                g.stored_key()
+            ));
+            k
+        } else {
+            warning = Some("no usable key — defaulting to C Major".to_string());
+            song::Key::c_major()
         },
     };
 
@@ -218,8 +215,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!(
-        "\n{} song(s) written, {skipped} already present, {scratch} scratch entries skipped",
-        written
+        "\n{written} song(s) written, {skipped} already present, {scratch} scratch entries skipped"
     );
     if dry_run {
         println!("(dry run — nothing written)");

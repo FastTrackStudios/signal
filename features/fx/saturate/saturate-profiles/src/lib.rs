@@ -458,9 +458,9 @@ impl Default for Controls {
 fn trim(knob: f32, at_noon: f32, lo: f32, hi: f32) -> f32 {
     let k = knob.clamp(0.0, 1.0);
     if k >= 0.5 {
-        at_noon + (hi - at_noon) * (k - 0.5) * 2.0
+        ((hi - at_noon) * (k - 0.5)).mul_add(2.0, at_noon)
     } else {
-        lo + (at_noon - lo) * k * 2.0
+        ((at_noon - lo) * k).mul_add(2.0, lo)
     }
 }
 
@@ -482,7 +482,7 @@ fn libm_exp2(x: f32) -> f32 {
         xi -= 1;
     }
     let xf = x - xi as f32;
-    let frac = 1.0 + xf * (0.695_976 + xf * (0.226_174 + xf * 0.078_024));
+    let frac = xf.mul_add(xf.mul_add(xf.mul_add(0.078_024, 0.226_174), 0.695_976), 1.0);
     frac * f32::from_bits(((127 + xi.clamp(-126, 127)) as u32) << 23)
 }
 
@@ -508,8 +508,8 @@ pub fn apply(
     // The scale multiplies how far the knob *travels*, not the gain itself,
     // so a closed Drive is unity on all nine — no profile is being driven
     // when the control says it is not.
-    pre.drive = 1.0 + controls.drive.clamp(0.0, 1.0) * 15.0 * v.drive_scale;
-    pre.q_point = (v.q_point + (controls.bias.clamp(0.0, 1.0) - 0.5) * 1.2).clamp(-1.0, 1.0);
+    pre.drive = (controls.drive.clamp(0.0, 1.0) * 15.0).mul_add(v.drive_scale, 1.0);
+    pre.q_point = (controls.bias.clamp(0.0, 1.0) - 0.5).mul_add(1.2, v.q_point).clamp(-1.0, 1.0);
     pre.skew = v.skew;
     pre.headroom = v.headroom;
     pre.knee = v.knee;
@@ -538,7 +538,7 @@ pub fn apply(
     // saturating it in another is a tilt the level match gets wrong. Half the
     // range is plenty of character and stays inside what the match can track.
     pre.set_tilt_db(
-        (v.tilt_db + (controls.tilt.clamp(0.0, 1.0) - 0.5) * TILT_MAX_DB)
+        (controls.tilt.clamp(0.0, 1.0) - 0.5).mul_add(TILT_MAX_DB, v.tilt_db)
             .clamp(-TILT_MAX_DB, TILT_MAX_DB),
     );
 
@@ -588,24 +588,27 @@ fn apply_character(
         // the region where nothing is audible. Cubed, noon lands near five
         // bits — a profile called Bitcrush should arrive crushed — and fully
         // up is genuinely off rather than merely quiet.
-        Character::Bits => digital.bits = 2.0 + knob * knob * knob * 22.0,
+        Character::Bits => digital.bits = (knob * knob * knob).mul_add(22.0, 2.0),
         // …and rate the other way round, so both digital knobs read
         // "clockwise is cleaner" like every other control on the panel.
         Character::Rate => {
             let down = 1.0 - knob;
-            digital.rate = 1.0 + down * down * 31.0;
+            digital.rate = (down * down).mul_add(31.0, 1.0);
         }
     }
 }
 
+#[must_use] 
 pub fn profile_by_id(id: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.id == id)
 }
 
+#[must_use] 
 pub fn profile_index(id: &str) -> Option<usize> {
     PROFILES.iter().position(|p| p.id == id)
 }
 
+#[must_use] 
 pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
     CATEGORIES.iter().enumerate().find_map(|(ci, category)| {
         category
@@ -618,8 +621,9 @@ pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
 
 /// Clicking the family you are in advances through it and wraps; clicking
 /// another lands on its first.
+#[must_use] 
 pub fn rail_click_target(current_index: usize, clicked_category: usize) -> usize {
-    let current_id = PROFILES.get(current_index).map(|p| p.id).unwrap_or("");
+    let current_id = PROFILES.get(current_index).map_or("", |p| p.id);
     let Some(category) = CATEGORIES.get(clicked_category) else {
         return current_index;
     };

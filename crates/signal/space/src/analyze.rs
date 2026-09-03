@@ -49,7 +49,7 @@ pub fn decode_wav_mono(path: &std::path::Path) -> Result<(Vec<f32>, f32), String
             .map_err(|e| e.to_string())?;
     let full_dur = mono.len() as f32 / ANALYSIS_SR as f32;
     // Trim leading silence (< -60 dBFS), keep 2 ms pre-roll.
-    let thr = 10f32.powf(-60.0 / 20.0);
+    let thr = 10f32.powi(-3);
     let start = mono.iter().position(|s| s.abs() > thr).unwrap_or(0);
     let start = start.saturating_sub((ANALYSIS_SR as usize) / 500);
     mono.drain(..start);
@@ -58,6 +58,7 @@ pub fn decode_wav_mono(path: &std::path::Path) -> Result<(Vec<f32>, f32), String
 }
 
 /// Analyze a mono buffer at [`ANALYSIS_SR`].
+#[must_use] 
 pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
     if mono.len() < 256 {
         return None;
@@ -72,7 +73,7 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
     let window: Vec<f32> = (0..fft_size)
         .map(|i| {
             let p = i as f32 / (fft_size - 1) as f32;
-            0.5 - 0.5 * (2.0 * core::f32::consts::PI * p).cos()
+            0.5f32.mul_add(-(2.0 * core::f32::consts::PI * p).cos(), 0.5)
         })
         .collect();
     let mut in_buf = fft.make_input_vec();
@@ -96,7 +97,7 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
     if frames == 0 {
         return None;
     }
-    for m in avg_mag.iter_mut() {
+    for m in &mut avg_mag {
         *m /= frames as f32;
     }
 
@@ -120,7 +121,7 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
     }
     let mean = bands.iter().sum::<f32>() / BANDS as f32;
     let floor = mean - 40.0;
-    for b in bands.iter_mut() {
+    for b in &mut bands {
         *b = (*b - mean).max(floor - mean) / 40.0; // ≈ -1..+1
     }
 
@@ -135,8 +136,8 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
     // Spectral flatness (geo/arith mean of magnitudes) — noisiness.
     let (mut logsum, mut sum) = (0.0f64, 0.0f64);
     for &m in avg_mag.iter().skip(1) {
-        logsum += (m.max(1e-12) as f64).ln();
-        sum += m as f64;
+        logsum += f64::from(m.max(1e-12)).ln();
+        sum += f64::from(m);
     }
     let n = (n_bins - 1) as f64;
     let flatness = ((logsum / n).exp() / (sum / n).max(1e-12)) as f32;
@@ -149,7 +150,7 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
         }
         z as f32 / mono.len() as f32
     };
-    let rms = (mono.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>() / mono.len() as f64)
+    let rms = (mono.iter().map(|&s| f64::from(s) * f64::from(s)).sum::<f64>() / mono.len() as f64)
         .sqrt() as f32;
     let rms_db = 20.0 * rms.max(1e-6).log10();
 
@@ -158,22 +159,20 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
     let env: Vec<f32> = mono
         .chunks(frame)
         .map(|c| {
-            (c.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>() / c.len() as f64).sqrt() as f32
+            (c.iter().map(|&s| f64::from(s) * f64::from(s)).sum::<f64>() / c.len() as f64).sqrt() as f32
         })
         .collect();
     let peak_i = env
         .iter()
         .enumerate()
         .max_by(|a, b| a.1.total_cmp(b.1))
-        .map(|(i, _)| i)
-        .unwrap_or(0);
+        .map_or(0, |(i, _)| i);
     let peak = env[peak_i].max(1e-6);
     let attack_ms = (peak_i as f32) * 5.0;
     let decay_ms = env[peak_i..]
         .iter()
         .position(|&e| e < peak * 0.1)
-        .map(|i| i as f32 * 5.0)
-        .unwrap_or((env.len() - peak_i) as f32 * 5.0);
+        .map_or((env.len() - peak_i) as f32 * 5.0, |i| i as f32 * 5.0);
     // Percussive = energy concentrated right after the peak.
     let total_e: f32 = env.iter().map(|e| e * e).sum();
     let head_e: f32 = env[peak_i..(peak_i + 20).min(env.len())]
@@ -202,7 +201,7 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
         }
     }
     if tot > 0.0 {
-        for s in split.iter_mut() {
+        for s in &mut split {
             *s /= tot;
         }
     }

@@ -229,6 +229,7 @@ fn ar_coeff(ms: f64, sample_rate: f64) -> f64 {
 }
 
 impl Detector {
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut d = Self {
             params: DetectorParams::default(),
@@ -261,7 +262,19 @@ impl Detector {
         self.auto_conf_coeff = 1.0 - (-1.0 / (1000.0 * AUTO_SETTLE_S)).exp();
     }
 
+    /// Compute countdown from sample rate for ~1 kHz histogram push cadence.
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "float-to-int cast: std has no non-`as` equivalent"
+    )]
+    fn histogram_push_countdown(&self) -> u32 {
+        (self.sample_rate / 1000.0) as u32
+    }
+
     /// Effective (threshold, knee) — learned values while auto is on.
+    #[must_use]
     pub fn effective_threshold(&self) -> (f64, f64) {
         if self.params.auto {
             if self.params.adaptive {
@@ -287,7 +300,7 @@ impl Detector {
                     // library's dynamic bands are band-limited enough to sit
                     // near that edge.
                     let learned =
-                        AUTO_TRACKING * tracking + (1.0 - AUTO_TRACKING) * absolute;
+                        AUTO_TRACKING.mul_add(tracking, (1.0 - AUTO_TRACKING) * absolute);
                     // A cold band sits a little SHY of where it will end up —
                     // the plugin walks up into its engagement, it does not
                     // fall back into it. So the handover is a threshold that
@@ -295,9 +308,9 @@ impl Detector {
                     // crossfade from the absolute fallback: that fallback is
                     // the more engaged of the two and ramping from it moves
                     // the band the wrong way.
-                    let blended = learned + (1.0 - self.auto_conf) * AUTO_COLD_OFFSET_DB;
+                    let blended = (1.0 - self.auto_conf).mul_add(AUTO_COLD_OFFSET_DB, learned);
                     return (
-                        blended + self.params.threshold_db * 0.25,
+                        self.params.threshold_db.mul_add(0.25, blended),
                         self.params.knee_db,
                     );
                 }
@@ -317,7 +330,7 @@ impl Detector {
             //
             // The knob stays an offset around it, which is how Pro-Q's reads.
             return (
-                AUTO_FULL_RANGE_AT_DB - self.params.span_db + self.params.threshold_db * 0.25,
+                self.params.threshold_db.mul_add(0.25, AUTO_FULL_RANGE_AT_DB - self.params.span_db),
                 self.params.knee_db,
             );
         }
@@ -328,6 +341,7 @@ impl Detector {
     /// relative mode) → drive d ∈ [0, 1].
     #[inline]
     pub fn tick(&mut self, side: f64, program: f64) -> f64 {
+        const RMS_TO_PEAK: f64 = std::f64::consts::SQRT_2;
         // Level: blend instantaneous |x| with a one-pole RMS.
         let sq = side * side;
         if self.ms_state <= 1.0e-18 {
@@ -341,9 +355,8 @@ impl Detector {
         // low and the threshold lands somewhere else than where it is marked:
         // measured against Pro-Q, our whole curve sat about 3.5 dB shy of its
         // at every input level, uniformly.
-        const RMS_TO_PEAK: f64 = std::f64::consts::SQRT_2;
         let rms = self.ms_state.sqrt() * RMS_TO_PEAK;
-        let level = peak + (rms - peak) * self.params.rms_mix.clamp(0.0, 1.0);
+        let level = (rms - peak).mul_add(self.params.rms_mix.clamp(0.0, 1.0), peak);
         let mut level_db = 20.0 * level.max(1.0e-10).log10();
 
         if self.params.relative {
@@ -361,11 +374,11 @@ impl Detector {
         // the audio thread.
         if self.params.auto && self.params.adaptive {
             if self.push_countdown == 0 {
-                self.push_countdown = (self.sample_rate / 1000.0) as u32;
+                self.push_countdown = self.histogram_push_countdown();
                 self.hist.push(level_db);
                 self.auto_conf += (1.0 - self.auto_conf) * self.auto_conf_coeff;
             }
-            self.push_countdown -= 1;
+            self.push_countdown = self.push_countdown.saturating_sub(1);
         }
 
         // dB over threshold, through a soft knee, scaled by the span.
@@ -399,11 +412,11 @@ impl Detector {
         self.ar_state += (drive - self.ar_state) * coeff;
 
         // Punch variant: release-tracked peak hold, then attack-smoothed.
-        self.hold_state = (self.hold_state - self.hold_state * self.release_coeff).max(drive);
-        let punched = self.ar_state + (self.hold_state - self.ar_state) * self.attack_coeff;
+        self.hold_state = self.hold_state.mul_add(-self.release_coeff, self.hold_state).max(drive);
+        let punched = (self.hold_state - self.ar_state).mul_add(self.attack_coeff, self.ar_state);
 
         let s = self.params.smooth.clamp(0.0, 1.0);
-        (self.ar_state + (punched - self.ar_state) * s).clamp(0.0, 1.0)
+        (punched - self.ar_state).mul_add(s, self.ar_state).clamp(0.0, 1.0)
     }
 
     pub fn reset(&mut self) {

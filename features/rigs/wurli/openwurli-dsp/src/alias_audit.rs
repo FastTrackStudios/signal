@@ -149,7 +149,7 @@ fn render_stimulus(note: u8, velocity: u8) -> Vec<f64> {
 
     let total = (sr * STIMULUS_RENDER_SECONDS) as usize;
     let mut signal = Vec::with_capacity(total);
-    let mut buf = vec![0.0f32; 1024];
+    let mut buf = [0.0f32; 1024];
     let mut pos = 0;
     while pos < total {
         let len = 1024.min(total - pos);

@@ -1,9 +1,9 @@
 //! Split a Cinematic Studio library into per-(section, articulation-group,
 //! mic) signalpacks — lossless FLAC + Ogg Vorbis proxy.
 //!
-//!   cargo run -p signal-sampler --release --example build_cs_packs -- \
-//!       "<lib_root>" <engine-config.styx> <groups.styx> \
-//!       "<full_out_root>" "<proxy_out_root>" \
+//!   cargo run -p signal-sampler --release --example `build_cs_packs` -- \
+//!       "<`lib_root`>" <engine-config.styx> <groups.styx> \
+//!       "<`full_out_root`>" "<`proxy_out_root`>" \
 //!       [--sections "1st Violins,Cellos"] [--mics Main,Mix] [--groups Legato] \
 //!       [--variant both|lossless|proxy] [--quality 0.6] [--dry-run] [--force]
 //!
@@ -11,7 +11,7 @@
 //! - `<lib_root>/_patches/<Section>/library.styx` — the rich per-section zone
 //!   specs (loops, legato intervals, arrival/lead-in) written by the CS
 //!   extraction. Zone `{...}` blocks are reused **verbatim** — this tool never
-//!   re-serializes specs (facet_styx::to_string is a known pack-killer).
+//!   re-serializes specs (`facet_styx::to_string` is a known pack-killer).
 //! - `<engine-config.styx>` — the library engine config
 //!   (e.g. features/rigs/orchestra/specs/cinematic-strings.styx); text-filtered
 //!   per pack: sections → the one section, mics → the one mic (forced default),
@@ -23,10 +23,10 @@
 //! Output: TWO parallel trees with IDENTICAL subpaths and filenames, so the
 //! whole proxy tree is a transferable drop-in replacement for the full tree
 //! (variant is distinguished by tree root + pack header kind, not filename):
-//!   <full_out_root>/<Section>/<Group>/<Section> - <Group> - <Mic>.signalpack   (FLAC)
-//!   <proxy_out_root>/<Section>/<Group>/<Section> - <Group> - <Mic>.signalpack  (Ogg Vorbis)
-//! Convention: full_out_root  = …/Signal/Libraries/Full/<Category>/<Library>
-//!             proxy_out_root = …/Signal/Libraries/Proxy/<Category>/<Library>
+//!   <`full_out_root`>/<Section>/<Group>/<Section> - <Group> - <Mic>.signalpack   (FLAC)
+//!   <`proxy_out_root`>/<Section>/<Group>/<Section> - <Group> - <Mic>.signalpack  (Ogg Vorbis)
+//! Convention: `full_out_root`  = …/Signal/Libraries/Full/<Category>/<Library>
+//!             `proxy_out_root` = …/Signal/Libraries/Proxy/<Category>/<Library>
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -394,11 +394,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // prefixes; curated config artics like `sus`/`leg` must survive).
             let (body, n_artics) = filter_list_block(&body, "articulations", |e| {
                 entry_field(e, "id")
-                    .map(|id| {
+                    .is_some_and(|id| {
                         member_ids.contains(id.as_str())
                             || group_for(&groups, &artic_to_group, &id) == Some(group.as_str())
                     })
-                    .unwrap_or(false)
             });
 
             // Zone articulation ids the (filtered) config does NOT declare —

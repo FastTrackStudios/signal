@@ -1,4 +1,4 @@
-//! Integration tests for RigBuilder — verifies the fluent builder API
+//! Integration tests for `RigBuilder` — verifies the fluent builder API
 //! produces correct, resolvable domain hierarchies.
 //!
 //! Demonstrates the recommended test pattern:
@@ -6,7 +6,7 @@
 //! - Use `fixtures::*` for shared helpers and seed data references
 //! - Use `graph.find_param()` instead of manual graph walking
 //!
-//!   cargo test -p signal --test signal_builder_api -- --nocapture
+//!   cargo test -p signal --test `signal_builder_api` -- --nocapture
 
 mod fixtures;
 
@@ -203,8 +203,8 @@ async fn build_keys_rig() {
 //  Builder + find_param on seeded data
 // ═════════════════════════════════════════════════════════════
 
-/// Use find_param on the seeded guitar megarig (verifying it replaces
-/// the old copy-pasted find_param_in_graph helper).
+/// Use `find_param` on the seeded guitar megarig (verifying it replaces
+/// the old copy-pasted `find_param_in_graph` helper).
 // The old `guitar-megarig` seed was removed (default_seed_rigs() is empty), so
 // this builds an equivalent rig with RigBuilder — the modern pattern — instead
 // of resolving a seeded rig that no longer exists.
@@ -320,7 +320,7 @@ async fn new_modules_get_version_stamped() {
                     "builder should stamp saved_at_version = Some(1)"
                 );
             }
-            other => panic!("expected PresetDefault, got {:?}", other),
+            other => panic!("expected PresetDefault, got {other:?}"),
         }
     }
 }
@@ -370,7 +370,7 @@ async fn block_preset_update_increments_version() {
                 bp.preset_id.clone(),
                 bp.default_snapshot_id.clone(),
                 signal::Block::from_parameters(vec![
-                    signal::BlockParameter::new("low", "Low", 0.5 + (i as f32) * 0.1),
+                    signal::BlockParameter::new("low", "Low", (i as f32).mul_add(0.1, 0.5)),
                     signal::BlockParameter::new("high", "High", 0.5),
                 ]),
             )
@@ -421,7 +421,7 @@ async fn find_param_clean_vs_lead() {
     let clean_gain = clean_graph.find_param("amp", "gain");
     let lead_gain = lead_graph.find_param("amp", "gain");
 
-    println!("Clean gain: {:?}, Lead gain: {:?}", clean_gain, lead_gain);
+    println!("Clean gain: {clean_gain:?}, Lead gain: {lead_gain:?}");
 
     if let (Some(c), Some(l)) = (clean_gain, lead_gain) {
         assert!(

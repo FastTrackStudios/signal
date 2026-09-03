@@ -6,5 +6,8 @@ license.workspace = true
 edition = "2021"
 description = "Reverb profiles — the seven families a reverb actually comes in, and which engine each one is"
 
+[lints]
+workspace = true
+
 [dependencies]
 reverb-dsp = { path = "../reverb-dsp" }

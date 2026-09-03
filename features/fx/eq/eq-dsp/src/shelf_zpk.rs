@@ -31,9 +31,9 @@ use std::f64::consts::PI;
 /// ```text
 ///   q_bw = 32^(cos(Q) * 0.1355 + 0.5) * 0.125
 /// ```
-/// Sanity: at Q = π/2, cos(Q)=0 → q_bw = 32^0.5 · 0.125 = √32/8 = 1/√2 ≈ 0.707.
+/// Sanity: at Q = π/2, cos(Q)=0 → `q_bw` = 32^0.5 · 0.125 = √32/8 = 1/√2 ≈ 0.707.
 fn q_to_bandwidth(q: f64) -> f64 {
-    let exponent = q.cos() * Q_BW_SCALE + Q_BW_OFFSET;
+    let exponent = q.cos().mul_add(Q_BW_SCALE, Q_BW_OFFSET);
     Q_BW_BASE.powf(exponent) * Q_BW_MULT
 }
 
@@ -48,8 +48,9 @@ fn q_to_bandwidth(q: f64) -> f64 {
 /// User Q is converted via the cos/pow Q→BW formula from the binary.
 ///
 /// RBJ analog prototype:
-///   H(s) = A · (s² + (√A · w0/Q_bw) · s + A·w0²) / (A·s² + (√A · w0/Q_bw) · s + w0²)
-/// where A = √(linear_gain).
+///   H(s) = A · (s² + (√A · `w0/Q_bw`) · s + A·w0²) / (A·s² + (√A · `w0/Q_bw`) · s + w0²)
+/// where A = √(`linear_gain`).
+#[must_use]
 pub fn design_low_shelf_zpk(
     n_sections: usize,
     freq_hz: f64,
@@ -63,7 +64,7 @@ pub fn design_low_shelf_zpk(
     }
 
     let total_linear = (user_gain_db * LN10_OVER_20).exp();
-    let section_gain = total_linear.powf(1.0 / n as f64);
+    let section_gain = total_linear.powf(1.0 / f64::from(u32::try_from(n).unwrap_or(1)));
     // Pro-Q4's cos/pow bandwidth — used as RBJ shelf slope `S`. Best match at Q≈1.
     let q_bw = q_to_bandwidth(user_q);
     let w0 = 2.0 * PI * freq_hz / sample_rate;
@@ -85,14 +86,14 @@ fn rbj_low_shelf_slope_biquad(w0: f64, slope: f64, linear_gain: f64) -> Coeffs {
     let cos_w0 = w0.cos();
     let sin_w0 = w0.sin();
     let s = slope.max(1e-6);
-    let disc = (a + 1.0 / a) * (1.0 / s - 1.0) + 2.0;
+    let disc = (a + 1.0 / a).mul_add(1.0 / s - 1.0, 2.0);
     let alpha = sin_w0 / 2.0 * disc.max(0.0).sqrt();
     let two_sqrt_a_alpha = 2.0 * a.sqrt() * alpha;
 
-    let b0 = a * ((a + 1.0) - (a - 1.0) * cos_w0 + two_sqrt_a_alpha);
-    let b1 = 2.0 * a * ((a - 1.0) - (a + 1.0) * cos_w0);
-    let b2 = a * ((a + 1.0) - (a - 1.0) * cos_w0 - two_sqrt_a_alpha);
-    let a0 = (a + 1.0) + (a - 1.0) * cos_w0 + two_sqrt_a_alpha;
+    let b0 = a * ((a - 1.0).mul_add(-cos_w0, a + 1.0) + two_sqrt_a_alpha);
+    let b1 = 2.0 * a * ((a + 1.0).mul_add(-cos_w0, a - 1.0));
+    let b2 = a * ((a - 1.0).mul_add(-cos_w0, a + 1.0) - two_sqrt_a_alpha);
+    let a0 = (a - 1.0).mul_add(cos_w0, a + 1.0) + two_sqrt_a_alpha;
     let a1 = -2.0 * ((a - 1.0) + (a + 1.0) * cos_w0);
     let a2 = (a + 1.0) + (a - 1.0) * cos_w0 - two_sqrt_a_alpha;
 
@@ -104,6 +105,7 @@ fn rbj_low_shelf_slope_biquad(w0: f64, slope: f64, linear_gain: f64) -> Coeffs {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// High shelf (UI) — placeholder using existing bilinear approach.
+#[must_use]
 pub fn design_high_shelf_zpk(
     n_sections: usize,
     freq_hz: f64,
@@ -143,6 +145,7 @@ fn rbj_high_shelf_biquad(w0: f64, q: f64, linear_gain: f64) -> Coeffs {
 }
 
 /// Tilt shelf — placeholder until rewritten (uses bilinear approach).
+#[must_use]
 pub fn design_tilt_shelf_zpk(
     n_sections: usize,
     freq_hz: f64,
@@ -172,6 +175,7 @@ pub fn design_tilt_shelf_zpk(
 }
 
 /// Band shelf — transform type 3 (LP→BP + bilinear). Kept as-is (currently passing).
+#[must_use]
 pub fn design_band_shelf_zpk(
     n_sections: usize,
     freq_hz: f64,
@@ -217,12 +221,12 @@ pub fn design_band_shelf_zpk(
 // ═══════════════════════════════════════════════════════════════════════════
 
 fn apply_shelf_gain(zpk: &mut Zpk, gain_param: f64, is_low_type: bool) {
-    for zero in zpk.zeros.iter_mut() {
+    for zero in &mut zpk.zeros {
         *zero = *zero * gain_param;
     }
     if is_low_type {
         let inv_gain = 1.0 / gain_param;
-        for pole in zpk.poles.iter_mut() {
+        for pole in &mut zpk.poles {
             *pole = *pole * inv_gain;
         }
     }

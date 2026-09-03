@@ -6,26 +6,26 @@ use std::path::{Path, PathBuf};
 /// Root of the built `.signalpack` soundsource library (loops baked in, disk
 /// streaming, tags). Mirrors the Keyscape packs root; preferred over the raw
 /// extraction. Override with `FTS_OMNISPHERE_PACKS`.
-pub(crate) const OMNISPHERE_PACKS_ROOT: &str =
+pub const OMNISPHERE_PACKS_ROOT: &str =
     "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
 
 /// Root of the built Keyscape packs. Indexed alongside the Omnisphere ones
 /// because Keyscape is an Omnisphere library — its soundsources are nameable
 /// from an ordinary Omnisphere patch. Override with `FTS_KEYSCAPE_PACKS`.
-pub(crate) const KEYSCAPE_PACKS_ROOT: &str =
+pub const KEYSCAPE_PACKS_ROOT: &str =
     "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs";
 
 /// Root of the built NI Essential Piano packs. Not an Omnisphere library, but
 /// indexed here because this is the rig's one name→source lookup and a keys
 /// profile names all three families through it. Override with
 /// `FTS_NI_PIANO_PACKS`.
-pub(crate) const NI_PIANO_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Full/Keys";
+pub const NI_PIANO_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Full/Keys";
 
 /// Root of the authored `.prt_omn` patches. A synthesis-mode patch realizes a
 /// source block as an oscillator the same way a pack realizes one as a
 /// sampler, so patches are soundsources too. Override with
 /// `FTS_OMNISPHERE_PATCHES`.
-pub(crate) const PATCH_ROOT: &str =
+pub const PATCH_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches";
 
 // ── Soundsource index ────────────────────────────────────────────────────────
@@ -41,6 +41,7 @@ pub struct SoundsourceIndex {
 impl SoundsourceIndex {
     /// Walk `root` (e.g. `…/Omnisphere`) up to a few levels, collecting every
     /// soundsource spec keyed by lower-cased name.
+    #[must_use] 
     pub fn scan(root: &Path) -> Self {
         let mut idx = Self::default();
         idx.scan_dir(root, 0);
@@ -50,6 +51,7 @@ impl SoundsourceIndex {
     /// Scan the default extraction root (`FTS_OMNISPHERE_ROOT` override), then
     /// overlay the built `.signalpack` library (`FTS_OMNISPHERE_PACKS`) so a
     /// pack always wins over the raw styx for the same name.
+    #[must_use] 
     pub fn scan_default() -> Self {
         let root = std::env::var("FTS_OMNISPHERE_ROOT")
             .unwrap_or_else(|_| crate::omni::OMNISPHERE_ROOT.into());
@@ -136,10 +138,12 @@ impl SoundsourceIndex {
         }
     }
 
+    #[must_use] 
     pub fn len(&self) -> usize {
         self.by_name.len()
     }
 
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.by_name.is_empty()
     }
@@ -168,7 +172,7 @@ impl SoundsourceIndex {
         }
         let keys: Vec<&str> = self.by_name.keys().map(String::as_str).collect();
         let hit = resolve_name(name, keys.iter().copied())?.to_string();
-        self.by_name.get(&hit).map(|p| p.as_path())
+        self.by_name.get(&hit).map(std::path::PathBuf::as_path)
     }
 }
 
@@ -221,6 +225,7 @@ pub fn resolve_name<'a>(
 /// Public because the keys backend does its own library scan and needs to
 /// match names the same way — two lookups disagreeing is how a lane ends up
 /// silently empty.
+#[must_use] 
 pub fn normalize_soundsource_name(name: &str) -> String {
     let mut s = name.to_lowercase();
     // Everything from the `^` marker onward describes *which capture* of the

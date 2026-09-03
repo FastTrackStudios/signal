@@ -10,7 +10,7 @@
 //!   spacing across sections for smooth shelf transitions.
 //!
 //! Key insight: Pro-Q 4 does NOT simply stack identical biquads. Each section gets
-//! a different gain_db/section to create the proper cascade response.
+//! a different `gain_db/section` to create the proper cascade response.
 
 use std::f64::consts::PI;
 
@@ -27,13 +27,14 @@ pub use shelf_alt::*;
 /// Compute cascade biquads for a peak/bell filter.
 ///
 /// Uses Vicanek matched peak EQ with per-section gain distribution.
-/// Each section gets gain_db/N dB with the same user Q.
+/// Each section gets `gain_db/N` dB with the same user Q.
 ///
-/// Pro-Q 4 binary (compute_cascade_coefficients @ 0x1800fec20) uses a
-/// Butterworth zero cascade at angles θ_k = π(2k+1)/(2·order) with gain
-/// accumulation ∏ 0.25/cos²(θ_k). The exact multi-section Q mapping is
+/// Pro-Q 4 binary (`compute_cascade_coefficients` @ 0x1800fec20) uses a
+/// Butterworth zero cascade at angles `θ_k` = π(2k+1)/(2·order) with gain
+/// accumulation ∏ `0.25/cos²(θ_k)`. The exact multi-section Q mapping is
 /// complex and not yet fully extracted. The Vicanek approach gives 99.3%
 /// parity for single/dual sections and ~65% for higher orders.
+#[must_use]
 pub fn compute_cascade_peak(
     freq_hz: f64,
     q: f64,
@@ -44,6 +45,7 @@ pub fn compute_cascade_peak(
     compute_cascade_peak_with_slope(freq_hz, q, gain_db, sample_rate, order, None)
 }
 
+#[must_use]
 pub fn compute_cascade_peak_with_slope(
     freq_hz: f64,
     q: f64,
@@ -93,14 +95,14 @@ pub fn compute_cascade_peak_with_slope(
 /// - The analog prototype is a Butterworth bandpass obtained via the
 ///   classical LP→BP transform `s → Q·(s/ω₀ + ω₀/s)` applied to a
 ///   Butterworth LP of order `N_LP = slope/2`.
-/// - For each LP-pole `p_LP_k = e^(j(π − θ_k))` (θ_k = π(2k+1)/(2·N_LP)),
+/// - For each LP-pole `p_LP_k = e^(j(π − θ_k))` (`θ_k` = `π(2k+1)/(2·N_LP)`),
 ///   the LP→BP transform yields *two* BP poles solving
 ///   `s² − (p_LP/Q')·s + 1 = 0`, with reciprocal magnitudes (one inside
 ///   the unit circle, one outside).  The two sections per LP-pole
 ///   correspond to the two reciprocal roots.
-/// - **Pole/zero gain split** (decoded from C/F = g_ref symmetry):
-///     - boost (g_dB > 0): `Q'_pole = Q`,  `Q'_zero = Q / √g_lin`
-///     - cut   (g_dB < 0): `Q'_pole = Q · √g_lin`, `Q'_zero = Q`
+/// - **Pole/zero gain split** (decoded from C/F = `g_ref` symmetry):
+///     - boost (`g_dB` > 0): `Q'_pole = Q`,  `Q'_zero = Q / √g_lin`
+///     - cut   (`g_dB` < 0): `Q'_pole = Q · √g_lin`, `Q'_zero = Q`
 /// - The `(A, B, C, D, E, F)` polynomial in `ω` (digital rad/sample)
 ///   is built from these analog s-plane (b2=1) quadratics with
 ///   `(A,D)=1`, `(B,E)=(b1²−2b0)·ω₀²`, `(C,F)=b0²·ω₀⁴`.
@@ -115,12 +117,12 @@ pub fn compute_cascade_peak_with_slope(
 ///   peak-finder quadratic in `u = ω²`:
 ///       `(A·E − B·D)·u² + 2(A·F − C·D)·u + (B·F − C·E) = 0`.
 /// - Verified bit-exact (≤ 1e-15) against `solve_bq_sweep.csv` for all
-///   captured slope=4 rows (root_count=2 column).  The smaller root is
+///   captured slope=4 rows (`root_count=2` column).  The smaller root is
 ///   `w_pole_solve`, the larger is `w_third_solve`.
 /// - **Caveat**: for some sections (e.g. sec=0 in fc=500/Q=1) the
 ///   `persec.w_pole` used by the audio synthesis is *not* the smaller
 ///   solve root.  An additional per-section selection layer maps the
-///   peak-finder roots into the (w_pole, w_zero, w_third) triple fed to
+///   peak-finder roots into the (`w_pole`, `w_zero`, `w_third`) triple fed to
 ///   the Lagrange synth.  This selection is undecoded; the captures
 ///   suggest a recipe involving `(w_pole, w_zero, w_third) ≈ ω₀·(α, α/100, α/10)`
 ///   for one branch and `(big_root, mid, big_root/10)` for the other.
@@ -272,7 +274,7 @@ fn bell_brickwall_proq4(
         ScaleByOmega(f64),
     }
     let hi_corner: Option<(usize, HiCorner)> =
-        if matches!(slope_idx, Some(7) | Some(8) | Some(9)) && n_sections >= 4 {
+        if matches!(slope_idx, Some(7 | 8 | 9)) && n_sections >= 4 {
             let q_max = match slope_idx {
                 Some(7) => 3.0,
                 Some(8) => 5.0,
@@ -290,9 +292,9 @@ fn bell_brickwall_proq4(
                 };
                 let p_lp = Complex::new(-theta_lp.sin(), theta_lp.cos());
                 let (_, bp_hi) = lp_to_bp(p_lp, b_pole);
-                let b0p_hi = bp_hi.mag_sq();
-                if b0p_hi > 1.0 + 1e-12 && b0p_hi < min_b0p {
-                    min_b0p = b0p_hi;
+                let bp_mag_sq = bp_hi.mag_sq();
+                if bp_mag_sq > 1.0 + 1e-12 && bp_mag_sq < min_b0p {
+                    min_b0p = bp_mag_sq;
                     min_pair = p;
                 }
             }
@@ -365,13 +367,13 @@ fn bell_brickwall_proq4(
         };
         let p_lp = Complex::new(-theta_lp.sin(), theta_lp.cos());
 
-        let (bp_p_a, bp_p_b) = lp_to_bp(p_lp, b_pole);
-        let (bp_z_a, bp_z_b) = lp_to_bp(p_lp, b_zero);
+        let (bp_pole_lo, bp_pole_hi) = lp_to_bp(p_lp, b_pole);
+        let (bp_zero_lo, bp_zero_hi) = lp_to_bp(p_lp, b_zero);
 
-        // bp_*_a is lo (|s|<1), bp_*_b is hi (|s|>1, reciprocal).
+        // bp_*_lo is lo (|s|<1), bp_*_hi is hi (|s|>1, reciprocal).
         // `inner = sec % 2 == 0` selects lo for even sections within a pair.
-        let p_sec = if inner { bp_p_a } else { bp_p_b };
-        let z_sec = if inner { bp_z_a } else { bp_z_b };
+        let p_sec = if inner { bp_pole_lo } else { bp_pole_hi };
+        let z_sec = if inner { bp_zero_lo } else { bp_zero_hi };
 
         // Analog quadratic (s−p)(s−p̄) = s² + b1·s + b0 with b2=1.
         // Real-LP-pole pair (odd N_LP, last pair_idx, p_lp = -1+0j):
@@ -527,7 +529,7 @@ fn bell_brickwall_proq4(
             && (1.8 * u_hi_signed.sqrt()) > 0.83 * PI;
         let w_eval = if matches!(
             slope_idx,
-            Some(3) | Some(4) | Some(5) | Some(6) | Some(7) | Some(8) | Some(9)
+            Some(3 | 4 | 5 | 6 | 7 | 8 | 9)
         ) {
             if force_uhi_pocket {
                 (1.8 * u_hi_signed.sqrt()).clamp(w_eval_default, PI)
@@ -570,7 +572,7 @@ fn bell_brickwall_proq4(
         // hi sections at Q ∈ {0.7, 0.85}.  Gated to bucket-B slopes
         // (7/8/9) — slope-3 has a different fallback we have not yet
         // decoded.
-        let is_bucket_b_multi = matches!(slope_idx, Some(7) | Some(8) | Some(9));
+        let is_bucket_b_multi = matches!(slope_idx, Some(7 | 8 | 9));
         let w_pole = if !w_pole_root_in_range && p_sec_b0p > 1.0 {
             if is_bucket_b_multi && u_lo_signed <= 0.0 && u_hi_signed > 0.0 {
                 u_hi_signed.sqrt().min(omega0) * q_user
@@ -604,8 +606,8 @@ fn bell_brickwall_proq4(
         {
             let t = ((freq_hz - 12000.0) / 10000.0).clamp(0.0, 1.0);
             let g_abs = gain_db.abs();
-            let wp_g12 = 0.5637618888 + (1.0335632346 - 0.5637618888) * t;
-            let wp_g6 = 0.5637618888 + (1.0326629488 - 0.5637618888) * t;
+            let wp_g12 = 0.563_761_888_8 + (1.033_563_234_6 - 0.563_761_888_8) * t;
+            let wp_g6 = 0.563_761_888_8 + (1.032_662_948_8 - 0.563_761_888_8) * t;
             wp_g6 + (wp_g12 - wp_g6) * ((g_abs - 6.0) / 6.0).clamp(0.0, 1.0)
         } else {
             w_pole
@@ -616,7 +618,7 @@ fn bell_brickwall_proq4(
         // The synth's internal cap (now bucket-B values) is the binding
         // constraint for w_third; cap w_pole here so the alpha/beta
         // products below feed that synth with fc-invariant geometry.
-        const W_POLE_BUCKETB_MAX: f64 = 3.1353094682826135;
+        const W_POLE_BUCKETB_MAX: f64 = 3.135_309_468_282_613_5;
         let w_pole_pre_cap = w_pole;
         let w_pole = w_pole.min(W_POLE_BUCKETB_MAX);
         let w_pole_capped = w_pole_pre_cap > W_POLE_BUCKETB_MAX;
@@ -641,18 +643,18 @@ fn bell_brickwall_proq4(
         let (alpha_eff, beta_eff, w_eval_eff) = if is_center {
             let mut a = (1.0 - 1.0 / q_user).max(0.2);
             let mut b = 1.0 - (1.0 - a) / 20.0;
-            if matches!(slope_idx, Some(5) | Some(6)) && freq_hz >= 21000.0 {
+            if matches!(slope_idx, Some(5 | 6)) && freq_hz >= 21000.0 {
                 let t = ((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0);
                 if (q_user - 10.0).abs() < 1e-6 {
-                    let wz_cap = 2.4604056871 + (2.5084429445 - 2.4604056871) * t;
-                    let wt_cap = 2.7344693353 + (2.8612254295 - 2.7344693353) * t;
-                    a = a.min(wz_cap / omega0);
-                    b = b.min(wt_cap / omega0);
+                    let w_zero_cap = 2.460_405_687_1 + (2.508_442_944_5 - 2.460_405_687_1) * t;
+                    let w_pole_cap = 2.734_469_335_3 + (2.861_225_429_5 - 2.734_469_335_3) * t;
+                    a = a.min(w_zero_cap / omega0);
+                    b = b.min(w_pole_cap / omega0);
                 } else if (q_user - 4.0).abs() < 1e-6 {
-                    let wz_cap = 2.0480673295 + (2.0764694393 - 2.0480673295) * t;
-                    let wt_cap = 2.7138524174 + (2.8396267542 - 2.7138524174) * t;
-                    a = a.min(wz_cap / omega0);
-                    b = b.min(wt_cap / omega0);
+                    let w_zero_cap = 2.048_067_329_5 + (2.076_469_439_3 - 2.048_067_329_5) * t;
+                    let w_pole_cap = 2.713_852_417_4 + (2.839_626_754_2 - 2.713_852_417_4) * t;
+                    a = a.min(w_zero_cap / omega0);
+                    b = b.min(w_pole_cap / omega0);
                 }
             }
             // w_eval_center = clamp(1.2·ω₀, 0.9π, π) — verified bit-exact
@@ -665,12 +667,12 @@ fn bell_brickwall_proq4(
         };
         let (cap_a, cap_b, cap_c, cap_d, cap_e, cap_f, g_ref) = if is_center && is_slope5 {
             let gp = gain_lin.powf(1.0 / 10.0);
-            let b1p_c = SQRT_2 / (q_user * gp);
-            let b1z_c = SQRT_2 * gp / q_user;
+            let b_pole = SQRT_2 / (q_user * gp);
+            let b_zero = SQRT_2 * gp / q_user;
             // b0p_c = b0z_c = 1
-            let cb = (b1z_c * b1z_c - 2.0) * g_om2;
+            let cb = (b_zero * b_zero - 2.0) * g_om2;
             let cc = g_om4;
-            let ce = (b1p_c * b1p_c - 2.0) * g_om2;
+            let ce = (b_pole * b_pole - 2.0) * g_om2;
             let cf = g_om4;
             let gr = if cf.abs() > 1e-300 { cc / cf } else { 0.0 };
             (1.0_f64, cb, cc, 1.0_f64, ce, cf, gr)
@@ -691,18 +693,18 @@ fn bell_brickwall_proq4(
             // (wz∈{1.398180,1.398443} for Q=1; wz∈{2.457401,2.462099,2.465469}
             // for Q=4) depend on a hidden ω₀ axis not yet decoded.
             const TABLE: [(f64, f64, f64); 7] = [
-                (0.3, 0.125840, 0.282470),
-                (0.5, 0.349551, 0.784627),
-                (0.7, 0.685115, 1.537856),
-                (0.85, 1.010189, 2.267541),
-                (1.0, 1.398180, 3.133742),
-                (4.0, 2.457401, 3.133742),
+                (0.3, 0.125_840, 0.282_470),
+                (0.5, 0.349_551, 0.784_627),
+                (0.7, 0.685_115, 1.537_856),
+                (0.85, 1.010_189, 2.267_541),
+                (1.0, 1.398_180, 3.133_742),
+                (4.0, 2.457_401, 3.133_742),
                 // Q=10 wz_cap is the captured cluster mean across Q=10
                 // hi-section drift cells (FTS-EQ-w1h, 2026-05-05). Pro-Q
                 // does not actually cap w_pole at Nyquist for Q=10 — this
                 // entry is used only by the hi-section min(wp·α, wz_cap)
                 // path, where it bounds the wz drift below α_std·π.
-                (10.0, 2.72280, 3.135309),
+                (10.0, 2.72280, 3.135_309),
             ];
             for (qt, wz, wt) in TABLE {
                 if (q - qt).abs() < 1e-6 {
@@ -739,7 +741,7 @@ fn bell_brickwall_proq4(
                 // because other still-undecoded section errors compensate.
                 q if (q - 4.0).abs() < 1e-6 && matches!(slope_idx, Some(3)) => {
                     if (20500.0..21500.0).contains(&freq_hz) {
-                        Some(2.4696020884)
+                        Some(2.469_602_088_4)
                     } else {
                         Some(2.508)
                     }
@@ -750,9 +752,9 @@ fn bell_brickwall_proq4(
                     && (18500.0..19500.0).contains(&freq_hz) =>
                 {
                     if sec == 1 {
-                        Some(2.4126244498)
+                        Some(2.412_624_449_8)
                     } else {
-                        Some(2.2366246240)
+                        Some(2.236_624_624_0)
                     }
                 }
                 q if (q - 4.0).abs() < 1e-6
@@ -763,24 +765,24 @@ fn bell_brickwall_proq4(
                     let g_abs = gain_db.abs();
                     let (cap_18k, cap_19k, cap_22k) = match sec {
                         1 => (
-                            2.3661622644 - 0.0007111895 * g_abs,
-                            2.4758886633 - 0.0007880263 * g_abs,
-                            2.4574005726,
+                            2.366_162_264_4 - 0.000_711_189_5 * g_abs,
+                            2.475_888_663_3 - 0.000_788_026_3 * g_abs,
+                            2.457_400_572_6,
                         ),
                         3 => (
-                            2.2514269355 - 0.0002623953 * g_abs,
-                            2.3729167597 - 0.0002570218 * g_abs,
-                            2.4574005726,
+                            2.251_426_935_5 - 0.000_262_395_3 * g_abs,
+                            2.372_916_759_7 - 0.000_257_021_8 * g_abs,
+                            2.457_400_572_6,
                         ),
                         5 => (
-                            2.1600496057 - 0.0000952783 * g_abs,
-                            2.2798367756 - 0.0001004133 * g_abs,
-                            2.5124230741 - 0.0000127131 * g_abs,
+                            2.160_049_605_7 - 0.000_095_278_3 * g_abs,
+                            2.279_836_775_6 - 0.000_100_413_3 * g_abs,
+                            2.512_423_074_1 - 0.000_012_713_1 * g_abs,
                         ),
                         _ => (
-                            2.0478344373,
-                            2.1616022350 - 0.0000002657 * g_abs,
-                            2.4549020328 - 0.0000110310 * g_abs,
+                            2.047_834_437_3,
+                            2.161_602_235_0 - 0.000_000_265_7 * g_abs,
+                            2.454_902_032_8 - 0.000_011_031_0 * g_abs,
                         ),
                     };
                     if freq_hz < 19000.0 {
@@ -802,9 +804,9 @@ fn bell_brickwall_proq4(
                 {
                     let g_abs = gain_db.abs();
                     match sec {
-                        1 => Some(2.4526125372 - 0.0003638507 * g_abs),
-                        3 => Some(2.3192945522 - 0.0001899927 * g_abs),
-                        _ => Some(2.1566010955 - 0.0000000084 * g_abs),
+                        1 => Some(2.452_612_537_2 - 0.000_363_850_7 * g_abs),
+                        3 => Some(2.319_294_552_2 - 0.000_189_992_7 * g_abs),
+                        _ => Some(2.156_601_095_5 - 0.000_000_008_4 * g_abs),
                     }
                 }
                 q if (q - 4.0).abs() < 1e-6
@@ -814,9 +816,9 @@ fn bell_brickwall_proq4(
                     && (20500.0..21500.0).contains(&freq_hz) =>
                 {
                     match sec {
-                        1 => Some(2.4620989429),
-                        3 => Some(2.5052848003),
-                        _ => Some(2.3769041168),
+                        1 => Some(2.462_098_942_9),
+                        3 => Some(2.505_284_800_3),
+                        _ => Some(2.376_904_116_8),
                     }
                 }
                 q if (q - 4.0).abs() < 1e-6
@@ -825,22 +827,22 @@ fn bell_brickwall_proq4(
                     && (19500.0..20500.0).contains(&freq_hz) =>
                 {
                     let g_abs = gain_db.abs();
-                    Some(2.4878363860 - 0.0009916625 * g_abs)
+                    Some(2.487_836_386_0 - 0.000_991_662_5 * g_abs)
                 }
                 q if (q - 4.0).abs() < 1e-6
                     && matches!(slope_idx, Some(5))
                     && sec == 1
                     && freq_hz >= 21500.0 =>
                 {
-                    Some(2.4654685677)
+                    Some(2.465_468_567_7)
                 }
                 q if (q - 4.0).abs() < 1e-6 => Some(2.508),
                 // Slope-4 Q=10 high-side sections drift with gain and then
                 // rise toward the generic Q=10 ceiling at 22 kHz.
                 q if (q - 10.0).abs() < 1e-6 && matches!(slope_idx, Some(4)) => {
                     let g_abs = gain_db.abs();
-                    let cap_21k = 2.6569676747 - 0.0005693145 * g_abs;
-                    let cap_22k = 2.7253001241 - 0.0002250017 * g_abs;
+                    let cap_21k = 2.656_967_674_7 - 0.000_569_314_5 * g_abs;
+                    let cap_22k = 2.725_300_124_1 - 0.000_225_001_7 * g_abs;
                     Some(
                         cap_21k
                             + (cap_22k - cap_21k) * ((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0),
@@ -848,9 +850,9 @@ fn bell_brickwall_proq4(
                 }
                 q if (q - 10.0).abs() < 1e-6 && matches!(slope_idx, Some(5)) => {
                     let g_abs = gain_db.abs();
-                    let cap_20k = 2.5619234350 - 0.0006424487 * g_abs;
-                    let cap_21k = 2.6701202709 - 0.0005161295 * g_abs;
-                    let cap_22k = 2.7290809213 - 0.0001381712 * g_abs;
+                    let cap_20k = 2.561_923_435_0 - 0.000_642_448_7 * g_abs;
+                    let cap_21k = 2.670_120_270_9 - 0.000_516_129_5 * g_abs;
+                    let cap_22k = 2.729_080_921_3 - 0.000_138_171_2 * g_abs;
                     if freq_hz < 21000.0 {
                         Some(
                             cap_20k
@@ -867,9 +869,9 @@ fn bell_brickwall_proq4(
                 }
                 q if (q - 10.0).abs() < 1e-6 && matches!(slope_idx, Some(6)) => {
                     let g_abs = gain_db.abs();
-                    let cap_20k = 2.5732882972 - 0.0005939945 * g_abs;
-                    let cap_21k = 2.6788892734 - 0.0004579092 * g_abs;
-                    let cap_22k = 2.7304533498 - 0.0000705467 * g_abs;
+                    let cap_20k = 2.573_288_297_2 - 0.000_593_994_5 * g_abs;
+                    let cap_21k = 2.678_889_273_4 - 0.000_457_909_2 * g_abs;
+                    let cap_22k = 2.730_453_349_8 - 0.000_070_546_7 * g_abs;
                     if freq_hz < 21000.0 {
                         Some(
                             cap_20k
@@ -892,15 +894,15 @@ fn bell_brickwall_proq4(
                     let g_abs = gain_db.abs();
                     let (cap_20k, cap_21k, cap_22k) = if sec == 1 {
                         (
-                            2.5882216633 - 0.0005023367 * g_abs,
-                            2.6919696199 - 0.0005433943 * g_abs,
-                            2.7304447384 + 0.0000130093 * g_abs,
+                            2.588_221_663_3 - 0.000_502_336_7 * g_abs,
+                            2.691_969_619_9 - 0.000_543_394_3 * g_abs,
+                            2.730_444_738_4 + 0.000_013_009_3 * g_abs,
                         )
                     } else {
                         (
-                            2.5060835693 - 0.0000683681 * g_abs,
-                            2.6228205786 - 0.0000932476 * g_abs,
-                            2.7086042108 - 0.0000366509 * g_abs,
+                            2.506_083_569_3 - 0.000_068_368_1 * g_abs,
+                            2.622_820_578_6 - 0.000_093_247_6 * g_abs,
+                            2.708_604_210_8 - 0.000_036_650_9 * g_abs,
                         )
                     };
                     if freq_hz < 21000.0 {
@@ -925,19 +927,19 @@ fn bell_brickwall_proq4(
                     let g_abs = gain_db.abs();
                     let (cap_20k, cap_21k, cap_22k) = match sec {
                         1 => (
-                            2.6041066815 - 0.0003749386 * g_abs,
-                            2.7019832101 - 0.0003687053 * g_abs,
-                            2.7273547286 + 0.0001204310 * g_abs,
+                            2.604_106_681_5 - 0.000_374_938_6 * g_abs,
+                            2.701_983_210_1 - 0.000_368_705_3 * g_abs,
+                            2.727_354_728_6 + 0.000_120_431_0 * g_abs,
                         ),
                         3 => (
-                            2.5439137754 - 0.0001237114 * g_abs,
-                            2.6554707943 - 0.0001034622 * g_abs,
-                            2.7246677661 - 0.0000387920 * g_abs,
+                            2.543_913_775_4 - 0.000_123_711_4 * g_abs,
+                            2.655_470_794_3 - 0.000_103_462_2 * g_abs,
+                            2.724_667_766_1 - 0.000_038_792_0 * g_abs,
                         ),
                         _ => (
-                            2.4943369492 - 0.0000291864 * g_abs,
-                            2.6116666640 - 0.0000270371 * g_abs,
-                            2.7019953257 - 0.0000172809 * g_abs,
+                            2.494_336_949_2 - 0.000_029_186_4 * g_abs,
+                            2.611_666_664_0 - 0.000_027_037_1 * g_abs,
+                            2.701_995_325_7 - 0.000_017_280_9 * g_abs,
                         ),
                     };
                     if freq_hz < 21000.0 {
@@ -962,24 +964,24 @@ fn bell_brickwall_proq4(
                     let g_abs = gain_db.abs();
                     let (cap_20k, cap_21k, cap_22k) = match sec {
                         1 => (
-                            2.6124548807 - 0.0002955015 * g_abs,
-                            2.7068078035 - 0.0002736828 * g_abs,
-                            2.7246462026 + 0.0001460740 * g_abs,
+                            2.612_454_880_7 - 0.000_295_501_5 * g_abs,
+                            2.706_807_803_5 - 0.000_273_682_8 * g_abs,
+                            2.724_646_202_6 + 0.000_146_074_0 * g_abs,
                         ),
                         3 => (
-                            2.5644702884 - 0.0001132205 * g_abs,
-                            2.6720804237 - 0.0000887681 * g_abs,
-                            2.7293733178 - 0.0000178405 * g_abs,
+                            2.564_470_288_4 - 0.000_113_220_5 * g_abs,
+                            2.672_080_423_7 - 0.000_088_768_1 * g_abs,
+                            2.729_373_317_8 - 0.000_017_840_5 * g_abs,
                         ),
                         5 => (
-                            2.5242174556 - 0.0000430659 * g_abs,
-                            2.6386277653 - 0.0000384679 * g_abs,
-                            2.7173733897 - 0.0000199365 * g_abs,
+                            2.524_217_455_6 - 0.000_043_065_9 * g_abs,
+                            2.638_627_765_3 - 0.000_038_467_9 * g_abs,
+                            2.717_373_389_7 - 0.000_019_936_5 * g_abs,
                         ),
                         _ => (
-                            2.4884241907 - 0.0000080799 * g_abs,
-                            2.6061602522 - 0.0000075602 * g_abs,
-                            2.6984166905 - 0.0000050026 * g_abs,
+                            2.488_424_190_7 - 0.000_008_079_9 * g_abs,
+                            2.606_160_252_2 - 0.000_007_560_2 * g_abs,
+                            2.698_416_690_5 - 0.000_005_002_6 * g_abs,
                         ),
                     };
                     if freq_hz < 21000.0 {
@@ -1058,7 +1060,6 @@ fn bell_brickwall_proq4(
 /// Bell 3-point Lagrange synthesis — extracted from `bell_s2_proq4` body
 /// (post-sub-frequency selection).  Verified ≤ 1.5e-13 bit-exact on
 /// captured `lagrange_per_section_sweep.csv` rows where `w_third != 0`.
-#[allow(dead_code, clippy::too_many_arguments)]
 pub(crate) fn bell_three_point_synth(
     cap_a: f64,
     cap_b: f64,
@@ -1074,8 +1075,7 @@ pub(crate) fn bell_three_point_synth(
 ) -> Coeffs {
     if std::env::var("FTSEQ_TRACE_BELL_INPUTS").is_ok() {
         eprintln!(
-            "BELL_IN wp={:.6} wz={:.6} wt={:.6} we={:.6} G={:.6} A={:.6} B={:.6} C={:.6} D={:.6} E={:.6} F={:.6}",
-            w_pole, w_zero, w_third, w_eval, g_ref, cap_a, cap_b, cap_c, cap_d, cap_e, cap_f
+            "BELL_IN wp={w_pole:.6} wz={w_zero:.6} wt={w_third:.6} we={w_eval:.6} G={g_ref:.6} A={cap_a:.6} B={cap_b:.6} C={cap_c:.6} D={cap_d:.6} E={cap_e:.6} F={cap_f:.6}"
         );
     }
     // Caps decoded from bucket-B captures (slopes ≥ 3) at fc ∈ {15..22}
@@ -1084,9 +1084,9 @@ pub(crate) fn bell_three_point_synth(
     //   distinct constants (3.13530947 and 3.13374181) independent of fc.
     // bell_s2 has its own inline synth path, so this function only sees
     // bucket-B inputs.
-    const W_POLE_MAX: f64 = 3.1353094682826135;
-    const W_ZERO_MAX: f64 = 2.827433388230814; // 0.9π — no captured cell hits it
-    const W_THIRD_MAX: f64 = 3.1337418135484723;
+    const W_POLE_MAX: f64 = 3.135_309_468_282_613_5;
+    const W_ZERO_MAX: f64 = 2.827_433_388_230_814; // 0.9π — no captured cell hits it
+    const W_THIRD_MAX: f64 = 3.133_741_813_548_472_3;
 
     let w_pole = w_pole.min(W_POLE_MAX);
     let w_zero = w_zero.min(W_ZERO_MAX);
@@ -1182,11 +1182,11 @@ pub(crate) fn bell_three_point_synth(
         let tt = tt2.sqrt();
         let rsp_68 = tp * tz * tt;
         let xmm5 = xmm5_in.unwrap_or_else(|| xmm4.max(0.0).sqrt() * rsp_68);
-        let xmm15 = (mp - mz) * tp2 * tz2;
+        let mp_mz_coeff = (mp - mz) * tp2 * tz2;
         let xmm0 = xmm5 * sqrt_g;
         let xmm3 = tz2 * xmm13_v - xmm0;
         let xmm2 = tp2 * xmm13_v - xmm0;
-        let xmm1 = if xmm15 == 0.0 {
+        let xmm1 = if mp_mz_coeff == 0.0 {
             0.0
         } else {
             let xmm4_local = (tp2 - tz2) * mz;
@@ -1199,7 +1199,7 @@ pub(crate) fn bell_three_point_synth(
             let xmm3_b = xmm3_sq * tp2;
             let xmm8_b = (xmm8 - xmm0_sq) * xmm4_local + xmm3_b;
             let xmm8_c = xmm8_b * mp;
-            ((xmm1_b - xmm8_c) / xmm15).max(0.0)
+            ((xmm1_b - xmm8_c) / mp_mz_coeff).max(0.0)
         };
         let xmm4_2 = tp2 * mp;
         let xmm0 = if xmm4_2 == 0.0 {
@@ -1235,17 +1235,17 @@ pub(crate) fn bell_three_point_synth(
 /// Each captured per-section biquad from
 /// `docs/reports/proq4/re/lagrange_brickwall_full.csv` was inverted via a
 /// 2-D Nelder-Mead search on `bell_s2_proq4(fc, Q_k, gdB_k)` to recover
-/// the (Q_k, gdB_k) the binary feeds into
+/// the (`Q_k`, `gdB_k`) the binary feeds into
 /// `compute_audio_biquad_lagrange_mzt` per section.  See
 /// `tools/proq4_probe/fit_brickwall_closed_form.py`.
 ///
 /// Slope=8 has 6 sections in 3 pairs.  Slope=6 has 3 sections (one pair +
-/// one real-pole section where Q_k=Q_user, gdB_k=±g_user/N_atoms exactly).
+/// one real-pole section where `Q_k=Q_user`, `gdB_k=±g_user/N_atoms` exactly).
 /// Slope=4 has 2 sections (one pair).
 ///
 /// Tables capture the recovered values at fc=500 Hz (low-fc, fits clean to
 /// residual ≤ 1e-3 in coefficient space).  Q-axis interpolated linearly in
-/// Q_user (clamped at table edges).  Gain magnitude scaled linearly:
+/// `Q_user` (clamped at table edges).  Gain magnitude scaled linearly:
 /// `gdB_k(g) = gdB_k(±12) · |g|/12`.  Sign of g picks `*_GP` vs `*_GN`
 /// table.
 fn bell_brickwall_proq4_n(
@@ -1262,7 +1262,7 @@ fn bell_brickwall_proq4_n(
         .collect()
 }
 
-/// Per-section `(Q_k, gdB_k)` lookup.  Returns N_sec entries per slope:
+/// Per-section `(Q_k, gdB_k)` lookup.  Returns `N_sec` entries per slope:
 /// slope=4 → 2, slope=6 → 3, slope=8 → 6.
 ///
 /// Recovered at fc=500 Hz (low-fc) by inverting `bell_s2_proq4` against
@@ -1274,77 +1274,77 @@ fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -> Ve
     // Boost (g=+12) tables: rows = sections, columns = Q_user grid.
     // ── slope=4 ──
     static QK_S4_GP: [[f64; 4]; 2] = [
-        [3.586285674, 3.016475764, 6.693358377, 15.30975674],
-        [0.3782821789, 0.914632176, 4.870053886, 13.09929388],
+        [3.586_285_674, 3.016_475_764, 6.693_358_377, 15.309_756_74],
+        [0.378_282_178_9, 0.914_632_176, 4.870_053_886, 13.099_293_88],
     ];
     static GDB_S4_GP: [[f64; 4]; 2] = [
-        [-3.13236434, 1.255240591, 5.548682501, 6.108227731],
-        [6.191169931, 7.073154659, 6.226073393, 5.857372621],
+        [-3.132_364_34, 1.255_240_591, 5.548_682_501, 6.108_227_731],
+        [6.191_169_931, 7.073_154_659, 6.226_073_393, 5.857_372_621],
     ];
     // Cut (g=−12)
     static QK_S4_GN: [[f64; 4]; 2] = [
-        [3.662941579, 3.019225582, 6.63635851, 15.16526366],
-        [0.3823381535, 0.9258982026, 4.919977142, 13.22662744],
+        [3.662_941_579, 3.019_225_582, 6.636_358_51, 15.165_263_66],
+        [0.382_338_153_5, 0.925_898_202_6, 4.919_977_142, 13.226_627_44],
     ];
     static GDB_S4_GN: [[f64; 4]; 2] = [
-        [4.610435319, -0.3537627548, -4.827502331, -5.39113254],
-        [-7.81374463, -8.073957711, -6.943889204, -6.555256923],
+        [4.610_435_319, -0.353_762_754_8, -4.827_502_331, -5.391_132_54],
+        [-7.813_744_63, -8.073_957_711, -6.943_889_204, -6.555_256_923],
     ];
 
     // ── slope=6 ── sec2 is real-pole: Q_k = Q_user, gdB_k = ±g/N_atoms = ±g/2.
     static QK_S6_GP: [[f64; 4]; 3] = [
-        [5.498228809, 4.653210027, 9.866439789, 22.20490666],
-        [0.5162556196, 1.234800415, 6.657535316, 18.11459317],
+        [5.498_228_809, 4.653_210_027, 9.866_439_789, 22.204_906_66],
+        [0.516_255_619_6, 1.234_800_415, 6.657_535_316, 18.114_593_17],
         [0.5, 1.0, 4.0, 10.0],
     ];
     static GDB_S6_GP: [[f64; 4]; 3] = [
-        [-1.183480987, 1.171725183, 3.972778928, 4.427459399],
-        [3.436676232, 4.188170462, 3.842903774, 3.572041903],
+        [-1.183_480_987, 1.171_725_183, 3.972_778_928, 4.427_459_399],
+        [3.436_676_232, 4.188_170_462, 3.842_903_774, 3.572_041_903],
         [4.0, 4.0, 4.0, 4.0],
     ];
     static QK_S6_GN: [[f64; 4]; 3] = [
-        [5.606281946, 4.657543646, 9.774894317, 21.96998342],
-        [0.5221149115, 1.250607826, 6.732871797, 18.30698387],
+        [5.606_281_946, 4.657_543_646, 9.774_894_317, 21.969_983_42],
+        [0.522_114_911_5, 1.250_607_826, 6.732_871_797, 18.306_983_87],
         [0.5, 1.0, 4.0, 10.0],
     ];
     static GDB_S6_GN: [[f64; 4]; 3] = [
-        [3.461188093, 0.3196947648, -2.756016762, -3.220873104],
-        [-5.603197597, -5.657318366, -5.002565762, -4.70833518],
+        [3.461_188_093, 0.319_694_764_8, -2.756_016_762, -3.220_873_104],
+        [-5.603_197_597, -5.657_318_366, -5.002_565_762, -4.708_335_18],
         [-4.0, -4.0, -4.0, -4.0],
     ];
 
     // ── slope=8 ── 6 sections in 3 pairs.
     static QK_S8_GP: [[f64; 4]; 6] = [
-        [11.87031352, 9.897547866, 20.20634547, 45.01306657],
-        [0.9377875246, 2.252198659, 12.28313595, 33.65582895],
-        [3.45182564, 2.84163995, 6.60790415, 15.19774248],
-        [0.3788147579, 0.9258846473, 4.921970232, 13.19500709],
-        [1.931487813, 1.382659957, 4.368807504, 10.58369547],
-        [0.2940331886, 0.8261471928, 3.934231067, 10.1095119],
+        [11.870_313_52, 9.897_547_866, 20.206_345_47, 45.013_066_57],
+        [0.937_787_524_6, 2.252_198_659, 12.283_135_95, 33.655_828_95],
+        [3.451_825_64, 2.841_639_95, 6.607_904_15, 15.197_742_48],
+        [0.378_814_757_9, 0.925_884_647_3, 4.921_970_232, 13.195_007_09],
+        [1.931_487_813, 1.382_659_957, 4.368_807_504, 10.583_695_47],
+        [0.294_033_188_6, 0.826_147_192_8, 3.934_231_067, 10.109_511_9],
     ];
     static GDB_S8_GP: [[f64; 4]; 6] = [
-        [1.289095059, 1.821483896, 3.02860127, 3.273931156],
-        [0.2463799283, 0.9824263576, 1.021121439, 0.890589525],
-        [-0.6409898177, 0.7301967881, 2.074807132, 2.252342132],
-        [1.68918928, 2.135316886, 1.867334951, 1.746544258],
-        [-1.962563681, 1.090614535, 1.997102503, 2.049182733],
-        [2.303700563, 2.50064549, 1.99610881, 1.941936092],
+        [1.289_095_059, 1.821_483_896, 3.028_601_27, 3.273_931_156],
+        [0.246_379_928_3, 0.982_426_357_6, 1.021_121_439, 0.890_589_525],
+        [-0.640_989_817_7, 0.730_196_788_1, 2.074_807_132, 2.252_342_132],
+        [1.689_189_28, 2.135_316_886, 1.867_334_951, 1.746_544_258],
+        [-1.962_563_681, 1.090_614_535, 1.997_102_503, 2.049_182_733],
+        [2.303_700_563, 2.500_645_49, 1.996_108_81, 1.941_936_092],
     ];
     static QK_S8_GN: [[f64; 4]; 6] = [
-        [12.12186332, 9.90772371, 19.99732776, 44.47499699],
-        [0.9489335978, 2.280406005, 12.42125861, 34.00866],
-        [3.476188027, 2.842246024, 6.590110695, 15.15269977],
-        [0.3795885307, 0.9288545515, 4.937299455, 13.23443958],
-        [1.944638858, 1.382370931, 4.36510037, 10.5749602],
-        [0.293772512, 0.8264468949, 3.937059473, 10.11725237],
+        [12.121_863_32, 9.907_723_71, 19.997_327_76, 44.474_996_99],
+        [0.948_933_597_8, 2.280_406_005, 12.421_258_61, 34.008_66],
+        [3.476_188_027, 2.842_246_024, 6.590_110_695, 15.152_699_77],
+        [0.379_588_530_7, 0.928_854_551_5, 4.937_299_455, 13.234_439_58],
+        [1.944_638_858, 1.382_370_931, 4.365_100_37, 10.574_960_2],
+        [0.293_772_512, 0.826_446_894_9, 3.937_059_473, 10.117_252_37],
     ];
     static GDB_S8_GN: [[f64; 4]; 6] = [
-        [3.639062152, 1.464339862, -0.3549221555, -0.6337659043],
-        [-4.13961928, -3.787995516, -3.349079567, -3.18580293],
-        [2.042917669, 0.1232266564, -1.396810249, -1.58293786],
-        [-3.010743182, -2.96353421, -2.522531413, -2.392057142],
-        [2.714769721, -0.8424414985, -1.817504313, -1.872310383],
-        [-3.044002745, -2.748376588, -2.173775358, -2.117127138],
+        [3.639_062_152, 1.464_339_862, -0.354_922_155_5, -0.633_765_904_3],
+        [-4.139_619_28, -3.787_995_516, -3.349_079_567, -3.185_802_93],
+        [2.042_917_669, 0.123_226_656_4, -1.396_810_249, -1.582_937_86],
+        [-3.010_743_182, -2.963_534_21, -2.522_531_413, -2.392_057_142],
+        [2.714_769_721, -0.842_441_498_5, -1.817_504_313, -1.872_310_383],
+        [-3.044_002_745, -2.748_376_588, -2.173_775_358, -2.117_127_138],
     ];
 
     let n_sec = match bp_order {
@@ -1415,10 +1415,10 @@ fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -> Ve
 ///
 /// This is the post-(u_*, w_*) tail of `compute_biquad_response_magnitude`
 /// @ 0x1801103c0 (the `byte[0x48] = 0` branch).  Given:
-///   - per-section sub-frequencies (w_pole, w_zero, w_third, w_eval) in
+///   - per-section sub-frequencies (`w_pole`, `w_zero`, `w_third`, `w_eval`) in
 ///     digital rad/sample,
-///   - the corresponding analog magnitude-squared values (u_pole, u_zero,
-///     u_third, u_eval) — typically `|H(jΩ)|²` evaluated at the warped
+///   - the corresponding analog magnitude-squared values (`u_pole`, `u_zero`,
+///     `u_third`, `u_eval`) — typically `|H(jΩ)|²` evaluated at the warped
 ///     `Ω = tan(w/2) / tan(ω₀/2)` for bucket-B sections, or directly at
 ///     digital ω scaled into bell-s2's normalized form,
 ///   - the per-section `g_ref` — `cap_c/cap_f` for bell-s2 (= 1) or
@@ -1430,6 +1430,7 @@ fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -> Ve
 /// Bit-exact against `compute_biquad_response_magnitude` for bucket-A
 /// (Bell s=2, validated via 100% conformance) and bucket-B (Bell s∈{3..9},
 /// validated via `bell_bucketB_synth_v3.py` to f64 noise floor at LF).
+#[must_use]
 pub fn lagrange3pt_synth_kernel(
     w_pole: f64,
     w_zero: f64,
@@ -1506,6 +1507,7 @@ pub fn lagrange3pt_synth_kernel(
 ///
 /// Validated bit-exact (≤ 1e-9 at LF, see
 /// `tools/proq4_probe/lookup_capture/bell_bucketB_synth_v3.py`).
+#[must_use]
 pub fn bell_bucket_b_section_from_analog(
     b2z: f64,
     b1z: f64,
@@ -1551,10 +1553,11 @@ pub fn bell_bucket_b_section_from_analog(
     )
 }
 
+#[must_use]
 pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
 
-    const Q_CORR_C: f64 = -1.35071992e-5;
+    const Q_CORR_C: f64 = -1.350_719_92e-5;
 
     let g_lin = 10.0_f64.powf(gain_db / 20.0);
     let big_a = g_lin.sqrt();
@@ -1622,7 +1625,7 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
     // This δ_eff feeds BOTH `w_zero = ω₀·(1 − δ)` and `w_third = ω₀·(1 − δ/20)`.
     let delta_extra = {
         let excess = (omega0 - 0.8 * PI).max(0.0);
-        1.604204 * excess * excess * excess * excess
+        1.604_204 * excess * excess * excess * excess
     };
     let delta = (1.0 / q_user + delta_extra).clamp(0.1, 0.8);
     // Sub-frequency upper-bound clamps decoded from `prepare_band_display_info`
@@ -1633,9 +1636,9 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
     //   param_1[0x10] = 3.0634  → w_third ≤ 3.0634  (≈ 0.9750·π)
     // Near Nyquist these prevent tan(w/2) from approaching infinity and
     // reduce numerical error in the synthesis. They are no-ops at low/mid fc.
-    const W_POLE_MAX: f64 = 3.078760800517997;
-    const W_ZERO_MAX: f64 = 2.827433388230814; // 0.9·π
-    const W_THIRD_MAX: f64 = 3.0633669965154073;
+    const W_POLE_MAX: f64 = 3.078_760_800_517_997;
+    const W_ZERO_MAX: f64 = 2.827_433_388_230_814; // 0.9·π
+    const W_THIRD_MAX: f64 = 3.063_366_996_515_407_3;
     let w_pole = omega0.min(W_POLE_MAX);
     let w_zero = (omega0 * (1.0 - delta)).min(W_ZERO_MAX);
     let w_third = (omega0 * (1.0 - delta / 20.0)).min(W_THIRD_MAX);
@@ -1729,7 +1732,7 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
 /// Verified bit-exact (≤ 1.9e-15 abs error across all 5 biquad
 /// coefficients) on 32 captured per-section rows from
 /// `lagrange_per_section_sweep.csv` joined with `solve_bq_sweep.csv`
-/// (slope=4, fc ∈ {500, 1000, 5000, 10000} Hz, Q_user ∈ {4, 10} plus
+/// (slope=4, fc ∈ {500, 1000, 5000, 10000} Hz, `Q_user` ∈ {4, 10} plus
 /// the Q=1 sec=1 fc∈{500,1000} cases).
 ///
 /// See `docs/reports/proq4/re/high_q_correction_decoded.md` for the
@@ -1755,8 +1758,8 @@ fn lagrange_synth_alt_path(
     w_eval: f64,
     g_ref: f64,
 ) -> Coeffs {
-    const W_POLE_MAX: f64 = 3.078760800517997;
-    const W_ZERO_MAX: f64 = 2.827433388230814;
+    const W_POLE_MAX: f64 = 3.078_760_800_517_997;
+    const W_ZERO_MAX: f64 = 2.827_433_388_230_814;
 
     let w_pole = w_pole.min(W_POLE_MAX);
     let w_zero = w_zero.min(W_ZERO_MAX);
@@ -1848,6 +1851,7 @@ fn lagrange_synth_alt_path(
 /// the |H(jω₀)|²=0 case for Notch breaks the Bell-style Lagrange.
 /// Custom sub-frequency override version.
 #[doc(hidden)]
+#[must_use]
 pub fn proq4_s2_from_prototype_with_subfreq_pub(
     freq_hz: f64,
     sample_rate: f64,
@@ -1910,9 +1914,9 @@ fn proq4_s2_from_prototype_with_subfreq(
         0.0
     };
 
-    const W_POLE_MAX: f64 = 3.078760800517997;
-    const W_ZERO_MAX: f64 = 2.827433388230814;
-    const W_THIRD_MAX: f64 = 3.0633669965154073;
+    const W_POLE_MAX: f64 = 3.078_760_800_517_997;
+    const W_ZERO_MAX: f64 = 2.827_433_388_230_814;
+    const W_THIRD_MAX: f64 = 3.063_366_996_515_407_3;
     let w_pole = w_pole_in.min(W_POLE_MAX);
     let w_zero = w_zero_in.min(W_ZERO_MAX);
     let w_third = w_third_in.min(W_THIRD_MAX);
@@ -2032,9 +2036,10 @@ fn proq4_s2_from_prototype_with_subfreq(
 /// Pro-Q 4 Lowpass slope-2 (audio-path Lagrange-MZT).
 ///
 /// Sub-frequencies decoded from runtime probe captures (ft=1):
-///   Q ≤ 1: w_pole = ω₀/2, w_zero = ω₀/10, w_third = ω₀·0.48
-///   Q ≥ 2: w_pole shifts up; complex pattern (TBD)
-///   w_eval = 0 at Q ≤ 1 (remapped to π−0.01), ≈ 2.45 at Q ≥ 2
+///   Q ≤ 1: `w_pole` = ω₀/2, `w_zero` = ω₀/10, `w_third` = ω₀·0.48
+///   Q ≥ 2: `w_pole` shifts up; complex pattern (TBD)
+///   `w_eval` = 0 at Q ≤ 1 (remapped to π−0.01), ≈ 2.45 at Q ≥ 2
+#[must_use]
 pub fn lowpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
     let q_user = q.max(1e-6);
@@ -2078,20 +2083,21 @@ pub fn lowpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
 /// Pro-Q 4 Highpass slope-2 (audio-path Lagrange-MZT).
 ///
 /// Analog prototype ZPK:
-///   numerator   = (1, 0, 0)        →  P_zero(s) = s²
-///   denominator = (1, √2/Q, 1)     →  P_pole(s) = s² + (√2/Q)·ω₀·s + ω₀²
+///   numerator   = (1, 0, 0)        →  `P_zero(s)` = s²
+///   denominator = (1, √2/Q, 1)     →  `P_pole(s)` = s² + (√2/Q)·ω₀·s + ω₀²
 ///
 /// Sub-frequencies decoded from runtime probe captures
 /// (`lp_hp_notch_bp_subfreq_capture.txt`, ft=2):
-///   w_pole = ω₀
-///   w_zero = 0.001 · ω₀
-///   w_third = 0.2 · ω₀
-///   w_eval = 0 at Q ≤ 1, ~2.45 at Q ≥ 2
-///   g_ref = 0
+///   `w_pole` = ω₀
+///   `w_zero` = 0.001 · ω₀
+///   `w_third` = 0.2 · ω₀
+///   `w_eval` = 0 at Q ≤ 1, ~2.45 at Q ≥ 2
+///   `g_ref` = 0
 /// HP section synthesis with Q-INDEPENDENT sub-frequencies.
 /// Used by slope ≥ 4 cascades where each section has different Q but
-/// all sections use w_pole = min(ω₀_user, 0.7π) per
+/// all sections use `w_pole` = `min(ω₀_user, 0.7π)` per
 /// `hp_high_fc_subfreq_analysis.md`.
+#[must_use]
 pub fn highpass_section_proq4(freq_hz: f64, q_section: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
     let q_sec = q_section.max(1e-6);
@@ -2121,6 +2127,7 @@ pub fn highpass_section_proq4(freq_hz: f64, q_section: f64, sample_rate: f64) ->
     )
 }
 
+#[must_use]
 pub fn highpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
     let q_user = q.max(1e-6);
@@ -2246,10 +2253,10 @@ fn mode0_forward(p2: f64, p3: f64, p4: f64, sp5_sq: f64, sp6_sq: f64) -> Coeffs 
     [1.0, a1, a2, b0, b1, b2]
 }
 
-/// Pro-Q 4 Bandpass-specific cascade values (a1_sec, a2_sec) per Q per
-/// section. Extracted from probe LAG_PROTO_DETAIL at fc=10 (matched-Z
+/// Pro-Q 4 Bandpass-specific cascade values (`a1_sec`, `a2_sec`) per Q per
+/// section. Extracted from probe `LAG_PROTO_DETAIL` at fc=10 (matched-Z
 /// near-bit-exact). Pro-Q's actual BP analog cascade differs from
-/// notch_inner_pair at Q≠1 due to floating-point arithmetic order.
+/// `notch_inner_pair` at Q≠1 due to floating-point arithmetic order.
 fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
     if matches!(slope, 3 | 5 | 7 | 9) {
         use std::f64::consts::SQRT_2;
@@ -2297,13 +2304,13 @@ fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
         (0.514_131_726_881_778_2, 0.346_014_345_973_210_24),
         (1.485_868_238_889_679_8, 2.890_053_581_990_569),
         (1.041_465_571_915_082_5, 0.616_038_504_746_829_3),
-        (1.690_585_188_896_737_4, 1.6232751561705796),
+        (1.690_585_188_896_737_4, 1.623_275_156_170_579_6),
     ];
     let q40: Vec<(f64, f64)> = vec![
         (0.076_090_173_887_941_88, 0.711_615_600_837_688_5),
         (0.106_925_949_625_576_74, 1.405_253_059_127_478),
         (0.218_757_319_001_314_68, 0.777_798_189_568_640_3),
-        (0.28125202904191926, 1.285_680_544_659_778_8),
+        (0.281_252_029_041_919_26, 1.285_680_544_659_778_8),
         (0.325_671_823_251_275_2, 0.911_343_216_434_378_7),
         (0.357_353_648_305_477_44, 1.097_281_443_441_791_5),
     ];
@@ -2311,7 +2318,7 @@ fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
         (0.034_108_918_559_306_506, 0.872_385_813_635_398_5),
         (0.039_098_433_314_909_74, 1.146_281_822_067_703_3),
         (0.095_002_807_786_505_8, 0.904_759_374_280_998_1),
-        (0.105_003_397_021_425_67, 1.1052662491556815),
+        (0.105_003_397_021_425_67, 1.105_266_249_155_681_5),
         (0.134_101_194_217_655_35, 0.963_977_549_097_682_1),
         (0.139_112_362_464_492_4, 1.037_368_557_946_226),
     ];
@@ -2356,6 +2363,7 @@ fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
 /// sr to compute `Q_pre` exactly as the binary does.
 ///
 /// Output: final digital biquad in `[a0, a1, a2, b0, b1, b2]` order.
+#[must_use]
 pub fn apply_proq4_prewarp(
     captured: [f64; 6],
     freq_hz: f64,
@@ -2393,24 +2401,26 @@ pub fn apply_proq4_prewarp(
     let inv_d = 1.0 / d_a;
     let two_t2m1 = 2.0 * (a2 * t2 - 1.0);
 
-    let new_a1 = two_t2m1 * inv_d;
-    let new_a2 = (1.0 - a1 * t + a2 * t2) * inv_d;
-    let new_b0 = (b0 + b1 * t + b2 * t2) * inv_d;
-    let new_b1 = 2.0 * (b2 * t2 - b0) * inv_d;
-    let new_b2 = (b0 - b1 * t + b2 * t2) * inv_d;
+    let a1_new = two_t2m1 * inv_d;
+    let a2_new = (1.0 - a1 * t + a2 * t2) * inv_d;
+    let b0_new = (b0 + b1 * t + b2 * t2) * inv_d;
+    let b1_new = 2.0 * (b2 * t2 - b0) * inv_d;
+    let b2_new = (b0 - b1 * t + b2 * t2) * inv_d;
 
-    [1.0, new_a1, new_a2, new_b0, new_b1, new_b2]
+    [1.0, a1_new, a2_new, b0_new, b1_new, b2_new]
 }
 
-/// LP-prototype atoms per Pro-Q 4 slope index, for Bell / Notch / Bandpass
-/// at slope ≥ 4.  Returns (complex_angles_radians, real_pole_count).
+/// LP-prototype atoms per Pro-Q 4 slope index, for Bell / Notch / Bandpass at slope ≥ 4.
+/// Returns (`complex_angles_radians`, `real_pole_count`).
+///
 /// Each "atom" produces two biquad sections via reciprocal-magnitude
-/// doubling: pole-pair_high uses gain_lin^(+1/(2·N)), pole-pair_low uses
+/// doubling: pole-pair_high uses `gain_lin^(+1/(2·N))`, pole-pair_low uses
 /// gain_lin^(-1/(2·N)), where N = total atom count (complex + real).
 ///
 /// Captured from Pro-Q 4 BLT hook at gain≈0 dB / fc=1000 / Q=1.
 /// See `docs/reports/proq4/re/complete_pipeline.md` §4 and
 /// `bell_lp_prototype_captures.txt`.
+#[must_use]
 pub fn lp_atoms_for_slope(slope: usize) -> (&'static [f64], usize) {
     use std::f64::consts::PI;
     const A105: f64 = 105.0 * PI / 180.0;
@@ -2438,7 +2448,6 @@ pub fn lp_atoms_for_slope(slope: usize) -> (&'static [f64], usize) {
     match slope {
         1 | 2 => (&[], 1),
         3 => (&A_S3, 0),
-        4 => (&A_S4, 0),
         5 => (&A_S5, 1),
         6 => (&A_S6, 1),
         7 => (&A_S7, 0),
@@ -2546,13 +2555,13 @@ fn bell_brickwall_cascade(
         let theta = PI * (2 * k + 1) as f64 / (2 * n_bp) as f64;
         let bp_pole_a = lp_to_bp_local(pole_mag, theta);
         let bp_zero_a = lp_to_bp_local(zero_mag, theta);
-        let (zp_re, zp_im) = blt(bp_pole_a.0, bp_pole_a.1);
-        let (zz_re, zz_im) = blt(bp_zero_a.0, bp_zero_a.1);
-        let a1 = -2.0 * zp_re;
-        let a2 = zp_re * zp_re + zp_im * zp_im;
+        let (pole_re, pole_im) = blt(bp_pole_a.0, bp_pole_a.1);
+        let (zero_re, zero_im) = blt(bp_zero_a.0, bp_zero_a.1);
+        let a1 = -2.0 * pole_re;
+        let a2 = pole_re * pole_re + pole_im * pole_im;
         let b0 = 1.0;
-        let b1 = -2.0 * zz_re;
-        let b2 = zz_re * zz_re + zz_im * zz_im;
+        let b1 = -2.0 * zero_re;
+        let b2 = zero_re * zero_re + zero_im * zero_im;
         sections.push([1.0, a1, a2, b0, b1, b2]);
     }
 
@@ -2579,7 +2588,7 @@ fn bell_brickwall_cascade(
     let cur_peak = (total_re * total_re + total_im * total_im).sqrt();
     if cur_peak > 1e-12 {
         let target_per_section = (g_lin / cur_peak).powf(1.0 / n as f64);
-        for s in sections.iter_mut() {
+        for s in &mut sections {
             s[3] *= target_per_section;
             s[4] *= target_per_section;
             s[5] *= target_per_section;
@@ -2624,25 +2633,25 @@ mod tests {
     #[test]
     fn alt_path_high_q_brickwall_bit_exact() {
         let cap_a = 1.0;
-        let cap_b = -4.60001455754851;
-        let cap_c = 5.992163077648592;
+        let cap_b = -4.600_014_557_548_51;
+        let cap_c = 5.992_163_077_648_592;
         let cap_d = 1.0;
-        let cap_e = -4.028747455414541;
-        let cap_f = 4.186816988762886;
-        let w_pole = 1.3997697350428404;
-        let w_zero = 2.088334741098665;
-        let w_eval = 2.7217368624929503;
-        let g_ref = 1.43119775565331;
+        let cap_e = -4.028_747_455_414_541;
+        let cap_f = 4.186_816_988_762_886;
+        let w_pole = 1.399_769_735_042_840_4;
+        let w_zero = 2.088_334_741_098_665;
+        let w_eval = 2.721_736_862_492_950_3;
+        let g_ref = 1.431_197_755_653_31;
 
         let sos = lagrange_synth_alt_path(
             cap_a, cap_b, cap_c, cap_d, cap_e, cap_f, w_pole, w_zero, w_eval, g_ref,
         );
 
-        let b0_cap = 1.1854672420213936;
-        let b1_cap = -0.06605333717011029;
-        let b2_cap = 0.7069158214908452;
-        let a1_cap = -0.2592929248851682;
-        let a2_cap = 0.7859073604623033;
+        let b0_cap = 1.185_467_242_021_393_6;
+        let b1_cap = -0.066_053_337_170_110_29;
+        let b2_cap = 0.706_915_821_490_845_2;
+        let a1_cap = -0.259_292_924_885_168_2;
+        let a2_cap = 0.785_907_360_462_303_3;
 
         // sos layout: [a0=1, a1, a2, b0, b1, b2]
         let max_err = [
@@ -2657,8 +2666,7 @@ mod tests {
 
         assert!(
             max_err <= 1e-12,
-            "alt-path coefficient mismatch: max_err = {:.3e}",
-            max_err,
+            "alt-path coefficient mismatch: max_err = {max_err:.3e}"
         );
     }
 
@@ -2677,8 +2685,7 @@ mod tests {
         let mag = mag_db_sos(&sos, w0);
         assert!(
             (mag - 6.0).abs() < 0.5,
-            "peak should be ~6 dB at center, got {}",
-            mag
+            "peak should be ~6 dB at center, got {mag}"
         );
     }
 
@@ -2690,8 +2697,7 @@ mod tests {
         let mag = mag_db_sos(&sos, w0);
         assert!(
             (mag - 12.0).abs() < 1.0,
-            "cascade peak should be ~12 dB at center, got {}",
-            mag
+            "cascade peak should be ~12 dB at center, got {mag}"
         );
     }
 
@@ -2699,7 +2705,7 @@ mod tests {
     fn peak_dc_is_unity() {
         let sos = compute_cascade_peak(1000.0, 2.0, 6.0, 48000.0, 2);
         let dc = mag_db_sos(&sos, 0.001);
-        assert!(dc.abs() < 0.5, "DC should be ~0 dB, got {}", dc);
+        assert!(dc.abs() < 0.5, "DC should be ~0 dB, got {dc}");
     }
 
     #[test]
@@ -2721,10 +2727,7 @@ mod tests {
             for (j, &coeff) in section.iter().enumerate() {
                 assert!(
                     coeff.is_finite(),
-                    "section[{}][{}] is not finite: {}",
-                    i,
-                    j,
-                    coeff
+                    "section[{i}][{j}] is not finite: {coeff}"
                 );
             }
             assert_ne!(
@@ -2744,10 +2747,7 @@ mod tests {
             for (j, &coeff) in section.iter().enumerate() {
                 assert!(
                     coeff.is_finite(),
-                    "section[{}][{}] is not finite: {}",
-                    i,
-                    j,
-                    coeff
+                    "section[{i}][{j}] is not finite: {coeff}"
                 );
             }
         }

@@ -160,7 +160,7 @@ impl<S: SignalApi> BlockPresetOps<S> {
             block_type,
             source_preset_id: Some(preset_id.clone()),
             source_variant_id: Some(snapshot_id.clone()),
-            state_data: snapshot.state_data().map(|d| d.to_vec()),
+            state_data: snapshot.state_data().map(<[u8]>::to_vec),
             block: snapshot.block(),
             stale: false,
         };

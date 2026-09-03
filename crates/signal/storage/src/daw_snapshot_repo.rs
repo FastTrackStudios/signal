@@ -4,7 +4,7 @@
 //! Each snapshot is keyed by an `owner_id` (rig ID, scene ID, etc.) so multiple
 //! snapshots can be grouped under a parent entity.
 
-use sea_orm::*;
+use sea_orm::{ActiveEnum, ConnectionTrait, Schema, ActiveModelBehavior, StatementBuilder, QueryTrait, QueryOrder, QueryFilter, EntityTrait, ColumnTrait, Iden, ActiveModelTrait, Set};
 
 use crate::entity;
 use crate::{DatabaseConnection, StorageResult};
@@ -65,7 +65,8 @@ pub struct DawSnapshotRepoLive {
 }
 
 impl DawSnapshotRepoLive {
-    pub fn new(db: DatabaseConnection) -> Self {
+    #[must_use] 
+    pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
 

@@ -23,19 +23,16 @@ fn arg(name: &str) -> Option<String> {
 }
 
 fn home(rest: &str) -> String {
-    std::env::var("HOME").map(|h| format!("{h}/{rest}")).unwrap_or_else(|_| rest.into())
+    std::env::var("HOME").map_or_else(|_| rest.into(), |h| format!("{h}/{rest}"))
 }
 
 fn open(path: &str) -> Option<HostedPlugin> {
-    match HostedPlugin::load(path) {
-        Ok(Some(mut p)) => {
-            p.prepare(SR, BLOCK as u32).ok()?;
-            Some(p)
-        }
-        _ => {
-            eprintln!("{path}: could not load");
-            None
-        }
+    if let Ok(Some(mut p)) = HostedPlugin::load(path) {
+        p.prepare(SR, BLOCK as u32).ok()?;
+        Some(p)
+    } else {
+        eprintln!("{path}: could not load");
+        None
     }
 }
 
@@ -66,7 +63,7 @@ fn rms_db(v: &[f32]) -> f64 {
     // Skip the warmup, as the transfer measurement does.
     let start = (eq_transfer::WARMUP_FRAMES * eq_transfer::FFT / 2).min(v.len() / 2);
     let tail = &v[start..];
-    let e: f64 = tail.iter().map(|x| (*x as f64) * (*x as f64)).sum();
+    let e: f64 = tail.iter().map(|x| f64::from(*x) * f64::from(*x)).sum();
     10.0 * (e / tail.len().max(1) as f64).log10()
 }
 

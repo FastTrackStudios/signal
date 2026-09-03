@@ -15,7 +15,7 @@ const MAPPING_CONFIG_SUBKEY: &str = "mapping_config";
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct MappingConfig {
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     version: String,
     mappings: Vec<Mapping>,
 }
@@ -23,7 +23,7 @@ struct MappingConfig {
 #[derive(Debug, Clone, serde::Deserialize)]
 struct Mapping {
     source_param: u8,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     target_track: TrackRef,
     target_fx: FxRef,
     target_param_index: u32,
@@ -35,7 +35,7 @@ enum TrackRef {
     // Deserialized from mapping config, but track targeting isn't wired up
     // yet — `target_track` (which holds this) is likewise `allow(dead_code)`
     // above until the routing logic consumes it.
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     ByIndex(u32),
 }
 
@@ -62,16 +62,16 @@ impl MapMode {
     fn apply(&self, source: f32) -> f32 {
         let v = source.clamp(0.0, 1.0);
         match self {
-            MapMode::ScaleRange { min, max } => min + v * (max - min),
-            MapMode::PassThrough => v,
-            MapMode::Toggle => {
+            Self::ScaleRange { min, max } => min + v * (max - min),
+            Self::PassThrough => v,
+            Self::Toggle => {
                 if v >= 0.5 {
                     1.0
                 } else {
                     0.0
                 }
             }
-            MapMode::MultiPoint { points } => {
+            Self::MultiPoint { points } => {
                 if points.is_empty() {
                     return v;
                 }
@@ -93,7 +93,7 @@ impl MapMode {
                             return a.param_value;
                         }
                         let t = (v - a.macro_value) / range;
-                        return a.param_value + (b.param_value - a.param_value) * t;
+                        return (b.param_value - a.param_value).mul_add(t, a.param_value);
                     }
                 }
                 last.param_value
@@ -347,7 +347,7 @@ fn apply_macros(state: &mut MacroState) {
             let source_val = macros[source_idx];
             let target_val = mapping.mode.apply(source_val);
 
-            daw.fx_param_set(&ts.track_guid, target_fx_idx, param_idx, target_val as f64);
+            daw.fx_param_set(&ts.track_guid, target_fx_idx, param_idx, f64::from(target_val));
         }
     }
 }

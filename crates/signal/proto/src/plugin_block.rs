@@ -38,7 +38,7 @@ pub struct ParamMapping {
     /// Which FX in a multi-FX block this param belongs to (0-based).
     ///
     /// For single-FX blocks this is always 0 (the default). For multi-FX
-    /// blocks (e.g., an Amp Block backed by amp_sim + cabinet_sim in a
+    /// blocks (e.g., an Amp Block backed by `amp_sim` + `cabinet_sim` in a
     /// REAPER Container), this indexes into the block's `linked_fx_indices`.
     #[serde(default)]
     pub fx_slot: u32,
@@ -89,14 +89,14 @@ pub struct VirtualBlock {
     /// FX indices this block spans in the DAW's FX chain.
     ///
     /// For a single-FX block, this is empty or contains one index.
-    /// For a multi-FX block (e.g., an amp block backed by amp_sim + cabinet_sim
+    /// For a multi-FX block (e.g., an amp block backed by `amp_sim` + `cabinet_sim`
     /// inside a REAPER Container), this lists all linked FX indices.
     /// Each [`ParamMapping::fx_slot`] indexes into this array.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub linked_fx_indices: Vec<u32>,
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
@@ -135,7 +135,8 @@ impl VirtualBlock {
     }
 
     /// Whether this block spans more than one FX.
-    pub fn is_multi_fx(&self) -> bool {
+    #[must_use] 
+    pub const fn is_multi_fx(&self) -> bool {
         self.linked_fx_indices.len() > 1
     }
 
@@ -143,6 +144,7 @@ impl VirtualBlock {
     ///
     /// Returns `None` if `linked_fx_indices` is empty (single-FX block —
     /// the caller should use the block's default FX index).
+    #[must_use] 
     pub fn resolve_fx_index(&self, fx_slot: u32) -> Option<u32> {
         self.linked_fx_indices.get(fx_slot as usize).copied()
     }
@@ -185,7 +187,7 @@ impl VirtualModule {
 /// Complete definition of how a single plugin maps to virtual modules/blocks.
 ///
 /// This is the top-level JSON-serializable document. It is NOT stored in the
-/// database — it lives as a JSON file or is embedded inline in a LayerSnapshot.
+/// database — it lives as a JSON file or is embedded inline in a `LayerSnapshot`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct PluginBlockDef {
     /// Unique identifier for this definition.
@@ -203,7 +205,7 @@ pub struct PluginBlockDef {
     pub version: u32,
 }
 
-fn default_version() -> u32 {
+const fn default_version() -> u32 {
     1
 }
 
@@ -232,6 +234,7 @@ impl PluginBlockDef {
     }
 
     /// All virtual blocks across all modules, in order.
+    #[must_use] 
     pub fn all_blocks(&self) -> Vec<&VirtualBlock> {
         self.modules.iter().flat_map(|m| &m.blocks).collect()
     }
@@ -272,6 +275,7 @@ impl PluginBlockDef {
     /// Each `VirtualModule` becomes a tuple. Each `VirtualBlock` becomes a
     /// `SignalNode::Block(Box<ModuleBlock>)` with `ModuleBlockSource::Inline`,
     /// carrying the virtual block's parameters as `BlockParameter`s.
+    #[must_use] 
     pub fn to_module_chains(&self) -> Vec<(String, ModuleType, SignalChain)> {
         self.modules
             .iter()
@@ -314,7 +318,7 @@ impl PluginBlockDef {
 
 // ─── Errors ─────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PluginBlockDefError {
     IndexOutOfRange {
         block_id: String,
@@ -369,7 +373,7 @@ impl std::error::Error for PluginBlockDefError {}
 /// ```
 ///
 /// Default format: `Type: Preset - Variation` (e.g., `DRIVE: Simple Drive - Low`).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FxDisplayOptions {
     /// Show the type prefix (e.g., "DRIVE", "AMP").
     pub show_type: bool,
@@ -395,7 +399,8 @@ impl Default for FxDisplayOptions {
 
 impl FxDisplayOptions {
     /// Show everything: `DRIVE Module: Simple Drive - Low`.
-    pub fn full() -> Self {
+    #[must_use] 
+    pub const fn full() -> Self {
         Self {
             show_type: true,
             show_collection_type: true,
@@ -405,7 +410,8 @@ impl FxDisplayOptions {
     }
 
     /// Show only preset and variation: `Simple Drive - Low`.
-    pub fn name_only() -> Self {
+    #[must_use] 
+    pub const fn name_only() -> Self {
         Self {
             show_type: false,
             show_collection_type: false,
@@ -422,7 +428,7 @@ impl FxDisplayOptions {
 /// - `variation`: `Some("Low")`
 ///
 /// If there's no ` - ` separator, the whole string is the preset with no variation.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FxNameParts {
     pub preset: String,
     pub variation: Option<String>,
@@ -430,6 +436,7 @@ pub struct FxNameParts {
 
 impl FxNameParts {
     /// Split a combined name like `"Simple Drive - Low"` into preset + variation.
+    #[must_use] 
     pub fn split(combined: &str) -> Self {
         // Split on the last ` - ` to handle presets containing hyphens
         // e.g., "Spring-Box - Boing" → preset="Spring-Box", variation="Boing"
@@ -453,7 +460,7 @@ impl FxNameParts {
 // ─── FX Name Parsing ────────────────────────────────────────────
 
 /// Classification of an FX item based on its display name.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FxRole {
     /// A module container: `"<TYPE> Module: <name>"`.
     Module {
@@ -476,6 +483,7 @@ impl FxRole {
     /// - `"<Type> Block: <name>"` → `Block { block_type, name }`
     /// - `"Module: <name>"` → `GenericModule { name }`
     /// - Anything else → `Unknown { name }`
+    #[must_use] 
     pub fn parse(display_name: &str) -> Self {
         // Strip optional [M] / [B] prefix
         let display_name = display_name
@@ -577,6 +585,7 @@ impl FxRole {
     /// // Name only (type + collection_type off):
     /// "Simple Drive - Low"
     /// ```
+    #[must_use] 
     pub fn format(&self, opts: &FxDisplayOptions) -> String {
         match self {
             Self::Module { module_type, name } => {
@@ -600,6 +609,7 @@ impl FxRole {
     }
 
     /// Format with the default display options.
+    #[must_use] 
     pub fn display_name(&self) -> String {
         self.format(&FxDisplayOptions::default())
     }
@@ -677,7 +687,7 @@ impl FxRole {
 // ─── Track Name Roles ───────────────────────────────────────────
 
 /// Display options controlling which parts of a track name are shown.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrackDisplayOptions {
     /// Show the bracket prefix (e.g., `[L]`, `[E]`, `[R]`).
     pub show_prefix: bool,
@@ -703,7 +713,7 @@ impl Default for TrackDisplayOptions {
 /// - `[R]` — Rig (top-level folder)
 /// - `[E]` — Engine (sub-folder under a rig)
 /// - `[L]` — Layer (leaf track, holds FX chain of modules + blocks)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TrackRole {
     /// A rig-level track (top-level folder): `"[R] <name>"`.
     Rig { name: String },
@@ -715,6 +725,7 @@ pub enum TrackRole {
 
 impl TrackRole {
     /// Format this track role as a display name using the given options.
+    #[must_use] 
     pub fn format(&self, opts: &TrackDisplayOptions) -> String {
         let (prefix, role, name) = match self {
             Self::Rig { name } => ("[R]", "Rig", name.as_str()),
@@ -742,6 +753,7 @@ impl TrackRole {
     }
 
     /// Format with the default display options (`[X] <name>`).
+    #[must_use] 
     pub fn display_name(&self) -> String {
         self.format(&TrackDisplayOptions::default())
     }
@@ -750,6 +762,7 @@ impl TrackRole {
     ///
     /// Recognizes `[R] ...`, `[E] ...`, `[L] ...` prefixes.
     /// Returns `None` if the name doesn't match any known prefix.
+    #[must_use] 
     pub fn parse(display_name: &str) -> Option<Self> {
         if let Some(rest) = display_name.strip_prefix("[R] ") {
             Some(Self::Rig {
@@ -839,7 +852,7 @@ mod tests {
         let err = def.validate().unwrap_err();
         match err {
             PluginBlockDefError::DuplicateIndex { index, .. } => assert_eq!(index, 0),
-            _ => panic!("expected DuplicateIndex, got {:?}", err),
+            _ => panic!("expected DuplicateIndex, got {err:?}"),
         }
     }
 
@@ -1015,7 +1028,7 @@ mod tests {
                         "wrong type for '{name}'"
                     );
                 }
-                other => panic!("expected Module for '{name}', got {:?}", other),
+                other => panic!("expected Module for '{name}', got {other:?}"),
             }
         }
     }
@@ -1081,7 +1094,7 @@ mod tests {
                 FxRole::Block { block_type, .. } => {
                     assert_eq!(block_type, *expected_type, "wrong type for '{name}'");
                 }
-                other => panic!("expected Block for '{name}', got {:?}", other),
+                other => panic!("expected Block for '{name}', got {other:?}"),
             }
         }
     }

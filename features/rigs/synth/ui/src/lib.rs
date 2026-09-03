@@ -39,7 +39,7 @@ enum Mode {
 struct SynthState {
     status: Signal<SynthStatus>,
     presets: Signal<Vec<SynthPreset>>,
-    #[allow(
+    #[expect(
         dead_code,
         reason = "seeded from the rig snapshot but not yet read by any view — module-tree view isn't wired up here yet"
     )]
@@ -82,7 +82,7 @@ fn use_synth_state() -> (SynthState, Option<SynthRigClient>) {
 
     // Live updates.
     {
-        let stream = stream.clone();
+        let stream = stream;
         architect::use_stream(
             move |sink| {
                 let stream = stream.clone();
@@ -130,7 +130,7 @@ pub fn SynthRigRemote() -> Element {
     // Currently-held notes light the piano.
     let lit: Vec<u8> = {
         let mut held = std::collections::BTreeSet::<u8>::new();
-        for e in midi.iter() {
+        for e in &midi {
             match e {
                 MidiEvent::NoteOn { key, velocity, .. } if velocity.get() > 0 => {
                     held.insert(key.get());
@@ -169,7 +169,7 @@ pub fn SynthRigRemote() -> Element {
         .into_iter()
         .map(|(id, label, m)| {
             let mut pick = mode;
-            fts_chrome::ChromeTab::new(id, label, mode() == m, Callback::new(move |_| pick.set(m)))
+            fts_chrome::ChromeTab::new(id, label, mode() == m, Callback::new(move |()| pick.set(m)))
         })
         .collect(),
     );
@@ -225,7 +225,7 @@ pub fn SynthRigRemote() -> Element {
                     // The live count is the quickest "is MIDI arriving?" signal.
                     div { style: "display:flex; align-items:baseline; gap:8px;",
                         span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "MIDI in" }
-                        span { style: "font-size:11px; color:#52525b;", {status.midi_port.clone().unwrap_or_else(|| "omni (all inputs)".into())} }
+                        span { style: "font-size:11px; color:#52525b;", {status.midi_port.unwrap_or_else(|| "omni (all inputs)".into())} }
                         div { style: "flex:1;" }
                         span { style: "font-size:12px; font-weight:700; color:#38bdf8;", "{midi_count} events" }
                     }
@@ -239,7 +239,7 @@ pub fn SynthRigRemote() -> Element {
                         span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Keyboard" }
                         {
                             let rig_on = rig.clone();
-                            let rig_off = rig.clone();
+                            let rig_off = rig;
                             rsx!{ Piano {
                                 start_note: 21,
                                 end_note: 108,
@@ -248,8 +248,8 @@ pub fn SynthRigRemote() -> Element {
                                 waterfall: false,
                                 accent_color: "#38bdf8".to_string(),
                                 height: "150px",
-                                on_note_on: move |n: u8| { let rig = rig_on.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 100).await; } }); },
-                                on_note_off: move |n: u8| { let rig = rig_off.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 0).await; } }); },
+                                on_note_on: move |n: u8| { let rig = rig_on.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(u32::from(n), 100).await; } }); },
+                                on_note_off: move |n: u8| { let rig = rig_off.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(u32::from(n), 0).await; } }); },
                             } }
                         }
                     }
@@ -292,7 +292,7 @@ fn freq_to_x(f: f64) -> f64 {
 }
 fn x_to_freq(x: f64) -> f64 {
     let (lm, lx) = (FMIN.log10(), FMAX.log10());
-    10f64.powf(lm + (x / FILT_W).clamp(0.0, 1.0) * (lx - lm))
+    10f64.powf((x / FILT_W).clamp(0.0, 1.0).mul_add(lx - lm, lm))
 }
 fn db_to_y(db: f64) -> f64 {
     ((DBMAX - db.clamp(DBMIN, DBMAX)) / (DBMAX - DBMIN)) * FILT_H
@@ -301,7 +301,7 @@ fn fmt_hz(f: f64) -> String {
     if f >= 1000.0 {
         format!("{:.1}k", f / 1000.0)
     } else {
-        format!("{:.0}", f)
+        format!("{f:.0}")
     }
 }
 
@@ -311,14 +311,14 @@ fn fmt_hz(f: f64) -> String {
 fn filter_mag_db(mode: &str, cutoff: f64, res: f64, poles: u32, f: f64) -> f64 {
     let fc = cutoff.max(1.0);
     let w = f / fc;
-    let q = 0.5 + res.clamp(0.0, 1.0) * 8.0; // 0.5 … 8.5
+    let q = res.clamp(0.0, 1.0).mul_add(8.0, 0.5); // 0.5 … 8.5
     let denom2 = |w: f64| {
-        let a = 1.0 - w * w;
-        (a * a + (w / q) * (w / q)).sqrt().max(1e-6)
+        let a = w.mul_add(-w, 1.0);
+        a.hypot(w / q).max(1e-6)
     };
     let extra = poles.saturating_sub(2);
-    let lp_extra = |w: f64| (1.0 / (1.0 + w * w).sqrt()).powi(extra as i32);
-    let hp_extra = |w: f64| (w / (1.0 + w * w).sqrt()).powi(extra as i32);
+    let lp_extra = |w: f64| (1.0 / w.mul_add(w, 1.0).sqrt()).powi(extra as i32);
+    let hp_extra = |w: f64| (w / w.mul_add(w, 1.0).sqrt()).powi(extra as i32);
     let lin = match mode {
         "highpass" => {
             if poles <= 1 {
@@ -349,8 +349,8 @@ fn filter_path(f: &SynthFilter) -> String {
         let freq = 10f64.powf(FMIN.log10() + t * (FMAX.log10() - FMIN.log10()));
         let db = filter_mag_db(
             &f.mode,
-            f.cutoff_hz as f64,
-            f.resonance as f64,
+            f64::from(f.cutoff_hz),
+            f64::from(f.resonance),
             f.poles,
             freq,
         );
@@ -376,7 +376,7 @@ fn power_scale(t: f64, power: f64) -> f64 {
     if power.abs() < 0.01 {
         return t;
     }
-    ((power * t).exp() - 1.0) / (power.exp() - 1.0)
+    (power * t).exp_m1() / power.exp_m1()
 }
 
 /// Invert `power_scale` at the segment midpoint (t = 0.5): given the fraction `f`
@@ -391,7 +391,7 @@ fn power_from_fraction(f: f64) -> f64 {
 // Log-ish (cube) time ↔ knob mapping: fine resolution at the short end, still
 // reaching ENV_TMAX at the top. Reversible so knob and node stay consistent.
 fn time_to_knob(t: f64) -> f64 {
-    (t / ENV_TMAX).clamp(0.0, 1.0).powf(1.0 / 3.0)
+    (t / ENV_TMAX).clamp(0.0, 1.0).cbrt()
 }
 fn knob_to_time(v: f64) -> f64 {
     v.clamp(0.0, 1.0).powi(3) * ENV_TMAX
@@ -406,14 +406,14 @@ fn fmt_secs(t: f64) -> String {
     if t < 1.0 {
         format!("{:.0}ms", t * 1000.0)
     } else {
-        format!("{:.2}s", t)
+        format!("{t:.2}s")
     }
 }
 fn fmt_power(p: f64) -> String {
     if p.abs() < 0.05 {
         "lin".to_string()
     } else {
-        format!("{:+.1}", p)
+        format!("{p:+.1}")
     }
 }
 
@@ -461,11 +461,11 @@ struct EnvGeom {
 }
 
 fn env_geom(e: &SynthEnvelope, x: &EnvExtra) -> EnvGeom {
-    let a = (e.attack.max(0.0)) as f64;
+    let a = f64::from(e.attack.max(0.0));
     let hold = x.hold.max(0.0);
-    let d = (e.decay.max(0.0)) as f64;
-    let r = (e.release.max(0.0)) as f64;
-    let sus = (e.sustain.clamp(0.0, 1.0)) as f64;
+    let d = f64::from(e.decay.max(0.0));
+    let r = f64::from(e.release.max(0.0));
+    let sus = f64::from(e.sustain.clamp(0.0, 1.0));
     // Auto-fit the window to the total envelope time (Vital's window_time).
     let total = (a + hold + d + r).max(0.1);
     let usable_w = ENV_W - ENV_LEFT - ENV_RIGHT;
@@ -476,7 +476,7 @@ fn env_geom(e: &SynthEnvelope, x: &EnvExtra) -> EnvGeom {
     let xr = xc + r / sec_per_x;
     let usable_h = ENV_H - ENV_TOP - ENV_BOT;
     let ytop = ENV_TOP;
-    let ysus = ENV_TOP + (1.0 - sus) * usable_h;
+    let ysus = (1.0 - sus).mul_add(usable_h, ENV_TOP);
     let y0 = ENV_TOP + usable_h;
 
     // Sample each segment through the curve so the stroke follows the power.
@@ -485,8 +485,8 @@ fn env_geom(e: &SynthEnvelope, x: &EnvExtra) -> EnvGeom {
     // attack: baseline → peak
     for i in 1..=n {
         let t = i as f64 / n as f64;
-        let xx = ENV_LEFT + (xa - ENV_LEFT) * t;
-        let yy = y0 + (ytop - y0) * power_scale(t, x.attack_power);
+        let xx = (xa - ENV_LEFT).mul_add(t, ENV_LEFT);
+        let yy = (ytop - y0).mul_add(power_scale(t, x.attack_power), y0);
         s.push_str(&format!(" L{xx:.1} {yy:.1}"));
     }
     // hold: flat at peak
@@ -494,26 +494,26 @@ fn env_geom(e: &SynthEnvelope, x: &EnvExtra) -> EnvGeom {
     // decay: peak → sustain
     for i in 1..=n {
         let t = i as f64 / n as f64;
-        let xx = xh + (xc - xh) * t;
-        let yy = ytop + (ysus - ytop) * power_scale(t, x.decay_power);
+        let xx = (xc - xh).mul_add(t, xh);
+        let yy = (ysus - ytop).mul_add(power_scale(t, x.decay_power), ytop);
         s.push_str(&format!(" L{xx:.1} {yy:.1}"));
     }
     // release: sustain → baseline
     for i in 1..=n {
         let t = i as f64 / n as f64;
-        let xx = xc + (xr - xc) * t;
-        let yy = ysus + (y0 - ysus) * power_scale(t, x.release_power);
+        let xx = (xr - xc).mul_add(t, xc);
+        let yy = (y0 - ysus).mul_add(power_scale(t, x.release_power), ysus);
         s.push_str(&format!(" L{xx:.1} {yy:.1}"));
     }
     let fill = format!("{s} L{ENV_LEFT:.1} {y0:.1} Z");
 
     // Power grab-points: each segment's midpoint value (t = 0.5).
-    let pax = (ENV_LEFT + xa) / 2.0;
-    let pay = y0 + (ytop - y0) * power_scale(0.5, x.attack_power);
-    let pdx = (xh + xc) / 2.0;
-    let pdy = ytop + (ysus - ytop) * power_scale(0.5, x.decay_power);
-    let prx = (xc + xr) / 2.0;
-    let pry = ysus + (y0 - ysus) * power_scale(0.5, x.release_power);
+    let pax = f64::midpoint(ENV_LEFT, xa);
+    let pay = (ytop - y0).mul_add(power_scale(0.5, x.attack_power), y0);
+    let pdx = f64::midpoint(xh, xc);
+    let pdy = (ysus - ytop).mul_add(power_scale(0.5, x.decay_power), ytop);
+    let prx = f64::midpoint(xc, xr);
+    let pry = (y0 - ysus).mul_add(power_scale(0.5, x.release_power), ysus);
 
     EnvGeom {
         sec_per_x,
@@ -674,7 +674,7 @@ fn GSlider(value: f64, label: String, display: String, on_change: Callback<f64>)
                 style: "width:100%; accent-color:#38bdf8;",
                 oninput: move |e: FormEvent| {
                     if let Ok(v) = e.value().parse::<u32>() {
-                        on_change.call((v as f64 / 1000.0).clamp(0.0, 1.0));
+                        on_change.call((f64::from(v) / 1000.0).clamp(0.0, 1.0));
                     }
                 },
             }
@@ -687,10 +687,10 @@ fn GSlider(value: f64, label: String, display: String, on_change: Callback<f64>)
 }
 
 /// Wrapper card for one control group: a header + a flex row of controls.
-fn group_card() -> &'static str {
+const fn group_card() -> &'static str {
     "display:flex; flex-direction:column; gap:6px; background:#18181b; border:1px solid #27272a; border-radius:6px; padding:8px 10px;"
 }
-fn group_hdr() -> &'static str {
+const fn group_hdr() -> &'static str {
     "font-size:10px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;"
 }
 
@@ -721,7 +721,7 @@ fn GlobalControlsPanel() -> Element {
     // Push the whole struct to the engine. Cloned client per call (like the
     // volume slider), so this stays a plain `Callback<SynthGlobals>`.
     let push = use_callback({
-        let rig = rig.clone();
+        let rig = rig;
         move |g: SynthGlobals| {
             let rig = rig.clone();
             spawn(async move {
@@ -767,9 +767,9 @@ fn GlobalControlsPanel() -> Element {
                 div { style: group_card(),
                     span { style: group_hdr(), "Vibrato" }
                     div { style: "display:flex; gap:10px;",
-                        GSlider { value: g.vibrato_rate as f64, label: "Rate".to_string(), display: uni_pct(g.vibrato_rate),
+                        GSlider { value: f64::from(g.vibrato_rate), label: "Rate".to_string(), display: uni_pct(g.vibrato_rate),
                             on_change: move |v: f64| set!(vibrato_rate, v as f32) }
-                        GSlider { value: g.vibrato_depth as f64, label: "Depth".to_string(), display: uni_pct(g.vibrato_depth),
+                        GSlider { value: f64::from(g.vibrato_depth), label: "Depth".to_string(), display: uni_pct(g.vibrato_depth),
                             on_change: move |v: f64| set!(vibrato_depth, v as f32) }
                     }
                 }
@@ -778,11 +778,11 @@ fn GlobalControlsPanel() -> Element {
                 div { style: group_card(),
                     span { style: group_hdr(), "Filter" }
                     div { style: "display:flex; gap:6px;",
-                        MiniKnob { value: g.filter_cutoff as f64, label: "Cutoff".to_string(), display: bip_disp(g.filter_cutoff), color: "#38bdf8".to_string(),
+                        MiniKnob { value: f64::from(g.filter_cutoff), label: "Cutoff".to_string(), display: bip_disp(g.filter_cutoff), color: "#38bdf8".to_string(),
                             on_change: move |v: f64| set!(filter_cutoff, v as f32) }
-                        MiniKnob { value: g.filter_reso as f64, label: "Reso".to_string(), display: bip_disp(g.filter_reso), color: "#38bdf8".to_string(),
+                        MiniKnob { value: f64::from(g.filter_reso), label: "Reso".to_string(), display: bip_disp(g.filter_reso), color: "#38bdf8".to_string(),
                             on_change: move |v: f64| set!(filter_reso, v as f32) }
-                        MiniKnob { value: g.filter_env as f64, label: "Env".to_string(), display: bip_disp(g.filter_env), color: "#38bdf8".to_string(),
+                        MiniKnob { value: f64::from(g.filter_env), label: "Env".to_string(), display: bip_disp(g.filter_env), color: "#38bdf8".to_string(),
                             on_change: move |v: f64| set!(filter_env, v as f32) }
                     }
                 }
@@ -791,9 +791,9 @@ fn GlobalControlsPanel() -> Element {
                 div { style: group_card(),
                     span { style: group_hdr(), "Unison" }
                     div { style: "display:flex; gap:10px;",
-                        GSlider { value: g.unison_detune as f64, label: "Detune".to_string(), display: uni_pct(g.unison_detune),
+                        GSlider { value: f64::from(g.unison_detune), label: "Detune".to_string(), display: uni_pct(g.unison_detune),
                             on_change: move |v: f64| set!(unison_detune, v as f32) }
-                        GSlider { value: g.unison_amount as f64, label: "Amount".to_string(), display: uni_pct(g.unison_amount),
+                        GSlider { value: f64::from(g.unison_amount), label: "Amount".to_string(), display: uni_pct(g.unison_amount),
                             on_change: move |v: f64| set!(unison_amount, v as f32) }
                     }
                 }
@@ -802,15 +802,15 @@ fn GlobalControlsPanel() -> Element {
                 div { style: group_card(),
                     span { style: group_hdr(), "Amp Env" }
                     div { style: "display:flex; gap:8px;",
-                        GSlider { value: g.amp_attack as f64, label: "Attack".to_string(), display: bip_disp(g.amp_attack),
+                        GSlider { value: f64::from(g.amp_attack), label: "Attack".to_string(), display: bip_disp(g.amp_attack),
                             on_change: move |v: f64| set!(amp_attack, v as f32) }
-                        GSlider { value: g.amp_decay as f64, label: "Decay".to_string(), display: bip_disp(g.amp_decay),
+                        GSlider { value: f64::from(g.amp_decay), label: "Decay".to_string(), display: bip_disp(g.amp_decay),
                             on_change: move |v: f64| set!(amp_decay, v as f32) }
-                        GSlider { value: g.amp_sustain as f64, label: "Sustain".to_string(), display: bip_disp(g.amp_sustain),
+                        GSlider { value: f64::from(g.amp_sustain), label: "Sustain".to_string(), display: bip_disp(g.amp_sustain),
                             on_change: move |v: f64| set!(amp_sustain, v as f32) }
-                        GSlider { value: g.amp_release as f64, label: "Release".to_string(), display: bip_disp(g.amp_release),
+                        GSlider { value: f64::from(g.amp_release), label: "Release".to_string(), display: bip_disp(g.amp_release),
                             on_change: move |v: f64| set!(amp_release, v as f32) }
-                        GSlider { value: g.amp_velocity as f64, label: "Velocity".to_string(), display: bip_disp(g.amp_velocity),
+                        GSlider { value: f64::from(g.amp_velocity), label: "Velocity".to_string(), display: bip_disp(g.amp_velocity),
                             on_change: move |v: f64| set!(amp_velocity, v as f32) }
                     }
                 }
@@ -819,15 +819,15 @@ fn GlobalControlsPanel() -> Element {
                 div { style: group_card(),
                     span { style: group_hdr(), "Filter Env" }
                     div { style: "display:flex; gap:8px;",
-                        GSlider { value: g.filt_attack as f64, label: "Attack".to_string(), display: bip_disp(g.filt_attack),
+                        GSlider { value: f64::from(g.filt_attack), label: "Attack".to_string(), display: bip_disp(g.filt_attack),
                             on_change: move |v: f64| set!(filt_attack, v as f32) }
-                        GSlider { value: g.filt_decay as f64, label: "Decay".to_string(), display: bip_disp(g.filt_decay),
+                        GSlider { value: f64::from(g.filt_decay), label: "Decay".to_string(), display: bip_disp(g.filt_decay),
                             on_change: move |v: f64| set!(filt_decay, v as f32) }
-                        GSlider { value: g.filt_sustain as f64, label: "Sustain".to_string(), display: bip_disp(g.filt_sustain),
+                        GSlider { value: f64::from(g.filt_sustain), label: "Sustain".to_string(), display: bip_disp(g.filt_sustain),
                             on_change: move |v: f64| set!(filt_sustain, v as f32) }
-                        GSlider { value: g.filt_release as f64, label: "Release".to_string(), display: bip_disp(g.filt_release),
+                        GSlider { value: f64::from(g.filt_release), label: "Release".to_string(), display: bip_disp(g.filt_release),
                             on_change: move |v: f64| set!(filt_release, v as f32) }
-                        GSlider { value: g.filt_velocity as f64, label: "Velocity".to_string(), display: bip_disp(g.filt_velocity),
+                        GSlider { value: f64::from(g.filt_velocity), label: "Velocity".to_string(), display: bip_disp(g.filt_velocity),
                             on_change: move |v: f64| set!(filt_velocity, v as f32) }
                     }
                 }
@@ -836,9 +836,9 @@ fn GlobalControlsPanel() -> Element {
                 div { style: group_card(),
                     span { style: group_hdr(), "Ambience" }
                     div { style: "display:flex; gap:10px;",
-                        GSlider { value: g.ambience_amount as f64, label: "Amount".to_string(), display: uni_pct(g.ambience_amount),
+                        GSlider { value: f64::from(g.ambience_amount), label: "Amount".to_string(), display: uni_pct(g.ambience_amount),
                             on_change: move |v: f64| set!(ambience_amount, v as f32) }
-                        GSlider { value: g.ambience_length as f64, label: "Length".to_string(), display: bip_disp(g.ambience_length),
+                        GSlider { value: f64::from(g.ambience_length), label: "Length".to_string(), display: bip_disp(g.ambience_length),
                             on_change: move |v: f64| set!(ambience_length, v as f32) }
                     }
                 }
@@ -847,11 +847,11 @@ fn GlobalControlsPanel() -> Element {
                 div { style: group_card(),
                     span { style: group_hdr(), "Tone" }
                     div { style: "display:flex; gap:8px;",
-                        GSlider { value: g.tone_low as f64, label: "Low".to_string(), display: bip_disp(g.tone_low),
+                        GSlider { value: f64::from(g.tone_low), label: "Low".to_string(), display: bip_disp(g.tone_low),
                             on_change: move |v: f64| set!(tone_low, v as f32) }
-                        GSlider { value: g.tone_mid as f64, label: "Mid".to_string(), display: bip_disp(g.tone_mid),
+                        GSlider { value: f64::from(g.tone_mid), label: "Mid".to_string(), display: bip_disp(g.tone_mid),
                             on_change: move |v: f64| set!(tone_mid, v as f32) }
-                        GSlider { value: g.tone_high as f64, label: "High".to_string(), display: bip_disp(g.tone_high),
+                        GSlider { value: f64::from(g.tone_high), label: "High".to_string(), display: bip_disp(g.tone_high),
                             on_change: move |v: f64| set!(tone_high, v as f32) }
                     }
                 }
@@ -871,7 +871,7 @@ fn GlobalControlsPanel() -> Element {
                             }
                             span { style: "font-size:9px; color:#71717a; text-transform:uppercase; letter-spacing:0.04em;", "On/Off" }
                         }
-                        GSlider { value: g.limiter as f64, label: "Limiter".to_string(), display: uni_pct(g.limiter),
+                        GSlider { value: f64::from(g.limiter), label: "Limiter".to_string(), display: uni_pct(g.limiter),
                             on_change: move |v: f64| set!(limiter, v as f32) }
                     }
                 }
@@ -891,7 +891,7 @@ fn LayerEditView() -> Element {
     // via the resource's own reactivity is not wired — a manual reload button
     // could call this again later).
     let layers_res = {
-        let rig = rig.clone();
+        let rig = rig;
         use_resource(move || {
             let rig = rig.clone();
             async move {
@@ -989,23 +989,23 @@ fn LayerEditView() -> Element {
 
     let filt_stroke = filter_path(&filter);
     let filt_fill = format!("{filt_stroke} L{FILT_W:.1} {FILT_H:.1} L0 {FILT_H:.1} Z");
-    let cut_x = freq_to_x(filter.cutoff_hz as f64);
+    let cut_x = freq_to_x(f64::from(filter.cutoff_hz));
     let cut_db = filter_mag_db(
         &filter.mode,
-        filter.cutoff_hz as f64,
-        filter.resonance as f64,
+        f64::from(filter.cutoff_hz),
+        f64::from(filter.resonance),
         filter.poles,
-        filter.cutoff_hz as f64,
+        f64::from(filter.cutoff_hz),
     );
     let cut_y = db_to_y(cut_db);
     // Modulated-cutoff ghost: where the filter envelope pushes the cutoff
     // (env_depth as octaves of upward sweep) — Vital's "you can see the mod".
-    let mod_cut = (filter.cutoff_hz as f64) * 2f64.powf((filter.env_depth as f64) * 4.0);
+    let mod_cut = f64::from(filter.cutoff_hz) * (f64::from(filter.env_depth) * 4.0).exp2();
     let mod_x = freq_to_x(mod_cut.clamp(FMIN, FMAX));
     let has_mod = filter.env_depth.abs() > 0.001;
 
     // Cutoff-knob normalized position (log).
-    let cut_norm = ((filter.cutoff_hz as f64).max(FMIN).log10() - FMIN.log10())
+    let cut_norm = (f64::from(filter.cutoff_hz).max(FMIN).log10() - FMIN.log10())
         / (FMAX.log10() - FMIN.log10());
 
     rsx! {
@@ -1037,7 +1037,7 @@ fn LayerEditView() -> Element {
                 }
                 div { style: "flex:1;" }
                 {
-                    let level = layer.level as f64;
+                    let level = f64::from(layer.level);
                     rsx! { MiniKnob {
                         value: level,
                         label: "level".to_string(),
@@ -1115,15 +1115,15 @@ fn LayerEditView() -> Element {
                         MiniKnob {
                             value: cut_norm,
                             label: "cutoff".to_string(),
-                            display: format!("{} Hz", fmt_hz(filter.cutoff_hz as f64)),
+                            display: format!("{} Hz", fmt_hz(f64::from(filter.cutoff_hz))),
                             color: "#38bdf8".to_string(),
                             on_change: move |v: f64| {
-                                let f = 10f64.powf(FMIN.log10() + v * (FMAX.log10() - FMIN.log10()));
+                                let f = 10f64.powf(v.mul_add(FMAX.log10() - FMIN.log10(), FMIN.log10()));
                                 edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { if let Some(fl) = l.filters.first_mut() { fl.cutoff_hz = f as f32; } } });
                             },
                         }
                         MiniKnob {
-                            value: filter.resonance as f64,
+                            value: f64::from(filter.resonance),
                             label: "res".to_string(),
                             display: format!("{}%", (filter.resonance * 100.0) as i32),
                             color: "#38bdf8".to_string(),
@@ -1194,7 +1194,7 @@ fn LayerEditView() -> Element {
                     let y0 = ENV_TOP + usable;
                     let level = (1.0 - ((vb_y - ENV_TOP) / usable)).clamp(0.0, 1.0) as f32;
                     // Current sustain Y for whichever env is being power-dragged.
-                    let sus_y = |sus: f32| ENV_TOP + (1.0 - sus.clamp(0.0, 1.0) as f64) * usable;
+                    let sus_y = |sus: f32| (1.0 - f64::from(sus.clamp(0.0, 1.0))).mul_add(usable, ENV_TOP);
                     // Fraction of a segment (start→end) that vb_y sits at.
                     let frac = |start: f64, end: f64| (vb_y - start) / (end - start);
                     match d.handle {
@@ -1208,18 +1208,18 @@ fn LayerEditView() -> Element {
                         Handle::AmpAttack => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.amp_env.attack = secs; }}); }
                         Handle::AmpCorner => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.amp_env.decay = secs; l.amp_env.sustain = level; }}); }
                         Handle::AmpRelease => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.amp_env.release = secs; }}); }
-                        Handle::AmpHold => { extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.amp.hold = secs as f64; }}); }
+                        Handle::AmpHold => { extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.amp.hold = f64::from(secs); }}); }
                         Handle::AmpAttackPow => {
                             let p = power_from_fraction(frac(y0, ytop));
                             extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.amp.attack_power = p; }});
                         }
                         Handle::AmpDecayPow => {
-                            let ys = sus_y(edit.peek().get(li).map(|l| l.amp_env.sustain).unwrap_or(0.0));
+                            let ys = sus_y(edit.peek().get(li).map_or(0.0, |l| l.amp_env.sustain));
                             let p = power_from_fraction(frac(ytop, ys));
                             extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.amp.decay_power = p; }});
                         }
                         Handle::AmpReleasePow => {
-                            let ys = sus_y(edit.peek().get(li).map(|l| l.amp_env.sustain).unwrap_or(0.0));
+                            let ys = sus_y(edit.peek().get(li).map_or(0.0, |l| l.amp_env.sustain));
                             let p = power_from_fraction(frac(ys, y0));
                             extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.amp.release_power = p; }});
                         }
@@ -1227,18 +1227,18 @@ fn LayerEditView() -> Element {
                         Handle::FiltAttack => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.filter_env.attack = secs; }}); }
                         Handle::FiltCorner => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.filter_env.decay = secs; l.filter_env.sustain = level; }}); }
                         Handle::FiltRelease => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.filter_env.release = secs; }}); }
-                        Handle::FiltHold => { extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.filter.hold = secs as f64; }}); }
+                        Handle::FiltHold => { extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.filter.hold = f64::from(secs); }}); }
                         Handle::FiltAttackPow => {
                             let p = power_from_fraction(frac(y0, ytop));
                             extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.filter.attack_power = p; }});
                         }
                         Handle::FiltDecayPow => {
-                            let ys = sus_y(edit.peek().get(li).map(|l| l.filter_env.sustain).unwrap_or(0.0));
+                            let ys = sus_y(edit.peek().get(li).map_or(0.0, |l| l.filter_env.sustain));
                             let p = power_from_fraction(frac(ytop, ys));
                             extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.filter.decay_power = p; }});
                         }
                         Handle::FiltReleasePow => {
-                            let ys = sus_y(edit.peek().get(li).map(|l| l.filter_env.sustain).unwrap_or(0.0));
+                            let ys = sus_y(edit.peek().get(li).map_or(0.0, |l| l.filter_env.sustain));
                             let p = power_from_fraction(frac(ys, y0));
                             extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.filter.release_power = p; }});
                         }
@@ -1351,10 +1351,10 @@ fn EnvBlock(title: String, color: String) -> Element {
 
     // Snapshots for the readouts / knob positions.
     let (ea, ed, es, er) = (
-        env.attack as f64,
-        env.decay as f64,
-        env.sustain as f64,
-        env.release as f64,
+        f64::from(env.attack),
+        f64::from(env.decay),
+        f64::from(env.sustain),
+        f64::from(env.release),
     );
     let (eh, pap, pdp, prp) = (
         extra.hold,
@@ -1553,7 +1553,7 @@ fn note_name(n: u8) -> String {
     const NAMES: [&str; 12] = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
     ];
-    let oct = n as i32 / 12 - 1;
+    let oct = i32::from(n) / 12 - 1;
     format!("{}{}", NAMES[(n % 12) as usize], oct)
 }
 
@@ -1574,7 +1574,7 @@ fn color_key(z: &SynthZone) -> String {
 fn color_for(key: &str) -> String {
     let mut h: u32 = 2166136261;
     for b in key.bytes() {
-        h = (h ^ b as u32).wrapping_mul(16777619);
+        h = (h ^ u32::from(b)).wrapping_mul(16777619);
     }
     format!("hsl({}, 58%, 52%)", h % 360)
 }
@@ -1614,7 +1614,7 @@ fn MappingView() -> Element {
 
     // Keymap for the selected soundsource (empty ⇒ first of the loaded preset).
     let mapping = {
-        let rig = rig.clone();
+        let rig = rig;
         use_resource(move || {
             let sel = selected_src();
             let rig = rig.clone();
@@ -1634,7 +1634,7 @@ fn MappingView() -> Element {
     let effective_src = if sel_src.is_empty() {
         src_list.first().cloned().unwrap_or_default()
     } else {
-        sel_src.clone()
+        sel_src
     };
 
     let header_name = if m.name.is_empty() {
@@ -1658,19 +1658,19 @@ fn MappingView() -> Element {
             .push(i);
     }
     let mut rects: Vec<RectDraw> = Vec::new();
-    for ((kmin, kmax, vmin, vmax), idxs) in windows.iter() {
+    for ((kmin, kmax, vmin, vmax), idxs) in &windows {
         let mut idxs = idxs.clone();
         idxs.sort_by_key(|&i| zones[i].rr_index);
         let n = idxs.len().max(1);
-        let base_x = *kmin as f64 / 128.0 * GRID_W;
-        let base_w = (*kmax as f64 - *kmin as f64 + 1.0) / 128.0 * GRID_W;
-        let y = (127.0 - *vmax as f64) / 128.0 * GRID_H;
-        let h = ((*vmax as f64 - *vmin as f64 + 1.0) / 128.0 * GRID_H).max(2.0);
+        let base_x = f64::from(*kmin) / 128.0 * GRID_W;
+        let base_w = (f64::from(*kmax) - f64::from(*kmin) + 1.0) / 128.0 * GRID_W;
+        let y = (127.0 - f64::from(*vmax)) / 128.0 * GRID_H;
+        let h = ((f64::from(*vmax) - f64::from(*vmin) + 1.0) / 128.0 * GRID_H).max(2.0);
         let stripe_w = base_w / n as f64;
         for (slot, &zi) in idxs.iter().enumerate() {
             let z = &zones[zi];
             rects.push(RectDraw {
-                x: base_x + slot as f64 * stripe_w,
+                x: (slot as f64).mul_add(stripe_w, base_x),
                 y,
                 w: (stripe_w - if n > 1 { 1.0 } else { 0.0 }).max(0.5),
                 h,
@@ -1684,7 +1684,7 @@ fn MappingView() -> Element {
     // Keys with (matching) zones tint the piano; the selected zone lights up.
     let mapped_keys: Vec<u8> = {
         let mut hs = std::collections::BTreeSet::<u8>::new();
-        for z in zones.iter() {
+        for z in &zones {
             if filter_matches(&fv, z) {
                 for k in z.key_min..=z.key_max {
                     hs.insert(k);
@@ -1836,7 +1836,7 @@ fn MappingView() -> Element {
                         // velocity rows
                         for v in [0u8, 32, 64, 96, 127] {
                             {
-                                let y = (127.0 - v as f64) / 128.0 * GRID_H;
+                                let y = (127.0 - f64::from(v)) / 128.0 * GRID_H;
                                 rsx!{ line { key: "v{v}", x1: "0", y1: "{y:.1}", x2: "1280", y2: "{y:.1}", stroke: "#18181b", stroke_width: "0.5" } }
                             }
                         }
@@ -1844,7 +1844,7 @@ fn MappingView() -> Element {
                         for oct in 0u8..11 {
                             {
                                 let k = oct * 12;
-                                let x = k as f64 / 128.0 * GRID_W;
+                                let x = f64::from(k) / 128.0 * GRID_W;
                                 rsx!{ line { key: "k{k}", x1: "{x:.1}", y1: "0", x2: "{x:.1}", y2: "480", stroke: "#27272a", stroke_width: "0.6" } }
                             }
                         }
@@ -1968,7 +1968,7 @@ fn item_tagset(item: &BrowseItem) -> TagSet {
 }
 
 /// Human label for a tag category (Browse facet headers + detail chips).
-fn browse_cat_label(cat: TagCategory) -> &'static str {
+const fn browse_cat_label(cat: TagCategory) -> &'static str {
     match cat {
         TagCategory::Instrument => "Instrument",
         TagCategory::Tone => "Tone",
@@ -2039,7 +2039,7 @@ fn BrowserView() -> Element {
 
     // Fetch every pack once (metadata only; the payload is small).
     let items_res = {
-        let rig = rig.clone();
+        let rig = rig;
         use_resource(move || {
             let rig = rig.clone();
             async move {

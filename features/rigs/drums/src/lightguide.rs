@@ -103,7 +103,7 @@ impl DrumLightGuide {
     pub fn tick(&mut self) {
         let now = Instant::now();
         let mut changed = false;
-        for f in self.flash_until.iter_mut() {
+        for f in &mut self.flash_until {
             if f.map(|t| now >= t).unwrap_or(false) {
                 *f = None;
                 changed = true;

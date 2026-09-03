@@ -62,7 +62,7 @@ fn noise(n: usize) -> Vec<f64> {
     (0..n)
         .map(|_| {
             s = s.wrapping_mul(1664525).wrapping_add(1013904223);
-            ((s >> 8) as f64 / 8_388_608.0) - 1.0
+            (f64::from(s >> 8) / 8_388_608.0) - 1.0
         })
         .collect()
 }
@@ -100,8 +100,8 @@ pub fn probe(path: &Path) -> Result<NamProbe, String> {
     }
     // Knee: how far the curve departs from a straight line. A linear model
     // gains the same dB per step; a saturating one compresses the top.
-    let low_slope = (io[3] - io[0]) as f64 / (IO_STEPS[3] - IO_STEPS[0]);
-    let high_slope = (io[7] - io[4]) as f64 / (IO_STEPS[7] - IO_STEPS[4]);
+    let low_slope = f64::from(io[3] - io[0]) / (IO_STEPS[3] - IO_STEPS[0]);
+    let high_slope = f64::from(io[7] - io[4]) / (IO_STEPS[7] - IO_STEPS[4]);
     let knee = ((low_slope - high_slope).max(0.0) as f32).clamp(0.0, 1.0);
     tracing::debug!(?io, low_slope, high_slope, knee, "nam probe");
 
@@ -132,12 +132,12 @@ fn band_response(out: &[f64], inp: &[f64]) -> [f32; EQ_BANDS] {
             ir += inp[k] * c;
             ii += inp[k] * s;
         }
-        let om = (or * or + oi * oi).sqrt().max(1e-12);
-        let im = (ir * ir + ii * ii).sqrt().max(1e-12);
+        let om = or.hypot(oi).max(1e-12);
+        let im = ir.hypot(ii).max(1e-12);
         *band = (20.0 * (om / im).log10()) as f32;
     }
     let mean = bands.iter().sum::<f32>() / EQ_BANDS as f32;
-    for b in bands.iter_mut() {
+    for b in &mut bands {
         *b = ((*b - mean) / 12.0).clamp(-2.0, 2.0); // ±24 dB → ±2
     }
     bands
@@ -146,6 +146,7 @@ fn band_response(out: &[f64], inp: &[f64]) -> [f32; EQ_BANDS] {
 impl NamProbe {
     /// The similarity vector. Voicing dominates (it is what "sounds like"
     /// means); the IO curve and knee carry gain character.
+    #[must_use] 
     pub fn features(&self) -> Vec<f32> {
         let mut v = Vec::with_capacity(DIM);
         v.extend_from_slice(&self.eq);
@@ -166,9 +167,9 @@ pub fn build(root: &Path) -> Result<(PathBuf, usize, usize), String> {
     let mut models: Vec<PathBuf> = walkdir::WalkDir::new(root)
         .max_depth(6)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| e.file_type().is_file())
-        .map(|e| e.into_path())
+        .map(walkdir::DirEntry::into_path)
         .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("nam"))
         .collect();
     models.sort();
@@ -231,6 +232,7 @@ pub fn build(root: &Path) -> Result<(PathBuf, usize, usize), String> {
 
 /// Coarse archetype from the measured behaviour — the Rig-Scope idea:
 /// derived from analysis, never asserted by the filename.
+#[must_use] 
 pub fn archetype(p: &NamProbe) -> &'static str {
     let bright = p.eq[EQ_BANDS - 6..].iter().sum::<f32>() / 6.0;
     let dark = p.eq[..6].iter().sum::<f32>() / 6.0;
@@ -330,7 +332,7 @@ pub fn partner_for(
             let sweet = 1.0 - (voice_d - 0.35).abs() / 0.35; // peak at ~0.35
             (
                 space.items[i].path.clone(),
-                sweet.clamp(0.0, 1.0) - gain_d * 0.1,
+                gain_d.mul_add(-0.1, sweet.clamp(0.0, 1.0)),
             )
         })
         .collect();

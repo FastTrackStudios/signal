@@ -40,6 +40,7 @@ pub enum AttachTrigger {
 }
 
 impl AttachTrigger {
+    #[must_use] 
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::RigOpen => "rig_open",
@@ -59,17 +60,14 @@ fn bump(rig: &'static str) -> (u64, Option<u128>) {
     };
     let map = guard.get_or_insert_with(HashMap::new);
     let now = Instant::now();
-    match map.get_mut(rig) {
-        Some((seq, last)) => {
-            *seq += 1;
-            let since = now.duration_since(*last).as_millis();
-            *last = now;
-            (*seq, Some(since))
-        }
-        None => {
-            map.insert(rig, (1, now));
-            (1, None)
-        }
+    if let Some((seq, last)) = map.get_mut(rig) {
+        *seq += 1;
+        let since = now.duration_since(*last).as_millis();
+        *last = now;
+        (*seq, Some(since))
+    } else {
+        map.insert(rig, (1, now));
+        (1, None)
     }
 }
 

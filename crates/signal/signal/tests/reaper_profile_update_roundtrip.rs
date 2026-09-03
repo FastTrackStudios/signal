@@ -11,7 +11,7 @@
 //! responsibility). We verify our save infrastructure writes correct files.
 //!
 //! Run with:
-//!   cargo xtask reaper-test profile_update_roundtrip
+//!   cargo xtask reaper-test `profile_update_roundtrip`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
@@ -67,7 +67,7 @@ async fn profile_update_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()> {
     }
 
     let fx_count = track.fx_chain().count().await?;
-    ctx.log(&format!("Built layer with {} FX", fx_count));
+    ctx.log(&format!("Built layer with {fx_count} FX"));
     assert!(fx_count > 0, "layer should have FX");
 
     // ── Step 2: Capture and save as "Default" variation ──
@@ -233,7 +233,7 @@ fn extract_fxchain(chunk: &str) -> Option<&str> {
         } else if ch == '>' {
             depth -= 1;
             if depth == 0 {
-                return Some(&chunk[start..start + i + 1]);
+                return Some(&chunk[start..=(start + i)]);
             }
         }
     }

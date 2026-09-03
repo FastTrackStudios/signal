@@ -3,10 +3,10 @@
 //! Tests the full hierarchy:
 //!   blocks → modules → layers → engines → rigs
 //!
-//! Uses an in-memory SQLite database seeded with `runtime_seed_bundle()` — no
+//! Uses an in-memory `SQLite` database seeded with `runtime_seed_bundle()` — no
 //! REAPER connection required. Run with:
 //!
-//!   cargo test -p signal --test signal_domain -- --nocapture
+//!   cargo test -p signal --test `signal_domain` -- --nocapture
 
 mod fixtures;
 
@@ -156,12 +156,10 @@ async fn load_jm_amp_lead_snapshot() {
         .value()
         .get();
 
-    println!("jm-amp gain: lead={:.2} clean={:.2}", lead_gain, clean_gain);
+    println!("jm-amp gain: lead={lead_gain:.2} clean={clean_gain:.2}");
     assert!(
         lead_gain > clean_gain,
-        "lead gain ({:.2}) should exceed clean gain ({:.2})",
-        lead_gain,
-        clean_gain
+        "lead gain ({lead_gain:.2}) should exceed clean gain ({clean_gain:.2})"
     );
 }
 
@@ -218,8 +216,7 @@ async fn mutate_and_persist_jm_boost_snapshot() {
         .get();
 
     println!(
-        "jm-justa-boost level: original={:.2} → mutated={:.2} → reloaded={:.2}",
-        original_level, new_level, reloaded_level
+        "jm-justa-boost level: original={original_level:.2} → mutated={new_level:.2} → reloaded={reloaded_level:.2}"
     );
     assert!(
         (reloaded_level - new_level).abs() < 0.001,
@@ -328,8 +325,7 @@ async fn jm_pedals_lead_variant_uses_edge_snapshot() {
             println!("✓ Lead variant correctly selects jm-justa-boost-edge");
         }
         other => panic!(
-            "expected PresetSnapshot source for lead boost, got {:?}",
-            other
+            "expected PresetSnapshot source for lead boost, got {other:?}"
         ),
     }
 }
@@ -444,7 +440,7 @@ async fn jm_layer_lead_variant_selects_crunch_amp() {
         .as_ref()
         .expect("amp module ref in lead variant should have explicit variant_id");
 
-    println!("Lead variant amp module → variant: {}", amp_variant_id);
+    println!("Lead variant amp module → variant: {amp_variant_id}");
     assert_eq!(
         amp_variant_id.to_string(),
         seed_id("jm-amp-module-crunch").to_string(),
@@ -465,7 +461,7 @@ async fn save_and_reload_jm_layer() {
         .expect("layer not found");
 
     let original_name = layer.name.clone();
-    layer.name = format!("{} (modified)", original_name);
+    layer.name = format!("{original_name} (modified)");
 
     signal.layers().save(layer).await.unwrap();
 
@@ -477,7 +473,7 @@ async fn save_and_reload_jm_layer() {
         .expect("layer not found after save");
 
     println!("Layer name: '{}' → '{}'", original_name, reloaded.name);
-    assert_eq!(reloaded.name, format!("{} (modified)", original_name));
+    assert_eq!(reloaded.name, format!("{original_name} (modified)"));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -504,7 +500,7 @@ async fn guitar_engine_has_jm_layer() {
     );
 
     for lid in &engine.layer_ids {
-        println!("  layer_id: {}", lid);
+        println!("  layer_id: {lid}");
     }
 
     let has_jm_layer = engine
@@ -544,7 +540,7 @@ async fn guitar_engine_default_scene_loads() {
 //  Rig-level tests
 // ─────────────────────────────────────────────────────────────
 
-/// Verify the guitar MegaRig is seeded with multiple scenes.
+/// Verify the guitar `MegaRig` is seeded with multiple scenes.
 #[tokio::test]
 async fn guitar_megarig_is_seeded() {
     let signal = controller().await;
@@ -567,7 +563,7 @@ async fn guitar_megarig_is_seeded() {
     );
 }
 
-/// Load the guitar MegaRig lead scene and verify it has engine selections and overrides.
+/// Load the guitar `MegaRig` lead scene and verify it has engine selections and overrides.
 #[tokio::test]
 async fn guitar_megarig_lead_scene_has_overrides() {
     let signal = controller().await;
@@ -596,7 +592,7 @@ async fn guitar_megarig_lead_scene_has_overrides() {
     );
 }
 
-/// Add a custom scene to the guitar MegaRig with a parameter override, save, reload, verify.
+/// Add a custom scene to the guitar `MegaRig` with a parameter override, save, reload, verify.
 #[tokio::test]
 async fn save_rig_with_custom_scene_and_override() {
     let signal = controller().await;

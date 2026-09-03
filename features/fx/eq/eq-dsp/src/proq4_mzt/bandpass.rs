@@ -4,11 +4,12 @@ use std::f64::consts::PI;
 
 use crate::biquad::Coeffs;
 
-/// Bandpass via MZT — from bp_notch_exact.md RE.
+/// Bandpass via MZT — from `bp_notch_exact.md` RE.
 ///
 /// p2 = 0, p3 = (3/4)·sp6, sp5 = sp6 = √2·t/Q
 /// Gives b0 = (7√2/4)·t/Q/D, b1 = -(6/7)·b0, b2 = -(1/7)·b0.
 /// ~0.7% error from actual p3/sp6 ratio (0.74863 vs 3/4).
+#[must_use]
 pub fn design_bandpass_mzt(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     // Pro-Q 4 Bandpass (filter_type=6) — non-standard form with TWO zeros:
     // - one at z=+1 (DC suppression)
@@ -43,12 +44,11 @@ pub fn design_bandpass_mzt(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     let t6 = t4 * t2;
     let t8 = t4 * t4;
     let t10 = t8 * t2;
-    let z_extra = -1.4353418643331e-01
-        + -5.1681616455089e-02 * t2
-        + 3.5155728635281e-02 * t4
-        + -1.7769301791135e-02 * t6
-        + 7.1849909782389e-03 * t8
-        + -1.3739788582112e-03 * t10;
+    let z_extra = (-1.373_978_858_211_2e-03_f64).mul_add(t2, 7.184_990_978_238_9e-03)
+        .mul_add(t2, -1.776_930_179_113_5e-02)
+        .mul_add(t2, 3.515_572_863_528_1e-02)
+        .mul_add(t2, -5.168_161_645_508_9e-02)
+        .mul_add(t2, -1.435_341_864_333_1e-01);
     // Numerator polynomial: (z-1)(z-z_extra) = z² - (1+z_extra)·z + z_extra
     // Or in z⁻¹ form: 1 - (1+z_extra)·z⁻¹ + z_extra·z⁻²
     // Wait — that has zeros at z=1 and z=z_extra. Coefficients (b0, b1, b2)
@@ -62,11 +62,11 @@ pub fn design_bandpass_mzt(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     let sw = w0.sin();
     // Compute |num(e^{-jw0})| and |den(e^{-jw0})|
     let num_re = b0_raw + b1_raw * cw + b2_raw * (cw * cw - sw * sw);
-    let num_im = -b1_raw * sw - b2_raw * 2.0 * cw * sw;
+    let num_im = (-b1_raw).mul_add(sw, -(b2_raw * 2.0 * cw * sw));
     let den_re = 1.0 + a1 * cw + a2 * (cw * cw - sw * sw);
-    let den_im = -a1 * sw - a2 * 2.0 * cw * sw;
-    let num_mag = (num_re * num_re + num_im * num_im).sqrt();
-    let den_mag = (den_re * den_re + den_im * den_im).sqrt();
+    let den_im = (-a1).mul_add(sw, -(a2 * 2.0 * cw * sw));
+    let num_mag = num_re.hypot(num_im);
+    let den_mag = den_re.hypot(den_im);
     let scale = if num_mag > 1e-30 {
         den_mag / num_mag
     } else {

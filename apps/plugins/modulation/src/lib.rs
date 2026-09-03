@@ -149,7 +149,7 @@ impl Plugin for FtsModulation {
         buffer_config: &BufferConfig,
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
         self.max_buffer_size = buffer_config.max_buffer_size as usize;
         let config = AudioConfig {
             sample_rate: self.sample_rate,
@@ -200,8 +200,8 @@ impl Plugin for FtsModulation {
                 for i in 0..len {
                     let (l, r) = (channels[0][offset + i], channels[1][offset + i]);
                     input_peak = input_peak.max(l.abs().max(r.abs()));
-                    left[i] = l as f64;
-                    right[i] = r as f64;
+                    left[i] = f64::from(l);
+                    right[i] = f64::from(r);
                 }
             }
 

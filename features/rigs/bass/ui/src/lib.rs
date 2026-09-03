@@ -57,7 +57,7 @@ fn use_bass_state() -> (BassState, Option<BassRigClient>) {
 
     // Live updates.
     {
-        let stream = stream.clone();
+        let stream = stream;
         architect::use_stream(
             move |sink| {
                 let stream = stream.clone();

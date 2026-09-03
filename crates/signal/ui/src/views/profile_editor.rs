@@ -6,7 +6,7 @@
 use dioxus::prelude::*;
 
 /// A profile entry for the list panel.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ProfileListEntry {
     pub id: String,
     pub name: String,
@@ -15,7 +15,7 @@ pub struct ProfileListEntry {
 }
 
 /// A patch entry within a profile.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PatchEntry {
     pub id: String,
     pub name: String,
@@ -24,7 +24,7 @@ pub struct PatchEntry {
 }
 
 /// A parameter override in a patch.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct OverrideEntry {
     pub param_name: String,
     pub inherited_value: String,

@@ -1,6 +1,6 @@
 //! Profile repository — data access for Profile collections and Patch variants.
 
-use sea_orm::*;
+use sea_orm::{ConnectionTrait, Schema, ActiveModelBehavior, StatementBuilder, QueryTrait, ActiveEnum, QueryOrder, QueryFilter, EntityTrait, ColumnTrait, Iden, ColIdx, IdenStatic, ActiveModelTrait, Set, Iterable};
 use signal_proto::metadata::Metadata;
 use signal_proto::overrides::Override;
 use signal_proto::profile::{Patch, PatchId, PatchTarget, Profile, ProfileId};
@@ -33,7 +33,8 @@ pub struct ProfileRepoLive {
 }
 
 impl ProfileRepoLive {
-    pub fn new(db: DatabaseConnection) -> Self {
+    #[must_use] 
+    pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
 

@@ -3,7 +3,7 @@
 //! Implements [`SetlistService`] on [`SignalLive`], delegating persistence
 //! to the underlying [`SetlistRepo`].
 
-use super::*;
+use super::{SetlistService, SignalLive, BlockRepo, ModuleRepo, LayerRepo, EngineRepo, RigRepo, ProfileRepo, SongRepo, SetlistRepo, SceneTemplateRepo, RackRepo, Setlist, SignalServiceError, SetlistId, SetlistEntryId, SetlistEntry};
 
 impl<B, M, L, E, R, P, So, Se, St, Ra> SetlistService
     for SignalLive<B, M, L, E, R, P, So, Se, St, Ra>

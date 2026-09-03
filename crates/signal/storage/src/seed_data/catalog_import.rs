@@ -18,6 +18,7 @@ use signal_proto::{seed_id, Block, BlockParameter, BlockType, Preset, Snapshot};
 /// on disk becomes a `Snapshot` within that collection.
 ///
 /// Returns an empty `Vec` if the catalog directory doesn't exist.
+#[must_use] 
 pub fn catalog_block_collections(library_path: &Path) -> Vec<Preset> {
     let catalog_path = library_path.join("catalog.json");
     if !catalog_path.exists() {
@@ -54,9 +55,7 @@ pub fn catalog_block_collections(library_path: &Path) -> Vec<Preset> {
             .and_then(|s| serde_json::from_str(&s).ok());
 
         let plugin_name = block_meta
-            .as_ref()
-            .map(|m| m.name.clone())
-            .unwrap_or_else(|| plugin.name.clone());
+            .as_ref().map_or_else(|| plugin.name.clone(), |m| m.name.clone());
 
         // Collect all snapshot JSONs recursively
         let snapshots_dir = block_dir.join("snapshots");
@@ -124,10 +123,10 @@ pub fn catalog_block_collections(library_path: &Path) -> Vec<Preset> {
                     .as_ref()
                     .and_then(|f| std::fs::read(meta_dir.join(f)).ok())
                     .or_else(|| {
-                        if !meta.state_file.is_empty() {
-                            std::fs::read(meta_dir.join(&meta.state_file)).ok()
-                        } else {
+                        if meta.state_file.is_empty() {
                             None
+                        } else {
+                            std::fs::read(meta_dir.join(&meta.state_file)).ok()
                         }
                     });
 
@@ -181,6 +180,7 @@ pub fn catalog_block_collections(library_path: &Path) -> Vec<Preset> {
 /// the rfxchain IS the data.
 ///
 /// Returns an empty `Vec` if no rfxchain files are found.
+#[must_use] 
 pub fn rfxchain_block_collections(library_path: &Path) -> Vec<Preset> {
     let mut presets = Vec::new();
 

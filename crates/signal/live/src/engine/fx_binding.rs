@@ -1,4 +1,4 @@
-//! FxRigBinding — discover rig structure from a DAW track's FX chain.
+//! `FxRigBinding` — discover rig structure from a DAW track's FX chain.
 //!
 //! Scans an FX chain (via `DawBridge`) and maps FX plugins to module slots.
 //! This bridges the gap between "what the DAW has" and "what signal models."
@@ -60,12 +60,14 @@ impl FxRigBinding {
     }
 
     /// The track this binding is attached to.
+    #[must_use] 
     pub fn track_id(&self) -> &str {
         &self.track_id
     }
 
     /// Whether the FX chain has been scanned.
-    pub fn is_bound(&self) -> bool {
+    #[must_use] 
+    pub const fn is_bound(&self) -> bool {
         self.discovered.is_some()
     }
 
@@ -86,24 +88,27 @@ impl FxRigBinding {
     }
 
     /// Get the discovered rig structure.
-    pub fn discovered_rig(&self) -> Option<&DiscoveredRig> {
+    #[must_use] 
+    pub const fn discovered_rig(&self) -> Option<&DiscoveredRig> {
         self.discovered.as_ref()
     }
 
     /// Get FX IDs for a module type.
+    #[must_use] 
     pub fn fx_ids_for_module(&self, module_type: ModuleType) -> &[String] {
         self.fx_map
             .get(&module_type)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
+            .map_or(&[], std::vec::Vec::as_slice)
     }
 
     /// All module types that are bound.
+    #[must_use] 
     pub fn bound_module_types(&self) -> Vec<ModuleType> {
         self.fx_map.keys().copied().collect()
     }
 
     /// Number of bound modules.
+    #[must_use] 
     pub fn module_count(&self) -> usize {
         self.fx_map.len()
     }

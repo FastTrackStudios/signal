@@ -1,4 +1,4 @@
-//! Rig scene grid -- domain-aware scene grid wrapping SceneTileGrid.
+//! Rig scene grid -- domain-aware scene grid wrapping `SceneTileGrid`.
 //!
 //! Fetches rig data from the controller and maps [`RigScene`] variants
 //! to [`TileData`] for the dumb [`SceneTileGrid`] component.
@@ -29,8 +29,8 @@ pub fn RigSceneGrid(
 
     // Fetch rig when rig_id changes.
     {
-        let signal = signal.clone();
-        let rig_id = rig_id.clone();
+        let signal = signal;
+        let rig_id = rig_id;
         use_effect(move || {
             let signal = signal.clone();
             let rig_id = rig_id.clone();

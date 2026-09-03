@@ -13,6 +13,7 @@ use lumen_blocks::components::dropdown::{
 use signal_guitar_proto::{AudioDevice, AudioPrefs};
 
 /// Devices + prefs + save callback handed to the settings modal / pickers.
+///
 /// Built per-render by the hosting view from the fetched device lists and the
 /// shared prefs signal; edits round-trip through
 /// [`on_save`](AudioSettingsBridge::on_save) (persist over RPC + rig restart).
@@ -66,8 +67,7 @@ pub fn AudioSettingsModal(bridge: AudioSettingsBridge, on_close: EventHandler<()
         .inputs
         .iter()
         .find(|d| d.name == sel_input)
-        .map(|d| d.channels.max(1))
-        .unwrap_or(DEFAULT_MAX_CHANNELS);
+        .map_or(DEFAULT_MAX_CHANNELS, |d| d.channels.max(1));
 
     let inputs = bridge.inputs.clone();
     let outputs = bridge.outputs.clone();
@@ -75,9 +75,7 @@ pub fn AudioSettingsModal(bridge: AudioSettingsBridge, on_close: EventHandler<()
 
     let sample_rate_label = SAMPLE_RATES
         .iter()
-        .find(|(hz, _)| *hz == sample_rate())
-        .map(|(_, l)| l.to_string())
-        .unwrap_or_else(|| format!("{} Hz", sample_rate()));
+        .find(|(hz, _)| *hz == sample_rate()).map_or_else(|| format!("{} Hz", sample_rate()), |(_, l)| l.to_string());
 
     rsx! {
         // Backdrop

@@ -3,7 +3,7 @@
 //!
 //! `reverb-dsp` ships fifteen algorithms and their variants, which is a list of
 //! implementations, not a list of *spaces*. Nobody reaching for a reverb wants
-//! "Velvet" or "FreeVerb"; they want a hall, or a plate, or something strange.
+//! "Velvet" or "`FreeVerb`"; they want a hall, or a plate, or something strange.
 //! So the panel is organised the way the question is asked:
 //!
 //! IR · Hall · Plate · Room · Spring · Ambient · Special
@@ -287,16 +287,19 @@ pub static CATEGORIES: &[Category] = &[
 ];
 
 /// The profile an id names, if this build has it.
+#[must_use] 
 pub fn profile_by_id(id: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.id == id)
 }
 
 /// Where an id sits in [`PROFILES`].
+#[must_use] 
 pub fn profile_index(id: &str) -> Option<usize> {
     PROFILES.iter().position(|p| p.id == id)
 }
 
 /// The family a profile belongs to, and its position inside it.
+#[must_use] 
 pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
     CATEGORIES.iter().enumerate().find_map(|(ci, category)| {
         category
@@ -312,8 +315,9 @@ pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
 /// Clicking the family you are already in advances to the next profile inside
 /// it and wraps; clicking any other family lands on its first. Same idiom as
 /// the compressor's rail, so the two plugins are the same instrument.
+#[must_use] 
 pub fn rail_click_target(current_index: usize, clicked_category: usize) -> usize {
-    let current_id = PROFILES.get(current_index).map(|p| p.id).unwrap_or("");
+    let current_id = PROFILES.get(current_index).map_or("", |p| p.id);
     let Some(category) = CATEGORIES.get(clicked_category) else {
         return current_index;
     };

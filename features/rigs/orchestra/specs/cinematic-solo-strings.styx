@@ -89,6 +89,8 @@ performance {
     // ASSUMPTION: start-on-the-click policy carried over from CSS (owner
     // policy — fresh attacks start on the tick and speak naturally after it).
     attack_placement start_at_tick
+    // Same bowed-sustain shape as CSS: no loop points, slow bow swell, so the
+    // body starts at its steady plateau. Opt-in — see the field's docs; on a
 }
 
 // ── Dynamic Control Model ─────────────────────────────────────────────────────

@@ -15,7 +15,7 @@
 use dioxus::prelude::*;
 
 /// A selectable item for the A/B assignment dropdowns.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct DropdownItem {
     /// Unique identifier for this item.
     pub id: String,
@@ -212,7 +212,7 @@ fn render_dropdown(
                                 "w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition-colors"
                             },
                             onclick: {
-                                let item_id = item_id.clone();
+                                let item_id = item_id;
                                 move |_| {
                                     on_select.call(item_id.clone());
                                     *open_signal.write() = false;

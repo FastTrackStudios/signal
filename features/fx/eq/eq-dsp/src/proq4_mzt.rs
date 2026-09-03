@@ -20,7 +20,7 @@
 //!
 //! This formulation matches Pro-Q 4's `compute_biquad_coefficients_from_poles` Mode 0
 //! formula exactly with substitutions:
-//!   p_2 = 1, p_3 = 1, p_4 = x_0, sp_5 = √x_0 / (A·Q), sp_6 = √x_0 · A / Q.
+//!   `p_2` = 1, `p_3` = 1, `p_4` = `x_0`, `sp_5` = √`x_0` / (A·Q), `sp_6` = √`x_0` · A / Q.
 
 mod bandpass;
 mod cut;
@@ -44,12 +44,13 @@ use std::f64::consts::PI;
 ///
 /// Parameters:
 /// - `w0_d`: digital corner angular frequency (radians/sample)
-/// - `num_alpha`: analog numerator α_n such that (s² + 2·α_n·s + c_n)/... at normalized w=1
-/// - `den_alpha`: analog denominator α_d
+/// - `num_alpha`: analog numerator `α_n` such that (s² + `2·α_n·s` + `c_n`)/... at normalized w=1
+/// - `den_alpha`: analog denominator `α_d`
 /// - `num_const`: analog numerator constant term (e.g. A² for peak gain A)
 /// - `den_const`: analog denominator constant term (1 for peak)
 ///
 /// For Pro-Q 4 peak: `num_alpha = A/(2Q)`, `den_alpha = 1/(2·A·Q)`, both constants = 1.
+#[must_use]
 pub fn mzt_biquad(
     w0_d: f64,
     num_alpha: f64,
@@ -112,14 +113,14 @@ pub(crate) fn mzt_quadratic(w0: f64, alpha: f64) -> (f64, f64) {
 /// References:
 /// - `docs/reports/proq4/re/hp_s8_w_eval_decoded.md` (sec 0)
 /// - `docs/reports/proq4/re/hp_s8_w_eval_sec1_2_decoded.md` (sec 1, 2 + Nyquist guard)
-
+///
 /// LP slope=8 per-section closed-form biquad.
 ///
 /// **Decoded 2026-05-01** (corrected) from `compute_audio_biquad_lagrange_mzt`
-/// captures via `PROBE_HOOK_AUDIO_BIQUAD=1` at filter_type=4 (= Pro-Q UI
+/// captures via `PROBE_HOOK_AUDIO_BIQUAD=1` at `filter_type=4` (= Pro-Q UI
 /// "High Cut" = LP). Earlier traces at `filter_type=2` were misread — that ID
-/// is "Low Cut" = HP, so the prior LAG_OUT data was actually HP s=8 (already
-/// solved). With the correct filter_type, AUDIO_BIQUAD == LAG_OUT bit-exactly,
+/// is "Low Cut" = HP, so the prior `LAG_OUT` data was actually HP s=8 (already
+/// solved). With the correct `filter_type`, `AUDIO_BIQUAD` == `LAG_OUT` bit-exactly,
 /// confirming both paths share `compute_audio_biquad_lagrange_mzt`.
 ///
 /// Decoded prototype struct (`LAG_PROTO_DETAIL`) — **updated 2026-05-01**
@@ -129,8 +130,8 @@ pub(crate) fn mzt_quadratic(w0: f64, alpha: f64) -> (f64, f64) {
 /// - analog denominator: `b2p = 1, b1p = 1, b0p = 1` (LITERAL — generic
 ///   `s²+s+1`); the per-section Butterworth damping is carried in a
 ///   separate `w_section_field` slot.
-/// - `w_section_field = 2·cos(θ_k)/Q_eff` where θ_k = (2k+1)π/24,
-
+/// - `w_section_field = 2·cos(θ_k)/Q_eff` where `θ_k` = (2k+1)π/24,
+///
 /// Closed-form decode of `compute_zpk_transfer_function_coefficients @ 0x1800fd420`
 /// (281 bytes, Pro-Q 4 binary).
 ///
@@ -154,12 +155,13 @@ pub(crate) fn mzt_quadratic(w0: f64, alpha: f64) -> (f64, f64) {
 ///
 /// Inputs: analog prototype `(b2z, b1z, b0z, b2p, b1p, b0p)` and frequency scale
 /// `g` (= post-clamp ω₀). The b1p input MUST be the per-section
-/// `w_section_field` value (= 2·cos(θ_k)/Q_eff for cascaded LP/HP sections,
+/// `w_section_field` value (= `2·cos(θ_k)/Q_eff` for cascaded LP/HP sections,
 /// = √2/Q for slope=2 single-section) — NOT the literal `b1p=1` from the
-/// LAG_PROTO template, which the binary overwrites at slot `+0x80` before
+/// `LAG_PROTO` template, which the binary overwrites at slot `+0x80` before
 /// calling this function.
 #[inline]
-#[allow(non_snake_case)]
+#[must_use]
+#[expect(non_snake_case, reason = "parameter names match Pro-Q 4 analog prototype")]
 pub fn zpk_section_to_AF(
     b2z: f64,
     b1z: f64,
@@ -167,38 +169,39 @@ pub fn zpk_section_to_AF(
     b2p: f64,
     b1p: f64,
     b0p: f64,
-    g: f64,
+    omega_scale: f64,
 ) -> (f64, f64, f64, f64, f64, f64) {
-    const EPS_F32: f32 = 1.1920929e-7; // captured at 0x18023161c
-    let abs_b2z_f32 = (b2z as f32).abs();
-    let abs_b2p_f32 = (b2p as f32).abs();
-    let second_order = abs_b2z_f32 > EPS_F32 || abs_b2p_f32 > EPS_F32;
-    let g2 = g * g;
+    const EPS_F32: f32 = 1.192_092_9e-7; // captured at 0x18023161c
+    let abs_b2_zero_f32 = (b2z as f32).abs();
+    let abs_b2_pole_f32 = (b2p as f32).abs();
+    let second_order = abs_b2_zero_f32 > EPS_F32 || abs_b2_pole_f32 > EPS_F32;
+    let g2 = omega_scale * omega_scale;
     let g4 = g2 * g2;
     if second_order {
-        let a = b2z * b2z;
-        let b = (b1z * b1z - 2.0 * b2z * b0z) * g2;
-        let c = b0z * b0z * g4;
-        let d = b2p * b2p;
-        let e = (b1p * b1p - 2.0 * b2p * b0p) * g2;
-        let f = b0p * b0p * g4;
-        (a, b, c, d, e, f)
+        let num_b2sq = b2z * b2z;
+        let num_cross = (b1z * b1z - 2.0 * b2z * b0z) * g2;
+        let num_b0sq = b0z * b0z * g4;
+        let den_b2sq = b2p * b2p;
+        let den_cross = (b1p * b1p - 2.0 * b2p * b0p) * g2;
+        let den_b0sq = b0p * b0p * g4;
+        (num_b2sq, num_cross, num_b0sq, den_b2sq, den_cross, den_b0sq)
     } else {
         // First-order section: B has no g², C/F have a single g².
-        let a = 0.0;
-        let b = b1z * b1z;
-        let c = b0z * b0z * g2;
-        let d = 0.0;
-        let e = b1p * b1p;
-        let f = b0p * b0p * g2;
-        (a, b, c, d, e, f)
+        let num_b2sq = 0.0;
+        let num_cross = b1z * b1z;
+        let num_b0sq = b0z * b0z * g2;
+        let den_b2sq = 0.0;
+        let den_cross = b1p * b1p;
+        let den_b0sq = b0p * b0p * g2;
+        (num_b2sq, num_cross, num_b0sq, den_b2sq, den_cross, den_b0sq)
     }
 }
 
 /// Sibling kernel that takes pre-computed `(A..F)` (e.g. from
 /// [`zpk_section_to_AF`]) and feeds them through the
-/// `compute_audio_biquad_lagrange_mzt` synth, branching in AFTER the
-/// `compute_zpk_transfer_function_coefficients` step.
+/// `compute_audio_biquad_lagrange_mzt` synth.
+///
+/// Branches in AFTER the `compute_zpk_transfer_function_coefficients` step.
 ///
 /// The existing [`crate::cascade::proq4_s2_from_prototype_with_subfreq_pub`]
 /// kernel takes `(b2z..b0p)` and computes `(A..F)` internally. This sibling
@@ -212,7 +215,8 @@ pub fn zpk_section_to_AF(
 /// is in the post-(A..F) Lagrange synthesis, not in (A..F) itself). See
 /// `compute_zpk_transfer_function_coefficients_decoded.md` for the full
 /// analysis.
-#[allow(non_snake_case)]
+#[expect(non_snake_case, reason = "parameter names (A, B, C, D, E, F) match the zpk transfer-function coefficients")]
+#[must_use]
 pub fn proq4_s2_from_AF_with_subfreq(
     freq_hz: f64,
     sample_rate: f64,
@@ -232,9 +236,9 @@ pub fn proq4_s2_from_AF_with_subfreq(
 
     let g_ref = if F.abs() > 1e-300 { C / F } else { 0.0 };
 
-    const W_POLE_MAX: f64 = 3.078760800517997;
-    const W_ZERO_MAX: f64 = 2.827433388230814;
-    const W_THIRD_MAX: f64 = 3.0633669965154073;
+    const W_POLE_MAX: f64 = 3.078_760_800_517_997;
+    const W_ZERO_MAX: f64 = 2.827_433_388_230_814;
+    const W_THIRD_MAX: f64 = 3.063_366_996_515_407_3;
     let w_pole = w_pole.min(W_POLE_MAX);
     let w_zero = w_zero.min(W_ZERO_MAX);
     let w_third = w_third.min(W_THIRD_MAX);
@@ -397,7 +401,7 @@ mod tests {
     }
 
     /// HP s=8 self-test against captured biquad coefficients from the
-    /// hp_s8_override_probe_*.csv ground-truth set. Picks 4 (fc, Q) points
+    /// `hp_s8_override_probe`_*.csv ground-truth set. Picks 4 (fc, Q) points
     /// covering the conformance grid (passing + failing baseline cells).
     #[test]
     fn hp_s8_section_biquad_matches_captures() {
@@ -421,44 +425,44 @@ mod tests {
             secs: [
                 [
                     0.991_094_613_365_541_6,
-                    -1.9821890792597903,
+                    -1.982_189_079_259_790_3,
                     0.991_094_465_894_248_7,
                     -1.978_815_203_626_625,
                     0.983_060_747_808_254_4,
                 ],
                 [
                     0.974_979_045_836_089_9,
-                    -1.9499579245187446,
+                    -1.949_957_924_518_744_6,
                     0.974_978_878_682_654_8,
-                    -1.9469671856482678,
-                    0.9511436965011707,
+                    -1.946_967_185_648_267_8,
+                    0.951_143_696_501_170_7,
                 ],
                 [
                     0.960_838_450_543_096_4,
-                    -1.9216768011177643,
+                    -1.921_676_801_117_764_3,
                     0.960_838_350_574_667_8,
-                    -1.9192909273276166,
+                    -1.919_290_927_327_616_6,
                     0.923_406_857_190_717_7,
                 ],
                 [
                     0.949_553_339_250_763_5,
                     -1.899_106_678_501_527,
                     0.949_553_339_250_763_5,
-                    -1.897286394592574,
+                    -1.897_286_394_592_574,
                     0.901_353_967_075_469_4,
                 ],
                 [
-                    0.941737332094155,
-                    -1.88347466418831,
-                    0.941737332094155,
-                    -1.8820357631266014,
+                    0.941_737_332_094_155,
+                    -1.883_474_664_188_31,
+                    0.941_737_332_094_155,
+                    -1.882_035_763_126_601_4,
                     0.886_069_834_160_997_2,
                 ],
                 [
                     0.937_731_597_135_943,
-                    -1.875463194271886,
+                    -1.875_463_194_271_886,
                     0.937_731_597_135_943,
-                    -1.8742410224886503,
+                    -1.874_241_022_488_650_3,
                     0.878_257_922_718_734,
                 ],
             ],
@@ -497,9 +501,9 @@ mod tests {
         }
     }
 
-    /// LP s=8 self-test: closed-form section biquad matches AUDIO_BIQUAD
-    /// captures (== LAG_OUT for LP) from PROBE_HOOK_AUDIO_BIQUAD at
-    /// filter_type=4 (Pro-Q UI "High Cut" = LP). The probe was run via
+    /// LP s=8 self-test: closed-form section biquad matches `AUDIO_BIQUAD`
+    /// captures (== `LAG_OUT` for LP) from `PROBE_HOOK_AUDIO_BIQUAD` at
+    /// `filter_type=4` (Pro-Q UI "High Cut" = LP). The probe was run via
     /// Wine on 2026-05-01 at fc=10000 Q=1 — sections 0..5 match bit-exactly.
     /// At higher fc (14k+) sections 4-5 enter the real-pole regime where
     /// the binary's Lagrange synth uses a different kernel; those cells
@@ -511,43 +515,43 @@ mod tests {
         let cap: [[f64; 5]; 6] = [
             [
                 0.873_474_573_837_371_4,
-                0.4038293798038623,
+                0.403_829_379_803_862_3,
                 -0.018_452_402_124_010_41,
-                -0.45367557274521014,
+                -0.453_675_572_745_210_14,
                 0.712_527_124_262_433_3,
             ],
             [
                 0.663_436_824_032_479_2,
-                0.29747738309412947,
-                -0.015493315627401612,
+                0.297_477_383_094_129_47,
+                -0.015_493_315_627_401_612,
                 -0.421_351_808_480_622_8,
-                0.3667726999798297,
+                0.366_772_699_979_829_7,
             ],
             [
                 0.537_653_151_818_607,
-                0.22821657559257644,
-                -0.014690866573636455,
-                -0.44753816309967964,
-                0.19871702393722662,
+                0.228_216_575_592_576_44,
+                -0.014_690_866_573_636_455,
+                -0.447_538_163_099_679_64,
+                0.198_717_023_937_226_62,
             ],
             [
-                0.46333342553632856,
-                0.17840906801167092,
+                0.463_333_425_536_328_56,
+                0.178_409_068_011_670_92,
                 -0.019_063_726_976_089_35,
                 -0.498_982_089_732_944_6,
-                0.12166085630485496,
+                0.121_660_856_304_854_96,
             ],
             [
-                0.42097455719699417,
+                0.420_974_557_196_994_17,
                 0.140_475_462_868_299_7,
                 -0.025_260_581_280_489_27,
                 -0.562_151_673_110_489_7,
                 0.098_341_111_895_294_13,
             ],
             [
-                0.40163136782451486,
-                0.11652528049963976,
-                -0.030682437067189518,
+                0.401_631_367_824_514_86,
+                0.116_525_280_499_639_76,
+                -0.030_682_437_067_189_518,
                 -0.612_513_739_974_542_4,
                 0.099_987_951_231_507_46,
             ],
@@ -569,15 +573,10 @@ mod tests {
                 sec, pred, cap[sec]
             );
         }
-        eprintln!(
-            "LP fc=10k Q=1 max_err={:.3e} worst_sec={}",
-            max_err, worst_sec
-        );
+        eprintln!("LP fc=10k Q=1 max_err={max_err:.3e} worst_sec={worst_sec}");
         assert!(
             max_err < 1e-5,
-            "LP s=8 max coeff err {:.3e} >= 1e-5 at sec {}",
-            max_err,
-            worst_sec
+            "LP s=8 max coeff err {max_err:.3e} >= 1e-5 at sec {worst_sec}"
         );
     }
 }

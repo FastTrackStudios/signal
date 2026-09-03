@@ -168,7 +168,7 @@ pub fn SignalSlider() -> Element {
                     button {
                         class: "px-3 py-1 rounded border border-zinc-400 hover:bg-zinc-100 text-sm",
                         onclick: {
-                            let signal = signal.clone();
+                            let signal = signal;
                             move |_| {
                                 let signal = signal.clone();
                                 let raw = browser_query_input();
@@ -235,9 +235,9 @@ fn CollectionCard(
                 button {
                     class: "px-2 py-1 text-xs rounded border border-zinc-400 hover:bg-zinc-100",
                     onclick: {
-                        let signal = signal.clone();
-                        let collection_id = collection_id.clone();
-                        let default_id = default_variant_id.clone();
+                        let signal = signal;
+                        let collection_id = collection_id;
+                        let default_id = default_variant_id;
                         move |_| {
                             let signal = signal.clone();
                             let collection_id = collection_id.clone();
@@ -270,7 +270,7 @@ fn CollectionCard(
                                 onclick: {
                                     let signal = signal.clone();
                                     let collection_id = collection_id.clone();
-                                    let variant_id = variant_id.clone();
+                                    let variant_id = variant_id;
                                     move |_| {
                                         let signal = signal.clone();
                                         let collection_id = collection_id.clone();
@@ -318,9 +318,9 @@ fn ModuleCollectionCard(collection: ModulePreset) -> Element {
                 button {
                     class: "px-2 py-1 text-xs rounded border border-zinc-400 hover:bg-zinc-100",
                     onclick: {
-                        let signal = signal.clone();
-                        let collection_id = collection_id.clone();
-                        let default_variant_id = default_variant_id.clone();
+                        let signal = signal;
+                        let collection_id = collection_id;
+                        let default_variant_id = default_variant_id;
                         move |_| {
                             let signal = signal.clone();
                             let collection_id = collection_id.clone();
@@ -351,7 +351,7 @@ fn ModuleCollectionCard(collection: ModulePreset) -> Element {
                                 onclick: {
                                     let signal = signal.clone();
                                     let collection_id = collection_id.clone();
-                                    let variant_id = variant_id.clone();
+                                    let variant_id = variant_id;
                                     move |_| {
                                         let signal = signal.clone();
                                         let collection_id = collection_id.clone();
@@ -420,7 +420,7 @@ pub(crate) fn ParameterSlider(
 
 // region: --- Normalization Helpers
 
-pub(crate) fn normalize_default_variant_id(
+pub fn normalize_default_variant_id(
     variants: &[Snapshot],
     explicit_default: &Snapshot,
 ) -> String {

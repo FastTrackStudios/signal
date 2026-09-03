@@ -152,7 +152,7 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
     // Get tempo for bar duration calculation
     let transport = project.transport();
     let state = transport.get_state().await?;
-    let beats_per_bar = state.time_signature.numerator as f64;
+    let beats_per_bar = f64::from(state.time_signature.numerator);
     let beat_duration = 60.0 / state.tempo.bpm;
     let bar_duration = beat_duration * beats_per_bar;
 

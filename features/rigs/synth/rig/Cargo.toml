@@ -5,6 +5,9 @@ edition = "2021"
 license.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 # PipeWire mode: audio + MIDI through the pipewire host, matching the keys rig.
 # Threads through to the shared KeysRig host + midicore's jack swap.

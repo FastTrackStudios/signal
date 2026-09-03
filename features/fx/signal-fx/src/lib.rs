@@ -68,8 +68,8 @@ fn process_f64_inplace(
         scratch_r.resize(n, 0.0);
     }
     for i in 0..n {
-        scratch_l[i] = in_l[i] as f64;
-        scratch_r[i] = in_r[i] as f64;
+        scratch_l[i] = f64::from(in_l[i]);
+        scratch_r[i] = f64::from(in_r[i]);
     }
     f(&mut scratch_l[..n], &mut scratch_r[..n]);
     for i in 0..n {
@@ -93,7 +93,7 @@ pub const EQ_FIELDS: usize = 6;
 
 // Appended param blocks (ids are APPEND-ONLY — the 0..143 layout is
 // frozen by saved rig patches):
-/// `b{i}_slope` — canonical slope index 0..10 (eq_dsp::Slope table).
+/// `b{i}_slope` — canonical slope index 0..10 (`eq_dsp::Slope` table).
 pub const EQ_SLOPE_BASE: u32 = 144;
 /// `output_gain` dB.
 pub const EQ_OUTPUT_GAIN_ID: u32 = 168;
@@ -165,6 +165,7 @@ fn eq_shape_to_filter(shape: u32) -> eq::FilterType {
 }
 
 /// Param name for `(band, field)` — `b{band+1}_{used|on|freq|gain|q|shape}`.
+#[must_use] 
 pub fn eq_param_name(band: usize, field: usize) -> String {
     let f = ["used", "on", "freq", "gain", "q", "shape"][field];
     format!("b{}_{}", band + 1, f)
@@ -226,6 +227,7 @@ fn eq_param_id_of(name: &str) -> Option<u32> {
 }
 
 /// Range/default metadata shared by `params()` and the rig tables.
+#[must_use] 
 pub fn eq_param_range(id: u32) -> (f64, f64, f64) {
     if id < (EQ_BANDS * EQ_FIELDS) as u32 {
         return match id as usize % EQ_FIELDS {
@@ -274,6 +276,7 @@ pub fn eq_param_range(id: u32) -> (f64, f64, f64) {
     }
 }
 
+#[must_use] 
 pub fn eq_param_name_of(id: u32) -> Option<String> {
     if id < (EQ_BANDS * EQ_FIELDS) as u32 {
         let (band, field) = (id as usize / EQ_FIELDS, id as usize % EQ_FIELDS);
@@ -334,6 +337,7 @@ pub struct NativeEq {
 }
 
 impl NativeEq {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         let mut values = vec![0.0; EQ_PARAM_COUNT as usize];
         for id in 0..EQ_PARAM_COUNT {
@@ -365,6 +369,7 @@ impl NativeEq {
         self.engine.set_band_dynamics(band, self.dynamics[band]);
     }
 
+    #[must_use] 
     pub fn spectral_engaged(&self) -> bool {
         self.engine.spectral_engaged()
     }
@@ -529,16 +534,19 @@ impl NativeEq {
     }
 
     /// The static chain's magnitude at `hz`, in dB — what Auto Gain reads.
+    #[must_use] 
     pub fn static_magnitude_db(&self, hz: f64) -> f64 {
         self.engine.static_magnitude_db(hz)
     }
 
     /// The compensation Auto Gain is applying, in dB.
+    #[must_use] 
     pub fn auto_gain_db(&self) -> f64 {
         self.engine.auto_gain_db()
     }
 
     /// Live dynamic gain of a band in dB (the yellow bar).
+    #[must_use] 
     pub fn live_dyn_gain_db(&self, band: usize) -> Option<f64> {
         self.engine.live_dyn_gain_db(band)
     }
@@ -700,6 +708,7 @@ pub struct NativePreamp {
 }
 
 impl NativePreamp {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         let mk = || saturate_dsp::preamp::ClassAPreamp::new(sample_rate.max(1.0) as f32);
         let mut p = Self {
@@ -980,6 +989,7 @@ pub struct NativeSaturate {
 }
 
 impl NativeSaturate {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         use audiocore_dsp::oversampling::{OversampleQuality, OversampleRate};
         let sr = sample_rate.max(1.0);
@@ -1360,7 +1370,7 @@ impl PluginInstance for NativeSaturate {
         }
         // Track input loudness for AGC.
         for i in 0..n {
-            let sq = 0.5 * (l[i] * l[i] + r[i] * r[i]);
+            let sq = 0.5 * l[i].mul_add(l[i], r[i] * r[i]);
             self.in_ms += (sq - self.in_ms) * 0.0005;
         }
         // Oversampled asymmetric shaping.
@@ -1372,7 +1382,7 @@ impl PluginInstance for NativeSaturate {
             }
         });
         for i in 0..n {
-            let sq = 0.5 * (l[i] * l[i] + r[i] * r[i]);
+            let sq = 0.5 * l[i].mul_add(l[i], r[i] * r[i]);
             self.out_ms += (sq - self.out_ms) * 0.0005;
         }
         // RMS-matching auto gain (slewed).
@@ -1413,7 +1423,7 @@ impl PluginInstance for NativeSaturate {
                 yr += self.dry_r[i];
             }
             let (dl, dr) = (f64::from(in_l[i]), f64::from(in_r[i]));
-            let (mut fl, mut fr) = (dl + (yl - dl) * self.mix, dr + (yr - dr) * self.mix);
+            let (mut fl, mut fr) = ((yl - dl).mul_add(self.mix, dl), (yr - dr).mul_add(self.mix, dr));
             if self.listen_delta {
                 fl -= dl;
                 fr -= dr;
@@ -1549,6 +1559,7 @@ pub struct NativeTune {
 }
 
 impl NativeTune {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         let sr = sample_rate.max(1.0);
         let detector = tune::detect::YinDetector::new(sr, tune::detect::YinConfig::default());
@@ -1646,7 +1657,7 @@ impl NativeTune {
 
     /// hz → MIDI honoring the A4 reference.
     fn to_midi(&self, hz: f64) -> f64 {
-        69.0 + 12.0 * (hz / self.a4_hz).log2()
+        12.0f64.mul_add((hz / self.a4_hz).log2(), 69.0)
     }
 
     /// Choose the correction target for the detected pitch.
@@ -1817,7 +1828,7 @@ impl PluginInstance for NativeTune {
             self.shift_state = target_shift;
         } else {
             let a = (-(n as f64) / (self.retune_ms * 0.001 * self.sample_rate)).exp();
-            self.shift_state = target_shift + (self.shift_state - target_shift) * a;
+            self.shift_state = (self.shift_state - target_shift).mul_add(a, target_shift);
         }
         self.chain.semitones = self.shift_state.clamp(-24.0, 24.0);
 
@@ -2004,6 +2015,7 @@ pub struct NativeComp {
 }
 
 impl NativeComp {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         let mut comp = comp::ProC3Compressor::new(sample_rate.max(1.0));
         comp.set_threshold(-18.0);
@@ -2082,8 +2094,8 @@ impl PluginInstance for NativeComp {
         }
         let n = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
         for i in 0..n {
-            out_l[i] = self.comp.process(in_l[i] as f64, 0) as f32;
-            out_r[i] = self.comp.process(in_r[i] as f64, 1) as f32;
+            out_l[i] = self.comp.process(f64::from(in_l[i]), 0) as f32;
+            out_r[i] = self.comp.process(f64::from(in_r[i]), 1) as f32;
             // Telemetry: rolling input peak + GR ring (see `comp_meter`).
             let in_peak = in_l[i].abs().max(in_r[i].abs());
             self.wave_peak = self.wave_peak.max(in_peak);
@@ -2237,6 +2249,7 @@ pub struct NativeLevel {
 }
 
 impl NativeLevel {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         let cfg = level_dsp::LevelerConfig::default();
         let sr = sample_rate.max(1.0);
@@ -2264,7 +2277,7 @@ impl NativeLevel {
         }
     }
 
-    fn set(&mut self, id: u32, v: f64) {
+    const fn set(&mut self, id: u32, v: f64) {
         match id {
             0 => self.gate.threshold_db = v,
             1 => self.gate.range_db = v,
@@ -2346,8 +2359,8 @@ impl PluginInstance for NativeLevel {
         }
         let n = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
         for i in 0..n {
-            out_l[i] = self.left.process_sample(in_l[i] as f64) as f32;
-            out_r[i] = self.right.process_sample(in_r[i] as f64) as f32;
+            out_l[i] = self.left.process_sample(f64::from(in_l[i])) as f32;
+            out_r[i] = self.right.process_sample(f64::from(in_r[i])) as f32;
         }
         Ok(())
     }
@@ -3090,7 +3103,7 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     },];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
-/// BigSky MX dual routing; `Single` = chain A only, bit-compatible with
+/// `BigSky` MX dual routing; `Single` = chain A only, bit-compatible with
 /// the previous single-chain wrapper). Defaults to a subtle Hall (low
 /// mix) so it sits under the tone rather than washing it out.
 pub struct NativeReverb {
@@ -3110,6 +3123,7 @@ pub struct NativeReverb {
 }
 
 impl NativeReverb {
+    #[must_use] 
     pub fn new(_sample_rate: f64) -> Self {
         let mut rev = reverb::DualReverb::new();
         rev.a.set_algorithm(reverb::AlgorithmType::Hall);
@@ -3410,7 +3424,7 @@ impl NativeReverb {
                 c.params.low_decay_mult = if v < 0.5 {
                     0.5 + v
                 } else {
-                    1.0 + (v - 0.5) * 1.2
+                    (v - 0.5).mul_add(1.2, 1.0)
                 };
                 c.update_params();
             }
@@ -3446,7 +3460,7 @@ impl NativeReverb {
         if ir.num_frames() == 0 {
             return false;
         }
-        let as_f64 = |ch: &[f32]| ch.iter().map(|&s| s as f64).collect::<Vec<f64>>();
+        let as_f64 = |ch: &[f32]| ch.iter().map(|&s| f64::from(s)).collect::<Vec<f64>>();
         let l = as_f64(&ir.channels[0]);
         let r = if ir.channels.len() >= 2 {
             as_f64(&ir.channels[1])
@@ -4034,7 +4048,7 @@ const DELAY_PARAMS: &[ParamSpec] = &[
 ];
 
 /// Native Delay block — wraps [`delay::DualDelay`] (two full chains +
-/// TimeLine MX 1+2 routing; `Single` = chain A only, bit-compatible with
+/// `TimeLine` MX 1+2 routing; `Single` = chain A only, bit-compatible with
 /// the previous single-chain wrapper). Defaults to a subtle clean
 /// quarter-note-ish delay with modest feedback.
 pub struct NativeDelay {
@@ -4047,6 +4061,7 @@ pub struct NativeDelay {
 }
 
 impl NativeDelay {
+    #[must_use] 
     pub fn new(_sample_rate: f64) -> Self {
         let mut dly = delay::DualDelay::new();
         for chain in [&mut dly.a, &mut dly.b] {
@@ -4533,12 +4548,15 @@ pub struct NativeMod {
 }
 
 impl NativeMod {
+    #[must_use] 
     pub fn chorus(sample_rate: f64) -> Self {
         Self::new(sample_rate, EffectType::Chorus, "Chorus", 1.0)
     }
+    #[must_use] 
     pub fn flanger(sample_rate: f64) -> Self {
         Self::new(sample_rate, EffectType::Flanger, "Flanger", 0.3)
     }
+    #[must_use] 
     pub fn vibrato(sample_rate: f64) -> Self {
         Self::new(sample_rate, EffectType::Vibrato, "Vibrato", 5.0)
     }
@@ -4697,6 +4715,7 @@ pub struct NativeTrem {
 }
 
 impl NativeTrem {
+    #[must_use] 
     pub fn new(_sample_rate: f64) -> Self {
         let mut tr = TremChain::new();
         tr.set_mode(TremMode::Stereo);
@@ -4715,7 +4734,7 @@ impl NativeTrem {
         }
     }
 
-    fn set(&mut self, id: u32, v: f64) {
+    const fn set(&mut self, id: u32, v: f64) {
         match id {
             0 => self.tr.set_depth(v),
             1 => self.tr.mix = v.clamp(0.0, 1.0),
@@ -4814,13 +4833,14 @@ pub struct NativePassthrough {
 }
 
 impl NativePassthrough {
-    pub fn new(label: &'static str) -> Self {
+    #[must_use] 
+    pub const fn new(label: &'static str) -> Self {
         Self {
             label,
             prepared: false,
         }
     }
-    pub fn set_named(&mut self, _name: &str, _value: f64) {}
+    pub const fn set_named(&mut self, _name: &str, _value: f64) {}
 }
 
 impl PluginInstance for NativePassthrough {
@@ -4899,7 +4919,8 @@ pub struct NativeGain {
 }
 
 impl NativeGain {
-    pub fn new(_sample_rate: f64) -> Self {
+    #[must_use] 
+    pub const fn new(_sample_rate: f64) -> Self {
         Self {
             target: 1.0,
             current: 1.0,
@@ -4964,7 +4985,7 @@ impl PluginInstance for NativeGain {
         let (t, c) = (self.target, self.coeff);
         let mut g = self.current;
         for i in 0..out_l.len() {
-            g = t + (g - t) * c;
+            g = (g - t).mul_add(c, t);
             out_l[i] = in_l.get(i).copied().unwrap_or(0.0) * g as f32;
             out_r[i] = in_r.get(i).copied().unwrap_or(0.0) * g as f32;
         }
@@ -5018,6 +5039,7 @@ pub struct NativeGate {
 }
 
 impl NativeGate {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         let mut g = Self {
             threshold: 10f64.powf(-50.0 / 20.0),
@@ -5109,16 +5131,16 @@ impl PluginInstance for NativeGate {
         // Detector source: the clean DI sidechain when the rig publishes
         // one (post-amp placement, input-accurate gating), else the block's
         // own input.
-        let di = sidechain::peak().map(|p| p as f64);
+        let di = sidechain::peak().map(f64::from);
         for i in 0..out_l.len() {
             let l = in_l.get(i).copied().unwrap_or(0.0);
             let r = in_r.get(i).copied().unwrap_or(0.0);
-            let peak = di.unwrap_or_else(|| l.abs().max(r.abs()) as f64);
+            let peak = di.unwrap_or_else(|| f64::from(l.abs().max(r.abs())));
             // Peak follower: instant rise, ~30 ms fall.
             self.env = if peak > self.env {
                 peak
             } else {
-                peak + (self.env - peak) * self.env_coeff
+                (self.env - peak).mul_add(self.env_coeff, peak)
             };
             let target = if self.env >= self.threshold { 1.0 } else { 0.0 };
             let coeff = if target > self.gain {
@@ -5126,7 +5148,7 @@ impl PluginInstance for NativeGate {
             } else {
                 self.release_coeff
             };
-            self.gain = target + (self.gain - target) * coeff;
+            self.gain = (self.gain - target).mul_add(coeff, target);
             out_l[i] = l * self.gain as f32;
             out_r[i] = r * self.gain as f32;
         }
@@ -5203,6 +5225,7 @@ pub struct NativeTransient {
 }
 
 impl NativeTransient {
+    #[must_use] 
     pub fn new(sample_rate: f64) -> Self {
         let mut t = Self {
             attack: 0.0,
@@ -5299,29 +5322,29 @@ impl PluginInstance for NativeTransient {
         for i in 0..out_l.len() {
             let l = in_l.get(i).copied().unwrap_or(0.0);
             let r = in_r.get(i).copied().unwrap_or(0.0);
-            let peak = (l.abs().max(r.abs()) as f64).max(1e-8);
+            let peak = f64::from(l.abs().max(r.abs())).max(1e-8);
             // Attack pair — different rise, shared fall.
-            let up = |env: f64, a: f64| peak + (env - peak) * a;
+            let up = |env: f64, a: f64| (env - peak).mul_add(a, peak);
             self.env_fast = if peak > self.env_fast {
                 up(self.env_fast, self.a_fast)
             } else {
-                peak + (self.env_fast - peak) * self.a_rel
+                (self.env_fast - peak).mul_add(self.a_rel, peak)
             };
             self.env_slow = if peak > self.env_slow {
                 up(self.env_slow, self.a_slow)
             } else {
-                peak + (self.env_slow - peak) * self.a_rel
+                (self.env_slow - peak).mul_add(self.a_rel, peak)
             };
             // Sustain pair — instant rise, different fall.
             self.env_short = if peak > self.env_short {
                 peak
             } else {
-                peak + (self.env_short - peak) * self.r_short
+                (self.env_short - peak).mul_add(self.r_short, peak)
             };
             self.env_long = if peak > self.env_long {
                 peak
             } else {
-                peak + (self.env_long - peak) * self.r_long
+                (self.env_long - peak).mul_add(self.r_long, peak)
             };
             // Ratios in dB (level-independent): >0 only during the hit /
             // the tail respectively; clamp keeps pathological ratios sane.
@@ -5329,10 +5352,9 @@ impl PluginInstance for NativeTransient {
                 (self.env_fast / self.env_slow.max(1e-8)).ln() * (20.0 / core::f64::consts::LN_10);
             let sustain_amt =
                 (self.env_long / self.env_short.max(1e-8)).ln() * (20.0 / core::f64::consts::LN_10);
-            let gain_db = atk_db * (attack_amt.clamp(0.0, 12.0) / 12.0)
-                + sus_db * (sustain_amt.clamp(0.0, 24.0) / 24.0);
+            let gain_db = atk_db.mul_add(attack_amt.clamp(0.0, 12.0) / 12.0, sus_db * (sustain_amt.clamp(0.0, 24.0) / 24.0));
             let wet = 10f64.powf(gain_db / 20.0) * self.output_gain;
-            let g = (1.0 - self.mix) + self.mix * wet;
+            let g = self.mix.mul_add(wet, 1.0 - self.mix);
             out_l[i] = l * g as f32;
             out_r[i] = r * g as f32;
         }
@@ -5377,7 +5399,7 @@ mod transient_tests {
             .fold(0.0f32, |a, &s| a.max(s.abs()));
         let tail = &out_l[sr / 10..];
         let rms =
-            (tail.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>() / tail.len() as f64).sqrt();
+            (tail.iter().map(|&s| f64::from(s) * f64::from(s)).sum::<f64>() / tail.len() as f64).sqrt();
         (head, rms)
     }
 

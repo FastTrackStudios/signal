@@ -13,13 +13,13 @@ use crate::components::{FlowBlock, PanZoomCanvas, SignalChainGrid};
 
 // region: --- Constants
 
-/// Grid cell size — must match `signal_chain_grid.rs` CELL_SIZE.
+/// Grid cell size — must match `signal_chain_grid.rs` `CELL_SIZE`.
 const CELL_SIZE: u32 = 64;
-/// Grid gap — must match `signal_chain_grid.rs` CELL_GAP.
+/// Grid gap — must match `signal_chain_grid.rs` `CELL_GAP`.
 const CELL_GAP: u32 = 4;
-/// Columns per logical block — must match `signal_chain_grid.rs` COLS_PER_BLOCK.
+/// Columns per logical block — must match `signal_chain_grid.rs` `COLS_PER_BLOCK`.
 const COLS_PER_BLOCK: u32 = 3;
-/// Wire span between blocks — must match `signal_chain_grid.rs` WIRE_SPAN.
+/// Wire span between blocks — must match `signal_chain_grid.rs` `WIRE_SPAN`.
 const WIRE_SPAN: u32 = 1;
 
 /// Horizontal gap (in logical block columns) between modules within a layer.
@@ -71,7 +71,7 @@ struct RigLayout {
 
 /// Convert a logical grid column to a pixel X position.
 fn col_to_px(col: usize) -> f64 {
-    CELL_GAP as f64 + col as f64 * COLS_PER_BLOCK as f64 * (CELL_SIZE + CELL_GAP) as f64
+    (col as f64 * f64::from(COLS_PER_BLOCK)).mul_add(f64::from(CELL_SIZE + CELL_GAP), f64::from(CELL_GAP))
 }
 
 /// Convert a logical grid column count to a pixel width.
@@ -80,12 +80,12 @@ fn cols_to_width(cols: usize) -> f64 {
         return 0.0;
     }
     let total_grid_cols = cols as u32 * COLS_PER_BLOCK - WIRE_SPAN;
-    total_grid_cols as f64 * (CELL_SIZE + CELL_GAP) as f64
+    f64::from(total_grid_cols) * f64::from(CELL_SIZE + CELL_GAP)
 }
 
 /// Convert a lane index to a pixel Y position.
 fn lane_to_px(lane: usize) -> f64 {
-    CELL_GAP as f64 + lane as f64 * (CELL_SIZE + CELL_GAP) as f64
+    (lane as f64).mul_add(f64::from(CELL_SIZE + CELL_GAP), f64::from(CELL_GAP))
 }
 
 /// Convert a lane count to a pixel height.
@@ -93,7 +93,7 @@ fn lanes_to_height(lanes: usize) -> f64 {
     if lanes == 0 {
         return 0.0;
     }
-    lanes as f64 * (CELL_SIZE + CELL_GAP) as f64
+    lanes as f64 * f64::from(CELL_SIZE + CELL_GAP)
 }
 
 /// Lay out all modules from a rig's engines onto a single unified grid.
@@ -134,10 +134,10 @@ fn layout_rig_preset(engines: &[EngineFlowData]) -> RigLayout {
                         name: mc.name.clone(),
                         color_bg: mc.color_bg.clone(),
                         color_border: mc.color_border.clone(),
-                        x: col_to_px(x_col) - CELL_GAP as f64 / 2.0,
-                        y: lane_to_px(y_lane) - CELL_GAP as f64 / 2.0,
-                        w: cols_to_width(cols) + CELL_GAP as f64,
-                        h: lanes_to_height(lanes) + CELL_GAP as f64,
+                        x: col_to_px(x_col) - f64::from(CELL_GAP) / 2.0,
+                        y: lane_to_px(y_lane) - f64::from(CELL_GAP) / 2.0,
+                        w: cols_to_width(cols) + f64::from(CELL_GAP),
+                        h: lanes_to_height(lanes) + f64::from(CELL_GAP),
                     });
                 }
 
@@ -205,8 +205,8 @@ pub fn RigPresetCanvas(
     } else {
         1
     };
-    let canvas_w = (total_grid_cols * (CELL_SIZE + CELL_GAP) + CELL_GAP) as f64;
-    let canvas_h = (layout.total_lanes as u32 * (CELL_SIZE + CELL_GAP) + CELL_GAP) as f64;
+    let canvas_w = f64::from(total_grid_cols * (CELL_SIZE + CELL_GAP) + CELL_GAP);
+    let canvas_h = f64::from(layout.total_lanes as u32 * (CELL_SIZE + CELL_GAP) + CELL_GAP);
 
     rsx! {
         PanZoomCanvas {

@@ -87,7 +87,7 @@ impl SharedState {
         self.annotate_stored()
     }
 
-    /// Drop the document: next block boundary falls back to StrictLive.
+    /// Drop the document: next block boundary falls back to `StrictLive`.
     pub fn clear_document(&self) {
         *self.doc.lock().unwrap() = None;
         self.schedule.store(None);
@@ -235,7 +235,7 @@ impl Plugin for SignalSamplerClap {
         main_output_channels: NonZeroU32::new(2),
         ..AudioIOLayout::const_default()
     }];
-    /// MidiCCs: the live path needs CC1/CC2 dynamics + CC58 keyswitches.
+    /// `MidiCCs`: the live path needs CC1/CC2 dynamics + CC58 keyswitches.
     const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
     // Headless sampler shell — the host shows its generic parameter UI.
     type Editor = ();

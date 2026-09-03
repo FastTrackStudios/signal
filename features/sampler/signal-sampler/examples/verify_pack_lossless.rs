@@ -25,9 +25,7 @@ use std::path::{Path, PathBuf};
 use signal_sampler::engine::cache::{load_sample, SampleCache, SignalPcmPack};
 
 fn short(path: &Path) -> String {
-    path.file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.display().to_string())
+    path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned())
 }
 
 fn main() -> eyre::Result<()> {

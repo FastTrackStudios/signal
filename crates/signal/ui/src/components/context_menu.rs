@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 
 /// A single menu item.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ContextMenuItem {
     pub id: String,
     pub label: String,

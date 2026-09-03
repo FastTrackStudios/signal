@@ -10,17 +10,18 @@ use super::eq_graph_model::EqBand;
 use super::eq_graph_response::{calculate_band_response, calculate_combined_response};
 
 /// All EQ curve paths (combined and per-band).
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct AllEqCurves {
     /// Combined curve stroke path.
     pub combined_stroke: String,
     /// Combined curve fill path.
     pub combined_fill: String,
-    /// Per-band curves: Vec of (band_index, stroke_path, fill_path) for each active band.
+    /// Per-band curves: Vec of (`band_index`, `stroke_path`, `fill_path`) for each active band.
     pub band_curves: Vec<(usize, String, String)>,
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
+#[must_use] 
 pub fn generate_all_eq_curves(
     bands: &[EqBand],
     sample_rate: f64,
@@ -44,7 +45,7 @@ pub fn generate_all_eq_curves(
 
     let freq_to_x = |freq: f64| -> f64 {
         let normalized = (freq.log10() - log_min) / (log_max - log_min);
-        padding + normalized * graph_width
+        normalized.mul_add(graph_width, padding)
     };
 
     let db_to_y = |db: f64| -> f64 {
@@ -126,8 +127,9 @@ where
 
 /// Generate the SVG path for the EQ curve.
 ///
-/// Returns (stroke_path, fill_path)
-#[allow(clippy::too_many_arguments)]
+/// Returns (`stroke_path`, `fill_path`)
+#[expect(clippy::too_many_arguments)]
+#[must_use] 
 pub fn generate_eq_curve_path(
     bands: &[EqBand],
     sample_rate: f64,
@@ -156,7 +158,7 @@ pub fn generate_eq_curve_path(
 
     let freq_to_x = |freq: f64| -> f64 {
         let normalized = (freq.log10() - log_min) / (log_max - log_min);
-        padding + normalized * graph_width
+        normalized.mul_add(graph_width, padding)
     };
 
     let db_to_y = |db: f64| -> f64 {
@@ -169,6 +171,7 @@ pub fn generate_eq_curve_path(
     build_curve_paths(&frequencies, &response_db, freq_to_x, db_to_y, zero_y)
 }
 
+#[must_use] 
 pub fn generate_grid_elements(
     padding: f64,
     graph_width: f64,
@@ -183,7 +186,7 @@ pub fn generate_grid_elements(
 
     let freq_to_x = |freq: f64| -> f64 {
         let normalized = (freq.log10() - log_min) / (log_max - log_min);
-        padding + normalized * graph_width
+        normalized.mul_add(graph_width, padding)
     };
 
     let db_to_y = |db: f64| -> f64 {
@@ -224,6 +227,7 @@ pub fn generate_grid_elements(
     lines
 }
 
+#[must_use] 
 pub fn generate_freq_labels(
     padding: f64,
     graph_width: f64,
@@ -238,7 +242,7 @@ pub fn generate_freq_labels(
 
     let freq_to_x = |freq: f64| -> f64 {
         let normalized = (freq.log10() - log_min) / (log_max - log_min);
-        padding + normalized * graph_width
+        normalized.mul_add(graph_width, padding)
     };
 
     let freq_labels = [
@@ -263,6 +267,7 @@ pub fn generate_freq_labels(
     labels
 }
 
+#[must_use] 
 pub fn generate_db_labels(
     padding: f64,
     graph_height: f64,

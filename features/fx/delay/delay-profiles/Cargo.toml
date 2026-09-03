@@ -6,5 +6,8 @@ license.workspace = true
 edition = "2021"
 description = "Delay profiles — the six families a delay comes in, and which engine each one is"
 
+[lints]
+workspace = true
+
 [dependencies]
 delay-dsp = { path = "../delay-dsp" }

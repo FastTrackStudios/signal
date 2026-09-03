@@ -1,8 +1,8 @@
 //! Smoke-test the IR pipeline against a real impulse response file.
 //!
-//! Usage: cargo run -p reverb-dsp --example ir_smoke -- <path-to-ir.wav> [more.wav ...]
+//! Usage: cargo run -p reverb-dsp --example `ir_smoke` -- <path-to-ir.wav> [more.wav ...]
 //!
-//! Loads each file via IrAsset -> IrTransforms -> Convolution, renders a
+//! Loads each file via `IrAsset` -> `IrTransforms` -> Convolution, renders a
 //! unit impulse, and prints length / peak / RT60-style decay stats.
 
 use reverb_dsp::algorithms::convolution::Convolution;
@@ -35,7 +35,7 @@ fn main() {
                 for i in 0..n {
                     let x = if i == 0 { 1.0 } else { 0.0 };
                     let (l, r) = conv.tick(x, x);
-                    let e = l * l + r * r;
+                    let e = l.mul_add(l, r * r);
                     energy += e;
                     peak = peak.max(l.abs()).max(r.abs());
                     if e > 1e-6 {

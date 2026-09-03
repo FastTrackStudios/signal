@@ -2,7 +2,7 @@
 //!
 //! Pro-Q 4 uses a 3-level delay cascade for group delay compensation
 //! in frequency-dependent phase modes. Each level provides up to
-//! MAX_DELAY_SAMPLES_PER_LEVEL samples of delay with a circular
+//! `MAX_DELAY_SAMPLES_PER_LEVEL` samples of delay with a circular
 //! power-of-2 buffer for efficient modular indexing.
 
 use crate::constants::{MAX_DELAY_SAMPLES_PER_LEVEL, NUM_DELAY_LEVELS};
@@ -21,12 +21,13 @@ pub struct DelayFilter {
 impl DelayFilter {
     /// Create a new delay filter with the given maximum delay in samples.
     ///
-    /// The buffer is allocated as the next power of 2 >= max_delay + 1.
+    /// The buffer is allocated as the next power of 2 >= `max_delay` + 1.
+    #[must_use]
     pub fn new(max_delay: usize) -> Self {
-        let size = (max_delay + 1).next_power_of_two();
+        let size = max_delay.saturating_add(1).next_power_of_two();
         Self {
             buffer: vec![0.0; size],
-            mask: size - 1,
+            mask: size.saturating_sub(1),
             write_pos: 0,
             delay_samples: 0,
         }
@@ -41,10 +42,12 @@ impl DelayFilter {
     /// Process one sample: write to buffer, read from delayed position.
     #[inline]
     pub fn process(&mut self, input: f64) -> f64 {
-        self.buffer[self.write_pos] = input;
-        let read_pos = (self.write_pos + self.buffer.len() - self.delay_samples) & self.mask;
-        let output = self.buffer[read_pos];
-        self.write_pos = (self.write_pos + 1) & self.mask;
+        if let Some(slot) = self.buffer.get_mut(self.write_pos) {
+            *slot = input;
+        }
+        let read_pos = (self.write_pos.wrapping_add(self.buffer.len()).wrapping_sub(self.delay_samples)) & self.mask;
+        let output = self.buffer.get(read_pos).copied().unwrap_or(0.0);
+        self.write_pos = (self.write_pos.wrapping_add(1)) & self.mask;
         output
     }
 
@@ -58,8 +61,8 @@ impl DelayFilter {
 /// 3-level delay cascade for anti-cramping group delay compensation.
 ///
 /// Each level can independently compensate for the group delay of
-/// different frequency bands, providing up to NUM_DELAY_LEVELS *
-/// MAX_DELAY_SAMPLES_PER_LEVEL total delay.
+/// different frequency bands, providing up to `NUM_DELAY_LEVELS` *
+/// `MAX_DELAY_SAMPLES_PER_LEVEL` total delay.
 pub struct DelayFilterCascade {
     delays: [DelayFilter; NUM_DELAY_LEVELS],
 }
@@ -67,7 +70,8 @@ pub struct DelayFilterCascade {
 impl DelayFilterCascade {
     /// Create a new cascade with buffers sized for the given sample rate.
     ///
-    /// Each level uses MAX_DELAY_SAMPLES_PER_LEVEL as its maximum.
+    /// Each level uses `MAX_DELAY_SAMPLES_PER_LEVEL` as its maximum.
+    #[must_use]
     pub fn new(_sample_rate: f64) -> Self {
         Self {
             delays: [
@@ -80,7 +84,7 @@ impl DelayFilterCascade {
 
     /// Set the group delay for a specific cascade level.
     ///
-    /// `level` is 0..NUM_DELAY_LEVELS, `delay_samples` is the delay
+    /// `level` is `0..NUM_DELAY_LEVELS`, `delay_samples` is the delay
     /// in samples for that level.
     pub fn set_group_delay(&mut self, level: usize, delay_samples: usize) {
         if level < NUM_DELAY_LEVELS {
@@ -113,8 +117,8 @@ mod tests {
     fn zero_delay_passes_through() {
         let mut d = DelayFilter::new(64);
         d.set_delay(0);
-        for i in 0..10 {
-            let input = i as f64 * 0.1;
+        for i in 0u32..10u32 {
+            let input = f64::from(i) * 0.1;
             let output = d.process(input);
             assert!(
                 (output - input).abs() < 1e-14,

@@ -69,11 +69,13 @@
 
 pub mod compare;
 pub mod decay;
+pub mod elements;
 pub mod filters;
 pub mod eq_transfer;
 pub mod generators;
 pub mod loudness;
 pub mod null;
+pub mod record;
 
 pub use compare::{compare, Comparison, Criterion, CriterionResult, Thresholds};
 pub use decay::{

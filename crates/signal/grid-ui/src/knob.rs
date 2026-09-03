@@ -4,7 +4,6 @@
 //! 270° (from 7 o'clock to 5 o'clock) with the zero point at 7 o'clock.
 
 use dioxus::prelude::*;
-use std::f64::consts::PI;
 
 /// Knob display size.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -16,7 +15,7 @@ pub enum KnobSize {
 }
 
 impl KnobSize {
-    fn diameter(self) -> u32 {
+    const fn diameter(self) -> u32 {
         match self {
             Self::Small => 32,
             Self::Medium => 48,
@@ -74,30 +73,26 @@ pub struct KnobProps {
 const START_ANGLE: f64 = 135.0;
 const SWEEP: f64 = 270.0;
 
-fn angle_for_value(v: f64) -> f64 {
-    START_ANGLE + v.clamp(0.0, 1.0) * SWEEP
+const fn angle_for_value(v: f64) -> f64 {
+    v.clamp(0.0, 1.0).mul_add(SWEEP, START_ANGLE)
 }
 
 fn arc_point(cx: f64, cy: f64, r: f64, angle_deg: f64) -> (f64, f64) {
-    let rad = angle_deg * PI / 180.0;
-    (cx + r * rad.cos(), cy + r * rad.sin())
+    let rad = angle_deg.to_radians();
+    (r.mul_add(rad.cos(), cx), r.mul_add(rad.sin(), cy))
 }
 
 fn svg_arc(cx: f64, cy: f64, r: f64, start_deg: f64, end_deg: f64) -> String {
     let (x1, y1) = arc_point(cx, cy, r, start_deg);
     let (x2, y2) = arc_point(cx, cy, r, end_deg);
-    let large = if (end_deg - start_deg).abs() > 180.0 {
-        1
-    } else {
-        0
-    };
+    let large = i32::from((end_deg - start_deg).abs() > 180.0);
     format!("M {x1:.1} {y1:.1} A {r:.1} {r:.1} 0 {large} 1 {x2:.1} {y2:.1}")
 }
 
 #[component]
 pub fn Knob(props: KnobProps) -> Element {
     let d = props.size.diameter();
-    let df = d as f64;
+    let df = f64::from(d);
     let cx = df / 2.0;
     let cy = df / 2.0;
     let r = df / 2.0 - 4.0; // Inset for stroke width

@@ -9,6 +9,9 @@ authors.workspace = true
 # detachable GUI. Renders purely from the wire contract (`signal-drums-proto`)
 # via the generated vox clients; no audio backend, no platform I/O.
 
+[lints]
+workspace = true
+
 [dependencies]
 dioxus.workspace = true
 signal-drums-proto.workspace = true

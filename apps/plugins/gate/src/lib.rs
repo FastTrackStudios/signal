@@ -140,14 +140,14 @@ impl Default for FtsGate {
 impl FtsGate {
     fn current_config(&self) -> GateConfig {
         GateConfig {
-            threshold_db: self.params.threshold_db.value() as f64,
-            hysteresis_db: self.params.hysteresis_db.value() as f64,
-            attack_ms: self.params.attack_ms.value() as f64,
-            hold_ms: self.params.hold_ms.value() as f64,
-            release_ms: self.params.release_ms.value() as f64,
+            threshold_db: f64::from(self.params.threshold_db.value()),
+            hysteresis_db: f64::from(self.params.hysteresis_db.value()),
+            attack_ms: f64::from(self.params.attack_ms.value()),
+            hold_ms: f64::from(self.params.hold_ms.value()),
+            release_ms: f64::from(self.params.release_ms.value()),
             // UI exposes attenuation as a positive amount; the DSP floor is
             // negative dB.
-            range_db: -(self.params.range_db.value() as f64),
+            range_db: -f64::from(self.params.range_db.value()),
         }
     }
 
@@ -189,7 +189,7 @@ impl Plugin for FtsGate {
         buffer_config: &BufferConfig,
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.sample_rate = buffer_config.sample_rate as f64;
+        self.sample_rate = f64::from(buffer_config.sample_rate);
         let cfg = self.current_config();
         self.gate = Some(Gate::new(self.sample_rate, cfg));
         true
@@ -220,7 +220,7 @@ impl Plugin for FtsGate {
             }
             // Advance detector + envelope once per frame, then apply the one
             // resulting gain to every channel.
-            let _ = gate.process_sample_keyed(0.0, key as f64);
+            let _ = gate.process_sample_keyed(0.0, f64::from(key));
             let gain = gate.gain() as f32;
             for sample in frame.iter_mut() {
                 *sample *= gain;
@@ -276,10 +276,10 @@ mod tests {
     fn silence_stays_gated() {
         let mut g = Gate::new(SR, test_cfg());
         // -60 dBFS tone, well under the -40 dB threshold.
-        let amp = 10f64.powf(-60.0 / 20.0);
+        let amp = 10f64.powi(-3);
         let mut max_out = 0.0f64;
         for n in 0..48_000 {
-            let x = amp * (2.0 * core::f64::consts::PI * 440.0 * n as f64 / SR).sin();
+            let x = amp * (2.0 * core::f64::consts::PI * 440.0 * f64::from(n) / SR).sin();
             max_out = max_out.max(g.process_sample(x).abs());
         }
         // Fully closed gain is -90 dB; output must stay far below the input.
@@ -296,7 +296,7 @@ mod tests {
         // -6 dBFS tone, far over threshold.
         let amp = 10f64.powf(-6.0 / 20.0);
         for n in 0..4800 {
-            let x = amp * (2.0 * core::f64::consts::PI * 440.0 * n as f64 / SR).sin();
+            let x = amp * (2.0 * core::f64::consts::PI * 440.0 * f64::from(n) / SR).sin();
             g.process_sample(x);
         }
         assert!(g.gain() > 0.95, "gate failed to open: gain = {}", g.gain());
@@ -309,7 +309,7 @@ mod tests {
         let mut g = Gate::new(SR, test_cfg());
         let amp = 10f64.powf(-6.0 / 20.0);
         for n in 0..4800 {
-            let x = amp * (2.0 * core::f64::consts::PI * 440.0 * n as f64 / SR).sin();
+            let x = amp * (2.0 * core::f64::consts::PI * 440.0 * f64::from(n) / SR).sin();
             g.process_sample(x);
         }
         assert!(g.gain() > 0.95);

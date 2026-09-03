@@ -56,9 +56,12 @@ pub(super) fn mzt_notch_simple_cascade(
     // factor of 2 instead, which built every notch 2√2 times too narrow. On a
     // Q 4 notch at 1 kHz the plugin is 5.23 dB down at 891 Hz and this was
     // 1.11, an effective Q of 2.86 against 8.1.
-    (0..n_sections)
+    let n_sections_u32 = u32::try_from(n_sections).unwrap_or(u32::MAX);
+    (0..n_sections_u32)
         .map(|k| {
-            let theta = PI * (2 * k + 1) as f64 / (2 * n_sections) as f64;
+            let k_f = f64::from(k);
+            let n_sections_f = f64::from(n_sections_u32);
+            let theta = PI * (2.0f64.mul_add(k_f, 1.0)) / (2.0 * n_sections_f);
             let q_section =
                 (q_user * theta.sin() * std::f64::consts::FRAC_1_SQRT_2).max(1e-6);
             rbj_notch_section(freq_hz, q_section, sample_rate)

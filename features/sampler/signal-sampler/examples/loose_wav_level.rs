@@ -2,7 +2,7 @@
 //! wav as a one-zone percussion instrument, strike it, and compare the
 //! rendered peak against the file's own peak. They should be within a few
 //! dB; a large constant deficit means the loose-wav path is mis-scaling.
-//!   cargo run --release -p signal-sampler --example loose_wav_level -- <file.wav>
+//!   cargo run --release -p signal-sampler --example `loose_wav_level` -- <file.wav>
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::path::PathBuf::from(
@@ -65,7 +65,7 @@ zones (
     for _ in 0..60 {
         buf.iter_mut().for_each(|s| *s = 0.0);
         rig.render_offline(&mut buf)?;
-        for &s in buf.iter() {
+        for &s in &buf {
             peak = peak.max(s.abs());
         }
     }

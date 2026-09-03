@@ -5,25 +5,25 @@
 //! (Q, gain, frequency) based on filter type and mode, producing "effective"
 //! parameters used by the design stage.
 //!
-//! Magic constants extracted from binary @ 0x18010de30 (compute_peak_band_parameters).
+//! Magic constants extracted from binary @ 0x18010de30 (`compute_peak_band_parameters`).
 
 /// Magic constant: Shelf frequency bound
-const SHELF_FREQ_BOUND_1: f64 = 2.607521902479528;
+const SHELF_FREQ_BOUND_1: f64 = 2.607_521_902_479_528;
 
 /// Magic constant: π upper bound (3.14... instead of full π)
-const PI_BOUND: f64 = 3.141278494324434;
+const PI_BOUND: f64 = 3.141_278_494_324_434;
 
 /// Magic constant: Shelf special scaling
 const SHELF_SCALE_1: f64 = 1.8; // From DAT_180231b10
 
 /// Magic constant: Type 6 clipping bound
-const TYPE_6_CLIP: f64 = 1.884955592153876;
+const TYPE_6_CLIP: f64 = 1.884_955_592_153_876;
 
 /// Magic constant: Q constraint high
 const Q_CONSTRAINT_HIGH: f64 = 0.9998;
 
 /// Magic constant: Q² adjustment bounds
-const Q_SQ_EPSILON: f64 = 0.000000000065670;
+const Q_SQ_EPSILON: f64 = 0.000_000_000_065_670;
 
 const MODE_SCALE_0_05: f64 = 0.05;
 
@@ -40,9 +40,9 @@ const SQ_SCALE_1_5: f64 = 1.5;
 const PI: f64 = std::f64::consts::PI;
 
 /// Magic constant: 9π/10
-const NINE_PI_OVER_10: f64 = 2.827433388230814;
+const NINE_PI_OVER_10: f64 = 2.827_433_388_230_814;
 
-/// Transformed parameters output from compute_peak_band_parameters
+/// Transformed parameters output from `compute_peak_band_parameters`
 #[derive(Debug, Clone, Copy)]
 pub struct TransformedParams {
     /// param[0x8] - processed Q or gain
@@ -61,7 +61,7 @@ pub struct TransformedParams {
 
 impl Default for TransformedParams {
     fn default() -> Self {
-        TransformedParams {
+        Self {
             processed_q: 1.0,
             q_term: 0.5,
             gain_term: 0.5,
@@ -75,7 +75,7 @@ impl Default for TransformedParams {
 
 /// Apply parameter transformations based on filter type and user inputs
 ///
-/// This mirrors the compute_peak_band_parameters function from Pro-Q 4.
+/// This mirrors the `compute_peak_band_parameters` function from Pro-Q 4.
 ///
 /// # Arguments
 /// * `filter_type` - Filter type (0-12)
@@ -90,6 +90,7 @@ impl Default for TransformedParams {
 ///
 /// # Returns
 /// Transformed parameters ready for filter design stage
+#[must_use]
 pub fn transform_parameters(
     filter_type: u32,
     user_q: f64,
@@ -179,8 +180,8 @@ fn transform_types_3_to_6(
     mode_param: f64,
 ) -> TransformedParams {
     // Compute Q² adjustment
-    let q_sq_adj = sq_component * sq_component * 0.25 + mode_param;
-    let q_sq_adj_clamped = q_sq_adj.max(Q_SQ_EPSILON).min(0.65); // Reasonable bounds
+    let q_sq_adj = (sq_component * sq_component).mul_add(0.25, mode_param);
+    let q_sq_adj_clamped = q_sq_adj.clamp(Q_SQ_EPSILON, 0.65); // Reasonable bounds
 
     // Type 6 special handling
     if filter_type == 6 {
@@ -275,7 +276,7 @@ fn transform_type_10_band_shelf(
         let processed_q = if mode == 1 {
             // Mode 1: SQ-based adjustment
             let sq_sq = sq_component * sq_component;
-            let adjusted = (Q_CONSTRAINT_HIGH - sq_sq * SQ_SCALE_0_0005) * user_q;
+            let adjusted = sq_sq.mul_add(-SQ_SCALE_0_0005, Q_CONSTRAINT_HIGH) * user_q;
             adjusted.min(PI_BOUND)
         } else if mode == 0 && param_state == 1 {
             // Mode 0, special param: power operation

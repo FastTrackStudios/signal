@@ -4,10 +4,11 @@ use std::f64::consts::PI;
 
 use crate::biquad::Coeffs;
 
-/// Notch via MZT — from notch_bandpass_lp_hp_mzt.md RE.
+/// Notch via MZT — from `notch_bandpass_lp_hp_mzt.md` RE.
 ///
 /// p2=1, p3=1, p4=t², sp5=√2·t/Q, sp6=0.
 /// Numerator: b1/b0 = -2cos(2π·fc/fs) (zeros exactly at unit circle at corner).
+#[must_use]
 pub fn design_notch(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     // Standard analog notch H(s) = (s²+1)/(s² + (1/Q_bw)·s + 1) via BLT
     // with Q_bw = Q/√2. Verified |H(0)|=1, |H(w0)|≈0, |H(π)|=1.

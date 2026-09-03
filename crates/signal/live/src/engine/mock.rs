@@ -40,6 +40,7 @@ impl Default for MockRigEngine {
 }
 
 impl MockRigEngine {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             slots: Mutex::new(HashMap::new()),
@@ -128,8 +129,7 @@ impl MockRigEngine {
             .lock()
             .unwrap()
             .get(&module_type)
-            .map(|s| s.is_disabled)
-            .unwrap_or(true)
+            .is_none_or(|s| s.is_disabled)
     }
 
     fn _next_handle(&self) -> u64 {

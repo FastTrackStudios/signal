@@ -13,8 +13,8 @@ pub use signal_grid::GridSlot;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Visual state of a block cell. Exactly one state at a time.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum BlockVisualState {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BlockVisualState {
     Normal,
     Selected,
     Template,
@@ -24,7 +24,7 @@ pub(crate) enum BlockVisualState {
 }
 
 impl BlockVisualState {
-    pub fn resolve(
+    pub const fn resolve(
         is_being_dragged: bool,
         is_drop_target: bool,
         is_bypassed: bool,
@@ -81,14 +81,14 @@ impl BlockVisualState {
         }
     }
 
-    pub fn port_opacity(&self) -> &'static str {
+    pub const fn port_opacity(&self) -> &'static str {
         match self {
             Self::Bypassed => "0.5",
             _ => "1",
         }
     }
 
-    pub fn cell_class(&self) -> &'static str {
+    pub const fn cell_class(&self) -> &'static str {
         match self {
             Self::Dragging => {
                 "absolute inset-0 flex flex-col items-center justify-center gap-1 \
@@ -108,8 +108,8 @@ impl BlockVisualState {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Visual state of a module container background.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum ModuleVisualState {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModuleVisualState {
     Normal,
     Selected,
     Template,
@@ -135,7 +135,7 @@ impl ModuleVisualState {
         }
     }
 
-    pub fn opacity(&self) -> &'static str {
+    pub const fn opacity(&self) -> &'static str {
         match self {
             Self::Dragging => "0.85",
             // Keep fully-bypassed modules readable — the cells inside carry
@@ -145,7 +145,7 @@ impl ModuleVisualState {
         }
     }
 
-    pub fn extra_style(&self) -> &'static str {
+    pub const fn extra_style(&self) -> &'static str {
         match self {
             Self::Dragging => "z-index: 50; border-style: dashed;",
             Self::Template => "border-style: dashed;",
@@ -153,7 +153,7 @@ impl ModuleVisualState {
         }
     }
 
-    pub fn transition(&self) -> &'static str {
+    pub const fn transition(&self) -> &'static str {
         match self {
             Self::Dragging => "none",
             _ => "transform 0.15s ease",
@@ -164,8 +164,7 @@ impl ModuleVisualState {
         match self {
             Self::Selected => {
                 format!(
-                    "box-shadow: 0 0 0 2px {}90, 0 0 12px {}30;",
-                    bg_color, bg_color
+                    "box-shadow: 0 0 0 2px {bg_color}90, 0 0 12px {bg_color}30;"
                 )
             }
             _ => "box-shadow: none;".to_string(),

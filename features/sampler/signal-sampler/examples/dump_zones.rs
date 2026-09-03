@@ -1,5 +1,5 @@
 //! Dump zone key/velocity/mic/articulation coverage from a pack, to see why
-//! note_on doesn't match a zone.
+//! `note_on` doesn't match a zone.
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -34,19 +34,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("\nkey ranges (min,max)->count:");
     for (k, c) in &keys {
-        println!("  {:?} x{c}", k);
+        println!("  {k:?} x{c}");
     }
     println!("\nvel ranges (min,max)->count:");
     for (k, c) in &vels {
-        println!("  {:?} x{c}", k);
+        println!("  {k:?} x{c}");
     }
     println!("\narticulations:");
     for (a, c) in &artics {
-        println!("  {:?} x{c}", a);
+        println!("  {a:?} x{c}");
     }
     println!("\nmic tags:");
     for (m, c) in &mics {
-        println!("  {:?} x{c}", m);
+        println!("  {m:?} x{c}");
     }
     println!("\nroot keys:");
     for (r, c) in &roots {

@@ -100,7 +100,7 @@ fn dump_rhodes() {
         .collect();
     eprintln!("pack entries with 'CLR r10' ({})", r10_entries.len());
     for e in r10_entries.iter().take(25) {
-        eprintln!("  {}", e);
+        eprintln!("  {e}");
     }
     // Decode a couple of lacrm samples and report their durations + peaks.
     let cache = signal_sampler::engine::cache::SampleCache::with_pack(pack.clone());
@@ -122,7 +122,7 @@ fn dump_rhodes() {
                     path_str, secs, peak, data.channels, data.sample_rate
                 );
             }
-            Err(e) => eprintln!("  {}: ERROR {}", path_str, e),
+            Err(e) => eprintln!("  {path_str}: ERROR {e}"),
         }
     }
     let matches: Vec<_> = pack
@@ -132,7 +132,7 @@ fn dump_rhodes() {
         .collect();
     eprintln!("pack entries matching 'lacrm 36 35': {}", matches.len());
     for m in matches.iter().take(8) {
-        eprintln!("  pack entry: {}", m);
+        eprintln!("  pack entry: {m}");
     }
     // Verify resolve at note 36 for the RR cycle.
     for rr in 0..4 {
@@ -150,7 +150,7 @@ fn dump_rhodes() {
     for (artic, dyns) in &by_artic {
         eprintln!("  {artic}:");
         for (dyn_id, notes) in dyns {
-            let ns: Vec<String> = notes.iter().map(|n| n.to_string()).collect();
+            let ns: Vec<String> = notes.iter().map(std::string::ToString::to_string).collect();
             eprintln!("    dyn={dyn_id} notes=[{}]", ns.join(","));
         }
     }

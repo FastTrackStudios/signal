@@ -31,7 +31,7 @@ crate::typed_uuid_id!(
 // ─── PatchTarget ────────────────────────────────────────────────
 
 /// What a patch references — any collection+variant level in the hierarchy.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum PatchTarget {
     /// A Rig scene (full rig preset + scene variant).
@@ -185,10 +185,12 @@ impl Profile {
         self.patches.push(patch);
     }
 
+    #[must_use] 
     pub fn default_patch(&self) -> Option<&Patch> {
         self.patches.iter().find(|p| p.id == self.default_patch_id)
     }
 
+    #[must_use] 
     pub fn patch(&self, id: &PatchId) -> Option<&Patch> {
         self.patches.iter().find(|p| &p.id == id)
     }
@@ -315,7 +317,7 @@ mod tests {
         ));
 
         let ref_patch =
-            Patch::from_patch_ref(PatchId::new(), "Copy of Clean", block_patch.id.clone());
+            Patch::from_patch_ref(PatchId::new(), "Copy of Clean", block_patch.id);
         assert!(matches!(ref_patch.target, PatchTarget::Patch { .. }));
     }
 }

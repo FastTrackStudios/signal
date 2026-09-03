@@ -4,7 +4,7 @@
 //! - Semi-transparent tinted background (cyan glow when selected)
 //! - Title bar with module name, collapse toggle, and bypass badge (draggable)
 //! - Port circles on left/right edges (module-level I/O)
-//! - Child NodeBlock components positioned inside
+//! - Child `NodeBlock` components positioned inside
 
 use dioxus::prelude::*;
 use uuid::Uuid;
@@ -287,7 +287,7 @@ pub fn ModuleContainer(props: ModuleContainerProps) -> Element {
                                     }
                                 },
                                 onmouseenter: {
-                                    let port_id = port_id.clone();
+                                    let port_id = port_id;
                                     move |_| {
                                         if wire_active {
                                             if let Some(ref cb) = on_hover {
@@ -356,7 +356,7 @@ pub fn ModuleContainer(props: ModuleContainerProps) -> Element {
                                     }
                                 },
                                 onmouseenter: {
-                                    let port_id = port_id.clone();
+                                    let port_id = port_id;
                                     move |_| {
                                         if wire_active {
                                             if let Some(ref cb) = on_hover {

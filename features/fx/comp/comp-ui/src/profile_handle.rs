@@ -83,7 +83,7 @@ pub fn profile_control_handle(
             let ptr = targets[0];
             let values = *values;
             Arc::new(move || {
-                let plain = unsafe { ptr.modulated_plain_value() } as f64;
+                let plain = f64::from(unsafe { ptr.modulated_plain_value() });
                 nearest_step(values, plain)
             })
         }
@@ -92,31 +92,28 @@ pub fn profile_control_handle(
     // Display. A stepped control reads its own label ("Limit", "8"); the
     // others defer to the engine param they front, which already knows its
     // unit and formatting.
-    let display: Arc<dyn Fn() -> String + Send + Sync> = match &control.mapping {
-        ParamMapping::Stepped { labels, .. } => {
-            let ptr = targets[0];
-            let labels = *labels;
-            let values = match &control.mapping {
-                ParamMapping::Stepped { values, .. } => *values,
-                _ => unreachable!(),
-            };
-            Arc::new(move || {
-                let plain = unsafe { ptr.modulated_plain_value() } as f64;
-                let index = step_index(values, plain);
-                labels.get(index).map(|s| s.to_string()).unwrap_or_default()
-            })
-        }
-        _ => {
-            let ptr = targets[0];
-            Arc::new(move || unsafe {
-                let n = ptr.modulated_normalized_value();
-                ptr.normalized_value_to_string(n, true)
-            })
-        }
+    let display: Arc<dyn Fn() -> String + Send + Sync> = if let ParamMapping::Stepped { labels, .. } = &control.mapping {
+        let ptr = targets[0];
+        let labels = *labels;
+        let values = match &control.mapping {
+            ParamMapping::Stepped { values, .. } => *values,
+            _ => unreachable!(),
+        };
+        Arc::new(move || {
+            let plain = f64::from(unsafe { ptr.modulated_plain_value() });
+            let index = step_index(values, plain);
+            labels.get(index).map(std::string::ToString::to_string).unwrap_or_default()
+        })
+    } else {
+        let ptr = targets[0];
+        Arc::new(move || unsafe {
+            let n = ptr.modulated_normalized_value();
+            ptr.normalized_value_to_string(n, true)
+        })
     };
 
     let write = {
-        let params = params.clone();
+        let params = params;
         let ctx = ctx.clone();
         move |normalized: f32| {
             if let Some(slot) = macro_slot {
@@ -125,7 +122,7 @@ pub fn profile_control_handle(
                 }
             }
             for (name, plain) in
-                map_control_value(profile, control_id, normalized as f64).unwrap_or_default()
+                map_control_value(profile, control_id, f64::from(normalized)).unwrap_or_default()
             {
                 let Some(ptr) = core_param_ptr(params.stage(stage), name) else {
                     continue;
@@ -155,7 +152,7 @@ pub fn profile_control_handle(
         }
     };
     let end = {
-        let ctx = ctx.clone();
+        let ctx = ctx;
         let ptrs = gesture_ptrs;
         move || {
             for ptr in &ptrs {
@@ -196,7 +193,7 @@ fn target_params(control: &'static ProfileControl) -> Vec<&'static str> {
 /// Where a control rests when nothing has moved it — the reset target for
 /// alt-click. Stepped controls rest on their first detent, everything else at
 /// mid-travel.
-fn default_position(control: &'static ProfileControl) -> f32 {
+const fn default_position(control: &'static ProfileControl) -> f32 {
     match &control.mapping {
         ParamMapping::Stepped { .. } => 0.0,
         _ => 0.5,
@@ -214,8 +211,7 @@ fn step_index(values: &[f64], plain: f64) -> usize {
                 .partial_cmp(&(*b - plain).abs())
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
-        .map(|(i, _)| i)
-        .unwrap_or(0)
+        .map_or(0, |(i, _)| i)
 }
 
 /// Normalized position of the detent nearest `plain`.
@@ -256,7 +252,7 @@ pub fn handle_for(
     let control = profile_control(profile, control_id)?;
     let slot = macro_slot_index(profile, control_id)
         .and_then(|i| params.stage(stage).macro_slot(i))
-        .map(|p| p.as_ptr());
+        .map(audiocore_core::Param::as_ptr);
     profile_control_handle(profile, control, params, stage, ctx, slot)
 }
 

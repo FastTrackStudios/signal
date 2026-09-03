@@ -1,11 +1,11 @@
-//! Snapshot operations — bridges live DAW capture with SQLite persistence.
+//! Snapshot operations — bridges live DAW capture with `SQLite` persistence.
 //!
 //! Coordinates [`DawBridge`] (live capture/apply) and [`DawSnapshotRepo`]
 //! (storage) to provide four high-level operations:
 //!
-//! - [`capture_and_save_snapshot`] — capture live params → serialize → SQLite
-//! - [`recall_snapshot`] — load from SQLite → deserialize → apply to DAW
-//! - [`capture_and_save_preset`] — capture params + state chunks → SQLite
+//! - [`capture_and_save_snapshot`] — capture live params → serialize → `SQLite`
+//! - [`recall_snapshot`] — load from `SQLite` → deserialize → apply to DAW
+//! - [`capture_and_save_preset`] — capture params + state chunks → `SQLite`
 //! - [`recall_preset`] — load full preset → apply chunks + params to DAW
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -100,7 +100,7 @@ fn epoch_timestamp() -> String {
 
 // region: --- Operations
 
-/// Capture live DAW parameters and save to SQLite.
+/// Capture live DAW parameters and save to `SQLite`.
 ///
 /// Returns the captured snapshot for immediate use (e.g. morphing between scenes).
 pub async fn capture_and_save_snapshot(
@@ -145,7 +145,7 @@ pub async fn recall_snapshot(
     Ok(DawSceneSnapshot::params_only(params))
 }
 
-/// Capture full plugin state (params + binary chunks) and save to SQLite.
+/// Capture full plugin state (params + binary chunks) and save to `SQLite`.
 ///
 /// This is the heavyweight save: captures exact binary plugin state for
 /// complete preset recall. Previous chunks for this owner are replaced.

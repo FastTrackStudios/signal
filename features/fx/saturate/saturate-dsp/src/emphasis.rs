@@ -34,7 +34,8 @@ pub enum EmphShape {
 }
 
 impl EmphShape {
-    pub fn from_index(i: u32) -> Self {
+    #[must_use] 
+    pub const fn from_index(i: u32) -> Self {
         match i {
             1 => Self::LowShelf,
             2 => Self::HighShelf,
@@ -99,6 +100,7 @@ pub struct EmphasisEq {
 }
 
 impl EmphasisEq {
+    #[must_use] 
     pub fn new(sample_rate: f32) -> Self {
         Self {
             sample_rate: sample_rate.max(1.0),
@@ -116,6 +118,7 @@ impl EmphasisEq {
 
     /// Whether any band does anything — a flat EQ is skipped entirely so the
     /// default plugin stays bit-identical.
+    #[must_use] 
     pub fn is_active(&self) -> bool {
         self.active.iter().any(|&a| a)
     }
@@ -138,11 +141,13 @@ impl EmphasisEq {
     }
 
     /// The bands as set.
-    pub fn bands(&self) -> &[EmphBand; BANDS] {
+    #[must_use] 
+    pub const fn bands(&self) -> &[EmphBand; BANDS] {
         &self.bands
     }
 
-    pub fn sigma_gain(&self) -> f32 {
+    #[must_use] 
+    pub const fn sigma_gain(&self) -> f32 {
         self.sigma_gain
     }
 
@@ -194,6 +199,7 @@ impl EmphasisEq {
 
     /// The emphasis curve's magnitude in dB at `freq` — what the editor
     /// draws (`fx.sat.emphasis.display`).
+    #[must_use] 
     pub fn magnitude_db(&self, freq: f32) -> f32 {
         let mut db = 0.0;
         for i in 0..BANDS {
@@ -228,10 +234,10 @@ impl EmphasisEq {
 /// Evaluated in f64: at the band's own centre the quadratic form cancels
 /// down four orders of magnitude, so f32 trig reads the peak wrong.
 fn section_mag_db(c: &Coeffs, freq: f32, sample_rate: f32) -> f32 {
-    let w = core::f64::consts::TAU * (freq as f64 / sample_rate as f64).clamp(0.0, 0.5);
+    let w = core::f64::consts::TAU * (f64::from(freq) / f64::from(sample_rate)).clamp(0.0, 0.5);
     let (cw, c2w) = (cos64(w), cos64(2.0 * w));
-    let (b0, b1, b2) = (c.b0 as f64, c.b1 as f64, c.b2 as f64);
-    let (a1, a2) = (c.a1 as f64, c.a2 as f64);
+    let (b0, b1, b2) = (f64::from(c.b0), f64::from(c.b1), f64::from(c.b2));
+    let (a1, a2) = (f64::from(c.a1), f64::from(c.a2));
     // |B(e^jw)|² for b0 + b1 z⁻¹ + b2 z⁻²:
     let num = b0 * b0 + b1 * b1 + b2 * b2 + 2.0 * (b0 * b1 + b1 * b2) * cw + 2.0 * b0 * b2 * c2w;
     let den = 1.0 + a1 * a1 + a2 * a2 + 2.0 * (a1 + a1 * a2) * cw + 2.0 * a2 * c2w;
@@ -244,7 +250,7 @@ fn design(band: &EmphBand, sample_rate: f32) -> Coeffs {
     let q = band.q.clamp(0.05, 18.0);
     // A = 10^(gain/40).
     let a_lin = pow10(band.gain_db.clamp(-24.0, 24.0) / 40.0);
-    let w0 = core::f64::consts::TAU * f as f64 / sample_rate as f64;
+    let w0 = core::f64::consts::TAU * f64::from(f) / f64::from(sample_rate);
     let cw = cos64(w0) as f32;
     let sw = sin64(w0) as f32;
     let alpha = sw / (2.0 * q);
@@ -397,7 +403,7 @@ mod tests {
     fn a_flat_eq_is_skipped_and_bit_exact() {
         let mut eq = EmphasisEq::new(48_000.0);
         assert!(!eq.is_active());
-        for &x in noise(64).iter() {
+        for &x in &noise(64) {
             assert_eq!(eq.pre(x), x);
             assert_eq!(eq.post(x), x);
         }

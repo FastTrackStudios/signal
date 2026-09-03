@@ -1,6 +1,6 @@
-//! Layer repository — data access for Layer collections and LayerSnapshot variants.
+//! Layer repository — data access for Layer collections and `LayerSnapshot` variants.
 
-use sea_orm::*;
+use sea_orm::{ConnectionTrait, Schema, ActiveModelBehavior, StatementBuilder, QueryTrait, ActiveEnum, QueryOrder, QueryFilter, EntityTrait, ColumnTrait, Iden, ColIdx, IdenStatic, ActiveModelTrait, Set, Iterable};
 use signal_proto::layer::{
     BlockRef, Layer, LayerId, LayerRef, LayerSnapshot, LayerSnapshotId, ModuleRef, PluginRef,
 };
@@ -37,7 +37,8 @@ pub struct LayerRepoLive {
 }
 
 impl LayerRepoLive {
-    pub fn new(db: DatabaseConnection) -> Self {
+    #[must_use] 
+    pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
 
@@ -475,7 +476,7 @@ mod tests {
         // Second override is a bypass
         match &ambient.overrides[1].op {
             signal_proto::overrides::OverrideOp::Bypass(b) => assert!(b),
-            other => panic!("expected Bypass, got {:?}", other),
+            other => panic!("expected Bypass, got {other:?}"),
         }
 
         // -- Check: switching between variants changes which module is active

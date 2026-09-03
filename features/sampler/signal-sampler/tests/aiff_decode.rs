@@ -13,7 +13,7 @@ fn ext80_from_u32(n: u32) -> [u8; 10] {
     if n == 0 {
         return [0; 10];
     }
-    let mut mant = n as u64;
+    let mut mant = u64::from(n);
     let mut exp = 63i32;
     while mant & (1u64 << 63) == 0 {
         mant <<= 1;

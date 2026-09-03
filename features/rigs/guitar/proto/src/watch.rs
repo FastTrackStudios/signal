@@ -14,7 +14,7 @@ use facet::Facet;
 use crate::{PerfStack, PerformanceModel};
 
 /// One footswitch stack (scene folder) as the watch renders it.
-#[derive(Clone, Debug, Default, PartialEq, Facet)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Facet)]
 pub struct WatchStack {
     /// Folder / footswitch name (e.g. "Clean", "Lead") — also drives the
     /// tile color, mirroring the web perform grid's `folder_color`.

@@ -140,7 +140,7 @@ pub fn SignalFlowGridView(
                     rsx! {
                         ModuleBrowserModal {
                             is_open: show_add_modal(),
-                            on_close: move |_| show_add_modal.set(false),
+                            on_close: move |()| show_add_modal.set(false),
                             on_add_module: move |bt: BlockType| {
                                 show_add_modal.set(false);
                                 cb.call(bt);
@@ -522,15 +522,16 @@ pub enum ModuleCategory {
 }
 
 impl ModuleCategory {
-    pub const ALL: &[ModuleCategory] = &[
-        ModuleCategory::All,
-        ModuleCategory::Drive,
-        ModuleCategory::Amp,
-        ModuleCategory::Modulation,
-        ModuleCategory::Time,
-        ModuleCategory::Utility,
+    pub const ALL: &[Self] = &[
+        Self::All,
+        Self::Drive,
+        Self::Amp,
+        Self::Modulation,
+        Self::Time,
+        Self::Utility,
     ];
 
+    #[must_use] 
     pub const fn label(&self) -> &'static str {
         match self {
             Self::All => "All",
@@ -542,7 +543,8 @@ impl ModuleCategory {
         }
     }
 
-    pub fn matches(&self, block_type: BlockType) -> bool {
+    #[must_use] 
+    pub const fn matches(&self, block_type: BlockType) -> bool {
         match self {
             Self::All => true,
             Self::Drive => matches!(block_type, BlockType::Drive | BlockType::Saturator),
@@ -792,7 +794,7 @@ pub fn ModuleBrowserModal(
                             r#type: "text",
                             placeholder: "Search modules...",
                             value: "{search_query}",
-                            oninput: move |e| search_query.set(e.value().clone()),
+                            oninput: move |e| search_query.set(e.value()),
                         }
                         span { class: "absolute left-3 top-2.5 text-zinc-500 text-sm", ">" }
                     }

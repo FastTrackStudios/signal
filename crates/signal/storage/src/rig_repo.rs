@@ -1,6 +1,6 @@
-//! Rig repository — data access for Rig collections and RigScene variants.
+//! Rig repository — data access for Rig collections and `RigScene` variants.
 
-use sea_orm::*;
+use sea_orm::{ConnectionTrait, Schema, ActiveModelBehavior, StatementBuilder, QueryTrait, Iterable, ColIdx, IdenStatic, ActiveEnum, QueryOrder, QueryFilter, EntityTrait, ColumnTrait, Iden, ActiveModelTrait, Set};
 use signal_proto::engine::EngineId;
 use signal_proto::metadata::Metadata;
 use signal_proto::overrides::Override;
@@ -34,7 +34,8 @@ pub struct RigRepoLive {
 }
 
 impl RigRepoLive {
-    pub fn new(db: DatabaseConnection) -> Self {
+    #[must_use] 
+    pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
 
@@ -68,7 +69,7 @@ impl RigRepoLive {
     }
 
     fn engine_ids_to_json(ids: &[EngineId]) -> StorageResult<String> {
-        let strs: Vec<&str> = ids.iter().map(|id| id.as_str()).collect();
+        let strs: Vec<&str> = ids.iter().map(signal_proto::engine::EngineId::as_str).collect();
         serde_json::to_string(&strs)
             .map_err(|e| StorageError::Data(format!("failed to serialize engine_ids: {e}")))
     }

@@ -21,7 +21,7 @@ pub enum NamFileKind {
 /// page. So provenance travels with the catalog entry rather than being
 /// resolved on demand — the entry outlives any session, and the obligation
 /// outlives the download.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Provenance {
     /// The library this came from — `"tone3000"` today.
     pub source: String,
@@ -117,12 +117,12 @@ pub fn parse_nam_metadata(contents: &str) -> Result<NamMetadata, serde_json::Err
             .map(String::from);
         meta.sample_rate = obj
             .get("sample_rate")
-            .and_then(|v| v.as_u64())
+            .and_then(serde_json::Value::as_u64)
             .map(|n| n as u32);
 
         if let Some(md) = obj.get("metadata").and_then(|v| v.as_object()) {
-            meta.gain = md.get("gain").and_then(|v| v.as_f64());
-            meta.loudness = md.get("loudness").and_then(|v| v.as_f64());
+            meta.gain = md.get("gain").and_then(serde_json::Value::as_f64);
+            meta.loudness = md.get("loudness").and_then(serde_json::Value::as_f64);
             meta.gear_type = md
                 .get("gear_type")
                 .and_then(|v| v.as_str())
@@ -150,6 +150,7 @@ pub fn parse_nam_metadata(contents: &str) -> Result<NamMetadata, serde_json::Err
 }
 
 /// Infer tags from NAM metadata fields.
+#[must_use] 
 pub fn infer_tags_from_metadata(meta: &NamMetadata, filename: &str) -> TagSet {
     let mut tags = TagSet::default();
 
@@ -218,6 +219,7 @@ pub fn infer_tags_from_metadata(meta: &NamMetadata, filename: &str) -> TagSet {
 }
 
 /// Determine file kind from extension.
+#[must_use] 
 pub fn kind_from_path(path: &Path) -> Option<NamFileKind> {
     match path.extension().and_then(|e| e.to_str()) {
         Some("nam") => Some(NamFileKind::AmpModel),

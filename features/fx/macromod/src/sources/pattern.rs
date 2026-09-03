@@ -1,4 +1,4 @@
-//! Pattern source — a drawn multi-segment curve (ShaperBox / tiagolr
+//! Pattern source — a drawn multi-segment curve (`ShaperBox` / tiagolr
 //! style MSEG), cycled by tempo or free rate.
 //!
 //! The point list is a serde/Facet-friendly mirror of
@@ -12,8 +12,8 @@ use super::lfo::{RetriggerMode, TempoDiv};
 
 /// One breakpoint of a drawn pattern. `x`/`y` are normalized 0..1;
 /// `curve_type` indexes [`fts_modulation::CurveType`] (0 = Hold,
-/// 1 = Curve, 2 = SCurve, 3 = HalfSine, 4 = Pulse, 5 = Wave,
-/// 6 = Triangle, 7 = Stairs, 8 = SmoothStairs); `tension` bends the
+/// 1 = Curve, 2 = `SCurve`, 3 = `HalfSine`, 4 = Pulse, 5 = Wave,
+/// 6 = Triangle, 7 = Stairs, 8 = `SmoothStairs`); `tension` bends the
 /// segment leaving this point (−1..1).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Facet)]
 pub struct PatternPoint {
@@ -28,12 +28,13 @@ pub struct PatternPoint {
     pub clear_tails: bool,
 }
 
-fn default_curve_type() -> u8 {
+const fn default_curve_type() -> u8 {
     1 // CurveType::Curve
 }
 
 impl PatternPoint {
-    pub fn new(x: f32, y: f32) -> Self {
+    #[must_use] 
+    pub const fn new(x: f32, y: f32) -> Self {
         Self {
             x,
             y,
@@ -91,6 +92,7 @@ impl Default for PatternConfig {
 
 impl PatternConfig {
     /// Convert the point list into the DSP engine's evaluator.
+    #[must_use] 
     pub fn build_pattern(&self) -> fts_modulation::Pattern {
         let mut pattern = fts_modulation::Pattern::new();
         pattern.set_points(
@@ -110,12 +112,12 @@ impl PatternConfig {
     }
 
     /// Effective cycle frequency in Hz.
+    #[must_use] 
     pub fn effective_rate_hz(&self, bpm: f32) -> f32 {
         if self.tempo_sync {
             let beats = self
                 .sync_division
-                .map(|d| d.beats())
-                .unwrap_or(1.0)
+                .map_or(1.0, super::lfo::TempoDiv::beats)
                 .max(1.0e-6);
             bpm / 60.0 / beats
         } else {

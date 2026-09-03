@@ -1,4 +1,4 @@
-//! nice_plug parameter definitions and shared UI state.
+//! `nice_plug` parameter definitions and shared UI state.
 //!
 //! Lives in `comp-ui` (not `comp-plugin`) so the [`crate::control_view`]
 //! component can render against the param tree without forcing a circular
@@ -33,6 +33,7 @@ impl Default for WaveRing {
 }
 
 impl WaveRing {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             buf: std::array::from_fn(|_| AtomicF32::new(0.0)),
@@ -299,8 +300,7 @@ impl CompStageParams {
     pub fn store_profile_id(&self, index: usize) {
         let id = comp_profiles::all_profiles()
             .get(index)
-            .map(|p| p.id())
-            .unwrap_or("control");
+            .map_or("control", |p| p.id());
         *self.profile_id.write() = id.to_string();
     }
 }
@@ -308,7 +308,7 @@ impl CompStageParams {
 /// The macro slots, in assignment order — index N backs the Nth compound
 /// control of the active profile.
 impl CompStageParams {
-    pub fn macro_slot(&self, index: usize) -> Option<&FloatParam> {
+    pub const fn macro_slot(&self, index: usize) -> Option<&FloatParam> {
         match index {
             0 => Some(&self.macro1),
             1 => Some(&self.macro2),
@@ -569,6 +569,7 @@ impl Default for CompStageParams {
 impl CompStageParams {
     /// A stage's params. `first` = stage 1, which starts in the stack (the
     /// plain plugin); the rest start unused until added.
+    #[must_use] 
     pub fn new(first: bool) -> Self {
         Self {
             sc_eq: std::array::from_fn(|i| ScBandParams::new(SC_DEFAULT_FREQS[i])),
@@ -837,9 +838,7 @@ fn macro_slot_param(name: &str) -> FloatParam {
 fn label_formatter(labels: &'static [&'static str]) -> Arc<dyn Fn(i32) -> String + Send + Sync> {
     Arc::new(move |v| {
         labels
-            .get(v.max(0) as usize)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| v.to_string())
+            .get(v.max(0) as usize).map_or_else(|| v.to_string(), std::string::ToString::to_string)
     })
 }
 

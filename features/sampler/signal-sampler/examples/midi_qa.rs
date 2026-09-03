@@ -57,7 +57,7 @@ struct Mark {
 }
 
 fn qn_to_frame(bpm: f64, qn: f64) -> usize {
-    (qn * 60.0 / bpm * SR as f64).round() as usize
+    (qn * 60.0 / bpm * f64::from(SR)).round() as usize
 }
 
 /// Build a mono legato line from (pitch, dur-QN); pitch 0 = rest.
@@ -88,7 +88,7 @@ const NN: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
 fn nm(p: u8) -> String {
-    format!("{}{}", NN[(p % 12) as usize], (p / 12) as i32 - 1)
+    format!("{}{}", NN[(p % 12) as usize], i32::from(p / 12) - 1)
 }
 
 fn rms(x: &[f32], a: usize, b: usize) -> f32 {
@@ -300,7 +300,7 @@ fn main() -> eyre::Result<()> {
         }
 
         // Window sizes (frames).
-        let ms = |m: f64| (m / 1000.0 * SR as f64) as usize;
+        let ms = |m: f64| (m / 1000.0 * f64::from(SR)) as usize;
         let mut fails: Vec<String> = Vec::new();
         let mut labels: Vec<(f64, f64, String)> = Vec::new();
 
@@ -337,7 +337,7 @@ fn main() -> eyre::Result<()> {
                 Kind::Release => {}
             }
 
-            let t = f as f64 / SR as f64;
+            let t = f as f64 / f64::from(SR);
             let lbl = if tags.is_empty() {
                 m.label.clone()
             } else {
@@ -375,7 +375,7 @@ fn main() -> eyre::Result<()> {
         let audio_anchor = res.transitions.first().map(|f| f.frame);
         let offset = match (trace_anchor, audio_anchor) {
             (Some(te), Some(ae)) => te.saturating_sub(ae),
-            _ => trace.events.first().map(|e| e.frame).unwrap_or(0),
+            _ => trace.events.first().map_or(0, |e| e.frame),
         };
         trace.events.retain(|e| e.frame >= offset);
         for e in &mut trace.events {
@@ -389,7 +389,7 @@ fn main() -> eyre::Result<()> {
             .collect();
         // QA boundary labels (incl. failure tags) as their own markers.
         for (t, _, s) in &labels {
-            rep_markers.push(((t * SR as f64) as u64, format!("QA {s}"), 0, 0));
+            rep_markers.push(((t * f64::from(SR)) as u64, format!("QA {s}"), 0, 0));
         }
         let emitted = res.emitted_markers.clone();
         let sources = signal_sampler::report::ReportSources {
@@ -444,8 +444,7 @@ fn main() -> eyre::Result<()> {
     }
 
     println!(
-        "\n{} total boundary failures across the battery.",
-        total_fail
+        "\n{total_fail} total boundary failures across the battery."
     );
     if total_fail > 0 {
         std::process::exit(1);

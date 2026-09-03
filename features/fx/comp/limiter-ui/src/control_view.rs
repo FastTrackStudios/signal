@@ -42,9 +42,11 @@ pub const MAX_EDITOR_W: f32 = 1600.0;
 pub const MAX_EDITOR_H: f32 = 1200.0;
 
 /// How the host may resize this editor: freely on both axes above the minimum.
+///
 /// The trace is the part that benefits from extra width — a longer time window
 /// makes the limiter's release behaviour much easier to read.
-pub fn resize_hint() -> ResizeHint {
+#[must_use] 
+pub const fn resize_hint() -> ResizeHint {
     ResizeHint::RESIZABLE.with_min_max_logical_size(
         Some(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H)),
         Some(LogicalSize::new(MAX_EDITOR_W, MAX_EDITOR_H)),
@@ -52,7 +54,8 @@ pub fn resize_hint() -> ResizeHint {
 }
 
 /// The limiter's identity colour.
-pub fn skin() -> Skin {
+#[must_use] 
+pub const fn skin() -> Skin {
     Skin::accented(accents::LIMITER)
 }
 
@@ -140,7 +143,7 @@ fn AppShell() -> Element {
                             "True Peak"
                         }
                         ParamToggle {
-                            handle: param_handle(params.true_peak.as_ptr(), ctx.clone()),
+                            handle: param_handle(params.true_peak.as_ptr(), ctx),
                             testid: "truepeak".to_string(),
                             skin,
                         }

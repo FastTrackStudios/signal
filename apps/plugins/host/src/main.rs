@@ -7,10 +7,10 @@
 //! a different windowing stack.
 //!
 //! The parent window is a **baseview** window (crates.io 0.2), not winit. On
-//! Linux that matters for input: winit selects XInput2 on its window, which
+//! Linux that matters for input: winit selects `XInput2` on its window, which
 //! starves the plugin's core-X11-only baseview child of pointer/key events —
 //! REAPER's plain X11 parent is what makes input work there, and this shell
-//! reproduces it. On macOS baseview gives an NSView parent, the same shape
+//! reproduces it. On macOS baseview gives an `NSView` parent, the same shape
 //! REAPER embeds into.
 //!
 //! Runs on Linux and macOS. Bare plugin names resolve against whichever
@@ -46,11 +46,11 @@ use raw_window_handle::HasWindowHandle;
 /// half the size it asked for.
 fn resize_to_plugin_size(ctx: &baseview::WindowContext, width: u32, height: u32) {
     if gui_api_uses_logical_size() {
-        ctx.resize(baseview::dpi::LogicalSize::new(width as f64, height as f64));
+        ctx.resize(baseview::dpi::LogicalSize::new(f64::from(width), f64::from(height)));
     } else {
         ctx.resize(baseview::dpi::PhysicalSize::new(
-            width as f64,
-            height as f64,
+            f64::from(width),
+            f64::from(height),
         ));
     }
 }
@@ -100,7 +100,7 @@ fn make_window_resizable(handle: &raw_window_handle::RawWindowHandle) {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn make_window_resizable(_handle: &raw_window_handle::RawWindowHandle) {
+const fn make_window_resizable(_handle: &raw_window_handle::RawWindowHandle) {
     // X11 windows are resizable unless the client sets size hints forbidding
     // it, and baseview sets none.
 }
@@ -145,7 +145,7 @@ fn resolve_bundle(arg: &str) -> PathBuf {
 
 struct HostHandler {
     /// `WindowHandler` methods take `&self` in baseview 0.2 — the plugin
-    /// lives behind a RefCell. Everything runs on the one GUI thread.
+    /// lives behind a `RefCell`. Everything runs on the one GUI thread.
     plugin: RefCell<Option<LoadedClapPlugin>>,
     /// This host's own window, so a resize the plugin asks for can be applied
     /// to the frame around it. `WindowContext` is cheap to clone and is the
@@ -224,7 +224,7 @@ impl WindowHandler for HostHandler {
                 _ => {}
             }
         }
-        if let Event::Window(WindowEvent::WillClose) = event {
+        if matches!(event, Event::Window(WindowEvent::WillClose)) {
             if let Some(plugin) = self.plugin.borrow_mut().as_mut() {
                 plugin.close_gui();
             }

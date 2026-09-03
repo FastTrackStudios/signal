@@ -7,7 +7,7 @@
 //! Chain order: Input → Drive → Amp → Modulation → Time → Dynamics → Master
 //!
 //! Run with:
-//!   cargo xtask reaper-test guitar_rig_save
+//!   cargo xtask reaper-test `guitar_rig_save`
 
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;

@@ -14,7 +14,7 @@ use architect::iroh_link::{self, IrohLink, iroh};
 use vox::{Link as _, LinkRx as _, LinkTx as _};
 
 /// Minimal real vox service over iroh (`serve-vox` mode) — a stub
-/// PackLibrary with one fake pack, no engine host around it.
+/// `PackLibrary` with one fake pack, no engine host around it.
 #[derive(Clone, architect::HasDispatcher)]
 struct StubPacks;
 

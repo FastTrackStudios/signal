@@ -134,7 +134,7 @@ fn init_tracing() {
     let _ = tracing::subscriber::set_global_default(subscriber);
 }
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 async fn handle_action(daw: &Daw, command_name: &str) {
     info!("signal action triggered: {command_name}");
 

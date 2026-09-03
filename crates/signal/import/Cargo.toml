@@ -4,6 +4,9 @@ version.workspace = true
 edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
 license.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 signal-proto.workspace = true
 signal-controller.workspace = true

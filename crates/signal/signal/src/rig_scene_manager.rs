@@ -1,6 +1,6 @@
 //! Manages preloaded rig scene hierarchies for gapless scene switching.
 //!
-//! Creates an "Input: {rig_name}" track that sends to complete `[R]/[E]/[L]`
+//! Creates an "Input: {`rig_name`}" track that sends to complete `[R]/[E]/[L]`
 //! track hierarchies — one per scene variant. Switching between scenes
 //! mutes/unmutes sends for <5ms gapless transitions with reverb tail ring-out.
 //!
@@ -41,7 +41,7 @@ struct SceneSlot {
 
 /// Internal state managed by the `RigSceneManager`.
 struct RigSceneState {
-    /// The "Input: {rig_name}" track that holds sends to scene rig folders.
+    /// The "Input: {`rig_name`}" track that holds sends to scene rig folders.
     input_track: TrackHandle,
     rig_name: String,
     project: Project,
@@ -49,7 +49,7 @@ struct RigSceneState {
     current: Option<SceneSlot>,
     /// Previous scene with tail still ringing out (muted send, unmuted folder for ~7s).
     tail: Option<SceneSlot>,
-    /// Preloaded scene slots keyed by scene_id, ready for instant switching.
+    /// Preloaded scene slots keyed by `scene_id`, ready for instant switching.
     preloaded: HashMap<String, SceneSlot>,
     /// GUIDs of rig tracks with pending delayed mutes.
     pending_mutes: Arc<Mutex<HashSet<String>>>,
@@ -67,6 +67,7 @@ pub struct RigSceneManager {
 }
 
 impl RigSceneManager {
+    #[must_use] 
     pub fn new(signal_live: Arc<SignalLive>) -> Self {
         Self {
             state: RwLock::new(None),
@@ -76,7 +77,7 @@ impl RigSceneManager {
 
     /// Set up the input track for rig scene switching.
     ///
-    /// Creates (or finds) an "Input: {rig_name}" track with parent_send disabled,
+    /// Creates (or finds) an "Input: {`rig_name`}" track with `parent_send` disabled,
     /// record-armed, and input monitoring enabled. Recovers existing scene tracks
     /// from a previous session by scanning `[R] {name} :: *` tracks.
     pub async fn set_target(
@@ -89,17 +90,14 @@ impl RigSceneManager {
         let tracks = project.tracks();
 
         // Find or create the input track
-        let input_track = match tracks.by_name(&input_track_name).await {
-            Ok(Some(t)) => t,
-            _ => {
-                let t = tracks.add(&input_track_name, None).await.map_err(|e| {
-                    RigSceneApplyError::DawError(format!("create input track: {e}"))
-                })?;
-                t.set_parent_send(false).await.map_err(|e| {
-                    RigSceneApplyError::DawError(format!("disable parent send: {e}"))
-                })?;
-                t
-            }
+        let input_track = if let Ok(Some(t)) = tracks.by_name(&input_track_name).await { t } else {
+            let t = tracks.add(&input_track_name, None).await.map_err(|e| {
+                RigSceneApplyError::DawError(format!("create input track: {e}"))
+            })?;
+            t.set_parent_send(false).await.map_err(|e| {
+                RigSceneApplyError::DawError(format!("disable parent send: {e}"))
+            })?;
+            t
         };
 
         // Record-arm + input monitoring
@@ -131,8 +129,7 @@ impl RigSceneManager {
                 let send_muted = input_sends
                     .iter()
                     .find(|s| s.dest_track_guid.as_deref() == Some(&track_info.guid))
-                    .map(|s| s.muted)
-                    .unwrap_or(true);
+                    .is_none_or(|s| s.muted);
 
                 let handle = match tracks.by_guid(&track_info.guid).await {
                     Ok(Some(h)) => h,
@@ -141,8 +138,7 @@ impl RigSceneManager {
 
                 if send_muted {
                     eprintln!(
-                        "[INFO] Recovered preloaded rig scene '{}' from existing track",
-                        scene_name
+                        "[INFO] Recovered preloaded rig scene '{scene_name}' from existing track"
                     );
                     recovered_preloaded.insert(
                         scene_name.clone(),
@@ -155,8 +151,7 @@ impl RigSceneManager {
                     );
                 } else {
                     eprintln!(
-                        "[INFO] Recovered active rig scene '{}' from existing track",
-                        scene_name
+                        "[INFO] Recovered active rig scene '{scene_name}' from existing track"
                     );
                     recovered_current = Some(SceneSlot {
                         rig_track: handle,
@@ -169,7 +164,7 @@ impl RigSceneManager {
         }
 
         let recovered_count =
-            recovered_preloaded.len() + if recovered_current.is_some() { 1 } else { 0 };
+            recovered_preloaded.len() + usize::from(recovered_current.is_some());
         if recovered_count > 0 {
             eprintln!("[INFO] Recovered {recovered_count} existing rig scene track(s) from REAPER");
         }
@@ -310,7 +305,7 @@ impl RigSceneManager {
         Ok(())
     }
 
-    /// Switch to a preloaded scene by scene_id.
+    /// Switch to a preloaded scene by `scene_id`.
     ///
     /// Fast path: mute current send, unmute preloaded, schedule tail mute.
     /// Returns `Ok(true)` on success, `Ok(false)` if scene not yet preloaded.

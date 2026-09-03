@@ -17,7 +17,7 @@ pub struct AnalyzerSettingsPanelProps {
     pub on_change: Callback<AnalyzerSettings>,
 }
 
-fn resolution_value(r: Resolution) -> &'static str {
+const fn resolution_value(r: Resolution) -> &'static str {
     match r {
         Resolution::Low => "low",
         Resolution::Medium => "med",
@@ -35,7 +35,7 @@ fn resolution_from(v: &str) -> Resolution {
     }
 }
 
-fn speed_value(s: Speed) -> &'static str {
+const fn speed_value(s: Speed) -> &'static str {
     match s {
         Speed::Slow => "slow",
         Speed::Medium => "med",
@@ -53,7 +53,7 @@ fn speed_from(v: &str) -> Speed {
     }
 }
 
-fn range_value(r: Range) -> &'static str {
+const fn range_value(r: Range) -> &'static str {
     match r {
         Range::Db60 => "60",
         Range::Db90 => "90",

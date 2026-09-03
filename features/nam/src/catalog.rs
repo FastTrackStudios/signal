@@ -31,6 +31,7 @@ pub struct IrPairing {
 }
 
 impl NamCatalog {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             version: 1,
@@ -55,22 +56,25 @@ impl NamCatalog {
             std::fs::create_dir_all(parent)?;
         }
         let json = serde_json::to_string_pretty(self)
-            .map_err(|e| NamError::CatalogError(format!("serializing catalog: {}", e)))?;
+            .map_err(|e| NamError::CatalogError(format!("serializing catalog: {e}")))?;
         std::fs::write(path, json)?;
         Ok(())
     }
 
     /// Look up an entry by its content hash.
+    #[must_use] 
     pub fn get_entry(&self, hash: &str) -> Option<&NamFileEntry> {
         self.entries.get(hash)
     }
 
     /// Return all entries of a given kind.
+    #[must_use] 
     pub fn entries_by_kind(&self, kind: NamFileKind) -> Vec<&NamFileEntry> {
         self.entries.values().filter(|e| e.kind == kind).collect()
     }
 
     /// Return all entries that have a tag matching the given category and value.
+    #[must_use] 
     pub fn entries_by_tag(&self, category: TagCategory, value: &str) -> Vec<&NamFileEntry> {
         let key = format!("{}:{}", category.as_str(), value);
         self.entries
@@ -80,11 +84,13 @@ impl NamCatalog {
     }
 
     /// Return all amp model entries (convenience).
+    #[must_use] 
     pub fn amp_models(&self) -> Vec<&NamFileEntry> {
         self.entries_by_kind(NamFileKind::AmpModel)
     }
 
     /// Return all IR entries (convenience).
+    #[must_use] 
     pub fn impulse_responses(&self) -> Vec<&NamFileEntry> {
         self.entries_by_kind(NamFileKind::ImpulseResponse)
     }
@@ -99,6 +105,7 @@ impl NamCatalog {
     }
 
     /// Get recommended IRs for a given model hash.
+    #[must_use] 
     pub fn ir_pairings_for_model(&self, model_hash: &str) -> Vec<&IrPairing> {
         self.ir_pairings
             .iter()
@@ -107,6 +114,7 @@ impl NamCatalog {
     }
 
     /// Summary stats for display.
+    #[must_use] 
     pub fn stats(&self) -> CatalogStats {
         let amp_count = self
             .entries

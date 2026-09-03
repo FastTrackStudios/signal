@@ -17,7 +17,7 @@ fn gain_db_at(band: &mut Band, freq: f64) -> f64 {
     let n = 48_000;
     let (mut acc_in, mut acc_out) = (0.0f64, 0.0f64);
     for i in 0..n {
-        let x = (inc * i as f64).sin();
+        let x = (inc * f64::from(i)).sin();
         let y = band.tick(x, 0);
         if i > n / 2 {
             acc_in += x * x;

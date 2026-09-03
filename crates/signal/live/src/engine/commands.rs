@@ -1,7 +1,7 @@
 //! Command dispatch and event streaming for rig control.
 //!
 //! `RigControlService` wraps the `RigEngine` with a command/event pattern:
-//! - **Commands** are discrete actions (LoadPatch, ApplySnapshot, NextSong, etc.)
+//! - **Commands** are discrete actions (`LoadPatch`, `ApplySnapshot`, `NextSong`, etc.)
 //! - **Events** are emitted after each command for reactive UI updates
 //!
 //! This decouples the UI from the engine's async internals — the UI sends
@@ -89,7 +89,7 @@ pub enum RigControlEvent {
     Error { error: String },
 }
 
-/// Simplified transition data for events (avoids cloning full TransitionResult).
+/// Simplified transition data for events (avoids cloning full `TransitionResult`).
 #[derive(Debug, Clone)]
 pub struct TransitionEventData {
     pub completed: bool,
@@ -111,12 +111,12 @@ impl From<&TransitionResult> for TransitionEventData {
 }
 
 /// Service trait for rig control — wraps engine with command/event pattern.
-#[allow(async_fn_in_trait)]
+#[expect(async_fn_in_trait)]
 pub trait RigControlService: Send + Sync {
     /// Execute a command and return resulting events.
     ///
     /// Returns a vec because some commands produce multiple events
-    /// (e.g. LoadPatch may emit SceneTransitioned + multiple SlotStateChanged).
+    /// (e.g. `LoadPatch` may emit `SceneTransitioned` + multiple `SlotStateChanged`).
     async fn execute(&self, command: RigControlCommand) -> Vec<RigControlEvent>;
 }
 
@@ -133,7 +133,8 @@ impl Default for MockRigControlService {
 }
 
 impl MockRigControlService {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             history: std::sync::Mutex::new(Vec::new()),
         }

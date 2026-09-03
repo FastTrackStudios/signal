@@ -10,8 +10,8 @@
 //! ```
 //!
 //! Phases:
-//!   1. parse+build — `load_preset` (PresetSpec parse + open N packs, parse
-//!      their embedded LibrarySpecs, build N engines).
+//!   1. parse+build — `load_preset` (`PresetSpec` parse + open N packs, parse
+//!      their embedded `LibrarySpecs`, build N engines).
 //!   2. preload — background FLAC decode of every sample; we poll
 //!      per-engine `preload_progress` until complete, and also
 //!      report time-to-first-engine-ready (≈ time-to-playable).

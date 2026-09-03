@@ -20,6 +20,7 @@ pub enum CcCurve {
 
 impl CcCurve {
     /// Apply the curve to a normalized CC value (0.0–1.0).
+    #[must_use] 
     pub fn apply(self, value: f64) -> f64 {
         let v = value.clamp(0.0, 1.0);
         match self {
@@ -32,7 +33,7 @@ impl CcCurve {
             Self::Exponential => {
                 // exp curve: faster response at low values
                 let base = 10.0_f64;
-                v.log(base) * (base - 1.0) + 1.0 // inverse of log
+                v.log(base).mul_add(base - 1.0, 1.0) // inverse of log
             }
             Self::Toggle => {
                 if v >= 0.5 {
@@ -44,13 +45,14 @@ impl CcCurve {
         }
     }
 
-    pub const ALL: &'static [CcCurve] = &[
+    pub const ALL: &'static [Self] = &[
         Self::Linear,
         Self::Logarithmic,
         Self::Exponential,
         Self::Toggle,
     ];
 
+    #[must_use] 
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Linear => "Linear",
@@ -62,7 +64,7 @@ impl CcCurve {
 }
 
 /// What a MIDI CC controls.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum MidiTarget {
     /// Controls the morph slider position (0.0–1.0).
@@ -98,6 +100,7 @@ pub struct MidiCcMapping {
 }
 
 impl MidiCcMapping {
+    #[must_use] 
     pub fn new(cc_number: u8, target: MidiTarget) -> Self {
         Self {
             channel: None,
@@ -111,16 +114,17 @@ impl MidiCcMapping {
     }
 
     /// Apply curve and range to a raw CC value (0–127).
+    #[must_use] 
     pub fn map_value(&self, cc_value: u8) -> f32 {
-        let normalized = cc_value as f64 / 127.0;
+        let normalized = f64::from(cc_value) / 127.0;
         let curved = self.curve.apply(normalized);
         let range = self.range_max - self.range_min;
-        self.range_min + (curved as f32 * range)
+        (curved as f32).mul_add(range, self.range_min)
     }
 }
 
 /// State of the MIDI learn process.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum MidiLearnState {
     /// Not learning — normal operation.
@@ -143,13 +147,15 @@ pub struct MidiMappingSet {
 }
 
 impl MidiMappingSet {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             mappings: Vec::new(),
         }
     }
 
     /// Find mappings that match a given CC message.
+    #[must_use] 
     pub fn find_mappings(&self, channel: u8, cc_number: u8) -> Vec<&MidiCcMapping> {
         self.mappings
             .iter()

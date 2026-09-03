@@ -102,6 +102,9 @@ impl From<&RigAudioPrefs> for daw_audio_io::AudioIoPrefs {
             sample_rate: p.sample_rate,
             buffer_size: p.buffer_size,
             want_input: true,
+            // The guitar rig keeps the engine's default node name; the caller
+            // overrides it where a process runs more than one engine.
+            node_name: String::new(),
             phones_routing: p.phones_routing,
             // Zeroed pairs fall back to the live-rig conventions:
             // main → 3-4, phones → 1-2, monitor mix in → 3-4.

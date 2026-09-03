@@ -18,6 +18,7 @@ use crate::zpk::Zpk;
 /// * `sections` - Cascade of biquad coefficient arrays
 /// * `frequencies` - Frequencies in Hz to evaluate at
 /// * `sample_rate` - Sample rate in Hz
+#[must_use]
 pub fn compute_magnitude_response(
     sections: &[Coeffs],
     frequencies: &[f64],
@@ -41,6 +42,7 @@ pub fn compute_magnitude_response(
 /// * `sections` - Cascade of biquad coefficient arrays
 /// * `frequencies` - Frequencies in Hz to evaluate at
 /// * `sample_rate` - Sample rate in Hz
+#[must_use]
 pub fn compute_phase_response(
     sections: &[Coeffs],
     frequencies: &[f64],
@@ -67,6 +69,7 @@ pub fn compute_phase_response(
 /// * `sections` - Cascade of biquad coefficient arrays
 /// * `freq_hz` - Frequency in Hz to evaluate at
 /// * `sample_rate` - Sample rate in Hz
+#[must_use]
 pub fn compute_group_delay(sections: &[Coeffs], freq_hz: f64, sample_rate: f64) -> f64 {
     let w = 2.0 * PI * freq_hz / sample_rate;
 
@@ -87,10 +90,16 @@ pub fn compute_group_delay(sections: &[Coeffs], freq_hz: f64, sample_rate: f64) 
 
     // Unwrap phase difference: handle wrapping around +/-pi
     let mut dphi = phase_hi - phase_lo;
-    while dphi > PI {
+    for _ in 0..2 {
+        if dphi <= PI {
+            break;
+        }
         dphi -= 2.0 * PI;
     }
-    while dphi < -PI {
+    for _ in 0..2 {
+        if dphi >= -PI {
+            break;
+        }
         dphi += 2.0 * PI;
     }
 
@@ -102,6 +111,7 @@ pub fn compute_group_delay(sections: &[Coeffs], freq_hz: f64, sample_rate: f64) 
 ///
 /// Directly evaluates the ZPK transfer function without converting
 /// to biquad sections. Useful for display before coefficient computation.
+#[must_use]
 pub fn compute_magnitude_response_zpk(
     zpk: &Zpk,
     frequencies: &[f64],
@@ -117,6 +127,7 @@ pub fn compute_magnitude_response_zpk(
 }
 
 /// Compute phase response from a ZPK representation.
+#[must_use]
 pub fn compute_phase_response_zpk(zpk: &Zpk, frequencies: &[f64], sample_rate: f64) -> Vec<f64> {
     frequencies
         .iter()
@@ -206,7 +217,7 @@ mod tests {
 
     #[test]
     fn magnitude_response_length_matches_input() {
-        let freqs: Vec<f64> = (1..100).map(|i| i as f64 * 100.0).collect();
+        let freqs: Vec<f64> = (1..100).map(|i| f64::from(i) * 100.0).collect();
         let mags = compute_magnitude_response(&[PASSTHROUGH], &freqs, 48000.0);
         assert_eq!(mags.len(), freqs.len());
     }
@@ -214,7 +225,7 @@ mod tests {
     #[test]
     fn phase_response_bounded() {
         let sos = design::design_filter(FilterType::Lowpass, 1000.0, 0.707, 0.0, 48000.0, 4);
-        let freqs: Vec<f64> = (1..100).map(|i| i as f64 * 200.0).collect();
+        let freqs: Vec<f64> = (1..100).map(|i| f64::from(i) * 200.0).collect();
         let phases = compute_phase_response(&sos, &freqs, 48000.0);
 
         for (i, &phase) in phases.iter().enumerate() {

@@ -1,4 +1,4 @@
-//! Example PluginBlockDef for Neural DSP "Archetype: John Mayer X".
+//! Example `PluginBlockDef` for Neural DSP "Archetype: John Mayer X".
 //!
 //! This demonstrates how a single plugin with ~200 parameters is decomposed
 //! into virtual modules and blocks for the grid UI.
@@ -10,6 +10,7 @@ use crate::{BlockType, ModuleType};
 ///
 /// Parameter indices are illustrative — real values come from the DAW's
 /// parameter enumeration at runtime.
+#[must_use] 
 pub fn archetype_john_mayer() -> PluginBlockDef {
     PluginBlockDef::new("Archetype: John Mayer X", 204)
         .with_vendor("Neural DSP")

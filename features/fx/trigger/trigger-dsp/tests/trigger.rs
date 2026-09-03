@@ -8,7 +8,7 @@ use trigger_dsp::velocity::{VelocityCurve, VelocityMapper};
 
 const SAMPLE_RATE: f64 = 48000.0;
 
-fn config() -> AudioConfig {
+const fn config() -> AudioConfig {
     AudioConfig {
         sample_rate: SAMPLE_RATE,
         max_buffer_size: 512,
@@ -156,7 +156,7 @@ fn detector_hysteresis_prevents_chatter() {
     det.reactivity_ms = 0.5;
     det.update(SAMPLE_RATE);
 
-    let detect_level = 10.0_f64.powf(-20.0 / 20.0); // 0.1
+    let detect_level = 10.0_f64.powi(-1); // 0.1
     let between_level = detect_level * 0.7; // Between detect and release thresholds
 
     // Trigger first
@@ -438,13 +438,13 @@ fn chain_sidechain_hpf_blocks_bass_trigger() {
     let len = 8192;
     let amp = 10.0_f64.powf(-10.0 / 20.0);
     let bass: Vec<f64> = (0..len)
-        .map(|i| (2.0 * std::f64::consts::PI * 50.0 * i as f64 / SAMPLE_RATE).sin() * amp)
+        .map(|i| (2.0 * std::f64::consts::PI * 50.0 * f64::from(i) / SAMPLE_RATE).sin() * amp)
         .collect();
 
     let mut l1 = bass.clone();
     let mut r1 = bass.clone();
     let mut l2 = bass.clone();
-    let mut r2 = bass.clone();
+    let mut r2 = bass;
 
     chain_no_hpf.process(&mut l1, &mut r1);
     chain_hpf.process(&mut l2, &mut r2);
@@ -470,9 +470,8 @@ fn chain_sidechain_listen_outputs_filtered() {
     let len = 4096;
     let mut left: Vec<f64> = (0..len)
         .map(|i| {
-            let t = i as f64 / SAMPLE_RATE;
-            (2.0 * std::f64::consts::PI * 50.0 * t).sin() * 0.5
-                + (2.0 * std::f64::consts::PI * 5000.0 * t).sin() * 0.5
+            let t = f64::from(i) / SAMPLE_RATE;
+            (2.0 * std::f64::consts::PI * 50.0 * t).sin().mul_add(0.5, (2.0 * std::f64::consts::PI * 5000.0 * t).sin() * 0.5)
         })
         .collect();
     let mut right = left.clone();
@@ -564,7 +563,7 @@ fn detector_spectral_flux_triggers_on_transient() {
     // Loud transient burst — needs multiple hops to produce ODF values
     triggered = false;
     for i in 0..4096 {
-        let t = i as f64 / SAMPLE_RATE;
+        let t = f64::from(i) / SAMPLE_RATE;
         let sample = (2.0 * std::f64::consts::PI * 1000.0 * t).sin() * 0.8;
         if det.tick(sample).is_some() {
             triggered = true;
@@ -594,7 +593,7 @@ fn detector_superflux_triggers_on_transient() {
     // Loud transient
     let mut triggered = false;
     for i in 0..4096 {
-        let t = i as f64 / SAMPLE_RATE;
+        let t = f64::from(i) / SAMPLE_RATE;
         let sample = (2.0 * std::f64::consts::PI * 200.0 * t).sin() * 0.8;
         if det.tick(sample).is_some() {
             triggered = true;
@@ -622,7 +621,7 @@ fn detector_peak_envelope_has_zero_latency() {
 fn deterministic_output() {
     let signal: Vec<f64> = (0..4096)
         .map(|i| {
-            let t = i as f64 / SAMPLE_RATE;
+            let t = f64::from(i) / SAMPLE_RATE;
             // A hit followed by silence
             if i < 200 {
                 (2.0 * std::f64::consts::PI * 1000.0 * t).sin() * 0.8

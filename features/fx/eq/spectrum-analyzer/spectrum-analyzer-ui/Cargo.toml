@@ -11,6 +11,9 @@ description = "Spectrum analyzer painters + settings panel for FTS-EQ"
 # nice-plug-dioxus / architect-ui stack as eq-ui so the `Scene` type and dioxus
 # prelude line up exactly.
 
+[lints]
+workspace = true
+
 [dependencies]
 # Direct dioxus dep: in the signal workspace audiocore-core is built without
 # its dioxus re-exports (default-features = false), so the prelude items

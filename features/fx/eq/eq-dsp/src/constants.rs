@@ -1,4 +1,4 @@
-#![allow(clippy::approx_constant)]
+#![expect(clippy::approx_constant, reason = "These constants are exact values extracted from Pro-Q 4 binary and must match precisely; they appear as approximations but are intentional binary extracts")]
 
 //! Magic constants extracted from Pro-Q 4 binary.
 //!
@@ -33,18 +33,18 @@ pub const LOG2_E: f64 = std::f64::consts::LOG2_E;
 
 pub const SCALE_0_5: f64 = 0.5;
 pub const SCALE_0_54: f64 = 0.54;
-pub const SCALE_0_628: f64 = 0.628318530717959; // π/5
-pub const SCALE_0_637: f64 = 0.636619772367581; // 1/π
+pub const SCALE_0_628: f64 = 0.628_318_530_717_959; // π/5
+pub const SCALE_0_637: f64 = 0.636_619_772_367_581; // 1/π
 pub const SCALE_0_65: f64 = 0.65;
-pub const SCALE_0_667: f64 = 0.666666666666667; // 2/3
-pub const SCALE_0_693: f64 = 0.693147180559945; // ln(2)
+pub const SCALE_0_667: f64 = 0.666_666_666_666_667; // 2/3
+pub const SCALE_0_693: f64 = 0.693_147_180_559_945; // ln(2)
 pub const SCALE_0_7: f64 = 0.7;
-pub const SCALE_0_766: f64 = 0.76609;
-pub const SCALE_0_784: f64 = 0.783594;
+pub const SCALE_0_766: f64 = 0.766_09;
+pub const SCALE_0_784: f64 = 0.783_594;
 pub const SCALE_0_785: f64 = 0.785; // ≈ π/4
 pub const SCALE_0_8: f64 = 0.8;
 pub const SCALE_0_9: f64 = 0.9;
-pub const SCALE_0_942: f64 = 0.942477796076938; // 3π/10
+pub const SCALE_0_942: f64 = 0.942_477_796_076_938; // 3π/10
 pub const SCALE_0_95: f64 = 0.95;
 pub const SCALE_0_96: f64 = 0.96;
 pub const SCALE_0_99: f64 = 0.99;
@@ -59,37 +59,37 @@ pub const MULT_1_0: f64 = 1.0;
 pub const MULT_1_01: f64 = 1.01;
 pub const MULT_1_2: f64 = 1.2;
 pub const MULT_1_25: f64 = 1.25;
-pub const MULT_1_29: f64 = 1.290372985;
-pub const MULT_1_414: f64 = 1.414213538169861; // √2 (single precision)
-pub const MULT_1_443: f64 = 1.442695040888963; // log2(e)
+pub const MULT_1_29: f64 = 1.290_372_985;
+pub const MULT_1_414: f64 = 1.414_213_538_169_861; // √2 (single precision)
+pub const MULT_1_443: f64 = 1.442_695_040_888_963; // log2(e)
 pub const MULT_1_5: f64 = 1.5;
-pub const MULT_1_548: f64 = 1.547508449804351;
-pub const MULT_HALF_PI: f64 = 1.570796326794897; // π/2
+pub const MULT_1_548: f64 = 1.547_508_449_804_351;
+pub const MULT_HALF_PI: f64 = 1.570_796_326_794_897; // π/2
 pub const MULT_1_8: f64 = 1.8;
-pub const MULT_1_885: f64 = 1.884955592153876; // 6/π
+pub const MULT_1_885: f64 = 1.884_955_592_153_876; // 6/π
 pub const MULT_2_0: f64 = 2.0;
-pub const MULT_2_199: f64 = 2.199114857512855;
+pub const MULT_2_199: f64 = 2.199_114_857_512_855;
 pub const MULT_2_2: f64 = 2.2;
-pub const MULT_2_419: f64 = 2.419026343264141;
-pub const MULT_2_513: f64 = 2.513274122871834; // 4π/5
-pub const MULT_2_608: f64 = 2.607521902479528;
-pub const MULT_2_670: f64 = 2.670353755551324;
-pub const MULT_2_827: f64 = 2.827433388230814; // 9π/10
-pub const MULT_2_922: f64 = 2.921681167838508;
-pub const MULT_2_985: f64 = 2.984513020910303;
+pub const MULT_2_419: f64 = 2.419_026_343_264_141;
+pub const MULT_2_513: f64 = 2.513_274_122_871_834; // 4π/5
+pub const MULT_2_608: f64 = 2.607_521_902_479_528;
+pub const MULT_2_670: f64 = 2.670_353_755_551_324;
+pub const MULT_2_827: f64 = 2.827_433_388_230_814; // 9π/10
+pub const MULT_2_922: f64 = 2.921_681_167_838_508;
+pub const MULT_2_985: f64 = 2.984_513_020_910_303;
 pub const MULT_3_0: f64 = 3.0;
-pub const MULT_3_079: f64 = 3.078760800517997;
-pub const MULT_3_110: f64 = 3.110176727053895;
-pub const MULT_3_135: f64 = 3.135309468282613;
-pub const MULT_3_141_LO: f64 = 3.141278494324434; // π low precision
-pub const MULT_3_141_MED: f64 = 3.141592534380504; // π medium precision
-pub const MULT_PI: f64 = 3.141592653589793; // π full precision
+pub const MULT_3_079: f64 = 3.078_760_800_517_997;
+pub const MULT_3_110: f64 = 3.110_176_727_053_895;
+pub const MULT_3_135: f64 = 3.135_309_468_282_613;
+pub const MULT_3_141_LO: f64 = 3.141_278_494_324_434; // π low precision
+pub const MULT_3_141_MED: f64 = 3.141_592_534_380_504; // π medium precision
+pub const MULT_PI: f64 = 3.141_592_653_589_793; // π full precision
 pub const MULT_3_3: f64 = 3.3;
 pub const MULT_4_0: f64 = 4.0;
-pub const MULT_5_657: f64 = 5.656854249492381; // 4√2
+pub const MULT_5_657: f64 = 5.656_854_249_492_381; // 4√2
 pub const MULT_6_0: f64 = 6.0;
-pub const MULT_TWO_PI: f64 = 6.283185307179586; // 2π
-pub const MULT_5_HALF_PI: f64 = 7.853981633974483; // 5π/2
+pub const MULT_TWO_PI: f64 = 6.283_185_307_179_586; // 2π
+pub const MULT_5_HALF_PI: f64 = 7.853_981_633_974_483; // 5π/2
 
 // ─── Adaptive Frequency Streaming State 2 Multipliers ──────────────────────
 // From 0x1802119d0 - 0x1802119ec
@@ -97,12 +97,12 @@ pub const MULT_5_HALF_PI: f64 = 7.853981633974483; // 5π/2
 /// 8-point adaptive multiplier array for state 2 frequency streaming.
 /// Progressive scaling from 1/π to 1.2 for smooth resolution transitions.
 pub const STATE2_MULTIPLIERS: [f64; 8] = [
-    0.636619772367581, // 1/π — transition in from previous state
-    0.785398163397448, // π/4 — quarter pi
-    0.942477796076938, // 3π/10 — three-tenths pi
-    0.990000000000000, // approaching 1.0
-    0.999000000000000, // very close to 1.0
-    1.000000000000000, // identity
+    0.636_619_772_367_581, // 1/π — transition in from previous state
+    0.785_398_163_397_448, // π/4 — quarter pi
+    0.942_477_796_076_938, // 3π/10 — three-tenths pi
+    0.990_000_000_000_000, // approaching 1.0
+    0.999_000_000_000_000, // very close to 1.0
+    1.000_000_000_000_000, // identity
     1.01,              // slightly above 1.0
     1.2,               // elevated multiplier for emphasis
 ];
@@ -117,13 +117,13 @@ pub const STATE2_MULTIPLIERS: [f64; 8] = [
 /// Q→BW base @ 0x180231df4 (f32 in binary, promoted)
 pub const Q_BW_BASE: f64 = 32.0;
 /// Q→BW scale @ 0x180231764
-pub const Q_BW_SCALE: f64 = 0.13554954528808594;
+pub const Q_BW_SCALE: f64 = 0.135_549_545_288_085_94;
 /// Q→BW offset @ 0x180231804
 pub const Q_BW_OFFSET: f64 = 0.5;
 /// Q→BW multiplier @ 0x180231760
 pub const Q_BW_MULT: f64 = 0.125;
 /// ln(10)/20 @ 0x180231988 (dB→linear exponent)
-pub const LN10_OVER_20: f64 = 0.115129254649702;
+pub const LN10_OVER_20: f64 = 0.115_129_254_649_702;
 /// 1/√2 @ 0x18028737c
 pub const INV_SQRT2: f64 = std::f64::consts::FRAC_1_SQRT_2;
 

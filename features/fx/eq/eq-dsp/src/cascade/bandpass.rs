@@ -4,7 +4,29 @@ use std::f64::consts::PI;
 
 use crate::biquad::Coeffs;
 
-use super::*;
+use super::{notch_analog_sections, bp_cascade_for_q, mode0_forward, bell_three_point_synth, proq4_s2_from_prototype_with_subfreq, lagrange_synth_alt_path};
+
+/// Bandpass slope-2 helper: BLT-based cascade.
+fn bandpass_cascade_slope2(freq_hz: f64, q_user: f64, sample_rate: f64) -> Vec<Coeffs> {
+    use std::f64::consts::SQRT_2;
+    let alpha = SQRT_2 / q_user;
+    let t = (PI * freq_hz / sample_rate).tan();
+    let t2 = t * t;
+    notch_analog_sections(2, q_user)
+        .into_iter()
+        .map(|(a1, a2)| {
+            let d = a2.mul_add(t2, a1.mul_add(t, 1.0));
+            let inv_d = 1.0 / d;
+            let b1_an = alpha * a2.max(0.0).sqrt();
+            let nb0 = b1_an * t * inv_d;
+            let nb1 = 0.0;
+            let nb2 = -b1_an * t * inv_d;
+            let da1 = -2.0 * (1.0 - a2 * t2) * inv_d;
+            let da2 = (1.0 - a1 * t + a2 * t2) * inv_d;
+            [1.0, da1, da2, nb0, nb1, nb2]
+        })
+        .collect()
+}
 
 /// Pro-Q 4 Bandpass cascade for slope ∈ {2, 4, 6, 8} (audio path-A).
 ///
@@ -28,27 +50,13 @@ use super::*;
 ///
 /// Section counts: 1, 1, 2, 6 for slopes 2, 4, 6, 8 (slope-8 reuses
 /// `notch_analog_sections`'s Butterworth N=6 LP→BS expansion).
+#[must_use]
 pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usize) -> Vec<Coeffs> {
     use std::f64::consts::SQRT_2;
     let q_user = q.max(1e-6);
     let alpha = SQRT_2 / q_user;
-    let t = (PI * freq_hz / sample_rate).tan();
-    let t2 = t * t;
     if slope == 2 {
-        return notch_analog_sections(slope, q_user)
-            .into_iter()
-            .map(|(a1, a2)| {
-                let d = 1.0 + a1 * t + a2 * t2;
-                let inv_d = 1.0 / d;
-                let b1_an = alpha * a2.max(0.0).sqrt();
-                let nb0 = b1_an * t * inv_d;
-                let nb1 = 0.0;
-                let nb2 = -b1_an * t * inv_d;
-                let da1 = -2.0 * (1.0 - a2 * t2) * inv_d;
-                let da2 = (1.0 - a1 * t + a2 * t2) * inv_d;
-                [1.0, da1, da2, nb0, nb1, nb2]
-            })
-            .collect();
+        return bandpass_cascade_slope2(freq_hz, q_user, sample_rate);
     }
     // s≥4: Pro-Q lagrange-MZT standard 3-point path. Decoded formula:
     //   - BLT prewarp denominator (a1_dig, a2_dig bit-exact)
@@ -69,6 +77,28 @@ pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usi
         .into_iter()
         .enumerate()
         .map(|(sec_idx, (a1_sec, a2_sec))| {
+            bandpass_cascade_section(freq_hz, q_user, sample_rate, slope, sec_idx, a1_sec, a2_sec, omega0, t_full, t_full2, g, g2, g4)
+        })
+        .collect()
+}
+
+#[expect(clippy::too_many_arguments, reason = "Pre-computed omega powers and trig values grouped for efficiency")]
+fn bandpass_cascade_section(
+    freq_hz: f64,
+    q_user: f64,
+    sample_rate: f64,
+    slope: usize,
+    sec_idx: usize,
+    a1_sec: f64,
+    a2_sec: f64,
+    omega0: f64,
+    t_full: f64,
+    t_full2: f64,
+    g: f64,
+    g2: f64,
+    g4: f64,
+) -> Coeffs {
+    use std::f64::consts::SQRT_2;
             if slope == 6 && q_user <= 0.5 && freq_hz <= 500.0 {
                 // Live MODE01 captures show the low-Q slope-6 low-frequency
                 // path enters mode-0 with smooth omega-scaled parameters.
@@ -470,7 +500,7 @@ pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usi
             }
 
             if slope == 5 && sec_idx == 2 {
-                let phi_conj = 0.6180339887498948;
+                let phi_conj = 0.618_033_988_749_894_8;
                 let x = (omega0 / PI).clamp(0.0, 1.0);
                 // Live MODE01/eval traces show the tail uses the alt-path
                 // algebra below. The w_eval exponent follows the same helper
@@ -508,7 +538,7 @@ pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usi
             } else if is_slope5_tail {
                 // Slope-5's real-pole tail uses a nonzero numerator floor:
                 // the captured p2 is the golden-ratio conjugate across Q/fc.
-                0.6180339887498948
+                0.618_033_988_749_894_8
             } else {
                 0.0
             };
@@ -548,7 +578,7 @@ pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usi
                     };
                     (sp6 / SQRT_2) * hf_tail_scale * (1.0 + 0.034 * low * q_one) * q_half_tail
                         + 0.45 * omega0 * omega0 / q_user
-                        + 0.000134 * low * q_low
+                        + 0.000_134 * low * q_low
                         + 0.00016 * low * q_mid
                 } else if slope == 4 && freq_hz <= 1000.0 {
                     let x = (freq_hz / 1000.0).clamp(0.0, 1.0);
@@ -587,12 +617,12 @@ pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usi
                 let w_pole_eff = omega0;
                 let w_eval = (w_pole_eff * 1.5).clamp(0.9 * PI, 0.99 * PI);
                 let dz_mag_sq = |w: f64| -> f64 {
-                    let cosw = w.cos();
-                    let sinw = w.sin();
-                    let cos2w = (2.0 * w).cos();
-                    let sin2w = (2.0 * w).sin();
-                    let re = 1.0 + a1_dig * cosw + a2_dig * cos2w;
-                    let im = -a1_dig * sinw - a2_dig * sin2w;
+                    let cos_w = w.cos();
+                    let sin_w = w.sin();
+                    let cos_double_w = (2.0 * w).cos();
+                    let sin_double_w = (2.0 * w).sin();
+                    let re = 1.0 + a1_dig * cos_w + a2_dig * cos_double_w;
+                    let im = -a1_dig * sin_w - a2_dig * sin_double_w;
                     re * re + im * im
                 };
                 let t_eval = (w_eval * 0.5).tan();
@@ -629,21 +659,19 @@ pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usi
                 p3
             };
             let inv_d = 1.0 / d_mode0;
-            let p2p4 = p2 * p4;
-            let b0 = (p2p4 + p3 + sp6) * inv_d;
-            let b1 = -2.0 * (p3 - p2p4) * inv_d;
-            let b2 = (p3 - sp6 + p2p4) * inv_d;
-            [1.0, a1_dig, a2_dig, b0, b1, b2]
-        })
-        .collect()
+    let p2p4 = p2 * p4;
+    let b0 = (p2p4 + p3 + sp6) * inv_d;
+    let b1 = -2.0 * (p3 - p2p4) * inv_d;
+    let b2 = (p3 - sp6 + p2p4) * inv_d;
+    [1.0, a1_dig, a2_dig, b0, b1, b2]
 }
 fn bp_s3_tail_p3_for_q(q: f64) -> f64 {
     // Rational fit to captured low-frequency slope-3 tail p3 values at
     // Q={0.5,1,4,10}. This is the same mode-0 parameter family as the
     // p2 fit above, not a coefficient lookup.
     let q = q.max(0.5);
-    (0.7082823596815021 * q * q + 0.0715511960334658 * q + 0.047750333818323)
-        / (q * q - 0.22770802249856914 * q)
+    (0.708_282_359_681_502_1 * q * q + 0.071_551_196_033_465_8 * q + 0.047_750_333_818_323)
+        / (q * q - 0.227_708_022_498_569_14 * q)
 }
 fn bp_s3_tail_p2_for_q(q: f64) -> f64 {
     let q = q.max(0.5);
@@ -652,7 +680,7 @@ fn bp_s3_tail_p2_for_q(q: f64) -> f64 {
         .max(0.0)
 }
 fn bp_s5_tail_p3_for_q(q: f64, omega0: f64) -> f64 {
-    let phi_conj = 0.6180339887498948;
+    let phi_conj = 0.618_033_988_749_894_8;
     let q = q.max(0.5);
     // Captures show p3 approaches p2 at low frequency and high Q, with a
     // small frequency-squared lift that scales as 1/Q² for the real tail.
@@ -667,16 +695,17 @@ fn bp_s5_tail_p3_for_q(q: f64, omega0: f64) -> f64 {
 /// Pro-Q 4 Bandpass slope-2 (audio-path Lagrange-MZT).
 ///
 /// Analog prototype ZPK (per `bandpass_formula.md`):
-///   numerator   = (0, √2/Q, 0)    →  P_zero(s) = (√2/Q)·ω₀·s
-///   denominator = (1, √2/Q, 1)    →  P_pole(s) = s² + (√2/Q)·ω₀·s + ω₀²
+///   numerator   = (0, √2/Q, 0)    →  `P_zero(s)` = (√2/Q)·ω₀·s
+///   denominator = (1, √2/Q, 1)    →  `P_pole(s)` = s² + (√2/Q)·ω₀·s + ω₀²
 ///
 /// Sub-frequencies decoded from runtime probe captures
 /// (`lp_hp_notch_bp_subfreq_capture.txt`):
-///   w_pole = ω₀
-///   w_zero = 0.01 · ω₀
-///   w_third = ω₀ · (1 - 0.001) at Q ≥ 1, ω₀ · 0.874 at Q = 0.5
-///   w_eval = clamp(1.25·ω₀, 0.85π, π)
-///   g_ref = 0
+///   `w_pole` = ω₀
+///   `w_zero` = 0.01 · ω₀
+///   `w_third` = ω₀ · (1 - 0.001) at Q ≥ 1, ω₀ · 0.874 at Q = 0.5
+///   `w_eval` = clamp(1.25·ω₀, 0.85π, π)
+///   `g_ref` = 0
+#[must_use]
 pub fn bandpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
     let q_user = q.max(1e-6);

@@ -18,7 +18,7 @@ pub enum ParamSource {
 }
 
 impl ParamSource {
-    fn label(self) -> &'static str {
+    const fn label(self) -> &'static str {
         match self {
             Self::Preset => "Preset",
             Self::Override => "Override",
@@ -27,7 +27,7 @@ impl ParamSource {
         }
     }
 
-    fn badge_class(self) -> &'static str {
+    const fn badge_class(self) -> &'static str {
         match self {
             Self::Preset => "bg-signal-slot-a/20 text-signal-slot-a",
             Self::Override => "bg-signal-override/20 text-signal-override",
@@ -267,7 +267,7 @@ pub fn ParamInspector(props: ParamInspectorProps) -> Element {
                     value: "{props.filter_query}",
                     oninput: move |evt: FormEvent| {
                         if let Some(cb) = &props.on_filter_change {
-                            cb.call(evt.value().clone());
+                            cb.call(evt.value());
                         }
                     },
                 }
@@ -275,17 +275,17 @@ pub fn ParamInspector(props: ParamInspectorProps) -> Element {
                 // Summary stats
                 div {
                     class: "flex items-center gap-2 text-[10px] text-muted-foreground",
-                    span { {format!("{} params", total)} }
+                    span { {format!("{total} params")} }
                     if override_count > 0 {
                         span {
                             class: "px-1 rounded bg-signal-override/20 text-signal-override",
-                            {format!("{} overrides", override_count)}
+                            {format!("{override_count} overrides")}
                         }
                     }
                     if mod_count > 0 {
                         span {
                             class: "px-1 rounded bg-signal-mod/20 text-signal-mod",
-                            {format!("{} modulated", mod_count)}
+                            {format!("{mod_count} modulated")}
                         }
                     }
                 }

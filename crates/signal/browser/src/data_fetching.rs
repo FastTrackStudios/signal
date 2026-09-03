@@ -220,7 +220,7 @@ pub async fn fetch_col3(
                         out.push(ColumnItem {
                             id: v.id.to_string(),
                             name: v.name.clone(),
-                            subtitle: Some(format!("{} module(s)", ref_count)),
+                            subtitle: Some(format!("{ref_count} module(s)")),
                             badge: None,
                             metadata: Some(meta),
                             structured_tags: tags,
@@ -337,7 +337,7 @@ pub async fn fetch_col3(
                     out.push(ColumnItem {
                         id: v.id.to_string(),
                         name: v.name.clone(),
-                        subtitle: Some(format!("{} module(s)", ref_count)),
+                        subtitle: Some(format!("{ref_count} module(s)")),
                         badge: None,
                         metadata: Some(meta),
                         structured_tags: tags,
@@ -464,13 +464,10 @@ async fn resolve_variant_module_chains(
         let module_preset = all_module_presets
             .iter()
             .find(|p| p.id().to_string() == collection_id_str);
-        let mt = module_preset.map(|p| p.module_type());
+        let mt = module_preset.map(signal::ModulePreset::module_type);
         let mc = mt
-            .map(|m| m.color())
-            .unwrap_or(signal::ModuleType::Drive.color());
-        let module_name = module_preset
-            .map(|p| p.name().to_string())
-            .unwrap_or_else(|| format!("Module {}", mr.collection_id));
+            .map_or(signal::ModuleType::Drive.color(), signal::ModuleType::color);
+        let module_name = module_preset.map_or_else(|| format!("Module {}", mr.collection_id), |p| p.name().to_string());
         let chain;
         if let Some(snapshot) = signal
             .module_presets()
@@ -780,7 +777,8 @@ async fn resolve_node_params(node: &signal::SignalNode, lookup: &mut ParamLookup
 
 // region: --- Utility
 
-pub fn rig_type_to_engine_type(rig_type: RigType) -> signal::EngineType {
+#[must_use] 
+pub const fn rig_type_to_engine_type(rig_type: RigType) -> signal::EngineType {
     match rig_type {
         RigType::Guitar => signal::EngineType::Guitar,
         RigType::Bass => signal::EngineType::Bass,

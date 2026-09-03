@@ -44,6 +44,7 @@ const RHODES: &[Variation] = &[v("Chorus"), v("Suitcase"), v("Warm"), v("Lush")]
 /// The variations authored on `preset`, by its library name. Matching is by
 /// name because that is what the library scan has — a pack-level id lands here
 /// when packs carry one.
+#[must_use] 
 pub fn variations_for(preset: &str) -> &'static [Variation] {
     let n = preset.to_ascii_lowercase();
     if n.contains("c7 grand") || (n.contains("c7") && n.contains("grand")) {
@@ -56,6 +57,7 @@ pub fn variations_for(preset: &str) -> &'static [Variation] {
 }
 
 /// Just the names, for the wire.
+#[must_use] 
 pub fn variation_names(preset: &str) -> Vec<String> {
     variations_for(preset)
         .iter()

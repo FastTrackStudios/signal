@@ -5,6 +5,9 @@ edition = "2021"          # matches sibling fx facades (comp, pitch)
 license.workspace = true
 description = "level — facade over level-dsp; vocal riding/de-ess/gate/de-breath (realtime) + offline analyze→envelope. Plugin UI and presets are opt-in."
 
+[lints]
+workspace = true
+
 [features]
 default = []
 # Opt-in plugin UI and preset profiles — declared now so the facade shape is

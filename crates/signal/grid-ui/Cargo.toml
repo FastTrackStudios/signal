@@ -10,6 +10,9 @@ authors.workspace = true
 # transforms + Dioxus events, proto-layer types only. Mounts identically in
 # the desktop shell and the browser remote.
 
+[lints]
+workspace = true
+
 [dependencies]
 dioxus.workspace = true
 uuid = { version = "1", features = ["v4"] }

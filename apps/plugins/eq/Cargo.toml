@@ -9,6 +9,9 @@ description = "FTS EQ — CLAP/VST3 audio plugin entry point"
 [lib]
 crate-type = ["cdylib", "lib"]
 
+[lints]
+workspace = true
+
 [dependencies]
 audiocore-core = { workspace = true }
 eq-dsp = { workspace = true }

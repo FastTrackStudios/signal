@@ -22,7 +22,7 @@ async fn open_eq(fx: &mut Fixture) {
         .expect("emphasis toggle on the rail");
     let (ox, oy) = el.document_origin();
     let (w, h) = el.size();
-    let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    let (x, y) = (ox + f64::from(w) / 2.0, oy + f64::from(h) / 2.0);
     fx.tester.pointer_move(x, y, false);
     let _ = fx.tester.pump().await;
     fx.tester.pointer_down(x, y);
@@ -80,7 +80,7 @@ async fn dragging_a_band_writes_the_emphasis_params() -> dioxus_test::Result<()>
     // 800×350 fallback mapper — same as eq-ui's own tests.
     let mapper =
         eq_ui::eq_graph_interaction::GraphMapper::new(20.0, 20_000.0, 12.0, 800.0, 350.0, 0.0);
-    let freq = fx.params.emph[2].freq_hz.value() as f64;
+    let freq = f64::from(fx.params.emph[2].freq_hz.value());
     let x = ox + mapper.freq_to_x(freq);
     let y = oy + mapper.db_to_y(0.0);
 
@@ -93,7 +93,7 @@ async fn dragging_a_band_writes_the_emphasis_params() -> dioxus_test::Result<()>
     fx.tester.pointer_down(x, y);
     let _ = fx.tester.pump().await;
     for step in 1..=4 {
-        fx.tester.pointer_move(x, y - 10.0 * step as f64, true);
+        fx.tester.pointer_move(x, 10.0f64.mul_add(-f64::from(step), y), true);
         let _ = fx.tester.pump().await;
     }
     fx.tester.pointer_up(x, y - 40.0);

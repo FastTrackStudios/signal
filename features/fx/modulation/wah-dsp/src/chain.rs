@@ -1,4 +1,4 @@
-//! WahChain — complete auto-wah processor with envelope + pattern modulation.
+//! `WahChain` — complete auto-wah processor with envelope + pattern modulation.
 //!
 //! Combines a Chamberlin SVF wah filter with triple-cascaded envelope
 //! smoothing, sidechain HPF for the envelope detector, and MSEG pattern
@@ -74,6 +74,7 @@ pub struct WahChain {
 }
 
 impl WahChain {
+    #[must_use] 
     pub fn new() -> Self {
         let mut modulator = Modulator::new();
         modulator.trigger.mode = TriggerMode::Sync;
@@ -138,22 +139,23 @@ impl WahChain {
         }
     }
 
-    pub fn set_transport(&mut self, transport: TransportInfo) {
+    pub const fn set_transport(&mut self, transport: TransportInfo) {
         self.transport = transport;
     }
 
-    pub fn set_mode(&mut self, mode: WahMode) {
+    pub const fn set_mode(&mut self, mode: WahMode) {
         self.filter_l.mode = mode;
         self.filter_r.mode = mode;
     }
 
-    pub fn set_q(&mut self, q: f64) {
+    pub const fn set_q(&mut self, q: f64) {
         self.filter_l.q = q;
         self.filter_r.q = q;
     }
 
     /// Current detected envelope level (for metering).
-    pub fn envelope_level(&self) -> f64 {
+    #[must_use] 
+    pub const fn envelope_level(&self) -> f64 {
         self.env_value
     }
 }
@@ -184,8 +186,8 @@ impl Processor for WahChain {
         // Envelope: fast attack for picking dynamics, moderate release
         // Sensitivity scales the time constants
         self.envelope.set_times_ms(
-            5.0 * (1.0 - self.sensitivity) + 0.5,
-            50.0 * (1.0 - self.sensitivity) + 10.0,
+            5.0f64.mul_add(1.0 - self.sensitivity, 0.5),
+            50.0f64.mul_add(1.0 - self.sensitivity, 10.0),
             config.sample_rate,
         );
 
@@ -216,7 +218,7 @@ impl Processor for WahChain {
             };
 
             // Envelope follower with sensitivity scaling
-            let scaled_input = filtered * (1.0 + self.sensitivity * 4.0);
+            let scaled_input = filtered * self.sensitivity.mul_add(4.0, 1.0);
             let raw_env = self.envelope.tick(scaled_input);
 
             // Soft-limit the envelope (sigmoid from rkrlv2)
@@ -230,8 +232,7 @@ impl Processor for WahChain {
             self.env_value = self.env_smoother.tick(limited);
 
             // Pattern modulation
-            let pos = self.transport.position_qn
-                + i as f64 * self.transport.beats_per_sample(self.sample_rate);
+            let pos = (i as f64).mul_add(self.transport.beats_per_sample(self.sample_rate), self.transport.position_qn);
             let t = TransportInfo {
                 position_qn: pos,
                 ..self.transport
@@ -240,11 +241,10 @@ impl Processor for WahChain {
 
             // Combine sources
             let mod_position = match self.source {
-                WahSource::Envelope => self.base_position + self.env_value * self.env_amount,
+                WahSource::Envelope => self.env_value.mul_add(self.env_amount, self.base_position),
                 WahSource::Pattern => self.base_position + pattern_val * self.pattern_amount,
                 WahSource::Both => {
-                    self.base_position
-                        + self.env_value * self.env_amount
+                    self.env_value.mul_add(self.env_amount, self.base_position)
                         + pattern_val * self.pattern_amount
                 }
             };
@@ -264,8 +264,8 @@ impl Processor for WahChain {
             let wet_l = self.filter_l.tick(left[i], 0);
             let wet_r = self.filter_r.tick(right[i], 1);
 
-            left[i] = dry_l * (1.0 - self.mix) + wet_l * self.mix;
-            right[i] = dry_r * (1.0 - self.mix) + wet_r * self.mix;
+            left[i] = dry_l.mul_add(1.0 - self.mix, wet_l * self.mix);
+            right[i] = dry_r.mul_add(1.0 - self.mix, wet_r * self.mix);
         }
     }
 }
@@ -315,7 +315,7 @@ mod tests {
         let mut l: Vec<f64> = (0..48000)
             .map(|i| {
                 let env = if i < 4800 { 0.8 } else { 0.01 };
-                (2.0 * PI * 200.0 * i as f64 / SR).sin() * env
+                (2.0 * PI * 200.0 * f64::from(i) / SR).sin() * env
             })
             .collect();
         let mut r = l.clone();
@@ -341,7 +341,7 @@ mod tests {
         });
 
         let mut l: Vec<f64> = (0..48000)
-            .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut r = l.clone();
 
@@ -359,7 +359,7 @@ mod tests {
         w.update(config());
 
         let input: Vec<f64> = (0..4800)
-            .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut l = input.clone();
         let mut r = input.clone();
@@ -395,7 +395,7 @@ mod tests {
 
         // Feed a low bass note
         let input: Vec<f64> = (0..4800)
-            .map(|i| (2.0 * PI * 80.0 * i as f64 / SR).sin() * 0.9)
+            .map(|i| (2.0 * PI * 80.0 * f64::from(i) / SR).sin() * 0.9)
             .collect();
 
         let mut l1 = input.clone();
@@ -404,7 +404,7 @@ mod tests {
         let env_no_sc = w_no_sc.envelope_level();
 
         let mut l2 = input.clone();
-        let mut r2 = input.clone();
+        let mut r2 = input;
         w_sc.process(&mut l2, &mut r2);
         let env_sc = w_sc.envelope_level();
 
@@ -437,14 +437,14 @@ mod tests {
             });
 
             let mut l: Vec<f64> = (0..48000)
-                .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+                .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
                 .collect();
             let mut r = l.clone();
 
             w.process(&mut l, &mut r);
 
             for (i, &s) in l.iter().enumerate() {
-                assert!(s.is_finite(), "NaN in {:?} at {i}", mode);
+                assert!(s.is_finite(), "NaN in {mode:?} at {i}");
             }
         }
     }

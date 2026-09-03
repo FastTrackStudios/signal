@@ -155,6 +155,7 @@ where
     }
 
     /// Check if a DAW patch applier is attached.
+    #[must_use] 
     pub fn has_daw_applier(&self) -> bool {
         self.daw_applier.read().expect("lock poisoned").is_some()
     }
@@ -173,6 +174,7 @@ where
     }
 
     /// Check if a rig scene applier is attached.
+    #[must_use] 
     pub fn has_rig_scene_applier(&self) -> bool {
         self.daw_rig_applier
             .read()
@@ -181,63 +183,75 @@ where
     }
 
     /// Access the underlying service implementation.
-    pub fn service(&self) -> &Arc<S> {
+    #[must_use] 
+    pub const fn service(&self) -> &Arc<S> {
         &self.service
     }
 
     // region: --- Namespace accessors
 
     /// Block parameter operations.
+    #[must_use] 
     pub fn blocks(&self) -> ops::BlockOps<S> {
         ops::BlockOps(self.clone())
     }
 
     /// Block preset (collection) operations.
+    #[must_use] 
     pub fn block_presets(&self) -> ops::BlockPresetOps<S> {
         ops::BlockPresetOps(self.clone())
     }
 
     /// Module preset (collection) operations.
+    #[must_use] 
     pub fn module_presets(&self) -> ops::ModulePresetOps<S> {
         ops::ModulePresetOps(self.clone())
     }
 
     /// Layer operations.
+    #[must_use] 
     pub fn layers(&self) -> ops::LayerOps<S> {
         ops::LayerOps(self.clone())
     }
 
     /// Engine operations.
+    #[must_use] 
     pub fn engines(&self) -> ops::EngineOps<S> {
         ops::EngineOps(self.clone())
     }
 
     /// Rig operations.
+    #[must_use] 
     pub fn rigs(&self) -> ops::RigOps<S> {
         ops::RigOps(self.clone())
     }
 
     /// Profile operations.
+    #[must_use] 
     pub fn profiles(&self) -> ops::ProfileOps<S> {
         ops::ProfileOps(self.clone())
     }
 
     /// Song operations.
+    #[must_use] 
     pub fn songs(&self) -> ops::SongOps<S> {
         ops::SongOps(self.clone())
     }
 
     /// Setlist operations.
+    #[must_use] 
     pub fn setlists(&self) -> ops::SetlistOps<S> {
         ops::SetlistOps(self.clone())
     }
 
     /// Scene template operations.
+    #[must_use] 
     pub fn scene_templates(&self) -> ops::SceneTemplateOps<S> {
         ops::SceneTemplateOps(self.clone())
     }
 
     /// Rack operations.
+    #[must_use] 
     pub fn racks(&self) -> ops::RackOps<S> {
         ops::RackOps(self.clone())
     }
@@ -247,11 +261,13 @@ where
     // region: --- Event streaming
 
     /// Subscribe to signal events for reactive UI updates.
+    #[must_use] 
     pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<events::SignalEvent> {
         self.event_bus.subscribe()
     }
 
     /// Get the event bus (for internal use by methods that emit events).
+    #[must_use] 
     pub fn event_bus(&self) -> &EventBus {
         &self.event_bus
     }
@@ -261,7 +277,8 @@ where
     // region: --- Active context
 
     /// Get the active context state (shared across all clones).
-    pub fn active_context(&self) -> &ActiveContextState {
+    #[must_use] 
+    pub const fn active_context(&self) -> &ActiveContextState {
         &self.active_context
     }
 

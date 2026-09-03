@@ -16,14 +16,14 @@ use daw_proto::midi::smf;
 use daw_proto::midi::{MidiNoteCreate, MidiTakeContent};
 
 /// The tempo the demo files are authored (and played back) at.
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub const DEMO_BPM: f64 = 74.0;
 
 const PPQ: f64 = 960.0;
 const BEAT: f64 = PPQ;
 const BAR: f64 = 4.0 * BEAT;
 
-/// The I–V–vi–IV progression in C major as (root, is_minor), one bar each.
+/// The I–V–vi–IV progression in C major as (root, `is_minor`), one bar each.
 const PROGRESSION: [(u8, bool); 4] = [
     (48, false), // C3
     (55, false), // G3
@@ -31,7 +31,7 @@ const PROGRESSION: [(u8, bool); 4] = [
     (53, false), // F3
 ];
 
-fn note(pitch: u8, velocity: u8, start_ppq: f64, length_ppq: f64) -> MidiNoteCreate {
+const fn note(pitch: u8, velocity: u8, start_ppq: f64, length_ppq: f64) -> MidiNoteCreate {
     MidiNoteCreate {
         channel: 0,
         pitch,
@@ -42,18 +42,19 @@ fn note(pitch: u8, velocity: u8, start_ppq: f64, length_ppq: f64) -> MidiNoteCre
 }
 
 /// Chord tones (semitone offsets from the root) for a triad.
-fn triad(minor: bool) -> [u8; 3] {
+const fn triad(minor: bool) -> [u8; 3] {
     if minor { [0, 3, 7] } else { [0, 4, 7] }
 }
 
 /// Sustained pad: whole-bar close-voiced triads + an octave root, slightly
 /// overlapped so the swap never gaps. 4-bar loop × 4 ≈ 52 s at 74 BPM.
+#[must_use] 
 pub fn pads() -> MidiTakeContent {
     let mut c = MidiTakeContent::default();
     for cycle in 0..4 {
         for (bar, (root, minor)) in PROGRESSION.iter().enumerate() {
             let start = (cycle * 4 + bar) as f64 * BAR;
-            let len = BAR + BEAT * 0.1;
+            let len = BEAT.mul_add(0.1, BAR);
             for off in triad(*minor) {
                 c.notes.push(note(root + off + 12, 62, start, len));
             }
@@ -65,6 +66,7 @@ pub fn pads() -> MidiTakeContent {
 
 /// Simple piano figure: a broken chord per bar (root, fifth, tenth, octave
 /// on the beats) with a held low root. 4-bar loop × 4 ≈ 52 s.
+#[must_use] 
 pub fn piano() -> MidiTakeContent {
     let mut c = MidiTakeContent::default();
     for cycle in 0..4 {
@@ -76,7 +78,7 @@ pub fn piano() -> MidiTakeContent {
             for (i, off) in beats.iter().enumerate() {
                 let vel = if i == 0 { 84 } else { 72 };
                 c.notes
-                    .push(note(root + off, vel, start + i as f64 * BEAT, BEAT * 1.6));
+                    .push(note(root + off, vel, (i as f64).mul_add(BEAT, start), BEAT * 1.6));
             }
             c.notes.push(note(root - 12, 76, start, BAR));
         }
@@ -86,6 +88,7 @@ pub fn piano() -> MidiTakeContent {
 
 /// 16th-note arp line over two octaves, accents on the beats.
 /// 4-bar loop × 4 ≈ 52 s.
+#[must_use] 
 pub fn arp() -> MidiTakeContent {
     let mut c = MidiTakeContent::default();
     let sixteenth = BEAT / 4.0;
@@ -110,7 +113,7 @@ pub fn arp() -> MidiTakeContent {
                 c.notes.push(note(
                     root + off + 12,
                     vel,
-                    start + i as f64 * sixteenth,
+                    (i as f64).mul_add(sixteenth, start),
                     sixteenth * 0.9,
                 ));
             }
@@ -120,6 +123,7 @@ pub fn arp() -> MidiTakeContent {
 }
 
 /// Every preset: (file stem, display name, content).
+#[must_use] 
 pub fn presets() -> Vec<(&'static str, &'static str, MidiTakeContent)> {
     vec![
         ("pads", "Pad progression (I–V–vi–IV)", pads()),
@@ -128,7 +132,7 @@ pub fn presets() -> Vec<(&'static str, &'static str, MidiTakeContent)> {
     ]
 }
 
-#[cfg_attr(test, allow(dead_code))]
+#[cfg_attr(test, expect(dead_code))]
 fn main() -> std::io::Result<()> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/demo-midi");
     std::fs::create_dir_all(&dir)?;

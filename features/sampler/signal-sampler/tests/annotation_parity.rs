@@ -4,7 +4,7 @@
 //! side was a hand-maintained parity COPY of `keyflow-orchestra/src/mirror.rs`
 //! kept in sync by comment convention; this test replaces the convention with
 //! an assertion — both paths must produce identical annotations over the whole
-//! MusicXML corpus (the same fixtures keyflow's `mirror_parity.rs` runs, where
+//! `MusicXML` corpus (the same fixtures keyflow's `mirror_parity.rs` runs, where
 //! the mirror side is itself verified against the real CSS engine).
 //!
 //! Scope: the DRIFT-PRONE shared model only — hints are keyflow-only
@@ -23,7 +23,7 @@ fn corpus_files() -> Vec<std::path::PathBuf> {
         .join("../../../crates/keyflow/examples/mxl");
     let mut files: Vec<_> = std::fs::read_dir(&dir)
         .expect("keyflow mxl corpus missing")
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .map(|e| e.path())
         .filter(|p| p.extension().is_some_and(|x| x == "mxl"))
         .collect();
@@ -62,7 +62,7 @@ fn to_document(notes: &[MidiNote], ccs: &[keyflow_orchestra::engine::CcEvent]) -
 }
 
 /// Both annotation paths over every part of every corpus score must agree on
-/// (ks_val, legato_from, re_bow_to) for every note.
+/// (`ks_val`, `legato_from`, `re_bow_to`) for every note.
 #[test]
 fn document_annotation_matches_mirror_across_corpus() {
     for f in corpus_files() {

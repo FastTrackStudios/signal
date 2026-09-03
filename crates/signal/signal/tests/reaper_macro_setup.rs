@@ -2,12 +2,12 @@
 //! REAPER integration test: Direct Macro → FX Parameter API.
 //!
 //! Tests the new direct FX parameter binding system without JSFX/MIDI middleware.
-//! Uses REAPER's built-in ReaComp compressor as the target plugin.
+//! Uses REAPER's built-in `ReaComp` compressor as the target plugin.
 //! Sets up macro bindings, registers them in the global registry, then verifies
 //! that moving macro knobs directly updates FX parameters via DAW RPC.
 //!
 //! Run with:
-//!   cargo xtask reaper-test macro_setup
+//!   cargo xtask reaper-test `macro_setup`
 
 use std::time::Duration;
 
@@ -22,12 +22,12 @@ async fn settle() {
     tokio::time::sleep(Duration::from_millis(300)).await;
 }
 
-/// ReaComp plugin name in REAPER's FX browser.
+/// `ReaComp` plugin name in REAPER's FX browser.
 const REACOMP: &str = "VST: ReaComp (Cockos)";
 
-/// Build a test Block with a MacroBank targeting ReaComp parameters.
+/// Build a test Block with a `MacroBank` targeting `ReaComp` parameters.
 ///
-/// ReaComp params (VST): Threshold, Ratio, Attack, Release, Pre-Comp, ...
+/// `ReaComp` params (VST): Threshold, Ratio, Attack, Release, Pre-Comp, ...
 /// We bind:
 ///   Knob 0 ("compress") → "Ratio" (value 0.6, range 0.0-1.0)
 ///   Knob 1 ("dynamics") → "Attack" AND "Release" (value 0.4, range 0.0-1.0)
@@ -205,7 +205,7 @@ async fn macro_setup_direct_reacomp_parameter_binding(
         let targets = signal::macro_registry::get_targets(&rb.knob_id);
         for target in targets {
             // Map macro value (0.6 → 0.9) through param range [0.0, 1.0]
-            let param_val = (target.min + (target.max - target.min) * 0.9) as f64;
+            let param_val = f64::from((target.max - target.min).mul_add(0.9, target.min));
             target_fx.param(target.param_index).set(param_val).await?;
             ctx.log(&format!(
                 "Set Ratio (idx={}) to {:.4}",
@@ -220,13 +220,11 @@ async fn macro_setup_direct_reacomp_parameter_binding(
     if let Some(rb) = ratio_binding {
         let after = target_fx.param(rb.param_index).get().await?;
         ctx.log(&format!(
-            "Ratio param after macro change to 0.9: {:.4}",
-            after
+            "Ratio param after macro change to 0.9: {after:.4}"
         ));
         assert!(
             (after - 0.9).abs() < 0.05,
-            "Ratio param should be ~0.9, got {:.4}",
-            after
+            "Ratio param should be ~0.9, got {after:.4}"
         );
         ctx.log("PASS: Ratio param responded directly to macro change");
     }
@@ -242,7 +240,7 @@ async fn macro_setup_direct_reacomp_parameter_binding(
         ));
         for target in targets {
             // Map macro value (0.4 → 0.7) through param range [0.0, 1.0]
-            let param_val = (target.min + (target.max - target.min) * 0.7) as f64;
+            let param_val = f64::from((target.max - target.min).mul_add(0.7, target.min));
             target_fx.param(target.param_index).set(param_val).await?;
             ctx.log(&format!(
                 "Set param (idx={}) to {:.4}",
@@ -261,13 +259,11 @@ async fn macro_setup_direct_reacomp_parameter_binding(
             .get()
             .await?;
         ctx.log(&format!(
-            "Attack param after macro change to 0.7: {:.4}",
-            attack_val
+            "Attack param after macro change to 0.7: {attack_val:.4}"
         ));
         assert!(
             (attack_val - 0.7).abs() < 0.05,
-            "Attack param should be ~0.7, got {:.4}",
-            attack_val
+            "Attack param should be ~0.7, got {attack_val:.4}"
         );
 
         // Second target (Release)
@@ -276,13 +272,11 @@ async fn macro_setup_direct_reacomp_parameter_binding(
             .get()
             .await?;
         ctx.log(&format!(
-            "Release param after macro change to 0.7: {:.4}",
-            release_val
+            "Release param after macro change to 0.7: {release_val:.4}"
         ));
         assert!(
             (release_val - 0.7).abs() < 0.05,
-            "Release param should be ~0.7, got {:.4}",
-            release_val
+            "Release param should be ~0.7, got {release_val:.4}"
         );
     }
 
@@ -445,13 +439,13 @@ async fn macro_lfo_modulation_demo(ctx: &daw::test::ReaperTestContext) -> eyre::
 
         // Oscillate between 0.0 and 1.0 using a sine wave
         // Period = 4 seconds (goes 0->1->0 in 4 seconds)
-        let sine = ((elapsed * std::f64::consts::PI / 2.0).sin() + 1.0) / 2.0;
+        let sine = f64::midpoint((elapsed * std::f64::consts::PI / 2.0).sin(), 1.0);
         let macro_val = sine as f32;
 
         // Update "compress" macro to drive Ratio parameter
         let targets = signal::macro_registry::get_targets("compress");
         for target in targets {
-            let param_val = (target.min + (target.max - target.min) * macro_val) as f64;
+            let param_val = f64::from((target.max - target.min).mul_add(macro_val, target.min));
             target_fx.param(target.param_index).set(param_val).await?;
         }
 
@@ -460,8 +454,7 @@ async fn macro_lfo_modulation_demo(ctx: &daw::test::ReaperTestContext) -> eyre::
             if let Some(rb) = ratio_binding {
                 let current = target_fx.param(rb.param_index).get().await?;
                 ctx.log(&format!(
-                    "T={:2.1}s | Macro={:.3} | Ratio={:.4}",
-                    elapsed, macro_val, current
+                    "T={elapsed:2.1}s | Macro={macro_val:.3} | Ratio={current:.4}"
                 ));
             }
         }
@@ -472,7 +465,7 @@ async fn macro_lfo_modulation_demo(ctx: &daw::test::ReaperTestContext) -> eyre::
 
     if let Some(rb) = ratio_binding {
         let final_val = target_fx.param(rb.param_index).get().await?;
-        ctx.log(&format!("Final Ratio parameter: {:.4}", final_val));
+        ctx.log(&format!("Final Ratio parameter: {final_val:.4}"));
     }
 
     ctx.log("");
@@ -519,11 +512,11 @@ async fn enumerate_reaper_fx(ctx: &daw::test::ReaperTestContext) -> eyre::Result
     for fx_name in fx_names {
         match track.fx_chain().add(fx_name).await {
             Ok(_fx) => {
-                ctx.log(&format!("✓ Found: {}", fx_name));
+                ctx.log(&format!("✓ Found: {fx_name}"));
                 settle().await;
             }
             Err(_e) => {
-                ctx.log(&format!("✗ Not found: {}", fx_name));
+                ctx.log(&format!("✗ Not found: {fx_name}"));
             }
         }
     }
@@ -686,7 +679,7 @@ async fn macro_lfo_multi_plugin_demo(ctx: &daw::test::ReaperTestContext) -> eyre
         let elapsed = start.elapsed().as_secs_f64();
 
         // Oscillate 0.0 to 1.0 with sine wave
-        let sine = ((elapsed * std::f64::consts::PI / 2.0).sin() + 1.0) / 2.0;
+        let sine = f64::midpoint((elapsed * std::f64::consts::PI / 2.0).sin(), 1.0);
         let macro_val = sine as f32;
 
         // Update all 3 plugins from the single macro — in PARALLEL for smooth 30+ FPS
@@ -699,7 +692,7 @@ async fn macro_lfo_multi_plugin_demo(ctx: &daw::test::ReaperTestContext) -> eyre
         let rg = rea_gate.clone();
 
         for target in targets {
-            let param_val = (target.min + (target.max - target.min) * macro_val) as f64;
+            let param_val = f64::from((target.max - target.min).mul_add(macro_val, target.min));
             let guid = target.fx_guid.clone();
 
             // Clone for this iteration
@@ -761,8 +754,7 @@ async fn macro_lfo_multi_plugin_demo(ctx: &daw::test::ReaperTestContext) -> eyre
                 .unwrap_or(0.0);
 
             ctx.log(&format!(
-                "T={:2.0}s | M={:.2} | R={:.3} A={:.3} | Rel={:.3} P={:.3} | T={:.3}",
-                elapsed, macro_val, ratio, attack1, release, precomp, threshold
+                "T={elapsed:2.0}s | M={macro_val:.2} | R={ratio:.3} A={attack1:.3} | Rel={release:.3} P={precomp:.3} | T={threshold:.3}"
             ));
         }
 

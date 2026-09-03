@@ -1,0 +1,24 @@
+[package]
+name = "signal-separator"
+version.workspace = true
+edition = "2021"          # matches the other signal domain crates
+license.workspace = true
+description = "Split a finished mix into stems for reference analysis — model registry and cascade"
+
+[dependencies]
+anyhow.workspace = true
+reqwest.workspace = true
+level-dsp.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true, features = ["fs", "process", "rt", "macros"] }
+tracing.workspace = true
+
+[dev-dependencies]
+# The example measures real stems: WAV in, elements out.
+hound.workspace = true
+signal-analyzer.workspace = true
+
+[lints]
+workspace = true

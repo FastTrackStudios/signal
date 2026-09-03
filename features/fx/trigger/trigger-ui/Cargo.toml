@@ -6,6 +6,9 @@ license.workspace = true
 edition = "2021"          # kept on 2021 — matches the nice-plug plugin stack (comp-ui)
 description = "Trigger GUI — analysis waveform (scrolling peaks + draggable threshold + hit markers), params, and control view"
 
+[lints]
+workspace = true
+
 [features]
 # Core-only by default in the signal workspace (wasm remotes). The plugin
 # builds enable `native` for the Blitz/nice-plug editor.

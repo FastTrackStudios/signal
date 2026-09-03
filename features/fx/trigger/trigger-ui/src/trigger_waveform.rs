@@ -80,7 +80,7 @@ pub fn TriggerWaveform() -> Element {
     let thresh_y = threshold_line_y(threshold, GRAPH_H);
     let grid: Vec<(f64, &str)> = DB_MARKERS
         .iter()
-        .map(|&(db, label)| (db_to_y(db as f64, GRAPH_H), label))
+        .map(|&(db, label)| (db_to_y(f64::from(db), GRAPH_H), label))
         .collect();
 
     rsx! {
@@ -117,7 +117,7 @@ pub fn TriggerWaveform() -> Element {
                         return;
                     }
                     let y = evt.element_coordinates().y;
-                    let db = y_to_db(y, GRAPH_H).clamp(-(RANGE_DB as f64), 0.0) as f32;
+                    let db = y_to_db(y, GRAPH_H).clamp(-f64::from(RANGE_DB), 0.0) as f32;
                     ctx.set_normalized_raw(
                         params.threshold_db.as_ptr(),
                         params.threshold_db.preview_normalized(db),
@@ -125,8 +125,8 @@ pub fn TriggerWaveform() -> Element {
                 }
             },
             onmouseup: {
-                let params = params.clone();
-                let ctx = ctx.clone();
+                let params = params;
+                let ctx = ctx;
                 move |_| {
                     if *dragging.read() {
                         ctx.end_set_raw(params.threshold_db.as_ptr());

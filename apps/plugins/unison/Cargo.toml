@@ -9,6 +9,9 @@ description = "FTS Unison — audio-domain unison / double-tracking engine (the 
 [lib]
 crate-type = ["cdylib", "lib"]
 
+[lints]
+workspace = true
+
 [dependencies]
 nice-plug.workspace = true
 pitch-dsp = { workspace = true }

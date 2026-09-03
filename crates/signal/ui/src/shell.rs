@@ -81,7 +81,7 @@ fn SignalShell() -> Element {
             } else {
                 // Default — delegate to the dock system
                 div { class: "flex-1 overflow-hidden",
-                    DockProvider { render_panel: render_panel.clone(),
+                    DockProvider { render_panel: render_panel,
                         DockRoot {}
                     }
                 }

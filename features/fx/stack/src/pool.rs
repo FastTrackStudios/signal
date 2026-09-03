@@ -121,6 +121,7 @@ pub struct StagePool<S> {
 impl<S: Stage> StagePool<S> {
     /// A pool of `stages.len()` slots. Slot 0 starts in use on lane 0 (the
     /// single-stage plugin, `fx.stack.model`); the rest start unused.
+    #[must_use] 
     pub fn new(stages: Vec<S>) -> Self {
         let n = stages.len();
         let slots = stages
@@ -153,11 +154,13 @@ impl<S: Stage> StagePool<S> {
         }
     }
 
-    pub fn len(&self) -> usize {
+    #[must_use] 
+    pub const fn len(&self) -> usize {
         self.slots.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use] 
+    pub const fn is_empty(&self) -> bool {
         self.slots.is_empty()
     }
 
@@ -181,6 +184,7 @@ impl<S: Stage> StagePool<S> {
         self.slots.get_mut(i).map(|s| &mut s.stage)
     }
 
+    #[must_use] 
     pub fn stage(&self, i: usize) -> Option<&S> {
         self.slots.get(i).map(|s| &s.stage)
     }
@@ -226,6 +230,7 @@ impl<S: Stage> StagePool<S> {
 
     /// The stack's reported latency: the slowest populated lane.
     // r[impl fx.stack.latency]
+    #[must_use] 
     pub fn latency(&self) -> usize {
         (0..self.lanes.len())
             .filter(|&l| self.lane_populated(l))
@@ -314,8 +319,8 @@ impl<S: Stage> StagePool<S> {
                 let mut fade = slot.fade;
                 for i in 0..frames {
                     fade = (fade + dir).clamp(0.0, 1.0);
-                    scratch_l[i] = scratch_l[i] * fade + self.fade_l[i] * (1.0 - fade);
-                    scratch_r[i] = scratch_r[i] * fade + self.fade_r[i] * (1.0 - fade);
+                    scratch_l[i] = scratch_l[i].mul_add(fade, self.fade_l[i] * (1.0 - fade));
+                    scratch_r[i] = scratch_r[i].mul_add(fade, self.fade_r[i] * (1.0 - fade));
                 }
                 slot.fade = fade;
                 if slot.fade == 0.0 {

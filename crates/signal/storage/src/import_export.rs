@@ -70,7 +70,8 @@ impl ExportBundle {
     pub const CURRENT_FORMAT: u32 = 1;
 
     /// Create an empty bundle with current format version.
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             format_version: Self::CURRENT_FORMAT,
             label: None,
@@ -88,7 +89,8 @@ impl ExportBundle {
     }
 
     /// Total number of entities in this bundle.
-    pub fn entity_count(&self) -> usize {
+    #[must_use] 
+    pub const fn entity_count(&self) -> usize {
         self.block_presets.len()
             + self.module_presets.len()
             + self.layers.len()
@@ -198,7 +200,8 @@ pub struct ImportResult {
 }
 
 impl ImportResult {
-    pub fn new() -> Self {
+    #[must_use] 
+    pub const fn new() -> Self {
         Self {
             imported: 0,
             skipped: 0,
@@ -207,7 +210,8 @@ impl ImportResult {
         }
     }
 
-    pub fn total_processed(&self) -> usize {
+    #[must_use] 
+    pub const fn total_processed(&self) -> usize {
         self.imported + self.skipped + self.overwritten
     }
 }

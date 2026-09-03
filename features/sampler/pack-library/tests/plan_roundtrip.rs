@@ -48,7 +48,7 @@ fn build_library(root: &std::path::Path) {
         &pack,
         signal_sampler::engine::cache::PackSpecSource::Path(&spec),
         &samples,
-        paths.iter().map(|p| p.as_path()),
+        paths.iter().map(std::path::PathBuf::as_path),
         signal_sampler::engine::cache::PackCodec::OggVorbis { quality: 0.4 },
     )
     .expect("pack build");

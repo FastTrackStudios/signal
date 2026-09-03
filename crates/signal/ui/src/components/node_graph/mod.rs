@@ -29,6 +29,7 @@ use uuid::Uuid;
 // ---------------------------------------------------------------------------
 
 impl NodeGraph {
+    #[must_use] 
     pub fn new() -> Self {
         Self::default()
     }
@@ -39,6 +40,7 @@ impl NodeGraph {
         id
     }
 
+    #[must_use] 
     pub fn find_module(&self, id: Uuid) -> Option<&GraphModule> {
         self.modules.iter().find(|m| m.id == id)
     }
@@ -47,6 +49,7 @@ impl NodeGraph {
         self.modules.iter_mut().find(|m| m.id == id)
     }
 
+    #[must_use] 
     pub fn module_at(&self, x: f64, y: f64) -> Option<&GraphModule> {
         self.modules.iter().rev().find(|m| m.contains_point(x, y))
     }
@@ -67,6 +70,7 @@ impl NodeGraph {
         self.wires.retain(|w| w.from_node != id && w.to_node != id);
     }
 
+    #[must_use] 
     pub fn has_wire(&self, from_node: Uuid, from_port: &str, to_node: Uuid, to_port: &str) -> bool {
         self.wires.iter().any(|w| {
             w.from_node == from_node
@@ -98,6 +102,7 @@ impl NodeGraph {
         Some(id)
     }
 
+    #[must_use] 
     pub fn find_node(&self, id: Uuid) -> Option<&Node> {
         if let Some(node) = self.nodes.iter().find(|n| n.id == id) {
             return Some(node);
@@ -122,6 +127,7 @@ impl NodeGraph {
         None
     }
 
+    #[must_use] 
     pub fn node_at(&self, x: f64, y: f64) -> Option<&Node> {
         self.nodes.iter().rev().find(|n| n.contains_point(x, y))
     }

@@ -103,7 +103,7 @@ fn main() -> eyre::Result<()> {
     println!(
         "wrote {} ({:.1}s, {} notes)",
         out.display(),
-        res.audio.len() as f64 / 2.0 / SR as f64,
+        res.audio.len() as f64 / 2.0 / f64::from(SR),
         res.note_count
     );
     Ok(())

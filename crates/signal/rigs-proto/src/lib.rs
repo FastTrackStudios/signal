@@ -12,7 +12,7 @@
 use facet::Facet;
 
 /// One selectable preset/kit/patch in a rig's library.
-#[derive(Clone, Debug, Default, PartialEq, Facet)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Facet)]
 pub struct RigPresetInfo {
     pub name: String,
     /// Whether this entry is the loaded one.
@@ -87,59 +87,62 @@ pub enum Rig {
 impl Rig {
     /// Every rig, in menu order: the instruments someone plays first, then
     /// the studio surfaces.
-    pub const ALL: &'static [Rig] = &[
-        Rig::Guitar,
-        Rig::Keys,
-        Rig::Drums,
-        Rig::Bass,
-        Rig::Vocals,
-        Rig::Synth,
-        Rig::Ekit,
-        Rig::Space,
+    pub const ALL: &'static [Self] = &[
+        Self::Guitar,
+        Self::Keys,
+        Self::Drums,
+        Self::Bass,
+        Self::Vocals,
+        Self::Synth,
+        Self::Ekit,
+        Self::Space,
     ];
 
     /// The rig's stable name: its `merge_router_scoped` / `scope_client!`
     /// scope on the wire, its key in prefs, its `--rig` argument, and its URL
     /// hash segment. One string for all of them, on purpose — a rig that is
     /// "keys" in a link and "Keys" on the wire is a bug waiting for a typo.
+    #[must_use] 
     pub const fn slug(self) -> &'static str {
         match self {
-            Rig::Guitar => "guitar",
-            Rig::Keys => "keys",
-            Rig::Drums => "drums",
-            Rig::Bass => "bass",
-            Rig::Vocals => "vocals",
-            Rig::Synth => "synth",
-            Rig::Ekit => "ekit",
-            Rig::Space => "space",
+            Self::Guitar => "guitar",
+            Self::Keys => "keys",
+            Self::Drums => "drums",
+            Self::Bass => "bass",
+            Self::Vocals => "vocals",
+            Self::Synth => "synth",
+            Self::Ekit => "ekit",
+            Self::Space => "space",
         }
     }
 
     /// Display name.
+    #[must_use] 
     pub const fn label(self) -> &'static str {
         match self {
-            Rig::Guitar => "Guitar",
-            Rig::Keys => "Keys",
-            Rig::Drums => "Drums",
-            Rig::Bass => "Bass",
-            Rig::Vocals => "Vocals",
-            Rig::Synth => "Synth",
-            Rig::Ekit => "E-Kit",
-            Rig::Space => "Samples",
+            Self::Guitar => "Guitar",
+            Self::Keys => "Keys",
+            Self::Drums => "Drums",
+            Self::Bass => "Bass",
+            Self::Vocals => "Vocals",
+            Self::Synth => "Synth",
+            Self::Ekit => "E-Kit",
+            Self::Space => "Samples",
         }
     }
 
     /// One line, in the player's terms — what you get when you open it.
+    #[must_use] 
     pub const fn blurb(self) -> &'static str {
         match self {
-            Rig::Guitar => "amp, cab, FX — footswitch scenes",
-            Rig::Keys => "sampled pianos & EPs — engine/layer routing",
-            Rig::Drums => "sampled kit, mixer, MM2 mixes",
-            Rig::Bass => "DI → NAM amp → IR — bass & synth bass",
-            Rig::Vocals => "live vocal chain",
-            Rig::Synth => "Omnisphere patches in the native engine",
-            Rig::Ekit => "pad grid over the sample space",
-            Rig::Space => "similarity maps over the sample libraries",
+            Self::Guitar => "amp, cab, FX — footswitch scenes",
+            Self::Keys => "sampled pianos & EPs — engine/layer routing",
+            Self::Drums => "sampled kit, mixer, MM2 mixes",
+            Self::Bass => "DI → NAM amp → IR — bass & synth bass",
+            Self::Vocals => "live vocal chain",
+            Self::Synth => "Omnisphere patches in the native engine",
+            Self::Ekit => "pad grid over the sample space",
+            Self::Space => "similarity maps over the sample libraries",
         }
     }
 
@@ -147,12 +150,14 @@ impl Rig {
     /// whether `scope_client!(client, rig.slug())` resolves. `Space` is a
     /// browser over the sample libraries, not an instrument with a transport,
     /// so it has no core; `Vocals` has no backend at all yet.
+    #[must_use] 
     pub const fn has_rig_core(self) -> bool {
-        !matches!(self, Rig::Space | Rig::Vocals)
+        !matches!(self, Self::Space | Self::Vocals)
     }
 
-    pub fn from_slug(s: &str) -> Option<Rig> {
-        Rig::ALL
+    #[must_use] 
+    pub fn from_slug(s: &str) -> Option<Self> {
+        Self::ALL
             .iter()
             .copied()
             .find(|k| k.slug().eq_ignore_ascii_case(s))

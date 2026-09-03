@@ -25,8 +25,8 @@ fn make_state(bands: Vec<EqBand>, spectrum: Vec<f32>) -> EqGraphRenderState {
         model_response_db: parking_lot::RwLock::new(Vec::new()),
         analyzer: parking_lot::RwLock::new(Default::default()),
         config: parking_lot::RwLock::new(GraphConfig {
-            rect_w: W as f64,
-            rect_h: H as f64,
+            rect_w: f64::from(W),
+            rect_h: f64::from(H),
             ..GraphConfig::default()
         }),
         interaction: parking_lot::RwLock::new(Default::default()),
@@ -46,8 +46,8 @@ fn model_response_curve_adds_paths_without_bands() {
         ),
         analyzer: parking_lot::RwLock::new(Default::default()),
         config: parking_lot::RwLock::new(GraphConfig {
-            rect_w: W as f64,
-            rect_h: H as f64,
+            rect_w: f64::from(W),
+            rect_h: f64::from(H),
             ..GraphConfig::default()
         }),
         interaction: parking_lot::RwLock::new(Default::default()),

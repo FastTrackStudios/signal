@@ -1,6 +1,6 @@
 //! Compressor GUI — Dioxus components for the FTS Comp plugin.
 //!
-//! Hosts the comp-specific Dioxus root component, the nice_plug parameter
+//! Hosts the comp-specific Dioxus root component, the `nice_plug` parameter
 //! tree, and the bridging glue from `nice_plug` parameters to
 //! [`fts_audio_ui`] widgets. General-purpose widgets (knobs, meters, drag
 //! provider) come from [`fts_audio_ui`]; layout primitives from [`architect_ui`].
@@ -15,8 +15,8 @@
 //!   including the macro fanout that lets one knob write several engine params
 //! - [`sections`]: the labelled-section / knob / selector layout primitives
 //! - [`profile_view`]: hardware-profile data model (1176, LA-2A, SSL bus)
-//! - [`params`]: nice_plug parameter tree + shared UI state
-//! - [`param_adapter`]: nice_plug `ParamPtr` → [`fts_audio_ui::ParamHandle`]
+//! - [`params`]: `nice_plug` parameter tree + shared UI state
+//! - [`param_adapter`]: `nice_plug` `ParamPtr` → [`fts_audio_ui::ParamHandle`]
 
 // ── Portable core (no plugin framework; compiles for wasm) ──
 pub mod comp_graph_svg;

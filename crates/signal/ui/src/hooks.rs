@@ -7,6 +7,7 @@ use signal::Signal;
 ///
 /// The app must call `provide_context(signal)` before any component
 /// that uses this hook renders. Panics if the context is missing.
+#[must_use] 
 pub fn use_signal_service() -> Signal {
     consume_context::<Signal>()
 }

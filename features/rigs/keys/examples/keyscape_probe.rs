@@ -1,6 +1,6 @@
 //! Offline proof that a Keyscape signalpack plays through the shared sampler:
 //! load the LA Custom C7 Grand, hit middle C, render, and confirm audio.
-//!   cargo run -p signal-keys --example keyscape_probe
+//!   cargo run -p signal-keys --example `keyscape_probe`
 
 use std::path::Path;
 
@@ -35,9 +35,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for _ in 0..48 {
         buf.iter_mut().for_each(|s| *s = 0.0);
         rig.render_offline(&mut buf)?;
-        for &s in buf.iter() {
+        for &s in &buf {
             pk = pk.max(s.abs());
-            rms += (s as f64) * (s as f64);
+            rms += f64::from(s) * f64::from(s);
             n += 1;
         }
     }

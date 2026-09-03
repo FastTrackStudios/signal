@@ -6,5 +6,8 @@ license.workspace = true
 authors.workspace = true
 description = "Shared Blitz-safe Dioxus widgets for signal rig UIs — knob, arc geometry"
 
+[lints]
+workspace = true
+
 [dependencies]
 dioxus.workspace = true

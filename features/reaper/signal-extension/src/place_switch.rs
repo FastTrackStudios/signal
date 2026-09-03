@@ -86,11 +86,10 @@ async fn place_switch(daw: &Daw, level: SwitchLevel) -> Result<()> {
     let cursor_time = state
         .edit_position
         .time
-        .map(|t| t.as_seconds())
-        .unwrap_or(0.0);
+        .map_or(0.0, |t| t.as_seconds());
 
     // Calculate bar duration
-    let beats_per_bar = state.time_signature.numerator as f64;
+    let beats_per_bar = f64::from(state.time_signature.numerator);
     let beat_duration = 60.0 / state.tempo.bpm;
     let bar_duration = beat_duration * beats_per_bar;
 
@@ -167,9 +166,9 @@ async fn place_switch(daw: &Daw, level: SwitchLevel) -> Result<()> {
 
 /// Walk up the parent chain from the selected track to find:
 /// 1. A track whose parent has `fts_signal/scene_count` — that track is the section
-/// 2. The parent with scene_count — that's the controller (song/profile folder)
+/// 2. The parent with `scene_count` — that's the controller (song/profile folder)
 ///
-/// Returns (section_index, section_name, controller_guid).
+/// Returns (`section_index`, `section_name`, `controller_guid`).
 async fn find_section_and_controller(
     selected: &daw::service::Track,
     track_map: &std::collections::HashMap<&str, &daw::service::Track>,
@@ -208,7 +207,7 @@ async fn find_section_and_controller(
 }
 
 /// Walk up the parent chain from the selected track to find:
-/// 1. The song folder (a folder track that is a child of a rig folder with scene_count)
+/// 1. The song folder (a folder track that is a child of a rig folder with `scene_count`)
 /// 2. The rig folder (the song folder's parent)
 async fn find_song_and_rig(
     selected: &daw::service::Track,

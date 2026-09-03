@@ -10,7 +10,7 @@
 //! - Smart filter type selection based on click position
 //!
 //! Uses SVG rendering for cross-platform compatibility.
-//! Ported from the legacy `audio-controls` crate for the nice_plug_dioxus Blitz renderer.
+//! Ported from the legacy `audio-controls` crate for the `nice_plug_dioxus` Blitz renderer.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -155,7 +155,7 @@ pub fn EqGraph(
     #[props(default)]
     class: String,
     /// Optional external signal to sync focused band state (for detail panels).
-    /// EqGraph writes the focused band index to this signal from event handlers.
+    /// `EqGraph` writes the focused band index to this signal from event handlers.
     #[props(default)]
     focused_band_out: Option<Signal<Option<usize>>>,
     /// Optional external signal for the cheat-sheet overlay selection, so a
@@ -188,7 +188,7 @@ pub fn EqGraph(
     #[props(default = 0.0)]
     rendered_height: f64,
     /// X offset of the SVG element from the window's left edge (in pixels).
-    /// Needed because Blitz's element_coordinates() returns window-relative coords.
+    /// Needed because Blitz's `element_coordinates()` returns window-relative coords.
     #[props(default = 0.0)]
     offset_x: f64,
     /// Y offset of the SVG element from the window's top edge (in pixels).
@@ -551,7 +551,7 @@ pub fn EqGraph(
                             if let Some(&(_, orig_freq, orig_gain)) = start_bands.iter().find(|(i, _, _)| *i == band_idx) {
                                 let new_gain = mapper.y_to_db(y).clamp(-30.0, 30.0) as f32;
                                 // r[impl fx.eq.display.auto-range]
-                                if auto_range && (new_gain.abs() as f64) >= db_range * 0.95 {
+                                if auto_range && f64::from(new_gain.abs()) >= db_range * 0.95 {
                                     if let (Some(cb), Some(next)) = (
                                         &on_db_range_change,
                                         super::eq_graph_model::DB_RANGE_STEPS
@@ -569,7 +569,7 @@ pub fn EqGraph(
                                 let mut bv = bands.write();
                                 for &(idx, _, og) in &start_bands {
                                     if idx < bv.len() {
-                                        let scaled_gain = (og * scale).clamp(-30.0, 30.0) as f64;
+                                        let scaled_gain = f64::from((og * scale).clamp(-30.0, 30.0));
                                         bv[idx].gain = drag_gain_for_shape(bv[idx].shape, og, scaled_gain);
                                         if let Some(&(_, of_, _)) = start_bands.iter().find(|(i,_,_)| *i==idx) {
                                             bv[idx].frequency = (of_ * freq_ratio).clamp(10.0, 30000.0);
@@ -657,8 +657,8 @@ pub fn EqGraph(
                     .is_some_and(|b| {
                         crate::eq_graph_popup::point_in_popup_region(
                             x, y,
-                            mapper.freq_to_x(b.frequency as f64),
-                            mapper.db_to_y(b.gain as f64),
+                            mapper.freq_to_x(f64::from(b.frequency)),
+                            mapper.db_to_y(f64::from(b.gain)),
                             graph_width, graph_height,
                             false,
                         )
@@ -782,7 +782,7 @@ pub fn EqGraph(
                     let now = now_ms();
                     let is_double = { *last_click.read() }.is_some_and(|(t, lx, ly)| {
                         now - t < double_click_threshold_ms &&
-                        ((x-lx).powi(2) + (y-ly).powi(2)).sqrt() < double_click_distance
+                        (x - lx).hypot(y - ly) < double_click_distance
                     });
                     if is_double {
                         last_click.set(None);
@@ -799,13 +799,13 @@ pub fn EqGraph(
                     let is_shift = evt.modifiers().shift();
                     let cur_sel = { selected_bands.read().clone() };
                     let new_sel = if is_shift {
-                        let mut s = cur_sel.clone();
+                        let mut s = cur_sel;
                         if s.contains(&idx) { s.retain(|&i| i != idx); } else { s.push(idx); }
                         s
                     } else if !cur_sel.contains(&idx) {
                         vec![idx]
                     } else {
-                        cur_sel.clone()
+                        cur_sel
                     };
                     selected_bands.set(new_sel.clone());
 
@@ -828,7 +828,7 @@ pub fn EqGraph(
                 let now = now_ms();
                 let is_double = { *last_click.read() }.is_some_and(|(t, lx, ly)| {
                     now - t < double_click_threshold_ms &&
-                    ((x-lx).powi(2) + (y-ly).powi(2)).sqrt() < double_click_distance
+                    (x - lx).hypot(y - ly) < double_click_distance
                 });
 
                 if is_double {
@@ -840,7 +840,7 @@ pub fn EqGraph(
                     if new_idx >= MAX_BANDS { return; }
                     let freq = mapper.x_to_freq(x).clamp(20.0, 20000.0) as f32;
                     let gain = mapper.y_to_db(y).clamp(-db_range, db_range) as f32;
-                    let shape = filter_type_for_position(freq as f64, gain as f64, db_range);
+                    let shape = filter_type_for_position(f64::from(freq), f64::from(gain), db_range);
                     let final_gain = if shape.uses_gain() { gain } else { 0.0 };
                     let new_band = EqBand { index: new_idx, used: true, enabled: true, frequency: freq,
                         gain: final_gain, q: 1.0, shape, solo: false, stereo_mode: StereoMode::default(),
@@ -929,8 +929,7 @@ pub fn EqGraph(
                             .parse::<usize>()
                             .ok()
                             .and_then(|i| crate::cheatsheet::PROFILES.get(i))
-                            .map(OverlayChoice::Pick)
-                            .unwrap_or(OverlayChoice::Off),
+                            .map_or(OverlayChoice::Off, OverlayChoice::Pick),
                     };
                     overlay_sel.set(sel);
                 },
@@ -964,12 +963,10 @@ pub fn EqGraph(
             if let Some(profile) = active_overlay {
                 for (zi, zone) in profile.zones.iter().enumerate() {
                     {
-                        let cx = (mapper.freq_to_x(zone.lo_hz as f64)
-                            + mapper.freq_to_x(zone.hi_hz as f64))
-                            / 2.0;
+                        let cx = f64::midpoint(mapper.freq_to_x(f64::from(zone.lo_hz)), mapper.freq_to_x(f64::from(zone.hi_hz)));
                         let (r, g, b, _) = zone.dir.rgba();
                         // Stagger vertically so adjacent labels don't fully overlap.
-                        let top = 10.0 + (zi % 3) as f64 * 12.0;
+                        let top = ((zi % 3) as f64).mul_add(12.0, 10.0);
                         rsx! {
                             div {
                                 key: "{zi}",
@@ -996,8 +993,8 @@ pub fn EqGraph(
                 if show_hints { rsx! {
                     for eb in crate::cheatsheet::EAR_BANDS.iter() {
                         {
-                            let ex = mapper.freq_to_x(eb.center_hz as f64);
-                            let color = crate::eq_graph_model::freq_to_color(eb.center_hz as f64);
+                            let ex = mapper.freq_to_x(f64::from(eb.center_hz));
+                            let color = crate::eq_graph_model::freq_to_color(f64::from(eb.center_hz));
                             rsx! {
                                 div {
                                     key: "ear-{eb.center_hz}",
@@ -1026,7 +1023,7 @@ pub fn EqGraph(
                 if show_hints { rsx! {
                     for fr in crate::cheatsheet::FREQ_RANGES.iter() {
                         {
-                            let cx = mapper.freq_to_x((fr.lo_hz as f64 * fr.hi_hz as f64).sqrt());
+                            let cx = mapper.freq_to_x((f64::from(fr.lo_hz) * f64::from(fr.hi_hz)).sqrt());
                             rsx! {
                                 div {
                                     key: "tm-{fr.lo_hz}",
@@ -1066,9 +1063,9 @@ pub fn EqGraph(
                 rsx! {
                     for band in bv.iter().filter(|b| b.used && !b.name.trim().is_empty()).cloned() {
                         {
-                            let lx = mapper.freq_to_x(band.frequency as f64);
-                            let ly = mapper.db_to_y(band.gain as f64);
-                            let color = crate::eq_graph_model::freq_to_color(band.frequency as f64);
+                            let lx = mapper.freq_to_x(f64::from(band.frequency));
+                            let ly = mapper.db_to_y(f64::from(band.gain));
+                            let color = crate::eq_graph_model::freq_to_color(f64::from(band.frequency));
                             rsx! {
                                 div {
                                     key: "name-{band.index}",
@@ -1113,8 +1110,8 @@ pub fn EqGraph(
                 if let Some(band_idx) = overlay_idx {
                     let band_opt = bands.read().get(band_idx).cloned();
                     if let Some(band) = band_opt {
-                        let bx = mapper.freq_to_x(band.frequency as f64);
-                        let by = mapper.db_to_y(band.gain as f64);
+                        let bx = mapper.freq_to_x(f64::from(band.frequency));
+                        let by = mapper.db_to_y(f64::from(band.gain));
                         rsx! {
                             BandPopup {
                                 key: "{band_idx}",
@@ -1128,7 +1125,7 @@ pub fn EqGraph(
                                 popup_activity,
                                 on_band_change: on_band_change,
                                 on_band_remove: on_band_remove,
-                                on_dismiss: move |_| { set_focused(None); },
+                                on_dismiss: move |()| { set_focused(None); },
                             }
                         }
                     } else { rsx! {} }
@@ -1150,13 +1147,13 @@ pub fn EqGraph(
                                 bands,
                                 on_band_change: on_band_change,
                                 on_band_remove: on_band_remove,
-                                on_dismiss: move |_| { context_menu.set(None); },
+                                on_dismiss: move |()| { context_menu.set(None); },
                             }
                         }
                     } else {
                         let freq = mapper.x_to_freq(ctx_x).clamp(20.0, 20000.0) as f32;
                         let gain = mapper.y_to_db(ctx_y).clamp(-db_range, db_range) as f32;
-                        let shape = filter_type_for_position(freq as f64, gain as f64, db_range);
+                        let shape = filter_type_for_position(f64::from(freq), f64::from(gain), db_range);
                         let final_gain = if shape.uses_gain() { gain } else { 0.0 };
                         rsx! {
                             EmptyGraphContextMenu {
@@ -1172,7 +1169,7 @@ pub fn EqGraph(
                                 gain: final_gain,
                                 shape,
                                 on_band_add: on_band_add,
-                                on_dismiss: move |_| { context_menu.set(None); },
+                                on_dismiss: move |()| { context_menu.set(None); },
                             }
                         }
                     }

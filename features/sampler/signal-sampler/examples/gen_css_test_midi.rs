@@ -45,7 +45,7 @@ struct Smf {
 }
 
 impl Smf {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             ev: Vec::new(),
             seq: 0,
@@ -67,9 +67,9 @@ impl Smf {
     fn cc_ramp(&mut self, t0: f64, dur: f64, ctrl: u8, a: u8, b: u8) {
         let steps = 64;
         for i in 0..=steps {
-            let f = i as f64 / steps as f64;
-            let v = (a as f64 + (b as f64 - a as f64) * f).round() as u8;
-            self.cc(t0 + dur * f, ctrl, v);
+            let f = f64::from(i) / f64::from(steps);
+            let v = (f64::from(b) - f64::from(a)).mul_add(f, f64::from(a)).round() as u8;
+            self.cc(dur.mul_add(f, t0), ctrl, v);
         }
     }
     fn write(mut self, path: &str) -> std::io::Result<()> {
@@ -142,8 +142,7 @@ fn main() -> std::io::Result<()> {
         m.note(start, 8.0, 67, 90);
         m.cc_ramp(start, 8.0, 1, 0, 127); // CC1 0→127 over the held note
         println!(
-            "{:6.1}  LONG {name:<22} note67 held 8s, CC1 0→127 sweep, CC2=0 (nonvib)",
-            start
+            "{start:6.1}  LONG {name:<22} note67 held 8s, CC1 0→127 sweep, CC2=0 (nonvib)"
         );
         t += 9.0;
         // vibrato (CC2=full)
@@ -154,8 +153,7 @@ fn main() -> std::io::Result<()> {
         m.note(start, 8.0, 67, 90);
         m.cc_ramp(start, 8.0, 1, 0, 127);
         println!(
-            "{:6.1}  LONG {name:<22} note67 held 8s, CC1 0→127 sweep, CC2=127 (vib)",
-            start
+            "{start:6.1}  LONG {name:<22} note67 held 8s, CC1 0→127 sweep, CC2=127 (vib)"
         );
         t += 9.5;
     }
@@ -169,8 +167,7 @@ fn main() -> std::io::Result<()> {
         m.note(start, 6.0, 67, 90);
         m.cc_ramp(start, 6.0, 2, 0, 127); // CC2 0→127
         println!(
-            "{:6.1}  VIB sweep  note67 held 6s, CC1={cc1} fixed, CC2 0→127",
-            start
+            "{start:6.1}  VIB sweep  note67 held 6s, CC1={cc1} fixed, CC2 0→127"
         );
         t += 7.0;
     }
@@ -183,7 +180,7 @@ fn main() -> std::io::Result<()> {
             t + 0.1
         );
         for (i, vel) in [20u8, 50, 80, 110, 127].iter().enumerate() {
-            m.note(t + 0.1 + i as f64 * 0.6, 0.4, 67, *vel);
+            m.note((i as f64).mul_add(0.6, t + 0.1), 0.4, 67, *vel);
         }
         t += 3.6;
     }
@@ -201,11 +198,11 @@ fn main() -> std::io::Result<()> {
         );
         let step = 0.6;
         for (i, &n) in line.iter().enumerate() {
-            let on = t + 0.1 + i as f64 * step;
+            let on = (i as f64).mul_add(step, t + 0.1);
             // overlap by holding ~0.15s into the next note
             m.note(on, step + 0.15, n, vel);
         }
-        t += 0.1 + line.len() as f64 * step + 1.0;
+        t += (line.len() as f64).mul_add(step, 0.1) + 1.0;
     }
 
     // ── 5. Portamento: low-velocity legato (≤10) + CC5 ──
@@ -231,12 +228,11 @@ fn main() -> std::io::Result<()> {
     m.cc_ramp(start, 8.0, 2, 0, 127); // vibrato in over the whole note
     m.cc_ramp(start + 4.0, 4.0, 1, 120, 30); // swell back down
     println!(
-        "{:6.1}  COMBO note67 8s: CC1 swell up+down, CC2 0→127 simultaneously",
-        start
+        "{start:6.1}  COMBO note67 8s: CC1 swell up+down, CC2 0→127 simultaneously"
     );
     t += 9.0;
 
     m.write(&path)?;
-    println!("\nwrote {path}  (~{:.0}s of MIDI)", t);
+    println!("\nwrote {path}  (~{t:.0}s of MIDI)");
     Ok(())
 }

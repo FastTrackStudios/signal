@@ -1,4 +1,4 @@
-//! Network probe for the engine's PackLibrary service — list the host's
+//! Network probe for the engine's `PackLibrary` service — list the host's
 //! packs, optionally download one (with resume) and verify its sha256.
 //!
 //! ```bash

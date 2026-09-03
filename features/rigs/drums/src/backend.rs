@@ -26,7 +26,7 @@ const KIT: &str = "kit";
 const DEFAULT_LIBRARY: &str =
     "/run/media/AudioHaven/Signal/Libraries/Drum Kits/GGD Modern and Massive 2";
 
-fn to_drum_map(m: InputMap) -> Option<DrumMap> {
+const fn to_drum_map(m: InputMap) -> Option<DrumMap> {
     match m {
         InputMap::Direct => None,
         InputMap::StrataPrime => Some(DrumMap::StrataPrime),
@@ -77,7 +77,7 @@ struct ChanRef {
 #[derive(Clone, Debug)]
 struct SendRef {
     piece: usize,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     mic: String,
     track: String,
     meter: usize,
@@ -116,7 +116,7 @@ struct KitMix {
 impl KitMix {
     /// Build the strip model from the loaded kit's track set.
     fn from_kit(kit: &signal_sampler::kit_tracks::KitState) -> Self {
-        let mut mix = KitMix::default();
+        let mut mix = Self::default();
         let bus_index: std::collections::HashMap<&str, usize> = kit
             .buses
             .iter()
@@ -185,7 +185,7 @@ struct Inner {
     /// LEDs. `None` when no keyboard is attached / hidraw isn't accessible.
     light: Mutex<Option<crate::DrumLightGuide>>,
     /// One-shot guard so the meter pump is spawned exactly once, however the
-    /// rig first becomes active (start / load_kit / open).
+    /// rig first becomes active (start / `load_kit` / open).
     pump_started: std::sync::atomic::AtomicBool,
     /// The sample-library catalog (every swappable `.signalengine`, grouped by
     /// kind on the client). Scanned once at construction.
@@ -214,9 +214,7 @@ impl DrumRigBackend {
     /// Build the backend and scan the kit library. Does not open audio — call
     /// [`DrumRig::start`] (which spawns the open off-thread) or `load_kit`.
     pub fn new() -> Self {
-        let library_dir = std::env::var("SIGNAL_DRUM_LIBRARY")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(DEFAULT_LIBRARY));
+        let library_dir = std::env::var("SIGNAL_DRUM_LIBRARY").map_or_else(|_| PathBuf::from(DEFAULT_LIBRARY), PathBuf::from);
         let library = crate::library::scan_engines(&crate::library::engines_dir(&library_dir));
         let mixes = scan_mixes(&library_dir.join("Mixes"));
         tracing::info!(
@@ -374,7 +372,7 @@ impl DrumRigBackend {
         };
         let dir = path.parent().unwrap_or(Path::new("")).to_path_buf();
         let mut found = false;
-        for e in spec.engines.iter_mut() {
+        for e in &mut spec.engines {
             if e.id == slot_id {
                 e.engine = engine_path.clone();
                 found = true;
@@ -422,15 +420,11 @@ impl DrumRigBackend {
     /// channel/bus (and the Master Bus chain to master). Strips match our mixer
     /// by name (Kick In 1, Snare Top, Overheads, Room Far, …).
     fn do_import_mix(&self, kit_index: usize, mix_path: PathBuf) {
-        let mixer = match std::fs::read_to_string(&mix_path)
+        let mixer = if let Some(m) = std::fs::read_to_string(&mix_path)
             .ok()
-            .and_then(|t| crate::cradle::parse_mixer(&t).ok())
-        {
-            Some(m) => m,
-            None => {
-                tracing::error!("mm2 import: read/parse {}", mix_path.display());
-                return;
-            }
+            .and_then(|t| crate::cradle::parse_mixer(&t).ok()) { m } else {
+            tracing::error!("mm2 import: read/parse {}", mix_path.display());
+            return;
         };
         let path = {
             let s = self.inner.state.lock().unwrap();
@@ -496,7 +490,7 @@ impl DrumRigBackend {
     /// The Master Bus chain has no daw master fx chain yet — logged, skipped.
     fn apply_mix(&self, rig: &SamplerRig, mixer: &crate::cradle::Mixer) {
         use daw::service::handle::DawHandle as _;
-        let sr = rig.sample_rate() as f64;
+        let sr = f64::from(rig.sample_rate());
         let Some(daw) = rig.daw_handle() else { return };
         let project = daw.current();
         let mut fx_applied = 0usize;
@@ -606,7 +600,7 @@ impl DrumRigBackend {
         let project = daw.current();
         let s = self.inner.state.lock().unwrap();
         let mix = &s.mix;
-        let vol = |db: f32| db_to_linear(db) as f64;
+        let vol = |db: f32| f64::from(db_to_linear(db));
         for ch in &mix.channels {
             let piece = mix
                 .pieces
@@ -643,8 +637,7 @@ impl DrumRigBackend {
                         || mix
                             .pieces
                             .get(snd.piece)
-                            .map(|p| p.state.soloed)
-                            .unwrap_or(false))
+                            .is_some_and(|p| p.state.soloed))
             });
             let track = project.track(&bus.track);
             let _ = track.set_volume(vol(bus.state.gain_db));
@@ -859,8 +852,7 @@ impl DrumRig for DrumRigBackend {
                 let peak = |idx: usize| {
                     meters
                         .cell(idx)
-                        .map(|c| c.peak(0).max(c.peak(1)))
-                        .unwrap_or(0.0)
+                        .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
                 };
                 for ch in &s.mix.channels {
                     master_peak = master_peak.max(peak(ch.meter));
@@ -917,7 +909,7 @@ impl DrumRig for DrumRigBackend {
         // Freshen preload counts.
         if let Ok(rig) = self.inner.rig.lock() {
             if let Some(rig) = rig.as_ref() {
-                for p in pieces.iter_mut() {
+                for p in &mut pieces {
                     let (l, t) = rig.kit_piece_progress(&p.id);
                     p.loaded_samples = l as u32;
                     p.total_samples = t as u32;
@@ -941,12 +933,12 @@ impl DrumRig for DrumRigBackend {
             .map(|(id, abs)| {
                 let abs_str = abs.display().to_string();
                 let lib = self.inner.library.iter().find(|p| p.path == abs_str);
-                let current_name = lib.map(|p| p.name.clone()).unwrap_or_else(|| {
+                let current_name = lib.map_or_else(|| {
                     abs.file_stem()
                         .and_then(|s| s.to_str())
                         .unwrap_or("")
                         .to_string()
-                });
+                }, |p| p.name.clone());
                 let kind = lib
                     .map(|p| p.kind.clone())
                     .filter(|k| !k.is_empty())
@@ -1095,8 +1087,7 @@ impl DrumRig for DrumRigBackend {
         let peak = |idx: usize| {
             meters
                 .cell(idx)
-                .map(|c| c.peak(0).max(c.peak(1)))
-                .unwrap_or(0.0)
+                .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
         };
         let s = self.inner.state.lock().unwrap();
         let mix = &s.mix;
@@ -1195,8 +1186,7 @@ impl DrumRig for DrumRigBackend {
         let peak = |idx: usize| {
             meters
                 .cell(idx)
-                .map(|c| c.peak(0).max(c.peak(1)))
-                .unwrap_or(0.0)
+                .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
         };
         let s = self.inner.state.lock().unwrap();
         let mix = &s.mix;
@@ -1418,7 +1408,7 @@ impl Services for DrumRigBackend {
 /// Now-ies".
 fn norm_name(s: &str) -> String {
     s.chars()
-        .filter(|c| c.is_ascii_alphanumeric())
+        .filter(char::is_ascii_alphanumeric)
         .map(|c| c.to_ascii_lowercase())
         .collect()
 }
@@ -1497,8 +1487,7 @@ fn pieces_from_preset(path: &Path, ids: &[String]) -> Vec<PieceInfo> {
         spec.note_routing
             .iter()
             .find(|nr| nr.targets.iter().any(|t| t == engine_id))
-            .map(|nr| nr.note as u32)
-            .unwrap_or(0)
+            .map_or(0, |nr| u32::from(nr.note))
     };
     spec.engines
         .iter()

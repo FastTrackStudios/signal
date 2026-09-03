@@ -140,8 +140,8 @@ impl Plugin for FtsMeter {
         // Deinterleave taps (audio passes through untouched).
         for (i, frame) in buffer.iter_samples().enumerate() {
             let mut it = frame.into_iter();
-            let l = it.next().map(|s| *s).unwrap_or(0.0);
-            let r = it.next().map(|s| *s).unwrap_or(l);
+            let l = it.next().map_or(0.0, |s| *s);
+            let r = it.next().map_or(l, |s| *s);
             self.left[i] = l;
             self.right[i] = r;
             self.mono[i] = 0.5 * (l + r);
