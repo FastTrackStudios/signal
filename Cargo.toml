@@ -48,6 +48,7 @@ members = [
     "crates/signal/ui",
     "crates/signal/widgets",
     "features/analyzer/signal-analyzer",
+    "features/separator/signal-separator",
     "features/preset-browser/preset-browser",
     "features/preset-browser/preset-browser-ui",
     "features/fx/comp/comp",
@@ -413,6 +414,7 @@ wah-dsp = { path = "features/fx/modulation/wah-dsp" }
 preset-browser = { path = "features/preset-browser/preset-browser" }
 preset-browser-ui = { path = "features/preset-browser/preset-browser-ui" }
 signal-analyzer = { path = "features/analyzer/signal-analyzer" }
+signal-separator = { path = "features/separator/signal-separator" }
 signal-fx = { path = "features/fx/signal-fx" }
 
 # ── Facet reflection + vox RPC — the rc.5 fleet pins ──────────────────
