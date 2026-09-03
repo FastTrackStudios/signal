@@ -12,5 +12,10 @@ sha2.workspace = true
 tokio = { workspace = true, features = ["fs", "process", "rt", "macros"] }
 tracing.workspace = true
 
+[dev-dependencies]
+# The example measures real stems: WAV in, elements out.
+hound.workspace = true
+signal-analyzer.workspace = true
+
 [lints]
 workspace = true

@@ -135,6 +135,9 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/signal"
 
 [workspace.dependencies]
+# WAV I/O for offline stem analysis (features/separator). Not audio-thread
+# code — this reads whole files off disk to measure them.
+hound = "3.5"
 # ── Internal — every moved crate, path declared ONCE here ─────────────
 fts-chrome = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6" }
 fts-audio-ui = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6" }
