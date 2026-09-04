@@ -42,7 +42,7 @@ env:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, nix-host]
+    runs-on: [self-hosted, signal]
     environment:
       name: signal-production
       url: https://signal.fasttrackstudio.app
