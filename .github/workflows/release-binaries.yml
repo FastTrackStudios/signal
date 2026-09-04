@@ -46,7 +46,7 @@ env:
 
 jobs:
   linux-desktop:
-    runs-on: [self-hosted, nix-host]
+    runs-on: [self-hosted, signal]
     steps:
       - name: Checkout the release tag (local-first)
         run: |
@@ -103,7 +103,7 @@ jobs:
     # the Justfile is the source of truth, issue #31): built with the
     # same nix devshell, packaged by `just plugins-package`, attached as
     # fts-plugins-v<version>-x86_64-linux.tar.gz.
-    runs-on: [self-hosted, nix-host]
+    runs-on: [self-hosted, signal]
     steps:
       - name: Checkout the release tag (local-first)
         run: |
