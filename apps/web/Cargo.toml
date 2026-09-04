@@ -38,6 +38,20 @@ dioxus-router = { workspace = true }
 ssg = { workspace = true }
 ssg-ui = { workspace = true }
 
+# The REAL rig control surfaces. The landing page renders these rather
+# than mocks of them, so the demo cannot drift from the product — see the
+# module docs in src/demos/. Both build for wasm32 and both read their rig
+# through `try_consume_context`, so they render read-only with no engine.
+signal-guitar-ui = { workspace = true }
+# `BlockType` is signal-proto's; features/rigs/guitar/proto imports it
+# privately, so the block types have to come from the owning crate.
+signal-proto = { workspace = true }
+signal-keys-ui = { workspace = true }
+# `architect::platform::sleep` — the wasm-cfg-split timer seam CLAUDE.md
+# mandates (tokio on native, browser timers on wasm). The rig UI crates
+# drive their own animations through it; the demo feed does the same.
+architect = { workspace = true }
+
 tracing = { workspace = true }
 
 # Not called directly. web-sys features are ADDITIVE across the dependency

@@ -60,6 +60,16 @@ pub fn ControlView(
     /// Wheel + pedal positions, for the strip beside the keys.
     #[props(default)]
     controllers: crate::controllers::Controllers,
+    /// Macros to show when there is no rig to fetch them from.
+    ///
+    /// The macro band normally pulls these over the wire, so with no
+    /// `KeysRigClient` in context every panel — Filter, Amp Envelope,
+    /// Vibrato — renders as an empty box. That is right for a remote that
+    /// has lost its rig and wrong for a surface being shown deliberately
+    /// without one. A client, when present, still wins: this is only the
+    /// value the band starts from.
+    #[props(default)]
+    macro_seed: Vec<KeysMacro>,
 ) -> Element {
     let mut selection = crate::selection::use_selection();
     // Escape clears the selection from wherever the pointer happens to be —
@@ -126,7 +136,7 @@ pub fn ControlView(
                     MasterStrip { master_db: mixer.master_db }
                 }
             }
-            MacroBand {}
+            MacroBand { seed: macro_seed.clone() }
             KeyboardStrip { mixer: mixer.clone(), held, controllers }
         }
     }
@@ -301,11 +311,13 @@ fn rig_curves(mixer: &KeysMixer, scope: &MacroScope) -> Vec<ModuleCurve> {
 /// beneath once that level stops agreeing with itself: the panels say
 /// "offset" and print the spread.
 #[component]
-fn MacroBand() -> Element {
+fn MacroBand(#[props(default)] seed: Vec<KeysMacro>) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let state = use_hook(try_consume_context::<crate::state::KeysViewState>);
     let selection = crate::selection::use_selection();
-    let mut macros = use_signal(Vec::<KeysMacro>::new);
+    // Seeded, not empty: with a rig the fetch below replaces this on the
+    // first effect run, and without one it is all the band will ever have.
+    let mut macros = use_signal(move || seed.clone());
 
     let scope = MacroScope::of(&selection.read());
     let accent = scope.accent();

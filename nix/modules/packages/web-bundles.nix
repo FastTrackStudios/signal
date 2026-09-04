@@ -24,7 +24,7 @@
         NO_DOWNLOADS = "1";
       };
 
-      dxWebNativeInputs = commonArgs.nativeBuildInputs ++ [
+      dxWebNativeInputs = commonArgs.nativeBuildInputs ++ config.fts.nativeBuildInputs ++ [
         config.fts.dx.cli          # dx 0.7.9 (nixpkgs-dx)
         config.fts.dx.wasmBindgen  # 0.2.126, matches the lock
         config.fts.dx.binaryen     # wasm-opt 129 — what dx 0.7.9 pins
@@ -34,6 +34,14 @@
         brotli
         llvmPackages_18.clang-unwrapped
         llvmPackages_18.bintools-unwrapped
+        # Build-time tools for the HOST half of the dx build (see the
+        # buildInputs comment on mkDxWebBundle). `strictDeps` keeps
+        # buildInputs off the build-script PATH, so these have to be
+        # declared native even though fts.buildInputs already lists them:
+        # stylo's build.rs shells out to python3, and cmake backs several
+        # of the Blitz-stack -sys crates.
+        python3
+        cmake
       ]);
 
       # The dx build runs from the app dir but writes to the
@@ -41,6 +49,21 @@
       mkDxWebBundle = { pname, appDir, dxName, preBuild ? "", dxArgs ? "" }:
         craneLib.buildPackage (commonArgs // dxWebEnv // {
           inherit pname;
+          # `dx build --platform web` still compiles a HOST binary (the
+          # server/SSG side), and signal-web now depends on the rig UI
+          # crates. signal-guitar-ui reaches session-ui -> dynamic-template
+          # -> daw -> daw-audio-io -> cpal -> {alsa,jack,pipewire}-sys, so
+          # the host half of the build needs the native audio headers even
+          # though the shipped artifact is wasm and never touches them.
+          # Without them the derivation dies in a build script -- first
+          # alsa-sys, then libspa-sys ("Package libpipewire-0.3 was not
+          # found in the pkg-config search path").
+          #
+          # Take the devshell's own set rather than adding libraries one
+          # failure at a time: it is already the curated list (alsa-lib.dev,
+          # libjack2, pipewire.dev) and nativeBuildInputs brings the
+          # bindgenHook that libspa-sys's bindgen run needs.
+          buildInputs = (commonArgs.buildInputs or [ ]) ++ config.fts.buildInputs;
           version = "0.1.0";
           cargoArtifacts = null;
           cargoExtraArgs = "--manifest-path ${appDir}/Cargo.toml";

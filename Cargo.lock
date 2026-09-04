@@ -14396,9 +14396,13 @@ dependencies = [
 name = "signal-web"
 version = "0.1.0"
 dependencies = [
+ "architect",
  "console_error_panic_hook",
  "dioxus",
  "dioxus-router",
+ "signal-guitar-ui",
+ "signal-keys-ui",
+ "signal-proto",
  "ssg",
  "ssg-build",
  "ssg-ui",

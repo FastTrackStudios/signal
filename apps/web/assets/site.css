@@ -187,11 +187,13 @@ a { color: inherit; text-decoration: none; }
 .sg-stripe-alt { background: var(--bg-alt); }
 
 .sg-stripe-inner {
-  max-width: 74rem;
+  max-width: 96rem;
   margin: 0 auto;
   padding: clamp(3rem, 8vh, 5rem) clamp(1rem, 5vw, 3rem);
   display: grid;
-  grid-template-columns: 1fr 1.15fr;
+  /* The demo takes the larger share: these are fullscreen rig surfaces,
+     and the copy reads fine narrow while the surface does not. */
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 2fr);
   gap: clamp(1.8rem, 5vw, 4rem);
   align-items: center;
 }
@@ -576,6 +578,125 @@ a { color: inherit; text-decoration: none; }
 }
 
 .sg-mic-label { font-family: var(--mono); font-size: 0.5rem; color: var(--ink-faint); }
+
+
+/* -- live rig surfaces (guitar, keys) -------------------------------- *
+ *
+ * These stripes render the REAL control surfaces from signal-guitar-ui and
+ * signal-keys-ui, not mocks. Both are full application screens, so they are
+ * scaled to fit the stripe rather than reflowed: reflowing would mean the
+ * landing page showing a layout nobody actually uses, which defeats the
+ * point of embedding the real component.
+ *
+ * The scale is a transform on a deliberately oversized child, so the UI
+ * lays out at its natural width and is then shrunk — the same trick a
+ * device mockup uses. `pointer-events: none` plus `inert` on the element
+ * keeps it non-interactive; with no RigClient in context a drag would move
+ * a control locally and reach nothing.
+ */
+.sg-demo-live {
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+  pointer-events: none;
+  background: #0d0d10;
+  /* Establish a container so the child can scale itself against the
+     stripe's actual width — see the transform below. */
+  container-type: inline-size;
+  aspect-ratio: var(--sg-demo-w) / var(--sg-demo-h);
+}
+
+/* A fullscreen rig window, laid out at a real desktop size and then shrunk
+ * to fit — the way a device mockup works.
+ *
+ * The alternative is letting the surface reflow into the stripe's width,
+ * and that is worse than it sounds: these UIs are built for a full screen,
+ * so a narrow one collapses into a column nobody actually uses. The
+ * landing page would be advertising a layout that does not exist.
+ *
+ * 1440x900 is the size the surfaces are designed against. `cqw` is the
+ * container's own width, so the scale follows the stripe at every
+ * breakpoint with no JS and no media queries.
+ */
+.sg-demo-live {
+  --sg-demo-w: 1440;
+  /* Not 900. The surfaces lay out against a 1440x900 desktop, but neither
+     fills that height — the guitar rig's empty FX slots and the keys
+     mixer's headroom left a third of the frame blank. Cropping the frame
+     rather than the content: the surface still lays out at its design
+     width, and the stripe stops advertising dead space. */
+  --sg-demo-h: 660;
+}
+
+.sg-demo-live > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(var(--sg-demo-w) * 1px);
+  height: calc(var(--sg-demo-h) * 1px);
+  /* length / length -> unitless number. `calc(100cqw / var(--sg-demo-w))`
+     looks right and is not: it divides by a NUMBER, so the result is a
+     length, `scale()` rejects it, and the surface renders unscaled at
+     1440px and clips. */
+  transform: scale(calc(100cqw / (var(--sg-demo-w) * 1px)));
+  transform-origin: top left;
+}
+
+.sg-demo-live * { color-scheme: dark; }
+
+
+/* The guitar stripe stacks two real surfaces: the control view, and the
+ * footswitch grid a player looks at on stage.
+ *
+ * Explicit fractions, NOT `1fr auto`. Both of these are fullscreen pages in
+ * the shipped app — the desktop remote puts them on separate tabs — so
+ * `auto` hands the grid its full natural height and squashes the control
+ * view to a sliver. Splitting the frame is the whole point of showing them
+ * together. */
+.sg-rig-stack {
+  display: grid;
+  /* The footswitch strip gets a FIXED height in virtual pixels, not a
+     fraction. As a fraction it was handed a quarter of the frame while its
+     content is a single row of buttons, and the surplus showed as a void
+     under the grid. */
+  grid-template-rows: 1fr 178px;
+  /* NO width/height here. `.sg-demo-live > *` sizes this to the virtual
+     viewport (1440 x --sg-demo-h) and scales it; `width: 100%` has equal
+     specificity, comes later, and wins — which silently collapsed the
+     stack back to the frame's own size and then scaled THAT down, leaving
+     a quarter of the frame empty. */
+  min-height: 0;
+}
+
+.sg-rig-control,
+.sg-rig-perform {
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.sg-rig-perform { border-top: 1px solid #26262c; }
+/* The grid lays out against the full frame; hold it to its own row. */
+.sg-rig-perform > * { width: 100%; height: 100%; }
+
+/* Taller frame for the guitar: it carries the grid under the surface. */
+/* Cropped to where the content actually ends: the surface plus the
+   footswitch strip, with no trailing void. */
+.sg-demo-guitar { --sg-demo-h: 810; }
+
+/* The keys mixer lays out WIDER than the guitar surface — five engines, the
+ * module strip and an 88-key keybed. Rendering it at 1440 meant the far
+ * engines and the filter blocks fell off the edge; at 2000 the whole mixer
+ * is in frame, just smaller. The viewport is the crop, the scale follows
+ * from it. */
+.sg-demo-keys {
+  --sg-demo-w: 2000;
+  /* 16:9, like the guitar frame. The mixer stretches to fill it — the
+     engine band, the module strip and the keybed all take the extra
+     height rather than leaving a void. */
+  --sg-demo-h: 1125;
+}
 
 /* -- vocal (no demo) ------------------------------------------------- */
 

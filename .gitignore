@@ -49,3 +49,4 @@ css_ab*.tsv
 
 # Alternate target dir used by the old gate.sh helper
 /target-local
+apps/web/.fts-theme-canonical.css

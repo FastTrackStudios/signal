@@ -69,6 +69,18 @@ use routes::{GuideIndex, GuidePage, Home, NotFound, RigDemo};
 /// `<head>` of every pre-rendered page.
 pub const SITE_CSS: &str = include_str!("../assets/site.css");
 
+/// The Tailwind sheet the embedded rig surfaces need.
+///
+/// The landing page mounts the REAL control surfaces. `signal-keys-ui` is
+/// styled entirely inline and needs nothing. `signal-guitar-ui` is
+/// Tailwind — 104 `class:` in its `ControlView` alone — so without this
+/// its surface renders as unstyled text over a bare graph, which is
+/// exactly what it did before this sheet existed.
+///
+/// Built by `just web-tailwind`, scanning only the crates this site
+/// mounts, which is why it is 31 KB rather than the desktop app's 100.
+pub const TAILWIND_CSS: &str = include_str!("../assets/tailwind-signal.css");
+
 /// The paths `dx build --ssg` should pre-render.
 ///
 /// The CLI looks for a server function at exactly this endpoint, calls
@@ -118,9 +130,11 @@ pub fn App() -> Element {
         // The vault sheet first, so the site's own rules win a tie: the
         // guide components' `ssg-*` classes are a default to build on,
         // not a theme to fight.
+        // Tailwind first: it is a base the embedded rig surfaces are built
+        // on, and the site's own rules must be able to override it.
+        document::Style { {TAILWIND_CSS} }
         document::Style { {ssg_ui::VAULT_CSS} }
         document::Style { {SITE_CSS} }
         Router::<Route> {}
     }
 }
-

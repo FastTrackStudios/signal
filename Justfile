@@ -49,6 +49,27 @@ theme-vendor:
 tailwind: _lumen-link theme-vendor
     cd apps/desktop && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --minify
 
+# The signal-web sheet. The landing page embeds the real rig surfaces, and
+# signal-guitar-ui is Tailwind-styled (104 `class:`) — without this its
+# ControlView renders as unstyled text over a bare graph. signal-keys-ui is
+# inline-styled and needs none of it.
+#
+# Same vendoring rule as `theme-vendor`: the canonical token sheet comes
+# from architect-ui at build time and is NOT committed, because a committed
+# copy is the fork that replaced. The compiled output IS committed, the way
+# apps/desktop commits its sheet — a landing page should not need a CSS
+# toolchain to build.
+web-theme-vendor:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src=$(cargo metadata --format-version 1 \
+        | python3 -c "import sys,json,os; print(os.path.dirname(next(p['manifest_path'] for p in json.load(sys.stdin)['packages'] if p['name']=='architect-ui')))")
+    cp "$src/assets/fts-theme.css" apps/web/.fts-theme-canonical.css
+    echo "vendored canonical theme for apps/web from $src"
+
+web-tailwind: web-theme-vendor
+    cd apps/web && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --minify
+
 # Watch Tailwind CSS for changes
 tailwind-watch: _lumen-link theme-vendor
     cd apps/desktop && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --watch --minify

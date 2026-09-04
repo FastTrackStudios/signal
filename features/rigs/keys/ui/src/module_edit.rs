@@ -399,8 +399,7 @@ fn LfoShape(shape: f32, depth: f32, accent: String) -> Element {
         };
         let x = PAD + t * (W - 2.0 * PAD);
         let y = H / 2.0 - v * d * (H / 2.0 - PAD);
-        let _ = write!(path, "{} {x:.1} {y:.1} ",
-            if i == 0 { "M" } else { "L" });
+        let _ = write!(path, "{} {x:.1} {y:.1} ", if i == 0 { "M" } else { "L" });
     }
     rsx! {
         svg {
