@@ -1,8 +1,9 @@
 //! The guide: an index of the vault, and one screen per note.
 //!
 //! These two screens are the ones that get **baked** — rendered to
-//! `index.html` files by `src/bin/bake.rs` and served as plain HTML with
-//! no wasm behind them. So they are built out of `ssg-ui`'s components,
+//! `index.html` files by `src/bin/bake.rs`, so the prose is served as
+//! plain HTML rather than produced by the wasm bundle. So they are built
+//! out of `ssg-ui`'s components,
 //! every one of which is a pure function of `&'static` data: no signals,
 //! no effects, no handlers, and navigation by ordinary `<a href>`.
 //!
