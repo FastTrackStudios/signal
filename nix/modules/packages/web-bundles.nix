@@ -119,6 +119,11 @@
         # prose is mojibake), and no bundle script, so nothing hydrates.
         # The failure is silent and the build still "succeeds".
         # (dioxus#3518.)
+        #
+        # The nix sandbox builds into a fresh directory, so the stale
+        # cache that bites a local rebuild (`clear_cache(false)` serves a
+        # route already in the cache rather than re-rendering it) cannot
+        # happen here. `just web-build` deletes the directory for that.
         dxArgs = "--ssg --force-sequential --wasm-split --features wasm-split";
       };
     in

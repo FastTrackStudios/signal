@@ -1130,3 +1130,4 @@ opt-level = 3
 # COOP/COEP headers that unlock SharedArrayBuffer. Developing against the
 # local checkout per CLAUDE.md; the release path is: land in architect,
 # tag, bump the rev here, delete this block.
+

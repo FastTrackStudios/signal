@@ -16,9 +16,10 @@
 //!
 //! - **The guide** is a vault, and it is *static*. `docs/guides/signal/*.md`
 //!   are notes with frontmatter; `build.rs` renders them to HTML at build
-//!   time through Task's `ssg-build`, and `src/bin/bake.rs` writes each
-//!   one out as a scriptless `index.html`. Reading the documentation
-//!   never loads the wasm bundle.
+//!   time through Task's `ssg-build`, and `dx build --ssg` pre-renders
+//!   each route into a finished `index.html`. Reading the documentation
+//!   does not wait on the wasm bundle; the bundle hydrates the page once
+//!   it arrives.
 //!
 //! The site is static. It derives any URL it needs from `window.location`
 //! at runtime, so one bundle serves any hostname and a new domain is an

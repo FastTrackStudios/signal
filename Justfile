@@ -649,9 +649,16 @@ web-serve:
 # charset, and no script to hydrate with. Sequential puts the client
 # first. (dioxus#3518.)
 #
-# `--wasm-split` is load-bearing too, for an unrelated reason — see the
-# note in nix/modules/packages/web-bundles.nix.
+# The `rm` is required too. The renderer's cache is configured
+# `clear_cache(false)`, which it must be — the cache directory is the
+# bundle — but that also means a route already in it is served rather
+# than re-rendered, so a rebuild after a code change silently ships the
+# OLD html.
+#
+# `--wasm-split` is load-bearing for an unrelated reason — see the note
+# in nix/modules/packages/web-bundles.nix.
 web-build:
+    rm -rf target/dx/signal-web/release/web/public
     cd apps/web && dx build --platform web --release --ssg --force-sequential \
         --wasm-split --features wasm-split
 

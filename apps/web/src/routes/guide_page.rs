@@ -1,16 +1,19 @@
 //! The guide: an index of the vault, and one screen per note.
 //!
-//! These two screens are the ones that get **baked** — rendered to
-//! `index.html` files by `src/bin/bake.rs`, so the prose is served as
-//! plain HTML rather than produced by the wasm bundle. So they are built
-//! out of `ssg-ui`'s components,
-//! every one of which is a pure function of `&'static` data: no signals,
-//! no effects, no handlers, and navigation by ordinary `<a href>`.
+//! These two screens are the ones `dx build --ssg` **pre-renders** —
+//! written out as finished `index.html` files, so the prose is in the
+//! document rather than produced by the wasm bundle. The bundle then
+//! hydrates them into the ordinary app.
 //!
-//! They still render inside the SPA — `dx serve` shows them, and the
-//! router resolves `/guide` if a reader arrives there without a baked
-//! file to serve. It is the same markup either way; the baked page is
-//! just the one that does not need a program to produce it.
+//! That is why they are built out of `ssg-ui`'s components, every one of
+//! which is a pure function of `&'static` data: no signals, no effects,
+//! no handlers. Hydration requires the client's first render to match
+//! the server's exactly, and a component with no state cannot disagree
+//! with itself.
+//!
+//! They render inside the SPA too — `dx serve` shows them, and the
+//! router resolves `/guide` for a reader who arrives client-side. It is
+//! the same markup either way.
 
 use dioxus::prelude::*;
 use ssg_ui::{Backlinks, ChapterNav, VaultArticle, VaultToc};
@@ -19,8 +22,8 @@ use crate::guide::VAULT;
 use crate::routes::Shell;
 
 /// Where the vault is published. One place, because the build script
-/// resolves `[[wikilinks]]` against it and the baker writes the files
-/// under it — the three have to agree.
+/// resolves `[[wikilinks]]` against it and `static_routes` enumerates
+/// the pages under it — the two have to agree.
 pub const BASE: &str = "/guide";
 
 /// `/guide` — the table of contents.
@@ -34,10 +37,12 @@ pub fn GuideIndex() -> Element {
                 ul { class: "sg-toc",
                     for page in VAULT.pages {
                         li { key: "{page.slug}",
-                            // A plain anchor, not a router `Link`: the
-                            // target is a baked file, and a full page
-                            // load is what fetches it. A `Link` would
-                            // client-render the same page and skip it.
+                            // A plain anchor rather than a router
+                            // `Link`. It costs a page load between
+                            // chapters instead of a client-side
+                            // transition — and every one of those pages
+                            // is pre-rendered, so it is a cheap one.
+                            // It also works before the bundle arrives.
                             a { href: "{BASE}/{page.slug}", "{page.title}" }
                             if !page.summary.is_empty() {
                                 span { class: "sg-toc-summary", " — {page.summary}" }
