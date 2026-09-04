@@ -6,6 +6,10 @@
 # Needs the CACHIX_AUTH_TOKEN repo/org secret (a cachix auth token with
 # write access to the fasttrackstudio cache). Without it the workflow
 # skips pushing and merely reports what would be cached.
+#
+# Runs on the repo's own self-hosted runner (NixOS, nix preinstalled), so
+# there is no installer step and `cachix` itself comes from nixpkgs —
+# downloaded dynamic binaries do not run on NixOS.
 
 name: cache-devshell
 
@@ -24,21 +28,23 @@ concurrency:
 
 jobs:
   seed:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, signal]
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
-          df -h / | tail -1
-      - uses: DeterminateSystems/nix-installer-action@v22
-      - uses: cachix/cachix-action@v17
-        with:
-          name: fasttrackstudio
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - name: Build CI devshell closure
         run: |
-          nix build --accept-flake-config --no-link \
+          nix build --accept-flake-config --no-link --print-out-paths \
             .#devShells.x86_64-linux.ci \
-            .#devShells.x86_64-linux.default
+            .#devShells.x86_64-linux.default \
+            | tee devshell-paths.txt
+      - name: Push to cachix
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          if [ -z "${CACHIX_AUTH_TOKEN}" ]; then
+            echo "CACHIX_AUTH_TOKEN not set — would push:"
+            cat devshell-paths.txt
+            exit 0
+          fi
+          xargs -a devshell-paths.txt nix run nixpkgs#cachix -- push fasttrackstudio
