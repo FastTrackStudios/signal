@@ -785,6 +785,14 @@ view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", branc
 collection-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main", default-features = false }
 attachments-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 
+# features/ssg — a vault (a directory of markdown notes) published as a
+# static site. apps/web's guide is one: `ssg-build` renders it to HTML in
+# build.rs, `ssg`/`ssg-ui` are the page model and the components, and
+# `dx build --ssg` pre-renders the routes the vault names.
+ssg = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+ssg-ui = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+ssg-build = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+
 # Task's externals not already pinned above (root pins win everywhere
 # a key already existed — dioxus, serde, tokio, facet/vox rc.5 fleet,
 # sea-orm crates.io 1.x, loro).
@@ -1122,4 +1130,3 @@ opt-level = 3
 # COOP/COEP headers that unlock SharedArrayBuffer. Developing against the
 # local checkout per CLAUDE.md; the release path is: land in architect,
 # tag, bump the rev here, delete this block.
-

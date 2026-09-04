@@ -101,7 +101,25 @@
         # load-bearing because of what it does to the wasm-opt pipeline, not
         # because of the chunking, so do not drop it as "we don't need
         # splitting" — that silently triples the bundle.
-        dxArgs = "--wasm-split --features wasm-split";
+        #
+        # `--ssg` pre-renders the guide. It builds the app's server as
+        # well as its client, runs the server, asks it for the routes to
+        # render (`signal_web::static_routes` — the router's static ones
+        # plus every page of the guide vault) and requests each, which
+        # writes it into the same `public` directory as an index.html.
+        # Nothing deploys that server; it exists for the length of this
+        # build. What ships is still a directory of static files.
+        #
+        # `--force-sequential` is REQUIRED alongside `--ssg`, and is not
+        # about build speed. The pre-render borrows `public/index.html`
+        # as its page shell, and the CLIENT build writes that file. Run
+        # in parallel — the default — the server can reach the render
+        # first, and every page comes out wrapped in Dioxus's bare
+        # fallback shell: no <title>, no charset (so every em dash in the
+        # prose is mojibake), and no bundle script, so nothing hydrates.
+        # The failure is silent and the build still "succeeds".
+        # (dioxus#3518.)
+        dxArgs = "--ssg --force-sequential --wasm-split --features wasm-split";
       };
     in
     {

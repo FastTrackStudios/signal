@@ -1,6 +1,6 @@
 //! The site's screens.
 
-mod guide_page;
+pub mod guide_page;
 mod home;
 pub mod rig;
 

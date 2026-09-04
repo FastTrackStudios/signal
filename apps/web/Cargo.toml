@@ -14,16 +14,29 @@ description = "signal.fasttrackstudio.app — the Signal landing page, rig demos
 # sandboxed `dx build` resolves offline and falls back to a feature set
 # that wants `dioxus-fullstack`, which the vendored dioxus source does not
 # carry.
-dioxus = { workspace = true, features = ["router"] }
+# `fullstack` is what makes the guide a static site: `dx build --ssg`
+# needs a server target to render the routes and a `#[server]` function
+# to ask for the list. The site is still deployed as static files — the
+# server exists at build time, to produce them.
+#
+# `launch` is here rather than on the `web` feature because both halves
+# of a fullstack build go through `LaunchBuilder`: the browser one to
+# mount the app, the server one to start rendering. Tying it to `web`
+# left the server build without it.
+dioxus = { workspace = true, features = ["router", "fullstack", "launch"] }
 # A direct dep only so `wasm-split` below can turn on its feature; the
 # router itself is used through `dioxus::prelude`.
 dioxus-router = { workspace = true }
 
-# The guide is markdown compiled in by build.rs. Rendering is a plain
-# pulldown-cmark pass rather than the editor crate keyflow-web uses: the
-# guide here has no fences to engrave and no wikilink graph yet, so
-# pulling the whole editor in would be weight for nothing.
-pulldown-cmark = { workspace = true, features = ["html"] }
+# The guide, as a static site. `ssg` carries the page model this crate's
+# build script codegens; `ssg-ui` renders it. Nothing here parses
+# markdown at runtime any more — build.rs does it, once.
+#
+# No `graph` feature: Signal's guide is three notes with no
+# cross-references, so there is no link graph to draw and no reason to
+# pull the knowledge-graph crate's dependency chain in to not draw one.
+ssg = { workspace = true }
+ssg-ui = { workspace = true }
 
 tracing = { workspace = true }
 
@@ -50,12 +63,23 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-wasm = "0.2"
 console_error_panic_hook = "0.1"
 
+[build-dependencies]
+# Reads docs/guides/signal and codegens the page table. The whole build
+# script is one call to it.
+ssg-build = { workspace = true }
+
 [lints]
 workspace = true
 
 [features]
 default = ["web"]
-web = ["dioxus/web", "dioxus/launch"]
+web = ["dioxus/web"]
+# The server half of the fullstack build. dx turns this on itself for the
+# server target — it looks for a feature named exactly `server` — and
+# never for the wasm one, so the axum/tokio stack stays out of the
+# bundle. It exists to run for the length of `dx build --ssg` and render
+# the routes; nothing deploys it.
+server = ["dioxus/server"]
 # Bundle-split the wasm along route variants, so the landing page does not
 # ship the guide and the rig pages before anyone asks for them. Requires
 # building with `dx build --wasm-split`; the feature alone changes nothing.

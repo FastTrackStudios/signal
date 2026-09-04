@@ -277,6 +277,63 @@ a { color: inherit; text-decoration: none; }
 .sg-toc a:hover { color: var(--accent) !important; }
 .sg-toc-summary { color: var(--ink-faint); font-size: 0.9rem; }
 
+/* ══ guide ══════════════════════════════════════════════════════════════
+ *
+ * The guide pages are STATIC — rendered to HTML at build time and served
+ * with no wasm behind them (see apps/web/src/bin/bake.rs). So everything
+ * they need has to be in this sheet: there is no JavaScript on those
+ * pages to add a class or measure anything.
+ *
+ * The components come from ssg-ui with `ssg-*` classes and a default
+ * sheet (`ssg_ui::VAULT_CSS`, inlined ahead of this one). What follows
+ * is only the part that is Signal's: the two-column frame, and the
+ * palette bindings that hand the shared components this site's colours
+ * instead of their `currentColor` fallbacks.
+ */
+
+/* The guide frame carries the page's own centring and padding, because
+ * `.sg-prose` — which does that job on every other screen — is nested
+ * inside a grid column here. Left to itself it would centre the article
+ * within its column while the contents rail sat against the window edge. */
+.sg-guide {
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  align-items: start;
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: clamp(2.5rem, 8vh, 4.5rem) clamp(1rem, 5vw, 3rem) 5rem;
+}
+
+/* …and the nested prose gives it back. */
+.sg-guide .sg-prose { max-width: none; margin: 0; padding: 0; }
+
+.sg-guide-toc { position: sticky; top: 2rem; }
+
+/* One column below the fold-out width — a 12rem rail beside prose on a
+ * phone leaves neither enough room. */
+@media (max-width: 52rem) {
+  .sg-guide { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+  .sg-guide-toc { position: static; }
+}
+
+.sg-guide-page { min-width: 0; }
+
+/* What ssg-ui's sheet leaves as custom properties, bound to the palette. */
+.sg-guide {
+  --ssg-rule: var(--line);
+  --ssg-accent: var(--accent);
+  --ssg-broken: var(--ink-faint);
+  --ssg-code-bg: rgba(255, 255, 255, 0.04);
+}
+
+.sg-guide a { color: var(--ink) !important; text-decoration: none !important; }
+.sg-guide a:hover { color: var(--accent) !important; }
+.sg-guide .ssg-prose a { color: var(--accent) !important; text-decoration: underline !important; }
+.sg-guide .ssg-toc-link { color: var(--ink-faint) !important; font-size: 0.92rem; }
+.sg-guide .ssg-toc-current { color: var(--accent) !important; }
+.sg-guide .ssg-chapter-label { color: var(--ink-faint); }
+
 /* ══ rig demos ══════════════════════════════════════════════════════════
  *
  * Everything below is the moving picture. No engine, no timers in Rust —

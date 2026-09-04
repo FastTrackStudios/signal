@@ -626,6 +626,39 @@ rig-devices:
 rig-setup name *args:
     cargo run --release -p signal-sampler --example guitar_rig -- --rig "{{name}}" {{args}} --write-config
 
+# ── Signal site (apps/web → signal.fasttrackstudio.app) ─────────────────
+#
+# The guide is statically generated: `--ssg` builds the app's server,
+# starts it, asks it for `static_routes` and renders each one to an
+# index.html under target/dx/signal-web/release/web/public. That is the
+# directory to deploy — the wasm bundle and the pre-rendered pages both
+# live in it. Nix runs the same command
+# (nix/modules/packages/web-bundles.nix).
+
+# Dev server for the Signal site.
+web-serve:
+    cd apps/web && dx serve --platform web
+
+# The site as it ships: bundle + pre-rendered guide.
+#
+# `--force-sequential` is required, not a preference. The pre-render
+# borrows `public/index.html` for its page shell, and that file is
+# written by the CLIENT build; run in parallel (the default) the server
+# can reach the render before the client has produced it, and every page
+# comes out with Dioxus's bare fallback shell instead — no <title>, no
+# charset, and no script to hydrate with. Sequential puts the client
+# first. (dioxus#3518.)
+#
+# `--wasm-split` is load-bearing too, for an unrelated reason — see the
+# note in nix/modules/packages/web-bundles.nix.
+web-build:
+    cd apps/web && dx build --platform web --release --ssg --force-sequential \
+        --wasm-split --features wasm-split
+
+# What `web-build` produced, served the way a static host would.
+web-preview: web-build
+    cd target/dx/signal-web/release/web/public && python3 -m http.server 8080
+
 # ── Website (apps/site → fasttrackstudio.app) ───────────────────────────
 
 # Dev server for the website (dioxus, live reload)
