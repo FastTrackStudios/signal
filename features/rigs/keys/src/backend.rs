@@ -1478,6 +1478,22 @@ impl State {
         rig_mixer::lane_gain(&mix, engine_muted, self.any_solo())
     }
 
+    /// Can anything this lane renders reach the output right now?
+    ///
+    /// Mute, solo-exclusion and the engine's own mute — the same three the
+    /// daw track ops fold in, asked here so the render tree can skip work the
+    /// track would only throw away.
+    fn lane_is_audible(&self, lane: &LaneState) -> bool {
+        if lane.muted {
+            return false;
+        }
+        if self.engines.get(&lane.engine).is_some_and(|e| e.muted) {
+            return false;
+        }
+        // Solo silences every un-soloed lane.
+        !self.any_solo() || lane.soloed
+    }
+
     fn engine_gain(&self, name: &str) -> f32 {
         match self.engines.get(name) {
             Some(e) => rig_mixer::group_gain(e.gain_db, e.muted),
@@ -1524,6 +1540,24 @@ fn keys_runtime() -> &'static tokio::runtime::Runtime {
             .build()
             .expect("keys runtime")
     })
+}
+
+/// The output-artefact half of [`signal_keys_proto::KeysRealtime`], read from
+/// the sampler's process-wide counters (`engine::output_glitches`).
+///
+/// Split out so `status` can spread it into the struct. These are global to
+/// the process rather than per-rig, because the audio thread bumps them from
+/// wherever it happens to be rendering.
+fn artefacts() -> signal_keys_proto::KeysRealtime {
+    let g = signal_sampler::engine::output_glitches();
+    signal_keys_proto::KeysRealtime {
+        holes: g.gap_runs as u64,
+        hole_frames: g.gap_frames as u64,
+        longest_hole: g.longest_gap as u64,
+        clicks: g.click_frames as u64,
+        nonfinite: g.nonfinite_frames as u64,
+        ..Default::default()
+    }
 }
 
 impl KeysRigBackend {
@@ -2272,11 +2306,29 @@ impl KeysRigBackend {
                 rig.set_lane_mute(Role::Layer, name, lane.muted);
                 rig.set_lane_solo(Role::Layer, name, lane.soloed);
                 if let Some(cells) = rig.lane_cells(name) {
+                    // Fold the lane's own audibility into its module cells.
+                    //
+                    // A lane/engine mute above is a daw TRACK op, applied
+                    // after the lane's instrument has already rendered. The
+                    // render tree never learns about it, so a muted lane goes
+                    // on spawning voices and rendering them at full price for
+                    // an output that is then multiplied by zero — and, when
+                    // its pack cannot resolve a body, goes on logging a
+                    // dead-key warning per note for an instrument nobody can
+                    // hear. (Found via the Aux engine, which starts muted and
+                    // holds Dolceola.)
+                    //
+                    // Zeroing the module cells puts that mute where the tree
+                    // can act on it: `node_render`'s gain node then drops
+                    // note-ons and stops rendering the subtree entirely. The
+                    // track mute still applies underneath; zero times zero is
+                    // the same silence, arrived at without the work.
+                    let audible = if s.lane_is_audible(lane) { 1.0 } else { 0.0 };
                     // Modules are named "<layer> <slot>" in the lane's tree.
                     for i in 0..lane.modules.len() {
                         let module_name =
                             format!("{name} {}", signal_synth::engine::module_slot(i));
-                        cells.set(Role::Module, &module_name, lane.module_gain(i));
+                        cells.set(Role::Module, &module_name, lane.module_gain(i) * audible);
                     }
                 }
             }
@@ -2962,6 +3014,11 @@ impl KeysRigSvc for KeysRigBackend {
                         block_frames: st.block_frames.load(Relaxed),
                         peak_render_ms: peak_ms as f32,
                         render_ms: last_ms as f32,
+                        // The artefact counters ride along with the deadline
+                        // ones so a UI can show both. They answer different
+                        // questions and the rig has been failing the second
+                        // while passing the first.
+                        ..artefacts()
                     }
                 })
                 .unwrap_or_default()

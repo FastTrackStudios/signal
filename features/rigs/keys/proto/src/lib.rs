@@ -387,6 +387,28 @@ pub struct KeysRealtime {
     /// Blocks rendered — the denominator behind the mean.
     #[facet(default)]
     pub blocks: u64,
+    /// Holes in the output: runs of digital silence with real signal on both
+    /// sides. What a starved stream or a stranded voice actually produces,
+    /// and what a listener hears as a click or crackle.
+    ///
+    /// Deliberately separate from [`xruns`](Self::xruns) and
+    /// [`over_budget`](Self::over_budget), which only answer "was the
+    /// callback late". Audio can arrive perfectly on time and be wrong; this
+    /// is the field that says so.
+    #[facet(default)]
+    pub holes: u64,
+    /// Frames of silence inside those holes.
+    #[facet(default)]
+    pub hole_frames: u64,
+    /// Longest single hole, frames.
+    #[facet(default)]
+    pub longest_hole: u64,
+    /// Output frames whose sample jumped further in one step than audio can.
+    #[facet(default)]
+    pub clicks: u64,
+    /// Non-finite output samples (NaN / inf) — always a bug.
+    #[facet(default)]
+    pub nonfinite: u64,
 }
 
 // ── Browser lane program (the worklet boot payload) ─────────────────────────
