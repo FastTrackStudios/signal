@@ -14396,6 +14396,7 @@ dependencies = [
  "tokio",
  "tone3000",
  "tracing",
+ "tracing-subscriber",
  "url",
  "wiremock",
 ]

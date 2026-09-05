@@ -225,6 +225,60 @@ async fn the_picker_hands_back_the_tone_the_user_chose() {
     assert_eq!(picked.name, "Plexi 51");
 }
 
+/// A download from a tone the user is looking at must not re-fetch it. The
+/// provenance still has to be right, and the calls still have to be spent
+/// only once — the free tier is 100 requests a minute.
+#[tokio::test]
+async fn downloading_a_tone_already_open_costs_no_extra_calls() {
+    let (server, backend, dir) = fixture().await;
+    sign_in(&server, &backend, false).await;
+    mount_tone(&server).await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/v1/models/1001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(model_json(1001, "1", &server.uri())))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/plexi_di.nam"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(NAM_BYTES))
+        .mount(&server)
+        .await;
+
+    // The UI opens the tone …
+    let tone = backend.tone(TONE_ID.into()).await;
+    assert!(tone.error.is_empty());
+    let before = detail_requests(&server).await;
+
+    // … and downloads from it.
+    backend.download_model(TONE_ID.into(), "1001".into());
+    wait_for(&dir.path().join("nam/catalog.json")).await;
+
+    assert_eq!(
+        detail_requests(&server).await,
+        before,
+        "the download re-fetched the tone it was started from"
+    );
+
+    // And the entry is still fully attributed.
+    let catalog = signal_nam::NamCatalog::load(&dir.path().join("nam/catalog.json")).unwrap();
+    let entry = catalog.entries.values().next().expect("one entry");
+    let provenance = entry.provenance.as_ref().expect("provenance");
+    assert_eq!(provenance.creator.as_deref(), Some("brucew"));
+    assert_eq!(provenance.license.as_deref(), Some("cc-by"));
+}
+
+/// How many times the tone-detail endpoint has been asked.
+async fn detail_requests(server: &MockServer) -> usize {
+    server
+        .received_requests()
+        .await
+        .unwrap_or_default()
+        .iter()
+        .filter(|r| r.url.path() == format!("/api/v1/tones/{TONE_ID}"))
+        .count()
+}
+
 /// The whole point of the integration: a model reaches the library, and the
 /// catalog entry carries the attribution the API terms require.
 #[tokio::test]
@@ -246,7 +300,7 @@ async fn a_downloaded_model_lands_in_the_library_with_its_provenance() {
 
     backend.download_model(TONE_ID.into(), "1001".into());
 
-    let placed = dir.path().join("nam/tone3000/51949/plexi_di.nam");
+    let placed = dir.path().join("nam/tone3000/51949/Plexi 51 DI.nam");
     wait_for(&placed).await;
     assert_eq!(
         std::fs::read_to_string(&placed).expect("placed file"),
@@ -259,7 +313,7 @@ async fn a_downloaded_model_lands_in_the_library_with_its_provenance() {
     let entry = catalog
         .entries
         .values()
-        .find(|e| e.filename == "plexi_di.nam")
+        .find(|e| e.filename == "Plexi 51 DI.nam")
         .expect("the download is in the catalog");
     let provenance = entry.provenance.as_ref().expect("provenance recorded");
     assert_eq!(provenance.source, "tone3000");

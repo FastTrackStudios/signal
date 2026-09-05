@@ -43,6 +43,10 @@ const SHELF_SIZE: u32 = 10;
 /// down a vox link. Tone photographs are tens of kilobytes; anything at this
 /// size is not a photograph.
 const MAX_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
+/// How many fetched tones to remember. Enough to cover a browse session, so
+/// that downloading from a tone the user is looking at costs no extra calls;
+/// small enough that a long session cannot grow without bound.
+const TONE_MEMO: usize = 64;
 
 /// The TONE3000 backend handle. Cheap to clone; all state is shared.
 #[derive(Clone, HasDispatcher)]
@@ -57,6 +61,15 @@ struct Inner {
     pending: Mutex<HashMap<String, AuthStart>>,
     /// `request_id` → the tone a `select_tone` flow came back with.
     picked: Mutex<HashMap<String, String>>,
+    /// Tones already fetched this session, by id.
+    ///
+    /// A download has to record the creator and licence with the file, and
+    /// re-fetching the tone to learn them costs three more API calls —
+    /// detail plus one per architecture — against a 100-per-minute budget,
+    /// *after* the bytes are already on disk. The UI has almost always just
+    /// displayed the tone, so this is nearly always a hit. Provenance does
+    /// not change, so there is nothing to go stale.
+    tones: Mutex<HashMap<String, PickedTone>>,
     /// Image URLs the catalog gave us. The engine fetches nothing else on a
     /// GUI's say-so — a remote naming an arbitrary address would otherwise
     /// have the engine make requests on its behalf, from inside the LAN.
@@ -88,6 +101,7 @@ impl Tone3000Backend {
                 session,
                 pending: Mutex::new(HashMap::new()),
                 picked: Mutex::new(HashMap::new()),
+                tones: Mutex::new(HashMap::new()),
                 known_images: Mutex::new(HashSet::new()),
                 client: tokio::sync::Mutex::new(None),
                 downloads: architect::rig::events_hub(),
@@ -209,7 +223,30 @@ impl Tone3000Backend {
 
         let picked = map::picked(&tone, &models);
         self.remember_images(&picked.images);
+        self.remember_tone(&picked);
         picked
+    }
+
+    /// Remember a fetched tone for [`Self::cached_tone`].
+    fn remember_tone(&self, tone: &PickedTone) {
+        let mut memo = self.inner.tones.lock().unwrap_or_else(PoisonError::into_inner);
+        // A plain cap rather than an LRU: the value of this memo is entirely
+        // in the last few seconds of browsing, and an eviction policy would
+        // be more machinery than the thing it manages.
+        if memo.len() >= TONE_MEMO {
+            memo.clear();
+        }
+        memo.insert(tone.id.clone(), tone.clone());
+    }
+
+    /// A tone already fetched this session.
+    fn cached_tone(&self, tone_id: &str) -> Option<PickedTone> {
+        self.inner
+            .tones
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(tone_id)
+            .cloned()
     }
 
     /// Fetch and place one model, publishing progress as it goes.
@@ -284,7 +321,7 @@ impl Tone3000Backend {
             }
         }
 
-        let filename = filename_for(&model);
+        let filename = self.filename_for(tone_id, &model, &bytes);
         let outcome = self.inner.session.place_model(tone_id, &filename, &bytes)?;
         progress.hash.clone_from(&outcome.hash);
         progress.path = outcome.path.to_string_lossy().to_string();
@@ -299,9 +336,49 @@ impl Tone3000Backend {
         // Attribution is recorded in the same breath as the file. A download
         // that lands without its creator and licence is one the terms do not
         // permit us to keep, and "record it later" never happens.
-        let tone = self.tone_detail(tone_id).await;
+        //
+        // Almost always a memo hit — the user is downloading from a tone they
+        // are looking at — so this costs nothing. The fetch is the fallback
+        // for a download driven from an id alone.
+        let tone = match self.cached_tone(tone_id) {
+            Some(tone) => tone,
+            None => self.tone_detail(tone_id).await,
+        };
         self.record(&outcome.path, &outcome.hash, &tone, model_id);
         Ok(())
+    }
+
+    /// The name a downloaded model should take in the library.
+    ///
+    /// The creator's name for the model, not the catalog's storage name. The
+    /// URL's last segment is an opaque id — a real download lands as
+    /// `ix2qbhsyea.nam` — and a library of those is unusable anywhere except
+    /// inside this app: a file dialog, a backup, a folder someone opens in
+    /// five years. The extension still comes from the URL, which is the one
+    /// thing it is reliably good for.
+    ///
+    /// Two models in one tone may share a name, and the second must not
+    /// silently overwrite the first — the catalog indexes by content hash, so
+    /// an overwritten file leaves an entry pointing at somebody else's bytes.
+    /// A clash therefore takes the model id as a disambiguator; identical
+    /// bytes at the same name are not a clash, they are the same file.
+    fn filename_for(&self, tone_id: &str, model: &api::Model, bytes: &[u8]) -> String {
+        let ext = extension_of(&model.model_url);
+        let stem = if model.name.trim().is_empty() {
+            format!("model-{}", model.id)
+        } else {
+            model.name.trim().to_string()
+        };
+        let preferred = format!("{stem}.{ext}");
+
+        let path = self.inner.session.destination(tone_id, &preferred);
+        let occupied_by_something_else = std::fs::read(&path)
+            .is_ok_and(|existing| digest(&existing) != digest(bytes));
+        if occupied_by_something_else {
+            format!("{stem} ({}).{ext}", model.id)
+        } else {
+            preferred
+        }
     }
 
     /// Index the placed file in the NAM catalog, provenance and all.
@@ -828,25 +905,19 @@ fn percent_of(done: usize, total: Option<u64>) -> Option<u32> {
     u32::try_from(done.saturating_mul(100).checked_div(total)?.min(100)).ok()
 }
 
-/// The name a model's file should take in the library.
+/// The extension the catalog serves a model under.
 ///
-/// Prefers the filename the catalog serves it under (it carries the right
-/// extension), and falls back to the model's display name with `.nam` — the
-/// only format a model, as opposed to an IR, comes in.
-fn filename_for(model: &api::Model) -> String {
-    let from_url = url::Url::parse(&model.model_url).ok().and_then(|u| {
-        u.path_segments()?
-            .next_back()
-            .filter(|s| s.contains('.'))
-            .map(ToString::to_string)
-    });
-    from_url.unwrap_or_else(|| {
-        if model.name.is_empty() {
-            format!("model-{}.nam", model.id)
-        } else {
-            format!("{}.nam", model.name)
-        }
-    })
+/// Taken from the URL because it is the one thing the URL is reliably good
+/// for: `.nam` for a capture, `.wav` for an impulse response.
+fn extension_of(model_url: &str) -> String {
+    url::Url::parse(model_url)
+        .ok()
+        .and_then(|u| {
+            let last = u.path_segments()?.next_back()?.to_string();
+            let ext = last.rsplit_once('.')?.1.to_string();
+            (!ext.is_empty() && ext.len() <= 8).then_some(ext)
+        })
+        .unwrap_or_else(|| "nam".to_string())
 }
 
 /// The media type of an encoded image, read from its own first bytes.
@@ -1029,26 +1100,88 @@ mod tests {
         assert_eq!(percent_of(300, Some(200)), Some(100), "never over 100");
     }
 
+    /// A real download's URL ends in an opaque id (`ix2qbhsyea.nam`), so the
+    /// creator's name is what makes the library readable outside this app.
     #[test]
-    fn a_models_filename_comes_from_its_url_when_it_has_one() {
+    fn a_download_is_named_after_the_model_not_the_storage_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Tone3000Backend::new(cfg(dir.path()));
         let model: api::Model = serde_json::from_str(
-            r#"{"id": 1, "tone_id": 2, "user_id": "u", "name": "Plexi DI",
-                "model_url": "https://x/models/1/download/plexi_di.nam"}"#,
+            r#"{"id": 293886, "tone_id": 51949, "user_id": "u", "name": "Plexi 51 DI#03",
+                "model_url": "https://x/storage/ix2qbhsyea.nam"}"#,
         )
         .unwrap();
-        assert_eq!(filename_for(&model), "plexi_di.nam");
+        assert_eq!(
+            backend.filename_for("51949", &model, b"weights"),
+            "Plexi 51 DI#03.nam"
+        );
+    }
 
-        let bare: api::Model = serde_json::from_str(
-            r#"{"id": 7, "tone_id": 2, "user_id": "u", "name": "Plexi DI",
-                "model_url": "https://x/models/7/download"}"#,
+    #[test]
+    fn an_impulse_response_keeps_its_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Tone3000Backend::new(cfg(dir.path()));
+        let ir: api::Model = serde_json::from_str(
+            r#"{"id": 5, "tone_id": 2, "user_id": "u", "name": "V30 57 cap edge",
+                "model_url": "https://x/storage/abc123.wav"}"#,
         )
         .unwrap();
-        assert_eq!(filename_for(&bare), "Plexi DI.nam");
+        assert_eq!(
+            backend.filename_for("2", &ir, b"riff"),
+            "V30 57 cap edge.wav"
+        );
+    }
 
+    #[test]
+    fn a_model_with_no_name_falls_back_to_its_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Tone3000Backend::new(cfg(dir.path()));
         let nameless: api::Model =
             serde_json::from_str(r#"{"id": 9, "tone_id": 2, "user_id": "u", "model_url": ""}"#)
                 .unwrap();
-        assert_eq!(filename_for(&nameless), "model-9.nam");
+        assert_eq!(backend.filename_for("2", &nameless, b"x"), "model-9.nam");
+    }
+
+    /// Two models in one tone may share a name. The second must not overwrite
+    /// the first: the catalog indexes by content hash, so an overwritten file
+    /// leaves an entry pointing at somebody else's bytes.
+    #[test]
+    fn a_name_clash_is_disambiguated_rather_than_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Tone3000Backend::new(cfg(dir.path()));
+        let first: api::Model = serde_json::from_str(
+            r#"{"id": 1, "tone_id": 7, "user_id": "u", "name": "Lead",
+                "model_url": "https://x/a.nam"}"#,
+        )
+        .unwrap();
+        let second: api::Model = serde_json::from_str(
+            r#"{"id": 2, "tone_id": 7, "user_id": "u", "name": "Lead",
+                "model_url": "https://x/b.nam"}"#,
+        )
+        .unwrap();
+
+        let name = backend.filename_for("7", &first, b"first bytes");
+        assert_eq!(name, "Lead.nam");
+        backend.session().place_model("7", &name, b"first bytes").unwrap();
+
+        assert_eq!(
+            backend.filename_for("7", &second, b"second bytes"),
+            "Lead (2).nam",
+            "different bytes under a taken name must not overwrite it"
+        );
+        // The same model downloaded twice is not a clash — it is the file
+        // that is already there.
+        assert_eq!(backend.filename_for("7", &first, b"first bytes"), "Lead.nam");
+    }
+
+    #[test]
+    fn an_extension_is_taken_from_the_url_and_defaults_to_nam() {
+        assert_eq!(extension_of("https://x/storage/ix2qbhsyea.nam"), "nam");
+        assert_eq!(extension_of("https://x/storage/abc.wav"), "wav");
+        assert_eq!(extension_of("https://x/models/7/download"), "nam");
+        assert_eq!(extension_of(""), "nam");
+        // A dot in a long trailing segment is not an extension.
+        assert_eq!(extension_of("https://x/a.verylongsuffixhere"), "nam");
     }
 
     #[test]

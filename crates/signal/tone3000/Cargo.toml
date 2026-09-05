@@ -29,6 +29,9 @@ sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
+# `examples/live_check.rs` — the one thing the mock cannot prove is that
+# TONE3000 agrees with us, so that example talks to the real API.
+tracing-subscriber = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 # A stubbed catalog on a loopback port: the conversation is the thing under
 # test, and it cannot be tested without one.
