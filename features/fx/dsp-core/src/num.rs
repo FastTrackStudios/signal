@@ -10,8 +10,10 @@
 //! down and the out-of-range case has a decided answer. That place is this
 //! module; everything else calls these functions.
 //!
-//! This is the shape the DSP crates are being moved onto, so it lives in the
-//! harness where they can all reach it.
+//! The processing crates must be able to use this on native, in an
+//! `AudioWorklet`, and on an embedded target, so it stays `no_std` and
+//! dependency-free — a conversion boundary only the test harness can reach
+//! would be no boundary at all.
 
 /// Largest integer `f32` represents exactly: 2^24, or about 5.8 minutes of
 /// samples at 48 kHz.
@@ -85,6 +87,54 @@ pub const fn narrow(x: f64) -> f32 {
     x as f32
 }
 
+/// An `i32` as `f32`, exact within ±2^24 and clamped beyond.
+#[must_use]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_precision_loss,
+    reason = "the audited boundary: the input is range-checked against the f32 mantissa on the lines above"
+)]
+pub const fn i32_to_f32(n: i32) -> f32 {
+    const EXACT: i32 = 1 << 24;
+    if n > EXACT {
+        return EXACT as f32;
+    }
+    if n < -EXACT {
+        return -EXACT as f32;
+    }
+    n as f32
+}
+
+/// The greatest integer not above `x`, as `i32` — `f32::floor` for crates that
+/// cannot reach `std` or `libm`.
+///
+/// NaN gives `0`, and magnitudes past the `i32` range saturate, matching the
+/// float-to-int conversion this is built on.
+#[must_use]
+pub fn floor_to_i32(x: f32) -> i32 {
+    let truncated = trunc_to_i32(x);
+    // Truncation rounds toward zero, so it overshoots upward for negatives.
+    if i32_to_f32(truncated) > x {
+        truncated.saturating_sub(1)
+    } else {
+        truncated
+    }
+}
+
+/// `x` truncated toward zero, as `i32`.
+///
+/// NaN gives `0` and out-of-range magnitudes saturate — Rust's float-to-int
+/// `as` is already defined this way, and naming it says the call site knows.
+#[must_use]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    reason = "the audited boundary: saturating float-to-int truncation is this function's stated purpose"
+)]
+pub const fn trunc_to_i32(x: f32) -> i32 {
+    x as i32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,6 +164,40 @@ mod tests {
     fn the_two_integer_conversions_agree() {
         for n in [0_u32, 1, 44_100, (1 << 24) - 1] {
             assert_eq!(f32_to_index(u32_to_f32(n)), f32_to_index(count_to_f32(n.try_into().unwrap())));
+        }
+    }
+
+    #[test]
+    fn flooring_matches_the_mathematical_definition() {
+        for (input, expected) in [
+            (0.0_f32, 0),
+            (2.9, 2),
+            (3.0, 3),
+            (-0.1, -1),
+            (-2.9, -3),
+            (-3.0, -3),
+        ] {
+            assert_eq!(floor_to_i32(input), expected, "floor({input})");
+        }
+    }
+
+    #[test]
+    fn flooring_saturates_rather_than_wrapping() {
+        assert_eq!(floor_to_i32(f32::NAN), 0);
+        assert_eq!(floor_to_i32(f32::INFINITY), i32::MAX);
+        assert_eq!(floor_to_i32(f32::NEG_INFINITY), i32::MIN);
+    }
+
+    #[test]
+    fn truncation_rounds_toward_zero_on_both_sides() {
+        assert_eq!(trunc_to_i32(2.9), 2);
+        assert_eq!(trunc_to_i32(-2.9), -2);
+    }
+
+    #[test]
+    fn signed_conversion_round_trips_within_the_mantissa() {
+        for n in [0_i32, 1, -1, 48_000, -48_000, (1 << 24) - 1, -((1 << 24) - 1)] {
+            assert_eq!(trunc_to_i32(i32_to_f32(n)), n);
         }
     }
 

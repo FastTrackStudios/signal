@@ -15,8 +15,8 @@
 //!   tells you *where* a later run diverged.
 //! - [`alloc`] arms a counting allocator around `process()` so "allocation-free
 //!   on the hot path" is a test result rather than a comment.
-//! - [`num`] is the audited conversion boundary the DSP crates move onto — the
-//!   one place an `as` is allowed to happen, with the precondition written down.
+//! - [`num`] is re-exported from `dsp-core`: the audited conversion boundary the
+//!   DSP crates themselves are built on, the one place an `as` may happen.
 //!
 //! Dev-dependency only. Nothing here ships in a plugin.
 //!
@@ -31,8 +31,11 @@
 
 pub mod alloc;
 pub mod golden;
-pub mod num;
 pub mod signal;
+
+/// The audited conversion boundary, re-exported so a test crate needs one
+/// dev-dependency rather than two.
+pub use dsp_core::num;
 
 pub use alloc::{AllocReport, CountingAlloc, assert_no_alloc, measure_alloc};
 pub use golden::{Golden, Mismatch};

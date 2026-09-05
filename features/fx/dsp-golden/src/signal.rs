@@ -6,7 +6,7 @@
 //! reason: a dependency bump must not be able to invalidate every reference
 //! vector in the tree.
 
-use crate::num::{count_to_f32, u32_to_f32};
+use dsp_core::num::{count_to_f32, u32_to_f32};
 
 /// A unit impulse at sample 0, silence after. Reveals a filter's entire
 /// linear behaviour in one pass.
@@ -63,7 +63,7 @@ pub fn noise(len: usize, seed: u64) -> Vec<f32> {
 /// leaves entirely idle.
 #[must_use]
 pub fn transients(len: usize, sample_rate: f32) -> Vec<f32> {
-    let period = crate::num::f32_to_index(sample_rate * 0.25).max(1);
+    let period = dsp_core::num::f32_to_index(sample_rate * 0.25).max(1);
     let decay = (sample_rate * 0.02).max(1.0);
     (0..len)
         .map(|n| {

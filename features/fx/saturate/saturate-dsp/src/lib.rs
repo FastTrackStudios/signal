@@ -20,45 +20,7 @@
 // even though they are allowed workspace-wide off the audio thread.
 #![deny(clippy::disallowed_methods)]
 
-// ── TEMPORARY: DSP rewrite pending ───────────────────────────────────────
-// 98 findings in this crate, held under `expect` rather than fixed one by one.
-//
-// These are the judgment lints — casts, indexing and integer arithmetic in
-// per-sample math. The correct rewrite for each depends on whether the code
-// runs on an audio callback, so editing them individually would be thousands
-// of unreviewable changes to code with no characterization tests behind it.
-// The plan is to restructure these algorithms into idiomatic Rust (typed
-// sample indices, iterators over raw indexing, checked conversions at the
-// boundary) against a golden-master harness that proves the output is
-// unchanged — which removes whole classes of these at once instead of
-// suppressing them.
-//
-// This is `allow`, not `expect`, and that is a deliberate compromise: `lib`
-// and `lib test` are separate compilations, so a lint can fire in one and be
-// unfulfilled in the other, and no single crate-root `expect` list satisfies
-// both — it oscillates. The cost is that this block does NOT delete itself
-// when the rewrite lands; it has to be removed by hand, and it will silently
-// keep hiding new violations until then. Shrink it as crates are rewritten.
-//
-// The realtime guard and every panic lint stay DENIED here — deliberately not
-// in this list. `unwrap`, `expect`, `panic`, and the disallowed-methods
-// realtime guard still fail the build in this crate.
-#![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::float_cmp,
-    clippy::indexing_slicing,
-    clippy::items_after_statements,
-    clippy::large_stack_arrays,
-    clippy::many_single_char_names,
-    reason = "pending the DSP algorithm rewrite; see the note above"
-)]
+use dsp_core::num;
 
 pub mod digital;
 pub mod emphasis;
@@ -226,22 +188,20 @@ pub(crate) fn db_to_gain(db: f32) -> f32 {
 /// and fractional parts with a cubic fit on the fraction.
 #[inline]
 pub(crate) fn exp2_approx(x: f32) -> f32 {
-    // Manual floor: `f32::floor` is std/libm-only and this crate is no_std.
-    let mut xi = x as i32;
-    if (xi as f32) > x {
-        xi -= 1;
-    }
-    let xf = x - xi as f32;
+    let whole = num::floor_to_i32(x);
+    let fraction = x - num::i32_to_f32(whole);
     // Cubic fit of 2^f on [0,1), max error ~2e-4 — inaudible for trims.
-    let frac = 1.0 + xf * (0.695_976 + xf * (0.226_174 + xf * 0.078_024));
-    let scale = pow2_int(xi);
-    frac * scale
+    let frac = 1.0 + fraction * (0.695_976 + fraction * (0.226_174 + fraction * 0.078_024));
+    frac * pow2_int(whole)
 }
 
+/// 2^n by writing the exponent field directly. `n` is clamped to the normal
+/// range, so the biased exponent lands in `1..=254` and the shift cannot
+/// collide with the sign bit.
 #[inline]
 fn pow2_int(n: i32) -> f32 {
-    let n = n.clamp(-126, 127);
-    f32::from_bits(((127 + n) as u32) << 23)
+    let biased = n.clamp(-126, 127).saturating_add(127);
+    f32::from_bits(u32::try_from(biased).unwrap_or(0) << 23)
 }
 
 #[cfg(test)]
@@ -268,7 +228,7 @@ mod tests {
         ] {
             s.set_curve(curve);
             for i in -100..=100 {
-                let x = i as f32 / 25.0; // -4..4, past the ceiling
+                let x = num::i32_to_f32(i) / 25.0; // -4..4, past the ceiling
                 let y = s.process(x);
                 assert!(y.abs() <= 1.5, "{curve:?} exploded: {x} -> {y}");
             }

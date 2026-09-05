@@ -163,7 +163,7 @@ mod tests {
         let mut buf = [0.0_f32; 512];
         let ((), report) = measure_alloc(|| {
             for (n, slot) in buf.iter_mut().enumerate() {
-                *slot = crate::num::count_to_f32(n) * 0.5;
+                *slot = dsp_core::num::count_to_f32(n) * 0.5;
             }
         });
         assert!(report.is_clean(), "{report}");
@@ -174,7 +174,7 @@ mod tests {
         let (_, report) = measure_alloc(|| {
             let mut v: Vec<f32> = Vec::new();
             for n in 0..64 {
-                v.push(crate::num::count_to_f32(n));
+                v.push(dsp_core::num::count_to_f32(n));
             }
             v
         });
@@ -187,7 +187,7 @@ mod tests {
         let ((), first) = measure_alloc(|| ());
         assert!(first.is_clean());
         let mut escapee: Vec<f32> = Vec::new();
-        escapee.extend((0..64).map(crate::num::count_to_f32));
+        escapee.extend((0..64).map(dsp_core::num::count_to_f32));
         assert!(escapee.iter().sum::<f32>() > 0.0);
         let ((), second) = measure_alloc(|| ());
         assert!(second.is_clean(), "work outside the guard must not be counted: {second}");

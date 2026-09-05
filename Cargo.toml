@@ -60,6 +60,7 @@ members = [
     "features/fx/delay/delay",
     "features/fx/delay/delay-dsp",
     "features/fx/dsp-golden",
+    "features/fx/dsp-core",
     "features/fx/delay/delay-profiles",
     "features/fx/delay/delay-ui",
     "features/fx/eq/apps/eq-standalone",
@@ -356,6 +357,7 @@ signal-synth-rig = { path = "features/rigs/synth/rig" }
 saturate = { path = "features/fx/saturate/saturate" }
 saturate-dsp = { path = "features/fx/saturate/saturate-dsp" }
 dsp-golden = { path = "features/fx/dsp-golden" }
+dsp-core = { path = "features/fx/dsp-core" }
 saturate-profiles = { path = "features/fx/saturate/saturate-profiles" }
 saturate-ui = { path = "features/fx/saturate/saturate-ui" }
 trigger = { path = "features/fx/trigger/trigger" }
