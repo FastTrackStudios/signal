@@ -33,7 +33,7 @@ pub struct SignInStatus {
 }
 
 /// An authorization to open in the system browser.
-#[derive(Facet, Clone, Debug, Default)]
+#[derive(Facet, Clone, Debug, Default, PartialEq)]
 pub struct AuthRequest {
     /// Open this externally — it cannot be rendered in-process.
     pub authorize_url: String,
@@ -43,7 +43,7 @@ pub struct AuthRequest {
 }
 
 /// One model belonging to a tone.
-#[derive(Facet, Clone, Debug, Default)]
+#[derive(Facet, Clone, Debug, Default, PartialEq)]
 pub struct ToneModel {
     pub id: String,
     pub name: String,
@@ -59,7 +59,7 @@ pub struct ToneModel {
 /// Creator and licence are carried on the wire rather than looked up later
 /// because the API terms forbid stripping them, and because a UI has to be
 /// able to show them next to the tone at the moment of download.
-#[derive(Facet, Clone, Debug, Default)]
+#[derive(Facet, Clone, Debug, Default, PartialEq)]
 pub struct PickedTone {
     pub id: String,
     pub name: String,
@@ -92,7 +92,7 @@ pub struct PickedTone {
 /// Deliberately flatter than [`PickedTone`]: search results and tone detail
 /// are different payloads upstream (licence, sizes and links are detail-only),
 /// so a row promises only what a row can actually be given.
-#[derive(Facet, Clone, Debug, Default)]
+#[derive(Facet, Clone, Debug, Default, PartialEq)]
 pub struct ToneSummary {
     pub id: String,
     pub title: String,
@@ -119,7 +119,7 @@ pub struct ToneSummary {
 ///
 /// One struct rather than eight parameters: `#[architect::rpc]` allows four
 /// per method (a Facet constraint), and a filter set grows.
-#[derive(Facet, Clone, Debug, Default)]
+#[derive(Facet, Clone, Debug, Default, PartialEq)]
 pub struct ToneQuery {
     /// Free text. Empty browses instead of searching — upstream they are the
     /// same call.
@@ -142,7 +142,7 @@ pub struct ToneQuery {
 /// The API's terms grant OAuth plus *bounded* list endpoints for free, and
 /// rate-limit `/tones/search` separately. These four cost nothing extra, so a
 /// UI can open on real content before the user has typed anything.
-#[derive(Facet, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Facet, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ToneShelf {
     /// The catalog's current top ten.
@@ -157,7 +157,7 @@ pub enum ToneShelf {
 }
 
 /// One page of tones.
-#[derive(Facet, Clone, Debug, Default)]
+#[derive(Facet, Clone, Debug, Default, PartialEq)]
 pub struct TonePage {
     pub tones: Vec<ToneSummary>,
     pub page: u32,
@@ -177,7 +177,7 @@ pub struct TonePage {
 /// cookie jar behind it, and an embedded engine has no HTTP server at all. So
 /// the engine fetches and caches, and the picture travels the vox link that
 /// already works everywhere. A UI renders it as a `data:` URI.
-#[derive(Facet, Clone, Debug, Default)]
+#[derive(Facet, Clone, Debug, Default, PartialEq)]
 pub struct ImageData {
     /// Encoded image bytes, exactly as the catalog served them — no
     /// re-encoding, so nothing is lost or silently transcoded.
@@ -189,7 +189,7 @@ pub struct ImageData {
 }
 
 /// Progress of one model download.
-#[derive(Facet, Clone, Debug, Default)]
+#[derive(Facet, Clone, Debug, Default, PartialEq)]
 pub struct DownloadProgress {
     pub model_id: String,
     pub model_name: String,
@@ -199,6 +199,11 @@ pub struct DownloadProgress {
     pub done: bool,
     /// Non-empty when the download failed; `done` is then also true.
     pub error: String,
+    /// Absolute path of the placed file, on the machine running the engine.
+    /// That is the right frame of reference even for a remote GUI on another
+    /// device: the engine is what will load the model, so this is the value
+    /// that goes into a preset.
+    pub path: String,
     /// SHA-256 of the placed file once `done` and `error` is empty — the key
     /// the NAM catalog indexes by, so a UI can jump straight to the entry.
     pub hash: String,

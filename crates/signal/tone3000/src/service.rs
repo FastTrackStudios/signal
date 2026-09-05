@@ -287,6 +287,7 @@ impl Tone3000Backend {
         let filename = filename_for(&model);
         let outcome = self.inner.session.place_model(tone_id, &filename, &bytes)?;
         progress.hash.clone_from(&outcome.hash);
+        progress.path = outcome.path.to_string_lossy().to_string();
         tracing::info!(
             tone = tone_id,
             model = model_id,

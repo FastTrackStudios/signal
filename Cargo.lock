@@ -14398,6 +14398,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-tone3000-ui"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "base64 0.22.1",
+ "dioxus",
+ "signal-tone3000-proto",
+]
+
+[[package]]
 name = "signal-ui"
 version = "0.1.0"
 dependencies = [
