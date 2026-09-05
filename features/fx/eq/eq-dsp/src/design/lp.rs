@@ -5,8 +5,8 @@
 //! bit-exact at fc≤2 kHz). Odd slopes (3/5) append the real-pole tail
 //! from [`super::hp`].
 
-use crate::biquad::Coeffs;
-use crate::cascade;
+use crate::design::biquad::Coeffs;
+use crate::design::cascade;
 
 use super::common::cascade_qs;
 use super::hp::{cut_odd_qs, cut_odd_tail_lowpass};
@@ -73,6 +73,6 @@ pub(super) fn mzt_lowpass_simple_cascade(
 /// `proq4_mzt::lp_slope8_section_biquad` for the decoded formula.
 fn lp_slope8_cascade(freq_hz: f64, q_user: f64, sample_rate: f64) -> Vec<Coeffs> {
     (0..6)
-        .map(|sec| crate::proq4_mzt::lp_slope8_section_biquad(sec, freq_hz, q_user, sample_rate))
+        .map(|sec| crate::design::mzt::lp_slope8_section_biquad(sec, freq_hz, q_user, sample_rate))
         .collect()
 }

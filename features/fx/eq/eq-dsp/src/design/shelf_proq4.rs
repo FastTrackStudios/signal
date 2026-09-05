@@ -14,8 +14,8 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::{Coeffs, PASSTHROUGH};
-use crate::zpk::Zpk;
+use crate::design::biquad::{Coeffs, PASSTHROUGH};
+use crate::math::zpk::Zpk;
 
 /// Design a low shelf filter via ZPK pipeline.
 ///
@@ -250,7 +250,7 @@ fn rbj_high_shelf(w0: f64, q: f64, gain_db: f64) -> Coeffs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::zpk::Complex;
+    use crate::math::zpk::Complex;
 
     fn mag_db_sos(sections: &[Coeffs], w: f64) -> f64 {
         let ejw = Complex::from_polar(1.0, w);

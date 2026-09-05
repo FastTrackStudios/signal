@@ -14,7 +14,7 @@
 //! response at crossover frequencies.
 
 use audiocore_dsp::AudioConfig;
-use eq_dsp::band::Band;
+use eq_dsp::runtime::band::Band;
 use eq_dsp::FilterType;
 
 use crate::spectral_flux::{FluxMode, SpectralFluxDetector};

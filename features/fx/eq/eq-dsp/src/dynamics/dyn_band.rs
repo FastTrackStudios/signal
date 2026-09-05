@@ -36,7 +36,7 @@ fn svf_q(display_q: f64, shape: DynShape) -> f64 {
     }
 }
 use super::svf::{Svf, SvfShape};
-use crate::band::Placement;
+use crate::runtime::band::Placement;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DynShape {

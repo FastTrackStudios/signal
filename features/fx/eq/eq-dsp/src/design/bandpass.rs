@@ -2,8 +2,8 @@
 //!
 //! See `docs/reports/proq4/re/bandpass_formula.md`.
 
-use crate::biquad::Coeffs;
-use crate::cascade;
+use crate::design::biquad::Coeffs;
+use crate::design::cascade;
 
 use super::common::cascade_qs;
 
@@ -40,7 +40,7 @@ pub(super) fn mzt_bandpass_simple_cascade(
         _ => {
             return cascade_qs(n, q)
                 .into_iter()
-                .map(|sq| crate::proq4_mzt::design_bandpass_mzt(freq_hz, sq, sample_rate))
+                .map(|sq| crate::design::mzt::design_bandpass_mzt(freq_hz, sq, sample_rate))
                 .collect();
         }
     };

@@ -6,8 +6,8 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::{eval_sos, mag_db_sos, Coeffs};
-use crate::zpk::Zpk;
+use crate::design::biquad::{eval_sos, mag_db_sos, Coeffs};
+use crate::math::zpk::Zpk;
 
 /// Compute magnitude response in dB at the given frequencies.
 ///
@@ -141,7 +141,7 @@ pub fn compute_phase_response_zpk(zpk: &Zpk, frequencies: &[f64], sample_rate: f
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::biquad::PASSTHROUGH;
+    use crate::design::biquad::PASSTHROUGH;
     use crate::design::{self, FilterType};
 
     #[test]
@@ -239,9 +239,9 @@ mod tests {
 
     #[test]
     fn zpk_magnitude_matches_sos() {
-        use crate::biquad;
-        use crate::prototype;
-        use crate::transform;
+        use crate::design::biquad;
+        use crate::math::prototype;
+        use crate::math::transform;
 
         let proto = prototype::butterworth_lp_prewarped(4, 1000.0, 48000.0);
         let digital = transform::bilinear(&proto, 48000.0);

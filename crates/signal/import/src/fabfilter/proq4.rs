@@ -304,7 +304,7 @@ impl Band {
 
     /// The engine's shape index for this band.
     ///
-    /// Pro-Q and `eq_dsp::slope::FilterShape` agree on every shape except two:
+    /// Pro-Q and `eq_dsp::design::slope::FilterShape` agree on every shape except two:
     /// Pro-Q numbers **2 = Low Cut, 3 = High Shelf** (read back from the
     /// plugin itself), and the engine's canonical order has them the other way
     /// round. Passing the raw index through therefore turns every high shelf
@@ -876,7 +876,7 @@ mod tests {
     fn reverb_shape_name(idx: f64) -> String {
         format!(
             "{:?}",
-            eq_dsp::slope::FilterShape::from_canonical_index(idx as u32)
+            eq_dsp::design::slope::FilterShape::from_canonical_index(idx as u32)
         )
     }
 

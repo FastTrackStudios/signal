@@ -16,6 +16,7 @@
 //! larger `process` calls are handled in chunks — no allocation on the
 //! audio thread.
 
+use dsp_core::num;
 use audiocore_dsp::{AudioConfig, Processor};
 
 use crate::chain::DelayChain;

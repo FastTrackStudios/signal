@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 use super::biquad_from_mode0_params;
 
@@ -156,7 +156,7 @@ pub fn hp_slope8_section_biquad(
     q_user: f64,
     sample_rate: f64,
 ) -> Coeffs {
-    use crate::cascade::proq4_s2_from_prototype_with_subfreq_pub;
+    use crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub;
 
     // Butterworth N=12 unit-circle pole angles. Section ordering in the
     // binary places highest-Q section (smallest pole_re) FIRST: sec 0 → k=5,
@@ -372,7 +372,7 @@ pub fn lp_slope8_section_biquad(
     q_user: f64,
     sample_rate: f64,
 ) -> Coeffs {
-    use crate::cascade::proq4_s2_from_prototype_with_subfreq_pub;
+    use crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub;
 
     let omega_base_raw = 2.0 * PI * freq_hz / sample_rate;
     // Use the same omega clamp as proq4_s2_from_prototype_with_subfreq for

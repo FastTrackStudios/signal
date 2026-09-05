@@ -16,7 +16,7 @@
 //! an attack one-pole and falls with a hold-scaled release. `transient
 //! = x·mask`, `steady = x − transient`, sample-exact complements.
 
-use crate::chain::EqChain;
+use crate::runtime::chain::EqChain;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SplitParams {

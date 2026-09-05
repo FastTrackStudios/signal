@@ -34,7 +34,7 @@ pub use notch::*;
 pub use peak::*;
 pub use shelf::*;
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 use std::f64::consts::PI;
 
 /// Generic MZT biquad design given analog prototype poles specified by
@@ -203,7 +203,7 @@ pub fn zpk_section_to_AF(
 ///
 /// Branches in AFTER the `compute_zpk_transfer_function_coefficients` step.
 ///
-/// The existing [`crate::cascade::proq4_s2_from_prototype_with_subfreq_pub`]
+/// The existing [`crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub`]
 /// kernel takes `(b2z..b0p)` and computes `(A..F)` internally. This sibling
 /// avoids that double-computation by accepting `(A..F)` directly. Useful for
 /// validating the decoded `(A..F)` formula against captured values bit-exactly
@@ -308,7 +308,7 @@ pub fn proq4_s2_from_AF_with_subfreq(
     let sq6 = sp6.sqrt();
     let big_d = (1.0 + p4) + sq5;
     if !big_d.is_finite() || big_d.abs() < 1e-30 {
-        return crate::biquad::PASSTHROUGH;
+        return crate::design::biquad::PASSTHROUGH;
     }
     let inv_d = 1.0 / big_d;
     let b0 = (p2 * p4 + p3 + sq6) * inv_d;
@@ -322,11 +322,11 @@ pub fn proq4_s2_from_AF_with_subfreq(
 }
 
 /// Pro-Q 4's `compute_biquad_coefficients_from_poles` Mode 0 formula —
-/// thin wrapper over [`crate::biquad::Mode0Params::to_biquad`] for legacy
+/// thin wrapper over [`crate::design::biquad::Mode0Params::to_biquad`] for legacy
 /// positional call sites in this module.
 #[inline]
 pub(crate) fn biquad_from_mode0_params(p2: f64, p3: f64, p4: f64, sp5: f64, sp6: f64) -> Coeffs {
-    crate::biquad::Mode0Params {
+    crate::design::biquad::Mode0Params {
         p2,
         p3,
         p4,
@@ -339,7 +339,7 @@ pub(crate) fn biquad_from_mode0_params(p2: f64, p3: f64, p4: f64, sp5: f64, sp6:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::biquad::eval_sos;
+    use crate::design::biquad::eval_sos;
 
     fn mag_db(sos: &Coeffs, w: f64) -> f64 {
         20.0 * eval_sos(&[*sos], w).mag().log10()

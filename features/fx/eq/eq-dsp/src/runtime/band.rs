@@ -4,9 +4,9 @@
 //! analog prototype -> transform -> ZPK -> biquad sections, with
 //! support for all 13 filter types and variable order up to 16.
 
-use crate::biquad::PASSTHROUGH;
+use crate::design::biquad::PASSTHROUGH;
 use crate::design::{self, FilterType};
-use crate::section::{Df1Section, Tdf2Section};
+use crate::runtime::section::{Df1Section, Tdf2Section};
 
 /// Maximum filter order (number of poles).
 pub const MAX_ORDER: usize = 16;
@@ -114,7 +114,7 @@ impl Band {
         // Brickwall's order is a sentinel, not a pole count — clamping it to
         // MAX_ORDER turns it back into the 96 dB/oct cascade it is meant to
         // replace, which is exactly the bug this design was written to fix.
-        let order = if self.order == crate::slope::BRICKWALL_ORDER {
+        let order = if self.order == crate::design::slope::BRICKWALL_ORDER {
             self.order
         } else {
             self.order.clamp(0, MAX_ORDER)

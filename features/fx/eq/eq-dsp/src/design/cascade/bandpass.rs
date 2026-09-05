@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 use super::{notch_analog_sections, bp_cascade_for_q, mode0_forward, bell_three_point_synth, proq4_s2_from_prototype_with_subfreq, lagrange_synth_alt_path};
 

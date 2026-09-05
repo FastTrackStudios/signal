@@ -26,8 +26,8 @@
 //! construction. Other helpers staged with explicit `unimplemented!` until
 //! their respective probe captures are wired in.
 
-use crate::biquad::Coeffs;
-use crate::cascade::proq4_s2_from_prototype_with_subfreq_pub;
+use crate::design::biquad::Coeffs;
+use crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub;
 use std::f64::consts::PI;
 
 /// Generic analog biquad prototype `(b2z·s² + b1z·s + b0z) / (b2p·s² + b1p·s + b0p)`.

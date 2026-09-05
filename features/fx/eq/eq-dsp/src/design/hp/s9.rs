@@ -1,7 +1,7 @@
 //! High-pass slope 9 (Db96, N=16 poles, 8 sections).
 
-use crate::biquad::Coeffs;
-use crate::cascade;
+use crate::design::biquad::Coeffs;
+use crate::design::cascade;
 
 use super::super::common::cascade_qs;
 use super::{

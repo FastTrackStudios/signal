@@ -1,7 +1,7 @@
 //! High-pass slope 7 (Db36, N=6 poles, 3 biquad sections).
 
-use crate::biquad::Coeffs;
-use crate::cascade;
+use crate::design::biquad::Coeffs;
+use crate::design::cascade;
 
 use super::super::common::cascade_qs;
 

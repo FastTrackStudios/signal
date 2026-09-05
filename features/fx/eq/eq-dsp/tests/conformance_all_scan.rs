@@ -19,7 +19,7 @@
 
 
 use eq_dsp::design::{design_filter, FilterType};
-use eq_dsp::response::compute_magnitude_response;
+use eq_dsp::runtime::response::compute_magnitude_response;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;

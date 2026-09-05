@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 /// Notch via MZT — from `notch_bandpass_lp_hp_mzt.md` RE.
 ///

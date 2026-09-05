@@ -1,6 +1,6 @@
 #[test]
 fn probe_shelf() {
-    use eq_dsp::band::Band;
+    use eq_dsp::runtime::band::Band;
     use eq_dsp::design::FilterType;
     let sr = 48000.0;
     // Drive a tone through a real Band and measure, so this is the path the

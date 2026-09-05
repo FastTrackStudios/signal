@@ -4,8 +4,8 @@
 //! response snapshots and a small set of tunable model parameters, then this
 //! module evaluates fit error and runs a bounded coordinate search.
 
-use crate::biquad::Coeffs;
-use crate::response::compute_magnitude_response;
+use crate::design::biquad::Coeffs;
+use crate::runtime::response::compute_magnitude_response;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ResponsePoint {

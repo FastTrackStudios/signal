@@ -3,7 +3,7 @@
 //! Equivalent to Pro-Q 4's per-channel processing chain that cascades
 //! all enabled bands in series.
 
-use crate::band::Band;
+use crate::runtime::band::Band;
 
 /// Maximum number of bands in a chain (matches Pro-Q 4's 24-band limit).
 pub const MAX_BANDS: usize = 24;
@@ -95,7 +95,7 @@ impl EqChain {
     }
 
     pub fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
-        use crate::band::Placement;
+        use crate::runtime::band::Placement;
         // Idle chain: zero per-sample work.
         if !self.has_active_bands() {
             return;
@@ -148,7 +148,7 @@ impl Default for EqChain {
 #[cfg(test)]
 mod placement_tests {
     use super::*;
-    use crate::band::Placement;
+    use crate::runtime::band::Placement;
     use crate::design::FilterType;
 
     /// A Right-placement band actually processes.

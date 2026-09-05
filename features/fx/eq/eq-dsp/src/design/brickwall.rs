@@ -46,10 +46,10 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::{self, Coeffs};
-use crate::elliptic::{ellipdeg, elliptic_asn, elliptic_k_complete, elliptic_sncndn};
-use crate::transform;
-use crate::zpk::{Complex, Zpk};
+use crate::design::biquad::{self, Coeffs};
+use crate::math::elliptic::{ellipdeg, elliptic_asn, elliptic_k_complete, elliptic_sncndn};
+use crate::math::transform;
+use crate::math::zpk::{Complex, Zpk};
 
 /// Prototype order. Even, so the response has no real pole and no zero at
 /// infinity — every one of the twelve zeros is a finite notch in the stopband.

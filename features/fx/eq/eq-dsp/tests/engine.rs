@@ -22,7 +22,7 @@
 )]
 
 
-use eq_dsp::band::Placement;
+use eq_dsp::runtime::band::Placement;
 use eq_dsp::engine::{BandConfig, BandDynamics, FtsEq};
 
 const SR: f64 = 48_000.0;

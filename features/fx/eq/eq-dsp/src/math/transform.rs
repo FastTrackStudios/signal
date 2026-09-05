@@ -7,7 +7,7 @@
 //!   3 = LP→BP + bilinear — Band Shelf
 //!   4 = Negate zeros — Allpass
 
-use crate::zpk::{Complex, Zpk};
+use crate::math::zpk::{Complex, Zpk};
 
 /// Bilinear s→z transform (transform type 2).
 ///
@@ -180,10 +180,10 @@ mod tests {
 
         // Apply bilinear to get z-domain
         let digital = bilinear(&ap, 44100.0);
-        let sos = crate::biquad::zpk_to_sos(&digital);
+        let sos = crate::design::biquad::zpk_to_sos(&digital);
 
         // DC normalize
-        let dc = crate::biquad::eval_sos(&sos, 0.0).mag();
+        let dc = crate::design::biquad::eval_sos(&sos, 0.0).mag();
         assert!(dc > 0.01, "DC should be nonzero");
     }
 }

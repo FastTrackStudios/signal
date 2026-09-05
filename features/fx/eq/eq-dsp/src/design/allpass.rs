@@ -7,7 +7,7 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 pub(super) fn design_allpass_with_lookup(
     n: usize,

@@ -22,7 +22,7 @@
 //! check.
 
 use dsp_golden::{Golden, golden, signal};
-use eq_dsp::band::Placement;
+use eq_dsp::runtime::band::Placement;
 use eq_dsp::engine::{BandConfig, BandDynamics, FtsEq};
 
 dsp_golden::install_counting_allocator!();

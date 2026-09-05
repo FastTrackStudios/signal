@@ -2,8 +2,8 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::Coeffs;
-use crate::constants::LN10_OVER_20;
+use crate::design::biquad::Coeffs;
+use crate::design::constants::LN10_OVER_20;
 
 use super::mzt_quadratic;
 

@@ -4,14 +4,14 @@
 //! cascades. They do not port reference implementations; calibration targets
 //! can refine the constants without changing the public settings shape.
 
-use crate::biquad::Coeffs;
-use crate::calibration::{
+use crate::design::biquad::Coeffs;
+use crate::hardware::calibration::{
     fit_response, CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget,
 };
 use crate::design::{self, FilterType};
-use crate::neve_1073::apply_gain_compensated_arctan;
-use crate::response::compute_magnitude_response;
-use crate::section::Tdf2Section;
+use crate::hardware::neve_1073::apply_gain_compensated_arctan;
+use crate::runtime::response::compute_magnitude_response;
+use crate::runtime::section::Tdf2Section;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HardwareEqCalibration {
@@ -804,8 +804,8 @@ fn push(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::calibration::{ResponsePoint, ResponseTarget};
-    use crate::response::compute_magnitude_response;
+    use crate::hardware::calibration::{ResponsePoint, ResponseTarget};
+    use crate::runtime::response::compute_magnitude_response;
 
     #[test]
     fn pultec_boost_and_atten_build_interacting_sections() {

@@ -93,7 +93,7 @@ fn main() {
             q: 1.0,
             shape: 0,
             slope: 2.0,
-            placement: eq_dsp::band::Placement::Stereo,
+            placement: eq_dsp::runtime::band::Placement::Stereo,
             stream: 0,
         },
     );

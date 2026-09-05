@@ -158,10 +158,10 @@ pub const EQ_DYN_SIDE_LO_BASE: u32 = 496;
 pub const EQ_DYN_SIDE_HI_BASE: u32 = 520;
 pub const EQ_PARAM_COUNT: u32 = 544;
 
-/// Canonical shape conversion — [`eq::slope::FilterShape`] owns the
+/// Canonical shape conversion — [`eq::design::slope::FilterShape`] owns the
 /// one true ordering (append-only, documented there).
 fn eq_shape_to_filter(shape: u32) -> eq::FilterType {
-    eq::slope::FilterShape::from_canonical_index(shape).to_filter_type()
+    eq::design::slope::FilterShape::from_canonical_index(shape).to_filter_type()
 }
 
 /// Param name for `(band, field)` — `b{band+1}_{used|on|freq|gain|q|shape}`.
@@ -490,7 +490,7 @@ impl NativeEq {
             match field {
                 0 => self.bands[band].slope = v,
                 7 => {
-                    self.bands[band].placement = eq::band::Placement::from_index(v as u32);
+                    self.bands[band].placement = eq::runtime::band::Placement::from_index(v as u32);
                 }
                 8 => self.bands[band].stream = v as u32,
                 9 => self.dynamics[band].spectral = v >= 0.5,
@@ -580,9 +580,9 @@ impl PluginInstance for NativeEq {
         } else if name.ends_with("_gain") || name.ends_with("dyn_range") || name == "output_gain" {
             Some(format!("{value:+.1} dB"))
         } else if name.ends_with("_slope") {
-            let s = eq::slope::Slope::from_param_index(value as usize);
+            let s = eq::design::slope::Slope::from_param_index(value as usize);
             Some(match s {
-                eq::slope::Slope::Brickwall => "Brickwall".into(),
+                eq::design::slope::Slope::Brickwall => "Brickwall".into(),
                 s => format!("{:.0} dB/oct", s.db_per_octave()),
             })
         } else {

@@ -6,7 +6,7 @@
 //! Pro-Q 4 that was 97 dB of mean error — the plugin peaks at its centre and
 //! is over 100 dB down two octaves away.
 
-use eq_dsp::band::Band;
+use eq_dsp::runtime::band::Band;
 use eq_dsp::design::FilterType;
 
 const SR: f64 = 48_000.0;

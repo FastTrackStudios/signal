@@ -1,7 +1,7 @@
 //! High-pass slope 4 (Db24, N=4 poles, 2 sections).
 
-use crate::biquad::Coeffs;
-use crate::cascade;
+use crate::design::biquad::Coeffs;
+use crate::design::cascade;
 
 use super::super::common::cascade_qs;
 

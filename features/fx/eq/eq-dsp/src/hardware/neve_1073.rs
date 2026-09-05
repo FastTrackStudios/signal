@@ -4,13 +4,13 @@
 //! uses this crate's existing filter designer to build a stepped hardware-style
 //! cascade, plus a gain-compensated arctan input stage.
 
-use crate::biquad::Coeffs;
-use crate::calibration::{
+use crate::design::biquad::Coeffs;
+use crate::hardware::calibration::{
     fit_response, CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget,
 };
 use crate::design::{self, FilterType};
-use crate::response::compute_magnitude_response;
-use crate::section::Tdf2Section;
+use crate::runtime::response::compute_magnitude_response;
+use crate::runtime::section::Tdf2Section;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Neve1073Hpf {
@@ -703,7 +703,7 @@ mod tests {
 
     #[test]
     fn calibrated_sections_can_match_generated_target() {
-        use crate::calibration::{FitOptions, ResponsePoint, ResponseTarget};
+        use crate::hardware::calibration::{FitOptions, ResponsePoint, ResponseTarget};
 
         let settings = Neve1073Settings {
             hpf: Neve1073Hpf::Hz160,

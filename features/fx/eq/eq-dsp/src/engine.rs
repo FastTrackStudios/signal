@@ -24,7 +24,7 @@
 //! [`FtsEq::process`] a block of `f64` in place. Nothing here knows about
 //! parameter ids, automation events or sample formats; hosts own those.
 
-use crate::band::Placement;
+use crate::runtime::band::Placement;
 
 /// Bands the engine carries. Pro-Q 4's count, because the translated presets
 /// are written against it.
@@ -41,7 +41,7 @@ pub struct BandConfig {
     pub freq_hz: f64,
     pub gain_db: f64,
     pub q: f64,
-    /// Canonical shape index (see [`crate::slope::FilterShape`]).
+    /// Canonical shape index (see [`crate::design::slope::FilterShape`]).
     pub shape: u32,
     /// Slope, in Pro-Q's units: **continuous**, `slope * 6` dB/oct up to 36,
     /// then the 48 / 72 / 96 / Brickwall steps. The integer part picks the
@@ -131,17 +131,17 @@ impl Default for BandDynamics {
 }
 
 fn eq_shape_to_filter(shape: u32) -> crate::FilterType {
-    crate::slope::FilterShape::from_canonical_index(shape).to_filter_type()
+    crate::design::slope::FilterShape::from_canonical_index(shape).to_filter_type()
 }
 
 pub struct FtsEq {
-    eq: crate::chain::EqChain,
+    eq: crate::runtime::chain::EqChain,
     /// Steady-stream chain (transient mode only; mirrors band configs
     /// per `b{i}_stream` — separate instance = separate filter state).
-    eq_b: crate::chain::EqChain,
-    splitter: crate::transient::PeakSteadySplitter,
-    spectral: crate::spectral::SpectralEngine,
-    spectral_regions: Vec<crate::spectral::SpectralRegion>,
+    eq_b: crate::runtime::chain::EqChain,
+    splitter: crate::dynamics::transient::PeakSteadySplitter,
+    spectral: crate::dynamics::spectral::SpectralEngine,
+    spectral_regions: Vec<crate::dynamics::spectral::SpectralRegion>,
     dyn_bands: Vec<crate::dynamics::DynBand>,
     /// (used, on) per band — a band renders only when both are set.
     state: [(bool, bool); EQ_BANDS],
@@ -236,8 +236,8 @@ pub struct FtsEq {
 /// Used by the Auto Gain grid to place a dynamic or spectral band's live gain
 /// on the curve: those bands are not in the static chain, so their shape has
 /// to be reconstructed. Only the shape matters, not the exact skirt.
-fn band_envelope(shape: crate::slope::FilterShape, f0: f64, q: f64, hz: f64) -> f64 {
-    use crate::slope::FilterShape as F;
+fn band_envelope(shape: crate::design::slope::FilterShape, f0: f64, q: f64, hz: f64) -> f64 {
+    use crate::design::slope::FilterShape as F;
     if hz <= 0.0 || f0 <= 0.0 {
         return 0.0;
     }
@@ -356,7 +356,7 @@ impl FtsEq {
     pub fn new(sample_rate: f64) -> Self {
         let sample_rate = sample_rate.max(1.0);
         let mk_chain = || {
-            let mut chain = crate::chain::EqChain::new();
+            let mut chain = crate::runtime::chain::EqChain::new();
             chain.set_sample_rate(sample_rate);
             for _ in 0..EQ_BANDS {
                 let idx = chain.add_band();
@@ -375,8 +375,8 @@ impl FtsEq {
         Self {
             eq: chain,
             eq_b: chain_b,
-            splitter: crate::transient::PeakSteadySplitter::new(sample_rate),
-            spectral: crate::spectral::SpectralEngine::new(sample_rate, 1024),
+            splitter: crate::dynamics::transient::PeakSteadySplitter::new(sample_rate),
+            spectral: crate::dynamics::spectral::SpectralEngine::new(sample_rate, 1024),
             spectral_regions: Vec::with_capacity(EQ_BANDS),
             dyn_bands: (0..EQ_BANDS)
                 .map(|_| {
@@ -434,14 +434,14 @@ impl FtsEq {
     fn sync_band(&mut self, band: usize) {
         let (used, on) = self.state[band];
         let enabled = used && on;
-        let shape = crate::slope::FilterShape::from_canonical_index(self.shapes[band]);
+        let shape = crate::design::slope::FilterShape::from_canonical_index(self.shapes[band]);
         let (range, thr, atk, rel, auto, relative) = self.dyn_cfg[band];
         // A band goes dynamic when it has a range and a dynamics-capable
         // shape (Bell/shelves — same rule as Pro-Q).
         let dyn_shape = match shape {
-            crate::slope::FilterShape::Bell => Some(crate::dynamics::DynShape::Bell),
-            crate::slope::FilterShape::LowShelf => Some(crate::dynamics::DynShape::LowShelf),
-            crate::slope::FilterShape::HighShelf => Some(crate::dynamics::DynShape::HighShelf),
+            crate::design::slope::FilterShape::Bell => Some(crate::dynamics::DynShape::Bell),
+            crate::design::slope::FilterShape::LowShelf => Some(crate::dynamics::DynShape::LowShelf),
+            crate::design::slope::FilterShape::HighShelf => Some(crate::dynamics::DynShape::HighShelf),
             _ => None,
         };
         let spectral = self.spectral_on[band] && range.abs() > 1.0e-3;
@@ -488,7 +488,7 @@ impl FtsEq {
                 let raw = self.slopes[band].max(0.0);
                 let laddered = matches!(
                     shape,
-                    crate::slope::FilterShape::LowCut | crate::slope::FilterShape::HighCut
+                    crate::design::slope::FilterShape::LowCut | crate::design::slope::FilterShape::HighCut
                 ) && raw < 6.0;
                 let (index, fraction) = if laddered {
                     (raw.floor() as usize, raw.fract())
@@ -505,7 +505,7 @@ impl FtsEq {
                 b.order = order;
                 b.fractional_order = fraction;
                 b.enabled = b.enabled && (order > 0 || fraction > 1.0e-6);
-                b.placement = crate::band::Placement::from_index(self.placements[band]);
+                b.placement = crate::runtime::band::Placement::from_index(self.placements[band]);
             }
             chain.update_band(band);
         }
@@ -522,7 +522,7 @@ impl FtsEq {
             d.params.q = q;
             d.params.base_gain_db = gain;
             d.params.range_db = range * self.gain_scale;
-            d.params.placement = crate::band::Placement::from_index(self.placements[band]);
+            d.params.placement = crate::runtime::band::Placement::from_index(self.placements[band]);
             // Side-chain range: a filtered band listens to what it is told to,
             // an unfiltered one listens to itself.
             let (filtered, lo, hi) = self.side_cfg[band];
@@ -651,7 +651,7 @@ impl FtsEq {
             let (used, on) = self.state[band];
             let dynamic = used && on && (self.dyn_active[band] || self.spectral_on[band]);
             if dynamic {
-                let shape = crate::slope::FilterShape::from_canonical_index(self.shapes[band]);
+                let shape = crate::design::slope::FilterShape::from_canonical_index(self.shapes[band]);
                 let f0 = self.freqs[band].clamp(10.0, 30000.0);
                 let q = self.qs[band].clamp(0.025, 40.0);
                 // A band that touches one side of the image only moves half
@@ -659,8 +659,8 @@ impl FtsEq {
                 // compensation. "Hammond Levelling" is four bands that are
                 // really two, duplicated for left and right; counting both at
                 // full weight doubled the compensation and cost 1.6 dB.
-                let w = match crate::band::Placement::from_index(self.placements[band]) {
-                    crate::band::Placement::Stereo => 1.0,
+                let w = match crate::runtime::band::Placement::from_index(self.placements[band]) {
+                    crate::runtime::band::Placement::Stereo => 1.0,
                     _ => 0.5,
                 };
                 for (i, e) in env.iter_mut().enumerate() {
@@ -792,22 +792,22 @@ impl FtsEq {
             }
             let freq = self.freqs[band].clamp(10.0, 30000.0);
             let q = self.qs[band].clamp(0.025, 40.0);
-            let shape = crate::slope::FilterShape::from_canonical_index(self.shapes[band]);
-            self.spectral_regions.push(crate::spectral::SpectralRegion {
+            let shape = crate::design::slope::FilterShape::from_canonical_index(self.shapes[band]);
+            self.spectral_regions.push(crate::dynamics::spectral::SpectralRegion {
                 freq_hz: freq,
                 q,
                 shape: match shape {
-                    crate::slope::FilterShape::LowShelf => {
-                        crate::spectral::SpectralShape::LowShelf
+                    crate::design::slope::FilterShape::LowShelf => {
+                        crate::dynamics::spectral::SpectralShape::LowShelf
                     }
-                    crate::slope::FilterShape::HighShelf => {
-                        crate::spectral::SpectralShape::HighShelf
+                    crate::design::slope::FilterShape::HighShelf => {
+                        crate::dynamics::spectral::SpectralShape::HighShelf
                     }
                     // Bell for everything else: 54 of the 74 spectral bands in
                     // the factory library are bells, and the handful that are
                     // not shelves are close enough to one that a separate
                     // curve for each would be fitting noise.
-                    _ => crate::spectral::SpectralShape::Bell,
+                    _ => crate::dynamics::spectral::SpectralShape::Bell,
                 },
                 // The band's range is the ceiling on how far a bin may be
                 // pulled down, not a scale factor against some other maximum.
@@ -842,7 +842,7 @@ impl FtsEq {
         let freq = self.freqs[band].clamp(10.0, 30000.0);
         let q = self.qs[band].clamp(0.025, 40.0);
         use crate::dynamics::SvfShape;
-        use crate::slope::FilterShape as F;
+        use crate::design::slope::FilterShape as F;
         let (shape, sf, sq) = match F::from_canonical_index(self.shapes[band]) {
             F::LowShelf | F::LowCut => (SvfShape::Lowpass, freq, 0.707),
             F::HighShelf | F::HighCut => (SvfShape::Highpass, freq, 0.707),
@@ -885,7 +885,7 @@ impl FtsEq {
         // alone. Density can widen a neighbourhood but nothing can narrow it
         // below the resolution it is measured at. The cost is latency, which
         // a spectral band already has and which `latency()` reports.
-        self.spectral = crate::spectral::SpectralEngine::new(self.sample_rate, 4096);
+        self.spectral = crate::dynamics::spectral::SpectralEngine::new(self.sample_rate, 4096);
         // Room for the whole delay the delta-listen read walks back over, plus
         // a block so a write and a read never collide inside one buffer.
         let ring = (self.spectral.latency() + block_size.max(1) as usize).next_power_of_two();

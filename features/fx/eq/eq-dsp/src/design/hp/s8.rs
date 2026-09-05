@@ -14,7 +14,7 @@
 //! for k = 5, 4, 3, 2, 1, 0 (highest-Q section first). The highest-Q
 //! section (sec0) is additionally scaled by `Q_user`, clamped to 40.
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> Vec<Coeffs> {
     hp_slope8_cascade(freq_hz, q, sample_rate)
@@ -25,6 +25,6 @@ fn hp_slope8_cascade(freq_hz: f64, q_user: f64, sample_rate: f64) -> Vec<Coeffs>
     // hp_s8_all_sections_subfreq.csv at SR=48000 + RE of compute_peak_type3).
     // See proq4_mzt::hp_slope8_section_biquad for the formula.
     (0..6)
-        .map(|sec| crate::proq4_mzt::hp_slope8_section_biquad(sec, freq_hz, q_user, sample_rate))
+        .map(|sec| crate::design::mzt::hp_slope8_section_biquad(sec, freq_hz, q_user, sample_rate))
         .collect()
 }

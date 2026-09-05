@@ -13,9 +13,7 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::{self, Coeffs};
-use crate::cascade;
-use crate::shelf_zpk;
+use biquad::Coeffs;
 
 mod allpass;
 mod bandpass;
@@ -28,6 +26,14 @@ mod lp;
 mod notch;
 mod shelf;
 mod tilt;
+pub mod biquad;
+pub mod cascade;
+pub mod constants;
+pub mod mzt;
+pub mod per_section;
+pub mod shelf_proq4;
+pub mod shelf_zpk;
+pub mod slope;
 use allpass::{design_allpass_with_lookup, design_bandpass_variant};
 use bandpass::mzt_bandpass_simple_cascade;
 use bell::mzt_peak_cascade;
@@ -95,7 +101,7 @@ pub fn design_filter(
 
     match filter_type {
         FilterType::Lowpass => {
-            if order == crate::slope::BRICKWALL_ORDER {
+            if order == crate::design::slope::BRICKWALL_ORDER {
                 return brickwall::brickwall_cascade(freq_hz, sample_rate, false);
             }
             // Order 1 is 6 dB/oct, not bypass — `Slope::Db0` is order ZERO and
@@ -108,7 +114,7 @@ pub fn design_filter(
             mzt_lowpass_simple_cascade(n, freq_hz, q, sample_rate, order)
         }
         FilterType::Highpass => {
-            if order == crate::slope::BRICKWALL_ORDER {
+            if order == crate::design::slope::BRICKWALL_ORDER {
                 return brickwall::brickwall_cascade(freq_hz, sample_rate, true);
             }
             if order == 1 {
@@ -241,7 +247,7 @@ pub fn apply_gain_q_interaction(q: f64, gain_db: f64, interaction: f64) -> f64 {
 /// and compute the RMS level change, then invert it.
 #[must_use]
 pub fn compute_auto_gain(band_sections: &[Vec<Coeffs>], sample_rate: f64) -> f64 {
-    use crate::zpk::Complex;
+    use crate::math::zpk::Complex;
 
     // Evaluate combined response at logarithmically-spaced frequencies
     // spanning the audible range (20 Hz - 20 kHz)
@@ -298,7 +304,7 @@ pub fn compute_auto_gain(band_sections: &[Vec<Coeffs>], sample_rate: f64) -> f64
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::biquad::PASSTHROUGH;
+    use crate::design::biquad::PASSTHROUGH;
 
     #[test]
     fn lowpass_design_basic() {

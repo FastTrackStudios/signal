@@ -26,7 +26,7 @@
 //! (0.7x moves -9 to -0.72 at 500 Hz) without a reason to prefer either, so it
 //! is left alone until there is one.
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 use super::shelf::shelf_universal_synth_cascade;
 

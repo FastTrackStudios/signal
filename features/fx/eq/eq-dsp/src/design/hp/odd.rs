@@ -4,8 +4,8 @@
 //! (the per-(slope, sec, q, fc) cell dispatcher). The dispatcher in `super`
 //! calls [`cascade`] with the user order.
 
-use crate::biquad::Coeffs;
-use crate::cascade;
+use crate::design::biquad::Coeffs;
+use crate::design::cascade;
 
 use super::{
     cut_odd_qs, cut_odd_tail_highpass, exact_48k_q, highpass_real_double_zero_section,

@@ -11,8 +11,8 @@
 
 use std::f64::consts::PI;
 
-use crate::elliptic;
-use crate::zpk::{Complex, Zpk};
+use crate::math::elliptic;
+use crate::math::zpk::{Complex, Zpk};
 
 /// Generate Butterworth lowpass prototype poles in the s-domain.
 ///

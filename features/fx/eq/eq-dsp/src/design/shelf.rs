@@ -11,7 +11,7 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 use super::common::{db_to_linear, ui_q_to_bandwidth_q};
 
@@ -28,7 +28,7 @@ fn shelf_odd_order_tail(
     g_half_section: f64,
     high_shelf: bool,
 ) -> Coeffs {
-    use crate::proq4_per_section_helpers::AnalogBiquad;
+    use crate::design::per_section::AnalogBiquad;
 
     let analog = if high_shelf {
         AnalogBiquad {
@@ -55,7 +55,7 @@ fn shelf_odd_order_tail(
     } else {
         (omega * 10.8).min(0.9 * PI)
     };
-    crate::cascade::proq4_s2_from_prototype_with_subfreq_pub(
+    crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub(
         freq_hz,
         sample_rate,
         analog.b2z,
@@ -101,8 +101,8 @@ fn create_shelf_analog_biquad(
     damping: f64,
     g_section: f64,
     high_shelf: bool,
-) -> crate::proq4_per_section_helpers::AnalogBiquad {
-    use crate::proq4_per_section_helpers::AnalogBiquad;
+) -> crate::design::per_section::AnalogBiquad {
+    use crate::design::per_section::AnalogBiquad;
 
     if high_shelf {
         let b2z = (g_section as f32 * g_section as f32) as f64;
@@ -142,7 +142,7 @@ fn shelf_normal_section(
     high_shelf: bool,
     omega_scale: f64,
 ) -> Coeffs {
-    use crate::proq4_per_section_helpers::{proq4_universal_section_synth, Prototype};
+    use crate::design::per_section::{proq4_universal_section_synth, Prototype};
 
     let (theta_k, damping, _qk, helper_alpha) = compute_shelf_params(
         sec_idx,
@@ -163,7 +163,7 @@ fn shelf_normal_section(
     };
     if effective_order == 16 && sec_idx >= n / 2 && q >= 9.99 && band_omega_ref > 0.9 * PI {
         let wp = band_omega_ref * 0.5;
-        return crate::cascade::proq4_s2_from_prototype_with_subfreq_pub(
+        return crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub(
             freq_hz,
             sample_rate,
             analog.b2z,
@@ -206,7 +206,7 @@ fn shelf_normal_section(
         if proto.wp > SHELF_ORDER2_HIGH_ROOT && proto.wp < NOTCH46_UPPER_ROOT {
             let wz = proto.wz;
             let wt = (1.0 - (helper_alpha as f64) * 0.05) * wz;
-            return crate::cascade::proq4_s2_from_prototype_with_subfreq_pub(
+            return crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub(
                 freq_hz,
                 sample_rate,
                 analog.b2z,

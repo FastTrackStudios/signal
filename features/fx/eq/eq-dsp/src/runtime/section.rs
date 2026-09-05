@@ -1,6 +1,6 @@
 //! TDF2 biquad processing section with Pro-Q 4's double-precision history.
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 const MAX_CH: usize = 2;
 
@@ -162,7 +162,7 @@ impl Default for Df1Section {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::biquad::PASSTHROUGH;
+    use crate::design::biquad::PASSTHROUGH;
 
     #[test]
     fn passthrough_returns_input() {

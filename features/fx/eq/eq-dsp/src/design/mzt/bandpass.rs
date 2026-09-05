@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 /// Bandpass via MZT — from `bp_notch_exact.md` RE.
 ///

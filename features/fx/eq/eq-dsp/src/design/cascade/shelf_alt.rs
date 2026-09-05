@@ -1,6 +1,6 @@
 //! Shelf-alt and flat-tilt cascade builders for Pro-Q 4.
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 use super::*;
 

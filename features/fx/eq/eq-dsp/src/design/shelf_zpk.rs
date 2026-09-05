@@ -13,11 +13,11 @@
 //!   UI "Tilt Shelf" → binary type 9     (prototype=LP,   transform=2 bilinear)
 //!   UI "Band Shelf" → binary type 10    (prototype=LP,   transform=3 LP→BP+bilinear)
 
-use crate::biquad::{self, Coeffs};
-use crate::constants::{INV_SQRT2, LN10_OVER_20, Q_BW_BASE, Q_BW_MULT, Q_BW_OFFSET, Q_BW_SCALE};
-use crate::prototype;
-use crate::transform;
-use crate::zpk::Zpk;
+use crate::design::biquad::{self, Coeffs};
+use crate::design::constants::{INV_SQRT2, LN10_OVER_20, Q_BW_BASE, Q_BW_MULT, Q_BW_OFFSET, Q_BW_SCALE};
+use crate::math::prototype;
+use crate::math::transform;
+use crate::math::zpk::Zpk;
 
 use std::f64::consts::PI;
 
@@ -191,17 +191,17 @@ pub fn design_band_shelf_zpk(
     let linear_gain = (user_gain_db * LN10_OVER_20).exp();
     let gain_param = linear_gain.sqrt();
 
-    let mut bp = crate::prototype::butterworth_bp_elliptic(n, freq_hz, user_q, sample_rate);
+    let mut bp = crate::math::prototype::butterworth_bp_elliptic(n, freq_hz, user_q, sample_rate);
     for zero in &mut bp.zeros {
         *zero = *zero * gain_param;
     }
     bp.gain *= gain_param.powi(bp.poles.len() as i32);
 
-    let digital = crate::transform::bilinear(&bp, sample_rate);
-    let mut sos = crate::biquad::zpk_to_sos(&digital);
+    let digital = crate::math::transform::bilinear(&bp, sample_rate);
+    let mut sos = crate::design::biquad::zpk_to_sos(&digital);
 
     let w0 = 2.0 * PI * freq_hz / sample_rate;
-    let peak = crate::biquad::eval_sos(&sos, w0).mag();
+    let peak = crate::design::biquad::eval_sos(&sos, w0).mag();
     if peak > 1e-10 {
         let target = 10.0_f64.powf(user_gain_db / 20.0);
         let scale = target / peak;

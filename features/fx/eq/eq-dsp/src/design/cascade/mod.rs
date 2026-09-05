@@ -14,7 +14,7 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::{Coeffs, PASSTHROUGH};
+use crate::design::biquad::{Coeffs, PASSTHROUGH};
 
 mod bandpass;
 mod notch;
@@ -162,7 +162,7 @@ fn bell_brickwall_proq4(
     n_sections: usize,
     slope_idx: Option<usize>,
 ) -> Vec<Coeffs> {
-    use crate::zpk::Complex;
+    use crate::math::zpk::Complex;
 
     let q_user = q.max(1e-6);
     let gain_lin = 10.0_f64.powf(gain_db / 20.0);
@@ -1062,7 +1062,7 @@ fn bell_brickwall_proq4(
         let zero_at_unity = coeffs[4] < -1.99 && coeffs[5] > 0.99;
         let coeffs =
             if pole_at_unity && zero_at_unity && den_dc.abs() < 1e-14 && num_dc.abs() < 1e-14 {
-                crate::biquad::PASSTHROUGH
+                crate::design::biquad::PASSTHROUGH
             } else {
                 coeffs
             };
@@ -2618,7 +2618,7 @@ mod tests {
 
     /// Evaluate magnitude in dB of a cascade of biquad sections at digital frequency w.
     fn mag_db_sos(sections: &[Coeffs], w: f64) -> f64 {
-        use crate::zpk::Complex;
+        use crate::math::zpk::Complex;
         let ejw = Complex::from_polar(1.0, w);
         let ejw2 = ejw * ejw;
         let mut h = Complex::new(1.0, 0.0);

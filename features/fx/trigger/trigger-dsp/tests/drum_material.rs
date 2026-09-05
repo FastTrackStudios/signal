@@ -158,7 +158,7 @@ fn run_detector(audio: &Audio, threshold_db: f64, sc_hpf_freq: f64) -> Vec<Trigg
 
     // Optional sidechain HPF
     let mut hpf = if sc_hpf_freq > 0.0 {
-        let mut band = eq_dsp::band::Band::new();
+        let mut band = eq_dsp::runtime::band::Band::new();
         band.filter_type = eq_dsp::FilterType::Highpass;
         band.freq_hz = sc_hpf_freq;
         band.q = 0.707;

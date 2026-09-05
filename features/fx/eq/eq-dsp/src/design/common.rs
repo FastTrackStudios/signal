@@ -5,7 +5,7 @@
 
 use std::f64::consts::PI;
 
-use crate::constants::LN10_OVER_20;
+use crate::design::constants::LN10_OVER_20;
 
 /// Map filter `pole_count` (= order arg from `design_filter`) to the Pro-Q 4
 /// slope index used by lookup tables and slope-dispatch matches.
