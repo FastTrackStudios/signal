@@ -3,7 +3,7 @@
 # A change here in a refactor commit means the audio changed. Investigate.
 name chain_lr_offset
 len 48000
-hash 856d5f64e21e9abf
+hash c5e8b13bcca7d5c3
 probe 0 0000000000000000 0
 probe 750 3fb4c07da3d70a3e 0.08106217622756959
 probe 1500 bfbebb68fae147af -0.12004715085029603

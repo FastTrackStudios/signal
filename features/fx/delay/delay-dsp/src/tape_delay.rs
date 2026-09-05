@@ -6,6 +6,7 @@
 //! Supports up to 3 read heads (RE-201 Space Echo style). All heads read from
 //! the same delay buffer with shared wow/flutter modulation.
 
+use dsp_core::num;
 use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::dc_blocker::DcBlocker;
@@ -65,7 +66,7 @@ impl SaturationType {
     pub const COUNT: usize = 7;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             0 => Self::Clean,
             2 => Self::Warm,
@@ -78,7 +79,7 @@ impl SaturationType {
     }
 
     #[must_use]
-    pub fn to_index(self) -> usize {
+    pub const fn to_index(self) -> usize {
         match self {
             Self::Clean => 0,
             Self::Tape => 1,
@@ -91,7 +92,7 @@ impl SaturationType {
     }
 
     #[must_use]
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Clean => "Clean",
             Self::Tape => "Tape",
@@ -318,27 +319,45 @@ impl TapeDelay {
 
     /// Buffer capacity: farthest head (2.85×) at Fast density + margin.
     fn tape_capacity(sample_rate: f64) -> usize {
-        (HEAD3_RATIO * sample_rate * 2.0) as usize + 4096
+        num::f64_to_index(HEAD3_RATIO * sample_rate * 2.0).saturating_add(4096)
+    }
+
+    /// One cell of the tape, wrapping.
+    ///
+    /// Total: the offset is reduced modulo the length, and an empty tape reads
+    /// as silence. Both branches are unreachable for a configured delay — the
+    /// point is that neither can panic on an audio callback.
+    #[inline]
+    fn cell(&self, index: usize, offset: usize) -> f64 {
+        let cap = self.tape.len();
+        index
+            .wrapping_add(offset)
+            .checked_rem(cap)
+            .and_then(|i| self.tape.get(i))
+            .copied()
+            .unwrap_or(0.0)
     }
 
     /// Cubic read at `lag_cells` behind the (fractional) write head.
     #[inline]
     fn read_tape(&self, lag_cells: f64) -> f64 {
-        let cap = self.tape.len() as f64;
+        let cap_u = self.tape.len();
+        let cap = num::count_to_f64(cap_u);
         let pos = (self.write_phase - lag_cells).rem_euclid(cap);
         let i0 = pos.floor();
         let frac = pos - i0;
-        let idx = i0 as usize;
-        let cap_u = self.tape.len();
-        let ym1 = self.tape[(idx + cap_u - 1) % cap_u];
-        let y0 = self.tape[idx];
-        let y1 = self.tape[(idx + 1) % cap_u];
-        let y2 = self.tape[(idx + 2) % cap_u];
+        let idx = num::f64_to_index(i0);
+        // `cap_u - 1` as a wrapping offset: one cell back is the same as
+        // `cap_u - 1` forward, and this way the arithmetic cannot underflow.
+        let ym1 = self.cell(idx, cap_u.saturating_sub(1));
+        let y0 = self.cell(idx, 0);
+        let y1 = self.cell(idx, 1);
+        let y2 = self.cell(idx, 2);
         // Catmull-Rom
-        let a0 = -0.5 * ym1 + 1.5 * y0 - 1.5 * y1 + 0.5 * y2;
-        let a1 = ym1 - 2.5 * y0 + 2.0 * y1 - 0.5 * y2;
-        let a2 = -0.5 * ym1 + 0.5 * y1;
-        ((a0 * frac + a1) * frac + a2) * frac + y0
+        let a0 = 0.5f64.mul_add(y2, 1.5f64.mul_add(y0, (-0.5f64).mul_add(ym1, -(1.5 * y1))));
+        let a1 = 0.5f64.mul_add(-y2, 2.0f64.mul_add(y1, (-2.5f64).mul_add(y0, ym1)));
+        let a2 = (-0.5f64).mul_add(ym1, 0.5 * y1);
+        a0.mul_add(frac, a1).mul_add(frac, a2).mul_add(frac, y0)
     }
 
     pub fn update(&mut self, sample_rate: f64) {
@@ -386,7 +405,7 @@ impl TapeDelay {
 
         // Low-end contour: progressive in-loop high-pass, off -> ~420 Hz.
         if self.low_contour > 0.005 {
-            let hp = 20.0 + self.low_contour.powf(1.5) * 400.0;
+            let hp = self.low_contour.powf(1.5).mul_add(400.0, 20.0);
             self.contour_hp.set_cutoff(hp, sample_rate);
         }
 
@@ -429,6 +448,10 @@ impl TapeDelay {
     /// Each head reads at its ratio × base time. All heads share the same
     /// wow/flutter modulation (physically correct — same tape transport).
     /// Feedback is derived from the combined output.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one pass of the tape transport: motor speed and inertia, wow, flutter, crinkle, the three heads, saturation, the feedback filters and the DC blocker. It is long because a tape machine has that many stages in series, and each helper would need most of the same locals"
+    )]
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
         // Fast transport = higher fidelity: half the mechanical instability
         // (wow/flutter/crinkle) for the same knob settings.
@@ -481,7 +504,7 @@ impl TapeDelay {
             }
             self.coeff_refresh = 16;
         }
-        self.coeff_refresh -= 1;
+        self.coeff_refresh = self.coeff_refresh.saturating_sub(1);
 
         // Crinkle: sparse tape-damage events. Each event briefly dips the
         // playback level and warps the read position; both targets are
@@ -489,27 +512,31 @@ impl TapeDelay {
         // than clicks. Event rate tracks the knob and the transport speed.
         if self.crinkle > 0.001 {
             if self.crinkle_dur > 0 {
-                self.crinkle_dur -= 1;
+                self.crinkle_dur = self.crinkle_dur.saturating_sub(1);
                 if self.crinkle_dur == 0 {
                     self.crinkle_dip_target = 1.0;
                     self.crinkle_warp_target = 0.0;
                 }
             } else if self.crinkle_wait == 0 {
                 // Schedule: 0.5..~10 events/s at full crinkle, halved on Fast.
-                let rate_hz = (0.5 + self.crinkle * 9.0) * speed_scale;
+                let rate_hz = self.crinkle.mul_add(9.0, 0.5) * speed_scale;
                 let mean_interval = self.sample_rate / rate_hz;
                 let u = (self.crinkle_rng.next_bipolar() + 1.0) * 0.5;
-                self.crinkle_wait = (mean_interval * (0.5 + u)) as u32;
+                self.crinkle_wait =
+                    u32::try_from(num::f64_to_index(mean_interval * (0.5 + u))).unwrap_or(u32::MAX);
                 // Event: 1–5 ms, severity scales with the knob.
                 let dur_u = (self.crinkle_rng.next_bipolar() + 1.0) * 0.5;
-                self.crinkle_dur = (self.sample_rate * (0.001 + dur_u * 0.004)) as u32;
+                self.crinkle_dur = u32::try_from(num::f64_to_index(
+                    self.sample_rate * dur_u.mul_add(0.004, 0.001),
+                ))
+                .unwrap_or(u32::MAX);
                 let sev_u = (self.crinkle_rng.next_bipolar() + 1.0) * 0.5;
-                let severity = self.crinkle * (0.3 + 0.7 * sev_u);
+                let severity = self.crinkle * 0.7f64.mul_add(sev_u, 0.3);
                 self.crinkle_dip_target = 1.0 - severity * 0.85;
                 self.crinkle_warp_target =
                     severity * 25.0 * self.crinkle_rng.next_bipolar().signum() * speed_scale;
             } else {
-                self.crinkle_wait -= 1;
+                self.crinkle_wait = self.crinkle_wait.saturating_sub(1);
             }
         } else {
             self.crinkle_dip_target = 1.0;
@@ -526,7 +553,7 @@ impl TapeDelay {
         // scales its depth between 35% (quiet) and 100% (loud).
         let key_coeff = 1.0 - (-1.0 / (0.02 * self.sample_rate)).exp();
         self.flutter_key_env += (input.abs() - self.flutter_key_env) * key_coeff;
-        let key = 0.35 + 0.65 * (self.flutter_key_env * 3.0).min(1.0);
+        let key = 0.65f64.mul_add((self.flutter_key_env * 3.0).min(1.0), 0.35);
         let wow_offset = self.wow.tick();
         let flutter_offset = self.flutter.tick() * key;
         let mod_offset = wow_offset + flutter_offset + self.crinkle_warp;
@@ -590,9 +617,9 @@ impl TapeDelay {
         //             loudness, none of the record-level punch.
         if drive > 0.0 {
             let (pre, post) = match self.voice {
-                TapeVoice::Mx => (1.0 + drive * 4.0, 1.0 / (1.0 + drive * 1.2)),
+                TapeVoice::Mx => (drive.mul_add(4.0, 1.0), 1.0 / drive.mul_add(1.2, 1.0)),
                 TapeVoice::Classic => {
-                    let headroom = 1.0 - drive * 0.65;
+                    let headroom = drive.mul_add(-0.65, 1.0);
                     (1.0 / headroom, headroom)
                 }
             };
@@ -619,7 +646,7 @@ impl TapeDelay {
                     // Hard compression with gain reduction
                     let level = x.abs();
                     if level > 0.5 {
-                        let reduction = 0.5 + (level - 0.5) * 0.2;
+                        let reduction = (level - 0.5).mul_add(0.2, 0.5);
                         x.signum() * reduction
                     } else {
                         x
@@ -633,9 +660,9 @@ impl TapeDelay {
                     // Gentle polynomial limiting
                     let x = x.clamp(-2.0, 2.0);
                     if x.abs() > 1.0 {
-                        x.signum() * (1.0 - 0.25 * (2.0 - x.abs()).powi(2))
+                        x.signum() * 0.25f64.mul_add(-(2.0 - x.abs()).powi(2), 1.0)
                     } else {
-                        x * (1.5 - 0.5 * x * x)
+                        x * (0.5 * x).mul_add(-x, 1.5)
                     }
                 }
             };
@@ -659,15 +686,23 @@ impl TapeDelay {
         self.record_aa.set_cutoff(aa_cutoff, self.sample_rate);
         let write_in = self.record_aa.tick(input + fb);
 
-        let cap = self.tape.len() as f64;
+        let cap = num::count_to_f64(self.tape.len());
         let old_pos = self.write_phase;
         let new_pos = old_pos + v;
         let mut boundary = old_pos.floor() + 1.0;
+        // Draining a fractional write head across whole cells; the comparison
+        // is the loop's termination condition, not an equality test.
+        #[expect(
+            clippy::while_float,
+            reason = "advancing a fractional write position one cell at a time"
+        )]
         while boundary <= new_pos {
             let t = (boundary - old_pos) / v;
             let sample = self.prev_write_in + t * (write_in - self.prev_write_in);
-            let idx = (boundary.rem_euclid(cap)) as usize % self.tape.len();
-            self.tape[idx] = sample;
+            let idx = num::f64_to_index(boundary.rem_euclid(cap));
+            if let Some(slot) = idx.checked_rem(self.tape.len()).and_then(|i| self.tape.get_mut(i)) {
+                *slot = sample;
+            }
             boundary += 1.0;
         }
         self.write_phase = new_pos.rem_euclid(cap);
@@ -678,7 +713,7 @@ impl TapeDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -755,7 +790,7 @@ mod tests {
         }
 
         assert!(
-            (peak_pos as i64 - expected_delay as i64).unsigned_abs() < 10,
+            (i64::from(peak_pos) - i64::from(expected_delay)).unsigned_abs() < 10,
             "Peak at {peak_pos}, expected near {expected_delay}"
         );
         assert!(peak_val > 0.5, "Peak should be significant: {peak_val}");
@@ -799,7 +834,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN/Inf at sample {i}");
         }
@@ -821,14 +856,14 @@ mod tests {
         let mut count = 0usize;
         for i in 0..96000 {
             // 0.3 DC + quiet sine — deliberately asymmetric signal
-            let input = 0.3 + (2.0 * PI * 220.0 * i as f64 / SR).sin() * 0.2;
+            let input = (2.0 * PI * 220.0 * f64::from(i) / SR).sin().mul_add(0.2, 0.3);
             let out = d.tick(input, 0);
             if i >= 48000 {
                 sum += out;
                 count += 1;
             }
         }
-        let mean = sum / count as f64;
+        let mean = sum / num::count_to_f64(count);
         assert!(
             mean.abs() < 0.5,
             "DC should not accumulate in feedback: mean={mean}"
@@ -865,7 +900,7 @@ mod tests {
         d_dark.update(SR);
 
         let input: Vec<f64> = (0..200)
-            .map(|i| (2.0 * PI * 10000.0 * i as f64 / SR).sin())
+            .map(|i| (2.0 * PI * 10000.0 * f64::from(i) / SR).sin())
             .collect();
 
         for &s in &input {
@@ -905,7 +940,7 @@ mod tests {
         let mut prev: f64 = 0.0;
         let mut max_jump: f64 = 0.0;
         for i in 0..4800 {
-            let input = (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             let jump = (out - prev).abs();
             max_jump = max_jump.max(jump);
@@ -1047,7 +1082,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.3;
+            let input = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.3;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN/Inf at sample {i}");
             assert!(out.abs() < 10.0, "Runaway at sample {i}: {out}");
@@ -1075,7 +1110,7 @@ mod dtape_parity_tests {
 
         // 20 ms 220 Hz burst at moderate level.
         for i in 0..960 {
-            d.tick((TAU * 220.0 * i as f64 / SR).sin() * 0.5, 0);
+            d.tick((TAU * 220.0 * f64::from(i) / SR).sin() * 0.5, 0);
         }
         // Collect the 3rd repeat (300 ms in) where loop shaping compounds.
         let mut rms = 0.0;
@@ -1126,7 +1161,7 @@ mod dtape_parity_tests {
             d.update(SR);
             let mut energy = 0.0;
             for i in 0..15000 {
-                let s = (TAU * 8000.0 * i as f64 / SR).sin() * 0.5;
+                let s = (TAU * 8000.0 * f64::from(i) / SR).sin() * 0.5;
                 let out = d.tick(s, 0);
                 if i > 5000 {
                     energy += out * out;
@@ -1159,7 +1194,7 @@ mod dtape_parity_tests {
             let mut env = 0.0f64;
             let mut min_env = f64::MAX;
             for i in 0..96000 {
-                let s = (TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+                let s = (TAU * 440.0 * f64::from(i) / SR).sin() * 0.5;
                 let out = d.tick(s, 0);
                 env = out.abs().max(env * release);
                 if i > 9600 {
@@ -1192,7 +1227,7 @@ mod dtape_parity_tests {
                 d.tape_speed = speed;
                 d.update(SR);
                 (0..48000)
-                    .map(|i| d.tick((TAU * 440.0 * i as f64 / SR).sin() * 0.5, 0))
+                    .map(|i| d.tick((TAU * 440.0 * f64::from(i) / SR).sin() * 0.5, 0))
                     .collect()
             };
             let dry = render(0.0, speed);
@@ -1224,7 +1259,7 @@ mod dtape_parity_tests {
             let mut energy = 0.0;
             for i in 0..24000 {
                 let s = if i < 1440 {
-                    (TAU * 80.0 * i as f64 / SR).sin() * 0.5
+                    (TAU * 80.0 * f64::from(i) / SR).sin() * 0.5
                 } else {
                     0.0
                 };
@@ -1256,9 +1291,9 @@ mod dtape_parity_tests {
         d.update(SR);
 
         let mut peak = 0.0f64;
-        for i in 0..(SR as usize * 10) {
+        for i in 0..(num::f64_to_index(SR).saturating_mul(10)) {
             let input = if i < 4800 {
-                (TAU * 330.0 * i as f64 / SR).sin() * 0.8
+                (TAU * 330.0 * num::count_to_f64(i) / SR).sin() * 0.8
             } else {
                 0.0
             };
@@ -1291,8 +1326,8 @@ mod dtape_parity_tests {
         d.update(SR_T);
 
         // 1 s of 440 Hz at the fast motor speed.
-        for i in 0..(SR_T as usize) {
-            let x = (core::f64::consts::TAU * 440.0 * i as f64 / SR_T).sin() * 0.5;
+        for i in 0..num::f64_to_index(SR_T) {
+            let x = (core::f64::consts::TAU * 440.0 * num::count_to_f64(i) / SR_T).sin() * 0.5;
             d.tick(x, 0);
         }
         // Slam the TIME knob to 1500 ms; silence in.
@@ -1302,10 +1337,10 @@ mod dtape_parity_tests {
         // Let the motor glide settle (~0.75 s), then count zero
         // crossings over 0.25 s — the head reaches the post-change
         // (silent) tape at ~1.05 s, so the window must end before that.
-        for _ in 0..((0.75 * SR_T) as usize) {
+        for _ in 0..num::f64_to_index(0.75 * SR_T) {
             d.tick(0.0, 0);
         }
-        let n = (0.25 * SR_T) as usize;
+        let n = num::f64_to_index(0.25 * SR_T);
         let mut prev = 0.0f64;
         let mut crossings = 0u32;
         let mut energy = 0.0;
@@ -1321,7 +1356,7 @@ mod dtape_parity_tests {
             energy > 1e-3,
             "should still be reading the stored tone: {energy}"
         );
-        let freq = crossings as f64 / 2.0 / 0.25;
+        let freq = f64::from(crossings) / 2.0 / 0.25;
         assert!(
             (60.0..130.0).contains(&freq),
             "stored tone should replay near 88 Hz (5x slowdown), got {freq} Hz"

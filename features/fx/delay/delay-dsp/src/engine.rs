@@ -962,7 +962,7 @@ impl DelayEngine {
 
     /// Get the last feedback sample for ping-pong cross-feeding.
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         match &self.inner {
             EngineInner::Tape(d) => d.last_feedback(),
             EngineInner::Clean(d) => d.last_feedback(),
