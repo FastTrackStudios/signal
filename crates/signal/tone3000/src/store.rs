@@ -16,6 +16,15 @@ pub struct Tokens {
     /// Unix seconds. Compared against the clock before each use; the client
     /// refreshes ahead of expiry rather than waiting for a 401.
     pub expires_at: i64,
+    /// The account these tokens belong to, as the catalog names it.
+    ///
+    /// Cached with the session so "signed in as who?" is answerable from
+    /// disk. The alternative — a `/user` call every time a surface asks —
+    /// spends a request from a 100-per-minute budget on a question whose
+    /// answer changes only at sign-in, and would make the status call fail
+    /// whenever the network is down while the session is perfectly valid.
+    #[serde(default)]
+    pub username: String,
 }
 
 impl Tokens {
@@ -133,6 +142,7 @@ mod tests {
             access_token: "a".into(),
             refresh_token: "r".into(),
             expires_at: 1_800_000_000,
+            username: "brucew".into(),
         };
         store.save(&tokens).unwrap();
         assert_eq!(store.load().unwrap(), Some(tokens));
@@ -150,6 +160,7 @@ mod tests {
                 access_token: "a".into(),
                 refresh_token: "r".into(),
                 expires_at: 0,
+                username: String::new(),
             })
             .unwrap();
         let mode = std::fs::metadata(store.path()).unwrap().permissions().mode();
@@ -169,6 +180,7 @@ mod tests {
             access_token: "a".into(),
             refresh_token: "r".into(),
             expires_at: 1_000,
+            username: String::new(),
         };
         assert!(t.needs_refresh(1_000), "expired");
         assert!(t.needs_refresh(950), "inside the slack window");

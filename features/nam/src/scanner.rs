@@ -39,6 +39,23 @@ pub fn scan_directory(nam_root: &Path) -> Result<HashMap<String, NamFileEntry>, 
     Ok(entries)
 }
 
+/// Index one file the way a full scan would, without walking the tree.
+///
+/// `Ok(None)` means the path is not a library file (not `.nam`/`.wav`) — a
+/// non-event, not an error. This exists for the downloaders: a fetched model
+/// is one known file, and re-hashing every capture in the library to notice it
+/// would cost seconds per download and grow with the library.
+///
+/// # Errors
+///
+/// Returns `NamError::IoError` if the file cannot be read.
+pub fn scan_one(path: &Path, nam_root: &Path) -> Result<Option<NamFileEntry>, NamError> {
+    let Some(kind) = kind_from_path(path) else {
+        return Ok(None);
+    };
+    scan_file(path, nam_root, kind).map(Some)
+}
+
 /// Scan a single file: hash it, extract metadata, build a `NamFileEntry`.
 fn scan_file(path: &Path, nam_root: &Path, kind: NamFileKind) -> Result<NamFileEntry, NamError> {
     let contents = std::fs::read(path)?;

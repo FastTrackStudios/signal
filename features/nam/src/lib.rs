@@ -52,7 +52,7 @@ pub use ir::IrMetadata;
 pub use nam_file::{NamFileEntry, NamFileKind, NamMetadata};
 pub use pack::{FileOverride, PackCategory, PackDefinition};
 pub use resolve::{nam_root_from_env, resolve_path, resolve_path_unchecked};
-pub use scanner::{apply_packs, merge_into_catalog, scan_directory, sha256_hex};
+pub use scanner::{apply_packs, merge_into_catalog, scan_directory, scan_one, sha256_hex};
 pub use vst_chunk::{
     create_default_chunk, decode_chunk, encode_chunk, extract_state_base64, first_base64_segment,
     rebuild_chunk_with_state, rebuild_clap_chunk_with_state, rewrite_paths, NamVstChunk,

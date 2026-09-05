@@ -10,6 +10,10 @@ use crate::store::{DownloadOutcome, TokenStore, Tokens};
 pub enum SessionError {
     #[error("not signed in to TONE3000")]
     NotSignedIn,
+    /// No publishable key. Distinct from being signed out: the user cannot
+    /// fix this by signing in, so a UI must not send them round that loop.
+    #[error("this build has no TONE3000 publishable key configured")]
+    NotConfigured,
     /// The callback did not match the request that started it. Treated as a
     /// hard failure rather than a retry: a mismatched `state` is what a CSRF
     /// attempt looks like, and it is indistinguishable from one.

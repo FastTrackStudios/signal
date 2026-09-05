@@ -13,7 +13,13 @@ workspace = true
 # The wire client (OAuth2+PKCE, search, models, downloads). Upstream MIT.
 tone3000.workspace = true
 signal-nam.workspace = true
-architect.workspace = true
+signal-tone3000-proto.workspace = true
+architect = { workspace = true, features = ["platform"] }
+# The model/image transfers: the wire client streams to an AsyncWrite but
+# reports no progress, and artwork is not its concern at all.
+reqwest = { workspace = true, features = ["stream"] }
+futures-util = { workspace = true }
+url = "2"
 tokio = { workspace = true }
 thiserror.workspace = true
 tracing.workspace = true
@@ -23,3 +29,10 @@ sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+# A stubbed catalog on a loopback port: the conversation is the thing under
+# test, and it cannot be tested without one.
+wiremock = "0.6"
+url = "2"
+signal-nam.workspace = true
+serde_json.workspace = true
