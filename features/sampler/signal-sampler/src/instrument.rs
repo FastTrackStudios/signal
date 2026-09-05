@@ -40,6 +40,9 @@ pub struct SamplerInstrument {
     /// can see a discontinuity that falls ACROSS a block boundary — which is
     /// where a per-block bug puts one.
     prev: (f32, f32),
+    /// Hole detection carries across blocks: a dropout does not politely
+    /// begin and end inside one callback.
+    holes: crate::engine::HoleDetector,
 }
 
 impl SamplerInstrument {
@@ -52,6 +55,7 @@ impl SamplerInstrument {
             engine,
             scratch: Vec::new(),
             prev: (0.0, 0.0),
+            holes: crate::engine::HoleDetector::default(),
         }
     }
 
@@ -75,7 +79,12 @@ impl SamplerInstrument {
     /// data already in cache because we just wrote it.
     fn scan_output(&mut self, out_l: &[f32], out_r: &[f32], frames: usize) {
         // Silence with nothing playing is not a gap, it is silence.
-        let sounding = self.engine.active_voices() > 0;
+        // With nothing playing there is no stream to have a hole in, and the
+        // silence that follows the last note must not be held open as a
+        // candidate: drop the run instead of letting the next note close it.
+        if self.engine.active_voices() == 0 {
+            self.holes.reset();
+        }
         let mut g = crate::engine::OutputGlitches::default();
         let (mut pl, mut pr) = self.prev;
         for f in 0..frames {
@@ -86,8 +95,15 @@ impl SamplerInstrument {
                 pr = 0.0;
                 continue;
             }
-            if sounding && l == 0.0 && r == 0.0 {
-                g.gap_frames += 1;
+            // A hole is silence that signal RESUMES after — not silence
+            // before a note has started, which every voice legitimately has
+            // (`start_hold`, `attack_delay`) and which the first version of
+            // this counted by the thousand.
+            let magnitude = l.abs().max(r.abs());
+            if let Some(run) = self.holes.feed(magnitude) {
+                g.gap_frames += run;
+                g.gap_runs += 1;
+                g.longest_gap = g.longest_gap.max(run);
             }
             let slew = (l - pl).abs().max((r - pr).abs());
             if slew > crate::engine::CLICK_SLEW {

@@ -315,9 +315,12 @@ fn main() {
     let g = signal_sampler::engine::output_glitches();
     let played_frames = (played * 48_000.0) as usize;
     println!(
-        "output artefacts: gaps={} ({:.3}% of frames) clicks={} nonfinite={} peak_slew={:.3}",
+        "output artefacts: holes={} ({} frames, {:.3}% of output, longest {} frames) \
+         clicks={} nonfinite={} peak_slew={:.3}",
+        g.gap_runs,
         g.gap_frames,
         100.0 * g.gap_frames as f64 / played_frames.max(1) as f64,
+        g.longest_gap,
         g.click_frames,
         g.nonfinite_frames,
         g.peak_slew_ppm as f64 / 1.0e6,
