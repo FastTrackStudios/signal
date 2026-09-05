@@ -131,7 +131,7 @@ impl Default for BandDynamics {
     }
 }
 
-fn eq_shape_to_filter(shape: u32) -> crate::FilterType {
+const fn eq_shape_to_filter(shape: u32) -> crate::FilterType {
     crate::design::slope::FilterShape::from_canonical_index(shape).to_filter_type()
 }
 
@@ -859,7 +859,7 @@ impl FtsEq {
     /// factory presets set the mode and five of those set a non-zero pan; all
     /// five are Mid/Side, and on "Room 01" this global alone was 2.54 dB of a
     /// 3.23 dB error.
-    pub fn set_output_pan(&mut self, pan: f64, mid_side: bool) {
+    pub const fn set_output_pan(&mut self, pan: f64, mid_side: bool) {
         self.output_pan = pan.clamp(-1.0, 1.0);
         self.output_pan_mid_side = mid_side;
     }
@@ -930,7 +930,7 @@ impl FtsEq {
 
     /// Whether the spectral engine is currently in the signal path.
     #[must_use]
-    pub fn spectral_engaged(&self) -> bool {
+    pub const fn spectral_engaged(&self) -> bool {
         self.spectral.has_regions()
     }
 
@@ -1020,6 +1020,7 @@ impl FtsEq {
         self.prepared
     }
 
+    #[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
     /// Process one block in place.
     pub fn process(&mut self, buf_l: &mut [f64], buf_r: &mut [f64]) {
         // Fully-idle block (no active bands, no dynamics, no spectral,
@@ -1247,7 +1248,7 @@ impl FtsEq {
             }
         }
     }
-    pub fn deactivate(&mut self) {
+    pub const fn deactivate(&mut self) {
         self.prepared = false;
     }
 }
@@ -1295,7 +1296,7 @@ impl FtsEq {
     }
 
     /// Output trim in dB, applied after everything else.
-    pub fn set_output_gain_db(&mut self, db: f64) {
+    pub const fn set_output_gain_db(&mut self, db: f64) {
         self.output_gain_db = db;
     }
 
@@ -1309,7 +1310,7 @@ impl FtsEq {
     }
 
     #[must_use]
-    pub fn gain_scale(&self) -> f64 {
+    pub const fn gain_scale(&self) -> f64 {
         self.gain_scale
     }
 
@@ -1322,11 +1323,11 @@ impl FtsEq {
         }
     }
 
-    pub fn set_transient_gain_db(&mut self, db: f64) {
+    pub const fn set_transient_gain_db(&mut self, db: f64) {
         self.transient_gain_db = db;
     }
 
-    pub fn set_steady_gain_db(&mut self, db: f64) {
+    pub const fn set_steady_gain_db(&mut self, db: f64) {
         self.steady_gain_db = db;
     }
 
@@ -1354,7 +1355,7 @@ impl FtsEq {
     }
 
     /// Solo one of the two streams: 0 both, 1 transient, 2 steady.
-    pub fn set_split_solo(&mut self, solo: u32) {
+    pub const fn set_split_solo(&mut self, solo: u32) {
         self.split_solo = solo;
     }
 
@@ -1366,7 +1367,7 @@ impl FtsEq {
     }
 
     #[must_use]
-    pub fn listen(&self) -> Option<(usize, u32)> {
+    pub const fn listen(&self) -> Option<(usize, u32)> {
         self.listen
     }
 
@@ -1377,7 +1378,7 @@ impl FtsEq {
     }
 
     #[must_use]
-    pub fn sample_rate(&self) -> f64 {
+    pub const fn sample_rate(&self) -> f64 {
         self.sample_rate
     }
 }

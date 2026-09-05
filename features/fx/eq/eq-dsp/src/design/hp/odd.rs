@@ -30,6 +30,7 @@ pub(super) fn cascade(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> V
     sections
 }
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 pub(super) fn highpass_odd_section(
     order: usize,
     freq_hz: f64,
@@ -380,19 +381,17 @@ pub(super) fn highpass_odd_section(
 }
 fn highpass_slope5_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
     let mut qs = cut_odd_qs(5, q_user);
-    if (q_user - 0.5).abs() < 1.0e-12 {
-        *qs.get_mut(0)
-            .expect("cut_odd_qs(5, _) guarantees 5 elements") = highpass_slope5_sec0_q05(freq_hz, sample_rate);
-    } else if (q_user - 1.0).abs() < 1.0e-12 {
-        *qs.get_mut(0)
-            .expect("cut_odd_qs(5, _) guarantees 5 elements") = highpass_slope5_sec0_q1(freq_hz, sample_rate);
-    } else if (q_user - 10.0).abs() < 1.0e-12 {
-        *qs.get_mut(0)
-            .expect("cut_odd_qs(5, _) guarantees 5 elements") = highpass_slope5_sec0_q10(
-            freq_hz,
-            sample_rate,
-            *qs.get(0).expect("cut_odd_qs(5, _) guarantees 5 elements"),
-        );
+    // `cut_odd_qs(5, _)` returns five elements, so `first_mut` always
+    // matches; skipping is the right answer if that ever stops being true,
+    // because the unmodified cascade is still a valid filter.
+    if let Some(first) = qs.first_mut() {
+        if (q_user - 0.5).abs() < 1.0e-12 {
+            *first = highpass_slope5_sec0_q05(freq_hz, sample_rate);
+        } else if (q_user - 1.0).abs() < 1.0e-12 {
+            *first = highpass_slope5_sec0_q1(freq_hz, sample_rate);
+        } else if (q_user - 10.0).abs() < 1.0e-12 {
+            *first = highpass_slope5_sec0_q10(freq_hz, sample_rate, *first);
+        }
     }
     qs
 }

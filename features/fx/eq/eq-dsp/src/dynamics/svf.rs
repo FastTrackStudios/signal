@@ -164,7 +164,7 @@ impl Svf {
         self.m2.mul_add(v2, self.m0.mul_add(x, self.m1 * v1))
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.ic1 = [0.0; 2];
         self.ic2 = [0.0; 2];
     }

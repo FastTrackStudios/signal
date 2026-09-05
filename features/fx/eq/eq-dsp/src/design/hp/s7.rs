@@ -140,6 +140,7 @@ fn highpass_slope7_section_freq_range(
     cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
 }
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 fn highpass_slope7_section(
     freq_hz: f64,
     sample_rate: f64,

@@ -618,6 +618,7 @@ impl SpectralEngine {
         (l, r)
     }
 
+    #[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
     #[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
     fn process_frame(&mut self) {
         let bins = self.mag_db.len();

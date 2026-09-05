@@ -71,20 +71,20 @@ pub(super) fn exact_48k_q(
 
 pub(super) fn interp_48k_table(freq_hz: f64, sample_rate: f64, table: &[(f64, f64)]) -> f64 {
     let sr_scale = sample_rate / 48000.0;
-    let fc = (freq_hz / sr_scale).clamp(
-        table.first().expect("table is non-empty").0,
-        table.last().expect("table is non-empty").0,
-    );
+    // An empty table has no curve to interpolate; 0.0 is the identity for the
+    // Q offsets this returns. Every caller passes a static, non-empty table.
+    let (Some(lo), Some(hi)) = (table.first(), table.last()) else {
+        return 0.0;
+    };
+    let fc = (freq_hz / sr_scale).clamp(lo.0, hi.0);
     for pair in table.windows(2) {
-        let [p0, p1] = pair else { unreachable!() };
-        let (f0, q0) = *p0;
-        let (f1, q1) = *p1;
+        let &[(f0, q0), (f1, q1)] = pair else { continue };
         if fc <= f1 {
             let t = (fc - f0) / (f1 - f0);
             return (q1 - q0).mul_add(t, q0);
         }
     }
-    table.last().expect("table is non-empty").1
+    hi.1
 }
 
 pub(super) fn highpass_s2_with_w_eval_scale(
@@ -181,17 +181,19 @@ pub(super) fn cut_odd_tail_poles_48k(freq_hz: f64) -> (f64, f64) {
         (21000.0, 0.047_742_394_741_058, -0.626_594_864_880_914),
         (22000.0, 0.037_996_222_971_866, -0.628_499_987_709_256),
     ];
-    let fc = freq_hz.clamp(POLES.first().expect("POLES is non-empty").0, POLES.last().expect("POLES is non-empty").0);
+    // The table is a non-empty `static`; the fallback keeps this total.
+    let (Some(lo), Some(hi)) = (POLES.first(), POLES.last()) else {
+        return Default::default();
+    };
+    let fc = freq_hz.clamp(lo.0, hi.0);
     for pair in POLES.windows(2) {
-        let [p0, p1] = pair else { unreachable!() };
-        let (f0, p0, n0) = *p0;
-        let (f1, p1, n1) = *p1;
+        let &[(f0, p0, n0), (f1, p1, n1)] = pair else { continue };
         if fc <= f1 {
             let t = (fc - f0) / (f1 - f0);
             return ((p1 - p0).mul_add(t, p0), (n1 - n0).mul_add(t, n0));
         }
     }
-    let (_, p, n) = *POLES.last().expect("POLES is non-empty");
+    let (_, p, n) = *hi;
     (p, n)
 }
 
@@ -237,6 +239,7 @@ pub(super) fn cut_odd_tail_highpass_shape(freq_hz: f64, sample_rate: f64) -> (f6
     cut_odd_tail_highpass_shape_48k(freq_hz / sr_scale)
 }
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 pub(super) fn cut_odd_tail_highpass_shape_48k(freq_hz: f64) -> (f64, f64, f64, f64) {
     const SHAPE: &[(f64, f64, f64, f64, f64)] = &[
         (
@@ -422,11 +425,13 @@ pub(super) fn cut_odd_tail_highpass_shape_48k(freq_hz: f64) -> (f64, f64, f64, f
             0.343_067_273_735_296,
         ),
     ];
-    let fc = freq_hz.clamp(SHAPE.first().expect("SHAPE is non-empty").0, SHAPE.last().expect("SHAPE is non-empty").0);
+    // The table is a non-empty `static`; the fallback keeps this total.
+    let (Some(lo), Some(hi)) = (SHAPE.first(), SHAPE.last()) else {
+        return Default::default();
+    };
+    let fc = freq_hz.clamp(lo.0, hi.0);
     for pair in SHAPE.windows(2) {
-        let [p0, p1] = pair else { unreachable!() };
-        let (f0, p0, n0, z0, k0) = *p0;
-        let (f1, p1, n1, z1, k1) = *p1;
+        let &[(f0, p0, n0, z0, k0), (f1, p1, n1, z1, k1)] = pair else { continue };
         if fc <= f1 {
             let t = (fc - f0) / (f1 - f0);
             return (
@@ -437,6 +442,6 @@ pub(super) fn cut_odd_tail_highpass_shape_48k(freq_hz: f64) -> (f64, f64, f64, f
             );
         }
     }
-    let (_, p, n, z, k) = *SHAPE.last().expect("SHAPE is non-empty");
+    let (_, p, n, z, k) = *hi;
     (p, n, z, k)
 }

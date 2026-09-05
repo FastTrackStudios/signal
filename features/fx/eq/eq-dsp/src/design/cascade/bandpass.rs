@@ -83,6 +83,7 @@ pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usi
         .collect()
 }
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 #[expect(clippy::too_many_arguments, reason = "Pre-computed omega powers and trig values grouped for efficiency")]
 fn bandpass_cascade_section(
     freq_hz: f64,

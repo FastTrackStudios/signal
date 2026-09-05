@@ -315,7 +315,7 @@ impl Band {
     }
 
     /// Force the bypass ramp fully open/closed (preset loads — no fade).
-    pub fn snap_bypass(&mut self) {
+    pub const fn snap_bypass(&mut self) {
         self.bypass_ramp = if self.enabled { 1.0 } else { 0.0 };
     }
 

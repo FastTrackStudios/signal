@@ -79,6 +79,7 @@ pub fn compute_cascade_shelf_alt(
 
     sections
 }
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 /// Compute cascade biquads for the Flat Tilt filter (UI type 8).
 ///
 /// **RE-decoded structure** (see
@@ -110,7 +111,7 @@ pub fn compute_cascade_flat_tilt(
     _sample_rate: f64,
     _order: usize,
 ) -> Vec<Coeffs> {
-    fn poly6(g: f64, c: [f64; 7]) -> f64 {
+    const fn poly6(g: f64, c: [f64; 7]) -> f64 {
         let [c0, c1, c2, c3, c4, c5, c6] = c;
         let mut s = c6;
         s = s.mul_add(g, c5);
@@ -122,7 +123,7 @@ pub fn compute_cascade_flat_tilt(
         s
     }
 
-    fn poly7(x: f64, c: [f64; 8]) -> f64 {
+    const fn poly7(x: f64, c: [f64; 8]) -> f64 {
         let [c0, c1, c2, c3, c4, c5, c6, c7] = c;
         let mut s = c7;
         s = s.mul_add(x, c6);
@@ -135,7 +136,7 @@ pub fn compute_cascade_flat_tilt(
         s
     }
 
-    fn poly4(x: f64, c: [f64; 5]) -> f64 {
+    const fn poly4(x: f64, c: [f64; 5]) -> f64 {
         let [c0, c1, c2, c3, c4] = c;
         let mut s = c4;
         s = s.mul_add(x, c3);

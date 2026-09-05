@@ -9,6 +9,7 @@
 
 use super::{Coeffs, PI, lagrange_synth_alt_path, trace_bell_inputs, PASSTHROUGH, bell_s2_proq4};
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 #[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 pub fn bell_brickwall_proq4(
     freq_hz: f64,
@@ -903,6 +904,7 @@ pub fn bell_brickwall_proq4(
     sections
 }
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 /// Bell 3-point Lagrange synthesis — extracted from `bell_s2_proq4` body
 /// (post-sub-frequency selection).  Verified ≤ 1.5e-13 bit-exact on
 /// captured `lagrange_per_section_sweep.csv` rows where `w_third != 0`.
@@ -1108,6 +1110,7 @@ pub(crate) fn bell_brickwall_proq4_n(
         .collect()
 }
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 #[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 /// Per-section `(Q_k, gdB_k)` lookup.  Returns `N_sec` entries per slope:
 /// slope=4 → 2, slope=6 → 3, slope=8 → 6.

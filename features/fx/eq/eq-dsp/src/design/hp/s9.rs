@@ -34,6 +34,7 @@ fn highpass_slope9_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
     qs
 }
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 fn highpass_slope9_section(
     freq_hz: f64,
     sample_rate: f64,

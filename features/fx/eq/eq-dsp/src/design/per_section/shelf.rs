@@ -6,6 +6,7 @@
 use super::{Prototype, PI, update_tracked_band_frequencies, eval_squared_mag_scalar};
 use dsp_core::num;
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 /// Per-section helper for `proto[0x13] == 7` (shelf-band sections, "else"
 /// branch in `prepare_band_display_info`).
 ///

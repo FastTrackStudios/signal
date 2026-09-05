@@ -88,7 +88,7 @@ impl LoudnessHistogram {
         Some((thr, (0.5 * (hi - lo)).max(5.0)))
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.bins = [0.0; N_BINS];
         self.total = 0.0;
     }

@@ -401,7 +401,7 @@ impl DynBand {
         }
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.filter.reset();
         self.side_bp.reset();
         self.side_hp.reset();

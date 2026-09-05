@@ -216,6 +216,7 @@ pub fn proq4_s2_from_prototype_with_subfreq_pub(
     )
 }
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 pub fn proq4_s2_from_prototype_with_subfreq(
     freq_hz: f64,
     sample_rate: f64,

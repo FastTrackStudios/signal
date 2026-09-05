@@ -423,6 +423,7 @@ pub fn build_neve_1073_sections(settings: Neve1073Settings, sample_rate: f64) ->
     )
 }
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 #[must_use]
 pub fn build_neve_1073_sections_with_calibration(
     settings: Neve1073Settings,

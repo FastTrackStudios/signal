@@ -420,7 +420,7 @@ impl Detector {
         (punched - self.ar_state).mul_add(s, self.ar_state).clamp(0.0, 1.0)
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.ms_state = 0.0;
         self.prog_ms_state = 0.0;
         self.ar_state = 0.0;

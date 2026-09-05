@@ -273,9 +273,11 @@ fn hp_s8_sec0_q_multiplier(q_user: f64) -> f64 {
     ];
     let q = q_user.max(1e-6);
     if q <= TABLE[0].0 {
-        return TABLE[0].1;
+        return TABLE.first().map_or(0.0, |e| e.1);
     }
-    let last_entry = TABLE.last().unwrap();
+    let Some(last_entry) = TABLE.last() else {
+        return 0.0;
+    };
     if q >= last_entry.0 {
         return last_entry.1;
     }
@@ -306,9 +308,11 @@ fn hp_s8_sec0_solver_q_multiplier(q_user: f64) -> f64 {
     ];
     let q = q_user.max(1e-6);
     if q <= TABLE[0].0 {
-        return TABLE[0].1;
+        return TABLE.first().map_or(0.0, |e| e.1);
     }
-    let last_entry = TABLE.last().unwrap();
+    let Some(last_entry) = TABLE.last() else {
+        return 0.0;
+    };
     if q >= last_entry.0 {
         return last_entry.1;
     }

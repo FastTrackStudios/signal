@@ -18,6 +18,7 @@ pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> Vec<Coeffs> {
         .collect()
 }
 
+#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
 fn highpass_slope6_section(
     freq_hz: f64,
     sample_rate: f64,
@@ -243,12 +244,9 @@ fn highpass_slope6_section(
     }
 }
 fn highpass_slope6_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
-    let [mut q0, q1, q2] = cascade_qs(3, q_user)
-        .into_iter()
-        .rev()
-        .collect::<Vec<_>>()
-        .try_into()
-        .expect("cascade_qs(3) returns exactly 3 elements");
+    let reversed: Vec<f64> = cascade_qs(3, q_user).into_iter().rev().collect();
+    // `cascade_qs(3)` returns exactly three; the fallback keeps this total.
+    let [mut q0, q1, q2] = <[f64; 3]>::try_from(reversed).unwrap_or([q_user; 3]);
 
     if (q_user - 0.5).abs() < 1.0e-12 {
         q0 = highpass_slope6_sec0_q05(freq_hz, sample_rate);
