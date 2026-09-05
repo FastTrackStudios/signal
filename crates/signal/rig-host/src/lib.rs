@@ -33,8 +33,9 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::{Arc, Mutex};
 
-use daw::service::handle::DawHandle as _;
 use daw::service::ProjectInfo;
+use daw::service::handle::DawHandle as _;
+use daw::standalone::Standalone;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::audio_engine::AudioEngine;
 #[cfg(all(not(target_arch = "wasm32"), target_os = "linux"))]
@@ -43,11 +44,10 @@ use daw::standalone::audio_engine::DuplexAudioEngine;
 use daw::standalone::metering::Meters;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::transport_engine::{PlayStateRepr, TransportShared};
-use daw::standalone::Standalone;
-#[cfg(not(target_arch = "wasm32"))]
-use daw_audio_io::duplex::EngineStats;
 #[cfg(not(target_arch = "wasm32"))]
 use daw_audio_io::AudioIoPrefs;
+#[cfg(not(target_arch = "wasm32"))]
+use daw_audio_io::duplex::EngineStats;
 
 pub mod gestures;
 pub mod lock;

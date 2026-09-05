@@ -9,7 +9,7 @@
 //!   - Quick density buildup (diffused surfaces)
 
 use crate::algorithm::{
-    decay_to_t60, t60_shelf_targets, AlgorithmParams, ReverbAlgorithm, ROOM_STUDIO_T60,
+    AlgorithmParams, ROOM_STUDIO_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets,
 };
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};

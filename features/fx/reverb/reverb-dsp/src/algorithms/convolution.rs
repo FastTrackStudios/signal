@@ -46,9 +46,9 @@ use audiocore_dsp::smoothing::ParamSmoother;
 use crate::algorithm::{
     AlgorithmParams, ConvolutionModParams, ImpulseParams, IrSlot, ReverbAlgorithm,
 };
-use crate::ir::prepared::{IrTrash, PreparedIr, PreparedIrPair, BLOCK, FFT_LEN, SPECTRUM_LEN};
-use crate::ir::transforms::IrTransforms;
 use crate::ir::IrAsset;
+use crate::ir::prepared::{BLOCK, FFT_LEN, IrTrash, PreparedIr, PreparedIrPair, SPECTRUM_LEN};
+use crate::ir::transforms::IrTransforms;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::modulated_delay::ModulatedDelay;
 use crate::primitives::one_pole::Lp1;

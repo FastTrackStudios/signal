@@ -4,11 +4,11 @@
 //! tag extraction from entity names and hierarchical browsing queries.
 
 use super::{
-    infer_tags_from_name, BlockRepo, BrowserEntityKind, BrowserEntry, BrowserHit, BrowserIndex,
+    ALL_BLOCK_TYPES, BlockRepo, BrowserEntityKind, BrowserEntry, BrowserHit, BrowserIndex,
     BrowserNodeId, BrowserQuery, BrowserService, EngineRepo, EngineService, LayerRepo,
     LayerService, ModuleRepo, ProfileRepo, ProfileService, RackRepo, RigRepo, RigService,
     SceneTemplateRepo, SetlistRepo, SetlistService, SignalLive, SignalServiceError, SongRepo,
-    SongService, StructuredTag, TagCategory, TagSet, TagWeights, ALL_BLOCK_TYPES,
+    SongService, StructuredTag, TagCategory, TagSet, TagWeights, infer_tags_from_name,
 };
 
 fn tags_from_name(name: &str) -> TagSet {

@@ -1512,7 +1512,10 @@ fn layer_btn(selected: bool, active: bool) -> String {
     } else {
         ("#18181b", "#27272a", "#a1a1aa")
     };
-    format!("width:32px; height:32px; border-radius:6px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:13px; font-weight:700; cursor:{};", if active { "pointer" } else { "default" })
+    format!(
+        "width:32px; height:32px; border-radius:6px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:13px; font-weight:700; cursor:{};",
+        if active { "pointer" } else { "default" }
+    )
 }
 
 fn preset_btn(loaded: bool) -> String {
@@ -1521,7 +1524,9 @@ fn preset_btn(loaded: bool) -> String {
     } else {
         ("#111113", "#27272a", "#a1a1aa")
     };
-    format!("display:flex; flex-direction:column; text-align:left; padding:6px 8px; border-radius:6px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:12px; cursor:pointer;")
+    format!(
+        "display:flex; flex-direction:column; text-align:left; padding:6px 8px; border-radius:6px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:12px; cursor:pointer;"
+    )
 }
 
 // ── Mapping (keymap) editor ───────────────────────────────────────────────────
@@ -1921,7 +1926,9 @@ fn sidebar_btn(active: bool) -> String {
     } else {
         ("transparent", "#1c1c1f", "#a1a1aa")
     };
-    format!("display:flex; align-items:center; gap:6px; text-align:left; padding:5px 8px; border-radius:5px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:11px; cursor:pointer;")
+    format!(
+        "display:flex; align-items:center; gap:6px; text-align:left; padding:5px 8px; border-radius:5px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:11px; cursor:pointer;"
+    )
 }
 
 fn src_tab(active: bool) -> String {
@@ -1930,7 +1937,9 @@ fn src_tab(active: bool) -> String {
     } else {
         ("#111113", "#27272a", "#a1a1aa")
     };
-    format!("padding:4px 10px; border-radius:5px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:11px; font-weight:600; cursor:pointer;")
+    format!(
+        "padding:4px 10px; border-radius:5px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:11px; font-weight:600; cursor:pointer;"
+    )
 }
 
 // ── Browse (faceted soundsource-pack browser) ─────────────────────────────────
@@ -2026,12 +2035,16 @@ fn browse_chip(active: bool) -> String {
     } else {
         ("#111113", "#27272a", "#a1a1aa")
     };
-    format!("padding:2px 8px; border-radius:10px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:10px; cursor:pointer; white-space:nowrap;")
+    format!(
+        "padding:2px 8px; border-radius:10px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:10px; cursor:pointer; white-space:nowrap;"
+    )
 }
 
 /// Small metadata badge (instrument / category / vendor) on a list row.
 fn browse_badge(color: &str) -> String {
-    format!("font-size:9px; color:{color}; border:1px solid {color}44; border-radius:3px; padding:0 4px; white-space:nowrap;")
+    format!(
+        "font-size:9px; color:{color}; border:1px solid {color}44; border-radius:3px; padding:0 4px; white-space:nowrap;"
+    )
 }
 
 /// The **Browse** page — search + facet sidebar + scrollable pack list + detail.

@@ -17,8 +17,8 @@
 
 use std::any::Any;
 use std::collections::BTreeMap;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 mod pipewire_capture;
 
@@ -57,12 +57,17 @@ fn main() {
         _capture_stream = start_system_capture(&ui_state)
             .map_err(|e| eprintln!("(cpal capture unavailable: {e} — analyzer idle)"))
             .ok();
-    } else { match pipewire_capture::spawn(&ui_state) { Err(e) => {
-        eprintln!("(pipewire capture setup failed: {e}; trying cpal)");
-        _capture_stream = start_system_capture(&ui_state)
-            .map_err(|e| eprintln!("(cpal capture unavailable: {e} — analyzer idle)"))
-            .ok();
-    } _ => {}}}
+    } else {
+        match pipewire_capture::spawn(&ui_state) {
+            Err(e) => {
+                eprintln!("(pipewire capture setup failed: {e}; trying cpal)");
+                _capture_stream = start_system_capture(&ui_state)
+                    .map_err(|e| eprintln!("(cpal capture unavailable: {e} — analyzer idle)"))
+                    .ok();
+            }
+            _ => {}
+        }
+    }
 
     if animate {
         eprintln!("(demo animations enabled — run without --animate for a static base EQ)");

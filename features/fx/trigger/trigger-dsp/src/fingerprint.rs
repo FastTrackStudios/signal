@@ -16,7 +16,7 @@
 //! hit — kick drums have energy concentrated below 200Hz, snares have
 //! a mid-frequency peak plus high-frequency wire rattle, etc.
 
-use rustfft::{num_complex::Complex, FftPlanner};
+use rustfft::{FftPlanner, num_complex::Complex};
 
 /// Spectral fingerprint for a drum sound.
 #[derive(Clone)]

@@ -86,13 +86,13 @@ pub mod tilt;
 
 pub use bbd_delay::BbdVoice;
 pub use chain::{DelayChain, HeadMode, TapDivision};
-pub use drum_delay::{DrumHead, DrumSpacing, HeadPlayback, GOLDEN_HEADS, SILVER_HEADS};
+pub use drum_delay::{DrumHead, DrumSpacing, GOLDEN_HEADS, HeadPlayback, SILVER_HEADS};
 pub use dual::{DualDelay, DualRouting};
 pub use engine::{DelayEngine, DelayStyle};
 pub use filter_delay::{FilterLfoShape, FilterLocation};
 pub use lofi_delay::LoFiFilterShape;
 pub use modulation::WobbleShape;
-pub use multitap_delay::{FeedbackMode, Tap, TapFilter, TapGrid, TapPreset, MAX_TAPS};
+pub use multitap_delay::{FeedbackMode, MAX_TAPS, Tap, TapFilter, TapGrid, TapPreset};
 pub use oilcan_delay::OilCanHeads;
 pub use pitch_delay::{IceInterval, IceSlice};
 pub use spectral_delay::{DensityMode, GrainDirection, GrainShape};

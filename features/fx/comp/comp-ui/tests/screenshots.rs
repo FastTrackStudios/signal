@@ -27,7 +27,7 @@ use dioxus_test::by_testid;
 #[path = "support/mod.rs"]
 mod support;
 
-use support::{mount_sized, mount_with, Fixture};
+use support::{Fixture, mount_sized, mount_with};
 
 /// Where the PNGs land. `target/gui-shots/comp` by default so they are
 /// gitignored and easy to find; `FTS_SHOTS_DIR` overrides it.

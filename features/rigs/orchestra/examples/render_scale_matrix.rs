@@ -14,10 +14,10 @@
 use std::io::Write as _;
 use std::path::PathBuf;
 
-use signal_orchestra::timing::{mix_click, render_click, CountIn, COUNT_IN_QN};
-use signal_orchestra::{load_strings, CSS_CONFIG, CSS_ROOT};
-use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
+use signal_orchestra::timing::{COUNT_IN_QN, CountIn, mix_click, render_click};
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
 
 const SR: u32 = 48_000;
 const ID: &str = "strings_1v";

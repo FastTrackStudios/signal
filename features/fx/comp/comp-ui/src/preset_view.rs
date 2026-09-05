@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use fts_audio_ui::ParamHandle;
 use preset_browser::PresetBrowser;
 
-use crate::param_map::{core_param_ptr, CORE_PARAM_NAMES};
+use crate::param_map::{CORE_PARAM_NAMES, core_param_ptr};
 use crate::params::CompStageParams;
 use fts_plug_ui::param_adapter::param_handle;
 

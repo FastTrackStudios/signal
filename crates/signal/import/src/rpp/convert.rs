@@ -29,7 +29,7 @@
 //! in [`Report::automated_chains`] so a run cannot quietly leave one behind.
 
 use crate::fabfilter::{ffbs, proc3, proq4};
-use crate::rpp::{chunk, fts_comp, fts_eq, split_fields, unquote, Block, Document, Node};
+use crate::rpp::{Block, Document, Node, chunk, fts_comp, fts_eq, split_fields, unquote};
 
 /// Which `FabFilter` plugin an instance is, and therefore what it becomes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -32,7 +32,7 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use facet::Facet;
-use signal_sampler::engine::cache::{create_signal_pack_with, PackCodec, PackSpecSource};
+use signal_sampler::engine::cache::{PackCodec, PackSpecSource, create_signal_pack_with};
 
 // ── The grouping spec ────────────────────────────────────────────────────────
 

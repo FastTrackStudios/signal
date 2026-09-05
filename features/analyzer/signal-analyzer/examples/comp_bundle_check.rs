@@ -29,13 +29,16 @@ fn home(rest: &str) -> String {
 }
 
 fn open(path: &str) -> Option<HostedPlugin> {
-    match HostedPlugin::load(path) { Ok(Some(mut p)) => {
-        p.prepare(SR, BLOCK as u32).ok()?;
-        Some(p)
-    } _ => {
-        eprintln!("{path}: could not load");
-        None
-    }}
+    match HostedPlugin::load(path) {
+        Ok(Some(mut p)) => {
+            p.prepare(SR, BLOCK as u32).ok()?;
+            Some(p)
+        }
+        _ => {
+            eprintln!("{path}: could not load");
+            None
+        }
+    }
 }
 
 fn render(p: &mut HostedPlugin, l: &[f32], r: &[f32]) -> (Vec<f32>, Vec<f32>) {

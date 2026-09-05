@@ -23,9 +23,9 @@ use signal_proto::defaults::guitar::guitar_rig_template;
 
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::{RigClient, RigEvent, RigStreamClient};
-use signal_guitar_ui::{meter_level, MeterPair, PerformGrid};
+use signal_guitar_ui::{MeterPair, PerformGrid, meter_level};
 
-use crate::components::{block_color, BlockColor, GridSelection, GridSlot};
+use crate::components::{BlockColor, GridSelection, GridSlot, block_color};
 use crate::views::{
     AudioPrefs, AudioSettingsBridge, AudioSettingsModal, LiveBlock, PerformanceModel, RigGridPanel,
 };

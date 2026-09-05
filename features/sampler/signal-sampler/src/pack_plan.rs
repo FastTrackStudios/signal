@@ -312,7 +312,7 @@ fn index_key_for(pack: &SignalPcmPack, file: &Path) -> Option<std::path::PathBuf
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
-    use fts_sample::cache::{create_signal_pack_with, PackCodec, PackSpecSource};
+    use fts_sample::cache::{PackCodec, PackSpecSource, create_signal_pack_with};
 
     /// Write a tiny mono wav so the pack encoder has real audio to pack.
     fn write_wav(path: &Path, frames: usize) {

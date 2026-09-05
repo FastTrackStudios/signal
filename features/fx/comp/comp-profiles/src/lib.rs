@@ -27,7 +27,7 @@ pub use distressor::DistressorProfile;
 pub use fairchild::Fairchild670Profile;
 pub use la2a::La2aProfile;
 pub use manley::ManleyVariMuProfile;
-pub use presets::{all_factory_presets, FactoryPreset, PresetParam, FACTORY_PRESETS};
+pub use presets::{FACTORY_PRESETS, FactoryPreset, PresetParam, all_factory_presets};
 pub use ssl_bus::SslBusProfile;
 pub use urei_1176::Urei1176Profile;
 

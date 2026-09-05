@@ -12,11 +12,11 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
-use eyre::{bail, Context, Result};
+use eyre::{Context, Result, bail};
 
 use crate::engine::cache::{
-    create_signal_pack_with, extract_signal_pack, load_sample, transcode_signal_pack, PackCodec,
-    PackSpecSource, SampleCache, SignalPcmPack,
+    PackCodec, PackSpecSource, SampleCache, SignalPcmPack, create_signal_pack_with,
+    extract_signal_pack, load_sample, transcode_signal_pack,
 };
 use crate::pack_rewrite::{read_embedded_spec, rewrite_embedded_spec};
 use crate::spec::LibrarySpec;

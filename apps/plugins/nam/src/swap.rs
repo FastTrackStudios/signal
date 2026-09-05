@@ -22,7 +22,7 @@
 //! allocates per send, which is the thing being avoided.
 
 use std::path::PathBuf;
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 
 use neural_amp_modeler::NamModel;
 

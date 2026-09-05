@@ -14,18 +14,21 @@ fn parse_mm2_hi_hat_styx() {
     assert_eq!(spec.zones.len(), 3130);
     // Hi-hat has Closed (42) + Open (46) + Pedal (44) zone groups;
     // articulations are subtypes ("Closed Tip" / "Open 1" / "Pedal Chick").
-    assert!(spec
-        .zones
-        .iter()
-        .any(|z| z.key_min == 42 && z.articulation.starts_with("Closed")));
-    assert!(spec
-        .zones
-        .iter()
-        .any(|z| z.key_min == 46 && z.articulation.starts_with("Open")));
-    assert!(spec
-        .zones
-        .iter()
-        .any(|z| z.key_min == 44 && z.articulation.starts_with("Pedal")));
+    assert!(
+        spec.zones
+            .iter()
+            .any(|z| z.key_min == 42 && z.articulation.starts_with("Closed"))
+    );
+    assert!(
+        spec.zones
+            .iter()
+            .any(|z| z.key_min == 46 && z.articulation.starts_with("Open"))
+    );
+    assert!(
+        spec.zones
+            .iter()
+            .any(|z| z.key_min == 44 && z.articulation.starts_with("Pedal"))
+    );
 }
 
 #[test]

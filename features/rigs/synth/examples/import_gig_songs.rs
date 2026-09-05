@@ -27,7 +27,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use signal_synth::gig::{read_presets, read_songs, GigSong};
+use signal_synth::gig::{GigSong, read_presets, read_songs};
 use song::{Arrangement, Part, PartsManifest, Song, TimeSignature};
 use uuid::Uuid;
 

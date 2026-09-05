@@ -23,7 +23,7 @@
 use std::sync::Arc;
 
 use audiocore_core::prelude::Param;
-use comp_profiles::{map_control_value, ParamMapping, Profile, ProfileControl};
+use comp_profiles::{ParamMapping, Profile, ProfileControl, map_control_value};
 use fts_audio_ui::ParamHandle;
 use nice_plug::prelude::ParamPtr;
 use nice_plug_dioxus::prelude::ParamContext;

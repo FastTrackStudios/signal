@@ -18,7 +18,7 @@
 //! For real-time use, the time-axis median filter is causal (one-sided),
 //! adding latency of (`median_width` / 2) * `hop_size` samples.
 
-use rustfft::{num_complex::Complex, FftPlanner};
+use rustfft::{FftPlanner, num_complex::Complex};
 
 /// Real-time harmonic/percussive separator.
 pub struct HpssProcessor {

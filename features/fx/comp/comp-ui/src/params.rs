@@ -6,8 +6,8 @@
 
 use atomic_float::AtomicF32;
 use audiocore_core::prelude::*;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Samples kept in each waveform history ring (one per processed block —
 /// ~2.7 s at 512-sample blocks / 48 kHz).

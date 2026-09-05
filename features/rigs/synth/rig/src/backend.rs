@@ -14,13 +14,13 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
-use architect::{layers, HasDispatcher, Layer, PubSub, Services};
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys::KeysRig;
 use signal_sampler::rig_node::{Container, RigNode, Role};
 use signal_synth::omni_import::{
-    load_patch_file, parse_patch, patch_to_container, OmniPatch, SoundsourceIndex,
+    OmniPatch, SoundsourceIndex, load_patch_file, parse_patch, patch_to_container,
 };
 use signal_synth_proto::synth::{SynthEvent, SynthRig as SynthRigSvc, SynthRigStreamSource};
 use signal_synth_proto::{
@@ -31,8 +31,7 @@ use signal_synth_proto::{
 /// Root of the Omnisphere patch library to browse. Defaults to the factory
 /// **Live Keyboardist** bundle (where the default patch lives); override with
 /// `FTS_OMNISPHERE_PATCHES`.
-const PATCHES_ROOT: &str =
-    "/run/media/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches/Factory/Live Keyboardist";
+const PATCHES_ROOT: &str = "/run/media/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches/Factory/Live Keyboardist";
 
 /// Root of the built `.signalpack` soundsource library the BROWSE view scans —
 /// the same root [`SoundsourceIndex::scan_default`] overlays. Override with
@@ -1161,8 +1160,15 @@ mod tests {
             .expect("Layer A");
         eprintln!(
             "Layer A: src={:?} level={:.2} filter[0]={} {:.0}Hz res={:.2} envd={:.2} | amp {:?} filt {:?} | {} routes",
-            a.source, a.level, a.filters[0].name, a.filters[0].cutoff_hz, a.filters[0].resonance,
-            a.filters[0].env_depth, a.amp_env, a.filter_env, a.routes.len()
+            a.source,
+            a.level,
+            a.filters[0].name,
+            a.filters[0].cutoff_hz,
+            a.filters[0].resonance,
+            a.filters[0].env_depth,
+            a.amp_env,
+            a.filter_env,
+            a.routes.len()
         );
         assert!(a.active, "Layer A active");
         assert!(!a.filters.is_empty(), "Layer A has a filter");
@@ -1209,7 +1215,7 @@ mod tests {
         for n in &c.children {
             match n {
                 RigNode::Block { block } if block.display_name() == name => {
-                    return Some(block.clone())
+                    return Some(block.clone());
                 }
                 RigNode::Container { container } => {
                     if let Some(b) = find_block(container, name) {

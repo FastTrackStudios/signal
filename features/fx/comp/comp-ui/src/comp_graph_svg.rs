@@ -109,11 +109,7 @@ pub fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bo
         .iter()
         .map(|&s| {
             let amp = f64::from(s.clamp(0.0, 1.0));
-            if from_bottom {
-                h - amp * h
-            } else {
-                amp * h
-            }
+            if from_bottom { h - amp * h } else { amp * h }
         })
         .collect();
     let baseline = if from_bottom { h } else { 0.0 };

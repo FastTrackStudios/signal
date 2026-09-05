@@ -25,11 +25,11 @@
 use std::path::PathBuf;
 
 use facet::Facet;
-use signal_rig_host::store::{signal_config_dir, StyxDir};
+use signal_rig_host::store::{StyxDir, signal_config_dir};
 
 use crate::profiles::{
-    default_keymap, default_midi_map, default_setlists, drive_presets, song_library, worship_def,
-    DrivePresetDef, KeyBindingDef, MidiMapDef, ProfileDef, SetlistDef, SongDef,
+    DrivePresetDef, KeyBindingDef, MidiMapDef, ProfileDef, SetlistDef, SongDef, default_keymap,
+    default_midi_map, default_setlists, drive_presets, song_library, worship_def,
 };
 
 /// The library directory (`SIGNAL_RIG_DIR` overrides).

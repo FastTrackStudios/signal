@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
-use architect::{layers, HasDispatcher, Layer, PubSub, Services};
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMonitor, Velocity};
 use signal_drums_proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
 use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
@@ -410,11 +410,7 @@ impl DrumRigBackend {
                 Ok(ids) => {
                     let abs = {
                         let p = PathBuf::from(&engine_path);
-                        if p.is_absolute() {
-                            p
-                        } else {
-                            dir.join(p)
-                        }
+                        if p.is_absolute() { p } else { dir.join(p) }
                     };
                     if let Ok(mut s) = self.inner.state.lock() {
                         s.piece_ids = ids;

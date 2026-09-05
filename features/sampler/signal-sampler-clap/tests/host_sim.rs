@@ -18,10 +18,10 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use signal_sampler::document::{render_schedule, DocumentRenderOptions};
+use signal_sampler::document::{DocumentRenderOptions, render_schedule};
 use signal_sampler::{
-    annotate, BlockTransport, DocNote, PlayMode, RealtimeScheduler, SamplerBank, Schedule,
-    TrackDocument,
+    BlockTransport, DocNote, PlayMode, RealtimeScheduler, SamplerBank, Schedule, TrackDocument,
+    annotate,
 };
 
 const SR: u32 = 48_000;
@@ -62,7 +62,10 @@ fn build_fixture(dir: &Path) -> PathBuf {
                 40.0f64.mul_add(f64::from(rr), 300.0),
                 0.4,
             );
-            let _ = writeln!(zones, "    {{ file {f}, key_min 0, key_max 127, root_key 64, articulation Leg, direction {dirn}, rr_index {rr} }}");
+            let _ = writeln!(
+                zones,
+                "    {{ file {f}, key_min 0, key_max 127, root_key 64, articulation Leg, direction {dirn}, rr_index {rr} }}"
+            );
         }
         let f = format!("stac_{rr}.wav");
         write_sine_wav(
@@ -71,7 +74,10 @@ fn build_fixture(dir: &Path) -> PathBuf {
             60.0f64.mul_add(f64::from(rr), 500.0),
             0.4,
         );
-        let _ = writeln!(zones, "    {{ file {f}, key_min 0, key_max 127, root_key 60, articulation Stac, rr_index {rr} }}");
+        let _ = writeln!(
+            zones,
+            "    {{ file {f}, key_min 0, key_max 127, root_key 60, articulation Stac, rr_index {rr} }}"
+        );
     }
     let styx = format!(
         r#"

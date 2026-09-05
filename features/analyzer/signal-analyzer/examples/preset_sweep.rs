@@ -227,43 +227,45 @@ fn main() {
             let save_dir = save_dir.clone();
             let reference_cache = reference_cache.clone();
             let target_error = target_error.clone();
-            scope.spawn(move || loop {
-                let next = { queue.lock().unwrap().next() };
-                let Some(preset) = next else { break };
-                let outcome = run_one(
-                    &binary,
-                    plugin.as_deref(),
-                    &preset,
-                    save_dir.as_deref(),
-                    reference_cache.as_deref(),
-                    target_error.as_deref(),
-                );
-                done.fetch_add(1, Ordering::Relaxed);
-                // Print as they land so a long sweep shows progress.
-                if tsv {
-                    println!(
-                        "{}\t{}\t{}\t{:.1}",
-                        outcome.name,
-                        if outcome.passed { "pass" } else { "fail" },
-                        outcome.error.map_or_else(
-                            || outcome.note.clone().unwrap_or_default(),
-                            |e| format!("{e:.4}")
-                        ),
-                        outcome.seconds
+            scope.spawn(move || {
+                loop {
+                    let next = { queue.lock().unwrap().next() };
+                    let Some(preset) = next else { break };
+                    let outcome = run_one(
+                        &binary,
+                        plugin.as_deref(),
+                        &preset,
+                        save_dir.as_deref(),
+                        reference_cache.as_deref(),
+                        target_error.as_deref(),
                     );
-                } else {
-                    println!(
-                        "  {:<44} {:<5} {:<9} {:>5.1}s",
-                        outcome.name.chars().take(44).collect::<String>(),
-                        if outcome.passed { "pass" } else { "FAIL" },
-                        outcome.error.map_or_else(
-                            || outcome.note.clone().unwrap_or_default(),
-                            |e| format!("{e:.3}")
-                        ),
-                        outcome.seconds
-                    );
+                    done.fetch_add(1, Ordering::Relaxed);
+                    // Print as they land so a long sweep shows progress.
+                    if tsv {
+                        println!(
+                            "{}\t{}\t{}\t{:.1}",
+                            outcome.name,
+                            if outcome.passed { "pass" } else { "fail" },
+                            outcome.error.map_or_else(
+                                || outcome.note.clone().unwrap_or_default(),
+                                |e| format!("{e:.4}")
+                            ),
+                            outcome.seconds
+                        );
+                    } else {
+                        println!(
+                            "  {:<44} {:<5} {:<9} {:>5.1}s",
+                            outcome.name.chars().take(44).collect::<String>(),
+                            if outcome.passed { "pass" } else { "FAIL" },
+                            outcome.error.map_or_else(
+                                || outcome.note.clone().unwrap_or_default(),
+                                |e| format!("{e:.3}")
+                            ),
+                            outcome.seconds
+                        );
+                    }
+                    results.lock().unwrap().push(outcome);
                 }
-                results.lock().unwrap().push(outcome);
             });
         }
     });

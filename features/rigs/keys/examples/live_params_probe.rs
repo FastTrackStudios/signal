@@ -13,8 +13,8 @@
 use std::thread::sleep;
 use std::time::Duration;
 
-use signal_keys::proto::keys::KeysRig as Svc;
 use signal_keys::KeysRigBackend;
+use signal_keys::proto::keys::KeysRig as Svc;
 
 fn main() {
     tracing_subscriber::fmt()

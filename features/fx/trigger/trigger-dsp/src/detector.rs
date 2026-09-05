@@ -12,7 +12,7 @@
 use audiocore_dsp::db::{db_to_linear, linear_to_db};
 use audiocore_dsp::envelope::EnvelopeFollower;
 
-use crate::spectral_flux::{FluxMode, SpectralFluxDetector, DEFAULT_FFT_SIZE, DEFAULT_HOP_SIZE};
+use crate::spectral_flux::{DEFAULT_FFT_SIZE, DEFAULT_HOP_SIZE, FluxMode, SpectralFluxDetector};
 
 /// Sidechain detection mode — how the raw input is converted to a level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

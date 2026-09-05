@@ -9,7 +9,7 @@ use sea_orm::{
 };
 use sea_orm::{ConnectionTrait, Schema};
 use signal_proto::{
-    metadata::Metadata, Block, BlockType, Preset, PresetId, Snapshot, SnapshotId, ALL_BLOCK_TYPES,
+    ALL_BLOCK_TYPES, Block, BlockType, Preset, PresetId, Snapshot, SnapshotId, metadata::Metadata,
 };
 
 use crate::entity;
@@ -472,7 +472,7 @@ impl BlockRepo for BlockRepoLive {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use signal_proto::{metadata::Metadata, seed_id, traits::Collection, BlockParameter};
+    use signal_proto::{BlockParameter, metadata::Metadata, seed_id, traits::Collection};
 
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -823,11 +823,13 @@ mod tests {
             loaded.metadata().description.as_deref(),
             Some("preset-desc")
         );
-        assert!(loaded
-            .default_snapshot()
-            .metadata()
-            .tags
-            .contains("snapshot-tag"));
+        assert!(
+            loaded
+                .default_snapshot()
+                .metadata()
+                .tags
+                .contains("snapshot-tag")
+        );
         assert_eq!(
             loaded.default_snapshot().metadata().notes.as_deref(),
             Some("snapshot-notes")

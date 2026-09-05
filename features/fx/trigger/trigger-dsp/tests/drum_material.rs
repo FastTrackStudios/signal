@@ -25,10 +25,10 @@
 )]
 
 use audiocore_dsp::{AudioConfig, Processor};
+use trigger_dsp::TriggerChain;
 use trigger_dsp::detector::{DetectMode, TriggerDetector};
 use trigger_dsp::sampler::{MixMode, Sample};
 use trigger_dsp::velocity::VelocityMapper;
-use trigger_dsp::TriggerChain;
 
 use symphonia::core::audio::{AudioBufferRef, Signal};
 use symphonia::core::codecs::DecoderOptions;

@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use signal_sampler::SamplerRig;
-use signal_space::{analyze, knn, Space, SpaceItem, SPACE_VERSION};
+use signal_space::{SPACE_VERSION, Space, SpaceItem, analyze, knn};
 
 /// The space built under `<library>/Space/pieces.space`.
 pub const PIECE_SPACE: &str = "pieces";

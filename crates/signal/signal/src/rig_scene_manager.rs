@@ -21,8 +21,8 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
 use daw::rpc::{Project, TrackHandle};
-use signal_live::engine::rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
 use signal_live::SignalLive;
+use signal_live::engine::rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
 use signal_proto::rig::{Rig, RigSceneId};
 
 /// How long to wait before muting a demoted scene's rig folder, allowing
@@ -94,18 +94,18 @@ impl RigSceneManager {
         let tracks = project.tracks();
 
         // Find or create the input track
-        let input_track = match tracks.by_name(&input_track_name).await { Ok(Some(t)) => {
-            t
-        } _ => {
-            let t = tracks
-                .add(&input_track_name, None)
-                .await
-                .map_err(|e| RigSceneApplyError::DawError(format!("create input track: {e}")))?;
-            t.set_parent_send(false)
-                .await
-                .map_err(|e| RigSceneApplyError::DawError(format!("disable parent send: {e}")))?;
-            t
-        }};
+        let input_track = match tracks.by_name(&input_track_name).await {
+            Ok(Some(t)) => t,
+            _ => {
+                let t = tracks.add(&input_track_name, None).await.map_err(|e| {
+                    RigSceneApplyError::DawError(format!("create input track: {e}"))
+                })?;
+                t.set_parent_send(false).await.map_err(|e| {
+                    RigSceneApplyError::DawError(format!("disable parent send: {e}"))
+                })?;
+                t
+            }
+        };
 
         // Record-arm + input monitoring
         let _ = input_track.arm().await;

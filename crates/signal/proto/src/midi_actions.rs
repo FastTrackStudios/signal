@@ -24,7 +24,7 @@
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
-use crate::actions::{switch_to_variation_action, NEXT_SONG, PREVIOUS_SONG};
+use crate::actions::{NEXT_SONG, PREVIOUS_SONG, switch_to_variation_action};
 
 // ── Trigger types ─────────────────────────────────────────────────────────────
 

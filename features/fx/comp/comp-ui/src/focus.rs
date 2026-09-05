@@ -8,7 +8,7 @@
 //! learns it through `CompUiState::focused_stage` (an atomic), never through
 //! this signal.
 
-use nice_plug_dioxus::prelude::{try_consume_context, ReadableExt, Signal};
+use nice_plug_dioxus::prelude::{ReadableExt, Signal, try_consume_context};
 
 /// The focused stage, 0-based.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

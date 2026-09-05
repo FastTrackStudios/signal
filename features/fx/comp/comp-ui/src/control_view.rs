@@ -23,16 +23,16 @@
 //! theme + layout primitives from [`architect_ui`]; the section wrappers from
 //! [`crate::sections`].
 
-use architect_ui::prelude::{default_theme_preset, ThemeMode, ThemeProvider, ThemeState};
+use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
 use audiocore_core::prelude::*;
 use fts_audio_ui::prelude::*;
-use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::editor::ResizeHint;
+use nice_plug::editor::dpi::LogicalSize;
 
-use crate::faces::{profile_id_for_index, Face};
+use crate::faces::{Face, profile_id_for_index};
 use crate::param_adapter::param_handle;
 use crate::params::{CompUiState, PROFILE_LABELS};
-use crate::profile_view::{profile_skin, ProfileSkin};
+use crate::profile_view::{ProfileSkin, profile_skin};
 
 /// Width the shell rail takes out of the window, in CSS px.
 ///

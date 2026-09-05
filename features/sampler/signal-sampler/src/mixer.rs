@@ -15,8 +15,8 @@
 //! scratch buffers); this module holds the routing config, the bus + master
 //! accumulators, and the lock-free peak meters.
 
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use signal_plugin_host::HostedPlugin;
 

@@ -306,11 +306,7 @@ impl<S: Stage> Stack<S> {
     fn lane_active(&self, idx: usize) -> bool {
         let any_solo = self.lanes.iter().any(|l| l.solo);
         let lane = &self.lanes[idx];
-        if any_solo {
-            lane.solo
-        } else {
-            !lane.mute
-        }
+        if any_solo { lane.solo } else { !lane.mute }
     }
 
     /// Process one block in place (`fx.stack.process`): every lane gets the

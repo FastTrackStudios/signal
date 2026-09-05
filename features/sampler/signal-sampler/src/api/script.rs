@@ -21,7 +21,7 @@
 use std::collections::HashMap;
 
 use super::model::Legato;
-use super::prim::{ArticulationId, Cc, Note, Seconds, Velocity, U7};
+use super::prim::{ArticulationId, Cc, Note, Seconds, U7, Velocity};
 
 /// A raw MIDI message entering the pipeline.
 #[derive(Clone, Copy, Debug)]

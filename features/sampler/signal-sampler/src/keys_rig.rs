@@ -16,8 +16,8 @@
 use std::sync::Arc;
 
 use daw::service::handle::DawHandle as _;
-use daw::standalone::metering::Meters;
 use daw::standalone::Standalone;
+use daw::standalone::metering::Meters;
 #[cfg(not(target_arch = "wasm32"))]
 use daw_audio_io::AudioIoPrefs;
 use signal_plugin_host::{
@@ -27,9 +27,9 @@ use signal_plugin_host::{
 use signal_rig_host::DuplexRigHost;
 use signal_rig_host::RigProject;
 
+use crate::MidiMonitor;
 use crate::node_render::{GainCells, RenderNode};
 use crate::rig_node::{Container, Role};
-use crate::MidiMonitor;
 
 /// Whether any sampler block in `tree` plays the library at `spec_path` —
 /// the test for "does this lane care that this pack just arrived?" (see
@@ -178,11 +178,7 @@ impl KeysInstrument {
             .retiring
             .as_mut()
             .is_some_and(|r| r.active_voices() == 0);
-        if done {
-            self.retiring.take()
-        } else {
-            None
-        }
+        if done { self.retiring.take() } else { None }
     }
 
     /// Whether a swapped-out tree is still sounding.

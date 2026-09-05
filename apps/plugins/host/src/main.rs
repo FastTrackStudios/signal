@@ -34,7 +34,7 @@ use std::path::PathBuf;
 
 use baseview::{Event, EventStatus, Window, WindowEvent, WindowHandler, WindowOpenOptions};
 use daw_standalone::audio_engine::plugin_host::{
-    gui_api_uses_logical_size, ClapHost, LoadedClapPlugin,
+    ClapHost, LoadedClapPlugin, gui_api_uses_logical_size,
 };
 use raw_window_handle::HasWindowHandle;
 

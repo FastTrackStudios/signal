@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
-use architect::{layers, HasDispatcher, Layer, PubSub, Services};
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
@@ -22,10 +22,10 @@ use signal_keys_proto::{
     KeysMeter, KeysMixer, KeysNode, KeysPackRef, KeysPerform, KeysPreset, KeysStack, KeysStatus,
 };
 
-use crate::profile::{worship_profile, KeysProfile};
+use crate::profile::{KeysProfile, worship_profile};
 use signal_rig_host::mixer::{self as rig_mixer, db_to_linear};
-use signal_sampler::rig_node::{RigNode, Role};
 use signal_sampler::Container;
+use signal_sampler::rig_node::{RigNode, Role};
 
 use crate::KeysRig;
 
@@ -1817,8 +1817,23 @@ impl KeysRigBackend {
         let Some(vals) = self.module_dsp_values(layer, module_idx) else {
             return false;
         };
-        let [cutoff_hz, reso, env_amt, a1, d1, s1, r1, a2, d2, s2, r2, unison, detune, vib_rate, vib_depth] =
-            vals;
+        let [
+            cutoff_hz,
+            reso,
+            env_amt,
+            a1,
+            d1,
+            s1,
+            r1,
+            a2,
+            d2,
+            s2,
+            r2,
+            unison,
+            detune,
+            vib_rate,
+            vib_depth,
+        ] = vals;
         let module = format!("{layer} {}", signal_synth::engine::module_slot(module_idx));
         let Ok(rig) = self.inner.rig.lock() else {
             return false;

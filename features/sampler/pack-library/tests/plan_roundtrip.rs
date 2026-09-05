@@ -9,8 +9,8 @@ use std::io::Write as _;
 use std::time::Duration;
 
 use signal_pack_library::PackLibraryBackend;
-use signal_packs_proto::packs::PackLibraryClient;
 use signal_packs_proto::PackRange;
+use signal_packs_proto::packs::PackLibraryClient;
 use vox::memory_link_pair;
 
 /// Build a tiny zoned `.signalpack` under `root/Proxy/` so the backend
@@ -115,9 +115,10 @@ async fn plan_and_ranges_roundtrip_the_wire() {
     let plan_json = String::from_utf8(json_bytes).expect("plan utf8");
     let plan: Vec<signal_packs_proto::PackSegment> =
         facet_json::from_str(&plan_json).expect("plan json parses");
-    assert!(plan
-        .iter()
-        .any(|s| s.rank == 0 && s.start == 0 && s.len == 64));
+    assert!(
+        plan.iter()
+            .any(|s| s.rank == 0 && s.start == 0 && s.len == 64)
+    );
     let covered: u64 = plan.iter().map(|s| s.len).sum();
     assert_eq!(covered, total, "segments tile the pack exactly once");
 

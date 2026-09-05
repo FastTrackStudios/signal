@@ -24,7 +24,7 @@ use audiocore_core::prelude::*;
 
 use crate::faces::use_face_context;
 use crate::hardware::knob::HardwareKnob;
-use crate::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
+use crate::hardware::panel::{Panel, PanelSlot, Silkscreen, panel_scale};
 use crate::hardware::rack::{RackDesign, RackItem};
 use crate::hardware::switches::{RatioButtons, ToggleSwitch};
 use crate::hardware::vu::{VuMeter, VuMode};

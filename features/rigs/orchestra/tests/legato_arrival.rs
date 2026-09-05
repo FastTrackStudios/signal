@@ -25,15 +25,15 @@
 //! and a staccato calibration case.
 
 use signal_orchestra::timing::{
-    pitch_arrival, spectral_flux, timing_corpus, OnsetKind, TimingCase,
+    OnsetKind, TimingCase, pitch_arrival, spectral_flux, timing_corpus,
 };
-use signal_orchestra::{load_strings, CSS_CONFIG, CSS_ROOT};
-use signal_sampler::document::{
-    annotate, qn_to_frame, DocEvent, DocumentRenderOptions, MarkerKind,
-};
-use signal_sampler::spec::LibrarySpec;
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
 use signal_sampler::PlayerPatch;
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{
+    DocEvent, DocumentRenderOptions, MarkerKind, annotate, qn_to_frame,
+};
+use signal_sampler::spec::LibrarySpec;
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
@@ -558,7 +558,11 @@ fn rendered_arrivals_land_on_grid_with_css() {
                         "   qn {:5.2} pitch {:3} Legato: pitch-share detector unresolved ({}) — skipped (deterministic arrival exact)",
                         exp.qn,
                         exp.pitch,
-                        if octave { "octave confound" } else { "chained fast join" }
+                        if octave {
+                            "octave confound"
+                        } else {
+                            "chained fast join"
+                        }
                     );
                     prev_pitch = Some(exp.pitch);
                     continue;
@@ -655,10 +659,16 @@ fn rendered_arrivals_land_on_grid_with_css() {
         "fresh-attack leading edges over {} notes: min {:.1} ms, max {:.1} ms; re-bow flux peaks over {}: min {:.1} max {:.1}; engine-arrival worst {} frames",
         edge_errs_ms.len(),
         edge_errs_ms.iter().copied().fold(f64::INFINITY, f64::min),
-        edge_errs_ms.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        edge_errs_ms
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max),
         rebow_errs_ms.len(),
         rebow_errs_ms.iter().copied().fold(f64::INFINITY, f64::min),
-        rebow_errs_ms.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        rebow_errs_ms
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max),
         worst_frames
     );
     // Post-marker gates (per-zone MEASURED `arrival_ms` in the pack,

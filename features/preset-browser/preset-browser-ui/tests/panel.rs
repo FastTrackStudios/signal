@@ -9,7 +9,7 @@
 use std::sync::{Arc, Mutex, OnceLock};
 
 use dioxus::prelude::*;
-use dioxus_test::{by_testid, render, DocumentTester};
+use dioxus_test::{DocumentTester, by_testid, render};
 use preset_browser::{Preset, PresetBrowser};
 
 /// A recorder for what the panel applied.

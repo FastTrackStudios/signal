@@ -5,7 +5,7 @@
 
 use audiocore_dsp::{AudioConfig, Processor};
 
-use crate::engine::{create_voices, ChorusEngine, EffectType, EngineType};
+use crate::engine::{ChorusEngine, EffectType, EngineType, create_voices};
 
 /// Maximum number of voices per channel.
 const MAX_VOICES: usize = 4;

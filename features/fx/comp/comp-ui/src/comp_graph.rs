@@ -32,8 +32,8 @@ use std::sync::atomic::Ordering;
 use audiocore_core::prelude::*;
 
 use crate::comp_graph_svg::{
-    db_to_y, scale_gr_wave, scale_input_wave, smooth_path, transfer_ball, transfer_curve_path,
-    y_to_db, RANGE_DB,
+    RANGE_DB, db_to_y, scale_gr_wave, scale_input_wave, smooth_path, transfer_ball,
+    transfer_curve_path, y_to_db,
 };
 use crate::params::CompUiState;
 
@@ -117,9 +117,11 @@ pub fn CompGraph(
     let frame_tick: Signal<u64> = use_signal(|| 0);
     use_hook(|| {
         let updater = dioxus_core::schedule_update();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_millis(33));
-            updater();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(33));
+                updater();
+            }
         });
     });
     let _ = *frame_tick.read();

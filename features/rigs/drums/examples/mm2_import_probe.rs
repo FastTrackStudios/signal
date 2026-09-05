@@ -83,13 +83,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut installed = 0;
     for fx in kick_strip.fx_slots() {
-        match mm2fx::build_processor(&fx, f64::from(sr)) { Some(plugin) => {
-            rig.install_mixer_plugin(KIT, FxTarget::Channel(kick_ch), plugin)?;
-            println!("  installed {}", fx.fx_type);
-            installed += 1;
-        } _ => {
-            println!("  skipped   {}", fx.fx_type);
-        }}
+        match mm2fx::build_processor(&fx, f64::from(sr)) {
+            Some(plugin) => {
+                rig.install_mixer_plugin(KIT, FxTarget::Channel(kick_ch), plugin)?;
+                println!("  installed {}", fx.fx_type);
+                installed += 1;
+            }
+            _ => {
+                println!("  skipped   {}", fx.fx_type);
+            }
+        }
     }
 
     warm(&rig, &mut buf);

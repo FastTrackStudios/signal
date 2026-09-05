@@ -22,7 +22,7 @@
 use std::path::PathBuf;
 
 use facet::Facet;
-use signal_rig_host::store::{signal_config_dir, StyxDir};
+use signal_rig_host::store::{StyxDir, signal_config_dir};
 
 /// The library directory (`SIGNAL_BASS_DIR` overrides).
 #[must_use]

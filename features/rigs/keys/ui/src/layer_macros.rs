@@ -16,8 +16,8 @@
 use dioxus::prelude::*;
 use signal_keys_proto::{KeysLayerDetail, KeysMacro};
 
-use crate::fader::{fmt_db, Fader};
-use crate::graphs::{module_color, Adsr, ModuleCurve};
+use crate::fader::{Fader, fmt_db};
+use crate::graphs::{Adsr, ModuleCurve, module_color};
 use crate::module_edit::{KnobRow, Panel};
 
 /// Every module as an overlay curve — its envelopes, its filter, its colour.

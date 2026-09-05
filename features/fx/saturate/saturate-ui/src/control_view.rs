@@ -8,12 +8,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use architect_ui::prelude::{default_theme_preset, ThemeMode, ThemeProvider, ThemeState};
+use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
 use dioxus::prelude::*;
 use fts_audio_ui::prelude::*;
 use fts_audio_ui::shell::{PluginShell, RailButton, ShellItem};
-use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::editor::ResizeHint;
+use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::prelude::Param;
 use nice_plug_dioxus::prelude::use_param_context;
 

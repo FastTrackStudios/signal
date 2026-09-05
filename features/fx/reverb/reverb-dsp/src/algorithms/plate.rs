@@ -15,8 +15,8 @@
 //! reference rate, scaled to the actual sample rate.
 
 use crate::algorithm::{
-    dattorro_gain_for_t60, decay_to_t60, AlgorithmParams, ReverbAlgorithm,
-    PLATE_DECAY_APPLICATIONS, PLATE_LOOP_SECONDS, PLATE_T60,
+    AlgorithmParams, PLATE_DECAY_APPLICATIONS, PLATE_LOOP_SECONDS, PLATE_T60, ReverbAlgorithm,
+    dattorro_gain_for_t60, decay_to_t60,
 };
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;

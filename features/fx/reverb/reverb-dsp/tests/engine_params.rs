@@ -19,9 +19,9 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
+use reverb_dsp::AlgorithmType;
 use reverb_dsp::algorithm::{ShimmerFeedbackMode, ShimmerParams};
 use reverb_dsp::chain::ReverbChain;
-use reverb_dsp::AlgorithmType;
 
 use audiocore_dsp::{AudioConfig, Processor};
 
@@ -308,9 +308,9 @@ fn nonlinear_gate_speed_shortens_hold() {
     };
 
     let env_len = 0.5f64.mul_add(1.9, 0.1) * SR; // matches size mapping
-                                                 // Window between the fast hold point (0.5) and the slow one (0.9):
-                                                 // slow (speed 1) is still at full level there, fast (speed 0) has
-                                                 // released.
+    // Window between the fast hold point (0.5) and the slow one (0.9):
+    // slow (speed 1) is still at full level there, fast (speed 0) has
+    // released.
     let w0 = (env_len * 0.62) as usize;
     let w1 = (env_len * 0.85) as usize;
 

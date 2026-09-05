@@ -30,8 +30,8 @@ pub mod profile_view;
 pub use fts_audio_ui::hardware;
 
 pub use profile_view::{
-    profile_skin, ProfileControlGroup, ProfileControlKind, ProfileControlView, ProfileParamWrite,
-    ProfileSkin, ProfileSkinGroup, ProfileView,
+    ProfileControlGroup, ProfileControlKind, ProfileControlView, ProfileParamWrite, ProfileSkin,
+    ProfileSkinGroup, ProfileView, profile_skin,
 };
 
 // ── The Blitz/vello plugin editor ──

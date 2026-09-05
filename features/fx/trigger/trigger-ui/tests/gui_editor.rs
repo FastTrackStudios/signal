@@ -29,9 +29,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use dioxus_test::{
-    by_testid,
+    DocumentTester, by_testid,
     matchers::{contains_substring, inner_html},
-    render, DocumentTester,
+    render,
 };
 
 use trigger_ui::control_view::App;
@@ -199,7 +199,7 @@ mod support {
     }
 }
 
-use support::{mount, ptr_key, Gesture};
+use support::{Gesture, mount, ptr_key};
 
 // ─────────────────────────────────────────────────────────────────────────
 // Tests

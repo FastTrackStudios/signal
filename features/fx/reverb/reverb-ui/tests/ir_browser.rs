@@ -13,7 +13,7 @@ use dioxus_test::by_testid;
 #[path = "support/mod.rs"]
 mod support;
 
-use support::{mount_with, Fixture};
+use support::{Fixture, mount_with};
 
 const fn library_dir() -> &'static str {
     concat!(env!("CARGO_MANIFEST_DIR"), "/tests/irs")

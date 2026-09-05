@@ -29,7 +29,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use signal_analyzer::{compare, decay, generators, DecayFit, Thresholds};
+use signal_analyzer::{DecayFit, Thresholds, compare, decay, generators};
 use signal_fx::NativeReverb;
 use signal_import::valhalla;
 use signal_plugin_host::{HostedPlugin, PluginInstance};
@@ -649,8 +649,8 @@ fn run_comparison(
                             .worst_ratio_error
                             .map_or_else(|| "n/a".into(), |e| format!("{e:.3}"));
                         println!(
-                        "tuned    : target {target:.3} s  round {round}  length {request:.3} s  worst band error {worst}"
-                    );
+                            "tuned    : target {target:.3} s  round {round}  length {request:.3} s  worst band error {worst}"
+                        );
                         if let Some(e) = cmp.worst_ratio_error {
                             if best.as_ref().is_none_or(|(b, _, _)| e < *b) {
                                 best = Some((e, params.clone(), native_ir.clone()));
@@ -728,12 +728,8 @@ fn run_comparison(
                     Some((err, best_params, best_ir)) => {
                         params = best_params;
                         native_ir = best_ir;
-                        let show = |k: &str| {
-                            params
-                                .iter()
-                                .find(|(n, _)| n == k)
-                                .map_or(1.0, |(_, v)| *v)
-                        };
+                        let show =
+                            |k: &str| params.iter().find(|(n, _)| n == k).map_or(1.0, |(_, v)| *v);
                         let curve: Vec<String> = (1..=BAND_PLAN.len())
                             .map(|n| format!("{:.2}", show(&format!("dband{n}_rate"))))
                             .collect();

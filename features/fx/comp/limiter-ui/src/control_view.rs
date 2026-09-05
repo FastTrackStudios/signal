@@ -6,12 +6,12 @@
 
 use audiocore_core::prelude::*;
 use fts_plug_ui::prelude::*;
-use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::editor::ResizeHint;
+use nice_plug::editor::dpi::LogicalSize;
 use nice_plug_dioxus::SharedState;
 use std::sync::atomic::Ordering;
 
-use crate::gr_trace::{GrTrace, GRAPH_H};
+use crate::gr_trace::{GRAPH_H, GrTrace};
 use crate::params::LimiterUiState;
 
 /// Editor size requested from the host on open.

@@ -297,8 +297,8 @@ fn clean_container_name(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use daw::service::fx::tree::{FxContainerChannelConfig, FxNodeId};
     use daw::service::fx::Fx;
+    use daw::service::fx::tree::{FxContainerChannelConfig, FxNodeId};
 
     fn plugin_node(guid: &str, name: &str, plugin_name: &str) -> FxNode {
         FxNode {

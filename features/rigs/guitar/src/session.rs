@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
-use architect::{layers, HasDispatcher, Layer, PubSub, Services};
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use signal_guitar_proto::audio::AudioSettings;
 use signal_guitar_proto::rig::{Rig, RigEvent, RigStreamSource};
 use signal_guitar_proto::{
@@ -24,7 +24,7 @@ use signal_proto::block::BlockType;
 use signal_sampler::{DeviceInfo, GuitarRig, ProfileRig, RigBlock, RigManager};
 
 use crate::library::RigLibrary;
-use crate::profiles::{build_profile, DrivePresetDef, ProfileDef, SetlistDef, SongDef};
+use crate::profiles::{DrivePresetDef, ProfileDef, SetlistDef, SongDef, build_profile};
 
 /// Rig whose audio prefs the settings service reads/writes (persisted to
 /// `<config>/signal/rigs/guitar-rig.styx` by `RigManager`).
@@ -86,7 +86,7 @@ impl Default for MeterPump {
 type SharedRig = Arc<Mutex<Option<ProfileRig>>>;
 
 use signal_rig_host::gestures::{FootswitchAction, FootswitchEngine, FootswitchMap};
-use signal_rig_host::lock::{panic_message, LockExt};
+use signal_rig_host::lock::{LockExt, panic_message};
 
 /// The headless rig session: live audio + profile/footswitch state, shared
 /// behind `Arc`s so service calls can arrive from any thread.

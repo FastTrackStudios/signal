@@ -313,11 +313,7 @@ fn subsonic_ratio(left: &[f64], right: &[f64]) -> f64 {
         .iter()
         .map(realfft::num_complex::Complex::norm_sqr)
         .sum();
-    if total > 0.0 {
-        low / total
-    } else {
-        0.0
-    }
+    if total > 0.0 { low / total } else { 0.0 }
 }
 
 // ---------------------------------------------------------------------------

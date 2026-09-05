@@ -22,7 +22,7 @@ use tokio::sync::{Mutex, RwLock};
 use crate::daw_compat::TrackHandleCompat;
 use daw::rpc::{Project, TrackHandle};
 use daw::service::TrackRef;
-use signal_live::engine::{graph_state_chunks, DawPatchApplier, DawStateChunk, PatchApplyError};
+use signal_live::engine::{DawPatchApplier, DawStateChunk, PatchApplyError, graph_state_chunks};
 use signal_proto::plugin_block::FxRole;
 use signal_proto::resolve::ResolvedGraph;
 
@@ -108,48 +108,50 @@ impl ReaperPatchApplier {
         let input_track_name = format!("Input: {fx_id}");
 
         // Look for existing folder or create it
-        let folder_track = match tracks.by_name(&fx_id).await { Ok(Some(t)) => {
-            t
-        } _ => {
-            let t = tracks
-                .add(&fx_id, None)
-                .await
-                .map_err(|e| PatchApplyError::DawError(format!("create folder track: {e}")))?;
-            t.set_folder_depth(1)
-                .await
-                .map_err(|e| PatchApplyError::DawError(format!("set folder start: {e}")))?;
-            t
-        }};
+        let folder_track = match tracks.by_name(&fx_id).await {
+            Ok(Some(t)) => t,
+            _ => {
+                let t = tracks
+                    .add(&fx_id, None)
+                    .await
+                    .map_err(|e| PatchApplyError::DawError(format!("create folder track: {e}")))?;
+                t.set_folder_depth(1)
+                    .await
+                    .map_err(|e| PatchApplyError::DawError(format!("set folder start: {e}")))?;
+                t
+            }
+        };
 
         // Look for existing input track or create it
-        let input_track = match tracks.by_name(&input_track_name).await { Ok(Some(t)) => {
-            t
-        } _ => {
-            // Make sure folder track has depth +1 (is a folder)
-            folder_track
-                .set_folder_depth(1)
-                .await
-                .map_err(|e| PatchApplyError::DawError(format!("set folder depth: {e}")))?;
+        let input_track = match tracks.by_name(&input_track_name).await {
+            Ok(Some(t)) => t,
+            _ => {
+                // Make sure folder track has depth +1 (is a folder)
+                folder_track
+                    .set_folder_depth(1)
+                    .await
+                    .map_err(|e| PatchApplyError::DawError(format!("set folder depth: {e}")))?;
 
-            // Insert child after the folder track
-            let folder_info = folder_track
-                .info()
-                .await
-                .map_err(|e| PatchApplyError::DawError(format!("folder info: {e}")))?;
-            let input = tracks
-                .add(&input_track_name, Some(folder_info.index + 1))
-                .await
-                .map_err(|e| PatchApplyError::DawError(format!("create input track: {e}")))?;
+                // Insert child after the folder track
+                let folder_info = folder_track
+                    .info()
+                    .await
+                    .map_err(|e| PatchApplyError::DawError(format!("folder info: {e}")))?;
+                let input = tracks
+                    .add(&input_track_name, Some(folder_info.index + 1))
+                    .await
+                    .map_err(|e| PatchApplyError::DawError(format!("create input track: {e}")))?;
 
-            // REAPER automatically sets the child's depth to close the folder
-            // No manual depth management needed!
+                // REAPER automatically sets the child's depth to close the folder
+                // No manual depth management needed!
 
-            // Disable parent send — audio goes through explicit sends, not folder bus
-            input.set_parent_send(false).await.map_err(|e| {
-                PatchApplyError::DawError(format!("disable parent send on input: {e}"))
-            })?;
-            input
-        }};
+                // Disable parent send — audio goes through explicit sends, not folder bus
+                input.set_parent_send(false).await.map_err(|e| {
+                    PatchApplyError::DawError(format!("disable parent send on input: {e}"))
+                })?;
+                input
+            }
+        };
 
         // Recover existing child tracks from a previous session.
         // After a hot-reload the REAPER tracks are still there but our state is empty.

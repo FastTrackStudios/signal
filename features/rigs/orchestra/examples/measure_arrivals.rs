@@ -56,8 +56,8 @@ use std::sync::Mutex;
 
 use signal_orchestra::timing::{pitch_share_curve, spectral_flux};
 use signal_orchestra::{CSS_CONFIG, CSS_ROOT};
-use signal_sampler::spec::{ArticulationKind, LibrarySpec, ZoneSpec};
 use signal_sampler::PlayerPatch;
+use signal_sampler::spec::{ArticulationKind, LibrarySpec, ZoneSpec};
 
 /// Longest plausible arrival (ms) — anything later is a measurement error
 /// (mis-tracked pitch, room-noise flux), not a marker.
@@ -578,17 +578,19 @@ fn main() -> Result<(), String> {
     let next = std::sync::atomic::AtomicUsize::new(0);
     std::thread::scope(|s| {
         for _ in 0..threads.max(1) {
-            s.spawn(|| loop {
-                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                if i >= jobs.len() {
-                    break;
-                }
-                let zi = jobs[i];
-                let m = measure_zone(spec, &spec.zones[zi], &patch.zone_paths[zi]);
-                let mut r = results.lock().unwrap();
-                r.push(m);
-                if r.len().is_multiple_of(2000) {
-                    eprintln!("  {}/{}", r.len(), jobs.len());
+            s.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if i >= jobs.len() {
+                        break;
+                    }
+                    let zi = jobs[i];
+                    let m = measure_zone(spec, &spec.zones[zi], &patch.zone_paths[zi]);
+                    let mut r = results.lock().unwrap();
+                    r.push(m);
+                    if r.len().is_multiple_of(2000) {
+                        eprintln!("  {}/{}", r.len(), jobs.len());
+                    }
                 }
             });
         }

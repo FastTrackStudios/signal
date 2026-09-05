@@ -5,11 +5,11 @@ use sea_orm::{
     EntityTrait, Iden, IdenStatic, Iterable, QueryFilter, QueryOrder, QueryTrait, Schema, Set,
     StatementBuilder,
 };
+use signal_proto::EngineType;
 use signal_proto::engine::{Engine, EngineId, EngineScene, EngineSceneId, LayerSelection};
 use signal_proto::layer::LayerId;
 use signal_proto::metadata::Metadata;
 use signal_proto::overrides::Override;
-use signal_proto::EngineType;
 
 use crate::entity;
 use crate::{DatabaseConnection, StorageError, StorageResult};

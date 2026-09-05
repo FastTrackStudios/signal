@@ -31,7 +31,7 @@ pub struct SignInStatus {
     /// failure, and a UI must not present it as one.
     pub error: String,
     /// How the engine is authorized: `account` when the token is brokered
-    /// by the FastTrackStudio issuer for a linked account, `tone3000` when
+    /// by the `FastTrackStudio` issuer for a linked account, `tone3000` when
     /// this engine holds its own session, empty when neither.
     ///
     /// A UI needs the difference. "Sign in to TONE3000" is the wrong thing

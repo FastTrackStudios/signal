@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod library;
 
-pub use library::{load_directory, LoadError, LoadReport};
+pub use library::{LoadError, LoadReport, load_directory};
 
 /// One preset: a named parameter set, plus what a browser needs to find it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]

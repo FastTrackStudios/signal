@@ -9,7 +9,7 @@
 //! to get the Schroeder energy-decay curve, then fit a line to a segment of it
 //! and extrapolate to −60 dB.
 
-use crate::filters::{octave_bands, OCTAVE_CENTRES_HZ};
+use crate::filters::{OCTAVE_CENTRES_HZ, octave_bands};
 
 /// Which segment of the decay curve the fit uses.
 ///

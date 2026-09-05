@@ -10,8 +10,8 @@
 //! [`PreparedIr`] / [`PreparedIrPair`] are the wire format between the
 //! loader thread and the audio thread.
 
-use realfft::num_complex::Complex;
 use realfft::RealFftPlanner;
+use realfft::num_complex::Complex;
 
 /// Partition size in samples. Sets latency (BLOCK / `sample_rate`) and
 /// per-block FFT size (2 × BLOCK). 512 → ~10.7 ms @ 48 kHz.

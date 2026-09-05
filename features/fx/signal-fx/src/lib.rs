@@ -5386,11 +5386,7 @@ mod transient_tests {
         let input: Vec<f32> = (0..n)
             .map(|i| {
                 let x = (i as f32 * 0.7).sin();
-                if i < sr * 5 / 1000 {
-                    x
-                } else {
-                    x * 0.15
-                }
+                if i < sr * 5 / 1000 { x } else { x * 0.15 }
             })
             .collect();
         let mut out_l = vec![0.0f32; n];

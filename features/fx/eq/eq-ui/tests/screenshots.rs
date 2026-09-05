@@ -20,11 +20,11 @@
 #![cfg(feature = "native")]
 
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use dioxus::prelude::*;
-use dioxus_test::{by_testid, render, DocumentTester};
+use dioxus_test::{DocumentTester, by_testid, render};
 
 use eq_ui::control_view::App;
 use eq_ui::params::{EqUiState, FtsEqParams};

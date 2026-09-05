@@ -843,20 +843,21 @@ impl SampleEngine {
             .performance
             .attack_ms
             .map_or(0, |ms| ms_to_frames(ms, sample_rate));
-        let cache = match patch.pack.clone() { Some(pack) => {
-            SampleCache::with_pack(pack)
-        } _ => {
-            // The prepared-cache dir is a native (on-disk) concept —
-            // `engine-native` only. Wasm patches always carry a pack.
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                SampleCache::with_prepared(patch.prepared_cache_dir.as_deref())
+        let cache = match patch.pack.clone() {
+            Some(pack) => SampleCache::with_pack(pack),
+            _ => {
+                // The prepared-cache dir is a native (on-disk) concept —
+                // `engine-native` only. Wasm patches always carry a pack.
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    SampleCache::with_prepared(patch.prepared_cache_dir.as_deref())
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    SampleCache::new()
+                }
             }
-            #[cfg(target_arch = "wasm32")]
-            {
-                SampleCache::new()
-            }
-        }};
+        };
 
         let mic_ids: Vec<String> = patch.spec.mics.iter().map(|m| m.id.clone()).collect();
 

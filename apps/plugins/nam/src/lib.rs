@@ -20,7 +20,7 @@
 //! track). Scratch buffers are preallocated to the host's max buffer size in
 //! `initialize()`; `process()` never allocates.
 //!
-use audiocore_core::prelude::{create_dioxus_editor_with_state, DioxusState};
+use audiocore_core::prelude::{DioxusState, create_dioxus_editor_with_state};
 use nice_plug::prelude::*;
 use std::sync::Arc;
 
@@ -197,7 +197,9 @@ impl Plugin for FtsNam {
                     Some(model)
                 }
                 Err(e) => {
-                    eprintln!("[{PLUGIN_NAME}] failed to load NAM model {path:?}: {e} — passing audio through dry");
+                    eprintln!(
+                        "[{PLUGIN_NAME}] failed to load NAM model {path:?}: {e} — passing audio through dry"
+                    );
                     None
                 }
             }

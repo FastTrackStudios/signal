@@ -38,8 +38,8 @@
 )]
 
 use audiocore_dsp::{AudioConfig, Processor};
-use reverb_dsp::chain::ReverbChain;
 use reverb_dsp::AlgorithmType;
+use reverb_dsp::chain::ReverbChain;
 
 const SR: f64 = 48_000.0;
 

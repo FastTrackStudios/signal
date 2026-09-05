@@ -38,9 +38,9 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 #[cfg(not(target_arch = "wasm32"))]
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use signal_proto::block::{BlockCategory, BlockType};
 
@@ -49,9 +49,9 @@ use facet::Facet;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::service::{FxChainContext, FxChains, FxParams, ProjectContext, TrackRef, Tracks};
 #[cfg(not(target_arch = "wasm32"))]
-use daw::standalone::metering::{linear_to_db, Meters};
-#[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::Standalone;
+#[cfg(not(target_arch = "wasm32"))]
+use daw::standalone::metering::{Meters, linear_to_db};
 #[cfg(not(target_arch = "wasm32"))]
 use daw_audio_io::duplex::EngineStats;
 // The shared daw-backed host: project seeding, track/FX-slot reservation, the

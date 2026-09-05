@@ -694,11 +694,7 @@ impl PresetRuntime {
                 })
                 .collect();
             let m = crate::mixer::DrumMixer::build(&engine_mics, sample_rate);
-            if m.is_empty() {
-                None
-            } else {
-                Some(m)
-            }
+            if m.is_empty() { None } else { Some(m) }
         };
 
         Ok(Self {

@@ -142,10 +142,10 @@ fn proq_state(
     };
     p[13] = 50.0; // Attack %
     p[14] = 50.0; // Release %
-                  // Instance-wide globals. Pro-Q 4 adds Character (0 Clean, 1 Subtle,
-                  // 2 Warm — "vintage non-linearities") and keeps Pro-Q 3's Processing Mode
-                  // (0 zero latency, 1 Natural Phase, 2 linear phase). Neither had ever been
-                  // measured here, and 26 and 29 of the 171 factory presets set them.
+    // Instance-wide globals. Pro-Q 4 adds Character (0 Clean, 1 Subtle,
+    // 2 Warm — "vintage non-linearities") and keeps Pro-Q 3's Processing Mode
+    // (0 zero latency, 1 Natural Phase, 2 linear phase). Neither had ever been
+    // measured here, and 26 and 29 of the 171 factory presets set them.
     p[552] = num("--mode", 0.0) as f32;
     p[554] = num("--character", 0.0) as f32;
     // Output Level is NOT stored in dB — see the mapping measured with this.

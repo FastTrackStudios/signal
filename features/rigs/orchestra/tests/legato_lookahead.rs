@@ -15,9 +15,9 @@
 //! Gated on the CSS library + config being present (same pattern as
 //! `score_to_audio.rs`).
 
-use signal_orchestra::{load_strings, CSS_CONFIG, CSS_ROOT};
-use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TrackDocument};
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TrackDocument};
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;

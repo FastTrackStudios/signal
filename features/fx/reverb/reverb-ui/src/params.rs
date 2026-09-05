@@ -8,8 +8,8 @@
 //! reverb.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use atomic_float::AtomicF32;
 use crossbeam_channel::Sender;

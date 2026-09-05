@@ -4,8 +4,8 @@
 //! frequency response visualization, and per-band filter type selection.
 
 use audiocore_core::prelude::*;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use spectrum_analyzer::dsp::AudioFeed;
 

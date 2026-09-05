@@ -1530,7 +1530,7 @@ mod decay_eq_filter_probe {
 
 #[cfg(test)]
 mod decay_eq_localization {
-    use crate::algorithm::{DecayBand, DECAY_BANDS};
+    use crate::algorithm::{DECAY_BANDS, DecayBand};
     use crate::primitives::fdn::{Fdn, MixMatrix};
 
     const SR: f64 = 48_000.0;

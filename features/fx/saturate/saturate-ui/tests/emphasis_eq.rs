@@ -11,7 +11,7 @@ use dioxus_test::by_testid;
 #[path = "support/mod.rs"]
 mod support;
 
-use support::{mount, Fixture};
+use support::{Fixture, mount};
 
 /// Click the emphasis toggle on the rail.
 async fn open_eq(fx: &mut Fixture) {
@@ -35,11 +35,12 @@ async fn open_eq(fx: &mut Fixture) {
 async fn the_eq_strip_opens_below_the_panel() -> dioxus_test::Result<()> {
     let mut fx = mount();
     // Closed by default; the panel is up.
-    assert!(fx
-        .tester
-        .query(by_testid("emphasis-view"))
-        .immediately()
-        .is_err());
+    assert!(
+        fx.tester
+            .query(by_testid("emphasis-view"))
+            .immediately()
+            .is_err()
+    );
     let panel = fx.tester.query(by_testid("hardware-panel")).immediately()?;
     let (_, panel_h_before) = panel.size();
 

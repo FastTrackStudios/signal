@@ -71,8 +71,8 @@
 //! sample-exactly, gains 0.800/0.397/0.243 against a truth of 0.8/0.4/0.267,
 //! and both onsets of an overlapping pair found to the sample.
 
-use realfft::num_complex::Complex32;
 use realfft::RealFftPlanner;
+use realfft::num_complex::Complex32;
 
 /// A fitted explanation of one reference window by one candidate group.
 #[derive(Debug, Clone)]
@@ -185,11 +185,7 @@ fn solve(mut g: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
     for col in 0..n {
         let (piv, mag) = (col..n).fold((col, 0.0), |acc, r| {
             let m = g[r][col].abs();
-            if m > acc.1 {
-                (r, m)
-            } else {
-                acc
-            }
+            if m > acc.1 { (r, m) } else { acc }
         });
         if mag < 1e-12 {
             return None;

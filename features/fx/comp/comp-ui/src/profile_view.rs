@@ -3,7 +3,7 @@
 //! This is a generic renderer that takes a `Profile` definition and creates
 //! appropriate UI controls for each `ProfileControl` entry.
 
-use comp_profiles::{map_control_value, ParamMapping, Profile};
+use comp_profiles::{ParamMapping, Profile, map_control_value};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ProfileSkin {
@@ -345,7 +345,7 @@ fn lerp(min: f64, max: f64, normalized: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use comp_profiles::{all_profiles, LA2A, SSL_BUS, UREI_1176};
+    use comp_profiles::{LA2A, SSL_BUS, UREI_1176, all_profiles};
 
     const SKIN_CONTROL_PARAMS: &[&str] = &[
         "threshold_db",

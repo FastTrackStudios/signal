@@ -18,11 +18,11 @@
 //! them without a circular dep.
 
 use nice_plug::prelude::*;
-use nice_plug_dioxus::{create_dioxus_editor_with_state, DioxusState};
-use std::sync::atomic::Ordering;
+use nice_plug_dioxus::{DioxusState, create_dioxus_editor_with_state};
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
-use comp::limiter::{sin_clip, GoldenClip};
+use comp::limiter::{GoldenClip, sin_clip};
 use limiter_ui::params::{LimiterParams, LimiterUiState};
 
 const PLUGIN_NAME: &str = "FTS Limiter";

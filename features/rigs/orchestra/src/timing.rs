@@ -23,8 +23,8 @@
 //! 3. **Ears** — the same tempo map drives a session-guide click render
 //!    mixed over the music, so the owner can HEAR the grid.
 
-use signal_sampler::document::{qn_to_sec, DocCc, DocNote, TempoPoint, TrackDocument};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{DocCc, DocNote, TempoPoint, TrackDocument, qn_to_sec};
 
 // ── Tempo-map helpers ────────────────────────────────────────────────────────
 

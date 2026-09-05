@@ -13,7 +13,7 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-use dioxus_test::{by_testid, render, DocumentTester};
+use dioxus_test::{DocumentTester, by_testid, render};
 
 use reverb_ui::control_view::{App, ReverbUi};
 use reverb_ui::params::{ReverbParams, ReverbUiState};

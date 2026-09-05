@@ -32,7 +32,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 
-use signal_sampler::engine::cache::{create_signal_pack_with, PackCodec, PackSpecSource};
+use signal_sampler::engine::cache::{PackCodec, PackSpecSource, create_signal_pack_with};
 use signal_sampler::styx_edit::{entry_field, find_list_block, scan, split_entries};
 
 /// Replace a top-level list block's entries with `kept` (verbatim entry texts).

@@ -32,7 +32,7 @@ mod style;
 
 pub use art::ToneArt;
 pub use detail::ToneDetail;
-pub use state::{use_tone3000_state, Tone3000State, UrlOpener};
+pub use state::{Tone3000State, UrlOpener, use_tone3000_state};
 
 use dioxus::prelude::*;
 use signal_tone3000_proto::tone3000::Tone3000Client;

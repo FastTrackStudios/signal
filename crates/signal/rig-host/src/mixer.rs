@@ -48,11 +48,7 @@ pub fn lane_gain(lane: &LaneMix, group_muted: bool, any_solo: bool) -> f32 {
 /// unmuted, silence when muted.
 #[must_use]
 pub fn group_gain(gain_db: f32, muted: bool) -> f32 {
-    if muted {
-        0.0
-    } else {
-        db_to_linear(gain_db)
-    }
+    if muted { 0.0 } else { db_to_linear(gain_db) }
 }
 
 #[cfg(test)]

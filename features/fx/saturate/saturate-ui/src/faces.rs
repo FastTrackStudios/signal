@@ -12,9 +12,9 @@
 //! watch a tube's curve lean as you move its bias in a way no number shows.
 
 use dioxus::prelude::*;
+use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
-use fts_audio_ui::ParamHandle;
 use std::fmt::Write;
 
 /// Panel drawing size — 2U, like the compressor's faces.

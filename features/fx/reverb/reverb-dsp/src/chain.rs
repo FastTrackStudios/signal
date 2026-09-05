@@ -2078,7 +2078,7 @@ mod tests {
 
     #[test]
     fn a_decay_shelf_localizes_through_the_whole_chain() {
-        use crate::algorithm::{DecayBand, DECAY_BANDS};
+        use crate::algorithm::{DECAY_BANDS, DecayBand};
         let flat = [DecayBand::default(); DECAY_BANDS];
         let mut cut = flat;
         cut[0] = DecayBand {

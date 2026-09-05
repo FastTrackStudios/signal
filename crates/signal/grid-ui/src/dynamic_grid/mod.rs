@@ -24,7 +24,7 @@ use uuid::Uuid;
 pub use types::GridSlot;
 
 pub use interaction::{
-    GridConnection, GridContextMenuEvent, GridSelection, GRID_CONNECTIONS, PICKER_CELL,
+    GRID_CONNECTIONS, GridConnection, GridContextMenuEvent, GridSelection, PICKER_CELL,
     PICKER_CLICK_POS,
 };
 use interaction::{GridDragState, GridWireDraft, GroupDragState, GroupDropTarget, InteractionMode};

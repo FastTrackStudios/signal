@@ -15,7 +15,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_import::rpp::{convert, Document};
+use signal_import::rpp::{Document, convert};
 
 mod verify;
 

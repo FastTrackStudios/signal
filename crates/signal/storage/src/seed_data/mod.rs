@@ -12,8 +12,8 @@ pub mod catalog_import;
 pub mod fxchains_scan;
 
 use signal_proto::{
-    engine::Engine, layer::Layer, profile::Profile, rig::Rig, setlist::Setlist, song::Song,
-    ModulePreset, Preset,
+    ModulePreset, Preset, engine::Engine, layer::Layer, profile::Profile, rig::Rig,
+    setlist::Setlist, song::Song,
 };
 
 #[derive(Debug, Clone)]

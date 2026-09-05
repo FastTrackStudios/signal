@@ -9,9 +9,9 @@
 
 use dioxus::prelude::*;
 
+use signal_guitar_proto::AudioPrefs;
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::RigClient;
-use signal_guitar_proto::AudioPrefs;
 
 use crate::perform::PerformGrid;
 use crate::settings::{AudioSettingsBridge, AudioSettingsModal};

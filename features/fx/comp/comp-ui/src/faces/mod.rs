@@ -18,8 +18,8 @@ use std::sync::Arc;
 
 use audiocore_core::prelude::*;
 use comp_profiles::Profile;
-use fts_audio_ui::shell::ShellItem;
 use fts_audio_ui::ParamHandle;
+use fts_audio_ui::shell::ShellItem;
 use nice_plug_dioxus::prelude::ParamContext;
 
 use crate::params::CompUiState;

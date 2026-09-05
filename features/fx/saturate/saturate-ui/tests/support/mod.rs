@@ -13,7 +13,7 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-use dioxus_test::{by_testid, render, DocumentTester};
+use dioxus_test::{DocumentTester, by_testid, render};
 
 use saturate_ui::control_view::{App, SatUi};
 use saturate_ui::params::{SatParams, SatUiState};

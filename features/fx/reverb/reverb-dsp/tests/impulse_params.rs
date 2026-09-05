@@ -17,11 +17,11 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
+use reverb_dsp::AlgorithmType;
 use reverb_dsp::algorithm::{ImpulseDirection, ImpulseParams, ImpulseTail, ReverbAlgorithm};
 use reverb_dsp::algorithms::convolution::Convolution;
 use reverb_dsp::chain::ReverbChain;
 use reverb_dsp::ir::ImpulseReshaper;
-use reverb_dsp::AlgorithmType;
 
 use audiocore_dsp::{AudioConfig, Processor};
 

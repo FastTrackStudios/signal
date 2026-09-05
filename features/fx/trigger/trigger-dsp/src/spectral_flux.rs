@@ -25,7 +25,7 @@
 //!   Sensitive to quiet onsets in loud contexts.
 //!   Reference: Bello et al. (2005)
 
-use rustfft::{num_complex::Complex, FftPlanner};
+use rustfft::{FftPlanner, num_complex::Complex};
 
 /// Onset detection function selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -315,11 +315,7 @@ impl SpectralFluxDetector {
         self.prev_magnitude[..num_bins].copy_from_slice(&self.magnitude[..num_bins]);
 
         let diff = hfc - prev_hfc;
-        if diff > 0.0 {
-            diff
-        } else {
-            0.0
-        }
+        if diff > 0.0 { diff } else { 0.0 }
     }
 
     /// Complex domain: magnitude + phase prediction error.
@@ -381,11 +377,7 @@ impl SpectralFluxDetector {
 
         self.prev_magnitude[..num_bins].copy_from_slice(&self.magnitude[..num_bins]);
 
-        if result > 0.0 {
-            result
-        } else {
-            0.0
-        }
+        if result > 0.0 { result } else { 0.0 }
     }
 
     /// Adaptive peak picking on ODF values.

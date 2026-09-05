@@ -7,8 +7,8 @@ use atomic_float::AtomicF32;
 use audiocore_core::prelude::*;
 use parking_lot::Mutex;
 use spectrum_analyzer::dsp::{Analyzer, AudioFeed};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Process-global source of unique analyzer instance ids (used for cross-instance
 /// spectrum sharing).
@@ -671,7 +671,7 @@ pub struct FtsEqParams {
 // (`eq_graph_model::DB_RANGE_STEPS`) so wasm builds share it; re-exported
 // here because the param layer is its natural address.
 pub use crate::eq_graph_model::{
-    db_range_for_index, db_range_index_containing, DB_RANGE_STEPS, DEFAULT_DB_RANGE,
+    DB_RANGE_STEPS, DEFAULT_DB_RANGE, db_range_for_index, db_range_index_containing,
 };
 
 impl Default for FtsEqParams {

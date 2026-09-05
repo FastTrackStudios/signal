@@ -20,8 +20,8 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::PathBuf;
 
-use signal_sampler::engine::cache::create_signal_pack;
 use signal_sampler::LibrarySpec;
+use signal_sampler::engine::cache::create_signal_pack;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);

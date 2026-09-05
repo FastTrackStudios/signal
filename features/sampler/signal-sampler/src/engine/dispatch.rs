@@ -773,11 +773,7 @@ impl SampleEngine {
                 any = true;
             }
         }
-        if any {
-            hi - lo + 1
-        } else {
-            0
-        }
+        if any { hi - lo + 1 } else { 0 }
     }
 
     /// Find a sustain-pedal-down BODY sibling of `base` in the spec — a full
@@ -911,11 +907,7 @@ impl SampleEngine {
             // release default is -10 dB below the note).
             let strike = {
                 let s = self.note_strike_vel[note as usize];
-                if s > 0 {
-                    s
-                } else {
-                    velocity.max(1)
-                }
+                if s > 0 { s } else { velocity.max(1) }
             };
             let rel_dyn = self.dynamic_for_artic(rel_id, strike);
             // Scale the release STRICTLY to the note body that is still

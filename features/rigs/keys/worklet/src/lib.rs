@@ -47,8 +47,8 @@ mod web {
     use wasm_bindgen::prelude::*;
 
     use daw_standalone::audio_engine::web::WebRenderer;
-    use signal_sampler::keys_rig::LaneProgram;
     use signal_sampler::KeysRig;
+    use signal_sampler::keys_rig::LaneProgram;
 
     use crate::wire_program_from_json;
 

@@ -12,9 +12,9 @@
 //! are the repeats you will hear.
 
 use dioxus::prelude::*;
+use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
-use fts_audio_ui::ParamHandle;
 
 /// Panel drawing size — 2U, like the compressor's faces.
 pub const W: f64 = 960.0;

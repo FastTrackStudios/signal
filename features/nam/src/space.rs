@@ -21,7 +21,7 @@
 use std::path::{Path, PathBuf};
 
 use neural_amp_modeler::NamModel;
-use signal_space::{knn, Space, SpaceItem, SPACE_VERSION};
+use signal_space::{SPACE_VERSION, Space, SpaceItem, knn};
 
 /// The space built under `<nam-root>/Space/nam.space`.
 pub const NAM_SPACE: &str = "nam";
@@ -269,11 +269,7 @@ fn voicing_centroid(p: &NamProbe) -> f32 {
         num += f * w;
         den += w;
     }
-    if den > 0.0 {
-        num / den
-    } else {
-        0.0
-    }
+    if den > 0.0 { num / den } else { 0.0 }
 }
 
 /// Models most similar to `model_path`, best-first.

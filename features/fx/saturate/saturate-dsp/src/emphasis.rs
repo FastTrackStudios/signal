@@ -318,11 +318,7 @@ fn sin64(x: f64) -> f64 {
 
 fn floor64(x: f64) -> f64 {
     let t = x as i64 as f64;
-    if x < t {
-        t - 1.0
-    } else {
-        t
-    }
+    if x < t { t - 1.0 } else { t }
 }
 
 /// 10^x via the crate's exp2: 10^x = 2^(x·log2 10).

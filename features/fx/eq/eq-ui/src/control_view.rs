@@ -11,14 +11,14 @@ use audiocore_core::prelude::*;
 // The concrete `GuiContext` is not in nice-plug's prelude (which carries the
 // `GuiContextInner` trait); upstream's own backends import it directly too.
 use architect_ui::prelude::{
-    default_theme_preset, Button, ButtonSize, ButtonVariant, Card, CardContent, CardHeader,
-    CardTitle, SegmentedControl, SegmentedControlSize, Select, SelectContent, SelectItem, Switch,
-    TabContent, TabList, TabTrigger, Tabs, ThemeMode, ThemeProvider, ThemeState,
+    Button, ButtonSize, ButtonVariant, Card, CardContent, CardHeader, CardTitle, SegmentedControl,
+    SegmentedControlSize, Select, SelectContent, SelectItem, Switch, TabContent, TabList,
+    TabTrigger, Tabs, ThemeMode, ThemeProvider, ThemeState, default_theme_preset,
 };
 use fts_audio_ui::prelude::*;
 use nice_plug::context::gui::GuiContext;
-use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::editor::ResizeHint;
+use nice_plug::editor::dpi::LogicalSize;
 
 use crate::eq_graph::{EqBand, EqBandShape, EqGraph, OverlayChoice};
 

@@ -31,8 +31,8 @@
 //!
 //! Pure data and arithmetic — no GUI, no framework deps.
 
-pub use saturate_dsp::preamp::SideShaper;
 pub use saturate_dsp::SaturationCurve;
+pub use saturate_dsp::preamp::SideShaper;
 
 /// What a circuit's own two knobs are wired to.
 ///
@@ -863,7 +863,7 @@ mod tests {
 
     // ── The mapping ──────────────────────────────────────────────────────
 
-    use saturate_dsp::digital::{DigitalStage, BITS_OFF};
+    use saturate_dsp::digital::{BITS_OFF, DigitalStage};
     use saturate_dsp::preamp::ClassAPreamp;
 
     fn engine(id: &str, controls: Controls) -> (ClassAPreamp, DigitalStage) {

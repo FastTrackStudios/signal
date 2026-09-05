@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-use signal_sampler::engine::cache::{create_signal_pack, PrepareStats};
 use signal_sampler::LibrarySpec;
+use signal_sampler::engine::cache::{PrepareStats, create_signal_pack};
 
 /// Browser tags applied to a built pack.
 #[derive(Debug, Clone, Default)]

@@ -23,10 +23,10 @@
 //! delivered to every node; sources consume note on/off, effects ignore them.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::rig::{build_block, build_sample_source, RigBlock};
+use crate::rig::{RigBlock, build_block, build_sample_source};
 use crate::rig_node::{Combine, Container, RigNode, Role, Zone};
 use crate::soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent, PluginParamInfo};
@@ -151,7 +151,7 @@ pub fn build_node_backend(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn 
 mod modmatrix;
 
 pub use modmatrix::ModEngine;
-use modmatrix::{build_arp, ModCompiler};
+use modmatrix::{ModCompiler, build_arp};
 
 /// A compiled, renderable node mirroring the container tree.
 pub enum RenderNode {

@@ -184,22 +184,24 @@ fn main() {
             let (files, next, done, results) =
                 (files.clone(), next.clone(), done.clone(), results.clone());
             let (plugin, binary, extra) = (plugin.clone(), binary.clone(), extra.clone());
-            scope.spawn(move || loop {
-                let i = next.fetch_add(1, Ordering::SeqCst);
-                let Some(preset) = files.get(i) else { return };
-                let outcome = run_one(&binary, &plugin, preset, &extra);
-                let n = done.fetch_add(1, Ordering::SeqCst) + 1;
-                println!(
-                    "  [{n:>3}/{}] {:<44} {}",
-                    files.len(),
-                    outcome.name,
-                    match (outcome.mean, &outcome.note) {
-                        (_, Some(note)) => note.clone(),
-                        (Some(m), _) => format!("mean {m:>6.2} dB"),
-                        _ => "—".into(),
-                    }
-                );
-                results.lock().unwrap().push(outcome);
+            scope.spawn(move || {
+                loop {
+                    let i = next.fetch_add(1, Ordering::SeqCst);
+                    let Some(preset) = files.get(i) else { return };
+                    let outcome = run_one(&binary, &plugin, preset, &extra);
+                    let n = done.fetch_add(1, Ordering::SeqCst) + 1;
+                    println!(
+                        "  [{n:>3}/{}] {:<44} {}",
+                        files.len(),
+                        outcome.name,
+                        match (outcome.mean, &outcome.note) {
+                            (_, Some(note)) => note.clone(),
+                            (Some(m), _) => format!("mean {m:>6.2} dB"),
+                            _ => "—".into(),
+                        }
+                    );
+                    results.lock().unwrap().push(outcome);
+                }
             });
         }
     });

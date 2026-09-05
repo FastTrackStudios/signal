@@ -25,9 +25,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::{
+    SamplerError,
     midi::{nearest_grid_note, note_name_to_midi},
     spec::LibrarySpec,
-    SamplerError,
 };
 
 // ── Sample key ────────────────────────────────────────────────────────────────

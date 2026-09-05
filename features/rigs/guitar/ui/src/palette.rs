@@ -9,8 +9,8 @@
 
 use dioxus::prelude::*;
 
-use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::PerformanceModel;
+use signal_guitar_proto::rig::RigClient;
 
 /// What an action does when executed.
 #[derive(Clone, PartialEq, Eq)]

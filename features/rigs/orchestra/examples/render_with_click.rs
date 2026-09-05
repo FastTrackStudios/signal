@@ -12,9 +12,9 @@
 use std::path::PathBuf;
 
 use signal_orchestra::timing::{mix_click, render_click};
-use signal_orchestra::{load_strings, render_part_offline, CSS_CONFIG, CSS_ROOT};
-use signal_sampler::document::TempoPoint;
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings, render_part_offline};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::TempoPoint;
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;

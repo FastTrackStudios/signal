@@ -283,11 +283,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match &e.kind {
                         TraceKind::VoiceSpawn(v) => println!(
                             "   spawn kind={} note={} root={} rate={:.4} gain={:.3} artic={} start={} loop={}..{}\n        file={}",
-                            v.voice_kind, v.note, v.root_key, v.rate, v.gain,
+                            v.voice_kind,
+                            v.note,
+                            v.root_key,
+                            v.rate,
+                            v.gain,
                             v.articulation,
-                            v.start_frame, v.loop_start, v.loop_end, v.file
+                            v.start_frame,
+                            v.loop_start,
+                            v.loop_end,
+                            v.file
                         ),
-                        TraceKind::SampleMiss { note, articulation, dynamic, rr, reason } => println!(
+                        TraceKind::SampleMiss {
+                            note,
+                            articulation,
+                            dynamic,
+                            rr,
+                            reason,
+                        } => println!(
                             "   MISS note={note} artic={articulation} dyn={dynamic} rr={rr} reason={reason:?}"
                         ),
                         other => println!("   {other:?}"),

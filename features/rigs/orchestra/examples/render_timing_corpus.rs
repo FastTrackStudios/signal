@@ -21,12 +21,12 @@ use std::io::Write as _;
 use std::path::PathBuf;
 
 use signal_orchestra::timing::{
-    mix_click, pitch_arrival, render_click, render_live_replay, spectral_flux, timing_corpus,
-    CountIn, OnsetKind,
+    CountIn, OnsetKind, mix_click, pitch_arrival, render_click, render_live_replay, spectral_flux,
+    timing_corpus,
 };
-use signal_orchestra::{load_strings, CSS_CONFIG, CSS_ROOT};
-use signal_sampler::document::{qn_to_frame, qn_to_sec, DocumentRenderOptions};
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{DocumentRenderOptions, qn_to_frame, qn_to_sec};
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;

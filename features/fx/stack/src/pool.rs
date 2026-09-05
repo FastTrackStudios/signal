@@ -18,7 +18,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::{Stage, SumMode, FADE_SAMPLES};
+use crate::{FADE_SAMPLES, Stage, SumMode};
 
 /// Per-lane mix controls.
 #[derive(Clone, Copy, Debug)]

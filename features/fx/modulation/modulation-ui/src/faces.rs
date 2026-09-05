@@ -15,9 +15,9 @@
 //! nothing periodic drives it at all.
 
 use dioxus::prelude::*;
+use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
-use fts_audio_ui::ParamHandle;
 use modulation_profiles::Character;
 use std::fmt::Write;
 
@@ -473,7 +473,7 @@ fn ShapeView(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use modulation_profiles::{profile_by_id, Character, CATEGORIES, PROFILES};
+    use modulation_profiles::{CATEGORIES, Character, PROFILES, profile_by_id};
 
     const ALL: [&ModDesign; 5] = [&CHORUS, &FLANGER, &VIBRATO, &TREMOLO, &WAH];
 

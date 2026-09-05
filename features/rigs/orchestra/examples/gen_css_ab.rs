@@ -24,7 +24,7 @@ const GAP: f64 = 2.0; // silence between units (kills tails → clean segmentati
 const LL_LEG: u8 = 2;
 const EX_LEG: u8 = 8;
 const SUS: u8 = 2; // sustain (Nonvib) mode; a single note is a fresh attack
-                   // short articulations
+// short articulations
 const SHORTS: &[(&str, u8)] = &[
     ("Spiccato", 13),
     ("Staccatissimo", 18),
@@ -170,8 +170,8 @@ impl Gen {
         self.row(win, b, cat, desc);
         // A, overlap B (transition), release A, hold B
         self.s.non(self.t, 0.6, a, vel); // will be released by A-off below via non? no—use raw pair
-                                         // redo precisely: A on, B on (overlap), A off, B off
-                                         // (non() already emitted A on+off at 0.6; emit B overlapping)
+        // redo precisely: A on, B on (overlap), A off, B off
+        // (non() already emitted A on+off at 0.6; emit B overlapping)
         self.s.non(self.t + 0.5, hold, b, vel);
         self.t += win + GAP;
     }

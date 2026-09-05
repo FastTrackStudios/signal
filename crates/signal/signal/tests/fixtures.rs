@@ -14,10 +14,10 @@
 
 #![allow(dead_code)]
 
+use signal::Signal;
 use signal::builder::BuiltRig;
 use signal::rig::{RigId, RigSceneId};
 use signal::seed_id;
-use signal::Signal;
 
 // ─── Controller bootstrap ───────────────────────────────────────
 

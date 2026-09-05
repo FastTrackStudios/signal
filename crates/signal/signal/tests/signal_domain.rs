@@ -11,10 +11,10 @@
 mod fixtures;
 
 use signal::{
-    bootstrap_in_memory_controller_async,
+    BlockType, ModuleBlockSource, bootstrap_in_memory_controller_async,
     overrides::{NodePath, Override},
     rig::{EngineSelection, RigScene},
-    seed_id, BlockType, ModuleBlockSource,
+    seed_id,
 };
 
 // ─────────────────────────────────────────────────────────────

@@ -12,7 +12,7 @@
 //! cargo run -p signal-analyzer --example decay_calibration -- --tsv
 //! ```
 
-use signal_analyzer::{decay, generators, DecayFit};
+use signal_analyzer::{DecayFit, decay, generators};
 use signal_fx::NativeReverb;
 use signal_plugin_host::{PluginEvents, PluginInstance};
 

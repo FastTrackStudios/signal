@@ -21,7 +21,7 @@ use dioxus::prelude::*;
 use eq_ui::eq_graph::EqGraph;
 use eq_ui::eq_graph_model::{EqBand, EqBandShape};
 use nice_plug::prelude::{Param, ParamPtr};
-use nice_plug_dioxus::prelude::{use_param_context, ParamContext};
+use nice_plug_dioxus::prelude::{ParamContext, use_param_context};
 
 use crate::params::ReverbParams;
 

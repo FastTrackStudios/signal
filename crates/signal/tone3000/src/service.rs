@@ -18,7 +18,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use architect::{layers, HasDispatcher, Layer, PubSub, Services};
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use futures_util::StreamExt as _;
 use signal_tone3000_proto::tone3000::{Tone3000, Tone3000StreamSource};
 use signal_tone3000_proto::{
@@ -1040,7 +1040,21 @@ fn mime_of(bytes: &[u8]) -> &'static str {
         [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
         [0x89, b'P', b'N', b'G', ..] => "image/png",
         [b'G', b'I', b'F', ..] => "image/gif",
-        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => "image/webp",
+        [
+            b'R',
+            b'I',
+            b'F',
+            b'F',
+            _,
+            _,
+            _,
+            _,
+            b'W',
+            b'E',
+            b'B',
+            b'P',
+            ..,
+        ] => "image/webp",
         _ => "application/octet-stream",
     }
 }

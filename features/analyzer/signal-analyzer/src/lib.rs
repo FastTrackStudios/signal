@@ -76,9 +76,9 @@ pub mod generators;
 pub mod loudness;
 pub mod null;
 
-pub use compare::{compare, Comparison, Criterion, CriterionResult, Thresholds};
+pub use compare::{Comparison, Criterion, CriterionResult, Thresholds, compare};
 pub use decay::{
-    compare_decay, compare_decay_against, reverb_time_best_effort, DecayComparison, DecayFit,
+    DecayComparison, DecayFit, compare_decay, compare_decay_against, reverb_time_best_effort,
 };
-pub use loudness::{compare_loudness, LoudnessComparison};
-pub use null::{align_by_latency, null_test, NullTest};
+pub use loudness::{LoudnessComparison, compare_loudness};
+pub use null::{NullTest, align_by_latency, null_test};

@@ -4,7 +4,7 @@
 //! collections and their snapshot variants.
 
 use super::error::OpsError;
-use crate::{events, SignalApi, SignalController};
+use crate::{SignalApi, SignalController, events};
 use signal_proto::engine::{EngineId, EngineSceneId};
 use signal_proto::layer::{LayerId, LayerSnapshotId};
 use signal_proto::resolve::{

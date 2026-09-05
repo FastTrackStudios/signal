@@ -10,14 +10,14 @@
 //! the Main face.
 
 use audiocore_core::prelude::*;
+use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::button::{LedMeter, PanelButton};
 use fts_audio_ui::hardware::knob::HardwareKnob;
 use fts_audio_ui::hardware::lever::LeverSwitch;
-use fts_audio_ui::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
+use fts_audio_ui::hardware::panel::{Panel, PanelSlot, Silkscreen, panel_scale};
 use fts_audio_ui::hardware::rack::{RackDesign, RackItem};
 use fts_audio_ui::hardware::switches::{RatioButtons, ToggleSwitch};
 use fts_audio_ui::shell::RAIL_W;
-use fts_audio_ui::ParamHandle;
 
 use crate::faces::params_map::control_ptr;
 use crate::param_adapter::param_handle;

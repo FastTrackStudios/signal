@@ -5,7 +5,7 @@
 
 pub use saturate_dsp::emphasis;
 pub use saturate_dsp::preamp;
-pub use saturate_dsp::{digital, SaturationCurve, Saturator};
+pub use saturate_dsp::{SaturationCurve, Saturator, digital};
 
 /// Stereo (or N-channel) saturator: one memoryless [`Saturator`] per channel
 /// sharing one settings set.

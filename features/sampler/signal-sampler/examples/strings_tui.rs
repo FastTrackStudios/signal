@@ -19,16 +19,16 @@
 //! warming — watch the WARM progress bar.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
+use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Gauge, Paragraph};
-use ratatui::Frame;
 use signal_sampler::{MidiEvent, MidiInputHandle, MidiMonitor, MidiSelection, SamplerRig};
 
 const INSTRUMENT_ID: &str = "strings_1v";

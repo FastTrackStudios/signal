@@ -8,7 +8,7 @@
 //! Useful for checking a library loaded correctly, and for working on the
 //! browsing behaviour without opening a plugin.
 
-use preset_browser::{load_directory, PresetBrowser, SortMode};
+use preset_browser::{PresetBrowser, SortMode, load_directory};
 
 fn main() {
     let mut args = std::env::args().skip(1);

@@ -123,10 +123,12 @@ mod tests {
             image_cache: PathBuf::from("/i"),
         };
         assert!(!cfg.is_configured());
-        assert!(Config {
-            publishable_key: "t3k_pub_x".into(),
-            ..cfg
-        }
-        .is_configured());
+        assert!(
+            Config {
+                publishable_key: "t3k_pub_x".into(),
+                ..cfg
+            }
+            .is_configured()
+        );
     }
 }

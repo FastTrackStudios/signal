@@ -12,7 +12,7 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use pitch_dsp::chain::Algorithm;
-use pitch_dsp::unison::{UnisonEngine, MAX_VOICES};
+use pitch_dsp::unison::{MAX_VOICES, UnisonEngine};
 
 const PLUGIN_NAME: &str = "FTS Unison";
 
@@ -216,8 +216,9 @@ impl Plugin for FtsUnison {
 
 impl ClapPlugin for FtsUnison {
     const CLAP_ID: &'static str = "com.fasttrackstudio.unison";
-    const CLAP_DESCRIPTION: Option<&'static str> =
-        Some("Audio-domain unison: 2-8 detuned voices, spread + decorrelation — double-tracking to ensemble");
+    const CLAP_DESCRIPTION: Option<&'static str> = Some(
+        "Audio-domain unison: 2-8 detuned voices, spread + decorrelation — double-tracking to ensemble",
+    );
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[

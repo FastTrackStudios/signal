@@ -335,11 +335,7 @@ fn fail(message: &str) -> ! {
 }
 
 fn blank<'a>(value: &'a str, fallback: &'a str) -> &'a str {
-    if value.is_empty() {
-        fallback
-    } else {
-        value
-    }
+    if value.is_empty() { fallback } else { value }
 }
 
 fn opt(value: &Option<String>) -> &str {
