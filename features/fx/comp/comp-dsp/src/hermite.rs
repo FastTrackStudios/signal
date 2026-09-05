@@ -4,17 +4,47 @@
 //! threshold, and smooths transitions in dB. Older exact-polynomial hypotheses
 //! are kept in the research docs, not in production code.
 //!
-//! History buffer structure (4 doubles per channel):
-//! - `hist[0]`: Most recent smoothed result (becomes hist0 in next sample)
-//! - `hist[1]`: Previous smoothed result (becomes hist1)
-//! - `hist[2]`: Two samples ago (becomes hist2)
-//! - `hist[3]`: Three samples ago (becomes hist3)
+//! History buffer structure (4 doubles per channel), newest first.
+
+use dsp_core::{Channel, PerChannel};
+
+/// Smoothed results kept per channel.
+const DEPTH: usize = 4;
+
+/// The last [`DEPTH`] smoothed results for one channel, newest first.
+///
+/// Destructuring rather than indexing: the array has a fixed size, so the
+/// pattern is irrefutable and there is no bounds check to fail — which is both
+/// the honest shape and the reason nothing here can panic on an audio callback.
+#[derive(Debug, Clone, Copy)]
+struct History([f64; DEPTH]);
+
+impl History {
+    /// Newest to oldest.
+    const fn parts(self) -> (f64, f64, f64, f64) {
+        let [newest, second, third, oldest] = self.0;
+        (newest, second, third, oldest)
+    }
+
+    /// Shift in a new result, dropping the oldest.
+    const fn push(&mut self, value: f64) {
+        let [newest, second, third, _dropped] = self.0;
+        self.0 = [value, newest, second, third];
+    }
+}
+
+impl Default for History {
+    /// Unity, not zero: these are linear gains, and a zeroed history would
+    /// mute the first samples after a reset.
+    fn default() -> Self {
+        Self([1.0; DEPTH])
+    }
+}
 
 /// Hermite cubic smoother with change detection
 #[derive(Clone)]
 pub struct HermiteCubicSmoother {
-    /// Per-channel history: 4 most recent smoothed results [hist0, hist1, hist2, hist3]
-    history: [[f64; 4]; 2],
+    history: PerChannel<History>,
 
     /// Change detection threshold (0.001 = 0.1%)
     change_threshold: f64,
@@ -41,7 +71,7 @@ impl HermiteCubicSmoother {
     #[must_use]
     pub fn new(_hypothesis: StateFuncHypothesis) -> Self {
         Self {
-            history: [[1.0; 4]; 2],
+            history: PerChannel::filled(History::default()),
             change_threshold: 0.001,
         }
     }
@@ -51,24 +81,19 @@ impl HermiteCubicSmoother {
     /// 2. Detect change: threshold = `gr_inst` * 0.001, compare with history
     /// 3. Route: Hermite cubic if change detected, `sqrt(gr_inst)` if steady state
     /// 4. Update history for next sample
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// The log/sqrt arguments the caller used to pass are gone: all four were
+    /// ignored by the body, so computing them per sample was pure cost, and
+    /// carrying them made the signature look like it modelled something.
     pub fn process(
         &mut self,
         gr_inst: f64,
         attack_coeff: f64,
         release_coeff: f64,
-        _log_rel: f64,
-        _log_atk: f64,
-        _sqrt_h0: f64,
-        _sqrt_h1: f64,
-        ch: usize,
+        ch: Channel,
     ) -> f64 {
-        // Step 1: Get 4-sample history for this channel
-        let hist = self.history[ch];
-        let hist0 = hist[0];
-        let hist1 = hist[1];
-        let hist2 = hist[2];
-        let hist3 = hist[3];
+        // Step 1: Get the history for this channel
+        let (hist0, hist1, hist2, hist3) = self.history[ch].parts();
 
         // Step 2: Change detection threshold
         let threshold = gr_inst * self.change_threshold;
@@ -103,12 +128,8 @@ impl HermiteCubicSmoother {
             gr_instant_sqrt
         };
 
-        // Step 5: Shift history and add new result
-        // Next sample: hist[0] (new result), hist[1] (old hist[0]), hist[2] (old hist[1]), hist[3] (old hist[2])
-        self.history[ch][3] = self.history[ch][2];
-        self.history[ch][2] = self.history[ch][1];
-        self.history[ch][1] = self.history[ch][0];
-        self.history[ch][0] = result;
+        // Step 5: shift the history and add the new result
+        self.history[ch].push(result);
 
         result
     }
@@ -125,7 +146,7 @@ impl HermiteCubicSmoother {
     }
 
     pub fn reset(&mut self) {
-        self.history = [[1.0; 4]; 2];
+        self.history.fill(History::default());
     }
 }
 
@@ -142,14 +163,7 @@ mod tests {
         let attack = 0.01_f64;
         let release = 0.05_f64;
 
-        let log_rel = release.ln();
-        let log_atk = attack.ln();
-        let sqrt_h0 = 0.7_f64;
-        let sqrt_h1 = 0.6_f64;
-
-        let result = smoother.process(
-            gr_inst, attack, release, log_rel, log_atk, sqrt_h0, sqrt_h1, 0,
-        );
+        let result = smoother.process(gr_inst, attack, release, Channel::LEFT);
 
         // Should not panic and should produce a valid f64
         assert!(result.is_finite());

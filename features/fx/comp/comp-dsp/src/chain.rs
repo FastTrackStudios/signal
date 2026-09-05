@@ -1,5 +1,7 @@
 //! Compressor chain — wrapper with lookahead delay and sidechain EQ.
 
+use dsp_core::Channel;
+
 use crate::{design_highpass_biquad, design_lowpass_biquad, Biquad, Detector};
 use audiocore_dsp::biquad::{Biquad as EqBiquad, FilterType as EqFilterType};
 use audiocore_dsp::AudioConfig;
@@ -462,7 +464,7 @@ mod tests {
         }
 
         assert!(
-            linked.comp.last_gr_db[1] > 1.0,
+            linked.comp.gain_reduction_db_for(Channel::RIGHT) > 1.0,
             "linked quiet channel should still receive gain reduction"
         );
     }

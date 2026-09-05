@@ -15,6 +15,8 @@
 //!
 //! Bands are summed at the output for final reconstruction.
 
+use dsp_core::Channel;
+
 use crate::biquad::Biquad;
 use crate::biquad::{design_highpass_biquad, design_lowpass_biquad};
 use crate::detector::Detector;
@@ -222,20 +224,13 @@ impl CompressionBand {
         }
 
         // Step 8: Smooth with Hermite cubic
-        let log_rel = self.gain_curve.release_coeff.ln();
-        let log_atk = self.gain_curve.attack_coeff.ln();
-        let sqrt_h0 = gr_instant.sqrt();
-        let sqrt_h1 = (gr_instant * 0.9).sqrt();
-
         let gr_smoothed = self.smoother.process(
             gr_instant,
             self.gain_curve.attack_coeff,
             self.gain_curve.release_coeff,
-            log_rel,
-            log_atk,
-            sqrt_h0,
-            sqrt_h1,
-            channel,
+            // `audiocore_dsp::Biquad::tick` still takes a raw index, so the
+            // usize stays the boundary here and only our own state is typed.
+            Channel::new(channel.min(crate::CHANNELS - 1)),
         );
 
         // Track for metering
@@ -318,9 +313,10 @@ impl MultiBandCompressor {
     /// Bands are summed for final output reconstruction
     pub fn process(&mut self, input: f64, channel: usize) -> f64 {
         // Process through all 3 bands and collect compressed band outputs
-        let band0_output = self.bands[0].process(input, channel);
-        let band1_output = self.bands[1].process(input, channel);
-        let band2_output = self.bands[2].process(input, channel);
+        let [low, mid, high] = &mut self.bands;
+        let band0_output = low.process(input, channel);
+        let band1_output = mid.process(input, channel);
+        let band2_output = high.process(input, channel);
 
         // Combine bands by summing the compressed band-specific audio
         // This proper multiband architecture:
