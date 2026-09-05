@@ -147,6 +147,10 @@ enum EngineInner {
 ///
 /// Shared parameters are stored here and synced to the active inner engine
 /// on `update()`. Style-specific parameters are set via dedicated methods.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "tape head enables and per-style switches, each an independent plugin parameter; grouping them would break every call site"
+)]
 pub struct DelayEngine {
     inner: EngineInner,
     style: DelayStyle,
@@ -552,6 +556,10 @@ impl DelayEngine {
     }
 
     /// Sync parameters to the active engine and update coefficients.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "a flat parameter sync across fourteen style variants — long because there are fourteen, and clearer as one table than as fourteen helpers"
+    )]
     pub fn update(&mut self, sample_rate: f64) {
         // Freeze pins feedback at 1.0 and bypasses the in-loop filters
         // and tilt so held repeats do not decay.

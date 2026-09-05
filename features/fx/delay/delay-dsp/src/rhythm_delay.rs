@@ -107,7 +107,7 @@ impl RhythmDelay {
         let mut output = 0.0;
         let mut last_tap = 0.0;
         for (i, &level) in self.tap_levels.iter().enumerate() {
-            let tap_delay = smooth_delay * num::count_to_f64(i + 1);
+            let tap_delay = smooth_delay * num::count_to_f64(i.saturating_add(1));
             let read_pos = tap_delay.clamp(1.0, max_read);
             let tap_out = self.delay.read_cubic(read_pos);
             output += tap_out * level;

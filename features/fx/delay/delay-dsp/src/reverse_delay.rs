@@ -172,7 +172,8 @@ impl ReverseDelay {
 
         // Two reversed read heads, half a cycle apart.
         let pos_a = self.grain_pos;
-        let pos_b = (self.grain_pos + grain_len).checked_rem(grain_len * 2).unwrap_or(0);
+        let cycle = grain_len.saturating_mul(2);
+        let pos_b = self.grain_pos.saturating_add(grain_len).checked_rem(cycle).unwrap_or(0);
 
         let read_a = self.read_reversed(pos_a, grain_len, mod_off);
         let read_b = self.read_reversed(pos_b, grain_len, mod_off);
@@ -190,7 +191,11 @@ impl ReverseDelay {
         }
 
         // Advance position
-        self.grain_pos = (self.grain_pos + 1).checked_rem(grain_len * 2).unwrap_or(0);
+        self.grain_pos = self
+            .grain_pos
+            .saturating_add(1)
+            .checked_rem(grain_len.saturating_mul(2))
+            .unwrap_or(0);
 
         // Feedback path
         let mut fb = output * self.feedback;
@@ -363,21 +368,32 @@ mod tests {
             d.feedback = 0.0;
             d.smear = smear;
             d.update(SR);
-            let mut w_sum = 0.0;
-            let mut t_sum = 0.0;
-            let mut t2_sum = 0.0;
+            // `weight_sum` / `time_sum` / `time_sq_sum`: the moments of the
+            // smear window. Spelled out rather than `w_sum`/`t_sum`/`t2_sum`
+            // because clippy cannot tell the last two apart, and neither
+            // could a reader skimming.
+            let mut weightime_sum = 0.0;
+            let mut time_sum = 0.0;
+            let mut time_sq_sum = 0.0;
             for i in 0..(48000 / 2) {
                 let input = if i < 24 { 0.9 } else { 0.0 };
                 let out = d.tick(input, 0);
                 let w = out * out;
                 let t = f64::from(i);
-                w_sum += w;
-                t_sum += w * t;
-                t2_sum += w * t * t;
+                weightime_sum += w;
+                time_sum += w * t;
+                time_sq_sum += w * t * t;
             }
-            assert!(w_sum > 0.0, "no wet output");
-            let mean = t_sum / w_sum;
-            ((t2_sum / w_sum) - (mean * mean)).sqrt()
+            assert!(weightime_sum > 0.0, "no wet output");
+            let mean = time_sum / weightime_sum;
+            // Variance as E[X²] − E[X]², then its root. Clippy reads the
+            // `mean * mean` as a mis-typed `time_sq_sum * mean`; the regrouping it
+            // suggests is a different quantity entirely.
+            #[expect(
+                clippy::suspicious_operation_groupings,
+                reason = "the standard variance identity, not a transposed operand"
+            )]
+            ((time_sq_sum / weightime_sum) - (mean * mean)).sqrt()
         };
         let dry_width = run(0.0);
         let wet_width = run(0.9);

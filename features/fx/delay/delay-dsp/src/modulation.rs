@@ -132,10 +132,16 @@ impl Flutter {
         }
 
         let p = self.phase;
-        let lfo = self.amp1 * (p).cos()
-            + self.amp2 * (2.0_f64.mul_add(p, 13.0 * PI / 4.0)).cos()
-            + self.amp3 * (3.0_f64.mul_add(p, -(PI / 10.0))).cos()
-            + self.amp_pinch * (self.pinch_phase + PI / 3.0).cos();
+        let lfo = self.amp_pinch.mul_add(
+            (self.pinch_phase + PI / 3.0).cos(),
+            self.amp3.mul_add(
+                (3.0_f64.mul_add(p, -(PI / 10.0))).cos(),
+                self.amp2.mul_add(
+                    (2.0_f64.mul_add(p, 13.0 * PI / 4.0)).cos(),
+                    self.amp1 * p.cos(),
+                ),
+            ),
+        );
 
         lfo * d2
     }

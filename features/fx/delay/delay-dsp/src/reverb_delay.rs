@@ -131,14 +131,12 @@ impl ReverbDelay {
                 Allpass::new(ms(DIFF_MS[0]), DIFF_G),
                 Allpass::new(ms(DIFF_MS[1]), DIFF_G),
             ],
-            lines: core::array::from_fn(|i| {
-                let len_ms = &LINE_MS[i];
-                DelayLine::new(num::f64_to_index(ms(*len_ms)).saturating_add(64))
+            // `map` over the table rather than `from_fn` with an index into
+            // it: same values, and nothing left for the lint to object to.
+            lines: LINE_MS.map(|len_ms| {
+                DelayLine::new(num::f64_to_index(ms(len_ms)).saturating_add(64))
             }),
-            line_len: core::array::from_fn(|i| {
-                let len_ms = &LINE_MS[i];
-                ms(*len_ms)
-            }),
+            line_len: LINE_MS.map(ms),
             damp: core::array::from_fn(|_| OnePoleLp::new(14000.0, sr)),
             decay_tilt_eq: DecayTilt::new(),
             line_g: 0.7,
@@ -242,8 +240,12 @@ impl ReverbDelay {
             .enumerate() {
             let mut len = *line_len;
             if i == 0 || i == 2 {
-                let m = i / 2;
-                let mod_phase = &mut self.mod_phase[m];
+                let m = i.checked_div(2).unwrap_or(0);
+                let [first_phase, rest_phase @ ..] = &mut self.mod_phase;
+                let mod_phase = m
+                    .checked_sub(1)
+                    .and_then(|k| rest_phase.get_mut(k))
+                    .map_or(first_phase, |slot| slot);
                 *mod_phase += *line_mod_hz / self.sample_rate;
                 if *mod_phase >= 1.0 {
                     *mod_phase -= 1.0;
@@ -254,7 +256,9 @@ impl ReverbDelay {
                     / 1000.0;
             }
             let max = f64::from(u32::try_from(line.len()).unwrap_or(u32::MAX)) - 4.0;
-            outs[i] = line.read_cubic(len.clamp(1.0, max));
+            if let Some(slot) = outs.get_mut(i) {
+                *slot = line.read_cubic(len.clamp(1.0, max));
+            }
         }
 
         // Damping inside the loop (bypassed while infinite).

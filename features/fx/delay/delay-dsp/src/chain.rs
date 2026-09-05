@@ -129,6 +129,10 @@ impl TapDivision {
 /// Signal flow: Input → Swell → `InputLevel` → Diffusion(loop) → Stereo Routing →
 /// Engine → Diffusion(post) → Accent → Duck → `RepeatDyn` → `HighPass` →
 /// LR Offset → Width → Pan → `OutputLevel` → Mix
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is a separate user-facing switch on the plugin panel (freeze, prime numbers, diffusion, ducking, duck gate, repeat dynamics); grouping them into a config struct would break every call site and tell a reader nothing new"
+)]
 pub struct DelayChain {
     // Delay engines
     pub delay_l: DelayEngine,
@@ -516,6 +520,10 @@ impl Processor for DelayChain {
     }
 
     // r[impl delay.chain.process]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one per-sample signal path — input level, diffusion, stereo routing, feel/prime detune, accent and groove, the two engines, ducking, width, pan, mix. Splitting it into helpers would hand each one a dozen live locals and make the order of the chain harder to read, not easier"
+    )]
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
         let n = left.len().min(right.len());
 
@@ -537,9 +545,9 @@ impl Processor for DelayChain {
 
         let stereo_field = self.delay_l.is_stereo_field_style();
 
-        for i in 0..n {
-            let dry_l = left[i];
-            let dry_r = right[i];
+        for (slot_l, slot_r) in left.iter_mut().zip(right.iter_mut()).take(n) {
+            let dry_l = *slot_l;
+            let dry_r = *slot_r;
 
             // --- Smoothed global params ---
             self.mix_smoother.set_target(self.mix);
@@ -806,8 +814,8 @@ impl Processor for DelayChain {
             wet_r *= output_level;
 
             // Mix dry/wet
-            left[i] = dry_l.mul_add(1.0 - mix, wet_l * mix);
-            right[i] = dry_r.mul_add(1.0 - mix, wet_r * mix);
+            *slot_l = dry_l.mul_add(1.0 - mix, wet_l * mix);
+            *slot_r = dry_r.mul_add(1.0 - mix, wet_r * mix);
         }
     }
 }
@@ -1116,6 +1124,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::many_single_char_names,
+        reason = "c/l/r/n are the chain and its stereo buffers — the conventional audio spelling"
+    )]
     fn freeze_holds_energy_and_disengages() {
         let mut c = make_chain();
         c.set_style(DelayStyle::Clean);
@@ -1298,6 +1310,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::many_single_char_names,
+        reason = "c/l/r/n are the chain and its stereo buffers — the conventional audio spelling"
+    )]
     fn duck_gate_kills_recirculation_only_last_note_repeats() {
         // Note A (440 Hz, 20 ms) then note B (2093 Hz, 100–600 ms)
         // covering A's first echo at 300 ms. GATE mutes the regeneration
@@ -1406,6 +1422,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::many_single_char_names,
+        reason = "c/l/r/n are the chain and its stereo buffers — the conventional audio spelling"
+    )]
     fn drum_pan_rotation_emerges_from_feedback_topology() {
         use crate::drum_delay::HeadPlayback;
 
@@ -1494,6 +1514,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::many_single_char_names,
+        reason = "c/l/r/n are the chain and its stereo buffers — the conventional audio spelling"
+    )]
     fn multitap_pans_land_on_their_sides() {
         use crate::multitap_delay::Tap;
 
