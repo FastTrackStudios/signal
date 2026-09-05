@@ -21,8 +21,14 @@ use signal_tone3000_proto::tone3000::Tone3000Client;
 pub struct ArtCache(Signal<HashMap<String, String>>);
 
 /// Provide the memo at the root of the browser.
+///
+/// The signal is created by its own hook before being handed over, for the
+/// same reason as the browser's state: an initializer passed to
+/// `use_context_provider` runs inside the hook machinery and may not call
+/// hooks itself.
 pub fn use_art_cache() -> ArtCache {
-    use_context_provider(|| ArtCache(Signal::new(HashMap::new())))
+    let cache = use_signal(HashMap::<String, String>::new);
+    use_context_provider(|| ArtCache(cache))
 }
 
 /// One tone's picture, or a labelled placeholder when it has none.

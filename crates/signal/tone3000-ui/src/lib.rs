@@ -66,7 +66,14 @@ const GEARS: [(&str, &str); 4] = [
 pub fn ToneBrowser(on_loaded: Callback<(String, String)>) -> Element {
     let client = use_hook(try_consume_context::<Tone3000Client>);
     let opener = use_hook(try_consume_context::<UrlOpener>);
-    let state = use_context_provider(use_tone3000_state);
+    // Run the hook, THEN provide its value. Passing `use_tone3000_state`
+    // straight to `use_context_provider` reads as the same thing and is
+    // not: the initializer runs inside the hook machinery, so the hooks
+    // inside it try to borrow a hook list that is already borrowed. It
+    // panics on first render, in every shell — the plugin host is simply
+    // where it was noticed.
+    let state = use_tone3000_state();
+    use_context_provider(|| state);
     art::use_art_cache();
 
     let mut view = use_signal(|| View::Shelf(ToneShelf::Trending));
