@@ -52,6 +52,8 @@ default = ["signal"]
 signal-guitar = [
     "dep:signal-guitar-proto",
     "dep:signal-guitar-ui",
+    "dep:signal-tone3000-proto",
+    "dep:signal-tone3000-ui",
     # Pack downloads (pack_client.rs) — list + fetch .signalpacks from a
     # pack host (the studio engine / a hosted mirror) over ws or iroh.
     "dep:signal-packs-proto",
@@ -196,6 +198,10 @@ tracing.workspace = true
 
 # Signal domain (the rig)
 signal-guitar-proto = { workspace = true, optional = true }
+# TONE3000: the wire contract and the tone browser. Both wasm-clean, so
+# the browser remote gets the same page the desktop app does.
+signal-tone3000-proto = { workspace = true, optional = true }
+signal-tone3000-ui = { workspace = true, optional = true }
 fts-chrome.workspace = true
 signal-guitar-ui = { workspace = true, optional = true }
 signal-bass-proto = { workspace = true, optional = true }

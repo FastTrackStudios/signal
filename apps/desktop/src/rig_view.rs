@@ -18,6 +18,7 @@ use signal_drums_ui::DrumRigRemote;
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::{RigClient, RigStreamClient};
 use signal_guitar_ui::GuitarRigRemote;
+use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
 use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
 use signal_keys_ui::KeysRigRemote;
 use signal_synth_proto::synth::{SynthRigClient, SynthRigStreamClient};
@@ -74,14 +75,27 @@ impl EngineMode {
     }
 }
 
-/// One connect attempt for all three clients.
-async fn connect_once(
-    target: &EngineTarget,
-) -> Option<(RigClient, RigStreamClient, AudioSettingsClient)> {
+/// Everything the guitar page renders from.
+///
+/// The TONE3000 pair is optional and the rig three are not: an engine
+/// without the tone service is an older engine, and it should still play.
+/// The Tones page renders its disconnected shell in that case.
+type GuitarClients = (
+    RigClient,
+    RigStreamClient,
+    AudioSettingsClient,
+    Option<Tone3000Client>,
+    Option<Tone3000StreamClient>,
+);
+
+/// One connect attempt for every client the page uses.
+async fn connect_once(target: &EngineTarget) -> Option<GuitarClients> {
     let rig: RigClient = establish(target).await?;
     let stream: RigStreamClient = establish(target).await?;
     let settings: AudioSettingsClient = establish(target).await?;
-    Some((rig, stream, settings))
+    let tones: Option<Tone3000Client> = establish(target).await;
+    let tones_stream: Option<Tone3000StreamClient> = establish(target).await;
+    Some((rig, stream, settings, tones, tones_stream))
 }
 
 /// The in-process rig's clients, bootstrapping it on first use.
@@ -91,7 +105,7 @@ async fn connect_once(
 /// a process-wide `OnceLock`, so a reconnect or a remount reuses the running
 /// rig instead of opening the device a second time.
 #[cfg(not(target_arch = "wasm32"))]
-async fn embedded_clients() -> Option<(RigClient, RigStreamClient, AudioSettingsClient)> {
+async fn embedded_clients() -> Option<GuitarClients> {
     if crate::rig_engine::engine().is_none() {
         let started = tokio::task::spawn_blocking(crate::rig_engine::bootstrap_blocking)
             .await
@@ -103,7 +117,50 @@ async fn embedded_clients() -> Option<(RigClient, RigStreamClient, AudioSettings
         }
     }
     let e = crate::rig_engine::engine()?;
-    Some((e.rig.clone(), e.stream.clone(), e.settings.clone()))
+    Some((
+        e.rig.clone(),
+        e.stream.clone(),
+        e.settings.clone(),
+        e.tones.clone(),
+        e.tones_stream.clone(),
+    ))
+}
+
+/// Open a URL in the user's own browser.
+///
+/// The one capability the tone browser cannot supply for itself: the
+/// authorization page is a web application, and every surface here reaches a
+/// browser differently. Native shells hand it to the desktop environment; the
+/// web build is already in a browser and opens a tab.
+fn open_externally(url: String) {
+    if url.is_empty() {
+        return;
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        // A popup blocker may refuse this, but the click that led here is a
+        // user gesture, which is the condition browsers actually check.
+        let open = dioxus::document::eval(
+            r"const url = await dioxus.recv(); window.open(url, '_blank', 'noopener');",
+        );
+        let _ = open.send(url);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        // No `open`/`opener` crate: this is one call per platform, and the
+        // dependency would be larger than the function.
+        let program = if cfg!(target_os = "macos") {
+            "open"
+        } else if cfg!(target_os = "windows") {
+            "explorer"
+        } else {
+            "xdg-open"
+        };
+        match std::process::Command::new(program).arg(&url).spawn() {
+            Ok(_) => tracing::info!(program, "opened a URL in the system browser"),
+            Err(e) => tracing::warn!(program, %e, "could not open the system browser"),
+        }
+    }
 }
 
 // ── Rig picker ──────────────────────────────────────────────────────────────
@@ -310,7 +367,7 @@ fn GuitarRigView() -> Element {
         loop {
             architect::platform::sleep(std::time::Duration::from_millis(1500)).await;
             let current = clients.peek().as_ref().cloned();
-            let Some((g, (rig, _, _))) = current else {
+            let Some((g, (rig, _, _, _, _))) = current else {
                 fails = 0;
                 continue;
             };
@@ -342,10 +399,21 @@ fn GuitarRigView() -> Element {
         document::Style { {SIGNAL_TAILWIND} }
         div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
             match state {
-                Some((rig, stream, settings)) => {
+                Some((rig, stream, settings, tones, tones_stream)) => {
                     let _ = provide_context(rig);
                     let _ = provide_context(stream);
                     let _ = provide_context(settings);
+                    // The Tones page reads these; absent ones leave it in its
+                    // disconnected state rather than failing to mount.
+                    if let Some(tones) = tones {
+                        let _ = provide_context(tones);
+                    }
+                    if let Some(tones_stream) = tones_stream {
+                        let _ = provide_context(tones_stream);
+                    }
+                    // Signing in means handing a page to a real browser —
+                    // this shell's way of doing that.
+                    let _ = provide_context(signal_tone3000_ui::UrlOpener::new(open_externally));
                     rsx! { GuitarRigRemote { key: "{generation}" } }
                 }
                 None => rsx! {

@@ -13713,6 +13713,8 @@ dependencies = [
  "signal-synth-rig",
  "signal-synth-ui",
  "signal-tone3000",
+ "signal-tone3000-proto",
+ "signal-tone3000-ui",
  "tokio",
  "tower-http",
  "tracing",
@@ -13906,6 +13908,7 @@ dependencies = [
  "signal-grid-ui",
  "signal-guitar-proto",
  "signal-proto",
+ "signal-tone3000-ui",
  "signal-widgets",
  "uuid",
 ]

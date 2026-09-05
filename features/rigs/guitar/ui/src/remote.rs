@@ -33,6 +33,10 @@ enum Mode {
     Perform,
     /// Integration layer (DAW sync, external control) — landing here.
     Session,
+    /// The TONE3000 catalog: find a capture, download it, load it as a
+    /// preset. Lives beside the rig rather than behind a file dialog
+    /// because picking an amp is a playing decision, not a filing one.
+    Tones,
 }
 
 /// The remote rig UI. Prop-less: everything arrives via context
@@ -377,6 +381,7 @@ pub fn GuitarRigRemote() -> Element {
                         (Mode::Routing, "Routing"),
                         (Mode::Control, "Control"),
                         (Mode::Session, "Session"),
+                        (Mode::Tones, "Tones"),
                     ] {
                         button {
                             key: "{label}",
@@ -494,6 +499,28 @@ pub fn GuitarRigRemote() -> Element {
                                 style: "flex: 2 1 0%;",
                                 if mode() == Mode::Routing {
                                     crate::grid::RigGraph { blocks: blocks() }
+                                } else if mode() == Mode::Tones {
+                                    // A downloaded model becomes a preset:
+                                    // the browser hands back a name and the
+                                    // path it landed at on the engine, which
+                                    // is exactly what `add_preset` takes.
+                                    {
+                                        let rig = rig.clone();
+                                        rsx! {
+                                            div { class: "h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card",
+                                                signal_tone3000_ui::ToneBrowser {
+                                                    on_loaded: move |(name, path): (String, String)| {
+                                                        let rig = rig.clone();
+                                                        spawn(async move {
+                                                            if let Some(r) = rig {
+                                                                let _ = r.add_preset(name, path).await;
+                                                            }
+                                                        });
+                                                    },
+                                                }
+                                            }
+                                        }
+                                    }
                                 } else if mode() == Mode::Session {
                                     // The session domain's performance view —
                                     // songs, sections, charts + chords — fed

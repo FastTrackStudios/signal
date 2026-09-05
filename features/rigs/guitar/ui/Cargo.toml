@@ -20,6 +20,9 @@ dioxus.workspace = true
 signal-widgets.workspace = true
 lumen-blocks.workspace = true
 signal-guitar-proto.workspace = true
+# The TONE3000 catalog browser — mounted as the Tones page. Wasm-clean,
+# like everything else here.
+signal-tone3000-ui.workspace = true
 # Uses `session_ui::PerformanceLayout` (a Dioxus component), so session-ui's
 # `dioxus` must be on — it's optional there, gated behind `web`/`desktop`.
 session-ui = { workspace = true, features = ["web"] }

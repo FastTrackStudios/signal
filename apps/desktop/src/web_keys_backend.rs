@@ -55,7 +55,8 @@ use signal_keys_proto::keys::{
 };
 use signal_keys_proto::{
     KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel, KeysMacro,
-    KeysMeter, KeysMixer, KeysModule, KeysNode, KeysPerform, KeysPreset, KeysStatus,
+    KeysMeter, KeysMixer, KeysModule, KeysNode, KeysPerform, KeysPreset, KeysRealtime,
+    KeysStatus,
 };
 
 use crate::web_keys_rig::Worklet;
@@ -485,6 +486,11 @@ impl WebKeysBackend {
             voices: s.voices.max(0) as u32,
             midi_port: s.midi_port.clone(),
             last_error: s.last_error.clone(),
+            // The browser rig has no realtime telemetry to report: the
+            // AudioWorklet does not surface xrun counts or per-block render
+            // timing, so the defaults say "unknown" rather than "zero
+            // dropouts", which would be a claim we cannot make.
+            rt: KeysRealtime::default(),
         }
     }
 
@@ -872,6 +878,10 @@ impl KeysRigSvc for WebKeysBackend {
     fn capture_stack(&self, _index: u32) {
         // See press_stack.
     }
+
+    /// No-op: there is no peak to reset without realtime telemetry (see the
+    /// `rt` field in `build_status`).
+    fn reset_rt_peak(&self) {}
 
     fn trigger(&self, note: u32, velocity: u32) {
         let (note, velocity) = (note.min(127) as u8, velocity.min(127) as u8);
