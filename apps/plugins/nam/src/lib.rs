@@ -3,13 +3,14 @@
 //! A thin nice-plug shell over [`neural_amp_modeler::NamModel`]: input gain →
 //! neural amp inference → output gain, the classic NAM plugin shape.
 //!
-//! **Model loading (stopgap)**: a headless plugin has no file browser, so the
-//! model path comes from the `FTS_NAM_MODEL` environment variable, falling
-//! back to `$HOME/.local/share/fts/nam/default.nam`. Loading happens in
-//! `initialize()` (not the audio thread). Real model management — browsing the
-//! signal-nam catalog, host state chunks, per-preset models — arrives with the
-//! GUI + signal-rig integration. If no model loads, `process()` passes audio
-//! through dry (unity, gains not applied) so the insert is transparent.
+//! **Model loading**: the editor is a TONE3000 tone browser — search the
+//! catalog, download a capture, play it, without leaving the insert. The
+//! chosen model reaches the audio thread through [`swap`], which loads and
+//! frees on a loader thread so `process()` does neither. `FTS_NAM_MODEL` (or
+//! `$HOME/.local/share/fts/nam/default.nam`) still seeds the model at
+//! `activate()`, so a headless host or an automated render behaves exactly as
+//! before. If no model loads, `process()` passes audio through dry (unity,
+//! gains not applied) so the insert is transparent.
 //!
 //! **Channel strategy**: NAM models are mono and [`NamModel`] is a single
 //! opaque inference instance (not `Clone` — it wraps the vendored C++ core).
@@ -19,13 +20,18 @@
 //! track). Scratch buffers are preallocated to the host's max buffer size in
 //! `initialize()`; `process()` never allocates.
 //!
-//! GUI is deliberately absent for now (headless, host-generic params),
-//! matching `signal-sampler-clap`; the nice-plug-dioxus editor is a follow-up.
-
+use audiocore_core::prelude::{create_dioxus_editor_with_state, DioxusState};
 use nice_plug::prelude::*;
 use std::sync::Arc;
 
 use neural_amp_modeler::NamModel;
+
+pub mod engine;
+pub mod state;
+pub mod swap;
+pub mod ui;
+
+use state::NamUi;
 
 const PLUGIN_NAME: &str = "FTS NAM";
 
@@ -83,6 +89,14 @@ pub struct FtsNam {
     params: Arc<NamParams>,
     /// The loaded amp model, or `None` → dry passthrough.
     model: Option<NamModel>,
+    /// What the editor shows and asks for.
+    ui: Arc<NamUi>,
+    /// Editor window state (size, open flag).
+    editor_state: Arc<DioxusState>,
+    /// The audio end of the model handoff — `None` until `activate()`, which
+    /// is when the sample rate and block size the loader must prime with are
+    /// finally known.
+    swap: Option<swap::AudioEnd>,
     /// Mono input scratch (f64, model domain), preallocated in `initialize()`.
     scratch_in: Vec<f64>,
     /// Mono output scratch (f64, model domain), preallocated in `initialize()`.
@@ -95,6 +109,9 @@ impl Default for FtsNam {
         Self {
             params: Arc::new(NamParams::default()),
             model: None,
+            ui: Arc::new(NamUi::new()),
+            editor_state: DioxusState::new(|| ui::SIZE),
+            swap: None,
             scratch_in: Vec::new(),
             scratch_out: Vec::new(),
             sample_rate: 48_000.0,
@@ -129,13 +146,18 @@ impl Plugin for FtsNam {
         ..AudioIOLayout::const_default()
     }];
 
-    // No editor yet — the host shows its generic parameter UI.
-    type Editor = ();
+    // `Plugin::Editor` is an associated type as of the baseview 0.3 rework,
+    // so the editor is named here rather than returned as a trait object.
+    type Editor = audiocore_core::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
+    }
+
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
+        create_dioxus_editor_with_state(self.editor_state.clone(), self.ui.clone(), ui::App)
     }
 
     fn activate(
@@ -151,8 +173,23 @@ impl Plugin for FtsNam {
         self.scratch_in = vec![0.0; max_block];
         self.scratch_out = vec![0.0; max_block];
 
-        // Stopgap model load (see module docs): env var / default path, on the
-        // main thread. Failure is non-fatal — the plugin becomes a dry insert.
+        // The handoff has to know the block shape it is priming models for,
+        // which is only settled here.
+        let (audio, editor) = swap::start(self.sample_rate, max_block);
+        self.swap = Some(audio);
+        self.ui.attach(editor);
+
+        // A model already chosen in the editor (or restored with the
+        // session) takes precedence over the environment seed below.
+        if self.ui.loaded_path().is_some() {
+            // `attach` above re-requested it; the loader is already reading
+            // it, and `process` will pick it up. Nothing to load here.
+            self.model = None;
+            return true;
+        }
+
+        // Seed from the environment (see module docs), on the main thread.
+        // Failure is non-fatal — the plugin becomes a dry insert.
         self.model = if let Some(path) = Self::model_path() { match NamModel::load(&path) {
             Ok(mut model) => {
                 model.reset(self.sample_rate, max_block);
@@ -185,6 +222,12 @@ impl Plugin for FtsNam {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
+        // Take a newly loaded model if the loader has one ready. Non-blocking,
+        // no allocation, no free — see `swap`.
+        if let Some(swap) = &mut self.swap {
+            self.model = swap.take(self.model.take());
+        }
+
         let n = buffer.samples();
         let Some(model) = &mut self.model else {
             // No model loaded → dry passthrough (documented stopgap behavior).

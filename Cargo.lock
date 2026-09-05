@@ -9141,8 +9141,17 @@ dependencies = [
 name = "nam-plugin"
 version = "0.1.0"
 dependencies = [
+ "architect",
+ "audiocore-core",
  "neural-amp-modeler",
  "nice-plug",
+ "signal-nam",
+ "signal-sampler",
+ "signal-tone3000",
+ "signal-tone3000-proto",
+ "signal-tone3000-ui",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

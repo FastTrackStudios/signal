@@ -19,6 +19,22 @@ workspace = true
 # paths, so the crate has to be nameable here. `vst3` is on by default.
 nice-plug.workspace = true
 
+# The Dioxus editor stack (nice-plug-dioxus + Blitz), re-exported through
+# audiocore-core the way every other FTS plugin editor takes it.
+audiocore-core = { workspace = true }
+# The tone browser — the same component the app and the browser remote
+# mount — and the engine half it drives.
+signal-tone3000-ui.workspace = true
+signal-tone3000.workspace = true
+signal-tone3000-proto.workspace = true
+# Where downloads land, and the config dir the session file sits in.
+signal-nam.workspace = true
+signal-sampler.workspace = true
+# The in-process engine: a memory-link server for the editor's clients.
+architect = { workspace = true, features = ["local", "vox"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+tracing.workspace = true
+
 # The NAM inference engine (load .nam files, run mono inference).
 # NOTE: this is deliberately NOT `signal-nam` — that crate (features/nam) is
 # the *library manager* (catalog, tags, chunk rewriting) with no DSP; the
