@@ -102,7 +102,7 @@ impl ReverseDelay {
 
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S) + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S).saturating_add(1024);
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -172,7 +172,7 @@ impl ReverseDelay {
 
         // Two reversed read heads, half a cycle apart.
         let pos_a = self.grain_pos;
-        let pos_b = (self.grain_pos + grain_len) % (grain_len * 2);
+        let pos_b = (self.grain_pos + grain_len).checked_rem(grain_len * 2).unwrap_or(0);
 
         let read_a = self.read_reversed(pos_a, grain_len, mod_off);
         let read_b = self.read_reversed(pos_b, grain_len, mod_off);
@@ -190,7 +190,7 @@ impl ReverseDelay {
         }
 
         // Advance position
-        self.grain_pos = (self.grain_pos + 1) % (grain_len * 2);
+        self.grain_pos = (self.grain_pos + 1).checked_rem(grain_len * 2).unwrap_or(0);
 
         // Feedback path
         let mut fb = output * self.feedback;
@@ -214,9 +214,9 @@ impl ReverseDelay {
     /// before this window started.
     #[inline]
     fn read_reversed(&self, pos: usize, grain_len: usize, mod_off: f64) -> f64 {
-        let pos_in_grain = (pos % grain_len) as f64;
+        let pos_in_grain = num::count_to_f64(pos.checked_rem(grain_len).unwrap_or(0));
         let read_offset = 2.0f64.mul_add(pos_in_grain, 1.0) + mod_off;
-        let max_read = (self.delay.len() - 4) as f64;
+        let max_read = num::count_to_f64(self.delay.len().saturating_sub(4));
         self.delay.read_cubic(read_offset.clamp(1.0, max_read))
     }
 
@@ -224,17 +224,17 @@ impl ReverseDelay {
     /// `cf` is the crossfade fraction (0.01–0.5).
     #[inline]
     fn grain_window(pos: usize, grain_len: usize, cf: f64) -> f64 {
-        let pos_in_grain = pos % grain_len;
-        let fade_samples = num::f64_to_index(grain_len as f64 * cf);
+        let pos_in_grain = pos.checked_rem(grain_len).unwrap_or(0);
+        let fade_samples = num::f64_to_index(num::count_to_f64(grain_len) * cf);
         let fade_samples = fade_samples.max(1);
 
         if pos_in_grain < fade_samples {
             // Fade in: raised cosine
-            let t = pos_in_grain as f64 / fade_samples as f64;
+            let t = num::count_to_f64(pos_in_grain) / num::count_to_f64(fade_samples);
             0.5 * (1.0 - (core::f64::consts::PI * t).cos())
-        } else if pos_in_grain >= grain_len - fade_samples {
+        } else if pos_in_grain >= grain_len.saturating_sub(fade_samples) {
             // Fade out: raised cosine
-            let t = (grain_len - 1 - pos_in_grain) as f64 / fade_samples as f64;
+            let t = num::count_to_f64(grain_len.saturating_sub(1).saturating_sub(pos_in_grain)) / num::count_to_f64(fade_samples);
             0.5 * (1.0 - (core::f64::consts::PI * t).cos())
         } else {
             1.0
@@ -293,7 +293,7 @@ mod tests {
         for i in 0..(grain * 3) {
             // Loud onset then a ramp so the onset sync fires at i=0.
             let input = if i < grain {
-                0.5f64.mul_add(i as f64 / grain as f64, 0.5)
+                0.5f64.mul_add(num::count_to_f64(i) / num::count_to_f64(grain), 0.5)
             } else {
                 0.0
             };
@@ -370,14 +370,14 @@ mod tests {
                 let input = if i < 24 { 0.9 } else { 0.0 };
                 let out = d.tick(input, 0);
                 let w = out * out;
-                let t = f64::from(i as i32);
+                let t = f64::from(i);
                 w_sum += w;
                 t_sum += w * t;
                 t2_sum += w * t * t;
             }
             assert!(w_sum > 0.0, "no wet output");
             let mean = t_sum / w_sum;
-            (t2_sum / w_sum - mean * mean).sqrt()
+            ((t2_sum / w_sum) - (mean * mean)).sqrt()
         };
         let dry_width = run(0.0);
         let wet_width = run(0.9);
@@ -400,7 +400,7 @@ mod tests {
             d.update(SR);
             (0..48000)
                 .map(|i| {
-                    let input = (core::f64::consts::TAU * 220.0 * f64::from(i as i32) / SR).sin() * 0.5;
+                    let input = (core::f64::consts::TAU * 220.0 * f64::from(i) / SR).sin() * 0.5;
                     d.tick(input, 0)
                 })
                 .collect()
@@ -431,7 +431,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (core::f64::consts::PI * 2.0 * 440.0 * f64::from(i as i32) / SR).sin() * 0.5;
+            let input = (core::f64::consts::PI * 2.0 * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at sample {i}");
             assert!(out.abs() < 10.0, "Runaway at {i}: {out}");

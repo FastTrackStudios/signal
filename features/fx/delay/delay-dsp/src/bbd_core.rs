@@ -26,6 +26,8 @@
 //! delays darken exactly like the hardware families the filters came
 //! from.
 
+use dsp_core::num;
+
 /// Minimal complex value — enough for the section bookkeeping, no deps.
 #[derive(Debug, Clone, Copy, Default)]
 struct C {
@@ -39,8 +41,8 @@ impl C {
     #[inline]
     fn mul(self, o: Self) -> Self {
         Self {
-            re: self.re * o.re - self.im * o.im,
-            im: self.re * o.im + self.im * o.re,
+            re: self.re.mul_add(o.re, -(self.im * o.im)),
+            im: self.re.mul_add(o.im, self.im * o.re),
         }
     }
 
@@ -72,10 +74,10 @@ impl C {
 
     #[inline]
     fn div(self, o: Self) -> Self {
-        let d = o.re * o.re + o.im * o.im;
+        let d = o.re.mul_add(o.re, o.im * o.im);
         Self {
-            re: (self.re * o.re + self.im * o.im) / d,
-            im: (self.im * o.re - self.re * o.im) / d,
+            re: self.re.mul_add(o.re, self.im * o.im) / d,
+            im: self.im.mul_add(o.re, -(self.re * o.im)) / d,
         }
     }
 }
@@ -287,13 +289,13 @@ impl BbdCore {
         self.h0 = 0.0;
         let mut hin0 = C::ZERO;
         let mut hout0 = C::ZERO;
-        #[allow(clippy::needless_range_loop)] // i spans arrays + self state
+        #[expect(clippy::needless_range_loop, reason = "i spans multiple constant arrays and accumulates results")]
         for i in 0..N_FILT {
             hin0 = hin0.add(IN_ROOTS[i].div(IN_POLES[i]).scale(-1.0));
             hout0 = hout0.add(OUT_ROOTS[i].div(OUT_POLES[i]).scale(-1.0));
         }
         self.makeup = 1.0 / (hin0.re * hout0.re).abs().max(1e-6);
-        #[allow(clippy::needless_range_loop)] // i spans arrays + self state
+        #[expect(clippy::needless_range_loop, reason = "i spans multiple struct arrays and state simultaneously")]
         for i in 0..N_FILT {
             // Input side: scale poles AND roots by k (the C++ reference
             // scales both, keeping the response shape).
@@ -313,16 +315,16 @@ impl BbdCore {
             self.out_arec[i] = po_hat.scale(-self.tn).exp();
             self.h0 -= gp.re;
         }
-        self.set_clock_samples(self.ts_bbd * 2.0 * self.stages as f64);
+        self.set_clock_samples(self.ts_bbd * 2.0 * num::count_to_f64(self.stages));
     }
 
     /// Per-sample clock update from the (possibly modulated) delay in
     /// samples. Cheap enough for audio-rate modulation: 10 complex exps.
     pub fn set_clock_samples(&mut self, delay_samples: f64) {
         let delay = delay_samples.max(16.0);
-        self.ts_bbd = delay / (2.0 * self.stages as f64);
+        self.ts_bbd = delay / (2.0 * num::count_to_f64(self.stages));
         let dt = 2.0 * self.ts_bbd;
-        #[allow(clippy::needless_range_loop)] // i spans arrays + self state
+        #[expect(clippy::needless_range_loop, reason = "i spans multiple struct arrays simultaneously")]
         for i in 0..N_FILT {
             self.in_aplus[i] = self.in_phat[i].scale(dt).exp();
             self.out_aplus[i] = self.out_phat[i].scale(-dt).exp();
@@ -336,7 +338,7 @@ impl BbdCore {
     }
 
     #[must_use]
-    pub fn stages(&self) -> usize {
+    pub const fn stages(&self) -> usize {
         self.stages
     }
 
@@ -350,15 +352,14 @@ impl BbdCore {
                 // Input tick: evaluate the AA filter bank at this exact
                 // clock instant and charge the bucket.
                 let mut v = 0.0;
-                #[allow(clippy::needless_range_loop)] // i spans two arrays + self state
-                #[allow(clippy::needless_range_loop)] // i spans arrays + self state
+                #[expect(clippy::needless_range_loop, reason = "i spans struct arrays and input processing state")]
                 for i in 0..N_FILT {
                     self.in_arec[i] = self.in_arec[i].mul(self.in_aplus[i]);
                     let g = self.in_g0[i].mul(self.in_arec[i]);
                     v += self.in_x[i].mul(g).re;
                 }
                 self.buffer[self.ptr] = shaper.shape(v);
-                self.ptr += 1;
+                self.ptr = self.ptr.saturating_add(1);
                 if self.ptr >= self.stages {
                     self.ptr = 0;
                 }
@@ -367,7 +368,7 @@ impl BbdCore {
                 let y = self.buffer[self.ptr];
                 let delta = y - self.y_bbd_old;
                 self.y_bbd_old = y;
-                #[allow(clippy::needless_range_loop)] // i spans arrays + self state
+                #[expect(clippy::needless_range_loop, reason = "i spans struct arrays and output accumulation")]
                 for i in 0..N_FILT {
                     self.out_arec[i] = self.out_arec[i].mul(self.out_aplus[i]);
                     out_accum[i] =
@@ -382,7 +383,7 @@ impl BbdCore {
         // Per-sample: rewind the running exponentials by one sample and
         // advance the section states at audio rate.
         let mut out = self.h0 * self.y_bbd_old;
-        #[allow(clippy::needless_range_loop)] // i spans arrays + self state
+        #[expect(clippy::needless_range_loop, reason = "i spans struct arrays and audio-rate state updates")]
         for i in 0..N_FILT {
             self.in_arec[i] = self.in_arec[i].mul(self.in_pbar_inv[i]);
             self.out_arec[i] = self.out_arec[i].mul(self.out_pbar[i]);
@@ -393,10 +394,10 @@ impl BbdCore {
 
         // Re-anchor the running exponentials periodically so hours of
         // multiplies can't drift them.
-        self.renorm += 1;
+        self.renorm = self.renorm.saturating_add(1);
         if self.renorm >= 256 {
             self.renorm = 0;
-            #[allow(clippy::needless_range_loop)] // i spans arrays + self state
+            #[expect(clippy::needless_range_loop, reason = "i spans struct arrays for exponential re-anchoring")]
             for i in 0..N_FILT {
                 self.in_arec[i] = self.in_phat[i].scale(self.tn).exp();
                 self.out_arec[i] = self.out_phat[i].scale(-self.tn).exp();
@@ -415,8 +416,7 @@ impl BbdCore {
         self.renorm = 0;
         self.in_x = [C::ZERO; N_FILT];
         self.out_x = [C::ZERO; N_FILT];
-        #[allow(clippy::needless_range_loop)] // i spans two arrays + self state
-        #[allow(clippy::needless_range_loop)] // i spans arrays + self state
+        #[expect(clippy::needless_range_loop, reason = "i spans struct arrays for reset initialization")]
         for i in 0..N_FILT {
             self.in_arec[i] = C { re: 1.0, im: 0.0 };
             self.out_arec[i] = C { re: 1.0, im: 0.0 };
@@ -446,9 +446,9 @@ mod tests {
         core.set_clock_samples(delay_samples);
         let mut peak = 0.0f64;
         for i in 0..24000 {
-            let x = (core::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+            let x = (core::f64::consts::TAU * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
             let y = core.process(x, &mut NoShaper);
-            if i > (delay_samples as usize) + 2000 {
+            if i > num::f64_to_index(delay_samples) + 2000 {
                 peak = peak.max(y.abs());
             }
         }
@@ -470,7 +470,7 @@ mod tests {
                 first_out = Some(i);
             }
         }
-        let arrived = first_out.expect("burst never arrived") as f64;
+        let arrived = f64::from(first_out.expect("burst never arrived"));
         assert!(
             (arrived - delay_samples).abs() < delay_samples * 0.1 + 200.0,
             "arrived at {arrived}, expected ≈{delay_samples}"
@@ -491,18 +491,18 @@ mod tests {
             let f = 6000.0;
             let mut sin_acc = 0.0;
             let mut cos_acc = 0.0;
-            let n = ((delay_s + 0.5) * SR) as usize;
-            let start = ((delay_s + 0.1) * SR) as usize;
+            let n = num::f64_to_index((delay_s + 0.5) * SR);
+            let start = num::f64_to_index((delay_s + 0.1) * SR);
             for i in 0..n {
-                let ph = core::f64::consts::TAU * f * i as f64 / SR;
+                let ph = core::f64::consts::TAU * f * num::count_to_f64(i) / SR;
                 let y = core.process(ph.sin() * 0.5, &mut NoShaper);
                 if i > start {
                     sin_acc += y * ph.sin();
                     cos_acc += y * ph.cos();
                 }
             }
-            let m = (n - start) as f64;
-            ((sin_acc / m).powi(2) + (cos_acc / m).powi(2)).sqrt()
+            let m = num::count_to_f64(n - start);
+            (sin_acc / m).hypot(cos_acc / m)
         };
         let bright = probe_level(0.03, 1.0);
         let dark = probe_level(0.5, 0.25);
@@ -519,9 +519,9 @@ mod tests {
         core.configure(SR, 8192, 1.0);
         for i in 0..96000 {
             // Sweep the clock hard while feeding a tone.
-            let sweep = 0.08 + 0.35 * (0.5 + 0.5 * (i as f64 * 0.0001).sin());
+            let sweep = 0.35f64.mul_add(0.5f64.mul_add((f64::from(i) * 0.0001).sin(), 0.5), 0.08);
             core.set_clock_samples(sweep * SR);
-            let x = (core::f64::consts::TAU * 330.0 * i as f64 / SR).sin() * 0.5;
+            let x = (core::f64::consts::TAU * 330.0 * f64::from(i) / SR).sin() * 0.5;
             let y = core.process(x, &mut NoShaper);
             assert!(y.is_finite(), "NaN at {i}");
             assert!(y.abs() < 100.0, "runaway at {i}: {y}");

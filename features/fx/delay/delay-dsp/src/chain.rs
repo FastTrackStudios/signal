@@ -509,7 +509,7 @@ impl Processor for DelayChain {
         self.lr_offset_smoother.set_target(self.lr_offset_ms);
 
         // Ensure delay line is large enough for max offset at this sample rate
-        let max_offset_samples = num::f64_to_index(25.0 * config.sample_rate / 1000.0) + 64;
+        let max_offset_samples = num::f64_to_index(25.0 * config.sample_rate / 1000.0).saturating_add(64);
         if self.lr_offset_delay.len() < max_offset_samples {
             self.lr_offset_delay = DelayLine::new(max_offset_samples);
         }

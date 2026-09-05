@@ -321,10 +321,7 @@ impl SpectralDelay {
     }
 
     fn spawn_grain(&mut self, delay_samples: f64, interval: f64) {
-        let slot = match self.grains.iter().position(|g| !g.active) {
-            Some(i) => i,
-            None => return, // all voices busy — skip, no stealing clicks
-        };
+        let Some(slot) = self.grains.iter().position(|g| !g.active) else { return }; // all voices busy — skip, no stealing clicks
 
         let rand01 = |rng: &mut XorShift32| (rng.next_bipolar() + 1.0) * 0.5;
 
@@ -628,7 +625,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input = (std::f64::consts::TAU * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at {i}");
             assert!(out.abs() < 8.0, "runaway at {i}: {out}");
@@ -687,7 +684,7 @@ mod tests {
             d.density = DensityMode::Synced(1.0 / 16.0);
             d.update(SR);
             for i in 0..48000 {
-                let input = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+                let input = (std::f64::consts::TAU * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
                 if d.tick(input, 0).abs() > 0.01 {
                     return i;
                 }
@@ -716,7 +713,7 @@ mod tests {
             s2 = s1;
             s1 = s0;
         }
-        ((coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2))) / (signal.len() as f64).powi(2)
+        ((coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2))) / (num::count_to_f64(signal.len())).powi(2)
     }
 
     #[test]
@@ -733,7 +730,7 @@ mod tests {
 
         let mut out = Vec::with_capacity(96000);
         for i in 0..144_000 {
-            let input = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input = (std::f64::consts::TAU * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
             let v = d.tick(input, 0);
             if i >= 48000 {
                 out.push(v);
@@ -770,7 +767,7 @@ mod tests {
         let mut pass3 = Vec::new();
         for i in 0..(period * 4) {
             let input = if i < 480 {
-                (std::f64::consts::TAU * 6000.0 * i as f64 / SR).sin() * 0.8
+                (std::f64::consts::TAU * 6000.0 * num::count_to_f64(i) / SR).sin() * 0.8
             } else {
                 0.0
             };
@@ -836,8 +833,8 @@ mod tests {
             for (i, v) in x.iter().enumerate() {
                 let e = v * v;
                 w += e;
-                t1 += e * i as f64;
-                t2 += e * (i as f64) * (i as f64);
+                t1 += e * num::count_to_f64(i);
+                t2 += e * num::count_to_f64(i) * num::count_to_f64(i);
             }
             let mean = t1 / w.max(1e-12);
             (t2 / w.max(1e-12) - mean * mean).max(0.0).sqrt()

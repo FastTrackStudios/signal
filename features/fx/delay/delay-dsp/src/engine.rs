@@ -491,7 +491,7 @@ impl DelayEngine {
     /// call every sample; the trimmed value reaches the inner engine on
     /// the next `tick`/`tick_at`.
     #[inline]
-    pub fn set_feedback_trim(&mut self, trim: f64) {
+    pub const fn set_feedback_trim(&mut self, trim: f64) {
         self.feedback_trim = trim.clamp(0.0, 1.0);
     }
 

@@ -341,19 +341,19 @@ mod tests {
         // delay time at significant level.
         let mut d = make(150.0);
         let burst = num::f64_to_index(0.003 * SR);
-        let expected = num::f64_to_index(150.0 * SR / 1000.0) as i64;
+        let expected = num::trunc_to_i64(150.0 * SR / 1000.0);
         let mut peak = 0.0f64;
         let mut peak_idx = 0i64;
         for i in 0..24000 {
             let input = if i < burst {
-                (core::f64::consts::TAU * 1000.0 * f64::from(i as i32) / SR).sin() * 0.8
+                (core::f64::consts::TAU * 1000.0 * num::count_to_f64(i) / SR).sin() * 0.8
             } else {
                 0.0
             };
             let out = d.tick(input, 0).abs();
-            if i as i64 > burst as i64 + 100 && out > peak {
+            if i > burst + 100 && out > peak {
                 peak = out;
-                peak_idx = i as i64;
+                peak_idx = num::trunc_to_i64(num::count_to_f64(i));
             }
         }
         assert!(
@@ -373,7 +373,7 @@ mod tests {
 
         let mut diff = 0.0;
         for i in 0..19200 {
-            let s = (std::f64::consts::PI * 2.0 * 440.0 * f64::from(i as i32) / SR).sin() * 0.5;
+            let s = (std::f64::consts::PI * 2.0 * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
             let a = d_clean.tick(s, 0);
             let b = d_mod.tick(s, 0);
             diff += (a - b).abs();
@@ -393,7 +393,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (std::f64::consts::PI * 2.0 * 440.0 * f64::from(i as i32) / SR).sin() * 0.5;
+            let input = (std::f64::consts::PI * 2.0 * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at sample {i}");
             assert!(out.abs() < 10.0, "Runaway at {i}: {out}");
@@ -425,7 +425,7 @@ mod tests {
         // Write a 60 ms 500 Hz burst.
         let burst_len = num::f64_to_index(SR * 0.06);
         for i in 0..burst_len {
-            let s = (std::f64::consts::TAU * f_in * f64::from(i as i32) / SR).sin() * 0.8;
+            let s = (std::f64::consts::TAU * f_in * num::count_to_f64(i) / SR).sin() * 0.8;
             d.tick(s, 0);
         }
         // Immediately halve the delay time: clock doubles.
@@ -453,8 +453,8 @@ mod tests {
         );
 
         // Measured frequency of the emitted burst.
-        let secs = f64::from(window.len() as i32) / SR;
-        let f_out = f64::from(zero_crossings(window) as i32) / secs;
+        let secs = num::count_to_f64(window.len()) / SR;
+        let f_out = num::count_to_f64(zero_crossings(window)) / secs;
         let ratio = f_out / f_in;
         assert!(
             ratio > 1.5,
@@ -472,7 +472,7 @@ mod tests {
         let f_in = 500.0;
         let burst_len = num::f64_to_index(SR * 0.06);
         for i in 0..burst_len {
-            let s = (std::f64::consts::TAU * f_in * f64::from(i as i32) / SR).sin() * 0.8;
+            let s = (std::f64::consts::TAU * f_in * num::count_to_f64(i) / SR).sin() * 0.8;
             d.tick(s, 0);
         }
         // Excursion: 600 -> 300 -> 600 ms, 50 ms in each leg, well before
@@ -496,8 +496,8 @@ mod tests {
         let start = out.iter().position(|s| s.abs() > thresh).unwrap();
         let end = out.len() - out.iter().rev().position(|s| s.abs() > thresh).unwrap();
         let window = &out[start..end];
-        let secs = f64::from(window.len() as i32) / SR;
-        let f_out = f64::from(zero_crossings(window) as i32) / secs;
+        let secs = num::count_to_f64(window.len()) / SR;
+        let f_out = num::count_to_f64(zero_crossings(window)) / secs;
         let ratio = f_out / f_in;
         assert!(
             (0.8..1.25).contains(&ratio),
@@ -518,7 +518,7 @@ mod tests {
             let mut energy = 0.0;
             let n = num::f64_to_index(SR * (time_ms / 1000.0 + 0.4));
             for i in 0..n {
-                let s = (std::f64::consts::TAU * 880.0 * f64::from(i as i32) / SR).sin() * 0.5;
+                let s = (std::f64::consts::TAU * 880.0 * num::count_to_f64(i) / SR).sin() * 0.5;
                 let a = clean.tick(s, 0);
                 let b = lossy.tick(s, 0);
                 diff += (a - b) * (a - b);
@@ -551,7 +551,7 @@ mod tests {
             d.update(SR);
             let mut energy = 0.0;
             for i in 0..96000 {
-                let s = (std::f64::consts::TAU * freq * f64::from(i as i32) / SR).sin() * 0.3;
+                let s = (std::f64::consts::TAU * freq * num::count_to_f64(i) / SR).sin() * 0.3;
                 let out = d.tick(s, 0);
                 if i > 24000 {
                     energy += out * out;
@@ -584,7 +584,7 @@ mod tests {
             let (mut re, mut im) = (0.0f64, 0.0f64);
             let mut n = 0.0;
             for i in 0..48000 {
-                let ph = std::f64::consts::TAU * f * f64::from(i as i32) / SR;
+                let ph = std::f64::consts::TAU * f * num::count_to_f64(i) / SR;
                 let out = d.tick(ph.sin() * 0.5, 0);
                 if i > 26000 {
                     re += out * ph.cos();
@@ -614,7 +614,7 @@ mod tests {
             d.update(SR);
             (0..24000)
                 .map(|i| {
-                    let s = (std::f64::consts::TAU * 440.0 * f64::from(i as i32) / SR).sin() * 0.5;
+                    let s = (std::f64::consts::TAU * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
                     d.tick(s, 0)
                 })
                 .collect()

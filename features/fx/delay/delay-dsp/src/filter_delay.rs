@@ -335,7 +335,7 @@ impl FilterDelay {
             input
         };
 
-        let max_read = num::count_to_f32(self.delay.len()) as f64 - 4.0;
+        let max_read = f64::from(num::count_to_f32(self.delay.len())) - 4.0;
         let mut output = self.delay.read_cubic(smooth_delay.clamp(1.0, max_read));
 
         if self.location == FilterLocation::Post {

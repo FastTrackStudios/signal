@@ -9,6 +9,7 @@ use std::f64::consts::PI;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::envelope::EnvelopeFollower;
 use audiocore_dsp::prng::XorShift32;
+use dsp_core::num;
 
 /// Wobble/LFO waveform shapes for wow modulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,7 +25,7 @@ impl WobbleShape {
     pub const COUNT: usize = 5;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Triangle,
             2 => Self::Square,
@@ -36,7 +37,7 @@ impl WobbleShape {
     }
 
     #[must_use]
-    pub fn to_index(self) -> usize {
+    pub const fn to_index(self) -> usize {
         match self {
             Self::Sine => 0,
             Self::Triangle => 1,
@@ -47,7 +48,7 @@ impl WobbleShape {
     }
 
     #[must_use]
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Sine => "Sine",
             Self::Triangle => "Triangle",
@@ -87,7 +88,7 @@ impl Default for Flutter {
 
 impl Flutter {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             rate: 0.3,
             depth: 0.0,
@@ -132,14 +133,14 @@ impl Flutter {
 
         let p = self.phase;
         let lfo = self.amp1 * (p).cos()
-            + self.amp2 * (2.0 * p + 13.0 * PI / 4.0).cos()
-            + self.amp3 * (3.0 * p - PI / 10.0).cos()
+            + self.amp2 * (2.0_f64.mul_add(p, 13.0 * PI / 4.0)).cos()
+            + self.amp3 * (3.0_f64.mul_add(p, -(PI / 10.0))).cos()
             + self.amp_pinch * (self.pinch_phase + PI / 3.0).cos();
 
         lfo * d2
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.phase = 0.0;
         self.pinch_phase = 0.0;
     }
@@ -228,7 +229,7 @@ impl Wow {
             WobbleShape::SampleAndHold => {
                 let in_first_half = phase < PI;
                 if in_first_half && !self.sh_triggered {
-                    self.sh_value = self.xorshift_uniform() * 2.0 - 1.0;
+                    self.sh_value = self.xorshift_uniform().mul_add(2.0, -1.0);
                     self.sh_triggered = true;
                 } else if !in_first_half {
                     self.sh_triggered = false;
@@ -246,10 +247,10 @@ impl Wow {
         // Advance OU process
         let noise = self.gaussian_noise();
         self.ou_state =
-            self.ou_state * self.ou_decay + noise * (1.0 - self.ou_decay * self.ou_decay).sqrt();
+            self.ou_state.mul_add(self.ou_decay, noise * (self.ou_decay.mul_add(-self.ou_decay, 1.0)).sqrt());
 
         // Rate modulated by drift
-        let freq_adjust = self.rate * (1.0 + self.ou_state.abs().powf(1.25) * self.drift);
+        let freq_adjust = self.rate * (self.ou_state.abs().powf(1.25).mul_add(self.drift, 1.0));
         let phase_inc = 2.0 * PI * freq_adjust / self.sample_rate;
         self.phase += phase_inc;
         if self.phase > 2.0 * PI {
@@ -257,7 +258,7 @@ impl Wow {
         }
 
         // Apply phase offset and compute waveform
-        let offset_phase = (self.phase + self.phase_offset * 2.0 * PI) % (2.0 * PI);
+        let offset_phase = ((self.phase_offset * 2.0).mul_add(PI, self.phase)) % (2.0 * PI);
         let lfo = self.waveform(offset_phase);
 
         self.amp * lfo * d2
@@ -275,10 +276,10 @@ impl Wow {
 
     /// Uniform sample in [0, 1) from the shared PRNG primitive.
     fn xorshift_uniform(&mut self) -> f64 {
-        self.rng.next() as f64 / u32::MAX as f64
+        f64::from(self.rng.next()) / f64::from(u32::MAX)
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.phase = 0.0;
         self.ou_state = 0.0;
         self.sh_value = 0.0;
@@ -354,7 +355,7 @@ impl DuckingFollower {
         let env = self.envelope.value();
         let release = if level < env && env > 1e-10 {
             let r = (env - level) / env;
-            self.release_coeff + r * r * (self.release_fast_coeff - self.release_coeff)
+            (r * r).mul_add(self.release_fast_coeff - self.release_coeff, self.release_coeff)
         } else {
             self.release_coeff
         };
@@ -403,17 +404,17 @@ struct AllpassFilter {
 impl AllpassFilter {
     fn new(max_samples: usize) -> Self {
         Self {
-            buffer: DelayLine::new(max_samples + 8),
+            buffer: DelayLine::new(max_samples.saturating_add(8)),
             delay: 1.0,
             feedback: 0.5,
         }
     }
 
     fn tick(&mut self, input: f64) -> f64 {
-        let max_read = self.buffer.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.buffer.len()) - 4.0;
         let delayed = self.buffer.read_cubic(self.delay.clamp(1.0, max_read));
 
-        let output = -input * self.feedback + delayed;
+        let output = (-input).mul_add(self.feedback, delayed);
         let write_val = input + delayed * self.feedback;
 
         self.buffer.write(write_val);
@@ -431,7 +432,7 @@ const DIFFUSE_DELAYS_L: [f64; 8] = [12.11, 10.49, 8.51, 7.13, 5.37, 4.21, 3.07, 
 const DIFFUSE_DELAYS_R: [f64; 8] = [12.08, 10.47, 8.49, 7.11, 5.35, 4.19, 3.05, 2.09];
 
 impl Diffuser {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64, is_right: bool) -> Self {
         let mps = sample_rate / 343.0; // Samples per meter (speed of sound)
         let base_distance = mps * 3.75;
@@ -441,10 +442,13 @@ impl Diffuser {
             DIFFUSE_DELAYS_L
         };
 
-        let allpasses = std::array::from_fn(|i| {
-            let max_delay = (base_distance * delays[i] * 2.0) as usize + 4;
+        // `array::map` rather than `array::from_fn` with an index: same
+        // arithmetic, no indexing for the lint to object to, and no fallible
+        // collect-then-convert step (which would need `expect`, denied here).
+        let allpasses = delays.map(|delay| {
+            let max_delay = num::f64_to_index(base_distance * delay * 2.0).saturating_add(4);
             let mut ap = AllpassFilter::new(max_delay);
-            ap.delay = base_distance * delays[i];
+            ap.delay = base_distance * delay;
             ap
         });
 
@@ -463,16 +467,16 @@ impl Diffuser {
         } else {
             DIFFUSE_DELAYS_L
         };
-        let offset = 0.9 - 0.9 * self.size;
+        let offset = 0.9_f64.mul_add(-self.size, 0.9);
 
-        for (i, ap) in self.allpasses.iter_mut().enumerate() {
+        for (ap, &delay) in self.allpasses.iter_mut().zip(&delays) {
             // Grow the buffer only if a higher sample rate demands it
             // (control path — never called from process()).
-            let needed = (base_distance * delays[i] * 2.0) as usize + 8;
+            let needed = num::f64_to_index(base_distance * delay * 2.0).saturating_add(8);
             if ap.buffer.len() < needed {
                 ap.buffer = DelayLine::new(needed);
             }
-            ap.delay = (base_distance * delays[i] * (1.0 - offset)).max(1.0);
+            ap.delay = (base_distance * delay * (1.0 - offset)).max(1.0);
             ap.feedback = self.smear.clamp(0.0, 0.9);
         }
     }
@@ -512,7 +516,7 @@ impl CompanderEnv {
     const RELEASE_S: f64 = 0.005;
 
     #[must_use]
-    #[allow(clippy::new_without_default)]
+    #[expect(clippy::new_without_default, reason = "new() calls configure() which is not const")]
     pub fn new() -> Self {
         let mut c = Self {
             env: Self::G0,
@@ -555,7 +559,7 @@ impl CompanderEnv {
         x * g
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.env = Self::G0;
     }
 }
@@ -584,7 +588,7 @@ mod tests {
         f.set_sample_rate(SR);
         f.depth = 0.0;
         for _ in 0..1000 {
-            assert_eq!(f.tick(), 0.0);
+            assert_eq!(f.tick().abs().to_bits(), 0.0_f64.to_bits());
         }
     }
 
@@ -606,7 +610,7 @@ mod tests {
         w.set_sample_rate(SR);
         w.depth = 0.0;
         for _ in 0..1000 {
-            assert_eq!(w.tick(), 0.0);
+            assert_eq!(w.tick().abs().to_bits(), 0.0_f64.to_bits());
         }
     }
 

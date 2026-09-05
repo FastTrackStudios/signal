@@ -179,7 +179,7 @@ impl DrumDelay {
         self.sample_rate = sample_rate;
         self.time_ms = self.time_ms.clamp(Self::MIN_TIME_MS, Self::MAX_TIME_MS);
 
-        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S) + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S).saturating_add(1024);
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -375,7 +375,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (std::f64::consts::TAU * 220.0 * f64::from(i as i32) / SR).sin() * 0.5;
+            let input = (std::f64::consts::TAU * 220.0 * num::count_to_f64(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at {i}");
         }
@@ -423,7 +423,7 @@ mod tests {
             (0..48000)
                 .map(|i| {
                     let input = if i < 9600 {
-                        (core::f64::consts::TAU * 220.0 * f64::from(i as i32) / SR).sin() * 0.8
+                        (core::f64::consts::TAU * 220.0 * num::count_to_f64(i) / SR).sin() * 0.8
                     } else {
                         0.0
                     };

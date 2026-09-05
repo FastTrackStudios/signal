@@ -66,7 +66,6 @@ impl IceInterval {
 }
 
 /// Slice size — scales with the delay time (per the MX manual).
-
 /// `i - offset` as a semitone count, for the index ranges `from_index` matches.
 ///
 /// Written as `const` arithmetic on `i8` rather than `i8::try_from(i).expect(..)`:
@@ -77,6 +76,11 @@ impl IceInterval {
 #[inline]
 const fn semitone_from_index(i: usize, offset: i8) -> i8 {
     // `i` is at most 26 here, so the low byte is the whole value.
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        reason = "i <= 26 (guaranteed by match arms in from_index), safe narrowing to i8"
+    )]
     let low = (i & 0x7F) as i8;
     low.saturating_sub(offset)
 }
@@ -385,7 +389,7 @@ mod tests {
         let mut out = Vec::with_capacity(n);
         for i in 0..n {
             let x = if i < burst {
-                (2.0 * PI * 300.0 * f64::from(i as i32) / SR).sin() * 0.5
+                (2.0 * PI * 300.0 * num::count_to_f64(i) / SR).sin() * 0.5
             } else {
                 0.0
             };
@@ -416,7 +420,7 @@ mod tests {
         let mut out = Vec::with_capacity(n);
         for i in 0..n {
             let x = if i < burst {
-                (2.0 * PI * 220.0 * f64::from(i as i32) / SR).sin() * 0.5
+                (2.0 * PI * 220.0 * num::count_to_f64(i) / SR).sin() * 0.5
             } else {
                 0.0
             };
@@ -446,7 +450,7 @@ mod tests {
 
         let mut max_err = 0.0f64;
         for i in 0..24000 {
-            let x = (2.0 * PI * 330.0 * f64::from(i as i32) / SR).sin() * 0.5;
+            let x = (2.0 * PI * 330.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(x);
             // Match PitchDelay's read-before-write order.
             let want = reference.read_cubic(delay_samples);
@@ -476,7 +480,7 @@ mod tests {
             d.update(SR);
             (0..48000)
                 .map(|i| {
-                    let x = (2.0 * PI * 220.0 * f64::from(i as i32) / SR).sin() * 0.5;
+                    let x = (2.0 * PI * 220.0 * f64::from(i) / SR).sin() * 0.5;
                     d.tick(x)
                 })
                 .collect()
@@ -501,7 +505,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (2.0 * PI * 440.0 * f64::from(i as i32) / SR).sin() * 0.5;
+            let input = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(input);
             assert!(out.is_finite(), "NaN at sample {i}");
         }
@@ -540,7 +544,7 @@ mod tests {
         let mut out_shifted = Vec::new();
 
         for i in 0..9600 {
-            let s = (2.0 * PI * 440.0 * f64::from(i as i32) / SR).sin() * 0.5;
+            let s = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5;
             out_normal.push(d_normal.tick(s));
             out_shifted.push(d_shifted.tick(s));
         }

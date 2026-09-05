@@ -111,6 +111,9 @@ impl ReverbDelay {
     const LINE_MOD_HZ: [f64; 2] = [0.61, 0.83];
 
     #[must_use]
+    /// # Panics
+    ///
+    /// Panics if `LINE_MS` does not have exactly 4 elements (invariant guaranteed by design).
     pub fn new() -> Self {
         let sr = 48000.0;
         let ms = |m: f64| m * sr / 1000.0;
@@ -129,11 +132,11 @@ impl ReverbDelay {
                 Allpass::new(ms(DIFF_MS[1]), DIFF_G),
             ],
             lines: core::array::from_fn(|i| {
-                let len_ms = LINE_MS.get(i).expect("LINE_MS has 4 elements");
+                let len_ms = &LINE_MS[i];
                 DelayLine::new(num::f64_to_index(ms(*len_ms)).saturating_add(64))
             }),
             line_len: core::array::from_fn(|i| {
-                let len_ms = LINE_MS.get(i).expect("LINE_MS has 4 elements");
+                let len_ms = &LINE_MS[i];
                 ms(*len_ms)
             }),
             damp: core::array::from_fn(|_| OnePoleLp::new(14000.0, sr)),
@@ -210,6 +213,9 @@ impl ReverbDelay {
         (x * d).tanh() / d.tanh()
     }
 
+    /// # Panics
+    ///
+    /// Panics if `mod_phase` is indexed out of bounds (invariant: m is always 0 or 1).
     pub fn tick(&mut self, input: f64, _ch: usize) -> f64 {
         // Pre-delay (smoothed against zipper on the TIME knob).
         self.predelay.write(input);
@@ -237,7 +243,7 @@ impl ReverbDelay {
             let mut len = *line_len;
             if i == 0 || i == 2 {
                 let m = i / 2;
-                let mod_phase = self.mod_phase.get_mut(m).expect("m is 0 or 1");
+                let mod_phase = &mut self.mod_phase[m];
                 *mod_phase += *line_mod_hz / self.sample_rate;
                 if *mod_phase >= 1.0 {
                     *mod_phase -= 1.0;
@@ -442,7 +448,7 @@ mod tests {
         let mut env_max = 0.0f64;
         let mut env = 0.0;
         for i in 0..96000 {
-            let input = (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.3;
+            let input = (core::f64::consts::TAU * 220.0 * f64::from(i) / SR).sin() * 0.3;
             let out = d.tick(input, 0).abs();
             env += (out - env) * 0.002;
             if i > 48000 {
@@ -466,7 +472,7 @@ mod tests {
             d.update(SR);
             (0..24000)
                 .map(|i| {
-                    let input = (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.8;
+                    let input = (core::f64::consts::TAU * 220.0 * f64::from(i) / SR).sin() * 0.8;
                     d.tick(input, 0)
                 })
                 .collect()
@@ -493,7 +499,7 @@ mod tests {
         d.decay_tilt = 0.7;
         d.update(SR);
         for i in 0..192_000 {
-            let input = (core::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.7;
+            let input = (core::f64::consts::TAU * 440.0 * f64::from(i) / SR).sin() * 0.7;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at {i}");
             assert!(out.abs() < 50.0, "runaway at {i}: {out}");

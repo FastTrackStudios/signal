@@ -134,11 +134,11 @@ impl OilCanDelay {
         self.sample_rate = sample_rate;
         self.time_ms = self.time_ms.clamp(Self::MIN_TIME_MS, Self::MAX_TIME_MS);
 
-        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S) + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S).saturating_add(1024);
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
-        let splat_len = num::f64_to_index(sample_rate * 0.008) + 8; // ~8 ms
+        let splat_len = num::f64_to_index(sample_rate * 0.008).saturating_add(8); // ~8 ms
         if self.splatter.len() < splat_len {
             self.splatter = DelayLine::new(splat_len);
         }
