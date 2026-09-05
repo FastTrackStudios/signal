@@ -1049,6 +1049,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "auth-client"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/architect?rev=1b007bb68d29e921a2b4ef98f23a815c8a9183c1#1b007bb68d29e921a2b4ef98f23a815c8a9183c1"
+dependencies = [
+ "base64 0.22.1",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+ "vox",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13579,6 +13592,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-account"
+version = "0.1.0"
+dependencies = [
+ "auth-client",
+ "rand 0.8.6",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
+ "wiremock",
+]
+
+[[package]]
 name = "signal-analyzer"
 version = "0.1.0"
 dependencies = [
@@ -13696,6 +13726,7 @@ dependencies = [
  "reqwest 0.12.28",
  "session-ui",
  "sha2 0.10.9",
+ "signal-account",
  "signal-bass",
  "signal-bass-proto",
  "signal-bass-ui",
@@ -14384,11 +14415,13 @@ name = "signal-tone3000"
 version = "0.1.0"
 dependencies = [
  "architect",
+ "auth-client",
  "futures-util",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "signal-account",
  "signal-nam",
  "signal-tone3000-proto",
  "tempfile",

@@ -123,6 +123,7 @@ signal = [
     # TONE3000: the engine holds the session and serves the OAuth redirect
     # (engine_tone3000.rs); signal-nam resolves where downloads land.
     "dep:signal-tone3000",
+    "dep:signal-account",
     "dep:signal-nam",
     "dep:url",
     "dep:axum",
@@ -300,6 +301,7 @@ signal-pack-library = { workspace = true, optional = true }
 signal-space = { workspace = true, optional = true }
 signal-ekit = { workspace = true, optional = true }
 signal-tone3000 = { workspace = true, optional = true }
+signal-account = { workspace = true, optional = true }
 signal-nam = { workspace = true, optional = true }
 url = { version = "2", optional = true }
 axum = { workspace = true, optional = true }

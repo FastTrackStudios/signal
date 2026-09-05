@@ -30,6 +30,14 @@ pub struct SignInStatus {
     /// ordinary "not signed in" state — never having signed in is not a
     /// failure, and a UI must not present it as one.
     pub error: String,
+    /// How the engine is authorized: `account` when the token is brokered
+    /// by the FastTrackStudio issuer for a linked account, `tone3000` when
+    /// this engine holds its own session, empty when neither.
+    ///
+    /// A UI needs the difference. "Sign in to TONE3000" is the wrong thing
+    /// to offer someone whose account is already linked, and "Sign out"
+    /// here cannot end a session this engine does not own.
+    pub via: String,
 }
 
 /// An authorization to open in the system browser.
@@ -219,7 +227,11 @@ pub mod tone3000 {
     #[architect::rpc]
     pub trait Tone3000 {
         /// Whether a session is stored, and for whom.
-        fn status(&self) -> SignInStatus;
+        ///
+        /// Async because the answer can depend on the account broker: a
+        /// linked account is a working session this engine holds nothing
+        /// for.
+        async fn status(&self) -> SignInStatus;
 
         /// Mint PKCE and build the authorize URL. The caller opens it in the
         /// system browser; nothing is exchanged until `complete_sign_in`.

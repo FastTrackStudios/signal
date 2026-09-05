@@ -27,6 +27,51 @@ use axum::response::Html;
 use axum::routing::get;
 use signal_tone3000::Tone3000Backend;
 
+/// Mount the FastTrackStudio account's callback route.
+///
+/// Same argument as the TONE3000 one below, one level up: the issuer's
+/// login page is a web application, so the engine catches the redirect and
+/// whichever GUI started the flow picks the session up from `status()`.
+pub fn extend_account(host: EngineHost, account: std::sync::Arc<signal_account::Account>) -> EngineHost {
+    let path = callback_path(&account.config().redirect_uri);
+    tracing::info!(path, issuer = account.config().issuer, "account: callback route mounted");
+    host.extend(
+        Router::new()
+            .route(&path, get(account_callback))
+            .with_state(account),
+    )
+}
+
+async fn account_callback(
+    State(account): State<std::sync::Arc<signal_account::Account>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Html<String> {
+    let query = params
+        .iter()
+        .map(|(k, v)| format!("{}={}", urlencode(k), urlencode(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    let url = format!("{}?{query}", account.config().redirect_uri);
+
+    match account.complete_sign_in(&url).await {
+        Ok(status) => {
+            let who = if status.email.is_empty() {
+                "You can close this tab and go back to Signal.".to_string()
+            } else {
+                format!(
+                    "Signed in as {}. You can close this tab and go back to Signal.",
+                    html_escape(&status.email)
+                )
+            };
+            Html(page("Signed in to FastTrackStudio", &who))
+        }
+        Err(e) => Html(page(
+            "Sign-in did not complete",
+            &html_escape(&e.to_string()),
+        )),
+    }
+}
+
 /// Mount the callback route on the engine's HTTP server.
 pub fn extend(host: EngineHost, backend: Tone3000Backend) -> EngineHost {
     let path = callback_path(backend.redirect_uri());

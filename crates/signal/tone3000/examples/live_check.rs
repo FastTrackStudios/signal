@@ -61,8 +61,12 @@ async fn main() {
 
     // ── Sign in ───────────────────────────────────────────────────────
     step("session");
-    if backend.status().signed_in {
-        ok(&format!("already signed in as {}", backend.status().username));
+    let existing = backend.status().await;
+    if existing.signed_in {
+        ok(&format!(
+            "already signed in as {} (via {})",
+            existing.username, existing.via
+        ));
     } else {
         let request = backend.begin_sign_in(false);
         if request.authorize_url.is_empty() {

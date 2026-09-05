@@ -1,0 +1,28 @@
+[package]
+name = "signal-account"
+version.workspace = true
+edition = "2021"          # matches the sibling signal crates
+license.workspace = true
+authors.workspace = true
+description = "The FastTrackStudio account on the engine: sign in to the issuer, and read the linked third-party tokens it brokers"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The shared redirect sign-in — PKCE and the four wire shapes, written
+# once in architect so five apps cannot each get the base64 alphabet
+# subtly wrong — plus the 0600 token store.
+auth-client.workspace = true
+reqwest = { workspace = true }
+rand = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+url = "2"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+wiremock = "0.6"
+tempfile = "3"

@@ -14,6 +14,9 @@ workspace = true
 tone3000.workspace = true
 signal-nam.workspace = true
 signal-tone3000-proto.workspace = true
+# The FastTrackStudio account, whose linked token is preferred over a
+# local TONE3000 session when the engine has one.
+signal-account.workspace = true
 architect = { workspace = true, features = ["platform"] }
 # The model/image transfers: the wire client streams to an AsyncWrite but
 # reports no progress, and artwork is not its concern at all.
@@ -36,6 +39,8 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 # A stubbed catalog on a loopback port: the conversation is the thing under
 # test, and it cannot be tested without one.
 wiremock = "0.6"
+# The brokered-token test stands up a stub issuer beside the stub catalog.
+auth-client.workspace = true
 url = "2"
 signal-nam.workspace = true
 serde_json.workspace = true

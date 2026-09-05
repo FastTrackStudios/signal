@@ -12,7 +12,7 @@
 use signal_tone3000_proto::tone3000::Tone3000 as _;
 use signal_tone3000_proto::{ToneQuery, ToneShelf};
 use signal_tone3000::{Config, Tone3000Backend};
-use wiremock::matchers::{body_string_contains, method, path, query_param};
+use wiremock::matchers::{bearer_token, body_string_contains, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const TONE_ID: &str = "51949";
@@ -103,10 +103,106 @@ async fn signing_in_persists_the_session_and_the_account_name() {
     // Status must be answerable from disk alone — no request, and correct
     // even with the catalog unreachable.
     drop(server);
-    let status = backend.status();
+    let status = backend.status().await;
     assert!(status.signed_in);
     assert_eq!(status.username, "brucew");
     assert!(status.error.is_empty());
+}
+
+/// The point of linking an account: this engine holds no TONE3000 session
+/// at all, and the catalog still works — the issuer brokers the token.
+#[tokio::test]
+async fn a_linked_account_authorizes_the_catalog_with_no_local_session() {
+    let (server, backend, dir) = fixture().await;
+
+    // The issuer, standing in for auth.fasttrackstudio.app.
+    let issuer = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/oauth2/linked-token"))
+        .and(query_param("provider", "tone3000"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "provider": "tone3000",
+            "login": "acodywright",
+            "account_id": "57af",
+            "access_token": "brokered-token"
+        })))
+        .mount(&issuer)
+        .await;
+
+    // A FastTrackStudio session on disk; no TONE3000 one.
+    let session_path = dir.path().join("account/session.json");
+    std::fs::create_dir_all(session_path.parent().unwrap()).unwrap();
+    auth_client::TokenStore::save(
+        &auth_client::FileTokenStore::new(session_path.clone()),
+        &auth_client::StoredSession::new("fts-token"),
+    )
+    .unwrap();
+    let account = std::sync::Arc::new(signal_account::Account::new(
+        signal_account::AccountConfig {
+            issuer: issuer.uri(),
+            client_id: "signal".into(),
+            redirect_uri: "http://localhost:4040/account/callback".into(),
+            session_path,
+        },
+    ));
+    let backend = backend.with_account(account);
+
+    // It reports itself authorized, and says by what.
+    let status = backend.status().await;
+    assert!(status.signed_in);
+    assert_eq!(status.via, "account");
+    assert_eq!(status.username, "acodywright");
+
+    // And the catalog is actually reachable, with the brokered credential.
+    Mock::given(method("GET"))
+        .and(path("/api/v1/tones/search"))
+        .and(bearer_token("brokered-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "data": [tone_detail_json()],
+            "page": 1, "page_size": 24, "total": 1, "total_pages": 1
+        })))
+        .mount(&server)
+        .await;
+
+    let page = backend.search(ToneQuery::default()).await;
+    assert!(page.error.is_empty(), "{}", page.error);
+    assert_eq!(page.tones.len(), 1);
+}
+
+/// A local session is this engine's own and needs no network to confirm,
+/// so it is preferred over the broker.
+#[tokio::test]
+async fn a_local_session_wins_over_a_linked_account() {
+    let (server, backend, dir) = fixture().await;
+    sign_in(&server, &backend, false).await;
+
+    let issuer = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/oauth2/linked-token"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0) // never asked: the local session answered first
+        .mount(&issuer)
+        .await;
+
+    let session_path = dir.path().join("account/session.json");
+    std::fs::create_dir_all(session_path.parent().unwrap()).unwrap();
+    auth_client::TokenStore::save(
+        &auth_client::FileTokenStore::new(session_path.clone()),
+        &auth_client::StoredSession::new("fts-token"),
+    )
+    .unwrap();
+    let backend = backend.with_account(std::sync::Arc::new(signal_account::Account::new(
+        signal_account::AccountConfig {
+            issuer: issuer.uri(),
+            client_id: "signal".into(),
+            redirect_uri: "http://localhost:4040/account/callback".into(),
+            session_path,
+        },
+    )));
+
+    let status = backend.status().await;
+    assert_eq!(status.via, "tone3000");
+    assert_eq!(status.username, "brucew");
 }
 
 #[tokio::test]
@@ -114,7 +210,7 @@ async fn signing_out_forgets_the_session() {
     let (server, backend, _dir) = fixture().await;
     sign_in(&server, &backend, false).await;
     backend.sign_out();
-    assert!(!backend.status().signed_in);
+    assert!(!backend.status().await.signed_in);
 }
 
 /// Closing TONE3000's picker is a person changing their mind. It comes back

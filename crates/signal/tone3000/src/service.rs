@@ -76,6 +76,15 @@ struct Inner {
     known_images: Mutex<HashSet<String>>,
     /// Built lazily from the stored session; dropped on sign-out.
     client: tokio::sync::Mutex<Option<api::Client>>,
+    /// The FastTrackStudio account, when the engine has one.
+    ///
+    /// Preferred over a local TONE3000 session, because the issuer holds
+    /// the refresh token and rotates it in one place: link once at
+    /// auth.fasttrackstudio.app/account, and every machine signed in to
+    /// that account can download captures without its own authorization.
+    /// A local session stays the fallback — for someone with no
+    /// FastTrackStudio account, and for when the issuer is unreachable.
+    account: Option<Arc<signal_account::Account>>,
     downloads: PubSub<DownloadProgress>,
     http: reqwest::Client,
 }
@@ -104,10 +113,25 @@ impl Tone3000Backend {
                 tones: Mutex::new(HashMap::new()),
                 known_images: Mutex::new(HashSet::new()),
                 client: tokio::sync::Mutex::new(None),
+                account: None,
                 downloads: architect::rig::events_hub(),
                 http: reqwest::Client::new(),
             }),
         }
+    }
+
+    /// Read the account's linked TONE3000 token instead of holding a
+    /// local session, when one is available.
+    #[must_use]
+    pub fn with_account(mut self, account: Arc<signal_account::Account>) -> Self {
+        // `Arc::get_mut` is sound here: this is a builder, called before
+        // the backend has been cloned into a router.
+        if let Some(inner) = Arc::get_mut(&mut self.inner) {
+            inner.account = Some(account);
+        } else {
+            tracing::error!("tone3000: with_account called after the backend was shared");
+        }
+        self
     }
 
     /// The composed service router — mount on any vox transport.
@@ -138,6 +162,16 @@ impl Tone3000Backend {
         if let Some(client) = guard.as_ref() {
             return Ok(client.clone());
         }
+
+        // The brokered path first. It is not cached in `client`: the issuer
+        // hands out a short-lived token and is the only thing that knows
+        // when it was last refreshed, so a client held here would go stale
+        // invisibly. One request to a service the engine already talks to
+        // is the cheaper mistake.
+        if let Some(brokered) = self.brokered_client().await {
+            return Ok(brokered);
+        }
+
         let tokens = self.inner.session.stored_tokens()?;
         let store = self.inner.session.token_store().clone();
         let username = tokens.username.clone();
@@ -155,6 +189,34 @@ impl Tone3000Backend {
         let client = builder.build();
         *guard = Some(client.clone());
         Ok(client)
+    }
+
+    /// A client carrying the account's linked token, if there is one.
+    ///
+    /// Returns `None` rather than an error whenever the brokered route is
+    /// not available — no account, not linked, issuer unreachable — because
+    /// every one of those is a reason to fall back to a local session, not
+    /// a reason to fail the call.
+    async fn brokered_client(&self) -> Option<api::Client> {
+        let account = self.inner.account.as_ref()?;
+        match account.linked_token(signal_account::TONE3000_PROVIDER).await {
+            Ok(linked) => {
+                tracing::debug!(
+                    login = linked.login.as_deref().unwrap_or_default(),
+                    "tone3000: using the account's linked token"
+                );
+                let mut builder = api::Client::builder(&self.inner.cfg.publishable_key)
+                    .access_token(linked.access_token);
+                if let Some(base) = &self.inner.cfg.base_url {
+                    builder = builder.base_url(base.clone());
+                }
+                Some(builder.build())
+            }
+            Err(e) => {
+                tracing::debug!(%e, "tone3000: no brokered token — falling back to a local session");
+                None
+            }
+        }
     }
 
     /// A client with no session — only good for redeeming an authorization.
@@ -471,19 +533,41 @@ impl Tone3000Backend {
 }
 
 impl Tone3000 for Tone3000Backend {
-    fn status(&self) -> SignInStatus {
+    async fn status(&self) -> SignInStatus {
+        // A local session wins: it is this engine's own, it needs no
+        // network to confirm, and someone who signed in here directly
+        // expects to see that rather than an account they also happen to
+        // have linked.
         match self.inner.session.token_store().load() {
-            Ok(Some(tokens)) => SignInStatus {
-                signed_in: true,
-                username: tokens.username,
-                error: String::new(),
-            },
-            Ok(None) => SignInStatus::default(),
-            Err(e) => SignInStatus {
-                error: e.to_string(),
-                ..SignInStatus::default()
-            },
+            Ok(Some(tokens)) => {
+                return SignInStatus {
+                    signed_in: true,
+                    username: tokens.username,
+                    error: String::new(),
+                    via: "tone3000".to_string(),
+                };
+            }
+            Ok(None) => {}
+            Err(e) => {
+                return SignInStatus {
+                    error: e.to_string(),
+                    ..SignInStatus::default()
+                };
+            }
         }
+
+        // Otherwise the account, if it has TONE3000 linked.
+        if let Some(account) = self.inner.account.as_ref() {
+            if let Ok(linked) = account.linked_token(signal_account::TONE3000_PROVIDER).await {
+                return SignInStatus {
+                    signed_in: true,
+                    username: linked.login.unwrap_or_default(),
+                    error: String::new(),
+                    via: "account".to_string(),
+                };
+            }
+        }
+        SignInStatus::default()
     }
 
     fn begin_sign_in(&self, prompt_select_tone: bool) -> AuthRequest {
@@ -788,6 +872,7 @@ impl Tone3000Backend {
             signed_in: true,
             username,
             error: String::new(),
+            via: "tone3000".to_string(),
         })
     }
 }
@@ -972,11 +1057,12 @@ mod tests {
         assert!(request.request_id.is_empty());
     }
 
-    #[test]
-    fn a_fresh_engine_reports_signed_out_without_an_error() {
+    #[tokio::test]
+    async fn a_fresh_engine_reports_signed_out_without_an_error() {
         let dir = tempfile::tempdir().unwrap();
-        let status = Tone3000Backend::new(cfg(dir.path())).status();
+        let status = Tone3000Backend::new(cfg(dir.path())).status().await;
         assert!(!status.signed_in);
+        assert!(status.via.is_empty(), "authorized by nothing");
         assert!(
             status.error.is_empty(),
             "never having signed in is not a failure"
