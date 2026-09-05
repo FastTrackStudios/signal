@@ -242,7 +242,10 @@ fn walking_the_render_tree_does_not_allocate() {
     rn.prepare(48_000.0, 256);
     // A non-unity fader, so the input-trim and meter paths are walked too
     // rather than short-circuited by the `== 1.0` fast path.
-    cells.set(Role::Layer, "Keys 1", 0.8);
+    assert!(
+        cells.set(Role::Layer, "Keys 1", 0.8),
+        "the lane has a fader cell"
+    );
 
     let (mut l, mut r) = (vec![0.0f32; 256], vec![0.0f32; 256]);
     let struck = [note_on(69, 100)];

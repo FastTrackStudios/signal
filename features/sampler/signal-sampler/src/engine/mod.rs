@@ -43,6 +43,90 @@ pub fn note_dropped() {
     NOTES_DROPPED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Output frames that came out digitally silent while voices were sounding.
+///
+/// The streaming signature. A voice whose chunk has not arrived reads 0.0
+/// and asks for it (`fts_sample`'s stream path returns silence for a
+/// non-resident chunk rather than blocking the audio thread), so a starved
+/// stream is not a dropout — it is a scatter of micro-gaps through otherwise
+/// correct audio, and it sounds like vinyl crackle rather than a click.
+/// Nothing measured this: `xruns` and `over_budget` both read zero while it
+/// happens, because the callback is perfectly on time and rendering silence.
+static GAP_FRAMES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Output frames whose sample jumped further in one step than audio can.
+///
+/// The discontinuity signature: a gap ENDING (the stream snapping back to
+/// signal), a voice retired mid-waveform, or a gain applied per block instead
+/// of ramped. Distinct from a gap, and a different fix.
+static CLICK_FRAMES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Non-finite output samples (NaN / inf). Always a bug, and audible as a
+/// burst of noise, so it is counted separately rather than folded into clicks.
+static NONFINITE_FRAMES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Largest one-sample jump seen, in millionths (an integer so it can live in
+/// an atomic). Says how bad the worst discontinuity was, not just that one
+/// happened.
+static PEAK_SLEW_PPM: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// A one-sample jump larger than this is not audio.
+///
+/// A full-scale 1 kHz sine moves ~0.13 per sample at 48 kHz, and even a hard
+/// piano attack stays well under this; a gap edge is a jump straight to or
+/// from zero. Set high enough that ordinary transients do not register.
+pub const CLICK_SLEW: f32 = 0.5;
+
+/// What the audio output actually looked like — the artefacts a deadline
+/// counter cannot see. See [`GAP_FRAMES`] and [`CLICK_FRAMES`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct OutputGlitches {
+    pub gap_frames: usize,
+    pub click_frames: usize,
+    pub nonfinite_frames: usize,
+    /// Worst one-sample jump, in millionths of full scale.
+    pub peak_slew_ppm: usize,
+}
+
+/// Record one block's worth of output analysis (see [`OutputGlitches`]).
+pub fn record_output_glitches(g: OutputGlitches) {
+    use std::sync::atomic::Ordering::Relaxed;
+    if g.gap_frames > 0 {
+        GAP_FRAMES.fetch_add(g.gap_frames, Relaxed);
+    }
+    if g.click_frames > 0 {
+        CLICK_FRAMES.fetch_add(g.click_frames, Relaxed);
+    }
+    if g.nonfinite_frames > 0 {
+        NONFINITE_FRAMES.fetch_add(g.nonfinite_frames, Relaxed);
+    }
+    if g.peak_slew_ppm > 0 {
+        PEAK_SLEW_PPM.fetch_max(g.peak_slew_ppm, Relaxed);
+    }
+}
+
+/// Output artefacts since process start (or the last [`reset_output_glitches`]).
+#[must_use]
+pub fn output_glitches() -> OutputGlitches {
+    use std::sync::atomic::Ordering::Relaxed;
+    OutputGlitches {
+        gap_frames: GAP_FRAMES.load(Relaxed),
+        click_frames: CLICK_FRAMES.load(Relaxed),
+        nonfinite_frames: NONFINITE_FRAMES.load(Relaxed),
+        peak_slew_ppm: PEAK_SLEW_PPM.load(Relaxed),
+    }
+}
+
+/// Zero the artefact counters — so a measurement can cover a chosen window
+/// rather than everything since the process started.
+pub fn reset_output_glitches() {
+    use std::sync::atomic::Ordering::Relaxed;
+    GAP_FRAMES.store(0, Relaxed);
+    CLICK_FRAMES.store(0, Relaxed);
+    NONFINITE_FRAMES.store(0, Relaxed);
+    PEAK_SLEW_PPM.store(0, Relaxed);
+}
+
 /// Notes dropped for want of a resident sample since process start.
 pub fn notes_dropped() -> usize {
     NOTES_DROPPED.load(std::sync::atomic::Ordering::Relaxed)

@@ -2981,6 +2981,41 @@ impl KeysRigSvc for KeysRigBackend {
         } else {
             0
         };
+        // Enrich THIS span rather than logging: `status` is polled by every
+        // attached UI, so the vox span architect already opens per call is a
+        // free, regular carrier for the rig's realtime health — one wide
+        // event per poll instead of a log line per metric.
+        //
+        // The audio thread contributes nothing here but relaxed atomic loads;
+        // all of these are counters it bumped, read from this (ordinary)
+        // thread. `wide::set` is a no-op when no OTel layer is installed, so
+        // this costs nothing when nobody is collecting.
+        //
+        // `audio.gap_frames` is the field worth watching: it counts output
+        // frames that were digitally silent while voices were sounding, which
+        // is what a starved sample stream produces. Deadline counters
+        // (`audio.over_budget`, `audio.xruns`) stay at zero through it,
+        // because the callback IS on time — it is just rendering silence.
+        {
+            use architect_telemetry::wide;
+            let g = signal_sampler::engine::output_glitches();
+            wide::set("rig", "keys");
+            wide::set("audio.running", running);
+            wide::set("audio.voices", i64::from(voices));
+            wide::set("audio.block_frames", i64::from(rt.block_frames));
+            wide::set("audio.render_mean_ms", f64::from(rt.mean_render_ms));
+            wide::set("audio.render_peak_ms", f64::from(rt.peak_render_ms));
+            wide::set("audio.xruns", rt.xruns.cast_signed());
+            wide::set("audio.over_budget", rt.over_budget.cast_signed());
+            wide::set("audio.blocks", rt.blocks.cast_signed());
+            wide::set("audio.gap_frames", g.gap_frames as i64);
+            wide::set("audio.click_frames", g.click_frames as i64);
+            wide::set("audio.nonfinite_frames", g.nonfinite_frames as i64);
+            wide::set(
+                "audio.notes_dropped",
+                signal_sampler::engine::notes_dropped() as i64,
+            );
+        }
         KeysStatus {
             running,
             loaded_preset,

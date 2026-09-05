@@ -144,6 +144,7 @@ fn main() {
         let r = KeysRigSvc::status(&backend).rt;
         (r.blocks, f64::from(r.mean_render_ms) * r.blocks as f64)
     };
+    signal_sampler::engine::reset_output_glitches();
     let faults0 = major_faults();
     let minor0 = minor_faults();
     // Measure the PLAY window, not the open: installing a preset and filling
@@ -308,6 +309,19 @@ fn main() {
         0.0
     };
     println!("page faults while playing: major={faults} minor={minor}");
+    // What the OUTPUT looked like, as opposed to whether the callback was on
+    // time. A starved stream reads silence for a chunk that has not arrived,
+    // so it shows up here and NOWHERE in the deadline numbers.
+    let g = signal_sampler::engine::output_glitches();
+    let played_frames = (played * 48_000.0) as usize;
+    println!(
+        "output artefacts: gaps={} ({:.3}% of frames) clicks={} nonfinite={} peak_slew={:.3}",
+        g.gap_frames,
+        100.0 * g.gap_frames as f64 / played_frames.max(1) as f64,
+        g.click_frames,
+        g.nonfinite_frames,
+        g.peak_slew_ppm as f64 / 1.0e6,
+    );
     println!(
         "per-chord voices: {}",
         per_chord_voices
