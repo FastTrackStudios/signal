@@ -33,11 +33,13 @@ pub use shelf_alt::*;
 // resolves and this split stays a pure move.
 pub(crate) use brickwall::{
     bell_brickwall_cascade, bell_brickwall_proq4, bell_brickwall_proq4_n, bell_three_point_synth,
-    brickwall_per_section_table,
 };
-pub(crate) use lagrange::{bell_bucket_b_section_from_analog, lagrange3pt_synth_kernel, lagrange_synth_alt_path};
-pub(crate) use s2::{bell_s2_proq4, highpass_s2_proq4, highpass_section_proq4, lowpass_s2_proq4, mode0_forward, proq4_s2_from_prototype_with_subfreq, proq4_s2_from_prototype_with_subfreq_pub};
-pub(crate) use tables::{apply_proq4_prewarp, bp_cascade_for_q, lp_atoms_for_slope};
+pub(crate) use lagrange::lagrange_synth_alt_path;
+pub(crate) use s2::{
+    bell_s2_proq4, highpass_s2_proq4, lowpass_s2_proq4, mode0_forward,
+    proq4_s2_from_prototype_with_subfreq, proq4_s2_from_prototype_with_subfreq_pub,
+};
+pub(crate) use tables::{bp_cascade_for_q, lp_atoms_for_slope};
 
 /// Compute cascade biquads for a peak/bell filter.
 ///

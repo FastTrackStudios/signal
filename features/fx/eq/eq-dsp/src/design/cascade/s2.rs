@@ -419,53 +419,6 @@ pub fn lowpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     )
 }
 
-/// Pro-Q 4 Highpass slope-2 (audio-path Lagrange-MZT).
-///
-/// Analog prototype ZPK:
-///   numerator   = (1, 0, 0)        →  `P_zero(s)` = s²
-///   denominator = (1, √2/Q, 1)     →  `P_pole(s)` = s² + (√2/Q)·ω₀·s + ω₀²
-///
-/// Sub-frequencies decoded from runtime probe captures
-/// (`lp_hp_notch_bp_subfreq_capture.txt`, ft=2):
-///   `w_pole` = ω₀
-///   `w_zero` = 0.001 · ω₀
-///   `w_third` = 0.2 · ω₀
-///   `w_eval` = 0 at Q ≤ 1, ~2.45 at Q ≥ 2
-///   `g_ref` = 0
-/// HP section synthesis with Q-INDEPENDENT sub-frequencies.
-/// Used by slope ≥ 4 cascades where each section has different Q but
-/// all sections use `w_pole` = `min(ω₀_user, 0.7π)` per
-/// `hp_high_fc_subfreq_analysis.md`.
-#[must_use]
-pub fn highpass_section_proq4(freq_hz: f64, q_section: f64, sample_rate: f64) -> Coeffs {
-    use std::f64::consts::SQRT_2;
-    let q_sec = q_section.max(1e-6);
-    let alpha = SQRT_2 / q_sec;
-    let omega0 = (2.0 * PI * freq_hz / sample_rate).min(PI - 0.01);
-    const W_POLE_HF_CLAMP: f64 = 0.7 * PI;
-    let w_pole = omega0.min(W_POLE_HF_CLAMP);
-    let w_zero = 0.001 * w_pole;
-    let w_third = 0.2 * w_pole;
-    // Binary substitutes w_eval=π for HP 1-root branch (per
-    // lp_hp_notch_bp_subfreq_decoded.md proto[4] table; mode-0 ASM
-    // captures confirm — see hp_mode01_capture.csv).
-    let w_eval = PI;
-    proq4_s2_from_prototype_with_subfreq(
-        freq_hz,
-        sample_rate,
-        1.0,
-        0.0,
-        0.0,
-        1.0,
-        alpha,
-        1.0,
-        w_pole,
-        w_zero,
-        w_third,
-        w_eval,
-    )
-}
-
 #[must_use]
 pub fn highpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
