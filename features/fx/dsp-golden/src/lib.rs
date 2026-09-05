@@ -38,4 +38,4 @@ pub mod signal;
 pub use dsp_core::num;
 
 pub use alloc::{AllocReport, CountingAlloc, assert_no_alloc, measure_alloc};
-pub use golden::{Golden, Mismatch};
+pub use golden::{Golden, Mismatch, Sample};

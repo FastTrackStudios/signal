@@ -14,6 +14,10 @@
 //! Regenerate with `UPDATE_GOLDEN=1 cargo nextest run -p <crate>`, and read the
 //! resulting diff — a reference file changing in a commit that claimed to be a
 //! pure refactor is the alarm, not a chore.
+//!
+//! Both float widths are pinned. Several DSP cores compute in `f64` and only
+//! narrow at the output, and pinning those at `f32` would throw away exactly
+//! the low bits a refactor is most likely to disturb.
 
 use core::fmt::{self, Write as _};
 use std::fs;
@@ -27,16 +31,74 @@ const REPORTED: usize = 8;
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
+/// A float this harness can pin.
+///
+/// Implemented for `f32` and `f64` only. The associated widths are what keep a
+/// reference file's text identical to what the single-width version wrote, so
+/// adding `f64` support did not invalidate anything already recorded.
+pub trait Sample: Copy + fmt::Display {
+    /// Bytes in the bit pattern — what the hash consumes per sample.
+    const BYTES: usize;
+    /// Hex digits a probe is written with.
+    const HEX_WIDTH: usize;
+
+    /// The IEEE-754 bit pattern, widened to `u64`.
+    fn bits(self) -> u64;
+    /// Rebuild from a pattern produced by [`Sample::bits`].
+    fn from_bits(bits: u64) -> Self;
+    /// Whether this is a real number rather than a NaN or an infinity.
+    fn finite(self) -> bool;
+    /// For failure reports only — never for the comparison itself.
+    fn to_f64(self) -> f64;
+}
+
+impl Sample for f32 {
+    const BYTES: usize = 4;
+    const HEX_WIDTH: usize = 8;
+
+    fn bits(self) -> u64 {
+        u64::from(Self::to_bits(self))
+    }
+    fn from_bits(bits: u64) -> Self {
+        Self::from_bits(u32::try_from(bits & 0xFFFF_FFFF).unwrap_or(0))
+    }
+    fn finite(self) -> bool {
+        Self::is_finite(self)
+    }
+    fn to_f64(self) -> f64 {
+        f64::from(self)
+    }
+}
+
+impl Sample for f64 {
+    const BYTES: usize = 8;
+    const HEX_WIDTH: usize = 16;
+
+    fn bits(self) -> u64 {
+        Self::to_bits(self)
+    }
+    fn from_bits(bits: u64) -> Self {
+        Self::from_bits(bits)
+    }
+    fn finite(self) -> bool {
+        Self::is_finite(self)
+    }
+    fn to_f64(self) -> Self {
+        self
+    }
+}
+
 /// FNV-1a over the raw bit patterns. Spelled out rather than pulled from a
 /// crate so that no dependency bump can silently invalidate every reference
 /// file in the tree.
 #[must_use]
-fn digest(samples: &[f32]) -> u64 {
+fn digest<S: Sample>(samples: &[S]) -> u64 {
     samples.iter().fold(FNV_OFFSET, |acc, sample| {
         sample
-            .to_bits()
+            .bits()
             .to_le_bytes()
             .iter()
+            .take(S::BYTES)
             .fold(acc, |h, byte| (h ^ u64::from(*byte)).wrapping_mul(FNV_PRIME))
     })
 }
@@ -52,21 +114,23 @@ fn probe_indices(len: usize) -> impl Iterator<Item = usize> {
 struct Record {
     len: usize,
     hash: u64,
-    probes: Vec<(usize, u32)>,
+    probes: Vec<(usize, u64)>,
+    hex_width: usize,
 }
 
 impl Record {
-    fn measure(samples: &[f32]) -> Self {
+    fn measure<S: Sample>(samples: &[S]) -> Self {
         Self {
             len: samples.len(),
             hash: digest(samples),
             probes: probe_indices(samples.len())
-                .filter_map(|i| samples.get(i).map(|s| (i, s.to_bits())))
+                .filter_map(|i| samples.get(i).map(|s| (i, s.bits())))
                 .collect(),
+            hex_width: S::HEX_WIDTH,
         }
     }
 
-    fn render(&self, name: &str) -> String {
+    fn render<S: Sample>(&self, name: &str) -> String {
         let mut out = String::new();
         out.push_str("# dsp-golden v1 — bit-exact reference vector.\n");
         out.push_str("# Regenerate: UPDATE_GOLDEN=1 cargo nextest run -p <crate>\n");
@@ -75,12 +139,17 @@ impl Record {
         let _ = writeln!(out, "len {}", self.len);
         let _ = writeln!(out, "hash {:016x}", self.hash);
         for (index, bits) in &self.probes {
-            let _ = writeln!(out, "probe {index} {bits:08x} {}", f32::from_bits(*bits));
+            let _ = writeln!(
+                out,
+                "probe {index} {bits:0width$x} {}",
+                S::from_bits(*bits),
+                width = self.hex_width,
+            );
         }
         out
     }
 
-    fn parse(text: &str) -> Option<Self> {
+    fn parse(text: &str, hex_width: usize) -> Option<Self> {
         let mut len = None;
         let mut hash = None;
         let mut probes = Vec::new();
@@ -90,12 +159,12 @@ impl Record {
                 (Some("len"), Some(value), _) => len = value.parse().ok(),
                 (Some("hash"), Some(value), _) => hash = u64::from_str_radix(value, 16).ok(),
                 (Some("probe"), Some(index), Some(bits)) => {
-                    probes.push((index.parse().ok()?, u32::from_str_radix(bits, 16).ok()?));
+                    probes.push((index.parse().ok()?, u64::from_str_radix(bits, 16).ok()?));
                 }
                 _ => {}
             }
         }
-        Some(Self { len: len?, hash: hash?, probes })
+        Some(Self { len: len?, hash: hash?, probes, hex_width })
     }
 }
 
@@ -117,7 +186,7 @@ pub enum Mismatch {
         report: String,
     },
     /// The output is not a finite signal, which no reference should ever pin.
-    NotFinite { name: String, index: usize, value: f32 },
+    NotFinite { name: String, index: usize, value: f64 },
 }
 
 impl fmt::Display for Mismatch {
@@ -177,9 +246,13 @@ impl Golden {
     ///
     /// Returns [`Mismatch`] when the reference is absent, unreadable, malformed,
     /// or no longer matches the output.
-    pub fn check(&self, name: &str, samples: &[f32]) -> Result<(), Mismatch> {
-        if let Some((index, value)) = samples.iter().enumerate().find(|(_, s)| !s.is_finite()) {
-            return Err(Mismatch::NotFinite { name: name.to_owned(), index, value: *value });
+    pub fn check<S: Sample>(&self, name: &str, samples: &[S]) -> Result<(), Mismatch> {
+        if let Some((index, value)) = samples.iter().enumerate().find(|(_, s)| !s.finite()) {
+            return Err(Mismatch::NotFinite {
+                name: name.to_owned(),
+                index,
+                value: value.to_f64(),
+            });
         }
 
         let measured = Record::measure(samples);
@@ -190,7 +263,7 @@ impl Golden {
                 fs::create_dir_all(parent)
                     .map_err(|error| Mismatch::Io { path: path.clone(), error })?;
             }
-            return fs::write(&path, measured.render(name))
+            return fs::write(&path, measured.render::<S>(name))
                 .map_err(|error| Mismatch::Io { path, error });
         }
 
@@ -201,7 +274,7 @@ impl Golden {
             }
             Err(error) => return Err(Mismatch::Io { path, error }),
         };
-        let stored = Record::parse(&text).ok_or(Mismatch::Corrupt { path })?;
+        let stored = Record::parse(&text, S::HEX_WIDTH).ok_or(Mismatch::Corrupt { path })?;
 
         if stored == measured {
             return Ok(());
@@ -210,7 +283,7 @@ impl Golden {
     }
 }
 
-fn report(stored: &Record, measured: &Record, samples: &[f32]) -> String {
+fn report<S: Sample>(stored: &Record, measured: &Record, samples: &[S]) -> String {
     let mut out = String::new();
     if stored.len != measured.len {
         let _ = writeln!(
@@ -227,7 +300,7 @@ fn report(stored: &Record, measured: &Record, samples: &[f32]) -> String {
         .iter()
         .filter_map(|(index, was)| {
             samples.get(*index).and_then(|now| {
-                (now.to_bits() != *was).then(|| (*index, f32::from_bits(*was), *now))
+                (now.bits() != *was).then(|| (*index, S::from_bits(*was).to_f64(), now.to_f64()))
             })
         })
         .collect();
@@ -243,7 +316,7 @@ fn report(stored: &Record, measured: &Record, samples: &[f32]) -> String {
     let _ = writeln!(out, "  {} of {} probes drifted:", drifted.len(), stored.probes.len());
     for (index, was, now) in drifted.iter().take(REPORTED) {
         let delta = now - was;
-        let relative = if was.abs() > f32::MIN_POSITIVE { delta / was } else { f32::NAN };
+        let relative = if was.abs() > f64::MIN_POSITIVE { delta / was } else { f64::NAN };
         let _ = writeln!(
             out,
             "    [{index}] {was:+.9e} -> {now:+.9e}  (delta {delta:+.3e}, {:.3} ppm)",
@@ -287,7 +360,7 @@ mod tests {
     fn a_record_round_trips_through_its_text_form() {
         let samples = crate::signal::noise(1024, 3);
         let record = Record::measure(&samples);
-        let parsed = Record::parse(&record.render("round/trip"));
+        let parsed = Record::parse(&record.render::<f32>("round/trip"), f32::HEX_WIDTH);
         assert_eq!(parsed, Some(record));
     }
 

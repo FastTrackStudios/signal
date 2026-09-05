@@ -75,6 +75,15 @@ pub fn transients(len: usize, sample_rate: f32) -> Vec<f32> {
         .collect()
 }
 
+/// The same excitation at double width, for cores that compute in `f64`.
+///
+/// Widening is exact, so an `f32` and an `f64` core fed through here see the
+/// identical signal and their reference vectors stay comparable.
+#[must_use]
+pub fn widen(samples: &[f32]) -> Vec<f64> {
+    samples.iter().copied().map(f64::from).collect()
+}
+
 /// Silence — the input that catches a stage humming, self-oscillating, or
 /// leaking denormals when nothing is playing.
 #[must_use]
