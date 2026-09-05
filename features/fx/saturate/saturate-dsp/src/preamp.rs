@@ -20,6 +20,9 @@
 //! oscilloscope) and a harmonic-spectrum probe measuring H1..Hn of the
 //! current settings against an internally synthesized sine.
 
+use dsp_core::num;
+use dsp_core::{Channel, PerChannel};
+
 use crate::tanh_approx;
 
 /// Per-side transfer curves. All pass through the origin with unity
@@ -103,6 +106,67 @@ const CROSSOVER_MAX: f32 = 0.15;
 const MAKEUP_REF_SIGMA: f32 = 0.126; // 10^(−18/20)
 pub const MAX_CHANNELS: usize = 2;
 
+/// The tilt shelf: `H(z) = (b0 + b1·z⁻¹) / (1 + a1·z⁻¹)`.
+#[derive(Debug, Clone, Copy)]
+struct TiltCoeffs {
+    b0: f32,
+    b1: f32,
+    a1: f32,
+}
+
+impl Default for TiltCoeffs {
+    /// A wire: `H(z) = 1`.
+    fn default() -> Self {
+        Self { b0: 1.0, b1: 0.0, a1: 0.0 }
+    }
+}
+
+/// One-pole history — one instance for the emphasis, one for its inverse.
+#[derive(Debug, Clone, Copy, Default)]
+struct OnePole {
+    x1: f32,
+    y1: f32,
+}
+
+impl OnePole {
+    /// One sample through `H(z)`.
+    #[inline]
+    const fn emphasise(&mut self, c: TiltCoeffs, x: f32) -> f32 {
+        let y = c.b0 * x + c.b1 * self.x1 - c.a1 * self.y1;
+        self.x1 = x;
+        self.y1 = y;
+        y
+    }
+
+    /// One sample through `1/H(z)` — the algebraic inverse, not a mirrored
+    /// second shelf, which is why `b0` divides.
+    #[inline]
+    const fn de_emphasise(&mut self, c: TiltCoeffs, x: f32) -> f32 {
+        let y = (x + c.a1 * self.x1 - c.b1 * self.y1) / c.b0;
+        self.x1 = x;
+        self.y1 = y;
+        y
+    }
+}
+
+/// Everything one channel remembers between samples.
+///
+/// These were five parallel `[_; MAX_CHANNELS]` arrays reached by a clamped
+/// index at each entry point. One struct per channel means adding state is a
+/// single edit, `reset()` cannot miss a field, and the channel index is
+/// validated once by [`Channel`] rather than at every access.
+#[derive(Debug, Clone, Copy, Default)]
+struct ChannelState {
+    /// Output DC blocker, one pole.
+    dc_x1: f32,
+    dc_y1: f32,
+    /// Sag envelope: program level pulling the operating point off centre.
+    sag_env: f32,
+    /// Tilt emphasis into the stage, and its inverse coming out.
+    tilt_pre: OnePole,
+    tilt_post: OnePole,
+}
+
 /// How a driven stage gives the gain back.
 ///
 /// This is not a detail. A saturator whose loudness moves with its drive
@@ -169,11 +233,7 @@ pub struct ClassAPreamp {
     /// Output trim (linear).
     pub output_gain: f32,
     // DC blocker state per channel: y[n] = x[n] − x[n−1] + R·y[n−1].
-    dc_x1: [f32; MAX_CHANNELS],
-    dc_y1: [f32; MAX_CHANNELS],
     dc_r: f32,
-    /// Sag envelope (per channel).
-    sag_env: [f32; MAX_CHANNELS],
     sag_coeff: f32,
     sag_ms: f32,
     /// Tilt: pre-emphasis into the stage, de-emphasis out of it. Which
@@ -188,10 +248,7 @@ pub struct ClassAPreamp {
     /// the shaper sees and nothing else, so anything it leaves behind
     /// in the output is a lie about what the knob does.
     tilt_db: f32,
-    // Emphasis H(z) = (b0 + b1·z⁻¹) / (1 + a1·z⁻¹).
-    tilt_b0: f32,
-    tilt_b1: f32,
-    tilt_a1: f32,
+    tilt: TiltCoeffs,
     /// Pink-weighted RMS gain of the emphasis shelf — the level multiplier
     /// the shaper sees relative to the input. Cached by
     /// [`Self::set_tilt_db`] for [`Self::refresh_makeup`].
@@ -200,8 +257,8 @@ pub struct ClassAPreamp {
     /// 6-band emphasis EQ, `fx.sat.emphasis.makeup`) — set from
     /// [`crate::emphasis::EmphasisEq::sigma_gain`] before makeup refresh.
     emphasis_sigma_gain: f32,
-    tilt_pre: [(f32, f32); MAX_CHANNELS],
-    tilt_post: [(f32, f32); MAX_CHANNELS],
+    /// Per-channel history.
+    channels: PerChannel<ChannelState>,
     sample_rate: f32,
 }
 
@@ -223,20 +280,16 @@ impl ClassAPreamp {
             makeup: Makeup::InverseDrive,
             mix: 1.0,
             output_gain: 1.0,
-            dc_x1: [0.0; MAX_CHANNELS],
-            dc_y1: [0.0; MAX_CHANNELS],
+
             dc_r: 0.0,
-            sag_env: [0.0; MAX_CHANNELS],
+
             sag_coeff: 0.0,
             sag_ms: 30.0,
             tilt_db: 0.0,
             tilt_sigma_gain: 1.0,
             emphasis_sigma_gain: 1.0,
-            tilt_b0: 1.0,
-            tilt_b1: 0.0,
-            tilt_a1: 0.0,
-            tilt_pre: [(0.0, 0.0); MAX_CHANNELS],
-            tilt_post: [(0.0, 0.0); MAX_CHANNELS],
+            tilt: TiltCoeffs::default(),
+            channels: PerChannel::default(),
             sample_rate: 48_000.0,
         };
         p.set_sample_rate(sample_rate);
@@ -274,6 +327,10 @@ impl ClassAPreamp {
     /// image is applied on the way out, so the tilt decides *what*
     /// distorts rather than what the output sounds like.
     pub fn set_tilt_db(&mut self, db: f32) {
+        // The 700 Hz hinge splits the audible band log2(700/20) : log2(20k/700).
+        const OCT_BELOW: f32 = 5.129;
+        const OCT_ABOVE: f32 = 4.836;
+
         self.tilt_db = db.clamp(-TILT_MAX_DB, TILT_MAX_DB);
         // The shelf, written out from the one-pole split. With
         // L(z) = a / (1 − (1−a)z⁻¹) and H = lo·L + hi·(1 − L):
@@ -281,9 +338,11 @@ impl ClassAPreamp {
         let a = (core::f32::consts::TAU * TILT_HZ / self.sample_rate).clamp(1.0e-4, 1.0);
         let hi = crate::db_to_gain(self.tilt_db);
         let lo = crate::db_to_gain(-self.tilt_db);
-        self.tilt_b0 = hi + (lo - hi) * a;
-        self.tilt_b1 = -hi * (1.0 - a);
-        self.tilt_a1 = -(1.0 - a);
+        self.tilt = TiltCoeffs {
+            b0: hi + (lo - hi) * a,
+            b1: -hi * (1.0 - a),
+            a1: -(1.0 - a),
+        };
 
         // What the emphasis does to the LEVEL reaching the shaper, for pink
         // program (equal power per octave, 20 Hz–20 kHz): the octaves below
@@ -291,8 +350,6 @@ impl ClassAPreamp {
         // [`Self::refresh_makeup`], which must calibrate at the level the
         // shaper actually sees rather than the input level — the 700 Hz
         // hinge splits the audible band log2(700/20) : log2(20k/700).
-        const OCT_BELOW: f32 = 5.129;
-        const OCT_ABOVE: f32 = 4.836;
         self.tilt_sigma_gain = crate::sqrt_approx(
             (OCT_BELOW * lo * lo + OCT_ABOVE * hi * hi) / (OCT_BELOW + OCT_ABOVE),
         );
@@ -411,7 +468,7 @@ impl ClassAPreamp {
         let mut mean_sq = 0.0f32;
         let mut x_var = 0.0f32;
         for i in 0..N {
-            let z = -SPAN + 2.0 * SPAN * (i as f32) / ((N - 1) as f32);
+            let z = -SPAN + 2.0 * SPAN * num::count_to_f32(i) / num::count_to_f32(N - 1);
             // exp(−z²/2) via exp2: e^a = 2^(a·log2e).
             let w = crate::exp2_approx(-z * z * 0.5 * core::f32::consts::LOG2_E);
             let x = sigma * z;
@@ -456,61 +513,45 @@ impl ClassAPreamp {
     /// path) need to mix *after* that, not here.
     #[inline]
     pub fn process_wet(&mut self, ch: usize, input: f32) -> f32 {
-        let ch = ch.min(MAX_CHANNELS - 1);
-        let x = self.tilt_in(ch, input);
-        // Sag: program level pulls the operating point off center.
+        // Fold onto the crate's processing width first, so a host asking for
+        // channel 5 of a stereo stage gets the same slot it always did.
+        let ch = Channel::new(ch.min(MAX_CHANNELS - 1));
+        let tilt = self.tilt;
+
+        // Pre-emphasis runs unconditionally rather than short-circuited at
+        // zero tilt: at zero the coefficients are an identity anyway, and
+        // keeping the state warm means moving the knob does not click.
+        let x = self.channels[ch].tilt_pre.emphasise(tilt, input);
+
+        // Sag: program level pulls the operating point off centre.
         let bias = if self.sag > 0.0 {
-            let e = &mut self.sag_env[ch];
-            *e += (x.abs() * self.drive - *e) * self.sag_coeff;
-            self.q_point + self.sag * (*e).min(2.0) * 0.4
+            let env = &mut self.channels[ch].sag_env;
+            *env += (x.abs() * self.drive - *env) * self.sag_coeff;
+            self.q_point + self.sag * (*env).min(2.0) * 0.4
         } else {
             self.q_point
         };
         let shaped = self.shape_side(self.deadband(x * self.drive) + bias);
+
         // Output DC blocker — the bias voltage never leaves the box.
-        let y = shaped - self.dc_x1[ch] + self.dc_r * self.dc_y1[ch];
-        self.dc_x1[ch] = shaped;
-        self.dc_y1[ch] = y;
+        let state = &mut self.channels[ch];
+        let y = shaped - state.dc_x1 + self.dc_r * state.dc_y1;
+        state.dc_x1 = shaped;
+        state.dc_y1 = y;
+
         let wet = match self.makeup {
             Makeup::InverseDrive => y / self.drive.max(1.0e-3),
             Makeup::Matched(gain) => y * gain,
             Makeup::None => y,
         };
-        self.tilt_out(ch, wet)
+
+        // De-emphasis: 1/H(z), so the signal comes out exactly level. What
+        // changed is only which part of it was pushed into the knee.
+        self.channels[ch].tilt_post.de_emphasise(tilt, wet)
     }
 
-    /// Pre-emphasis: the shelf, applied.
-    ///
-    /// Run unconditionally rather than short-circuited at zero tilt —
-    /// at zero the coefficients make it an identity anyway, and keeping
-    /// the state warm means moving the knob (or switching profile) does
-    /// not click.
-    #[inline]
-    fn tilt_in(&mut self, ch: usize, x: f32) -> f32 {
-        let (x1, y1) = &mut self.tilt_pre[ch];
-        let y = self.tilt_b0 * x + self.tilt_b1 * *x1 - self.tilt_a1 * *y1;
-        *x1 = x;
-        *y1 = y;
-        y
-    }
-
-    /// De-emphasis: 1/H(z), so the signal comes out exactly level. What
-    /// changed is only which part of it was pushed into the knee.
-    #[inline]
-    fn tilt_out(&mut self, ch: usize, x: f32) -> f32 {
-        let (x1, y1) = &mut self.tilt_post[ch];
-        let y = (x + self.tilt_a1 * *x1 - self.tilt_b1 * *y1) / self.tilt_b0;
-        *x1 = x;
-        *y1 = y;
-        y
-    }
-
-    pub const fn reset(&mut self) {
-        self.dc_x1 = [0.0; MAX_CHANNELS];
-        self.dc_y1 = [0.0; MAX_CHANNELS];
-        self.sag_env = [0.0; MAX_CHANNELS];
-        self.tilt_pre = [(0.0, 0.0); MAX_CHANNELS];
-        self.tilt_post = [(0.0, 0.0); MAX_CHANNELS];
+    pub fn reset(&mut self) {
+        self.channels.fill(ChannelState::default());
     }
 }
 
@@ -518,14 +559,18 @@ impl ClassAPreamp {
 #[cfg(feature = "analysis")]
 pub mod analysis {
     extern crate std;
+
+    use dsp_core::num;
+    use std::vec;
+
     use super::ClassAPreamp;
 
     /// Sample the static transfer curve into `out` over x ∈ [−1, 1] —
     /// the indicative display draws its big slow sine through this.
     pub fn transfer_curve(pre: &ClassAPreamp, out: &mut [(f32, f32)]) {
-        let n = out.len().max(2);
+        let last = num::count_to_f32(out.len().max(2).saturating_sub(1));
         for (i, slot) in out.iter_mut().enumerate() {
-            let x = -1.0 + 2.0 * i as f32 / (n - 1) as f32;
+            let x = 2.0f32.mul_add(num::count_to_f32(i) / last, -1.0);
             *slot = (x, pre.transfer(x));
         }
     }
@@ -544,20 +589,26 @@ pub mod analysis {
         probe.mix = 1.0;
         probe.output_gain = 1.0;
         probe.reset();
-        let mut buf = [0.0f32; N];
-        for (i, b) in buf.iter_mut().enumerate() {
-            let ph = core::f32::consts::TAU * CYCLES as f32 * i as f32 / N as f32;
-            *b = probe.process(0, ph.sin());
-        }
-        // Skip the DC-blocker warmup: analyze the second half.
-        let seg = &buf[N / 2..];
+        // On the heap, not the stack: 8192 floats is 32 KB, which is most of a
+        // thread's stack on some hosts. This runs on the UI thread, where an
+        // allocation is ordinary — the realtime rule is about `process`.
+        let length = num::count_to_f32(N);
+        let cycles = num::count_to_f32(CYCLES);
+        let buf: vec::Vec<f32> = (0..N)
+            .map(|i| {
+                let ph = core::f32::consts::TAU * cycles * num::count_to_f32(i) / length;
+                probe.process(0, ph.sin())
+            })
+            .collect();
+        // Skip the DC-blocker warmup: analyse the second half.
+        let seg = buf.get(N / 2..).unwrap_or(&[]);
         let mut h1 = 0.0f32;
         for (k, slot) in out.iter_mut().enumerate() {
-            let f = (CYCLES * (k + 1)) as f32 / N as f32;
+            let f = cycles * num::count_to_f32(k.saturating_add(1)) / length;
             let mut re = 0.0f32;
             let mut im = 0.0f32;
             for (i, &s) in seg.iter().enumerate() {
-                let ph = core::f32::consts::TAU * f * i as f32;
+                let ph = core::f32::consts::TAU * f * num::count_to_f32(i);
                 re += s * ph.cos();
                 im += s * ph.sin();
             }
@@ -647,7 +698,7 @@ mod tests {
         let mut mean = 0.0f64;
         let n = 96_000;
         for i in 0..n {
-            let x = (core::f32::consts::TAU * 100.0 * i as f32 / 48_000.0).sin() * 0.5;
+            let x = (core::f32::consts::TAU * 100.0 * num::i32_to_f32(i) / 48_000.0).sin() * 0.5;
             let y = p.process(0, x);
             if i >= n / 2 {
                 mean += f64::from(y);
@@ -734,7 +785,7 @@ mod tests {
         p.negative = SideShaper::Transformer;
         p.knee = 1.0;
         for i in -40..=40 {
-            let x = i as f32 / 20.0;
+            let x = num::i32_to_f32(i) / 20.0;
             assert!(
                 (p.transfer(x) - x.clamp(-1.0, 1.0)).abs() < 1.0e-5,
                 "knee=1 must be a hard clip at {x}: {}",
@@ -772,8 +823,16 @@ mod tests {
         let mut p = ClassAPreamp::new(48_000.0);
         p.drive = 1.0;
         p.crossover = 1.0;
-        assert_eq!(p.transfer(0.05), 0.0, "inside the deadband must be silence");
-        assert!(p.transfer(0.5) != 0.0, "outside it, the stage conducts");
+        assert_eq!(
+            p.transfer(0.05).to_bits(),
+            0.0_f32.to_bits(),
+            "inside the deadband must be silence"
+        );
+        assert_ne!(
+            p.transfer(0.5).to_bits(),
+            0.0_f32.to_bits(),
+            "outside it, the stage conducts"
+        );
     }
 
     /// Tilt decides what distorts, not what the output sounds like: a
@@ -785,7 +844,7 @@ mod tests {
         p.set_tilt_db(9.0);
         let mut max_err = 0.0f32;
         for i in 0..48_000 {
-            let x = (core::f32::consts::TAU * 1_000.0 * i as f32 / 48_000.0).sin() * 0.5;
+            let x = (core::f32::consts::TAU * 1_000.0 * num::i32_to_f32(i) / 48_000.0).sin() * 0.5;
             let y = p.process(0, x);
             if i > 24_000 {
                 max_err = max_err.max((y - x).abs());
@@ -807,7 +866,7 @@ mod tests {
             // 60 Hz — well below the 700 Hz hinge.
             let mut peak = 0.0f32;
             for i in 0..48_000 {
-                let x = (core::f32::consts::TAU * 60.0 * i as f32 / 48_000.0).sin() * 0.5;
+                let x = (core::f32::consts::TAU * 60.0 * num::i32_to_f32(i) / 48_000.0).sin() * 0.5;
                 let y = p.process(0, x);
                 if i > 24_000 {
                     peak = peak.max(y.abs());
@@ -829,7 +888,7 @@ mod tests {
         let mut p = ClassAPreamp::new(48_000.0);
         let mut max_err = 0.0f32;
         for i in 0..48_000 {
-            let x = (core::f32::consts::TAU * 440.0 * i as f32 / 48_000.0).sin() * 0.5;
+            let x = (core::f32::consts::TAU * 440.0 * num::i32_to_f32(i) / 48_000.0).sin() * 0.5;
             let y = p.process(0, x);
             if i > 24_000 {
                 max_err = max_err.max((y - x).abs());

@@ -21,6 +21,8 @@
 //! `no_std` like the rest of the crate: the one transcendental (cos for the
 //! coefficient math) is a range-reduced polynomial below.
 
+use dsp_core::num;
+
 /// Number of emphasis bands.
 pub const BANDS: usize = 6;
 
@@ -43,6 +45,10 @@ impl EmphShape {
         }
     }
 }
+
+/// Below this the band is treated as off — the section is skipped entirely,
+/// which is what makes a flat EQ bit-exact rather than merely close.
+const INAUDIBLE_DB: f32 = 0.01;
 
 /// One band's settings.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -74,7 +80,7 @@ struct Coeffs {
     a2: f32,
 }
 
-/// Per-channel DF1 state for one section.
+/// DF1 state for one section.
 #[derive(Debug, Clone, Copy, Default)]
 struct State {
     x1: f32,
@@ -83,15 +89,56 @@ struct State {
     y2: f32,
 }
 
+impl State {
+    /// One sample through `H(z)`.
+    #[inline]
+    fn step(&mut self, c: &Coeffs, x: f32) -> f32 {
+        let y = c.b0 * x + c.b1 * self.x1 + c.b2 * self.x2 - c.a1 * self.y1 - c.a2 * self.y2;
+        self.push(x, y);
+        y
+    }
+
+    /// One sample through `1/H(z)`: numerator and denominator swapped, which
+    /// is why `b0` divides rather than multiplies.
+    #[inline]
+    fn step_inverse(&mut self, c: &Coeffs, x: f32) -> f32 {
+        let y = (x + c.a1 * self.x1 + c.a2 * self.x2 - c.b1 * self.y1 - c.b2 * self.y2) / c.b0;
+        self.push(x, y);
+        y
+    }
+
+    #[inline]
+    const fn push(&mut self, x: f32, y: f32) {
+        self.x2 = self.x1;
+        self.x1 = x;
+        self.y2 = self.y1;
+        self.y1 = y;
+    }
+}
+
+/// One band, designed: its coefficients and both filter histories.
+///
+/// These were four parallel `[_; BANDS]` arrays walked by index. Keeping them
+/// in one struct means the coefficients and the history they belong to cannot
+/// drift out of step, and the passes below become a fold over sections rather
+/// than an indexed loop the compiler has to be trusted about.
+#[derive(Debug, Clone, Copy, Default)]
+struct Section {
+    coeffs: Coeffs,
+    /// False when the band's gain is inaudible — the section is skipped
+    /// entirely, which is also why a flat EQ is bit-exact rather than merely
+    /// close.
+    active: bool,
+    pre: State,
+    post: State,
+}
+
 /// The pair, per audio channel: instantiate one per channel like the
 /// preamps ([`crate::preamp::ClassAPreamp`] is per-channel in the plugin).
 #[derive(Default)]
 pub struct EmphasisEq {
     bands: [EmphBand; BANDS],
-    coeffs: [Coeffs; BANDS],
-    active: [bool; BANDS],
-    pre_state: [State; BANDS],
-    post_state: [State; BANDS],
+    sections: [Section; BANDS],
     sample_rate: f32,
     /// Pink-weighted RMS gain of the emphasis curve — what it does to the
     /// level reaching the shaper. Feed into the preamp's makeup calibration
@@ -120,7 +167,7 @@ impl EmphasisEq {
     /// default plugin stays bit-identical.
     #[must_use] 
     pub fn is_active(&self) -> bool {
-        self.active.iter().any(|&a| a)
+        self.sections.iter().any(|section| section.active)
     }
 
     /// Design all sections from the band table. Setter-path arithmetic —
@@ -128,14 +175,13 @@ impl EmphasisEq {
     /// section is a handful of ops and there is no allocation).
     pub fn set_bands(&mut self, bands: &[EmphBand; BANDS]) {
         self.bands = *bands;
-        for (i, band) in bands.iter().enumerate() {
-            let inaudible = band.gain_db.abs() < 0.01;
-            self.active[i] = !inaudible;
-            if inaudible {
-                self.coeffs[i] = Coeffs::default();
-                continue;
-            }
-            self.coeffs[i] = design(band, self.sample_rate);
+        for (section, band) in self.sections.iter_mut().zip(bands) {
+            section.active = band.gain_db.abs() >= INAUDIBLE_DB;
+            section.coeffs = if section.active {
+                design(band, self.sample_rate)
+            } else {
+                Coeffs::default()
+            };
         }
         self.sigma_gain = self.compute_sigma_gain();
     }
@@ -154,78 +200,66 @@ impl EmphasisEq {
     /// Emphasis (pre-stage) pass for channel `ch`'s sample.
     #[inline]
     pub fn pre(&mut self, x: f32) -> f32 {
-        let mut v = x;
-        for i in 0..BANDS {
-            if !self.active[i] {
-                continue;
-            }
-            let c = &self.coeffs[i];
-            let s = &mut self.pre_state[i];
-            let y = c.b0 * v + c.b1 * s.x1 + c.b2 * s.x2 - c.a1 * s.y1 - c.a2 * s.y2;
-            s.x2 = s.x1;
-            s.x1 = v;
-            s.y2 = s.y1;
-            s.y1 = y;
-            v = y;
-        }
-        v
+        self.sections
+            .iter_mut()
+            .filter(|section| section.active)
+            .fold(x, |v, section| {
+                let coeffs = section.coeffs;
+                section.pre.step(&coeffs, v)
+            })
     }
 
     /// De-emphasis (post-stage) pass: the exact inverse sections, in reverse
     /// order. `H⁻¹ = (1 + a1 z⁻¹ + a2 z⁻²) / (b0 + b1 z⁻¹ + b2 z⁻²)`.
     #[inline]
     pub fn post(&mut self, x: f32) -> f32 {
-        let mut v = x;
-        for i in (0..BANDS).rev() {
-            if !self.active[i] {
-                continue;
-            }
-            let c = &self.coeffs[i];
-            let s = &mut self.post_state[i];
-            let y = (v + c.a1 * s.x1 + c.a2 * s.x2 - c.b1 * s.y1 - c.b2 * s.y2) / c.b0;
-            s.x2 = s.x1;
-            s.x1 = v;
-            s.y2 = s.y1;
-            s.y1 = y;
-            v = y;
-        }
-        v
+        self.sections
+            .iter_mut()
+            .rev()
+            .filter(|section| section.active)
+            .fold(x, |v, section| {
+                let coeffs = section.coeffs;
+                section.post.step_inverse(&coeffs, v)
+            })
     }
 
     pub fn reset(&mut self) {
-        self.pre_state = [State::default(); BANDS];
-        self.post_state = [State::default(); BANDS];
+        for section in &mut self.sections {
+            section.pre = State::default();
+            section.post = State::default();
+        }
     }
 
     /// The emphasis curve's magnitude in dB at `freq` — what the editor
     /// draws (`fx.sat.emphasis.display`).
     #[must_use] 
     pub fn magnitude_db(&self, freq: f32) -> f32 {
-        let mut db = 0.0;
-        for i in 0..BANDS {
-            if self.active[i] {
-                db += section_mag_db(&self.coeffs[i], freq, self.sample_rate);
-            }
-        }
-        db
+        self.sections
+            .iter()
+            .filter(|section| section.active)
+            .map(|section| section_mag_db(&section.coeffs, freq, self.sample_rate))
+            .sum()
     }
 
     /// Pink-weighted RMS gain over 20 Hz–20 kHz: equal power per octave, so
     /// log-spaced sample points weight equally.
     fn compute_sigma_gain(&self) -> f32 {
+        /// Log-spaced probe points across the audible band.
+        const POINTS: usize = 24;
+
         if !self.is_active() {
             return 1.0;
         }
-        const POINTS: usize = 24;
-        let mut sum = 0.0f32;
-        for k in 0..POINTS {
-            // 20 Hz … 20 kHz, log spaced: 20 * 10^(3k/(N-1)).
-            let exp = 3.0 * k as f32 / (POINTS - 1) as f32;
-            let f = 20.0 * pow10(exp);
-            let g = crate::db_to_gain(self.magnitude_db(f));
-            sum += g * g;
-        }
-        crate::sqrt_approx(sum / POINTS as f32).clamp(0.05, 20.0)
+        let last = num::count_to_f32(POINTS.saturating_sub(1));
+        let sum: f32 = (0..POINTS)
+            .map(|k| {
+                // 20 Hz … 20 kHz, log spaced: 20 * 10^(3k/(N-1)).
+                let f = 20.0 * pow10(3.0 * num::count_to_f32(k) / last);
+                let g = crate::db_to_gain(self.magnitude_db(f));
+                g * g
+            })
+            .sum();
+        crate::sqrt_approx(sum / num::count_to_f32(POINTS)).clamp(0.05, 20.0)
     }
 }
 
@@ -241,7 +275,7 @@ fn section_mag_db(c: &Coeffs, freq: f32, sample_rate: f32) -> f32 {
     // |B(e^jw)|² for b0 + b1 z⁻¹ + b2 z⁻²:
     let num = b0 * b0 + b1 * b1 + b2 * b2 + 2.0 * (b0 * b1 + b1 * b2) * cw + 2.0 * b0 * b2 * c2w;
     let den = 1.0 + a1 * a1 + a2 * a2 + 2.0 * (a1 + a1 * a2) * cw + 2.0 * a2 * c2w;
-    (10.0 * log10_64((num / den.max(1e-30)).max(1e-30))) as f32
+    crate::num::narrow(10.0 * log10_64((num / den.max(1e-30)).max(1e-30)))
 }
 
 /// RBJ peak / shelf design, α = sin(w0)/(2Q).
@@ -251,8 +285,8 @@ fn design(band: &EmphBand, sample_rate: f32) -> Coeffs {
     // A = 10^(gain/40).
     let a_lin = pow10(band.gain_db.clamp(-24.0, 24.0) / 40.0);
     let w0 = core::f64::consts::TAU * f64::from(f) / f64::from(sample_rate);
-    let cw = cos64(w0) as f32;
-    let sw = sin64(w0) as f32;
+    let cw = num::narrow(cos64(w0));
+    let sw = num::narrow(sin64(w0));
     let alpha = sw / (2.0 * q);
     let sqrt_a = crate::sqrt_approx(a_lin);
 
@@ -317,12 +351,7 @@ fn sin64(x: f64) -> f64 {
 }
 
 fn floor64(x: f64) -> f64 {
-    let t = x as i64 as f64;
-    if x < t {
-        t - 1.0
-    } else {
-        t
-    }
+    num::floor_f64(x)
 }
 
 /// 10^x via the crate's exp2: 10^x = 2^(x·log2 10).
@@ -334,13 +363,13 @@ fn pow10(x: f32) -> f32 {
 /// (~1e-9 relative).
 fn log10_64(x: f64) -> f64 {
     let bits = x.max(1e-300).to_bits();
-    let exp = ((bits >> 52) & 0x7FF) as i64 - 1023;
+    let exp = i32::try_from((bits >> 52) & 0x7FF).unwrap_or(0).saturating_sub(1023);
     let mant = f64::from_bits((bits & 0x000F_FFFF_FFFF_FFFF) | 0x3FF0_0000_0000_0000);
     // ln(m) = 2 atanh((m−1)/(m+1)), m ∈ [1,2): 5 series terms suffice.
     let t = (mant - 1.0) / (mant + 1.0);
     let t2 = t * t;
     let ln_m = 2.0 * t * (1.0 + t2 * (1.0 / 3.0 + t2 * (1.0 / 5.0 + t2 * (1.0 / 7.0 + t2 / 9.0))));
-    (exp as f64 + ln_m / core::f64::consts::LN_2) * core::f64::consts::LOG10_2
+    (f64::from(exp) + ln_m / core::f64::consts::LN_2) * core::f64::consts::LOG10_2
 }
 
 #[cfg(test)]
@@ -370,7 +399,7 @@ mod tests {
                 x ^= x << 13;
                 x ^= x >> 17;
                 x ^= x << 5;
-                (x as f32 / u32::MAX as f32) - 0.5
+                num::narrow(f64::from(x) / f64::from(u32::MAX)) - 0.5
             })
             .collect()
     }
@@ -404,10 +433,12 @@ mod tests {
         let mut eq = EmphasisEq::new(48_000.0);
         assert!(!eq.is_active());
         for &x in &noise(64) {
-            assert_eq!(eq.pre(x), x);
-            assert_eq!(eq.post(x), x);
+            // Bit patterns: an inactive section is skipped entirely, so this
+            // is exactness, not tolerance.
+            assert_eq!(eq.pre(x).to_bits(), x.to_bits());
+            assert_eq!(eq.post(x).to_bits(), x.to_bits());
         }
-        assert_eq!(eq.sigma_gain(), 1.0);
+        assert_eq!(eq.sigma_gain().to_bits(), 1.0_f32.to_bits());
     }
 
     // r[verify fx.sat.emphasis]

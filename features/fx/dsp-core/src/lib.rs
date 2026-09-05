@@ -22,4 +22,4 @@ pub mod channel;
 pub mod num;
 
 pub use channel::{Channel, PerChannel};
-pub use num::{count_to_f32, f32_to_index, floor_to_i32, i32_to_f32, narrow, trunc_to_i32, u32_to_f32};
+pub use num::{count_to_f32, f32_to_index, floor_f64, floor_to_i32, i32_to_f32, narrow, trunc_to_i32, u32_to_f32};

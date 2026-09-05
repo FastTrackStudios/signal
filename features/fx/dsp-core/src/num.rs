@@ -135,6 +135,27 @@ pub const fn trunc_to_i32(x: f32) -> i32 {
     x as i32
 }
 
+/// The greatest integer not above `x` — `f64::floor` for crates that cannot
+/// reach `std` or `libm`.
+///
+/// Magnitudes past the `i64` range are already integral in `f64`, so they are
+/// returned unchanged rather than saturated.
+#[must_use]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "the audited boundary: the round trip through i64 is the floor, and magnitudes past its range are handled above"
+)]
+pub fn floor_f64(x: f64) -> f64 {
+    const INTEGRAL: f64 = (1_u64 << 53) as f64;
+    if !x.is_finite() || x.abs() >= INTEGRAL {
+        return x;
+    }
+    let truncated = x as i64 as f64;
+    if x < truncated { truncated - 1.0 } else { truncated }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,6 +220,20 @@ mod tests {
         for n in [0_i32, 1, -1, 48_000, -48_000, (1 << 24) - 1, -((1 << 24) - 1)] {
             assert_eq!(trunc_to_i32(i32_to_f32(n)), n);
         }
+    }
+
+    #[test]
+    fn flooring_f64_matches_the_mathematical_definition() {
+        for (input, expected) in [(0.0_f64, 0.0), (2.9, 2.0), (3.0, 3.0), (-0.1, -1.0), (-2.9, -3.0)] {
+            assert!((floor_f64(input) - expected).abs() < f64::EPSILON, "floor({input})");
+        }
+    }
+
+    #[test]
+    fn flooring_f64_passes_through_what_is_already_integral() {
+        assert!(floor_f64(f64::INFINITY).is_infinite());
+        assert!(floor_f64(f64::NAN).is_nan());
+        assert!((floor_f64(f64::MAX) - f64::MAX).abs() < f64::EPSILON);
     }
 
     #[test]

@@ -184,7 +184,7 @@ fn the_emphasis_pair_holds_its_reference_and_stays_invertible() {
         band.shape = EmphShape::from_index(u32::try_from(i % 3).unwrap_or(0));
         band.freq_hz = 80.0 * 2.0_f32.powi(i32::try_from(i).unwrap_or(0));
         band.gain_db = if i % 2 == 0 { 6.0 } else { -4.5 };
-        band.q = 0.7 + 0.3 * dsp_golden::num::count_to_f32(i);
+        band.q = 0.3f32.mul_add(dsp_golden::num::count_to_f32(i), 0.7);
     }
 
     let mut eq = EmphasisEq::new(SAMPLE_RATE);
