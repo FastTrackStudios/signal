@@ -135,6 +135,134 @@ fn eq_shape_to_filter(shape: u32) -> crate::FilterType {
     crate::design::slope::FilterShape::from_canonical_index(shape).to_filter_type()
 }
 
+/// Everything the engine tracks for one band.
+///
+/// This replaced sixteen parallel `[_; EQ_BANDS]` arrays walked by a shared
+/// index, three of them anonymous tuples — `dyn_cfg` was a
+/// `(f64, f64, f64, f64, bool, bool)` destructured positionally at every use,
+/// which is six chances to transpose two settings and no way for the compiler
+/// to notice. Naming the fields is most of the value here; removing 56
+/// indexing sites is the rest.
+#[derive(Debug, Clone, Copy)]
+struct BandSlot {
+    /// Pro-Q's "Used": the band exists at all.
+    used: bool,
+    /// Switched on rather than bypassed. A band renders only when both are set.
+    enabled: bool,
+    /// Canonical shape index, and the slope (needed for routing and
+    /// effective-order resolution).
+    shape: u32,
+    slope: f64,
+    placement: u32,
+    stream: u32,
+    /// Frequency / gain / Q in their own units. These used to be read out of
+    /// the host's id-indexed value vector, which is what tied the engine to
+    /// one particular parameter numbering; they live here so any front end
+    /// can drive it.
+    freq_hz: f64,
+    gain_db: f64,
+    q: f64,
+    dynamics: DynSettings,
+    side: SideChain,
+    spectral: SpectralSettings,
+    /// Whether the band currently routes through the dynamic engine.
+    dyn_active: bool,
+    /// Whether the band's dynamics ride the STATIC design's gain instead —
+    /// the shapes the SVF cannot build. See `DynBandParams::modulate_only`.
+    dyn_modulated: bool,
+    /// The gain each modulated band last had designed in, so the static
+    /// cascade is only rebuilt when it has actually moved.
+    dyn_modulated_gain: f64,
+}
+
+/// The raw dynamics parameters, formerly a six-tuple.
+#[derive(Debug, Clone, Copy)]
+struct DynSettings {
+    range_db: f64,
+    threshold_db: f64,
+    attack_pct: f64,
+    release_pct: f64,
+    auto: bool,
+    relative: bool,
+}
+
+/// The band's side-chain listening range, formerly a three-tuple.
+#[derive(Debug, Clone, Copy)]
+struct SideChain {
+    filtered: bool,
+    lo_hz: f64,
+    hi_hz: f64,
+}
+
+/// Per-band spectral-mode settings.
+#[derive(Debug, Clone, Copy)]
+struct SpectralSettings {
+    on: bool,
+    density: f64,
+    tilt: bool,
+}
+
+/// The bands, indexable without a bounds check that can fail.
+///
+/// Same shape as `dsp_core::PerChannel`, and for the same reason: the callers
+/// all guard with `if band >= EQ_BANDS { return; }` already, but that guard is
+/// in a line the compiler cannot connect to the access. Folding an
+/// out-of-range band onto the last one keeps the guard's meaning while making
+/// the access total.
+#[derive(Debug, Clone, Copy)]
+struct Bands([BandSlot; EQ_BANDS]);
+
+impl Bands {
+    fn iter(&self) -> core::slice::Iter<'_, BandSlot> {
+        self.0.iter()
+    }
+}
+
+impl core::ops::Index<usize> for Bands {
+    type Output = BandSlot;
+
+    fn index(&self, band: usize) -> &BandSlot {
+        let [first, ..] = &self.0;
+        self.0.get(band).unwrap_or(first)
+    }
+}
+
+impl core::ops::IndexMut<usize> for Bands {
+    fn index_mut(&mut self, band: usize) -> &mut BandSlot {
+        let [first, rest @ ..] = &mut self.0;
+        band.checked_sub(1)
+            .and_then(|i| rest.get_mut(i))
+            .map_or(first, |slot| slot)
+    }
+}
+
+impl BandSlot {
+    const DEFAULT: Self = Self {
+        used: false,
+        enabled: false,
+        shape: 0,
+        slope: 2.0,
+        placement: 0,
+        stream: 0,
+        freq_hz: 1000.0,
+        gain_db: 0.0,
+        q: 0.707,
+        dynamics: DynSettings {
+            range_db: 0.0,
+            threshold_db: -40.0,
+            attack_pct: 50.0,
+            release_pct: 50.0,
+            auto: true,
+            relative: false,
+        },
+        side: SideChain { filtered: false, lo_hz: 20.0, hi_hz: 20_000.0 },
+        spectral: SpectralSettings { on: false, density: 50.0, tilt: false },
+        dyn_active: false,
+        dyn_modulated: false,
+        dyn_modulated_gain: f64::NAN,
+    };
+}
+
 pub struct FtsEq {
     eq: crate::runtime::chain::EqChain,
     /// Steady-stream chain (transient mode only; mirrors band configs
@@ -144,17 +272,9 @@ pub struct FtsEq {
     spectral: crate::dynamics::spectral::SpectralEngine,
     spectral_regions: Vec<crate::dynamics::spectral::SpectralRegion>,
     dyn_bands: Vec<crate::dynamics::DynBand>,
-    /// (used, on) per band — a band renders only when both are set.
-    state: [(bool, bool); EQ_BANDS],
-    /// Canonical shape + slope index per band (needed for routing and
-    /// effective-order resolution).
-    shapes: [u32; EQ_BANDS],
-    slopes: [f64; EQ_BANDS],
-    placements: [u32; EQ_BANDS],
-    streams: [u32; EQ_BANDS],
-    spectral_on: [bool; EQ_BANDS],
-    spectral_density: [f64; EQ_BANDS],
-    spectral_tilt: [bool; EQ_BANDS],
+    /// Per-band settings and routing flags. One struct rather than the
+    /// sixteen parallel arrays this used to be.
+    bands: Bands,
     transient_mode: bool,
     split_solo: u32,
     transient_gain_db: f64,
@@ -172,25 +292,6 @@ pub struct FtsEq {
     /// became 4096.
     dry_ring: [Vec<f64>; 2],
     dry_pos: usize,
-    /// Band frequency / gain / Q, in their own units. These used to be read
-    /// out of the host's id-indexed value vector, which is what tied the
-    /// engine to one particular parameter numbering; they live here now so any
-    /// front end can drive it.
-    freqs: [f64; EQ_BANDS],
-    gains: [f64; EQ_BANDS],
-    qs: [f64; EQ_BANDS],
-    /// Per-band side-chain range: (filtered, lo, hi).
-    side_cfg: [(bool, f64, f64); EQ_BANDS],
-    /// Raw dynamic params per band: (range, thr, atk, rel, auto, relative).
-    dyn_cfg: [(f64, f64, f64, f64, bool, bool); EQ_BANDS],
-    /// Whether the band currently routes through the dynamic engine.
-    dyn_active: [bool; EQ_BANDS],
-    /// Whether the band's dynamics ride the STATIC design's gain instead —
-    /// the shapes the SVF cannot build. See `DynBandParams::modulate_only`.
-    dyn_modulated: [bool; EQ_BANDS],
-    /// The gain each modulated band last had designed in, so the static
-    /// cascade is only rebuilt when it has actually moved.
-    dyn_modulated_gain: [f64; EQ_BANDS],
     output_gain_db: f64,
     /// Pro-Q's Character: 0 Clean, 1 Subtle, 2 Warm.
     character: u32,
@@ -386,14 +487,7 @@ impl FtsEq {
                     d
                 })
                 .collect(),
-            state: [(false, false); EQ_BANDS],
-            shapes: [0; EQ_BANDS],
-            slopes: [2.0; EQ_BANDS],
-            placements: [0; EQ_BANDS],
-            streams: [0; EQ_BANDS],
-            spectral_on: [false; EQ_BANDS],
-            spectral_density: [50.0; EQ_BANDS],
-            spectral_tilt: [false; EQ_BANDS],
+            bands: Bands([BandSlot::DEFAULT; EQ_BANDS]),
             transient_mode: false,
             split_solo: 0,
             transient_gain_db: 0.0,
@@ -402,14 +496,6 @@ impl FtsEq {
             solo_filter: crate::dynamics::Svf::new(sample_rate),
             dry_ring: [vec![0.0; 2048], vec![0.0; 2048]],
             dry_pos: 0,
-            dyn_cfg: [(0.0, -40.0, 50.0, 50.0, true, false); EQ_BANDS],
-            dyn_active: [false; EQ_BANDS],
-            dyn_modulated: [false; EQ_BANDS],
-            dyn_modulated_gain: [f64::NAN; EQ_BANDS],
-            side_cfg: [(false, 20.0, 20_000.0); EQ_BANDS],
-            freqs: [1000.0; EQ_BANDS],
-            gains: [0.0; EQ_BANDS],
-            qs: [0.707; EQ_BANDS],
             output_gain_db: 0.0,
             character: 0,
             character_shaper: [CharacterShaper::default(); 2],
@@ -434,10 +520,18 @@ impl FtsEq {
     /// Route + configure one band after any of its params changed.
     fn sync_band(&mut self, band: usize) {
         let band = band.min(EQ_BANDS - 1);
-        let (used, on) = self.state[band];
+        let slot = self.bands[band];
+            let (used, on) = (slot.used, slot.enabled);
         let enabled = used && on;
-        let shape = crate::design::slope::FilterShape::from_canonical_index(self.shapes[band]);
-        let (range, thr, atk, rel, auto, relative) = self.dyn_cfg[band];
+        let shape = crate::design::slope::FilterShape::from_canonical_index(self.bands[band].shape);
+        let DynSettings {
+                range_db: range,
+                threshold_db: thr,
+                attack_pct: atk,
+                release_pct: rel,
+                auto,
+                relative,
+            } = self.bands[band].dynamics;
         // A band goes dynamic when it has a range and a dynamics-capable
         // shape (Bell/shelves — same rule as Pro-Q).
         let dyn_shape = match shape {
@@ -446,28 +540,28 @@ impl FtsEq {
             crate::design::slope::FilterShape::HighShelf => Some(crate::dynamics::DynShape::HighShelf),
             _ => None,
         };
-        let spectral = self.spectral_on[band] && range.abs() > 1.0e-3;
+        let spectral = self.bands[band].spectral.on && range.abs() > 1.0e-3;
         let go_dynamic = enabled && !spectral && range.abs() > 1.0e-3 && dyn_shape.is_some();
-        self.dyn_active[band] = go_dynamic;
+        self.bands[band].dyn_active = go_dynamic;
         // A dynamic band whose shape has no SVF equivalent — Flat Tilt is the
         // one the factory library uses — keeps its exact static design and has
         // that design's gain ridden by the detector instead. Measured against
         // the plugin, a dynamic Flat Tilt is simply the static Flat Tilt curve
         // scaled by the drive, and the static one already matches to 0.00 dB.
         let modulated = enabled && !spectral && range.abs() > 1.0e-3 && dyn_shape.is_none();
-        self.dyn_modulated[band] = modulated;
+        self.bands[band].dyn_modulated = modulated;
         if !modulated {
-            self.dyn_modulated_gain[band] = f64::NAN;
+            self.bands[band].dyn_modulated_gain = f64::NAN;
         }
 
-        let freq = self.freqs[band].clamp(10.0, 30000.0);
-        let gain = self.gains[band].clamp(-30.0, 30.0) * self.gain_scale;
-        let q = self.qs[band].clamp(0.025, 40.0);
+        let freq = self.bands[band].freq_hz.clamp(10.0, 30000.0);
+        let gain = self.bands[band].gain_db.clamp(-30.0, 30.0) * self.gain_scale;
+        let q = self.bands[band].q.clamp(0.025, 40.0);
 
         // Stream routing (transient mode): 0 Both, 1 Transient (chain
         // A), 2 Steady (chain B). Outside transient mode chain A takes
         // everything and chain B idles.
-        let stream = self.streams[band];
+        let stream = self.bands[band].stream;
         let in_a = !self.transient_mode || stream != 2;
         let in_b = self.transient_mode && stream != 1;
         for (chain, present) in [(&mut self.eq, in_a), (&mut self.eq_b, in_b)] {
@@ -476,7 +570,7 @@ impl FtsEq {
                 b.freq_hz = freq;
                 b.gain_db = gain;
                 b.q = q;
-                b.filter_type = eq_shape_to_filter(self.shapes[band]);
+                b.filter_type = eq_shape_to_filter(self.bands[band].shape);
                 // effective_order 0 = a 0 dB/oct cut = true bypass.
                 // Continuous slope. A cut's slope is a one-sided roll-off, so
                 // the integer part chooses the order and the remainder becomes
@@ -487,7 +581,7 @@ impl FtsEq {
                 //
                 // Continuity only applies below 36 dB/oct: the settings above
                 // it are discrete steps, not a range.
-                let raw = self.slopes[band].max(0.0);
+                let raw = self.bands[band].slope.max(0.0);
                 let laddered = matches!(
                     shape,
                     crate::design::slope::FilterShape::LowCut | crate::design::slope::FilterShape::HighCut
@@ -507,7 +601,7 @@ impl FtsEq {
                 b.order = order;
                 b.fractional_order = fraction;
                 b.enabled = b.enabled && (order > 0 || fraction > 1.0e-6);
-                b.placement = crate::runtime::band::Placement::from_index(self.placements[band]);
+                b.placement = crate::runtime::band::Placement::from_index(self.bands[band].placement);
             }
             chain.update_band(band);
         }
@@ -525,10 +619,10 @@ impl FtsEq {
             d.params.q = q;
             d.params.base_gain_db = gain;
             d.params.range_db = range * self.gain_scale;
-            d.params.placement = crate::runtime::band::Placement::from_index(self.placements[band]);
+            d.params.placement = crate::runtime::band::Placement::from_index(self.bands[band].placement);
             // Side-chain range: a filtered band listens to what it is told to,
             // an unfiltered one listens to itself.
-            let (filtered, lo, hi) = self.side_cfg[band];
+            let SideChain { filtered, lo_hz: lo, hi_hz: hi } = self.bands[band].side;
             d.params.side_mode = if filtered {
                 crate::dynamics::SideMode::Free
             } else {
@@ -655,18 +749,19 @@ impl FtsEq {
         for band in 0..EQ_BANDS {
             let band = band.min(EQ_BANDS - 1);
             let mut env = vec![0.0f64; n];
-            let (used, on) = self.state[band];
-            let dynamic = used && on && (self.dyn_active[band] || self.spectral_on[band]);
+            let slot = self.bands[band];
+            let (used, on) = (slot.used, slot.enabled);
+            let dynamic = used && on && (self.bands[band].dyn_active || self.bands[band].spectral.on);
             if dynamic {
-                let shape = crate::design::slope::FilterShape::from_canonical_index(self.shapes[band]);
-                let f0 = self.freqs[band].clamp(10.0, 30000.0);
-                let q = self.qs[band].clamp(0.025, 40.0);
+                let shape = crate::design::slope::FilterShape::from_canonical_index(self.bands[band].shape);
+                let f0 = self.bands[band].freq_hz.clamp(10.0, 30000.0);
+                let q = self.bands[band].q.clamp(0.025, 40.0);
                 // A band that touches one side of the image only moves half
                 // the signal, so it is worth half as much to a broadband
                 // compensation. "Hammond Levelling" is four bands that are
                 // really two, duplicated for left and right; counting both at
                 // full weight doubled the compensation and cost 1.6 dB.
-                let w = match crate::runtime::band::Placement::from_index(self.placements[band]) {
+                let w = match crate::runtime::band::Placement::from_index(self.bands[band].placement) {
                     crate::runtime::band::Placement::Stereo => 1.0,
                     _ => 0.5,
                 };
@@ -689,14 +784,15 @@ impl FtsEq {
         let mut live = [0.0f64; EQ_BANDS];
         let mut region = 0usize;
         for (band, live_slot) in live.iter_mut().enumerate() {
-            let (used, on) = self.state[band];
+            let slot = self.bands[band];
+            let (used, on) = (slot.used, slot.enabled);
             if !(used && on) {
                 continue;
             }
-            if self.spectral_on[band] && self.dyn_cfg[band].0.abs() > 1.0e-3 {
+            if self.bands[band].spectral.on && self.bands[band].dynamics.range_db.abs() > 1.0e-3 {
                 *live_slot = -self.spectral.region_reduction_db(region);
                 region = region.saturating_add(1);
-            } else if self.dyn_active[band] {
+            } else if self.bands[band].dyn_active {
                 // The band's live gain relative to the base the static chain
                 // is NOT carrying — a dynamic band is out of that chain
                 // entirely, so its whole applied gain counts here.
@@ -790,17 +886,18 @@ impl FtsEq {
         self.spectral_regions.clear();
         for band in 0..EQ_BANDS {
             let band = band.min(EQ_BANDS - 1);
-            let (used, on) = self.state[band];
-            if !(used && on && self.spectral_on[band]) {
+            let slot = self.bands[band];
+            let (used, on) = (slot.used, slot.enabled);
+            if !(used && on && self.bands[band].spectral.on) {
                 continue;
             }
-            let (range, thr, _, _, auto, _) = self.dyn_cfg[band];
+            let DynSettings { range_db: range, threshold_db: thr, auto, .. } = self.bands[band].dynamics;
             if range.abs() <= 1.0e-3 {
                 continue;
             }
-            let freq = self.freqs[band].clamp(10.0, 30000.0);
-            let q = self.qs[band].clamp(0.025, 40.0);
-            let shape = crate::design::slope::FilterShape::from_canonical_index(self.shapes[band]);
+            let freq = self.bands[band].freq_hz.clamp(10.0, 30000.0);
+            let q = self.bands[band].q.clamp(0.025, 40.0);
+            let shape = crate::design::slope::FilterShape::from_canonical_index(self.bands[band].shape);
             self.spectral_regions.push(crate::dynamics::spectral::SpectralRegion {
                 freq_hz: freq,
                 q,
@@ -824,8 +921,8 @@ impl FtsEq {
                 // The manual knob's own range is -80..0 dB.
                 threshold_db: thr,
                 auto,
-                density: (self.spectral_density[band] / 100.0).clamp(0.0, 1.0),
-                tilt: self.spectral_tilt[band],
+                density: (self.bands[band].spectral.density / 100.0).clamp(0.0, 1.0),
+                tilt: self.bands[band].spectral.tilt,
             });
         }
         self.spectral.set_regions(&self.spectral_regions);
@@ -848,11 +945,11 @@ impl FtsEq {
             return;
         }
         let band = band.min(EQ_BANDS - 1);
-        let freq = self.freqs[band].clamp(10.0, 30000.0);
-        let q = self.qs[band].clamp(0.025, 40.0);
+        let freq = self.bands[band].freq_hz.clamp(10.0, 30000.0);
+        let q = self.bands[band].q.clamp(0.025, 40.0);
         use crate::dynamics::SvfShape;
         use crate::design::slope::FilterShape as F;
-        let (shape, sf, sq) = match F::from_canonical_index(self.shapes[band]) {
+        let (shape, sf, sq) = match F::from_canonical_index(self.bands[band].shape) {
             F::LowShelf | F::LowCut => (SvfShape::Lowpass, freq, 0.707),
             F::HighShelf | F::HighCut => (SvfShape::Highpass, freq, 0.707),
             // Bells, notches, bandpasses, tilts: hear the band region.
@@ -862,7 +959,7 @@ impl FtsEq {
     }
     #[must_use]
     pub fn live_dyn_gain_db(&self, band: usize) -> Option<f64> {
-        (band < EQ_BANDS && self.dyn_active[band]).then(|| self.dyn_bands[band].live_gain_db())
+        (band < EQ_BANDS && self.bands[band].dyn_active).then(|| self.dyn_bands[band].live_gain_db())
     }
 
     /// Added latency in samples — non-zero only while a spectral band puts
@@ -923,8 +1020,10 @@ impl FtsEq {
     pub fn process(&mut self, buf_l: &mut [f64], buf_r: &mut [f64]) {
         // Fully-idle block (no active bands, no dynamics, no spectral,
         // no transient split, unity output): straight copy, zero DSP.
-        let any_dyn = self.dyn_active.iter().any(|&a| a)
-            || self.dyn_modulated.iter().any(|&a| a);
+        let any_dyn = self
+            .bands
+            .iter()
+            .any(|slot| slot.dyn_active || slot.dyn_modulated);
         if self.listen.is_none()
             && !self.transient_mode
             && !any_dyn
@@ -946,13 +1045,11 @@ impl FtsEq {
         let splitter = &mut self.splitter;
         let spectral = &mut self.spectral;
         let dyn_bands = &mut self.dyn_bands;
-        let dyn_active = &self.dyn_active;
-        let dyn_modulated = &self.dyn_modulated;
+        let slots = &mut self.bands;
         let character = self.character;
         let character_shaper = &mut self.character_shaper;
         let pan = self.output_pan;
         let pan_mid_side = self.output_pan_mid_side;
-        let dyn_modulated_gain = &mut self.dyn_modulated_gain;
         let transient_mode = self.transient_mode;
         let split_solo = self.split_solo;
         let tg = audiocore_dsp::db::db_to_linear(self.transient_gain_db);
@@ -1035,15 +1132,15 @@ impl FtsEq {
                     // only when the gain has actually moved — a redesign is
                     // not free, and a tenth of a decibel is inaudible.
                     for (bi, d) in dyn_bands.iter_mut().enumerate() {
-                        if !dyn_modulated[bi] {
+                        if !slots[bi].dyn_modulated {
                             continue;
                         }
                         for i in 0..left.len() {
                             d.observe(left[i], right[i], side_ref[i]);
                         }
                         let g = d.live_gain_db();
-                        if !(g - dyn_modulated_gain[bi]).abs().lt(&0.1) {
-                            dyn_modulated_gain[bi] = g;
+                        if !(g - slots[bi].dyn_modulated_gain).abs().lt(&0.1) {
+                            slots[bi].dyn_modulated_gain = g;
                             if let Some(band) = eq.band_mut(bi) {
                                 band.gain_db = g;
                             }
@@ -1053,7 +1150,7 @@ impl FtsEq {
                     eq.process(left, right);
                 }
                 for (bi, d) in dyn_bands.iter_mut().enumerate() {
-                    if !dyn_active[bi] {
+                    if !slots[bi].dyn_active {
                         continue;
                     }
                     for i in 0..left.len() {
@@ -1138,14 +1235,15 @@ impl FtsEq {
         if band >= EQ_BANDS {
             return;
         }
-        self.state[band] = (cfg.used, cfg.enabled);
-        self.freqs[band] = cfg.freq_hz;
-        self.gains[band] = cfg.gain_db;
-        self.qs[band] = cfg.q;
-        self.shapes[band] = cfg.shape;
-        self.slopes[band] = cfg.slope;
-        self.placements[band] = cfg.placement as u32;
-        self.streams[band] = cfg.stream;
+        self.bands[band].used = cfg.used;
+        self.bands[band].enabled = cfg.enabled;
+        self.bands[band].freq_hz = cfg.freq_hz;
+        self.bands[band].gain_db = cfg.gain_db;
+        self.bands[band].q = cfg.q;
+        self.bands[band].shape = cfg.shape;
+        self.bands[band].slope = cfg.slope;
+        self.bands[band].placement = cfg.placement as u32;
+        self.bands[band].stream = cfg.stream;
         self.sync_band(band);
     }
 
@@ -1154,22 +1252,22 @@ impl FtsEq {
         if band >= EQ_BANDS {
             return;
         }
-        self.dyn_cfg[band] = (
-            dynamics.range_db,
-            dynamics.threshold_db,
-            dynamics.attack_pct,
-            dynamics.release_pct,
-            dynamics.auto,
-            dynamics.relative,
-        );
-        self.spectral_on[band] = dynamics.spectral;
-        self.spectral_density[band] = dynamics.spectral_density;
-        self.spectral_tilt[band] = dynamics.spectral_tilt;
-        self.side_cfg[band] = (
-            dynamics.side_filtered,
-            dynamics.side_lo_hz,
-            dynamics.side_hi_hz,
-        );
+        self.bands[band].dynamics = DynSettings {
+            range_db: dynamics.range_db,
+            threshold_db: dynamics.threshold_db,
+            attack_pct: dynamics.attack_pct,
+            release_pct: dynamics.release_pct,
+            auto: dynamics.auto,
+            relative: dynamics.relative,
+        };
+        self.bands[band].spectral.on = dynamics.spectral;
+        self.bands[band].spectral.density = dynamics.spectral_density;
+        self.bands[band].spectral.tilt = dynamics.spectral_tilt;
+        self.bands[band].side = SideChain {
+            filtered: dynamics.side_filtered,
+            lo_hz: dynamics.side_lo_hz,
+            hi_hz: dynamics.side_hi_hz,
+        };
         self.sync_band(band);
     }
 
@@ -1252,7 +1350,7 @@ impl FtsEq {
     /// Whether any band currently routes through the whole-band dynamics.
     #[must_use]
     pub fn any_dynamic(&self) -> bool {
-        self.dyn_active.iter().any(|&a| a)
+        self.bands.iter().any(|slot| slot.dyn_active)
     }
 
     #[must_use]
