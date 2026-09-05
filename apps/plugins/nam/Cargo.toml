@@ -1,7 +1,7 @@
 [package]
 name = "nam-plugin"
 version.workspace = true
-edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap)
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "FTS NAM — CLAP/VST3 Neural Amp Modeler plugin over the neural-amp-modeler engine"

@@ -1,7 +1,7 @@
 [package]
 name = "signal-tone3000"
 version.workspace = true
-edition = "2021"          # matches the sibling signal crates
+edition.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "TONE3000 tone library: OAuth session, model download into the NAM library"

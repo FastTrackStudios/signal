@@ -1,7 +1,7 @@
 [package]
 name = "unison-plugin"
 version.workspace = true
-edition = "2021"          # matches the nice-plug plugin stack
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "FTS Unison — audio-domain unison / double-tracking engine (the same voices signal's synths use)"

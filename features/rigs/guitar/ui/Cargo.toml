@@ -1,7 +1,7 @@
 [package]
 name = "signal-guitar-ui"
 version.workspace = true
-edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+edition.workspace = true
 license.workspace = true
 authors.workspace = true
 

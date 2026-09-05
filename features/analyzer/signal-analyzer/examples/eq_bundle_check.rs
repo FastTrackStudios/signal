@@ -57,13 +57,13 @@ fn main() {
             std::env::var("HOME").unwrap_or_default()
         )
     });
-    let mut plugin = if let Ok(Some(mut p)) = HostedPlugin::load(&path) {
+    let mut plugin = match HostedPlugin::load(&path) { Ok(Some(mut p)) => {
         p.prepare(SR, BLOCK as u32).expect("prepare");
         p
-    } else {
+    } _ => {
         eprintln!("{path}: could not load");
         std::process::exit(1);
-    };
+    }};
     plugin.load_state(&one_bell()).expect("load_state");
 
     let (l, r) = eq_transfer::stimulus(

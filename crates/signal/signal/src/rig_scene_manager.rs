@@ -94,9 +94,9 @@ impl RigSceneManager {
         let tracks = project.tracks();
 
         // Find or create the input track
-        let input_track = if let Ok(Some(t)) = tracks.by_name(&input_track_name).await {
+        let input_track = match tracks.by_name(&input_track_name).await { Ok(Some(t)) => {
             t
-        } else {
+        } _ => {
             let t = tracks
                 .add(&input_track_name, None)
                 .await
@@ -105,7 +105,7 @@ impl RigSceneManager {
                 .await
                 .map_err(|e| RigSceneApplyError::DawError(format!("disable parent send: {e}")))?;
             t
-        };
+        }};
 
         // Record-arm + input monitoring
         let _ = input_track.arm().await;

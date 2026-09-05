@@ -87,7 +87,8 @@ fn write_wav(path: &std::path::Path, samples: &[f32]) -> eyre::Result<()> {
 
 fn main() -> eyre::Result<()> {
     // The owner's chosen lane.
-    std::env::set_var("SIGNAL_ARRIVAL_SEMANTICS", "kontakt");
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::set_var("SIGNAL_ARRIVAL_SEMANTICS", "kontakt") };
 
     let out = PathBuf::from(
         std::env::args()

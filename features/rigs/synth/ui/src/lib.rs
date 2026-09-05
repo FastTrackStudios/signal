@@ -737,7 +737,7 @@ fn GlobalControlsPanel() -> Element {
     // Set one field then push. `globals` (Signal) + `push` (Callback) are Copy, so
     // each per-control closure captures its own copy.
     macro_rules! set {
-        ($field:ident, $v:expr) => {{
+        ($field:ident, $v:expr_2021) => {{
             let out = {
                 let mut g = globals.write();
                 g.$field = $v;

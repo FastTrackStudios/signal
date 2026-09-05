@@ -3,7 +3,7 @@ name = "delay-ui"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-edition = "2021"
+edition.workspace = true
 description = "Delay GUI — the six families, each with its own panel"
 
 [lints]

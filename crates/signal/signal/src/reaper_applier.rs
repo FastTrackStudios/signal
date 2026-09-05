@@ -108,9 +108,9 @@ impl ReaperPatchApplier {
         let input_track_name = format!("Input: {fx_id}");
 
         // Look for existing folder or create it
-        let folder_track = if let Ok(Some(t)) = tracks.by_name(&fx_id).await {
+        let folder_track = match tracks.by_name(&fx_id).await { Ok(Some(t)) => {
             t
-        } else {
+        } _ => {
             let t = tracks
                 .add(&fx_id, None)
                 .await
@@ -119,12 +119,12 @@ impl ReaperPatchApplier {
                 .await
                 .map_err(|e| PatchApplyError::DawError(format!("set folder start: {e}")))?;
             t
-        };
+        }};
 
         // Look for existing input track or create it
-        let input_track = if let Ok(Some(t)) = tracks.by_name(&input_track_name).await {
+        let input_track = match tracks.by_name(&input_track_name).await { Ok(Some(t)) => {
             t
-        } else {
+        } _ => {
             // Make sure folder track has depth +1 (is a folder)
             folder_track
                 .set_folder_depth(1)
@@ -149,7 +149,7 @@ impl ReaperPatchApplier {
                 PatchApplyError::DawError(format!("disable parent send on input: {e}"))
             })?;
             input
-        };
+        }};
 
         // Recover existing child tracks from a previous session.
         // After a hot-reload the REAPER tracks are still there but our state is empty.

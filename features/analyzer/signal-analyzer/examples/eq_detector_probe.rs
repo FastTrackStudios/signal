@@ -200,13 +200,13 @@ fn main() {
     let ours_only = std::env::args().any(|a| a == "--ours-only");
     let mut plugin = if ours_only {
         None
-    } else if let Ok(Some(mut p)) = HostedPlugin::load(&path) {
+    } else { match HostedPlugin::load(&path) { Ok(Some(mut p)) => {
         p.prepare(SR, BLOCK as u32).expect("prepare");
         Some(p)
-    } else {
+    } _ => {
         eprintln!("{path}: could not load");
         std::process::exit(1);
-    };
+    }}};
 
     /// Pro-Q's effective noise bandwidth, in dB, at the Q values swept below.
     ///

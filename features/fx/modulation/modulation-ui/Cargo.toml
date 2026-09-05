@@ -3,7 +3,7 @@ name = "modulation-ui"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-edition = "2021"
+edition.workspace = true
 description = "Modulation GUI — the five circuits, each with its own panel"
 
 [lints]

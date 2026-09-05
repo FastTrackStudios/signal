@@ -3,7 +3,7 @@ name = "saturate-profiles"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-edition = "2021"
+edition.workspace = true
 description = "Saturation profiles — the five circuits, and the curve each one clips with"
 
 [lints]

@@ -23,7 +23,7 @@ pub fn BlockCustomGui(props: BlockCustomGuiProps) -> Element {
     let curation = &props.block.param_curation;
 
     // Filter to featured params if curation exists, otherwise show all
-    let featured: Vec<_> = if let Some(ref curation) = curation {
+    let featured: Vec<_> = if let Some(curation) = curation {
         params
             .iter()
             .filter(|p| curation.is_featured(p.id()))

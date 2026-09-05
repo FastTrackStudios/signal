@@ -1,7 +1,7 @@
 [package]
 name = "guide-plugin"
 version.workspace = true
-edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap)
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "FTS Guide — CLAP/VST3 click/guide generator over the session-guide engine, driven by the host transport"

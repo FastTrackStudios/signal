@@ -843,9 +843,9 @@ impl SampleEngine {
             .performance
             .attack_ms
             .map_or(0, |ms| ms_to_frames(ms, sample_rate));
-        let cache = if let Some(pack) = patch.pack.clone() {
+        let cache = match patch.pack.clone() { Some(pack) => {
             SampleCache::with_pack(pack)
-        } else {
+        } _ => {
             // The prepared-cache dir is a native (on-disk) concept —
             // `engine-native` only. Wasm patches always carry a pack.
             #[cfg(not(target_arch = "wasm32"))]
@@ -856,7 +856,7 @@ impl SampleEngine {
             {
                 SampleCache::new()
             }
-        };
+        }};
 
         let mic_ids: Vec<String> = patch.spec.mics.iter().map(|m| m.id.clone()).collect();
 

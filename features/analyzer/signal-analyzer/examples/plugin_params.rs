@@ -55,13 +55,13 @@ fn main() {
     let only: Option<Vec<String>> =
         arg("--only").map(|s| s.split(',').map(|p| p.trim().to_lowercase()).collect());
 
-    let mut plugin = if let Ok(Some(mut p)) = HostedPlugin::load(&path) {
+    let mut plugin = match HostedPlugin::load(&path) { Ok(Some(mut p)) => {
         p.prepare(SR, BLOCK as u32).expect("prepare");
         p
-    } else {
+    } _ => {
         eprintln!("{path}: could not load");
         std::process::exit(1);
-    };
+    }};
 
     let all = plugin.params();
     eprintln!("{} parameters", all.len());

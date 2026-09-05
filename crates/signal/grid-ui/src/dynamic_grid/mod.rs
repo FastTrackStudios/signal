@@ -513,7 +513,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                         if let Some(ref target) = group_drop_target {
                             let mut new_chain = chain_signal();
                             match target {
-                                GroupDropTarget::SwapWith(ref target_name) => {
+                                GroupDropTarget::SwapWith(target_name) => {
                                     let dragged_min_col = new_chain.iter()
                                         .filter(|s| s.module_group.as_deref() == Some(&gd.group_name))
                                         .map(|s| s.col).min().unwrap_or(0);
@@ -702,10 +702,10 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                 }
 
                 // Ghost preview for group drag target
-                if let (Some(ref gd), Some(ref target)) = (interaction().group_drag().cloned(), &group_drop_target) {
+                if let (Some(ref gd), Some(target)) = (interaction().group_drag().cloned(), &group_drop_target) {
                     {
                         let ghost_style = match target {
-                            GroupDropTarget::SwapWith(ref target_name) => {
+                            GroupDropTarget::SwapWith(target_name) => {
                                 if let Some(tg) = module_groups.iter().find(|g| &g.name == target_name) {
                                     let label = if gd.shift_held { "extract" } else { "swap" };
                                     let border_color = if gd.shift_held { "#22d3ee" } else { "#60a5fa" };

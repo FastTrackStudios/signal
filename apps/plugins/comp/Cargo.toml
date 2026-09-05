@@ -1,7 +1,7 @@
 [package]
 name = "comp-plugin"
 version.workspace = true
-edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap)
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "FTS Comp — CLAP/VST3 compressor plugin over the comp engine"

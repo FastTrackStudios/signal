@@ -200,7 +200,7 @@ pub async fn fetch_col3(
         NavCategory::Presets => {
             let is_layer = col2_tag == Some(LAYER_PRESET_TAG);
             let items = if is_layer {
-                if let Some(layer) = signal.layers().load(col2_id).await.ok().flatten() {
+                match signal.layers().load(col2_id).await.ok().flatten() { Some(layer) => {
                     let all_module_presets =
                         signal.module_presets().list().await.unwrap_or_default();
                     let block_preset_lookup = build_block_preset_lookup(signal).await;
@@ -233,11 +233,11 @@ pub async fn fetch_col3(
                         });
                     }
                     out
-                } else {
+                } _ => {
                     Vec::new()
-                }
+                }}
             } else {
-                if let Some(rig) = signal.rigs().load(col2_id).await.ok().flatten() {
+                match signal.rigs().load(col2_id).await.ok().flatten() { Some(rig) => {
                     let all_module_presets =
                         signal.module_presets().list().await.unwrap_or_default();
                     let block_preset_lookup = build_block_preset_lookup(signal).await;
@@ -272,14 +272,14 @@ pub async fn fetch_col3(
                         });
                     }
                     out
-                } else {
+                } _ => {
                     Vec::new()
-                }
+                }}
             };
             (items, Vec::new())
         }
         NavCategory::Engines => {
-            let items = if let Some(engine) = signal.engines().load(col2_id).await.ok().flatten() {
+            let items = match signal.engines().load(col2_id).await.ok().flatten() { Some(engine) => {
                 let all_module_presets = signal.module_presets().list().await.unwrap_or_default();
                 let block_preset_lookup = build_block_preset_lookup(signal).await;
                 let mut items = Vec::new();
@@ -313,13 +313,13 @@ pub async fn fetch_col3(
                     }
                 }
                 items
-            } else {
+            } _ => {
                 Vec::new()
-            };
+            }};
             (items, Vec::new())
         }
         NavCategory::Layers => {
-            let items = if let Some(layer) = signal.layers().load(col2_id).await.ok().flatten() {
+            let items = match signal.layers().load(col2_id).await.ok().flatten() { Some(layer) => {
                 let all_module_presets = signal.module_presets().list().await.unwrap_or_default();
                 let block_preset_lookup = build_block_preset_lookup(signal).await;
                 let mut out = Vec::new();
@@ -350,9 +350,9 @@ pub async fn fetch_col3(
                     });
                 }
                 out
-            } else {
+            } _ => {
                 Vec::new()
-            };
+            }};
             (items, Vec::new())
         }
         NavCategory::Modules => {
@@ -470,17 +470,17 @@ async fn resolve_variant_module_chains(
             |p| p.name().to_string(),
         );
         let chain;
-        if let Some(snapshot) = signal
+        match signal
             .module_presets()
             .load_default(collection_id_str)
             .await
             .ok()
             .flatten()
-        {
+        { Some(snapshot) => {
             chain = snapshot.module().chain().clone();
-        } else {
+        } _ => {
             chain = SignalChain::new(vec![]);
-        }
+        }}
         out.push(ModuleChainData {
             name: module_name,
             color_bg: mc.bg.to_string(),

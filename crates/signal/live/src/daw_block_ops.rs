@@ -694,14 +694,14 @@ async fn configure_fx_free(
             match fx.set_state_chunk(data.clone()).await {
                 Ok(()) => {
                     // Re-acquire by index — fallback may have changed the GUID.
-                    if let Ok(Some(reacquired)) = track.fx_chain().by_index(fx_index).await {
+                    match track.fx_chain().by_index(fx_index).await { Ok(Some(reacquired)) => {
                         fx = reacquired;
                         eprintln!(
                             "[signal]   ✓ state chunk applied for '{}' (guid={})",
                             resolved.display_name,
                             fx.guid(),
                         );
-                    } else {
+                    } _ => {
                         // FX disappeared — fallback corrupted the track chunk.
                         // Re-add the plugin with default state.
                         eprintln!(
@@ -715,7 +715,7 @@ async fn configure_fx_free(
                             .map_err(|e| {
                                 format!("Failed to re-add FX '{}': {e}", resolved.display_name)
                             })?;
-                    }
+                    }}
                 }
                 Err(e) => {
                     eprintln!(

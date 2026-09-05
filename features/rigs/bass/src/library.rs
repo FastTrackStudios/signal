@@ -254,7 +254,8 @@ mod tests {
 
     #[test]
     fn asset_paths_roundtrip_relative() {
-        std::env::set_var("SIGNAL_BASS_DIR", "/tmp/fts-test-bass");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("SIGNAL_BASS_DIR", "/tmp/fts-test-bass") };
         let store = super::store();
         let mut p = String::from("models/x.nam");
         store.resolve(&mut p);
@@ -269,7 +270,8 @@ mod tests {
 
     #[test]
     fn last_state_roundtrips() {
-        std::env::set_var("SIGNAL_BASS_DIR", "/tmp/fts-test-bass");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("SIGNAL_BASS_DIR", "/tmp/fts-test-bass") };
         let state = BassLastState {
             active_preset: "Synth Bass".into(),
             master_trim_db: -3.0,

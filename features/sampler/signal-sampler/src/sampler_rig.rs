@@ -661,11 +661,11 @@ impl SamplerRig {
     }
 
     pub fn unload_instrument(&self, id: &str) {
-        if let Ok(mut bank) = self.bank().lock() {
+        match self.bank().lock() { Ok(mut bank) => {
             bank.unload_instrument(id);
-        } else {
+        } _ => {
             tracing::warn!("signal-sampler: sampler bank lock poisoned; unload skipped");
-        }
+        }}
     }
 
     pub fn set_midi_channel(&self, id: impl Into<InstrumentId>, channel: u8) {
@@ -689,22 +689,22 @@ impl SamplerRig {
     }
 
     pub fn set_muted(&self, id: &str, muted: bool) {
-        if let Ok(mut bank) = self.bank().lock() {
+        match self.bank().lock() { Ok(mut bank) => {
             bank.set_muted(id, muted);
-        } else {
+        } _ => {
             tracing::warn!("signal-sampler: sampler bank lock poisoned; mute skipped");
-        }
+        }}
     }
 
     /// Pin an instrument to a single articulation (e.g. `"Leg"` legato);
     /// `None` clears the pin. Without a pin, a multi-articulation zone set fires
     /// every articulation matching the note — pin one to play just sustains.
     pub fn pin_articulation(&self, id: &str, artic: Option<String>) {
-        if let Ok(mut bank) = self.bank().lock() {
+        match self.bank().lock() { Ok(mut bank) => {
             bank.pin_articulation(id, artic);
-        } else {
+        } _ => {
             tracing::warn!("signal-sampler: bank lock poisoned; pin skipped");
-        }
+        }}
     }
 
     /// Select an instrument's live articulation (the keyswitch / CC58
@@ -973,22 +973,22 @@ impl SamplerRig {
 
     /// Switch an instrument's active microphone position (e.g. `"Mix"`).
     pub fn set_mic(&self, id: &str, mic_id: impl Into<String>) {
-        if let Ok(mut bank) = self.bank().lock() {
+        match self.bank().lock() { Ok(mut bank) => {
             bank.set_mic(id, mic_id);
-        } else {
+        } _ => {
             tracing::warn!("signal-sampler: bank lock poisoned; set_mic skipped");
-        }
+        }}
     }
 
     /// Restrict an instrument's zoned playback to a single mic; `None` plays
     /// all. Needed for multi-mic libraries (CSS ships Main + Mix in one zone
     /// set with no `mics` block, so all mics otherwise sound at once).
     pub fn set_solo_mic(&self, id: &str, mic_id: Option<String>) {
-        if let Ok(mut bank) = self.bank().lock() {
+        match self.bank().lock() { Ok(mut bank) => {
             bank.set_solo_mic(id, mic_id);
-        } else {
+        } _ => {
             tracing::warn!("signal-sampler: bank lock poisoned; set_solo_mic skipped");
-        }
+        }}
     }
 
     /// Warm (decode into cache) the samples `note` would trigger for `id` under
@@ -1039,9 +1039,9 @@ impl SamplerRig {
     fn dispatch(&self, msg: midicore::MidiEvent) {
         if let Some((daw, track)) = self.bank_io() {
             daw.push_live_midi(&track, msg);
-        } else if let Ok(mut bank) = self.bank().lock() {
+        } else { match self.bank().lock() { Ok(mut bank) => {
             apply_midi(&mut bank, &msg);
-        }
+        } _ => {}}}
     }
 
     pub fn note_on(&self, _id: &str, note: u8, velocity: u8) {
@@ -1055,20 +1055,20 @@ impl SamplerRig {
     /// neither can drive a bank of many instruments that must each answer
     /// independently (a pad grid, where every pad is its own instrument).
     pub fn note_on_instrument(&self, id: &str, note: u8, velocity: u8) {
-        if let Ok(mut bank) = self.bank().lock() {
+        match self.bank().lock() { Ok(mut bank) => {
             bank.note_on(id, note, velocity);
-        } else {
+        } _ => {
             tracing::warn!("signal-sampler: bank lock poisoned; note_on skipped");
-        }
+        }}
     }
 
     /// The [`note_on_instrument`](Self::note_on_instrument) counterpart.
     pub fn note_off_instrument(&self, id: &str, note: u8, velocity: u8) {
-        if let Ok(mut bank) = self.bank().lock() {
+        match self.bank().lock() { Ok(mut bank) => {
             bank.note_off_with_velocity(id, note, velocity);
-        } else {
+        } _ => {
             tracing::warn!("signal-sampler: bank lock poisoned; note_off skipped");
-        }
+        }}
     }
 
     pub fn note_off(&self, _id: &str, note: u8) {

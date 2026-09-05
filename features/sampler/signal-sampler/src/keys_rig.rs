@@ -1227,7 +1227,7 @@ impl KeysRig {
     /// opening hardware ports takes seconds and can stall outright while the
     /// `PipeWire` graph reconfigures, and that stall must not pin a rig mutex.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn midi_sink(&self) -> impl Fn(midicore::TimedEvent) + Send + Clone + 'static {
+    pub fn midi_sink(&self) -> impl Fn(midicore::TimedEvent) + Send + Clone + 'static + use<> {
         let daw = self.daw.clone();
         let targets = self.midi_targets();
         midicore::attach::tap_sink(self.midi_monitor.clone(), move |ev| {

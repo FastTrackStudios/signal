@@ -837,7 +837,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                         bg-amber-600 hover:bg-amber-500 text-white \
                                         transition-colors duration-150",
                                 onclick: move |_| {
-                                    if let (Some(ref cb), Some(ref assign)) = (&on_assign, &assignment) {
+                                    if let (Some(cb), Some(assign)) = (&on_assign, &assignment) {
                                         cb.call(assign.clone());
                                     }
                                 },

@@ -702,7 +702,8 @@ mod tests {
     fn waveguide_note_is_audible_and_tuned() {
         // Force the analytic fallback — the dev machine has a real trained
         // table installed in ~/.config and tests must not depend on it.
-        std::env::set_var("CITY_GRAND_WG_TABLE", "/nonexistent-test-table");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("CITY_GRAND_WG_TABLE", "/nonexistent-test-table") };
         let mut m = NativeWaveguide::new(48_000);
         m.prepare(48_000.0, 512).unwrap();
         let (inl, inr) = (vec![0.0; 512], vec![0.0; 512]);
@@ -736,7 +737,8 @@ mod tests {
 
     #[test]
     fn note_off_releases() {
-        std::env::set_var("CITY_GRAND_WG_TABLE", "/nonexistent-test-table");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("CITY_GRAND_WG_TABLE", "/nonexistent-test-table") };
         let mut m = NativeWaveguide::new(48_000);
         m.prepare(48_000.0, 512).unwrap();
         let (inl, inr) = (vec![0.0; 512], vec![0.0; 512]);

@@ -122,7 +122,7 @@ fn black_x(note: u8, origin_white: u32) -> Option<f64> {
     let boundary = BLACK_SEMITONES
         .iter()
         .zip(BLACK_BOUNDARIES.iter())
-        .find(|(&s, _)| s == semitone)
+        .find(|&(&s, _)| s == semitone)
         .map(|(_, &b)| b)?;
     let octave = u32::from(note) / 12;
     let abs_boundary = octave * 7 + u32::from(boundary);

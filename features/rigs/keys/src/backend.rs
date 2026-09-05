@@ -1939,13 +1939,13 @@ impl KeysRigBackend {
     /// generation and only the last one standing does the work.
     fn rebuild_soon(&self) {
         use std::sync::atomic::Ordering;
-        let gen = self.inner.rebuild_gen.fetch_add(1, Ordering::AcqRel) + 1;
+        let r#gen = self.inner.rebuild_gen.fetch_add(1, Ordering::AcqRel) + 1;
         let b = self.clone();
         let _ = std::thread::Builder::new()
             .name("keys-param-rebuild".into())
             .spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(180));
-                if b.inner.rebuild_gen.load(Ordering::Acquire) != gen {
+                if b.inner.rebuild_gen.load(Ordering::Acquire) != r#gen {
                     return; // a later edit owns the rebuild
                 }
                 let _rt = keys_runtime().enter();

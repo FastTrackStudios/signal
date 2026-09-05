@@ -95,8 +95,10 @@ fn main() -> eyre::Result<()> {
     {
         for (lane, env) in lanes {
             match env {
-                Some(v) => std::env::set_var("SIGNAL_ARRIVAL_SEMANTICS", v),
-                None => std::env::remove_var("SIGNAL_ARRIVAL_SEMANTICS"),
+                // TODO: Audit that the environment access only happens in single-threaded code.
+                Some(v) => unsafe { std::env::set_var("SIGNAL_ARRIVAL_SEMANTICS", v) },
+                // TODO: Audit that the environment access only happens in single-threaded code.
+                None => unsafe { std::env::remove_var("SIGNAL_ARRIVAL_SEMANTICS") },
             }
             let res = rig
                 .render_offline_document(ID, &case.doc, &DocumentRenderOptions::default())
@@ -118,7 +120,8 @@ fn main() -> eyre::Result<()> {
         }
         let _ = write!(readme, "\n- case `{}`: {}\n", case.name, case.desc);
     }
-    std::env::remove_var("SIGNAL_ARRIVAL_SEMANTICS");
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::remove_var("SIGNAL_ARRIVAL_SEMANTICS") };
     std::fs::write(out_dir.join("README.md"), readme)?;
     Ok(())
 }

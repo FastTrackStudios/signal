@@ -1,7 +1,7 @@
 [package]
 name = "trigger"
 version.workspace = true
-edition = "2021"          # matches sibling fx facades (comp, level)
+edition.workspace = true
 license.workspace = true
 description = "trigger — facade over trigger-dsp; the legacy FTS-Trigger engine (sidechain bandpass → onset detection → velocity curve → sampler). Plugin UI and preset profiles are opt-in."
 

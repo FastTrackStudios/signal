@@ -57,12 +57,12 @@ fn main() {
         _capture_stream = start_system_capture(&ui_state)
             .map_err(|e| eprintln!("(cpal capture unavailable: {e} — analyzer idle)"))
             .ok();
-    } else if let Err(e) = pipewire_capture::spawn(&ui_state) {
+    } else { match pipewire_capture::spawn(&ui_state) { Err(e) => {
         eprintln!("(pipewire capture setup failed: {e}; trying cpal)");
         _capture_stream = start_system_capture(&ui_state)
             .map_err(|e| eprintln!("(cpal capture unavailable: {e} — analyzer idle)"))
             .ok();
-    }
+    } _ => {}}}
 
     if animate {
         eprintln!("(demo animations enabled — run without --animate for a static base EQ)");

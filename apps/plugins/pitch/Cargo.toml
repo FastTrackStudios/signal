@@ -1,7 +1,7 @@
 [package]
 name = "pitch-plugin"
 version.workspace = true
-edition = "2021"          # matches the nice-plug plugin stack
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "FTS Pitch — pitch shifter + stereo doubler over the pitch-dsp engines"

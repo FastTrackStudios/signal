@@ -193,11 +193,11 @@ impl ControllerUiState {
     }
 
     pub fn macro_colors(&self) -> Vec<String> {
-        if let Ok(colors) = self.macro_colors.read() {
+        match self.macro_colors.read() { Ok(colors) => {
             colors.to_vec()
-        } else {
+        } _ => {
             vec![String::new(); NUM_MACROS]
-        }
+        }}
     }
 }
 

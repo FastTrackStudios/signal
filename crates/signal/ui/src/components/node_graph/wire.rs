@@ -195,7 +195,7 @@ pub fn WirePath(props: WirePathProps) -> Element {
                 style: "pointer-events: stroke; cursor: pointer;",
                 onclick: move |evt| {
                     evt.stop_propagation();
-                    if let (Some(id), Some(ref cb)) = (wire_id, &on_click) {
+                    if let (Some(id), Some(cb)) = (wire_id, &on_click) {
                         cb.call(id);
                     }
                 },

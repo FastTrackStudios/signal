@@ -29,13 +29,13 @@ fn home(rest: &str) -> String {
 }
 
 fn open(path: &str) -> Option<HostedPlugin> {
-    if let Ok(Some(mut p)) = HostedPlugin::load(path) {
+    match HostedPlugin::load(path) { Ok(Some(mut p)) => {
         p.prepare(SR, BLOCK as u32).ok()?;
         Some(p)
-    } else {
+    } _ => {
         eprintln!("{path}: could not load");
         None
-    }
+    }}
 }
 
 fn render(p: &mut HostedPlugin, l: &[f32], r: &[f32]) -> (Vec<f32>, Vec<f32>) {

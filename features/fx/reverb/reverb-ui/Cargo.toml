@@ -3,7 +3,7 @@ name = "reverb-ui"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-edition = "2021"
+edition.workspace = true
 description = "Reverb GUI — the seven families, each with its own panel"
 
 [lints]
