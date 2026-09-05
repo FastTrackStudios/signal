@@ -23,9 +23,9 @@ use std::io::{BufRead as _, BufReader, Write as _};
 use std::net::TcpListener;
 use std::time::Duration;
 
+use signal_tone3000::{Config, Tone3000Backend};
 use signal_tone3000_proto::tone3000::Tone3000 as _;
 use signal_tone3000_proto::{ToneQuery, ToneShelf};
-use signal_tone3000::{Config, Tone3000Backend};
 
 /// How long to wait for the user to finish in the browser.
 const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(180);
@@ -126,10 +126,19 @@ async fn main() {
         // A rate limit here is a real answer about the free tier, not a bug.
         fail(&format!("search: {}", found.error));
     }
-    ok(&format!("{} of {} tones for \"plexi\"", found.tones.len(), found.total));
+    ok(&format!(
+        "{} of {} tones for \"plexi\"",
+        found.tones.len(),
+        found.total
+    ));
 
     // Prefer a searched tone; fall back to the shelf if the search was thin.
-    let Some(row) = found.tones.first().or_else(|| trending.tones.first()).cloned() else {
+    let Some(row) = found
+        .tones
+        .first()
+        .or_else(|| trending.tones.first())
+        .cloned()
+    else {
         fail("the catalog returned no tones at all");
     };
 
@@ -159,7 +168,10 @@ async fn main() {
             if image.error.is_empty() {
                 ok(&format!("{} bytes, {}", image.bytes.len(), image.mime));
                 let again = backend.image(url.clone()).await;
-                ok(&format!("second fetch served from cache: {} bytes", again.bytes.len()));
+                ok(&format!(
+                    "second fetch served from cache: {} bytes",
+                    again.bytes.len()
+                ));
             } else {
                 fail(&format!("image: {}", image.error));
             }
@@ -206,7 +218,10 @@ async fn main() {
     }
 
     println!("\n  ✓ everything above spoke to the real catalog.");
-    println!("  files left in {} — delete it when you are done.", temp.path().display());
+    println!(
+        "  files left in {} — delete it when you are done.",
+        temp.path().display()
+    );
     // Leak the tempdir so the paths printed above still exist afterwards.
     std::mem::forget(temp);
 }

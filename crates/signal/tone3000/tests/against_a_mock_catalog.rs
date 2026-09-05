@@ -9,9 +9,9 @@
 //! No network: `wiremock` binds a loopback port and `SIGNAL_T3K_BASE_URL`'s
 //! config equivalent points the client at it.
 
+use signal_tone3000::{Config, Tone3000Backend};
 use signal_tone3000_proto::tone3000::Tone3000 as _;
 use signal_tone3000_proto::{ToneQuery, ToneShelf};
-use signal_tone3000::{Config, Tone3000Backend};
 use wiremock::matchers::{bearer_token, body_string_contains, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -84,7 +84,11 @@ async fn sign_in(server: &MockServer, backend: &Tone3000Backend, with_tone: bool
         .map(|(_, v)| v.into_owned())
         .expect("state is in the authorize url");
 
-    let tone = if with_tone { format!("&tone_id={TONE_ID}") } else { String::new() };
+    let tone = if with_tone {
+        format!("&tone_id={TONE_ID}")
+    } else {
+        String::new()
+    };
     let callback =
         format!("http://127.0.0.1:4040/tone3000/callback?code=auth_code&state={state}{tone}");
     let status = backend
@@ -289,7 +293,10 @@ async fn a_failed_search_says_so_instead_of_looking_empty() {
 
     let page = backend.search(ToneQuery::default()).await;
     assert!(page.tones.is_empty());
-    assert!(!page.error.is_empty(), "a rate limit must not read as no results");
+    assert!(
+        !page.error.is_empty(),
+        "a rate limit must not read as no results"
+    );
 }
 
 /// The models endpoint serves one architecture per call. A tone with both
@@ -306,7 +313,11 @@ async fn a_tone_carries_the_models_of_every_architecture_it_reports() {
     assert_eq!(tone.license, "cc-by");
     assert_eq!(tone.creator, "brucew");
     assert_eq!(tone.models.len(), 2, "one v1 and one v2 model");
-    let architectures: Vec<&str> = tone.models.iter().map(|m| m.architecture.as_str()).collect();
+    let architectures: Vec<&str> = tone
+        .models
+        .iter()
+        .map(|m| m.architecture.as_str())
+        .collect();
     assert!(architectures.contains(&"1") && architectures.contains(&"2"));
 }
 
@@ -332,7 +343,11 @@ async fn downloading_a_tone_already_open_costs_no_extra_calls() {
 
     Mock::given(method("GET"))
         .and(path("/api/v1/models/1001"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(model_json(1001, "1", &server.uri())))
+        .respond_with(ResponseTemplate::new(200).set_body_json(model_json(
+            1001,
+            "1",
+            &server.uri(),
+        )))
         .mount(&server)
         .await;
     Mock::given(method("GET"))
@@ -385,7 +400,11 @@ async fn a_downloaded_model_lands_in_the_library_with_its_provenance() {
 
     Mock::given(method("GET"))
         .and(path("/api/v1/models/1001"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(model_json(1001, "1", &server.uri())))
+        .respond_with(ResponseTemplate::new(200).set_body_json(model_json(
+            1001,
+            "1",
+            &server.uri(),
+        )))
         .mount(&server)
         .await;
     Mock::given(method("GET"))

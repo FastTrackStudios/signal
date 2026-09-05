@@ -110,7 +110,7 @@ pub fn decode_chunk(base64_data: &str) -> Result<NamVstChunk, NamError> {
 /// Patches both size fields in the REAPER VST3 header:
 /// - Offset 0x30: total outer size = `data.len()` - 0x3C
 /// - Offset 0x3C: component state size = (data after header) - `controller_tail_size`
-#[must_use] 
+#[must_use]
 pub fn encode_chunk(chunk: &NamVstChunk) -> String {
     let mut data = Vec::with_capacity(
         HEADER_SIZE
@@ -152,7 +152,7 @@ pub fn encode_chunk(chunk: &NamVstChunk) -> String {
 /// is zero-initialized (size fields are patched on `encode_chunk`), and
 /// the tail contains default NAM parameter data (8 bytes of zeros,
 /// matching the controller state seen in live captures).
-#[must_use] 
+#[must_use]
 pub fn create_default_chunk() -> NamVstChunk {
     let header = vec![0u8; HEADER_SIZE];
 
@@ -231,7 +231,7 @@ fn write_length_prefixed_string(buf: &mut Vec<u8>, s: &str) {
 ///
 /// For VST/VST3, extracts lines between header and footer.
 /// For CLAP, extracts lines from within the `<STATE` block.
-#[must_use] 
+#[must_use]
 pub fn extract_state_base64(chunk: &str) -> Option<Vec<String>> {
     let lines: Vec<&str> = chunk.lines().collect();
     if lines.len() < 3 {
@@ -279,7 +279,7 @@ pub fn extract_state_base64(chunk: &str) -> Option<Vec<String>> {
 }
 
 /// Extract the first base64 segment (up to and including the `=`-padded line).
-#[must_use] 
+#[must_use]
 pub fn first_base64_segment(segments: &[String]) -> String {
     let mut result = String::new();
     for line in segments {
@@ -299,7 +299,7 @@ pub fn first_base64_segment(segments: &[String]) -> String {
 ///
 /// For CLAP chunks, only the `<STATE>` block content is replaced; everything else
 /// (CFG, `IN_PINS`, etc.) is preserved.
-#[must_use] 
+#[must_use]
 pub fn rebuild_chunk_with_state(chunk: &str, new_b64: &str) -> String {
     let lines: Vec<&str> = chunk.lines().collect();
     let header = lines.first().copied().unwrap_or("");
@@ -355,7 +355,7 @@ pub fn rebuild_chunk_with_state(chunk: &str, new_b64: &str) -> String {
 ///   >
 /// >
 /// ```
-#[must_use] 
+#[must_use]
 pub fn rebuild_clap_chunk_with_state(lines: &[&str], new_b64: &str) -> String {
     let mut result = String::new();
 

@@ -30,7 +30,9 @@ pub fn scan_directory(nam_root: &Path) -> Result<HashMap<String, NamFileEntry>, 
             continue;
         }
 
-        let Some(kind) = kind_from_path(path) else { continue };
+        let Some(kind) = kind_from_path(path) else {
+            continue;
+        };
 
         let file_entry = scan_file(path, nam_root, kind)?;
         entries.insert(file_entry.hash.clone(), file_entry);
@@ -139,7 +141,7 @@ pub fn merge_into_catalog(catalog: &mut NamCatalog, scanned: HashMap<String, Nam
 }
 
 /// Compute SHA-256 hex digest of data.
-#[must_use] 
+#[must_use]
 pub fn sha256_hex(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
@@ -161,7 +163,7 @@ pub fn apply_packs(entries: &mut HashMap<String, NamFileEntry>, packs: &[crate::
 
 /// Collect all files from a source directory and return their paths grouped by subdirectory.
 /// Used during import to map source structure to signal-library layout.
-#[must_use] 
+#[must_use]
 pub fn collect_source_files(source_dir: &Path) -> Vec<PathBuf> {
     WalkDir::new(source_dir)
         .follow_links(true)

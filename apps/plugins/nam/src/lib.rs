@@ -190,16 +190,18 @@ impl Plugin for FtsNam {
 
         // Seed from the environment (see module docs), on the main thread.
         // Failure is non-fatal — the plugin becomes a dry insert.
-        self.model = if let Some(path) = Self::model_path() { match NamModel::load(&path) {
-            Ok(mut model) => {
-                model.reset(self.sample_rate, max_block);
-                Some(model)
+        self.model = if let Some(path) = Self::model_path() {
+            match NamModel::load(&path) {
+                Ok(mut model) => {
+                    model.reset(self.sample_rate, max_block);
+                    Some(model)
+                }
+                Err(e) => {
+                    eprintln!("[{PLUGIN_NAME}] failed to load NAM model {path:?}: {e} — passing audio through dry");
+                    None
+                }
             }
-            Err(e) => {
-                eprintln!("[{PLUGIN_NAME}] failed to load NAM model {path:?}: {e} — passing audio through dry");
-                None
-            }
-        } } else {
+        } else {
             eprintln!(
                 "[{PLUGIN_NAME}] no model path ({MODEL_ENV_VAR} unset, no $HOME) — passing audio through dry"
             );

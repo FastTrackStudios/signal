@@ -134,11 +134,7 @@ pub fn ToneDetail(
 
 /// One downloadable variant: what it is, and the one button that matters.
 #[component]
-fn ModelRow(
-    tone_id: String,
-    model: ToneModel,
-    on_loaded: Callback<(String, String)>,
-) -> Element {
+fn ModelRow(tone_id: String, model: ToneModel, on_loaded: Callback<(String, String)>) -> Element {
     let client = use_hook(try_consume_context::<Tone3000Client>);
     let state = use_context::<Tone3000State>();
     let done = state.completed(&model.id);

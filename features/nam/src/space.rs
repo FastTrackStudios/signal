@@ -152,7 +152,7 @@ fn band_response(out: &[f64], inp: &[f64]) -> [f32; EQ_BANDS] {
 impl NamProbe {
     /// The similarity vector. Voicing dominates (it is what "sounds like"
     /// means); the IO curve and knee carry gain character.
-    #[must_use] 
+    #[must_use]
     pub fn features(&self) -> Vec<f32> {
         let mut v = Vec::with_capacity(DIM);
         v.extend_from_slice(&self.eq);
@@ -242,7 +242,7 @@ pub fn build(root: &Path) -> Result<(PathBuf, usize, usize), String> {
 
 /// Coarse archetype from the measured behaviour — the Rig-Scope idea:
 /// derived from analysis, never asserted by the filename.
-#[must_use] 
+#[must_use]
 pub fn archetype(p: &NamProbe) -> &'static str {
     let bright = p.eq[EQ_BANDS - 6..].iter().sum::<f32>() / 6.0;
     let dark = p.eq[..6].iter().sum::<f32>() / 6.0;

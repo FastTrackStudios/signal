@@ -31,7 +31,7 @@ pub struct IrPairing {
 }
 
 impl NamCatalog {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             version: 1,
@@ -70,19 +70,19 @@ impl NamCatalog {
     }
 
     /// Look up an entry by its content hash.
-    #[must_use] 
+    #[must_use]
     pub fn get_entry(&self, hash: &str) -> Option<&NamFileEntry> {
         self.entries.get(hash)
     }
 
     /// Return all entries of a given kind.
-    #[must_use] 
+    #[must_use]
     pub fn entries_by_kind(&self, kind: NamFileKind) -> Vec<&NamFileEntry> {
         self.entries.values().filter(|e| e.kind == kind).collect()
     }
 
     /// Return all entries that have a tag matching the given category and value.
-    #[must_use] 
+    #[must_use]
     pub fn entries_by_tag(&self, category: TagCategory, value: &str) -> Vec<&NamFileEntry> {
         let key = format!("{}:{}", category.as_str(), value);
         self.entries
@@ -92,13 +92,13 @@ impl NamCatalog {
     }
 
     /// Return all amp model entries (convenience).
-    #[must_use] 
+    #[must_use]
     pub fn amp_models(&self) -> Vec<&NamFileEntry> {
         self.entries_by_kind(NamFileKind::AmpModel)
     }
 
     /// Return all IR entries (convenience).
-    #[must_use] 
+    #[must_use]
     pub fn impulse_responses(&self) -> Vec<&NamFileEntry> {
         self.entries_by_kind(NamFileKind::ImpulseResponse)
     }
@@ -113,7 +113,7 @@ impl NamCatalog {
     }
 
     /// Get recommended IRs for a given model hash.
-    #[must_use] 
+    #[must_use]
     pub fn ir_pairings_for_model(&self, model_hash: &str) -> Vec<&IrPairing> {
         self.ir_pairings
             .iter()
@@ -122,7 +122,7 @@ impl NamCatalog {
     }
 
     /// Summary stats for display.
-    #[must_use] 
+    #[must_use]
     pub fn stats(&self) -> CatalogStats {
         let amp_count = self
             .entries
@@ -303,12 +303,19 @@ mod tests {
     #[test]
     fn a_catalog_without_provenance_still_loads() {
         let mut catalog = NamCatalog::new();
-        catalog.entries.insert("abc123".into(), sample_entry("abc123", "old.nam"));
+        catalog
+            .entries
+            .insert("abc123".into(), sample_entry("abc123", "old.nam"));
 
         let mut doc: serde_json::Value =
             serde_json::to_value(&catalog).expect("serialize current catalog");
-        let entry = doc["entries"]["abc123"].as_object_mut().expect("entry object");
-        assert!(entry.remove("provenance").is_some(), "field was there to remove");
+        let entry = doc["entries"]["abc123"]
+            .as_object_mut()
+            .expect("entry object");
+        assert!(
+            entry.remove("provenance").is_some(),
+            "field was there to remove"
+        );
 
         let legacy: NamCatalog =
             serde_json::from_value(doc).expect("a catalog with no provenance key still loads");
@@ -337,9 +344,15 @@ mod tests {
 
         let json = serde_json::to_string(&catalog).expect("serialize");
         let back: NamCatalog = serde_json::from_str(&json).expect("deserialize");
-        let p = back.entries["h"].provenance.as_ref().expect("provenance kept");
+        let p = back.entries["h"]
+            .provenance
+            .as_ref()
+            .expect("provenance kept");
         assert_eq!(p.creator.as_deref(), Some("someone"));
         assert_eq!(p.license.as_deref(), Some("cc-by"));
-        assert_eq!(p.tone_url.as_deref(), Some("https://www.tone3000.com/tones/1234"));
+        assert_eq!(
+            p.tone_url.as_deref(),
+            Some("https://www.tone3000.com/tones/1234")
+        );
     }
 }

@@ -199,7 +199,10 @@ impl Tone3000Backend {
     /// a reason to fail the call.
     async fn brokered_client(&self) -> Option<api::Client> {
         let account = self.inner.account.as_ref()?;
-        match account.linked_token(signal_account::TONE3000_PROVIDER).await {
+        match account
+            .linked_token(signal_account::TONE3000_PROVIDER)
+            .await
+        {
             Ok(linked) => {
                 tracing::debug!(
                     login = linked.login.as_deref().unwrap_or_default(),
@@ -291,7 +294,11 @@ impl Tone3000Backend {
 
     /// Remember a fetched tone for [`Self::cached_tone`].
     fn remember_tone(&self, tone: &PickedTone) {
-        let mut memo = self.inner.tones.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut memo = self
+            .inner
+            .tones
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         // A plain cap rather than an LRU: the value of this memo is entirely
         // in the last few seconds of browsing, and an eviction policy would
         // be more machinery than the thing it manages.
@@ -326,7 +333,11 @@ impl Tone3000Backend {
                 progress.error = e.to_string();
             }
         }
-        progress.percent = if progress.error.is_empty() { 100 } else { progress.percent };
+        progress.percent = if progress.error.is_empty() {
+            100
+        } else {
+            progress.percent
+        };
         progress.done = true;
         self.inner.downloads.publish(progress);
     }
@@ -434,8 +445,8 @@ impl Tone3000Backend {
         let preferred = format!("{stem}.{ext}");
 
         let path = self.inner.session.destination(tone_id, &preferred);
-        let occupied_by_something_else = std::fs::read(&path)
-            .is_ok_and(|existing| digest(&existing) != digest(bytes));
+        let occupied_by_something_else =
+            std::fs::read(&path).is_ok_and(|existing| digest(&existing) != digest(bytes));
         if occupied_by_something_else {
             format!("{stem} ({}).{ext}", model.id)
         } else {
@@ -494,7 +505,11 @@ impl Tone3000Backend {
         let path = self.inner.cfg.image_cache.join(digest(url.as_bytes()));
         if let Ok(bytes) = std::fs::read(&path) {
             let mime = mime_of(&bytes).to_string();
-            return Ok(ImageData { bytes, mime, error: String::new() });
+            return Ok(ImageData {
+                bytes,
+                mime,
+                error: String::new(),
+            });
         }
 
         let response = self
@@ -510,7 +525,10 @@ impl Tone3000Backend {
                 response.status()
             )));
         }
-        if response.content_length().is_some_and(|n| n > MAX_IMAGE_BYTES) {
+        if response
+            .content_length()
+            .is_some_and(|n| n > MAX_IMAGE_BYTES)
+        {
             return Err(SessionError::Api("image is implausibly large".to_string()));
         }
         let bytes = response
@@ -528,7 +546,11 @@ impl Tone3000Backend {
             tracing::debug!(%e, "tone3000: image not cached");
         }
         let mime = mime_of(&bytes).to_string();
-        Ok(ImageData { bytes, mime, error: String::new() })
+        Ok(ImageData {
+            bytes,
+            mime,
+            error: String::new(),
+        })
     }
 }
 
@@ -558,7 +580,10 @@ impl Tone3000 for Tone3000Backend {
 
         // Otherwise the account, if it has TONE3000 linked.
         if let Some(account) = self.inner.account.as_ref() {
-            if let Ok(linked) = account.linked_token(signal_account::TONE3000_PROVIDER).await {
+            if let Ok(linked) = account
+                .linked_token(signal_account::TONE3000_PROVIDER)
+                .await
+            {
                 return SignInStatus {
                     signed_in: true,
                     username: linked.login.unwrap_or_default(),
@@ -1082,7 +1107,10 @@ mod tests {
 
         assert_eq!(q.get("response_type").map(String::as_str), Some("code"));
         assert_eq!(q.get("client_id").map(String::as_str), Some("t3k_pub_test"));
-        assert_eq!(q.get("code_challenge_method").map(String::as_str), Some("S256"));
+        assert_eq!(
+            q.get("code_challenge_method").map(String::as_str),
+            Some("S256")
+        );
         assert_eq!(q.get("prompt").map(String::as_str), Some("select_tone"));
         assert_eq!(
             q.get("redirect_uri").map(String::as_str),
@@ -1159,10 +1187,18 @@ mod tests {
         let backend = Tone3000Backend::new(cfg(dir.path()));
         let request = backend.begin_sign_in(false);
         let url = "http://127.0.0.1:4040/tone3000/callback?code=c&state=wrong";
-        let first = backend.complete_sign_in(request.request_id.clone(), url.into()).await;
-        let second = backend.complete_sign_in(request.request_id, url.into()).await;
+        let first = backend
+            .complete_sign_in(request.request_id.clone(), url.into())
+            .await;
+        let second = backend
+            .complete_sign_in(request.request_id, url.into())
+            .await;
         assert!(first.error.contains("state"));
-        assert!(second.error.contains("no authorization is pending"), "{}", second.error);
+        assert!(
+            second.error.contains("no authorization is pending"),
+            "{}",
+            second.error
+        );
     }
 
     /// The engine will not fetch an address a remote made up — it is inside
@@ -1248,7 +1284,10 @@ mod tests {
 
         let name = backend.filename_for("7", &first, b"first bytes");
         assert_eq!(name, "Lead.nam");
-        backend.session().place_model("7", &name, b"first bytes").unwrap();
+        backend
+            .session()
+            .place_model("7", &name, b"first bytes")
+            .unwrap();
 
         assert_eq!(
             backend.filename_for("7", &second, b"second bytes"),
@@ -1257,7 +1296,10 @@ mod tests {
         );
         // The same model downloaded twice is not a clash — it is the file
         // that is already there.
-        assert_eq!(backend.filename_for("7", &first, b"first bytes"), "Lead.nam");
+        assert_eq!(
+            backend.filename_for("7", &first, b"first bytes"),
+            "Lead.nam"
+        );
     }
 
     #[test]

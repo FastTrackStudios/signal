@@ -203,7 +203,10 @@ impl Account {
     /// # Errors
     ///
     /// See [`AccountError`]; every arm leaves the stored session untouched.
-    pub async fn complete_sign_in(&self, callback_url: &str) -> Result<AccountStatus, AccountError> {
+    pub async fn complete_sign_in(
+        &self,
+        callback_url: &str,
+    ) -> Result<AccountStatus, AccountError> {
         let url = url::Url::parse(callback_url)
             .map_err(|e| AccountError::Issuer(format!("callback is not a URL: {e}")))?;
         let params: HashMap<String, String> = url
@@ -227,11 +230,18 @@ impl Account {
             .ok_or(AccountError::NoPendingRequest)?;
         let code = params.get("code").ok_or(AccountError::MissingCode)?;
 
-        let body = oidc::token_request_body(&self.cfg.client_id, &self.cfg.redirect_uri, code, &pkce);
+        let body =
+            oidc::token_request_body(&self.cfg.client_id, &self.cfg.redirect_uri, code, &pkce);
         let response = self
             .http
-            .post(format!("{}/oauth2/token", self.cfg.issuer.trim_end_matches('/')))
-            .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .post(format!(
+                "{}/oauth2/token",
+                self.cfg.issuer.trim_end_matches('/')
+            ))
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded",
+            )
             .body(body)
             .send()
             .await
@@ -240,7 +250,8 @@ impl Account {
             .text()
             .await
             .map_err(|e| AccountError::Issuer(e.to_string()))?;
-        let token = oidc::access_token_from(&text).map_err(|e| AccountError::Issuer(e.to_string()))?;
+        let token =
+            oidc::access_token_from(&text).map_err(|e| AccountError::Issuer(e.to_string()))?;
 
         // Who signed in, asked once and cached, so `status` never needs the
         // network. A userinfo failure does not fail the sign-in: the token
@@ -257,7 +268,10 @@ impl Account {
             .save(&session)
             .map_err(|e| AccountError::Issuer(e.to_string()))?;
 
-        tracing::info!(user = session.user_id, "account: signed in to FastTrackStudio");
+        tracing::info!(
+            user = session.user_id,
+            "account: signed in to FastTrackStudio"
+        );
         Ok(self.status())
     }
 
@@ -319,7 +333,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let status = account(dir.path()).status();
         assert!(!status.signed_in);
-        assert!(status.error.is_empty(), "never having signed in is not a failure");
+        assert!(
+            status.error.is_empty(),
+            "never having signed in is not a failure"
+        );
     }
 
     #[test]
@@ -331,14 +348,23 @@ mod tests {
 
         assert_eq!(url.path(), "/oauth2/authorize");
         assert_eq!(q.get("client_id").map(String::as_str), Some("signal"));
-        assert_eq!(q.get("code_challenge_method").map(String::as_str), Some("S256"));
+        assert_eq!(
+            q.get("code_challenge_method").map(String::as_str),
+            Some("S256")
+        );
         let scope = q.get("scope").expect("a scope");
         // Without `tone3000` the issuer will not hand over the linked
         // token; without `offline_access` the session lasts an hour.
         assert!(scope.contains("tone3000"), "{scope}");
         assert!(scope.contains("offline_access"), "{scope}");
-        assert!(!q.contains_key("code_verifier"), "the verifier never travels in a URL");
-        assert_eq!(q.get("state").map(String::as_str), Some(start.request_id.as_str()));
+        assert!(
+            !q.contains_key("code_verifier"),
+            "the verifier never travels in a URL"
+        );
+        assert_eq!(
+            q.get("state").map(String::as_str),
+            Some(start.request_id.as_str())
+        );
     }
 
     /// Two sign-ins must not share a challenge, or one callback could

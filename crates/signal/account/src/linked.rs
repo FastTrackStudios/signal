@@ -128,7 +128,10 @@ mod tests {
             .mount(&server)
             .await;
 
-        let linked = account.linked_token("tone3000").await.expect("linked token");
+        let linked = account
+            .linked_token("tone3000")
+            .await
+            .expect("linked token");
         assert_eq!(linked.access_token, "t3k-access-token");
         assert_eq!(linked.login.as_deref(), Some("acodywright"));
     }
@@ -151,7 +154,10 @@ mod tests {
 
         let err = account.linked_token("tone3000").await.unwrap_err();
         assert!(err.to_string().contains("not_linked"), "{err}");
-        assert!(err.to_string().contains("no such account is linked"), "{err}");
+        assert!(
+            err.to_string().contains("no such account is linked"),
+            "{err}"
+        );
     }
 
     #[tokio::test]
@@ -167,14 +173,24 @@ mod tests {
         let err = account.linked_token("tone3000").await.unwrap_err();
         assert!(matches!(err, AccountError::NotSignedIn), "{err}");
         assert!(
-            server.received_requests().await.unwrap_or_default().is_empty(),
+            server
+                .received_requests()
+                .await
+                .unwrap_or_default()
+                .is_empty(),
             "a signed-out engine must not call the issuer"
         );
     }
 
     #[test]
     fn an_unparseable_error_body_still_says_something() {
-        assert_eq!(describe(503, "<html>gateway</html>"), "the issuer answered 503");
-        assert_eq!(describe(403, r#"{"error":"insufficient_scope"}"#), "insufficient_scope");
+        assert_eq!(
+            describe(503, "<html>gateway</html>"),
+            "the issuer answered 503"
+        );
+        assert_eq!(
+            describe(403, r#"{"error":"insufficient_scope"}"#),
+            "insufficient_scope"
+        );
     }
 }

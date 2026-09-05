@@ -55,8 +55,7 @@ use signal_keys_proto::keys::{
 };
 use signal_keys_proto::{
     KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel, KeysMacro,
-    KeysMeter, KeysMixer, KeysModule, KeysNode, KeysPerform, KeysPreset, KeysRealtime,
-    KeysStatus,
+    KeysMeter, KeysMixer, KeysModule, KeysNode, KeysPerform, KeysPreset, KeysRealtime, KeysStatus,
 };
 
 use crate::web_keys_rig::Worklet;

@@ -245,8 +245,7 @@ pub mod tone3000 {
         /// Redeem the callback the browser produced. `callback_url` is the
         /// full redirect URI including its query; the engine checks `state`
         /// against the pending request and exchanges the code.
-        async fn complete_sign_in(&self, request_id: String, callback_url: String)
-        -> SignInStatus;
+        async fn complete_sign_in(&self, request_id: String, callback_url: String) -> SignInStatus;
 
         /// Forget the stored session.
         fn sign_out(&self);

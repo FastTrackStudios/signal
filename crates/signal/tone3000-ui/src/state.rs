@@ -56,10 +56,7 @@ pub struct Tone3000State {
 impl Tone3000State {
     /// Whether this model is being fetched right now.
     pub fn in_flight(&self, model_id: &str) -> bool {
-        self.downloads
-            .read()
-            .get(model_id)
-            .is_some_and(|p| !p.done)
+        self.downloads.read().get(model_id).is_some_and(|p| !p.done)
     }
 
     /// The finished download for a model, if it landed successfully.

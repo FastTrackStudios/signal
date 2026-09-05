@@ -105,17 +105,16 @@ pub fn GuitarRigRemote() -> Element {
         })
     };
 
-    let live_bridge =
-        devices
-            .read()
-            .as_ref()
-            .and_then(std::clone::Clone::clone)
-            .map(|d| AudioSettingsBridge {
-                inputs: d.inputs,
-                outputs: d.outputs,
-                prefs: prefs(),
-                on_save: apply,
-            });
+    let live_bridge = devices
+        .read()
+        .as_ref()
+        .and_then(std::clone::Clone::clone)
+        .map(|d| AudioSettingsBridge {
+            inputs: d.inputs,
+            outputs: d.outputs,
+            prefs: prefs(),
+            on_save: apply,
+        });
 
     let perf = state.perf;
     let blocks = state.blocks;
@@ -128,8 +127,9 @@ pub fn GuitarRigRemote() -> Element {
     // the raw patch name before any footswitch has been pressed.
     let perf_now = perf();
     let active_stack = perf_now.stacks.iter().find(|s| s.is_active);
-    let (lens_bg, lens_fg) = active_stack
-        .map_or(("#27272a", "#e4e4e7"), |s| crate::perform::folder_color(&s.name));
+    let (lens_bg, lens_fg) = active_stack.map_or(("#27272a", "#e4e4e7"), |s| {
+        crate::perform::folder_color(&s.name)
+    });
     let lens_label = match active_stack {
         Some(s) => {
             // Folder-as-main naming: the stack IS the sound; variations

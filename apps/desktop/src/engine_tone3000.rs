@@ -32,9 +32,16 @@ use signal_tone3000::Tone3000Backend;
 /// Same argument as the TONE3000 one below, one level up: the issuer's
 /// login page is a web application, so the engine catches the redirect and
 /// whichever GUI started the flow picks the session up from `status()`.
-pub fn extend_account(host: EngineHost, account: std::sync::Arc<signal_account::Account>) -> EngineHost {
+pub fn extend_account(
+    host: EngineHost,
+    account: std::sync::Arc<signal_account::Account>,
+) -> EngineHost {
     let path = callback_path(&account.config().redirect_uri);
-    tracing::info!(path, issuer = account.config().issuer, "account: callback route mounted");
+    tracing::info!(
+        path,
+        issuer = account.config().issuer,
+        "account: callback route mounted"
+    );
     host.extend(
         Router::new()
             .route(&path, get(account_callback))
@@ -127,7 +134,10 @@ async fn callback(
     } else {
         // The provider's own words, not a generic apology: "access_denied"
         // and "this link has expired" call for different actions.
-        Html(page("Sign-in did not complete", &html_escape(&status.error)))
+        Html(page(
+            "Sign-in did not complete",
+            &html_escape(&status.error),
+        ))
     }
 }
 
