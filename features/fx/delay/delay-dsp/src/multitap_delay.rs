@@ -21,6 +21,8 @@
 //!   skipped. Per-tap filters run inside each line's own loop, so
 //!   filtered repeats self-darken authentically in both modes.
 
+use dsp_core::num;
+
 use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
@@ -125,7 +127,7 @@ impl Tap {
             TapGrid::Off => 256,
         };
         let s = step.clamp(1, total);
-        self.position = (f64::from(s - 1) / f64::from(total)).max(1.0 / 256.0);
+        self.position = (f64::from(s.saturating_sub(1)) / f64::from(total)).max(1.0 / 256.0);
     }
 
     #[must_use]
@@ -149,7 +151,9 @@ impl Tap {
             position,
             level,
             pan: 0.0,
-            repeats: if position == 1.0 { 1.0 } else { 0.0 },
+            // 1.0 is an exact sentinel here — the caller passes the literal to
+            // mark the final tap, so this is an identity test, not a measurement.
+            repeats: if position.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 },
             filter: TapFilter::Off,
             cutoff: 2000.0,
             mod_amount: 0.0,
@@ -184,6 +188,10 @@ impl TapPreset {
     /// [`MultiTapDelay::apply_classic`] also sets the 16th grid and
     /// `Input` feedback, matching the MX's auto-config on recall.
     #[must_use]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "a flat table of the sixteen MX tap presets, one match arm each; splitting it would scatter a table that is only readable side by side"
+    )]
     pub fn classic(n: u8) -> [Tap; MAX_TAPS] {
         let mut taps = [Tap::off(); MAX_TAPS];
         // Helper: enabled tap at (position, level, pan, repeats).
@@ -201,25 +209,24 @@ impl TapPreset {
             }
             // 2: quarter pulse, centered. // interpretation
             2 => {
-                for (i, p) in [0.25, 0.5, 0.75, 1.0].iter().enumerate() {
-                    taps[i] = t(
+                for (i, (slot, p)) in taps.iter_mut().zip([0.25, 0.5, 0.75, 1.0].iter()).enumerate() {
+                    *slot = t(
                         *p,
-                        1.0 - i as f64 * 0.15,
+                        num::count_to_f64(i).mul_add(-0.15, 1.0),
                         0.0,
-                        if *p == 1.0 { 1.0 } else { 0.0 },
+                        if p.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 },
                     );
                 }
             }
             // 3: eighth-note drive, alternating narrow pans. // interpretation
             3 =>
             {
-                #[allow(clippy::needless_range_loop)]
-                for i in 0..8 {
-                    let p = (i + 1) as f64 / 8.0;
+                for (i, slot) in taps.iter_mut().enumerate().take(8) {
+                    let p = num::count_to_f64(i.saturating_add(1)) / 8.0;
                     let pan = if i % 2 == 0 { -0.4 } else { 0.4 };
-                    taps[i] = t(
+                    *slot = t(
                         p,
-                        0.85 - i as f64 * 0.07,
+                        num::count_to_f64(i).mul_add(-0.07, 0.85),
                         pan,
                         if i == 7 { 1.0 } else { 0.0 },
                     );
@@ -233,11 +240,11 @@ impl TapPreset {
             }
             // 5: triplet feel across the field. // interpretation
             5 => {
-                for (i, p) in [1.0 / 3.0, 2.0 / 3.0, 1.0].iter().enumerate() {
-                    let pan = [-0.7, 0.7, 0.0][i];
-                    taps[i] = t(
+                for (i, (slot, p)) in taps.iter_mut().zip([1.0 / 3.0, 2.0 / 3.0, 1.0].iter()).enumerate() {
+                    let pan = [-0.7, 0.7, 0.0].get(i).copied().unwrap_or(0.0);
+                    *slot = t(
                         *p,
-                        0.9 - i as f64 * 0.1,
+                        num::count_to_f64(i).mul_add(-0.1, 0.9),
                         pan,
                         if i == 2 { 1.0 } else { 0.0 },
                     );
@@ -252,18 +259,19 @@ impl TapPreset {
             }
             // 7: syncopated off-beats. // interpretation
             7 => {
-                for (i, p) in [0.1875, 0.4375, 0.6875, 0.9375].iter().enumerate() {
+                for (i, (slot, p)) in taps.iter_mut().zip([0.1875, 0.4375, 0.6875, 0.9375].iter()).enumerate() {
                     let pan = if i % 2 == 0 { -0.6 } else { 0.6 };
-                    taps[i] = t(*p, 0.8, pan, 0.0);
+                    *slot = t(*p, 0.8, pan, 0.0);
                 }
                 taps[4] = t(1.0, 0.4, 0.0, 1.0);
             }
             // 8: swung eighths (2:1). // interpretation
             8 => {
-                for i in 0..4 {
-                    let beat = i as f64 * 0.25;
-                    taps[i * 2] = t((beat + 0.1667).min(1.0), 0.7, -0.5, 0.0);
-                    taps[i * 2 + 1] = t(
+                for (i, pair) in taps.chunks_exact_mut(2).enumerate().take(4) {
+                    let beat = num::count_to_f64(i) * 0.25;
+                    let [wide, narrow] = pair else { continue };
+                    *wide = t((beat + 0.1667).min(1.0), 0.7, -0.5, 0.0);
+                    *narrow = t(
                         (beat + 0.25).min(1.0),
                         0.9,
                         0.5,
@@ -278,41 +286,40 @@ impl TapPreset {
             }
             // 10: golden-ratio cascade (Echorec-ish). // interpretation
             10 => {
-                for (i, p) in [0.146, 0.236, 0.382, 0.618, 1.0].iter().enumerate() {
-                    let pan = [-0.8, 0.5, -0.3, 0.7, 0.0][i];
-                    taps[i] = t(*p, 0.5 + 0.5 * p, pan, if *p == 1.0 { 1.0 } else { 0.0 });
+                for (i, (slot, p)) in taps.iter_mut().zip([0.146, 0.236, 0.382, 0.618, 1.0].iter()).enumerate() {
+                    let pan = [-0.8, 0.5, -0.3, 0.7, 0.0].get(i).copied().unwrap_or(0.0);
+                    *slot = t(*p, 0.5 + 0.5 * p, pan, if p.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 });
                 }
             }
             // 11: accelerando bunching toward the beat. // interpretation
             11 => {
-                for (i, p) in [0.5, 0.75, 0.875, 0.9375, 0.96875, 1.0].iter().enumerate() {
-                    taps[i] = t(
+                for (i, (slot, p)) in taps.iter_mut().zip([0.5, 0.75, 0.875, 0.9375, 0.96875, 1.0].iter()).enumerate() {
+                    *slot = t(
                         *p,
-                        0.5 + i as f64 * 0.1,
-                        (i as f64 - 2.5) * 0.3,
-                        if *p == 1.0 { 1.0 } else { 0.0 },
+                        num::count_to_f64(i).mul_add(0.1, 0.5),
+                        (num::count_to_f64(i) - 2.5) * 0.3,
+                        if p.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 },
                     );
                 }
             }
             // 12: decelerando — mirror of 11. // interpretation
             12 => {
-                for (i, p) in [0.03125, 0.0625, 0.125, 0.25, 0.5, 1.0].iter().enumerate() {
-                    taps[i] = t(
+                for (i, (slot, p)) in taps.iter_mut().zip([0.03125, 0.0625, 0.125, 0.25, 0.5, 1.0].iter()).enumerate() {
+                    *slot = t(
                         *p,
-                        1.0 - i as f64 * 0.08,
-                        (2.5 - i as f64) * 0.3,
-                        if *p == 1.0 { 1.0 } else { 0.0 },
+                        num::count_to_f64(i).mul_add(-0.08, 1.0),
+                        (2.5 - num::count_to_f64(i)) * 0.3,
+                        if p.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 },
                     );
                 }
             }
             // 13: pan sweep L→R across even 16ths. // interpretation
             13 =>
             {
-                #[allow(clippy::needless_range_loop)]
-                for i in 0..8 {
-                    let p = (i + 1) as f64 / 8.0;
-                    let pan = -1.0 + i as f64 * (2.0 / 7.0);
-                    taps[i] = t(p, 0.75, pan, if i == 7 { 1.0 } else { 0.0 });
+                for (i, slot) in taps.iter_mut().enumerate().take(8) {
+                    let p = num::count_to_f64(i.saturating_add(1)) / 8.0;
+                    let pan = num::count_to_f64(i).mul_add(2.0 / 7.0, -1.0);
+                    *slot = t(p, 0.75, pan, if i == 7 { 1.0 } else { 0.0 });
                 }
             }
             // 14: interleaved double ping-pong (wide/narrow). // interpretation
@@ -334,13 +341,16 @@ impl TapPreset {
             // 'early reflection' pattern").
             _ => {
                 let positions = [0.06, 0.11, 0.17, 0.25, 0.36, 0.5, 0.71, 1.0];
-                for (i, p) in positions.iter().enumerate() {
-                    let pan = [(0.3), (-0.5), (0.7), (-0.2), (0.5), (-0.7), (0.2), (0.0)][i];
-                    taps[i] = t(
+                for (i, (slot, p)) in taps.iter_mut().zip(positions.iter()).enumerate() {
+                    let pan = [0.3, -0.5, 0.7, -0.2, 0.5, -0.7, 0.2, 0.0]
+                        .get(i)
+                        .copied()
+                        .unwrap_or(0.0);
+                    *slot = t(
                         *p,
-                        0.9 - i as f64 * 0.09,
+                        num::count_to_f64(i).mul_add(-0.09, 0.9),
                         pan,
-                        if *p == 1.0 { 1.0 } else { 0.0 },
+                        if p.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 },
                     );
                 }
             }
@@ -356,8 +366,8 @@ impl TapPreset {
                 return Self::classic(1);
             }
             Self::Quarters => {
-                for (i, t) in [0.25, 0.5, 0.75, 1.0].iter().enumerate() {
-                    taps[i] = Tap::at(*t, 1.0 - i as f64 * 0.2);
+                for (i, (slot, t)) in taps.iter_mut().zip([0.25, 0.5, 0.75, 1.0].iter()).enumerate() {
+                    *slot = Tap::at(*t, num::count_to_f64(i).mul_add(-0.2, 1.0));
                 }
             }
             Self::DottedEighth => {
@@ -366,25 +376,33 @@ impl TapPreset {
                 taps[2] = Tap::at(1.0, 1.0);
             }
             Self::Golden => {
-                for (i, t) in [0.146, 0.236, 0.382, 0.618, 1.0].iter().enumerate() {
-                    taps[i] = Tap::at(*t, 0.5 + 0.5 * t);
+                for (slot, t) in taps.iter_mut().zip([0.146, 0.236, 0.382, 0.618, 1.0].iter()) {
+                    *slot = Tap::at(*t, 0.5 + 0.5 * t);
                 }
             }
             Self::EarlyReflections => {
                 let positions = [0.06, 0.11, 0.17, 0.25, 0.36, 0.5, 0.71, 1.0];
-                for (i, t) in positions.iter().enumerate() {
-                    taps[i] = Tap::at(*t, 0.9 - i as f64 * 0.09);
+                for (i, (slot, t)) in taps.iter_mut().zip(positions.iter()).enumerate() {
+                    *slot = Tap::at(*t, num::count_to_f64(i).mul_add(-0.09, 0.9));
                 }
             }
             Self::Accelerando => {
                 let positions = [0.5, 0.75, 0.875, 0.9375, 0.96875, 1.0];
-                for (i, t) in positions.iter().enumerate() {
-                    taps[i] = Tap::at(*t, 0.5 + i as f64 * 0.1);
+                for (i, (slot, t)) in taps.iter_mut().zip(positions.iter()).enumerate() {
+                    *slot = Tap::at(*t, num::count_to_f64(i).mul_add(0.1, 0.5));
                 }
             }
         }
         taps
     }
+}
+
+/// The modulation state a tap's read position depends on.
+#[derive(Clone, Copy, Debug)]
+struct TapMod {
+    depth: f64,
+    phase: f64,
+    sample_rate: f64,
 }
 
 pub struct MultiTapDelay {
@@ -478,7 +496,7 @@ impl MultiTapDelay {
         self.sample_rate = sample_rate;
         self.time_ms = self.time_ms.clamp(Self::MIN_TIME_MS, Self::MAX_TIME_MS);
 
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S).saturating_add(1024);
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -488,7 +506,7 @@ impl MultiTapDelay {
         if self.feedback_mode == FeedbackMode::Parallel {
             if self.parallel_lines.len() < MAX_TAPS {
                 self.parallel_lines = (0..MAX_TAPS).map(|_| DelayLine::new(max_len)).collect();
-            } else if self.parallel_lines[0].len() < max_len {
+            } else if self.parallel_lines.first().is_some_and(|line| line.len() < max_len) {
                 for line in &mut self.parallel_lines {
                     *line = DelayLine::new(max_len);
                 }
@@ -531,16 +549,35 @@ impl MultiTapDelay {
     /// (`mod_amount` scales the shared LFO; per-tap phase offsets
     /// decorrelate the taps; excursion capped at ~4 ms).
     #[inline]
-    fn tap_pos(&self, tap: &Tap, i: usize, smooth_delay: f64, max_read: f64) -> f64 {
+    /// Read position for one tap, including its modulation excursion.
+    ///
+    /// An associated function taking [`TapMod`] rather than a `&self` method,
+    /// and that is the point: as a method it borrowed all of `self`, so the
+    /// tick loops below could not call it while holding `&mut` on the per-tap
+    /// delay lines or filters. That is what forced them to index `self.taps[i]`
+    /// and `self.parallel_lines[i]` instead of iterating, which is where most
+    /// of this file's indexing findings came from. It is also a pure function
+    /// of its inputs, so it reads better as one.
+    fn tap_pos(tap: &Tap, index: usize, smooth_delay: f64, max_read: f64, m: TapMod) -> f64 {
         let mut pos = smooth_delay * tap.position;
-        let amt = self.mod_depth * tap.mod_amount;
+        let amt = m.depth * tap.mod_amount;
         if amt > 0.0 {
-            let ph = (self.mod_phase + i as f64 * 0.125).fract();
+            let ph = num::count_to_f64(index).mul_add(0.125, m.phase).fract();
             let lfo = (std::f64::consts::TAU * ph).sin();
-            let excursion = (self.sample_rate * 0.004).min(pos * 0.02);
+            let excursion = (m.sample_rate * 0.004).min(pos * 0.02);
             pos += lfo * amt * excursion;
         }
         pos.clamp(1.0, max_read)
+    }
+
+    /// The modulation state [`Self::tap_pos`] depends on, lifted out of `self`
+    /// so the tick loops can hold mutable borrows of the per-tap state.
+    const fn tap_mod(&self) -> TapMod {
+        TapMod {
+            depth: self.mod_depth,
+            phase: self.mod_phase,
+            sample_rate: self.sample_rate,
+        }
     }
 
     /// True whenever the independent-lines topology is running
@@ -553,7 +590,7 @@ impl MultiTapDelay {
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
         let (l, r) = self.tick_inner(input, ch, false);
         // Mono: pans ignored; tick_inner returns the plain sum in `l`.
-        debug_assert_eq!(r, 0.0);
+        debug_assert_eq!(r.to_bits(), 0.0_f64.to_bits());
         l
     }
 
@@ -569,19 +606,19 @@ impl MultiTapDelay {
             return self.tick_parallel(input, ch, stereo, smooth_delay);
         }
 
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.delay.len()) - 4.0;
         let mut out_l = 0.0;
         let mut out_r = 0.0;
         let mut fb_sum = 0.0;
-        for i in 0..MAX_TAPS {
-            let tap = self.taps[i];
+        let tap_mod = self.tap_mod();
+        for (i, (tap, filter)) in self.taps.iter().zip(&mut self.tap_filters).enumerate() {
             if !tap.enabled {
                 continue;
             }
-            let pos = self.tap_pos(&tap, i, smooth_delay, max_read);
+            let pos = Self::tap_pos(tap, i, smooth_delay, max_read, tap_mod);
             let mut sample = self.delay.read_cubic(pos);
             if tap.filter != TapFilter::Off {
-                sample = self.tap_filters[i].tick(sample, ch);
+                sample = filter.tick(sample, ch);
             }
             if stereo {
                 let (gl, gr) = crate::pan_gains(tap.pan);
@@ -621,7 +658,12 @@ impl MultiTapDelay {
         stereo: bool,
         smooth_delay: f64,
     ) -> (f64, f64) {
-        let max_read = self.parallel_lines[0].len() as f64 - 4.0;
+        // An empty set of lines cannot reach here (`parallel_active` gates it),
+        // and a zero read span is the safe answer if it ever did.
+        let max_read = self
+            .parallel_lines
+            .first()
+            .map_or(0.0, |line| num::count_to_f64(line.len()) - 4.0);
 
         let mut line_input = input;
         if self.hicut_freq > 0.0 {
@@ -634,18 +676,25 @@ impl MultiTapDelay {
         let mut out_l = 0.0;
         let mut out_r = 0.0;
         let mut fb_avg = 0.0;
-        for i in 0..MAX_TAPS {
-            let tap = self.taps[i];
+        let tap_mod = self.tap_mod();
+        let feedback = self.feedback;
+        for (i, ((tap, filter), line)) in self
+            .taps
+            .iter()
+            .zip(&mut self.tap_filters)
+            .zip(&mut self.parallel_lines)
+            .enumerate()
+        {
             if !tap.enabled {
                 // Keep disabled lines primed so enabling a tap later
                 // plays history instead of silence.
-                self.parallel_lines[i].write(line_input);
+                line.write(line_input);
                 continue;
             }
-            let pos = self.tap_pos(&tap, i, smooth_delay, max_read);
-            let mut sample = self.parallel_lines[i].read_cubic(pos);
+            let pos = Self::tap_pos(tap, i, smooth_delay, max_read, tap_mod);
+            let mut sample = line.read_cubic(pos);
             if tap.filter != TapFilter::Off {
-                sample = self.tap_filters[i].tick(sample, ch);
+                sample = filter.tick(sample, ch);
             }
             if stereo {
                 let (gl, gr) = crate::pan_gains(tap.pan);
@@ -654,17 +703,17 @@ impl MultiTapDelay {
             } else {
                 out_l += sample * tap.level;
             }
-            let fb = (sample * tap.repeats * self.feedback).clamp(-1.5, 1.5);
-            self.parallel_lines[i].write(line_input + fb);
+            let fb = (sample * tap.repeats * feedback).clamp(-1.5, 1.5);
+            line.write(line_input + fb);
             fb_avg += fb;
         }
-        self.feedback_sample = fb_avg / MAX_TAPS as f64;
+        self.feedback_sample = fb_avg / num::count_to_f64(MAX_TAPS);
 
         (out_l, out_r)
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -705,11 +754,11 @@ mod tests {
         for i in 0..96000 {
             let input = if i == 0 { 1.0 } else { 0.0 };
             if d.tick(input, 0).abs() > 0.3 {
-                hits.push(i as i64);
+                hits.push(i64::from(i));
             }
         }
-        let t1 = (200.0 * SR / 1000.0) as i64;
-        let t2 = (800.0 * SR / 1000.0) as i64;
+        let t1 = num::trunc_to_i64(200.0 * SR / 1000.0);
+        let t2 = num::trunc_to_i64(800.0 * SR / 1000.0);
         assert!(hits.iter().any(|&h| (h - t1).abs() < 100), "{hits:?}");
         assert!(hits.iter().any(|&h| (h - t2).abs() < 100), "{hits:?}");
     }
@@ -749,7 +798,7 @@ mod tests {
         }
         // Regeneration of the 200 ms tap → repeats at 400/600 ms too.
         let at = |ms: f64| -> f64 {
-            let c = (ms * SR / 1000.0) as usize;
+            let c = num::f64_to_index(ms * SR / 1000.0);
             out[c - 200..c + 200].iter().map(|x| x * x).sum()
         };
         assert!(at(200.0) > 0.1, "first pass: {}", at(200.0));
@@ -772,7 +821,7 @@ mod tests {
             let mut hf = 0.0;
             let mut prev = 0.0;
             for i in 0..24000 {
-                let input = (std::f64::consts::TAU * 5000.0 * i as f64 / SR).sin() * 0.5;
+                let input = (std::f64::consts::TAU * 5000.0 * num::count_to_f64(i) / SR).sin() * 0.5;
                 let out = d.tick(input, 0);
                 hf += (out - prev) * (out - prev);
                 prev = out;
@@ -813,7 +862,7 @@ mod tests {
                 *o = d.tick(input, 0);
             }
             let window = |ms: f64| -> f64 {
-                let c = (ms * SR / 1000.0) as usize;
+                let c = num::f64_to_index(ms * SR / 1000.0);
                 out[c - 480..c + 480].iter().map(|x| x * x).sum()
             };
             (window(400.0), window(520.0))
@@ -853,7 +902,7 @@ mod tests {
             *o = d.tick(input, 0);
         }
         let window = |ms: f64| -> f64 {
-            let c = (ms * SR / 1000.0) as usize;
+            let c = num::f64_to_index(ms * SR / 1000.0);
             out[c - 240..c + 240].iter().map(|x| x * x).sum()
         };
         // Self-recirculation at its own 200 ms period.
@@ -877,7 +926,7 @@ mod tests {
 
             let mut out = vec![0.0f64; 48000];
             for (i, o) in out.iter_mut().enumerate() {
-                let input = (std::f64::consts::TAU * 880.0 * i as f64 / SR).sin() * 0.5;
+                let input = (std::f64::consts::TAU * 880.0 * num::count_to_f64(i) / SR).sin() * 0.5;
                 *o = d.tick(input, 0);
                 assert!(o.is_finite());
             }
@@ -957,9 +1006,9 @@ mod tests {
                 .filter(|t| t.enabled)
                 .map(|t| {
                     (
-                        (t.position * 1e6) as i64,
-                        (t.pan * 1e6) as i64,
-                        (t.level * 1e6) as i64,
+                        num::trunc_to_i64(t.position * 1e6),
+                        num::trunc_to_i64(t.pan * 1e6),
+                        num::trunc_to_i64(t.level * 1e6),
                     )
                 })
                 .collect();
