@@ -17,7 +17,49 @@ rustflags = ["-C", "force-frame-pointers=yes"]
 rustflags = [
   "-C", "force-frame-pointers=yes",
   "-C", "link-arg=-fuse-ld=mold",
+  # See the CPU baseline note below.
+  "-C", "target-cpu=x86-64-v3",
 ]
+
+# macOS on Intel. No mold here (the Apple linker is the one that works with
+# the platform's dylib conventions), but the same CPU floor applies: every
+# Intel Mac that can run a current macOS is Haswell or later anyway.
+[target.x86_64-apple-darwin]
+rustflags = [
+  "-C", "force-frame-pointers=yes",
+  "-C", "target-cpu=x86-64-v3",
+]
+
+# ── CPU baseline: x86-64-v3 (Haswell, 2013) ──────────────────────────────
+#
+# Raised from the default x86-64 baseline (2003) on 2026-09-05, for FMA.
+#
+# `f64::mul_add` has no instruction in the baseline ISA, so it lowers to a
+# libm `fma()` CALL. Measured on this tree's own flags, 20M iterations of
+# `a * v + b` against `a.mul_add(v, b)`:
+#
+#     baseline x86-64   plain  9.03 ms   mul_add  51.78 ms   5.73x SLOWER
+#     x86-64-v3         plain  8.22 ms   mul_add   8.49 ms   1.03x, free
+#
+# That matters because `clippy::suboptimal_flops` — which is denied here via
+# `nursery` — asks for `mul_add` several hundred times across the DSP crates,
+# every one of them on an audio callback. Without this flag, obeying the lint
+# would have made the hot path ~6x slower on the arithmetic it touched. The
+# alternative was to allow the lint; raising the floor keeps the lint policy
+# free of exceptions AND makes the code genuinely faster, so it wins.
+#
+# v3 is the standard psABI level for Haswell and later: AVX, AVX2, BMI1/2,
+# F16C, FMA, LZCNT, MOVBE. It also lets LLVM auto-vectorise the DSP loops
+# with AVX2 rather than SSE2.
+#
+# CONSEQUENCE: binaries built here — including distributed plugins — will
+# SIGILL on pre-2013 x86 hardware. That is a deliberate product decision.
+# AMD support starts at Excavator (2015) / Zen (2017).
+#
+# Not set for other architectures, and deliberately so: aarch64 (Apple
+# Silicon, iOS) has fused multiply-add in baseline NEON with no flag needed,
+# and wasm32 has no FMA instruction at all — `+fma` is not even a valid
+# feature name on either, so putting it in `[build]` would break them.
 
 # Carried over from the dissolved session/keyflow workspaces: git deps and
 # patched git sources fetch via the git CLI so SSH / credentials work the

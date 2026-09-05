@@ -55,7 +55,7 @@ impl Detector {
 
         let rms = self.rms_power.sqrt();
         let mix = rms_mix.clamp(0.0, 1.0);
-        let detected = input_abs * (1.0 - mix) + rms * mix;
+        let detected = input_abs.mul_add(1.0 - mix, rms * mix);
         linear_to_db(detected).max(DB_FLOOR)
     }
 

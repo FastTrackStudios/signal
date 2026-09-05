@@ -1,6 +1,6 @@
 //! Compressor chain — wrapper with lookahead delay and sidechain EQ.
 
-use dsp_core::{Channel, num};
+use dsp_core::num;
 
 use crate::{design_highpass_biquad, design_lowpass_biquad, Biquad, Detector};
 use audiocore_dsp::biquad::{Biquad as EqBiquad, FilterType as EqFilterType};
@@ -165,8 +165,8 @@ impl CompChain {
 
         let (ff_key_l, ff_key_r) = self.sidechain_key(sidechain_l, sidechain_r);
         let feedback = self.comp.feedback.clamp(0.0, 1.0);
-        let key_l = ff_key_l * (1.0 - feedback) + self.feedback_l.abs() * feedback;
-        let key_r = ff_key_r * (1.0 - feedback) + self.feedback_r.abs() * feedback;
+        let key_l = ff_key_l.mul_add(1.0 - feedback, self.feedback_l.abs() * feedback);
+        let key_r = ff_key_r.mul_add(1.0 - feedback, self.feedback_r.abs() * feedback);
 
         let link = self.comp.channel_link.clamp(0.0, 1.0);
         let linked = key_l.max(key_r);
@@ -366,6 +366,8 @@ impl Default for CompChain {
 
 #[cfg(test)]
 mod tests {
+    use dsp_core::Channel;
+
     use super::*;
 
     #[test]

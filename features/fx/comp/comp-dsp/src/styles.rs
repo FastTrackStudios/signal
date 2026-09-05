@@ -82,7 +82,7 @@ pub fn atan_approx(x: f64) -> f64 {
     // This matches the nonlinear response observed in FET and Optical styles
     const PI: f64 = std::f64::consts::PI;
     let x2 = x * x;
-    2.0 * x / (PI + PI * x2)
+    2.0 * x / PI.mul_add(x2, PI)
 }
 
 /// Dispatcher for compression style functions.

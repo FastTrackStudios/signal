@@ -156,7 +156,7 @@ impl CompressionBand {
 
         // Apply sqrt-based formula:
         // sqrt(level_diff² + 1.0) provides smooth rounding near zero
-        let sqrt_component = (level_diff * level_diff + 1.0).sqrt() * freq_scaled;
+        let sqrt_component = level_diff.mul_add(level_diff, 1.0).sqrt() * freq_scaled;
 
         // Add linear component: level_diff * 0.5
         let linear_component = level_diff.abs() * BAND2_SCALE;

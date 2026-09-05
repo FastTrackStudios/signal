@@ -41,8 +41,6 @@ const PARAM_SMOOTHING_MS: f64 = 10.0;
 /// last slot rather than growing state it will never read.
 pub const CHANNELS: usize = 2;
 
-/// Compressor core used by the plugin chain.
-
 /// Everything one channel remembers between samples.
 ///
 /// These were eight parallel `[_; CHANNELS]` arrays reached by a clamped index
@@ -82,6 +80,7 @@ impl Default for ChannelState {
     }
 }
 
+/// Compressor core used by the plugin chain.
 pub struct ProC3Compressor {
     detector: Detector,
     gain_curve: GainCurve,
@@ -256,7 +255,7 @@ impl ProC3Compressor {
         self.channels[channel].auto_makeup_db = if self.auto_makeup {
             // Use half of the current reduction for conservative gain matching.
             // Full compensation tends to over-brighten and overload transients.
-            0.995 * self.channels[channel].auto_makeup_db + 0.005 * (gr_db * 0.5).min(24.0)
+            0.995f64.mul_add(self.channels[channel].auto_makeup_db, 0.005 * (gr_db * 0.5).min(24.0))
         } else {
             0.995 * self.channels[channel].auto_makeup_db
         };
@@ -301,14 +300,13 @@ impl ProC3Compressor {
         }
     }
 
-    /// Get current gain reduction in dB
-    #[must_use]
     /// Gain reduction on one channel, in dB.
     #[must_use]
     pub fn gain_reduction_db_for(&self, channel: Channel) -> f64 {
         self.channels[channel].last_gr_db
     }
 
+    /// Get current gain reduction in dB
     #[must_use]
     pub fn gain_reduction_db(&self) -> f64 {
         self.channels[Channel::LEFT].last_gr_db.max(self.channels[Channel::RIGHT].last_gr_db)
@@ -349,7 +347,7 @@ impl ProC3Compressor {
 
         let samples = (self.sample_rate * PARAM_SMOOTHING_MS / 1000.0).max(1.0);
         let coeff = 1.0 - (-1.0 / samples).exp();
-        current + (target - current) * coeff
+        (target - current).mul_add(coeff, current)
     }
 
     fn smooth_gain_computer_params(&mut self) {
@@ -499,8 +497,8 @@ impl ProC3Compressor {
     fn drive_antiderivative(sample: f64, pre_gain: f64, normalization: f64, mode: i32) -> f64 {
         let x = sample * pre_gain;
         let integral = match mode {
-            1 => x * x.atan() - 0.5 * (1.0 + x * x).ln(),
-            2 if x >= 0.0 => x - (1.0 + x).ln(),
+            1 => x.mul_add(x.atan(), -(0.5 * (x * x).ln_1p())),
+            2 if x >= 0.0 => x - x.ln_1p(),
             2 => -x - (1.0 - x).ln(),
             4 => cubic_drive_antiderivative_raw(x),
             5 => hard_clip_antiderivative_raw(x),
@@ -525,8 +523,8 @@ impl ProC3Compressor {
         let crest = (self.crest_peak_power / self.crest_rms_power.max(1e-12)).clamp(1.0, 64.0);
         let transient = ((crest.sqrt() - 1.0) / 7.0).clamp(0.0, 1.0);
 
-        let target_attack = self.attack_ms * (1.0 - amount * 0.85 * transient).clamp(0.05, 2.0);
-        let release_shape = (1.0 + amount * (1.5 * transient - 0.4)).clamp(0.25, 4.0);
+        let target_attack = self.attack_ms * (amount * 0.85).mul_add(-transient, 1.0).clamp(0.05, 2.0);
+        let release_shape = (1.0 + amount * 1.5f64.mul_add(transient, -0.4)).clamp(0.25, 4.0);
         let style_shape =
             Self::style_auto_release_multiplier(CompressionStyle::from_id(self.style), transient);
         let target_release = self.release_ms * (release_shape * style_shape).clamp(0.1, 6.0);
@@ -545,9 +543,9 @@ impl ProC3Compressor {
         let transient = transient.clamp(0.0, 1.0);
         let sustained = 1.0 - transient;
         match style {
-            CompressionStyle::Fet => 1.0 - 0.45 * transient,
-            CompressionStyle::Vca => 1.0 - 0.2 * transient + 0.15 * sustained,
-            CompressionStyle::Optical => 1.0 + 0.35 * transient + 0.9 * sustained,
+            CompressionStyle::Fet => 0.45f64.mul_add(-transient, 1.0),
+            CompressionStyle::Vca => 0.15f64.mul_add(sustained, 0.2f64.mul_add(-transient, 1.0)),
+            CompressionStyle::Optical => 0.9f64.mul_add(sustained, 0.35f64.mul_add(transient, 1.0)),
             _ => 1.0,
         }
         .clamp(0.25, 2.5)
@@ -645,11 +643,11 @@ fn cubic_drive_raw(x: f64) -> f64 {
 
 fn cubic_drive_antiderivative_raw(x: f64) -> f64 {
     if x <= -1.0 {
-        (-2.0 / 3.0) * x - 0.25
+        (-2.0_f64 / 3.0).mul_add(x, -0.25)
     } else if x >= 1.0 {
-        (2.0 / 3.0) * x - 0.25
+        (2.0_f64 / 3.0).mul_add(x, -0.25)
     } else {
-        0.5 * x * x - x.powi(4) / 12.0
+        (0.5 * x).mul_add(x, -(x.powi(4) / 12.0))
     }
 }
 
@@ -965,7 +963,7 @@ mod tests {
         comp.drive = 1.0;
         comp.smoothed_drive = 1.0;
 
-        let pre_gain = 1.0 + comp.drive * 11.0;
+        let pre_gain = comp.drive.mul_add(11.0, 1.0);
         let normalization = ProC3Compressor::drive_transfer_raw(pre_gain, 0)
             .abs()
             .max(1e-9);
