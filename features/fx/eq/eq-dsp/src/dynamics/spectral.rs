@@ -483,9 +483,7 @@ impl SpectralEngine {
         self.region_env.clear();
         for r in &self.regions {
             let mut env = Vec::with_capacity(bins);
-            for i in 0..bins {
-                env.push(region_envelope(r, num::count_to_f64(i) * bin_hz));
-            }
+            env.extend((0..bins).map(|i| region_envelope(r, num::count_to_f64(i) * bin_hz)));
             self.region_env.push(env);
         }
         self.region_reduction_db.clear();
@@ -592,8 +590,8 @@ impl SpectralEngine {
         if self.fill == self.block {
             self.process_frame();
             // Slide the input ring left by one hop.
-            for ch in 0..2 {
-                self.in_buf[ch].copy_within(self.hop.., 0);
+            for buf in &mut self.in_buf {
+                buf.copy_within(self.hop.., 0);
             }
             self.fill = self.block.saturating_sub(self.hop);
         }
@@ -608,11 +606,11 @@ impl SpectralEngine {
     fn process_frame(&mut self) {
         let bins = self.mag_db.len();
         // Forward FFT both channels (windowed).
-        for ch in 0..2 {
-            for i in 0..self.block {
-                self.frame[i] = self.in_buf[ch][i] * self.window[i];
+        for (input, spec) in self.in_buf.iter().zip(&mut self.spec) {
+            for (slot, (x, w)) in self.frame.iter_mut().zip(input.iter().zip(&self.window)) {
+                *slot = x * w;
             }
-            let _ = self.fft.process(&mut self.frame, &mut self.spec[ch]);
+            let _ = self.fft.process(&mut self.frame, spec);
         }
 
         if !self.params.freeze {
@@ -624,16 +622,24 @@ impl SpectralEngine {
             // below, where the region that owns the bin decides. Adding it in
             // both places would count it twice.
             let bin_hz = self.sample_rate / num::count_to_f64(self.block);
-            for i in 0..bins {
-                let m = 0.5 * (self.spec[0][i].norm() + self.spec[1][i].norm())
-                    / (num::count_to_f64(self.block) * 0.25);
-                self.mag_db[i] = 20.0 * m.max(1.0e-10).log10();
+            let [spec_l, spec_r] = &self.spec;
+            let scale = num::count_to_f64(self.block) * 0.25;
+            let level_coeff = self.level_coeff;
+            for (((mag, level), sl), sr) in self
+                .mag_db
+                .iter_mut()
+                .zip(self.level_db.iter_mut())
+                .zip(spec_l.iter())
+                .zip(spec_r.iter())
+            {
+                let m = 0.5 * (sl.norm() + sr.norm()) / scale;
+                *mag = 20.0 * m.max(1.0e-10).log10();
                 // The trigger reads a smoothed level, not the instantaneous
                 // bin — see `SPECTRAL_LEVEL_MS`.
-                if self.level_db[i] <= -119.0 {
-                    self.level_db[i] = self.mag_db[i];
+                if *level <= -119.0 {
+                    *level = *mag;
                 } else {
-                    self.level_db[i] += (self.mag_db[i] - self.level_db[i]) * self.level_coeff;
+                    *level += (*mag - *level) * level_coeff;
                 }
             }
 
@@ -659,12 +665,12 @@ impl SpectralEngine {
 
             // Each bin's long-term level, which is what an Auto threshold
             // learns from.
-            for i in 0..bins {
-                if self.learned_db[i] <= -119.0 {
-                    self.learned_db[i] = self.level_db[i];
+            let learned_coeff = self.learned_coeff;
+            for (learned, level) in self.learned_db.iter_mut().zip(&self.level_db) {
+                if *learned <= -119.0 {
+                    *learned = *level;
                 } else {
-                    self.learned_db[i] +=
-                        (self.level_db[i] - self.learned_db[i]) * self.learned_coeff;
+                    *learned += (*level - *learned) * learned_coeff;
                 }
             }
 
@@ -797,37 +803,44 @@ impl SpectralEngine {
 
         // Apply gains; delta morphs suppressed ↔ removed.
         let delta = self.params.delta.clamp(0.0, 1.0);
-        for ch in 0..2 {
-            for i in 0..bins {
-                let g_keep = self.gain[i];
-                let g = g_keep * (1.0 - delta) + (1.0 - g_keep) * delta;
-                self.spec[ch][i] *= g;
+        let norm = 1.0 / (num::count_to_f64(self.block) * 1.5);
+        let (hop, block) = (self.hop, self.block);
+        for ((spec_ch, ola), out) in self
+            .spec
+            .iter_mut()
+            .zip(self.ola.iter_mut())
+            .zip(self.out_buf.iter_mut())
+        {
+            for (bin, g_keep) in spec_ch.iter_mut().zip(&self.gain) {
+                *bin *= g_keep.mul_add(1.0 - delta, (1.0 - g_keep) * delta);
             }
-            let mut spec = self.spec[ch].clone();
+            let mut spec = spec_ch.clone();
             let _ = self.ifft.process(&mut spec, &mut self.frame);
             // Overlap-add with synthesis window; Hann² at 75% overlap
             // sums to 1.5·block, folded into the normalization.
-            let norm = 1.0 / (self.block as f64 * 1.5);
-            for i in 0..self.block {
-                self.ola[ch][i] += self.frame[i] * self.window[i] * norm;
+            for (slot, (x, w)) in ola.iter_mut().zip(self.frame.iter().zip(&self.window)) {
+                *slot += x * w * norm;
             }
             // Emit one hop of finished samples.
-            for i in 0..self.hop {
-                self.out_buf[ch].push(self.ola[ch][i]);
-            }
-            self.ola[ch].copy_within(self.hop.., 0);
-            for i in (self.block - self.hop)..self.block {
-                self.ola[ch][i] = 0.0;
+            out.extend(ola.iter().take(hop).copied());
+            ola.copy_within(hop.., 0);
+            if let Some(tail) = ola.get_mut(block.saturating_sub(hop)..block) {
+                tail.fill(0.0);
             }
         }
         self.primed = true;
     }
 
     pub fn reset(&mut self) {
-        for ch in 0..2 {
-            self.in_buf[ch].fill(0.0);
-            self.ola[ch].fill(0.0);
-            self.out_buf[ch].clear();
+        for ((input, ola), out) in self
+            .in_buf
+            .iter_mut()
+            .zip(self.ola.iter_mut())
+            .zip(self.out_buf.iter_mut())
+        {
+            input.fill(0.0);
+            ola.fill(0.0);
+            out.clear();
         }
         self.fill = 0;
         self.gr_db.fill(0.0);

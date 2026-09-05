@@ -1075,8 +1075,13 @@ impl FtsEq {
         if self.side_ref.len() < n_in {
             self.side_ref.resize(n_in, 0.0);
         }
-        for i in 0..n_in {
-            self.side_ref[i] = 0.5 * (buf_l[i] + buf_r[i]);
+        for (slot, (l, r)) in self
+            .side_ref
+            .iter_mut()
+            .zip(buf_l.iter().zip(buf_r.iter()))
+            .take(n_in)
+        {
+            *slot = 0.5 * (l + r);
         }
         let side_ref = &self.side_ref;
 
@@ -1089,10 +1094,13 @@ impl FtsEq {
                 if matches!(listen, Some((_, 2))) {
                     let ring = dry_ring[0].len();
                     let mut p = *dry_pos;
-                    for i in 0..left.len() {
-                        dry_ring[0][p] = left[i];
-                        dry_ring[1][p] = right[i];
-                        p = (p + 1) % ring;
+                    let [ring_l, ring_r] = dry_ring;
+                    for (l, r) in left.iter().zip(right.iter()) {
+                        if let (Some(dl), Some(dr)) = (ring_l.get_mut(p), ring_r.get_mut(p)) {
+                            *dl = *l;
+                            *dr = *r;
+                        }
+                        p = p.saturating_add(1).checked_rem(ring).unwrap_or(0);
                     }
                 }
                 if transient_mode {
@@ -1102,14 +1110,20 @@ impl FtsEq {
                     // recombine. Complementary split keeps flat
                     // settings a null.
                     let n = left.len();
-                    for i in 0..n {
-                        let mask = splitter.tick_mask(0.5 * (left[i] + right[i]));
-                        let tl = left[i] * mask;
-                        let tr = right[i] * mask;
-                        scratch_left[i] = left[i] - tl;
-                        scratch_right[i] = right[i] - tr;
-                        left[i] = tl;
-                        right[i] = tr;
+                    for (((l, r), sl), sr) in left
+                        .iter_mut()
+                        .zip(right.iter_mut())
+                        .zip(scratch_left.iter_mut())
+                        .zip(scratch_right.iter_mut())
+                        .take(n)
+                    {
+                        let mask = splitter.tick_mask(0.5 * (*l + *r));
+                        let tl = *l * mask;
+                        let tr = *r * mask;
+                        *sl = *l - tl;
+                        *sr = *r - tr;
+                        *l = tl;
+                        *r = tr;
                     }
                     eq.process(left, right);
                     eq_b.process(&mut scratch_left[..n], &mut scratch_right[..n]);
@@ -1153,17 +1167,15 @@ impl FtsEq {
                     if !slots[bi].dyn_active {
                         continue;
                     }
-                    for i in 0..left.len() {
-                        d.tick(&mut left[i], &mut right[i], side_ref[i]);
+                    for ((l, r), s) in left.iter_mut().zip(right.iter_mut()).zip(side_ref) {
+                        d.tick(l, r, *s);
                     }
                 }
                 // Per-band spectral dynamics (engaged only while at
                 // least one band has its spectral toggle on).
                 if spectral.has_regions() {
-                    for i in 0..left.len() {
-                        let (sl, sr) = spectral.tick(left[i], right[i]);
-                        left[i] = sl;
-                        right[i] = sr;
+                    for (l, r) in left.iter_mut().zip(right.iter_mut()) {
+                        (*l, *r) = spectral.tick(*l, *r);
                     }
                 }
                 // Character's waveshaper sits at the OUTPUT — its own makeup
@@ -1172,31 +1184,32 @@ impl FtsEq {
                 // programme material: "Production Ready Vocals" 1.49 dB to
                 // 1.81, "Kick - IN 01" 1.65 to 1.82.
                 if character == 2 {
-                    for i in 0..left.len() {
-                        left[i] = character_shaper[0].tick(left[i]);
-                        right[i] = character_shaper[1].tick(right[i]);
+                    let [shaper_l, shaper_r] = character_shaper;
+                    for (l, r) in left.iter_mut().zip(right.iter_mut()) {
+                        *l = shaper_l.tick(*l);
+                        *r = shaper_r.tick(*r);
                     }
                 }
                 if (out_gain - 1.0).abs() > 1.0e-9 {
-                    for i in 0..left.len() {
-                        left[i] *= out_gain;
-                        right[i] *= out_gain;
+                    for (l, r) in left.iter_mut().zip(right.iter_mut()) {
+                        *l *= out_gain;
+                        *r *= out_gain;
                     }
                 }
                 // Output Pan: turn one side down, never boost the other.
                 if pan.abs() > 1.0e-9 {
                     let (pan_neg, pan_pos) = (1.0 + pan.min(0.0), 1.0 - pan.max(0.0));
                     if pan_mid_side {
-                        for i in 0..left.len() {
-                            let (mid, side_diff) = (0.5 * (left[i] + right[i]), 0.5 * (left[i] - right[i]));
+                        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
+                            let (mid, side_diff) = (0.5 * (*l + *r), 0.5 * (*l - *r));
                             let (mid, side_diff) = (mid * pan_pos, side_diff * pan_neg);
-                            left[i] = mid + side_diff;
-                            right[i] = mid - side_diff;
+                            *l = mid + side_diff;
+                            *r = mid - side_diff;
                         }
                     } else {
-                        for i in 0..left.len() {
-                            left[i] *= pan_neg;
-                            right[i] *= pan_pos;
+                        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
+                            *l *= pan_neg;
+                            *r *= pan_pos;
                         }
                     }
                 }
@@ -1207,9 +1220,9 @@ impl FtsEq {
                 // band solo together.
                 if let Some((_, mode)) = listen {
                     if mode == 1 {
-                        for i in 0..left.len() {
-                            left[i] = solo_filter.tick(0, left[i]);
-                            right[i] = solo_filter.tick(1, right[i]);
+                        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
+                            *l = solo_filter.tick(0, *l);
+                            *r = solo_filter.tick(1, *r);
                         }
                     } else {
                         let ring = dry_ring[0].len();
