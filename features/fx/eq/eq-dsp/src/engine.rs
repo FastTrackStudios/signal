@@ -255,8 +255,16 @@ impl BandSlot {
             auto: true,
             relative: false,
         },
-        side: SideChain { filtered: false, lo_hz: 20.0, hi_hz: 20_000.0 },
-        spectral: SpectralSettings { on: false, density: 50.0, tilt: false },
+        side: SideChain {
+            filtered: false,
+            lo_hz: 20.0,
+            hi_hz: 20_000.0,
+        },
+        spectral: SpectralSettings {
+            on: false,
+            density: 50.0,
+            tilt: false,
+        },
         dyn_active: false,
         dyn_modulated: false,
         dyn_modulated_gain: f64::NAN,
@@ -423,8 +431,7 @@ struct CharacterShaper {
 
 impl CharacterShaper {
     fn update(&mut self, sample_rate: f64) {
-        self.lp_coeff =
-            1.0 - (-core::f64::consts::TAU * CHARACTER_DRIVE_HZ / sample_rate).exp();
+        self.lp_coeff = 1.0 - (-core::f64::consts::TAU * CHARACTER_DRIVE_HZ / sample_rate).exp();
         self.lift = 10.0f64.powf(CHARACTER_DRIVE_DB / 20.0) - 1.0;
         self.dc_r = 1.0 - core::f64::consts::TAU * 5.0 / sample_rate;
         self.lp = 0.0;
@@ -521,23 +528,27 @@ impl FtsEq {
     fn sync_band(&mut self, band: usize) {
         let band = band.min(EQ_BANDS - 1);
         let slot = self.bands[band];
-            let (used, on) = (slot.used, slot.enabled);
+        let (used, on) = (slot.used, slot.enabled);
         let enabled = used && on;
         let shape = crate::design::slope::FilterShape::from_canonical_index(self.bands[band].shape);
         let DynSettings {
-                range_db: range,
-                threshold_db: thr,
-                attack_pct: atk,
-                release_pct: rel,
-                auto,
-                relative,
-            } = self.bands[band].dynamics;
+            range_db: range,
+            threshold_db: thr,
+            attack_pct: atk,
+            release_pct: rel,
+            auto,
+            relative,
+        } = self.bands[band].dynamics;
         // A band goes dynamic when it has a range and a dynamics-capable
         // shape (Bell/shelves — same rule as Pro-Q).
         let dyn_shape = match shape {
             crate::design::slope::FilterShape::Bell => Some(crate::dynamics::DynShape::Bell),
-            crate::design::slope::FilterShape::LowShelf => Some(crate::dynamics::DynShape::LowShelf),
-            crate::design::slope::FilterShape::HighShelf => Some(crate::dynamics::DynShape::HighShelf),
+            crate::design::slope::FilterShape::LowShelf => {
+                Some(crate::dynamics::DynShape::LowShelf)
+            }
+            crate::design::slope::FilterShape::HighShelf => {
+                Some(crate::dynamics::DynShape::HighShelf)
+            }
             _ => None,
         };
         let spectral = self.bands[band].spectral.on && range.abs() > 1.0e-3;
@@ -584,7 +595,8 @@ impl FtsEq {
                 let raw = self.bands[band].slope.max(0.0);
                 let laddered = matches!(
                     shape,
-                    crate::design::slope::FilterShape::LowCut | crate::design::slope::FilterShape::HighCut
+                    crate::design::slope::FilterShape::LowCut
+                        | crate::design::slope::FilterShape::HighCut
                 ) && raw < 6.0;
                 let (index, fraction) = if laddered {
                     (num::f64_to_index(raw.floor()), raw.fract())
@@ -601,7 +613,8 @@ impl FtsEq {
                 b.order = order;
                 b.fractional_order = fraction;
                 b.enabled = b.enabled && (order > 0 || fraction > 1.0e-6);
-                b.placement = crate::runtime::band::Placement::from_index(self.bands[band].placement);
+                b.placement =
+                    crate::runtime::band::Placement::from_index(self.bands[band].placement);
             }
             chain.update_band(band);
         }
@@ -619,10 +632,15 @@ impl FtsEq {
             d.params.q = q;
             d.params.base_gain_db = gain;
             d.params.range_db = range * self.gain_scale;
-            d.params.placement = crate::runtime::band::Placement::from_index(self.bands[band].placement);
+            d.params.placement =
+                crate::runtime::band::Placement::from_index(self.bands[band].placement);
             // Side-chain range: a filtered band listens to what it is told to,
             // an unfiltered one listens to itself.
-            let SideChain { filtered, lo_hz: lo, hi_hz: hi } = self.bands[band].side;
+            let SideChain {
+                filtered,
+                lo_hz: lo,
+                hi_hz: hi,
+            } = self.bands[band].side;
             d.params.side_mode = if filtered {
                 crate::dynamics::SideMode::Free
             } else {
@@ -729,7 +747,8 @@ impl FtsEq {
             let step = (1.0_f64 / 12.0).exp2();
             let ceiling = self.sample_rate * 0.45;
             let mut hz = 20.0f64;
-            let max_iterations = num::f64_to_index((ceiling / 20.0).log(step).ceil()).saturating_add(1);
+            let max_iterations =
+                num::f64_to_index((ceiling / 20.0).log(step).ceil()).saturating_add(1);
             for _ in 0..max_iterations {
                 if hz >= ceiling {
                     break;
@@ -751,9 +770,11 @@ impl FtsEq {
             let mut env = vec![0.0f64; n];
             let slot = self.bands[band];
             let (used, on) = (slot.used, slot.enabled);
-            let dynamic = used && on && (self.bands[band].dyn_active || self.bands[band].spectral.on);
+            let dynamic =
+                used && on && (self.bands[band].dyn_active || self.bands[band].spectral.on);
             if dynamic {
-                let shape = crate::design::slope::FilterShape::from_canonical_index(self.bands[band].shape);
+                let shape =
+                    crate::design::slope::FilterShape::from_canonical_index(self.bands[band].shape);
                 let f0 = self.bands[band].freq_hz.clamp(10.0, 30000.0);
                 let q = self.bands[band].q.clamp(0.025, 40.0);
                 // A band that touches one side of the image only moves half
@@ -761,10 +782,11 @@ impl FtsEq {
                 // compensation. "Hammond Levelling" is four bands that are
                 // really two, duplicated for left and right; counting both at
                 // full weight doubled the compensation and cost 1.6 dB.
-                let w = match crate::runtime::band::Placement::from_index(self.bands[band].placement) {
-                    crate::runtime::band::Placement::Stereo => 1.0,
-                    _ => 0.5,
-                };
+                let w =
+                    match crate::runtime::band::Placement::from_index(self.bands[band].placement) {
+                        crate::runtime::band::Placement::Stereo => 1.0,
+                        _ => 0.5,
+                    };
                 for (e, &hz) in env.iter_mut().zip(&self.auto_grid_hz) {
                     *e = w * band_envelope(shape, f0, q, hz);
                 }
@@ -891,39 +913,46 @@ impl FtsEq {
             if !(used && on && self.bands[band].spectral.on) {
                 continue;
             }
-            let DynSettings { range_db: range, threshold_db: thr, auto, .. } = self.bands[band].dynamics;
+            let DynSettings {
+                range_db: range,
+                threshold_db: thr,
+                auto,
+                ..
+            } = self.bands[band].dynamics;
             if range.abs() <= 1.0e-3 {
                 continue;
             }
             let freq = self.bands[band].freq_hz.clamp(10.0, 30000.0);
             let q = self.bands[band].q.clamp(0.025, 40.0);
-            let shape = crate::design::slope::FilterShape::from_canonical_index(self.bands[band].shape);
-            self.spectral_regions.push(crate::dynamics::spectral::SpectralRegion {
-                freq_hz: freq,
-                q,
-                shape: match shape {
-                    crate::design::slope::FilterShape::LowShelf => {
-                        crate::dynamics::spectral::SpectralShape::LowShelf
-                    }
-                    crate::design::slope::FilterShape::HighShelf => {
-                        crate::dynamics::spectral::SpectralShape::HighShelf
-                    }
-                    // Bell for everything else: 54 of the 74 spectral bands in
-                    // the factory library are bells, and the handful that are
-                    // not shelves are close enough to one that a separate
-                    // curve for each would be fitting noise.
-                    _ => crate::dynamics::spectral::SpectralShape::Bell,
-                },
-                // The band's range is the ceiling on how far a bin may be
-                // pulled down, not a scale factor against some other maximum.
-                max_depth_db: range.abs(),
-                // An ABSOLUTE per-bin threshold in dBFS, not a prominence.
-                // The manual knob's own range is -80..0 dB.
-                threshold_db: thr,
-                auto,
-                density: (self.bands[band].spectral.density / 100.0).clamp(0.0, 1.0),
-                tilt: self.bands[band].spectral.tilt,
-            });
+            let shape =
+                crate::design::slope::FilterShape::from_canonical_index(self.bands[band].shape);
+            self.spectral_regions
+                .push(crate::dynamics::spectral::SpectralRegion {
+                    freq_hz: freq,
+                    q,
+                    shape: match shape {
+                        crate::design::slope::FilterShape::LowShelf => {
+                            crate::dynamics::spectral::SpectralShape::LowShelf
+                        }
+                        crate::design::slope::FilterShape::HighShelf => {
+                            crate::dynamics::spectral::SpectralShape::HighShelf
+                        }
+                        // Bell for everything else: 54 of the 74 spectral bands in
+                        // the factory library are bells, and the handful that are
+                        // not shelves are close enough to one that a separate
+                        // curve for each would be fitting noise.
+                        _ => crate::dynamics::spectral::SpectralShape::Bell,
+                    },
+                    // The band's range is the ceiling on how far a bin may be
+                    // pulled down, not a scale factor against some other maximum.
+                    max_depth_db: range.abs(),
+                    // An ABSOLUTE per-bin threshold in dBFS, not a prominence.
+                    // The manual knob's own range is -80..0 dB.
+                    threshold_db: thr,
+                    auto,
+                    density: (self.bands[band].spectral.density / 100.0).clamp(0.0, 1.0),
+                    tilt: self.bands[band].spectral.tilt,
+                });
         }
         self.spectral.set_regions(&self.spectral_regions);
     }
@@ -961,7 +990,11 @@ impl FtsEq {
     #[must_use]
     pub fn live_dyn_gain_db(&self, band: usize) -> Option<f64> {
         (band < EQ_BANDS && self.bands[band].dyn_active)
-            .then(|| self.dyn_bands.get(band).map(crate::dynamics::DynBand::live_gain_db))
+            .then(|| {
+                self.dyn_bands
+                    .get(band)
+                    .map(crate::dynamics::DynBand::live_gain_db)
+            })
             .flatten()
     }
 
@@ -1024,7 +1057,10 @@ impl FtsEq {
         self.prepared
     }
 
-    #[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+    )]
     /// Process one block in place.
     pub fn process(&mut self, buf_l: &mut [f64], buf_r: &mut [f64]) {
         // Fully-idle block (no active bands, no dynamics, no spectral,

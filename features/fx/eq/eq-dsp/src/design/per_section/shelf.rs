@@ -3,10 +3,13 @@
 //! Three related routines rather than one, matching three code paths in the
 //! binary; the difference between them is documented at each function.
 
-use super::{Prototype, PI, update_tracked_band_frequencies, eval_squared_mag_scalar};
+use super::{eval_squared_mag_scalar, update_tracked_band_frequencies, Prototype, PI};
 use dsp_core::num;
 
-#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+)]
 /// Per-section helper for `proto[0x13] == 7` (shelf-band sections, "else"
 /// branch in `prepare_band_display_info`).
 ///
@@ -131,11 +134,16 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             if threshold < dvar10_v {
                 let blend = (dvar10_v - threshold) / (dvar4 - threshold);
                 let blend_sq = f64::from(num::narrow((blend * blend)));
-                let blended = local_res8.abs().mul_add(dvar10_v, -dvar10_v).mul_add(blend_sq, dvar10_v);
+                let blended = local_res8
+                    .abs()
+                    .mul_add(dvar10_v, -dvar10_v)
+                    .mul_add(blend_sq, dvar10_v);
                 proto.wz = blended;
             }
             // Compute final w_eval and return.
-            let cand = 0.5_f64.powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
+            let cand = 0.5_f64
+                .powf(local_res8 * CONST_3_3)
+                .mul_add(PI_OVER_5, FOUR_PI_OVER_5);
             // Note: the binary uses pow(wp/π, local_res8·3.3) but at this
             // point dVar10 (the input to the pow's arg-prep) was set to π
             // (dVar4). We mirror with dVar10 = π → wp/π = 1 → pow result
@@ -147,11 +155,16 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
 
         if iv5_local == 1 {
             let dvar1 = proto.wp;
-            let dvar10_v = if proto.root_count_dup == 2 { dvar4 } else { dvar1 };
+            let dvar10_v = if proto.root_count_dup == 2 {
+                dvar4
+            } else {
+                dvar1
+            };
             if bvar3 || proto.q_scratch_50 <= 1.0 {
                 proto.wz = dvar11 * dvar11 * dvar1;
-                let cand =
-                    (dvar10_v / PI).powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
+                let cand = (dvar10_v / PI)
+                    .powf(local_res8 * CONST_3_3)
+                    .mul_add(PI_OVER_5, FOUR_PI_OVER_5);
                 proto.w_eval = if dvar10_v <= cand {
                     if cand >= PI {
                         PI
@@ -185,7 +198,9 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
                 proto.wz = dvar11_use * dvar11.sqrt() * dvar1;
             }
             // Final w_eval (when iv5_local != 0) — bypass to LAB_18010d2d4.
-            let cand = 1.0_f64.powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
+            let cand = 1.0_f64
+                .powf(local_res8 * CONST_3_3)
+                .mul_add(PI_OVER_5, FOUR_PI_OVER_5);
             proto.w_eval = if dvar4 <= cand {
                 if cand >= PI {
                     PI
@@ -214,7 +229,9 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             // LAB_18010d2cf: proto[2] = dvar12 (= wz)
             proto.wz = dvar12;
             // Skip to w_eval.
-            let cand = 1.0_f64.powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
+            let cand = 1.0_f64
+                .powf(local_res8 * CONST_3_3)
+                .mul_add(PI_OVER_5, FOUR_PI_OVER_5);
             proto.w_eval = PI.min(cand.max(0.0));
             return;
         } else if iv5_c == 0 {
@@ -241,7 +258,9 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
         proto.wt = dvar11.sqrt() * proto.wp;
         let dvar12 = dvar11.sqrt() * proto.wp * CONST_0_25;
         proto.wz = dvar12;
-        let cand = 1.0_f64.powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
+        let cand = 1.0_f64
+            .powf(local_res8 * CONST_3_3)
+            .mul_add(PI_OVER_5, FOUR_PI_OVER_5);
         proto.w_eval = PI.min(cand.max(0.0));
         return;
     }
@@ -249,7 +268,11 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
     // === Special-flag override path (flag_69 != 0 OR flag_68 != 0) ===
     if proto.mode <= 0 {
         // proto[9] == 0 sub-branch: clamp wp to 9π/10, set wt = wp · 0.25
-        let dvar11_use = if NINE_PI_TEN <= proto.band_omega_ref { NINE_PI_TEN } else { proto.band_omega_ref };
+        let dvar11_use = if NINE_PI_TEN <= proto.band_omega_ref {
+            NINE_PI_TEN
+        } else {
+            proto.band_omega_ref
+        };
         proto.wp = dvar11_use;
         let dvar12 = dvar11_use * CONST_0_25;
         proto.wt = dvar11_use * CONST_0_01;
@@ -261,7 +284,9 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
         proto.wt = dvar11_use * CONST_0_01;
         proto.wz = dvar12;
     }
-    let cand = 1.0_f64.powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
+    let cand = 1.0_f64
+        .powf(local_res8 * CONST_3_3)
+        .mul_add(PI_OVER_5, FOUR_PI_OVER_5);
     proto.w_eval = PI.min(cand.max(0.0));
 }
 

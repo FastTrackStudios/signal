@@ -14,7 +14,9 @@
 //!   UI "Band Shelf" → binary type 10    (prototype=LP,   transform=3 LP→BP+bilinear)
 
 use crate::design::biquad::{self, Coeffs};
-use crate::design::constants::{INV_SQRT2, LN10_OVER_20, Q_BW_BASE, Q_BW_MULT, Q_BW_OFFSET, Q_BW_SCALE};
+use crate::design::constants::{
+    INV_SQRT2, LN10_OVER_20, Q_BW_BASE, Q_BW_MULT, Q_BW_OFFSET, Q_BW_SCALE,
+};
 use crate::math::prototype;
 use crate::math::transform;
 use crate::math::zpk::Zpk;
@@ -175,7 +177,10 @@ pub fn design_tilt_shelf_zpk(
     sections
 }
 
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// Band shelf — transform type 3 (LP→BP + bilinear). Kept as-is (currently passing).
 #[must_use]
 pub fn design_band_shelf_zpk(
@@ -222,7 +227,10 @@ pub fn design_band_shelf_zpk(
 // Internal helpers (legacy — kept until tilt/band shelf are rewritten)
 // ═══════════════════════════════════════════════════════════════════════════
 
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 fn apply_shelf_gain(zpk: &mut Zpk, gain_param: f64, is_low_type: bool) {
     for zero in &mut zpk.zeros {
         *zero *= gain_param;

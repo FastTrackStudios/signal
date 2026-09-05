@@ -1,4 +1,7 @@
-#![expect(rustdoc::broken_intra_doc_links, reason = "large transliterated codebase may have incomplete intra-doc links")]
+#![expect(
+    rustdoc::broken_intra_doc_links,
+    reason = "large transliterated codebase may have incomplete intra-doc links"
+)]
 // The library has a large amount of code transliterated from a reference
 // binary; the following style lints fire heavily on that code without
 // actually flagging bugs. They are suppressed via item-level attributes
@@ -34,15 +37,15 @@ pub mod engine;
 
 /// Coefficient design: parameters in, biquad cascades out. Not realtime.
 pub mod design;
-/// The per-sample path: sections, bands, the chain, and response readout.
-pub mod runtime;
 /// Level detection and the dynamic/spectral/transient bands built on it.
 pub mod dynamics;
+/// The per-sample path: sections, bands, the chain, and response readout.
+pub mod runtime;
 
-/// Textbook filter mathematics, with no Pro-Q in it.
-pub mod math;
 /// Fixed response curves modelled from named analogue units.
 pub mod hardware;
+/// Textbook filter mathematics, with no Pro-Q in it.
+pub mod math;
 
 pub use design::FilterType;
 pub use runtime::band::Band;

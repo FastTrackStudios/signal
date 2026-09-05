@@ -1,6 +1,6 @@
 //! Decoded coefficient tables, and the pre-warp they feed.
 
-use super::{notch_inner_pair, notch_analog_sections, PI};
+use super::{notch_analog_sections, notch_inner_pair, PI};
 
 /// Q-table configuration: (`lower_q`, `lower_table`, `upper_q`, `upper_table`)
 type QTableConfig<'a> = (f64, &'a Vec<(f64, f64)>, f64, &'a Vec<(f64, f64)>);
@@ -15,7 +15,8 @@ pub fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
         let q_user = q.max(1e-6);
         let c_quartic = 2.0 + 2.0 / (q_user * q_user);
         let (angles, real_count) = lp_atoms_for_slope(slope);
-        let mut sections = Vec::with_capacity(angles.len().saturating_mul(2).saturating_add(real_count));
+        let mut sections =
+            Vec::with_capacity(angles.len().saturating_mul(2).saturating_add(real_count));
         for &theta in angles {
             let b = -2.0 * SQRT_2 * theta.cos() / q_user;
             let (a1i, a2i) = notch_inner_pair(b, c_quartic);
@@ -91,7 +92,9 @@ pub fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
     let alpha = (q - lo_q) / (hi_q - lo_q);
     lo_v.iter()
         .zip(hi_v.iter())
-        .map(|(&(a1l, a2l), &(a1h, a2h))| (alpha.mul_add(a1h - a1l, a1l), alpha.mul_add(a2h - a2l, a2l)))
+        .map(|(&(a1l, a2l), &(a1h, a2h))| {
+            (alpha.mul_add(a1h - a1l, a1l), alpha.mul_add(a2h - a2l, a2l))
+        })
         .collect()
 }
 

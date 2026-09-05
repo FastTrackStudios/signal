@@ -69,15 +69,22 @@ pub fn compute_zpk_transfer_coeffs_generic(
     let omega_sq = omega * omega;
     let omega_qd = omega_sq * omega_sq;
 
-    let is_quadratic = analog.b2z.abs() > f64::from(EPS_F32) || analog.b2p.abs() > f64::from(EPS_F32);
+    let is_quadratic =
+        analog.b2z.abs() > f64::from(EPS_F32) || analog.b2p.abs() > f64::from(EPS_F32);
 
     let coeffs = if is_quadratic {
         MagSqCoeffs {
             a: analog.b2z * analog.b2z,
-            b: analog.b1z.mul_add(analog.b1z, -(2.0 * analog.b2z * analog.b0z)) * omega_sq,
+            b: analog
+                .b1z
+                .mul_add(analog.b1z, -(2.0 * analog.b2z * analog.b0z))
+                * omega_sq,
             c: analog.b0z * analog.b0z * omega_qd,
             d: analog.b2p * analog.b2p,
-            e: analog.b1p.mul_add(analog.b1p, -(2.0 * analog.b2p * analog.b0p)) * omega_sq,
+            e: analog
+                .b1p
+                .mul_add(analog.b1p, -(2.0 * analog.b2p * analog.b0p))
+                * omega_sq,
             f: analog.b0p * analog.b0p * omega_qd,
         }
     } else {

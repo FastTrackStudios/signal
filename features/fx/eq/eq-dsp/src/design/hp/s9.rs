@@ -34,7 +34,10 @@ fn highpass_slope9_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
     qs
 }
 
-#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+)]
 fn highpass_slope9_section(
     freq_hz: f64,
     sample_rate: f64,
@@ -268,7 +271,9 @@ fn highpass_slope9_section(
         };
         wp_scale.map_or_else(
             || cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate),
-            |wp_scale| highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0),
+            |wp_scale| {
+                highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0)
+            },
         )
     } else if sec == 1 && (q_user - 0.5).abs() < 1.0e-12 && (fc_48k - 10000.0).abs() < 1.0e-6 {
         highpass_s2_with_w_eval_scale(freq_hz, sample_rate, q_section, 1.0025)

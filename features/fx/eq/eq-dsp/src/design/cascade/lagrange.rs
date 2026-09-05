@@ -1,6 +1,6 @@
 //! The three-point Lagrange synthesis kernel, and the paths built on it.
 
-use super::{Coeffs, PI, PASSTHROUGH};
+use super::{Coeffs, PASSTHROUGH, PI};
 
 /// Pro-Q 4 audio-path Lagrange-MZT **alt 2-point** synthesis.
 ///

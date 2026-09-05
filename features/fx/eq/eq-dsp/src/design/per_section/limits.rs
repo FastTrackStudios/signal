@@ -4,7 +4,7 @@
 //! whether a band's centre has drifted outside what the current sample rate
 //! can represent, and what to do about it.
 
-use super::{Prototype, eval_squared_mag_scalar};
+use super::{eval_squared_mag_scalar, Prototype};
 
 /// Pro-Q's `check_frequency_within_band_limits @ 0x18010e7f0`.
 ///

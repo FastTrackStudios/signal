@@ -19,22 +19,22 @@ use biquad::Coeffs;
 mod allpass;
 mod bandpass;
 mod bell;
+pub mod biquad;
 mod brickwall;
+pub mod cascade;
 mod common;
+pub mod constants;
 pub mod fractional;
 mod hp;
 mod lp;
-mod notch;
-mod shelf;
-mod tilt;
-pub mod biquad;
-pub mod cascade;
-pub mod constants;
 pub mod mzt;
+mod notch;
 pub mod per_section;
+mod shelf;
 pub mod shelf_proq4;
 pub mod shelf_zpk;
 pub mod slope;
+mod tilt;
 use allpass::{design_allpass_with_lookup, design_bandpass_variant};
 use bandpass::mzt_bandpass_simple_cascade;
 use bell::mzt_peak_cascade;
@@ -237,7 +237,10 @@ pub fn apply_gain_q_interaction(q: f64, gain_db: f64, interaction: f64) -> f64 {
     q_modified.clamp(0.025, 40.0)
 }
 
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// Compute auto-gain compensation for current EQ settings.
 ///
 /// From Pro-Q 4 binary: "`AutoGain`" parameter at 0x18022ccf8.

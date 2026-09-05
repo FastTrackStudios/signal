@@ -46,5 +46,12 @@ pub(super) fn mzt_peak_cascade(
     // FTSEQ_BELL_SLOPE disambiguates for tests/regen.
     let env_slope = get_ftseq_bell_slope();
     let slope_idx = env_slope.or_else(|| super::common::slope_from_pole_count(pole_count));
-    cascade::compute_cascade_peak_with_slope(freq_hz, q, gain_db, sample_rate, n.saturating_mul(2), slope_idx)
+    cascade::compute_cascade_peak_with_slope(
+        freq_hz,
+        q,
+        gain_db,
+        sample_rate,
+        n.saturating_mul(2),
+        slope_idx,
+    )
 }

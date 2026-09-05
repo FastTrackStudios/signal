@@ -79,7 +79,10 @@ pub fn compute_cascade_shelf_alt(
 
     sections
 }
-#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+)]
 /// Compute cascade biquads for the Flat Tilt filter (UI type 8).
 ///
 /// **RE-decoded structure** (see

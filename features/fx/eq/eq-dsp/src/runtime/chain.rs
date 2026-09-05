@@ -149,8 +149,8 @@ impl Default for EqChain {
 #[cfg(test)]
 mod placement_tests {
     use super::*;
-    use crate::runtime::band::Placement;
     use crate::design::FilterType;
+    use crate::runtime::band::Placement;
 
     /// A Right-placement band actually processes.
     ///
@@ -184,8 +184,9 @@ mod placement_tests {
             r[i] = x;
         }
         chain.process(&mut l, &mut r);
-        let calc_rms =
-            |v: &[f64]| (v[n / 2..].iter().map(|x| x * x).sum::<f64>() / num::count_to_f64(n / 2)).sqrt();
+        let calc_rms = |v: &[f64]| {
+            (v[n / 2..].iter().map(|x| x * x).sum::<f64>() / num::count_to_f64(n / 2)).sqrt()
+        };
         let (lrms, rrms) = (calc_rms(&l), calc_rms(&r));
         // A unit sine's RMS is 1/√2 — spelled as the constant so the number
         // is the identity rather than a rounded literal.

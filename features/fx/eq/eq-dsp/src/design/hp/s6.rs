@@ -18,7 +18,10 @@ pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> Vec<Coeffs> {
         .collect()
 }
 
-#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+)]
 fn highpass_slope6_section(
     freq_hz: f64,
     sample_rate: f64,
@@ -237,7 +240,9 @@ fn highpass_slope6_section(
         };
         wp_scale.map_or_else(
             || cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate),
-            |wp_scale| highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0),
+            |wp_scale| {
+                highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0)
+            },
         )
     } else {
         cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)

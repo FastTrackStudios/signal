@@ -166,7 +166,10 @@ pub fn design_band_shelf(
     sections
 }
 
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// Apply shelf gain to a ZPK filter representation.
 ///
 /// Pro-Q 4's `apply_shelf_gain_to_zpk` (0x1800fcce0):
@@ -256,7 +259,10 @@ mod tests {
     use super::*;
     use crate::math::zpk::Complex;
 
-    #[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+    )]
     fn mag_db_sos(sections: &[Coeffs], w: f64) -> f64 {
         let ejw = Complex::from_polar(1.0, w);
         let ejw2 = ejw * ejw;

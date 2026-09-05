@@ -11,9 +11,9 @@
 
 use std::f64::consts::PI;
 
-use dsp_core::num;
 use crate::math::elliptic;
 use crate::math::zpk::{Complex, Zpk};
+use dsp_core::num;
 
 /// Generate Butterworth lowpass prototype poles in the s-domain.
 ///
@@ -33,7 +33,10 @@ pub fn butterworth_lp(order: usize) -> Zpk {
     Zpk::new(vec![], poles, 1.0)
 }
 
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// Generate Butterworth lowpass prototype with pre-warped cutoff.
 ///
 /// Pre-warps the analog cutoff frequency to compensate for bilinear transform
@@ -51,7 +54,10 @@ pub fn butterworth_lp_prewarped(order: usize, freq_hz: f64, sample_rate: f64) ->
     proto
 }
 
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// Generate Butterworth bandpass prototype via standard LP→BP transformation.
 ///
 /// LP→BP transform: s -> `Q_bp` * (s/w0 + w0/s)
@@ -123,7 +129,8 @@ pub fn butterworth_bp_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
     // not duplicates. Each section index gets a DIFFERENT elliptic function evaluation.
     // For order-N filter: iterate through N sections, not through LP poles.
     for section_idx in 0..order {
-        let u_i = 2.0f64.mul_add(num::count_to_f64(section_idx), 1.0) * kk / num::count_to_f64(order);
+        let u_i =
+            2.0f64.mul_add(num::count_to_f64(section_idx), 1.0) * kk / num::count_to_f64(order);
 
         // Evaluate Jacobi elliptic functions at this section's parameter
         let sn_val = elliptic::elliptic_sn(u_i, k);
@@ -153,7 +160,10 @@ pub fn butterworth_bp_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
     Zpk::new(bp_zeros, bp_poles, gain)
 }
 
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// Generate Butterworth bandstop (notch) prototype via LP→BS transformation.
 ///
 /// LP→BS transform: reciprocal of LP→BP. Each LP pole maps to a pair of BS poles,
@@ -219,7 +229,8 @@ pub fn butterworth_bs_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
     // Pro-Q 4 generates DISTINCT poles for each section using u_i = (2*i+1)*K(k)/order,
     // not duplicates. Each section index gets a DIFFERENT elliptic function evaluation.
     for section_idx in 0..order {
-        let u_i = 2.0f64.mul_add(num::count_to_f64(section_idx), 1.0) * kk / num::count_to_f64(order);
+        let u_i =
+            2.0f64.mul_add(num::count_to_f64(section_idx), 1.0) * kk / num::count_to_f64(order);
 
         // Evaluate Jacobi elliptic functions at this section's parameter
         let sn_val = elliptic::elliptic_sn(u_i, k);
@@ -363,10 +374,10 @@ mod tests {
         let ell_bp = butterworth_bp_elliptic(2, 1000.0, 2.0, 48000.0);
 
         // Both should have poles in LHP with similar magnitudes
-        let std_mag: f64 =
-            std_bp.poles.iter().map(|p| p.mag()).sum::<f64>() / num::count_to_f64(std_bp.poles.len());
-        let ell_mag: f64 =
-            ell_bp.poles.iter().map(|p| p.mag()).sum::<f64>() / num::count_to_f64(ell_bp.poles.len());
+        let std_mag: f64 = std_bp.poles.iter().map(|p| p.mag()).sum::<f64>()
+            / num::count_to_f64(std_bp.poles.len());
+        let ell_mag: f64 = ell_bp.poles.iter().map(|p| p.mag()).sum::<f64>()
+            / num::count_to_f64(ell_bp.poles.len());
 
         // They won't be identical but should be in the same ballpark
         let ratio = std_mag / (ell_mag + 1e-30);

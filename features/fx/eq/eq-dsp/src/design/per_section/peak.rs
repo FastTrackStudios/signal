@@ -62,7 +62,9 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
             if proto.mode > 0 {
                 let wp_in = proto.wp;
                 // f32 lane: ((wp · 0.44209706…) - 5/12)
-                let fv2_a = f64::from(num::narrow(wp_in.mul_add(0.442_097_064_144_153_7, -(5.0 / 12.0))));
+                let fv2_a = f64::from(num::narrow(
+                    wp_in.mul_add(0.442_097_064_144_153_7, -(5.0 / 12.0)),
+                ));
                 let mut fv2_sq_part = (fv2_a * fv2_a).mul_add(0.20, 0.785);
                 let mut fv2_b = f64::from(num::narrow(fv2_sq_part));
                 if f64::from(num::narrow(fv2_b)) > 0.96 {

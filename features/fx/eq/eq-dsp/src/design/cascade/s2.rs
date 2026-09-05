@@ -3,7 +3,7 @@
 //! The single-biquad cases that every steeper slope is ultimately assembled
 //! from, so a fault here shows up in all of them at once.
 
-use super::{Coeffs, PI, PASSTHROUGH};
+use super::{Coeffs, PASSTHROUGH, PI};
 
 #[must_use]
 pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Coeffs {
@@ -122,9 +122,14 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
     let t3s = t3 * t3;
 
     let den = t3s
-        * (((u_zero - u_third) * (g_ref - u_pole)).mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s)))
+        * (((u_zero - u_third) * (g_ref - u_pole))
+            .mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s)))
         + (g_ref - u_third) * (u_pole - u_zero) * t1s * t2s;
-    let num = ((t2s - t3s) * u_third).mul_add(u_zero, u_pole * ((t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero))) + u_eval * ((t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third)));
+    let num = ((t2s - t3s) * u_third).mul_add(
+        u_zero,
+        u_pole * ((t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero)))
+            + u_eval * ((t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third)),
+    );
 
     let s2 = if den.abs() > 1e-30 {
         (num / den).max(0.0)
@@ -139,7 +144,12 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
 
     let sp6_den = (u_pole - u_zero) * t1s * t2s;
     let sp6 = if sp6_den.abs() > 1e-30 {
-        let sp6_num = (a1_term * a1_term * t2s).mul_add(u_zero, -((t1s * t2s * (1.0 - s2 * t3s) * (t1s - t2s)).mul_add(u_zero, a2_term * a2_term * t1s) * u_pole));
+        let sp6_num = (a1_term * a1_term * t2s).mul_add(
+            u_zero,
+            -((t1s * t2s * (1.0 - s2 * t3s) * (t1s - t2s))
+                .mul_add(u_zero, a2_term * a2_term * t1s)
+                * u_pole),
+        );
         (sp6_num / sp6_den).max(0.0)
     } else {
         0.0
@@ -216,7 +226,10 @@ pub fn proq4_s2_from_prototype_with_subfreq_pub(
     )
 }
 
-#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+)]
 pub fn proq4_s2_from_prototype_with_subfreq(
     freq_hz: f64,
     sample_rate: f64,
@@ -288,9 +301,14 @@ pub fn proq4_s2_from_prototype_with_subfreq(
     let t3s = t3 * t3;
 
     let den = t3s
-        * (((u_zero - u_third) * (g_ref - u_pole)).mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s)))
+        * (((u_zero - u_third) * (g_ref - u_pole))
+            .mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s)))
         + (g_ref - u_third) * (u_pole - u_zero) * t1s * t2s;
-    let num = ((t2s - t3s) * u_third).mul_add(u_zero, u_pole * ((t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero))) + u_eval * ((t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third)));
+    let num = ((t2s - t3s) * u_third).mul_add(
+        u_zero,
+        u_pole * ((t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero)))
+            + u_eval * ((t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third)),
+    );
 
     // Pro-Q4 alt-path branch decoded from `compute_audio_biquad_lagrange_mzt`
     // 0x180110972..0x1801109ec.  When NUM/DEN < 0.0025/(t2*t3), the binary:
@@ -336,7 +354,12 @@ pub fn proq4_s2_from_prototype_with_subfreq(
 
     let sp6_den = (u_pole - u_zero) * t1s * t2s;
     let sp6 = if sp6_den.abs() > 1e-30 {
-        let sp6_num = (a1_term * a1_term * t2s).mul_add(u_zero, -((t1s * t2s * (s2.mul_add(-t3s, 1.0)) * (t1s - t2s)).mul_add(u_zero, a2_term * a2_term * t1s) * u_pole));
+        let sp6_num = (a1_term * a1_term * t2s).mul_add(
+            u_zero,
+            -((t1s * t2s * (s2.mul_add(-t3s, 1.0)) * (t1s - t2s))
+                .mul_add(u_zero, a2_term * a2_term * t1s)
+                * u_pole),
+        );
         (sp6_num / sp6_den).max(0.0)
     } else {
         0.0

@@ -9,7 +9,10 @@
 
 use crate::math::zpk::{Complex, Zpk};
 
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// Bilinear s→z transform (transform type 2).
 ///
 /// Maps analog prototype poles/zeros from the s-plane to the z-plane using:
@@ -66,7 +69,10 @@ pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
     Zpk::new(z_zeros, z_poles, gain.re)
 }
 
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// Allpass transform (transform type 4): negate real part of poles to get zeros.
 ///
 /// From Pro-Q 4 binary (`design_filter_zpk_and_transform`, transform type 4):

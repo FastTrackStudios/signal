@@ -144,7 +144,8 @@ pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) 
         let (zero, pole) = if high_pass {
             // March down from the corner. Attenuate below, unity above: the
             // zero sits under the pole and the top asymptote stays at 1.
-            let upper = freq_hz * (-(f64::from(i32::try_from(cell).unwrap_or(0))) * CELL_OCTAVES).exp2();
+            let upper =
+                freq_hz * (-(f64::from(i32::try_from(cell).unwrap_or(0))) * CELL_OCTAVES).exp2();
             let lower = upper * (-separation).exp2();
             if lower <= floor_hz {
                 break;
@@ -153,7 +154,8 @@ pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) 
         } else {
             // March up from the corner. Unity below, attenuate above: the
             // pole sits under the zero and the DC asymptote is normalised.
-            let lower = freq_hz * (f64::from(i32::try_from(cell).unwrap_or(0)) * CELL_OCTAVES).exp2();
+            let lower =
+                freq_hz * (f64::from(i32::try_from(cell).unwrap_or(0)) * CELL_OCTAVES).exp2();
             let upper = lower * separation.exp2();
             // BOTH ends have to fit. Keeping a cell whose zero lands past
             // Nyquist does not give a gentler slope — the pre-warp pins the
@@ -234,11 +236,13 @@ mod tests {
     /// plugin on a preset whose filter shape was otherwise correct.
     #[test]
     fn the_pass_band_is_left_at_unity() {
-        for db in compute_magnitude_response(&sections(1000.0, 0.6, SR, true), &[4000.0, 12_000.0], SR)
+        for db in
+            compute_magnitude_response(&sections(1000.0, 0.6, SR, true), &[4000.0, 12_000.0], SR)
         {
             assert!(db.abs() < 0.5, "low cut pass band moved by {db:+.2} dB");
         }
-        for db in compute_magnitude_response(&sections(1000.0, 0.6, SR, false), &[50.0, 250.0], SR) {
+        for db in compute_magnitude_response(&sections(1000.0, 0.6, SR, false), &[50.0, 250.0], SR)
+        {
             assert!(db.abs() < 0.5, "high cut pass band moved by {db:+.2} dB");
         }
     }

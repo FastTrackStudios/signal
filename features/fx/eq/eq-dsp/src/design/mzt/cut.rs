@@ -125,7 +125,10 @@ pub fn design_highpass_mzt(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     let sp6 = 0.0_f64;
     biquad_from_mode0_params(p2, p3, p4, sp5, sp6)
 }
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// - `docs/reports/proq4/re/lagrange_synthesis_decoded.md` (mainline synth)
 /// - `docs/reports/proq4/re/lagrange_runtime_decoded.md` (mode-0 closed form)
 ///
@@ -335,7 +338,7 @@ fn hp_s8_w_eval_sec_0_2(w_pole_solver: f64) -> f64 {
     const K: f64 = 0.2;
     const D: f64 = 0.785;
     let fv = f64::from((A.mul_add(w_pole_solver, -B) as f32));
-    let e = f64::from((((fv * fv).mul_add(K, D) as f32)));
+    let e = f64::from(((fv * fv).mul_add(K, D) as f32));
     let cand = e * PI;
     let wp_clamp = w_pole_solver.min(PI);
     if cand >= wp_clamp {

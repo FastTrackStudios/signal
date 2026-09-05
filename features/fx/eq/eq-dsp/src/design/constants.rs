@@ -1,4 +1,7 @@
-#![expect(clippy::approx_constant, reason = "These constants are exact values extracted from Pro-Q 4 binary and must match precisely; they appear as approximations but are intentional binary extracts")]
+#![expect(
+    clippy::approx_constant,
+    reason = "These constants are exact values extracted from Pro-Q 4 binary and must match precisely; they appear as approximations but are intentional binary extracts"
+)]
 
 //! Magic constants extracted from Pro-Q 4 binary.
 //!
@@ -103,8 +106,8 @@ pub const STATE2_MULTIPLIERS: [f64; 8] = [
     0.990_000_000_000_000, // approaching 1.0
     0.999_000_000_000_000, // very close to 1.0
     1.000_000_000_000_000, // identity
-    1.01,              // slightly above 1.0
-    1.2,               // elevated multiplier for emphasis
+    1.01,                  // slightly above 1.0
+    1.2,                   // elevated multiplier for emphasis
 ];
 
 // ─── Pro-Q 4 Q→Bandwidth Constants ─────────────────────────────────────────

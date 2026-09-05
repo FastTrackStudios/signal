@@ -24,7 +24,11 @@ fn highpass_slope4_section(
 ) -> Coeffs {
     let fc_48k = freq_hz / (sample_rate / 48000.0);
     if sec == 0 && (q_user - 1.0).abs() < 1.0e-12 && (16000.0..=22000.0).contains(&fc_48k) {
-        #[expect(clippy::as_conversions, clippy::cast_possible_truncation, reason = "float-to-int cast with explicit rounding")]
+        #[expect(
+            clippy::as_conversions,
+            clippy::cast_possible_truncation,
+            reason = "float-to-int cast with explicit rounding"
+        )]
         match fc_48k.round() as i32 {
             16000 => [
                 1.0,

@@ -333,6 +333,52 @@ fn region_envelope(r: &SpectralRegion, hz: f64) -> f64 {
     }
 }
 
+/// Everything the engine tracks for one FFT bin.
+///
+/// Ten parallel `Vec`s walked by a shared bin index, before: the analysis
+/// magnitude, three smoothed versions of it, the trigger target, its spread,
+/// the applied reduction, the resulting gain, the owning region and the bin's
+/// log-frequency. Every per-bin loop had to keep the same `i` aligned across
+/// all ten by hand.
+#[derive(Debug, Clone, Copy)]
+struct Bin {
+    /// Instantaneous analysis magnitude, dB.
+    mag_db: f64,
+    /// `mag_db` smoothed over `SPECTRAL_LEVEL_MS` — what the trigger reads.
+    level_db: f64,
+    /// Neighbourhood average of `mag_db`, for relative (prominence) mode.
+    ref_db: f64,
+    /// Long-term level, which an Auto threshold learns from.
+    learned_db: f64,
+    /// How hard this bin triggered, dB, before the region curve is applied.
+    target_db: f64,
+    /// How far this bin's reduction spreads, in octaves.
+    spread_oct: f64,
+    /// The reduction actually being applied, dB, after attack/release.
+    gr_db: f64,
+    /// The linear gain `gr_db` works out to.
+    gain: f64,
+    /// Which region owns this bin, or `usize::MAX` for none.
+    owner: usize,
+    /// log2 of the bin's centre frequency, cached for the spread passes.
+    log2_hz: f64,
+}
+
+impl Bin {
+    const SILENT: Self = Self {
+        mag_db: -120.0,
+        level_db: -120.0,
+        ref_db: -120.0,
+        learned_db: -120.0,
+        target_db: 0.0,
+        spread_oct: 0.0,
+        gr_db: 0.0,
+        gain: 1.0,
+        owner: usize::MAX,
+        log2_hz: 0.0,
+    };
+}
+
 pub struct SpectralEngine {
     pub params: SpectralParams,
     /// When non-empty, band regions REPLACE the global lo/hi/amount/
@@ -342,20 +388,7 @@ pub struct SpectralEngine {
     /// regions change; a peaking magnitude per bin per frame would be far too
     /// much arithmetic for the audio thread.
     region_env: Vec<Vec<f64>>,
-    /// The long-term level of each BIN, in dBFS — what an Auto threshold is
-    /// measured against.
-    ///
-    /// Per bin, not per region. A region-wide average is what a band-limited
-    /// detector would give, and it fails the moment another band reshapes the
-    /// spectrum underneath it: on "Kick - Bad PZM Rescue" a +27 dB expanding
-    /// bell at 5 kHz sits inside a spectral band's skirt at 1273 Hz, dragged
-    /// the region's average up by 20 dB, and switched the spectral reduction
-    /// off entirely — the plugin still applied 11.8 dB there.
-    learned_db: Vec<f64>,
     learned_coeff: f64,
-    /// Which region owns each bin, so the envelope can be applied after the
-    /// spreading pass.
-    bin_owner: Vec<usize>,
     /// Each region's curve-weighted mean reduction, in dB — what the Auto Gain
     /// compensation needs to know about a band it cannot see in the static
     /// chain.
@@ -365,17 +398,10 @@ pub struct SpectralEngine {
     block: usize,
     hop: usize,
     window: Vec<f64>,
-    /// Per-bin reduction before it is spread across frequency, and the width
-    /// each bin's own region asks for.
-    target_db: Vec<f64>,
-    /// Each bin's reach, in octaves, from the region it belongs to.
-    spread_oct: Vec<f64>,
-    /// log2 of each bin's centre frequency — the spreading pass measures
-    /// distance in octaves, and a `log2` per bin per frame is not something
-    /// to do on the audio thread.
-    bin_log2: Vec<f64>,
     /// Reusable buffer for the spreading pass — no allocation on the audio
     /// thread.
+    /// One entry per FFT bin.
+    bins: Vec<Bin>,
     scratch_db: Vec<f64>,
     /// Input rings (per channel) + pending fill.
     in_buf: [Vec<f64>; 2],
@@ -387,13 +413,7 @@ pub struct SpectralEngine {
     // Scratch (preallocated).
     frame: Vec<f64>,
     spec: [Vec<Complex<f64>>; 2],
-    mag_db: Vec<f64>,
-    /// `mag_db` smoothed in time — see [`SPECTRAL_LEVEL_MS`].
-    level_db: Vec<f64>,
     level_coeff: f64,
-    ref_db: Vec<f64>,
-    gr_db: Vec<f64>,
-    gain: Vec<f64>,
     attack_coeff: f64,
     release_coeff: f64,
     sample_rate: f64,
@@ -419,9 +439,7 @@ impl SpectralEngine {
             params: SpectralParams::default(),
             regions: Vec::with_capacity(24),
             region_env: Vec::new(),
-            learned_db: vec![-120.0; bins],
             learned_coeff: 1.0,
-            bin_owner: vec![usize::MAX; bins],
             region_reduction_db: Vec::new(),
             fft,
             ifft,
@@ -430,23 +448,19 @@ impl SpectralEngine {
             window,
             in_buf: [vec![0.0; block], vec![0.0; block]],
             ola: [vec![0.0; block], vec![0.0; block]],
-            out_buf: [Vec::with_capacity(block.saturating_mul(2)), Vec::with_capacity(block.saturating_mul(2))],
+            out_buf: [
+                Vec::with_capacity(block.saturating_mul(2)),
+                Vec::with_capacity(block.saturating_mul(2)),
+            ],
             fill: 0,
             frame: vec![0.0; block],
             spec: [
                 vec![Complex::new(0.0, 0.0); bins],
                 vec![Complex::new(0.0, 0.0); bins],
             ],
-            mag_db: vec![-120.0; bins],
-            level_db: vec![-120.0; bins],
             level_coeff: 1.0,
-            ref_db: vec![-120.0; bins],
-            gr_db: vec![0.0; bins],
-            target_db: vec![0.0; bins],
-            spread_oct: vec![0.0; bins],
-            bin_log2: vec![0.0; bins],
+            bins: vec![Bin::SILENT; bins],
             scratch_db: vec![0.0; bins],
-            gain: vec![1.0; bins],
             attack_coeff: 1.0,
             release_coeff: 1.0,
             sample_rate,
@@ -478,7 +492,7 @@ impl SpectralEngine {
         }
         // Rebuild the per-region curves. Not the audio thread: this runs when
         // a parameter moves.
-        let bins = self.mag_db.len();
+        let bins = self.bins.len();
         let bin_hz = self.sample_rate / num::count_to_f64(self.block);
         self.region_env.clear();
         for r in &self.regions {
@@ -516,47 +530,43 @@ impl SpectralEngine {
         // different densities in one instance each spread by their own amount
         // and with their own profile.
         let (mut peak, mut reach, mut from) = (0.0f64, 1.0f64, f64::NEG_INFINITY);
-        let mut spread_index = 0_usize;
-        for ((slot, &log2), &oct) in spread
-            .iter_mut()
-            .zip(&self.bin_log2)
-            .zip(&self.spread_oct)
-            .take(bins)
-        {
-            let t = self.target_db.get(spread_index).copied().unwrap_or(0.0);
-            let dist = log2 - from;
-            let carried = if dist < reach { peak * spread_taper(dist / reach) } else { 0.0 };
-            if t >= carried {
-                peak = t;
-                reach = oct.max(1.0e-6);
-                from = log2;
-                *slot = t;
+        for (slot, bin) in spread.iter_mut().zip(&self.bins).take(bins) {
+            let dist = bin.log2_hz - from;
+            let carried = if dist < reach {
+                peak * spread_taper(dist / reach)
+            } else {
+                0.0
+            };
+            if bin.target_db >= carried {
+                peak = bin.target_db;
+                reach = bin.spread_oct.max(1.0e-6);
+                from = bin.log2_hz;
+                *slot = bin.target_db;
             } else {
                 *slot = carried;
             }
-            spread_index = spread_index.saturating_add(1);
         }
 
         let (mut peak, mut reach, mut from) = (0.0f64, 1.0f64, f64::INFINITY);
-        for ((slot, (&t, &log2)), &oct) in spread
-            .iter_mut()
-            .zip(self.target_db.iter().zip(&self.bin_log2))
-            .zip(&self.spread_oct)
-            .take(bins)
-            .rev()
-        {
-            let dist = from - log2;
-            let carried = if dist < reach { peak * spread_taper(dist / reach) } else { 0.0 };
-            if t >= carried {
-                peak = t;
-                reach = oct.max(1.0e-6);
-                from = log2;
+        for (slot, bin) in spread.iter_mut().zip(&self.bins).take(bins).rev() {
+            let dist = from - bin.log2_hz;
+            let carried = if dist < reach {
+                peak * spread_taper(dist / reach)
+            } else {
+                0.0
+            };
+            if bin.target_db >= carried {
+                peak = bin.target_db;
+                reach = bin.spread_oct.max(1.0e-6);
+                from = bin.log2_hz;
             } else if carried > *slot {
                 *slot = carried;
             }
         }
 
-        self.target_db[..bins].copy_from_slice(&spread[..bins]);
+        for (bin, &spread_db) in self.bins.iter_mut().zip(spread.iter()).take(bins) {
+            bin.target_db = spread_db;
+        }
         self.scratch_db = spread;
     }
 
@@ -574,8 +584,8 @@ impl SpectralEngine {
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
         let bin_hz = sample_rate / num::count_to_f64(self.block);
-        for (i, slot) in self.bin_log2.iter_mut().enumerate() {
-            *slot = (num::count_to_f64(i) * bin_hz).max(1.0).log2();
+        for (i, bin) in self.bins.iter_mut().enumerate() {
+            bin.log2_hz = (num::count_to_f64(i) * bin_hz).max(1.0).log2();
         }
         // Frame-rate ballistics: coefficients per HOP, not per sample.
         let hop_s = num::count_to_f64(self.hop) / sample_rate;
@@ -618,10 +628,16 @@ impl SpectralEngine {
         (l, r)
     }
 
-    #[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
-    #[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+    )]
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+    )]
     fn process_frame(&mut self) {
-        let bins = self.mag_db.len();
+        let bins = self.bins.len();
         // Forward FFT both channels (windowed).
         for (input, spec) in self.in_buf.iter().zip(&mut self.spec) {
             for (slot, (x, w)) in self.frame.iter_mut().zip(input.iter().zip(&self.window)) {
@@ -642,155 +658,147 @@ impl SpectralEngine {
             let [spec_l, spec_r] = &self.spec;
             let scale = num::count_to_f64(self.block) * 0.25;
             let level_coeff = self.level_coeff;
-            for (((mag, level), sl), sr) in self
-                .mag_db
-                .iter_mut()
-                .zip(self.level_db.iter_mut())
-                .zip(spec_l.iter())
-                .zip(spec_r.iter())
-            {
+            for ((bin, sl), sr) in self.bins.iter_mut().zip(spec_l.iter()).zip(spec_r.iter()) {
                 let m = 0.5 * (sl.norm() + sr.norm()) / scale;
-                *mag = 20.0 * m.max(1.0e-10).log10();
+                bin.mag_db = 20.0 * m.max(1.0e-10).log10();
                 // The trigger reads a smoothed level, not the instantaneous
                 // bin — see `SPECTRAL_LEVEL_MS`.
-                if *level <= -119.0 {
-                    *level = *mag;
+                if bin.level_db <= -119.0 {
+                    bin.level_db = bin.mag_db;
                 } else {
-                    *level += (*mag - *level) * level_coeff;
+                    bin.level_db += (bin.mag_db - bin.level_db) * level_coeff;
                 }
             }
 
             // Smoothed spectral reference: two-pass (up + down) one-pole
             // across bins with an octave-proportional coefficient —
             // cheap constant-Q-ish neighborhood average.
-            let mut acc = self.mag_db.first().copied().unwrap_or(0.0);
-            for (i, (&mag, slot)) in self
-                .mag_db
-                .iter()
-                .zip(self.ref_db.iter_mut())
-                .enumerate()
-                .take(bins)
-            {
+            let mut acc = self.bins.first().map_or(0.0, |b| b.mag_db);
+            for (i, bin) in self.bins.iter_mut().enumerate().take(bins) {
                 let f = num::count_to_f64(i.max(1)) * bin_hz;
                 let neighbors = f * (SMOOTH_OCTAVES.exp2() - 1.0) / bin_hz;
                 let c = 1.0 / (1.0 + neighbors.max(1.0));
-                acc += (mag - acc) * c;
-                *slot = acc;
+                acc += (bin.mag_db - acc) * c;
+                bin.ref_db = acc;
             }
-            let mut acc = self.mag_db.last().copied().unwrap_or(0.0);
-            for (i, (&mag, slot)) in self
-                .mag_db
-                .iter()
-                .zip(self.ref_db.iter_mut())
-                .enumerate()
-                .take(bins)
-                .rev()
-            {
+            let mut acc = self.bins.last().map_or(0.0, |b| b.mag_db);
+            for (i, bin) in self.bins.iter_mut().enumerate().take(bins).rev() {
                 let f = num::count_to_f64(i.max(1)) * bin_hz;
                 let neighbors = f * (SMOOTH_OCTAVES.exp2() - 1.0) / bin_hz;
                 let c = 1.0 / (1.0 + neighbors.max(1.0));
-                acc += (mag - acc) * c;
-                *slot = 0.5 * (*slot + acc);
+                acc += (bin.mag_db - acc) * c;
+                bin.ref_db = 0.5 * (bin.ref_db + acc);
             }
 
             // Each bin's long-term level, which is what an Auto threshold
             // learns from.
             let learned_coeff = self.learned_coeff;
-            for (learned, level) in self.learned_db.iter_mut().zip(&self.level_db) {
-                if *learned <= -119.0 {
-                    *learned = *level;
+            for bin in &mut self.bins {
+                if bin.learned_db <= -119.0 {
+                    bin.learned_db = bin.level_db;
                 } else {
-                    *learned += (*level - *learned) * learned_coeff;
+                    bin.learned_db += (bin.level_db - bin.learned_db) * learned_coeff;
                 }
             }
 
             // Per-bin target gain reduction.
             let global_sharp = self.params.density.clamp(0.0, 1.0).mul_add(3.0, 1.0);
-            for i in 0..bins {
-                let f = num::count_to_f64(i) * bin_hz;
-                // Region mode: the region whose curve reaches furthest into
-                // this bin owns it. Global mode uses the engine params, where
-                // `depth` is a 0..1 scale rather than a dB ceiling.
-                let mut owner = usize::MAX;
-                let (in_range, depth, thr, density_here, tilt) = if self.regions.is_empty() {
-                    (
-                        f >= self.params.lo_hz && f <= self.params.hi_hz,
-                        self.params.amount,
-                        self.params.threshold_db,
-                        self.params.density,
-                        self.params.tilt,
-                    )
-                } else {
-                    let mut best = 0.0f64;
-                    for (ri, r) in self.regions.iter().enumerate() {
-                        let reach = self.region_env[ri][i] * r.max_depth_db;
-                        if reach > best {
-                            best = reach;
-                            owner = ri;
-                        }
-                    }
-                    match self.regions.get(owner) {
-                        // The threshold is ABSOLUTE, not a prominence over a
-                        // smoothed neighbourhood. A spectral band on Auto pulls
-                        // its whole curve down on flat noise, which nothing
-                        // driven by prominence can do — measured, a -24 dB
-                        // range takes flat noise down 20.96 dB at the band's
-                        // own frequency.
-                        Some(r) if best > 1.0e-4 => (
-                            true,
-                            r.max_depth_db,
-                            if r.auto {
-                                let extra = if matches!(r.shape, SpectralShape::Bell) {
-                                    0.0
-                                } else {
-                                    SPECTRAL_SHELF_HEADROOM_DB
-                                };
-                                self.learned_db[i]
-                                    - (r.max_depth_db - SPECTRAL_HEADROOM_DB - extra)
-                            } else {
-                                r.threshold_db
-                            },
-                            r.density,
-                            r.tilt,
-                        ),
-                        _ => {
-                            owner = usize::MAX;
-                            (false, 0.0, 0.0, 0.0, false)
-                        }
-                    }
-                };
-                self.bin_owner[i] = owner;
-                let gated = self.level_db[i] < self.params.gate_db;
-                let tilt_db = if tilt && f > 1.0 {
-                    SPECTRAL_TILT_DB_PER_OCT * (f / SPECTRAL_TILT_PIVOT_HZ).log2()
-                } else {
-                    0.0
-                };
-                let over = if self.regions.is_empty() && self.params.relative {
-                    self.mag_db[i] - self.ref_db[i] - thr + tilt_db
-                } else {
-                    self.level_db[i] - thr + tilt_db
-                };
-                let target = if in_range && !gated && over > 0.0 {
-                    if self.regions.is_empty() {
-                        (over * global_sharp * depth.clamp(0.0, 1.0)).min(24.0)
+            // Scoped so the shared borrows end before `spread_targets` needs
+            // `&mut self` below.
+            {
+                let regions = &self.regions;
+                let region_env = &self.region_env;
+                let params = &self.params;
+                for (i, bin) in self.bins.iter_mut().enumerate().take(bins) {
+                    let f = num::count_to_f64(i) * bin_hz;
+                    // Region mode: the region whose curve reaches furthest into
+                    // this bin owns it. Global mode uses the engine params, where
+                    // `depth` is a 0..1 scale rather than a dB ceiling.
+                    let mut owner = usize::MAX;
+                    let (in_range, depth, thr, density_here, tilt) = if regions.is_empty() {
+                        (
+                            f >= params.lo_hz && f <= params.hi_hz,
+                            params.amount,
+                            params.threshold_db,
+                            params.density,
+                            params.tilt,
+                        )
                     } else {
-                        // One dB of reduction per dB over threshold, capped at
-                        // the band's range — the same law the whole-band
-                        // detector runs on.
-                        over.min(depth)
-                    }
-                } else {
-                    0.0
-                };
-                self.target_db[i] = target;
-                let d = if self.regions.is_empty() {
-                    self.params.density
-                } else {
-                    density_here
-                };
-                self.spread_oct[i] =
-                    (1.0 - d.clamp(0.0, 1.0)).mul_add(SPREAD_RANGE_OCT, SPREAD_FLOOR_OCT);
+                        let mut best = 0.0f64;
+                        for (ri, r) in regions.iter().enumerate() {
+                            let reach = region_env
+                                .get(ri)
+                                .and_then(|e| e.get(i))
+                                .copied()
+                                .unwrap_or(0.0)
+                                * r.max_depth_db;
+                            if reach > best {
+                                best = reach;
+                                owner = ri;
+                            }
+                        }
+                        match regions.get(owner) {
+                            // The threshold is ABSOLUTE, not a prominence over a
+                            // smoothed neighbourhood. A spectral band on Auto pulls
+                            // its whole curve down on flat noise, which nothing
+                            // driven by prominence can do — measured, a -24 dB
+                            // range takes flat noise down 20.96 dB at the band's
+                            // own frequency.
+                            Some(r) if best > 1.0e-4 => (
+                                true,
+                                r.max_depth_db,
+                                if r.auto {
+                                    let extra = if matches!(r.shape, SpectralShape::Bell) {
+                                        0.0
+                                    } else {
+                                        SPECTRAL_SHELF_HEADROOM_DB
+                                    };
+                                    bin.learned_db - (r.max_depth_db - SPECTRAL_HEADROOM_DB - extra)
+                                } else {
+                                    r.threshold_db
+                                },
+                                r.density,
+                                r.tilt,
+                            ),
+                            _ => {
+                                owner = usize::MAX;
+                                (false, 0.0, 0.0, 0.0, false)
+                            }
+                        }
+                    };
+                    bin.owner = owner;
+                    let gated = bin.level_db < params.gate_db;
+                    let tilt_db = if tilt && f > 1.0 {
+                        SPECTRAL_TILT_DB_PER_OCT * (f / SPECTRAL_TILT_PIVOT_HZ).log2()
+                    } else {
+                        0.0
+                    };
+                    let over = if regions.is_empty() && params.relative {
+                        bin.mag_db - bin.ref_db - thr + tilt_db
+                    } else {
+                        bin.level_db - thr + tilt_db
+                    };
+                    let target = if in_range && !gated && over > 0.0 {
+                        if regions.is_empty() {
+                            (over * global_sharp * depth.clamp(0.0, 1.0)).min(24.0)
+                        } else {
+                            // One dB of reduction per dB over threshold, capped at
+                            // the band's range — the same law the whole-band
+                            // detector runs on.
+                            over.min(depth)
+                        }
+                    } else {
+                        0.0
+                    };
+                    bin.target_db = target;
+                    let d = if regions.is_empty() {
+                        params.density
+                    } else {
+                        density_here
+                    };
+                    bin.spread_oct =
+                        (1.0 - d.clamp(0.0, 1.0)).mul_add(SPREAD_RANGE_OCT, SPREAD_FLOOR_OCT);
+                }
             }
 
             self.spread_targets(bins);
@@ -799,36 +807,35 @@ impl SpectralEngine {
             // how hard the bin triggered; the curve says how much of that the
             // band actually applies there.
             if !self.regions.is_empty() {
-                for i in 0..bins {
-                    let owner = self.bin_owner[i];
-                    self.target_db[i] *= self.region_env.get(owner).map_or(0.0, |env| env[i]);
+                for (i, bin) in self.bins.iter_mut().enumerate().take(bins) {
+                    bin.target_db *= self
+                        .region_env
+                        .get(bin.owner)
+                        .and_then(|env| env.get(i))
+                        .copied()
+                        .unwrap_or(0.0);
                 }
             }
 
-            for i in 0..bins {
-                let target = self.target_db[i];
+            let (attack, release) = (self.attack_coeff, self.release_coeff);
+            for bin in self.bins.iter_mut().take(bins) {
                 // Frame-rate attack/release per bin.
-                let c = if target > self.gr_db[i] {
-                    self.attack_coeff
+                let c = if bin.target_db > bin.gr_db {
+                    attack
                 } else {
-                    self.release_coeff
+                    release
                 };
-                self.gr_db[i] += (target - self.gr_db[i]) * c;
-                self.gain[i] = 10.0f64.powf(-self.gr_db[i] / 20.0);
+                bin.gr_db += (bin.target_db - bin.gr_db) * c;
+                bin.gain = 10.0f64.powf(-bin.gr_db / 20.0);
             }
 
             // Each region's mean reduction, weighted by its own curve.
             for r in 0..self.regions.len() {
                 let env = &self.region_env[r];
                 let (mut num, mut den) = (0.0f64, 0.0f64);
-                for ((&e, &owner), &gr) in env
-                    .iter()
-                    .zip(&self.bin_owner)
-                    .zip(&self.gr_db)
-                    .take(bins)
-                {
-                    if e > 1.0e-3 && owner == r {
-                        num += e * gr;
+                for (&e, bin) in env.iter().zip(&self.bins).take(bins) {
+                    if e > 1.0e-3 && bin.owner == r {
+                        num += e * bin.gr_db;
                         den += e;
                     }
                 }
@@ -846,8 +853,8 @@ impl SpectralEngine {
             .zip(self.ola.iter_mut())
             .zip(self.out_buf.iter_mut())
         {
-            for (bin, g_keep) in spec_ch.iter_mut().zip(&self.gain) {
-                *bin *= g_keep.mul_add(1.0 - delta, (1.0 - g_keep) * delta);
+            for (slot, bin) in spec_ch.iter_mut().zip(&self.bins) {
+                *slot *= bin.gain.mul_add(1.0 - delta, (1.0 - bin.gain) * delta);
             }
             let mut spec = spec_ch.clone();
             let _ = self.ifft.process(&mut spec, &mut self.frame);
@@ -878,8 +885,10 @@ impl SpectralEngine {
             out.clear();
         }
         self.fill = 0;
-        self.gr_db.fill(0.0);
-        self.gain.fill(1.0);
+        for bin in &mut self.bins {
+            bin.gr_db = 0.0;
+            bin.gain = 1.0;
+        }
         self.primed = false;
     }
 }
@@ -923,7 +932,10 @@ mod tests {
         let mut inp = vec![0.0; n];
         for i in 0..n {
             // Noise bed at low level + screaming 2 kHz resonance.
-            let x = 0.02f64.mul_add(noise(&mut seed), 0.5 * (core::f64::consts::TAU * 2000.0 * num::count_to_f64(i) / SR).sin());
+            let x = 0.02f64.mul_add(
+                noise(&mut seed),
+                0.5 * (core::f64::consts::TAU * 2000.0 * num::count_to_f64(i) / SR).sin(),
+            );
             inp[i] = x;
             let (l, _) = e.tick(x, x);
             out[i] = l;

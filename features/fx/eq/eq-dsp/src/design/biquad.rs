@@ -87,7 +87,10 @@ pub fn zpk_to_sos(zpk: &Zpk) -> Vec<Coeffs> {
 /// H(z) = (b0 + b1·z⁻¹ + b2·z⁻²) / (a0 + a1·z⁻¹ + a2·z⁻²)
 /// At z = e^(jw), z⁻¹ = e^(-jw), which is why we use negative exponent here.
 #[must_use]
-#[expect(clippy::arithmetic_side_effects, reason = "Complex arithmetic is inherently safe")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "Complex arithmetic is inherently safe"
+)]
 pub fn eval_sos(sections: &[Coeffs], w: f64) -> Complex {
     let ejw = Complex::from_polar(1.0, -w);
     let ejw2 = Complex::from_polar(1.0, -2.0 * w);
@@ -118,7 +121,10 @@ pub fn mag_db_sos(sections: &[Coeffs], w: f64) -> f64 {
 // ─── Internal Helpers ─────────────────────────────────────────────────────────
 
 /// Convert up to 2 poles into denominator coefficients [a0, a1, a2].
-#[expect(clippy::arithmetic_side_effects, reason = "Complex arithmetic is inherently safe")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "Complex arithmetic is inherently safe"
+)]
 fn poles_to_den(poles: &[Complex]) -> [f64; 3] {
     match poles.len() {
         0 => [1.0, 0.0, 0.0],
@@ -139,7 +145,10 @@ fn poles_to_den(poles: &[Complex]) -> [f64; 3] {
 }
 
 /// Convert up to 2 zeros into numerator coefficients [b0, b1, b2], scaled by gain.
-#[expect(clippy::arithmetic_side_effects, reason = "Complex arithmetic is inherently safe")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "Complex arithmetic is inherently safe"
+)]
 fn zeros_to_num(zeros: &[Complex], gain: f64) -> [f64; 3] {
     match zeros.len() {
         0 => [gain, 0.0, 0.0],

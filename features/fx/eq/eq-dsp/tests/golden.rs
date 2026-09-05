@@ -21,9 +21,9 @@
 //! ones that break in a rewrite are never the ones anybody thought to spot
 //! check.
 
-use dsp_golden::{Golden, golden, signal};
-use eq_dsp::runtime::band::Placement;
+use dsp_golden::{golden, signal, Golden};
 use eq_dsp::engine::{BandConfig, BandDynamics, FtsEq};
+use eq_dsp::runtime::band::Placement;
 
 dsp_golden::install_counting_allocator!();
 
@@ -92,7 +92,10 @@ fn render(eq: &mut FtsEq, left_in: &[f64], right_in: &[f64]) -> Vec<f64> {
     for (l, r) in left.chunks_mut(block).zip(right.chunks_mut(block)) {
         eq.process(l, r);
     }
-    left.into_iter().zip(right).flat_map(<[f64; 2]>::from).collect()
+    left.into_iter()
+        .zip(right)
+        .flat_map(<[f64; 2]>::from)
+        .collect()
 }
 
 fn impulse_pair() -> (Vec<f64>, Vec<f64>) {
@@ -249,11 +252,7 @@ fn a_bypassed_band_is_bit_transparent() {
     cfg.used = false;
     eq.set_band(0, cfg);
     let out = render(&mut eq, &left, &right);
-    for (n, (got, want)) in out
-        .chunks_exact(2)
-        .zip(left.iter().zip(&right))
-        .enumerate()
-    {
+    for (n, (got, want)) in out.chunks_exact(2).zip(left.iter().zip(&right)).enumerate() {
         let [got_l, got_r] = got else { continue };
         assert_eq!(got_l.to_bits(), want.0.to_bits(), "left drifted at {n}");
         assert_eq!(got_r.to_bits(), want.1.to_bits(), "right drifted at {n}");
@@ -362,7 +361,10 @@ fn band_shelf_is_unstable_below_q_0_707() {
     }
     for q in [1.0_f64, 1.2, 8.0] {
         let peak = peak_at(q);
-        assert!(peak.is_finite() && peak < 1e4, "band_shelf broke at Q {q}: {peak}");
+        assert!(
+            peak.is_finite() && peak < 1e4,
+            "band_shelf broke at Q {q}: {peak}"
+        );
     }
 }
 
@@ -465,7 +467,9 @@ fn no_shape_is_unstable_at_extreme_settings() {
                 let out = render(&mut eq, &input, &input);
                 let peak = out.iter().fold(0.0_f64, |m, s| m.max(s.abs()));
                 if !(peak.is_finite() && peak < 1e4) {
-                    bad.push(format!("{name:>18} {gain:+5.0} dB {freq:>8.0} Hz Q {q:<6} -> {peak}"));
+                    bad.push(format!(
+                        "{name:>18} {gain:+5.0} dB {freq:>8.0} Hz Q {q:<6} -> {peak}"
+                    ));
                 }
             }
         }
@@ -480,7 +484,10 @@ fn processing_allocates_nothing() {
     eq.set_band(1, band(3, 0.0, 4.0));
     eq.set_band_dynamics(
         0,
-        BandDynamics { range_db: -6.0, ..BandDynamics::default() },
+        BandDynamics {
+            range_db: -6.0,
+            ..BandDynamics::default()
+        },
     );
 
     let mut left = signal::widen(&signal::noise(512, 5));

@@ -9,10 +9,16 @@
 
 use dsp_core::num;
 
-use super::{Coeffs, PI, lagrange_synth_alt_path, trace_bell_inputs, PASSTHROUGH, bell_s2_proq4};
+use super::{bell_s2_proq4, lagrange_synth_alt_path, trace_bell_inputs, Coeffs, PASSTHROUGH, PI};
 
-#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+)]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 pub fn bell_brickwall_proq4(
     freq_hz: f64,
     q: f64,
@@ -23,8 +29,8 @@ pub fn bell_brickwall_proq4(
 ) -> Vec<Coeffs> {
     const W_POLE_BUCKETB_MAX: f64 = 3.135_309_468_282_613_5;
     use crate::math::zpk::Complex;
-    use std::f64::consts::SQRT_2;
     use dsp_core::num;
+    use std::f64::consts::SQRT_2;
 
     #[derive(Clone, Copy)]
     enum HiCorner {
@@ -190,7 +196,6 @@ pub fn bell_brickwall_proq4(
         };
 
     let mut sections = Vec::with_capacity(n_sections);
-
 
     for sec in 0..n_sections {
         let pair_idx = sec / 2;
@@ -400,10 +405,7 @@ pub fn bell_brickwall_proq4(
             && (q_user - 0.5).abs() < 1e-6
             && u_hi_signed > 0.0
             && (1.8 * u_hi_signed.sqrt()) > 0.83 * PI;
-        let w_eval = if matches!(
-            slope_idx,
-            Some(3..=9)
-        ) {
+        let w_eval = if matches!(slope_idx, Some(3..=9)) {
             if force_uhi_pocket {
                 (1.8 * u_hi_signed.sqrt()).clamp(w_eval_default, PI)
             } else if u_lo_signed > 0.0 {
@@ -518,13 +520,17 @@ pub fn bell_brickwall_proq4(
             if matches!(slope_idx, Some(5 | 6)) && freq_hz >= 21000.0 {
                 let t = ((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0);
                 if (q_user - 10.0).abs() < 1e-6 {
-                    let w_zero_cap = (2.508_442_944_5_f64 - 2.460_405_687_1).mul_add(t, 2.460_405_687_1);
-                    let w_pole_cap = (2.861_225_429_5_f64 - 2.734_469_335_3).mul_add(t, 2.734_469_335_3);
+                    let w_zero_cap =
+                        (2.508_442_944_5_f64 - 2.460_405_687_1).mul_add(t, 2.460_405_687_1);
+                    let w_pole_cap =
+                        (2.861_225_429_5_f64 - 2.734_469_335_3).mul_add(t, 2.734_469_335_3);
                     a = a.min(w_zero_cap / omega0);
                     b = b.min(w_pole_cap / omega0);
                 } else if (q_user - 4.0).abs() < 1e-6 {
-                    let w_zero_cap = (2.076_469_439_3_f64 - 2.048_067_329_5).mul_add(t, 2.048_067_329_5);
-                    let w_pole_cap = (2.839_626_754_2_f64 - 2.713_852_417_4).mul_add(t, 2.713_852_417_4);
+                    let w_zero_cap =
+                        (2.076_469_439_3_f64 - 2.048_067_329_5).mul_add(t, 2.048_067_329_5);
+                    let w_pole_cap =
+                        (2.839_626_754_2_f64 - 2.713_852_417_4).mul_add(t, 2.713_852_417_4);
                     a = a.min(w_zero_cap / omega0);
                     b = b.min(w_pole_cap / omega0);
                 }
@@ -659,7 +665,8 @@ pub fn bell_brickwall_proq4(
                     };
                     if freq_hz < 19000.0 {
                         Some(
-                            (cap_19k - cap_18k).mul_add(((freq_hz - 18000.0) / 1000.0).clamp(0.0, 1.0), cap_18k),
+                            (cap_19k - cap_18k)
+                                .mul_add(((freq_hz - 18000.0) / 1000.0).clamp(0.0, 1.0), cap_18k),
                         )
                     } else if freq_hz >= 21500.0 {
                         Some(cap_22k)
@@ -714,7 +721,8 @@ pub fn bell_brickwall_proq4(
                     let cap_21k = 0.000_569_314_5f64.mul_add(-g_abs, 2.656_967_674_7);
                     let cap_22k = 0.000_225_001_7f64.mul_add(-g_abs, 2.725_300_124_1);
                     Some(
-                        (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
+                        (cap_22k - cap_21k)
+                            .mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                     )
                 }
                 q if (q - 10.0).abs() < 1e-6 && matches!(slope_idx, Some(5)) => {
@@ -724,11 +732,13 @@ pub fn bell_brickwall_proq4(
                     let cap_22k = 0.000_138_171_2f64.mul_add(-g_abs, 2.729_080_921_3);
                     if freq_hz < 21000.0 {
                         Some(
-                            (cap_21k - cap_20k).mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
+                            (cap_21k - cap_20k)
+                                .mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
                         )
                     } else {
                         Some(
-                            (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
+                            (cap_22k - cap_21k)
+                                .mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                         )
                     }
                 }
@@ -739,11 +749,13 @@ pub fn bell_brickwall_proq4(
                     let cap_22k = 0.000_070_546_7f64.mul_add(-g_abs, 2.730_453_349_8);
                     if freq_hz < 21000.0 {
                         Some(
-                            (cap_21k - cap_20k).mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
+                            (cap_21k - cap_20k)
+                                .mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
                         )
                     } else {
                         Some(
-                            (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
+                            (cap_22k - cap_21k)
+                                .mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                         )
                     }
                 }
@@ -768,11 +780,13 @@ pub fn bell_brickwall_proq4(
                     };
                     if freq_hz < 21000.0 {
                         Some(
-                            (cap_21k - cap_20k).mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
+                            (cap_21k - cap_20k)
+                                .mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
                         )
                     } else {
                         Some(
-                            (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
+                            (cap_22k - cap_21k)
+                                .mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                         )
                     }
                 }
@@ -801,11 +815,13 @@ pub fn bell_brickwall_proq4(
                     };
                     if freq_hz < 21000.0 {
                         Some(
-                            (cap_21k - cap_20k).mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
+                            (cap_21k - cap_20k)
+                                .mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
                         )
                     } else {
                         Some(
-                            (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
+                            (cap_22k - cap_21k)
+                                .mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                         )
                     }
                 }
@@ -839,11 +855,13 @@ pub fn bell_brickwall_proq4(
                     };
                     if freq_hz < 21000.0 {
                         Some(
-                            (cap_21k - cap_20k).mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
+                            (cap_21k - cap_20k)
+                                .mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
                         )
                     } else {
                         Some(
-                            (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
+                            (cap_22k - cap_21k)
+                                .mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                         )
                     }
                 }
@@ -902,7 +920,10 @@ pub fn bell_brickwall_proq4(
     sections
 }
 
-#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+)]
 /// Bell 3-point Lagrange synthesis — extracted from `bell_s2_proq4` body
 /// (post-sub-frequency selection).  Verified ≤ 1.5e-13 bit-exact on
 /// captured `lagrange_per_section_sweep.csv` rows where `w_third != 0`.
@@ -1108,8 +1129,14 @@ pub fn bell_brickwall_proq4_n(
         .collect()
 }
 
-#[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+)]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// Per-section `(Q_k, gdB_k)` lookup.  Returns `N_sec` entries per slope:
 /// slope=4 → 2, slope=6 → 3, slope=8 → 6.
 ///
@@ -1132,11 +1159,26 @@ pub fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -
     // Cut (g=−12)
     static QK_S4_GN: [[f64; 4]; 2] = [
         [3.662_941_579, 3.019_225_582, 6.636_358_51, 15.165_263_66],
-        [0.382_338_153_5, 0.925_898_202_6, 4.919_977_142, 13.226_627_44],
+        [
+            0.382_338_153_5,
+            0.925_898_202_6,
+            4.919_977_142,
+            13.226_627_44,
+        ],
     ];
     static GDB_S4_GN: [[f64; 4]; 2] = [
-        [4.610_435_319, -0.353_762_754_8, -4.827_502_331, -5.391_132_54],
-        [-7.813_744_63, -8.073_957_711, -6.943_889_204, -6.555_256_923],
+        [
+            4.610_435_319,
+            -0.353_762_754_8,
+            -4.827_502_331,
+            -5.391_132_54,
+        ],
+        [
+            -7.813_744_63,
+            -8.073_957_711,
+            -6.943_889_204,
+            -6.555_256_923,
+        ],
     ];
 
     // ── slope=6 ── sec2 is real-pole: Q_k = Q_user, gdB_k = ±g/N_atoms = ±g/2.
@@ -1156,8 +1198,18 @@ pub fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -
         [0.5, 1.0, 4.0, 10.0],
     ];
     static GDB_S6_GN: [[f64; 4]; 3] = [
-        [3.461_188_093, 0.319_694_764_8, -2.756_016_762, -3.220_873_104],
-        [-5.603_197_597, -5.657_318_366, -5.002_565_762, -4.708_335_18],
+        [
+            3.461_188_093,
+            0.319_694_764_8,
+            -2.756_016_762,
+            -3.220_873_104,
+        ],
+        [
+            -5.603_197_597,
+            -5.657_318_366,
+            -5.002_565_762,
+            -4.708_335_18,
+        ],
         [-4.0, -4.0, -4.0, -4.0],
     ];
 
@@ -1166,14 +1218,34 @@ pub fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -
         [11.870_313_52, 9.897_547_866, 20.206_345_47, 45.013_066_57],
         [0.937_787_524_6, 2.252_198_659, 12.283_135_95, 33.655_828_95],
         [3.451_825_64, 2.841_639_95, 6.607_904_15, 15.197_742_48],
-        [0.378_814_757_9, 0.925_884_647_3, 4.921_970_232, 13.195_007_09],
+        [
+            0.378_814_757_9,
+            0.925_884_647_3,
+            4.921_970_232,
+            13.195_007_09,
+        ],
         [1.931_487_813, 1.382_659_957, 4.368_807_504, 10.583_695_47],
-        [0.294_033_188_6, 0.826_147_192_8, 3.934_231_067, 10.109_511_9],
+        [
+            0.294_033_188_6,
+            0.826_147_192_8,
+            3.934_231_067,
+            10.109_511_9,
+        ],
     ];
     static GDB_S8_GP: [[f64; 4]; 6] = [
         [1.289_095_059, 1.821_483_896, 3.028_601_27, 3.273_931_156],
-        [0.246_379_928_3, 0.982_426_357_6, 1.021_121_439, 0.890_589_525],
-        [-0.640_989_817_7, 0.730_196_788_1, 2.074_807_132, 2.252_342_132],
+        [
+            0.246_379_928_3,
+            0.982_426_357_6,
+            1.021_121_439,
+            0.890_589_525,
+        ],
+        [
+            -0.640_989_817_7,
+            0.730_196_788_1,
+            2.074_807_132,
+            2.252_342_132,
+        ],
         [1.689_189_28, 2.135_316_886, 1.867_334_951, 1.746_544_258],
         [-1.962_563_681, 1.090_614_535, 1.997_102_503, 2.049_182_733],
         [2.303_700_563, 2.500_645_49, 1.996_108_81, 1.941_936_092],
@@ -1182,17 +1254,47 @@ pub fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -
         [12.121_863_32, 9.907_723_71, 19.997_327_76, 44.474_996_99],
         [0.948_933_597_8, 2.280_406_005, 12.421_258_61, 34.008_66],
         [3.476_188_027, 2.842_246_024, 6.590_110_695, 15.152_699_77],
-        [0.379_588_530_7, 0.928_854_551_5, 4.937_299_455, 13.234_439_58],
+        [
+            0.379_588_530_7,
+            0.928_854_551_5,
+            4.937_299_455,
+            13.234_439_58,
+        ],
         [1.944_638_858, 1.382_370_931, 4.365_100_37, 10.574_960_2],
         [0.293_772_512, 0.826_446_894_9, 3.937_059_473, 10.117_252_37],
     ];
     static GDB_S8_GN: [[f64; 4]; 6] = [
-        [3.639_062_152, 1.464_339_862, -0.354_922_155_5, -0.633_765_904_3],
+        [
+            3.639_062_152,
+            1.464_339_862,
+            -0.354_922_155_5,
+            -0.633_765_904_3,
+        ],
         [-4.139_619_28, -3.787_995_516, -3.349_079_567, -3.185_802_93],
-        [2.042_917_669, 0.123_226_656_4, -1.396_810_249, -1.582_937_86],
-        [-3.010_743_182, -2.963_534_21, -2.522_531_413, -2.392_057_142],
-        [2.714_769_721, -0.842_441_498_5, -1.817_504_313, -1.872_310_383],
-        [-3.044_002_745, -2.748_376_588, -2.173_775_358, -2.117_127_138],
+        [
+            2.042_917_669,
+            0.123_226_656_4,
+            -1.396_810_249,
+            -1.582_937_86,
+        ],
+        [
+            -3.010_743_182,
+            -2.963_534_21,
+            -2.522_531_413,
+            -2.392_057_142,
+        ],
+        [
+            2.714_769_721,
+            -0.842_441_498_5,
+            -1.817_504_313,
+            -1.872_310_383,
+        ],
+        [
+            -3.044_002_745,
+            -2.748_376_588,
+            -2.173_775_358,
+            -2.117_127_138,
+        ],
     ];
 
     let n_sec = match bp_order {
@@ -1243,7 +1345,10 @@ pub fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -
         .collect()
 }
 
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// Bell brick-wall cascade — Pro-Q 4 slope-≥4 peak EQ.
 ///
 /// Implements the verified Pro-Q 4 design pipeline:

@@ -162,7 +162,10 @@ pub(crate) fn mzt_quadratic(w0: f64, alpha: f64) -> (f64, f64) {
 /// calling this function.
 #[inline]
 #[must_use]
-#[expect(non_snake_case, reason = "parameter names match Pro-Q 4 analog prototype")]
+#[expect(
+    non_snake_case,
+    reason = "parameter names match Pro-Q 4 analog prototype"
+)]
 pub fn zpk_section_to_AF(
     b2z: f64,
     b1z: f64,
@@ -216,7 +219,10 @@ pub fn zpk_section_to_AF(
 /// is in the post-(A..F) Lagrange synthesis, not in (A..F) itself). See
 /// `compute_zpk_transfer_function_coefficients_decoded.md` for the full
 /// analysis.
-#[expect(non_snake_case, reason = "parameter names (A, B, C, D, E, F) match the zpk transfer-function coefficients")]
+#[expect(
+    non_snake_case,
+    reason = "parameter names (A, B, C, D, E, F) match the zpk transfer-function coefficients"
+)]
 #[must_use]
 pub fn proq4_s2_from_AF_with_subfreq(
     freq_hz: f64,
@@ -273,9 +279,14 @@ pub fn proq4_s2_from_AF_with_subfreq(
     let t3s = t3 * t3;
 
     let den = t3s
-        * ((u_zero - u_third) * (g_ref - u_pole)).mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s))
+        * ((u_zero - u_third) * (g_ref - u_pole))
+            .mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s))
         + (g_ref - u_third) * (u_pole - u_zero) * t1s * t2s;
-    let num = ((t2s - t3s) * u_third).mul_add(u_zero, u_pole * (t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero)) + u_eval * (t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third));
+    let num = ((t2s - t3s) * u_third).mul_add(
+        u_zero,
+        u_pole * (t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero))
+            + u_eval * (t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third),
+    );
 
     let s2 = if den.abs() > 1e-30 {
         (num / den).max(0.0)
@@ -290,7 +301,12 @@ pub fn proq4_s2_from_AF_with_subfreq(
 
     let sp6_den = (u_pole - u_zero) * t1s * t2s;
     let sp6 = if sp6_den.abs() > 1e-30 {
-        let sp6_num = (a1_term * a1_term * t2s).mul_add(u_zero, -((t1s * t2s * (1.0 - s2 * t3s) * (t1s - t2s)).mul_add(u_zero, a2_term * a2_term * t1s) * u_pole));
+        let sp6_num = (a1_term * a1_term * t2s).mul_add(
+            u_zero,
+            -((t1s * t2s * (1.0 - s2 * t3s) * (t1s - t2s))
+                .mul_add(u_zero, a2_term * a2_term * t1s)
+                * u_pole),
+        );
         (sp6_num / sp6_den).max(0.0)
     } else {
         0.0
@@ -565,9 +581,7 @@ mod tests {
                     worst_sec = sec;
                 }
             }
-            eprintln!(
-                "LP fc=10k Q=1 sec{sec} pred={pred:?} cap={cap_row:?}"
-            );
+            eprintln!("LP fc=10k Q=1 sec{sec} pred={pred:?} cap={cap_row:?}");
         }
         eprintln!("LP fc=10k Q=1 max_err={max_err:.3e} worst_sec={worst_sec}");
         assert!(

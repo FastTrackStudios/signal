@@ -441,7 +441,8 @@ mod tests {
             let n = 48_000;
             let mut out = vec![0.0; n];
             for (i, output) in out.iter_mut().enumerate().take(n) {
-                let mut l = amp * (core::f64::consts::TAU * 1000.0 * num::count_to_f64(i) / SR).sin();
+                let mut l =
+                    amp * (core::f64::consts::TAU * 1000.0 * num::count_to_f64(i) / SR).sin();
                 let mut r = l;
                 let side = l;
                 b.tick(&mut l, &mut r, side);

@@ -23,7 +23,12 @@ struct Df1State {
 }
 
 impl Df1State {
-    const ZERO: Self = Self { x1: 0.0, x2: 0.0, y1: 0.0, y2: 0.0 };
+    const ZERO: Self = Self {
+        x1: 0.0,
+        x2: 0.0,
+        y1: 0.0,
+        y2: 0.0,
+    };
 }
 
 /// Transposed Direct Form II biquad section.

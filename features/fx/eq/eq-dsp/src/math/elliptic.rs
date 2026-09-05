@@ -8,8 +8,8 @@
 //!   - `elliptic_sn`         (0x18011e6f0) -- Jacobi elliptic sn(u,k)
 //!   - `elliptic_asn`        (0x18011e900) -- inverse Jacobi sn
 
-use std::f64::consts::PI;
 use dsp_core::num;
+use std::f64::consts::PI;
 
 /// Maximum iterations for iterative algorithms.
 const MAX_ITER: usize = 64;
@@ -262,7 +262,12 @@ mod tests {
     #[test]
     fn k_at_half() {
         // K(0.5) = 1.8540746773013719...
-        assert_approx(elliptic_k_complete(0.5), 1.854_074_677_301_372, 1e-12, "K(0.5)");
+        assert_approx(
+            elliptic_k_complete(0.5),
+            1.854_074_677_301_372,
+            1e-12,
+            "K(0.5)",
+        );
     }
 
     #[test]

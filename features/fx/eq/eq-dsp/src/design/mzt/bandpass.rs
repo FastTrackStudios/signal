@@ -44,7 +44,8 @@ pub fn design_bandpass_mzt(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     let t6 = t4 * t2;
     let t8 = t4 * t4;
     let t10 = t8 * t2;
-    let z_extra = (-1.373_978_858_211_2e-03_f64).mul_add(t2, 7.184_990_978_238_9e-03)
+    let z_extra = (-1.373_978_858_211_2e-03_f64)
+        .mul_add(t2, 7.184_990_978_238_9e-03)
         .mul_add(t2, -1.776_930_179_113_5e-02)
         .mul_add(t2, 3.515_572_863_528_1e-02)
         .mul_add(t2, -5.168_161_645_508_9e-02)

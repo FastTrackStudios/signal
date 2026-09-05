@@ -46,11 +46,11 @@
 
 use std::f64::consts::PI;
 
-use dsp_core::num;
 use crate::design::biquad::{self, Coeffs};
 use crate::math::elliptic::{ellipdeg, elliptic_asn, elliptic_k_complete, elliptic_sncndn};
 use crate::math::transform;
 use crate::math::zpk::{Complex, Zpk};
+use dsp_core::num;
 
 /// Prototype order. Even, so the response has no real pole and no zero at
 /// infinity — every one of the twelve zeros is a finite notch in the stopband.
@@ -76,7 +76,10 @@ const ORDER: usize = 12;
 /// 0.00..0.03 spread the plugin's passband was measured at.
 const PASSBAND_RIPPLE_DB: f64 = 0.02;
 
-#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// The elliptic analog prototype, passband edge at `omega = 1`.
 ///
 /// Orfanidis' construction: the transmission zeros are `j / (k * cd(u_i K, k))`
@@ -95,7 +98,8 @@ fn prototype() -> Zpk {
     // sc(w, k1') = 1/ep, which is a real sn of a real value.
     let k1p = (1.0 - k1 * k1).max(0.0).sqrt();
     let v0_param = elliptic_asn(1.0 / (1.0 + ep * ep).sqrt(), k1p);
-    let v0 = v0_param / (f64::from(u32::try_from(ORDER).unwrap_or(u32::MAX)) * elliptic_k_complete(k1 * k1));
+    let v0 = v0_param
+        / (f64::from(u32::try_from(ORDER).unwrap_or(u32::MAX)) * elliptic_k_complete(k1 * k1));
 
     // cd(x + jy, k) = cn(x + jy) / dn(x + jy); the shared denominator of the
     // complex-argument formulas cancels, leaving only real sn/cn/dn at x
@@ -152,15 +156,35 @@ pub(super) fn brickwall_cascade(freq_hz: f64, sample_rate: f64, highpass: bool) 
         // LP->HP is s -> wa/s. The order is even, so every zero is finite and
         // the inversion leaves the counts matched — nothing has to be added
         // at the origin.
-        #[expect(clippy::arithmetic_side_effects, reason = "Essential complex division for bilinear analog-to-digital transform")]
-        let zeros = proto.zeros.iter().map(|&z| Complex::new(wa, 0.0) / z).collect();
-        #[expect(clippy::arithmetic_side_effects, reason = "Essential complex division for bilinear analog-to-digital transform")]
-        let poles = proto.poles.iter().map(|&p| Complex::new(wa, 0.0) / p).collect();
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "Essential complex division for bilinear analog-to-digital transform"
+        )]
+        let zeros = proto
+            .zeros
+            .iter()
+            .map(|&z| Complex::new(wa, 0.0) / z)
+            .collect();
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "Essential complex division for bilinear analog-to-digital transform"
+        )]
+        let poles = proto
+            .poles
+            .iter()
+            .map(|&p| Complex::new(wa, 0.0) / p)
+            .collect();
         Zpk::new(zeros, poles, 1.0)
     } else {
-        #[expect(clippy::arithmetic_side_effects, reason = "Essential complex multiplication for bilinear analog-to-digital transform")]
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "Essential complex multiplication for bilinear analog-to-digital transform"
+        )]
         let zeros = proto.zeros.iter().map(|&z| z * wa).collect();
-        #[expect(clippy::arithmetic_side_effects, reason = "Essential complex multiplication for bilinear analog-to-digital transform")]
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "Essential complex multiplication for bilinear analog-to-digital transform"
+        )]
         let poles = proto.poles.iter().map(|&p| p * wa).collect();
         Zpk::new(zeros, poles, 1.0)
     };
@@ -207,7 +231,10 @@ mod tests {
         }
         // Ninety decibels down within an eighth of an octave.
         let edge = db_at(&sos, 5658.0);
-        assert!(edge < -85.0, "should be past 85 dB down at 5658 Hz, got {edge:.2}");
+        assert!(
+            edge < -85.0,
+            "should be past 85 dB down at 5658 Hz, got {edge:.2}"
+        );
         // And it must STAY there rather than running away like an all-pole
         // cascade — this is the half of the shape a Butterworth cannot do.
         // Equiripple means the stopband dips to a null at every transmission
@@ -230,13 +257,25 @@ mod tests {
     #[test]
     fn low_cut_is_the_mirror() {
         let sos = brickwall_cascade(1000.0, SR, true);
-        assert!(db_at(&sos, 4000.0).abs() < 0.1, "passband above the corner is flat");
-        assert!(db_at(&sos, 1004.0).abs() < 0.2, "flat right up to the corner");
+        assert!(
+            db_at(&sos, 4000.0).abs() < 0.1,
+            "passband above the corner is flat"
+        );
+        assert!(
+            db_at(&sos, 1004.0).abs() < 0.2,
+            "flat right up to the corner"
+        );
         let edge = db_at(&sos, 1000.0 / 1.14);
-        assert!(edge < -85.0, "85 dB down an eighth of an octave below, got {edge:.2}");
+        assert!(
+            edge < -85.0,
+            "85 dB down an eighth of an octave below, got {edge:.2}"
+        );
         for hz in [100.0, 300.0, 700.0] {
             let got = db_at(&sos, hz);
-            assert!(got < -80.0, "stopband at {hz} Hz should hold down, got {got:.2}");
+            assert!(
+                got < -80.0,
+                "stopband at {hz} Hz should hold down, got {got:.2}"
+            );
         }
     }
 

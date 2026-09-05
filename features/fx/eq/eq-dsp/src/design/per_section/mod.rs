@@ -32,19 +32,24 @@ use dsp_core::num;
 use std::f64::consts::PI;
 
 mod analog;
-mod peak;
-mod notch;
 mod limits;
+mod notch;
+mod peak;
 mod shelf;
 
 // The shape helpers live in the files above. This module's surface is
 // unchanged, so every existing `per_section::foo` call site still resolves
 // and the split stays a pure move.
-pub use analog::{AnalogBiquad, MagSqCoeffs, PoleRoots, Prototype, compute_zpk_transfer_coeffs_generic, eval_squared_mag_scalar, omega_scale_for_band_type, solve_biquad_denominator_quadratic_generic};
-pub use peak::{compute_peak_type3_parameters};
-pub use notch::{compute_notch_type46_parameters};
+pub use analog::{
+    compute_zpk_transfer_coeffs_generic, eval_squared_mag_scalar, omega_scale_for_band_type,
+    solve_biquad_denominator_quadratic_generic, AnalogBiquad, MagSqCoeffs, PoleRoots, Prototype,
+};
 pub use limits::{check_frequency_within_band_limits, update_tracked_band_frequencies};
-pub use shelf::{compute_band_shelf_parameters, compute_band_shelf_parameters_v2, compute_shelf_band_parameters};
+pub use notch::compute_notch_type46_parameters;
+pub use peak::compute_peak_type3_parameters;
+pub use shelf::{
+    compute_band_shelf_parameters, compute_band_shelf_parameters_v2, compute_shelf_band_parameters,
+};
 
 /// Dispatch a `proto` through the helper that matches its `section_type`.
 ///
@@ -179,7 +184,10 @@ pub fn apply_inline_section_defaults(proto: &mut Prototype) {
     proto.wt = proto.wp * 0.5;
 }
 
-#[expect(dead_code, reason = "placeholder for potential future use in decompilation helpers")]
+#[expect(
+    dead_code,
+    reason = "placeholder for potential future use in decompilation helpers"
+)]
 const _CONST_PI: f64 = PI;
 
 #[cfg(test)]
@@ -879,9 +887,18 @@ mod tests {
     /// ω scaling table: shelves use 16/25, others use 1.
     #[test]
     fn omega_scale_table() {
-        assert_eq!(omega_scale_for_band_type(7).to_bits(), (16.0 / 25.0_f64).to_bits());
-        assert_eq!(omega_scale_for_band_type(8).to_bits(), (16.0 / 25.0_f64).to_bits());
-        assert_eq!(omega_scale_for_band_type(9).to_bits(), (16.0 / 25.0_f64).to_bits());
+        assert_eq!(
+            omega_scale_for_band_type(7).to_bits(),
+            (16.0 / 25.0_f64).to_bits()
+        );
+        assert_eq!(
+            omega_scale_for_band_type(8).to_bits(),
+            (16.0 / 25.0_f64).to_bits()
+        );
+        assert_eq!(
+            omega_scale_for_band_type(9).to_bits(),
+            (16.0 / 25.0_f64).to_bits()
+        );
         assert_eq!(omega_scale_for_band_type(0).to_bits(), 1.0_f64.to_bits());
         assert_eq!(omega_scale_for_band_type(3).to_bits(), 1.0_f64.to_bits());
         assert_eq!(omega_scale_for_band_type(4).to_bits(), 1.0_f64.to_bits());
