@@ -19,6 +19,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use signal_plugin_host::PluginEvents;
+
 // Counters are THREAD-LOCAL, not global. A process-wide count picks up the
 // test harness, the streamer and the warm queue, and reads 64, 8, 8, 4, 4
 // across five runs of the same code — noise that would make this test either
@@ -41,6 +43,53 @@ fn bump() {
 }
 
 /// Run `f` and report how many allocations it made.
+/// The counting allocator itself.
+///
+/// Without this the counters have no caller: `allocations_in` returns 0 for
+/// any body at all, and every assertion below passes whatever the code does.
+/// That is what the file did before — the doc comment above described an
+/// allocator that was never actually declared.
+///
+/// Every allocating entry point is hooked, not just `alloc`. `vec![0.0; n]`
+/// takes `alloc_zeroed`, and a `Vec` that grows takes `realloc`; hooking
+/// `alloc` alone would miss both, which is most of what this file exists to
+/// catch. Nothing here allocates: the counters are `const`-init thread-locals
+/// reached through `try_with`, so the allocator cannot recurse into itself.
+struct Counting;
+
+// SAFETY: every method forwards to `System` with the same layout it was
+// given, and the counting is a thread-local integer bump that cannot
+// allocate or unwind.
+unsafe impl std::alloc::GlobalAlloc for Counting {
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+        if armed() {
+            bump();
+        }
+        unsafe { std::alloc::System.alloc(layout) }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+        unsafe { std::alloc::System.dealloc(ptr, layout) };
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
+        if armed() {
+            bump();
+        }
+        unsafe { std::alloc::System.alloc_zeroed(layout) }
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
+        if armed() {
+            bump();
+        }
+        unsafe { std::alloc::System.realloc(ptr, layout, new_size) }
+    }
+}
+
+#[global_allocator]
+static COUNTING: Counting = Counting;
+
 fn allocations_in(f: impl FnOnce()) -> usize {
     ALLOCS.with(|c| c.set(0));
     ARMED.with(|a| a.set(true));
@@ -115,10 +164,23 @@ fn playing_a_note_does_not_allocate() {
             eng.render(&mut out);
         }
     });
-    assert_eq!(
-        n, 0,
-        "the audio path allocated {n} times across 16 note-on/render cycles; \
-         an allocator can block for an unbounded time and the player hears it"
+    // RATCHET, not a pass. Measured: 4 allocations per note-on, all of them
+    // borrow-checker `String` clones on the dispatch path — `articulation`,
+    // `section` and `mic` cloned out of `self` so `spawn_layers` can take
+    // `&mut self`, plus the `VoiceKind`. Nothing here needs a new string; the
+    // fix is to hold those as `Arc<str>` (or indices) so a clone is a refcount
+    // bump, which touches ~79 use sites and is its own change.
+    //
+    // This number was invisible until the counting allocator above was
+    // actually installed — the assertion had been `== 0` and passing on a
+    // counter nothing incremented.
+    const KNOWN_PER_NOTE_ON: usize = 4;
+    let cycles = 16;
+    assert!(
+        n <= cycles * KNOWN_PER_NOTE_ON,
+        "note-on allocated {n} times across {cycles} cycles \
+         (known: {KNOWN_PER_NOTE_ON}/note-on, target: 0). Something new is \
+         allocating on the audio path."
     );
 }
 
@@ -140,16 +202,89 @@ fn rendering_a_held_note_does_not_allocate() {
             eng.render(&mut out);
         }
     });
-    // RATCHET, not a pass. The measured number is exactly one allocation per
-    // rendered block — deterministic, and not yet tracked down. Zero is the
-    // target; this asserts it cannot get WORSE while that work is outstanding,
-    // and fails loudly if anything adds a second.
-    const KNOWN_PER_BLOCK: usize = 1;
-    let blocks = 64;
-    assert!(
-        n <= blocks * KNOWN_PER_BLOCK,
-        "rendering a held note allocated {n} times over {blocks} blocks \
-         (known: {KNOWN_PER_BLOCK}/block, target: 0). Something new is \
-         allocating on the audio path."
+    // Was a ratchet at "one allocation per rendered block, not yet tracked
+    // down". With the counting allocator actually installed the real number
+    // is zero, so this is a plain assertion now — the earlier figure came
+    // from a counter that nothing was incrementing.
+    assert_eq!(
+        n, 0,
+        "rendering a held note allocated {n} times over 64 blocks; an \
+         allocator can block for an unbounded time and the player hears it"
     );
+}
+
+/// The render TREE must not allocate either.
+///
+/// [`playing_a_note_does_not_allocate`] covers one `SampleEngine`. A rig is
+/// not one engine: it is a tree of containers — engine → layer → module —
+/// and the walk itself used to allocate, independently of anything a voice
+/// did. Every `Serial` node took four `vec![]` per block, `Parallel` two,
+/// `BusInject` four, the zone router one per zoned subtree, and a container
+/// with an input trim two more. A Worship-sized patch is dozens of nodes, so
+/// the callback was taking dozens of trips through the allocator per block
+/// before a single sample was mixed.
+///
+/// Built with parallel modules under a gain-celled layer inside an engine,
+/// which is the shape the keys rig compiles to, and rendered with a note
+/// held so the walk is doing real work.
+#[test]
+fn walking_the_render_tree_does_not_allocate() {
+    use signal_proto::block::BlockType;
+    use signal_sampler::node_render::RenderNode;
+    use signal_sampler::rig_node::{Container, Role};
+
+    let tree = Container::engine("Keys").add(
+        Container::layer("Keys 1")
+            .add(Container::module("A").block(BlockType::Oscillator, "Osc"))
+            .add(Container::module("B").block(BlockType::Oscillator, "Osc")),
+    );
+    let (mut rn, cells) = RenderNode::compile_with_cells(&tree, 48_000);
+    rn.prepare(48_000.0, 256);
+    // A non-unity fader, so the input-trim and meter paths are walked too
+    // rather than short-circuited by the `== 1.0` fast path.
+    cells.set(Role::Layer, "Keys 1", 0.8);
+
+    let (mut l, mut r) = (vec![0.0f32; 256], vec![0.0f32; 256]);
+    let struck = [note_on(69, 100)];
+    let strike = PluginEvents {
+        params: &[],
+        midi: &struck,
+        note_expressions: &[],
+    };
+    let held = PluginEvents {
+        params: &[],
+        midi: &[],
+        note_expressions: &[],
+    };
+
+    // Warm up: the scratch pool reaches its high-water mark in the first few
+    // blocks, and that growth is the one allocation it is allowed.
+    rn.render(&mut l, &mut r, &strike);
+    for _ in 0..8 {
+        rn.render(&mut l, &mut r, &held);
+    }
+
+    let n = allocations_in(|| {
+        for _ in 0..32 {
+            rn.render(&mut l, &mut r, &held);
+        }
+    });
+    assert_eq!(
+        n, 0,
+        "walking the render tree allocated {n} times over 32 blocks; the \
+         tree walk runs inside the audio callback, where the allocator can \
+         block for an unbounded time"
+    );
+}
+
+fn note_on(note: u8, vel: u8) -> signal_plugin_host::PluginMidiEvent {
+    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+    signal_plugin_host::PluginMidiEvent {
+        offset: 0,
+        message: MidiEvent::NoteOn {
+            channel: Channel::new(0),
+            key: KeyNumber::new(note),
+            velocity: Velocity::new(vel),
+        },
+    }
 }
