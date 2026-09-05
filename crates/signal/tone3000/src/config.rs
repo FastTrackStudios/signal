@@ -25,7 +25,13 @@ use std::path::PathBuf;
 /// port, but TONE3000 matches registered redirect URIs, so the port has to be
 /// one we can register. 4040 is the engine's own port — the callback lands on
 /// the HTTP server that is already there.
-pub const DEFAULT_REDIRECT_URI: &str = "http://127.0.0.1:4040/tone3000/callback";
+///
+/// Spelled `localhost` rather than `127.0.0.1` because TONE3000's own demo
+/// documents localhost origins as allowed during development without being
+/// registered, and that is the string their check is described in terms of.
+/// The two resolve to the same socket for us either way — the engine binds
+/// `0.0.0.0` — so this costs nothing and removes a registration step.
+pub const DEFAULT_REDIRECT_URI: &str = "http://localhost:4040/tone3000/callback";
 
 /// The path the redirect URI above resolves to, mounted by the engine host.
 pub const CALLBACK_PATH: &str = "/tone3000/callback";
