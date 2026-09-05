@@ -28,6 +28,8 @@ may happen:
 | `x.floor()` in `no_std` | `num::floor_f64(x)` |
 | `n as f64` where `n: i32`/`u32` | `f64::from(n)` — infallible, no helper needed |
 | `n as f64` where `n: usize` | `num::count_to_f64(n)` |
+| `n as usize` where `n: u32` | `num::u32_to_index(n)` |
+| `n as i32` where `n: usize` | `num::count_to_i32(n)` |
 | `n as f64` where `n: u64` | `num::u64_to_f64(n)` |
 | `n as f64` where `n: i64` | `num::i64_to_f64(n)` |
 | `x as i64` where `x: f64` | `num::trunc_to_i64(x)` |
@@ -47,6 +49,57 @@ than wrapping it in `u64::try_from(..)`.
 Note the semantics you are preserving: Rust's float→int `as` **saturates** and
 maps NaN to 0, and `f32_to_index` / `f64_to_index` / `trunc_to_i32` reproduce
 that exactly. So swapping them in is arithmetic-neutral.
+
+**The table above is the complete list.** If the conversion you need is not on
+it, do not invent a helper name and do not reach for `f64::from` and hope —
+say so in your summary and leave the line alone. Every automated run of this
+recipe so far has produced at least one call to a `num::` function that does
+not exist, which is a compile error rather than a fix.
+
+## Never rewrite the arithmetic inside an assertion
+
+This one has already destroyed working tests, so it is a rule and not a
+preference: **do not apply `mul_add`, `ln_1p`, `exp_m1` or any other
+arithmetic rewrite inside `assert!`, `assert_eq!`, or `debug_assert!`.** Leave
+the assertion exactly as written and report it.
+
+What went wrong: `assert!((p.wp - 0.9 * PI).abs() < 1e-12)` was rewritten to
+
+```rust
+assert!((p.wp - 0.9f64.mul_add(-PI, p.wp)).abs() < 1e-12);   // WRONG
+```
+
+The inner `mul_add` is correct on its own — `0.9f64.mul_add(-PI, p.wp)` *is*
+`p.wp - 0.9 * PI`. But the outer `p.wp -` was left in place, so the assertion
+now evaluates `A - (A - B*C)`, which is `B*C`, and asserts that 2.83 is less
+than 1e-12. Five of seven assertions were rewritten this way in one run.
+
+This is worse than a compile error. It compiles, it looks like a reasonable
+diff, and it silently guts a test — in the one place the golden vectors cannot
+see, because they only observe the code under test, not the tests themselves.
+An inverted assertion that happens to still pass leaves no trace at all.
+
+The performance argument does not apply in a test, so there is nothing to gain
+and a working test to lose.
+
+## Attributes go on items and statements, never expressions
+
+`#[expect(..)]` on an expression is a hard error (E0658, "attributes on
+expressions are experimental"). If a lint fires inside an expression, either
+fix it properly — usually `try_from`, `saturating_*`, or one of the `num::`
+helpers — or hoist the attribute to the enclosing `let` statement or function.
+
+## Patterns bind by reference
+
+Destructuring a slice of tuples binds references, so `let [(a, b), (c, d)] = w`
+over a `&[(f64, f64)]` gives `a: &f64`. The fix is one deref on the pattern,
+not a deref at every use:
+
+```rust
+let &[(q0, k0), (q1, k1)] = w else { continue };   // q0: f64
+```
+
+Also: `f64::to_bits()` returns `u64`, not `u32`.
 
 ## Indexing — `indexing_slicing`
 
