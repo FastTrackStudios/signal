@@ -740,9 +740,9 @@ impl FtsEq {
         }
         let n = self.auto_grid_hz.len();
         self.auto_grid_static_db.clear();
-        for i in 0..n {
-            let hz = self.auto_grid_hz[i];
-            self.auto_grid_static_db.push(self.eq.magnitude_db(hz, self.sample_rate));
+        for &hz in &self.auto_grid_hz {
+            self.auto_grid_static_db
+                .push(self.eq.magnitude_db(hz, self.sample_rate));
         }
         // And the shape of every band the static chain cannot see.
         self.auto_grid_env.clear();
@@ -765,8 +765,8 @@ impl FtsEq {
                     crate::runtime::band::Placement::Stereo => 1.0,
                     _ => 0.5,
                 };
-                for (i, e) in env.iter_mut().enumerate() {
-                    *e = w * band_envelope(shape, f0, q, self.auto_grid_hz[i]);
+                for (e, &hz) in env.iter_mut().zip(&self.auto_grid_hz) {
+                    *e = w * band_envelope(shape, f0, q, hz);
                 }
             }
             self.auto_grid_env.push(env);
@@ -800,11 +800,11 @@ impl FtsEq {
             }
         }
         let (mut num, mut den) = (0.0f64, 0.0f64);
-        for i in 0..n {
-            let mut db = self.auto_grid_static_db[i];
-            for (band, &live_val) in live.iter().enumerate() {
+        for (i, &static_db) in self.auto_grid_static_db.iter().enumerate().take(n) {
+            let mut db = static_db;
+            for (&live_val, env) in live.iter().zip(&self.auto_grid_env) {
                 if live_val != 0.0 {
-                    db += live_val * self.auto_grid_env[band][i];
+                    db += live_val * env.get(i).copied().unwrap_or(0.0);
                 }
             }
             // Equal weight per octave — pink, not white.
@@ -959,7 +959,9 @@ impl FtsEq {
     }
     #[must_use]
     pub fn live_dyn_gain_db(&self, band: usize) -> Option<f64> {
-        (band < EQ_BANDS && self.bands[band].dyn_active).then(|| self.dyn_bands[band].live_gain_db())
+        (band < EQ_BANDS && self.bands[band].dyn_active)
+            .then(|| self.dyn_bands.get(band).map(crate::dynamics::DynBand::live_gain_db))
+            .flatten()
     }
 
     /// Added latency in samples — non-zero only while a spectral band puts
@@ -1002,9 +1004,10 @@ impl FtsEq {
         self.dry_ring = [vec![0.0; ring], vec![0.0; ring]];
         self.dry_pos = 0;
         self.sync_spectral_regions();
+        for band in &mut self.dyn_bands {
+            band.reset();
+        }
         for b in 0..EQ_BANDS {
-            let b = b.min(EQ_BANDS - 1);
-            self.dyn_bands[b].reset();
             self.sync_band(b);
         }
         self.scratch_l = vec![0.0; num::u32_to_index(block_size.max(1))];
@@ -1132,17 +1135,18 @@ impl FtsEq {
                     }
                     eq.process(left, right);
                     eq_b.process(&mut scratch_left[..n], &mut scratch_right[..n]);
-                    for i in 0..n {
-                        let (ol, or) = match split_solo {
-                            1 => (left[i] * tg, right[i] * tg),
-                            2 => (scratch_left[i] * sg, scratch_right[i] * sg),
-                            _ => (
-                                left[i].mul_add(tg, scratch_left[i] * sg),
-                                right[i].mul_add(tg, scratch_right[i] * sg),
-                            ),
+                    for (((l, r), &sl), &sr) in left
+                        .iter_mut()
+                        .zip(right.iter_mut())
+                        .zip(scratch_left.iter())
+                        .zip(scratch_right.iter())
+                        .take(n)
+                    {
+                        (*l, *r) = match split_solo {
+                            1 => (*l * tg, *r * tg),
+                            2 => (sl * sg, sr * sg),
+                            _ => (l.mul_add(tg, sl * sg), r.mul_add(tg, sr * sg)),
                         };
-                        left[i] = ol;
-                        right[i] = or;
                     }
                 } else {
                     // Bands whose dynamics ride the static design run their
@@ -1154,8 +1158,8 @@ impl FtsEq {
                         if !slots[bi].dyn_modulated {
                             continue;
                         }
-                        for i in 0..left.len() {
-                            d.observe(left[i], right[i], side_ref[i]);
+                        for ((l, r), s) in left.iter().zip(right.iter()).zip(side_ref) {
+                            d.observe(*l, *r, *s);
                         }
                         let g = d.live_gain_db();
                         if !(g - slots[bi].dyn_modulated_gain).abs().lt(&0.1) {
@@ -1230,17 +1234,19 @@ impl FtsEq {
                             *r = solo_filter.tick(1, *r);
                         }
                     } else {
-                        let ring = dry_ring[0].len();
-                        for i in 0..left.len() {
-                            // `+ ring` before the subtraction keeps the index positive when the
-                        // delay reaches back past the ring's origin.
-                        let read = dry_pos
-                            .saturating_add(ring)
-                            .saturating_sub(dry_delay)
-                            .checked_rem(ring)
-                            .unwrap_or(0);
-                            left[i] -= dry_ring[0][read];
-                            right[i] -= dry_ring[1][read];
+                        let [ring_l, ring_r] = dry_ring;
+                        let ring = ring_l.len();
+                        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
+                            // `+ ring` before the subtraction keeps the index
+                            // positive when the delay reaches back past the
+                            // ring's origin.
+                            let read = dry_pos
+                                .saturating_add(ring)
+                                .saturating_sub(dry_delay)
+                                .checked_rem(ring)
+                                .unwrap_or(0);
+                            *l -= ring_l.get(read).copied().unwrap_or(0.0);
+                            *r -= ring_r.get(read).copied().unwrap_or(0.0);
                             *dry_pos = dry_pos.saturating_add(1).checked_rem(ring).unwrap_or(0);
                         }
                     }
