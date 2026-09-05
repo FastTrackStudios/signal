@@ -195,6 +195,71 @@ impl StageShaper for NoShaper {
 
 pub const MAX_STAGES: usize = 8192;
 
+/// One pole of the input (anti-alias) filter bank.
+///
+/// This and [`OutSection`] replaced thirteen parallel `[C; N_FILT]` arrays
+/// walked by a shared index. The arithmetic is identical; what changes is that
+/// a section's coefficients and the state they drive can no longer drift apart,
+/// and the loops below iterate rather than index — which also retires five
+/// `#[expect(needless_range_loop)]` suppressions that were papering over the
+/// indexing rather than removing it.
+#[derive(Clone, Copy, Debug)]
+struct InSection {
+    /// Section state.
+    x: C,
+    /// Per-sample pole p̄, and its inverse.
+    pbar: C,
+    pbar_inv: C,
+    /// Base weight Ts·r.
+    g0: C,
+    /// Per-input-tick advance p̄^{2·`ts_bbd`}.
+    aplus: C,
+    /// Running p̄^{tn}.
+    arec: C,
+    /// p̂ = p·k·Ts, kept for recomputing the tick advances.
+    phat: C,
+}
+
+/// One pole of the output (reconstruction) filter bank.
+#[derive(Clone, Copy, Debug)]
+struct OutSection {
+    /// Section state.
+    x: C,
+    /// Per-sample pole p̄.
+    pbar: C,
+    /// Weight base (r/p)·p̄.
+    gp_pbar: C,
+    /// Per-output-tick advance p̄^{−2·`ts_bbd`}.
+    aplus: C,
+    /// Running p̄^{−tn}.
+    arec: C,
+    /// p̂, kept for recomputing the tick advances.
+    phat: C,
+}
+
+impl InSection {
+    const ZERO: Self = Self {
+        x: C::ZERO,
+        pbar: C::ZERO,
+        pbar_inv: C::ZERO,
+        g0: C::ZERO,
+        aplus: C::ZERO,
+        arec: C::ZERO,
+        phat: C::ZERO,
+    };
+}
+
+impl OutSection {
+    const ZERO: Self = Self {
+        x: C::ZERO,
+        pbar: C::ZERO,
+        gp_pbar: C::ZERO,
+        aplus: C::ZERO,
+        arec: C::ZERO,
+        phat: C::ZERO,
+    };
+}
+
 pub struct BbdCore {
     sample_rate: f64,
     stages: usize,
@@ -210,25 +275,8 @@ pub struct BbdCore {
     /// Half-tick period in samples (= `sample_rate` / `clock_hz`).
     ts_bbd: f64,
 
-    // Input sections: state x, per-sample pole p̄, its inverse, base
-    // weight Ts·r, per-input-tick advance p̄^{2·ts_bbd}, running p̄^{tn}.
-    in_x: [C; N_FILT],
-    in_pbar: [C; N_FILT],
-    in_pbar_inv: [C; N_FILT],
-    in_g0: [C; N_FILT],
-    in_aplus: [C; N_FILT],
-    in_arec: [C; N_FILT],
-    /// p̂ = p·k·Ts, kept for recomputing the tick advances.
-    in_phat: [C; N_FILT],
-
-    // Output sections: weight base (r/p)·p̄, per-output-tick advance
-    // p̄^{−2·ts_bbd}, running p̄^{−tn}.
-    out_x: [C; N_FILT],
-    out_pbar: [C; N_FILT],
-    out_gp_pbar: [C; N_FILT],
-    out_aplus: [C; N_FILT],
-    out_arec: [C; N_FILT],
-    out_phat: [C; N_FILT],
+    in_sections: [InSection; N_FILT],
+    out_sections: [OutSection; N_FILT],
 
     h0: f64,
     /// Unity-insertion makeup: 1 / (`H_in(0)·H_out(0)`). The raw Juno
@@ -254,19 +302,8 @@ impl BbdCore {
             even_on: true,
             tn: 0.0,
             ts_bbd: 1.0,
-            in_x: [C::ZERO; N_FILT],
-            in_pbar: [C::ZERO; N_FILT],
-            in_pbar_inv: [C::ZERO; N_FILT],
-            in_g0: [C::ZERO; N_FILT],
-            in_aplus: [C::ZERO; N_FILT],
-            in_arec: [C::ZERO; N_FILT],
-            in_phat: [C::ZERO; N_FILT],
-            out_x: [C::ZERO; N_FILT],
-            out_pbar: [C::ZERO; N_FILT],
-            out_gp_pbar: [C::ZERO; N_FILT],
-            out_aplus: [C::ZERO; N_FILT],
-            out_arec: [C::ZERO; N_FILT],
-            out_phat: [C::ZERO; N_FILT],
+            in_sections: [InSection::ZERO; N_FILT],
+            out_sections: [OutSection::ZERO; N_FILT],
             h0: 0.0,
             makeup: 1.0,
             y_bbd_old: 0.0,
@@ -289,30 +326,34 @@ impl BbdCore {
         self.h0 = 0.0;
         let mut hin0 = C::ZERO;
         let mut hout0 = C::ZERO;
-        #[expect(clippy::needless_range_loop, reason = "i spans multiple constant arrays and accumulates results")]
-        for i in 0..N_FILT {
-            hin0 = hin0.add(IN_ROOTS[i].div(IN_POLES[i]).scale(-1.0));
-            hout0 = hout0.add(OUT_ROOTS[i].div(OUT_POLES[i]).scale(-1.0));
+        for ((in_root, in_pole), (out_root, out_pole)) in IN_ROOTS
+            .iter()
+            .zip(&IN_POLES)
+            .zip(OUT_ROOTS.iter().zip(&OUT_POLES))
+        {
+            hin0 = hin0.add(in_root.div(*in_pole).scale(-1.0));
+            hout0 = hout0.add(out_root.div(*out_pole).scale(-1.0));
         }
         self.makeup = 1.0 / (hin0.re * hout0.re).abs().max(1e-6);
-        #[expect(clippy::needless_range_loop, reason = "i spans multiple struct arrays and state simultaneously")]
-        for i in 0..N_FILT {
+        let tn = self.tn;
+        for ((section, pole), root) in self.in_sections.iter_mut().zip(&IN_POLES).zip(&IN_ROOTS) {
             // Input side: scale poles AND roots by k (the C++ reference
             // scales both, keeping the response shape).
-            let p_hat = IN_POLES[i].scale(k * ts);
-            self.in_phat[i] = p_hat;
-            self.in_pbar[i] = p_hat.exp();
-            self.in_pbar_inv[i] = p_hat.scale(-1.0).exp();
-            self.in_g0[i] = IN_ROOTS[i].scale(k * ts);
-            self.in_arec[i] = p_hat.scale(self.tn).exp();
-
-            let po_hat = OUT_POLES[i].scale(k * ts);
-            self.out_phat[i] = po_hat;
-            self.out_pbar[i] = po_hat.exp();
+            let p_hat = pole.scale(k * ts);
+            section.phat = p_hat;
+            section.pbar = p_hat.exp();
+            section.pbar_inv = p_hat.scale(-1.0).exp();
+            section.g0 = root.scale(k * ts);
+            section.arec = p_hat.scale(tn).exp();
+        }
+        for ((section, pole), root) in self.out_sections.iter_mut().zip(&OUT_POLES).zip(&OUT_ROOTS) {
+            let po_hat = pole.scale(k * ts);
+            section.phat = po_hat;
+            section.pbar = po_hat.exp();
             // (r/p) is scale-invariant (both scale by k).
-            let gp = OUT_ROOTS[i].div(OUT_POLES[i]);
-            self.out_gp_pbar[i] = gp.mul(self.out_pbar[i]);
-            self.out_arec[i] = po_hat.scale(-self.tn).exp();
+            let gp = root.div(*pole);
+            section.gp_pbar = gp.mul(section.pbar);
+            section.arec = po_hat.scale(-tn).exp();
             self.h0 -= gp.re;
         }
         self.set_clock_samples(self.ts_bbd * 2.0 * num::count_to_f64(self.stages));
@@ -324,10 +365,9 @@ impl BbdCore {
         let delay = delay_samples.max(16.0);
         self.ts_bbd = delay / (2.0 * num::count_to_f64(self.stages));
         let dt = 2.0 * self.ts_bbd;
-        #[expect(clippy::needless_range_loop, reason = "i spans multiple struct arrays simultaneously")]
-        for i in 0..N_FILT {
-            self.in_aplus[i] = self.in_phat[i].scale(dt).exp();
-            self.out_aplus[i] = self.out_phat[i].scale(-dt).exp();
+        for (in_section, out_section) in self.in_sections.iter_mut().zip(&mut self.out_sections) {
+            in_section.aplus = in_section.phat.scale(dt).exp();
+            out_section.aplus = out_section.phat.scale(-dt).exp();
         }
     }
 
@@ -347,32 +387,43 @@ impl BbdCore {
     pub fn process(&mut self, u: f64, shaper: &mut impl StageShaper) -> f64 {
         let mut out_accum = [C::ZERO; N_FILT];
 
+        // Comparing the running tick position against a whole sample. This is
+        // a scheduler, not an equality test: `tn` accumulates `ts_bbd` and the
+        // loop drains whole samples out of it, so the float comparison is the
+        // termination condition, and there is no epsilon that would make it
+        // more correct.
+        #[expect(
+            clippy::while_float,
+            reason = "draining a fractional clock accumulator; the comparison is the loop's purpose"
+        )]
         while self.tn < 1.0 {
             if self.even_on {
                 // Input tick: evaluate the AA filter bank at this exact
                 // clock instant and charge the bucket.
                 let mut v = 0.0;
-                #[expect(clippy::needless_range_loop, reason = "i spans struct arrays and input processing state")]
-                for i in 0..N_FILT {
-                    self.in_arec[i] = self.in_arec[i].mul(self.in_aplus[i]);
-                    let g = self.in_g0[i].mul(self.in_arec[i]);
-                    v += self.in_x[i].mul(g).re;
+                for section in &mut self.in_sections {
+                    section.arec = section.arec.mul(section.aplus);
+                    let g = section.g0.mul(section.arec);
+                    v += section.x.mul(g).re;
                 }
-                self.buffer[self.ptr] = shaper.shape(v);
+                if let Some(slot) = self.buffer.get_mut(self.ptr) {
+                    *slot = shaper.shape(v);
+                }
                 self.ptr = self.ptr.saturating_add(1);
                 if self.ptr >= self.stages {
                     self.ptr = 0;
                 }
             } else {
                 // Output tick: ZOH step into the reconstruction bank.
-                let y = self.buffer[self.ptr];
+                // `ptr` is kept below `stages` by the wrap above, and `stages`
+                // never exceeds the buffer, so the fallback is unreachable —
+                // it exists so the read cannot panic on an audio callback.
+                let y = self.buffer.get(self.ptr).copied().unwrap_or(0.0);
                 let delta = y - self.y_bbd_old;
                 self.y_bbd_old = y;
-                #[expect(clippy::needless_range_loop, reason = "i spans struct arrays and output accumulation")]
-                for i in 0..N_FILT {
-                    self.out_arec[i] = self.out_arec[i].mul(self.out_aplus[i]);
-                    out_accum[i] =
-                        out_accum[i].add(self.out_gp_pbar[i].mul(self.out_arec[i]).scale(delta));
+                for (section, accum) in self.out_sections.iter_mut().zip(&mut out_accum) {
+                    section.arec = section.arec.mul(section.aplus);
+                    *accum = accum.add(section.gp_pbar.mul(section.arec).scale(delta));
                 }
             }
             self.even_on = !self.even_on;
@@ -383,13 +434,17 @@ impl BbdCore {
         // Per-sample: rewind the running exponentials by one sample and
         // advance the section states at audio rate.
         let mut out = self.h0 * self.y_bbd_old;
-        #[expect(clippy::needless_range_loop, reason = "i spans struct arrays and audio-rate state updates")]
-        for i in 0..N_FILT {
-            self.in_arec[i] = self.in_arec[i].mul(self.in_pbar_inv[i]);
-            self.out_arec[i] = self.out_arec[i].mul(self.out_pbar[i]);
-            self.in_x[i] = self.in_x[i].mul(self.in_pbar[i]).add(C { re: u, im: 0.0 });
-            self.out_x[i] = self.out_x[i].mul(self.out_pbar[i]).add(out_accum[i]);
-            out += self.out_x[i].re;
+        for ((in_section, out_section), accum) in self
+            .in_sections
+            .iter_mut()
+            .zip(&mut self.out_sections)
+            .zip(&out_accum)
+        {
+            in_section.arec = in_section.arec.mul(in_section.pbar_inv);
+            out_section.arec = out_section.arec.mul(out_section.pbar);
+            in_section.x = in_section.x.mul(in_section.pbar).add(C { re: u, im: 0.0 });
+            out_section.x = out_section.x.mul(out_section.pbar).add(*accum);
+            out += out_section.x.re;
         }
 
         // Re-anchor the running exponentials periodically so hours of
@@ -397,10 +452,11 @@ impl BbdCore {
         self.renorm = self.renorm.saturating_add(1);
         if self.renorm >= 256 {
             self.renorm = 0;
-            #[expect(clippy::needless_range_loop, reason = "i spans struct arrays for exponential re-anchoring")]
-            for i in 0..N_FILT {
-                self.in_arec[i] = self.in_phat[i].scale(self.tn).exp();
-                self.out_arec[i] = self.out_phat[i].scale(-self.tn).exp();
+            let tn = self.tn;
+            for (in_section, out_section) in self.in_sections.iter_mut().zip(&mut self.out_sections)
+            {
+                in_section.arec = in_section.phat.scale(tn).exp();
+                out_section.arec = out_section.phat.scale(-tn).exp();
             }
         }
 
@@ -414,12 +470,11 @@ impl BbdCore {
         self.tn = 0.0;
         self.y_bbd_old = 0.0;
         self.renorm = 0;
-        self.in_x = [C::ZERO; N_FILT];
-        self.out_x = [C::ZERO; N_FILT];
-        #[expect(clippy::needless_range_loop, reason = "i spans struct arrays for reset initialization")]
-        for i in 0..N_FILT {
-            self.in_arec[i] = C { re: 1.0, im: 0.0 };
-            self.out_arec[i] = C { re: 1.0, im: 0.0 };
+        for (in_section, out_section) in self.in_sections.iter_mut().zip(&mut self.out_sections) {
+            in_section.x = C::ZERO;
+            out_section.x = C::ZERO;
+            in_section.arec = C { re: 1.0, im: 0.0 };
+            out_section.arec = C { re: 1.0, im: 0.0 };
         }
     }
 }
