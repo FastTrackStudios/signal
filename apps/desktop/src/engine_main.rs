@@ -199,6 +199,19 @@ async fn async_main() {
     let packs = signal_pack_library::PackLibraryBackend::new();
     let router = router.merge_router(packs.router());
 
+    // ── TONE3000 (the public NAM/IR library) ──────────────────────────────
+    // The session and the fetching live on the engine, not in a GUI: a
+    // plugin editor cannot host an authorization page, and the browser
+    // remote is served over plain HTTP on the LAN where WebCrypto (and so
+    // PKCE) is unavailable. Every GUI is a courier for a URL in one
+    // direction and a callback in the other.
+    let config_dir_t3k = signal_sampler::rig_prefs::signal_config_dir();
+    let tone3000 = signal_tone3000::Tone3000Backend::new(signal_tone3000::Config::from_env(
+        &config_dir_t3k,
+        signal_nam::nam_root_from_env(&config_dir_t3k.join("nam")),
+    ));
+    let router = router.merge_router(tone3000.router());
+
     // ── Sample space (similarity maps over the sample libraries, #77) ────
     let space = signal_space::service::SpaceBackend::new();
     let router = router.merge_router(space.router());
@@ -226,6 +239,9 @@ async fn async_main() {
         engine_host = engine_host.extend(routes);
         tracing::info!("watch bridge mounted at /watch/v1");
     }
+    // The registered OAuth redirect lands on this same server (see
+    // engine_tone3000.rs for why it can only be the engine).
+    let engine_host = crate::engine_tone3000::extend(engine_host, tone3000);
     engine_host
         .iroh(
             config_dir.join("iroh.key"),

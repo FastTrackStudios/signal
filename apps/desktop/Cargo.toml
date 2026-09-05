@@ -118,6 +118,11 @@ signal = [
     "dep:signal-space-proto",
     "dep:signal-ekit",
     "dep:signal-ekit-proto",
+    # TONE3000: the engine holds the session and serves the OAuth redirect
+    # (engine_tone3000.rs); signal-nam resolves where downloads land.
+    "dep:signal-tone3000",
+    "dep:signal-nam",
+    "dep:url",
     "dep:axum",
     "dep:tower-http",
 ]
@@ -288,6 +293,9 @@ signal-sampler = { workspace = true, optional = true }
 signal-pack-library = { workspace = true, optional = true }
 signal-space = { workspace = true, optional = true }
 signal-ekit = { workspace = true, optional = true }
+signal-tone3000 = { workspace = true, optional = true }
+signal-nam = { workspace = true, optional = true }
+url = { version = "2", optional = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 # Watch bridge (engine_watch.rs): facet-json for the WatchState wire form,

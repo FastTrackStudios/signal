@@ -599,6 +599,50 @@ impl Tone3000 for Tone3000Backend {
 }
 
 impl Tone3000Backend {
+    /// Redeem a callback that arrived without a request id.
+    ///
+    /// The browser is redirected to a fixed URI and knows nothing about the
+    /// request that started the flow, so the engine's HTTP route cannot name
+    /// one. The `state` nonce identifies it instead — which is the job it
+    /// already has, since it is the value that must match for the callback to
+    /// be trusted at all.
+    ///
+    /// Returns the status and the request id it belonged to, so a caller can
+    /// still ask [`Tone3000::picked_tone`] what the user chose.
+    pub async fn complete_from_callback(&self, callback_url: &str) -> (SignInStatus, String) {
+        let Ok(url) = url::Url::parse(callback_url) else {
+            return (failed_sign_in("callback is not a URL"), String::new());
+        };
+        let echoed = url
+            .query_pairs()
+            .find(|(k, _)| k == "state")
+            .map(|(_, v)| v.into_owned())
+            .unwrap_or_default();
+
+        let found = {
+            let pending = self
+                .inner
+                .pending
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            pending
+                .iter()
+                .find(|(_, start)| start.verify_state(&echoed).is_ok())
+                .map(|(id, _)| id.clone())
+        };
+        let Some(request_id) = found else {
+            return (
+                failed_sign_in("no authorization is pending for this callback"),
+                String::new(),
+            );
+        };
+
+        let status = self
+            .complete_sign_in(request_id.clone(), callback_url.to_string())
+            .await;
+        (status, request_id)
+    }
+
     /// Redeem a callback: check `state`, exchange the code, persist the
     /// session, and remember any tone the picker came back with.
     async fn redeem(
