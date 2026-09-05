@@ -682,7 +682,12 @@ mod tests {
                 .map(|i| {
                     // Broadband-ish test signal.
                     let t = f64::from(i) / SR;
-                    let s = (std::f64::consts::TAU * 5200.0 * t).sin().mul_add(0.2, (std::f64::consts::TAU * 220.0 * t).sin().mul_add(0.3, (std::f64::consts::TAU * 1700.0 * t).sin() * 0.2));
+                    let s = (std::f64::consts::TAU * 5200.0 * t).sin().mul_add(
+                        0.2,
+                        (std::f64::consts::TAU * 220.0 * t)
+                            .sin()
+                            .mul_add(0.3, (std::f64::consts::TAU * 1700.0 * t).sin() * 0.2),
+                    );
                     let v = d.tick(s, 0);
                     assert!(v.is_finite());
                     v
@@ -732,7 +737,9 @@ mod tests {
             let mut peak = 0.0f64;
             for i in 0..96000 {
                 // Slow sinusoidal time wobble like the chain's mod.
-                d.time_ms = (f64::from(i) / SR * std::f64::consts::TAU * 0.8).sin().mul_add(0.8, time_ms);
+                d.time_ms = (f64::from(i) / SR * std::f64::consts::TAU * 0.8)
+                    .sin()
+                    .mul_add(0.8, time_ms);
                 let s = (std::f64::consts::TAU * 440.0 * f64::from(i) / SR).sin() * 0.3;
                 let v = d.tick(s, 0);
                 assert!(v.is_finite(), "NaN at {i} (time={time_ms})");

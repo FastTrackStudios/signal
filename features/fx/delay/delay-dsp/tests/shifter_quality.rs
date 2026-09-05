@@ -23,7 +23,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 use delay_dsp::shimmer_delay::ShimmerDelay;
 use std::f64::consts::PI;
 

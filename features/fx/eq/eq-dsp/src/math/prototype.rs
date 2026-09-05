@@ -48,7 +48,7 @@ pub fn butterworth_lp_prewarped(order: usize, freq_hz: f64, sample_rate: f64) ->
 
     let mut proto = butterworth_lp(order);
     for p in &mut proto.poles {
-        *p = *p * w_a;
+        *p *= w_a;
     }
     proto.gain = w_a.powi(num::count_to_i32(order));
     proto

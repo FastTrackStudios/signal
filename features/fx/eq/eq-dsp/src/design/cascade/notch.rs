@@ -158,12 +158,16 @@ fn notch_alt_path_kernel(
         g4,
     )
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a decoded routine's parameter list: each argument is one coefficient or pole term the reference implementation passes separately. Bundling them into a struct would rename the maths for no gain and break the correspondence with the decode notes"
+)]
 /// Generic Pro-Q lagrange-MZT alt-path kernel.
 /// `(cap_a, cap_b, cap_c)` are the numerator polynomial coefficients of
 /// `|H_a(jω)|²` for the analog section: N(ω) = A·ω⁴ + B·ω² + C.
 /// `(a1_sec, a2_sec)` define the denominator (1, a1, a2) → (1, E, F·g⁴).
 fn alt_path_kernel_generic(
-    _omega0: f64,
+    omega0: f64,
     a1_sec: f64,
     a2_sec: f64,
     g_ref: f64,
@@ -174,7 +178,7 @@ fn alt_path_kernel_generic(
     cap_b: f64,
     cap_c: f64,
 ) -> Coeffs {
-    let g = _omega0;
+    let g = omega0;
     let g2 = g * g;
     let g4 = g2 * g2;
     let cap_e = a1_sec.mul_add(a1_sec, -(2.0 * a2_sec)) * g2;
@@ -306,7 +310,7 @@ fn notch_s8_section_biquad(
     // when w_zero clamps to π at high fc — verified via probe at fc=20k Q=1).
     let alt_path = || {
         let beta = (omega0 / PI - 0.8).clamp(0.0, 0.2);
-        let b1p_f32 = f64::from(num::narrow((beta * beta * 25.0)));
+        let b1p_f32 = f64::from(num::narrow(beta * beta * 25.0));
         let mut wz = s_blend.sqrt() * omega0 * (1.0 - b1p_f32 * 0.05);
         let wt = (1.0 - b1p_f32 * 0.2) * wz * s_blend;
         if omega0 < 0.0314 {
@@ -372,7 +376,7 @@ fn notch_s2_alt_path_synth(freq_hz: f64, q_user: f64, sample_rate: f64) -> Coeff
     let w_pole = omega_d;
     let omega_over_pi = w_pole / PI;
     let beta = (omega_over_pi - 0.8).clamp(0.0, 0.2);
-    let b1p_f32 = f64::from(num::narrow((beta * beta * 25.0)));
+    let b1p_f32 = f64::from(num::narrow(beta * beta * 25.0));
     let a_shelf = (0.5_f64.powf(alpha * 0.5)).max(0.01);
     let sqrt_t = f64::from(num::narrow(omega_over_pi.sqrt()));
     let s_blend = (a_shelf - 0.99).mul_add(sqrt_t, 0.99);

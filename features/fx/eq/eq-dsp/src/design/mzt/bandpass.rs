@@ -40,10 +40,6 @@ pub fn design_bandpass_mzt(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     // Order-5 polynomial in t² (= tan²(πfc/sr)). Max abs error vs Pro-Q 4: 8e-7.
     // Above fc≈16 kHz Pro-Q 4 switches to a different design (z_extra → -0.75
     // near Nyquist); not modeled here — most BP filters sit below 14 kHz.
-    let t4 = t2 * t2;
-    let t6 = t4 * t2;
-    let t8 = t4 * t4;
-    let t10 = t8 * t2;
     let z_extra = (-1.373_978_858_211_2e-03_f64)
         .mul_add(t2, 7.184_990_978_238_9e-03)
         .mul_add(t2, -1.776_930_179_113_5e-02)

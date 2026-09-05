@@ -332,7 +332,7 @@ impl HardwareEqModel {
     }
 
     pub fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
-        for (i, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
+        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
             *l = self.process_sample(*l, 0);
             *r = self.process_sample(*r, 1);
         }

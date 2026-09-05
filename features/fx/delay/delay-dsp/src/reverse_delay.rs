@@ -173,7 +173,11 @@ impl ReverseDelay {
         // Two reversed read heads, half a cycle apart.
         let pos_a = self.grain_pos;
         let cycle = grain_len.saturating_mul(2);
-        let pos_b = self.grain_pos.saturating_add(grain_len).checked_rem(cycle).unwrap_or(0);
+        let pos_b = self
+            .grain_pos
+            .saturating_add(grain_len)
+            .checked_rem(cycle)
+            .unwrap_or(0);
 
         let read_a = self.read_reversed(pos_a, grain_len, mod_off);
         let read_b = self.read_reversed(pos_b, grain_len, mod_off);
@@ -239,7 +243,8 @@ impl ReverseDelay {
             0.5 * (1.0 - (core::f64::consts::PI * t).cos())
         } else if pos_in_grain >= grain_len.saturating_sub(fade_samples) {
             // Fade out: raised cosine
-            let t = num::count_to_f64(grain_len.saturating_sub(1).saturating_sub(pos_in_grain)) / num::count_to_f64(fade_samples);
+            let t = num::count_to_f64(grain_len.saturating_sub(1).saturating_sub(pos_in_grain))
+                / num::count_to_f64(fade_samples);
             0.5 * (1.0 - (core::f64::consts::PI * t).cos())
         } else {
             1.0

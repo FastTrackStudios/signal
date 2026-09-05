@@ -140,7 +140,9 @@ impl AdmCodec {
                 // Decay toward MIN at the syllabic rate.
                 (self.step - Self::MIN_STEP).mul_add(self.syllabic, Self::MIN_STEP)
             };
-            self.level = self.level.mul_add(self.leak, if bit { self.step } else { -self.step });
+            self.level = self
+                .level
+                .mul_add(self.leak, if bit { self.step } else { -self.step });
         }
         self.level
     }

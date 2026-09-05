@@ -39,7 +39,7 @@ pub(crate) use s2::{
     bell_s2_proq4, highpass_s2_proq4, lowpass_s2_proq4, mode0_forward,
     proq4_s2_from_prototype_with_subfreq, proq4_s2_from_prototype_with_subfreq_pub,
 };
-pub(crate) use tables::{bp_cascade_for_q, lp_atoms_for_slope};
+pub(crate) use tables::bp_cascade_for_q;
 
 /// Compute cascade biquads for a peak/bell filter.
 ///

@@ -5,7 +5,6 @@
 //! vectorized), and the transient splitter's realtime mode.
 
 use super::histogram::LoudnessHistogram;
-use dsp_core::num;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DetectorParams {
@@ -440,6 +439,7 @@ impl Detector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dsp_core::num;
 
     const SR: f64 = 48000.0;
 

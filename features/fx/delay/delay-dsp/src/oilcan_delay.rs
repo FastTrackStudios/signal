@@ -219,7 +219,10 @@ impl OilCanDelay {
             OilCanHeads::Long => self.delay.read_cubic(long_pos) * makeup,
             OilCanHeads::Short => self.delay.read_cubic(short_pos) * makeup,
             OilCanHeads::Both => {
-                self.delay.read_cubic(short_pos).mul_add(0.8, self.delay.read_cubic(long_pos)) * makeup
+                self.delay
+                    .read_cubic(short_pos)
+                    .mul_add(0.8, self.delay.read_cubic(long_pos))
+                    * makeup
                     / 1.4
             }
         };

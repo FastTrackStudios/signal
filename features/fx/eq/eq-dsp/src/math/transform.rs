@@ -22,7 +22,7 @@ use crate::math::zpk::{Complex, Zpk};
 #[must_use]
 pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
     let fs2 = 2.0 * sample_rate;
-    let fs2_complex = Complex::new(fs2, 0.0);
+    let _fs2_complex = Complex::new(fs2, 0.0);
 
     let mut z_zeros: Vec<Complex> = zpk
         .zeros

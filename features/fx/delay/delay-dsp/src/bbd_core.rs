@@ -346,7 +346,8 @@ impl BbdCore {
             section.g0 = root.scale(k * ts);
             section.arec = p_hat.scale(tn).exp();
         }
-        for ((section, pole), root) in self.out_sections.iter_mut().zip(&OUT_POLES).zip(&OUT_ROOTS) {
+        for ((section, pole), root) in self.out_sections.iter_mut().zip(&OUT_POLES).zip(&OUT_ROOTS)
+        {
             let po_hat = pole.scale(k * ts);
             section.phat = po_hat;
             section.pbar = po_hat.exp();

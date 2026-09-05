@@ -153,7 +153,11 @@ impl Tap {
             pan: 0.0,
             // 1.0 is an exact sentinel here — the caller passes the literal to
             // mark the final tap, so this is an identity test, not a measurement.
-            repeats: if position.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 },
+            repeats: if position.to_bits() == 1.0_f64.to_bits() {
+                1.0
+            } else {
+                0.0
+            },
             filter: TapFilter::Off,
             cutoff: 2000.0,
             mod_amount: 0.0,
@@ -209,18 +213,25 @@ impl TapPreset {
             }
             // 2: quarter pulse, centered. // interpretation
             2 => {
-                for (i, (slot, p)) in taps.iter_mut().zip([0.25, 0.5, 0.75, 1.0].iter()).enumerate() {
+                for (i, (slot, p)) in taps
+                    .iter_mut()
+                    .zip([0.25, 0.5, 0.75, 1.0].iter())
+                    .enumerate()
+                {
                     *slot = t(
                         *p,
                         num::count_to_f64(i).mul_add(-0.15, 1.0),
                         0.0,
-                        if p.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 },
+                        if p.to_bits() == 1.0_f64.to_bits() {
+                            1.0
+                        } else {
+                            0.0
+                        },
                     );
                 }
             }
             // 3: eighth-note drive, alternating narrow pans. // interpretation
-            3 =>
-            {
+            3 => {
                 for (i, slot) in taps.iter_mut().enumerate().take(8) {
                     let p = num::count_to_f64(i.saturating_add(1)) / 8.0;
                     let pan = if i % 2 == 0 { -0.4 } else { 0.4 };
@@ -240,7 +251,11 @@ impl TapPreset {
             }
             // 5: triplet feel across the field. // interpretation
             5 => {
-                for (i, (slot, p)) in taps.iter_mut().zip([1.0 / 3.0, 2.0 / 3.0, 1.0].iter()).enumerate() {
+                for (i, (slot, p)) in taps
+                    .iter_mut()
+                    .zip([1.0 / 3.0, 2.0 / 3.0, 1.0].iter())
+                    .enumerate()
+                {
                     let pan = [-0.7, 0.7, 0.0].get(i).copied().unwrap_or(0.0);
                     *slot = t(
                         *p,
@@ -259,7 +274,11 @@ impl TapPreset {
             }
             // 7: syncopated off-beats. // interpretation
             7 => {
-                for (i, (slot, p)) in taps.iter_mut().zip([0.1875, 0.4375, 0.6875, 0.9375].iter()).enumerate() {
+                for (i, (slot, p)) in taps
+                    .iter_mut()
+                    .zip([0.1875, 0.4375, 0.6875, 0.9375].iter())
+                    .enumerate()
+                {
                     let pan = if i % 2 == 0 { -0.6 } else { 0.6 };
                     *slot = t(*p, 0.8, pan, 0.0);
                 }
@@ -286,36 +305,64 @@ impl TapPreset {
             }
             // 10: golden-ratio cascade (Echorec-ish). // interpretation
             10 => {
-                for (i, (slot, p)) in taps.iter_mut().zip([0.146, 0.236, 0.382, 0.618, 1.0].iter()).enumerate() {
+                for (i, (slot, p)) in taps
+                    .iter_mut()
+                    .zip([0.146, 0.236, 0.382, 0.618, 1.0].iter())
+                    .enumerate()
+                {
                     let pan = [-0.8, 0.5, -0.3, 0.7, 0.0].get(i).copied().unwrap_or(0.0);
-                    *slot = t(*p, 0.5 + 0.5 * p, pan, if p.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 });
+                    *slot = t(
+                        *p,
+                        0.5 + 0.5 * p,
+                        pan,
+                        if p.to_bits() == 1.0_f64.to_bits() {
+                            1.0
+                        } else {
+                            0.0
+                        },
+                    );
                 }
             }
             // 11: accelerando bunching toward the beat. // interpretation
             11 => {
-                for (i, (slot, p)) in taps.iter_mut().zip([0.5, 0.75, 0.875, 0.9375, 0.96875, 1.0].iter()).enumerate() {
+                for (i, (slot, p)) in taps
+                    .iter_mut()
+                    .zip([0.5, 0.75, 0.875, 0.9375, 0.96875, 1.0].iter())
+                    .enumerate()
+                {
                     *slot = t(
                         *p,
                         num::count_to_f64(i).mul_add(0.1, 0.5),
                         (num::count_to_f64(i) - 2.5) * 0.3,
-                        if p.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 },
+                        if p.to_bits() == 1.0_f64.to_bits() {
+                            1.0
+                        } else {
+                            0.0
+                        },
                     );
                 }
             }
             // 12: decelerando — mirror of 11. // interpretation
             12 => {
-                for (i, (slot, p)) in taps.iter_mut().zip([0.03125, 0.0625, 0.125, 0.25, 0.5, 1.0].iter()).enumerate() {
+                for (i, (slot, p)) in taps
+                    .iter_mut()
+                    .zip([0.03125, 0.0625, 0.125, 0.25, 0.5, 1.0].iter())
+                    .enumerate()
+                {
                     *slot = t(
                         *p,
                         num::count_to_f64(i).mul_add(-0.08, 1.0),
                         (2.5 - num::count_to_f64(i)) * 0.3,
-                        if p.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 },
+                        if p.to_bits() == 1.0_f64.to_bits() {
+                            1.0
+                        } else {
+                            0.0
+                        },
                     );
                 }
             }
             // 13: pan sweep L→R across even 16ths. // interpretation
-            13 =>
-            {
+            13 => {
                 for (i, slot) in taps.iter_mut().enumerate().take(8) {
                     let p = num::count_to_f64(i.saturating_add(1)) / 8.0;
                     let pan = num::count_to_f64(i).mul_add(2.0 / 7.0, -1.0);
@@ -350,7 +397,11 @@ impl TapPreset {
                         *p,
                         num::count_to_f64(i).mul_add(-0.09, 0.9),
                         pan,
-                        if p.to_bits() == 1.0_f64.to_bits() { 1.0 } else { 0.0 },
+                        if p.to_bits() == 1.0_f64.to_bits() {
+                            1.0
+                        } else {
+                            0.0
+                        },
                     );
                 }
             }
@@ -366,7 +417,11 @@ impl TapPreset {
                 return Self::classic(1);
             }
             Self::Quarters => {
-                for (i, (slot, t)) in taps.iter_mut().zip([0.25, 0.5, 0.75, 1.0].iter()).enumerate() {
+                for (i, (slot, t)) in taps
+                    .iter_mut()
+                    .zip([0.25, 0.5, 0.75, 1.0].iter())
+                    .enumerate()
+                {
                     *slot = Tap::at(*t, num::count_to_f64(i).mul_add(-0.2, 1.0));
                 }
             }
@@ -376,7 +431,10 @@ impl TapPreset {
                 taps[2] = Tap::at(1.0, 1.0);
             }
             Self::Golden => {
-                for (slot, t) in taps.iter_mut().zip([0.146, 0.236, 0.382, 0.618, 1.0].iter()) {
+                for (slot, t) in taps
+                    .iter_mut()
+                    .zip([0.146, 0.236, 0.382, 0.618, 1.0].iter())
+                {
                     *slot = Tap::at(*t, 0.5 + 0.5 * t);
                 }
             }
@@ -506,7 +564,11 @@ impl MultiTapDelay {
         if self.feedback_mode == FeedbackMode::Parallel {
             if self.parallel_lines.len() < MAX_TAPS {
                 self.parallel_lines = (0..MAX_TAPS).map(|_| DelayLine::new(max_len)).collect();
-            } else if self.parallel_lines.first().is_some_and(|line| line.len() < max_len) {
+            } else if self
+                .parallel_lines
+                .first()
+                .is_some_and(|line| line.len() < max_len)
+            {
                 for line in &mut self.parallel_lines {
                     *line = DelayLine::new(max_len);
                 }
@@ -821,7 +883,8 @@ mod tests {
             let mut hf = 0.0;
             let mut prev = 0.0;
             for i in 0..24000 {
-                let input = (std::f64::consts::TAU * 5000.0 * num::count_to_f64(i) / SR).sin() * 0.5;
+                let input =
+                    (std::f64::consts::TAU * 5000.0 * num::count_to_f64(i) / SR).sin() * 0.5;
                 let out = d.tick(input, 0);
                 hf += (out - prev) * (out - prev);
                 prev = out;

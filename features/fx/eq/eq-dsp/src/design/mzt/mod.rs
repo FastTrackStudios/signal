@@ -223,6 +223,10 @@ pub fn zpk_section_to_AF(
     non_snake_case,
     reason = "parameter names (A, B, C, D, E, F) match the zpk transfer-function coefficients"
 )]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a decoded routine's parameter list: each argument is one coefficient or pole term the reference implementation passes separately. Bundling them into a struct would rename the maths for no gain and break the correspondence with the decode notes"
+)]
 #[must_use]
 pub fn proq4_s2_from_AF_with_subfreq(
     freq_hz: f64,

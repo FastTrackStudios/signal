@@ -231,9 +231,9 @@ pub fn ellipdeg(n: usize, k1: f64) -> f64 {
     let (mut num, mut den) = (1.0f64, 1.0f64);
     for m in 1..=8u32 {
         let exp_m_next = m.saturating_mul(m.saturating_add(1));
-        num += q.powi(exp_m_next as i32);
+        num += q.powi(i32::try_from(exp_m_next).unwrap_or(i32::MAX));
         let exp_m_sq = m.saturating_mul(m);
-        den += 2.0 * q.powi(exp_m_sq as i32);
+        den += 2.0 * q.powi(i32::try_from(exp_m_sq).unwrap_or(i32::MAX));
     }
     4.0 * q.sqrt() * (num / den).powi(2)
 }

@@ -428,8 +428,14 @@ mod tests {
         }
         // Repeat 1 at 300 ms (≈440), repeat 2 at 600 ms (≈880).
         let cands = [220.0, 440.0, 880.0, 1760.0];
-        let f1 = dominant(&out[num::f64_to_index(SR * 0.33)..num::f64_to_index(SR * 0.42)], &cands);
-        let f2 = dominant(&out[num::f64_to_index(SR * 0.63)..num::f64_to_index(SR * 0.72)], &cands);
+        let f1 = dominant(
+            &out[num::f64_to_index(SR * 0.33)..num::f64_to_index(SR * 0.42)],
+            &cands,
+        );
+        let f2 = dominant(
+            &out[num::f64_to_index(SR * 0.63)..num::f64_to_index(SR * 0.72)],
+            &cands,
+        );
         assert!(
             (f1 - 440.0).abs() < 1.0 && (f2 - 880.0).abs() < 1.0,
             "successive repeats should climb an octave: f1={f1} f2={f2}"

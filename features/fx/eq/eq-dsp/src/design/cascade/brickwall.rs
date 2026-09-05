@@ -134,7 +134,7 @@ pub fn bell_brickwall_proq4(
             (0.6, 2.2634),
             (0.7, 2.01411),
         ];
-        let last_q = TABLE.last().map(|t| t.0).unwrap_or(0.0);
+        let last_q = TABLE.last().map_or(0.0, |t| t.0);
         if q < TABLE[0].0 - 1e-12 || q > last_q + 1e-12 {
             return None;
         }
@@ -921,8 +921,8 @@ pub fn bell_brickwall_proq4(
 }
 
 #[expect(
-    clippy::too_many_lines,
-    reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+    clippy::too_many_arguments,
+    reason = "a decoded routine's parameter list: each argument is one coefficient or pole term the reference implementation passes separately. Bundling them into a struct would rename the maths for no gain and break the correspondence with the decode notes"
 )]
 /// Bell 3-point Lagrange synthesis — extracted from `bell_s2_proq4` body
 /// (post-sub-frequency selection).  Verified ≤ 1.5e-13 bit-exact on
@@ -940,7 +940,8 @@ pub fn bell_three_point_synth(
     w_eval: f64,
     g_ref: f64,
 ) -> Coeffs {
-    // bell_s2 has its own inline synth path, so this function only sees
+    const W_ZERO_MAX: f64 = 2.827_433_388_230_814; // 0.9π — no captured cell hits it
+                                                   // bell_s2 has its own inline synth path, so this function only sees
     const W_POLE_MAX: f64 = 3.135_309_468_282_613_5;
     const W_THIRD_MAX: f64 = 3.133_741_813_548_472_3;
     if trace_bell_inputs() {
@@ -953,7 +954,6 @@ pub fn bell_three_point_synth(
     //   bell_s{3..9}_secparams_audio.json — w_pole and w_third each cap to
     //   distinct constants (3.13530947 and 3.13374181) independent of fc.
     // bucket-B inputs.
-    const W_ZERO_MAX: f64 = 2.827_433_388_230_814; // 0.9π — no captured cell hits it
 
     let w_pole = w_pole.min(W_POLE_MAX);
     let w_zero = w_zero.min(W_ZERO_MAX);
@@ -991,7 +991,6 @@ pub fn bell_three_point_synth(
     let tp2 = tp * tp;
     let tz2 = tz * tz;
     let tt2 = tt * tt;
-    let _rsp_68 = tp * tz * tt; // [RSP+0x68] from preamble: tz·tp·tt
 
     // D_lag (Lagrange determinant; 0x180110855..0x1801108c1)
     let d_lag = tt2 * ((mz - mt) * (g - mp)).mul_add(tz2, -((mp - mt) * (g - mz) * tp2))
@@ -1005,9 +1004,13 @@ pub fn bell_three_point_synth(
             bell_synth_post_join(mp, mz, mt, tp2, tz2, tt2, 0.0, Some(0.0), p2, sqrt_me);
         (s5, s6, p4_v, sqrt_me)
     } else {
-        let n_inter = mp * (tt2 - tp2).mul_add(mt, (tz2 - tt2).mul_add(me, (tp2 - tz2) * mz))
-            + me * (tt2 - tp2).mul_add(mz, (tp2 - tz2) * mt)
-            + (tz2 - tt2) * mt * mz;
+        let n_inter = me.mul_add(
+            (tt2 - tp2).mul_add(mz, (tp2 - tz2) * mt),
+            mp.mul_add(
+                (tt2 - tp2).mul_add(mt, (tz2 - tt2).mul_add(me, (tp2 - tz2) * mz)),
+                (tz2 - tt2) * mt * mz,
+            ),
+        );
         let xmm4_nd = n_inter / d_lag;
         let threshold = 0.0025 / (tt * tz);
         if xmm4_nd >= threshold {
@@ -1032,52 +1035,6 @@ pub fn bell_three_point_synth(
             (s5, s6, p4_v, xmm13_p2)
         }
     };
-    fn bell_synth_post_join(
-        mp: f64,
-        mz: f64,
-        _mt: f64,
-        tp2: f64,
-        tz2: f64,
-        tt2: f64,
-        xmm4: f64,
-        xmm5_in: Option<f64>,
-        sqrt_g: f64,
-        xmm13_v: f64,
-    ) -> (f64, f64, f64) {
-        let tp = tp2.sqrt();
-        let tz = tz2.sqrt();
-        let tt = tt2.sqrt();
-        let rsp_68 = tp * tz * tt;
-        let xmm5 = xmm5_in.unwrap_or_else(|| xmm4.max(0.0).sqrt() * rsp_68);
-        let mp_mz_coeff = (mp - mz) * tp2 * tz2;
-        let xmm0 = xmm5 * sqrt_g;
-        let xmm3 = tz2.mul_add(xmm13_v, -xmm0);
-        let xmm2 = tp2.mul_add(xmm13_v, -xmm0);
-        let xmm1 = if mp_mz_coeff == 0.0 {
-            0.0
-        } else {
-            let xmm4_local = (tp2 - tz2) * mz;
-            let xmm8 = tz2 * tp2;
-            let xmm1_a = xmm2 * xmm2;
-            let xmm0_a = tz2 * mz;
-            let xmm3_sq = xmm3 * xmm3;
-            let xmm1_b = xmm1_a * xmm0_a;
-            let xmm0_sq = xmm5 * xmm5;
-            let xmm3_b = xmm3_sq * tp2;
-            let xmm8_b = (xmm8 - xmm0_sq).mul_add(xmm4_local, xmm3_b);
-            let xmm8_c = xmm8_b * mp;
-            ((xmm1_b - xmm8_c) / mp_mz_coeff).max(0.0)
-        };
-        let xmm4_2 = tp2 * mp;
-        let xmm0 = if xmm4_2 == 0.0 {
-            0.0
-        } else {
-            let xmm3_2 = (tp2 - xmm5).powi(2) * mp;
-            let xmm0_2 = xmm1 * tp2 - xmm3_2 + xmm2 * xmm2;
-            (xmm0_2 / xmm4_2).max(0.0)
-        };
-        (xmm0, xmm1, xmm5)
-    }
     let p3 = p3_eff;
 
     let sq5 = sp5.sqrt();
@@ -1132,10 +1089,6 @@ pub fn bell_brickwall_proq4_n(
 #[expect(
     clippy::too_many_lines,
     reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
-)]
-#[expect(
-    clippy::arithmetic_side_effects,
-    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
 )]
 /// Per-section `(Q_k, gdB_k)` lookup.  Returns `N_sec` entries per slope:
 /// slope=4 → 2, slope=6 → 3, slope=8 → 6.
@@ -1323,13 +1276,24 @@ pub fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -
     };
 
     // Linear interpolation on the Q_user grid (clamped at edges).
-    let q_clamped = q_user.clamp(QS[0], QS[QS.len() - 1]);
-    let mut q_idx = 0;
-    while q_idx + 1 < QS.len() - 1 && q_clamped > QS[q_idx + 1] {
-        q_idx += 1;
+    // The table is a non-empty `static`; the fallbacks keep this total.
+    let q_clamped = q_user.clamp(
+        QS.first().copied().unwrap_or(0.0),
+        QS.last().copied().unwrap_or(0.0),
+    );
+    let mut q_idx = 0_usize;
+    while q_idx.saturating_add(1) < QS.len().saturating_sub(1)
+        && QS
+            .get(q_idx.saturating_add(1))
+            .is_some_and(|&q| q_clamped > q)
+    {
+        q_idx = q_idx.saturating_add(1);
     }
-    let q_lo = QS[q_idx];
-    let q_hi = QS[q_idx + 1];
+    let q_lo = QS.get(q_idx).copied().unwrap_or(0.0);
+    let q_hi = QS
+        .get(q_idx.saturating_add(1))
+        .copied()
+        .unwrap_or(q_lo + 1.0);
     let alpha = (q_clamped - q_lo) / (q_hi - q_lo);
     let lerp = |a: f64, b: f64| (b - a).mul_add(alpha, a);
 
@@ -1338,8 +1302,21 @@ pub fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -
 
     (0..n_sec)
         .map(|i| {
-            let qk = lerp(qk_table[i][q_idx], qk_table[i][q_idx + 1]);
-            let gk_12 = lerp(gdb_table[i][q_idx], gdb_table[i][q_idx + 1]);
+            let pick = |table: &[[f64; 4]], j: usize| {
+                table
+                    .get(i)
+                    .and_then(|row| row.get(j))
+                    .copied()
+                    .unwrap_or(0.0)
+            };
+            let qk = lerp(
+                pick(qk_table, q_idx),
+                pick(qk_table, q_idx.saturating_add(1)),
+            );
+            let gk_12 = lerp(
+                pick(gdb_table, q_idx),
+                pick(gdb_table, q_idx.saturating_add(1)),
+            );
             (qk, gk_12 * g_scale)
         })
         .collect()
@@ -1444,7 +1421,7 @@ pub fn bell_brickwall_cascade(
 
     let mut sections = Vec::with_capacity(n);
     for k in 0..n {
-        let theta = PI * num::count_to_f64((2 * k + 1)) / num::count_to_f64((2 * n_bp));
+        let theta = PI * num::count_to_f64(2 * k + 1) / num::count_to_f64(2 * n_bp);
         let bp_pole_a = lp_to_bp_local(pole_mag, theta);
         let bp_zero_a = lp_to_bp_local(zero_mag, theta);
         let (pole_re, pole_im) = blt(bp_pole_a.0, bp_pole_a.1);
@@ -1488,4 +1465,55 @@ pub fn bell_brickwall_cascade(
     }
 
     sections
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a decoded routine's parameter list: each argument is one coefficient or pole term the reference implementation passes separately. Bundling them into a struct would rename the maths for no gain and break the correspondence with the decode notes"
+)]
+fn bell_synth_post_join(
+    mp: f64,
+    mz: f64,
+    _mt: f64,
+    tp2: f64,
+    tz2: f64,
+    tt2: f64,
+    xmm4: f64,
+    xmm5_in: Option<f64>,
+    sqrt_g: f64,
+    xmm13_v: f64,
+) -> (f64, f64, f64) {
+    let tp = tp2.sqrt();
+    let tz = tz2.sqrt();
+    let tt = tt2.sqrt();
+    let rsp_68 = tp * tz * tt;
+    let xmm5 = xmm5_in.unwrap_or_else(|| xmm4.max(0.0).sqrt() * rsp_68);
+    let mp_mz_coeff = (mp - mz) * tp2 * tz2;
+    let xmm0 = xmm5 * sqrt_g;
+    let xmm3 = tz2.mul_add(xmm13_v, -xmm0);
+    let xmm2 = tp2.mul_add(xmm13_v, -xmm0);
+    let xmm1 = if mp_mz_coeff == 0.0 {
+        0.0
+    } else {
+        let xmm4_local = (tp2 - tz2) * mz;
+        let xmm8 = tz2 * tp2;
+        let xmm1_a = xmm2 * xmm2;
+        let xmm0_a = tz2 * mz;
+        let xmm3_sq = xmm3 * xmm3;
+        let xmm1_b = xmm1_a * xmm0_a;
+        let xmm0_sq = xmm5 * xmm5;
+        let xmm3_b = xmm3_sq * tp2;
+        let xmm8_b = (xmm8 - xmm0_sq).mul_add(xmm4_local, xmm3_b);
+        let xmm8_c = xmm8_b * mp;
+        ((xmm1_b - xmm8_c) / mp_mz_coeff).max(0.0)
+    };
+    let xmm4_2 = tp2 * mp;
+    let xmm0 = if xmm4_2 == 0.0 {
+        0.0
+    } else {
+        let xmm3_2 = (tp2 - xmm5).powi(2) * mp;
+        let xmm0_2 = xmm1 * tp2 - xmm3_2 + xmm2 * xmm2;
+        (xmm0_2 / xmm4_2).max(0.0)
+    };
+    (xmm0, xmm1, xmm5)
 }

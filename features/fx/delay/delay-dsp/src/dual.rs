@@ -16,7 +16,6 @@
 //! larger `process` calls are handled in chunks — no allocation on the
 //! audio thread.
 
-use dsp_core::num;
 use audiocore_dsp::{AudioConfig, Processor};
 
 use crate::chain::DelayChain;
@@ -144,18 +143,17 @@ impl DualDelay {
                 }
 
                 self.a.process(left, right);
-                self.b.process(&mut self.b_l[..left.len()], &mut self.b_r[..left.len()]);
+                self.b
+                    .process(&mut self.b_l[..left.len()], &mut self.b_r[..left.len()]);
 
                 // Sum of both chains' mix laws, dry counted once:
                 // out = dry·(1 − mixA − mixB) + wetA·mixA + wetB·mixB.
                 for (l, (r, (dl, (dr, (bl, br))))) in left.iter_mut().zip(
                     right.iter_mut().zip(
-                        self.dry_l.iter().zip(
-                            self.dry_r.iter().zip(
-                                self.b_l.iter().zip(self.b_r.iter())
-                            )
-                        )
-                    )
+                        self.dry_l
+                            .iter()
+                            .zip(self.dry_r.iter().zip(self.b_l.iter().zip(self.b_r.iter()))),
+                    ),
                 ) {
                     *l += bl - dl;
                     *r += br - dr;
@@ -171,13 +169,16 @@ impl DualDelay {
                 }
 
                 self.a.process(left, right);
-                self.b.process(&mut self.b_l[..left.len()], &mut self.b_r[..left.len()]);
+                self.b
+                    .process(&mut self.b_l[..left.len()], &mut self.b_r[..left.len()]);
 
                 let swapped = self.routing == DualRouting::SplitSwapped;
-                for (((l, r), bl), br) in left.iter_mut()
+                for (((l, r), bl), br) in left
+                    .iter_mut()
                     .zip(right.iter_mut())
                     .zip(self.b_l.iter())
-                    .zip(self.b_r.iter()) {
+                    .zip(self.b_r.iter())
+                {
                     let a_mono = (*l + *r) * 0.5;
                     let b_mono = (*bl + *br) * 0.5;
                     if swapped {
@@ -239,6 +240,7 @@ impl Processor for DualDelay {
 mod tests {
     use super::*;
     use crate::engine::DelayStyle;
+    use dsp_core::num;
 
     const SR: f64 = 48000.0;
 
@@ -274,10 +276,6 @@ mod tests {
         (l, r)
     }
 
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "end index is clamped with .min(buf.len()), and start is always <= end due to saturating operations"
-    )]
     fn window_energy(buf: &[f64], center_ms: f64, half_ms: f64) -> f64 {
         let c = num::f64_to_index(center_ms * SR / 1000.0);
         let h = num::f64_to_index(half_ms * SR / 1000.0);

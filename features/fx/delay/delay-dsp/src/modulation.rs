@@ -252,8 +252,10 @@ impl Wow {
 
         // Advance OU process
         let noise = self.gaussian_noise();
-        self.ou_state =
-            self.ou_state.mul_add(self.ou_decay, noise * (self.ou_decay.mul_add(-self.ou_decay, 1.0)).sqrt());
+        self.ou_state = self.ou_state.mul_add(
+            self.ou_decay,
+            noise * (self.ou_decay.mul_add(-self.ou_decay, 1.0)).sqrt(),
+        );
 
         // Rate modulated by drift
         let freq_adjust = self.rate * (self.ou_state.abs().powf(1.25).mul_add(self.drift, 1.0));
@@ -361,7 +363,10 @@ impl DuckingFollower {
         let env = self.envelope.value();
         let release = if level < env && env > 1e-10 {
             let r = (env - level) / env;
-            (r * r).mul_add(self.release_fast_coeff - self.release_coeff, self.release_coeff)
+            (r * r).mul_add(
+                self.release_fast_coeff - self.release_coeff,
+                self.release_coeff,
+            )
         } else {
             self.release_coeff
         };
@@ -522,7 +527,10 @@ impl CompanderEnv {
     const RELEASE_S: f64 = 0.005;
 
     #[must_use]
-    #[expect(clippy::new_without_default, reason = "new() calls configure() which is not const")]
+    #[expect(
+        clippy::new_without_default,
+        reason = "new() calls configure() which is not const"
+    )]
     pub fn new() -> Self {
         let mut c = Self {
             env: Self::G0,

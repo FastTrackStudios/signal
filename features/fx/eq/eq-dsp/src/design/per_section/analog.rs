@@ -4,8 +4,6 @@
 //! that finds its pole pair, and the prototype the shape helpers fill in.
 //! Nothing here is shape-specific.
 
-use super::*;
-
 /// Generic analog biquad prototype `(b2z·s² + b1z·s + b0z) / (b2p·s² + b1p·s + b0p)`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AnalogBiquad {
@@ -137,7 +135,7 @@ pub fn solve_biquad_denominator_quadratic_generic(
 
     let mut det_a = a.mul_add(e, -(b * d));
     let mut det_b = 2.0 * (f.mul_add(a, -(c * d)));
-    let mut take_sqrt = if det_a == 0.0 {
+    let take_sqrt = if det_a == 0.0 {
         det_a = det_b;
         det_b = 0.0;
         false

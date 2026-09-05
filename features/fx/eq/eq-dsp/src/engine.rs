@@ -77,6 +77,10 @@ impl Default for BandConfig {
 /// A range of zero is a static band — that is the test, not `enabled`, because
 /// Pro-Q leaves its dynamics section switched on for bands that never use it.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent switch on the plugin panel — used, enabled, auto, relative, spectral, tilt, side-filtered and so on. Grouping them into a config struct would break every call site and tell a reader nothing the field names do not already say"
+)]
 pub struct BandDynamics {
     /// Target minus base, in dB. Negative compresses, positive expands.
     pub range_db: f64,
@@ -144,6 +148,10 @@ const fn eq_shape_to_filter(shape: u32) -> crate::FilterType {
 /// to notice. Naming the fields is most of the value here; removing 56
 /// indexing sites is the rest.
 #[derive(Debug, Clone, Copy)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent switch on the plugin panel — used, enabled, auto, relative, spectral, tilt, side-filtered and so on. Grouping them into a config struct would break every call site and tell a reader nothing the field names do not already say"
+)]
 struct BandSlot {
     /// Pro-Q's "Used": the band exists at all.
     used: bool,
@@ -271,6 +279,10 @@ impl BandSlot {
     };
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "engine-wide mode switches (transient split, freeze, prepared, pan mid/side, …), each an independent plugin control"
+)]
 pub struct FtsEq {
     eq: crate::runtime::chain::EqChain,
     /// Steady-stream chain (transient mode only; mirrors band configs
@@ -525,6 +537,10 @@ impl FtsEq {
     }
 
     /// Route + configure one band after any of its params changed.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one flat parameter sync per band across thirteen shapes, the dynamics routing and the side-chain; longer as a table than as thirteen helpers"
+    )]
     fn sync_band(&mut self, band: usize) {
         let band = band.min(EQ_BANDS - 1);
         let slot = self.bands[band];
@@ -622,7 +638,9 @@ impl FtsEq {
         self.sync_listen();
         self.refresh_auto_gain();
 
-        let d = &mut self.dyn_bands[band];
+        let Some(d) = self.dyn_bands.get_mut(band) else {
+            return;
+        };
         d.params.enabled = go_dynamic || modulated;
         d.params.modulate_only = modulated;
         if go_dynamic || modulated {
@@ -818,7 +836,10 @@ impl FtsEq {
                 // The band's live gain relative to the base the static chain
                 // is NOT carrying — a dynamic band is out of that chain
                 // entirely, so its whole applied gain counts here.
-                *live_slot = self.dyn_bands[band].live_gain_db();
+                *live_slot = self
+                    .dyn_bands
+                    .get(band)
+                    .map_or(0.0, crate::dynamics::DynBand::live_gain_db);
             }
         }
         let (mut num, mut den) = (0.0f64, 0.0f64);
@@ -967,6 +988,9 @@ impl FtsEq {
     /// region you hear follows the band's shape — bells/notches solo a
     /// bandpass at freq/Q, shelves and cuts solo everything they reach.
     fn sync_listen(&mut self) {
+        use crate::design::slope::FilterShape as F;
+        use crate::dynamics::SvfShape;
+
         let Some((band, mode)) = self.listen else {
             return;
         };
@@ -974,8 +998,6 @@ impl FtsEq {
             return;
         }
         let band = band.min(EQ_BANDS - 1);
-        use crate::design::slope::FilterShape as F;
-        use crate::dynamics::SvfShape;
 
         let freq = self.bands[band].freq_hz.clamp(10.0, 30000.0);
         let q = self.bands[band].q.clamp(0.025, 40.0);
@@ -1171,7 +1193,11 @@ impl FtsEq {
                         *r = tr;
                     }
                     eq.process(left, right);
-                    eq_b.process(&mut scratch_left[..n], &mut scratch_right[..n]);
+                    if let (Some(sl), Some(sr)) =
+                        (scratch_left.get_mut(..n), scratch_right.get_mut(..n))
+                    {
+                        eq_b.process(sl, sr);
+                    }
                     for (((l, r), &sl), &sr) in left
                         .iter_mut()
                         .zip(right.iter_mut())
@@ -1309,7 +1335,7 @@ impl FtsEq {
         self.bands[band].q = cfg.q;
         self.bands[band].shape = cfg.shape;
         self.bands[band].slope = cfg.slope;
-        self.bands[band].placement = cfg.placement as u32;
+        self.bands[band].placement = cfg.placement.to_index();
         self.bands[band].stream = cfg.stream;
         self.sync_band(band);
     }

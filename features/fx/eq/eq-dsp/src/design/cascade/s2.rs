@@ -6,6 +6,10 @@
 use super::{Coeffs, PASSTHROUGH, PI};
 
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against"
+)]
 pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
 
@@ -176,6 +180,10 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
     [1.0, a1, a2, b0, b1, b2]
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a decoded routine's parameter list: each argument is one coefficient or pole term the reference implementation passes separately. Bundling them into a struct would rename the maths for no gain and break the correspondence with the decode notes"
+)]
 /// Generic Pro-Q 4 audio-path Lagrange-MZT slope-2 synthesis.
 ///
 /// Replicates `bell_s2_proq4` machinery exactly but takes the analog
@@ -229,6 +237,10 @@ pub fn proq4_s2_from_prototype_with_subfreq_pub(
 #[expect(
     clippy::too_many_lines,
     reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a decoded routine's parameter list: each argument is one coefficient or pole term the reference implementation passes separately. Bundling them into a struct would rename the maths for no gain and break the correspondence with the decode notes"
 )]
 pub fn proq4_s2_from_prototype_with_subfreq(
     freq_hz: f64,

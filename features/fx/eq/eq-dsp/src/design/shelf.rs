@@ -124,6 +124,10 @@ fn create_shelf_analog_biquad(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a decoded routine's parameter list: each argument is one coefficient or pole term the reference implementation passes separately. Bundling them into a struct would rename the maths for no gain and break the correspondence with the decode notes"
+)]
 fn shelf_normal_section(
     sec_idx: usize,
     n: usize,
@@ -142,7 +146,7 @@ fn shelf_normal_section(
 ) -> Coeffs {
     use crate::design::per_section::{proq4_universal_section_synth, Prototype};
 
-    let (theta_k, damping, _qk, helper_alpha) = compute_shelf_params(
+    let (_theta_k, damping, _qk, helper_alpha) = compute_shelf_params(
         sec_idx,
         order_f,
         effective_order,

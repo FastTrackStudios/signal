@@ -133,9 +133,8 @@ impl ReverbDelay {
             ],
             // `map` over the table rather than `from_fn` with an index into
             // it: same values, and nothing left for the lint to object to.
-            lines: LINE_MS.map(|len_ms| {
-                DelayLine::new(num::f64_to_index(ms(len_ms)).saturating_add(64))
-            }),
+            lines: LINE_MS
+                .map(|len_ms| DelayLine::new(num::f64_to_index(ms(len_ms)).saturating_add(64))),
             line_len: LINE_MS.map(ms),
             damp: core::array::from_fn(|_| OnePoleLp::new(14000.0, sr)),
             decay_tilt_eq: DecayTilt::new(),
@@ -161,9 +160,9 @@ impl ReverbDelay {
         for (ap, &diff_ms) in self.diffusers.iter_mut().zip(&DIFF_MS) {
             ap.resize(ms(diff_ms));
         }
-        for ((line_len, line), line_ms) in self.line_len.iter_mut()
-            .zip(&mut self.lines)
-            .zip(&LINE_MS) {
+        for ((line_len, line), line_ms) in
+            self.line_len.iter_mut().zip(&mut self.lines).zip(&LINE_MS)
+        {
             *line_len = ms(*line_ms);
             let needed = num::f64_to_index(*line_len).saturating_add(64);
             if line.len() < needed {
@@ -219,10 +218,10 @@ impl ReverbDelay {
         self.predelay.write(input);
         self.pre_smoother
             .set_target(self.time_ms * 0.001 * self.sample_rate);
-        let pre_pos = self
-            .pre_smoother
-            .tick()
-            .clamp(1.0, f64::from(u32::try_from(self.predelay.len()).unwrap_or(u32::MAX)) - 4.0);
+        let pre_pos = self.pre_smoother.tick().clamp(
+            1.0,
+            f64::from(u32::try_from(self.predelay.len()).unwrap_or(u32::MAX)) - 4.0,
+        );
         let pre = self.predelay.read_cubic(pre_pos);
 
         // Grit INTO the reverb.
@@ -234,10 +233,13 @@ impl ReverbDelay {
 
         // FDN read (lines 0 and 2 gently modulated).
         let mut outs = [0.0f64; 4];
-        for (i, ((line_len, line), line_mod_hz)) in self.line_len.iter()
+        for (i, ((line_len, line), line_mod_hz)) in self
+            .line_len
+            .iter()
             .zip(&self.lines)
             .zip(Self::LINE_MOD_HZ.iter())
-            .enumerate() {
+            .enumerate()
+        {
             let mut len = *line_len;
             if i == 0 || i == 2 {
                 let m = i.checked_div(2).unwrap_or(0);
@@ -272,9 +274,7 @@ impl ReverbDelay {
         // Householder feedback: y_i = x_i − (2/4)·Σx.
         let sum: f64 = damped.iter().sum();
         let inject = [1.0, -1.0, 1.0, -1.0];
-        for ((d, line), inj) in damped.iter()
-            .zip(&mut self.lines)
-            .zip(inject.iter()) {
+        for ((d, line), inj) in damped.iter().zip(&mut self.lines).zip(inject.iter()) {
             let mixed = 0.5_f64.mul_add(-sum, *d);
             line.write((x * inj).mul_add(0.5, mixed * self.line_g));
         }

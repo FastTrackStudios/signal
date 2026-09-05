@@ -2,6 +2,10 @@
 
 use super::{Coeffs, PASSTHROUGH, PI};
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a decoded routine's parameter list: each argument is one coefficient or pole term the reference implementation passes separately. Bundling them into a struct would rename the maths for no gain and break the correspondence with the decode notes"
+)]
 /// Pro-Q 4 audio-path Lagrange-MZT **alt 2-point** synthesis.
 ///
 /// This is the `byte[0x48] = 1` branch inside

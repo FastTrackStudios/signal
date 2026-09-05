@@ -32,7 +32,6 @@ impl LoudnessHistogram {
     #[inline]
     #[expect(
         clippy::as_conversions,
-        clippy::cast_precision_loss,
         clippy::cast_sign_loss,
         clippy::cast_possible_truncation,
         reason = "float-to-int cast after safe clamp to [0, N_BINS-1]"

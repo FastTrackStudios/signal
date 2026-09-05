@@ -56,9 +56,7 @@ fn bandpass_cascade_slope2(freq_hz: f64, q_user: f64, sample_rate: f64) -> Vec<C
 /// `notch_analog_sections`'s Butterworth N=6 LP→BS expansion).
 #[must_use]
 pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usize) -> Vec<Coeffs> {
-    use std::f64::consts::SQRT_2;
     let q_user = q.max(1e-6);
-    let alpha = SQRT_2 / q_user;
     if slope == 2 {
         return bandpass_cascade_slope2(freq_hz, q_user, sample_rate);
     }
@@ -363,9 +361,9 @@ fn bandpass_cascade_section(
         if diff <= 0.01 {
             w_pole = omega0;
         }
-        if (a2_sec > 1.0
+        if a2_sec > 1.0
             && w_pole > PI
-            && (q_user >= 4.0 && omega0 >= 2.0 * PI * 22_000.0 / sample_rate || q_user <= 1.0))
+            && (q_user >= 4.0 && omega0 >= 2.0 * PI * 22_000.0 / sample_rate || q_user <= 1.0)
         {
             w_pole = omega0;
         } else if q_user <= 1.0 && a2_sec > 1.0 {

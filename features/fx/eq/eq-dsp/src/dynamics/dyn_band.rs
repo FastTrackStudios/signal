@@ -6,7 +6,6 @@
 //! `target − base` is the Pro-Q-style bipolar "dynamic range".
 
 use super::detector::Detector;
-use dsp_core::num;
 
 /// The band's Q as the state-variable filter wants it.
 ///
@@ -416,6 +415,7 @@ impl DynBand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dsp_core::num;
 
     const SR: f64 = 48000.0;
 

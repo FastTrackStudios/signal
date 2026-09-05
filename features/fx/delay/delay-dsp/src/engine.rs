@@ -125,7 +125,10 @@ impl DelayStyle {
     }
 }
 
-#[expect(clippy::large_enum_variant, reason = "one live engine at a time; boxing would ripple through the hot path")]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "one live engine at a time; boxing would ripple through the hot path"
+)]
 enum EngineInner {
     Tape(TapeDelay),
     Clean(CleanDelay),
@@ -1043,10 +1046,7 @@ mod tests {
             for s in 0..96000 {
                 let input = (std::f64::consts::TAU * 440.0 * f64::from(s) / SR).sin() * 0.5;
                 let out = e.tick(input, 0);
-                assert!(
-                    out.is_finite(),
-                    "{style:?} produced NaN/Inf at sample {s}"
-                );
+                assert!(out.is_finite(), "{style:?} produced NaN/Inf at sample {s}");
             }
         }
     }

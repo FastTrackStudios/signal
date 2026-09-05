@@ -321,7 +321,9 @@ impl SpectralDelay {
     }
 
     fn spawn_grain(&mut self, delay_samples: f64, interval: f64) {
-        let Some(slot) = self.grains.iter().position(|g| !g.active) else { return }; // all voices busy — skip, no stealing clicks
+        let Some(slot) = self.grains.iter().position(|g| !g.active) else {
+            return;
+        }; // all voices busy — skip, no stealing clicks
 
         let rand01 = |rng: &mut XorShift32| (rng.next_bipolar() + 1.0) * 0.5;
 
@@ -713,7 +715,8 @@ mod tests {
             s2 = s1;
             s1 = s0;
         }
-        ((coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2))) / (num::count_to_f64(signal.len())).powi(2)
+        ((coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)))
+            / (num::count_to_f64(signal.len())).powi(2)
     }
 
     #[test]

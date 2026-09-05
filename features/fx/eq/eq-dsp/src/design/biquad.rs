@@ -153,12 +153,13 @@ fn zeros_to_num(zeros: &[Complex], gain: f64) -> [f64; 3] {
     match zeros.len() {
         0 => [gain, 0.0, 0.0],
         1 => {
-            let z = *zeros.first().expect("guaranteed by len check");
-            [gain, -gain * z.re, 0.0]
+            let re = zeros.first().map_or(0.0, |z| z.re);
+            [gain, -gain * re, 0.0]
         }
         _ => {
-            let z0 = *zeros.first().expect("guaranteed by len check");
-            let z1 = *zeros.get(1).expect("guaranteed by len check");
+            let (Some(&z0), Some(&z1)) = (zeros.first(), zeros.get(1)) else {
+                return [gain, 0.0, 0.0];
+            };
             let sum = z0 + z1;
             let prod = z0 * z1;
             [gain, -gain * sum.re, gain * prod.re]

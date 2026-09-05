@@ -6,7 +6,6 @@
 //! Supports up to 3 read heads (RE-201 Space Echo style). All heads read from
 //! the same delay buffer with shared wow/flutter modulation.
 
-use dsp_core::num;
 use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::dc_blocker::DcBlocker;
@@ -14,6 +13,7 @@ use audiocore_dsp::one_pole::OnePoleHp;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
 use audiocore_dsp::soft_clip::sin_clip;
+use dsp_core::num;
 
 use crate::modulation::{Flutter, WobbleShape, Wow};
 
@@ -700,7 +700,10 @@ impl TapeDelay {
             let t = (boundary - old_pos) / v;
             let sample = self.prev_write_in + t * (write_in - self.prev_write_in);
             let idx = num::f64_to_index(boundary.rem_euclid(cap));
-            if let Some(slot) = idx.checked_rem(self.tape.len()).and_then(|i| self.tape.get_mut(i)) {
+            if let Some(slot) = idx
+                .checked_rem(self.tape.len())
+                .and_then(|i| self.tape.get_mut(i))
+            {
                 *slot = sample;
             }
             boundary += 1.0;
@@ -856,7 +859,9 @@ mod tests {
         let mut count = 0usize;
         for i in 0..96000 {
             // 0.3 DC + quiet sine — deliberately asymmetric signal
-            let input = (2.0 * PI * 220.0 * f64::from(i) / SR).sin().mul_add(0.2, 0.3);
+            let input = (2.0 * PI * 220.0 * f64::from(i) / SR)
+                .sin()
+                .mul_add(0.2, 0.3);
             let out = d.tick(input, 0);
             if i >= 48000 {
                 sum += out;

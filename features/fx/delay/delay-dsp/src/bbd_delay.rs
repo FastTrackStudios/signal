@@ -266,7 +266,10 @@ impl BbdDelay {
         let compressed = self.comp_env.compress(input + self.fb_prev);
         let x = compressed.clamp(-1.5, 1.5);
         let shaped = (self.thd_b * x * x).mul_add(-x, (self.thd_a * x).mul_add(-x, x));
-        let write_in = self.thd_dc.tick(shaped).mul_add(1.0, self.rng.next_bipolar() * 1.0e-3);
+        let write_in = self
+            .thd_dc
+            .tick(shaped)
+            .mul_add(1.0, self.rng.next_bipolar() * 1.0e-3);
 
         let raw = self.core.process(write_in, &mut self.loss);
         let output = self.exp_env.expand(raw);
@@ -393,7 +396,8 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (std::f64::consts::PI * 2.0 * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
+            let input =
+                (std::f64::consts::PI * 2.0 * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at sample {i}");
             assert!(out.abs() < 10.0, "Runaway at {i}: {out}");

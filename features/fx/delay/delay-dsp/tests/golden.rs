@@ -19,7 +19,7 @@
 
 use delay_dsp::chain::{DelayChain, StereoMode};
 use delay_dsp::engine::{DelayEngine, DelayStyle};
-use dsp_golden::{Golden, golden, signal};
+use dsp_golden::{golden, signal, Golden};
 
 use audiocore_dsp::{AudioConfig, Processor};
 
@@ -31,7 +31,10 @@ const GENERATOR_RATE: f32 = 48_000.0;
 const LEN: usize = 24_000;
 
 const fn config() -> AudioConfig {
-    AudioConfig { sample_rate: SAMPLE_RATE, max_buffer_size: 512 }
+    AudioConfig {
+        sample_rate: SAMPLE_RATE,
+        max_buffer_size: 512,
+    }
 }
 
 /// Transient bursts with a little tone under them: each repeat stays
@@ -131,7 +134,11 @@ fn the_time_modulation_entry_point_holds_its_reference() {
                 let base = 150.0_f64.clamp(min_ms, max_ms);
                 let seconds = f64::from(dsp_golden::num::count_to_f32(n)) / SAMPLE_RATE;
                 let wobble = (core::f64::consts::TAU * 2.0 * seconds).sin();
-                engine.tick_at(*x, n % 2, (base * wobble.mul_add(0.15, 1.0)).clamp(min_ms, max_ms))
+                engine.tick_at(
+                    *x,
+                    n % 2,
+                    (base * wobble.mul_add(0.15, 1.0)).clamp(min_ms, max_ms),
+                )
             })
             .collect();
         dsp_golden::assert_golden!(g, &format!("tick_at_{name}"), &out);
@@ -158,9 +165,15 @@ fn chain_variants() -> Vec<ChainVariant> {
                 c.pingpong_feedback = 0.8;
             }),
         ),
-        ("mono", Box::new(|c: &mut DelayChain| c.stereo_mode = StereoMode::Mono)),
+        (
+            "mono",
+            Box::new(|c: &mut DelayChain| c.stereo_mode = StereoMode::Mono),
+        ),
         ("frozen", Box::new(|c: &mut DelayChain| c.freeze = true)),
-        ("lr_offset", Box::new(|c: &mut DelayChain| c.lr_offset_ms = 12.0)),
+        (
+            "lr_offset",
+            Box::new(|c: &mut DelayChain| c.lr_offset_ms = 12.0),
+        ),
         (
             "diffused",
             Box::new(|c: &mut DelayChain| {
@@ -221,10 +234,9 @@ fn only_the_known_chain_parameters_are_inert() {
             .iter()
             .chain(right.iter())
             .fold(0xcbf2_9ce4_8422_2325_u64, |h, v| {
-                v.to_bits()
-                    .to_le_bytes()
-                    .iter()
-                    .fold(h, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3))
+                v.to_bits().to_le_bytes().iter().fold(h, |h, b| {
+                    (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3)
+                })
             });
         if let Some((other, _)) = seen.iter().find(|(_, d)| *d == digest) {
             collisions.push((name.to_owned(), other.clone()));
@@ -278,7 +290,11 @@ fn the_stereo_chain_holds_its_reference() {
         for (l, r) in left.chunks_mut(512).zip(right.chunks_mut(512)) {
             chain.process(l, r);
         }
-        let interleaved: Vec<f64> = left.into_iter().zip(right).flat_map(<[f64; 2]>::from).collect();
+        let interleaved: Vec<f64> = left
+            .into_iter()
+            .zip(right)
+            .flat_map(<[f64; 2]>::from)
+            .collect();
         dsp_golden::assert_golden!(g, &format!("chain_{name}"), &interleaved);
     }
 }
@@ -305,10 +321,18 @@ fn block_size_does_not_change_the_output() {
     let (big_l, big_r) = render(512);
     let (small_l, small_r) = render(64);
     for (n, (a, b)) in big_l.iter().zip(&small_l).enumerate() {
-        assert_eq!(a.to_bits(), b.to_bits(), "left channel diverged at sample {n}");
+        assert_eq!(
+            a.to_bits(),
+            b.to_bits(),
+            "left channel diverged at sample {n}"
+        );
     }
     for (n, (a, b)) in big_r.iter().zip(&small_r).enumerate() {
-        assert_eq!(a.to_bits(), b.to_bits(), "right channel diverged at sample {n}");
+        assert_eq!(
+            a.to_bits(),
+            b.to_bits(),
+            "right channel diverged at sample {n}"
+        );
     }
 }
 
@@ -337,7 +361,9 @@ fn block_size_does_not_change_the_output() {
 /// judgement about the tape model, so it is left alone and pinned here.
 #[test]
 fn reset_must_precede_update() {
-    let burst: Vec<f64> = (0..19_200).map(|i| if i < 100 { 1.0 } else { 0.0 }).collect();
+    let burst: Vec<f64> = (0..19_200)
+        .map(|i| if i < 100 { 1.0 } else { 0.0 })
+        .collect();
     let wet_energy = |reset_first: bool| {
         let mut chain = DelayChain::new();
         chain.delay_l.time_ms = 80.0;
@@ -359,7 +385,10 @@ fn reset_must_precede_update() {
     };
     let healthy = wet_energy(true);
     let starved = wet_energy(false);
-    assert!(healthy > 50.0, "reset-then-update should delay normally: {healthy}");
+    assert!(
+        healthy > 50.0,
+        "reset-then-update should delay normally: {healthy}"
+    );
     assert!(
         starved < healthy / 10.0,
         "update-then-reset is expected to starve the wet path (see the doc \

@@ -7,7 +7,6 @@
 use crate::design::biquad::PASSTHROUGH;
 use crate::design::{self, FilterType};
 use crate::runtime::section::{Df1Section, Tdf2Section};
-use dsp_core::num;
 
 /// Maximum filter order (number of poles).
 pub const MAX_ORDER: usize = 16;
@@ -37,6 +36,20 @@ pub enum Placement {
 }
 
 impl Placement {
+    #[must_use]
+    /// The wire value this placement round-trips through
+    /// [`Self::from_index`]. Spelled out rather than `self as u32` so the
+    /// discriminants stay checkable against the enum above.
+    pub const fn to_index(self) -> u32 {
+        match self {
+            Self::Stereo => 0,
+            Self::Left => 1,
+            Self::Right => 2,
+            Self::Mid => 3,
+            Self::Side => 4,
+        }
+    }
+
     #[must_use]
     pub const fn from_index(idx: u32) -> Self {
         match idx {
@@ -352,6 +365,7 @@ impl Default for Band {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dsp_core::num;
 
     #[test]
     fn default_band_passes_through() {

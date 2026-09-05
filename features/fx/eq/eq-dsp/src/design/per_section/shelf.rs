@@ -121,7 +121,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
     if proto.flag_byte_69 == 0 && proto.flag_byte_68 == 0 {
         // === Main path (no special-flag override) ===
         let dvar4 = PI;
-        let mut iv5_local = proto.mode;
+        let iv5_local = proto.mode;
         if iv5_local == 2 {
             // Smooth-blend wz against threshold = max(α², 0.65)·π
             let threshold = local_res8 * local_res8;
@@ -133,7 +133,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             let dvar10_v = proto.wz;
             if threshold < dvar10_v {
                 let blend = (dvar10_v - threshold) / (dvar4 - threshold);
-                let blend_sq = f64::from(num::narrow((blend * blend)));
+                let blend_sq = f64::from(num::narrow(blend * blend));
                 let blended = local_res8
                     .abs()
                     .mul_add(dvar10_v, -dvar10_v)
@@ -531,7 +531,7 @@ pub fn compute_band_shelf_parameters(proto: &mut Prototype) {
         if dvar7_lin <= dvar3_x {
             dvar3_x = dvar7_lin;
         }
-        proto.alpha_scratch_8c = num::narrow((dvar7_quad * dvar7_quad * 25.0));
+        proto.alpha_scratch_8c = num::narrow(dvar7_quad * dvar7_quad * 25.0);
         proto.wt = dvar3_x;
         return;
     }
@@ -571,7 +571,7 @@ fn label_d7f9(proto: &mut Prototype, fv11: f64, fv12_f32: f32) {
         }
         let dvar5 = proto.band_omega_ref / PI - 0.80;
         let dvar6 = dvar5.clamp(0.0, 0.20);
-        let fv2 = num::narrow((dvar6 * dvar6 * 25.0));
+        let fv2 = num::narrow(dvar6 * dvar6 * 25.0);
         proto.alpha_scratch_8c = fv2;
         let mut dvar3 = f64::from(fv2).sqrt().mul_add(-0.20, 1.0) * proto.band_omega_ref;
         if ZERO_NINE_THREE_PI <= dvar3 {

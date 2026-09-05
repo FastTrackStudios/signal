@@ -1,6 +1,6 @@
 //! Decoded coefficient tables, and the pre-warp they feed.
 
-use super::{notch_analog_sections, notch_inner_pair, PI};
+use super::{notch_analog_sections, notch_inner_pair};
 
 /// Q-table configuration: (`lower_q`, `lower_table`, `upper_q`, `upper_table`)
 type QTableConfig<'a> = (f64, &'a Vec<(f64, f64)>, f64, &'a Vec<(f64, f64)>);

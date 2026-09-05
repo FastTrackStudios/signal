@@ -186,14 +186,14 @@ pub fn apply_shelf_gain(zpk: &mut Zpk, filter_type: u32, gain_linear: f64) {
 
     // Scale zeros by gain
     for z in &mut zpk.zeros {
-        *z = *z * gain_linear;
+        *z *= gain_linear;
     }
 
     // For low types, also scale poles by 1/gain
     if is_low_type {
         let inv_gain = 1.0 / gain_linear;
         for p in &mut zpk.poles {
-            *p = *p * inv_gain;
+            *p *= inv_gain;
         }
     }
 

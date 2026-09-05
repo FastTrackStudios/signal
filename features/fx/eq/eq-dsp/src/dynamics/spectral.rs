@@ -830,8 +830,12 @@ impl SpectralEngine {
             }
 
             // Each region's mean reduction, weighted by its own curve.
-            for r in 0..self.regions.len() {
-                let env = &self.region_env[r];
+            for ((r, env), out) in self
+                .region_env
+                .iter()
+                .enumerate()
+                .zip(self.region_reduction_db.iter_mut())
+            {
                 let (mut num, mut den) = (0.0f64, 0.0f64);
                 for (&e, bin) in env.iter().zip(&self.bins).take(bins) {
                     if e > 1.0e-3 && bin.owner == r {
@@ -839,7 +843,7 @@ impl SpectralEngine {
                         den += e;
                     }
                 }
-                self.region_reduction_db[r] = if den > 0.0 { num / den } else { 0.0 };
+                *out = if den > 0.0 { num / den } else { 0.0 };
             }
         }
 
@@ -904,7 +908,7 @@ mod tests {
         *seed = seed
             .wrapping_mul(6_364_136_223_846_793_005)
             .wrapping_add(1_442_695_040_888_963_407);
-        (num::u64_to_f64((*seed >> 33)) / num::u64_to_f64((1u64 << 31))) - 1.0
+        (num::u64_to_f64(*seed >> 33) / num::u64_to_f64(1_u64 << 31)) - 1.0
     }
 
     /// Band energy of a buffer via Goertzel-ish correlation.

@@ -513,7 +513,8 @@ impl Processor for DelayChain {
         self.lr_offset_smoother.set_target(self.lr_offset_ms);
 
         // Ensure delay line is large enough for max offset at this sample rate
-        let max_offset_samples = num::f64_to_index(25.0 * config.sample_rate / 1000.0).saturating_add(64);
+        let max_offset_samples =
+            num::f64_to_index(25.0 * config.sample_rate / 1000.0).saturating_add(64);
         if self.lr_offset_delay.len() < max_offset_samples {
             self.lr_offset_delay = DelayLine::new(max_offset_samples);
         }
@@ -616,7 +617,10 @@ impl Processor for DelayChain {
                     let mono = (diff_in_l + diff_in_r) * 0.5;
                     let fb_r = self.pingpong_dc_r.tick(self.delay_r.last_feedback());
                     let fb_l = self.pingpong_dc_l.tick(self.delay_l.last_feedback());
-                    (fb_r.mul_add(pingpong_feedback, mono), fb_l * pingpong_feedback)
+                    (
+                        fb_r.mul_add(pingpong_feedback, mono),
+                        fb_l * pingpong_feedback,
+                    )
                 }
             };
 
@@ -719,11 +723,15 @@ impl Processor for DelayChain {
             // --- Accent: alternating repeat volume ---
             if self.accent.abs() > 1e-6 && delay_time_samples_l > 1.0 {
                 // L channel accent
-                let accent_gain_l = self.accent.mul_add(if self.accent_flip_l { 1.0 } else { -1.0 }, 1.0);
+                let accent_gain_l = self
+                    .accent
+                    .mul_add(if self.accent_flip_l { 1.0 } else { -1.0 }, 1.0);
                 wet_l *= accent_gain_l;
 
                 // R channel accent
-                let accent_gain_r = self.accent.mul_add(if self.accent_flip_r { 1.0 } else { -1.0 }, 1.0);
+                let accent_gain_r = self
+                    .accent
+                    .mul_add(if self.accent_flip_r { 1.0 } else { -1.0 }, 1.0);
                 wet_r *= accent_gain_r;
 
                 // Advance accent phases
@@ -1118,7 +1126,9 @@ mod tests {
             .map(|(i, _)| i)
             .unwrap();
         assert!(
-            (i64::try_from(peak).unwrap_or(i64::MAX) - i64::try_from(expected).unwrap_or(i64::MAX)).unsigned_abs() < 480,
+            (i64::try_from(peak).unwrap_or(i64::MAX) - i64::try_from(expected).unwrap_or(i64::MAX))
+                .unsigned_abs()
+                < 480,
             "synced repeat at {peak}, expected near {expected}"
         );
     }
@@ -1260,7 +1270,10 @@ mod tests {
             s2 = s1;
             s1 = s0;
         }
-        (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)).max(0.0).sqrt()
+        (coeff * s1)
+            .mul_add(-s2, s1.mul_add(s1, s2 * s2))
+            .max(0.0)
+            .sqrt()
     }
 
     #[test]
@@ -1595,7 +1608,9 @@ mod tests {
 
         // The R channel peak should be offset from L channel peak
         // 10ms at 48kHz = 480 samples
-        let idx_diff = (i64::try_from(r_peak_idx).unwrap_or(i64::MAX) - i64::try_from(l_peak_idx).unwrap_or(i64::MAX)).unsigned_abs();
+        let idx_diff = (i64::try_from(r_peak_idx).unwrap_or(i64::MAX)
+            - i64::try_from(l_peak_idx).unwrap_or(i64::MAX))
+        .unsigned_abs();
 
         // Also verify L and R differ in content
         let sample_diff: f64 = l

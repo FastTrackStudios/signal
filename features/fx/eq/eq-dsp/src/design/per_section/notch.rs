@@ -21,8 +21,10 @@ use dsp_core::num;
 ///   confirm whether `dVar6` is `proto[0xa0]` (`band_omega_ref`) or `proto[1]`
 ///   (current wp). Stubbed with `unimplemented!`.
 pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
-    // Composite scratch (binary keeps everything in f32 SS instructions
-    // until the final write to the f64 wp/wz/wt slots).
+    // mode == 2 (complex-roots path)
+    const TWO_NINE_EIGHT_FOUR_FIVE: f64 = 2.984_513_020_910_303_5; // ≈ 0.95·π
+                                                                   // Composite scratch (binary keeps everything in f32 SS instructions
+                                                                   // until the final write to the f64 wp/wz/wt slots).
     let s8c = proto.alpha_scratch_8c;
     let s94 = proto.alpha_scratch_94;
     let fv7 = (s8c * s8c).mul_add(0.25f32, s94);
@@ -51,14 +53,11 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
         return;
     }
 
-    // mode == 2 (complex-roots path)
-    const TWO_NINE_EIGHT_FOUR_FIVE: f64 = 2.984_513_020_910_303_5; // ≈ 0.95·π
-    let mut wp_in = proto.wp; // wp from upstream solve_biquad
-
     if matches!(proto.section_type, 2 | 5) && proto.wz < TWO_NINE_EIGHT_FOUR_FIVE {
         std::mem::swap(&mut proto.wp, &mut proto.wz);
-        wp_in = proto.wp;
     }
+    // wp from upstream solve_biquad, after the possible swap above.
+    let wp_in = proto.wp;
 
     if matches!(proto.section_type, 2 | 5) && proto.wz >= TWO_NINE_EIGHT_FOUR_FIVE {
         let d6 = wp_in;

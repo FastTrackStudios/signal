@@ -4,7 +4,6 @@
 //! all enabled bands in series.
 
 use crate::runtime::band::Band;
-use dsp_core::num;
 
 /// Maximum number of bands in a chain (matches Pro-Q 4's 24-band limit).
 pub const MAX_BANDS: usize = 24;
@@ -151,6 +150,7 @@ mod placement_tests {
     use super::*;
     use crate::design::FilterType;
     use crate::runtime::band::Placement;
+    use dsp_core::num;
 
     /// A Right-placement band actually processes.
     ///

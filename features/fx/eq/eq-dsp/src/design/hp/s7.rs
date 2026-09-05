@@ -341,6 +341,24 @@ fn highpass_slope7_section_freq_range(
     clippy::too_many_lines,
     reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
 )]
+/// # Two arms of this chain are dead
+///
+/// `sec == 0, q_user == 0.5, fc_48k == 10000` and the same at `12000` each
+/// appear TWICE in this `if`/`else if` chain, about 230 lines apart, and the
+/// two copies disagree: the earlier pair returns hardcoded captured biquad
+/// coefficients, the later pair calls the algorithmic path
+/// (`highpass_s2_with_subfreq_scales` / `highpass_s2_with_w_eval_scale`).
+/// First match wins, so the algorithmic arms never run.
+///
+/// That may well be intended — an exact capture should beat an approximation —
+/// but it is not *stated* anywhere, and it means the algorithmic fallback
+/// someone wrote for these two cells is not reachable at any sample rate.
+/// Deciding which is correct needs the conformance captures, so both are left
+/// in place and the duplication is documented rather than removed.
+#[expect(
+    clippy::same_functions_in_if_condition,
+    reason = "two arms are genuinely unreachable; documented above rather than silently deleted"
+)]
 fn highpass_slope7_section(
     freq_hz: f64,
     sample_rate: f64,
@@ -591,6 +609,8 @@ fn highpass_slope7_section(
         highpass_s2_with_w_eval_scale(freq_hz, sample_rate, q_section, 0.912)
     } else if sec == 1 && (q_user - 0.5).abs() < 1.0e-12 && (fc_48k - 8000.0).abs() < 1.0e-6 {
         highpass_s2_with_w_eval_scale(freq_hz, sample_rate, q_section, 1.035)
+    // UNREACHABLE — see the note on this function. The identical condition
+    // appears ~230 lines above and returns captured coefficients instead.
     } else if sec == 0 && (q_user - 0.5).abs() < 1.0e-12 && (fc_48k - 10000.0).abs() < 1.0e-6 {
         highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, 1.08, 1.016)
     } else if sec == 1 && (q_user - 0.5).abs() < 1.0e-12 && (fc_48k - 10000.0).abs() < 1.0e-6 {
