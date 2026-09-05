@@ -13,7 +13,7 @@
 // even though they are allowed workspace-wide off the audio thread.
 #![deny(clippy::disallowed_methods)]
 
-use dsp_core::{Channel, PerChannel};
+use dsp_core::{Channel, PerChannel, num};
 
 pub mod biquad;
 pub mod chain;
@@ -35,11 +35,13 @@ pub use styles::{CompressionStyle, StyleCoefficients};
 
 const PARAM_SMOOTHING_MS: f64 = 10.0;
 
-/// Compressor core used by the plugin chain.
-/// Channels this compressor keeps state for. Stereo — the plugin is stereo,
-/// and a host asking for more folds onto the last slot rather than growing
-/// state it will never read.
+/// Channels this compressor keeps state for.
+///
+/// Stereo — the plugin is stereo, and a host asking for more folds onto the
+/// last slot rather than growing state it will never read.
 pub const CHANNELS: usize = 2;
+
+/// Compressor core used by the plugin chain.
 
 /// Everything one channel remembers between samples.
 ///
@@ -228,7 +230,8 @@ impl ProC3Compressor {
             self.channels[channel].hold_remaining = self.hold_samples();
         } else if self.channels[channel].hold_remaining > 0 {
             gr_instant = self.channels[channel].last_gr_linear;
-            self.channels[channel].hold_remaining -= 1;
+            self.channels[channel].hold_remaining =
+                self.channels[channel].hold_remaining.saturating_sub(1);
         }
 
         // Step 3: SMOOTH GAIN REDUCTION WITH HERMITE CUBIC
@@ -312,31 +315,31 @@ impl ProC3Compressor {
     }
 
     /// Set threshold in dB
-    pub fn set_threshold(&mut self, threshold_db: f64) {
+    pub const fn set_threshold(&mut self, threshold_db: f64) {
         self.threshold_db = threshold_db;
         self.gain_curve.threshold_db = threshold_db;
     }
 
     /// Set ratio (e.g., 4.0 = 4:1)
-    pub fn set_ratio(&mut self, ratio: f64) {
+    pub const fn set_ratio(&mut self, ratio: f64) {
         self.ratio = ratio;
         self.gain_curve.ratio = ratio;
     }
 
     /// Set knee width in dB
-    pub fn set_knee(&mut self, knee_db: f64) {
+    pub const fn set_knee(&mut self, knee_db: f64) {
         self.knee_db = knee_db;
         self.gain_curve.knee_db = knee_db;
     }
 
     /// Set maximum gain-reduction range in dB.
-    pub fn set_range_db(&mut self, range_db: f64) {
+    pub const fn set_range_db(&mut self, range_db: f64) {
         self.range_db = range_db.clamp(0.0, 120.0);
         self.gain_curve.range_db = self.range_db;
     }
 
     fn hold_samples(&self) -> usize {
-        (self.hold_ms.max(0.0) * self.sample_rate / 1000.0).round() as usize
+        num::f64_to_index((self.hold_ms.max(0.0) * self.sample_rate / 1000.0).round())
     }
 
     fn smooth_parameter(&self, current: f64, target: f64) -> f64 {
@@ -585,7 +588,7 @@ impl ProC3Compressor {
     }
 
     /// Set parallel compression fold parameter (0-1)
-    pub fn set_fold(&mut self, fold: f64) {
+    pub const fn set_fold(&mut self, fold: f64) {
         self.fold = fold.clamp(0.0, 1.0);
     }
 
@@ -1127,7 +1130,8 @@ mod tests {
         comp.ceiling = 1.0;
         comp.process(0.5, 0);
         assert_eq!(
-            comp.smoothed_ceiling, 1.0,
+            comp.smoothed_ceiling.to_bits(),
+            1.0_f64.to_bits(),
             "enabling the ceiling should not ramp through near-zero values"
         );
 

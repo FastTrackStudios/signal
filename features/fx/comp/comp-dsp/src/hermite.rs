@@ -21,9 +21,8 @@ struct History([f64; DEPTH]);
 
 impl History {
     /// Newest to oldest.
-    const fn parts(self) -> (f64, f64, f64, f64) {
-        let [newest, second, third, oldest] = self.0;
-        (newest, second, third, oldest)
+    fn parts(self) -> (f64, f64, f64, f64) {
+        self.0.into()
     }
 
     /// Shift in a new result, dropping the oldest.
@@ -135,13 +134,13 @@ impl HermiteCubicSmoother {
     }
 
     /// Update change detection threshold for tuning
-    pub fn set_change_threshold(&mut self, threshold: f64) {
+    pub const fn set_change_threshold(&mut self, threshold: f64) {
         self.change_threshold = threshold;
     }
 
     /// Get current change detection threshold
     #[must_use]
-    pub fn get_change_threshold(&self) -> f64 {
+    pub const fn get_change_threshold(&self) -> f64 {
         self.change_threshold
     }
 

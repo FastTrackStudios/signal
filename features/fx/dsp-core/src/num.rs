@@ -87,6 +87,24 @@ pub const fn narrow(x: f64) -> f32 {
     x as f32
 }
 
+/// A finite, non-negative `f64` as a sample index, rounding toward zero.
+///
+/// The `f64` counterpart of [`f32_to_index`], with the same decided answers:
+/// NaN and negatives give `0`, and anything past `usize::MAX` saturates.
+#[must_use]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the audited boundary: float-to-int `as` saturates in Rust, and every case is enumerated above"
+)]
+pub fn f64_to_index(x: f64) -> usize {
+    if x.is_nan() || x <= 0.0 {
+        return 0;
+    }
+    x as usize
+}
+
 /// An `i32` as `f32`, exact within ±2^24 and clamped beyond.
 #[must_use]
 #[expect(
@@ -170,6 +188,14 @@ mod tests {
     #[test]
     fn oversized_counts_clamp_rather_than_round() {
         assert_eq!(f32_to_index(count_to_f32(EXACT_MAX + 1)), EXACT_MAX);
+    }
+
+    #[test]
+    fn both_widths_agree_on_hostile_floats() {
+        assert_eq!(f64_to_index(f64::NAN), 0);
+        assert_eq!(f64_to_index(-1.0), 0);
+        assert_eq!(f64_to_index(2.9), 2);
+        assert_eq!(f64_to_index(f64::INFINITY), usize::MAX);
     }
 
     #[test]

@@ -25,7 +25,7 @@ pub enum CompressionStyle {
 impl CompressionStyle {
     /// Create from integer style ID (0-4)
     #[must_use]
-    pub fn from_id(id: i32) -> Self {
+    pub const fn from_id(id: i32) -> Self {
         match id {
             1 => Self::Fet,
             2 => Self::Vca,
@@ -36,8 +36,17 @@ impl CompressionStyle {
 
     /// Get style ID
     #[must_use]
-    pub fn id(&self) -> i32 {
-        *self as i32
+    pub const fn id(&self) -> i32 {
+        // Written out rather than `*self as i32`: the discriminants are the
+        // wire values the plugin's style parameter carries, so they are worth
+        // stating where a reader can check them against the enum above.
+        match self {
+            Self::Clean => 0,
+            Self::Fet => 1,
+            Self::Vca => 2,
+            Self::Optical => 3,
+            Self::Reserved => 4,
+        }
     }
 }
 
@@ -96,7 +105,7 @@ pub fn compute_style_dispatcher(style: CompressionStyle, _sample_rate: f64) -> S
 /// - π-based time constants
 /// - Sqrt-based gain scaling
 /// - Three operational modes
-fn compute_style_fet_coefficients() -> StyleCoefficients {
+const fn compute_style_fet_coefficients() -> StyleCoefficients {
     StyleCoefficients {
         attack_coeff: 0.9,   // FET-style fast attack
         release_coeff: 0.95, // Slower release typical of FET
@@ -111,7 +120,7 @@ fn compute_style_fet_coefficients() -> StyleCoefficients {
 /// - No nonlinear coloration (approximations)
 /// - Clean, transparent compression
 /// - Direct filter pole computation from matrix coefficients
-fn compute_style_vca_coefficients() -> StyleCoefficients {
+const fn compute_style_vca_coefficients() -> StyleCoefficients {
     StyleCoefficients {
         attack_coeff: 0.95,  // Standard attack
         release_coeff: 0.98, // Typical release
@@ -129,7 +138,7 @@ fn compute_style_vca_coefficients() -> StyleCoefficients {
 /// - 4+ adaptive detection modes with state tracking
 /// - Sqrt blending and smooth interpolation
 /// - Authentic vintage optical tube response
-fn compute_style_optical_coefficients() -> StyleCoefficients {
+const fn compute_style_optical_coefficients() -> StyleCoefficients {
     StyleCoefficients {
         attack_coeff: 0.85,  // Optical styles have slower attack
         release_coeff: 0.93, // Moderate release

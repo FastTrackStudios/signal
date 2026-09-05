@@ -1,5 +1,7 @@
 //! Gain reduction smoothing with attack/release time constants.
 
+use dsp_core::{Channel, PerChannel};
+
 use audiocore_dsp::envelope::EnvelopeFollower;
 
 /// Exponential smoother for gain reduction.
@@ -15,7 +17,7 @@ pub struct GainReductionSmoother {
     attack_s: f64,
     release_s: f64,
     /// Per-channel smoothing state.
-    env: [EnvelopeFollower; 2],
+    env: PerChannel<EnvelopeFollower>,
 }
 
 impl GainReductionSmoother {
@@ -25,7 +27,7 @@ impl GainReductionSmoother {
             sample_rate,
             attack_s: 0.01,
             release_s: 0.05,
-            env: [EnvelopeFollower::new(1.0), EnvelopeFollower::new(1.0)],
+            env: PerChannel::new([(); dsp_core::channel::MAX_CHANNELS].map(|()| EnvelopeFollower::new(1.0))),
         };
         s.update_coeffs();
         s
@@ -56,7 +58,7 @@ impl GainReductionSmoother {
     /// Attack when GR rises (`gr_inst >= state`), release when it falls —
     /// the follower's `input > value` test matches on the rising side, and
     /// at exact equality both branches produce the same output.
-    pub fn smooth_gr(&mut self, gr_inst: f64, ch: usize) -> f64 {
+    pub fn smooth_gr(&mut self, gr_inst: f64, ch: Channel) -> f64 {
         self.env[ch].tick(gr_inst)
     }
 
@@ -95,7 +97,7 @@ mod tests {
         for i in 0..2000 {
             // Alternate compress / release phases.
             let gr = if (i / 500) % 2 == 0 { 0.5 } else { 1.0 };
-            let got = s.smooth_gr(gr, 0);
+            let got = s.smooth_gr(gr, Channel::LEFT);
             ref_state = reference_smooth(ref_state, gr, sr, 0.01, 0.05);
             assert!(
                 (got - ref_state).abs() < 1e-12,
@@ -107,8 +109,8 @@ mod tests {
     #[test]
     fn channels_independent() {
         let mut s = GainReductionSmoother::new(48000.0);
-        s.smooth_gr(0.2, 0);
-        let r = s.smooth_gr(1.0, 1);
+        s.smooth_gr(0.2, Channel::LEFT);
+        let r = s.smooth_gr(1.0, Channel::RIGHT);
         assert!((r - 1.0).abs() < 1e-9, "ch1 should be untouched: {r}");
     }
 }
