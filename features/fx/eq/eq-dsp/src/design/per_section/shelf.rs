@@ -130,7 +130,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             let dvar10_v = proto.wz;
             if threshold < dvar10_v {
                 let blend = (dvar10_v - threshold) / (dvar4 - threshold);
-                let blend_sq = f64::from((blend * blend) as f32);
+                let blend_sq = f64::from(num::narrow((blend * blend)));
                 let blended = local_res8.abs().mul_add(dvar10_v, -dvar10_v).mul_add(blend_sq, dvar10_v);
                 proto.wz = blended;
             }
@@ -480,7 +480,7 @@ pub fn compute_band_shelf_parameters(proto: &mut Prototype) {
             proto.wp = use_wp_or_wz;
             let dvar3 = f64::from(proto.alpha_scratch_8c) * 0.20;
             let dvar4 =
-                dvar7.sqrt() * use_wp_or_wz * (1.0 - f64::from(proto.alpha_scratch_8c) * 0.05);
+                dvar7.sqrt() * use_wp_or_wz * f64::from(proto.alpha_scratch_8c).mul_add(-0.05, 1.0);
             proto.wz = dvar4;
             proto.wt = (1.0 - dvar3) * dvar4 * dvar7;
             if !bvar1 {
@@ -491,7 +491,7 @@ pub fn compute_band_shelf_parameters(proto: &mut Prototype) {
 
         // iv3 == 2 sub-branch (post small-mag-at-wz fall-through).
         let dvar6 = proto.wz;
-        let diff = f64::from(dvar6 as f32 - use_wp_or_wz as f32).abs();
+        let diff = f64::from(num::narrow(dvar6) - num::narrow(use_wp_or_wz)).abs();
         if diff <= EPS_1_192E_NEG_7 {
             let dvar3 = proto.wp;
             proto.wz = dvar3;
@@ -506,7 +506,7 @@ pub fn compute_band_shelf_parameters(proto: &mut Prototype) {
         if dvar7_lin <= dvar3_x {
             dvar3_x = dvar7_lin;
         }
-        proto.alpha_scratch_8c = (dvar7_quad * dvar7_quad * 25.0) as f32;
+        proto.alpha_scratch_8c = num::narrow((dvar7_quad * dvar7_quad * 25.0));
         proto.wt = dvar3_x;
         return;
     }
@@ -546,9 +546,9 @@ fn label_d7f9(proto: &mut Prototype, fv11: f64, fv12_f32: f32) {
         }
         let dvar5 = proto.band_omega_ref / PI - 0.80;
         let dvar6 = dvar5.clamp(0.0, 0.20);
-        let fv2 = (dvar6 * dvar6 * 25.0) as f32;
+        let fv2 = num::narrow((dvar6 * dvar6 * 25.0));
         proto.alpha_scratch_8c = fv2;
-        let mut dvar3 = (1.0 - f64::from(fv2).sqrt() * 0.20) * proto.band_omega_ref;
+        let mut dvar3 = f64::from(fv2).sqrt().mul_add(-0.20, 1.0) * proto.band_omega_ref;
         if ZERO_NINE_THREE_PI <= dvar3 {
             dvar3 = ZERO_NINE_THREE_PI;
         }
@@ -564,7 +564,7 @@ fn label_d7f9(proto: &mut Prototype, fv11: f64, fv12_f32: f32) {
     if proto.proto_0x12_sign == 1 {
         const NEAR_PI_A: f64 = 3.141_278_494_324_434; // ≈ π
         let a8c = proto.alpha_scratch_8c;
-        let bracket = 0.9998 - f64::from(a8c * a8c) * 0.0005;
+        let bracket = f64::from(a8c * a8c).mul_add(-0.0005, 0.9998);
         let mut v = bracket * proto.wp;
         if NEAR_PI_A <= v {
             v = NEAR_PI_A;

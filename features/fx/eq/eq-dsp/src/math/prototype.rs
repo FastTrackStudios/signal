@@ -364,9 +364,9 @@ mod tests {
 
         // Both should have poles in LHP with similar magnitudes
         let std_mag: f64 =
-            std_bp.poles.iter().map(|p| p.mag()).sum::<f64>() / std_bp.poles.len() as f64;
+            std_bp.poles.iter().map(|p| p.mag()).sum::<f64>() / num::count_to_f64(std_bp.poles.len());
         let ell_mag: f64 =
-            ell_bp.poles.iter().map(|p| p.mag()).sum::<f64>() / ell_bp.poles.len() as f64;
+            ell_bp.poles.iter().map(|p| p.mag()).sum::<f64>() / num::count_to_f64(ell_bp.poles.len());
 
         // They won't be identical but should be in the same ballpark
         let ratio = std_mag / (ell_mag + 1e-30);

@@ -1,5 +1,7 @@
 //! Peak / bell section parameters (Pro-Q band type 3).
 
+use dsp_core::num;
+
 use super::{Prototype, PI};
 
 /// Per-section helper for `proto[0x13] ∈ {0, 3}` (peak-style sections).
@@ -60,13 +62,13 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
             if proto.mode > 0 {
                 let wp_in = proto.wp;
                 // f32 lane: ((wp · 0.44209706…) - 5/12)
-                let fv2_a = f64::from(wp_in.mul_add(0.442_097_064_144_153_7, -(5.0 / 12.0)) as f32);
+                let fv2_a = f64::from(num::narrow(wp_in.mul_add(0.442_097_064_144_153_7, -(5.0 / 12.0))));
                 let mut fv2_sq_part = (fv2_a * fv2_a).mul_add(0.20, 0.785);
-                let mut fv2_b = f64::from(fv2_sq_part as f32);
-                if f64::from(fv2_b as f32) > 0.96 {
+                let mut fv2_b = f64::from(num::narrow(fv2_sq_part));
+                if f64::from(num::narrow(fv2_b)) > 0.96 {
                     // Mirror w_eval around 0.96 (binary: (w_eval - 0.96) + w_eval)
                     fv2_sq_part = (proto.w_eval - 0.96) + proto.w_eval;
-                    fv2_b = f64::from(fv2_sq_part as f32);
+                    fv2_b = f64::from(num::narrow(fv2_sq_part));
                 }
                 // wp_clamped = min(wp_in, π)
                 let wp_clamped = wp_in.min(PI);

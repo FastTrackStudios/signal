@@ -275,7 +275,7 @@ pub fn proq4_s2_from_AF_with_subfreq(
     let den = t3s
         * ((u_zero - u_third) * (g_ref - u_pole)).mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s))
         + (g_ref - u_third) * (u_pole - u_zero) * t1s * t2s;
-    let num = ((t2s - t3s) * u_third).mul_add(u_zero, u_pole * ((t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero) + (t3s - t1s) * u_third) + u_eval * (t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third));
+    let num = ((t2s - t3s) * u_third).mul_add(u_zero, u_pole * (t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero)) + u_eval * (t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third));
 
     let s2 = if den.abs() > 1e-30 {
         (num / den).max(0.0)

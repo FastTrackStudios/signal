@@ -1,5 +1,7 @@
 //! Notch cascade builders for Pro-Q 4 (s=2 through s=8).
 
+use dsp_core::num;
+
 use std::f64::consts::PI;
 
 use crate::design::biquad::Coeffs;
@@ -295,7 +297,7 @@ fn notch_s8_section_biquad(
     // S_blend from proto[10] = √2 (constant for Notch)
     let alpha = std::f64::consts::SQRT_2 / q_user;
     let a_shelf = (0.5_f64.powf(alpha * 0.5)).max(0.01);
-    let sqrt_t = f64::from((omega0 / PI).sqrt() as f32);
+    let sqrt_t = f64::from(num::narrow((omega0 / PI).sqrt()));
     let s_blend = (a_shelf - 0.99).mul_add(sqrt_t, 0.99);
 
     let g_ref = 1.0 / (a2_sec * a2_sec);
@@ -304,7 +306,7 @@ fn notch_s8_section_biquad(
     // when w_zero clamps to π at high fc — verified via probe at fc=20k Q=1).
     let alt_path = || {
         let beta = (omega0 / PI - 0.8).clamp(0.0, 0.2);
-        let b1p_f32 = f64::from((beta * beta * 25.0) as f32);
+        let b1p_f32 = f64::from(num::narrow((beta * beta * 25.0)));
         let mut wz = s_blend.sqrt() * omega0 * (1.0 - b1p_f32 * 0.05);
         let wt = (1.0 - b1p_f32 * 0.2) * wz * s_blend;
         if omega0 < 0.0314 {
@@ -370,9 +372,9 @@ fn notch_s2_alt_path_synth(freq_hz: f64, q_user: f64, sample_rate: f64) -> Coeff
     let w_pole = omega_d;
     let omega_over_pi = w_pole / PI;
     let beta = (omega_over_pi - 0.8).clamp(0.0, 0.2);
-    let b1p_f32 = f64::from((beta * beta * 25.0) as f32);
+    let b1p_f32 = f64::from(num::narrow((beta * beta * 25.0)));
     let a_shelf = (0.5_f64.powf(alpha * 0.5)).max(0.01);
-    let sqrt_t = f64::from(omega_over_pi.sqrt() as f32);
+    let sqrt_t = f64::from(num::narrow(omega_over_pi.sqrt()));
     let s_blend = (a_shelf - 0.99).mul_add(sqrt_t, 0.99);
     let mut w_zero = s_blend.sqrt() * w_pole * (1.0 - b1p_f32 * 0.05);
     let w_third = (1.0 - b1p_f32 * 0.2) * w_zero * s_blend;

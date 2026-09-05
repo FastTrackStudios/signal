@@ -895,7 +895,7 @@ mod tests {
         *seed = seed
             .wrapping_mul(6_364_136_223_846_793_005)
             .wrapping_add(1_442_695_040_888_963_407);
-        ((*seed >> 33) as f64 / (1u64 << 31) as f64) - 1.0
+        (num::u64_to_f64((*seed >> 33)) / num::u64_to_f64((1u64 << 31))) - 1.0
     }
 
     /// Band energy of a buffer via Goertzel-ish correlation.
@@ -903,11 +903,11 @@ mod tests {
         let mut re = 0.0;
         let mut im = 0.0;
         for (i, &x) in buf.iter().enumerate() {
-            let ph = core::f64::consts::TAU * freq * i as f64 / SR;
+            let ph = core::f64::consts::TAU * freq * num::count_to_f64(i) / SR;
             re += x * ph.cos();
             im += x * ph.sin();
         }
-        (re * re + im * im) / buf.len() as f64
+        (re * re + im * im) / num::count_to_f64(buf.len())
     }
 
     #[test]
@@ -923,7 +923,7 @@ mod tests {
         let mut inp = vec![0.0; n];
         for i in 0..n {
             // Noise bed at low level + screaming 2 kHz resonance.
-            let x = 0.02f64.mul_add(noise(&mut seed), 0.5 * (core::f64::consts::TAU * 2000.0 * i as f64 / SR).sin());
+            let x = 0.02f64.mul_add(noise(&mut seed), 0.5 * (core::f64::consts::TAU * 2000.0 * num::count_to_f64(i) / SR).sin());
             inp[i] = x;
             let (l, _) = e.tick(x, x);
             out[i] = l;

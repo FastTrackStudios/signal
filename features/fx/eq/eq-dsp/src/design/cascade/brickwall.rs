@@ -7,6 +7,8 @@
 //! would separate the arithmetic from its evidence. Splitting it wants the
 //! conformance captures in `tests/reference`, not a refactor.
 
+use dsp_core::num;
+
 use super::{Coeffs, PI, lagrange_synth_alt_path, trace_bell_inputs, PASSTHROUGH, bell_s2_proq4};
 
 #[expect(clippy::too_many_lines, reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence")]
@@ -848,11 +850,7 @@ pub fn bell_brickwall_proq4(
                 q if (q - 10.0).abs() < 1e-6 => Some(2.73),
                 _ => cap_table(q_user).map(|(wz, _)| wz),
             };
-            let wz = if let Some(wz_cap_val) = hi_wz_ceiling {
-                wz_unsat.min(wz_cap_val)
-            } else {
-                wz_unsat
-            };
+            let wz = hi_wz_ceiling.map_or(wz_unsat, |wz_cap_val| wz_unsat.min(wz_cap_val));
             (wz, w_pole * beta_eff)
         } else {
             (w_pole * alpha_eff, w_pole * beta_eff)
@@ -908,7 +906,7 @@ pub fn bell_brickwall_proq4(
 /// Bell 3-point Lagrange synthesis — extracted from `bell_s2_proq4` body
 /// (post-sub-frequency selection).  Verified ≤ 1.5e-13 bit-exact on
 /// captured `lagrange_per_section_sweep.csv` rows where `w_third != 0`.
-pub(crate) fn bell_three_point_synth(
+pub fn bell_three_point_synth(
     cap_a: f64,
     cap_b: f64,
     cap_c: f64,
@@ -986,7 +984,7 @@ pub(crate) fn bell_three_point_synth(
             bell_synth_post_join(mp, mz, mt, tp2, tz2, tt2, 0.0, Some(0.0), p2, sqrt_me);
         (s5, s6, p4_v, sqrt_me)
     } else {
-        let n_inter = mp * ((tz2 - tt2).mul_add(me, (tp2 - tz2) * mz) + (tt2 - tp2) * mt)
+        let n_inter = mp * (tt2 - tp2).mul_add(mt, (tz2 - tt2).mul_add(me, (tp2 - tz2) * mz))
             + me * (tt2 - tp2).mul_add(mz, (tp2 - tz2) * mt)
             + (tz2 - tt2) * mt * mz;
         let xmm4_nd = n_inter / d_lag;
@@ -1096,7 +1094,7 @@ pub(crate) fn bell_three_point_synth(
 /// `Q_user` (clamped at table edges).  Gain magnitude scaled linearly:
 /// `gdB_k(g) = gdB_k(±12) · |g|/12`.  Sign of g picks `*_GP` vs `*_GN`
 /// table.
-pub(crate) fn bell_brickwall_proq4_n(
+pub fn bell_brickwall_proq4_n(
     freq_hz: f64,
     q: f64,
     gain_db: f64,
@@ -1117,7 +1115,7 @@ pub(crate) fn bell_brickwall_proq4_n(
 ///
 /// Recovered at fc=500 Hz (low-fc) by inverting `bell_s2_proq4` against
 /// captured per-section biquads in `lagrange_brickwall_full.csv`.
-pub(crate) fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -> Vec<(f64, f64)> {
+pub fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -> Vec<(f64, f64)> {
     // Q_user grid the recovery sweep covers.
     const QS: [f64; 4] = [0.5, 1.0, 4.0, 10.0];
 
@@ -1262,7 +1260,7 @@ pub(crate) fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db:
 ///    bell peak.
 ///
 /// See `complete_pipeline.md` §4 and `band_buf_post_lp_bp.md`.
-pub(crate) fn bell_brickwall_cascade(
+pub fn bell_brickwall_cascade(
     freq_hz: f64,
     q: f64,
     gain_db: f64,
@@ -1287,7 +1285,7 @@ pub(crate) fn bell_brickwall_cascade(
 
     let g_lin = 10.0_f64.powf(gain_db / 20.0);
     let n_bp = 2 * n;
-    let pole_mag = g_lin.powf(-1.0 / n_bp as f64);
+    let pole_mag = g_lin.powf(-1.0 / num::count_to_f64(n_bp));
     let zero_mag = 1.0 / pole_mag;
 
     // Band edges (kept from earlier impl — empirical from pole-spread
@@ -1341,7 +1339,7 @@ pub(crate) fn bell_brickwall_cascade(
 
     let mut sections = Vec::with_capacity(n);
     for k in 0..n {
-        let theta = PI * (2 * k + 1) as f64 / (2 * n_bp) as f64;
+        let theta = PI * num::count_to_f64((2 * k + 1)) / num::count_to_f64((2 * n_bp));
         let bp_pole_a = lp_to_bp_local(pole_mag, theta);
         let bp_zero_a = lp_to_bp_local(zero_mag, theta);
         let (pole_re, pole_im) = blt(bp_pole_a.0, bp_pole_a.1);
@@ -1362,9 +1360,9 @@ pub(crate) fn bell_brickwall_cascade(
     let mut total_re: f64 = 1.0;
     let mut total_im: f64 = 0.0;
     for s in &sections {
-        let n_re = s[5].mul_add(cw2, s[3] + s[4] * cw);
+        let n_re = s[5].mul_add(cw2, s[4].mul_add(cw, s[3]));
         let n_im = s[4].mul_add(sw, s[5] * sw2);
-        let d_re = s[2].mul_add(cw2, 1.0 + s[1] * cw);
+        let d_re = s[2].mul_add(cw2, s[1].mul_add(cw, 1.0));
         let d_im = s[1].mul_add(sw, s[2] * sw2);
         let dm2 = d_re * d_re + d_im * d_im;
         let qr = (n_re * d_re + n_im * d_im) / dm2;
@@ -1376,7 +1374,7 @@ pub(crate) fn bell_brickwall_cascade(
     }
     let cur_peak = total_re.hypot(total_im);
     if cur_peak > 1e-12 {
-        let target_per_section = (g_lin / cur_peak).powf(1.0 / n as f64);
+        let target_per_section = (g_lin / cur_peak).powf(1.0 / num::count_to_f64(n));
         for s in &mut sections {
             s[3] *= target_per_section;
             s[4] *= target_per_section;
