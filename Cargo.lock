@@ -2287,7 +2287,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2775,8 +2775,8 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -6054,8 +6054,8 @@ dependencies = [
  "libc",
  "log",
  "rustversion",
- "windows-link 0.2.1",
- "windows-result 0.4.1",
+ "windows-link 0.1.3",
+ "windows-result 0.3.4",
 ]
 
 [[package]]
@@ -6374,7 +6374,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.18",
- "windows 0.62.2",
+ "windows 0.58.0",
 ]
 
 [[package]]
@@ -6965,7 +6965,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "system-configuration",
  "tokio",
  "tower-layer",
@@ -6986,7 +6986,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.58.0",
 ]
 
 [[package]]
@@ -8833,7 +8833,7 @@ dependencies = [
  "parking_lot",
  "wasm-bindgen",
  "web-sys",
- "windows 0.62.2",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -9344,16 +9344,16 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 [[package]]
 name = "nice-log"
 version = "0.3.0"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#155e28d3d1556e25ae516f602e9e9e34286f9647"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#c21deffe3242c6581a6c05457b97b8c54c6d0f50"
 dependencies = [
  "tracing-appender",
- "windows 0.62.2",
+ "windows 0.61.3",
 ]
 
 [[package]]
 name = "nice-plug"
 version = "0.2.0"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#155e28d3d1556e25ae516f602e9e9e34286f9647"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#c21deffe3242c6581a6c05457b97b8c54c6d0f50"
 dependencies = [
  "anyhow",
  "anymap3",
@@ -9377,13 +9377,13 @@ dependencies = [
  "tracing-subscriber",
  "vst3",
  "widestring",
- "windows 0.62.2",
+ "windows 0.61.3",
 ]
 
 [[package]]
 name = "nice-plug-core"
 version = "0.2.0"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#155e28d3d1556e25ae516f602e9e9e34286f9647"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#c21deffe3242c6581a6c05457b97b8c54c6d0f50"
 dependencies = [
  "atomic_float",
  "atomic_refcell",
@@ -9402,7 +9402,7 @@ dependencies = [
 [[package]]
 name = "nice-plug-derive"
 version = "0.1.2"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#155e28d3d1556e25ae516f602e9e9e34286f9647"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#c21deffe3242c6581a6c05457b97b8c54c6d0f50"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9412,7 +9412,7 @@ dependencies = [
 [[package]]
 name = "nice-plug-dioxus"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#155e28d3d1556e25ae516f602e9e9e34286f9647"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#c21deffe3242c6581a6c05457b97b8c54c6d0f50"
 dependencies = [
  "anyrender",
  "anyrender_vello 0.11.0",
@@ -9422,12 +9422,15 @@ dependencies = [
  "blitz-traits",
  "crossbeam",
  "cursor-icon",
+ "data-url",
  "dioxus-devtools",
  "dioxus-native",
  "futures-util",
  "keyboard-types 0.8.3",
  "libc",
  "nice-plug-core",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
  "parking_lot",
  "pollster",
  "raw-window-handle 0.6.2",
@@ -9442,7 +9445,7 @@ dependencies = [
 [[package]]
 name = "nice-plug-xtask"
 version = "0.1.1"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#155e28d3d1556e25ae516f602e9e9e34286f9647"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#c21deffe3242c6581a6c05457b97b8c54c6d0f50"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -9516,7 +9519,7 @@ dependencies = [
  "pin-project-lite",
  "rustc-hash 2.1.3",
  "rustls",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
@@ -9559,7 +9562,7 @@ checksum = "3137a52df66c20090a889828d1c655f21f52294cba64e5c4fbb04fc83eee7c8e"
 dependencies = [
  "cfg_aliases",
  "libc",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -9723,7 +9726,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
@@ -10534,15 +10537,6 @@ name = "ordered-float"
 version = "4.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "ordered-float"
-version = "5.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7d950ca161dc355eaf28f82b11345ed76c6e1f6eb1f4f4479e0323b9e2fbd0e"
 dependencies = [
  "num-traits",
 ]
@@ -11575,7 +11569,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
@@ -11722,7 +11716,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.3",
  "rustls",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -11761,7 +11755,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -12299,7 +12293,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "rustix 1.1.4",
- "windows 0.62.2",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -13076,7 +13070,7 @@ dependencies = [
  "bigdecimal",
  "chrono",
  "inherent",
- "ordered-float 4.6.0",
+ "ordered-float",
  "rust_decimal",
  "serde_json",
  "time",
@@ -16047,7 +16041,7 @@ dependencies = [
  "nix 0.29.0",
  "num-derive",
  "num-traits",
- "ordered-float 4.6.0",
+ "ordered-float",
  "pest",
  "pest_derive",
  "phf 0.11.3",
@@ -18115,7 +18109,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f2ab60e120fd6eaa68d9567f3226e876684639d22a4219b313ff69ec0ccd5ac"
 dependencies = [
  "log",
- "ordered-float 4.6.0",
+ "ordered-float",
  "strsim 0.11.1",
  "thiserror 1.0.69",
  "wezterm-dynamic-derive",
@@ -18278,7 +18272,7 @@ dependencies = [
  "objc2-metal 0.3.2",
  "objc2-quartz-core 0.3.2",
  "once_cell",
- "ordered-float 5.3.0",
+ "ordered-float",
  "parking_lot",
  "portable-atomic",
  "portable-atomic-util",
@@ -18391,7 +18385,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -19324,8 +19318,8 @@ dependencies = [
  "log",
  "serde",
  "thiserror 2.0.18",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
