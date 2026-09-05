@@ -117,6 +117,38 @@ async fn signing_out_forgets_the_session() {
     assert!(!backend.status().signed_in);
 }
 
+/// Closing TONE3000's picker is a person changing their mind. It comes back
+/// with `canceled=true` and no code, and must read as "nothing happened"
+/// rather than as a broken sign-in.
+#[tokio::test]
+async fn closing_the_picker_is_not_reported_as_a_failure() {
+    let (server, backend, _dir) = fixture().await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/oauth/token"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0) // the code exchange must not even be attempted
+        .mount(&server)
+        .await;
+
+    let request = backend.begin_sign_in(true);
+    let url = url::Url::parse(&request.authorize_url).expect("authorize url parses");
+    let state = url
+        .query_pairs()
+        .find(|(k, _)| k == "state")
+        .map(|(_, v)| v.into_owned())
+        .expect("state is in the authorize url");
+
+    let status = backend
+        .complete_sign_in(
+            request.request_id,
+            format!("http://localhost:4040/tone3000/callback?state={state}&canceled=true"),
+        )
+        .await;
+
+    assert!(!status.signed_in);
+    assert_eq!(status.error, "sign-in was canceled");
+}
+
 #[tokio::test]
 async fn a_search_pages_and_maps_the_catalog() {
     let (server, backend, _dir) = fixture().await;

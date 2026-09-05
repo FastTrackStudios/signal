@@ -667,6 +667,16 @@ impl Tone3000Backend {
         }
 
         start.verify_state(params.get("state").map_or("", String::as_str))?;
+
+        // Closing TONE3000's own picker comes back as `canceled=true` with no
+        // code. That is a person changing their mind, not a failure, and it
+        // must not be reported as one — an error banner for "I clicked the X"
+        // teaches people that the feature is broken.
+        if params.get("canceled").is_some_and(|v| v == "true") {
+            tracing::info!("tone3000: the user closed the picker");
+            return Err(SessionError::Canceled);
+        }
+
         let code = params.get("code").ok_or(SessionError::MissingCode)?;
 
         let client = self.anonymous();

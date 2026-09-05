@@ -73,6 +73,12 @@ async fn callback(
                 html_escape(&status.username)
             ),
         ))
+    } else if status.error == "sign-in was canceled" {
+        // Not a failure page: the user closed the picker on purpose.
+        Html(page(
+            "No tone selected",
+            "You can close this tab and go back to Signal.",
+        ))
     } else {
         // The provider's own words, not a generic apology: "access_denied"
         // and "this link has expired" call for different actions.

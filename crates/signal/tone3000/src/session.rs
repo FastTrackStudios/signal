@@ -21,6 +21,10 @@ pub enum SessionError {
     StateMismatch,
     #[error("the authorization callback carried no code")]
     MissingCode,
+    /// The user closed TONE3000's picker. An outcome, not a fault — the
+    /// caller should return to where it was, quietly.
+    #[error("sign-in was canceled")]
+    Canceled,
     #[error("TONE3000 rejected the request: {0}")]
     Api(String),
     #[error(transparent)]
