@@ -35,6 +35,41 @@ async fn main() -> eyre::Result<()> {
         .await
         .map_err(|e| eyre::eyre!("KeysRig handshake: {e:?}"))?;
 
+    // `--play` drives chords through the rig's own `trigger` RPC — the
+    // on-screen piano's path — so the watcher can produce the load it is
+    // measuring. Without it, it waits for a human at the keyboard.
+    let play = std::env::args().any(|a| a == "--play");
+    if play {
+        let rig2: KeysRigClient = vox_core::initiator_on(
+            vox_websocket::WsLink::connect(&url)
+                .await
+                .map_err(|e| eyre::eyre!("connect (player): {e:?}"))?,
+        )
+        .establish()
+        .await
+        .map_err(|e| eyre::eyre!("handshake (player): {e:?}"))?;
+        tokio::spawn(async move {
+            // Twenty notes at a time: ten fingers with an octave doubler is
+            // an ordinary way to play this rig, and it is where the reported
+            // glitching lives.
+            const CHORDS: [[u32; 4]; 4] = [[60, 64, 67, 72], [57, 60, 64, 69], [53, 57, 60, 65], [55, 59, 62, 67]];
+            let mut i = 0usize;
+            loop {
+                let chord = CHORDS[i % CHORDS.len()];
+                for oct in 0..5u32 {
+                    for n in chord {
+                        let note = n + oct * 12;
+                        if note <= 108 {
+                            let _ = rig2.trigger(note, 100).await;
+                        }
+                    }
+                }
+                i += 1;
+                tokio::time::sleep(Duration::from_millis(700)).await;
+            }
+        });
+    }
+
     println!("watching {url} — play the rig; ctrl-c to stop\n");
     println!(
         "{:>6} {:>7} {:>9} {:>9} {:>7} {:>6} {:>7} {:>8} {:>7}",
