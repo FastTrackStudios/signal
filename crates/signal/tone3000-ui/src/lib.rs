@@ -150,7 +150,6 @@ pub fn ToneBrowser(on_loaded: Callback<(String, String)>) -> Element {
                     if signed_in {
                         {
                             let name = state.status.read().username.clone();
-                            let client = client.clone();
                             rsx! {
                                 span { style: "font-size:12px;color:{style::MUTED};",
                                     if name.is_empty() { "signed in" } else { "{name}" }
@@ -173,7 +172,6 @@ pub fn ToneBrowser(on_loaded: Callback<(String, String)>) -> Element {
                         }
                     } else {
                         {
-                            let client = client.clone();
                             let opener = opener.clone();
                             rsx! {
                                 button {
@@ -341,7 +339,6 @@ pub fn ToneBrowser(on_loaded: Callback<(String, String)>) -> Element {
                 "Powered by TONE3000"
                 div { style: "flex:1;" }
                 {
-                    let opener = opener.clone();
                     rsx! {
                         button {
                             style: style::ghost_button(),

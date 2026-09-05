@@ -43,7 +43,7 @@ impl PartialEq for UrlOpener {
 }
 
 /// Live browser state: who is signed in, and what is downloading.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Tone3000State {
     /// The session, refreshed after every sign-in or sign-out.
     pub status: Signal<SignInStatus>,
@@ -55,11 +55,13 @@ pub struct Tone3000State {
 
 impl Tone3000State {
     /// Whether this model is being fetched right now.
+    #[must_use]
     pub fn in_flight(&self, model_id: &str) -> bool {
         self.downloads.read().get(model_id).is_some_and(|p| !p.done)
     }
 
     /// The finished download for a model, if it landed successfully.
+    #[must_use]
     pub fn completed(&self, model_id: &str) -> Option<DownloadProgress> {
         self.downloads
             .read()
@@ -71,6 +73,7 @@ impl Tone3000State {
     /// Progress 0..=100 for a model being fetched, when the server told us
     /// how big it is. `None` means "working, length unknown" — which a UI
     /// must render as motion, not as 0%.
+    #[must_use]
     pub fn percent(&self, model_id: &str) -> Option<u32> {
         self.downloads
             .read()
@@ -96,10 +99,10 @@ pub fn use_tone3000_state() -> Tone3000State {
         use_future(move || {
             let client = client.clone();
             async move {
-                if let Some(client) = client {
-                    if let Ok(s) = client.status().await {
-                        status.set(s);
-                    }
+                if let Some(client) = client
+                    && let Ok(s) = client.status().await
+                {
+                    status.set(s);
                 }
             }
         });
@@ -135,10 +138,10 @@ pub fn use_tone3000_state() -> Tone3000State {
 /// user's browser, or after signing out.
 pub fn refresh_status(client: Option<Tone3000Client>, mut status: Signal<SignInStatus>) {
     spawn(async move {
-        if let Some(client) = client {
-            if let Ok(s) = client.status().await {
-                status.set(s);
-            }
+        if let Some(client) = client
+            && let Ok(s) = client.status().await
+        {
+            status.set(s);
         }
     });
 }

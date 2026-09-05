@@ -93,7 +93,6 @@ pub fn ToneDetail(
                     if !tone.tone_url.is_empty() {
                         {
                             let url = tone.tone_url.clone();
-                            let opener = opener.clone();
                             rsx! {
                                 button {
                                     style: "{style::ghost_button()}margin-top:12px;",
@@ -176,8 +175,9 @@ fn ModelRow(tone_id: String, model: ToneModel, on_loaded: Callback<(String, Stri
 
             if let Some(finished) = done {
                 {
-                    let label = name.clone();
-                    let path = finished.path.clone();
+                    // Cloned per click, not per render: the callback may fire
+                    // more than once and cannot consume what it captures.
+                    let (label, path) = (name, finished.path);
                     rsx! {
                         button {
                             style: style::primary_button(),
@@ -190,15 +190,11 @@ fn ModelRow(tone_id: String, model: ToneModel, on_loaded: Callback<(String, Stri
                 div { style: "min-width:92px;text-align:right;font-size:12px;color:{style::MUTED};",
                     // No length from the server is common; saying "0%" for a
                     // download that is moving is a lie a progress bar tells.
-                    match percent {
-                        Some(p) => rsx! { "{p}%" },
-                        None => rsx! { "downloading…" },
-                    }
+                    {percent.map_or_else(|| rsx! { "downloading…" }, |p| rsx! { "{p}%" })}
                 }
             } else {
                 {
-                    let (client, tone_id, model_id) =
-                        (client.clone(), tone_id.clone(), model.id.clone());
+                    let (client, tone_id, model_id) = (client, tone_id, model.id);
                     rsx! {
                         button {
                             style: style::primary_button(),
