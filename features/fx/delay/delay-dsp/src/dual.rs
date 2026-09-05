@@ -17,7 +17,6 @@
 //! audio thread.
 
 use audiocore_dsp::{AudioConfig, Processor};
-use dsp_core::num;
 
 use crate::chain::DelayChain;
 

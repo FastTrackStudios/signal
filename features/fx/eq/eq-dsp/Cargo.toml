@@ -13,4 +13,5 @@ audiocore-dsp = { workspace = true }
 realfft = { workspace = true }
 
 [dev-dependencies]
+dsp-golden = { workspace = true }
 
