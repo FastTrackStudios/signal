@@ -729,7 +729,7 @@ impl FtsEq {
             let step = (1.0_f64 / 12.0).exp2();
             let ceiling = self.sample_rate * 0.45;
             let mut hz = 20.0f64;
-            let max_iterations = (ceiling / 20.0).log(step).ceil() as usize + 1;
+            let max_iterations = num::f64_to_index((ceiling / 20.0).log(step).ceil()).saturating_add(1);
             for _ in 0..max_iterations {
                 if hz >= ceiling {
                     break;
@@ -994,7 +994,11 @@ impl FtsEq {
         self.spectral = crate::dynamics::spectral::SpectralEngine::new(self.sample_rate, 4096);
         // Room for the whole delay the delta-listen read walks back over, plus
         // a block so a write and a read never collide inside one buffer.
-        let ring = (self.spectral.latency() + num::u32_to_index(block_size.max(1))).next_power_of_two();
+        let ring = self
+            .spectral
+            .latency()
+            .saturating_add(num::u32_to_index(block_size.max(1)))
+            .next_power_of_two();
         self.dry_ring = [vec![0.0; ring], vec![0.0; ring]];
         self.dry_pos = 0;
         self.sync_spectral_regions();
@@ -1227,10 +1231,16 @@ impl FtsEq {
                     } else {
                         let ring = dry_ring[0].len();
                         for i in 0..left.len() {
-                            let read = (*dry_pos + ring - dry_delay) % ring;
+                            // `+ ring` before the subtraction keeps the index positive when the
+                        // delay reaches back past the ring's origin.
+                        let read = dry_pos
+                            .saturating_add(ring)
+                            .saturating_sub(dry_delay)
+                            .checked_rem(ring)
+                            .unwrap_or(0);
                             left[i] -= dry_ring[0][read];
                             right[i] -= dry_ring[1][read];
-                            *dry_pos = (*dry_pos + 1) % ring;
+                            *dry_pos = dry_pos.saturating_add(1).checked_rem(ring).unwrap_or(0);
                         }
                     }
                 }

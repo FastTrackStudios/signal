@@ -610,6 +610,7 @@ impl SpectralEngine {
         (l, r)
     }
 
+    #[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
     fn process_frame(&mut self) {
         let bins = self.mag_db.len();
         // Forward FFT both channels (windowed).
@@ -661,7 +662,7 @@ impl SpectralEngine {
                 acc += (self.mag_db[i] - acc) * c;
                 self.ref_db[i] = acc;
             }
-            let mut acc = self.mag_db[bins - 1];
+            let mut acc = self.mag_db.last().copied().unwrap_or(0.0);
             for i in (0..bins).rev() {
                 let f = num::count_to_f64(i.max(1)) * bin_hz;
                 let neighbors = f * (SMOOTH_OCTAVES.exp2() - 1.0) / bin_hz;

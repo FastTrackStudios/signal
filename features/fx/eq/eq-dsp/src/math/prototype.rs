@@ -33,6 +33,7 @@ pub fn butterworth_lp(order: usize) -> Zpk {
     Zpk::new(vec![], poles, 1.0)
 }
 
+#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 /// Generate Butterworth lowpass prototype with pre-warped cutoff.
 ///
 /// Pre-warps the analog cutoff frequency to compensate for bilinear transform
@@ -50,6 +51,7 @@ pub fn butterworth_lp_prewarped(order: usize, freq_hz: f64, sample_rate: f64) ->
     proto
 }
 
+#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 /// Generate Butterworth bandpass prototype via standard LP→BP transformation.
 ///
 /// LP→BP transform: s -> `Q_bp` * (s/w0 + w0/s)
@@ -151,6 +153,7 @@ pub fn butterworth_bp_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
     Zpk::new(bp_zeros, bp_poles, gain)
 }
 
+#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 /// Generate Butterworth bandstop (notch) prototype via LP→BS transformation.
 ///
 /// LP→BS transform: reciprocal of LP→BP. Each LP pole maps to a pair of BS poles,

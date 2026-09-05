@@ -175,6 +175,7 @@ fn trace_bell_inputs() -> bool {
 mod tests {
     use super::*;
 
+    #[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
     /// Evaluate magnitude in dB of a cascade of biquad sections at digital frequency w.
     fn mag_db_sos(sections: &[Coeffs], w: f64) -> f64 {
         use crate::math::zpk::Complex;

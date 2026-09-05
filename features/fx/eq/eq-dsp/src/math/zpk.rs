@@ -113,6 +113,7 @@ impl Div for Complex {
         clippy::suspicious_arithmetic_impl,
         reason = "complex division is multiplication by the reciprocal"
     )]
+    #[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
     fn div(self, rhs: Self) -> Self {
         self * rhs.inv()
     }
@@ -149,12 +150,14 @@ impl Mul<Complex> for f64 {
 }
 
 impl MulAssign<f64> for Complex {
+    #[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
     fn mul_assign(&mut self, rhs: f64) {
         *self = *self * rhs;
     }
 }
 
 impl DivAssign<f64> for Complex {
+    #[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
     fn div_assign(&mut self, rhs: f64) {
         *self = *self / rhs;
     }

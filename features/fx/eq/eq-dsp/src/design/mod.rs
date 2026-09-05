@@ -237,6 +237,7 @@ pub fn apply_gain_q_interaction(q: f64, gain_db: f64, interaction: f64) -> f64 {
     q_modified.clamp(0.025, 40.0)
 }
 
+#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 /// Compute auto-gain compensation for current EQ settings.
 ///
 /// From Pro-Q 4 binary: "`AutoGain`" parameter at 0x18022ccf8.

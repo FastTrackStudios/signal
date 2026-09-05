@@ -76,6 +76,7 @@ const ORDER: usize = 12;
 /// 0.00..0.03 spread the plugin's passband was measured at.
 const PASSBAND_RIPPLE_DB: f64 = 0.02;
 
+#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 /// The elliptic analog prototype, passband edge at `omega = 1`.
 ///
 /// Orfanidis' construction: the transmission zeros are `j / (k * cd(u_i K, k))`

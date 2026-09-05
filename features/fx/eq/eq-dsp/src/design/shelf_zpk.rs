@@ -175,6 +175,7 @@ pub fn design_tilt_shelf_zpk(
     sections
 }
 
+#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 /// Band shelf — transform type 3 (LP→BP + bilinear). Kept as-is (currently passing).
 #[must_use]
 pub fn design_band_shelf_zpk(
@@ -221,6 +222,7 @@ pub fn design_band_shelf_zpk(
 // Internal helpers (legacy — kept until tilt/band shelf are rewritten)
 // ═══════════════════════════════════════════════════════════════════════════
 
+#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 fn apply_shelf_gain(zpk: &mut Zpk, gain_param: f64, is_low_type: bool) {
     for zero in &mut zpk.zeros {
         *zero *= gain_param;

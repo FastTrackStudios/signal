@@ -9,6 +9,7 @@
 
 use super::{Coeffs, PI, lagrange_synth_alt_path, trace_bell_inputs, PASSTHROUGH, bell_s2_proq4};
 
+#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 pub fn bell_brickwall_proq4(
     freq_hz: f64,
     q: f64,
@@ -1107,6 +1108,7 @@ pub(crate) fn bell_brickwall_proq4_n(
         .collect()
 }
 
+#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 /// Per-section `(Q_k, gdB_k)` lookup.  Returns `N_sec` entries per slope:
 /// slope=4 → 2, slope=6 → 3, slope=8 → 6.
 ///
@@ -1240,6 +1242,7 @@ pub(crate) fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db:
         .collect()
 }
 
+#[expect(clippy::arithmetic_side_effects, reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload")]
 /// Bell brick-wall cascade — Pro-Q 4 slope-≥4 peak EQ.
 ///
 /// Implements the verified Pro-Q 4 design pipeline:
