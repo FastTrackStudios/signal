@@ -2,6 +2,7 @@
 
 use crate::design::biquad::Coeffs;
 use crate::design::cascade;
+use dsp_core::num;
 
 use super::super::common::cascade_qs;
 use super::{
@@ -24,9 +25,11 @@ fn highpass_slope9_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
     }
     let mut qs: Vec<f64> = qs.into_iter().rev().collect();
     if qs.len() > 3 {
-        qs[1] = highpass_slope9_sec_q(freq_hz, sample_rate, 1);
-        qs[2] = highpass_slope9_sec_q(freq_hz, sample_rate, 2);
-        qs[3] = highpass_slope9_sec_q(freq_hz, sample_rate, 3);
+        if let [_, q1, q2, q3, ..] = &mut qs[..] {
+            *q1 = highpass_slope9_sec_q(freq_hz, sample_rate, 1);
+            *q2 = highpass_slope9_sec_q(freq_hz, sample_rate, 2);
+            *q3 = highpass_slope9_sec_q(freq_hz, sample_rate, 3);
+        }
     }
     qs
 }
@@ -42,7 +45,7 @@ fn highpass_slope9_section(
     if sec == 2 && (q_user - 10.0).abs() < 1.0e-12 && (fc_48k - 2000.0).abs() < 1.0e-6 {
         highpass_s2_with_w_eval_scale(freq_hz, sample_rate, q_section, 1.0355)
     } else if sec == 0 && (q_user - 10.0).abs() < 1.0e-12 && (8000.0..=22000.0).contains(&fc_48k) {
-        match fc_48k as i32 {
+        match num::trunc_to_i64(fc_48k) {
             8000 => [
                 1.0,
                 -0.979_374_206_888,
@@ -134,7 +137,7 @@ fn highpass_slope9_section(
             _ => cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate),
         }
     } else if sec == 0 && (q_user - 4.0).abs() < 1.0e-12 && (10000.0..=22000.0).contains(&fc_48k) {
-        match fc_48k as i32 {
+        match num::trunc_to_i64(fc_48k) {
             10000 => [
                 1.0,
                 -0.494_683_542_291,
@@ -218,7 +221,7 @@ fn highpass_slope9_section(
             _ => cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate),
         }
     } else if sec == 0 && (q_user - 0.5).abs() < 1.0e-12 && (19000.0..=22000.0).contains(&fc_48k) {
-        match fc_48k as i32 {
+        match num::trunc_to_i64(fc_48k) {
             19000 => [
                 1.0,
                 0.798_626_442_258,
@@ -262,16 +265,16 @@ fn highpass_slope9_section(
         } else {
             None
         };
-        if let Some(wp_scale) = wp_scale {
-            highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0)
-        } else {
-            cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
-        }
+        wp_scale.map_or_else(
+            || cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate),
+            |wp_scale| highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0),
+        )
     } else if sec == 1 && (q_user - 0.5).abs() < 1.0e-12 && (fc_48k - 10000.0).abs() < 1.0e-6 {
         highpass_s2_with_w_eval_scale(freq_hz, sample_rate, q_section, 1.0025)
-    } else if sec == 2 && (q_user - 0.5).abs() < 1.0e-12 && (fc_48k - 8000.0).abs() < 1.0e-6 {
-        highpass_s2_with_w_eval_scale(freq_hz, sample_rate, q_section, 1.0135)
-    } else if sec == 2 && (q_user - 1.0).abs() < 1.0e-12 && (fc_48k - 8000.0).abs() < 1.0e-6 {
+    } else if sec == 2
+        && ((q_user - 0.5).abs() < 1.0e-12 || (q_user - 1.0).abs() < 1.0e-12)
+        && (fc_48k - 8000.0).abs() < 1.0e-6
+    {
         highpass_s2_with_w_eval_scale(freq_hz, sample_rate, q_section, 1.0135)
     } else if (q_user - 4.0).abs() < 1.0e-12 && (fc_48k - 8000.0).abs() < 1.0e-6 && sec < 4 {
         match sec {
@@ -313,7 +316,7 @@ fn highpass_slope9_section(
         && ((q_user - 4.0).abs() < 1.0e-12 || (q_user - 10.0).abs() < 1.0e-12)
         && (1..=3).contains(&sec)
     {
-        match (sec, fc_48k as i32) {
+        match (sec, num::trunc_to_i64(fc_48k)) {
             (1, 8000) => [
                 1.0,
                 -0.794_676_489_686,
@@ -395,7 +398,7 @@ fn highpass_slope9_section(
             || (q_user - 10.0).abs() < 1.0e-12)
         && (1..=3).contains(&sec)
     {
-        match (sec, fc_48k as i32) {
+        match (sec, num::trunc_to_i64(fc_48k)) {
             (1, 14000) => [
                 1.0,
                 0.173_478_315_388,

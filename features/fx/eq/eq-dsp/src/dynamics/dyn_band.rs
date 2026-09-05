@@ -6,6 +6,7 @@
 //! `target − base` is the Pro-Q-style bipolar "dynamic range".
 
 use super::detector::Detector;
+use dsp_core::num;
 
 /// The band's Q as the state-variable filter wants it.
 ///
@@ -440,7 +441,7 @@ mod tests {
             let n = 48_000;
             let mut out = vec![0.0; n];
             for (i, output) in out.iter_mut().enumerate().take(n) {
-                let mut l = amp * (core::f64::consts::TAU * 1000.0 * (i as u32 as f64) / SR).sin();
+                let mut l = amp * (core::f64::consts::TAU * 1000.0 * num::count_to_f64(i) / SR).sin();
                 let mut r = l;
                 let side = l;
                 b.tick(&mut l, &mut r, side);
@@ -466,7 +467,7 @@ mod tests {
         b.update(SR);
         let mut min_gain = 0.0f64;
         for i in 0..48_000 {
-            let mut l = 0.7 * (core::f64::consts::TAU * 200.0 * i as f64 / SR).sin();
+            let mut l = 0.7 * (core::f64::consts::TAU * 200.0 * f64::from(i) / SR).sin();
             let mut r = l;
             let side = l;
             b.tick(&mut l, &mut r, side);
@@ -513,9 +514,9 @@ mod tests {
             // Ten seconds — past the handover, which has a three-second time
             // constant.
             let mut rng = 0x51DE_0042u64;
-            for _ in 0..(10 * SR as usize) {
+            for _ in 0..(10 * num::f64_to_index(SR)) {
                 rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
-                let u = ((rng >> 33) as f64 / (1u64 << 31) as f64) - 1.0;
+                let u = (num::u64_to_f64(rng >> 33) / num::u64_to_f64(1u64 << 31)) - 1.0;
                 let mut l = level * u * 3.0f64.sqrt();
                 let mut r = l;
                 let side = l;
@@ -559,9 +560,9 @@ mod tests {
         let level = 10.0f64.powf(-18.8 / 20.0);
         let mut rng = 0x51DE_0042u64;
         let at = |b: &mut DynBand, seconds: usize, rng: &mut u64| {
-            for _ in 0..(seconds * SR as usize) {
+            for _ in 0..(seconds * num::f64_to_index(SR)) {
                 *rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
-                let u = ((*rng >> 33) as f64 / (1u64 << 31) as f64) - 1.0;
+                let u = (num::u64_to_f64(*rng >> 33) / num::u64_to_f64(1u64 << 31)) - 1.0;
                 let mut l = level * u * 3.0f64.sqrt();
                 let mut r = l;
                 let side = l;
@@ -586,7 +587,7 @@ mod tests {
         b.update(SR);
         let mut max_gain = 0.0f64;
         for i in 0..48_000 {
-            let mut l = 0.5 * (core::f64::consts::TAU * 1000.0 * i as f64 / SR).sin();
+            let mut l = 0.5 * (core::f64::consts::TAU * 1000.0 * f64::from(i) / SR).sin();
             let mut r = l;
             let side = l;
             b.tick(&mut l, &mut r, side);

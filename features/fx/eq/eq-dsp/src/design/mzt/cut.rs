@@ -3,6 +3,7 @@
 use std::f64::consts::PI;
 
 use crate::design::biquad::Coeffs;
+use dsp_core::num;
 
 use super::biquad_from_mode0_params;
 
@@ -158,17 +159,22 @@ pub fn hp_slope8_section_biquad(
 ) -> Coeffs {
     use crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub;
 
+    const Q_CLAMP: f64 = 7.383;
+    const M_K_FIXED: [f64; 6] = [1.0, 1.126_764_543_5, 1.145_667_882_1, 1.0, 1.0, 1.0];
+    const SOLVER_M: [f64; 3] = [1.01749, 1.18923, 1.96544];
+
+    debug_assert!(sec_idx < 6, "sec_idx must be in 0..6");
+
     // Butterworth N=12 unit-circle pole angles. Section ordering in the
     // binary places highest-Q section (smallest pole_re) FIRST: sec 0 → k=5,
     // sec 1 → k=4, ..., sec 5 → k=0.
-    let k = 5 - sec_idx;
-    let theta = PI * (2.0 * k as f64 + 1.0) / 24.0;
+    let k = 5usize.saturating_sub(sec_idx);
+    let theta = PI * 2.0_f64.mul_add(num::count_to_f64(k), 1.0) / 24.0;
     let pole_re_mag = theta.cos(); // |pole_re| on unit Butterworth circle
 
     // Q-loading on sec 0 only
-    const Q_CLAMP: f64 = 7.383;
     let pole_re_eff = if sec_idx == 0 {
-        let q_eff = q_user.min(Q_CLAMP).max(1e-6);
+        let q_eff = q_user.clamp(1e-6, Q_CLAMP);
         pole_re_mag / q_eff
     } else {
         pole_re_mag
@@ -181,21 +187,19 @@ pub fn hp_slope8_section_biquad(
     // Post-rewrite w_pole multipliers from hp_s8_all_sections_subfreq.csv
     // (SR=48000, 240 rows, verified 2026-05-01). Sec 0 is Q-dependent,
     // sec 1, 2 are Q-invariant fixed multipliers, sec 3-5 = 1.0 (= ω_base).
-    const M_K_FIXED: [f64; 6] = [1.0, 1.126_764_543_5, 1.145_667_882_1, 1.0, 1.0, 1.0];
 
     // Solver (pre-rewrite) wp multipliers, used as INPUT to the
     // compute_peak_type3 w_eval formula for sec 1, 2 only. Per
     // hp_s8_w_eval_sec1_2_decoded.md: M_1 = 2^(1/4) (exact), M_0/M_2 from
     // FULL_PIPELINE STAGE_7 traces. Sec 0 uses post-rewrite wp directly
     // (already the correct input — verified across all (fc,Q) in CSV).
-    const SOLVER_M: [f64; 3] = [1.01749, 1.18923, 1.96544];
 
     let omega_base = 2.0 * PI * freq_hz / sample_rate;
 
     let m_k = if sec_idx == 0 {
         hp_s8_sec0_q_multiplier(q_user)
     } else {
-        M_K_FIXED[sec_idx]
+        M_K_FIXED[sec_idx.min(M_K_FIXED.len() - 1)]
     };
     let w_pole_raw = omega_base * m_k;
 
@@ -204,9 +208,9 @@ pub fn hp_slope8_section_biquad(
     // where α = pole_re_eff (Q-loaded for sec 0). This matters for sec 0 at
     // low Q + high fc: at fc=22000 Q=0.5 the Q-loaded α=0.261, t=0.864,
     // ceiling=3.013 = captured wp_post (vs 3.110 with un-loaded α).
-    let d2 = 4.0 * pole_re_eff * pole_re_eff - 2.0;
+    let d2 = (4.0 * pole_re_eff).mul_add(pole_re_eff, -2.0);
     let t = (-0.5 * d2).clamp(0.0, 1.0);
-    let nyquist_ceiling = t * 0.3 * PI + 0.7 * PI;
+    let nyquist_ceiling = (t * 0.3).mul_add(PI, 0.7 * PI);
     let w_pole = w_pole_raw.min(nyquist_ceiling).min(PI);
 
     let w_zero = 0.001 * w_pole;
@@ -234,7 +238,7 @@ pub fn hp_slope8_section_biquad(
             hp_s8_w_eval_sec_0_2(wp_solver)
         }
         1 | 2 => {
-            let wp_solver = omega_base * SOLVER_M[sec_idx];
+            let wp_solver = omega_base * SOLVER_M.get(sec_idx).copied().unwrap_or(1.0);
             hp_s8_w_eval_sec_0_2(wp_solver)
         }
         _ => PI,
@@ -270,21 +274,20 @@ fn hp_s8_sec0_q_multiplier(q_user: f64) -> f64 {
     if q <= TABLE[0].0 {
         return TABLE[0].1;
     }
-    if q >= TABLE[TABLE.len() - 1].0 {
-        return TABLE[TABLE.len() - 1].1;
+    let last_entry = TABLE.last().unwrap();
+    if q >= last_entry.0 {
+        return last_entry.1;
     }
     let lq = q.log10();
-    for w in TABLE.windows(2) {
-        let (q0, m0) = w[0];
-        let (q1, m1) = w[1];
+    for (&(q0, m0), &(q1, m1)) in TABLE.iter().zip(TABLE.iter().skip(1)) {
         if q >= q0 && q <= q1 {
             let l0 = q0.log10();
             let l1 = q1.log10();
             let frac = (lq - l0) / (l1 - l0);
-            return m0 + (m1 - m0) * frac;
+            return (m1 - m0).mul_add(frac, m0);
         }
     }
-    TABLE[TABLE.len() - 1].1
+    last_entry.1
 }
 /// Sec 0 SOLVER (pre-rewrite) wp / `ω_base` multiplier. Q-dependent.
 /// fc-invariant — verified bit-exact across all (fc,Q) in
@@ -304,21 +307,20 @@ fn hp_s8_sec0_solver_q_multiplier(q_user: f64) -> f64 {
     if q <= TABLE[0].0 {
         return TABLE[0].1;
     }
-    if q >= TABLE[TABLE.len() - 1].0 {
-        return TABLE[TABLE.len() - 1].1;
+    let last_entry = TABLE.last().unwrap();
+    if q >= last_entry.0 {
+        return last_entry.1;
     }
-    for w in TABLE.windows(2) {
-        let (q0, m0) = w[0];
-        let (q1, m1) = w[1];
+    for (&(q0, m0), &(q1, m1)) in TABLE.iter().zip(TABLE.iter().skip(1)) {
         if q >= q0 && q <= q1 {
             let l0 = q0.log10();
             let l1 = q1.log10();
             let lq = q.log10();
             let frac = (lq - l0) / (l1 - l0);
-            return m0 + (m1 - m0) * frac;
+            return (m1 - m0).mul_add(frac, m0);
         }
     }
-    TABLE[TABLE.len() - 1].1
+    last_entry.1
 }
 /// Decoded `compute_peak_type3_parameters` `w_eval` formula for HP s=8 sec 0..2.
 /// f32 cast preserved for bit-exactness with binary's SS instructions.
@@ -327,8 +329,8 @@ fn hp_s8_w_eval_sec_0_2(w_pole_solver: f64) -> f64 {
     const B: f64 = 5.0 / 12.0;
     const K: f64 = 0.2;
     const D: f64 = 0.785;
-    let fv = ((A * w_pole_solver - B) as f32) as f64;
-    let e = ((fv * fv * K + D) as f32) as f64;
+    let fv = f64::from((A.mul_add(w_pole_solver, -B) as f32));
+    let e = f64::from((((fv * fv).mul_add(K, D) as f32)));
     let cand = e * PI;
     let wp_clamp = w_pole_solver.min(PI);
     if cand >= wp_clamp {
@@ -347,7 +349,7 @@ fn hp_s8_w_eval_sec_0_2(w_pole_solver: f64) -> f64 {
 /// - `w_third` = `ω₀ · √max(1 − w_sf²/2, 0.25)` where `w_sf` = `w_section_field`
 /// - `w_zero = w_third / 2`
 /// - `w_eval` slot is written 0; downstream JA at 0x18011041a substitutes π
-///    (1-root branch — `proto[4]` table per `lp_hp_notch_bp_subfreq_decoded.md`).
+///   (1-root branch — `proto[4]` table per `lp_hp_notch_bp_subfreq_decoded.md`).
 ///
 /// We pass `b1p = w_section_field` to the kernel because the kernel's
 /// `b1p` slot is what actually consumes the Butterworth damping —
@@ -374,6 +376,10 @@ pub fn lp_slope8_section_biquad(
 ) -> Coeffs {
     use crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub;
 
+    const Q_CLAMP_SEC0: f64 = 7.383;
+
+    debug_assert!(sec_idx < 6, "sec_idx must be in 0..6");
+
     let omega_base_raw = 2.0 * PI * freq_hz / sample_rate;
     // Use the same omega clamp as proq4_s2_from_prototype_with_subfreq for
     // sub-frequency math; the synth function will re-clamp internally.
@@ -381,16 +387,15 @@ pub fn lp_slope8_section_biquad(
 
     // Butterworth N=12 pole pair angle ordering: sec 0 → highest-Q (smallest
     // real-part of pole) which is k=5; sec 5 → k=0.
-    let k = 5 - sec_idx;
-    let theta = PI * (2.0 * k as f64 + 1.0) / 24.0;
+    let k = 5usize.saturating_sub(sec_idx);
+    let theta = PI * 2.0_f64.mul_add(num::count_to_f64(k), 1.0) / 24.0;
     let cos_theta = theta.cos();
 
     // b1p = 2·cos(θ_k); only sec 0 is Q-loaded (divides by Q_user).
     // Sec 0 Q clamp at 7.383 matches HP s=8 (verified at fc=1k Q=10:
     // captured b1p = 0.03536 = 2·cos(11π/24)/7.383).
-    const Q_CLAMP_SEC0: f64 = 7.383;
     let b1p = if sec_idx == 0 {
-        let q_eff = q_user.min(Q_CLAMP_SEC0).max(1e-6);
+        let q_eff = q_user.clamp(1e-6, Q_CLAMP_SEC0);
         2.0 * cos_theta / q_eff
     } else {
         2.0 * cos_theta

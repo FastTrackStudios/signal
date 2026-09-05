@@ -4,7 +4,7 @@
 //! whether a band's centre has drifted outside what the current sample rate
 //! can represent, and what to do about it.
 
-use super::*;
+use super::{Prototype, eval_squared_mag_scalar};
 
 /// Pro-Q's `check_frequency_within_band_limits @ 0x18010e7f0`.
 ///
@@ -35,14 +35,10 @@ pub fn check_frequency_within_band_limits(
     if abs_threshold == 0.0 {
         return true;
     }
-    let alt_edge = if upper <= 0.0 {
-        proto.band_edge_high
-    } else {
-        // Binary: vt10(band, upper). Without an analog handle we
-        // conservatively reuse band_edge_high — callers in our wired
-        // pipeline supply `upper <= 0` for the no-vt10 path.
-        proto.band_edge_high
-    };
+    // Binary: vt10(band, upper). Without an analog handle we
+    // conservatively reuse band_edge_high — callers in our wired
+    // pipeline supply `upper <= 0` for the no-vt10 path.
+    let alt_edge = proto.band_edge_high;
     let d_low = (freq - proto.band_edge_low).abs();
     let d_alt = (freq - alt_edge).abs();
     let d_min = d_low.min(d_alt);

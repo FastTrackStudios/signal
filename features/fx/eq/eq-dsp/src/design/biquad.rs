@@ -118,17 +118,18 @@ pub fn mag_db_sos(sections: &[Coeffs], w: f64) -> f64 {
 // ─── Internal Helpers ─────────────────────────────────────────────────────────
 
 /// Convert up to 2 poles into denominator coefficients [a0, a1, a2].
+#[expect(clippy::arithmetic_side_effects, reason = "Complex arithmetic is inherently safe")]
 fn poles_to_den(poles: &[Complex]) -> [f64; 3] {
     match poles.len() {
         0 => [1.0, 0.0, 0.0],
         1 => {
-            let p = *poles.get(0).unwrap_or(&Complex { re: 0.0, im: 0.0 });
+            let p = *poles.first().unwrap_or(&Complex { re: 0.0, im: 0.0 });
             // (1 - p*z^-1) expanded: real coefficients only for real or paired poles.
             [1.0, -p.re, 0.0]
         }
         _ => {
             // Two poles: (1 - p0*z^-1)(1 - p1*z^-1)
-            let p0 = *poles.get(0).unwrap_or(&Complex { re: 0.0, im: 0.0 });
+            let p0 = *poles.first().unwrap_or(&Complex { re: 0.0, im: 0.0 });
             let p1 = *poles.get(1).unwrap_or(&Complex { re: 0.0, im: 0.0 });
             let sum = p0 + p1;
             let prod = p0 * p1;
@@ -138,16 +139,17 @@ fn poles_to_den(poles: &[Complex]) -> [f64; 3] {
 }
 
 /// Convert up to 2 zeros into numerator coefficients [b0, b1, b2], scaled by gain.
+#[expect(clippy::arithmetic_side_effects, reason = "Complex arithmetic is inherently safe")]
 fn zeros_to_num(zeros: &[Complex], gain: f64) -> [f64; 3] {
     match zeros.len() {
         0 => [gain, 0.0, 0.0],
         1 => {
-            let z = zeros[0];
+            let z = *zeros.first().expect("guaranteed by len check");
             [gain, -gain * z.re, 0.0]
         }
         _ => {
-            let z0 = zeros[0];
-            let z1 = zeros[1];
+            let z0 = *zeros.first().expect("guaranteed by len check");
+            let z1 = *zeros.get(1).expect("guaranteed by len check");
             let sum = z0 + z1;
             let prod = z0 * z1;
             [gain, -gain * sum.re, gain * prod.re]
@@ -223,7 +225,7 @@ mod tests {
 
         // Compare at several frequencies.
         for k in 1..8 {
-            let w = PI * k as f64 / 8.0;
+            let w = PI * f64::from(k) / 8.0;
             let from_zpk = zpk.eval_z(w).mag();
             let from_sos = eval_sos(&sos, w).mag();
             let diff = (from_zpk - from_sos).abs();

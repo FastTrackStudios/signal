@@ -11,6 +11,7 @@
 //!   - Allpass: Butterworth -> bilinear -> reflect zeros
 //!   - `ShelfAlt`: `cascade::compute_cascade_shelf_alt`
 
+use dsp_core::num;
 use std::f64::consts::PI;
 
 use biquad::Coeffs;
@@ -257,10 +258,10 @@ pub fn compute_auto_gain(band_sections: &[Vec<Coeffs>], sample_rate: f64) -> f64
     let log_range = (f_high / f_low).ln();
 
     let mut sum_db = 0.0;
-    let mut count = 0;
+    let mut count: usize = 0;
 
     for i in 0..num_points {
-        let t = i as f64 / (num_points - 1) as f64;
+        let t = f64::from(i) / f64::from(num_points - 1);
         let freq = f_low * (t * log_range).exp();
         let w = 2.0 * PI * freq / sample_rate;
 
@@ -285,13 +286,13 @@ pub fn compute_auto_gain(band_sections: &[Vec<Coeffs>], sample_rate: f64) -> f64
         let mag_db = 20.0 * h.mag().log10();
         if mag_db.is_finite() {
             sum_db += mag_db;
-            count += 1;
+            count = count.saturating_add(1);
         }
     }
 
     if count > 0 {
         // Return negative of average gain change (compensation)
-        -(sum_db / count as f64)
+        -(sum_db / num::count_to_f64(count))
     } else {
         0.0
     }
@@ -368,7 +369,7 @@ mod tests {
     fn allpass_unity_magnitude() {
         let sos = design_filter(FilterType::Allpass, 1000.0, 0.707, 0.0, 48000.0, 2);
         for k in 1..8 {
-            let w = PI * k as f64 / 8.0;
+            let w = PI * f64::from(k) / 8.0;
             let mag = biquad::mag_db_sos(&sos, w);
             assert!(
                 mag.abs() < 3.0,
@@ -401,7 +402,9 @@ mod tests {
         let sos = design_filter(FilterType::FlatTilt, 1000.0, 1.0, 0.0, 48000.0, 2);
         assert_eq!(sos.len(), 1);
         for s in &sos {
-            assert_eq!(*s, PASSTHROUGH);
+            for (coeff, passthrough_coeff) in s.iter().zip(PASSTHROUGH.iter()) {
+                assert_eq!(coeff.to_bits(), passthrough_coeff.to_bits());
+            }
         }
     }
 
@@ -458,6 +461,8 @@ mod tests {
     fn passthrough_on_zero_gain_peak() {
         let sos = design_filter(FilterType::Peak, 1000.0, 2.0, 0.0, 48000.0, 2);
         assert_eq!(sos.len(), 1);
-        assert_eq!(sos[0], PASSTHROUGH);
+        for (coeff, passthrough_coeff) in sos[0].iter().zip(PASSTHROUGH.iter()) {
+            assert_eq!(coeff.to_bits(), passthrough_coeff.to_bits());
+        }
     }
 }

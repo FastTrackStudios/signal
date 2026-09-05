@@ -2,6 +2,7 @@
 
 use crate::design::biquad::Coeffs;
 use crate::design::cascade;
+use dsp_core::num;
 
 use super::super::common::cascade_qs;
 
@@ -83,7 +84,9 @@ const fn highpass_slope7_section_freq_range_sec0_q10(fc_48k: f64) -> Option<Coef
     }
 }
 
-fn highpass_slope7_section_freq_range_sec0_q100(fc_48k: f64) -> Option<Coeffs> {
+#[expect(clippy::cast_possible_truncation, reason = "float-to-int cast necessary for lookup")]
+#[expect(clippy::as_conversions, reason = "no std alternative for float-to-int cast")]
+const fn highpass_slope7_section_freq_range_sec0_q100(fc_48k: f64) -> Option<Coeffs> {
     match fc_48k as i32 {
         20000 => Some([1.0, 0.850_240_734_762, 0.345_621_740_202, 0.316_257_880_843, -0.632_375_457_005, 0.316_117_576_162]),
         21000 => Some([1.0, 0.887_446_010_266, 0.331_695_942_423, 0.289_004_798_396, -0.577_859_664_976, 0.288_854_866_580]),
@@ -92,7 +95,9 @@ fn highpass_slope7_section_freq_range_sec0_q100(fc_48k: f64) -> Option<Coeffs> {
     }
 }
 
-fn highpass_slope7_section_freq_range_sec1(fc_48k: f64) -> Option<Coeffs> {
+#[expect(clippy::cast_possible_truncation, reason = "float-to-int cast necessary for lookup")]
+#[expect(clippy::as_conversions, reason = "no std alternative for float-to-int cast")]
+const fn highpass_slope7_section_freq_range_sec1(fc_48k: f64) -> Option<Coeffs> {
     match fc_48k as i32 {
         16000 => Some([1.0, 0.092_710_884_626, 0.096_385_406_338, 0.270_996_290_703, -0.541_975_080_714, 0.270_978_790_010]),
         17000 => Some([1.0, 0.149_077_863_062, 0.068_935_717_709, 0.246_870_489_337, -0.493_740_978_675, 0.246_870_489_337]),
@@ -176,7 +181,7 @@ fn highpass_slope7_section(
             || (fc_48k - 12000.0).abs() < 1.0e-6
             || (fc_48k - 14000.0).abs() < 1.0e-6)
     {
-        match fc_48k as i32 {
+        match num::trunc_to_i64(fc_48k) {
             10000 => [
                 1.0,
                 -0.459_515_280_276,
@@ -204,7 +209,7 @@ fn highpass_slope7_section(
             _ => cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate),
         }
     } else if sec == 0 && (q_user - 1.0).abs() < 1.0e-12 && (20000.0..=22000.0).contains(&fc_48k) {
-        match fc_48k as i32 {
+        match num::trunc_to_i64(fc_48k) {
             20000 => [
                 1.0,
                 0.850_240_734_762,
@@ -235,7 +240,7 @@ fn highpass_slope7_section(
         && (q_user - 10.0).abs() < 1.0e-12
         && ((10000.0..=22000.0).contains(&fc_48k) && (fc_48k - 11000.0).abs() > 1.0e-6)
     {
-        match fc_48k as i32 {
+        match num::trunc_to_i64(fc_48k) {
             10000 => [
                 1.0,
                 -0.497_679_492_799,
@@ -412,11 +417,10 @@ fn highpass_slope7_section(
         } else {
             None
         };
-        if let Some(wp_scale) = wp_scale {
-            highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0)
-        } else {
-            cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
-        }
+        wp_scale.map_or_else(
+            || cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate),
+            |wp_scale| highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0)
+        )
     } else {
         cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
     }
@@ -442,10 +446,15 @@ fn highpass_slope7_section(
 fn highpass_slope7_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
     let mut qs: Vec<f64> = cascade_qs(4, q_user).into_iter().rev().collect();
     if (q_user - 0.5).abs() < 1.0e-12 {
-        qs[0] = highpass_slope7_sec0_q05(freq_hz, sample_rate);
+        if let Some(elem) = qs.get_mut(0) {
+            *elem = highpass_slope7_sec0_q05(freq_hz, sample_rate);
+        }
     }
     if qs.len() > 1 {
-        qs[1] = highpass_slope7_sec1_q(freq_hz, sample_rate);
+        // Safety: bounds checked above
+        if let Some(elem) = qs.get_mut(1) {
+            *elem = highpass_slope7_sec1_q(freq_hz, sample_rate);
+        }
     }
     qs
 }

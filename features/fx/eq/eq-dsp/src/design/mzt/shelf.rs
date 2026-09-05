@@ -123,8 +123,8 @@ pub fn design_tilt_shelf_first_order(freq_hz: f64, gain_db: f64, sample_rate: f6
     let w0 = 2.0 * PI * freq_hz / sample_rate;
     let t = (w0 * 0.5).tan();
 
-    let n0 = g * t + 1.0;
-    let n1 = g * t - 1.0;
+    let n0 = g.mul_add(t, 1.0);
+    let n1 = g.mul_add(t, -1.0);
     let d0 = t + g;
     let d1 = t - g;
     let inv = 1.0 / d0;

@@ -9,6 +9,7 @@
 //!   - `elliptic_asn`        (0x18011e900) -- inverse Jacobi sn
 
 use std::f64::consts::PI;
+use dsp_core::num;
 
 /// Maximum iterations for iterative algorithms.
 const MAX_ITER: usize = 64;
@@ -141,7 +142,7 @@ pub fn elliptic_asn(y: f64, k: f64) -> f64 {
 
         // d(sn)/du = cn * dn, where cn = sqrt(1 - sn^2), dn = sqrt(1 - k^2 * sn^2)
         let cn = (1.0 - sn * sn).max(0.0).sqrt();
-        let dn = (1.0 - k * k * sn * sn).max(0.0).sqrt();
+        let dn = (k * k * sn).mul_add(-sn, 1.0).max(0.0).sqrt();
         let deriv = cn * dn;
 
         if deriv.abs() < 1e-30 {
@@ -180,12 +181,12 @@ pub fn elliptic_sncndn(u_input: f64, modulus: f64) -> (f64, f64, f64) {
     a_seq.push(agm_a);
     c_seq.push(modulus.abs());
 
-    let mut iter_count = 0;
+    let mut iter_count: usize = 0;
     for _ in 0..MAX_ITER {
         let a_next = (agm_a + agm_b) * 0.5;
         let c_next = (agm_a - agm_b) * 0.5;
         let b_next = (agm_a * agm_b).sqrt();
-        iter_count += 1;
+        iter_count = iter_count.saturating_add(1);
         a_seq.push(a_next);
         c_seq.push(c_next);
         if c_next.abs() < TOL {
@@ -196,14 +197,16 @@ pub fn elliptic_sncndn(u_input: f64, modulus: f64) -> (f64, f64, f64) {
         agm_b = b_next;
     }
 
-    let mut phi = (1u64 << iter_count) as f64 * agm_a * u_input;
+    let mut phi = num::u64_to_f64(1u64 << iter_count) * agm_a * u_input;
     for i in (1..=iter_count).rev() {
-        phi = (phi + (c_seq[i] / a_seq[i] * phi.sin()).asin()) * 0.5;
+        let c_i = c_seq.get(i).copied().unwrap_or(0.0);
+        let a_i = a_seq.get(i).copied().unwrap_or(1.0);
+        phi = (phi + (c_i / a_i * phi.sin()).asin()) * 0.5;
     }
     let sn = phi.sin();
     let cn = phi.cos();
     // dn is strictly positive for real u, so the square root is unambiguous.
-    let dn = (1.0 - m_param * sn * sn).max(0.0).sqrt();
+    let dn = (m_param * sn).mul_add(-sn, 1.0).max(0.0).sqrt();
     (sn, cn, dn)
 }
 
@@ -223,12 +226,14 @@ pub fn ellipdeg(n: usize, k1: f64) -> f64 {
     let big_k = elliptic_k_complete(k1 * k1);
     let big_kp = elliptic_k_complete(1.0 - k1 * k1);
     let q1 = (-PI * big_kp / big_k).exp();
-    let q = q1.powf(1.0 / n as f64);
+    let q = q1.powf(1.0 / num::count_to_f64(n));
 
     let (mut num, mut den) = (1.0f64, 1.0f64);
     for m in 1..=8u32 {
-        num += q.powi((m * (m + 1)) as i32);
-        den += 2.0 * q.powi((m * m) as i32);
+        let exp_m_next = m.saturating_mul(m.saturating_add(1));
+        num += q.powi(exp_m_next as i32);
+        let exp_m_sq = m.saturating_mul(m);
+        den += 2.0 * q.powi(exp_m_sq as i32);
     }
     4.0 * q.sqrt() * (num / den).powi(2)
 }

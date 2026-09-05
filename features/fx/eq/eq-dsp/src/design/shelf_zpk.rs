@@ -18,6 +18,7 @@ use crate::design::constants::{INV_SQRT2, LN10_OVER_20, Q_BW_BASE, Q_BW_MULT, Q_
 use crate::math::prototype;
 use crate::math::transform;
 use crate::math::zpk::Zpk;
+use dsp_core::num;
 
 use std::f64::consts::PI;
 
@@ -64,7 +65,7 @@ pub fn design_low_shelf_zpk(
     }
 
     let total_linear = (user_gain_db * LN10_OVER_20).exp();
-    let section_gain = total_linear.powf(1.0 / f64::from(u32::try_from(n).unwrap_or(1)));
+    let section_gain = total_linear.powf(1.0 / num::count_to_f64(n));
     // Pro-Q4's cos/pow bandwidth — used as RBJ shelf slope `S`. Best match at Q≈1.
     let q_bw = q_to_bandwidth(user_q);
     let w0 = 2.0 * PI * freq_hz / sample_rate;
@@ -94,8 +95,8 @@ fn rbj_low_shelf_slope_biquad(w0: f64, slope: f64, linear_gain: f64) -> Coeffs {
     let b1 = 2.0 * a * ((a + 1.0).mul_add(-cos_w0, a - 1.0));
     let b2 = a * ((a - 1.0).mul_add(-cos_w0, a + 1.0) - two_sqrt_a_alpha);
     let a0 = (a - 1.0).mul_add(cos_w0, a + 1.0) + two_sqrt_a_alpha;
-    let a1 = -2.0 * ((a - 1.0) + (a + 1.0) * cos_w0);
-    let a2 = (a + 1.0) + (a - 1.0) * cos_w0 - two_sqrt_a_alpha;
+    let a1 = -2.0 * ((a + 1.0).mul_add(cos_w0, a - 1.0));
+    let a2 = (a - 1.0).mul_add(cos_w0, a + 1.0) - two_sqrt_a_alpha;
 
     [1.0, a1 / a0, a2 / a0, b0 / a0, b1 / a0, b2 / a0]
 }
@@ -118,7 +119,7 @@ pub fn design_high_shelf_zpk(
         return vec![biquad::PASSTHROUGH; n];
     }
     let total_linear = (user_gain_db * LN10_OVER_20).exp();
-    let section_gain = total_linear.powf(1.0 / n as f64);
+    let section_gain = total_linear.powf(1.0 / num::count_to_f64(n));
     let q_bw = q_to_bandwidth(user_q);
     let w0 = 2.0 * PI * freq_hz / sample_rate;
     (0..n)
@@ -134,12 +135,12 @@ fn rbj_high_shelf_biquad(w0: f64, q: f64, linear_gain: f64) -> Coeffs {
     let alpha = sin_w0 / (2.0 * q.max(1e-6));
     let two_sqrt_a_alpha = 2.0 * a.sqrt() * alpha;
 
-    let b0 = a * ((a + 1.0) + (a - 1.0) * cos_w0 + two_sqrt_a_alpha);
-    let b1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * cos_w0);
-    let b2 = a * ((a + 1.0) + (a - 1.0) * cos_w0 - two_sqrt_a_alpha);
-    let a0 = (a + 1.0) - (a - 1.0) * cos_w0 + two_sqrt_a_alpha;
-    let a1 = 2.0 * ((a - 1.0) - (a + 1.0) * cos_w0);
-    let a2 = (a + 1.0) - (a - 1.0) * cos_w0 - two_sqrt_a_alpha;
+    let b0 = a * ((a - 1.0).mul_add(cos_w0, a + 1.0) + two_sqrt_a_alpha);
+    let b1 = -2.0 * a * ((a + 1.0).mul_add(cos_w0, a - 1.0));
+    let b2 = a * ((a - 1.0).mul_add(cos_w0, a + 1.0) - two_sqrt_a_alpha);
+    let a0 = (a - 1.0).mul_add(-cos_w0, a + 1.0) + two_sqrt_a_alpha;
+    let a1 = 2.0 * ((a + 1.0).mul_add(-cos_w0, a - 1.0));
+    let a2 = (a - 1.0).mul_add(-cos_w0, a + 1.0) - two_sqrt_a_alpha;
 
     [1.0, a1 / a0, a2 / a0, b0 / a0, b1 / a0, b2 / a0]
 }
@@ -158,7 +159,7 @@ pub fn design_tilt_shelf_zpk(
         return vec![biquad::PASSTHROUGH; n];
     }
 
-    let section_gain_db = user_gain_db / n as f64;
+    let section_gain_db = user_gain_db / num::count_to_f64(n);
     let linear_gain = (section_gain_db * LN10_OVER_20).exp();
     let gain_param = linear_gain.sqrt();
 
@@ -193,9 +194,9 @@ pub fn design_band_shelf_zpk(
 
     let mut bp = crate::math::prototype::butterworth_bp_elliptic(n, freq_hz, user_q, sample_rate);
     for zero in &mut bp.zeros {
-        *zero = *zero * gain_param;
+        *zero *= gain_param;
     }
-    bp.gain *= gain_param.powi(bp.poles.len() as i32);
+    bp.gain *= gain_param.powi(i32::try_from(bp.poles.len()).unwrap_or(i32::MAX));
 
     let digital = crate::math::transform::bilinear(&bp, sample_rate);
     let mut sos = crate::design::biquad::zpk_to_sos(&digital);
@@ -222,22 +223,23 @@ pub fn design_band_shelf_zpk(
 
 fn apply_shelf_gain(zpk: &mut Zpk, gain_param: f64, is_low_type: bool) {
     for zero in &mut zpk.zeros {
-        *zero = *zero * gain_param;
+        *zero *= gain_param;
     }
     if is_low_type {
         let inv_gain = 1.0 / gain_param;
         for pole in &mut zpk.poles {
-            *pole = *pole * inv_gain;
+            *pole *= inv_gain;
         }
     }
 }
 
 fn apply_q_to_shelf_section(sos: &mut [Coeffs], user_q: f64) {
-    if sos.is_empty() || user_q.abs() < 1e-15 {
+    if user_q.abs() < 1e-15 {
         return;
     }
-    let q_scale = INV_SQRT2 / user_q;
-    let coeffs = &mut sos[0];
-    coeffs[1] *= q_scale;
-    coeffs[4] *= q_scale;
+    if let Some(coeffs) = sos.get_mut(0) {
+        let q_scale = INV_SQRT2 / user_q;
+        coeffs[1] *= q_scale;
+        coeffs[4] *= q_scale;
+    }
 }

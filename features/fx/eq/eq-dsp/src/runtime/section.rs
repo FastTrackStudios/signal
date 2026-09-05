@@ -127,16 +127,14 @@ impl Df1Section {
 
     /// The normalised coefficients, `[b0, b1, b2, a1, a2]` with `a0 = 1`.
     #[must_use]
-    pub fn coeffs(&self) -> [f64; 5] {
+    pub const fn coeffs(&self) -> [f64; 5] {
         [self.b0, self.b1, self.b2, self.a1, self.a2]
     }
 
     /// Process one sample through the biquad (Direct Form I).
     #[inline]
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
-        let output = self.b0 * input + self.b1 * self.x1[ch] + self.b2 * self.x2[ch]
-            - self.a1 * self.y1[ch]
-            - self.a2 * self.y2[ch];
+        let output = self.a2.mul_add(-self.y2[ch], self.a1.mul_add(-self.y1[ch], self.b2.mul_add(self.x2[ch], self.b0.mul_add(input, self.b1 * self.x1[ch]))));
         self.x2[ch] = self.x1[ch];
         self.x1[ch] = input;
         self.y2[ch] = self.y1[ch];
@@ -145,7 +143,7 @@ impl Df1Section {
     }
 
     /// Reset all state to zero.
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.x1 = [0.0; MAX_CH];
         self.x2 = [0.0; MAX_CH];
         self.y1 = [0.0; MAX_CH];
@@ -170,7 +168,7 @@ mod tests {
         sec.set_coeffs(PASSTHROUGH);
 
         for i in 0..100 {
-            let input = (i as f64) * 0.01 - 0.5;
+            let input = f64::from(i).mul_add(0.01, -0.5);
             let output = sec.tick(input, 0);
             assert!(
                 (output - input).abs() < 1e-14,
@@ -247,7 +245,7 @@ mod tests {
         sec.set_coeffs(PASSTHROUGH);
 
         for i in 0..100 {
-            let input = (i as f64) * 0.01 - 0.5;
+            let input = f64::from(i).mul_add(0.01, -0.5);
             let output = sec.tick(input, 0);
             assert!(
                 (output - input).abs() < 1e-14,
@@ -273,7 +271,7 @@ mod tests {
                 if i == 0 {
                     1.0
                 } else {
-                    ((i as f64) * 0.7).sin() * 0.5
+                    (f64::from(i) * 0.7).sin() * 0.5
                 }
             })
             .collect();

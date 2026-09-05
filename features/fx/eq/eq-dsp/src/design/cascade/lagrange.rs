@@ -1,6 +1,6 @@
 //! The three-point Lagrange synthesis kernel, and the paths built on it.
 
-use super::*;
+use super::{Coeffs, PI, PASSTHROUGH};
 
 /// Pro-Q 4 audio-path Lagrange-MZT **alt 2-point** synthesis.
 ///
@@ -29,7 +29,7 @@ use super::*;
 /// Returns `[a0=1, a1, a2, b0, b1, b2]` matching the layout used
 /// elsewhere in `cascade.rs`, or `PASSTHROUGH` if the formula
 /// degenerates (zero divisor, non-finite intermediate).
-pub(crate) fn lagrange_synth_alt_path(
+pub fn lagrange_synth_alt_path(
     cap_a: f64,
     cap_b: f64,
     cap_c: f64,
@@ -51,11 +51,11 @@ pub(crate) fn lagrange_synth_alt_path(
     let hsq = |w: f64| -> f64 {
         let w2 = w * w;
         let w4 = w2 * w2;
-        let den = cap_d * w4 + cap_e * w2 + cap_f;
+        let den = cap_d.mul_add(w4, cap_e * w2 + cap_f);
         if den.abs() < 1e-300 {
             0.0
         } else {
-            (cap_a * w4 + cap_b * w2 + cap_c) / den
+            (cap_a.mul_add(w4, cap_b * w2 + cap_c)) / den
         }
     };
 
@@ -94,7 +94,7 @@ pub(crate) fn lagrange_synth_alt_path(
     let sp5 = ((bracket * t2s + (g_ref - u_zero) * s_val * s_val) / sp5_den).max(0.0);
 
     // sp6 (combined post-sp5)
-    let sp6 = ((t1s - s_val).powi(2) * u_pole / t1s - t1s * u_eval + 2.0 * p2 * p3 * s_val
+    let sp6 = ((2.0 * p2 * p3).mul_add(s_val, (t1s - s_val).powi(2) * u_pole / t1s - t1s * u_eval)
         - s_val * s_val * g_ref / t1s
         + sp5 * u_pole)
         .max(0.0);

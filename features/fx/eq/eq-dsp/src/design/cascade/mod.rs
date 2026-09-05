@@ -132,7 +132,7 @@ pub fn compute_cascade_peak_with_slope(
 /// **Sub-frequency derivation:**
 /// - `w_pole` and `w_third` are the two positive roots of the |H(jω)|²
 ///   peak-finder quadratic in `u = ω²`:
-///       `(A·E − B·D)·u² + 2(A·F − C·D)·u + (B·F − C·E) = 0`.
+///   `(A·E − B·D)·u² + 2(A·F − C·D)·u + (B·F − C·E) = 0`.
 /// - Verified bit-exact (≤ 1e-15) against `solve_bq_sweep.csv` for all
 ///   captured slope=4 rows (`root_count=2` column).  The smaller root is
 ///   `w_pole_solve`, the larger is `w_third_solve`.
@@ -247,7 +247,9 @@ mod tests {
     fn peak_zero_gain_is_passthrough() {
         let sos = compute_cascade_peak(1000.0, 2.0, 0.0, 48000.0, 2);
         assert_eq!(sos.len(), 1);
-        assert_eq!(sos[0], PASSTHROUGH);
+        let sos_bits: [u64; 6] = sos[0].map(f64::to_bits);
+        let expected_bits: [u64; 6] = PASSTHROUGH.map(f64::to_bits);
+        assert_eq!(sos_bits, expected_bits);
     }
 
     #[test]
@@ -285,8 +287,10 @@ mod tests {
     fn shelf_alt_zero_gain_is_passthrough() {
         let sos = compute_cascade_shelf_alt(1000.0, 1.0, 0.0, 48000.0, 2);
         assert_eq!(sos.len(), 3);
+        let expected_bits: [u64; 6] = PASSTHROUGH.map(f64::to_bits);
         for (i, s) in sos.iter().enumerate() {
-            assert_eq!(*s, PASSTHROUGH, "Section {i} should be passthrough");
+            let s_bits: [u64; 6] = s.map(f64::to_bits);
+            assert_eq!(s_bits, expected_bits, "Section {i} should be passthrough");
         }
     }
 
@@ -296,6 +300,7 @@ mod tests {
         // Always 3 sections from hardcoded ZPK path
         assert_eq!(sos.len(), 3);
         // All sections should be valid (non-NaN) and not passthrough
+        let expected_bits: [u64; 6] = PASSTHROUGH.map(f64::to_bits);
         for (i, section) in sos.iter().enumerate() {
             for (j, &coeff) in section.iter().enumerate() {
                 assert!(
@@ -303,8 +308,9 @@ mod tests {
                     "section[{i}][{j}] is not finite: {coeff}"
                 );
             }
+            let section_bits: [u64; 6] = section.map(f64::to_bits);
             assert_ne!(
-                *section, PASSTHROUGH,
+                section_bits, expected_bits,
                 "Section {i} should not be passthrough for non-zero gain"
             );
         }

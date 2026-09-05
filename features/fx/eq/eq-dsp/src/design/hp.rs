@@ -71,16 +71,20 @@ pub(super) fn exact_48k_q(
 
 pub(super) fn interp_48k_table(freq_hz: f64, sample_rate: f64, table: &[(f64, f64)]) -> f64 {
     let sr_scale = sample_rate / 48000.0;
-    let fc = (freq_hz / sr_scale).clamp(table[0].0, table[table.len() - 1].0);
+    let fc = (freq_hz / sr_scale).clamp(
+        table.first().expect("table is non-empty").0,
+        table.last().expect("table is non-empty").0,
+    );
     for pair in table.windows(2) {
-        let (f0, q0) = pair[0];
-        let (f1, q1) = pair[1];
+        let [p0, p1] = pair else { unreachable!() };
+        let (f0, q0) = *p0;
+        let (f1, q1) = *p1;
         if fc <= f1 {
             let t = (fc - f0) / (f1 - f0);
-            return q0 + (q1 - q0) * t;
+            return (q1 - q0).mul_add(t, q0);
         }
     }
-    table[table.len() - 1].1
+    table.last().expect("table is non-empty").1
 }
 
 pub(super) fn highpass_s2_with_w_eval_scale(
@@ -117,10 +121,10 @@ pub(super) fn highpass_s2_with_subfreq_scales(
     let w_third = 0.2 * w_pole;
     let w_eval = if q_sec > 1.0 {
         let inner = w_pole * 0.4421 - 5.0 / 12.0;
-        let base = (inner * inner * 0.2 + 0.785) * PI;
+        let base = (inner * inner).mul_add(0.2, 0.785) * PI;
         let d = (w_pole - 1.515).max(0.0);
         let q_term = (1.0 / (q_sec * q_sec) - 0.01).clamp(0.0, 0.06);
-        (base + 0.0396 * d * q_term).clamp(0.0, PI)
+        (0.0396_f64 * d).mul_add(q_term, base).clamp(0.0, PI)
     } else {
         PI
     };
@@ -177,16 +181,17 @@ pub(super) fn cut_odd_tail_poles_48k(freq_hz: f64) -> (f64, f64) {
         (21000.0, 0.047_742_394_741_058, -0.626_594_864_880_914),
         (22000.0, 0.037_996_222_971_866, -0.628_499_987_709_256),
     ];
-    let fc = freq_hz.clamp(POLES[0].0, POLES[POLES.len() - 1].0);
+    let fc = freq_hz.clamp(POLES.first().expect("POLES is non-empty").0, POLES.last().expect("POLES is non-empty").0);
     for pair in POLES.windows(2) {
-        let (f0, p0, n0) = pair[0];
-        let (f1, p1, n1) = pair[1];
+        let [p0, p1] = pair else { unreachable!() };
+        let (f0, p0, n0) = *p0;
+        let (f1, p1, n1) = *p1;
         if fc <= f1 {
             let t = (fc - f0) / (f1 - f0);
-            return (p0 + (p1 - p0) * t, n0 + (n1 - n0) * t);
+            return ((p1 - p0).mul_add(t, p0), (n1 - n0).mul_add(t, n0));
         }
     }
-    let (_, p, n) = POLES[POLES.len() - 1];
+    let (_, p, n) = *POLES.last().expect("POLES is non-empty");
     (p, n)
 }
 
@@ -207,20 +212,20 @@ pub(super) fn cut_odd_qs(order: usize, user_q: f64) -> Vec<f64> {
 }
 
 pub(super) fn cut_odd_tail_lowpass(freq_hz: f64, sample_rate: f64) -> Coeffs {
+    const Z1: f64 = -0.091_036_004_267_1;
+    const Z2: f64 = -0.667_163_858_960_4;
     let (p_pos, p_neg) = cut_odd_tail_poles(freq_hz, sample_rate);
     let a1 = -(p_pos + p_neg);
     let a2 = p_pos * p_neg;
-    const Z1: f64 = -0.091_036_004_267_1;
-    const Z2: f64 = -0.667_163_858_960_4;
     let k = (1.0 + a1 + a2) / ((1.0 - Z1) * (1.0 - Z2));
     [1.0, a1, a2, k, -k * (Z1 + Z2), k * Z1 * Z2]
 }
 
 pub(super) fn cut_odd_tail_highpass(freq_hz: f64, sample_rate: f64) -> Coeffs {
+    const Z1: f64 = 1.0;
     let (p_pos, p_neg, z2, k) = cut_odd_tail_highpass_shape(freq_hz, sample_rate);
     let a1 = -(p_pos + p_neg);
     let a2 = p_pos * p_neg;
-    const Z1: f64 = 1.0;
     [1.0, a1, a2, k, -k * (Z1 + z2), k * Z1 * z2]
 }
 
@@ -417,20 +422,21 @@ pub(super) fn cut_odd_tail_highpass_shape_48k(freq_hz: f64) -> (f64, f64, f64, f
             0.343_067_273_735_296,
         ),
     ];
-    let fc = freq_hz.clamp(SHAPE[0].0, SHAPE[SHAPE.len() - 1].0);
+    let fc = freq_hz.clamp(SHAPE.first().expect("SHAPE is non-empty").0, SHAPE.last().expect("SHAPE is non-empty").0);
     for pair in SHAPE.windows(2) {
-        let (f0, p0, n0, z0, k0) = pair[0];
-        let (f1, p1, n1, z1, k1) = pair[1];
+        let [p0, p1] = pair else { unreachable!() };
+        let (f0, p0, n0, z0, k0) = *p0;
+        let (f1, p1, n1, z1, k1) = *p1;
         if fc <= f1 {
             let t = (fc - f0) / (f1 - f0);
             return (
-                p0 + (p1 - p0) * t,
-                n0 + (n1 - n0) * t,
-                z0 + (z1 - z0) * t,
-                k0 + (k1 - k0) * t,
+                (p1 - p0).mul_add(t, p0),
+                (n1 - n0).mul_add(t, n0),
+                (z1 - z0).mul_add(t, z0),
+                (k1 - k0).mul_add(t, k0),
             );
         }
     }
-    let (_, p, n, z, k) = SHAPE[SHAPE.len() - 1];
+    let (_, p, n, z, k) = *SHAPE.last().expect("SHAPE is non-empty");
     (p, n, z, k)
 }

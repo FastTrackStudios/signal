@@ -1,6 +1,6 @@
 //! Peak / bell section parameters (Pro-Q band type 3).
 
-use super::*;
+use super::{Prototype, PI};
 
 /// Per-section helper for `proto[0x13] ∈ {0, 3}` (peak-style sections).
 ///
@@ -60,13 +60,13 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
             if proto.mode > 0 {
                 let wp_in = proto.wp;
                 // f32 lane: ((wp · 0.44209706…) - 5/12)
-                let fv2_a = ((wp_in * 0.442_097_064_144_153_7 - 5.0 / 12.0) as f32) as f64;
-                let mut fv2_sq_part = fv2_a * fv2_a * 0.20 + 0.785;
-                let mut fv2_b = fv2_sq_part as f32 as f64;
-                if (fv2_b as f32 as f64) > 0.96 {
+                let fv2_a = f64::from(wp_in.mul_add(0.442_097_064_144_153_7, -(5.0 / 12.0)) as f32);
+                let mut fv2_sq_part = (fv2_a * fv2_a).mul_add(0.20, 0.785);
+                let mut fv2_b = f64::from(fv2_sq_part as f32);
+                if f64::from(fv2_b as f32) > 0.96 {
                     // Mirror w_eval around 0.96 (binary: (w_eval - 0.96) + w_eval)
                     fv2_sq_part = (proto.w_eval - 0.96) + proto.w_eval;
-                    fv2_b = fv2_sq_part as f32 as f64;
+                    fv2_b = f64::from(fv2_sq_part as f32);
                 }
                 // wp_clamped = min(wp_in, π)
                 let wp_clamped = wp_in.min(PI);
@@ -92,12 +92,12 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
             // === alpha & wp/wz/wt derivation (unconditional) ===
             // alpha_94_new = (alpha_94_old² · 4.0 - 2.0) as f32
             let a94_in = proto.alpha_scratch_94;
-            let fv2 = a94_in * a94_in * 4.0f32 - 2.0f32;
+            let fv2 = (a94_in * a94_in).mul_add(4.0f32, -2.0f32);
             proto.alpha_scratch_94 = fv2;
 
             // dVar_alpha = (fv2 < 0) ? max(sqrt(-fv2/2), 0.5) : 0.5
-            let dvar_alpha = if (fv2 as f64) < 0.0 {
-                let s = (fv2 as f64 * -0.5).sqrt();
+            let dvar_alpha = if f64::from(fv2) < 0.0 {
+                let s = (f64::from(fv2) * -0.5).sqrt();
                 if s <= 0.5 {
                     0.5
                 } else {
@@ -109,17 +109,11 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
 
             // fVar3 = fv2 · -0.5 (f32); fv11 = clamp(fVar3, 0, 1.0)
             let fv3 = fv2 * -0.5f32;
-            let fv11 = if fv3 < 0.0 {
-                0.0f32
-            } else if fv3 >= 1.0f32 {
-                1.0f32
-            } else {
-                fv3
-            };
-            let fv11_d = fv11 as f64;
+            let fv11 = fv3.clamp(0.0f32, 1.0f32);
+            let fv11_d = f64::from(fv11);
 
             // wp_new candidate = band_omega_ref / ((alpha-1)·fv11 + 1)
-            let wp_new = proto.band_omega_ref / ((dvar_alpha - 1.0) * fv11_d + 1.0);
+            let wp_new = proto.band_omega_ref / ((dvar_alpha - 1.0).mul_add(fv11_d, 1.0));
 
             // dVar5 = π - clamp(wp_new - π, 0, 0.3π)
             let excess = wp_new - PI;
@@ -142,11 +136,12 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
             proto.wp = wp_final;
 
             // wt scale: dVar10 = 0.20, modified iff fv2 ≥ 6.0
-            let mut dvar10 = 0.20;
-            if fv2 >= 6.0f32 {
+            let dvar10 = if fv2 >= 6.0f32 {
                 let fv2_capped = if fv2 >= 20.0f32 { 20.0f32 } else { fv2 };
-                dvar10 = 0.20 - (fv2_capped as f64 - 6.0) * (9.0 / 700.0);
-            }
+                (f64::from(fv2_capped) - 6.0).mul_add(-(9.0 / 700.0), 0.20)
+            } else {
+                0.20
+            };
             proto.wt = wp_final * dvar10;
             proto.wz = wp_final * 0.001;
         }

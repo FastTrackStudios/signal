@@ -7,9 +7,9 @@
 //! would separate the arithmetic from its evidence. Splitting it wants the
 //! conformance captures in `tests/reference`, not a refactor.
 
-use super::*;
+use super::{Coeffs, PI, lagrange_synth_alt_path, trace_bell_inputs, PASSTHROUGH, bell_s2_proq4};
 
-pub(crate) fn bell_brickwall_proq4(
+pub fn bell_brickwall_proq4(
     freq_hz: f64,
     q: f64,
     gain_db: f64,
@@ -18,10 +18,18 @@ pub(crate) fn bell_brickwall_proq4(
     slope_idx: Option<usize>,
 ) -> Vec<Coeffs> {
     use crate::math::zpk::Complex;
+    use std::f64::consts::SQRT_2;
+    use dsp_core::num;
+
+    #[derive(Clone, Copy)]
+    enum HiCorner {
+        Snap,
+        PeakTimesQ,
+        ScaleByOmega(f64),
+    }
 
     let q_user = q.max(1e-6);
     let gain_lin = 10.0_f64.powf(gain_db / 20.0);
-    use std::f64::consts::SQRT_2;
 
     // Decoded bandwidth (2026-05-04, see
     // `docs/reports/proq4/re/bell_bucketB_BW_decoded.md`):
@@ -50,7 +58,7 @@ pub(crate) fn bell_brickwall_proq4(
     let g_pow = if is_slope5 {
         gain_lin.powf(1.0 / 5.0)
     } else {
-        gain_lin.powf(1.0 / (2.0 * n_lp as f64))
+        gain_lin.powf(1.0 / (2.0 * num::count_to_f64(n_lp)))
     };
     let b_pole = SQRT_2 / (q_user * g_pow);
     let b_zero = SQRT_2 * g_pow / q_user;
@@ -75,7 +83,7 @@ pub(crate) fn bell_brickwall_proq4(
         let sq = disc.sqrt();
         let r1 = (-b + sq) * 0.5;
         let r2 = (-b - sq) * 0.5;
-        let (lo, _hi_quad) = if r1.mag() < r2.mag() {
+        let (lo, hi_quad) = if r1.mag() < r2.mag() {
             (r1, r2)
         } else {
             (r2, r1)
@@ -85,7 +93,7 @@ pub(crate) fn bell_brickwall_proq4(
         let hi = if mag_sq > 0.0 {
             Complex::new(lo.re / mag_sq, lo.im / mag_sq)
         } else {
-            _hi_quad
+            hi_quad
         };
         (lo, hi)
     };
@@ -115,14 +123,14 @@ pub(crate) fn bell_brickwall_proq4(
             (0.6, 2.2634),
             (0.7, 2.01411),
         ];
-        if q < TABLE[0].0 - 1e-12 || q > TABLE[TABLE.len() - 1].0 + 1e-12 {
+        let last_q = TABLE.last().map(|t| t.0).unwrap_or(0.0);
+        if q < TABLE[0].0 - 1e-12 || q > last_q + 1e-12 {
             return None;
         }
         // exact bin or linear interpolate (extend nearest-neighbor at
         // endpoints — table is dense enough for the captured Qs).
         for w in TABLE.windows(2) {
-            let (q0, k0) = w[0];
-            let (q1, k1) = w[1];
+            let &[(q0, k0), (q1, k1)] = w else { continue };
             if q >= q0 - 1e-12 && q <= q1 + 1e-12 {
                 if (q - q0).abs() < 1e-9 {
                     return Some(k0);
@@ -136,14 +144,8 @@ pub(crate) fn bell_brickwall_proq4(
         None
     };
 
-    #[derive(Clone, Copy)]
-    enum HiCorner {
-        Snap,
-        PeakTimesQ,
-        ScaleByOmega(f64),
-    }
     let hi_corner: Option<(usize, HiCorner)> =
-        if matches!(slope_idx, Some(7 | 8 | 9)) && n_sections >= 4 {
+        if matches!(slope_idx, Some(7..=9)) && n_sections >= 4 {
             let q_max = match slope_idx {
                 Some(7) => 3.0,
                 Some(8) => 5.0,
@@ -157,7 +159,7 @@ pub(crate) fn bell_brickwall_proq4(
                 let theta_lp = if is_slope5 && p != n_lp / 2 {
                     PI / 5.0
                 } else {
-                    PI * (2 * p + 1) as f64 / (2 * n_lp) as f64
+                    PI * (2.0 * num::count_to_f64(p) + 1.0) / (2.0 * num::count_to_f64(n_lp))
                 };
                 let p_lp = Complex::new(-theta_lp.sin(), theta_lp.cos());
                 let (_, bp_hi) = lp_to_bp(p_lp, b_pole);
@@ -183,6 +185,8 @@ pub(crate) fn bell_brickwall_proq4(
         };
 
     let mut sections = Vec::with_capacity(n_sections);
+
+    const W_POLE_BUCKETB_MAX: f64 = 3.135_309_468_282_613_5;
 
     for sec in 0..n_sections {
         let pair_idx = sec / 2;
@@ -214,15 +218,15 @@ pub(crate) fn bell_brickwall_proq4(
                 (24.0, 69.96),
             ];
             let g_abs = gain_db.abs();
+            let last_entry = SLOPE3_ANGLE_TABLE.last().copied().unwrap_or((0.0, 0.0));
             let theta_deg = if g_abs <= SLOPE3_ANGLE_TABLE[0].0 {
                 SLOPE3_ANGLE_TABLE[0].1
-            } else if g_abs >= SLOPE3_ANGLE_TABLE[SLOPE3_ANGLE_TABLE.len() - 1].0 {
-                SLOPE3_ANGLE_TABLE[SLOPE3_ANGLE_TABLE.len() - 1].1
+            } else if g_abs >= last_entry.0 {
+                last_entry.1
             } else {
                 let mut t = SLOPE3_ANGLE_TABLE[0].1;
                 for w in SLOPE3_ANGLE_TABLE.windows(2) {
-                    let (g0, t0) = w[0];
-                    let (g1, t1) = w[1];
+                    let &[(g0, t0), (g1, t1)] = w else { continue };
                     if g_abs >= g0 && g_abs <= g1 {
                         t = t0 + (t1 - t0) * (g_abs - g0) / (g1 - g0);
                         break;
@@ -232,7 +236,7 @@ pub(crate) fn bell_brickwall_proq4(
             };
             theta_deg.to_radians()
         } else {
-            PI * (2 * pair_idx + 1) as f64 / (2 * n_lp) as f64
+            PI * (2.0 * num::count_to_f64(pair_idx) + 1.0) / (2.0 * num::count_to_f64(n_lp))
         };
         let p_lp = Complex::new(-theta_lp.sin(), theta_lp.cos());
 
@@ -266,10 +270,10 @@ pub(crate) fn bell_brickwall_proq4(
         // |P(jω)|² polynomial coefficients (matches solve_bq_sweep.csv to
         // ≤ 0.5% rel — small Q-correction undecoded).
         let cap_a = 1.0;
-        let cap_b = (b1_z * b1_z - 2.0 * b0_z) * g_om2;
+        let cap_b = b1_z.mul_add(b1_z, -2.0 * b0_z) * g_om2;
         let cap_c = b0_z * b0_z * g_om4;
         let cap_d = 1.0;
-        let cap_e = (b1_p * b1_p - 2.0 * b0_p) * g_om2;
+        let cap_e = b1_p.mul_add(b1_p, -2.0 * b0_p) * g_om2;
         let cap_f = b0_p * b0_p * g_om4;
         let g_ref = if cap_f.abs() > 1e-300 {
             cap_c / cap_f
@@ -325,11 +329,7 @@ pub(crate) fn bell_brickwall_proq4(
                 u_lo_signed.sqrt()
             }
         } else if b0_p < 1.0 && u_hi_signed <= 0.0 {
-            if let Some(k) = lowq_k(q_user) {
-                omega0 / k
-            } else {
-                0.0
-            }
+            lowq_k(q_user).map_or(0.0, |k| omega0 / k)
         } else {
             u_hi_signed.max(0.0).sqrt().min(omega0) * q_user.min(1.0)
         };
@@ -398,7 +398,7 @@ pub(crate) fn bell_brickwall_proq4(
             && (1.8 * u_hi_signed.sqrt()) > 0.83 * PI;
         let w_eval = if matches!(
             slope_idx,
-            Some(3 | 4 | 5 | 6 | 7 | 8 | 9)
+            Some(3..=9)
         ) {
             if force_uhi_pocket {
                 (1.8 * u_hi_signed.sqrt()).clamp(w_eval_default, PI)
@@ -441,7 +441,7 @@ pub(crate) fn bell_brickwall_proq4(
         // hi sections at Q ∈ {0.7, 0.85}.  Gated to bucket-B slopes
         // (7/8/9) — slope-3 has a different fallback we have not yet
         // decoded.
-        let is_bucket_b_multi = matches!(slope_idx, Some(7 | 8 | 9));
+        let is_bucket_b_multi = matches!(slope_idx, Some(7..=9));
         let w_pole = if !w_pole_root_in_range && p_sec_b0p > 1.0 {
             if is_bucket_b_multi && u_lo_signed <= 0.0 && u_hi_signed > 0.0 {
                 u_hi_signed.sqrt().min(omega0) * q_user
@@ -475,9 +475,9 @@ pub(crate) fn bell_brickwall_proq4(
         {
             let t = ((freq_hz - 12000.0) / 10000.0).clamp(0.0, 1.0);
             let g_abs = gain_db.abs();
-            let wp_g12 = 0.563_761_888_8 + (1.033_563_234_6 - 0.563_761_888_8) * t;
-            let wp_g6 = 0.563_761_888_8 + (1.032_662_948_8 - 0.563_761_888_8) * t;
-            wp_g6 + (wp_g12 - wp_g6) * ((g_abs - 6.0) / 6.0).clamp(0.0, 1.0)
+            let wp_g12 = (1.033_563_234_6_f64 - 0.563_761_888_8).mul_add(t, 0.563_761_888_8);
+            let wp_g6 = (1.032_662_948_8_f64 - 0.563_761_888_8).mul_add(t, 0.563_761_888_8);
+            (wp_g12 - wp_g6).mul_add(((g_abs - 6.0) / 6.0).clamp(0.0, 1.0), wp_g6)
         } else {
             w_pole
         };
@@ -487,7 +487,6 @@ pub(crate) fn bell_brickwall_proq4(
         // The synth's internal cap (now bucket-B values) is the binding
         // constraint for w_third; cap w_pole here so the alpha/beta
         // products below feed that synth with fc-invariant geometry.
-        const W_POLE_BUCKETB_MAX: f64 = 3.135_309_468_282_613_5;
         let w_pole_pre_cap = w_pole;
         let w_pole = w_pole.min(W_POLE_BUCKETB_MAX);
         let w_pole_capped = w_pole_pre_cap > W_POLE_BUCKETB_MAX;

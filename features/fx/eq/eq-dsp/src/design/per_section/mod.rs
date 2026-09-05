@@ -28,6 +28,7 @@
 
 use crate::design::biquad::Coeffs;
 use crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub;
+use dsp_core::num;
 use std::f64::consts::PI;
 
 mod analog;
@@ -116,8 +117,8 @@ pub fn proq4_universal_section_synth(
     let omega = 2.0 * PI * freq_hz * omega_scale / sample_rate;
     let (mag_coeffs, is_quadratic) = compute_zpk_transfer_coeffs_generic(analog, omega);
     let roots = solve_biquad_denominator_quadratic_generic(&mag_coeffs, is_quadratic);
-    proto.mode = roots.count as i32;
-    proto.root_count_dup = roots.count as i32;
+    proto.mode = i32::from(roots.count);
+    proto.root_count_dup = i32::from(roots.count);
     if roots.count >= 1 {
         proto.wp = roots.w1;
     }
@@ -126,7 +127,7 @@ pub fn proq4_universal_section_synth(
     }
     if matches!(proto.section_type, 2 | 5) && roots.count >= 2 {
         let aux = (roots.w2.min(PI) / PI - 0.8).clamp(0.0, 0.2);
-        proto.alpha_scratch_8c = (aux * aux * 25.0) as f32;
+        proto.alpha_scratch_8c = num::narrow(aux * aux * 25.0);
     }
     // Synchronize derived caches the helpers may read.
     proto.analog = Some(*analog);
@@ -185,6 +186,9 @@ const _CONST_PI: f64 = PI;
 mod tests {
     use super::*;
 
+    /// Constant for 0.6π used in tests.
+    const ZERO_POINT_SIX_PI: f64 = 1.884_955_592_153_875_9;
+
     /// Build a `Prototype` with explicit non-zero values so we can detect
     /// stale-write bugs (helper failing to overwrite a field).
     fn fresh_proto() -> Prototype {
@@ -225,9 +229,9 @@ mod tests {
         p.band_omega_ref = 0.4;
         p.wp = 0.123; // would only matter if mode==1
         compute_peak_type3_parameters(&mut p);
-        assert_eq!(p.wp, 0.4);
-        assert_eq!(p.wt, 0.2);
-        assert_eq!(p.wz, 0.1);
+        assert_eq!(p.wp.to_bits(), 0.4_f64.to_bits());
+        assert_eq!(p.wt.to_bits(), 0.2_f64.to_bits());
+        assert_eq!(p.wz.to_bits(), 0.1_f64.to_bits());
     }
 
     /// peak3 type=0, mode=1, wp ≤ `half_ref`: still uses `half_ref` for wt.
@@ -239,9 +243,9 @@ mod tests {
         p.band_omega_ref = 1.0;
         p.wp = 0.1; // not greater than 0.5
         compute_peak_type3_parameters(&mut p);
-        assert_eq!(p.wt, 0.5);
-        assert_eq!(p.wp, 1.0);
-        assert_eq!(p.wz, 0.25);
+        assert_eq!(p.wt.to_bits(), 0.5_f64.to_bits());
+        assert_eq!(p.wp.to_bits(), 1.0_f64.to_bits());
+        assert_eq!(p.wz.to_bits(), 0.25_f64.to_bits());
     }
 
     /// peak3 type=0, mode=1, wp > `half_ref`: wt latches onto wp before the
@@ -255,9 +259,9 @@ mod tests {
         p.band_omega_ref = 1.0;
         p.wp = 0.8; // greater than 0.5
         compute_peak_type3_parameters(&mut p);
-        assert_eq!(p.wt, 0.8);
-        assert_eq!(p.wp, 1.0);
-        assert_eq!(p.wz, 0.4);
+        assert_eq!(p.wt.to_bits(), 0.8_f64.to_bits());
+        assert_eq!(p.wp.to_bits(), 1.0_f64.to_bits());
+        assert_eq!(p.wz.to_bits(), 0.4_f64.to_bits());
     }
 
     /// peak3 type=3 with mode=0 (skips `w_eval` update) and benign `alpha_94=0`:
@@ -277,15 +281,15 @@ mod tests {
         let snapshot_w_eval = p.w_eval;
         compute_peak_type3_parameters(&mut p);
         // mode=0 → w_eval untouched
-        assert_eq!(p.w_eval, snapshot_w_eval);
+        assert_eq!(p.w_eval.to_bits(), snapshot_w_eval.to_bits());
         // wp = band_omega_ref (= 0.5, well below π)
         assert!((p.wp - 0.5).abs() < 1e-12);
         // wt = wp · 0.20
-        assert!((p.wt - 0.5 * 0.20).abs() < 1e-12);
+        assert!((0.5f64.mul_add(-0.20, p.wt)).abs() < 1e-12);
         // wz = wp · 0.001
-        assert!((p.wz - 0.5 * 0.001).abs() < 1e-12);
+        assert!((0.5f64.mul_add(-0.001, p.wz)).abs() < 1e-12);
         // alpha_94_out = 0 · 0 · 4 - 2 = -2
-        assert_eq!(p.alpha_scratch_94, -2.0);
+        assert_eq!(p.alpha_scratch_94.to_bits(), (-2.0_f32).to_bits());
     }
 
     /// peak3 type=3 with mode=0 and `alpha_94=1.0` (positive, so fv2 = 4·1 - 2 = 2 ≥ 0):
@@ -306,7 +310,7 @@ mod tests {
         assert!((p.wp - zero_seven_pi).abs() < 1e-12);
         assert!((p.wt - zero_seven_pi * 0.20).abs() < 1e-12);
         assert!((p.wz - zero_seven_pi * 0.001).abs() < 1e-12);
-        assert_eq!(p.alpha_scratch_94, 2.0);
+        assert_eq!(p.alpha_scratch_94.to_bits(), 2.0_f32.to_bits());
     }
 
     /// peak3 type=3, mode=1: `w_eval` IS updated. With wp=1.0 the f32 lane
@@ -340,7 +344,7 @@ mod tests {
         // fv2 = 6 → dvar10 = 0.20 - 0·(9/700) = 0.20
         // (boundary case: bVar1 fires but the multiplier is 0)
         let wp = p.wp;
-        assert!((p.wt - wp * 0.20).abs() < 1e-12);
+        assert!(wp.mul_add(-0.20, p.wt).abs() < 1e-12);
     }
 
     /// bandshelf v2 mode==0, sign=+1: `w_eval` picks the upper branch
@@ -355,7 +359,7 @@ mod tests {
         p.wp = 1.0; // wp·1.5 = 1.5 < 0.9π
         compute_band_shelf_parameters_v2(&mut p);
         // Below clamp floor → w_eval = 9π/10
-        assert!((p.w_eval - 0.9 * PI).abs() < 1e-12);
+        assert!(0.9f64.mul_add(-PI, p.w_eval).abs() < 1e-12);
     }
 
     /// bandshelf v2 sign=-1: lower branch (wp·1.25, clamped to [0.85π, π]).
@@ -394,7 +398,7 @@ mod tests {
             nine_pi_10
         );
         assert!((p.stored_g - 0.999).abs() < 1e-12);
-        assert!((p.stored_f - 0.999 * 0.999).abs() < 1e-12);
+        assert!(0.999f64.mul_add(-0.999, p.stored_f).abs() < 1e-12);
     }
 
     /// bandshelf v2 mode==2, wz > π: promotes mode to 1 (sticky write).
@@ -468,7 +472,7 @@ mod tests {
         p.band_omega_ref = 5.0; // > 9π/10
         p.q_scratch_50 = 1.0;
         compute_shelf_band_parameters(&mut p);
-        assert!((p.wp - 0.9 * PI).abs() < 1e-12);
+        assert!(0.9f64.mul_add(-PI, p.wp).abs() < 1e-12);
     }
 
     /// shelf7 special-flag path (`flag_69` != 0): uses simplified clamp branch.
@@ -480,7 +484,7 @@ mod tests {
         p.flag_byte_69 = 1;
         p.band_omega_ref = 5.0; // > 9π/10
         compute_shelf_band_parameters(&mut p);
-        assert!((p.wp - 0.9 * PI).abs() < 1e-12);
+        assert!(0.9f64.mul_add(-PI, p.wp).abs() < 1e-12);
     }
 
     /// `update_tracked_band_frequencies` is a no-op when mode==0.
@@ -492,8 +496,8 @@ mod tests {
         p.wz = 0.5;
         update_tracked_band_frequencies(&mut p, 0.0, 0.0);
         assert_eq!(p.mode, 0);
-        assert_eq!(p.wp, 1.0);
-        assert_eq!(p.wz, 0.5);
+        assert_eq!(p.wp.to_bits(), 1.0_f64.to_bits());
+        assert_eq!(p.wz.to_bits(), 0.5_f64.to_bits());
     }
 
     /// `check_frequency_within_band_limits`: upper > 0 and freq > upper → false.
@@ -533,8 +537,8 @@ mod tests {
         p.wp = 1.0;
         update_tracked_band_frequencies(&mut p, 1.0, 0.0);
         assert_eq!(p.mode, 1);
-        assert_eq!(p.wp, 1.0);
-        assert_eq!(p.prev_wp, 0.0);
+        assert_eq!(p.wp.to_bits(), 1.0_f64.to_bits());
+        assert_eq!(p.prev_wp.to_bits(), 0.0_f64.to_bits());
     }
 
     /// `update_tracked_band_frequencies` mode==2 with no analog: both wz/wp
@@ -647,10 +651,10 @@ mod tests {
     /// can predict the exact `(1−fv8)` and `(1−fv8·0.05)` factors without
     /// duplicating the bit-cast logic.
     fn fv8_factors(s8c: f32, s94: f32) -> (f64, f64) {
-        let fv7 = s8c * s8c * 0.25f32 + s94;
+        let fv7 = (s8c * s8c).mul_add(0.25f32, s94);
         let fv8 = fv7.clamp(0.10f32, 0.80f32);
-        let fv8_005 = (fv8 * 0.05f32) as f64;
-        (1.0 - fv8 as f64, 1.0 - fv8_005)
+        let fv8_005 = f64::from(fv8 * 0.05f32);
+        (1.0 - f64::from(fv8), 1.0 - fv8_005)
     }
 
     /// notch46 mode≠2, type=4: wp = `0.5·band_omega_ref`; wz/wt scaled by
@@ -665,9 +669,9 @@ mod tests {
         p.alpha_scratch_94 = 0.2;
         let (one_minus, one_minus_005) = fv8_factors(0.5, 0.2);
         compute_notch_type46_parameters(&mut p);
-        assert_eq!(p.wp, 0.3);
-        assert_eq!(p.wz, one_minus * 0.3);
-        assert_eq!(p.wt, one_minus_005 * 0.3);
+        assert_eq!(p.wp.to_bits(), 0.3_f64.to_bits());
+        assert_eq!(p.wz.to_bits(), (one_minus * 0.3).to_bits());
+        assert_eq!(p.wt.to_bits(), (one_minus_005 * 0.3).to_bits());
     }
 
     /// notch46 mode≠2, type=6, `band_omega_ref` < 0.6π: no clamp, fixed splits.
@@ -678,9 +682,9 @@ mod tests {
         p.mode = 1;
         p.band_omega_ref = 1.0; // < 0.6π ≈ 1.885
         compute_notch_type46_parameters(&mut p);
-        assert_eq!(p.wp, 1.0);
-        assert_eq!(p.wz, 0.05);
-        assert_eq!(p.wt, 0.5);
+        assert_eq!(p.wp.to_bits(), 1.0_f64.to_bits());
+        assert_eq!(p.wz.to_bits(), 0.05_f64.to_bits());
+        assert_eq!(p.wt.to_bits(), 0.5_f64.to_bits());
     }
 
     /// notch46 mode≠2, type=6, `band_omega_ref` > 0.6π: wp clamps to 0.6π.
@@ -690,10 +694,9 @@ mod tests {
         p.section_type = 6;
         p.band_omega_ref = 3.0; // > 0.6π
         compute_notch_type46_parameters(&mut p);
-        const ZERO_POINT_SIX_PI: f64 = 1.884_955_592_153_875_9;
-        assert_eq!(p.wp, ZERO_POINT_SIX_PI);
-        assert_eq!(p.wz, ZERO_POINT_SIX_PI * 0.05);
-        assert_eq!(p.wt, ZERO_POINT_SIX_PI * 0.5);
+        assert_eq!(p.wp.to_bits(), ZERO_POINT_SIX_PI.to_bits());
+        assert_eq!(p.wz.to_bits(), (ZERO_POINT_SIX_PI * 0.05).to_bits());
+        assert_eq!(p.wt.to_bits(), (ZERO_POINT_SIX_PI * 0.5).to_bits());
     }
 
     /// notch46 mode==2, type=6: fallback path, regardless of wp magnitude.
@@ -709,9 +712,9 @@ mod tests {
         p.alpha_scratch_94 = 0.1;
         let (one_minus, one_minus_005) = fv8_factors(0.6, 0.1);
         compute_notch_type46_parameters(&mut p);
-        assert_eq!(p.wp, 0.4);
-        assert_eq!(p.wz, one_minus * 0.4);
-        assert_eq!(p.wt, one_minus_005 * 0.4);
+        assert_eq!(p.wp.to_bits(), 0.4_f64.to_bits());
+        assert_eq!(p.wz.to_bits(), (one_minus * 0.4).to_bits());
+        assert_eq!(p.wt.to_bits(), (one_minus_005 * 0.4).to_bits());
     }
 
     /// notch46 mode==2, type=4, wp ≥ 0.95π: also fallback path.
@@ -726,9 +729,9 @@ mod tests {
         p.alpha_scratch_94 = 0.5;
         let (one_minus, one_minus_005) = fv8_factors(0.0, 0.5);
         compute_notch_type46_parameters(&mut p);
-        assert_eq!(p.wp, 0.25);
-        assert_eq!(p.wz, one_minus * 0.25);
-        assert_eq!(p.wt, one_minus_005 * 0.25);
+        assert_eq!(p.wp.to_bits(), 0.25_f64.to_bits());
+        assert_eq!(p.wz.to_bits(), (one_minus * 0.25).to_bits());
+        assert_eq!(p.wt.to_bits(), (one_minus_005 * 0.25).to_bits());
     }
 
     /// notch46 mode==2, type=4, wp < 0.95π: smooth-blend branch.
@@ -750,13 +753,13 @@ mod tests {
         // dvar4_floor = max(1, 0.70) = 1
         // quad_floor = 1·0.06157521601 + 2.41902634 = 2.48060...
         // smooth_blend (1.3142) ≤ quad_floor (2.48) → w_eval = min(quad_floor, π) = 2.48060…
-        let expected_w_eval = 1.0 * 0.061_575_216_010_359_95 + 2.419_026_343_264_141;
+        let expected_w_eval = 1.0f64.mul_add(0.061_575_216_010_359_95, 2.419_026_343_264_141);
         assert!((p.w_eval - expected_w_eval).abs() < 1e-12);
 
         // fv3 = (1.0 - 0.5) - 0.15 = 0.35 → fv7 = 0.35
         // stored_e_new = 2.0 - 0.35·0.15·π = 2.0 - 0.05249·π ≈ 2.0 - 0.16493
-        let fv7 = 0.35f32 as f64;
-        let expected_e = 2.0 - fv7 * 0.15 * PI;
+        let fv7 = f64::from(0.35f32);
+        let expected_e = (fv7 * 0.15).mul_add(-PI, 2.0);
         // tolerance loose because fv3 and fv7 are computed in f32
         assert!(
             (p.stored_e - expected_e).abs() < 1e-6,
@@ -764,11 +767,11 @@ mod tests {
             p.stored_e,
             expected_e
         );
-        assert!((p.stored_f - p.stored_e * 0.95).abs() < 1e-15);
-        assert!((p.stored_g - p.stored_f * 0.995).abs() < 1e-15);
+        assert!((0.95_f64.mul_add(-p.stored_e, p.stored_f)).abs() < 1e-15);
+        assert!((0.995_f64.mul_add(-p.stored_f, p.stored_g)).abs() < 1e-15);
 
         // wt = (1 - fv8·0.05) · wz; fv8 = 0.10 (clamped) → wt ≈ 0.995 · 0.5
-        let one_minus_005 = 1.0 - (0.10f32 * 0.05f32) as f64;
+        let one_minus_005 = 1.0 - f64::from(0.10f32 * 0.05f32);
         assert!((p.wt - one_minus_005 * 0.5).abs() < 1e-7);
     }
 
@@ -782,7 +785,7 @@ mod tests {
         p.alpha_scratch_8c = 0.0;
         p.alpha_scratch_94 = 0.0; // fv7 = 0 → clamps up to 0.10
         compute_notch_type46_parameters(&mut p);
-        assert_eq!(p.wp, 0.5);
+        assert_eq!(p.wp.to_bits(), 0.5_f64.to_bits());
         // (1 − 0.10f32) · 0.5 ≈ 0.45 (loose because 0.10 is f32-rounded)
         assert!((p.wz - 0.45).abs() < 1e-7);
         // (1 − 0.10f32·0.05f32) · 0.5 ≈ 0.4975
@@ -797,9 +800,9 @@ mod tests {
         p.band_omega_ref = 1.0;
         let r = dispatch_section_helper(&mut p);
         assert!(r.is_ok());
-        assert_eq!(p.wp, 1.0);
-        assert_eq!(p.wt, 0.5);
-        assert_eq!(p.wz, 0.25);
+        assert_eq!(p.wp.to_bits(), 1.0_f64.to_bits());
+        assert_eq!(p.wt.to_bits(), 0.5_f64.to_bits());
+        assert_eq!(p.wz.to_bits(), 0.25_f64.to_bits());
     }
 
     /// Dispatcher routes the notch46 family through notch46. This includes
@@ -813,11 +816,11 @@ mod tests {
             let r = dispatch_section_helper(&mut p);
             assert!(r.is_ok(), "section_type={section_type}");
             if section_type == 6 {
-                assert_eq!(p.wp, 1.0);
-                assert_eq!(p.wz, 0.05);
-                assert_eq!(p.wt, 0.5);
+                assert_eq!(p.wp.to_bits(), 1.0_f64.to_bits());
+                assert_eq!(p.wz.to_bits(), 0.05_f64.to_bits());
+                assert_eq!(p.wt.to_bits(), 0.5_f64.to_bits());
             } else {
-                assert_eq!(p.wp, 0.5);
+                assert_eq!(p.wp.to_bits(), 0.5_f64.to_bits());
                 assert!((p.wz - 0.45).abs() < 1e-8);
                 assert!((p.wt - 0.4975).abs() < 1e-8);
             }
@@ -876,14 +879,14 @@ mod tests {
     /// ω scaling table: shelves use 16/25, others use 1.
     #[test]
     fn omega_scale_table() {
-        assert_eq!(omega_scale_for_band_type(7), 16.0 / 25.0);
-        assert_eq!(omega_scale_for_band_type(8), 16.0 / 25.0);
-        assert_eq!(omega_scale_for_band_type(9), 16.0 / 25.0);
-        assert_eq!(omega_scale_for_band_type(0), 1.0);
-        assert_eq!(omega_scale_for_band_type(3), 1.0);
-        assert_eq!(omega_scale_for_band_type(4), 1.0);
-        assert_eq!(omega_scale_for_band_type(10), 1.0);
-        assert_eq!(omega_scale_for_band_type(11), 1.0);
+        assert_eq!(omega_scale_for_band_type(7).to_bits(), (16.0 / 25.0_f64).to_bits());
+        assert_eq!(omega_scale_for_band_type(8).to_bits(), (16.0 / 25.0_f64).to_bits());
+        assert_eq!(omega_scale_for_band_type(9).to_bits(), (16.0 / 25.0_f64).to_bits());
+        assert_eq!(omega_scale_for_band_type(0).to_bits(), 1.0_f64.to_bits());
+        assert_eq!(omega_scale_for_band_type(3).to_bits(), 1.0_f64.to_bits());
+        assert_eq!(omega_scale_for_band_type(4).to_bits(), 1.0_f64.to_bits());
+        assert_eq!(omega_scale_for_band_type(10).to_bits(), 1.0_f64.to_bits());
+        assert_eq!(omega_scale_for_band_type(11).to_bits(), 1.0_f64.to_bits());
     }
 
     /// End-to-end synth with a unity gain prototype + `section_type=0` helper.
@@ -904,7 +907,7 @@ mod tests {
         let (coeffs, fallback) =
             proq4_universal_section_synth(&mut p, &analog, 1000.0, 48000.0, 1.0);
         assert!(fallback.is_none());
-        assert_eq!(coeffs[0], 1.0); // a0
+        assert_eq!(coeffs[0].to_bits(), 1.0_f64.to_bits()); // a0
         for c in &coeffs {
             assert!(c.is_finite(), "coeff {c} must be finite");
         }
@@ -940,9 +943,9 @@ mod tests {
         let mut p = fresh_proto();
         p.wp = 1.2;
         apply_inline_section_defaults(&mut p);
-        assert_eq!(p.wp, 1.2);
+        assert_eq!(p.wp.to_bits(), 1.2_f64.to_bits());
         assert!((p.wz - 0.06).abs() < 1e-12);
-        assert_eq!(p.wt, 0.6);
+        assert_eq!(p.wt.to_bits(), 0.6_f64.to_bits());
     }
 
     /// fv8 clamp ceiling (0.80): large scratch inputs saturate.
@@ -954,7 +957,7 @@ mod tests {
         p.alpha_scratch_8c = 5.0;
         p.alpha_scratch_94 = 5.0; // fv7 huge → clamps down to 0.80
         compute_notch_type46_parameters(&mut p);
-        assert_eq!(p.wp, 1.0);
+        assert_eq!(p.wp.to_bits(), 1.0_f64.to_bits());
         // (1 − 0.80) · 1.0 = 0.20
         assert!((p.wz - 0.20).abs() < 1e-7);
         // (1 − 0.80·0.05) · 1.0 = (1 − 0.04) · 1.0 = 0.96

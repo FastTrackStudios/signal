@@ -381,9 +381,9 @@ impl Neve1073Model {
     }
 
     pub fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
-        for i in 0..left.len().min(right.len()) {
-            left[i] = self.process_sample(left[i], 0);
-            right[i] = self.process_sample(right[i], 1);
+        for (left_sample, right_sample) in left.iter_mut().zip(right.iter_mut()) {
+            *left_sample = self.process_sample(*left_sample, 0);
+            *right_sample = self.process_sample(*right_sample, 1);
         }
     }
 

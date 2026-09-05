@@ -3,13 +3,16 @@
 //! The single-biquad cases that every steeper slope is ultimately assembled
 //! from, so a fault here shows up in all of them at once.
 
-use super::*;
+use super::{Coeffs, PI, PASSTHROUGH};
 
 #[must_use]
 pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
 
     const Q_CORR_C: f64 = -1.350_719_92e-5;
+    const W_POLE_MAX: f64 = 3.078_760_800_517_997;
+    const W_ZERO_MAX: f64 = 2.827_433_388_230_814; // 0.9·π
+    const W_THIRD_MAX: f64 = 3.063_366_996_515_407_3;
 
     let g_lin = 10.0_f64.powf(gain_db / 20.0);
     let big_a = g_lin.sqrt();
@@ -51,7 +54,7 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
     let q_corr = if (q_user - 1.0).abs() < 1e-12 {
         q_user
     } else {
-        q_user * (1.0 + Q_CORR_C * q_user.ln())
+        Q_CORR_C.mul_add(q_user.ln(), 1.0) * q_user
     };
 
     let g_om = omega0;
@@ -76,7 +79,7 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
     //
     // This δ_eff feeds BOTH `w_zero = ω₀·(1 − δ)` and `w_third = ω₀·(1 − δ/20)`.
     let delta_extra = {
-        let excess = (omega0 - 0.8 * PI).max(0.0);
+        let excess = 0.8f64.mul_add(-PI, omega0).max(0.0);
         1.604_204 * excess * excess * excess * excess
     };
     let delta = (1.0 / q_user + delta_extra).clamp(0.1, 0.8);
@@ -88,9 +91,6 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
     //   param_1[0x10] = 3.0634  → w_third ≤ 3.0634  (≈ 0.9750·π)
     // Near Nyquist these prevent tan(w/2) from approaching infinity and
     // reduce numerical error in the synthesis. They are no-ops at low/mid fc.
-    const W_POLE_MAX: f64 = 3.078_760_800_517_997;
-    const W_ZERO_MAX: f64 = 2.827_433_388_230_814; // 0.9·π
-    const W_THIRD_MAX: f64 = 3.063_366_996_515_407_3;
     let w_pole = omega0.min(W_POLE_MAX);
     let w_zero = (omega0 * (1.0 - delta)).min(W_ZERO_MAX);
     let w_third = (omega0 * (1.0 - delta / 20.0)).min(W_THIRD_MAX);
@@ -122,11 +122,10 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
     let t3s = t3 * t3;
 
     let den = t3s
-        * ((u_zero - u_third) * (g_ref - u_pole) * t2s
-            - (u_pole - u_third) * (g_ref - u_zero) * t1s)
+        * (((u_zero - u_third) * (g_ref - u_pole)).mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s)))
         + (g_ref - u_third) * (u_pole - u_zero) * t1s * t2s;
-    let num = u_pole * ((t2s - t3s) * u_eval + (t1s - t2s) * u_zero + (t3s - t1s) * u_third)
-        + u_eval * ((t3s - t1s) * u_zero + (t1s - t2s) * u_third)
+    let num = u_pole * ((t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero)))
+        + u_eval * ((t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third))
         + (t2s - t3s) * u_third * u_zero;
 
     let s2 = if den.abs() > 1e-30 {
@@ -142,9 +141,7 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
 
     let sp6_den = (u_pole - u_zero) * t1s * t2s;
     let sp6 = if sp6_den.abs() > 1e-30 {
-        let sp6_num = a1_term * a1_term * t2s * u_zero
-            - (t1s * t2s * (1.0 - s2 * t3s) * (t1s - t2s) * u_zero + a2_term * a2_term * t1s)
-                * u_pole;
+        let sp6_num = (a1_term * a1_term * t2s).mul_add(u_zero, -((t1s * t2s * (1.0 - s2 * t3s) * (t1s - t2s)).mul_add(u_zero, a2_term * a2_term * t1s) * u_pole));
         (sp6_num / sp6_den).max(0.0)
     } else {
         0.0
@@ -221,7 +218,7 @@ pub fn proq4_s2_from_prototype_with_subfreq_pub(
     )
 }
 
-pub(crate) fn proq4_s2_from_prototype_with_subfreq(
+pub fn proq4_s2_from_prototype_with_subfreq(
     freq_hz: f64,
     sample_rate: f64,
     b2z: f64,
@@ -235,6 +232,10 @@ pub(crate) fn proq4_s2_from_prototype_with_subfreq(
     w_third_in: f64,
     w_eval_in: f64,
 ) -> Coeffs {
+    const W_POLE_MAX: f64 = 3.078_760_800_517_997;
+    const W_ZERO_MAX: f64 = 2.827_433_388_230_814;
+    const W_THIRD_MAX: f64 = 3.063_366_996_515_407_3;
+
     let omega0_raw = 2.0 * PI * freq_hz / sample_rate;
     let omega0 = omega0_raw.min(PI - 0.01);
 
@@ -242,20 +243,16 @@ pub(crate) fn proq4_s2_from_prototype_with_subfreq(
     let g_om2 = g_om * g_om;
     let g_om4 = g_om2 * g_om2;
     let cap_a = b2z * b2z;
-    let cap_b = (b1z * b1z - 2.0 * b2z * b0z) * g_om2;
+    let cap_b = b1z.mul_add(b1z, -(2.0 * b2z * b0z)) * g_om2;
     let cap_c = b0z * b0z * g_om4;
     let cap_d = b2p * b2p;
-    let cap_e = (b1p * b1p - 2.0 * b2p * b0p) * g_om2;
+    let cap_e = b1p.mul_add(b1p, -(2.0 * b2p * b0p)) * g_om2;
     let cap_f = b0p * b0p * g_om4;
     let g_ref = if cap_f.abs() > 1e-300 {
         cap_c / cap_f
     } else {
         0.0
     };
-
-    const W_POLE_MAX: f64 = 3.078_760_800_517_997;
-    const W_ZERO_MAX: f64 = 2.827_433_388_230_814;
-    const W_THIRD_MAX: f64 = 3.063_366_996_515_407_3;
     let w_pole = w_pole_in.min(W_POLE_MAX);
     let w_zero = w_zero_in.min(W_ZERO_MAX);
     let w_third = w_third_in.min(W_THIRD_MAX);
@@ -268,8 +265,8 @@ pub(crate) fn proq4_s2_from_prototype_with_subfreq(
     let h_sq = |w: f64| -> f64 {
         let w2 = w * w;
         let w4 = w2 * w2;
-        let num = cap_a * w4 + cap_b * w2 + cap_c;
-        let den = cap_d * w4 + cap_e * w2 + cap_f;
+        let num = cap_a.mul_add(w4, cap_b * w2) + cap_c;
+        let den = cap_d.mul_add(w4, cap_e * w2) + cap_f;
         if den.abs() > 1e-300 {
             num / den
         } else {
@@ -292,11 +289,10 @@ pub(crate) fn proq4_s2_from_prototype_with_subfreq(
     let t3s = t3 * t3;
 
     let den = t3s
-        * ((u_zero - u_third) * (g_ref - u_pole) * t2s
-            - (u_pole - u_third) * (g_ref - u_zero) * t1s)
+        * (((u_zero - u_third) * (g_ref - u_pole)).mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s)))
         + (g_ref - u_third) * (u_pole - u_zero) * t1s * t2s;
-    let num = u_pole * ((t2s - t3s) * u_eval + (t1s - t2s) * u_zero + (t3s - t1s) * u_third)
-        + u_eval * ((t3s - t1s) * u_zero + (t1s - t2s) * u_third)
+    let num = u_pole * ((t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero)))
+        + u_eval * ((t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third))
         + (t2s - t3s) * u_third * u_zero;
 
     // Pro-Q4 alt-path branch decoded from `compute_audio_biquad_lagrange_mzt`
@@ -325,7 +321,7 @@ pub(crate) fn proq4_s2_from_prototype_with_subfreq(
         let n_alt = u_pole * (t1s * (u_third - u_zero) + t2s * u_zero - t3s * u_third)
             + (t3s - t2s) * u_third * u_zero
             + 0.0025 * den / t2t3;
-        let d_alt = (t2s - t3s) * u_pole + (t1s - t2s) * u_third + (t3s - t1s) * u_zero;
+        let d_alt = (t3s - t1s).mul_add(u_zero, (t2s - t3s).mul_add(u_pole, (t1s - t2s) * u_third));
         let p3_alt = if d_alt.abs() > 1e-30 {
             (n_alt / d_alt).max(0.0).sqrt()
         } else {
@@ -343,9 +339,7 @@ pub(crate) fn proq4_s2_from_prototype_with_subfreq(
 
     let sp6_den = (u_pole - u_zero) * t1s * t2s;
     let sp6 = if sp6_den.abs() > 1e-30 {
-        let sp6_num = a1_term * a1_term * t2s * u_zero
-            - (t1s * t2s * (1.0 - s2 * t3s) * (t1s - t2s) * u_zero + a2_term * a2_term * t1s)
-                * u_pole;
+        let sp6_num = (a1_term * a1_term * t2s).mul_add(u_zero, -((t1s * t2s * (s2.mul_add(-t3s, 1.0)) * (t1s - t2s)).mul_add(u_zero, a2_term * a2_term * t1s) * u_pole));
         (sp6_num / sp6_den).max(0.0)
     } else {
         0.0
@@ -422,6 +416,8 @@ pub fn lowpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
 #[must_use]
 pub fn highpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     use std::f64::consts::SQRT_2;
+    const W_POLE_HF_CLAMP: f64 = 0.7 * PI; // 2.199114857512855
+
     let q_user = q.max(1e-6);
     // HP analog form: textbook Butterworth (1, √2/Q, 1) — verified
     // bit-exact against solve_bq_lphpbpnotch.csv.
@@ -466,7 +462,6 @@ pub fn highpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     // High-fc clamp at 0.7π per `hp_high_fc_subfreq_analysis.md`:
     //   Q ≤ 1: w_pole = min(ω₀, 0.7π)
     //   Q > 1: same Q-prewarped formula, but w_eval freeze rule applies
-    const W_POLE_HF_CLAMP: f64 = 0.7 * PI; // 2.199114857512855
     let w_pole = if q_user > 1.0 {
         let q2 = q_user * q_user;
         omega0 * (q2 / (q2 - 1.0 + 1.0 / q2)).sqrt()
@@ -499,7 +494,7 @@ pub fn highpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     // (Q ≤ 1 routes through the 1-root branch handled in the else-arm.)
     let w_eval = if q_user > 1.0 {
         let inner = w_pole * 0.4421 - 5.0 / 12.0;
-        let base = (inner * inner * 0.2 + 0.785) * PI;
+        let base = (inner * inner).mul_add(0.2, 0.785) * PI;
         let extra = {
             let d = (w_pole - 1.515).max(0.0);
             let q_term = (1.0 / (q_user * q_user) - 0.01).clamp(0.0, 0.06);
@@ -531,7 +526,7 @@ pub fn highpass_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
 // Mode-0 forward formula (decoded from compute_biquad_coefficients_from_poles
 // @ 0x180110b50). Inputs (p2, p3, p4, sp5², sp6²); outputs biquad
 // [1, a1, a2, b0, b1, b2]. Used by BP s=8 lookup.
-pub(crate) fn mode0_forward(p2: f64, p3: f64, p4: f64, sp5_sq: f64, sp6_sq: f64) -> Coeffs {
+pub fn mode0_forward(p2: f64, p3: f64, p4: f64, sp5_sq: f64, sp6_sq: f64) -> Coeffs {
     let sp5 = sp5_sq.sqrt();
     let sp6 = sp6_sq.sqrt();
     let one_p_p4 = 1.0 + p4;

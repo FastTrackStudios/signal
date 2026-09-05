@@ -1,6 +1,7 @@
 //! Notch section parameters (Pro-Q band types 4 and 6).
 
-use super::*;
+use super::{Prototype, PI};
+use dsp_core::num;
 
 /// Per-section helper for `proto[0x13] ∈ {4, 6}` (notch-style sections).
 ///
@@ -24,20 +25,14 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
     // until the final write to the f64 wp/wz/wt slots).
     let s8c = proto.alpha_scratch_8c;
     let s94 = proto.alpha_scratch_94;
-    let fv7 = s8c * s8c * 0.25f32 + s94;
+    let fv7 = (s8c * s8c).mul_add(0.25f32, s94);
     let fv8 = fv7.clamp(0.10f32, 0.80f32);
-    let fv8_d = fv8 as f64;
-    let fv8_005 = (fv8 * 0.05f32) as f64;
+    let fv8_d = f64::from(fv8);
+    let fv8_005 = f64::from(fv8 * 0.05f32);
 
     if proto.mode != 2 {
         let mut d6 = proto.band_omega_ref;
-        if proto.section_type != 6 {
-            // type=4 static path
-            d6 *= 0.5;
-            proto.wp = d6;
-            proto.wz = (1.0 - fv8_d) * d6;
-            proto.wt = (1.0 - fv8_005) * d6;
-        } else {
+        if proto.section_type == 6 {
             // type=6 static path: clamp band_omega_ref to 0.6π, then split.
             const ZERO_POINT_SIX_PI: f64 = 1.884_955_592_153_875_9;
             if d6 > ZERO_POINT_SIX_PI {
@@ -46,13 +41,19 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
             proto.wp = d6;
             proto.wz = d6 * 0.05;
             proto.wt = d6 * 0.5;
+        } else {
+            // type=4 static path
+            d6 *= 0.5;
+            proto.wp = d6;
+            proto.wz = (1.0 - fv8_d) * d6;
+            proto.wt = (1.0 - fv8_005) * d6;
         }
         return;
     }
 
     // mode == 2 (complex-roots path)
-    let mut wp_in = proto.wp; // wp from upstream solve_biquad
     const TWO_NINE_EIGHT_FOUR_FIVE: f64 = 2.984_513_020_910_303_5; // ≈ 0.95·π
+    let mut wp_in = proto.wp; // wp from upstream solve_biquad
 
     if matches!(proto.section_type, 2 | 5) && proto.wz < TWO_NINE_EIGHT_FOUR_FIVE {
         std::mem::swap(&mut proto.wp, &mut proto.wz);
@@ -94,9 +95,9 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
             wp_in
         };
         // dVar2 = (π - wp)·0.1 + wp  (linear blend toward π)
-        let smooth_blend = (PI - wp_in) * 0.1 + wp_in;
+        let smooth_blend = (PI - wp_in).mul_add(0.1, wp_in);
         // dVar4 = dVar4²·0.0615… + 2.4190…  (quadratic floor in wp)
-        let quad_floor = dvar4_floor * dvar4_floor * QUAD_COEF + QUAD_OFFSET;
+        let quad_floor = (dvar4_floor * dvar4_floor).mul_add(QUAD_COEF, QUAD_OFFSET);
         // dVar2 = if (smooth_blend ≤ quad_floor) min(quad_floor, π) else smooth_blend
         let new_w_eval = if smooth_blend <= quad_floor {
             if quad_floor >= PI {
@@ -111,16 +112,10 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
 
         // === stored_e/f/g update + wt update ===
         // fv3 = (wp - wz) - 0.15  (wz here is the upstream solve_biquad value)
-        let fv3 = (wp_in - proto.wz) as f32 - WT_OFFSET as f32;
-        let fv7 = if fv3 < 0.0 {
-            0.0f32
-        } else if fv3 >= 1.0f32 {
-            1.0f32
-        } else {
-            fv3
-        };
+        let fv3 = num::narrow(wp_in - proto.wz) - num::narrow(WT_OFFSET);
+        let fv7 = fv3.clamp(0.0f32, 1.0f32);
         // stored_e_new = stored_e_old - (fv7·0.15)·π
-        let stored_e_new = proto.stored_e - (fv7 as f64 * WT_OFFSET) * PI;
+        let stored_e_new = (f64::from(fv7) * WT_OFFSET).mul_add(-PI, proto.stored_e);
         proto.stored_e = stored_e_new;
         let stored_f_val = stored_e_new * STORED_F_SCALE;
         proto.stored_f = stored_f_val;
@@ -142,8 +137,8 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
     } else {
         proto.wz
     };
-    let fv8_d = fv8 as f64;
-    let fv8_005 = (fv8 * 0.05f32) as f64;
+    let fv8_d = f64::from(fv8);
+    let fv8_005 = f64::from(fv8 * 0.05f32);
     proto.wp = d6;
     proto.wz = (1.0 - fv8_d) * d6;
     proto.wt = (1.0 - fv8_005) * d6;

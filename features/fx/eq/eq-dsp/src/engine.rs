@@ -25,6 +25,7 @@
 //! parameter ids, automation events or sample formats; hosts own those.
 
 use crate::runtime::band::Placement;
+use dsp_core::num;
 
 /// Bands the engine carries. Pro-Q 4's count, because the translated presets
 /// are written against it.
@@ -343,7 +344,7 @@ impl CharacterShaper {
 }
 
 #[inline]
-fn character_gain_db(mode: u32) -> f64 {
+const fn character_gain_db(mode: u32) -> f64 {
     match mode {
         1 => 0.01,
         2 => 0.55,
@@ -432,6 +433,7 @@ impl FtsEq {
 
     /// Route + configure one band after any of its params changed.
     fn sync_band(&mut self, band: usize) {
+        let band = band.min(EQ_BANDS - 1);
         let (used, on) = self.state[band];
         let enabled = used && on;
         let shape = crate::design::slope::FilterShape::from_canonical_index(self.shapes[band]);
@@ -491,9 +493,9 @@ impl FtsEq {
                     crate::design::slope::FilterShape::LowCut | crate::design::slope::FilterShape::HighCut
                 ) && raw < 6.0;
                 let (index, fraction) = if laddered {
-                    (raw.floor() as usize, raw.fract())
+                    (num::f64_to_index(raw.floor()), raw.fract())
                 } else {
-                    (raw.round() as usize, 0.0)
+                    (num::f64_to_index(raw.round()), 0.0)
                 };
                 let order = shape.effective_order(index);
                 // A slope under 6 dB/oct is ALL ladder — integer order zero.
@@ -517,6 +519,7 @@ impl FtsEq {
         d.params.enabled = go_dynamic || modulated;
         d.params.modulate_only = modulated;
         if go_dynamic || modulated {
+            const BASE_RELEASE_MS: f64 = 300.0;
             d.params.shape = dyn_shape.unwrap_or(crate::dynamics::DynShape::Bell);
             d.params.freq_hz = freq;
             d.params.q = q;
@@ -575,7 +578,6 @@ impl FtsEq {
             // Attack time constants read off the plugin's step response on a
             // -12 dB band: 1.34 ms at 200 Hz, 0.77 at 1 kHz, 0.57 at 8 kHz.
             let base_atk = (0.5 + 170.0 / freq.max(1.0)).clamp(0.3, 20.0);
-            const BASE_RELEASE_MS: f64 = 300.0;
             let base_rel = BASE_RELEASE_MS;
             d.detector.params.attack_ms =
                 base_atk * 8.0f64.powf((atk.clamp(0.0, 100.0) - 50.0) / 50.0);
@@ -630,10 +632,14 @@ impl FtsEq {
         // 1/12-octave grid from 20 Hz up. Fine enough that a surgical notch is
         // not stepped over, cheap enough to rebuild on a parameter change.
         if self.auto_grid_hz.is_empty() {
-            let step = 2.0f64.powf(1.0 / 12.0);
+            let step = (1.0_f64 / 12.0).exp2();
             let ceiling = self.sample_rate * 0.45;
             let mut hz = 20.0f64;
-            while hz < ceiling {
+            let max_iterations = ((ceiling / 20.0).log2() / step.log2()).ceil() as usize + 1;
+            for _ in 0..max_iterations {
+                if hz >= ceiling {
+                    break;
+                }
                 self.auto_grid_hz.push(hz);
                 hz *= step;
             }
@@ -647,6 +653,7 @@ impl FtsEq {
         // And the shape of every band the static chain cannot see.
         self.auto_grid_env.clear();
         for band in 0..EQ_BANDS {
+            let band = band.min(EQ_BANDS - 1);
             let mut env = vec![0.0f64; n];
             let (used, on) = self.state[band];
             let dynamic = used && on && (self.dyn_active[band] || self.spectral_on[band]);
@@ -681,27 +688,27 @@ impl FtsEq {
         let n = self.auto_grid_static_db.len();
         let mut live = [0.0f64; EQ_BANDS];
         let mut region = 0usize;
-        for band in 0..EQ_BANDS {
+        for (band, live_slot) in live.iter_mut().enumerate() {
             let (used, on) = self.state[band];
             if !(used && on) {
                 continue;
             }
             if self.spectral_on[band] && self.dyn_cfg[band].0.abs() > 1.0e-3 {
-                live[band] = -self.spectral.region_reduction_db(region);
-                region += 1;
+                *live_slot = -self.spectral.region_reduction_db(region);
+                region = region.saturating_add(1);
             } else if self.dyn_active[band] {
                 // The band's live gain relative to the base the static chain
                 // is NOT carrying — a dynamic band is out of that chain
                 // entirely, so its whole applied gain counts here.
-                live[band] = self.dyn_bands[band].live_gain_db();
+                *live_slot = self.dyn_bands[band].live_gain_db();
             }
         }
         let (mut num, mut den) = (0.0f64, 0.0f64);
         for i in 0..n {
             let mut db = self.auto_grid_static_db[i];
-            for band in 0..EQ_BANDS {
-                if live[band] != 0.0 {
-                    db += live[band] * self.auto_grid_env[band][i];
+            for (band, &live_val) in live.iter().enumerate() {
+                if live_val != 0.0 {
+                    db += live_val * self.auto_grid_env[band][i];
                 }
             }
             // Equal weight per octave — pink, not white.
@@ -723,19 +730,19 @@ impl FtsEq {
 
     /// The compensation Auto Gain is currently applying, in dB (0 when off).
     #[must_use]
-    pub fn auto_gain_db(&self) -> f64 {
+    pub const fn auto_gain_db(&self) -> f64 {
         self.auto_gain_db
     }
 
     /// The Output Pan currently set, and its mode.
     #[must_use]
-    pub fn output_pan(&self) -> f64 {
+    pub const fn output_pan(&self) -> f64 {
         self.output_pan
     }
 
     /// Whether Output Pan balances mid against side rather than left/right.
     #[must_use]
-    pub fn output_pan_mid_side(&self) -> bool {
+    pub const fn output_pan_mid_side(&self) -> bool {
         self.output_pan_mid_side
     }
 
@@ -782,6 +789,7 @@ impl FtsEq {
     fn sync_spectral_regions(&mut self) {
         self.spectral_regions.clear();
         for band in 0..EQ_BANDS {
+            let band = band.min(EQ_BANDS - 1);
             let (used, on) = self.state[band];
             if !(used && on && self.spectral_on[band]) {
                 continue;
@@ -839,6 +847,7 @@ impl FtsEq {
         if mode != 1 {
             return;
         }
+        let band = band.min(EQ_BANDS - 1);
         let freq = self.freqs[band].clamp(10.0, 30000.0);
         let q = self.qs[band].clamp(0.025, 40.0);
         use crate::dynamics::SvfShape;
@@ -863,7 +872,7 @@ impl FtsEq {
         // Spectral bands put the STFT in the path; everything else is
         // zero-latency.
         if self.spectral.has_regions() {
-            self.spectral.latency() as u32
+            u32::try_from(self.spectral.latency()).unwrap_or(u32::MAX)
         } else {
             0
         }
@@ -888,24 +897,25 @@ impl FtsEq {
         self.spectral = crate::dynamics::spectral::SpectralEngine::new(self.sample_rate, 4096);
         // Room for the whole delay the delta-listen read walks back over, plus
         // a block so a write and a read never collide inside one buffer.
-        let ring = (self.spectral.latency() + block_size.max(1) as usize).next_power_of_two();
+        let ring = (self.spectral.latency() + num::u32_to_index(block_size.max(1))).next_power_of_two();
         self.dry_ring = [vec![0.0; ring], vec![0.0; ring]];
         self.dry_pos = 0;
         self.sync_spectral_regions();
         for b in 0..EQ_BANDS {
+            let b = b.min(EQ_BANDS - 1);
             self.dyn_bands[b].reset();
             self.sync_band(b);
         }
-        self.scratch_l = vec![0.0; block_size.max(1) as usize];
-        self.scratch_r = vec![0.0; block_size.max(1) as usize];
-        self.scratch_sl = vec![0.0; block_size.max(1) as usize];
-        self.scratch_sr = vec![0.0; block_size.max(1) as usize];
-        self.side_ref = vec![0.0; block_size.max(1) as usize];
+        self.scratch_l = vec![0.0; num::u32_to_index(block_size.max(1))];
+        self.scratch_r = vec![0.0; num::u32_to_index(block_size.max(1))];
+        self.scratch_sl = vec![0.0; num::u32_to_index(block_size.max(1))];
+        self.scratch_sr = vec![0.0; num::u32_to_index(block_size.max(1))];
+        self.side_ref = vec![0.0; num::u32_to_index(block_size.max(1))];
         self.prepared = true;
     }
 
     #[must_use]
-    pub fn is_prepared(&self) -> bool {
+    pub const fn is_prepared(&self) -> bool {
         self.prepared
     }
 

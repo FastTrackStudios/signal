@@ -69,15 +69,15 @@ pub fn compute_zpk_transfer_coeffs_generic(
     let omega_sq = omega * omega;
     let omega_qd = omega_sq * omega_sq;
 
-    let is_quadratic = analog.b2z.abs() > EPS_F32 as f64 || analog.b2p.abs() > EPS_F32 as f64;
+    let is_quadratic = analog.b2z.abs() > f64::from(EPS_F32) || analog.b2p.abs() > f64::from(EPS_F32);
 
     let coeffs = if is_quadratic {
         MagSqCoeffs {
             a: analog.b2z * analog.b2z,
-            b: (analog.b1z * analog.b1z - 2.0 * analog.b2z * analog.b0z) * omega_sq,
+            b: analog.b1z.mul_add(analog.b1z, -(2.0 * analog.b2z * analog.b0z)) * omega_sq,
             c: analog.b0z * analog.b0z * omega_qd,
             d: analog.b2p * analog.b2p,
-            e: (analog.b1p * analog.b1p - 2.0 * analog.b2p * analog.b0p) * omega_sq,
+            e: analog.b1p.mul_add(analog.b1p, -(2.0 * analog.b2p * analog.b0p)) * omega_sq,
             f: analog.b0p * analog.b0p * omega_qd,
         }
     } else {
@@ -128,14 +128,15 @@ pub fn solve_biquad_denominator_quadratic_generic(
         };
     }
 
-    let mut det_a = a * e - b * d;
-    let mut det_b = 2.0 * (f * a - c * d);
-    let mut take_sqrt = true;
-    if det_a == 0.0 {
+    let mut det_a = a.mul_add(e, -(b * d));
+    let mut det_b = 2.0 * (f.mul_add(a, -(c * d)));
+    let mut take_sqrt = if det_a == 0.0 {
         det_a = det_b;
         det_b = 0.0;
-        take_sqrt = false;
-    }
+        false
+    } else {
+        true
+    };
     if det_a == 0.0 {
         return PoleRoots {
             w1: 0.0,
@@ -144,7 +145,7 @@ pub fn solve_biquad_denominator_quadratic_generic(
         };
     }
 
-    let det_c = f * b - c * e;
+    let det_c = f.mul_add(b, -(c * e));
     let disc = det_b * det_b - 4.0 * det_a * det_c;
     if disc < 0.0 {
         return PoleRoots {
@@ -217,8 +218,8 @@ pub fn solve_biquad_denominator_quadratic_generic(
 pub fn eval_squared_mag_scalar(coeffs: &MagSqCoeffs, w: f64) -> f64 {
     let w2 = w * w;
     let w4 = w2 * w2;
-    let num = w4 * coeffs.a + w2 * coeffs.b + coeffs.c;
-    let den = w4 * coeffs.d + w2 * coeffs.e + coeffs.f;
+    let num = w4.mul_add(coeffs.a, w2 * coeffs.b) + coeffs.c;
+    let den = w4.mul_add(coeffs.d, w2 * coeffs.e) + coeffs.f;
     if den.abs() > 1e-300 {
         (num / den).max(0.0)
     } else {

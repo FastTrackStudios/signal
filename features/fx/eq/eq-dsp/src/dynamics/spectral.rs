@@ -21,6 +21,8 @@ use realfft::num_complex::Complex;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 use std::sync::Arc;
 
+use dsp_core::num;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SpectralParams {
     /// Reduction depth (0..1): scales the per-bin gain reduction.
@@ -408,11 +410,11 @@ impl SpectralEngine {
         let hop = block / 4;
         let window: Vec<f64> = (0..block)
             .map(|i| {
-                let t = i as f64 / block as f64;
-                0.5 - 0.5 * (core::f64::consts::TAU * t).cos()
+                let t = num::count_to_f64(i) / num::count_to_f64(block);
+                0.5f64.mul_add(-(core::f64::consts::TAU * t).cos(), 0.5)
             })
             .collect();
-        let bins = block / 2 + 1;
+        let bins = block.saturating_div(2).saturating_add(1);
         let mut e = Self {
             params: SpectralParams::default(),
             regions: Vec::with_capacity(24),
@@ -428,7 +430,7 @@ impl SpectralEngine {
             window,
             in_buf: [vec![0.0; block], vec![0.0; block]],
             ola: [vec![0.0; block], vec![0.0; block]],
-            out_buf: [Vec::with_capacity(block * 2), Vec::with_capacity(block * 2)],
+            out_buf: [Vec::with_capacity(block.saturating_mul(2)), Vec::with_capacity(block.saturating_mul(2))],
             fill: 0,
             frame: vec![0.0; block],
             spec: [
@@ -458,8 +460,8 @@ impl SpectralEngine {
     /// completes it — verified by impulse: a spike at t returns at
     /// t + block − 1).
     #[must_use]
-    pub fn latency(&self) -> usize {
-        self.block - 1
+    pub const fn latency(&self) -> usize {
+        self.block.saturating_sub(1)
     }
 
     /// Replace the band-region set (preallocated capacity 24 — no
@@ -477,12 +479,12 @@ impl SpectralEngine {
         // Rebuild the per-region curves. Not the audio thread: this runs when
         // a parameter moves.
         let bins = self.mag_db.len();
-        let bin_hz = self.sample_rate / self.block as f64;
+        let bin_hz = self.sample_rate / num::count_to_f64(self.block);
         self.region_env.clear();
         for r in &self.regions {
             let mut env = Vec::with_capacity(bins);
             for i in 0..bins {
-                env.push(region_envelope(r, i as f64 * bin_hz));
+                env.push(region_envelope(r, num::count_to_f64(i) * bin_hz));
             }
             self.region_env.push(env);
         }
@@ -555,18 +557,18 @@ impl SpectralEngine {
     }
 
     #[must_use]
-    pub fn has_regions(&self) -> bool {
+    pub const fn has_regions(&self) -> bool {
         !self.regions.is_empty()
     }
 
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        let bin_hz = sample_rate / self.block as f64;
+        let bin_hz = sample_rate / num::count_to_f64(self.block);
         for (i, slot) in self.bin_log2.iter_mut().enumerate() {
-            *slot = (i as f64 * bin_hz).max(1.0).log2();
+            *slot = (num::count_to_f64(i) * bin_hz).max(1.0).log2();
         }
         // Frame-rate ballistics: coefficients per HOP, not per sample.
-        let hop_s = self.hop as f64 / sample_rate;
+        let hop_s = num::count_to_f64(self.hop) / sample_rate;
         let c = |ms: f64| -> f64 {
             if ms <= 0.0 {
                 1.0
@@ -586,14 +588,14 @@ impl SpectralEngine {
         let pos = self.fill;
         self.in_buf[0][pos] = left;
         self.in_buf[1][pos] = right;
-        self.fill += 1;
+        self.fill = self.fill.saturating_add(1);
         if self.fill == self.block {
             self.process_frame();
             // Slide the input ring left by one hop.
             for ch in 0..2 {
                 self.in_buf[ch].copy_within(self.hop.., 0);
             }
-            self.fill = self.block - self.hop;
+            self.fill = self.block.saturating_sub(self.hop);
         }
         let (l, r) = if self.out_buf[0].is_empty() {
             (0.0, 0.0)
@@ -621,10 +623,10 @@ impl SpectralEngine {
             // whole instance; it is now applied to each bin's prominence
             // below, where the region that owns the bin decides. Adding it in
             // both places would count it twice.
-            let bin_hz = self.sample_rate / self.block as f64;
+            let bin_hz = self.sample_rate / num::count_to_f64(self.block);
             for i in 0..bins {
                 let m = 0.5 * (self.spec[0][i].norm() + self.spec[1][i].norm())
-                    / (self.block as f64 * 0.25);
+                    / (num::count_to_f64(self.block) * 0.25);
                 self.mag_db[i] = 20.0 * m.max(1.0e-10).log10();
                 // The trigger reads a smoothed level, not the instantaneous
                 // bin — see `SPECTRAL_LEVEL_MS`.
@@ -640,16 +642,16 @@ impl SpectralEngine {
             // cheap constant-Q-ish neighborhood average.
             let mut acc = self.mag_db[0];
             for i in 0..bins {
-                let f = (i.max(1)) as f64 * bin_hz;
-                let neighbors = f * (2.0f64.powf(SMOOTH_OCTAVES) - 1.0) / bin_hz;
+                let f = num::count_to_f64(i.max(1)) * bin_hz;
+                let neighbors = f * (SMOOTH_OCTAVES.exp2() - 1.0) / bin_hz;
                 let c = 1.0 / (1.0 + neighbors.max(1.0));
                 acc += (self.mag_db[i] - acc) * c;
                 self.ref_db[i] = acc;
             }
             let mut acc = self.mag_db[bins - 1];
             for i in (0..bins).rev() {
-                let f = (i.max(1)) as f64 * bin_hz;
-                let neighbors = f * (2.0f64.powf(SMOOTH_OCTAVES) - 1.0) / bin_hz;
+                let f = num::count_to_f64(i.max(1)) * bin_hz;
+                let neighbors = f * (SMOOTH_OCTAVES.exp2() - 1.0) / bin_hz;
                 let c = 1.0 / (1.0 + neighbors.max(1.0));
                 acc += (self.mag_db[i] - acc) * c;
                 self.ref_db[i] = 0.5 * (self.ref_db[i] + acc);
@@ -667,9 +669,9 @@ impl SpectralEngine {
             }
 
             // Per-bin target gain reduction.
-            let global_sharp = 1.0 + self.params.density.clamp(0.0, 1.0) * 3.0;
+            let global_sharp = self.params.density.clamp(0.0, 1.0).mul_add(3.0, 1.0);
             for i in 0..bins {
-                let f = i as f64 * bin_hz;
+                let f = num::count_to_f64(i) * bin_hz;
                 // Region mode: the region whose curve reaches furthest into
                 // this bin owns it. Global mode uses the engine params, where
                 // `depth` is a 0..1 scale rather than a dB ceiling.
@@ -752,7 +754,7 @@ impl SpectralEngine {
                     density_here
                 };
                 self.spread_oct[i] =
-                    SPREAD_FLOOR_OCT + (1.0 - d.clamp(0.0, 1.0)) * SPREAD_RANGE_OCT;
+                    (1.0 - d.clamp(0.0, 1.0)).mul_add(SPREAD_RANGE_OCT, SPREAD_FLOOR_OCT);
             }
 
             self.spread_targets(bins);
@@ -763,10 +765,7 @@ impl SpectralEngine {
             if !self.regions.is_empty() {
                 for i in 0..bins {
                     let owner = self.bin_owner[i];
-                    self.target_db[i] *= match self.region_env.get(owner) {
-                        Some(env) => env[i],
-                        None => 0.0,
-                    };
+                    self.target_db[i] *= self.region_env.get(owner).map_or(0.0, |env| env[i]);
                 }
             }
 

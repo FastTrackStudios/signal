@@ -3,7 +3,7 @@
 # A change here in a refactor commit means the audio changed. Investigate.
 name impulse_high_cut
 len 16384
-hash 52e14ca25de34260
+hash 0d4240bc314159f4
 probe 0 3fefdf9acdf6b4cb 0.9960454962471429
 probe 256 3ec72ac8fdd7baad 0.0000027617370352764126
 probe 512 3df0397f68918a05 0.0000000002360990088924877

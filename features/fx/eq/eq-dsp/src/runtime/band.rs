@@ -7,6 +7,7 @@
 use crate::design::biquad::PASSTHROUGH;
 use crate::design::{self, FilterType};
 use crate::runtime::section::{Df1Section, Tdf2Section};
+use dsp_core::num;
 
 /// Maximum filter order (number of poles).
 pub const MAX_ORDER: usize = 16;
@@ -257,11 +258,11 @@ impl Band {
                 continue;
             };
             // H(e^jw) with z^-1 = cos w - j sin w.
-            let num_re = b2.mul_add(c2w, b0 + b1 * cw);
-            let num_im = -(b1 * sw + b2 * s2w);
-            let den_re = 1.0 + a1 * cw + a2 * c2w;
-            let den_im = -(a1 * sw + a2 * s2w);
-            let num: f64 = (num_re * num_re + num_im * num_im).max(1.0e-30);
+            let num_re = b2.mul_add(c2w, b1.mul_add(cw, b0));
+            let num_im = -(b1.mul_add(sw, b2 * s2w));
+            let den_re = a2.mul_add(c2w, a1.mul_add(cw, 1.0));
+            let den_im = -(a1.mul_add(sw, a2 * s2w));
+            let num: f64 = (num_re.mul_add(num_re, num_im * num_im)).max(1.0e-30);
             let den: f64 = (den_re * den_re + den_im * den_im).max(1.0e-30);
             db += 10.0 * (num / den).log10();
         }
@@ -294,7 +295,7 @@ impl Band {
         }
         let dry = sample;
         let wet = self.tick_inner(sample, ch);
-        dry + self.bypass_ramp * (wet - dry)
+        self.bypass_ramp.mul_add(wet - dry, dry)
     }
 
     /// The raw cascade (no bypass crossfade).
@@ -302,12 +303,12 @@ impl Band {
     fn tick_inner(&mut self, sample: f64, ch: usize) -> f64 {
         let mut out = sample;
         if self.use_df1 {
-            for i in 0..self.num_sections {
-                out = self.df1_sections[i].tick(out, ch);
+            for section in self.df1_sections.iter_mut().take(self.num_sections) {
+                out = section.tick(out, ch);
             }
         } else {
-            for i in 0..self.num_sections {
-                out = self.sections[i].tick(out, ch);
+            for section in self.sections.iter_mut().take(self.num_sections) {
+                out = section.tick(out, ch);
             }
         }
         out * self.output_gain
@@ -472,10 +473,10 @@ mod tests {
         // essentially silent whatever the gain field says.
         let sr = 48_000.0;
         let mut rms = 0.0f64;
-        for i in 0..(sr as usize) {
-            let x = (core::f64::consts::TAU * band.freq_hz * i as f64 / sr).sin();
+        for i in 0..num::f64_to_index(sr) {
+            let x = (core::f64::consts::TAU * band.freq_hz * num::count_to_f64(i) / sr).sin();
             let y = band.tick(x, 0);
-            if i > sr as usize / 2 {
+            if i > num::f64_to_index(sr) / 2 {
                 rms += y * y;
             }
         }

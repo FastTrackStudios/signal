@@ -103,7 +103,7 @@ impl Slope {
     /// CANONICAL slope param index (0..=10, Brickwall = 10) — the ONE
     /// table every param surface uses (plugin, signal-fx, rig, tests).
     #[must_use]
-    pub fn param_index(self) -> usize {
+    pub const fn param_index(self) -> usize {
         match self {
             Self::Db0 => 0,
             Self::Db6 => 1,
@@ -122,7 +122,7 @@ impl Slope {
     /// Canonical inverse of [`Self::param_index`]. Out-of-range clamps
     /// to Db12 (the historical default order).
     #[must_use]
-    pub fn from_param_index(idx: usize) -> Self {
+    pub const fn from_param_index(idx: usize) -> Self {
         match idx {
             0 => Self::Db0,
             1 => Self::Db6,
@@ -149,7 +149,7 @@ impl Slope {
     /// second-steepest identical filters, 65 dB apart from the plugin an
     /// eighth of an octave past the corner.
     #[must_use]
-    pub fn order(self) -> usize {
+    pub const fn order(self) -> usize {
         match self {
             Self::Db0 => 0,
             Self::Db6 => 1,
@@ -168,7 +168,7 @@ impl Slope {
     /// Number of biquad sections Pro-Q uses for this slope.
     /// Empirically captured via probe (see `capture_grid.py` + RE).
     #[must_use]
-    pub fn section_count(self) -> usize {
+    pub const fn section_count(self) -> usize {
         match self {
             Self::Db0 | Self::Db6 | Self::Db12 => 1,
             Self::Db18 | Self::Db24 => 2,
@@ -212,13 +212,27 @@ pub enum FilterShape {
 impl FilterShape {
     /// Canonical shape index (the wire/param value).
     #[must_use]
-    pub fn canonical_index(self) -> u32 {
-        self as u32
+    pub const fn canonical_index(self) -> u32 {
+        match self {
+            Self::Bell => 0,
+            Self::LowShelf => 1,
+            Self::HighShelf => 2,
+            Self::LowCut => 3,
+            Self::HighCut => 4,
+            Self::Notch => 5,
+            Self::BandPass => 6,
+            Self::TiltShelf => 7,
+            Self::FlatTilt => 8,
+            Self::AllPass => 9,
+            Self::BandShelf => 10,
+            Self::ShelfAlt => 11,
+            Self::BandPassVariant => 12,
+        }
     }
 
     /// Canonical inverse. Out-of-range falls back to Bell.
     #[must_use]
-    pub fn from_canonical_index(idx: u32) -> Self {
+    pub const fn from_canonical_index(idx: u32) -> Self {
         match idx {
             1 => Self::LowShelf,
             2 => Self::HighShelf,
@@ -238,7 +252,7 @@ impl FilterShape {
 
     /// The DSP design entry point for this UI shape.
     #[must_use]
-    pub fn to_filter_type(self) -> crate::design::FilterType {
+    pub const fn to_filter_type(self) -> crate::design::FilterType {
         use crate::design::FilterType;
         match self {
             Self::Bell => FilterType::Peak,
@@ -278,7 +292,7 @@ impl FilterShape {
 
     /// Minimum dB/oct slope this filter shape allows in Pro-Q UI.
     #[must_use]
-    pub fn min_slope(self) -> Slope {
+    pub const fn min_slope(self) -> Slope {
         match self {
             Self::LowCut | Self::HighCut | Self::BandPass => Slope::Db0,
             Self::Bell | Self::Notch => Slope::Db12,
@@ -295,13 +309,13 @@ impl FilterShape {
 
     /// Whether this shape supports Brickwall slope (HP/LP only).
     #[must_use]
-    pub fn supports_brickwall(self) -> bool {
+    pub const fn supports_brickwall(self) -> bool {
         matches!(self, Self::LowCut | Self::HighCut)
     }
 
     /// Whether this shape uses the gain parameter.
     #[must_use]
-    pub fn uses_gain(self) -> bool {
+    pub const fn uses_gain(self) -> bool {
         matches!(
             self,
             Self::Bell
@@ -316,7 +330,7 @@ impl FilterShape {
 
     /// Pro-Q binary filter type ID (probe argv[2]).
     #[must_use]
-    pub fn pro_q_type_id(self) -> u32 {
+    pub const fn pro_q_type_id(self) -> u32 {
         match self {
             Self::Bell => 0,
             Self::LowShelf => 1,

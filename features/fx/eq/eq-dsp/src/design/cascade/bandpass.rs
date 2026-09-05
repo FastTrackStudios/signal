@@ -3,6 +3,7 @@
 use std::f64::consts::PI;
 
 use crate::design::biquad::Coeffs;
+use dsp_core::num;
 
 use super::{notch_analog_sections, bp_cascade_for_q, mode0_forward, bell_three_point_synth, proq4_s2_from_prototype_with_subfreq, lagrange_synth_alt_path};
 
@@ -21,8 +22,8 @@ fn bandpass_cascade_slope2(freq_hz: f64, q_user: f64, sample_rate: f64) -> Vec<C
             let nb0 = b1_an * t * inv_d;
             let nb1 = 0.0;
             let nb2 = -b1_an * t * inv_d;
-            let da1 = -2.0 * (1.0 - a2 * t2) * inv_d;
-            let da2 = (1.0 - a1 * t + a2 * t2) * inv_d;
+            let da1 = -2.0 * a2.mul_add(-t2, 1.0) * inv_d;
+            let da2 = a2.mul_add(t2, a1.mul_add(-t, 1.0)) * inv_d;
             [1.0, da1, da2, nb0, nb1, nb2]
         })
         .collect()
@@ -172,7 +173,7 @@ fn bandpass_cascade_section(
                         ],
                     ],
                 };
-                let eval = |c: [f64; 3]| c[0] * x * x + c[1] * x + c[2];
+                let eval = |c: [f64; 3]| (c[0] * x).mul_add(x, c[1].mul_add(x, c[2]));
                 let p3 = eval(coeffs[0]) * omega0;
                 let p4 = eval(coeffs[1]) * omega_sq;
                 let sp5_sq = eval(coeffs[2]) * omega_sq;
@@ -209,10 +210,10 @@ fn bandpass_cascade_section(
                         let b1z = b2z * (2.0 / q_user);
                         return bell_three_point_synth(
                             b2z * b2z,
-                            (b1z * b1z - 2.0 * b2z * b2z) * g2,
+                            b1z.mul_add(b1z, -(2.0 * b2z * b2z)) * g2,
                             b2z * b2z * g4,
                             1.0,
-                            (a1_sec * a1_sec - 2.0 * a2_sec) * g2,
+                            a1_sec.mul_add(a1_sec, -(2.0 * a2_sec)) * g2,
                             a2_sec * a2_sec * g4,
                             w_pole,
                             w_zero,
@@ -237,10 +238,10 @@ fn bandpass_cascade_section(
                         let b1z = b2z * (2.0 / q_user);
                         return bell_three_point_synth(
                             b2z * b2z,
-                            (b1z * b1z - 2.0 * b2z * b2z) * g2,
+                            b1z.mul_add(b1z, -(2.0 * b2z * b2z)) * g2,
                             b2z * b2z * g4,
                             1.0,
-                            (a1_sec * a1_sec - 2.0 * a2_sec) * g2,
+                            a1_sec.mul_add(a1_sec, -(2.0 * a2_sec)) * g2,
                             a2_sec * a2_sec * g4,
                             w_pole,
                             w_zero,
@@ -302,7 +303,7 @@ fn bandpass_cascade_section(
                     let w_pole = (omega0 * a2_sec.max(0.0).sqrt()).min(0.98 * PI);
                     let w_eval = (1.5 * w_pole).clamp(0.9 * PI, 0.99 * PI);
                     let f = q_user.min(1.0);
-                    let w_third = (0.999 - (1.0 - f) * (1.0 - f) * 0.5) * w_pole;
+                    let w_third = ((1.0 - f) * (1.0 - f)).mul_add(-0.5, 0.999) * w_pole;
                     return proq4_s2_from_prototype_with_subfreq(
                         freq_hz,
                         sample_rate,
@@ -321,7 +322,7 @@ fn bandpass_cascade_section(
             }
             if slope == 4 {
                 let cap_b = alpha_b * alpha_b * g2;
-                let cap_e = (a1_sec * a1_sec - 2.0 * a2_sec) * g2;
+                let cap_e = a1_sec.mul_add(a1_sec, -(2.0 * a2_sec)) * g2;
                 let cap_f = a2_sec * a2_sec * g4;
                 let h_sq = |w: f64| -> f64 {
                     let w2 = w * w;
@@ -334,17 +335,11 @@ fn bandpass_cascade_section(
                     }
                 };
                 let mut w_pole = omega0 * a2_sec.max(0.0).sqrt();
-                let diff = ((h_sq(PI) - h_sq(w_pole)) as f32).abs() as f64;
+                let diff = f64::from(num::narrow(h_sq(PI) - h_sq(w_pole)).abs());
                 if diff <= 0.01 {
                     w_pole = omega0;
                 }
-                if a2_sec > 1.0
-                    && w_pole > PI
-                    && q_user >= 4.0
-                    && omega0 >= 2.0 * PI * 22_000.0 / sample_rate
-                {
-                    w_pole = omega0;
-                } else if q_user <= 1.0 && a2_sec > 1.0 && w_pole > PI {
+                if (a2_sec > 1.0 && w_pole > PI && (q_user >= 4.0 && omega0 >= 2.0 * PI * 22_000.0 / sample_rate || q_user <= 1.0)) {
                     w_pole = omega0;
                 } else if q_user <= 1.0 && a2_sec > 1.0 {
                     w_pole = w_pole.min(PI - 1e-9);
@@ -355,7 +350,7 @@ fn bandpass_cascade_section(
                 // This preserves the captured 0.999 ratio at Q >= 1 and the
                 // 0.874 ratio seen in live Q=0.5 bandpass slope-4 probes.
                 let f = q_user.min(1.0);
-                let w_third = (0.999 - (1.0 - f) * (1.0 - f) * 0.5) * w_pole;
+                let w_third = ((1.0 - f) * (1.0 - f)).mul_add(-0.5, 0.999) * w_pole;
                 let w_eval = (1.5 * w_pole).clamp(0.9 * PI, 0.99 * PI);
                 return proq4_s2_from_prototype_with_subfreq(
                     freq_hz,
@@ -373,7 +368,7 @@ fn bandpass_cascade_section(
                 );
             }
             let cap_b = alpha_b * alpha_b * g2;
-            let cap_e = (a1_sec * a1_sec - 2.0 * a2_sec) * g2;
+            let cap_e = a1_sec.mul_add(a1_sec, -(2.0 * a2_sec)) * g2;
             let cap_f = a2_sec * a2_sec * g4;
 
             // Analog squared magnitude
@@ -404,9 +399,9 @@ fn bandpass_cascade_section(
                 (-2.0 * z_re, z_re * z_re + z_im * z_im)
             } else {
                 // Real analog poles → BLT fallback
-                let d_blt = 1.0 + a1_sec * t_full + a2_sec * t_full2;
-                let a1d = (-2.0 + 2.0 * a2_sec * t_full2) / d_blt;
-                let a2d = (1.0 - a1_sec * t_full + a2_sec * t_full2) / d_blt;
+                let d_blt = a2_sec.mul_add(t_full2, a1_sec.mul_add(t_full, 1.0));
+                let a1d = (2.0 * a2_sec).mul_add(t_full2, -2.0) / d_blt;
+                let a2d = a2_sec.mul_add(t_full2, a1_sec.mul_add(-t_full, 1.0)) / d_blt;
                 (a1d, a2d)
             };
 
@@ -424,8 +419,8 @@ fn bandpass_cascade_section(
             };
             if slope == 3 && a2_sec > 1.0 && q_user >= 4.0 && omega0 > PI * 0.4 {
                 let x = (freq_hz / (sample_rate * 0.5)).clamp(0.0, 1.0);
-                let sp5 = (1.0 + p4) - a2_dig * d_mode0;
-                let tail_ratio = (0.64 - 0.18 * x).clamp(0.45, 0.58);
+                let sp5 = a2_dig.mul_add(-d_mode0, 1.0 + p4);
+                let tail_ratio = 0.18_f64.mul_add(-x, 0.64).clamp(0.45, 0.58);
                 sp6_sq = sp6_sq.max(sp5 * sp5 * tail_ratio);
             }
             let sp6 = sp6_sq.sqrt();
@@ -454,25 +449,15 @@ fn bandpass_cascade_section(
                 } else {
                     0.99 * PI
                 };
-                let w_pole = if slope == 9
-                    && sec_idx == 7
-                    && (q_user - 1.0).abs() < 1e-9
-                    && freq_hz >= 19_000.0
+                let w_pole = if (slope == 9 && sec_idx == 7 && (q_user - 1.0).abs() < 1e-9 && freq_hz >= 19_000.0)
+                    || (matches!(slope, 8 | 9) && a2_sec > 1.0 && w_section_raw > slope8_reset_threshold)
+                    || (slope == 7 && a2_sec > 1.0 && w_section_raw > 0.99 * PI)
+                    || (slope == 6 && a2_sec > 1.0 && w_section_raw > PI)
+                    || (slope == 5 && a2_sec > 1.0 && w_section_raw > 0.99 * PI)
                 {
-                    omega0
-                } else if matches!(slope, 8 | 9)
-                    && a2_sec > 1.0
-                    && w_section_raw > slope8_reset_threshold
-                {
-                    omega0
-                } else if slope == 7 && a2_sec > 1.0 && w_section_raw > 0.99 * PI {
-                    omega0
-                } else if slope == 6 && a2_sec > 1.0 && w_section_raw > PI {
                     omega0
                 } else if matches!(slope, 6..=9) && q_user <= 1.0 && a2_sec > 1.0 {
                     w_section_raw.min(PI - 1e-9)
-                } else if slope == 5 && a2_sec > 1.0 && w_section_raw > 0.99 * PI {
-                    omega0
                 } else {
                     w_section_raw.min(0.98 * PI)
                 };
@@ -482,7 +467,7 @@ fn bandpass_cascade_section(
                     (w_pole * 1.5).clamp(0.9 * PI, 0.99 * PI)
                 };
                 let f = q_user.min(1.0);
-                let w_third = (0.999 - (1.0 - f) * (1.0 - f) * 0.5) * w_pole;
+                let w_third = ((1.0 - f) * (1.0 - f)).mul_add(-0.5, 0.999) * w_pole;
                 return proq4_s2_from_prototype_with_subfreq(
                     freq_hz,
                     sample_rate,
@@ -506,16 +491,16 @@ fn bandpass_cascade_section(
                 // algebra below. The w_eval exponent follows the same helper
                 // curve as compute_shelf_band_parameters' mode>=1 path.
                 let q_curve = 0.5_f64.powf((SQRT_2 / q_user) * 0.5);
-                let tail_w_eval = PI * (0.8 + 0.2 * x.powf(3.3 * q_curve));
+                let tail_w_eval = PI * 0.2_f64.mul_add(x.powf(3.3 * q_curve), 0.8);
                 let g2_tail = omega0 * omega0;
                 let g4_tail = g2_tail * g2_tail;
-                let tail_a1 = ((SQRT_2 / q_user) as f32) as f64;
+                let tail_a1 = f64::from(num::narrow(SQRT_2 / q_user));
                 return lagrange_synth_alt_path(
                     phi_conj * phi_conj,
-                    (tail_a1 * tail_a1 - 2.0 * phi_conj * phi_conj) * g2_tail,
+                    tail_a1.mul_add(tail_a1, -(2.0 * phi_conj * phi_conj)) * g2_tail,
                     phi_conj * phi_conj * g4_tail,
                     1.0,
-                    (tail_a1 * tail_a1 - 2.0) * g2_tail,
+                    tail_a1.mul_add(tail_a1, -2.0) * g2_tail,
                     g4_tail,
                     omega0,
                     omega0 * 0.25,
@@ -546,7 +531,7 @@ fn bandpass_cascade_section(
                 if slope == 3 && a2_sec > 1.0 {
                     let hf = ((freq_hz - 15000.0) / 7000.0).clamp(0.0, 1.0);
                     let q_mix = ((q_user - 4.0) / 6.0).clamp(0.0, 1.0);
-                    bp_s3_tail_p3_for_q(q_user) * (1.0 + (0.34 - 0.08 * q_mix) * hf)
+                    bp_s3_tail_p3_for_q(q_user) * (0.08_f64.mul_add(-q_mix, 0.34).mul_add(hf, 1.0))
                 } else if is_slope5_tail {
                     bp_s5_tail_p3_for_q(q_user, omega0)
                 } else if is_slope6_tail {
@@ -557,7 +542,7 @@ fn bandpass_cascade_section(
                         * (1.0 - ((4.0 - q_user) / 3.5).clamp(0.0, 1.0));
                     let q_hi = ((q_user - 4.0) / 6.0).clamp(0.0, 1.0);
                     let hf = ((freq_hz - 15000.0) / 7000.0).clamp(0.0, 1.0);
-                    let hf_tail_scale = (1.0 - 2.00 * (0.60 + 0.40 * q_hi) * hf).max(0.005);
+                    let hf_tail_scale = ((2.00 * (0.40_f64.mul_add(q_hi, 0.60))).mul_add(-hf, 1.0)).max(0.005);
                     let q_one = if q_user <= 1.0 {
                         ((q_user - 0.5) / 0.5).clamp(0.0, 1.0)
                     } else {
@@ -568,46 +553,42 @@ fn bandpass_cascade_section(
                         let low_trim = (-((x - 0.08) / 0.08).powi(2)).exp();
                         let mid_trim = (-((x - 0.24) / 0.08).powi(2)).exp();
                         let upper_trim = (-((x - 0.50) / 0.10).powi(2)).exp();
-                        (1.0078 + 0.0928 * x - 0.1040 * x * x + 0.009 * mid_lift
-                            - 0.00045 * low_trim
-                            - 0.00045 * mid_trim
-                            - 0.004 * upper_trim)
+                        (0.004_f64.mul_add(-upper_trim, 0.00045_f64.mul_add(-mid_trim, 0.00045_f64.mul_add(-low_trim, 0.009_f64.mul_add(mid_lift, (0.1040_f64 * x).mul_add(-x, 0.0928_f64.mul_add(x, 1.0078)))))))
                             .max(0.95)
                     } else {
                         1.0
                     };
-                    (sp6 / SQRT_2) * hf_tail_scale * (1.0 + 0.034 * low * q_one) * q_half_tail
+                    (0.00016_f64 * low).mul_add(q_mid, (sp6 / SQRT_2) * hf_tail_scale * (0.034_f64 * low).mul_add(q_one, 1.0) * q_half_tail
                         + 0.45 * omega0 * omega0 / q_user
-                        + 0.000_134 * low * q_low
-                        + 0.00016 * low * q_mid
+                        + (0.000_134_f64 * low).mul_add(q_low, 0.0))
                 } else if slope == 4 && freq_hz <= 1000.0 {
                     let x = (freq_hz / 1000.0).clamp(0.0, 1.0);
-                    sp6 / SQRT_2 * (1.0 + 0.00028 * (1.0 - x * x) - 0.00006 * x * x)
+                    sp6 / SQRT_2 * ((0.00006_f64 * x).mul_add(-x, 0.00028_f64.mul_add(1.0 - x * x, 1.0)))
                 } else if slope == 4 && q_user >= 4.0 && freq_hz >= 15000.0 {
                     let x = ((freq_hz - 15000.0) / 7000.0).clamp(0.0, 1.0);
                     let q_mix = ((q_user - 4.0) / 6.0).clamp(0.0, 1.0);
                     let reduction = if sec_idx == 0 {
-                        0.62 + 0.06 * q_mix
+                        0.06_f64.mul_add(q_mix, 0.62)
                     } else {
-                        0.72 + 0.16 * q_mix
+                        0.16_f64.mul_add(q_mix, 0.72)
                     };
                     sp6 / SQRT_2 * (1.0 - reduction * x)
                 } else if slope == 7 && freq_hz <= 1000.0 {
                     let x = (freq_hz / 1000.0).clamp(0.0, 1.0);
-                    sp6 / SQRT_2 * (1.0 + 0.0002 * (1.0 - x * x))
+                    sp6 / SQRT_2 * 0.0002_f64.mul_add(1.0 - x * x, 1.0)
                 } else if slope == 7 && q_user >= 4.0 && freq_hz >= 15000.0 {
                     let x = ((freq_hz - 15000.0) / 7000.0).clamp(0.0, 1.0);
                     let q_mix = ((q_user - 4.0) / 6.0).clamp(0.0, 1.0);
                     let reduction = match sec_idx {
-                        0 => 0.62 + 0.06 * q_mix,
-                        1 => 0.72 + 0.12 * q_mix,
-                        2 => 0.58 + 0.08 * q_mix,
-                        _ => 0.64 + 0.12 * q_mix,
+                        0 => 0.06_f64.mul_add(q_mix, 0.62),
+                        1 => 0.12_f64.mul_add(q_mix, 0.72),
+                        2 => 0.08_f64.mul_add(q_mix, 0.58),
+                        _ => 0.12_f64.mul_add(q_mix, 0.64),
                     };
                     sp6 / SQRT_2 * (1.0 - reduction * x)
                 } else if slope == 5 && sec_idx == 0 && freq_hz <= 1000.0 {
                     let x = (freq_hz / 1000.0).clamp(0.0, 1.0);
-                    sp6 / SQRT_2 * (1.0 + 0.0003 * (1.0 - x * x))
+                    sp6 / SQRT_2 * 0.0003_f64.mul_add(1.0 - x * x, 1.0)
                 } else {
                     // Low-fc: structural sp6 = √2·p3
                     sp6 / SQRT_2
@@ -621,8 +602,8 @@ fn bandpass_cascade_section(
                     let sin_w = w.sin();
                     let cos_double_w = (2.0 * w).cos();
                     let sin_double_w = (2.0 * w).sin();
-                    let re = 1.0 + a1_dig * cos_w + a2_dig * cos_double_w;
-                    let im = -a1_dig * sin_w - a2_dig * sin_double_w;
+                    let re = a2_dig.mul_add(cos_double_w, a1_dig.mul_add(cos_w, 1.0));
+                    let im = (-a1_dig).mul_add(sin_w, -(a2_dig * sin_double_w));
                     re * re + im * im
                 };
                 let t_eval = (w_eval * 0.5).tan();
@@ -640,19 +621,19 @@ fn bandpass_cascade_section(
                     let x = ((freq_hz - 15000.0) / 7000.0).clamp(0.0, 1.0);
                     let q_mix = ((q_user - 4.0) / 6.0).clamp(0.0, 1.0);
                     let reduction = if sec_idx == 0 {
-                        0.62 + 0.06 * q_mix
+                        0.06_f64.mul_add(q_mix, 0.62)
                     } else {
-                        0.72 + 0.16 * q_mix
+                        0.16_f64.mul_add(q_mix, 0.72)
                     };
                     p3 *= 1.0 - reduction * x;
                 } else if slope == 7 && q_user >= 4.0 && freq_hz >= 15000.0 {
                     let x = ((freq_hz - 15000.0) / 7000.0).clamp(0.0, 1.0);
                     let q_mix = ((q_user - 4.0) / 6.0).clamp(0.0, 1.0);
                     let reduction = match sec_idx {
-                        0 => 0.62 + 0.06 * q_mix,
-                        1 => 0.72 + 0.12 * q_mix,
-                        2 => 0.58 + 0.08 * q_mix,
-                        _ => 0.64 + 0.12 * q_mix,
+                        0 => 0.06_f64.mul_add(q_mix, 0.62),
+                        1 => 0.12_f64.mul_add(q_mix, 0.72),
+                        2 => 0.08_f64.mul_add(q_mix, 0.58),
+                        _ => 0.12_f64.mul_add(q_mix, 0.64),
                     };
                     p3 *= 1.0 - reduction * x;
                 }
@@ -670,13 +651,13 @@ fn bp_s3_tail_p3_for_q(q: f64) -> f64 {
     // Q={0.5,1,4,10}. This is the same mode-0 parameter family as the
     // p2 fit above, not a coefficient lookup.
     let q = q.max(0.5);
-    (0.708_282_359_681_502_1 * q * q + 0.071_551_196_033_465_8 * q + 0.047_750_333_818_323)
+    ((0.708_282_359_681_502_1_f64 * q).mul_add(q, 0.071_551_196_033_465_8_f64.mul_add(q, 0.047_750_333_818_323)))
         / (q * q - 0.227_708_022_498_569_14 * q)
 }
 fn bp_s3_tail_p2_for_q(q: f64) -> f64 {
     let q = q.max(0.5);
-    ((0.706_361_059_557_113 * q * q - 0.617_222_169_155_086_7 * q + 0.127_302_505_126_316_7)
-        / (q * q - 0.536_125_138_583_560_3 * q))
+    (((0.706_361_059_557_113_f64 * q).mul_add(q, -(0.617_222_169_155_086_7_f64 * q) + 0.127_302_505_126_316_7)
+        / (q * q - 0.536_125_138_583_560_3 * q)))
         .max(0.0)
 }
 fn bp_s5_tail_p3_for_q(q: f64, omega0: f64) -> f64 {
@@ -684,13 +665,13 @@ fn bp_s5_tail_p3_for_q(q: f64, omega0: f64) -> f64 {
     let q = q.max(0.5);
     // Captures show p3 approaches p2 at low frequency and high Q, with a
     // small frequency-squared lift that scales as 1/Q² for the real tail.
-    let low_omega = (1.0 - (omega0 / 0.2).powi(2)).clamp(0.0, 1.0);
+    let low_omega = (omega0 / 0.2).mul_add(-(omega0 / 0.2), 1.0).clamp(0.0, 1.0);
     let q01 = if q <= 1.0 {
         ((q - 0.5) / 0.5).clamp(0.0, 1.0)
     } else {
         0.0
     };
-    phi_conj + (0.1398 + 0.0005 * low_omega + 0.014 * q01) * omega0 * omega0 / (q * q)
+    phi_conj + (0.014_f64.mul_add(q01, 0.1398 + 0.0005_f64.mul_add(low_omega, 0.0))) * omega0 * omega0 / (q * q)
 }
 /// Pro-Q 4 Bandpass slope-2 (audio-path Lagrange-MZT).
 ///

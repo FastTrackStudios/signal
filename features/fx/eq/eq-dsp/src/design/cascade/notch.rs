@@ -175,12 +175,12 @@ fn alt_path_kernel_generic(
     let g = _omega0;
     let g2 = g * g;
     let g4 = g2 * g2;
-    let cap_e = (a1_sec * a1_sec - 2.0 * a2_sec) * g2;
+    let cap_e = a1_sec.mul_add(a1_sec, -(2.0 * a2_sec)) * g2;
     let cap_f = a2_sec * a2_sec * g4;
     let h_sq = |w: f64| -> f64 {
         let w2 = w * w;
         let w4 = w2 * w2;
-        let num = cap_a * w4 + cap_b * w2 + cap_c;
+        let num = cap_a.mul_add(w4, cap_b * w2) + cap_c;
         let den = w4 + cap_e * w2 + cap_f;
         if den.abs() > 1e-300 {
             (num / den).max(0.0)
@@ -244,9 +244,9 @@ fn alt_path_kernel_generic(
         return PASSTHROUGH;
     }
     let inv_d = 1.0 / big_d;
-    let b0 = (p2 * p4 + p3 + sq6) * inv_d;
-    let b1 = -2.0 * (p3 - p2 * p4) * inv_d;
-    let b2 = (p3 - sq6 + p2 * p4) * inv_d;
+    let b0 = p2.mul_add(p4, p3 + sq6) * inv_d;
+    let b1 = -2.0 * p2.mul_add(-p4, p3) * inv_d;
+    let b2 = p2.mul_add(p4, p3 - sq6) * inv_d;
     let a1 = -2.0 * (1.0 - p4) * inv_d;
     let a2 = (1.0 + p4 - sq5) * inv_d;
     [1.0, a1, a2, b0, b1, b2]
@@ -269,7 +269,7 @@ fn notch_s8_section_biquad(
     // Compute solve_biquad output per section
     let cap_b = -2.0 * g2;
     let cap_c = g4;
-    let cap_e = (a1_sec * a1_sec - 2.0 * a2_sec) * g2;
+    let cap_e = a1_sec.mul_add(a1_sec, -(2.0 * a2_sec)) * g2;
     let cap_f = a2_sec * a2_sec * g4;
     let delta = cap_e - cap_b;
     let gamma = 2.0 * (cap_f - cap_c);
@@ -295,8 +295,8 @@ fn notch_s8_section_biquad(
     // S_blend from proto[10] = √2 (constant for Notch)
     let alpha = std::f64::consts::SQRT_2 / q_user;
     let a_shelf = (0.5_f64.powf(alpha * 0.5)).max(0.01);
-    let sqrt_t = ((omega0 / PI).sqrt() as f32) as f64;
-    let s_blend = (a_shelf - 0.99) * sqrt_t + 0.99;
+    let sqrt_t = f64::from((omega0 / PI).sqrt() as f32);
+    let s_blend = (a_shelf - 0.99).mul_add(sqrt_t, 0.99);
 
     let g_ref = 1.0 / (a2_sec * a2_sec);
 
@@ -304,7 +304,7 @@ fn notch_s8_section_biquad(
     // when w_zero clamps to π at high fc — verified via probe at fc=20k Q=1).
     let alt_path = || {
         let beta = (omega0 / PI - 0.8).clamp(0.0, 0.2);
-        let b1p_f32 = ((beta * beta * 25.0) as f32) as f64;
+        let b1p_f32 = f64::from((beta * beta * 25.0) as f32);
         let mut wz = s_blend.sqrt() * omega0 * (1.0 - b1p_f32 * 0.05);
         let wt = (1.0 - b1p_f32 * 0.2) * wz * s_blend;
         if omega0 < 0.0314 {
@@ -370,10 +370,10 @@ fn notch_s2_alt_path_synth(freq_hz: f64, q_user: f64, sample_rate: f64) -> Coeff
     let w_pole = omega_d;
     let omega_over_pi = w_pole / PI;
     let beta = (omega_over_pi - 0.8).clamp(0.0, 0.2);
-    let b1p_f32 = ((beta * beta * 25.0) as f32) as f64;
+    let b1p_f32 = f64::from((beta * beta * 25.0) as f32);
     let a_shelf = (0.5_f64.powf(alpha * 0.5)).max(0.01);
-    let sqrt_t = (omega_over_pi.sqrt() as f32) as f64;
-    let s_blend = (a_shelf - 0.99) * sqrt_t + 0.99;
+    let sqrt_t = f64::from(omega_over_pi.sqrt() as f32);
+    let s_blend = (a_shelf - 0.99).mul_add(sqrt_t, 0.99);
     let mut w_zero = s_blend.sqrt() * w_pole * (1.0 - b1p_f32 * 0.05);
     let w_third = (1.0 - b1p_f32 * 0.2) * w_zero * s_blend;
     if w_pole < 0.0314_f64 {
@@ -391,7 +391,7 @@ fn notch_s2_alt_path_synth(freq_hz: f64, q_user: f64, sample_rate: f64) -> Coeff
     let h_sq = |w: f64| -> f64 {
         let w2 = w * w;
         let num = (w2 - g2) * (w2 - g2);
-        let den = num + alpha * alpha * w2 * g2;
+        let den = (alpha * alpha * w2).mul_add(g2, num);
         if den.abs() > 1e-300 {
             (num / den).max(0.0)
         } else {
@@ -463,9 +463,9 @@ fn notch_s2_alt_path_synth(freq_hz: f64, q_user: f64, sample_rate: f64) -> Coeff
         return PASSTHROUGH;
     }
     let inv_d = 1.0 / big_d;
-    let b0 = (p2 * p4 + p3 + sq6) * inv_d;
-    let b1 = -2.0 * (p3 - p2 * p4) * inv_d;
-    let b2 = (p3 - sq6 + p2 * p4) * inv_d;
+    let b0 = p2.mul_add(p4, p3 + sq6) * inv_d;
+    let b1 = -2.0 * p2.mul_add(-p4, p3) * inv_d;
+    let b2 = p2.mul_add(p4, p3 - sq6) * inv_d;
     let a1 = -2.0 * (1.0 - p4) * inv_d;
     let a2 = (1.0 + p4 - sq5) * inv_d;
     [1.0, a1, a2, b0, b1, b2]
@@ -489,8 +489,8 @@ pub fn notch_s2_proq4(freq_hz: f64, q: f64, sample_rate: f64) -> Coeffs {
     let da0 = 1.0 + alpha_t + t2;
     let inv_d = 1.0 / da0;
     let nb0 = 1.0 + t2;
-    let nb1 = -2.0 + 2.0 * t2;
-    let da1 = -2.0 + 2.0 * t2;
+    let nb1 = 2.0f64.mul_add(t2, -2.0);
+    let da1 = 2.0f64.mul_add(t2, -2.0);
     let da2 = 1.0 - alpha_t + t2;
     [
         1.0,

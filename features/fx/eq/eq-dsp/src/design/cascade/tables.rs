@@ -1,18 +1,21 @@
 //! Decoded coefficient tables, and the pre-warp they feed.
 
-use super::*;
+use super::{notch_inner_pair, notch_analog_sections, PI};
+
+/// Q-table configuration: (lower_q, lower_table, upper_q, upper_table)
+type QTableConfig<'a> = (f64, &'a Vec<(f64, f64)>, f64, &'a Vec<(f64, f64)>);
 
 /// Pro-Q 4 Bandpass-specific cascade values (`a1_sec`, `a2_sec`) per Q per
 /// section. Extracted from probe `LAG_PROTO_DETAIL` at fc=10 (matched-Z
 /// near-bit-exact). Pro-Q's actual BP analog cascade differs from
 /// `notch_inner_pair` at Q≠1 due to floating-point arithmetic order.
-pub(crate) fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
+pub fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
     if matches!(slope, 3 | 5 | 7 | 9) {
         use std::f64::consts::SQRT_2;
         let q_user = q.max(1e-6);
         let c_quartic = 2.0 + 2.0 / (q_user * q_user);
         let (angles, real_count) = lp_atoms_for_slope(slope);
-        let mut sections = Vec::with_capacity(angles.len() * 2 + real_count);
+        let mut sections = Vec::with_capacity(angles.len().saturating_mul(2).saturating_add(real_count));
         for &theta in angles {
             let b = -2.0 * SQRT_2 * theta.cos() / q_user;
             let (a1i, a2i) = notch_inner_pair(b, c_quartic);
@@ -31,7 +34,7 @@ pub(crate) fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
         use std::f64::consts::SQRT_2;
         let q_user = q.max(1e-6);
         let c_quartic = 2.0 + 2.0 / (q_user * q_user);
-        let theta = 120.0_f64 * PI / 180.0;
+        let theta = 120.0_f64.to_radians();
         let b = -2.0 * SQRT_2 * theta.cos() / q_user;
         let (a1i, a2i) = notch_inner_pair(b, c_quartic);
         return vec![(a1i, a2i), (a1i / a2i, 1.0 / a2i), (SQRT_2 / q_user, 1.0)];
@@ -71,7 +74,7 @@ pub(crate) fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
         (0.134_101_194_217_655_35, 0.963_977_549_097_682_1),
         (0.139_112_362_464_492_4, 1.037_368_557_946_226),
     ];
-    let (lo_q, lo_v, hi_q, hi_v): (f64, &Vec<(f64, f64)>, f64, &Vec<(f64, f64)>) = if q <= 0.5 {
+    let (lo_q, lo_v, hi_q, hi_v): QTableConfig = if q <= 0.5 {
         (0.5, &q05, 0.5, &q05)
     } else if q <= 1.0 {
         (0.5, &q05, 1.0, &q10)
@@ -88,7 +91,7 @@ pub(crate) fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
     let alpha = (q - lo_q) / (hi_q - lo_q);
     lo_v.iter()
         .zip(hi_v.iter())
-        .map(|(&(a1l, a2l), &(a1h, a2h))| (a1l + alpha * (a1h - a1l), a2l + alpha * (a2h - a2l)))
+        .map(|(&(a1l, a2l), &(a1h, a2h))| (alpha.mul_add(a1h - a1l, a1l), alpha.mul_add(a2h - a2l, a2l)))
         .collect()
 }
 

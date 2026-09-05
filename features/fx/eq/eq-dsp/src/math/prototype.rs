@@ -11,6 +11,7 @@
 
 use std::f64::consts::PI;
 
+use dsp_core::num;
 use crate::math::elliptic;
 use crate::math::zpk::{Complex, Zpk};
 
@@ -23,9 +24,9 @@ use crate::math::zpk::{Complex, Zpk};
 #[must_use]
 pub fn butterworth_lp(order: usize) -> Zpk {
     let mut poles = Vec::with_capacity(order);
-    let order_f64 = order as i32 as f64;
+    let order_f64 = num::count_to_f64(order);
     for k in 0..order {
-        let k_f64 = k as i32 as f64;
+        let k_f64 = num::count_to_f64(k);
         let angle = PI * (2.0f64.mul_add(k_f64, order_f64) + 1.0) / (2.0 * order_f64);
         poles.push(Complex::from_polar(1.0, angle));
     }
@@ -45,7 +46,7 @@ pub fn butterworth_lp_prewarped(order: usize, freq_hz: f64, sample_rate: f64) ->
     for p in &mut proto.poles {
         *p = *p * w_a;
     }
-    proto.gain = w_a.powi(order as i32);
+    proto.gain = w_a.powi(num::count_to_i32(order));
     proto
 }
 
@@ -65,7 +66,7 @@ pub fn butterworth_bp(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Z
 
     let lp = butterworth_lp(order);
 
-    let mut bp_poles = Vec::with_capacity(2 * order);
+    let mut bp_poles = Vec::with_capacity(order.saturating_mul(2));
     let mut bp_zeros = Vec::with_capacity(order);
 
     for &s_k in &lp.poles {
@@ -81,7 +82,7 @@ pub fn butterworth_bp(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Z
         bp_zeros.push(Complex::ZERO);
     }
 
-    let gain = bw_a.powi(order as i32);
+    let gain = bw_a.powi(num::count_to_i32(order));
     Zpk::new(bp_zeros, bp_poles, gain)
 }
 
@@ -112,7 +113,7 @@ pub fn butterworth_bp_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
     // Complete elliptic integral K(k) for normalization
     let kk = elliptic::elliptic_k_complete(k);
 
-    let mut bp_poles = Vec::with_capacity(2 * order);
+    let mut bp_poles = Vec::with_capacity(order.saturating_mul(2));
     let mut bp_zeros = Vec::with_capacity(order);
 
     // CRITICAL FIX: Section-indexed elliptic parametrization.
@@ -120,18 +121,18 @@ pub fn butterworth_bp_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
     // not duplicates. Each section index gets a DIFFERENT elliptic function evaluation.
     // For order-N filter: iterate through N sections, not through LP poles.
     for section_idx in 0..order {
-        let u_i = (2.0 * section_idx as f64 + 1.0) * kk / order as f64;
+        let u_i = 2.0f64.mul_add(num::count_to_f64(section_idx), 1.0) * kk / num::count_to_f64(order);
 
         // Evaluate Jacobi elliptic functions at this section's parameter
         let sn_val = elliptic::elliptic_sn(u_i, k);
         let cn_val = (1.0 - sn_val * sn_val).max(0.0).sqrt();
-        let dn_val = (1.0 - k * k * sn_val * sn_val).max(0.0).sqrt();
+        let dn_val = ((k * k * sn_val).mul_add(-sn_val, 1.0)).max(0.0).sqrt();
 
         // The elliptic transform maps to BP poles:
         //   sigma = bw * sn * dn / (1 - k^2 * sn^2)
         //   omega_offset = bw * cn / (1 - k^2 * sn^2)
         // Each section gets UNIQUE sigma and omega_offset based on section_idx.
-        let denom = 1.0 - k * k * sn_val * sn_val + 1e-30;
+        let denom = (k * k * sn_val).mul_add(-sn_val, 1.0) + 1e-30;
         let sigma = bw_a * sn_val * dn_val / denom;
         let omega_offset = bw_a * cn_val / denom;
 
@@ -146,7 +147,7 @@ pub fn butterworth_bp_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
         bp_zeros.push(Complex::ZERO);
     }
 
-    let gain = bw_a.powi(order as i32);
+    let gain = bw_a.powi(num::count_to_i32(order));
     Zpk::new(bp_zeros, bp_poles, gain)
 }
 
@@ -162,8 +163,8 @@ pub fn butterworth_bs(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Z
 
     let lp = butterworth_lp(order);
 
-    let mut bs_poles = Vec::with_capacity(2 * order);
-    let mut bs_zeros = Vec::with_capacity(2 * order);
+    let mut bs_poles = Vec::with_capacity(order.saturating_mul(2));
+    let mut bs_zeros = Vec::with_capacity(order.saturating_mul(2));
 
     for &s_k in &lp.poles {
         // BS pole equation: s^2 - s*(bw_a/s_k) + w0_a^2 = 0
@@ -208,25 +209,25 @@ pub fn butterworth_bs_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
     // Complete elliptic integral K(k) for normalization
     let kk = elliptic::elliptic_k_complete(k);
 
-    let mut bs_poles = Vec::with_capacity(2 * order);
-    let mut bs_zeros = Vec::with_capacity(2 * order);
+    let mut bs_poles = Vec::with_capacity(order.saturating_mul(2));
+    let mut bs_zeros = Vec::with_capacity(order.saturating_mul(2));
 
     // CRITICAL FIX: Section-indexed elliptic parametrization (same as bandpass).
     // Pro-Q 4 generates DISTINCT poles for each section using u_i = (2*i+1)*K(k)/order,
     // not duplicates. Each section index gets a DIFFERENT elliptic function evaluation.
     for section_idx in 0..order {
-        let u_i = (2.0 * section_idx as f64 + 1.0) * kk / order as f64;
+        let u_i = 2.0f64.mul_add(num::count_to_f64(section_idx), 1.0) * kk / num::count_to_f64(order);
 
         // Evaluate Jacobi elliptic functions at this section's parameter
         let sn_val = elliptic::elliptic_sn(u_i, k);
         let cn_val = (1.0 - sn_val * sn_val).max(0.0).sqrt();
-        let dn_val = (1.0 - k * k * sn_val * sn_val).max(0.0).sqrt();
+        let dn_val = ((k * k * sn_val).mul_add(-sn_val, 1.0)).max(0.0).sqrt();
 
         // The elliptic transform maps to BS poles:
         //   sigma = bw * sn * dn / (1 - k^2 * sn^2)
         //   omega_offset = bw * cn / (1 - k^2 * sn^2)
         // Each section gets UNIQUE sigma and omega_offset based on section_idx.
-        let denom = 1.0 - k * k * sn_val * sn_val + 1e-30;
+        let denom = (k * k * sn_val).mul_add(-sn_val, 1.0) + 1e-30;
         let sigma = bw_a * sn_val * dn_val / denom;
         let omega_offset = bw_a * cn_val / denom;
 

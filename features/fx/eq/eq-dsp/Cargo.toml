@@ -10,6 +10,7 @@ workspace = true
 
 [dependencies]
 audiocore-dsp = { workspace = true }
+dsp-core = { workspace = true }
 realfft = { workspace = true }
 
 [dev-dependencies]

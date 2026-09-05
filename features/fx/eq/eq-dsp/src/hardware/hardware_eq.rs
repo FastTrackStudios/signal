@@ -778,7 +778,7 @@ fn push_cut_if_active(
 }
 
 fn proportional_q(gain_db: f64, base: f64, max: f64) -> f64 {
-    base + (max - base) * (gain_db.abs() / 12.0).clamp(0.0, 1.0)
+    (max - base).mul_add((gain_db.abs() / 12.0).clamp(0.0, 1.0), base)
 }
 
 fn push(

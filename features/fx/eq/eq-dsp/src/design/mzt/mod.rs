@@ -35,6 +35,7 @@ pub use peak::*;
 pub use shelf::*;
 
 use crate::design::biquad::Coeffs;
+use dsp_core::num;
 use std::f64::consts::PI;
 
 /// Generic MZT biquad design given analog prototype poles specified by
@@ -93,7 +94,7 @@ pub fn mzt_biquad(
 /// Returns (c1, c2) where digital polynomial is `1 + c1·z⁻¹ + c2·z⁻²`.
 pub(crate) fn mzt_quadratic(w0: f64, alpha: f64) -> (f64, f64) {
     let sigma = -w0 * alpha * 0.5;
-    let disc = 1.0 - alpha * alpha * 0.25;
+    let disc = (alpha * alpha).mul_add(-0.25, 1.0);
     if disc >= 0.0 {
         // Underdamped: complex pair
         let omega = w0 * disc.sqrt();
@@ -172,17 +173,17 @@ pub fn zpk_section_to_AF(
     omega_scale: f64,
 ) -> (f64, f64, f64, f64, f64, f64) {
     const EPS_F32: f32 = 1.192_092_9e-7; // captured at 0x18023161c
-    let abs_b2_zero_f32 = (b2z as f32).abs();
-    let abs_b2_pole_f32 = (b2p as f32).abs();
+    let abs_b2_zero_f32 = num::narrow(b2z).abs();
+    let abs_b2_pole_f32 = num::narrow(b2p).abs();
     let second_order = abs_b2_zero_f32 > EPS_F32 || abs_b2_pole_f32 > EPS_F32;
     let g2 = omega_scale * omega_scale;
     let g4 = g2 * g2;
     if second_order {
         let num_b2sq = b2z * b2z;
-        let num_cross = (b1z * b1z - 2.0 * b2z * b0z) * g2;
+        let num_cross = b1z.mul_add(b1z, -(2.0 * b2z * b0z)) * g2;
         let num_b0sq = b0z * b0z * g4;
         let den_b2sq = b2p * b2p;
-        let den_cross = (b1p * b1p - 2.0 * b2p * b0p) * g2;
+        let den_cross = b1p.mul_add(b1p, -(2.0 * b2p * b0p)) * g2;
         let den_b0sq = b0p * b0p * g4;
         (num_b2sq, num_cross, num_b0sq, den_b2sq, den_cross, den_b0sq)
     } else {
@@ -231,14 +232,15 @@ pub fn proq4_s2_from_AF_with_subfreq(
     w_third: f64,
     w_eval: f64,
 ) -> Coeffs {
+    const W_POLE_MAX: f64 = 3.078_760_800_517_997;
+    const W_ZERO_MAX: f64 = 2.827_433_388_230_814;
+    const W_THIRD_MAX: f64 = 3.063_366_996_515_407_3;
+
     let omega0_raw = 2.0 * PI * freq_hz / sample_rate;
     let omega0 = omega0_raw.min(PI - 0.01);
 
     let g_ref = if F.abs() > 1e-300 { C / F } else { 0.0 };
 
-    const W_POLE_MAX: f64 = 3.078_760_800_517_997;
-    const W_ZERO_MAX: f64 = 2.827_433_388_230_814;
-    const W_THIRD_MAX: f64 = 3.063_366_996_515_407_3;
     let w_pole = w_pole.min(W_POLE_MAX);
     let w_zero = w_zero.min(W_ZERO_MAX);
     let w_third = w_third.min(W_THIRD_MAX);
@@ -247,8 +249,8 @@ pub fn proq4_s2_from_AF_with_subfreq(
     let h_sq = |w: f64| -> f64 {
         let w2 = w * w;
         let w4 = w2 * w2;
-        let num = A * w4 + B * w2 + C;
-        let den = D * w4 + E * w2 + F;
+        let num = A.mul_add(w4, B.mul_add(w2, C));
+        let den = D.mul_add(w4, E.mul_add(w2, F));
         if den.abs() > 1e-300 {
             num / den
         } else {
@@ -271,12 +273,9 @@ pub fn proq4_s2_from_AF_with_subfreq(
     let t3s = t3 * t3;
 
     let den = t3s
-        * ((u_zero - u_third) * (g_ref - u_pole) * t2s
-            - (u_pole - u_third) * (g_ref - u_zero) * t1s)
+        * ((u_zero - u_third) * (g_ref - u_pole)).mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s))
         + (g_ref - u_third) * (u_pole - u_zero) * t1s * t2s;
-    let num = u_pole * ((t2s - t3s) * u_eval + (t1s - t2s) * u_zero + (t3s - t1s) * u_third)
-        + u_eval * ((t3s - t1s) * u_zero + (t1s - t2s) * u_third)
-        + (t2s - t3s) * u_third * u_zero;
+    let num = ((t2s - t3s) * u_third).mul_add(u_zero, u_pole * ((t2s - t3s) * u_eval + (t1s - t2s) * u_zero + (t3s - t1s) * u_third) + u_eval * ((t3s - t1s) * u_zero + (t1s - t2s) * u_third));
 
     let s2 = if den.abs() > 1e-30 {
         (num / den).max(0.0)
@@ -291,9 +290,7 @@ pub fn proq4_s2_from_AF_with_subfreq(
 
     let sp6_den = (u_pole - u_zero) * t1s * t2s;
     let sp6 = if sp6_den.abs() > 1e-30 {
-        let sp6_num = a1_term * a1_term * t2s * u_zero
-            - (t1s * t2s * (1.0 - s2 * t3s) * (t1s - t2s) * u_zero + a2_term * a2_term * t1s)
-                * u_pole;
+        let sp6_num = (a1_term * a1_term * t2s).mul_add(u_zero, -((t1s * t2s * (1.0 - s2 * t3s) * (t1s - t2s) * u_zero + a2_term * a2_term * t1s) * u_pole));
         (sp6_num / sp6_den).max(0.0)
     } else {
         0.0
@@ -558,11 +555,11 @@ mod tests {
         ];
         let mut max_err = 0.0_f64;
         let mut worst_sec = 0usize;
-        for sec in 0..6 {
+        for (sec, cap_row) in cap.iter().enumerate() {
             let sos = lp_slope8_section_biquad(sec, 10000.0, 1.0, 48000.0);
             let pred = [sos[3], sos[4], sos[5], sos[1], sos[2]];
             for i in 0..5 {
-                let err = (pred[i] - cap[sec][i]).abs();
+                let err = (pred[i] - cap_row[i]).abs();
                 if err > max_err {
                     max_err = err;
                     worst_sec = sec;
@@ -570,7 +567,7 @@ mod tests {
             }
             eprintln!(
                 "LP fc=10k Q=1 sec{} pred={:?} cap={:?}",
-                sec, pred, cap[sec]
+                sec, pred, cap_row
             );
         }
         eprintln!("LP fc=10k Q=1 max_err={max_err:.3e} worst_sec={worst_sec}");

@@ -16,6 +16,7 @@ use std::f64::consts::PI;
 
 use crate::design::biquad::{Coeffs, PASSTHROUGH};
 use crate::math::zpk::Zpk;
+use dsp_core::num;
 
 /// Design a low shelf filter via ZPK pipeline.
 ///
@@ -86,7 +87,7 @@ pub fn design_high_shelf(
 
     (0..n)
         .map(|k| {
-            let section_gain = gain_db / n as f64;
+            let section_gain = gain_db / num::count_to_f64(n);
             let bw_q = butterworth_section_q(k, n);
             let section_q = bw_q * (q / std::f64::consts::FRAC_1_SQRT_2);
             rbj_high_shelf(w0, section_q, section_gain)
@@ -118,7 +119,7 @@ pub fn design_tilt_shelf(
 
     (0..n)
         .map(|k| {
-            let section_gain = gain_db / n as f64;
+            let section_gain = gain_db / num::count_to_f64(n);
             let bw_q = butterworth_section_q(k, n);
             let section_q = bw_q * (q / std::f64::consts::FRAC_1_SQRT_2);
             rbj_low_shelf(w0, section_q, section_gain)
@@ -154,10 +155,10 @@ pub fn design_band_shelf(
     let w_lo = 2.0 * PI * f_lo / sample_rate;
     let w_hi = 2.0 * PI * f_hi / sample_rate;
 
-    let gain_per = gain_db / n as f64;
+    let gain_per = gain_db / num::count_to_f64(n);
     let shelf_q = std::f64::consts::FRAC_1_SQRT_2;
 
-    let mut sections = Vec::with_capacity(2 * n);
+    let mut sections = Vec::with_capacity(n.saturating_mul(2));
     for _ in 0..n {
         sections.push(rbj_low_shelf(w_hi, shelf_q, gain_per));
         sections.push(rbj_high_shelf(w_lo, shelf_q, gain_per));
@@ -207,7 +208,9 @@ pub fn apply_shelf_gain(zpk: &mut Zpk, filter_type: u32, gain_linear: f64) {
 /// For a 2n-th order Butterworth, section k has:
 ///   `Q_k` = 1 / (2 * sin(pi * (2k + 1) / (4n)))
 fn butterworth_section_q(k: usize, n: usize) -> f64 {
-    let angle = PI * (2 * k + 1) as f64 / (4 * n) as f64;
+    let numerator = k.saturating_mul(2).saturating_add(1);
+    let denominator = n.saturating_mul(4);
+    let angle = PI * num::count_to_f64(numerator) / num::count_to_f64(denominator);
     1.0 / (2.0 * angle.sin())
 }
 
@@ -219,12 +222,12 @@ fn rbj_low_shelf(w0: f64, q: f64, gain_db: f64) -> Coeffs {
     let alpha = sin_w0 / (2.0 * q);
     let two_sqrt_a_alpha = 2.0 * a.sqrt() * alpha;
 
-    let b0 = a * ((a + 1.0) - (a - 1.0) * cos_w0 + two_sqrt_a_alpha);
-    let b1 = 2.0 * a * ((a - 1.0) - (a + 1.0) * cos_w0);
-    let b2 = a * ((a + 1.0) - (a - 1.0) * cos_w0 - two_sqrt_a_alpha);
-    let a0 = (a + 1.0) + (a - 1.0) * cos_w0 + two_sqrt_a_alpha;
-    let a1 = -2.0 * ((a - 1.0) + (a + 1.0) * cos_w0);
-    let a2 = (a + 1.0) + (a - 1.0) * cos_w0 - two_sqrt_a_alpha;
+    let b0 = a * ((a - 1.0).mul_add(-cos_w0, a + 1.0) + two_sqrt_a_alpha);
+    let b1 = 2.0 * a * ((a + 1.0).mul_add(-cos_w0, a - 1.0));
+    let b2 = a * ((a - 1.0).mul_add(-cos_w0, a + 1.0) - two_sqrt_a_alpha);
+    let a0 = (a - 1.0).mul_add(cos_w0, a + 1.0) + two_sqrt_a_alpha;
+    let a1 = -2.0 * ((a + 1.0).mul_add(cos_w0, a - 1.0));
+    let a2 = (a - 1.0).mul_add(cos_w0, a + 1.0) - two_sqrt_a_alpha;
 
     [a0, a1, a2, b0, b1, b2]
 }
@@ -237,12 +240,12 @@ fn rbj_high_shelf(w0: f64, q: f64, gain_db: f64) -> Coeffs {
     let alpha = sin_w0 / (2.0 * q);
     let two_sqrt_a_alpha = 2.0 * a.sqrt() * alpha;
 
-    let b0 = a * ((a + 1.0) + (a - 1.0) * cos_w0 + two_sqrt_a_alpha);
-    let b1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * cos_w0);
-    let b2 = a * ((a + 1.0) + (a - 1.0) * cos_w0 - two_sqrt_a_alpha);
-    let a0 = (a + 1.0) - (a - 1.0) * cos_w0 + two_sqrt_a_alpha;
-    let a1 = 2.0 * ((a - 1.0) - (a + 1.0) * cos_w0);
-    let a2 = (a + 1.0) - (a - 1.0) * cos_w0 - two_sqrt_a_alpha;
+    let b0 = a * ((a - 1.0).mul_add(cos_w0, a + 1.0) + two_sqrt_a_alpha);
+    let b1 = -2.0 * a * ((a + 1.0).mul_add(cos_w0, a - 1.0));
+    let b2 = a * ((a - 1.0).mul_add(cos_w0, a + 1.0) - two_sqrt_a_alpha);
+    let a0 = (a - 1.0).mul_add(-cos_w0, a + 1.0) + two_sqrt_a_alpha;
+    let a1 = 2.0 * ((a + 1.0).mul_add(-cos_w0, a - 1.0));
+    let a2 = (a - 1.0).mul_add(-cos_w0, a + 1.0) - two_sqrt_a_alpha;
 
     [a0, a1, a2, b0, b1, b2]
 }
@@ -272,7 +275,7 @@ mod tests {
     fn low_shelf_zero_gain_is_passthrough() {
         let sos = design_low_shelf(1, 1000.0, 0.707, 0.0, 48000.0);
         assert_eq!(sos.len(), 1);
-        assert_eq!(sos[0], PASSTHROUGH);
+        assert_eq!(sos[0].map(|x| x.to_bits()), PASSTHROUGH.map(|x| x.to_bits()));
     }
 
     #[test]
@@ -321,7 +324,7 @@ mod tests {
     fn tilt_shelf_zero_gain_is_passthrough() {
         let sos = design_tilt_shelf(1, 1000.0, 0.707, 0.0, 48000.0);
         assert_eq!(sos.len(), 1);
-        assert_eq!(sos[0], PASSTHROUGH);
+        assert_eq!(sos[0].map(|x| x.to_bits()), PASSTHROUGH.map(|x| x.to_bits()));
     }
 
     #[test]
@@ -351,7 +354,7 @@ mod tests {
     fn band_shelf_zero_gain_is_passthrough() {
         let sos = design_band_shelf(1, 1000.0, 2.0, 0.0, 48000.0);
         assert_eq!(sos.len(), 1);
-        assert_eq!(sos[0], PASSTHROUGH);
+        assert_eq!(sos[0].map(|x| x.to_bits()), PASSTHROUGH.map(|x| x.to_bits()));
     }
 
     #[test]
@@ -377,7 +380,7 @@ mod tests {
         apply_shelf_gain(&mut zpk, 7, 2.0);
         // Low shelf: zeros *= gain, poles /= gain
         assert!(
-            (zpk.zeros[0].re - (-0.5 * 2.0)).abs() < 1e-10,
+            ((-0.5f64).mul_add(-2.0, zpk.zeros[0].re)).abs() < 1e-10,
             "zero should be scaled by gain"
         );
         assert!(
@@ -396,7 +399,7 @@ mod tests {
         apply_shelf_gain(&mut zpk, 8, 2.0);
         // High shelf: zeros *= gain, poles unchanged
         assert!(
-            (zpk.zeros[0].re - (-0.5 * 2.0)).abs() < 1e-10,
+            ((-0.5f64).mul_add(-2.0, zpk.zeros[0].re)).abs() < 1e-10,
             "zero should be scaled by gain"
         );
         assert!(

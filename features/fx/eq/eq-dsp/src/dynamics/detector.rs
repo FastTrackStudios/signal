@@ -5,6 +5,7 @@
 //! vectorized), and the transient splitter's realtime mode.
 
 use super::histogram::LoudnessHistogram;
+use dsp_core::num;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DetectorParams {
@@ -497,7 +498,7 @@ mod tests {
         // Ten seconds — the plugin's own Auto takes about seven to settle, and
         // the histogram here needs comparable time to fill.
         for i in 0..480_000 {
-            let x = 0.125 * (core::f64::consts::TAU * 300.0 * i as f64 / SR).sin();
+            let x = 0.125 * (core::f64::consts::TAU * 300.0 * f64::from(i) / SR).sin();
             d.tick(x, x);
         }
         // The programme here is a sine at about -18 dBFS, and the threshold
@@ -514,7 +515,7 @@ mod tests {
         quiet.params.span_db = d.params.span_db;
         quiet.update(SR);
         for i in 0..480_000 {
-            let x = 0.004 * (core::f64::consts::TAU * 300.0 * i as f64 / SR).sin();
+            let x = 0.004 * (core::f64::consts::TAU * 300.0 * f64::from(i) / SR).sin();
             quiet.tick(x, x);
         }
         let (quiet_thr, _) = quiet.effective_threshold();
@@ -535,7 +536,7 @@ mod tests {
         d.params.threshold_db = 0.0;
         d.update(SR);
         for i in 0..96_000 {
-            let x = 0.125 * (core::f64::consts::TAU * 300.0 * i as f64 / SR).sin();
+            let x = 0.125 * (core::f64::consts::TAU * 300.0 * f64::from(i) / SR).sin();
             d.tick(x, x);
         }
         let (thr, _) = d.effective_threshold();
@@ -602,8 +603,8 @@ mod tests {
         d.update(SR);
 
         // Drive it to the top, then let go.
-        for i in 0..(SR as usize) {
-            let x = 0.5 * (core::f64::consts::TAU * 1000.0 * i as f64 / SR).sin();
+        for i in 0..num::f64_to_index(SR) {
+            let x = 0.5 * (core::f64::consts::TAU * 1000.0 * num::count_to_f64(i) / SR).sin();
             d.tick(x, x);
         }
         let peak = d.tick(0.0, 0.0);
@@ -611,9 +612,9 @@ mod tests {
 
         // Time to fall to 1/e of that.
         let mut fell_at = None;
-        for i in 0..(SR as usize) {
+        for i in 0..num::f64_to_index(SR) {
             if d.tick(0.0, 0.0) < peak * std::f64::consts::E.recip() {
-                fell_at = Some(i as f64 * 1000.0 / SR);
+                fell_at = Some(num::count_to_f64(i) * 1000.0 / SR);
                 break;
             }
         }

@@ -4,6 +4,7 @@
 //! all enabled bands in series.
 
 use crate::runtime::band::Band;
+use dsp_core::num;
 
 /// Maximum number of bands in a chain (matches Pro-Q 4's 24-band limit).
 pub const MAX_BANDS: usize = 24;
@@ -178,13 +179,13 @@ mod placement_tests {
         let n = 4800;
         let (mut l, mut r) = (vec![0.0f64; n], vec![0.0f64; n]);
         for i in 0..n {
-            let x = (core::f64::consts::TAU * 100.0 * (i as i32 as f64) / sr).sin();
+            let x = (core::f64::consts::TAU * 100.0 * num::count_to_f64(i) / sr).sin();
             l[i] = x;
             r[i] = x;
         }
         chain.process(&mut l, &mut r);
         let calc_rms =
-            |v: &[f64]| (v[n / 2..].iter().map(|x| x * x).sum::<f64>() / (n / 2) as f64).sqrt();
+            |v: &[f64]| (v[n / 2..].iter().map(|x| x * x).sum::<f64>() / num::count_to_f64(n / 2)).sqrt();
         let (lrms, rrms) = (calc_rms(&l), calc_rms(&r));
         // A unit sine's RMS is 1/√2 — spelled as the constant so the number
         // is the identity rather than a rounded literal.
@@ -212,7 +213,7 @@ mod placement_tests {
         c.update_band(idx);
         let n = 24_000;
         let mut l: Vec<f64> = (0..n)
-            .map(|i| 0.4 * (core::f64::consts::TAU * 1000.0 * i as f64 / 48000.0).sin())
+            .map(|i| 0.4 * (core::f64::consts::TAU * 1000.0 * num::count_to_f64(i) / 48000.0).sin())
             .collect();
         let mut r = l.clone();
         let dry = l.clone();
@@ -243,7 +244,7 @@ mod placement_tests {
         chain.update_band(idx);
         let num_samples = 48_000;
         let mut left_samples: Vec<f64> = (0..num_samples)
-            .map(|i| 0.2 * (core::f64::consts::TAU * 1000.0 * i as f64 / 48000.0).sin())
+            .map(|i| 0.2 * (core::f64::consts::TAU * 1000.0 * num::count_to_f64(i) / 48000.0).sin())
             .collect();
         let mut right_samples = left_samples.clone();
         let dry = left_samples.clone();
@@ -307,7 +308,7 @@ mod tests {
 
         let band = chain.band(idx).unwrap();
         assert_eq!(band.filter_type, FilterType::Lowpass);
-        assert_eq!(band.freq_hz, 2000.0);
+        assert_eq!(band.freq_hz.to_bits(), 2000.0_f64.to_bits());
     }
 
     #[test]

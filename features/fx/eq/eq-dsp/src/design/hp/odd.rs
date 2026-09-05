@@ -6,6 +6,7 @@
 
 use crate::design::biquad::Coeffs;
 use crate::design::cascade;
+use dsp_core::num;
 
 use super::{
     cut_odd_qs, cut_odd_tail_highpass, exact_48k_q, highpass_real_double_zero_section,
@@ -46,7 +47,7 @@ pub(super) fn highpass_odd_section(
         && (q_user - 0.5).abs() < 1.0e-12
         && (12000.0..=22000.0).contains(&fc_48k)
     {
-        match fc_48k as i32 {
+        match num::trunc_to_i64(fc_48k) {
             12000 => [
                 1.0,
                 -0.255_832_069_423,
@@ -126,7 +127,7 @@ pub(super) fn highpass_odd_section(
         && (q_user - 1.0).abs() < 1.0e-12
         && ((18000.0..=19000.0).contains(&fc_48k) || (21000.0..=22000.0).contains(&fc_48k))
     {
-        match fc_48k as i32 {
+        match num::trunc_to_i64(fc_48k) {
             18000 => [
                 1.0,
                 0.506_761_587_130,
@@ -166,7 +167,7 @@ pub(super) fn highpass_odd_section(
         && (q_user - 10.0).abs() < 1.0e-12
         && (18000.0..=20000.0).contains(&fc_48k)
     {
-        match fc_48k as i32 {
+        match num::trunc_to_i64(fc_48k) {
             18000 => [
                 1.0,
                 1.277_295_217_581,
@@ -198,7 +199,7 @@ pub(super) fn highpass_odd_section(
         && (q_user - 1.0).abs() < 1.0e-12
         && (16000.0..=22000.0).contains(&fc_48k)
     {
-        match fc_48k as i32 {
+        match num::trunc_to_i64(fc_48k) {
             16000 => [
                 1.0,
                 0.138_185_557_972,
@@ -369,11 +370,10 @@ pub(super) fn highpass_odd_section(
         } else {
             None
         };
-        if let Some(wp_scale) = wp_scale {
-            highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0)
-        } else {
-            cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
-        }
+        wp_scale.map_or_else(
+            || cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate),
+            |wp_scale| highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0),
+        )
     } else {
         cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
     }
@@ -381,11 +381,18 @@ pub(super) fn highpass_odd_section(
 fn highpass_slope5_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
     let mut qs = cut_odd_qs(5, q_user);
     if (q_user - 0.5).abs() < 1.0e-12 {
-        qs[0] = highpass_slope5_sec0_q05(freq_hz, sample_rate);
+        *qs.get_mut(0)
+            .expect("cut_odd_qs(5, _) guarantees 5 elements") = highpass_slope5_sec0_q05(freq_hz, sample_rate);
     } else if (q_user - 1.0).abs() < 1.0e-12 {
-        qs[0] = highpass_slope5_sec0_q1(freq_hz, sample_rate);
+        *qs.get_mut(0)
+            .expect("cut_odd_qs(5, _) guarantees 5 elements") = highpass_slope5_sec0_q1(freq_hz, sample_rate);
     } else if (q_user - 10.0).abs() < 1.0e-12 {
-        qs[0] = highpass_slope5_sec0_q10(freq_hz, sample_rate, qs[0]);
+        *qs.get_mut(0)
+            .expect("cut_odd_qs(5, _) guarantees 5 elements") = highpass_slope5_sec0_q10(
+            freq_hz,
+            sample_rate,
+            *qs.get(0).expect("cut_odd_qs(5, _) guarantees 5 elements"),
+        );
     }
     qs
 }

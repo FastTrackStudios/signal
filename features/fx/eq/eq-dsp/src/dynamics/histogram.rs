@@ -4,6 +4,8 @@
 //! read from the histogram give a program-adaptive threshold
 //! (P50) and knee (half the P10–P90 loudness spread, floored at 5 dB).
 
+use dsp_core::num;
+
 const N_BINS: usize = 120;
 const DB_MIN: f64 = -100.0;
 const DB_MAX: f64 = 0.0;
@@ -69,7 +71,7 @@ impl LoudnessHistogram {
         for (i, &b) in self.bins.iter().enumerate() {
             acc += b;
             if acc >= target {
-                let frac = ((i as i32 as f64) + 0.5) / (N_BINS as i32 as f64);
+                let frac = (num::count_to_f64(i) + 0.5) / num::count_to_f64(N_BINS);
                 return Some(DB_MIN + frac * (DB_MAX - DB_MIN));
             }
         }

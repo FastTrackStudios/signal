@@ -3,7 +3,7 @@
 # A change here in a refactor commit means the audio changed. Investigate.
 name placement_right
 len 16384
-hash 1d8e69261751082d
+hash d0802df9259d5f17
 probe 0 0000000000000000 0
 probe 256 3fe0202c20000000 0.5039272904396057
 probe 512 3fecac3200000000 0.8960199356079102

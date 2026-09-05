@@ -3,7 +3,8 @@
 //! Pro-Q 4 stores ZPK internally (20 doubles per section at output+0x48).
 //! Infinity sentinel (0x7FF0000000000000) marks unused poles/zeros.
 
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use dsp_core::num;
+use std::ops::{Add, Div, DivAssign, Mul, MulAssign, Neg, Sub};
 
 /// Complex number for filter pole/zero calculations.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -98,16 +99,21 @@ impl Mul for Complex {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
         Self {
-            re: self.re * rhs.re - self.im * rhs.im,
-            im: self.re * rhs.im + self.im * rhs.re,
+            re: self.re.mul_add(rhs.re, -(self.im * rhs.im)),
+            im: self.re.mul_add(rhs.im, self.im * rhs.re),
         }
     }
 }
 
 impl Div for Complex {
     type Output = Self;
+    // a / b = a * (1/b) for complex numbers — the multiplication is the
+    // definition, not a typo for division.
+    #[expect(
+        clippy::suspicious_arithmetic_impl,
+        reason = "complex division is multiplication by the reciprocal"
+    )]
     fn div(self, rhs: Self) -> Self {
-        // a / b = a * (1/b) for complex numbers — intentional.
         self * rhs.inv()
     }
 }
@@ -139,6 +145,18 @@ impl Mul<Complex> for f64 {
             re: self * rhs.re,
             im: self * rhs.im,
         }
+    }
+}
+
+impl MulAssign<f64> for Complex {
+    fn mul_assign(&mut self, rhs: f64) {
+        *self = *self * rhs;
+    }
+}
+
+impl DivAssign<f64> for Complex {
+    fn div_assign(&mut self, rhs: f64) {
+        *self = *self / rhs;
     }
 }
 
@@ -182,7 +200,7 @@ pub struct Zpk {
 
 impl Zpk {
     #[must_use]
-    pub fn new(zeros: Vec<Complex>, poles: Vec<Complex>, gain: f64) -> Self {
+    pub const fn new(zeros: Vec<Complex>, poles: Vec<Complex>, gain: f64) -> Self {
         Self { zeros, poles, gain }
     }
 
@@ -196,13 +214,31 @@ impl Zpk {
     pub fn eval(&self, s: Complex) -> Complex {
         let mut num = Complex::new(self.gain, 0.0);
         for &z in &self.zeros {
-            num = num * (s - z);
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "complex arithmetic is intentional"
+            )]
+            {
+                num = num * (s - z);
+            }
         }
         let mut den = Complex::ONE;
         for &p in &self.poles {
-            den = den * (s - p);
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "complex arithmetic is intentional"
+            )]
+            {
+                den = den * (s - p);
+            }
         }
-        num / den
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "complex arithmetic is intentional"
+        )]
+        {
+            num / den
+        }
     }
 
     #[must_use]
@@ -258,7 +294,7 @@ pub fn pair_conjugates(zpk: &Zpk) -> Vec<(Vec<Complex>, Vec<Complex>, f64)> {
 
     let n = pole_pairs.len().max(zero_pairs.len());
     let gain_per = if n > 0 {
-        zpk.gain.abs().powf(1.0 / n as f64) * zpk.gain.signum()
+        zpk.gain.abs().powf(1.0 / num::count_to_f64(n)) * zpk.gain.signum()
     } else {
         zpk.gain
     };
@@ -268,7 +304,20 @@ pub fn pair_conjugates(zpk: &Zpk) -> Vec<(Vec<Complex>, Vec<Complex>, f64)> {
         let pp = pole_pairs.get(i).cloned().unwrap_or_default();
         let zp = zero_pairs.get(i).cloned().unwrap_or_default();
         let g = if i == 0 {
-            zpk.gain / gain_per.powi((n - 1) as i32)
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "n is bounded by vector lengths and fits in i32"
+            )]
+            #[expect(
+                clippy::cast_possible_wrap,
+                reason = "n is bounded by vector lengths and fits in i32"
+            )]
+            #[expect(
+                clippy::as_conversions,
+                reason = "n is bounded by vector lengths; use saturating_sub for safe arithmetic"
+            )]
+            let exp = n.saturating_sub(1) as i32;
+            zpk.gain / gain_per.powi(exp)
         } else {
             gain_per
         };
@@ -277,6 +326,14 @@ pub fn pair_conjugates(zpk: &Zpk) -> Vec<(Vec<Complex>, Vec<Complex>, f64)> {
     sections
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "indices from iteration bounds are provably safe"
+)]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "i + 1 is safe within iteration bounds"
+)]
 fn group_conjugate_pairs(roots: &[Complex]) -> Vec<Vec<Complex>> {
     let mut used = vec![false; roots.len()];
     let mut pairs = Vec::new();

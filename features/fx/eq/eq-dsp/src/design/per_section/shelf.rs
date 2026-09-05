@@ -3,7 +3,8 @@
 //! Three related routines rather than one, matching three code paths in the
 //! binary; the difference between them is documented at each function.
 
-use super::*;
+use super::{Prototype, PI, update_tracked_band_frequencies, eval_squared_mag_scalar};
+use dsp_core::num;
 
 /// Per-section helper for `proto[0x13] == 7` (shelf-band sections, "else"
 /// branch in `prepare_band_display_info`).
@@ -92,7 +93,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             // dVar11 = (sec[0x5c] f32) · proto[10]; proto[10] = dVar11
             // We approximate sec[0x5c] = alpha_scratch_8c (different field
             // semantics, but the scratch flow is similar).
-            proto.q_scratch_50 *= proto.alpha_scratch_8c as f64;
+            proto.q_scratch_50 *= f64::from(proto.alpha_scratch_8c);
         }
     } else if iv5 > 0 {
         // Skip to LAB_18010d019 then LAB_18010d03f.
@@ -100,19 +101,13 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             // bvar3 stays false.
         } else {
             bvar3 = true;
-            proto.q_scratch_50 *= proto.alpha_scratch_8c as f64;
+            proto.q_scratch_50 *= f64::from(proto.alpha_scratch_8c);
         }
     }
 
     // Step 7: α = clamp(pow(0.5, q_scratch_50·0.5), 0.1, 0.99)
     let dvar10 = 0.5_f64.powf(proto.q_scratch_50 * 0.5);
-    let dvar11 = if dvar10 < CONST_0_1 {
-        CONST_0_1
-    } else if dvar10 > CONST_0_99 {
-        CONST_0_99
-    } else {
-        dvar10
-    };
+    let dvar11 = dvar10.clamp(CONST_0_1, CONST_0_99);
 
     if proto.root_count_dup != 2 {
         local_res8 = dvar11;
@@ -134,12 +129,12 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             let dvar10_v = proto.wz;
             if threshold < dvar10_v {
                 let blend = (dvar10_v - threshold) / (dvar4 - threshold);
-                let blend_sq = (blend * blend) as f32 as f64;
-                let blended = dvar10_v + (local_res8.abs() * dvar10_v - dvar10_v) * blend_sq;
+                let blend_sq = f64::from((blend * blend) as f32);
+                let blended = (local_res8.abs() * dvar10_v - dvar10_v).mul_add(blend_sq, dvar10_v);
                 proto.wz = blended;
             }
             // Compute final w_eval and return.
-            let cand = 0.5_f64.powf(local_res8 * CONST_3_3) * PI_OVER_5 + FOUR_PI_OVER_5;
+            let cand = 0.5_f64.powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
             // Note: the binary uses pow(wp/π, local_res8·3.3) but at this
             // point dVar10 (the input to the pow's arg-prep) was set to π
             // (dVar4). We mirror with dVar10 = π → wp/π = 1 → pow result
@@ -151,14 +146,11 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
 
         if iv5_local == 1 {
             let dvar1 = proto.wp;
-            let mut dvar10_v = dvar1;
-            if proto.root_count_dup == 2 {
-                dvar10_v = dvar4;
-            }
+            let dvar10_v = if proto.root_count_dup == 2 { dvar4 } else { dvar1 };
             if bvar3 || proto.q_scratch_50 <= 1.0 {
                 proto.wz = dvar11 * dvar11 * dvar1;
                 let cand =
-                    (dvar10_v / PI).powf(local_res8 * CONST_3_3) * PI_OVER_5 + FOUR_PI_OVER_5;
+                    (dvar10_v / PI).powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
                 proto.w_eval = if dvar10_v <= cand {
                     if cand >= PI {
                         PI
@@ -192,7 +184,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
                 proto.wz = dvar11_use * dvar11.sqrt() * dvar1;
             }
             // Final w_eval (when iv5_local != 0) — bypass to LAB_18010d2d4.
-            let cand = (PI / PI).powf(local_res8 * CONST_3_3) * PI_OVER_5 + FOUR_PI_OVER_5;
+            let cand = 1.0_f64.powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
             proto.w_eval = if dvar4 <= cand {
                 if cand >= PI {
                     PI
@@ -216,12 +208,12 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
                 proto.band_omega_ref
             };
             proto.wp = dvar13;
-            let dvar12 = (PI - dvar13) * 0.5 + dvar13;
+            let dvar12 = (PI - dvar13).mul_add(0.5, dvar13);
             proto.wt = dvar13 * CONST_0_25;
             // LAB_18010d2cf: proto[2] = dvar12 (= wz)
             proto.wz = dvar12;
             // Skip to w_eval.
-            let cand = (PI / PI).powf(local_res8 * CONST_3_3) * PI_OVER_5 + FOUR_PI_OVER_5;
+            let cand = 1.0_f64.powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
             proto.w_eval = PI.min(cand.max(0.0));
             return;
         } else if iv5_c == 0 {
@@ -248,7 +240,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
         proto.wt = dvar11.sqrt() * proto.wp;
         let dvar12 = dvar11.sqrt() * proto.wp * CONST_0_25;
         proto.wz = dvar12;
-        let cand = (PI / PI).powf(local_res8 * CONST_3_3) * PI_OVER_5 + FOUR_PI_OVER_5;
+        let cand = 1.0_f64.powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
         proto.w_eval = PI.min(cand.max(0.0));
         return;
     }
@@ -256,10 +248,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
     // === Special-flag override path (flag_69 != 0 OR flag_68 != 0) ===
     if proto.mode <= 0 {
         // proto[9] == 0 sub-branch: clamp wp to 9π/10, set wt = wp · 0.25
-        let mut dvar11_use = proto.band_omega_ref;
-        if NINE_PI_TEN <= proto.band_omega_ref {
-            dvar11_use = NINE_PI_TEN;
-        }
+        let dvar11_use = if NINE_PI_TEN <= proto.band_omega_ref { NINE_PI_TEN } else { proto.band_omega_ref };
         proto.wp = dvar11_use;
         let dvar12 = dvar11_use * CONST_0_25;
         proto.wt = dvar11_use * CONST_0_01;
@@ -271,7 +260,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
         proto.wt = dvar11_use * CONST_0_01;
         proto.wz = dvar12;
     }
-    let cand = (PI / PI).powf(local_res8 * CONST_3_3) * PI_OVER_5 + FOUR_PI_OVER_5;
+    let cand = 1.0_f64.powf(local_res8 * CONST_3_3).mul_add(PI_OVER_5, FOUR_PI_OVER_5);
     proto.w_eval = PI.min(cand.max(0.0));
 }
 
@@ -290,6 +279,8 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
 /// shelf7 is ported, the delegated path returns early with a debug-assert
 /// in debug builds.
 pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
+    const SQRT2_F32_ROUNDED: f64 = 1.414_213_538_169_860_8;
+
     let mode_in = proto.mode;
 
     // Delegation predicate.
@@ -300,15 +291,14 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
 
     // fv8 = clamp(√2 / proto[10], 0, 1.0); the binary stores √2 as a
     // single-rounded double (0x3FF6A09E60000000).
-    const SQRT2_F32_ROUNDED: f64 = 1.414_213_538_169_860_8;
     let mut iv3 = mode_in;
     let raw = SQRT2_F32_ROUNDED / proto.q_scratch_50;
     let fv8: f64;
     let mut bvar2 = false;
 
     if mode_in != 2 || proto.wz <= PI {
-        let fv8_f32 = (raw as f32).min(1.0f32);
-        fv8 = fv8_f32 as f64;
+        let fv8_f32 = num::narrow(raw).min(1.0f32);
+        fv8 = f64::from(fv8_f32);
         if mode_in == 2 && proto.proto_0x12_sign == 1 {
             // Swap wp ↔ wz, set the sticky bvar2 path.
             std::mem::swap(&mut proto.wp, &mut proto.wz);
@@ -317,8 +307,8 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
     } else {
         // mode == 2 AND wz > π — promote mode locally to 1 and persist.
         iv3 = 1;
-        let fv8_f32 = (raw as f32).min(1.0f32);
-        fv8 = fv8_f32 as f64;
+        let fv8_f32 = num::narrow(raw).min(1.0f32);
+        fv8 = f64::from(fv8_f32);
         proto.mode = 1;
     }
 
@@ -330,9 +320,9 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
             let mpi = eval_squared_mag_scalar(&coeffs, PI);
             // |Δ| (f32 lane, fabs via mask): when difference small (≤0.01),
             // step mode back and snap wp to band_omega_ref.
-            let diff = ((mpi - mp) as f32).abs() as f64;
+            let diff = f64::from(num::narrow(mpi - mp).abs());
             if diff <= 0.01 {
-                proto.mode -= 1;
+                proto.mode = proto.mode.saturating_sub(1);
                 proto.wp = proto.band_omega_ref;
             }
         }
@@ -370,8 +360,7 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
     proto.w_eval = new_w_eval;
 
     // wz / proto[1] / stored_f / stored_g updates.
-    let wp_for_wt: f64;
-    if bvar2 {
+    let wp_for_wt = if bvar2 {
         // Swap branch: clamp wp down to 9π/10, scale stored_e through 0.999².
         let wp_clamped = if wp_now > nine_pi_10 {
             nine_pi_10
@@ -382,7 +371,7 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
         let stored_e_scaled = proto.stored_e * 0.999;
         proto.stored_g = stored_e_scaled; // proto[0x10]
         proto.stored_f = stored_e_scaled * 0.999; // proto[0xf]
-        wp_for_wt = wp_clamped;
+        wp_clamped
     } else {
         // Non-swap branch: wz = wp · clamp(sqrt(|H(j0)|²), 0.01, 0.5).
         let factor = if let Some(analog) = proto.analog {
@@ -397,12 +386,12 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
         };
         let wp_now = proto.wp; // re-read in case of any aliasing
         proto.wz = wp_now * factor;
-        wp_for_wt = wp_now;
-    }
+        wp_now
+    };
 
     // wt = (0.999 - (1 - fv8)² · 0.5) · wp_for_wt.
     let one_minus_fv8 = 1.0 - fv8;
-    let bracket = 0.999 - one_minus_fv8 * one_minus_fv8 * 0.5;
+    let bracket = (one_minus_fv8 * one_minus_fv8).mul_add(-0.5, 0.999);
     proto.wt = bracket * wp_for_wt;
 }
 
@@ -426,9 +415,9 @@ pub fn compute_band_shelf_parameters(proto: &mut Prototype) {
 
     // dVar3 = √2 / proto[10]; binary marks proto+0x49 flag (we don't model it).
     let raw = SQRT2_F32_ROUNDED / proto.q_scratch_50;
-    let fv12_f32 = raw as f32;
+    let fv12_f32 = num::narrow(raw);
     let fv11_f32 = if fv12_f32 >= 1.0 { 1.0 } else { fv12_f32 };
-    let fv11 = fv11_f32 as f64;
+    let fv11 = f64::from(fv11_f32);
 
     update_tracked_band_frequencies(proto, raw, 0.0);
 
@@ -481,8 +470,8 @@ pub fn compute_band_shelf_parameters(proto: &mut Prototype) {
 
         let sqrt_arg = use_wp_or_wz / PI;
         let sqrt_val = sqrt_arg.sqrt();
-        let sqrt_f32 = sqrt_val as f32 as f64;
-        let dvar7 = (pow_half - 0.99) * sqrt_f32 + 0.99;
+        let sqrt_f32 = f64::from(num::narrow(sqrt_val));
+        let dvar7 = (pow_half - 0.99).mul_add(sqrt_f32, 0.99);
 
         if proto.mode == 1 {
             let pi_over_100 = PI / 100.0;

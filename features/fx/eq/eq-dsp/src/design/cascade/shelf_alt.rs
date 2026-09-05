@@ -2,7 +2,7 @@
 
 use crate::design::biquad::Coeffs;
 
-use super::*;
+use super::PASSTHROUGH;
 
 /// Compute cascade biquads for the shelf-alt filter (type 12 / 0xc).
 ///
@@ -26,6 +26,12 @@ pub fn compute_cascade_shelf_alt(
     _sample_rate: f64,
     _order: usize,
 ) -> Vec<Coeffs> {
+    // Hardcoded constants from binary
+    const BASE_1: f64 = -0.013_139_006_488_339_29; // DAT_180232030
+    const BASE_2: f64 = -0.074_325_444_687_670_08; // DAT_180232038
+    const SECTION_SPACING: f64 = 32.0; // DAT_180231c58
+    const INTER_GAIN: f64 = 5.656_854_249_492_381; // DAT_180231bd8 = 4*sqrt(2)
+
     if gain_db.abs() < 0.001 {
         return vec![PASSTHROUGH; 3];
     }
@@ -38,12 +44,6 @@ pub fn compute_cascade_shelf_alt(
     let gain_sqrt = gain_linear.sqrt();
     let gain_quarter = gain_sqrt.sqrt();
     let inv_gain_quarter = 1.0 / gain_quarter;
-
-    // Hardcoded constants from binary
-    const BASE_1: f64 = -0.013_139_006_488_339_29; // DAT_180232030
-    const BASE_2: f64 = -0.074_325_444_687_670_08; // DAT_180232038
-    const SECTION_SPACING: f64 = 32.0; // DAT_180231c58
-    const INTER_GAIN: f64 = 5.656_854_249_492_381; // DAT_180231bd8 = 4*sqrt(2)
 
     // Build 3 sections, each with 2 real poles and 2 real zeros
     // Section k uses frequencies: base * SECTION_SPACING^k
@@ -110,19 +110,46 @@ pub fn compute_cascade_flat_tilt(
     _sample_rate: f64,
     _order: usize,
 ) -> Vec<Coeffs> {
+    fn poly6(g: f64, c: [f64; 7]) -> f64 {
+        let [c0, c1, c2, c3, c4, c5, c6] = c;
+        let mut s = c6;
+        s = s.mul_add(g, c5);
+        s = s.mul_add(g, c4);
+        s = s.mul_add(g, c3);
+        s = s.mul_add(g, c2);
+        s = s.mul_add(g, c1);
+        s = s.mul_add(g, c0);
+        s
+    }
+
+    fn poly7(x: f64, c: [f64; 8]) -> f64 {
+        let [c0, c1, c2, c3, c4, c5, c6, c7] = c;
+        let mut s = c7;
+        s = s.mul_add(x, c6);
+        s = s.mul_add(x, c5);
+        s = s.mul_add(x, c4);
+        s = s.mul_add(x, c3);
+        s = s.mul_add(x, c2);
+        s = s.mul_add(x, c1);
+        s = s.mul_add(x, c0);
+        s
+    }
+
+    fn poly4(x: f64, c: [f64; 5]) -> f64 {
+        let [c0, c1, c2, c3, c4] = c;
+        let mut s = c4;
+        s = s.mul_add(x, c3);
+        s = s.mul_add(x, c2);
+        s = s.mul_add(x, c1);
+        s = s.mul_add(x, c0);
+        s
+    }
+
     if gain_db.abs() < 0.001 {
         return vec![PASSTHROUGH; 3];
     }
 
     let g = gain_db;
-
-    fn poly6(g: f64, c: [f64; 7]) -> f64 {
-        let mut s = c[6];
-        for k in (0..6).rev() {
-            s = s * g + c[k];
-        }
-        s
-    }
 
     // ── Section 0 (low-band) ──
     let a1_s0 = poly6(
@@ -282,20 +309,6 @@ pub fn compute_cascade_flat_tilt(
     // |g| ≤ 12 (test grid range); at extreme |g| ≥ 18 Pro-Q applies a
     // soft clamp not modeled here.
     let lf = freq_hz.ln();
-    fn poly7(x: f64, c: [f64; 8]) -> f64 {
-        let mut s = c[7];
-        for k in (0..7).rev() {
-            s = s * x + c[k];
-        }
-        s
-    }
-    fn poly4(x: f64, c: [f64; 5]) -> f64 {
-        let mut s = c[4];
-        for k in (0..4).rev() {
-            s = s * x + c[k];
-        }
-        s
-    }
 
     // Section 0
     let f_s0 = poly7(
@@ -321,7 +334,7 @@ pub fn compute_cascade_flat_tilt(
             1.084_112_099_745_412_9e-13,
         ],
     );
-    let b0_s0 = (g * (f_s0 + g * g * g_coef_s0)).exp();
+    let b0_s0 = (g * ((g * g).mul_add(g_coef_s0, f_s0))).exp();
 
     // Section 1
     let f_s1 = poly7(
@@ -347,7 +360,7 @@ pub fn compute_cascade_flat_tilt(
             1.083_982_243_407_473_1e-13,
         ],
     );
-    let b0_s1 = (g * (f_s1 + g * g * g_coef_s1)).exp();
+    let b0_s1 = (g * ((g * g).mul_add(g_coef_s1, f_s1))).exp();
 
     // Section 2
     let f_s2 = poly7(
@@ -373,7 +386,7 @@ pub fn compute_cascade_flat_tilt(
             1.084_133_470_229_396_7e-13,
         ],
     );
-    let b0_s2 = (g * (f_s2 + g * g * g_coef_s2)).exp();
+    let b0_s2 = (g * ((g * g).mul_add(g_coef_s2, f_s2))).exp();
 
     vec![
         [1.0, a1_s0, a2_s0, b0_s0, b1b0_s0 * b0_s0, b2b0_s0 * b0_s0],

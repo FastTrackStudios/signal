@@ -152,6 +152,25 @@ pub const fn trunc_to_i64(x: f64) -> i64 {
     x as i64
 }
 
+/// A count or index as `i32`, saturating.
+///
+/// For the many filter routines that take an order or a section index as a
+/// signed integer because the reference implementation did.
+#[must_use]
+pub fn count_to_i32(n: usize) -> i32 {
+    i32::try_from(n).unwrap_or(i32::MAX)
+}
+
+/// A `u32` as a sample index.
+///
+/// Lossless on every target this ships to (`usize` is 32- or 64-bit), so the
+/// saturation below is unreachable; it exists so the conversion is total
+/// without an `as`.
+#[must_use]
+pub fn u32_to_index(n: u32) -> usize {
+    usize::try_from(n).unwrap_or(usize::MAX)
+}
+
 /// A finite, non-negative `f64` as a sample index, rounding toward zero.
 ///
 /// The `f64` counterpart of [`f32_to_index`], with the same decided answers:
@@ -274,6 +293,13 @@ mod tests {
     fn wide_counts_clamp_rather_than_rounding() {
         assert!((count_to_f64(usize::MAX) - u64_to_f64(u64::MAX)).abs() < f64::EPSILON);
         assert!(i64_to_f64(i64::MIN) < 0.0);
+    }
+
+    #[test]
+    fn u32_indexes_round_trip() {
+        for n in [0_u32, 1, 24, 48_000, u32::MAX] {
+            assert_eq!(u32::try_from(u32_to_index(n)).unwrap_or(0), n);
+        }
     }
 
     #[test]

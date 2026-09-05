@@ -19,7 +19,7 @@ pub(super) fn design_allpass_with_lookup(
     let _ = pole_count;
     design_allpass(n, freq_hz, q, sample_rate)
 }
-/// + `allpass_q_dependence_decoded.md`).  Each cascade section is a
+///   + `allpass_q_dependence_decoded.md`).  Each cascade section is a
 /// canonical analog allpass:
 ///
 /// ```text
