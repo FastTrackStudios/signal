@@ -28,6 +28,7 @@ use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::num;
 
 // 16 voices: 1/32-of-repeat density with 2x-overlap windows plus
 // stretch needs more simultaneous grains than the old cap of 8 —
@@ -82,7 +83,7 @@ struct Grain {
 }
 
 impl Grain {
-    fn idle() -> Self {
+    const fn idle() -> Self {
         Self {
             active: false,
             offset: 0.0,
@@ -102,9 +103,13 @@ impl Grain {
 /// constants (spec'd at Clouds' 32 kHz internal rate, rescaled to the
 /// host rate; the L/R sets differ slightly for decorrelation). A large
 /// part of the hardware granular "expensive" smear.
+struct DiffuserStage {
+    line: DelayLine,
+    delay: f64,
+}
+
 struct CloudsDiffuser {
-    lines: [DelayLine; 4],
-    delays: [f64; 4],
+    stages: [DiffuserStage; 4],
 }
 
 /// Per-channel allpass delays in samples at 32 kHz (Clouds constants).
@@ -115,21 +120,45 @@ const DIFFUSER_K: f64 = 0.625;
 impl CloudsDiffuser {
     fn new(base_32k: &[f64; 4], sample_rate: f64) -> Self {
         let scale = sample_rate / 32_000.0;
-        let delays = core::array::from_fn(|i| base_32k[i] * scale);
+        let [d0, d1, d2, d3] = base_32k;
+        let values = [d0 * scale, d1 * scale, d2 * scale, d3 * scale];
+        let sizes = [
+            num::f64_to_index(values[0]).saturating_add(8),
+            num::f64_to_index(values[1]).saturating_add(8),
+            num::f64_to_index(values[2]).saturating_add(8),
+            num::f64_to_index(values[3]).saturating_add(8),
+        ];
         Self {
-            lines: core::array::from_fn(|i| DelayLine::new((base_32k[i] * scale) as usize + 8)),
-            delays,
+            stages: [
+                DiffuserStage {
+                    line: DelayLine::new(sizes[0]),
+                    delay: values[0],
+                },
+                DiffuserStage {
+                    line: DelayLine::new(sizes[1]),
+                    delay: values[1],
+                },
+                DiffuserStage {
+                    line: DelayLine::new(sizes[2]),
+                    delay: values[2],
+                },
+                DiffuserStage {
+                    line: DelayLine::new(sizes[3]),
+                    delay: values[3],
+                },
+            ],
         }
     }
 
     fn resize(&mut self, base_32k: &[f64; 4], sample_rate: f64) {
         let scale = sample_rate / 32_000.0;
-        #[allow(clippy::needless_range_loop)] // i spans parallel tables
-        for i in 0..4 {
-            self.delays[i] = base_32k[i] * scale;
-            let needed = self.delays[i] as usize + 8;
-            if self.lines[i].len() < needed {
-                self.lines[i] = DelayLine::new(needed);
+        let [d0, d1, d2, d3] = base_32k;
+        let values = [d0 * scale, d1 * scale, d2 * scale, d3 * scale];
+        for (stage, delay_val) in self.stages.iter_mut().zip(&values) {
+            stage.delay = *delay_val;
+            let needed = num::f64_to_index(*delay_val).saturating_add(8);
+            if stage.line.len() < needed {
+                stage.line = DelayLine::new(needed);
             }
         }
     }
@@ -137,19 +166,18 @@ impl CloudsDiffuser {
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
         let mut x = input;
-        #[allow(clippy::needless_range_loop)] // i spans parallel tables
-        for i in 0..4 {
-            let delayed = self.lines[i].read_linear(self.delays[i]);
-            let v = x - DIFFUSER_K * delayed;
-            self.lines[i].write(v);
-            x = delayed + DIFFUSER_K * v;
+        for stage in &mut self.stages {
+            let delayed = stage.line.read_linear(stage.delay);
+            let v = DIFFUSER_K.mul_add(-delayed, x);
+            stage.line.write(v);
+            x = DIFFUSER_K.mul_add(v, delayed);
         }
         x
     }
 
     fn reset(&mut self) {
-        for l in &mut self.lines {
-            l.clear();
+        for stage in &mut self.stages {
+            stage.line.clear();
         }
     }
 }
@@ -259,7 +287,7 @@ impl SpectralDelay {
         self.sample_rate = sample_rate;
         self.time_ms = self.time_ms.clamp(Self::MIN_TIME_MS, Self::MAX_TIME_MS);
 
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S).saturating_add(1024);
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -293,8 +321,9 @@ impl SpectralDelay {
     }
 
     fn spawn_grain(&mut self, delay_samples: f64, interval: f64) {
-        let Some(slot) = self.grains.iter().position(|g| !g.active) else {
-            return; // all voices busy — skip, no stealing clicks
+        let slot = match self.grains.iter().position(|g| !g.active) {
+            Some(i) => i,
+            None => return, // all voices busy — skip, no stealing clicks
         };
 
         let rand01 = |rng: &mut XorShift32| (rng.next_bipolar() + 1.0) * 0.5;
@@ -330,11 +359,11 @@ impl SpectralDelay {
         // Window completion: a grain dies early if its read head walks
         // off either buffer edge mid-window (a truncated window is a
         // click). Cap the duration so the full envelope always plays.
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.delay.len()) - 4.0;
         if drift < 0.0 {
             // Pitched-up grains walk toward the write head. Push the
             // start point out if needed, then cap.
-            let min_offset = 8.0 + 256.0 * -drift;
+            let min_offset = 256.0_f64.mul_add(-drift, 8.0);
             offset = offset.max(min_offset).min(max_read);
             dur = dur.min((offset - 8.0) / -drift);
         } else if drift > 0.0 {
@@ -359,16 +388,18 @@ impl SpectralDelay {
         // centered, scattered clouds open up (subtle, ≤ ±0.6).
         let pan = self.rng.next_bipolar() * 0.6 * self.spread;
 
-        self.grains[slot] = Grain {
-            active: true,
-            offset,
-            drift,
-            age: 0.0,
-            dur,
-            gain: 1.0,
-            pan,
-            filt,
-        };
+        if let Some(grain) = self.grains.get_mut(slot) {
+            *grain = Grain {
+                active: true,
+                offset,
+                drift,
+                age: 0.0,
+                dur,
+                gain: 1.0,
+                pan,
+                filt,
+            };
+        }
     }
 
     /// Grain window for the active shape at `phase` in [0, 1).
@@ -433,7 +464,7 @@ impl SpectralDelay {
         let target_delay = self.time_ms * 0.001 * self.sample_rate;
         self.smoother.set_target(target_delay);
         let smooth_delay = self.smoother.tick();
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.delay.len()) - 4.0;
 
         // Spawn scheduler. Synced density is metronomic; free density
         // randomizes each gap ±50% ("Off: grain fragments repeat
@@ -444,7 +475,7 @@ impl SpectralDelay {
             self.spawn_grain(smooth_delay, interval);
             self.spawn_countdown = match self.density {
                 DensityMode::Synced(_) => interval,
-                DensityMode::FreeHz(_) => interval * (1.0 + self.rng.next_bipolar() * 0.5),
+                DensityMode::FreeHz(_) => interval * self.rng.next_bipolar().mul_add(0.5, 1.0),
             };
         }
 
@@ -478,11 +509,11 @@ impl SpectralDelay {
 
             g.offset += g.drift;
             g.age += 1.0;
-            active += 1;
+            active = active.saturating_add(1);
         }
         // Overlap normalization: ~2 grains sound at once by design.
         if active > 2 {
-            let norm = (active as f64 / 2.0).sqrt();
+            let norm = (f64::from(active) / 2.0).sqrt();
             wet_l /= norm;
             wet_r /= norm;
         }
@@ -510,12 +541,11 @@ impl SpectralDelay {
         // repeats evolve tonally through regeneration like the MX's
         // frequency-domain process. Fixed and light by design.
         // interpretation: behavior match, not the FFT algorithm.
-        for (i, &a) in [0.35f64, 0.55].iter().enumerate() {
-            let st = &mut self.disp_state[i];
+        for (state, &a) in self.disp_state.iter_mut().zip([0.35f64, 0.55].iter()) {
+            let [s0, s1] = *state;
             let x = fb;
-            let y = -a * x + st[0] + a * st[1];
-            st[0] = x;
-            st[1] = y;
+            let y = a.mul_add(s1, (-a).mul_add(x, s0));
+            *state = [x, y];
             fb = y;
         }
         fb = self.disp_shelf.tick(fb, ch);
@@ -533,7 +563,7 @@ impl SpectralDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -686,7 +716,7 @@ mod tests {
             s2 = s1;
             s1 = s0;
         }
-        (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (signal.len() as f64).powi(2)
+        ((coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2))) / (signal.len() as f64).powi(2)
     }
 
     #[test]
@@ -735,7 +765,7 @@ mod tests {
         // Measure the recirculating signal itself (last_feedback) —
         // that is the path the dispersion/shelf voicing shapes. The
         // burst passes the feedback tap once per period.
-        let period = (0.3 * SR) as usize;
+        let period = num::f64_to_index(0.3 * SR);
         let mut pass1 = Vec::new();
         let mut pass3 = Vec::new();
         for i in 0..(period * 4) {

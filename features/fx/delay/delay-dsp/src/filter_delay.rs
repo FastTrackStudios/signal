@@ -11,6 +11,7 @@ use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::denormal::flush;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::num;
 
 /// LFO waveform for the filter sweep. `+` shapes start at their peak,
 /// `-` shapes at their trough (`TimeLine`'s polarity convention: where the
@@ -40,7 +41,7 @@ impl FilterLfoShape {
     /// `TimeLine` MX CC order: +Tri, −Tri, +Sq, −Sq, +Sine, −Sine, Ramp,
     /// Saw, Random, Down, Up (CC 0–10).
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             0 => Self::TrianglePos,
             1 => Self::TriangleNeg,
@@ -57,14 +58,14 @@ impl FilterLfoShape {
     }
 
     #[must_use]
-    pub fn is_one_shot(self) -> bool {
+    pub const fn is_one_shot(self) -> bool {
         matches!(self, Self::Down | Self::Up)
     }
 
     /// ± shapes re-sync their cycle to input attacks: '+' lands at the
     /// highest frequency on the attack, '−' at the lowest. Returns the
     /// phase that puts the waveform at that extreme.
-    fn attack_sync_phase(self) -> Option<f64> {
+    const fn attack_sync_phase(self) -> Option<f64> {
         match self {
             // Triangles peak mid-cycle; the others at phase 0.
             Self::TrianglePos | Self::TriangleNeg => Some(0.5),
@@ -84,8 +85,8 @@ impl FilterLfoShape {
                 (std::f64::consts::TAU * phase).cos()
             }
             Self::SineNeg => -(std::f64::consts::TAU * phase).cos(),
-            Self::TrianglePos => 1.0 - 4.0 * (phase - 0.5).abs(),
-            Self::TriangleNeg => 4.0 * (phase - 0.5).abs() - 1.0,
+            Self::TrianglePos => 4.0_f64.mul_add(-(phase - 0.5).abs(), 1.0),
+            Self::TriangleNeg => 4.0_f64.mul_add((phase - 0.5).abs(), -1.0),
             Self::SquarePos => {
                 if phase < 0.5 {
                     1.0
@@ -100,8 +101,8 @@ impl FilterLfoShape {
                     1.0
                 }
             }
-            Self::Saw => 1.0 - 2.0 * phase,
-            Self::Ramp => 2.0 * phase - 1.0,
+            Self::Saw => 2.0_f64.mul_add(-phase, 1.0),
+            Self::Ramp => 2.0_f64.mul_add(phase, -1.0),
             Self::Random => sh,
         }
     }
@@ -142,13 +143,13 @@ impl Svf {
 
     #[inline]
     fn tick_lp(&mut self, input: f64) -> f64 {
-        let high = input - self.low - self.q_inv * self.band;
-        self.band = flush(self.band + self.f * high);
-        self.low = flush(self.low + self.f * self.band);
+        let high = self.q_inv.mul_add(-self.band, input - self.low);
+        self.band = flush(self.f.mul_add(high, self.band));
+        self.low = flush(self.f.mul_add(self.band, self.low));
         self.low
     }
 
-    fn reset(&mut self) {
+    const fn reset(&mut self) {
         self.low = 0.0;
         self.band = 0.0;
     }
@@ -252,7 +253,7 @@ impl FilterDelay {
         self.lfo_speed = self.lfo_speed.clamp(1.0 / 32.0, 32.0);
         self.trem_speed = self.trem_speed.clamp(1.0 / 32.0, 32.0);
 
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S).saturating_add(1024);
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -269,11 +270,11 @@ impl FilterDelay {
     }
 
     /// LFO value in [-1, 1] for the current phase.
-    fn lfo_value(&mut self) -> f64 {
+    fn lfo_value(&self) -> f64 {
         match self.lfo_shape {
             // One-shots use one_shot_phase, driven per-attack in tick().
-            FilterLfoShape::Down => 1.0 - 2.0 * self.one_shot_phase.min(1.0),
-            FilterLfoShape::Up => 2.0 * self.one_shot_phase.min(1.0) - 1.0,
+            FilterLfoShape::Down => 2.0_f64.mul_add(-self.one_shot_phase.min(1.0), 1.0),
+            FilterLfoShape::Up => 2.0_f64.mul_add(self.one_shot_phase.min(1.0), -1.0),
             shape => shape.cyclic_value(self.lfo_phase, self.sh_value),
         }
     }
@@ -326,7 +327,7 @@ impl FilterDelay {
                 self.svf.set(cutoff, self.q, self.sample_rate);
             }
         }
-        self.ctrl_countdown -= 1;
+        self.ctrl_countdown = self.ctrl_countdown.saturating_sub(1);
 
         let filtered_in = if self.location == FilterLocation::Pre {
             self.svf.tick_lp(input)
@@ -334,7 +335,7 @@ impl FilterDelay {
             input
         };
 
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f32(self.delay.len()) as f64 - 4.0;
         let mut output = self.delay.read_cubic(smooth_delay.clamp(1.0, max_read));
 
         if self.location == FilterLocation::Post {
@@ -344,7 +345,7 @@ impl FilterDelay {
         // Synced tremolo on the repeats (own shape list, cyclic only).
         if self.trem_depth > 1e-4 {
             let wave = self.trem_shape.cyclic_value(self.trem_phase, self.sh_value);
-            let trem = 1.0 - self.trem_depth * (0.5 + 0.5 * wave);
+            let trem = self.trem_depth.mul_add(-(0.5_f64.mul_add(wave, 0.5)), 1.0);
             output *= trem;
         }
 
@@ -359,7 +360,7 @@ impl FilterDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -398,7 +399,7 @@ mod tests {
             d.update(SR);
             let mut out = Vec::with_capacity(48000);
             for i in 0..48000 {
-                let input = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+                let input = (std::f64::consts::TAU * 440.0 * f64::from(i) / SR).sin() * 0.5;
                 let v = d.tick(input, 0);
                 assert!(v.is_finite(), "{shape:?} NaN at {i}");
                 out.push(v);
@@ -432,7 +433,7 @@ mod tests {
         d.center_hz = 6000.0;
         d.update(SR);
 
-        let expected = (100.0 * SR / 1000.0) as i64;
+        let expected = num::trunc_to_i64(100.0 * SR / 1000.0);
         let mut peak_pos = 0i64;
         let mut peak = 0.0f64;
         for i in 0..20000 {
@@ -466,9 +467,9 @@ mod tests {
         let mut max_env = 0.0f64;
         let mut env = 0.0;
         for i in 0..96000 {
-            let input = (std::f64::consts::TAU * 3000.0 * i as f64 / SR).sin() * 0.5;
+            let input = (std::f64::consts::TAU * 3000.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
-            env = 0.999 * env + 0.001 * out.abs();
+            env = 0.999_f64.mul_add(env, 0.001 * out.abs());
             if i > 48000 {
                 min_env = min_env.min(env);
                 max_env = max_env.max(env);
@@ -495,9 +496,9 @@ mod tests {
         let mut max_env = 0.0f64;
         let mut env = 0.0;
         for i in 0..96000 {
-            let input = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input = (std::f64::consts::TAU * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
-            env = 0.995 * env + 0.005 * out.abs();
+            env = 0.995_f64.mul_add(env, 0.005 * out.abs());
             if i > 48000 {
                 min_env = min_env.min(env);
                 max_env = max_env.max(env);
@@ -531,7 +532,7 @@ mod tests {
 
         // Attack: a loud burst.
         for i in 0..480 {
-            let x = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.8;
+            let x = (std::f64::consts::TAU * 440.0 * f64::from(i) / SR).sin() * 0.8;
             d.tick(x, 0);
         }
         assert!(
@@ -555,7 +556,7 @@ mod tests {
             d.update(SR);
 
             for s in 0..48000 {
-                let input = (std::f64::consts::TAU * 440.0 * s as f64 / SR).sin() * 0.5;
+                let input = (std::f64::consts::TAU * 440.0 * f64::from(s) / SR).sin() * 0.5;
                 let out = d.tick(input, 0);
                 assert!(out.is_finite(), "shape {i} NaN at {s}");
             }
@@ -583,7 +584,7 @@ mod tests {
             (0..n)
                 .map(|i| {
                     let x = if i < 4800 {
-                        (core::f64::consts::TAU * 440.0 * i as f64 / sr).sin() * 0.6
+                        (core::f64::consts::TAU * 440.0 * num::count_to_f64(i) / sr).sin() * 0.6
                     } else {
                         0.0
                     };
@@ -619,7 +620,7 @@ mod tests {
         for phase in [0.1, 0.4, 0.6, 0.9] {
             let p = FilterLfoShape::SquarePos.cyclic_value(phase, 0.0);
             let n = FilterLfoShape::SquareNeg.cyclic_value(phase, 0.0);
-            assert_eq!(p, -n);
+            assert_eq!(p.to_bits(), (-n).to_bits());
         }
     }
 }

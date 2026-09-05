@@ -87,6 +87,71 @@ pub const fn narrow(x: f64) -> f32 {
     x as f32
 }
 
+/// Largest integer `f64` represents exactly: 2^53. At 48 kHz that is roughly
+/// 5900 years of samples, so nothing in a DSP path can reach it.
+const EXACT_MAX_F64: u64 = 1 << 53;
+
+/// A sample count or buffer length as `f64`, exactly.
+///
+/// This exists because **`f64: From<usize>` does not exist in Rust** — the
+/// standard library only provides infallible conversions from the integer
+/// types that fit a float's mantissa on every target, and `usize` is 64-bit
+/// here. Reaching for `f64::from(n)` on a `usize` is a compile error, and
+/// reaching for `n as f64` is the lint. This is the answer to both.
+#[must_use]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_precision_loss,
+    reason = "the audited boundary: the input is range-checked against the f64 mantissa on the line above"
+)]
+pub fn count_to_f64(n: usize) -> f64 {
+    let clamped = u64::try_from(n).unwrap_or(u64::MAX).min(EXACT_MAX_F64);
+    clamped as f64
+}
+
+/// A `u64` as `f64`, exact below 2^53 and clamped above it.
+///
+/// Same reason as [`count_to_f64`]: there is no `From<u64> for f64`.
+#[must_use]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_precision_loss,
+    reason = "the audited boundary: the input is range-checked against the f64 mantissa on the line above"
+)]
+pub fn u64_to_f64(n: u64) -> f64 {
+    n.min(EXACT_MAX_F64) as f64
+}
+
+/// An `i64` as `f64`, exact within ±2^53 and clamped beyond.
+///
+/// Same reason again: there is no `From<i64> for f64`.
+#[must_use]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_precision_loss,
+    reason = "the audited boundary: the input is range-checked against the f64 mantissa on the line above"
+)]
+pub fn i64_to_f64(n: i64) -> f64 {
+    // `saturating_neg` rather than `-limit`: the unary minus is itself an
+    // arithmetic side effect the policy denies, and would overflow at i64::MIN.
+    let limit = i64::try_from(EXACT_MAX_F64).unwrap_or(i64::MAX);
+    n.clamp(limit.saturating_neg(), limit) as f64
+}
+
+/// `x` truncated toward zero, as `i64` — the `f64` counterpart of
+/// [`trunc_to_i32`].
+///
+/// NaN gives `0` and out-of-range magnitudes saturate.
+#[must_use]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    reason = "the audited boundary: saturating float-to-int truncation is this function's stated purpose"
+)]
+pub const fn trunc_to_i64(x: f64) -> i64 {
+    x as i64
+}
+
 /// A finite, non-negative `f64` as a sample index, rounding toward zero.
 ///
 /// The `f64` counterpart of [`f32_to_index`], with the same decided answers:
@@ -191,6 +256,27 @@ mod tests {
     }
 
     #[test]
+    fn wide_counts_round_trip_exactly() {
+        // The point of these three is that `f64::From` has no impl for any of
+        // their inputs, so a call site cannot fall back to the safe thing.
+        for n in [0_usize, 1, 48_000, 1 << 40] {
+            assert_eq!(f64_to_index(count_to_f64(n)), n);
+        }
+        for n in [0_u64, 1, 48_000, 1 << 40] {
+            assert!((u64_to_f64(n) - count_to_f64(usize::try_from(n).unwrap_or(0))).abs() < f64::EPSILON);
+        }
+        for n in [0_i64, 1, -1, 48_000, -48_000] {
+            assert!((i64_to_f64(n) + i64_to_f64(-n)).abs() < f64::EPSILON);
+        }
+    }
+
+    #[test]
+    fn wide_counts_clamp_rather_than_rounding() {
+        assert!((count_to_f64(usize::MAX) - u64_to_f64(u64::MAX)).abs() < f64::EPSILON);
+        assert!(i64_to_f64(i64::MIN) < 0.0);
+    }
+
+    #[test]
     fn both_widths_agree_on_hostile_floats() {
         assert_eq!(f64_to_index(f64::NAN), 0);
         assert_eq!(f64_to_index(-1.0), 0);
@@ -239,6 +325,9 @@ mod tests {
     fn truncation_rounds_toward_zero_on_both_sides() {
         assert_eq!(trunc_to_i32(2.9), 2);
         assert_eq!(trunc_to_i32(-2.9), -2);
+        assert_eq!(trunc_to_i64(2.9), 2);
+        assert_eq!(trunc_to_i64(-2.9), -2);
+        assert_eq!(trunc_to_i64(f64::NAN), 0);
     }
 
     #[test]

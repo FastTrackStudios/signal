@@ -34,7 +34,7 @@ impl DecayTilt {
             let freq = 20000.0 * (1.0 + tilt).max(0.05);
             self.eq.set(FilterType::Lowpass, freq, 0.707, sample_rate);
         } else {
-            let freq = 20.0 + tilt * 2000.0;
+            let freq = tilt.mul_add(2000.0, 20.0);
             self.eq.set(FilterType::Highpass, freq, 0.707, sample_rate);
         }
     }

@@ -17,6 +17,7 @@
 //! audio thread.
 
 use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::num;
 
 use crate::chain::DelayChain;
 
@@ -42,7 +43,7 @@ impl DualRouting {
     pub const COUNT: usize = 6;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Series12,
             2 => Self::Series21,
@@ -54,7 +55,7 @@ impl DualRouting {
     }
 
     #[must_use]
-    pub fn to_index(self) -> usize {
+    pub const fn to_index(self) -> usize {
         match self {
             Self::Single => 0,
             Self::Series12 => 1,
@@ -66,7 +67,7 @@ impl DualRouting {
     }
 
     #[must_use]
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Single => "Single",
             Self::Series12 => "Series 1>2",
@@ -106,12 +107,15 @@ impl DualDelay {
     }
 
     /// Max samples per inner chunk (scratch capacity).
-    fn chunk_capacity(&self) -> usize {
+    const fn chunk_capacity(&self) -> usize {
         self.dry_l.len()
     }
 
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "scratch buffers are pre-sized in update() to hold max_buffer_size, so slicing [..left.len()] is safe"
+    )]
     fn process_chunk(&mut self, left: &mut [f64], right: &mut [f64]) {
-        let n = left.len();
         match self.routing {
             DualRouting::Single => {
                 self.a.process(left, right);
@@ -125,38 +129,63 @@ impl DualDelay {
                 self.a.process(left, right);
             }
             DualRouting::Parallel => {
-                self.dry_l[..n].copy_from_slice(left);
-                self.dry_r[..n].copy_from_slice(right);
-                self.b_l[..n].copy_from_slice(left);
-                self.b_r[..n].copy_from_slice(right);
+                // Copy left/right to scratch buffers using iterators
+                for (d, s) in self.dry_l.iter_mut().zip(left.iter()) {
+                    *d = *s;
+                }
+                for (d, s) in self.dry_r.iter_mut().zip(right.iter()) {
+                    *d = *s;
+                }
+                for (d, s) in self.b_l.iter_mut().zip(left.iter()) {
+                    *d = *s;
+                }
+                for (d, s) in self.b_r.iter_mut().zip(right.iter()) {
+                    *d = *s;
+                }
 
                 self.a.process(left, right);
-                self.b.process(&mut self.b_l[..n], &mut self.b_r[..n]);
+                self.b.process(&mut self.b_l[..left.len()], &mut self.b_r[..left.len()]);
 
                 // Sum of both chains' mix laws, dry counted once:
                 // out = dry·(1 − mixA − mixB) + wetA·mixA + wetB·mixB.
-                for i in 0..n {
-                    left[i] += self.b_l[i] - self.dry_l[i];
-                    right[i] += self.b_r[i] - self.dry_r[i];
+                for (l, (r, (dl, (dr, (bl, br))))) in left.iter_mut().zip(
+                    right.iter_mut().zip(
+                        self.dry_l.iter().zip(
+                            self.dry_r.iter().zip(
+                                self.b_l.iter().zip(self.b_r.iter())
+                            )
+                        )
+                    )
+                ) {
+                    *l += bl - dl;
+                    *r += br - dr;
                 }
             }
             DualRouting::Split | DualRouting::SplitSwapped => {
-                self.b_l[..n].copy_from_slice(left);
-                self.b_r[..n].copy_from_slice(right);
+                // Copy left/right to scratch buffers using iterators
+                for (d, s) in self.b_l.iter_mut().zip(left.iter()) {
+                    *d = *s;
+                }
+                for (d, s) in self.b_r.iter_mut().zip(right.iter()) {
+                    *d = *s;
+                }
 
                 self.a.process(left, right);
-                self.b.process(&mut self.b_l[..n], &mut self.b_r[..n]);
+                self.b.process(&mut self.b_l[..left.len()], &mut self.b_r[..left.len()]);
 
                 let swapped = self.routing == DualRouting::SplitSwapped;
-                for i in 0..n {
-                    let a_mono = (left[i] + right[i]) * 0.5;
-                    let b_mono = (self.b_l[i] + self.b_r[i]) * 0.5;
+                for (((l, r), bl), br) in left.iter_mut()
+                    .zip(right.iter_mut())
+                    .zip(self.b_l.iter())
+                    .zip(self.b_r.iter()) {
+                    let a_mono = (*l + *r) * 0.5;
+                    let b_mono = (*bl + *br) * 0.5;
                     if swapped {
-                        left[i] = b_mono;
-                        right[i] = a_mono;
+                        *l = b_mono;
+                        *r = a_mono;
                     } else {
-                        left[i] = a_mono;
-                        right[i] = b_mono;
+                        *l = a_mono;
+                        *r = b_mono;
                     }
                 }
             }
@@ -189,12 +218,16 @@ impl Processor for DualDelay {
         }
     }
 
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "end is computed as min(pos + cap, n) where pos < n, so slicing [pos..end] is always in bounds"
+    )]
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
         let n = left.len().min(right.len());
         let cap = self.chunk_capacity();
         let mut pos = 0;
         while pos < n {
-            let end = (pos + cap).min(n);
+            let end = pos.saturating_add(cap).min(n);
             let (l, r) = (&mut left[pos..end], &mut right[pos..end]);
             self.process_chunk(l, r);
             pos = end;
@@ -241,10 +274,14 @@ mod tests {
         (l, r)
     }
 
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "end index is clamped with .min(buf.len()), and start is always <= end due to saturating operations"
+    )]
     fn window_energy(buf: &[f64], center_ms: f64, half_ms: f64) -> f64 {
-        let c = (center_ms * SR / 1000.0) as usize;
-        let h = (half_ms * SR / 1000.0) as usize;
-        buf[c.saturating_sub(h)..(c + h).min(buf.len())]
+        let c = num::f64_to_index(center_ms * SR / 1000.0);
+        let h = num::f64_to_index(half_ms * SR / 1000.0);
+        buf[c.saturating_sub(h)..(c.saturating_add(h)).min(buf.len())]
             .iter()
             .map(|x| x * x)
             .sum()

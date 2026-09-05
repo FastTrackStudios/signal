@@ -3497,6 +3497,7 @@ name = "delay-dsp"
 version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
+ "dsp-core",
  "dsp-golden",
  "pitch-dsp",
 ]

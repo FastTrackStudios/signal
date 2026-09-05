@@ -20,6 +20,7 @@ use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::envelope::EnvelopeFollower;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::num;
 
 /// Device voicings for the Lo-Fi output filter (`TimeLine` MX "Filter
 /// Shape"). Center frequencies / resonances are chosen per the device
@@ -49,7 +50,7 @@ pub enum LoFiFilterShape {
 
 impl LoFiFilterShape {
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             1 => Self::VintageAmp,
             2 => Self::Victrola,
@@ -64,7 +65,7 @@ impl LoFiFilterShape {
     }
 
     /// (`hp_hz`, `lp_hz`, `peak_hz`, `peak_q`, `peak_db`) for the 3-section bank.
-    fn design(self) -> Option<(f64, f64, f64, f64, f64)> {
+    const fn design(self) -> Option<(f64, f64, f64, f64, f64)> {
         // interpretation: 2–3 biquad approximations of each device.
         match self {
             Self::Off => None,
@@ -137,7 +138,7 @@ impl VinylNoise {
         // (~4/s subtle → ~30/s heavy), 0.3–1.5 ms bursts.
         self.crackle_countdown -= 1.0;
         if self.crackle_countdown <= 0.0 {
-            let rate_hz = 4.0 + amount * 26.0;
+            let rate_hz = amount.mul_add(26.0, 4.0);
             self.crackle_countdown = self.sample_rate / rate_hz * (0.3 + rand01 * 1.4);
             self.crackle_hold = self.sample_rate * (0.0003 + rand01 * 0.0012);
             self.crackle_gain = 0.4 + rand01 * 0.6;
@@ -292,7 +293,7 @@ impl LoFiDelay {
 
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S) + 1024;
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -334,7 +335,7 @@ impl LoFiDelay {
     /// Quantize to simulated bit depth.
     #[inline]
     fn quantize(x: f64, bits: f64) -> f64 {
-        let steps = (2.0f64).powf(bits);
+        let steps = bits.exp2();
         (x * steps).round() / steps
     }
 
@@ -353,7 +354,7 @@ impl LoFiDelay {
                 * self.sample_rate;
         }
 
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.delay.len()) - 4.0;
         let read_pos = smooth_delay.clamp(1.0, max_read);
         let clean = self.delay.read_cubic(read_pos);
 
@@ -361,8 +362,8 @@ impl LoFiDelay {
         // its harmonics alias through the sample-rate hold.
         let mut degraded = clean;
         if self.grit > 0.0 {
-            let drive = 1.0 + self.grit * 6.0;
-            degraded = (degraded * drive).tanh() / (1.0 + self.grit * 1.5);
+            let drive = self.grit.mul_add(6.0, 1.0);
+            degraded = (degraded * drive).tanh() / self.grit.mul_add(1.5, 1.0);
         }
         self.sr_counter += 1.0;
         if self.sr_counter >= self.sample_rate_div {
@@ -420,7 +421,7 @@ impl LoFiDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -458,7 +459,7 @@ mod tests {
             s2 = s1;
             s1 = s0;
         }
-        (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (signal.len() as f64).powi(2)
+        (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / num::count_to_f64(signal.len()).powi(2)
     }
 
     #[test]
@@ -495,7 +496,7 @@ mod tests {
         }
 
         assert!(
-            (peak_pos as i64 - 4800).unsigned_abs() < 10,
+            (i64::from(peak_pos) - 4800).unsigned_abs() < 10,
             "Peak at {peak_pos}, expected near 4800"
         );
     }
@@ -514,7 +515,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (std::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input = (std::f64::consts::PI * 2.0 * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at sample {i}");
         }
@@ -538,7 +539,7 @@ mod tests {
 
         let mut diff = 0.0;
         for i in 0..9600 {
-            let s = (std::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+            let s = (std::f64::consts::PI * 2.0 * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let a = d_clean.tick(s, 0);
             let b = d_lofi.tick(s, 0);
             diff += (a - b).abs();
@@ -562,7 +563,7 @@ mod tests {
             d.update(SR);
             (0..24000)
                 .map(|i| {
-                    let s = (std::f64::consts::TAU * 330.0 * i as f64 / SR).sin() * 0.5;
+                    let s = (std::f64::consts::TAU * 330.0 * f64::from(i) / SR).sin() * 0.5;
                     d.tick(s, 0)
                 })
                 .collect()
@@ -577,7 +578,7 @@ mod tests {
             d.update(SR);
             (0..24000)
                 .map(|i| {
-                    let s = (std::f64::consts::TAU * 330.0 * i as f64 / SR).sin() * 0.5;
+                    let s = (std::f64::consts::TAU * 330.0 * f64::from(i) / SR).sin() * 0.5;
                     d.tick(s, 0)
                 })
                 .collect::<Vec<_>>()
@@ -618,7 +619,7 @@ mod tests {
             d.update(SR);
             let mut out = Vec::with_capacity(48000);
             for i in 0..48000 {
-                let s = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+                let s = (std::f64::consts::TAU * 440.0 * f64::from(i) / SR).sin() * 0.5;
                 let v = d.tick(s, 0);
                 if i > 12000 {
                     out.push(v);
@@ -680,10 +681,8 @@ mod tests {
             (0..24000)
                 .map(|i| {
                     // Broadband-ish test signal.
-                    let t = i as f64 / SR;
-                    let s = (std::f64::consts::TAU * 220.0 * t).sin() * 0.3
-                        + (std::f64::consts::TAU * 1700.0 * t).sin() * 0.2
-                        + (std::f64::consts::TAU * 5200.0 * t).sin() * 0.2;
+                    let t = f64::from(i) / SR;
+                    let s = (std::f64::consts::TAU * 5200.0 * t).sin().mul_add(0.2, (std::f64::consts::TAU * 220.0 * t).sin().mul_add(0.3, (std::f64::consts::TAU * 1700.0 * t).sin() * 0.2));
                     let v = d.tick(s, 0);
                     assert!(v.is_finite());
                     v
@@ -733,8 +732,8 @@ mod tests {
             let mut peak = 0.0f64;
             for i in 0..96000 {
                 // Slow sinusoidal time wobble like the chain's mod.
-                d.time_ms = time_ms + (i as f64 / SR * std::f64::consts::TAU * 0.8).sin() * 0.8;
-                let s = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.3;
+                d.time_ms = (f64::from(i) / SR * std::f64::consts::TAU * 0.8).sin().mul_add(0.8, time_ms);
+                let s = (std::f64::consts::TAU * 440.0 * f64::from(i) / SR).sin() * 0.3;
                 let v = d.tick(s, 0);
                 assert!(v.is_finite(), "NaN at {i} (time={time_ms})");
                 peak = peak.max(v.abs());

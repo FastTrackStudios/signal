@@ -15,6 +15,7 @@ use crate::tilt::DecayTilt;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::one_pole::OnePoleLp;
 use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::num;
 
 /// Schroeder allpass over a fixed delay.
 struct Allpass {
@@ -26,14 +27,14 @@ struct Allpass {
 impl Allpass {
     fn new(delay_samples: f64, g: f64) -> Self {
         Self {
-            line: DelayLine::new(delay_samples as usize + 8),
+            line: DelayLine::new(num::f64_to_index(delay_samples).saturating_add(8)),
             delay: delay_samples,
             g,
         }
     }
 
     fn resize(&mut self, delay_samples: f64) {
-        let needed = delay_samples as usize + 8;
+        let needed = num::f64_to_index(delay_samples).saturating_add(8);
         if self.line.len() < needed {
             self.line = DelayLine::new(needed);
         }
@@ -43,9 +44,9 @@ impl Allpass {
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
         let delayed = self.line.read_linear(self.delay);
-        let v = input - self.g * delayed;
+        let v = self.g.mul_add(-delayed, input);
         self.line.write(v);
-        delayed + self.g * v
+        self.g.mul_add(v, delayed)
     }
 
     fn reset(&mut self) {
@@ -121,14 +122,20 @@ impl ReverbDelay {
             trem_rate_hz: 4.0,
             trem_depth: 0.0,
             decay_tilt: 0.0,
-            predelay: DelayLine::new((sr * Self::MAX_PRE_S) as usize + 1024),
+            predelay: DelayLine::new(num::f64_to_index(sr * Self::MAX_PRE_S).saturating_add(1024)),
             pre_smoother: ParamSmoother::new(0.0),
             diffusers: [
                 Allpass::new(ms(DIFF_MS[0]), DIFF_G),
                 Allpass::new(ms(DIFF_MS[1]), DIFF_G),
             ],
-            lines: core::array::from_fn(|i| DelayLine::new(ms(LINE_MS[i]) as usize + 64)),
-            line_len: core::array::from_fn(|i| ms(LINE_MS[i])),
+            lines: core::array::from_fn(|i| {
+                let len_ms = LINE_MS.get(i).expect("LINE_MS has 4 elements");
+                DelayLine::new(num::f64_to_index(ms(*len_ms)).saturating_add(64))
+            }),
+            line_len: core::array::from_fn(|i| {
+                let len_ms = LINE_MS.get(i).expect("LINE_MS has 4 elements");
+                ms(*len_ms)
+            }),
             damp: core::array::from_fn(|_| OnePoleLp::new(14000.0, sr)),
             decay_tilt_eq: DecayTilt::new(),
             line_g: 0.7,
@@ -145,20 +152,21 @@ impl ReverbDelay {
         self.sample_rate = sample_rate;
         self.time_ms = self.time_ms.clamp(Self::MIN_TIME_MS, Self::MAX_TIME_MS);
 
-        let pre_len = (sample_rate * Self::MAX_PRE_S) as usize + 1024;
+        let pre_len = num::f64_to_index(sample_rate * Self::MAX_PRE_S).saturating_add(1024);
         if self.predelay.len() < pre_len {
             self.predelay = DelayLine::new(pre_len);
         }
         let ms = |m: f64| m * sample_rate / 1000.0;
-        for (i, ap) in self.diffusers.iter_mut().enumerate() {
-            ap.resize(ms(DIFF_MS[i]));
+        for (ap, &diff_ms) in self.diffusers.iter_mut().zip(&DIFF_MS) {
+            ap.resize(ms(diff_ms));
         }
-        #[allow(clippy::needless_range_loop)] // i spans parallel arrays + self
-        for i in 0..4 {
-            self.line_len[i] = ms(LINE_MS[i]);
-            let needed = self.line_len[i] as usize + 64;
-            if self.lines[i].len() < needed {
-                self.lines[i] = DelayLine::new(needed);
+        for ((line_len, line), line_ms) in self.line_len.iter_mut()
+            .zip(&mut self.lines)
+            .zip(&LINE_MS) {
+            *line_len = ms(*line_ms);
+            let needed = num::f64_to_index(*line_len).saturating_add(64);
+            if line.len() < needed {
+                *line = DelayLine::new(needed);
             }
         }
 
@@ -198,7 +206,7 @@ impl ReverbDelay {
         if grit <= 0.001 {
             return x;
         }
-        let d = 1.0 + grit * 6.0;
+        let d = grit.mul_add(6.0, 1.0);
         (x * d).tanh() / d.tanh()
     }
 
@@ -210,7 +218,7 @@ impl ReverbDelay {
         let pre_pos = self
             .pre_smoother
             .tick()
-            .clamp(1.0, self.predelay.len() as f64 - 4.0);
+            .clamp(1.0, f64::from(u32::try_from(self.predelay.len()).unwrap_or(u32::MAX)) - 4.0);
         let pre = self.predelay.read_cubic(pre_pos);
 
         // Grit INTO the reverb.
@@ -222,40 +230,43 @@ impl ReverbDelay {
 
         // FDN read (lines 0 and 2 gently modulated).
         let mut outs = [0.0f64; 4];
-        #[allow(clippy::needless_range_loop)] // i spans parallel arrays + self
-        for i in 0..4 {
-            let mut len = self.line_len[i];
+        for (i, ((line_len, line), line_mod_hz)) in self.line_len.iter()
+            .zip(&self.lines)
+            .zip(Self::LINE_MOD_HZ.iter())
+            .enumerate() {
+            let mut len = *line_len;
             if i == 0 || i == 2 {
                 let m = i / 2;
-                self.mod_phase[m] += Self::LINE_MOD_HZ[m] / self.sample_rate;
-                if self.mod_phase[m] >= 1.0 {
-                    self.mod_phase[m] -= 1.0;
+                let mod_phase = self.mod_phase.get_mut(m).expect("m is 0 or 1");
+                *mod_phase += *line_mod_hz / self.sample_rate;
+                if *mod_phase >= 1.0 {
+                    *mod_phase -= 1.0;
                 }
-                len += (self.mod_phase[m] * core::f64::consts::TAU).sin()
+                len += (*mod_phase * core::f64::consts::TAU).sin()
                     * Self::LINE_MOD_MS
                     * self.sample_rate
                     / 1000.0;
             }
-            let max = self.lines[i].len() as f64 - 4.0;
-            outs[i] = self.lines[i].read_cubic(len.clamp(1.0, max));
+            let max = f64::from(u32::try_from(line.len()).unwrap_or(u32::MAX)) - 4.0;
+            outs[i] = line.read_cubic(len.clamp(1.0, max));
         }
 
         // Damping inside the loop (bypassed while infinite).
         let mut damped = outs;
         if !self.damp_open {
-            #[allow(clippy::needless_range_loop)] // i spans parallel arrays + self
-            for i in 0..4 {
-                damped[i] = self.damp[i].tick(damped[i]);
+            for (d, damp_filter) in damped.iter_mut().zip(&mut self.damp) {
+                *d = damp_filter.tick(*d);
             }
         }
 
         // Householder feedback: y_i = x_i − (2/4)·Σx.
         let sum: f64 = damped.iter().sum();
         let inject = [1.0, -1.0, 1.0, -1.0];
-        #[allow(clippy::needless_range_loop)] // i spans parallel arrays + self
-        for i in 0..4 {
-            let mixed = damped[i] - 0.5 * sum;
-            self.lines[i].write(x * inject[i] * 0.5 + mixed * self.line_g);
+        for ((d, line), inj) in damped.iter()
+            .zip(&mut self.lines)
+            .zip(inject.iter()) {
+            let mixed = 0.5_f64.mul_add(-sum, *d);
+            line.write((x * inj).mul_add(0.5, mixed * self.line_g));
         }
 
         // Wet tap: alternating signs decorrelate the line sum.
@@ -270,8 +281,8 @@ impl ReverbDelay {
             if self.trem_phase >= 1.0 {
                 self.trem_phase -= 1.0;
             }
-            let lfo = 0.5 + 0.5 * (self.trem_phase * core::f64::consts::TAU).sin();
-            wet *= 1.0 - self.trem_depth.clamp(0.0, 1.0) * lfo;
+            let lfo = 0.5_f64.mul_add((self.trem_phase * core::f64::consts::TAU).sin(), 0.5);
+            wet *= self.trem_depth.clamp(0.0, 1.0).mul_add(-lfo, 1.0);
         }
 
         wet = self.decay_tilt_eq.tick(wet, 0);
@@ -281,7 +292,7 @@ impl ReverbDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -389,7 +400,7 @@ mod tests {
         };
         let near = onset(2.0);
         let far = onset(400.0);
-        let expected_gap = (398.0 * SR / 1000.0) as usize;
+        let expected_gap = num::f64_to_index(398.0 * SR / 1000.0);
         assert!(
             far > near + expected_gap / 2,
             "pre-delay should move the reverb onset: {near} vs {far}"

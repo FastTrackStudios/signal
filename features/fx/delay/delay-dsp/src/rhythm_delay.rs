@@ -8,6 +8,7 @@ use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::num;
 
 /// Multi-tap rhythm delay — 8 taps at integer multiples of base time.
 pub struct RhythmDelay {
@@ -67,7 +68,7 @@ impl RhythmDelay {
 
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S) + 1024;
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -100,16 +101,16 @@ impl RhythmDelay {
         self.smoother.set_target(target_delay);
         let smooth_delay = self.smoother.tick();
 
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.delay.len()) - 4.0;
 
         // Sum all 8 taps
         let mut output = 0.0;
         let mut last_tap = 0.0;
-        for i in 0..8 {
-            let tap_delay = smooth_delay * (i + 1) as f64;
+        for (i, &level) in self.tap_levels.iter().enumerate() {
+            let tap_delay = smooth_delay * f64::from((i + 1) as u32);
             let read_pos = tap_delay.clamp(1.0, max_read);
             let tap_out = self.delay.read_cubic(read_pos);
-            output += tap_out * self.tap_levels[i];
+            output += tap_out * level;
             if i == 7 {
                 last_tap = tap_out;
             }
@@ -135,7 +136,7 @@ impl RhythmDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -185,10 +186,10 @@ mod tests {
         }
 
         // Expect peaks near 2400, 4800, 7200, 9600 samples (50ms multiples)
-        let expected_positions = [2400, 4800, 7200, 9600];
+        let expected_positions = [2400_usize, 4800, 7200, 9600];
         for &pos in &expected_positions {
             // Find peak in a window around expected position
-            let window_start = (pos as i64 - 20).max(0) as usize;
+            let window_start = pos.saturating_sub(20);
             let window_end = (pos + 20).min(total_samples);
             let peak = samples[window_start..window_end]
                 .iter()
@@ -212,7 +213,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (std::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input = (std::f64::consts::PI * 2.0 * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at sample {i}");
         }

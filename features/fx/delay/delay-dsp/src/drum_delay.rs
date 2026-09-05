@@ -15,6 +15,7 @@ use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::num;
 
 /// Per-head playback routing: off, half level (−6 dB), or full.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -28,7 +29,7 @@ pub enum HeadPlayback {
 impl HeadPlayback {
     #[inline]
     #[must_use]
-    pub fn gain(self) -> f64 {
+    pub const fn gain(self) -> f64 {
         match self {
             Self::Off => 0.0,
             Self::Half => 0.5, // −6 dB
@@ -141,7 +142,7 @@ impl DrumDelay {
             position,
             // Feedback from only the last head preserves stereo pan
             // rotation (see spec); default matches.
-            feedback: position == 1.0,
+            feedback: position.to_bits() == 1.0_f64.to_bits(),
             pan: 0.0,
         });
         Self {
@@ -178,14 +179,14 @@ impl DrumDelay {
         self.sample_rate = sample_rate;
         self.time_ms = self.time_ms.clamp(Self::MIN_TIME_MS, Self::MAX_TIME_MS);
 
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S) + 1024;
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
 
         // Progressive high-pass: lo_cut 0..1 → off..500 Hz.
         if self.lo_cut > 0.01 {
-            let freq = 20.0 + self.lo_cut * 480.0;
+            let freq = self.lo_cut.mul_add(480.0, 20.0);
             self.lo_cut_filter
                 .set(FilterType::Highpass, freq, 0.707, sample_rate);
         }
@@ -216,7 +217,7 @@ impl DrumDelay {
             self.wobble_target = self.rng.next_bipolar();
         }
         self.wobble_current += (self.wobble_target - self.wobble_current) * 0.0005;
-        smooth_delay * (1.0 + self.wobble_current * self.wobble * 0.003)
+        smooth_delay * (self.wobble_current * self.wobble).mul_add(0.003, 1.0)
     }
 
     /// Filter + clamp the feedback sum and write the delay line. The
@@ -234,7 +235,7 @@ impl DrumDelay {
 
         let mut record = input + fb;
         if self.grit > 0.001 {
-            let drive = 1.0 + self.grit * 5.0;
+            let drive = self.grit.mul_add(5.0, 1.0);
             record = (record * drive).tanh() / drive.tanh();
         }
         if self.hicut_freq > 0.0 {
@@ -247,7 +248,7 @@ impl DrumDelay {
 
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
         let wobbled_delay = self.advance_clock();
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.delay.len()) - 4.0;
 
         let mut output = 0.0;
         let mut fb_sum = 0.0;
@@ -276,7 +277,7 @@ impl DrumDelay {
     /// center, while last-head-only feedback preserves the rotation.
     pub fn tick_stereo(&mut self, input: f64) -> (f64, f64) {
         let wobbled_delay = self.advance_clock();
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.delay.len()) - 4.0;
 
         let mut out_l = 0.0;
         let mut out_r = 0.0;
@@ -303,7 +304,7 @@ impl DrumDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -345,9 +346,9 @@ mod tests {
         }
         // 4 golden-spaced heads → distinct clusters near 118/191/309/500 ms.
         for expected_ms in [118.0, 191.0, 309.0, 500.0] {
-            let expected = (expected_ms * SR / 1000.0) as i64;
+            let expected = num::trunc_to_i64(expected_ms * SR / 1000.0);
             assert!(
-                peaks.iter().any(|&p| (p as i64 - expected).abs() < 240),
+                peaks.iter().any(|&p| (i64::from(p) - expected).abs() < 240),
                 "expected a head tap near {expected_ms} ms, peaks: {peaks:?}"
             );
         }
@@ -358,10 +359,10 @@ mod tests {
         let mut d = DrumDelay::new();
         d.time_ms = 50.0;
         d.update(SR);
-        assert_eq!(d.time_ms, DrumDelay::MIN_TIME_MS);
+        assert_eq!(d.time_ms.to_bits(), DrumDelay::MIN_TIME_MS.to_bits());
         d.time_ms = 9999.0;
         d.update(SR);
-        assert_eq!(d.time_ms, DrumDelay::MAX_TIME_MS);
+        assert_eq!(d.time_ms.to_bits(), DrumDelay::MAX_TIME_MS.to_bits());
     }
 
     #[test]
@@ -374,7 +375,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (std::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
+            let input = (std::f64::consts::TAU * 220.0 * f64::from(i as i32) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at {i}");
         }
@@ -394,7 +395,7 @@ mod tests {
             let out: Vec<f64> = (0..96000)
                 .map(|i| {
                     seed = seed.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
-                    let noise = (seed >> 9) as f64 / (1u32 << 23) as f64 - 1.0;
+                    let noise = f64::from(seed >> 9) / f64::from(1u32 << 23) - 1.0;
                     let input = if i < 4800 { noise * 0.5 } else { 0.0 };
                     d.tick(input, 0)
                 })
@@ -422,7 +423,7 @@ mod tests {
             (0..48000)
                 .map(|i| {
                     let input = if i < 9600 {
-                        (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.8
+                        (core::f64::consts::TAU * 220.0 * f64::from(i as i32) / SR).sin() * 0.8
                     } else {
                         0.0
                     };

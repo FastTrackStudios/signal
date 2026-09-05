@@ -16,6 +16,7 @@ use crate::modulation::Diffuser;
 use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::num;
 
 /// Reverse delay using onset-synced alternating reversed grains.
 pub struct ReverseDelay {
@@ -101,7 +102,7 @@ impl ReverseDelay {
 
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S) + 1024;
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -130,11 +131,11 @@ impl ReverseDelay {
         self.diffuser.smear = self.smear.clamp(0.0, 1.0) * 0.5;
         self.diffuser.update(sample_rate, false);
 
-        self.grain_samples = ((self.time_ms * 0.001 * sample_rate) as usize).max(64);
+        self.grain_samples = num::f64_to_index(self.time_ms * 0.001 * sample_rate).max(64);
     }
 
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
-        let grain_len = ((self.time_ms * 0.001 * self.sample_rate) as usize).max(64);
+        let grain_len = num::f64_to_index(self.time_ms * 0.001 * self.sample_rate).max(64);
         self.grain_samples = grain_len;
 
         // ── Onset detection: re-sync the window cycle to the attack ──
@@ -214,7 +215,7 @@ impl ReverseDelay {
     #[inline]
     fn read_reversed(&self, pos: usize, grain_len: usize, mod_off: f64) -> f64 {
         let pos_in_grain = (pos % grain_len) as f64;
-        let read_offset = 2.0 * pos_in_grain + 1.0 + mod_off;
+        let read_offset = 2.0f64.mul_add(pos_in_grain, 1.0) + mod_off;
         let max_read = (self.delay.len() - 4) as f64;
         self.delay.read_cubic(read_offset.clamp(1.0, max_read))
     }
@@ -224,7 +225,7 @@ impl ReverseDelay {
     #[inline]
     fn grain_window(pos: usize, grain_len: usize, cf: f64) -> f64 {
         let pos_in_grain = pos % grain_len;
-        let fade_samples = (grain_len as f64 * cf) as usize;
+        let fade_samples = num::f64_to_index(grain_len as f64 * cf);
         let fade_samples = fade_samples.max(1);
 
         if pos_in_grain < fade_samples {
@@ -241,7 +242,7 @@ impl ReverseDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -292,7 +293,7 @@ mod tests {
         for i in 0..(grain * 3) {
             // Loud onset then a ramp so the onset sync fires at i=0.
             let input = if i < grain {
-                0.5 + 0.5 * (i as f64 / grain as f64)
+                0.5f64.mul_add(i as f64 / grain as f64, 0.5)
             } else {
                 0.0
             };
@@ -320,7 +321,7 @@ mod tests {
         d.feedback = 0.0;
         d.update(SR);
 
-        let grain = (0.08 * SR) as usize;
+        let grain = num::f64_to_index(0.08 * SR);
         let gap = grain * 3 + 517; // deliberately NOT a multiple of the cycle
         let burst = |d: &mut ReverseDelay| -> usize {
             // Feed a 3 ms burst, then silence; return samples from burst
@@ -369,7 +370,7 @@ mod tests {
                 let input = if i < 24 { 0.9 } else { 0.0 };
                 let out = d.tick(input, 0);
                 let w = out * out;
-                let t = i as f64;
+                let t = f64::from(i as i32);
                 w_sum += w;
                 t_sum += w * t;
                 t2_sum += w * t * t;
@@ -399,7 +400,7 @@ mod tests {
             d.update(SR);
             (0..48000)
                 .map(|i| {
-                    let input = (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
+                    let input = (core::f64::consts::TAU * 220.0 * f64::from(i as i32) / SR).sin() * 0.5;
                     d.tick(input, 0)
                 })
                 .collect()
@@ -430,7 +431,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (core::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input = (core::f64::consts::PI * 2.0 * 440.0 * f64::from(i as i32) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at sample {i}");
             assert!(out.abs() < 10.0, "Runaway at {i}: {out}");

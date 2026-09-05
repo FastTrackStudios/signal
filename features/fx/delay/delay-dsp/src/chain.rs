@@ -8,6 +8,7 @@ use audiocore_dsp::envelope::EnvelopeFollower;
 use audiocore_dsp::note_sync::NoteValue;
 use audiocore_dsp::smoothing::ParamSmoother;
 use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::num;
 
 use crate::engine::{DelayEngine, DelayStyle};
 use crate::modulation::{Diffuser, DuckingFollower};
@@ -65,7 +66,7 @@ impl TapDivision {
     pub const COUNT: usize = 8;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             0 => Self::Quarter,
             1 => Self::DottedEighth,
@@ -79,7 +80,7 @@ impl TapDivision {
     }
 
     #[must_use]
-    pub fn to_index(self) -> usize {
+    pub const fn to_index(self) -> usize {
         match self {
             Self::Quarter => 0,
             Self::DottedEighth => 1,
@@ -93,7 +94,7 @@ impl TapDivision {
     }
 
     #[must_use]
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Quarter => "1/4",
             Self::DottedEighth => "1/8.",
@@ -425,10 +426,7 @@ impl Processor for DelayChain {
         // style's valid range (TimeLine MX per-machine time ranges).
         let tempo = self.tempo_bpm;
         let synced = |div: TapDivision, fallback: f64| -> f64 {
-            match tempo {
-                Some(bpm) => div.to_ms(bpm).unwrap_or(fallback),
-                None => fallback,
-            }
+            tempo.map_or(fallback, |bpm| div.to_ms(bpm).unwrap_or(fallback))
         };
         let (min_l, max_l) = self.delay_l.style().time_range_ms();
         let (min_r, max_r) = self.delay_r.style().time_range_ms();
@@ -511,7 +509,7 @@ impl Processor for DelayChain {
         self.lr_offset_smoother.set_target(self.lr_offset_ms);
 
         // Ensure delay line is large enough for max offset at this sample rate
-        let max_offset_samples = (25.0 * config.sample_rate / 1000.0) as usize + 64;
+        let max_offset_samples = num::f64_to_index(25.0 * config.sample_rate / 1000.0) + 64;
         if self.lr_offset_delay.len() < max_offset_samples {
             self.lr_offset_delay = DelayLine::new(max_offset_samples);
         }
@@ -610,7 +608,7 @@ impl Processor for DelayChain {
                     let mono = (diff_in_l + diff_in_r) * 0.5;
                     let fb_r = self.pingpong_dc_r.tick(self.delay_r.last_feedback());
                     let fb_l = self.pingpong_dc_l.tick(self.delay_l.last_feedback());
-                    (mono + fb_r * pingpong_feedback, fb_l * pingpong_feedback)
+                    (fb_r.mul_add(pingpong_feedback, mono), fb_l * pingpong_feedback)
                 }
             };
 
@@ -713,11 +711,11 @@ impl Processor for DelayChain {
             // --- Accent: alternating repeat volume ---
             if self.accent.abs() > 1e-6 && delay_time_samples_l > 1.0 {
                 // L channel accent
-                let accent_gain_l = 1.0 + self.accent * if self.accent_flip_l { 1.0 } else { -1.0 };
+                let accent_gain_l = self.accent.mul_add(if self.accent_flip_l { 1.0 } else { -1.0 }, 1.0);
                 wet_l *= accent_gain_l;
 
                 // R channel accent
-                let accent_gain_r = 1.0 + self.accent * if self.accent_flip_r { 1.0 } else { -1.0 };
+                let accent_gain_r = self.accent.mul_add(if self.accent_flip_r { 1.0 } else { -1.0 }, 1.0);
                 wet_r *= accent_gain_r;
 
                 // Advance accent phases
@@ -797,8 +795,8 @@ impl Processor for DelayChain {
             if (pl + 1.0).abs() > 1e-4 || (pr - 1.0).abs() > 1e-4 {
                 let al = (pl + 1.0) * std::f64::consts::FRAC_PI_4;
                 let ar = (pr + 1.0) * std::f64::consts::FRAC_PI_4;
-                let new_l = wet_l * al.cos() + wet_r * ar.cos();
-                let new_r = wet_l * al.sin() + wet_r * ar.sin();
+                let new_l = wet_l.mul_add(al.cos(), wet_r * ar.cos());
+                let new_r = wet_l.mul_add(al.sin(), wet_r * ar.sin());
                 wet_l = new_l;
                 wet_r = new_r;
             }
@@ -808,8 +806,8 @@ impl Processor for DelayChain {
             wet_r *= output_level;
 
             // Mix dry/wet
-            left[i] = dry_l * (1.0 - mix) + wet_l * mix;
-            right[i] = dry_r * (1.0 - mix) + wet_r * mix;
+            left[i] = dry_l.mul_add(1.0 - mix, wet_l * mix);
+            right[i] = dry_r.mul_add(1.0 - mix, wet_r * mix);
         }
     }
 }
@@ -936,7 +934,7 @@ mod tests {
 
         let n = 48000;
         let mut l: Vec<f64> = (0..n)
-            .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut r = l.clone();
 
@@ -998,7 +996,7 @@ mod tests {
         c_clean.process(&mut l_clean, &mut r_clean);
 
         let mut l_diff = impulse.clone();
-        let mut r_diff = impulse.clone();
+        let mut r_diff = impulse;
         c_diff.process(&mut l_diff, &mut r_diff);
 
         // Count how many samples are above threshold — diffusion should spread energy
@@ -1021,7 +1019,7 @@ mod tests {
 
         let n = 19200;
         let mut l: Vec<f64> = (0..n)
-            .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut r = l.clone();
 
@@ -1033,7 +1031,7 @@ mod tests {
             .zip(r.iter())
             .map(|(a, b)| (a - b).abs())
             .sum::<f64>()
-            / n as f64;
+            / f64::from(n);
         assert!(
             diff > 0.001,
             "Width should create stereo difference: avg_diff={diff}"
@@ -1103,7 +1101,7 @@ mod tests {
         let mut r = l.clone();
         c.process(&mut l, &mut r);
 
-        let expected = (250.0 * SR / 1000.0) as usize;
+        let expected = num::f64_to_index(250.0 * SR / 1000.0);
         let peak = l
             .iter()
             .enumerate()
@@ -1112,7 +1110,7 @@ mod tests {
             .map(|(i, _)| i)
             .unwrap();
         assert!(
-            (peak as i64 - expected as i64).unsigned_abs() < 480,
+            (i64::try_from(peak).unwrap_or(i64::MAX) - i64::try_from(expected).unwrap_or(i64::MAX)).unsigned_abs() < 480,
             "synced repeat at {peak}, expected near {expected}"
         );
     }
@@ -1195,7 +1193,7 @@ mod tests {
             // Steady tone; measure early wet energy (first repeat).
             let n = 12000; // 250 ms
             let mut l: Vec<f64> = (0..n)
-                .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+                .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
                 .collect();
             let mut r = l.clone();
             c.process(&mut l, &mut r);
@@ -1250,7 +1248,7 @@ mod tests {
             s2 = s1;
             s1 = s0;
         }
-        (s1 * s1 + s2 * s2 - coeff * s1 * s2).max(0.0).sqrt()
+        (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)).max(0.0).sqrt()
     }
 
     #[test]
@@ -1333,8 +1331,8 @@ mod tests {
             let n = 96000; // 2 s
             let mut l: Vec<f64> = (0..n)
                 .map(|i| {
-                    let t_ms = i as f64 * 1000.0 / SR;
-                    let t = i as f64 / SR;
+                    let t_ms = f64::from(i) * 1000.0 / SR;
+                    let t = f64::from(i) / SR;
                     if t_ms < 20.0 {
                         (2.0 * PI * 440.0 * t).sin() * 0.8
                     } else if (100.0..600.0).contains(&t_ms) {
@@ -1348,8 +1346,8 @@ mod tests {
             c.process(&mut l, &mut r);
 
             let window = |center_ms: f64| -> &[f64] {
-                let c0 = (center_ms * SR / 1000.0) as usize;
-                let h = (40.0 * SR / 1000.0) as usize;
+                let c0 = num::f64_to_index(center_ms * SR / 1000.0);
+                let h = num::f64_to_index(40.0 * SR / 1000.0);
                 &l[c0 - h..c0 + h]
             };
             // A's 3rd echo slot (900 ms): needs recirculation at 300
@@ -1440,8 +1438,8 @@ mod tests {
             c.process(&mut l, &mut r);
 
             // Second-pass window of head 1 (pan hard L): 400+100 = 500 ms.
-            let cnt = (500.0 * SR / 1000.0) as usize;
-            let h = (30.0 * SR / 1000.0) as usize;
+            let cnt = num::f64_to_index(500.0 * SR / 1000.0);
+            let h = num::f64_to_index(30.0 * SR / 1000.0);
             let le: f64 = l[cnt - h..cnt + h].iter().map(|x| x * x).sum();
             let re: f64 = r[cnt - h..cnt + h].iter().map(|x| x * x).sum();
             (le, re)
@@ -1519,7 +1517,7 @@ mod tests {
         c.process(&mut l, &mut r);
 
         let window = |buf: &[f64], ms: f64| -> f64 {
-            let cidx = (ms * SR / 1000.0) as usize;
+            let cidx = num::f64_to_index(ms * SR / 1000.0);
             let h = 480;
             buf[cidx - h..cidx + h].iter().map(|x| x * x).sum()
         };
@@ -1573,7 +1571,7 @@ mod tests {
 
         // The R channel peak should be offset from L channel peak
         // 10ms at 48kHz = 480 samples
-        let idx_diff = (r_peak_idx as i64 - l_peak_idx as i64).unsigned_abs();
+        let idx_diff = (i64::try_from(r_peak_idx).unwrap_or(i64::MAX) - i64::try_from(l_peak_idx).unwrap_or(i64::MAX)).unsigned_abs();
 
         // Also verify L and R differ in content
         let sample_diff: f64 = l

@@ -23,6 +23,7 @@ use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
 use audiocore_dsp::soft_clip::sin_clip;
+use dsp_core::num;
 
 /// Which pickup heads are engaged.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,11 +134,11 @@ impl OilCanDelay {
         self.sample_rate = sample_rate;
         self.time_ms = self.time_ms.clamp(Self::MIN_TIME_MS, Self::MAX_TIME_MS);
 
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S) + 1024;
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
-        let splat_len = (sample_rate * 0.008) as usize + 8; // ~8 ms
+        let splat_len = num::f64_to_index(sample_rate * 0.008) + 8; // ~8 ms
         if self.splatter.len() < splat_len {
             self.splatter = DelayLine::new(splat_len);
         }
@@ -166,11 +167,11 @@ impl OilCanDelay {
     #[inline]
     fn splatter_tick(&mut self, input: f64) -> f64 {
         // Schroeder allpass over a fixed ~6 ms delay.
-        let d = (self.sample_rate * 0.006).min(self.splatter.len() as f64 - 2.0);
+        let d = (self.sample_rate * 0.006).min(num::count_to_f64(self.splatter.len()) - 2.0);
         let delayed = self.splatter.read_linear(d);
-        let v = input - self.splatter_g * delayed;
+        let v = self.splatter_g.mul_add(-delayed, input);
         self.splatter.write(v);
-        delayed + self.splatter_g * v
+        self.splatter_g.mul_add(v, delayed)
     }
 
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
@@ -202,9 +203,9 @@ impl OilCanDelay {
         self.grit_walk *= 0.999;
         let grit_jitter = self.grit_walk * self.grit * 0.004;
 
-        let factor = 1.0 + (wow + flutter) * self.wobble + grit_jitter;
+        let factor = (wow + flutter).mul_add(self.wobble, 1.0) + grit_jitter;
 
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.delay.len()) - 4.0;
         let long_pos = (smooth_delay * factor).clamp(1.0, max_read);
         let short_pos = (smooth_delay * Self::SHORT_RATIO * factor).clamp(1.0, max_read);
         // Disc rotation: identical for both head modes, longer than the
@@ -218,7 +219,7 @@ impl OilCanDelay {
             OilCanHeads::Long => self.delay.read_cubic(long_pos) * makeup,
             OilCanHeads::Short => self.delay.read_cubic(short_pos) * makeup,
             OilCanHeads::Both => {
-                (self.delay.read_cubic(long_pos) + self.delay.read_cubic(short_pos) * 0.8) * makeup
+                self.delay.read_cubic(short_pos).mul_add(0.8, self.delay.read_cubic(long_pos)) * makeup
                     / 1.4
             }
         };
@@ -245,14 +246,14 @@ impl OilCanDelay {
             record = self.murk_hp.tick(record, ch);
         }
         self.delay
-            .write(Self::WRITE_ALPHA * record + (1.0 - Self::WRITE_ALPHA) * residue);
+            .write(Self::WRITE_ALPHA.mul_add(record, (1.0 - Self::WRITE_ALPHA) * residue));
         self.feedback_sample = fb;
 
         output
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -284,7 +285,7 @@ mod tests {
         d.wobble = 0.0;
         d.update(SR);
 
-        let expected = (300.0 * SR / 1000.0) as i64;
+        let expected = num::trunc_to_i64(300.0 * SR / 1000.0);
         let mut peak_pos = 0i64;
         let mut peak = 0.0f64;
         for i in 0..48000 {
@@ -318,14 +319,14 @@ mod tests {
                 hits.push(i);
             }
         }
-        let short = (500.0 * OilCanDelay::SHORT_RATIO * SR / 1000.0) as i64;
-        let long = (500.0 * SR / 1000.0) as i64;
+        let short = num::trunc_to_i64(500.0 * OilCanDelay::SHORT_RATIO * SR / 1000.0);
+        let long = num::trunc_to_i64(500.0 * SR / 1000.0);
         assert!(
-            hits.iter().any(|&h| (h as i64 - short).abs() < 480),
+            hits.iter().any(|&h| (i64::from(h) - short).abs() < 480),
             "{hits:?}"
         );
         assert!(
-            hits.iter().any(|&h| (h as i64 - long).abs() < 480),
+            hits.iter().any(|&h| (i64::from(h) - long).abs() < 480),
             "{hits:?}"
         );
     }
@@ -347,7 +348,7 @@ mod tests {
         // First echo at 400 ms; ghost passes recur at 400*1.45 = 580 ms
         // AFTER the first echo: 980 ms, then 1560 ms...
         let energy_at = |ms: f64| -> f64 {
-            let c = (ms * SR / 1000.0) as usize;
+            let c = num::f64_to_index(ms * SR / 1000.0);
             out[c.saturating_sub(400)..(c + 400).min(out.len())]
                 .iter()
                 .map(|x| x * x)
@@ -381,8 +382,8 @@ mod tests {
             }
             // Ghost of the WRITTEN residue appears at rotation period
             // after the write: find the peak in a window around it.
-            let lo = (500.0 * SR / 1000.0) as usize;
-            let hi = (700.0 * SR / 1000.0) as usize;
+            let lo = num::f64_to_index(500.0 * SR / 1000.0);
+            let hi = num::f64_to_index(700.0 * SR / 1000.0);
             lo + out[lo..hi]
                 .iter()
                 .enumerate()
@@ -390,8 +391,8 @@ mod tests {
                 .map(|(i, _)| i)
                 .unwrap()
         };
-        let long_peak = run(OilCanHeads::Long) as i64;
-        let short_peak = run(OilCanHeads::Short) as i64;
+        let long_peak = i64::try_from(run(OilCanHeads::Long)).unwrap_or(i64::MAX);
+        let short_peak = i64::try_from(run(OilCanHeads::Short)).unwrap_or(i64::MAX);
         // 580 ms rotation ghost read through the long head arrives at
         // 580 ms into the long output; through the short head the FIRST
         // echo differs but the rotation spacing is the same 580 ms.
@@ -411,7 +412,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (std::f64::consts::TAU * 330.0 * i as f64 / SR).sin() * 0.7;
+            let input = (std::f64::consts::TAU * 330.0 * f64::from(i) / SR).sin() * 0.7;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at {i}");
         }
@@ -431,7 +432,7 @@ mod tests {
             d.update(SR);
             (0..96000)
                 .map(|i| {
-                    let input = (core::f64::consts::TAU * 90.0 * i as f64 / SR).sin() * 0.5;
+                    let input = (core::f64::consts::TAU * 90.0 * f64::from(i) / SR).sin() * 0.5;
                     let out = d.tick(input, 0);
                     out * out
                 })
@@ -457,7 +458,7 @@ mod tests {
             d.update(SR);
             (0..48000)
                 .map(|i| {
-                    let input = (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
+                    let input = (core::f64::consts::TAU * 220.0 * f64::from(i) / SR).sin() * 0.5;
                     d.tick(input, 0)
                 })
                 .collect()
@@ -485,13 +486,13 @@ mod tests {
         d.tone_hz = 12000.0;
         d.update(SR);
 
-        let mut out = vec![0.0f64; (3.0 * SR) as usize];
+        let mut out = vec![0.0f64; num::f64_to_index(3.0 * SR)];
         for (i, o) in out.iter_mut().enumerate() {
             let input = if i == 0 { 1.0 } else { 0.0 };
             *o = d.tick(input, 0);
         }
         let energy_at = |ms: f64| -> f64 {
-            let c = (ms * SR / 1000.0) as usize;
+            let c = num::f64_to_index(ms * SR / 1000.0);
             out[c.saturating_sub(1200)..(c + 1200).min(out.len())]
                 .iter()
                 .map(|x| x * x)
