@@ -138,6 +138,28 @@ Apply them — the tree builds `x86-64-v3`, so `mul_add` is a single instruction
 (`(-2.0 / 3.0).mul_add(x, -0.25)` is E0689, ambiguous numeric type); write
 `(-2.0_f64 / 3.0)`. Nothing in this family ships without a `cargo check`.
 
+## When a reference vector is allowed to change
+
+Almost never — but "never" would be a lie, so here is the actual rule.
+
+The default is that a golden diff means you broke something. Two things make a
+change legitimate, and **both** must hold:
+
+1. The drift is at ULP scale. The harness reports an absolute delta and a
+   relative figure in ppm for every drifted probe. `1e-16` at `0.000 ppm` on
+   `f64` is one or two units in the last place; anything reaching whole ppm is
+   a regression in a named fixture, no matter how plausible the diff looks.
+2. You can name the cause, and it is an accuracy *improvement* — in practice
+   `mul_add` or `ln_1p`, which round once where the original rounded twice.
+
+Then re-record with `UPDATE_GOLDEN=1 cargo nextest run -p <crate>`, in a commit
+that does nothing else, quoting the measured drift. Check the diff before you
+commit it: only `hash` and `probe` lines may move, and a changed `len` or
+`name` means the fixture itself changed rather than the audio.
+
+If the cause is "I am not sure why it moved", that is not one of the two
+conditions. Revert and bisect.
+
 ## Suppressions
 
 `#[allow]` is denied. If a suppression is genuinely right, it is

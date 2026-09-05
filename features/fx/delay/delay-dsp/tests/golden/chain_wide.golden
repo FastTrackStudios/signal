@@ -3,7 +3,7 @@
 # A change here in a refactor commit means the audio changed. Investigate.
 name chain_wide
 len 48000
-hash b64e7ec813af1414
+hash 2424df54822363bc
 probe 0 0000000000000000 0
 probe 750 3fb4c07da3d70a3e 0.08106217622756959
 probe 1500 bfbebb68fae147af -0.12004715085029603
