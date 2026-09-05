@@ -27,7 +27,19 @@ may happen:
 | `x.floor() as i32` | `num::floor_to_i32(x)` |
 | `x.floor()` in `no_std` | `num::floor_f64(x)` |
 | `n as f64` where `n: i32`/`u32` | `f64::from(n)` — infallible, no helper needed |
+| `n as f64` where `n: usize` | `num::count_to_f64(n)` |
+| `n as f64` where `n: u64` | `num::u64_to_f64(n)` |
+| `n as f64` where `n: i64` | `num::i64_to_f64(n)` |
+| `x as i64` where `x: f64` | `num::trunc_to_i64(x)` |
 | `n as u64` where `n: usize` | `u64::try_from(n).unwrap_or(u64::MAX)` |
+
+**`f64::from` does NOT accept `usize`, `u64` or `i64`.** The standard library
+only provides infallible float conversions from integers that fit the mantissa
+on every target, and those three do not. Writing `f64::from(n)` on a `usize` is
+a compile error, not a lint fix — this was the single largest source of damage
+on the first automated run of this recipe. Use the helpers above. Likewise
+`count_to_f32` takes a `usize`, not a `u64`: pass `v.len()` directly rather
+than wrapping it in `u64::try_from(..)`.
 
 `num::` is `dsp_core::num`; add `use dsp_core::num;` if absent, and
 `dsp-core = { workspace = true }` to `[dependencies]`.
@@ -108,6 +120,15 @@ wants, and it cannot drift:
 assert_eq!(out.to_bits(), input.to_bits());
 ```
 
+**Take `.abs()` first when the expected value is zero.** `-0.0` compares equal
+to `0.0` under IEEE but has a different bit pattern, so a silence assertion
+written as `assert_eq!(x.to_bits(), 0.0_f64.to_bits())` fails the moment the
+code produces negative zero — which DSP code does constantly:
+
+```rust
+assert_eq!(x.abs().to_bits(), 0.0_f64.to_bits());
+```
+
 Only use an epsilon where the value is genuinely computed and approximate.
 
 ## `suboptimal_flops` / `imprecise_flops`
@@ -123,6 +144,32 @@ Apply them — the tree builds `x86-64-v3`, so `mul_add` is a single instruction
 `#[expect(clippy::lint, reason = "why")]`, which deletes itself when it stops
 being needed. Prefer a real fix; `unused_variables` on a half-implemented
 algorithm is a bug report, not a lint to silence.
+
+## Do not restructure a loop you cannot compile
+
+Converting `for i in 0..N { a[i]; b[i]; c[i] }` into a `zip` chain is the right
+shape *when the arrays are few and the pattern is obvious*. It is the wrong
+thing to attempt on a wide filter bank: nested `zip` produces deeply nested
+tuple patterns, getting the arity wrong is a compile error at best and a
+silently swapped state variable at worst, and the code where this is most
+tempting (a 10-stage complex filter bank, a multi-tap delay) is exactly the
+code where a swapped variable is least visible.
+
+Rule of thumb: **at most two sequences in one `zip`.** Three or more, or a
+`zip` whose pattern needs more than one level of nesting — leave the loop
+alone, report it, and let a human or a stronger model do it against the
+reference vectors.
+
+Two files were reverted on the first automated run of this recipe for exactly
+this. A third compiled, passed every unit test, and moved the audio by 10%.
+
+## Never introduce a fallible or non-const call into a `const fn`
+
+`TryFrom` is not a const trait and `Result::expect` is not a const method, so
+`i8::try_from(i).expect(...)` inside a `const fn` does not compile — and
+`expect` is denied by this workspace besides. If a `const fn` needs a narrowing
+conversion, do it with const-legal arithmetic and a comment stating the range
+the caller guarantees.
 
 ## What NOT to do
 

@@ -204,13 +204,18 @@ function verifyPrompt() {
    That count is \`remainingLints\`.
 4. \`cargo nextest run -p ${pkg} --no-fail-fast 2>&1 | tail -30\`
    testsPass = the summary line reports 0 failed.
-5. \`git status --porcelain | grep -E 'tests/golden/' || echo CLEAN\`
-   goldensUnchanged = the output is exactly \`CLEAN\`.
+5. From the step-4 output, find every FAILING test whose name appears in the
+   \`::golden\` binary. goldensUnchanged = there are none.
 
-**Step 5 is the one that matters.** The reference vectors were recorded on the
-unmodified code; a refactor that is genuinely behaviour-preserving leaves every
-one byte-identical. If any golden file shows as modified, the rewrite changed
-the audio: set goldensUnchanged=false and list the changed files in \`detail\`.
+**Step 5 is the one that matters, and it is a TEST result, not a file diff.**
+A golden file on disk only changes when something is run with UPDATE_GOLDEN
+set, so \`git status\` on that directory says nothing about drift and will
+report clean even when the audio has moved. The signal is the golden tests
+failing. When they do, copy the harness's drift report verbatim into
+\`detail\` — it gives the absolute delta and the ppm for each drifted probe,
+and the distinction matters enormously: a delta around 1e-16 at 0.000 ppm is
+fused-multiply-add rounding and is expected, while anything reaching whole
+ppm is a real regression in a named fixture.
 Do NOT re-record them, do not run anything with UPDATE_GOLDEN set, and do not
 try to fix it — report and stop.
 
