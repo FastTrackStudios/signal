@@ -133,6 +133,31 @@ impl Default for ModuleState {
     }
 }
 
+/// **TEMPORARY (2026-09-05): lanes that start switched OFF.**
+///
+/// The rig does not currently fit its deadline with the whole Worship stack
+/// live. Render cost is linear in voice count, and 20 notes across all the
+/// layers is ~233 voices: 7.2ms of work in a 5.33ms block, which the player
+/// hears as crackling roughly once a second. With these three off it is
+/// ~136 voices and 4.2ms, i.e. inside the budget with headroom.
+///
+/// This is a starting position, not a limitation — exactly like the engine
+/// mutes above, these are ordinary module switches and turning any of them
+/// back on in the mixer works normally (and will crackle again until the
+/// voice-render loop is block-processed, which is the actual fix).
+///
+/// `FTS_KEYS_ALL_ON=1` starts everything live, for measuring the real thing.
+///
+/// DELETE THIS once `Voice::render_block` hoists its per-frame branch work:
+/// the whole stack is supposed to play.
+fn starts_switched_off(lane: &str) -> bool {
+    const HEAVY: [&str; 3] = ["Pad", "Shimmer", "Synth 2"];
+    if std::env::var_os("FTS_KEYS_ALL_ON").is_some() {
+        return false;
+    }
+    HEAVY.contains(&lane)
+}
+
 impl LaneState {
     /// What the mixer shows for the lane: the module preset it was opened
     /// from, else module A's soundsource.
@@ -1417,6 +1442,7 @@ impl State {
                             .map(|patch| ModuleState {
                                 patch,
                                 macros: default_macros(),
+                                enabled: !starts_switched_off(&layer.name),
                                 ..ModuleState::default()
                             })
                             .collect(),

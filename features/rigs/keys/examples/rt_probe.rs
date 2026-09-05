@@ -151,6 +151,32 @@ fn main() {
     KeysRigSvc::reset_rt_peak(&backend);
     let open_peak = KeysRigSvc::status(&backend).rt.peak_render_ms;
 
+    // What is actually live. Voice count is the cost of this engine, so which
+    // modules are switched on IS the performance story — print it before any
+    // numbers, so a run can never be read out of context.
+    {
+        let m = KeysRigSvc::mixer(&backend);
+        let mut on = Vec::new();
+        let mut off = Vec::new();
+        for e in &m.engines {
+            for l in &e.layers {
+                for md in &l.modules {
+                    if md.patch.is_empty() {
+                        continue;
+                    }
+                    let label = format!("{}/{}", l.name, md.slot);
+                    if md.enabled {
+                        on.push(label);
+                    } else {
+                        off.push(label);
+                    }
+                }
+            }
+        }
+        println!("modules live ({}): {on:?}", on.len());
+        println!("modules off  ({}): {off:?}", off.len());
+    }
+
     // `FTS_RT_OFF="Pad,Shimmer"` mutes those lanes before the run. A muted
     // lane's voices are skipped entirely rather than rendered and multiplied
     // by zero, so this measures what a patch with switched-off modules
