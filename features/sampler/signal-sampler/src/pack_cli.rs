@@ -706,10 +706,7 @@ enum Target {
 impl Target {
     fn open(path: &Path) -> Result<(Self, String)> {
         if path.extension().and_then(|e| e.to_str()) == Some("styx") {
-            Ok((
-                Self::Styx(path.to_owned()),
-                std::fs::read_to_string(path)?,
-            ))
+            Ok((Self::Styx(path.to_owned()), std::fs::read_to_string(path)?))
         } else {
             Ok((Self::Pack(path.to_owned()), read_embedded_spec(path)?))
         }
@@ -2902,7 +2899,8 @@ fn render_report(
     distinct.sort_unstable();
     distinct.dedup();
     let stem_base = wav_path
-        .file_stem().map_or_else(|| "render".into(), |s| s.to_string_lossy().into_owned());
+        .file_stem()
+        .map_or_else(|| "render".into(), |s| s.to_string_lossy().into_owned());
     let mut stems = Vec::new();
     for note in &distinct {
         let (stem_audio, _, _, _, _, _) = render_pass(Some(std::iter::once(*note).collect()))?;
@@ -2999,7 +2997,8 @@ fn render_compare(
     }
 
     let stem = out
-        .file_stem().map_or_else(|| "compare".into(), |s| s.to_string_lossy().into_owned());
+        .file_stem()
+        .map_or_else(|| "compare".into(), |s| s.to_string_lossy().into_owned());
 
     // Render each variant to its own full report next to the wrapper.
     let mut entries: Vec<(String, u8, String)> = Vec::new(); // (label, vel, html filename)
@@ -3098,14 +3097,12 @@ fn build(samples_root: &Path, out: &Path, codec: &str, quality: f32) -> Result<(
         .flatten()
         .map(|e| e.path())
         .filter(|p| {
-            p.extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| {
-                    matches!(
-                        e.to_ascii_lowercase().as_str(),
-                        "flac" | "wav" | "aif" | "aiff"
-                    )
-                })
+            p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                matches!(
+                    e.to_ascii_lowercase().as_str(),
+                    "flac" | "wav" | "aif" | "aiff"
+                )
+            })
         })
         .collect();
     paths.sort();

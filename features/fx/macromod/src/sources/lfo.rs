@@ -30,7 +30,7 @@ impl LfoWaveform {
         Self::StepSequence,
     ];
 
-    #[must_use] 
+    #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Sine => "Sine",
@@ -64,7 +64,7 @@ pub enum TempoDiv {
 
 impl TempoDiv {
     /// Duration as a fraction of a whole note.
-    #[must_use] 
+    #[must_use]
     pub const fn beats(self) -> f32 {
         match self {
             Self::Whole => 4.0,
@@ -81,7 +81,7 @@ impl TempoDiv {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Whole => "1/1",

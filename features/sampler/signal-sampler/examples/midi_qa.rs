@@ -442,9 +442,7 @@ fn main() -> eyre::Result<()> {
         total_fail += fails.len();
     }
 
-    println!(
-        "\n{total_fail} total boundary failures across the battery."
-    );
+    println!("\n{total_fail} total boundary failures across the battery.");
     if total_fail > 0 {
         std::process::exit(1);
     }

@@ -122,7 +122,7 @@ pub struct TremChain {
 }
 
 impl TremChain {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         let mut modulator = Modulator::new();
         // Default: sine-like LFO at 1/4 note
@@ -299,7 +299,8 @@ impl Processor for TremChain {
                 } else {
                     raw_y
                 };
-                (self.modulator.max - self.modulator.min).mul_add(inverted, self.modulator.min)
+                (self.modulator.max - self.modulator.min)
+                    .mul_add(inverted, self.modulator.min)
                     .clamp(0.0, 1.0)
             } else {
                 mod_l
@@ -321,7 +322,8 @@ impl Processor for TremChain {
                 } else {
                     raw_y
                 };
-                (self.modulator.max - self.modulator.min).mul_add(inverted, self.modulator.min)
+                (self.modulator.max - self.modulator.min)
+                    .mul_add(inverted, self.modulator.min)
                     .clamp(0.0, 1.0)
             } else {
                 mod_r

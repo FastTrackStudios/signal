@@ -252,7 +252,8 @@ fn start_system_capture(ui: &Arc<EqUiState>) -> anyhow::Result<cpal::Stream> {
         eprintln!("available audio inputs:");
         for d in inputs {
             let name = d
-                .description().map_or_else(|_| "<unknown>".into(), |desc| desc.name().to_string());
+                .description()
+                .map_or_else(|_| "<unknown>".into(), |desc| desc.name().to_string());
             eprintln!("  - {name}");
             let lname = name.to_lowercase();
             if let Some(want) = &env_dev {
@@ -274,7 +275,8 @@ fn start_system_capture(ui: &Arc<EqUiState>) -> anyhow::Result<cpal::Stream> {
         .or_else(|| host.default_input_device())
         .ok_or_else(|| anyhow::anyhow!("no input device available"))?;
     let dev_name = device
-        .description().map_or_else(|_| "<unknown>".into(), |desc| desc.name().to_string());
+        .description()
+        .map_or_else(|_| "<unknown>".into(), |desc| desc.name().to_string());
     eprintln!("capturing from: {dev_name}");
     eprintln!(
         "  ↳ to visualize system audio: open `pavucontrol` → Recording tab and set\n     this app's source to \"Monitor of <your output>\", or connect the sink\n     monitor to this node in `qpwgraph`. Override the device with\n     FTS_EQ_AUDIO_INPUT=\"<name>\"."

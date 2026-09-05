@@ -40,7 +40,7 @@ fn bounds() -> ((u32, u32), (u32, u32)) {
     fts_audio_ui::EditorForm::size_bounds(fts_audio_ui::shell::RAIL_W, (EDITOR_W, EDITOR_H))
 }
 
-#[must_use] 
+#[must_use]
 pub fn min_editor_size() -> (f32, f32) {
     let ((w, h), _) = bounds();
     // The curve view is the floor on width: narrower than this and the graph
@@ -48,7 +48,7 @@ pub fn min_editor_size() -> (f32, f32) {
     (w as f32, h as f32)
 }
 
-#[must_use] 
+#[must_use]
 pub fn max_editor_size() -> (f32, f32) {
     let (_, (w, h)) = bounds();
     // Generous, but bounded — an unbounded hint rubber-stamps whatever a host
@@ -56,7 +56,7 @@ pub fn max_editor_size() -> (f32, f32) {
     ((w as f32 * 2.4).max(2400.0), (h as f32 * 1.4).max(1400.0))
 }
 
-#[must_use] 
+#[must_use]
 pub fn resize_hint() -> ResizeHint {
     let (min_w, min_h) = min_editor_size();
     let (max_w, max_h) = max_editor_size();

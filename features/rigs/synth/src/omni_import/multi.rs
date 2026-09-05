@@ -50,7 +50,7 @@ pub fn parse_multi(xml: &str) -> Result<OmniMulti, String> {
 
 /// Map a Multi onto one composition tree: Parts sum in parallel, each with
 /// its mixer level (0.75 ≈ unity — CALIBRATE) and mute (bypass).
-#[must_use] 
+#[must_use]
 pub fn multi_to_container(multi: &OmniMulti, index: &SoundsourceIndex) -> Container {
     let title = if multi.name.is_empty() {
         "Omnisphere Multi".to_string()

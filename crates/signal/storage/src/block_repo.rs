@@ -3,7 +3,10 @@
 use std::collections::HashMap;
 
 use sea_orm::sea_query::Index;
-use sea_orm::{ActiveModelBehavior, StatementBuilder, QueryTrait, ActiveEnum, EntityTrait, ActiveModelTrait, Set, Iden, ColIdx, IdenStatic, Iterable, QueryFilter, QueryOrder, ColumnTrait};
+use sea_orm::{
+    ActiveEnum, ActiveModelBehavior, ActiveModelTrait, ColIdx, ColumnTrait, EntityTrait, Iden,
+    IdenStatic, Iterable, QueryFilter, QueryOrder, QueryTrait, Set, StatementBuilder,
+};
 use sea_orm::{ConnectionTrait, Schema};
 use signal_proto::{
     metadata::Metadata, Block, BlockType, Preset, PresetId, Snapshot, SnapshotId, ALL_BLOCK_TYPES,
@@ -44,7 +47,7 @@ pub struct BlockRepoLive {
 }
 
 impl BlockRepoLive {
-    #[must_use] 
+    #[must_use]
     pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }

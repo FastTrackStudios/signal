@@ -832,7 +832,8 @@ impl PresetRuntime {
                 let BufferRef::ModuleInput {
                     module_idx: target_mod_idx,
                     port_idx: target_port_idx,
-                } = edge.to else {
+                } = edge.to
+                else {
                     continue;
                 };
                 if target_mod_idx != mod_idx {

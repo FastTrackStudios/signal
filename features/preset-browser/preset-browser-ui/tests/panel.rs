@@ -117,7 +117,10 @@ async fn the_panel_lists_the_library() -> dioxus_test::Result<()> {
 async fn choosing_a_preset_hands_its_parameters_over() -> dioxus_test::Result<()> {
     // The whole point of the panel: a click has to reach the DSP.
     let mut tester = mount(ClickHarness).await;
-    assert!(click_log().lock().unwrap().is_empty(), "nothing applied on open");
+    assert!(
+        click_log().lock().unwrap().is_empty(),
+        "nothing applied on open"
+    );
 
     // The list defaults to alphabetical order, so the first row is
     // "Acoustic Chamber" and not the first preset in the library.
@@ -258,7 +261,10 @@ async fn stepping_from_the_bar_applies() -> dioxus_test::Result<()> {
 async fn the_bar_shows_a_match_badge_only_once_a_preset_is_chosen() -> dioxus_test::Result<()> {
     let mut tester = mount(BarDisplayHarness).await;
     assert!(
-        tester.query(by_testid("preset-bar-match")).immediately().is_err(),
+        tester
+            .query(by_testid("preset-bar-match"))
+            .immediately()
+            .is_err(),
         "nothing is selected, so there is no match quality to report",
     );
 
@@ -267,7 +273,10 @@ async fn the_bar_shows_a_match_badge_only_once_a_preset_is_chosen() -> dioxus_te
     click(&mut tester, "preset-bar-next").await?;
     click(&mut tester, "preset-bar-next").await?;
     assert!(
-        tester.query(by_testid("preset-bar-match")).immediately().is_ok(),
+        tester
+            .query(by_testid("preset-bar-match"))
+            .immediately()
+            .is_ok(),
         "a measured preset reports how closely it matches",
     );
     Ok(())

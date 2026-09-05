@@ -198,12 +198,14 @@ impl Fixture {
     /// also the SVG's viewBox height, which is what keeps element y and
     /// viewBox y the same thing.
     pub fn graph_h(&self) -> f64 {
-        f64::from(self.tester
-            .query(by_testid("comp-graph"))
-            .immediately()
-            .expect("comp-graph container not in DOM")
-            .size()
-            .1)
+        f64::from(
+            self.tester
+                .query(by_testid("comp-graph"))
+                .immediately()
+                .expect("comp-graph container not in DOM")
+                .size()
+                .1,
+        )
     }
 
     /// Document-space origin of the compressor-graph interaction surface.

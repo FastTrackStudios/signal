@@ -48,7 +48,8 @@ fn arg(name: &str) -> Option<String> {
 fn cache_path_for(preset_path: &str) -> Option<std::path::PathBuf> {
     let dir = arg("--reference-cache")?;
     let stem = Path::new(preset_path)
-        .file_stem().map_or_else(|| "preset".into(), |s| s.to_string_lossy().into_owned());
+        .file_stem()
+        .map_or_else(|| "preset".into(), |s| s.to_string_lossy().into_owned());
     Some(Path::new(&dir).join(format!("{stem}.reference.wav")))
 }
 
@@ -193,7 +194,11 @@ fn write_wav(path: &Path, samples: &[f32]) -> std::io::Result<()> {
 /// Read a render written by [`write_wav`].
 fn read_wav(path: &Path) -> Option<Vec<f32>> {
     let mut r = hound::WavReader::open(path).ok()?;
-    Some(r.samples::<f32>().filter_map(std::result::Result::ok).collect())
+    Some(
+        r.samples::<f32>()
+            .filter_map(std::result::Result::ok)
+            .collect(),
+    )
 }
 
 /// Blocks of silence to run before the impulse.
@@ -365,7 +370,8 @@ fn run_comparison(
     // promise: the reference is re-rendered every run).
     let cache_path = arg("--reference-cache").map(|dir| {
         let stem = Path::new(preset_path)
-            .file_stem().map_or_else(|| "preset".into(), |s| s.to_string_lossy().into_owned());
+            .file_stem()
+            .map_or_else(|| "preset".into(), |s| s.to_string_lossy().into_owned());
         Path::new(&dir).join(format!("{stem}.reference.wav"))
     });
     if let Some(p) = &cache_path {
@@ -640,7 +646,8 @@ fn run_comparison(
                             DecayFit::T20,
                         );
                         let worst = cmp
-                            .worst_ratio_error.map_or_else(|| "n/a".into(), |e| format!("{e:.3}"));
+                            .worst_ratio_error
+                            .map_or_else(|| "n/a".into(), |e| format!("{e:.3}"));
                         println!(
                         "tuned    : target {target:.3} s  round {round}  length {request:.3} s  worst band error {worst}"
                     );
@@ -820,7 +827,8 @@ fn run_comparison(
     // justify it, so a preset can be trusted or re-examined later.
     if let Some(dir) = arg("--save-dir") {
         let stem = Path::new(preset_path)
-            .file_stem().map_or_else(|| "preset".into(), |s| s.to_string_lossy().into_owned());
+            .file_stem()
+            .map_or_else(|| "preset".into(), |s| s.to_string_lossy().into_owned());
         let _ = std::fs::create_dir_all(&dir);
         let out = Path::new(&dir).join(format!("{stem}.json"));
 

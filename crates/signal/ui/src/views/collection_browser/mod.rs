@@ -107,7 +107,7 @@ pub enum BrowseLevel {
 }
 
 impl BrowseLevel {
-    #[must_use] 
+    #[must_use]
     pub const fn label(&self) -> &'static str {
         match self {
             Self::Presets => "Presets",

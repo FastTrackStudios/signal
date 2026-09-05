@@ -14,17 +14,17 @@ pub struct Model {
 }
 
 impl Model {
-    #[must_use] 
+    #[must_use]
     pub fn preset_id_branded(&self) -> ModulePresetId {
         ModulePresetId::from(self.id.clone())
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_snapshot_id_branded(&self) -> ModuleSnapshotId {
         ModuleSnapshotId::from(self.default_snapshot_id.clone())
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn module_type_branded(&self) -> ModuleType {
         ModuleType::from_str(&self.module_type).unwrap_or_default()
     }

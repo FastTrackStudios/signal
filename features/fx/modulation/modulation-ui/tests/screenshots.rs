@@ -21,10 +21,13 @@ mod support;
 use support::{mount_with, Fixture};
 
 fn shots_dir() -> PathBuf {
-    let dir = std::env::var("FTS_SHOTS_DIR").map_or_else(|_| {
+    let dir = std::env::var("FTS_SHOTS_DIR").map_or_else(
+        |_| {
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../../../../target/gui-shots/modulation")
-        }, PathBuf::from);
+        },
+        PathBuf::from,
+    );
     std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("create {}: {e}", dir.display()));
     dir
 }

@@ -1963,7 +1963,10 @@ mod tests {
         let mut rig = FakeRig::with(2);
         let mut ctl = SnapshotSwitcher::new(vec![(3, SnapshotId::new("Solo"))]);
         ctl.on_event(ControlEvent::Footswitch(3, true), &mut rig);
-        assert_eq!(rig.snapshot.as_ref().map(super::SnapshotId::as_str), Some("Solo"));
+        assert_eq!(
+            rig.snapshot.as_ref().map(super::SnapshotId::as_str),
+            Some("Solo")
+        );
     }
 
     #[test]

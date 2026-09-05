@@ -113,7 +113,7 @@ impl FtsEqPlugin {
                     shape: bp.filter_type.value().max(0) as u32,
                     slope: f64::from(bp.slope.value().max(0.0)),
                     placement: eq_dsp::band::Placement::from_index(
-                        bp.placement.value().max(0) as u32,
+                        bp.placement.value().max(0) as u32
                     ),
                     stream: 0,
                 },
@@ -145,7 +145,8 @@ impl FtsEqPlugin {
         // preset that used to stop at the translator: Character is a squarer
         // rather than a trim, Auto Gain moves the whole output, and the pan
         // is either L/R or M/S depending on its mode.
-        self.engine.set_auto_gain(self.params.auto_gain.value() > 0.5);
+        self.engine
+            .set_auto_gain(self.params.auto_gain.value() > 0.5);
         self.engine
             .set_character(self.params.character.value().max(0) as u32);
         self.engine.set_output_pan(

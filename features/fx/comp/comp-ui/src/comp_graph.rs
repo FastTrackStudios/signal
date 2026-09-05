@@ -54,7 +54,7 @@ pub const GRAPH_H: f64 = 300.0;
 /// gets letterboxed. Feeding it the real pixel size makes the scale exactly 1,
 /// which both fills the surface and keeps pointer coordinates equal to viewBox
 /// coordinates.
-#[must_use] 
+#[must_use]
 pub fn graph_size() -> (f64, f64) {
     match crate::hardware::panel::window_logical_size() {
         Some((win_w, win_h)) => (
@@ -73,7 +73,7 @@ pub fn graph_size() -> (f64, f64) {
 /// container height and for the viewBox, so element-relative pointer y is
 /// still viewBox y at any size. Falls back to the design height when no host
 /// window size is in context (headless tests, non-plugin mounts).
-#[must_use] 
+#[must_use]
 pub fn graph_height() -> f64 {
     graph_size().1
 }

@@ -189,12 +189,12 @@ impl Profile {
         self.patches.push(patch);
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_patch(&self) -> Option<&Patch> {
         self.patches.iter().find(|p| p.id == self.default_patch_id)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn patch(&self, id: &PatchId) -> Option<&Patch> {
         self.patches.iter().find(|p| &p.id == id)
     }
@@ -320,8 +320,7 @@ mod tests {
             PatchTarget::BlockSnapshot { .. }
         ));
 
-        let ref_patch =
-            Patch::from_patch_ref(PatchId::new(), "Copy of Clean", block_patch.id);
+        let ref_patch = Patch::from_patch_ref(PatchId::new(), "Copy of Clean", block_patch.id);
         assert!(matches!(ref_patch.target, PatchTarget::Patch { .. }));
     }
 }

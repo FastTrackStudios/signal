@@ -174,9 +174,7 @@ fn power_spectrum(x: &[f32]) -> Option<Vec<f64>> {
         return None;
     }
     let window: Vec<f64> = (0..NFFT)
-        .map(|i| {
-            0.5 - 0.5 * (2.0 * std::f64::consts::PI * i as f64 / NFFT as f64).cos()
-        })
+        .map(|i| 0.5 - 0.5 * (2.0 * std::f64::consts::PI * i as f64 / NFFT as f64).cos())
         .collect();
 
     let mut planner = RealFftPlanner::<f64>::new();
@@ -236,7 +234,11 @@ fn bands_from_spectrum(power: &[f64], sample_rate: f64) -> Vec<(f64, f64)> {
         out.push((centre, 10.0 * (density + 1e-30).log10()));
     }
 
-    let finite: Vec<f64> = out.iter().map(|(_, d)| *d).filter(|d| d.is_finite()).collect();
+    let finite: Vec<f64> = out
+        .iter()
+        .map(|(_, d)| *d)
+        .filter(|d| d.is_finite())
+        .collect();
     if finite.is_empty() {
         return out;
     }
@@ -335,7 +337,11 @@ fn fullness_from(power: &[f64], profile: &[(f64, f64)], sample_rate: f64) -> Ful
         }
     }
 
-    let finite: Vec<f64> = profile.iter().map(|(_, d)| *d).filter(|d| d.is_finite()).collect();
+    let finite: Vec<f64> = profile
+        .iter()
+        .map(|(_, d)| *d)
+        .filter(|d| d.is_finite())
+        .collect();
     let occupancy = if finite.is_empty() {
         0.0
     } else {
@@ -408,8 +414,16 @@ mod tests {
     fn flatness_separates_a_tone_from_noise() {
         let tone = profile(&sine(1000.0, 3.0, 0.5), SR).unwrap();
         let hiss = profile(&noise(3.0, 0.3), SR).unwrap();
-        assert!(tone.fullness.flatness < 0.05, "tone {:?}", tone.fullness.flatness);
-        assert!(hiss.fullness.flatness > 0.3, "noise {:?}", hiss.fullness.flatness);
+        assert!(
+            tone.fullness.flatness < 0.05,
+            "tone {:?}",
+            tone.fullness.flatness
+        );
+        assert!(
+            hiss.fullness.flatness > 0.3,
+            "noise {:?}",
+            hiss.fullness.flatness
+        );
         assert!(hiss.fullness.flatness > tone.fullness.flatness);
     }
 
@@ -418,16 +432,28 @@ mod tests {
         // The "how full is it" question, which replaced THD.
         let tone = profile(&sine(1000.0, 3.0, 0.5), SR).unwrap();
         let hiss = profile(&noise(3.0, 0.3), SR).unwrap();
-        assert!(hiss.fullness.occupancy > tone.fullness.occupancy * 3.0,
-            "noise {:.2} vs tone {:.2}", hiss.fullness.occupancy, tone.fullness.occupancy);
+        assert!(
+            hiss.fullness.occupancy > tone.fullness.occupancy * 3.0,
+            "noise {:.2} vs tone {:.2}",
+            hiss.fullness.occupancy,
+            tone.fullness.occupancy
+        );
     }
 
     #[test]
     fn centroid_tracks_brightness() {
         let low = profile(&sine(100.0, 3.0, 0.5), SR).unwrap();
         let high = profile(&sine(6000.0, 3.0, 0.5), SR).unwrap();
-        assert!(low.fullness.centroid_hz < 400.0, "{}", low.fullness.centroid_hz);
-        assert!(high.fullness.centroid_hz > 3000.0, "{}", high.fullness.centroid_hz);
+        assert!(
+            low.fullness.centroid_hz < 400.0,
+            "{}",
+            low.fullness.centroid_hz
+        );
+        assert!(
+            high.fullness.centroid_hz > 3000.0,
+            "{}",
+            high.fullness.centroid_hz
+        );
     }
 
     #[test]
@@ -446,8 +472,12 @@ mod tests {
 
         let a = profile(&tone, SR).unwrap();
         let b = profile(&padded, SR).unwrap();
-        assert!((a.loudness_lufs - b.loudness_lufs).abs() < 0.5,
-            "gate failed: {} vs {} LUFS", a.loudness_lufs, b.loudness_lufs);
+        assert!(
+            (a.loudness_lufs - b.loudness_lufs).abs() < 0.5,
+            "gate failed: {} vs {} LUFS",
+            a.loudness_lufs,
+            b.loudness_lufs
+        );
         assert!((a.crest_db - b.crest_db).abs() < 0.2);
     }
 
@@ -464,9 +494,16 @@ mod tests {
         // 50 Hz and vocal air above 10 kHz both fall outside 62.5 Hz-8 kHz.
         let c = band_centres();
         assert!(c[0] <= 20.0, "lowest band {}", c[0]);
-        assert!(*c.last().unwrap() > 15_000.0, "highest band {}", c.last().unwrap());
+        assert!(
+            *c.last().unwrap() > 15_000.0,
+            "highest band {}",
+            c.last().unwrap()
+        );
         assert!(c.len() > 50, "expected ~60 bands, got {}", c.len());
-        assert!((c[6] / c[0] - 2.0).abs() < 1e-6, "six bands should be an octave");
+        assert!(
+            (c[6] / c[0] - 2.0).abs() < 1e-6,
+            "six bands should be an octave"
+        );
     }
 
     #[test]

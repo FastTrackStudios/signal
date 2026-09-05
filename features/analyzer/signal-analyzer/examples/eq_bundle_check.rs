@@ -19,7 +19,9 @@ const BLOCK: usize = 512;
 
 fn arg(name: &str) -> Option<String> {
     let a: Vec<String> = std::env::args().collect();
-    a.iter().position(|x| x == name).and_then(|i| a.get(i + 1).cloned())
+    a.iter()
+        .position(|x| x == name)
+        .and_then(|i| a.get(i + 1).cloned())
 }
 
 /// A state holding exactly one band: a +12 dB bell at 1 kHz, engine Q 1.
@@ -50,7 +52,10 @@ fn one_bell() -> Vec<u8> {
 
 fn main() {
     let path = arg("--plugin").unwrap_or_else(|| {
-        format!("{}/.clap/FTS EQ.clap", std::env::var("HOME").unwrap_or_default())
+        format!(
+            "{}/.clap/FTS EQ.clap",
+            std::env::var("HOME").unwrap_or_default()
+        )
     });
     let mut plugin = if let Ok(Some(mut p)) = HostedPlugin::load(&path) {
         p.prepare(SR, BLOCK as u32).expect("prepare");
@@ -76,7 +81,9 @@ fn main() {
             buf[2 * i] = l[pos + i];
             buf[2 * i + 1] = r[pos + i];
         }
-        plugin.process_interleaved(&mut buf, &[], &[]).expect("process");
+        plugin
+            .process_interleaved(&mut buf, &[], &[])
+            .expect("process");
         ol.extend((0..n).map(|i| buf[2 * i]));
         or.extend((0..n).map(|i| buf[2 * i + 1]));
         pos += n;
@@ -109,12 +116,19 @@ fn main() {
     );
 
     println!("  a +12 dB bell at 1 kHz, Q 1\n");
-    println!("  {:>8} {:>10} {:>10} {:>8}", "Hz", "bundle", "engine", "diff");
+    println!(
+        "  {:>8} {:>10} {:>10} {:>8}",
+        "Hz", "bundle", "engine", "diff"
+    );
     let mut worst = 0.0f64;
     for (i, hz) in centres.iter().enumerate() {
         let want = engine.static_magnitude_db(*hz);
         worst = worst.max((measured[i] - want).abs());
-        println!("  {hz:>8.0} {:>10.2} {want:>10.2} {:>8.2}", measured[i], measured[i] - want);
+        println!(
+            "  {hz:>8.0} {:>10.2} {want:>10.2} {:>8.2}",
+            measured[i],
+            measured[i] - want
+        );
     }
     println!("\n  worst {worst:.2} dB");
 }

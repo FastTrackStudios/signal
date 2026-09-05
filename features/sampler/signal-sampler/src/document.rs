@@ -635,7 +635,10 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
         .legato_engine
         .as_ref()
         .and_then(|le| le.expressive.clone());
-    let primary = spec.legato_engine.as_ref().and_then(crate::spec::LegatoEngineSpec::primary_mode);
+    let primary = spec
+        .legato_engine
+        .as_ref()
+        .and_then(crate::spec::LegatoEngineSpec::primary_mode);
     let ll_range = low_latency
         .as_ref()
         .and_then(|m| m.enabled_cc58_range.as_deref())

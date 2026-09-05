@@ -126,7 +126,12 @@ pub fn compare(
     thresholds: Thresholds,
 ) -> Comparison {
     let null = null_test(reference, candidate);
-    let decay = compare_decay(reference_ir, candidate_ir, sample_rate, thresholds.decay_fit);
+    let decay = compare_decay(
+        reference_ir,
+        candidate_ir,
+        sample_rate,
+        thresholds.decay_fit,
+    );
     let loudness = compare_loudness(reference, candidate, sample_rate);
 
     let mut results = Vec::new();
@@ -198,11 +203,20 @@ mod tests {
     fn exact_match_ignores_decay_and_reverb_match_ignores_null() {
         let ir = decaying(1.0, 4.0, 53);
         let exact = compare(&ir, &ir, &ir, &ir, SR, Thresholds::exact_match());
-        assert!(!exact.results.iter().any(|r| r.criterion == Criterion::Decay));
+        assert!(!exact
+            .results
+            .iter()
+            .any(|r| r.criterion == Criterion::Decay));
 
         let reverb = compare(&ir, &ir, &ir, &ir, SR, Thresholds::reverb_match());
-        assert!(!reverb.results.iter().any(|r| r.criterion == Criterion::Null));
-        assert!(reverb.results.iter().any(|r| r.criterion == Criterion::Decay));
+        assert!(!reverb
+            .results
+            .iter()
+            .any(|r| r.criterion == Criterion::Null));
+        assert!(reverb
+            .results
+            .iter()
+            .any(|r| r.criterion == Criterion::Decay));
     }
 
     #[test]

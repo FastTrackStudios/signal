@@ -38,7 +38,7 @@ pub enum ModulationSource {
 }
 
 impl ModulationSource {
-    #[must_use] 
+    #[must_use]
     pub const fn display_name(&self) -> &'static str {
         match self {
             Self::Lfo(_) => "LFO",

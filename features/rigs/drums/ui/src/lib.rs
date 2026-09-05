@@ -579,12 +579,7 @@ fn DrumKit(
     lit: Vec<u8>,
     on_hit: EventHandler<u32>,
 ) -> Element {
-    let note_of = |id: &str| {
-        notes
-            .iter()
-            .find(|(i, _)| i == id)
-            .map_or(0, |(_, n)| *n)
-    };
+    let note_of = |id: &str| notes.iter().find(|(i, _)| i == id).map_or(0, |(_, n)| *n);
     rsx! {
         div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",
             for slot in slots.iter() {

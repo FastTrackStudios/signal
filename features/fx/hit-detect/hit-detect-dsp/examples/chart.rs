@@ -30,7 +30,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 fn main() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
     let path = args.next().expect("usage: chart <audio-file> [bpm]");

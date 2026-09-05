@@ -104,7 +104,7 @@ const FMAX: f64 = 17000.0;
 const ODF_RING_LEN: usize = 31; // ~150ms at 200fps
 
 impl SpectralFluxDetector {
-    #[must_use] 
+    #[must_use]
     pub fn new(mode: FluxMode, fft_size: usize, hop_size: usize, sample_rate: f64) -> Self {
         let num_bins = fft_size / 2 + 1;
 
@@ -194,13 +194,13 @@ impl SpectralFluxDetector {
     }
 
     /// Returns the latency in samples introduced by this detector.
-    #[must_use] 
+    #[must_use]
     pub const fn latency_samples(&self) -> usize {
         self.fft_size
     }
 
     /// Returns the hop size in samples.
-    #[must_use] 
+    #[must_use]
     pub const fn hop_size(&self) -> usize {
         self.hop_size
     }

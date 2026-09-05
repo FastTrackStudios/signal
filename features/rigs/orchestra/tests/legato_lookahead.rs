@@ -40,7 +40,10 @@ fn rms_db(audio: &[f32], start_frame: usize, len: usize) -> f32 {
     if b <= a {
         return -120.0;
     }
-    let s: f64 = audio[a..b].iter().map(|&x| f64::from(x) * f64::from(x)).sum();
+    let s: f64 = audio[a..b]
+        .iter()
+        .map(|&x| f64::from(x) * f64::from(x))
+        .sum();
     let rms = (s / (b - a) as f64).sqrt();
     if rms <= 1e-9 {
         -120.0

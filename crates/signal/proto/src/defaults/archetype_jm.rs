@@ -10,7 +10,7 @@ use crate::{BlockType, ModuleType};
 ///
 /// Parameter indices are illustrative — real values come from the DAW's
 /// parameter enumeration at runtime.
-#[must_use] 
+#[must_use]
 pub fn archetype_john_mayer() -> PluginBlockDef {
     PluginBlockDef::new("Archetype: John Mayer X", 204)
         .with_vendor("Neural DSP")

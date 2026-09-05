@@ -187,18 +187,18 @@ pub static CATEGORIES: &[Category] = &[
     },
 ];
 
-#[must_use] 
+#[must_use]
 pub fn profile_by_id(id: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.id == id)
 }
 
-#[must_use] 
+#[must_use]
 pub fn profile_index(id: &str) -> Option<usize> {
     PROFILES.iter().position(|p| p.id == id)
 }
 
 /// The family a profile belongs to, and its position inside it.
-#[must_use] 
+#[must_use]
 pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
     CATEGORIES.iter().enumerate().find_map(|(ci, category)| {
         category
@@ -211,7 +211,7 @@ pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
 
 /// The profile index a rail click selects: clicking the family you are in
 /// advances through it and wraps, clicking another lands on its first.
-#[must_use] 
+#[must_use]
 pub fn rail_click_target(current_index: usize, clicked_category: usize) -> usize {
     let current_id = PROFILES.get(current_index).map_or("", |p| p.id);
     let Some(category) = CATEGORIES.get(clicked_category) else {

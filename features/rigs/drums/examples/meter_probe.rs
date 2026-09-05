@@ -85,7 +85,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let mut peaks = vec![0.0f32; notes.len()];
         for _ in 0..30 {
-            for s in buf.iter_mut() { *s = 0.0; }
+            for s in buf.iter_mut() {
+                *s = 0.0;
+            }
             let _ = rig.render_offline(buf);
             if let Some(m) = rig.drum_mixer_meters(KIT) {
                 for (i, (eidx, _)) in notes.iter().enumerate() {

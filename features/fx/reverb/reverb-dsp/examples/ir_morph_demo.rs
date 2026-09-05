@@ -29,7 +29,6 @@
               test/example code, where panicking on bad input is the point"
 )]
 
-
 use audiocore_dsp::{AudioConfig, Processor};
 use reverb_dsp::algorithm::AlgorithmType;
 use reverb_dsp::chain::ReverbChain;
@@ -156,8 +155,12 @@ fn main() {
     // Normalize to -1 dBFS so the wet sum never clips the 16-bit output.
     if peak > 0.0 {
         let g = 0.89 / peak;
-        for s in &mut left { *s *= g; }
-        for s in &mut right { *s *= g; }
+        for s in &mut left {
+            *s *= g;
+        }
+        for s in &mut right {
+            *s *= g;
+        }
     }
 
     write_wav_stereo_16(&args[2], &left, &right);

@@ -87,7 +87,7 @@ pub struct InferredBlock {
 ///   - Depth-1 **sub-container** → Block (multi-FX); its children are ignored
 /// - `FxRoutingMode::Parallel` → `SignalChain` with a `Split` node
 /// - `FxRoutingMode::Serial` → sequential `SignalChain`
-#[must_use] 
+#[must_use]
 pub fn infer_chain_from_fx_tree(tree: &FxTree) -> InferredChain {
     let mut modules = Vec::new();
     let mut standalone_blocks = Vec::new();

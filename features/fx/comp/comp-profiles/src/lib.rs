@@ -61,7 +61,7 @@ pub static UREI_1176_LN: Urei1176Profile = Urei1176Profile {
 /// This order IS the `profile` parameter's value order, so **append only** —
 /// hosts persist the parameter, and reordering silently repoints a saved
 /// session at a different unit.
-#[must_use] 
+#[must_use]
 pub fn all_profiles() -> [&'static (dyn Profile + Sync); 11] {
     [
         &CONTROL,
@@ -144,20 +144,20 @@ pub static CATEGORIES: &[Category] = &[
 ];
 
 /// The profile with this id, if there is one.
-#[must_use] 
+#[must_use]
 pub fn profile_by_id(id: &str) -> Option<&'static (dyn Profile + Sync)> {
     all_profiles().into_iter().find(|p| p.id() == id)
 }
 
 /// Index of a profile id in [`all_profiles`] — the value the `profile`
 /// parameter holds.
-#[must_use] 
+#[must_use]
 pub fn profile_index(id: &str) -> Option<usize> {
     all_profiles().iter().position(|p| p.id() == id)
 }
 
 /// The category a profile belongs to, and its position within it.
-#[must_use] 
+#[must_use]
 pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
     CATEGORIES.iter().enumerate().find_map(|(ci, category)| {
         category
@@ -183,7 +183,10 @@ pub fn map_control_value(
         ParamMapping::Direct { param, range } => {
             let start = *range.start();
             let end = *range.end();
-            Some(vec![(*param, (end - start).mul_add(normalized_value, start))])
+            Some(vec![(
+                *param,
+                (end - start).mul_add(normalized_value, start),
+            )])
         }
         ParamMapping::Stepped { param, values, .. } => {
             if values.is_empty() {

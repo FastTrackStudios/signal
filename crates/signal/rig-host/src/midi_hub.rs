@@ -132,7 +132,10 @@ impl MidiHub {
         sink: impl Fn(TimedEvent) + Send + Sync + 'static,
     ) -> Subscription {
         let id = {
-            let mut n = self.next_id.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut n = self
+                .next_id
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             *n += 1;
             *n
         };
@@ -179,8 +182,13 @@ impl MidiHub {
             Err(_) => return,
         };
 
-        let mut input = self.input.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(existing) = input.as_ref() { existing.set_selectors(selectors) } else {
+        let mut input = self
+            .input
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(existing) = input.as_ref() {
+            existing.set_selectors(selectors)
+        } else {
             if selectors.is_empty() {
                 return; // Nothing to listen for yet.
             }

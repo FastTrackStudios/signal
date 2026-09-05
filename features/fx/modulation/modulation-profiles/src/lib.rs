@@ -68,7 +68,7 @@ pub enum Circuit {
 }
 
 impl Circuit {
-    #[must_use] 
+    #[must_use]
     pub const fn chain(self) -> Chain {
         match self {
             Self::Delay { .. } => Chain::Delay,
@@ -581,17 +581,17 @@ pub static CATEGORIES: &[Category] = &[
     },
 ];
 
-#[must_use] 
+#[must_use]
 pub fn profile_by_id(id: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.id == id)
 }
 
-#[must_use] 
+#[must_use]
 pub fn profile_index(id: &str) -> Option<usize> {
     PROFILES.iter().position(|p| p.id == id)
 }
 
-#[must_use] 
+#[must_use]
 pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
     CATEGORIES.iter().enumerate().find_map(|(ci, category)| {
         category
@@ -604,7 +604,7 @@ pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
 
 /// Clicking the family you are in advances through it and wraps; clicking
 /// another lands on its first.
-#[must_use] 
+#[must_use]
 pub fn rail_click_target(current_index: usize, clicked_category: usize) -> usize {
     let current_id = PROFILES.get(current_index).map_or("", |p| p.id);
     let Some(category) = CATEGORIES.get(clicked_category) else {
@@ -656,7 +656,7 @@ pub const RATE_MIN_HZ: f32 = 0.05;
 pub const RATE_MAX_HZ: f32 = 20.0;
 
 /// Normalised knob → Hz.
-#[must_use] 
+#[must_use]
 pub fn rate_hz_from(knob: f32) -> f32 {
     let k = knob.clamp(0.0, 1.0);
     // Clamped rather than trusted: the round trip through log/exp lands a
@@ -667,7 +667,7 @@ pub fn rate_hz_from(knob: f32) -> f32 {
 
 /// Hz → normalised knob, so a profile's resting rate can be shown on the
 /// same control the user turns.
-#[must_use] 
+#[must_use]
 pub fn rate_knob_from(hz: f32) -> f32 {
     let hz = hz.clamp(RATE_MIN_HZ, RATE_MAX_HZ);
     (log2(hz / RATE_MIN_HZ) / log2(RATE_MAX_HZ / RATE_MIN_HZ)).clamp(0.0, 1.0)
@@ -967,7 +967,10 @@ pub fn shape(profile: &Profile, controls: &Controls, out: &mut [f64]) {
             let transport = TransportInfo::default();
             for slot in out.iter_mut() {
                 wah.modulator.tick(&transport, 0.0);
-                *slot = wah.modulator.output().mul_add(wah.pattern_amount, wah.base_position);
+                *slot = wah
+                    .modulator
+                    .output()
+                    .mul_add(wah.pattern_amount, wah.base_position);
             }
         }
     }

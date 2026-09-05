@@ -40,7 +40,7 @@ impl Default for MockRigEngine {
 }
 
 impl MockRigEngine {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             slots: Mutex::new(HashMap::new()),
@@ -50,7 +50,10 @@ impl MockRigEngine {
 
     /// Initialize slots for the given module types.
     pub fn initialize_slots(&self, module_types: &[ModuleType]) {
-        let mut slots = self.slots.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut slots = self
+            .slots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         for &mt in module_types {
             slots.entry(mt).or_insert_with(|| MockSlotState {
                 _module_type: mt,
@@ -68,7 +71,10 @@ impl MockRigEngine {
         &self,
         targets: HashMap<ModuleType, ModuleTarget>,
     ) -> TransitionResult {
-        let mut slots = self.slots.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut slots = self
+            .slots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let errors = Vec::new();
 
         // Disable slots not present in new targets.
@@ -141,7 +147,10 @@ impl MockRigEngine {
     }
 
     fn _next_handle(&self) -> u64 {
-        let mut h = self._next_handle.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut h = self
+            ._next_handle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let val = *h;
         *h += 1;
         val
@@ -154,7 +163,10 @@ impl RigEngine for MockRigEngine {
         module_type: ModuleType,
         _snapshot: &ModuleSnapshot,
     ) -> Result<(), EngineError> {
-        let slots = self.slots.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let slots = self
+            .slots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if slots.contains_key(&module_type) {
             Ok(())
         } else {
@@ -172,7 +184,10 @@ impl RigEngine for MockRigEngine {
     }
 
     fn slot_count(&self) -> usize {
-        self.slots.lock().unwrap_or_else(std::sync::PoisonError::into_inner).len()
+        self.slots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
     }
 
     fn active_module_types(&self) -> Vec<ModuleType> {
@@ -190,7 +205,10 @@ impl RigEngine for MockRigEngine {
     }
 
     async fn shutdown(&self) {
-        let mut slots = self.slots.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut slots = self
+            .slots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         for slot in slots.values_mut() {
             slot.instance_state = InstanceState::Unloaded;
             slot.active_target = None;

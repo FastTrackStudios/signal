@@ -17,7 +17,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 use reverb_dsp::algorithm::{ImpulseDirection, ImpulseParams, ImpulseTail, ReverbAlgorithm};
 use reverb_dsp::algorithms::convolution::Convolution;
 use reverb_dsp::chain::ReverbChain;

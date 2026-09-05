@@ -8,7 +8,9 @@
 //!   - Neutral, transparent character
 //!   - Quick density buildup (diffused surfaces)
 
-use crate::algorithm::{AlgorithmParams, ROOM_STUDIO_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets};
+use crate::algorithm::{
+    decay_to_t60, t60_shelf_targets, AlgorithmParams, ReverbAlgorithm, ROOM_STUDIO_T60,
+};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;

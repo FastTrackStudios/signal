@@ -27,7 +27,7 @@ pub enum ZoneDir {
 impl ZoneDir {
     /// RGBA tint for painting the zone (red = cut, green = boost, blue = sweet,
     /// amber = sweep).
-    #[must_use] 
+    #[must_use]
     pub const fn rgba(self) -> (u8, u8, u8, u8) {
         match self {
             Self::Cut => (235, 80, 90, 255),
@@ -70,7 +70,7 @@ pub struct InstrumentProfile {
 }
 
 // ── Per-instrument profiles ─────────────────────────────────────────────────
-use ZoneDir::{Sweet, Boost, Cut, Sweep};
+use ZoneDir::{Boost, Cut, Sweep, Sweet};
 
 pub const KICK_ACOUSTIC: InstrumentProfile = InstrumentProfile {
     name: "Kick (Acoustic)",
@@ -406,7 +406,7 @@ pub const PROFILES: &[InstrumentProfile] = &[
 /// first, and profiles are checked in [`PROFILES`] order so the more specific
 /// kick/bass/vocal variants win before the generic ones. Returns `None` if
 /// nothing matches (caller falls back to [`GENERAL`]).
-#[must_use] 
+#[must_use]
 pub fn match_track_name(track_name: &str) -> Option<&'static InstrumentProfile> {
     let name = track_name.to_ascii_lowercase();
     if name.trim().is_empty() {
@@ -428,7 +428,7 @@ pub fn match_track_name(track_name: &str) -> Option<&'static InstrumentProfile> 
 }
 
 /// Resolve a track name to the profile to display, falling back to `GENERAL`.
-#[must_use] 
+#[must_use]
 pub fn profile_for_track(track_name: &str) -> &'static InstrumentProfile {
     match_track_name(track_name).unwrap_or(&GENERAL)
 }
@@ -462,7 +462,7 @@ impl StaticTrackProvider {
     }
 
     /// No track (overlay "Auto" resolves to off).
-    #[must_use] 
+    #[must_use]
     pub const fn none() -> Self {
         Self { name: None }
     }
@@ -470,7 +470,7 @@ impl StaticTrackProvider {
     /// Read the track name from the `FTS_EQ_TRACK_NAME` env var — handy for
     /// testing overlays in the standalone without a host
     /// (`FTS_EQ_TRACK_NAME="Kick In" cargo run -p eq-standalone`).
-    #[must_use] 
+    #[must_use]
     pub fn from_env() -> Self {
         Self {
             name: std::env::var("FTS_EQ_TRACK_NAME")
@@ -574,7 +574,7 @@ pub const EAR_BANDS: &[EarBand] = &[
 
 /// The ISO octave band a frequency falls in (within ±half an octave of a center),
 /// for contextual hints (e.g. "this band sits in the 1 kHz 'ah' range").
-#[must_use] 
+#[must_use]
 pub fn ear_band_for(hz: f32) -> Option<&'static EarBand> {
     // Half an octave each side: center/√2 .. center*√2.
     const HALF_OCT: f32 = std::f32::consts::SQRT_2;
@@ -685,7 +685,7 @@ pub const FREQ_RANGES: &[FreqRange] = &[
 ];
 
 /// The descriptor range a frequency falls in.
-#[must_use] 
+#[must_use]
 pub fn freq_range_for(hz: f32) -> Option<&'static FreqRange> {
     FREQ_RANGES.iter().find(|r| hz >= r.lo_hz && hz < r.hi_hz)
 }

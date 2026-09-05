@@ -31,7 +31,9 @@ use std::sync::{Arc, Mutex};
 
 fn arg(name: &str) -> Option<String> {
     let a: Vec<String> = std::env::args().collect();
-    a.iter().position(|x| x == name).and_then(|i| a.get(i + 1).cloned())
+    a.iter()
+        .position(|x| x == name)
+        .and_then(|i| a.get(i + 1).cloned())
 }
 
 /// One preset's measurement.
@@ -54,7 +56,10 @@ fn collect_presets(root: &Path, out: &mut Vec<PathBuf>) {
     for path in items {
         if path.is_dir() {
             collect_presets(&path, out);
-        } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ffp")) {
+        } else if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("ffp"))
+        {
             out.push(path);
         }
     }
@@ -63,7 +68,8 @@ fn collect_presets(root: &Path, out: &mut Vec<PathBuf>) {
 /// Run one preset and parse the summary line out of `eq_match`'s report.
 fn run_one(binary: &Path, plugin: &str, preset: &Path, extra: &[String]) -> Outcome {
     let name = preset
-        .file_stem().map_or_else(|| "<unnamed>".into(), |s| s.to_string_lossy().into_owned());
+        .file_stem()
+        .map_or_else(|| "<unnamed>".into(), |s| s.to_string_lossy().into_owned());
     let started = std::time::Instant::now();
 
     let mut cmd = Command::new(binary);
@@ -133,7 +139,9 @@ fn main() {
         std::process::exit(2);
     };
     let jobs: usize = arg("--jobs").and_then(|v| v.parse().ok()).unwrap_or(8);
-    let limit: usize = arg("--limit").and_then(|v| v.parse().ok()).unwrap_or(usize::MAX);
+    let limit: usize = arg("--limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(usize::MAX);
     // Anything after `--` is handed to every `eq_match` run, so a whole-library
     // sweep can be taken at a different level or on a different stimulus
     // without teaching this program about either.
@@ -211,7 +219,10 @@ fn main() {
     println!("\n── library ──────────────────────────────────────────");
     println!("  measured           {n} of {}", all.len());
     println!("  median             {:.2} dB", percentile(&means, 0.5));
-    println!("  mean               {:.2} dB", means.iter().sum::<f64>() / n.max(1) as f64);
+    println!(
+        "  mean               {:.2} dB",
+        means.iter().sum::<f64>() / n.max(1) as f64
+    );
     println!("  90th percentile    {:.2} dB", percentile(&means, 0.9));
     println!(
         "  under 1 dB         {} ({:.0}%)",
@@ -223,7 +234,10 @@ fn main() {
     println!("  above 3 dB         {}", n - under(3.0));
 
     println!("\n── worst twelve ─────────────────────────────────────");
-    println!("  {:<44} {:>8} {:>8} {:>9}", "preset", "mean", "worst", "at");
+    println!(
+        "  {:<44} {:>8} {:>8} {:>9}",
+        "preset", "mean", "worst", "at"
+    );
     for o in all.iter().take(12) {
         println!(
             "  {:<44} {:>8} {:>8} {:>9}",
@@ -243,9 +257,10 @@ fn main() {
     }
 
     if let Some(base) = arg("--baseline") {
-        match std::fs::read(&base).ok().and_then(|b| {
-            serde_json::from_slice::<serde_json::Value>(&b).ok()
-        }) {
+        match std::fs::read(&base)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        {
             Some(doc) => {
                 let mut moved: Vec<(String, f64, f64)> = Vec::new();
                 for o in &all {
@@ -265,7 +280,10 @@ fn main() {
                 moved.sort_by(|a, b| (b.2 - b.1).total_cmp(&(a.2 - a.1)));
                 println!("\n── against {base} ───────────────────────────");
                 println!("  {} presets moved by 0.05 dB or more", moved.len());
-                println!("  {:<44} {:>8} {:>8} {:>8}", "preset", "was", "now", "delta");
+                println!(
+                    "  {:<44} {:>8} {:>8} {:>8}",
+                    "preset", "was", "now", "delta"
+                );
                 for (name, was, now) in moved.iter().take(10).chain(moved.iter().rev().take(10)) {
                     println!("  {name:<44} {was:>8.2} {now:>8.2} {:>8.2}", now - was);
                 }

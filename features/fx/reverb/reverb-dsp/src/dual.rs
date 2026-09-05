@@ -336,12 +336,18 @@ mod tests {
 
         // Both sides have to be doing something, or an exchange of silence
         // would pass.
-        assert!(energy(&l) > 1e-6 && energy(&r) > 1e-6, "both sides must be active");
+        assert!(
+            energy(&l) > 1e-6 && energy(&r) > 1e-6,
+            "both sides must be active"
+        );
         let difference: f64 = l.iter().zip(r.iter()).map(|(a, b)| (a - b).abs()).sum();
         assert!(difference > 1e-3, "the two sides must be different reverbs");
 
         let mismatch = |a: &[f64], b: &[f64]| -> f64 {
-            a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).sum::<f64>()
+            a.iter()
+                .zip(b.iter())
+                .map(|(x, y)| (x - y).abs())
+                .sum::<f64>()
                 / a.iter().map(|x| x.abs()).sum::<f64>().max(1e-30)
         };
         assert!(

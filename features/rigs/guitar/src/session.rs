@@ -838,18 +838,14 @@ impl GuitarRigBackend {
             // Recall activates the song's stack only when it isn't already
             // the active one — a press on the active stack would *rotate*
             // it (FM9 semantics), silently changing the patch.
-            let already_active = self
-                .rig
-                .lock_ok()
-                .as_ref()
-                .is_some_and(|prig| {
-                    prig.stacks().get(stack).is_some_and(|st| {
-                        st.patches.iter().any(|p| {
-                            prig.active_patch()
-                                .is_some_and(|a| a.name.eq_ignore_ascii_case(p))
-                        })
+            let already_active = self.rig.lock_ok().as_ref().is_some_and(|prig| {
+                prig.stacks().get(stack).is_some_and(|st| {
+                    st.patches.iter().any(|p| {
+                        prig.active_patch()
+                            .is_some_and(|a| a.name.eq_ignore_ascii_case(p))
                     })
-                });
+                })
+            });
             if already_active {
                 self.publish_state();
             } else {
@@ -1156,7 +1152,9 @@ fn build_perf_model_static(def: &ProfileDef) -> PerformanceModel {
                 available: false,
                 is_active: false,
                 preset: patch_def.map(|p| p.preset.clone()).unwrap_or_default(),
-                override_modules: patch_def.map(super::profiles::PatchDef::override_modules).unwrap_or_default(),
+                override_modules: patch_def
+                    .map(super::profiles::PatchDef::override_modules)
+                    .unwrap_or_default(),
             }
         })
         .collect();
@@ -1195,7 +1193,9 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
                 available,
                 is_active: active_stack == Some(si),
                 preset: patch_def.map(|p| p.preset.clone()).unwrap_or_default(),
-                override_modules: patch_def.map(super::profiles::PatchDef::override_modules).unwrap_or_default(),
+                override_modules: patch_def
+                    .map(super::profiles::PatchDef::override_modules)
+                    .unwrap_or_default(),
             }
         })
         .collect();
@@ -1392,9 +1392,10 @@ impl Rig for GuitarRigBackend {
             // Live model when the audio rig is open; otherwise the static
             // model from the profile def, so the footswitch stacks still
             // render before the device opens (iOS with no interface yet).
-            self.rig
-                .lock_ok()
-                .as_ref().map_or_else(|| build_perf_model_static(&def), |prig| build_perf_model(prig, &def))
+            self.rig.lock_ok().as_ref().map_or_else(
+                || build_perf_model_static(&def),
+                |prig| build_perf_model(prig, &def),
+            )
         };
         m.boost_db = self.current_boost_db();
         m.tempo_bpm = self.tempo_bpm().round() as u32;
@@ -2376,7 +2377,9 @@ impl Rig for GuitarRigBackend {
                 let next = BOOST_LEVELS
                     .iter()
                     .position(|l| (*l - *level).abs() < 0.01)
-                    .map_or(BOOST_LEVELS[0], |i| BOOST_LEVELS[(i + 1) % BOOST_LEVELS.len()]);
+                    .map_or(BOOST_LEVELS[0], |i| {
+                        BOOST_LEVELS[(i + 1) % BOOST_LEVELS.len()]
+                    });
                 *level = next;
             } else {
                 // Engage at the remembered level.
@@ -2721,7 +2724,10 @@ fn spectrum_bins(samples: &[f32], rate: f32, bins: usize) -> Vec<f32> {
     // Hann window into complex buffer.
     let mut re: Vec<f32> = (0..n)
         .map(|i| {
-            let w = 0.5f32.mul_add(-(2.0 * std::f32::consts::PI * i as f32 / n as f32).cos(), 0.5);
+            let w = 0.5f32.mul_add(
+                -(2.0 * std::f32::consts::PI * i as f32 / n as f32).cos(),
+                0.5,
+            );
             samples[i] * w
         })
         .collect();
@@ -2746,7 +2752,10 @@ fn spectrum_bins(samples: &[f32], rate: f32, bins: usize) -> Vec<f32> {
                 let ang = step * k as f32;
                 let (wr, wi) = (ang.cos(), ang.sin());
                 let (i, j) = (start + k, start + k + half);
-                let (tr, ti) = (re[j].mul_add(wr, -(im[j] * wi)), re[j].mul_add(wi, im[j] * wr));
+                let (tr, ti) = (
+                    re[j].mul_add(wr, -(im[j] * wi)),
+                    re[j].mul_add(wi, im[j] * wr),
+                );
                 re[j] = re[i] - tr;
                 im[j] = im[i] - ti;
                 re[i] += tr;

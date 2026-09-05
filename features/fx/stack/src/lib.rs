@@ -103,7 +103,7 @@ impl<S: Stage> Lane<S> {
 
     /// Sum of the enabled stages' latencies — serial stages add
     /// (`fx.stack.latency`).
-    #[must_use] 
+    #[must_use]
     pub fn latency(&self) -> usize {
         self.stages
             .iter()
@@ -211,7 +211,7 @@ pub enum SumMode {
 
 impl SumMode {
     /// The normalization factor for `n` active lanes.
-    #[must_use] 
+    #[must_use]
     pub fn norm(self, n: usize) -> f64 {
         let n = n.max(1) as f64;
         match self {
@@ -379,8 +379,12 @@ mod tests {
     struct Gain(f64);
     impl Stage for Gain {
         fn process(&mut self, l: &mut [f64], r: &mut [f64]) {
-            for x in l.iter_mut() { *x *= self.0; }
-            for x in r.iter_mut() { *x *= self.0; }
+            for x in l.iter_mut() {
+                *x *= self.0;
+            }
+            for x in r.iter_mut() {
+                *x *= self.0;
+            }
         }
     }
 

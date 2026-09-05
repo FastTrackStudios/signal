@@ -457,7 +457,9 @@ fn rewrite_zones_styx(text: &str, arrivals: &BTreeMap<String, f64>) -> String {
                 let after_lead = block
                     .iter()
                     .position(|l| l.trim_start().starts_with("lead_in_ms"));
-                if let Some(i) = after_lead { block.insert(i + 1, arrival_line) } else {
+                if let Some(i) = after_lead {
+                    block.insert(i + 1, arrival_line)
+                } else {
                     let close = block.len() - 1;
                     block.insert(close, arrival_line);
                 }

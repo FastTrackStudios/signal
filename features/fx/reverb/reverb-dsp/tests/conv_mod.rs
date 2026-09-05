@@ -16,7 +16,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 use std::f64::consts::PI;
 
 use reverb_dsp::algorithm::{ConvolutionModParams, IrSlot, ReverbAlgorithm};
@@ -28,7 +27,10 @@ const SR: f64 = 48000.0;
 /// pre-change baseline capture exactly).
 fn probe_input(i: usize) -> f64 {
     let t = i as f64 / SR;
-    0.1f64.mul_add((2.0 * PI * 1337.0 * t).sin(), 0.25f64.mul_add((2.0 * PI * 440.0 * t).sin(), if i == 0 { 1.0 } else { 0.0 }))
+    0.1f64.mul_add(
+        (2.0 * PI * 1337.0 * t).sin(),
+        0.25f64.mul_add((2.0 * PI * 440.0 * t).sin(), if i == 0 { 1.0 } else { 0.0 }),
+    )
 }
 
 /// All mod params at defaults must reproduce the pre-modulation

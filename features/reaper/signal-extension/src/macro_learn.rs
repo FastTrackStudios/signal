@@ -324,11 +324,7 @@ pub async fn handle_macro_clear(daw: &Daw) -> Result<()> {
         }
     }
 
-    console_log(
-        daw,
-        &format!("No mappings to clear for Macro {macro_idx}"),
-    )
-    .await;
+    console_log(daw, &format!("No mappings to clear for Macro {macro_idx}")).await;
     Ok(())
 }
 

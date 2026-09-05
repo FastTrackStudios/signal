@@ -4,7 +4,16 @@
 //! a resolve target (rig scene, profile patch, or song section) down to concrete
 //! block parameter values with the override stack applied.
 
-use super::{Block, BlockParameterOverride, HashMap, ResolveError, NodePathSegment, ResolvedGraph, NodeOverrideOp, SignalLive, BlockRepo, ModuleRepo, LayerRepo, EngineRepo, RigRepo, ProfileRepo, SongRepo, SetlistRepo, SceneTemplateRepo, RackRepo, BlockType, PresetId, SnapshotId, ResolvedBlock, ALL_BLOCK_TYPES, ModuleSnapshot, ResolvedModule, ModuleBlockSource, ModulePresetId, ModuleSnapshotId, EngineId, LayerId, LayerSnapshotId, LayerSource, ResolvedLayer, HashSet, Layer, LayerSnapshot, LayerService, validate_overrides, SnapshotPolicy, PatchTarget, RigId, RigSceneId, ProfileService, ResolveTarget, RigService, ScenePolicy, FreePolicy, SongService, ResolvedEngine, EngineSceneId, Snapshot, ResolveService, EngineService};
+use super::{
+    validate_overrides, Block, BlockParameterOverride, BlockRepo, BlockType, EngineId, EngineRepo,
+    EngineSceneId, EngineService, FreePolicy, HashMap, HashSet, Layer, LayerId, LayerRepo,
+    LayerService, LayerSnapshot, LayerSnapshotId, LayerSource, ModuleBlockSource, ModulePresetId,
+    ModuleRepo, ModuleSnapshot, ModuleSnapshotId, NodeOverrideOp, NodePathSegment, PatchTarget,
+    PresetId, ProfileRepo, ProfileService, RackRepo, ResolveError, ResolveService, ResolveTarget,
+    ResolvedBlock, ResolvedEngine, ResolvedGraph, ResolvedLayer, ResolvedModule, RigId, RigRepo,
+    RigSceneId, RigService, ScenePolicy, SceneTemplateRepo, SetlistRepo, SignalLive, Snapshot,
+    SnapshotId, SnapshotPolicy, SongRepo, SongService, ALL_BLOCK_TYPES,
+};
 
 fn apply_block_parameter_overrides(block: &mut Block, overrides: &[BlockParameterOverride]) {
     for ov in overrides {
@@ -351,9 +360,9 @@ where
         }
         .ok_or_else(|| {
             ResolveError::InvalidReference(match variant_id {
-                Some(variant_id) => format!(
-                    "missing module variant: preset={preset_id} variant={variant_id}"
-                ),
+                Some(variant_id) => {
+                    format!("missing module variant: preset={preset_id} variant={variant_id}")
+                }
                 None => format!("missing module default variant: preset={preset_id}"),
             })
         })?;
@@ -848,7 +857,7 @@ where
         target: &ResolveTarget,
     ) -> Result<Option<ResolvedGraph>, ResolveError> {
         let Some(patch_target) = self.extract_patch_target(target).await? else {
-            return Ok(None)
+            return Ok(None);
         };
 
         let PatchTarget::BlockSnapshot {

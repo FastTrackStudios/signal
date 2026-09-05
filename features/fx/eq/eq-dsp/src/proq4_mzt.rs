@@ -161,7 +161,10 @@ pub(crate) fn mzt_quadratic(w0: f64, alpha: f64) -> (f64, f64) {
 /// calling this function.
 #[inline]
 #[must_use]
-#[expect(non_snake_case, reason = "parameter names match Pro-Q 4 analog prototype")]
+#[expect(
+    non_snake_case,
+    reason = "parameter names match Pro-Q 4 analog prototype"
+)]
 pub fn zpk_section_to_AF(
     b2z: f64,
     b1z: f64,
@@ -215,7 +218,10 @@ pub fn zpk_section_to_AF(
 /// is in the post-(A..F) Lagrange synthesis, not in (A..F) itself). See
 /// `compute_zpk_transfer_function_coefficients_decoded.md` for the full
 /// analysis.
-#[expect(non_snake_case, reason = "parameter names (A, B, C, D, E, F) match the zpk transfer-function coefficients")]
+#[expect(
+    non_snake_case,
+    reason = "parameter names (A, B, C, D, E, F) match the zpk transfer-function coefficients"
+)]
 #[must_use]
 pub fn proq4_s2_from_AF_with_subfreq(
     freq_hz: f64,

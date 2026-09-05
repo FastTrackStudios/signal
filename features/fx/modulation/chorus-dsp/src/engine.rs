@@ -17,7 +17,7 @@ pub enum EffectType {
 }
 
 impl EffectType {
-    #[must_use] 
+    #[must_use]
     pub const fn base_delay_ms(&self) -> f64 {
         match self {
             Self::Chorus => 10.0,
@@ -26,7 +26,7 @@ impl EffectType {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn max_depth_ms(&self) -> f64 {
         match self {
             Self::Chorus => 12.0,
@@ -84,7 +84,7 @@ pub struct CubicVoice {
 
 impl CubicVoice {
     const MAX_DELAY: usize = 192_000 / 20 + 64;
-    #[must_use] 
+    #[must_use]
     pub fn new(phase_offset: f64) -> Self {
         Self {
             last_delay_ms: 0.0,
@@ -155,7 +155,7 @@ pub struct BbdVoice {
 
 impl BbdVoice {
     const DEFAULT_STAGES: usize = 512;
-    #[must_use] 
+    #[must_use]
     pub fn new(phase_offset: f64) -> Self {
         Self {
             last_delay_ms: 0.0,
@@ -255,7 +255,7 @@ pub struct TapeVoice {
 
 impl TapeVoice {
     const MAX_DELAY: usize = 192_000 / 20 + 64;
-    #[must_use] 
+    #[must_use]
     pub fn new(phase_offset: f64) -> Self {
         Self {
             last_delay_ms: 0.0,
@@ -293,8 +293,12 @@ impl ChorusEngine for TapeVoice {
         self.wow_phase = (self.wow_phase + 0.33 / self.sample_rate).fract();
         let wow = (self.wow_phase * 2.0 * PI).sin() * depth * 0.3;
         self.flutter_phase = (self.flutter_phase + 5.8 / self.sample_rate).fract();
-        let flutter = (self.flutter_phase * 6.0 * PI).sin().mul_add(0.1, (self.flutter_phase * 2.0 * PI).sin().mul_add(0.6, (self.flutter_phase * 4.0 * PI).sin() * 0.3))
-            * depth
+        let flutter = (self.flutter_phase * 6.0 * PI).sin().mul_add(
+            0.1,
+            (self.flutter_phase * 2.0 * PI)
+                .sin()
+                .mul_add(0.6, (self.flutter_phase * 4.0 * PI).sin() * 0.3),
+        ) * depth
             * 0.15;
         let base_ms = effect_type.base_delay_ms();
         let depth_ms = effect_type.max_depth_ms() * depth;
@@ -342,7 +346,7 @@ pub struct OrbitVoice {
 
 impl OrbitVoice {
     const MAX_DELAY: usize = 192_000 / 20 + 64;
-    #[must_use] 
+    #[must_use]
     pub fn new(phase_offset: f64) -> Self {
         Self {
             last_delay_ms: 0.0,
@@ -441,7 +445,7 @@ impl JunoVoice {
     /// Original fixed DC-blocker pole (R = 0.995 at 48 kHz).
     const DC_R: f64 = 0.995;
 
-    #[must_use] 
+    #[must_use]
     pub fn new(phase_offset: f64) -> Self {
         let lfo_phase = phase_offset.mul_add(2.0, -1.0);
         let mut voice = Self {
@@ -552,7 +556,7 @@ impl ChorusEngine for JunoVoice {
 }
 
 /// Create a vector of engines for one channel.
-#[must_use] 
+#[must_use]
 pub fn create_voices(engine: EngineType, count: usize) -> Vec<Box<dyn ChorusEngine>> {
     (0..count)
         .map(|i| {

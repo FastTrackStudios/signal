@@ -13,7 +13,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 use audiocore_dsp::{AudioConfig, Processor};
 use trigger_dsp::chain::TriggerChain;
 use trigger_dsp::detector::{DetectAlgorithm, DetectMode, TriggerDetector};
@@ -485,7 +484,9 @@ fn chain_sidechain_listen_outputs_filtered() {
     let mut left: Vec<f64> = (0..len)
         .map(|i| {
             let t = f64::from(i) / SAMPLE_RATE;
-            (2.0 * std::f64::consts::PI * 50.0 * t).sin().mul_add(0.5, (2.0 * std::f64::consts::PI * 5000.0 * t).sin() * 0.5)
+            (2.0 * std::f64::consts::PI * 50.0 * t)
+                .sin()
+                .mul_add(0.5, (2.0 * std::f64::consts::PI * 5000.0 * t).sin() * 0.5)
         })
         .collect();
     let mut right = left.clone();

@@ -9,7 +9,7 @@
 //! track fader sits under its folder's.
 
 /// dB → linear gain. `0.0` dB = unity.
-#[must_use] 
+#[must_use]
 pub fn db_to_linear(db: f32) -> f32 {
     10f32.powf(db / 20.0)
 }
@@ -34,7 +34,7 @@ pub fn any_solo<'a>(lanes: impl IntoIterator<Item = &'a LaneMix>) -> bool {
 /// The linear gain a lane should render at right now, folding in its own
 /// mute, its group's mute, solo-exclusion, and liveness. Group *faders* are
 /// their own cell — not folded in here.
-#[must_use] 
+#[must_use]
 pub fn lane_gain(lane: &LaneMix, group_muted: bool, any_solo: bool) -> f32 {
     let solo_excluded = any_solo && !lane.soloed;
     if lane.muted || group_muted || solo_excluded || !lane.live {
@@ -46,7 +46,7 @@ pub fn lane_gain(lane: &LaneMix, group_muted: bool, any_solo: bool) -> f32 {
 
 /// The linear gain a group (engine / bus) fader contributes: its fader when
 /// unmuted, silence when muted.
-#[must_use] 
+#[must_use]
 pub fn group_gain(gain_db: f32, muted: bool) -> f32 {
     if muted {
         0.0

@@ -69,14 +69,12 @@ pub fn build_soundsource_pack(
         .flatten()
         .map(|e| e.path())
         .filter(|p| {
-            p.extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| {
-                    matches!(
-                        e.to_ascii_lowercase().as_str(),
-                        "flac" | "wav" | "aif" | "aiff"
-                    )
-                })
+            p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                matches!(
+                    e.to_ascii_lowercase().as_str(),
+                    "flac" | "wav" | "aif" | "aiff"
+                )
+            })
         })
         .collect();
     paths.sort();

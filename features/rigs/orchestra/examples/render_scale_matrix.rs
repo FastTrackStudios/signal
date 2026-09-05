@@ -172,12 +172,18 @@ fn main() -> eyre::Result<()> {
             let emitted = res
                 .emitted_markers
                 .iter()
-                .find(|m| m.note == t.to_note && (m.frame as i64 - grid).abs() < (i64::from(SR) / 2)).map_or_else(|| "  (none)".into(), |m| {
-                    format!(
-                        "{:+7.1}ms",
-                        (m.frame as i64 - grid) as f64 * 1000.0 / f64::from(SR)
-                    )
-                });
+                .find(|m| {
+                    m.note == t.to_note && (m.frame as i64 - grid).abs() < (i64::from(SR) / 2)
+                })
+                .map_or_else(
+                    || "  (none)".into(),
+                    |m| {
+                        format!(
+                            "{:+7.1}ms",
+                            (m.frame as i64 - grid) as f64 * 1000.0 / f64::from(SR)
+                        )
+                    },
+                );
             let line = format!(
                 "  pos {} {:>3}→{:<3} {dir} predicted {:+7.1}ms emitted {emitted}",
                 i + 2,

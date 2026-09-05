@@ -36,7 +36,7 @@ pub const SEED_UUID_NS: Uuid = Uuid::from_bytes([
 
 /// Generate a deterministic UUID from a human-readable name.
 /// Same name always produces same UUID — used for seed data and tests.
-#[must_use] 
+#[must_use]
 pub fn seed_id(name: &str) -> Uuid {
     Uuid::new_v5(&SEED_UUID_NS, name.as_bytes())
 }

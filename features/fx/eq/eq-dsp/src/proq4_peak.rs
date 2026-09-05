@@ -113,8 +113,13 @@ pub struct PoleFreqs {
 pub fn solve_pole_frequencies(poly: &MagSqPoly) -> PoleFreqs {
     // Cross-determinant quadratic: finds w² where |`H_num`|² / |`H_den`|² = 1
     // `A`·w⁴ + `B`·w² + `C` = 0 where:
-    let qa = poly.num_w4.mul_add(poly.den_w2, -(poly.num_w2 * poly.den_w4));
-    let qb = 2.0 * poly.num_w0.mul_add(poly.den_w4, -(poly.den_w0 * poly.num_w4));
+    let qa = poly
+        .num_w4
+        .mul_add(poly.den_w2, -(poly.num_w2 * poly.den_w4));
+    let qb = 2.0
+        * poly
+            .num_w0
+            .mul_add(poly.den_w4, -(poly.den_w0 * poly.num_w4));
     let qc = poly.num_w0 * poly.den_w2 - poly.den_w0 * poly.num_w2;
 
     if qa.abs() < 1e-30 {

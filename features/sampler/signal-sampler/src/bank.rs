@@ -399,11 +399,10 @@ impl SamplerBank {
                     paths = cache.paths.len(),
                     "background preload starting",
                 );
-                let stats = cache
-                    .cache
-                    .preload_cancelable(cache.paths.iter().map(std::path::PathBuf::as_path), || {
-                        cancel.load(Ordering::Relaxed) != generation
-                    });
+                let stats = cache.cache.preload_cancelable(
+                    cache.paths.iter().map(std::path::PathBuf::as_path),
+                    || cancel.load(Ordering::Relaxed) != generation,
+                );
                 tracing::info!(
                     pack = %pack_label,
                     loaded = stats.loaded,
@@ -468,11 +467,10 @@ impl SamplerBank {
         if let Err(err) = std::thread::Builder::new()
             .name(format!("signal-preload:{label}"))
             .spawn(move || {
-                let stats = pending
-                    .cache
-                    .preload_cancelable(pending.paths.iter().map(std::path::PathBuf::as_path), || {
-                        cancel.load(Ordering::Relaxed) != generation
-                    });
+                let stats = pending.cache.preload_cancelable(
+                    pending.paths.iter().map(std::path::PathBuf::as_path),
+                    || cancel.load(Ordering::Relaxed) != generation,
+                );
                 tracing::info!(
                     block = %label,
                     loaded = stats.loaded,
@@ -946,11 +944,10 @@ impl SamplerBank {
         if let Err(err) = std::thread::Builder::new()
             .name(format!("signal-preload-engine:{label}"))
             .spawn(move || {
-                let stats = pending
-                    .cache
-                    .preload_cancelable(pending.paths.iter().map(std::path::PathBuf::as_path), || {
-                        cancel.load(Ordering::Relaxed) != generation
-                    });
+                let stats = pending.cache.preload_cancelable(
+                    pending.paths.iter().map(std::path::PathBuf::as_path),
+                    || cancel.load(Ordering::Relaxed) != generation,
+                );
                 tracing::info!(
                     engine = %label,
                     loaded = stats.loaded,
@@ -1051,9 +1048,10 @@ impl SamplerBank {
                         break;
                     }
                     let s = std::time::Instant::now();
-                    let stats = cache.preload_cancelable(paths.iter().map(std::path::PathBuf::as_path), || {
-                        cancel.load(Ordering::Relaxed) != generation
-                    });
+                    let stats = cache
+                        .preload_cancelable(paths.iter().map(std::path::PathBuf::as_path), || {
+                            cancel.load(Ordering::Relaxed) != generation
+                        });
                     total_loaded += stats.loaded;
                     tracing::info!(
                         preset = %preset_label,
@@ -1540,7 +1538,8 @@ impl SamplerBank {
             .midi_channels
             .get(&channel)
             .cloned()
-            .or_else(|| self.default_instrument.clone()) else {
+            .or_else(|| self.default_instrument.clone())
+        else {
             return;
         };
         let kind = status & 0xF0;
@@ -1591,7 +1590,10 @@ impl SamplerBank {
     /// isn't a send-routed drum preset.
     #[must_use]
     pub fn preset_mixer_layout(&self, prefix: &str) -> Option<crate::mixer::MixerLayout> {
-        self.presets.get(prefix)?.mixer().map(super::mixer::DrumMixer::layout)
+        self.presets
+            .get(prefix)?
+            .mixer()
+            .map(super::mixer::DrumMixer::layout)
     }
 
     /// Clone the lock-free peak-meter handle for a loaded preset's mixer.
@@ -1861,8 +1863,16 @@ impl SamplerBank {
 
     #[must_use]
     pub fn instrument_ids(&self) -> Vec<&str> {
-        let mut ids: Vec<&str> = self.instruments.keys().map(std::string::String::as_str).collect();
-        ids.extend(self.instrument_to_preset.keys().map(std::string::String::as_str));
+        let mut ids: Vec<&str> = self
+            .instruments
+            .keys()
+            .map(std::string::String::as_str)
+            .collect();
+        ids.extend(
+            self.instrument_to_preset
+                .keys()
+                .map(std::string::String::as_str),
+        );
         ids
     }
 }

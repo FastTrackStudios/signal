@@ -36,7 +36,7 @@ pub struct ChorusChain {
 }
 
 impl ChorusChain {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         let engine = EngineType::Cubic;
         Self {
@@ -66,7 +66,9 @@ impl ChorusChain {
 
 /// Create right-channel voices with stereo phase offset.
 fn create_voices_stereo(engine: EngineType, count: usize) -> Vec<Box<dyn ChorusEngine>> {
-    use crate::engine::{ChorusEngine, EngineType, CubicVoice, BbdVoice, TapeVoice, OrbitVoice, JunoVoice};
+    use crate::engine::{
+        BbdVoice, ChorusEngine, CubicVoice, EngineType, JunoVoice, OrbitVoice, TapeVoice,
+    };
     (0..count)
         .map(|i| {
             let offset = i as f64 / count as f64 + 0.25; // +90° for stereo

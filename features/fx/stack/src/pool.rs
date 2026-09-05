@@ -121,7 +121,7 @@ pub struct StagePool<S> {
 impl<S: Stage> StagePool<S> {
     /// A pool of `stages.len()` slots. Slot 0 starts in use on lane 0 (the
     /// single-stage plugin, `fx.stack.model`); the rest start unused.
-    #[must_use] 
+    #[must_use]
     pub fn new(stages: Vec<S>) -> Self {
         let n = stages.len();
         let slots = stages
@@ -154,12 +154,12 @@ impl<S: Stage> StagePool<S> {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.slots.len()
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.slots.is_empty()
     }
@@ -184,7 +184,7 @@ impl<S: Stage> StagePool<S> {
         self.slots.get_mut(i).map(|s| &mut s.stage)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn stage(&self, i: usize) -> Option<&S> {
         self.slots.get(i).map(|s| &s.stage)
     }
@@ -230,7 +230,7 @@ impl<S: Stage> StagePool<S> {
 
     /// The stack's reported latency: the slowest populated lane.
     // r[impl fx.stack.latency]
-    #[must_use] 
+    #[must_use]
     pub fn latency(&self) -> usize {
         (0..self.lanes.len())
             .filter(|&l| self.lane_populated(l))
@@ -367,8 +367,12 @@ mod tests {
     struct Gain(f64);
     impl Stage for Gain {
         fn process(&mut self, l: &mut [f64], r: &mut [f64]) {
-            for x in l.iter_mut() { *x *= self.0; }
-            for x in r.iter_mut() { *x *= self.0; }
+            for x in l.iter_mut() {
+                *x *= self.0;
+            }
+            for x in r.iter_mut() {
+                *x *= self.0;
+            }
         }
     }
 

@@ -87,12 +87,15 @@ fn main() -> eyre::Result<()> {
     let css_root = PathBuf::from(arg(&args, "--lib").unwrap_or_else(|| CSS_ROOT.to_string()));
     let section = arg(&args, "--section").unwrap_or_else(|| "1st Violins".to_string());
     // The per-section zone spec carries the actual sample paths.
-    let spec_path = arg(&args, "--spec").map_or_else(|| {
-        css_root
-            .join("_patches")
-            .join(&section)
-            .join("library.styx")
-    }, PathBuf::from);
+    let spec_path = arg(&args, "--spec").map_or_else(
+        || {
+            css_root
+                .join("_patches")
+                .join(&section)
+                .join("library.styx")
+        },
+        PathBuf::from,
+    );
     let mut mic_idx = MICS
         .iter()
         .position(|m| Some(*m) == arg(&args, "--mic").as_deref())
@@ -124,7 +127,8 @@ fn main() -> eyre::Result<()> {
     // Load the zones WITH the descriptive engine config so articulations,
     // keyswitches and CC58 work. Falls back to zones-only if the config is
     // missing (articulation switching then disabled).
-    let config_path = arg(&args, "--config").map_or_else(|| PathBuf::from(CSS_CONFIG), PathBuf::from);
+    let config_path =
+        arg(&args, "--config").map_or_else(|| PathBuf::from(CSS_CONFIG), PathBuf::from);
     if config_path.exists() {
         rig.load_instrument_with_config(
             INSTRUMENT_ID,

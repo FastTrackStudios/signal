@@ -99,7 +99,7 @@ impl Setlist {
         self.entries.push(entry);
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn entry(&self, id: &SetlistEntryId) -> Option<&SetlistEntry> {
         self.entries.iter().find(|e| &e.id == id)
     }

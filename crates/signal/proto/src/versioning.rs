@@ -169,7 +169,7 @@ impl SyncMetadata {
     }
 
     /// Whether this entity needs to be pushed to remote.
-    #[must_use] 
+    #[must_use]
     pub const fn needs_sync(&self) -> bool {
         self.dirty
     }

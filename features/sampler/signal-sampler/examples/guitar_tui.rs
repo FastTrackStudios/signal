@@ -1132,14 +1132,8 @@ fn settings_overlay(f: &mut Frame, s: &Settings, rate: u32, ring: u32) {
     // Latency breakdown — each stage's frames → ms, summed. Device stages use
     // (headroom + period-size); the graph quantum and rig ring add on top. The
     // interface's USB transport + converters are real but unmeasurable here.
-    let cap_fr = s
-        .cap
-        .as_ref()
-        .map_or(0, |c| c.headroom + c.period_size);
-    let play_fr = s
-        .play
-        .as_ref()
-        .map_or(0, |p| p.headroom + p.period_size);
+    let cap_fr = s.cap.as_ref().map_or(0, |c| c.headroom + c.period_size);
+    let play_fr = s.play.as_ref().map_or(0, |p| p.headroom + p.period_size);
     let total_fr = cap_fr + s.buffer() + ring + play_fr;
     let cap_d = s.cap.clone().unwrap_or_default();
     let play_d = s.play.clone().unwrap_or_default();

@@ -93,7 +93,8 @@ async fn dragging_a_band_writes_the_emphasis_params() -> dioxus_test::Result<()>
     fx.tester.pointer_down(x, y);
     let _ = fx.tester.pump().await;
     for step in 1..=4 {
-        fx.tester.pointer_move(x, 10.0f64.mul_add(-f64::from(step), y), true);
+        fx.tester
+            .pointer_move(x, 10.0f64.mul_add(-f64::from(step), y), true);
         let _ = fx.tester.pump().await;
     }
     fx.tester.pointer_up(x, y - 40.0);

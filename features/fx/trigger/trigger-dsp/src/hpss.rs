@@ -59,7 +59,7 @@ pub struct HpssProcessor {
 
 impl HpssProcessor {
     /// Create a new HPSS processor.
-    #[must_use] 
+    #[must_use]
     pub fn new(
         fft_size: usize,
         hop_size: usize,
@@ -130,7 +130,7 @@ impl HpssProcessor {
     }
 
     /// Returns the latency in samples.
-    #[must_use] 
+    #[must_use]
     pub const fn latency_samples(&self) -> usize {
         (self.time_median_width / 2) * self.hop_size + self.fft_size
     }

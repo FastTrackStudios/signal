@@ -87,7 +87,10 @@ pub fn zpk_to_sos(zpk: &Zpk) -> Vec<Coeffs> {
 /// H(z) = (b0 + b1·z⁻¹ + b2·z⁻²) / (a0 + a1·z⁻¹ + a2·z⁻²)
 /// At z = e^(jw), z⁻¹ = e^(-jw), which is why we use negative exponent here.
 #[must_use]
-#[expect(clippy::arithmetic_side_effects, reason = "Complex arithmetic is inherently safe")]
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "Complex arithmetic is inherently safe"
+)]
 pub fn eval_sos(sections: &[Coeffs], w: f64) -> Complex {
     let ejw = Complex::from_polar(1.0, -w);
     let ejw2 = Complex::from_polar(1.0, -2.0 * w);

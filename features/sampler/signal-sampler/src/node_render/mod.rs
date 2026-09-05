@@ -47,7 +47,7 @@ pub enum LeafBackend {
 
 impl LeafBackend {
     /// The generator kind when this leaf is a source slot.
-    #[must_use] 
+    #[must_use]
     pub fn soundsource_kind(&self) -> Option<SoundsourceKind> {
         match self {
             Self::Source(s) => Some(s.kind()),
@@ -136,7 +136,7 @@ pub(crate) fn build_leaf_backend(block: &RigBlock, sample_rate: u32) -> Option<L
 /// generic [`SoundsourceLeaf`] — this is the graph-boundary form; the
 /// compiled tree itself uses `build_leaf_backend` and holds sources
 /// directly.
-#[must_use] 
+#[must_use]
 pub fn build_node_backend(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn PluginInstance>> {
     build_leaf_backend(block, sample_rate).map(|backend| match backend {
         LeafBackend::Source(src) => {
@@ -191,10 +191,7 @@ pub enum RenderNode {
         inner: Box<Self>,
     },
     /// A subtree whose output also feeds one or more send buses (unity gain).
-    SendTap {
-        buses: Vec<usize>,
-        inner: Box<Self>,
-    },
+    SendTap { buses: Vec<usize>, inner: Box<Self> },
     /// A send-bus **return**: `inner` processes the bus content and its
     /// output is summed with the pass-through main signal (send/return
     /// semantics — the main chain is not re-processed by the return).
@@ -255,13 +252,13 @@ pub struct GainCells {
 
 impl GainCells {
     /// The cell for one container, if the tree had it.
-    #[must_use] 
+    #[must_use]
     pub fn get(&self, role: Role, name: &str) -> Option<&Arc<AtomicU32>> {
         self.gains.get(&(role, name.to_string()))
     }
 
     /// Set a container's live gain (linear; `0.0` = muted).
-    #[must_use] 
+    #[must_use]
     pub fn set(&self, role: Role, name: &str, gain: f32) -> bool {
         match self.gains.get(&(role, name.to_string())) {
             Some(cell) => {
@@ -279,7 +276,7 @@ impl GainCells {
 
     /// A container's post-fader peak (linear, already decaying) — `0.0` when
     /// the tree has no such container.
-    #[must_use] 
+    #[must_use]
     pub fn peak(&self, role: Role, name: &str) -> f32 {
         self.peaks
             .get(&(role, name.to_string()))
@@ -288,7 +285,7 @@ impl GainCells {
 
     /// Every metered container and its current peak — the payload a mixer
     /// publishes at meter rate.
-    #[must_use] 
+    #[must_use]
     pub fn peaks(&self) -> Vec<(Role, String, f32)> {
         self.peaks
             .iter()
@@ -307,14 +304,14 @@ impl RenderNode {
     /// Compile a container tree into a render tree at `sample_rate`,
     /// resolving its `ModMatrix` routes. A container with a non-full [`Zone`]
     /// is wrapped in [`RenderNode::Zoned`] so only its in-window notes reach it.
-    #[must_use] 
+    #[must_use]
     pub fn compile(container: &Container, sample_rate: u32) -> Self {
         Self::compile_with_cells(container, sample_rate).0
     }
 
     /// As [`compile`](Self::compile), also returning the [`GainCells`] for the
     /// tree's Engine/Layer containers — the mixer's live fader handles.
-    #[must_use] 
+    #[must_use]
     pub fn compile_with_cells(container: &Container, sample_rate: u32) -> (Self, GainCells) {
         let mut mc = ModCompiler::new(sample_rate);
         mc.collect_buses(container);
@@ -323,12 +320,7 @@ impl RenderNode {
         (Self::finish(root, mc, container, sample_rate), cells)
     }
 
-    fn finish(
-        root: Self,
-        mc: ModCompiler,
-        container: &Container,
-        sample_rate: u32,
-    ) -> Self {
+    fn finish(root: Self, mc: ModCompiler, container: &Container, sample_rate: u32) -> Self {
         // Always wrap: the ModEngine is also the tree's live-edit address
         // book (leaf/source registries + parameter overlay), so even a
         // route-less tree keeps it — an empty tick is a few clears.
@@ -606,9 +598,7 @@ impl RenderNode {
     fn leaf_count(&self) -> usize {
         match self {
             Self::Leaf { .. } => 1,
-            Self::Serial(v) | Self::Parallel(v) => {
-                v.iter().map(Self::leaf_count).sum()
-            }
+            Self::Serial(v) | Self::Parallel(v) => v.iter().map(Self::leaf_count).sum(),
             Self::Zoned { inner, .. }
             | Self::Modulated { inner, .. }
             | Self::Gain { inner, .. }
@@ -618,13 +608,11 @@ impl RenderNode {
     }
 
     /// Count the leaf processors that actually have a backend (for tests/metering).
-    #[must_use] 
+    #[must_use]
     pub fn live_leaves(&self) -> usize {
         match self {
             Self::Leaf { inst, .. } => inst.is_some() as usize,
-            Self::Serial(v) | Self::Parallel(v) => {
-                v.iter().map(Self::live_leaves).sum()
-            }
+            Self::Serial(v) | Self::Parallel(v) => v.iter().map(Self::live_leaves).sum(),
             Self::Zoned { inner, .. }
             | Self::Modulated { inner, .. }
             | Self::Gain { inner, .. }
@@ -936,9 +924,7 @@ impl RenderNode {
                 .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
                 .map_or(0, |s| s.engine().active_voices()),
             Self::Leaf { .. } => 0,
-            Self::Serial(v) | Self::Parallel(v) => {
-                v.iter_mut().map(Self::active_voices).sum()
-            }
+            Self::Serial(v) | Self::Parallel(v) => v.iter_mut().map(Self::active_voices).sum(),
             Self::Zoned { inner, .. }
             | Self::Gain { inner, .. }
             | Self::Modulated { inner, .. }
@@ -950,7 +936,7 @@ impl RenderNode {
     /// The generator kinds of this subtree's **source** leaves, in compile
     /// order — the tree-side view remotes classify layers by (processors
     /// and placeholders are skipped).
-    #[must_use] 
+    #[must_use]
     pub fn source_kinds(&self) -> Vec<SoundsourceKind> {
         fn walk(node: &RenderNode, out: &mut Vec<SoundsourceKind>) {
             match node {
@@ -977,7 +963,7 @@ impl RenderNode {
     }
 
     /// The compiled `ModMatrix`, when any routes resolved (for tests/UI).
-    #[must_use] 
+    #[must_use]
     pub fn mod_engine(&self) -> Option<&ModEngine> {
         match self {
             Self::Modulated { engine, .. } => Some(engine),
@@ -1273,10 +1259,12 @@ impl RenderNode {
                 // output sums onto the pass-through main signal.
                 let bl: Vec<f32> = ctx
                     .bus_l
-                    .get(*bus).map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
+                    .get(*bus)
+                    .map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
                 let br: Vec<f32> = ctx
                     .bus_r
-                    .get(*bus).map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
+                    .get(*bus)
+                    .map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
                 let mut tl = vec![0.0f32; frames];
                 let mut tr = vec![0.0f32; frames];
                 inner.process_inner(&bl, &br, &mut tl, &mut tr, events, ctx);
@@ -1961,7 +1949,8 @@ zones (
             // The engine (live-edit address book) is always present now;
             // only the ROUTE count depends on the tree.
             assert_eq!(
-                rn.mod_engine().map(super::modmatrix::ModEngine::route_count),
+                rn.mod_engine()
+                    .map(super::modmatrix::ModEngine::route_count),
                 Some(if with_route { 1 } else { 0 }),
                 "route resolution matches"
             );
@@ -1997,7 +1986,11 @@ zones (
             .block(BlockType::Filter, "Filter")
             .route("Wheel", "Filter.cutoff", -1.0);
         let mut rn = RenderNode::compile(&tree, 48_000);
-        assert_eq!(rn.mod_engine().map(super::modmatrix::ModEngine::route_count), Some(1));
+        assert_eq!(
+            rn.mod_engine()
+                .map(super::modmatrix::ModEngine::route_count),
+            Some(1)
+        );
         rn.prepare(48_000.0, 512);
 
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
@@ -2282,7 +2275,8 @@ zones (
         // The engine is always present (live-edit address book); the broken
         // routes just resolve to nothing.
         assert_eq!(
-            rn.mod_engine().map(super::modmatrix::ModEngine::route_count),
+            rn.mod_engine()
+                .map(super::modmatrix::ModEngine::route_count),
             Some(0),
             "no routes resolved"
         );

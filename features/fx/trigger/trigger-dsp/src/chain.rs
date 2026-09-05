@@ -70,7 +70,7 @@ pub struct TriggerChain {
 }
 
 impl TriggerChain {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         let mut sc_hpf = Band::new();
         sc_hpf.filter_type = FilterType::Highpass;
@@ -141,7 +141,7 @@ impl TriggerChain {
 
     /// Get the number of trigger events in the last `process()` call.
     /// (Check `triggered_this_block` for boolean, or this for count.)
-    #[must_use] 
+    #[must_use]
     pub const fn last_trigger_velocity(&self) -> f64 {
         self.last_velocity
     }
@@ -182,7 +182,7 @@ impl TriggerChain {
 
     /// Latency (in samples) of the current detection algorithm — zero for
     /// the time-domain peak envelope, FFT-sized for spectral modes.
-    #[must_use] 
+    #[must_use]
     pub const fn latency_samples(&self) -> usize {
         self.detector.latency_samples()
     }

@@ -49,7 +49,8 @@ fn main() {
         .engines
         .iter()
         .flat_map(|e| e.layers.iter())
-        .find(|l| l.live).map_or_else(|| "Keys 1".into(), |l| l.name.clone());
+        .find(|l| l.live)
+        .map_or_else(|| "Keys 1".into(), |l| l.name.clone());
     println!("probe: driving lane {lane:?}");
 
     let chord = [60u32, 64, 67];

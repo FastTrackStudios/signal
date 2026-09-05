@@ -23,11 +23,11 @@ use uuid::Uuid;
 
 pub use types::GridSlot;
 
-use interaction::{InteractionMode, GroupDropTarget, GridDragState, GridWireDraft, GroupDragState};
 pub use interaction::{
     GridConnection, GridContextMenuEvent, GridSelection, GRID_CONNECTIONS, PICKER_CELL,
     PICKER_CLICK_POS,
 };
+use interaction::{GridDragState, GridWireDraft, GroupDragState, GroupDropTarget, InteractionMode};
 
 pub use block_picker::BlockPickerDropdown;
 pub(crate) use cables::*;

@@ -925,9 +925,7 @@ impl ReverbChain {
         let variant = match (self.voice, self.algorithm_type) {
             // Plate: MX rebuild = Dattorro, Classic = the Lexicon 224
             // port. (Progenitor stays reachable via set_variant.)
-            (ReverbVoice::Mx, AlgorithmType::Plate | AlgorithmType::Spring) => {
-                Some(0)
-            }
+            (ReverbVoice::Mx, AlgorithmType::Plate | AlgorithmType::Spring) => Some(0),
             (ReverbVoice::Classic, AlgorithmType::Plate | AlgorithmType::Spring) => Some(1),
             _ => None,
         };

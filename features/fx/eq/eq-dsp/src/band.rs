@@ -249,9 +249,13 @@ impl Band {
         let mut db = 20.0 * self.output_gain.max(1.0e-12).log10();
         for i in 0..self.num_sections {
             let coeffs = if self.use_df1 {
-                self.df1_sections.get(i).map(super::section::Df1Section::coeffs)
+                self.df1_sections
+                    .get(i)
+                    .map(super::section::Df1Section::coeffs)
             } else {
-                self.sections.get(i).map(super::section::Tdf2Section::coeffs)
+                self.sections
+                    .get(i)
+                    .map(super::section::Tdf2Section::coeffs)
             };
             let Some([b0, b1, b2, a1, a2]) = coeffs else {
                 continue;
@@ -480,6 +484,9 @@ mod tests {
             }
         }
         let db = 10.0 * (rms / (sr / 2.0)).max(1e-30).log10();
-        assert!(db < -60.0, "the band's own frequency should be notched out, got {db:.1} dB");
+        assert!(
+            db < -60.0,
+            "the band's own frequency should be notched out, got {db:.1} dB"
+        );
     }
 }

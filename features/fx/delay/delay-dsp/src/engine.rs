@@ -1035,10 +1035,7 @@ mod tests {
             for s in 0..96000 {
                 let input = (std::f64::consts::TAU * 440.0 * s as f64 / SR).sin() * 0.5;
                 let out = e.tick(input, 0);
-                assert!(
-                    out.is_finite(),
-                    "{style:?} produced NaN/Inf at sample {s}"
-                );
+                assert!(out.is_finite(), "{style:?} produced NaN/Inf at sample {s}");
             }
         }
     }

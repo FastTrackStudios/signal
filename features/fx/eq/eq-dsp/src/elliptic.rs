@@ -257,7 +257,12 @@ mod tests {
     #[test]
     fn k_at_half() {
         // K(0.5) = 1.8540746773013719...
-        assert_approx(elliptic_k_complete(0.5), 1.854_074_677_301_372, 1e-12, "K(0.5)");
+        assert_approx(
+            elliptic_k_complete(0.5),
+            1.854_074_677_301_372,
+            1e-12,
+            "K(0.5)",
+        );
     }
 
     #[test]

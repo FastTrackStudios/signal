@@ -25,7 +25,7 @@ pub const GR_RANGE_DB: f64 = 24.0;
 /// Map a gain-reduction amount in dB to a y coordinate.
 ///
 /// 0 dB (no reduction) sits at the top; [`GR_RANGE_DB`] at the bottom.
-#[must_use] 
+#[must_use]
 pub fn gr_to_y(gr_db: f64, height: f64) -> f64 {
     let t = (gr_db.max(0.0) / GR_RANGE_DB).min(1.0);
     t * height
@@ -33,7 +33,7 @@ pub fn gr_to_y(gr_db: f64, height: f64) -> f64 {
 
 /// Map a linear sample magnitude (0..=1) to a half-height offset from the
 /// waveform's centre line.
-#[must_use] 
+#[must_use]
 pub fn amp_to_half_height(amp: f64, height: f64) -> f64 {
     amp.clamp(0.0, 1.0) * height * 0.5
 }
@@ -43,7 +43,7 @@ pub fn amp_to_half_height(amp: f64, height: f64) -> f64 {
 /// With a single sample the point sits at the left edge; the caller draws a
 /// degenerate path, which is correct for a ring that has only been written
 /// once.
-#[must_use] 
+#[must_use]
 pub fn sample_x(index: usize, n: usize, width: f64) -> f64 {
     if n <= 1 {
         return 0.0;
@@ -56,7 +56,7 @@ pub fn sample_x(index: usize, n: usize, width: f64) -> f64 {
 ///
 /// Returns an empty string for an empty window so the caller can skip the
 /// path element entirely.
-#[must_use] 
+#[must_use]
 pub fn gr_area_path(gr_db: &[f32], width: f64, height: f64) -> String {
     if gr_db.is_empty() {
         return String::new();
@@ -76,7 +76,7 @@ pub fn gr_area_path(gr_db: &[f32], width: f64, height: f64) -> String {
 
 /// Build the `d` of the output waveform envelope: a symmetric filled shape
 /// around the vertical centre of the trace.
-#[must_use] 
+#[must_use]
 pub fn waveform_path(peaks: &[f32], width: f64, height: f64) -> String {
     if peaks.is_empty() {
         return String::new();
@@ -102,7 +102,7 @@ pub fn waveform_path(peaks: &[f32], width: f64, height: f64) -> String {
 }
 
 /// Horizontal gridlines, as (y, label) pairs, every 6 dB of reduction.
-#[must_use] 
+#[must_use]
 pub fn gr_gridlines(height: f64) -> Vec<(f64, String)> {
     let mut out = Vec::new();
     let mut db = 6.0;
@@ -159,7 +159,10 @@ mod tests {
     fn waveform_is_symmetric_about_the_centre_line() {
         let d = waveform_path(&[1.0], TRACE_W, TRACE_H);
         // One sample: top edge then bottom edge, mirrored about mid.
-        assert!(d.contains(&format!("0.00 {:.2}", TRACE_H.mul_add(0.5, -(TRACE_H * 0.5)))));
+        assert!(d.contains(&format!(
+            "0.00 {:.2}",
+            TRACE_H.mul_add(0.5, -(TRACE_H * 0.5))
+        )));
         assert!(d.contains(&format!("0.00 {:.2}", TRACE_H.mul_add(0.5, TRACE_H * 0.5))));
         assert!(d.ends_with(" Z"));
         assert!(waveform_path(&[], TRACE_W, TRACE_H).is_empty());

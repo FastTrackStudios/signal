@@ -355,7 +355,10 @@ fn fit_cells(cells: usize, avail_w: f64, avail_h: f64) -> CompactFit {
     const GAP: f64 = 12.0;
     const PAD: f64 = 16.0;
 
-    let (inner_w, inner_h) = (PAD.mul_add(-2.0, avail_w).max(1.0), (avail_h - PAD).max(1.0));
+    let (inner_w, inner_h) = (
+        PAD.mul_add(-2.0, avail_w).max(1.0),
+        (avail_h - PAD).max(1.0),
+    );
     let flow = if avail_h < 200.0 {
         CompactFlow::Row
     } else if avail_w < avail_h {

@@ -30,7 +30,7 @@ use signal_sampler::SamplerRig;
 
 /// Inverse of [`qn_to_sec`]: QN position at `sec`, integrating the
 /// piecewise-constant tempo map (empty map = 120 BPM).
-#[must_use] 
+#[must_use]
 pub fn sec_to_qn(tempo: &[TempoPoint], sec: f64) -> f64 {
     let mut bpm = tempo.first().map_or(120.0, |t| t.bpm);
     let mut seg_sec = 0.0;
@@ -50,7 +50,7 @@ pub fn sec_to_qn(tempo: &[TempoPoint], sec: f64) -> f64 {
 }
 
 /// Tempo (BPM) in effect at `sec`.
-#[must_use] 
+#[must_use]
 pub fn bpm_at_sec(tempo: &[TempoPoint], sec: f64) -> f64 {
     let qn = sec_to_qn(tempo, sec);
     let mut bpm = tempo.first().map_or(120.0, |t| t.bpm);
@@ -95,7 +95,7 @@ pub struct CountIn {
 /// optional count-in on its own voice. Sample-accurate: the guide engine
 /// places each hit from the `BlockClock` beat grid this function derives
 /// from the map (see `features/guide/tests/guide_engine.rs`).
-#[must_use] 
+#[must_use]
 pub fn render_click(
     tempo: &[TempoPoint],
     total_frames: usize,
@@ -174,7 +174,7 @@ pub fn render_click(
 /// The click is gain-scaled and panned toward the right
 /// (`pan` 0.5 = center, 1.0 = hard right) so it reads clearly against the
 /// music.
-#[must_use] 
+#[must_use]
 pub fn mix_click(music: &[f32], click: &[f32], click_gain: f32, pan: f32) -> Vec<f32> {
     let frames = music.len().max(click.len()).div_ceil(2);
     let (gl, gr) = (
@@ -263,7 +263,7 @@ fn fft_inplace(re: &mut [f64], im: &mut [f64]) {
 }
 
 /// Compute the spectral-flux curve of interleaved stereo `audio`.
-#[must_use] 
+#[must_use]
 pub fn spectral_flux(audio: &[f32], sr: u32) -> FluxCurve {
     let frames = audio.len() / 2;
     let mono: Vec<f64> = (0..frames)
@@ -307,7 +307,7 @@ impl FluxCurve {
     /// Time (sec) of the strongest flux peak within `±search` of
     /// `expected`, refined by parabolic interpolation around the peak bin.
     /// `None` when the window is empty or flat (silence).
-    #[must_use] 
+    #[must_use]
     pub fn onset_near(&self, expected: f64, search: f64) -> Option<f64> {
         let lo = (((expected - search - self.t0) / self.hop_sec)
             .floor()
@@ -364,8 +364,9 @@ impl FluxCurve {
         for i in lo..hi {
             if self.v[i] >= thresh {
                 let frac = if i > lo && self.v[i] > self.v[i - 1] {
-                    f64::from(((thresh - self.v[i - 1]) / (self.v[i] - self.v[i - 1])).clamp(0.0, 1.0))
-                        - 1.0
+                    f64::from(
+                        ((thresh - self.v[i - 1]) / (self.v[i] - self.v[i - 1])).clamp(0.0, 1.0),
+                    ) - 1.0
                 } else {
                     0.0
                 };
@@ -407,7 +408,7 @@ fn goertzel(mono: &[f64], off: usize, n: usize, sr: u32, freq: f64) -> f64 {
 /// the destination's share first crosses 50% and holds. This measures
 /// exactly what the schedule promises ("the pitch change lands ON the
 /// tick"), independent of bow noise or the pre-bow swell.
-#[must_use] 
+#[must_use]
 pub fn pitch_arrival(
     audio: &[f32],
     sr: u32,
@@ -517,7 +518,7 @@ pub struct PitchShareCurve {
 }
 
 /// Compute the [`PitchShareCurve`] for a `from → to` pitch pair.
-#[must_use] 
+#[must_use]
 pub fn pitch_share_curve(
     audio: &[f32],
     sr: u32,
@@ -589,7 +590,7 @@ pub fn pitch_share_curve(
 ///
 /// Used by the join analyzer (`examples/analyze_joins.rs`) as the independent
 /// cross-measurement.
-#[must_use] 
+#[must_use]
 pub fn dest_energy_curve(
     audio: &[f32],
     sr: u32,
@@ -771,7 +772,7 @@ fn legato_line(b: &mut CaseBuilder, vel: u8) {
 /// The deterministic legato-timing showcase corpus. Every case is a
 /// standalone [`TrackDocument`] (single channel/line) whose every note has
 /// a grid-time arrival expectation.
-#[must_use] 
+#[must_use]
 pub fn timing_corpus() -> Vec<TimingCase> {
     let mut cases = Vec::new();
 
@@ -1038,7 +1039,10 @@ mod tests {
         for i in 0..frames {
             let t = i as f64 / f64::from(sr);
             let mix = ((t - (1.0 - xfade / 2.0)) / xfade).clamp(0.0, 1.0);
-            let s = (2.0 * std::f64::consts::PI * f1 * t).sin().mul_add(1.0 - mix, (2.0 * std::f64::consts::PI * f2 * t).sin() * mix) as f32
+            let s = (2.0 * std::f64::consts::PI * f1 * t)
+                .sin()
+                .mul_add(1.0 - mix, (2.0 * std::f64::consts::PI * f2 * t).sin() * mix)
+                as f32
                 * 0.5;
             audio[i * 2] = s;
             audio[i * 2 + 1] = s;
@@ -1054,7 +1058,10 @@ mod tests {
         for i in 0..frames {
             let t = i as f64 / f64::from(sr);
             let mix = ((t - (1.0 - xfade / 2.0)) / xfade).clamp(0.0, 1.0);
-            let s = (2.0 * std::f64::consts::PI * f1 * t).sin().mul_add(1.0 - mix, (2.0 * std::f64::consts::PI * f3 * t).sin() * mix) as f32
+            let s = (2.0 * std::f64::consts::PI * f1 * t)
+                .sin()
+                .mul_add(1.0 - mix, (2.0 * std::f64::consts::PI * f3 * t).sin() * mix)
+                as f32
                 * 0.5;
             audio8[i * 2] = s;
             audio8[i * 2 + 1] = s;

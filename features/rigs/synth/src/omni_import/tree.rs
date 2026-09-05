@@ -193,8 +193,8 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
             // Sample mode: unison + amp attack/release ride the
             // Sampler block (the engine handles them at trigger time;
             // decay/sustain need a full per-voice ADSR — pending).
-            let mut sb = RigBlock::sample_lib(spec.to_string_lossy().to_string())
-                .named(&layer.soundsource);
+            let mut sb =
+                RigBlock::sample_lib(spec.to_string_lossy().to_string()).named(&layer.soundsource);
             if layer.unison_count > 1 {
                 sb = sb
                     .with_param("unison_voices", layer.unison_count.to_string())

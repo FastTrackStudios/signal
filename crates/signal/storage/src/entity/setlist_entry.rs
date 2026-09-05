@@ -14,7 +14,7 @@ pub struct Model {
 }
 
 impl Model {
-    #[must_use] 
+    #[must_use]
     pub fn entry_id_branded(&self) -> SetlistEntryId {
         SetlistEntryId::from(self.id.clone())
     }

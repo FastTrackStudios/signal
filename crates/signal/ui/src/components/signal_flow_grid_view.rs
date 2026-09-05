@@ -531,7 +531,7 @@ impl ModuleCategory {
         Self::Utility,
     ];
 
-    #[must_use] 
+    #[must_use]
     pub const fn label(&self) -> &'static str {
         match self {
             Self::All => "All",
@@ -543,7 +543,7 @@ impl ModuleCategory {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn matches(&self, block_type: BlockType) -> bool {
         match self {
             Self::All => true,

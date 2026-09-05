@@ -50,14 +50,7 @@ impl Biquad {
         let w0 = 2.0 * PI * centre_hz / sample_rate;
         let (sin, cos) = (w0.sin(), w0.cos());
         let alpha = sin / (2.0 * q);
-        Self::normalized(
-            alpha,
-            0.0,
-            -alpha,
-            1.0 + alpha,
-            -2.0 * cos,
-            1.0 - alpha,
-        )
+        Self::normalized(alpha, 0.0, -alpha, 1.0 + alpha, -2.0 * cos, 1.0 - alpha)
     }
 
     /// High-shelf (RBJ cookbook), `gain_db` above the corner.
@@ -212,7 +205,10 @@ mod tests {
     fn high_shelf_reaches_its_gain() {
         let bq = Biquad::high_shelf(1000.0, 0.707, 6.0, SR);
         assert!(db(magnitude(&bq, 20.0, SR)).abs() < 0.5, "unity below");
-        assert!((db(magnitude(&bq, 20_000.0, SR)) - 6.0).abs() < 0.5, "+6 above");
+        assert!(
+            (db(magnitude(&bq, 20_000.0, SR)) - 6.0).abs() < 0.5,
+            "+6 above"
+        );
     }
 
     #[test]
@@ -222,9 +218,21 @@ mod tests {
 
         // BS.1770: ~0 dB through the midrange, ~+4 dB at the top, steep
         // low-frequency rolloff.
-        assert!(resp(1000.0).abs() < 0.5, "flat at 1 kHz, got {}", resp(1000.0));
-        assert!(resp(10_000.0) > 3.0, "lifted at 10 kHz, got {}", resp(10_000.0));
-        assert!(resp(20.0) < -10.0, "rolled off at 20 Hz, got {}", resp(20.0));
+        assert!(
+            resp(1000.0).abs() < 0.5,
+            "flat at 1 kHz, got {}",
+            resp(1000.0)
+        );
+        assert!(
+            resp(10_000.0) > 3.0,
+            "lifted at 10 kHz, got {}",
+            resp(10_000.0)
+        );
+        assert!(
+            resp(20.0) < -10.0,
+            "rolled off at 20 Hz, got {}",
+            resp(20.0)
+        );
     }
 
     #[test]

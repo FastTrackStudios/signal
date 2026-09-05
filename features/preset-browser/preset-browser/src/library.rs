@@ -20,7 +20,10 @@ use crate::Preset;
 #[derive(Debug)]
 pub enum LoadError {
     /// The directory itself could not be listed.
-    Unreadable { path: PathBuf, source: std::io::Error },
+    Unreadable {
+        path: PathBuf,
+        source: std::io::Error,
+    },
 }
 
 impl std::fmt::Display for LoadError {
@@ -44,7 +47,7 @@ pub struct LoadReport {
 }
 
 impl LoadReport {
-    #[must_use] 
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.presets.is_empty()
     }
@@ -94,7 +97,10 @@ impl SavedPreset {
         // The source plugin's own mode name is the most useful grouping we
         // have — "Plate", "Chamber1979", "Large Chamber" — because it is what
         // the preset was actually voiced as, not a folder someone filed it in.
-        let match_error = self.measurement.as_ref().and_then(|m| m.worst_band_ratio_error);
+        let match_error = self
+            .measurement
+            .as_ref()
+            .and_then(|m| m.worst_band_ratio_error);
         let mut tags = Vec::new();
         if let Some(m) = &self.measurement {
             // Whether the translation was verified against the reference is
@@ -141,7 +147,10 @@ pub fn load_directory(dir: impl AsRef<Path>) -> Result<LoadReport, LoadError> {
     let mut report = LoadReport::default();
     let mut paths: Vec<PathBuf> = entries
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")))
+        .filter(|p| {
+            p.extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+        })
         .collect();
     // Stable order, so `SortMode::Library` means something reproducible.
     paths.sort();

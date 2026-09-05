@@ -1623,7 +1623,11 @@ impl SamplerRig {
         tables.instruments.insert(id.clone(), track.clone());
         tables.order.push(id);
         drop(tables);
-        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tables = self
+            .inner
+            .tracks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(track)
     }
@@ -1672,7 +1676,11 @@ impl SamplerRig {
         };
         tables.buses.insert(bus_id.to_string(), bus.clone());
         drop(tables);
-        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tables = self
+            .inner
+            .tracks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(bus)
     }
@@ -2030,7 +2038,11 @@ impl SamplerRig {
         }
         // Meter indices are compacted on the next load (resize_meters).
         drop(tables);
-        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tables = self
+            .inner
+            .tracks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(())
     }
@@ -2075,7 +2087,11 @@ impl SamplerRig {
         tables.instruments.insert(id.to_string(), track.clone());
         tables.order.push(id.to_string());
         drop(tables);
-        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tables = self
+            .inner
+            .tracks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(track)
     }
@@ -2348,7 +2364,11 @@ mod tests {
 
     /// A 2-piece kit (kick, snare), each with a close mic + an Overhead bus mic.
     fn kit_layout() -> MixerLayout {
-        let mics = |v: &[&str]| v.iter().map(std::string::ToString::to_string).collect::<Vec<_>>();
+        let mics = |v: &[&str]| {
+            v.iter()
+                .map(std::string::ToString::to_string)
+                .collect::<Vec<_>>()
+        };
         let engine_mics = vec![
             ("kick".to_string(), mics(&["In 1", "Overhead"])),
             ("snare".to_string(), mics(&["In 1", "Overhead"])),

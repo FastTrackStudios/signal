@@ -420,10 +420,7 @@ pub(crate) fn ParameterSlider(
 
 // region: --- Normalization Helpers
 
-pub fn normalize_default_variant_id(
-    variants: &[Snapshot],
-    explicit_default: &Snapshot,
-) -> String {
+pub fn normalize_default_variant_id(variants: &[Snapshot], explicit_default: &Snapshot) -> String {
     if variants.iter().any(|v| v.id() == explicit_default.id()) {
         return explicit_default.id().to_string();
     }

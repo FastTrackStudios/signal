@@ -671,9 +671,7 @@ impl ProfileRig {
 
     /// The active profile's stacks (footswitch groups), or empty.
     pub fn stacks(&self) -> &[RigStack] {
-        self.profile
-            .as_ref()
-            .map_or(&[], |p| p.stacks.as_slice())
+        self.profile.as_ref().map_or(&[], |p| p.stacks.as_slice())
     }
 
     /// The rotation cursor (index into the stack's patch list) for `stack_idx`.
@@ -832,9 +830,7 @@ impl ProfileRig {
     }
 
     pub fn patches(&self) -> &[RigPatch] {
-        self.profile
-            .as_ref()
-            .map_or(&[], |p| p.patches.as_slice())
+        self.profile.as_ref().map_or(&[], |p| p.patches.as_slice())
     }
 
     pub fn is_patch_available(&self, index: usize) -> bool {

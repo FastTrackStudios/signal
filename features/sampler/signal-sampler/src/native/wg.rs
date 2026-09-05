@@ -479,14 +479,18 @@ impl NativeWaveguide {
                     .min_by_key(|r| (r.note as i32 - note as i32).abs())
                     .filter(|r| (r.note as i32 - note as i32).abs() <= 3)
                     .cloned()
-            }).map_or_else(|| fallback_row(note), |mut r| {
-                if r.note != note {
-                    // shift a neighbor's params to this pitch
-                    r.f0 *= 2f32.powf((note as f32 - r.note as f32) / 12.0);
-                    r.note = note;
-                }
-                r
             })
+            .map_or_else(
+                || fallback_row(note),
+                |mut r| {
+                    if r.note != note {
+                        // shift a neighbor's params to this pitch
+                        r.f0 *= 2f32.powf((note as f32 - r.note as f32) / 12.0);
+                        r.note = note;
+                    }
+                    r
+                },
+            )
     }
 
     fn note_on(&mut self, note: u8, vel: u8) {

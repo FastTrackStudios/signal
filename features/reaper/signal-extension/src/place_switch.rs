@@ -95,10 +95,7 @@ async fn place_switch(daw: &Daw, level: SwitchLevel) -> Result<()> {
     // Get edit cursor position
     let transport = project.transport();
     let state = transport.get_state().await?;
-    let cursor_time = state
-        .edit_position
-        .time
-        .map_or(0.0, |t| t.as_seconds());
+    let cursor_time = state.edit_position.time.map_or(0.0, |t| t.as_seconds());
 
     // Calculate bar duration
     let beats_per_bar = f64::from(state.time_signature.numerator);

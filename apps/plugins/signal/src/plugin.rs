@@ -79,7 +79,10 @@ fn load_rig(shared: &SharedState, sr: u32) {
     // Swap the finished bank in (one locked assignment). Samples keep
     // streaming in on load_pack's own preload thread; the engine plays what
     // is cached and streams the rest.
-    *shared.bank.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = bank;
+    *shared
+        .bank
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = bank;
     shared.rig_loaded.store(true, Ordering::Release);
     tracing::info!(sr, "rig ready");
 }

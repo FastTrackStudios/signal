@@ -509,7 +509,9 @@ pub fn apply(
     // so a closed Drive is unity on all nine — no profile is being driven
     // when the control says it is not.
     pre.drive = (controls.drive.clamp(0.0, 1.0) * 15.0).mul_add(v.drive_scale, 1.0);
-    pre.q_point = (controls.bias.clamp(0.0, 1.0) - 0.5).mul_add(1.2, v.q_point).clamp(-1.0, 1.0);
+    pre.q_point = (controls.bias.clamp(0.0, 1.0) - 0.5)
+        .mul_add(1.2, v.q_point)
+        .clamp(-1.0, 1.0);
     pre.skew = v.skew;
     pre.headroom = v.headroom;
     pre.knee = v.knee;
@@ -538,7 +540,8 @@ pub fn apply(
     // saturating it in another is a tilt the level match gets wrong. Half the
     // range is plenty of character and stays inside what the match can track.
     pre.set_tilt_db(
-        (controls.tilt.clamp(0.0, 1.0) - 0.5).mul_add(TILT_MAX_DB, v.tilt_db)
+        (controls.tilt.clamp(0.0, 1.0) - 0.5)
+            .mul_add(TILT_MAX_DB, v.tilt_db)
             .clamp(-TILT_MAX_DB, TILT_MAX_DB),
     );
 
@@ -598,17 +601,17 @@ fn apply_character(
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn profile_by_id(id: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.id == id)
 }
 
-#[must_use] 
+#[must_use]
 pub fn profile_index(id: &str) -> Option<usize> {
     PROFILES.iter().position(|p| p.id == id)
 }
 
-#[must_use] 
+#[must_use]
 pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
     CATEGORIES.iter().enumerate().find_map(|(ci, category)| {
         category
@@ -621,7 +624,7 @@ pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
 
 /// Clicking the family you are in advances through it and wraps; clicking
 /// another lands on its first.
-#[must_use] 
+#[must_use]
 pub fn rail_click_target(current_index: usize, clicked_category: usize) -> usize {
     let current_id = PROFILES.get(current_index).map_or("", |p| p.id);
     let Some(category) = CATEGORIES.get(clicked_category) else {

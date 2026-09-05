@@ -1,6 +1,10 @@
 //! Layer repository — data access for Layer collections and `LayerSnapshot` variants.
 
-use sea_orm::{ConnectionTrait, Schema, ActiveModelBehavior, StatementBuilder, QueryTrait, ActiveEnum, QueryOrder, QueryFilter, EntityTrait, ColumnTrait, Iden, ColIdx, IdenStatic, ActiveModelTrait, Set, Iterable};
+use sea_orm::{
+    ActiveEnum, ActiveModelBehavior, ActiveModelTrait, ColIdx, ColumnTrait, ConnectionTrait,
+    EntityTrait, Iden, IdenStatic, Iterable, QueryFilter, QueryOrder, QueryTrait, Schema, Set,
+    StatementBuilder,
+};
 use signal_proto::layer::{
     BlockRef, Layer, LayerId, LayerRef, LayerSnapshot, LayerSnapshotId, ModuleRef, PluginRef,
 };
@@ -37,7 +41,7 @@ pub struct LayerRepoLive {
 }
 
 impl LayerRepoLive {
-    #[must_use] 
+    #[must_use]
     pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }

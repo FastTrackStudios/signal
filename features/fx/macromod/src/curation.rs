@@ -14,7 +14,7 @@ pub struct ParamCuration {
 }
 
 impl ParamCuration {
-    #[must_use] 
+    #[must_use]
     pub const fn new(featured: Vec<String>) -> Self {
         Self {
             featured_param_ids: featured,
@@ -22,19 +22,19 @@ impl ParamCuration {
     }
 
     /// Whether a parameter ID is featured.
-    #[must_use] 
+    #[must_use]
     pub fn is_featured(&self, param_id: &str) -> bool {
         self.featured_param_ids.iter().any(|id| id == param_id)
     }
 
     /// Number of featured parameters.
-    #[must_use] 
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.featured_param_ids.len()
     }
 
     /// Whether the curation list is empty.
-    #[must_use] 
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.featured_param_ids.is_empty()
     }

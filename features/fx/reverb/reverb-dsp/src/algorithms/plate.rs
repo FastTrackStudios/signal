@@ -14,7 +14,10 @@
 //! All delay lengths from Dattorro's published values at 29761 Hz
 //! reference rate, scaled to the actual sample rate.
 
-use crate::algorithm::{AlgorithmParams, PLATE_DECAY_APPLICATIONS, PLATE_LOOP_SECONDS, PLATE_T60, ReverbAlgorithm, dattorro_gain_for_t60, decay_to_t60};
+use crate::algorithm::{
+    dattorro_gain_for_t60, decay_to_t60, AlgorithmParams, ReverbAlgorithm,
+    PLATE_DECAY_APPLICATIONS, PLATE_LOOP_SECONDS, PLATE_T60,
+};
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::one_pole::Lp1;
@@ -236,8 +239,7 @@ impl ReverbAlgorithm for Plate {
         // Previously this was a bare gain ramp (0.3..0.99) with no relation
         // to time, so `decay_time` did nothing on a plate at all.
         let t60 = decay_to_t60(params.decay, PLATE_T60.0, PLATE_T60.1);
-        self.decay =
-            dattorro_gain_for_t60(t60, PLATE_LOOP_SECONDS, PLATE_DECAY_APPLICATIONS);
+        self.decay = dattorro_gain_for_t60(t60, PLATE_LOOP_SECONDS, PLATE_DECAY_APPLICATIONS);
 
         // Damping → tank LP cutoff (2k–16k Hz)
         let freq = 2000.0 + (1.0 - params.damping) * 14000.0;

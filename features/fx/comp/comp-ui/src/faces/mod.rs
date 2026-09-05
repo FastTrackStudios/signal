@@ -27,7 +27,7 @@ use crate::profile_handle::handle_for;
 
 /// Profile ids in `comp_profiles::all_profiles()` order — which is the order
 /// the `profile` parameter's values are in.
-#[must_use] 
+#[must_use]
 pub fn profile_ids() -> Vec<&'static str> {
     comp_profiles::all_profiles()
         .iter()
@@ -36,7 +36,7 @@ pub fn profile_ids() -> Vec<&'static str> {
 }
 
 /// The profile id a `profile` param index selects.
-#[must_use] 
+#[must_use]
 pub fn profile_id_for_index(index: usize) -> &'static str {
     comp_profiles::all_profiles()
         .get(index)
@@ -44,7 +44,7 @@ pub fn profile_id_for_index(index: usize) -> &'static str {
 }
 
 /// The profile a `profile` param index selects.
-#[must_use] 
+#[must_use]
 pub fn profile_for_index(index: usize) -> &'static (dyn Profile + Sync) {
     comp_profiles::all_profiles()
         .get(index)
@@ -53,7 +53,7 @@ pub fn profile_for_index(index: usize) -> &'static (dyn Profile + Sync) {
 }
 
 /// The rail badge for a profile — how the unit is named on its own panel.
-#[must_use] 
+#[must_use]
 pub fn profile_badge(profile_id: &str) -> &'static str {
     match profile_id {
         "control" => "MAIN",
@@ -76,7 +76,7 @@ pub fn profile_badge(profile_id: &str) -> &'static str {
 ///
 /// A family with more than one unit says so in its tooltip, because a button
 /// that changes on a second click is not discoverable otherwise.
-#[must_use] 
+#[must_use]
 pub fn rail_items(profile_index: usize) -> Vec<ShellItem> {
     let active_id = profile_id_for_index(profile_index);
     let active = comp_profiles::category_of(active_id).map(|(c, _)| c);
@@ -109,8 +109,7 @@ pub fn rail_items(profile_index: usize) -> Vec<ShellItem> {
             // which one is showing. Clicking cycles them, and until now
             // nothing on the rail admitted that a family of three existed.
             let at = if is_active {
-                comp_profiles::category_of(active_id)
-                    .map_or(0, |(_, v)| v)
+                comp_profiles::category_of(active_id).map_or(0, |(_, v)| v)
             } else {
                 0
             };
@@ -125,7 +124,7 @@ pub fn rail_items(profile_index: usize) -> Vec<ShellItem> {
 ///
 /// Clicking the family you are already on advances to the next unit inside it
 /// and wraps; clicking any other family lands on its first unit.
-#[must_use] 
+#[must_use]
 pub fn rail_click_target(profile_index: usize, clicked_category: usize) -> usize {
     let active_id = profile_id_for_index(profile_index);
     let Some(category) = comp_profiles::CATEGORIES.get(clicked_category) else {
@@ -147,7 +146,7 @@ pub fn rail_click_target(profile_index: usize, clicked_category: usize) -> usize
 /// height. A rack unit is 4:1 and wants none — given a tall window it just
 /// draws black above and below itself. So switching profile asks the host to
 /// resize, the same way the plugin asks on open.
-#[must_use] 
+#[must_use]
 pub const fn preferred_editor_size(_profile_index: usize) -> (u32, u32) {
     // Every face asks for the same box: the panel's 900x300 drawing plus the
     // rail, with a little air around it.
@@ -162,7 +161,7 @@ pub const fn preferred_editor_size(_profile_index: usize) -> (u32, u32) {
 
 /// The editor size for a profile *and* a chosen form: the form decides, except
 /// for Responsive, which defers to the face.
-#[must_use] 
+#[must_use]
 pub fn editor_size_for(profile_index: usize, form: fts_audio_ui::EditorForm) -> (u32, u32) {
     form.editor_size(
         crate::control_view::RAIL_W,

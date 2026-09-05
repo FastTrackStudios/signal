@@ -83,7 +83,11 @@ impl std::fmt::Display for FfbsError {
         match self {
             Self::TooShort => write!(f, "FFBS blob shorter than its 12-byte header"),
             Self::BadMagic(m) => {
-                write!(f, "not an FFBS blob: magic {:?}", String::from_utf8_lossy(m))
+                write!(
+                    f,
+                    "not an FFBS blob: magic {:?}",
+                    String::from_utf8_lossy(m)
+                )
             }
             Self::TruncatedParams {
                 declared,
@@ -302,7 +306,10 @@ mod tests {
 
     #[test]
     fn rejects_non_ffbs_and_truncated() {
-        assert!(matches!(parse(b"nope---------"), Err(FfbsError::BadMagic(_))));
+        assert!(matches!(
+            parse(b"nope---------"),
+            Err(FfbsError::BadMagic(_))
+        ));
         assert_eq!(parse(b"FFBS"), Err(FfbsError::TooShort));
 
         // Declares 10 floats, supplies 2.
@@ -335,7 +342,10 @@ mod tests {
     fn a_round_trip_preserves_the_parameter_vector() {
         let params: Vec<f32> = (0..600).map(|i| i as f32 * 0.017).collect();
         let blob = encode(&params);
-        assert!(is_ffbs(&blob), "the encoder must produce something the parser accepts");
+        assert!(
+            is_ffbs(&blob),
+            "the encoder must produce something the parser accepts"
+        );
 
         let back = parse(&blob).expect("parses");
         assert_eq!(back.version, 1);
@@ -344,4 +354,3 @@ mod tests {
         assert_eq!(back.metadata, FfbsMetadata::default());
     }
 }
-

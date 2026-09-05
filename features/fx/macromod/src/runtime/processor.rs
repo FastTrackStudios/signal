@@ -46,7 +46,7 @@ pub struct FollowerState {
 }
 
 impl FollowerState {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             level: 0.0,
@@ -87,7 +87,7 @@ pub struct RandomState {
 }
 
 impl RandomState {
-    #[must_use] 
+    #[must_use]
     pub fn new(seed: Option<u64>) -> Self {
         let rng_state = seed.unwrap_or(0x1234_5678_9ABC_DEF0);
         let mut s = Self {
@@ -113,9 +113,7 @@ impl RandomState {
     pub fn tick(&mut self, dt: f64, config: &RandomConfig, bpm: f64) -> f64 {
         let rate = if config.tempo_sync {
             let beats_per_sec = bpm / 60.0;
-            let div_beats = config
-                .sync_division
-                .map_or(1.0, |d| f64::from(d.beats()));
+            let div_beats = config.sync_division.map_or(1.0, |d| f64::from(d.beats()));
             beats_per_sec / div_beats
         } else {
             f64::from(config.rate_hz)
@@ -182,7 +180,7 @@ pub struct ModulationProcessor {
 
 impl ModulationProcessor {
     /// Create a new processor from a set of modulation routes.
-    #[must_use] 
+    #[must_use]
     pub fn new(routes: Vec<ModulationRoute>) -> Self {
         let states = routes
             .iter()
@@ -213,7 +211,7 @@ impl ModulationProcessor {
     }
 
     /// Number of routes.
-    #[must_use] 
+    #[must_use]
     pub const fn route_count(&self) -> usize {
         self.routes.len()
     }

@@ -28,14 +28,14 @@ pub enum Value {
 }
 
 impl Value {
-    #[must_use] 
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&Self> {
         match self {
             Self::Map(m) => m.get(key),
             _ => None,
         }
     }
-    #[must_use] 
+    #[must_use]
     pub const fn as_f64(&self) -> Option<f64> {
         match self {
             Self::Num(n) => Some(*n),
@@ -43,14 +43,14 @@ impl Value {
             _ => None,
         }
     }
-    #[must_use] 
+    #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::Str(s) => Some(s),
             _ => None,
         }
     }
-    #[must_use] 
+    #[must_use]
     pub fn as_arr(&self) -> Option<&[Self]> {
         match self {
             Self::Arr(a) => Some(a),
@@ -140,7 +140,7 @@ pub struct EqBand {
 
 impl Strip {
     /// The strip's FX chain as typed slots (order preserved).
-    #[must_use] 
+    #[must_use]
     pub fn fx_slots(&self) -> Vec<FxSlot> {
         self.fx
             .iter()

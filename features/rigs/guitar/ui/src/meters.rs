@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 
 /// Map a linear peak (0..1) to a perceptual meter level (0..1) via a sqrt
 /// curve, so quiet-but-present signal is clearly visible.
-#[must_use] 
+#[must_use]
 pub fn meter_level(peak: f32) -> f64 {
     f64::from(peak.max(0.0).sqrt()).min(1.0)
 }

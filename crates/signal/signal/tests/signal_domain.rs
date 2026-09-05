@@ -324,9 +324,7 @@ async fn jm_pedals_lead_variant_uses_edge_snapshot() {
             );
             println!("✓ Lead variant correctly selects jm-justa-boost-edge");
         }
-        other => panic!(
-            "expected PresetSnapshot source for lead boost, got {other:?}"
-        ),
+        other => panic!("expected PresetSnapshot source for lead boost, got {other:?}"),
     }
 }
 

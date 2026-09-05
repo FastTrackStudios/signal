@@ -159,7 +159,10 @@ fn main() -> eyre::Result<()> {
                 }
                 OnsetKind::PhraseStart => (flux.leading_edge(exp.sec, 0.10, 0.25), "flux-edge"),
             };
-            let err = measured.map_or_else(|| "n/a".into(), |t| format!("{:+.1} ms", (t - exp.sec) * 1000.0));
+            let err = measured.map_or_else(
+                || "n/a".into(),
+                |t| format!("{:+.1} ms", (t - exp.sec) * 1000.0),
+            );
             prev_pitch = Some(exp.pitch);
             println!(
                 "   note {i:2} qn {:5.2} pitch {:3} {:12} {label:9} err {err}",

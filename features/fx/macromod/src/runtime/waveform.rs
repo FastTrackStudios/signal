@@ -17,7 +17,7 @@ use std::f64::consts::TAU;
 ///
 /// # Returns
 /// Bipolar value in `[-1.0, 1.0]`.
-#[must_use] 
+#[must_use]
 pub fn evaluate_waveform(
     waveform: LfoWaveform,
     phase: f64,

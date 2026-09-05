@@ -27,7 +27,7 @@ use crate::params::CompStageParams;
 use fts_plug_ui::param_adapter::param_handle;
 
 /// Where the compressor's presets live.
-#[must_use] 
+#[must_use]
 pub fn preset_library_root() -> std::path::PathBuf {
     preset_browser_ui::library_root(
         "FTS_COMP_PRESETS",
@@ -36,7 +36,7 @@ pub fn preset_library_root() -> std::path::PathBuf {
 }
 
 /// The compressor's library: every bank under the root, as one list.
-#[must_use] 
+#[must_use]
 pub fn load_library() -> (PresetBrowser, String) {
     preset_browser_ui::load_library_tree(&preset_library_root())
 }
@@ -68,7 +68,10 @@ pub fn apply(
     if unmatched.is_empty() {
         note.set(String::new());
     } else {
-        note.set(format!("{applied} applied; {} not in this build", unmatched.len()));
+        note.set(format!(
+            "{applied} applied; {} not in this build",
+            unmatched.len()
+        ));
     }
 }
 

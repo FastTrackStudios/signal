@@ -167,7 +167,7 @@ pub struct BandParams {
 }
 
 impl BandParams {
-    #[must_use] 
+    #[must_use]
     pub fn new(idx: usize) -> Self {
         // Gregory Scott baseline, default on every instance: band 0 is a low
         // shelf cornered ~400 Hz and band 1 a high shelf ~2.5 kHz — both enabled
@@ -269,7 +269,10 @@ impl BandParams {
             slope: FloatParam::new(
                 format!("B{} Slope", idx + 1),
                 2.0,
-                FloatRange::Linear { min: 0.0, max: 10.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 10.0,
+                },
             )
             .with_value_to_string(Arc::new(|v| {
                 // Continuous up to 36 dB/oct, then discrete steps.
@@ -316,7 +319,10 @@ impl BandParams {
             dyn_range_db: FloatParam::new(
                 format!("B{} Dyn Range", idx + 1),
                 0.0,
-                FloatRange::Linear { min: -30.0, max: 30.0 },
+                FloatRange::Linear {
+                    min: -30.0,
+                    max: 30.0,
+                },
             )
             .with_unit(" dB")
             .with_step_size(0.1),
@@ -325,7 +331,10 @@ impl BandParams {
                 format!("B{} Dyn Threshold", idx + 1),
                 -18.0,
                 // Pro-Q's threshold reaches -90 dB.
-                FloatRange::Linear { min: -90.0, max: 0.0 },
+                FloatRange::Linear {
+                    min: -90.0,
+                    max: 0.0,
+                },
             )
             .with_unit(" dB")
             .with_step_size(0.1),
@@ -333,7 +342,10 @@ impl BandParams {
             dyn_attack: FloatParam::new(
                 format!("B{} Dyn Attack", idx + 1),
                 50.0,
-                FloatRange::Linear { min: 0.0, max: 100.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
             )
             .with_unit(" %")
             .with_step_size(0.1),
@@ -341,7 +353,10 @@ impl BandParams {
             dyn_release: FloatParam::new(
                 format!("B{} Dyn Release", idx + 1),
                 50.0,
-                FloatRange::Linear { min: 0.0, max: 100.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
             )
             .with_unit(" %")
             .with_step_size(0.1),
@@ -391,20 +406,21 @@ impl BandParams {
                 0,
                 IntRange::Linear { min: 0, max: 4 },
             )
-            .with_value_to_string(Arc::new(|v| {
-                match v {
-                    1 => "Left".to_string(),
-                    2 => "Right".to_string(),
-                    3 => "Mid".to_string(),
-                    4 => "Side".to_string(),
-                    _ => "Stereo".to_string(),
-                }
+            .with_value_to_string(Arc::new(|v| match v {
+                1 => "Left".to_string(),
+                2 => "Right".to_string(),
+                3 => "Mid".to_string(),
+                4 => "Side".to_string(),
+                _ => "Stereo".to_string(),
             })),
 
             spectral_density: FloatParam::new(
                 format!("B{} Spectral Density", idx + 1),
                 50.0,
-                FloatRange::Linear { min: 0.0, max: 100.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
             )
             .with_unit(" %")
             .with_step_size(0.1),

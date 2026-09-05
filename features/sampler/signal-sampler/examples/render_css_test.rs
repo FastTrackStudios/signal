@@ -71,8 +71,8 @@ fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
                 p += 1;
                 let len = read_vlq(d, &mut p) as usize;
                 if meta == 0x51 {
-                    us_per_q =
-                        f64::from(d[p]).mul_add(65536.0, f64::from(d[p + 1]) * 256.0) + f64::from(d[p + 2]);
+                    us_per_q = f64::from(d[p]).mul_add(65536.0, f64::from(d[p + 1]) * 256.0)
+                        + f64::from(d[p + 2]);
                 }
                 p += len;
             }

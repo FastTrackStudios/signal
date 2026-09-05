@@ -149,7 +149,9 @@ mod support {
         // Seed the display: a ramp of audible peaks + two hits with distinct
         // velocities inside the visible window.
         for k in 0..256u32 {
-            ui_state.input_wave.push(0.9f32.mul_add(k as f32 / 255.0, 0.05));
+            ui_state
+                .input_wave
+                .push(0.9f32.mul_add(k as f32 / 255.0, 0.05));
         }
         ui_state.hits.push(200, 0.9);
         ui_state.hits.push(250, 0.4);
@@ -326,7 +328,8 @@ async fn dragging_threshold_line_lowers_threshold_to_pointer_db() -> dioxus_test
     fx.tester.pointer_down(sx, sy);
     let _ = fx.tester.pump().await;
     for step in 1..=3 {
-        fx.tester.pointer_move(sx, 15.0f64.mul_add(f64::from(step), sy), true);
+        fx.tester
+            .pointer_move(sx, 15.0f64.mul_add(f64::from(step), sy), true);
         let _ = fx.tester.pump().await;
     }
     fx.tester.pointer_up(sx, sy + 45.0);

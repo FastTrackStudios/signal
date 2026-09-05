@@ -15,7 +15,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 use audiocore_dsp::{AudioConfig, Processor};
 use reverb_dsp::{AlgorithmType, ReverbChain};
 

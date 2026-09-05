@@ -191,7 +191,8 @@ where
             let mut best_error = current_error;
 
             for direction in [-1.0, 1.0] {
-                let candidate_value = scalar.clamp_value(scalar.step.mul_add(direction, scalar.value));
+                let candidate_value =
+                    scalar.clamp_value(scalar.step.mul_add(direction, scalar.value));
                 if (candidate_value - scalar.value).abs() <= f64::EPSILON {
                     continue;
                 }

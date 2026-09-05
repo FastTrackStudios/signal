@@ -45,7 +45,11 @@ impl DelayFilter {
         if let Some(slot) = self.buffer.get_mut(self.write_pos) {
             *slot = input;
         }
-        let read_pos = (self.write_pos.wrapping_add(self.buffer.len()).wrapping_sub(self.delay_samples)) & self.mask;
+        let read_pos = (self
+            .write_pos
+            .wrapping_add(self.buffer.len())
+            .wrapping_sub(self.delay_samples))
+            & self.mask;
         let output = self.buffer.get(read_pos).copied().unwrap_or(0.0);
         self.write_pos = (self.write_pos.wrapping_add(1)) & self.mask;
         output

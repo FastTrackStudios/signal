@@ -1538,7 +1538,9 @@ async fn the_top_rail_carries_the_preset_strip() -> dioxus_test::Result<()> {
     let mut fx = mount();
     let _ = fx.tester.pump().await;
 
-    fx.tester.query(by_testid("preset-bar-name")).immediately()?;
+    fx.tester
+        .query(by_testid("preset-bar-name"))
+        .immediately()?;
     assert!(
         fx.tester
             .query(by_testid("comp-presets"))

@@ -38,7 +38,7 @@ pub enum SignalNode {
 
 impl SignalNode {
     /// Returns the inner block if this is a `Block` node.
-    #[must_use] 
+    #[must_use]
     pub fn as_block(&self) -> Option<&ModuleBlock> {
         match self {
             Self::Block(b) => Some(b),
@@ -55,7 +55,7 @@ impl SignalNode {
     }
 
     /// Returns the parallel lanes if this is a `Split` node.
-    #[must_use] 
+    #[must_use]
     pub fn as_split(&self) -> Option<&[SignalChain]> {
         match self {
             Self::Block(_) => None,
@@ -78,7 +78,7 @@ pub struct SignalChain {
 
 impl SignalChain {
     /// Create a chain from an explicit list of nodes.
-    #[must_use] 
+    #[must_use]
     pub const fn new(nodes: Vec<SignalNode>) -> Self {
         Self { nodes }
     }
@@ -86,7 +86,7 @@ impl SignalChain {
     /// Create a pure series chain (no parallel routing).
     ///
     /// This is the backward-compatible path: `Module::from_blocks()` delegates here.
-    #[must_use] 
+    #[must_use]
     pub fn serial(blocks: Vec<ModuleBlock>) -> Self {
         Self {
             nodes: blocks
@@ -97,7 +97,7 @@ impl SignalChain {
     }
 
     /// The ordered list of nodes in this chain.
-    #[must_use] 
+    #[must_use]
     pub fn nodes(&self) -> &[SignalNode] {
         &self.nodes
     }
@@ -111,7 +111,7 @@ impl SignalChain {
     ///
     /// This is the backward-compatible accessor — callers that just need a
     /// flat list of blocks (e.g., block count, parameter iteration) use this.
-    #[must_use] 
+    #[must_use]
     pub fn blocks(&self) -> Vec<&ModuleBlock> {
         let mut out = Vec::new();
         collect_blocks(&self.nodes, &mut out);
@@ -126,19 +126,19 @@ impl SignalChain {
     }
 
     /// True if this chain has no `Split` nodes (pure series).
-    #[must_use] 
+    #[must_use]
     pub fn is_serial(&self) -> bool {
         self.nodes.iter().all(|n| matches!(n, SignalNode::Block(_)))
     }
 
     /// Number of nodes at the top level (not recursive).
-    #[must_use] 
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.nodes.len()
     }
 
     /// True if the chain has no nodes.
-    #[must_use] 
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.nodes.is_empty()
     }

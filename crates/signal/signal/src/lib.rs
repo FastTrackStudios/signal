@@ -110,13 +110,11 @@ pub mod fxchains {
 ///
 /// REAPER's `.RfxChain` format is the *inner* content only — no `<FXCHAIN>` delimiters.
 /// This function removes the header line and closing `>`, returning just the bare FX blocks.
-#[must_use] 
+#[must_use]
 pub fn strip_fxchain_wrapper(chunk: &str) -> String {
     let trimmed = chunk.trim();
     if trimmed.starts_with("<FXCHAIN") {
-        let after_header = trimmed
-            .find('\n')
-            .map_or(trimmed, |i| &trimmed[i + 1..]);
+        let after_header = trimmed.find('\n').map_or(trimmed, |i| &trimmed[i + 1..]);
         let inner = after_header.trim_end();
         if let Some(stripped) = inner.strip_suffix('>') {
             stripped.trim_end().to_string()

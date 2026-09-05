@@ -33,13 +33,13 @@ fn bounds() -> ((u32, u32), (u32, u32)) {
     fts_audio_ui::EditorForm::size_bounds(RAIL_W, (EDITOR_W, EDITOR_H))
 }
 
-#[must_use] 
+#[must_use]
 pub fn min_editor_size() -> (f32, f32) {
     let ((w, h), _) = bounds();
     (w as f32, h as f32)
 }
 
-#[must_use] 
+#[must_use]
 pub fn max_editor_size() -> (f32, f32) {
     let (_, (w, h)) = bounds();
     ((w as f32 * 2.0).max(1960.0), (h as f32 * 1.4).max(1320.0))
@@ -47,7 +47,7 @@ pub fn max_editor_size() -> (f32, f32) {
 
 /// Freely resizable between the extremes of the size presets — a bound tighter
 /// than a preset the rail offers is a button that does nothing.
-#[must_use] 
+#[must_use]
 pub fn resize_hint() -> ResizeHint {
     let (min_w, min_h) = min_editor_size();
     let (max_w, max_h) = max_editor_size();
@@ -65,7 +65,7 @@ pub struct DelayUi {
 }
 
 /// The editor's size for a profile and a chosen form.
-#[must_use] 
+#[must_use]
 pub fn editor_size_for(_profile_index: usize, form: fts_audio_ui::EditorForm) -> (u32, u32) {
     form.editor_size(RAIL_W, (EDITOR_W, EDITOR_H))
 }
@@ -146,8 +146,7 @@ pub fn App() -> Element {
     .collect();
 
     // One rail entry per family, badged with the space that is active in it.
-    let active_category = delay_profiles::category_of(profile.id)
-        .map_or(0, |(c, _)| c);
+    let active_category = delay_profiles::category_of(profile.id).map_or(0, |(c, _)| c);
     let items: Vec<ShellItem> = delay_profiles::CATEGORIES
         .iter()
         .enumerate()
@@ -161,8 +160,7 @@ pub fn App() -> Element {
             // which one is showing — clicking cycles them, and nothing else
             // on the rail admits that.
             let at = if index == active_category {
-                delay_profiles::category_of(profile.id)
-                    .map_or(0, |(_, v)| v)
+                delay_profiles::category_of(profile.id).map_or(0, |(_, v)| v)
             } else {
                 0
             };
@@ -235,7 +233,7 @@ pub fn App() -> Element {
 }
 
 /// The rail badge for a space: short enough for a 48px rail.
-#[must_use] 
+#[must_use]
 pub fn profile_badge(profile_id: &str) -> String {
     match profile_id {
         "digital" => "DIG",

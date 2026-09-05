@@ -25,7 +25,7 @@ use facet::Facet;
 use signal_rig_host::store::{signal_config_dir, StyxDir};
 
 /// The library directory (`SIGNAL_BASS_DIR` overrides).
-#[must_use] 
+#[must_use]
 pub fn bass_dir() -> PathBuf {
     if let Ok(p) = std::env::var("SIGNAL_BASS_DIR") {
         if !p.is_empty() {
@@ -78,7 +78,7 @@ pub struct BassPresetDef {
 
 impl BassPresetDef {
     /// Is this the live DI path (vs the sampled stub)?
-    #[must_use] 
+    #[must_use]
     pub fn is_audio(&self) -> bool {
         self.kind.is_empty() || self.kind.eq_ignore_ascii_case("audio")
     }
@@ -115,7 +115,7 @@ impl Default for BassMidiMapDef {
 }
 
 /// Code-built default MIDI map (matches the embedded `midi.styx`).
-#[must_use] 
+#[must_use]
 pub const fn default_midi_map() -> BassMidiMapDef {
     BassMidiMapDef {
         program_change: true,
@@ -229,7 +229,7 @@ impl BassLibrary {
     }
 
     /// `None` when the file is missing (fresh install) or unparsable.
-    #[must_use] 
+    #[must_use]
     pub fn load_last_state() -> Option<BassLastState> {
         store().read("last-state.styx")
     }

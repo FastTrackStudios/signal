@@ -135,7 +135,7 @@ pub struct BuiltRig {
 
 impl BuiltRig {
     /// Look up a scene ID by name.
-    #[must_use] 
+    #[must_use]
     pub fn scene_id(&self, name: &str) -> Option<&RigSceneId> {
         self.scene_ids
             .iter()
@@ -144,7 +144,7 @@ impl BuiltRig {
     }
 
     /// Look up a patch ID by name.
-    #[must_use] 
+    #[must_use]
     pub fn patch_id(&self, name: &str) -> Option<&PatchId> {
         self.patch_ids
             .iter()
@@ -153,7 +153,7 @@ impl BuiltRig {
     }
 
     /// Look up a block preset's snapshot ID by preset name and snapshot name.
-    #[must_use] 
+    #[must_use]
     pub fn snapshot_id(&self, preset_name: &str, snapshot_name: &str) -> Option<&SnapshotId> {
         self.block_presets
             .iter()
@@ -274,7 +274,7 @@ impl RigBuilder {
     }
 
     /// Build all domain entities. No I/O — returns pure domain objects.
-    #[must_use] 
+    #[must_use]
     pub fn build(self) -> BuiltRig {
         // Ensure at least one scene
         let scenes = if self.scenes.is_empty() {
@@ -411,10 +411,9 @@ impl RigBuilder {
         let first_rig_scene_id = RigSceneId::new();
         rig_scene_ids.push((scenes[0].clone(), first_rig_scene_id.clone()));
 
-        let default_rig_scene =
-            RigScene::new(first_rig_scene_id, scenes[0].as_str()).with_engine(
-                EngineSelection::new(engine_id.clone(), engine_scene_ids[0].1.clone()),
-            );
+        let default_rig_scene = RigScene::new(first_rig_scene_id, scenes[0].as_str()).with_engine(
+            EngineSelection::new(engine_id.clone(), engine_scene_ids[0].1.clone()),
+        );
 
         let mut rig = Rig::new(
             rig_id.clone(),

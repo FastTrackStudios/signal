@@ -80,7 +80,7 @@ const ROW_BAND_STRIDE: usize = 2;
 
 /// Flatten the full rig hierarchy (engines → layers → modules → blocks)
 /// into a single `Vec<GridSlot>` for the interactive `DynamicGridView`.
-#[must_use] 
+#[must_use]
 pub fn engines_to_grid_slots(engines: &[EngineFlowData], params: &ParamLookup) -> Vec<GridSlot> {
     let mut slots = Vec::new();
     let mut occupied = HashSet::new();
@@ -182,7 +182,7 @@ pub fn engines_to_grid_slots(engines: &[EngineFlowData], params: &ParamLookup) -
 }
 
 /// Convert a list of module chains into grid slots for `DynamicGridView`.
-#[must_use] 
+#[must_use]
 pub fn module_chains_to_grid_slots(
     chains: &[ModuleChainData],
     params: &ParamLookup,
@@ -219,7 +219,7 @@ pub fn module_chains_to_grid_slots(
 }
 
 /// Convert a single signal chain into grid slots for `DynamicGridView`.
-#[must_use] 
+#[must_use]
 pub fn signal_chain_to_grid_slots(
     chain: &SignalChain,
     module_name: &str,
@@ -440,7 +440,7 @@ fn find_free_module_row(
 /// `SOFT_MAX_COLS`, and `Split` nodes fan their wet lanes into parallel rows.
 /// Empty lanes (dry pass-through) are skipped, exactly as in
 /// `flatten_chain_nodes`.
-#[must_use] 
+#[must_use]
 pub fn template_to_grid_slots(rig: &RigTemplate) -> Vec<GridSlot> {
     let mut slots = Vec::new();
     let mut engine_base_row: usize = 0;

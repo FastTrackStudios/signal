@@ -14,12 +14,10 @@
 //! `process()` is pure arithmetic per sample.
 
 #![no_std]
-
 // Realtime guard. This crate runs on an audio callback, so the calls in
 // clippy.toml's disallowed-methods list (locks, env, sleep) are real bugs here
 // even though they are allowed workspace-wide off the audio thread.
 #![deny(clippy::disallowed_methods)]
-
 // ── TEMPORARY: DSP rewrite pending ───────────────────────────────────────
 // 98 findings in this crate, held under `expect` rather than fixed one by one.
 //
@@ -100,7 +98,7 @@ pub struct Saturator {
 }
 
 impl Saturator {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         let mut s = Self {
             curve: SaturationCurve::Tanh,
@@ -123,7 +121,7 @@ impl Saturator {
         self.makeup = 1.0 / sqrt_approx(self.drive_gain);
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn drive(&self) -> f32 {
         self.drive
     }
@@ -132,7 +130,7 @@ impl Saturator {
         self.curve = curve;
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn curve(&self) -> SaturationCurve {
         self.curve
     }
@@ -153,7 +151,7 @@ impl Saturator {
 
     /// Shape one sample.
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn process(&self, input: f32) -> f32 {
         if self.drive == 0.0 && self.mix >= 1.0 {
             return input * self.output_gain;

@@ -615,9 +615,7 @@ impl SampleEngine {
         // Honour the forced-RR pin like every other RR-bearing trigger —
         // document mode pins a stable per-note slot here so playback never
         // consults the mutable counter (position-independent determinism).
-        let rr = self
-            .forced_rr
-            .map_or(self.zone_rr_counter, |f| f as usize);
+        let rr = self.forced_rr.map_or(self.zone_rr_counter, |f| f as usize);
         self.zone_rr_counter = self.zone_rr_counter.wrapping_add(1);
 
         let nv_artic = self.articulation.clone();
@@ -728,9 +726,7 @@ impl SampleEngine {
     /// the flag is off or the artic carries no thresholds this falls back to the
     /// even-split dynamic with the velocity² loudness curve (non-CSS libraries).
     pub(crate) fn trigger_zoned_short(&mut self, note: u8, velocity: u8) {
-        let rr = self
-            .forced_rr
-            .map_or(self.zone_rr_counter, |f| f as usize);
+        let rr = self.forced_rr.map_or(self.zone_rr_counter, |f| f as usize);
         self.zone_rr_counter = self.zone_rr_counter.wrapping_add(1);
         let artic = self.articulation.clone();
 
@@ -1140,7 +1136,10 @@ impl SampleEngine {
             .patch
             .spec
             .articulation(&self.articulation)
-            .map_or_else(|| self.articulation.starts_with("Sord"), super::super::spec::ArticulationSpec::is_sordino);
+            .map_or_else(
+                || self.articulation.starts_with("Sord"),
+                super::super::spec::ArticulationSpec::is_sordino,
+            );
         let want_role = if retrigger {
             crate::spec::LegatoRole::Retrigger
         } else {
@@ -1190,9 +1189,7 @@ impl SampleEngine {
             // document prefire (`sched_lead`) the spawn is arrival-aligned
             // (held back by `lead − onset`) so the re-bow speaks ON the
             // tick; live re-bows keep firing immediately.
-            let rr = self
-                .forced_rr
-                .map_or(self.zone_rr_counter, |f| f as usize);
+            let rr = self.forced_rr.map_or(self.zone_rr_counter, |f| f as usize);
             if let Some(idx) = self.find_layer_zone(leg_id, "", &dynamic, to, rr) {
                 let restore = self.spawn_align_lead;
                 self.spawn_align_lead = sched_lead.filter(|&l| l > 0);
@@ -1434,9 +1431,7 @@ impl SampleEngine {
         };
         let (lo, hi, blend) = self.layers_for_artic(&rel_id);
         let dynamic = if blend >= 0.5 { hi } else { lo };
-        let rr = self
-            .forced_rr
-            .map_or(self.zone_rr_counter, |f| f as usize);
+        let rr = self.forced_rr.map_or(self.zone_rr_counter, |f| f as usize);
         // Release samples are non-directional → pass "" (no direction filter).
         // CSS's recorded releases are a subtle bow-off tail UNDER the note's
         // decay — but these samples are normalised loud, so at unity (×makeup)
@@ -1446,15 +1441,12 @@ impl SampleEngine {
             // linear held-time curve %ru5pa — a further −6 dB at 10 ms held,
             // fading to 0 dB extra by ≥ 1 s. Short taps get quiet bow-offs;
             // long notes get the full (still −6 dB) release tail.
-            let held_ms = self
-                .note_on_frame
-                .get(&note)
-                .map_or(1000.0, |&f| {
-                    crate::engine::frames_to_ms(
-                        self.frames_rendered.saturating_sub(f),
-                        self.sample_rate,
-                    )
-                });
+            let held_ms = self.note_on_frame.get(&note).map_or(1000.0, |&f| {
+                crate::engine::frames_to_ms(
+                    self.frames_rendered.saturating_sub(f),
+                    self.sample_rate,
+                )
+            });
             let held_db = if held_ms >= 1000.0 {
                 0.0
             } else {
@@ -1493,9 +1485,7 @@ impl SampleEngine {
         };
         let (lo, hi, blend) = self.layers_for_artic(&atk_id);
         let dynamic = if blend >= 0.5 { hi } else { lo };
-        let rr = self
-            .forced_rr
-            .map_or(self.zone_rr_counter, |f| f as usize);
+        let rr = self.forced_rr.map_or(self.zone_rr_counter, |f| f as usize);
         if let Some(idx) = self.find_layer_zone(&atk_id, "", &dynamic, note, rr) {
             self.spawn_zone_voice(idx, note, VoiceKind::Short, 1.0, None, 0.0);
         }
@@ -2195,8 +2185,7 @@ impl SampleEngine {
                     .set(self.sample_misses.get().saturating_add(1));
                 self.record_sample_miss(format!(
                     "zone note={} velocity={velocity}",
-                    event_note
-                        .map_or_else(|| "event".to_string(), |note| note.to_string())
+                    event_note.map_or_else(|| "event".to_string(), |note| note.to_string())
                 ));
                 tracing::debug!(note = ?event_note, velocity, trigger = ?trigger, "zone miss");
             }

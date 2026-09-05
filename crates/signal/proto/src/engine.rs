@@ -174,19 +174,19 @@ impl Engine {
         Some(self.variants.remove(pos))
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_variant(&self) -> Option<&EngineScene> {
         self.variants
             .iter()
             .find(|v| v.id == self.default_variant_id)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn variant(&self, id: &EngineSceneId) -> Option<&EngineScene> {
         self.variants.iter().find(|v| &v.id == id)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_layer_type_compatible(&self, layer_type: EngineType) -> bool {
         self.engine_type == layer_type
     }

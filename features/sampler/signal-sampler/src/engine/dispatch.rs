@@ -1176,7 +1176,8 @@ impl SampleEngine {
             .spec
             .articulations
             .iter()
-            .find(|a| a.id.eq_ignore_ascii_case(tag) || a.label.eq_ignore_ascii_case(tag)).map_or_else(|| tag.to_string(), |a| a.id.clone());
+            .find(|a| a.id.eq_ignore_ascii_case(tag) || a.label.eq_ignore_ascii_case(tag))
+            .map_or_else(|| tag.to_string(), |a| a.id.clone());
         self.articulation = self.remap_sordino(&id, self.con_sordino);
     }
 

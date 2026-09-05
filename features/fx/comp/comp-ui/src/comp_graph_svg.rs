@@ -23,7 +23,7 @@ pub const RANGE_DB: f32 = 60.0;
 /// Below `threshold − knee/2` the output equals the input; above
 /// `threshold + knee/2` the output follows the ratio slope; inside the knee
 /// a quadratic blends the two with continuous value and first derivative.
-#[must_use] 
+#[must_use]
 pub fn compress_transfer(input_db: f32, threshold_db: f32, ratio: f32, knee_db: f32) -> f32 {
     if ratio <= 1.0 {
         return input_db;
@@ -42,28 +42,28 @@ pub fn compress_transfer(input_db: f32, threshold_db: f32, ratio: f32, knee_db: 
 
 /// dB (0 at the top … −[`RANGE_DB`] at the bottom) → y within a graph of
 /// height `h`.
-#[must_use] 
+#[must_use]
 pub fn db_to_y(db: f64, h: f64) -> f64 {
     ((-db) / f64::from(RANGE_DB)).clamp(0.0, 1.0) * h
 }
 
 /// Inverse of [`db_to_y`]: y within a graph of height `h` → dB (clamped to
 /// the display range, 0 … −[`RANGE_DB`]).
-#[must_use] 
+#[must_use]
 pub fn y_to_db(y: f64, h: f64) -> f64 {
     -(y / h).clamp(0.0, 1.0) * f64::from(RANGE_DB)
 }
 
 /// Input dB (−[`RANGE_DB`] at the left … 0 at the right) → x within a graph
 /// of width `w`.
-#[must_use] 
+#[must_use]
 pub fn db_to_x(db: f64, w: f64) -> f64 {
     ((db + f64::from(RANGE_DB)) / f64::from(RANGE_DB)).clamp(0.0, 1.0) * w
 }
 
 /// Linear peak sample (0..1) → normalized display amplitude (0..1) through
 /// dB, so the waveform is log-scaled like the painter's.
-#[must_use] 
+#[must_use]
 pub fn scale_input_peak(peak: f32) -> f32 {
     if peak <= 0.0 {
         0.0
@@ -75,19 +75,19 @@ pub fn scale_input_peak(peak: f32) -> f32 {
 
 /// Gain reduction in dB (positive = reducing) → normalized display fraction
 /// of the graph height (0..1), painted downward from the top.
-#[must_use] 
+#[must_use]
 pub fn scale_gr_db(gr_db: f32) -> f32 {
     (gr_db / RANGE_DB).clamp(0.0, 1.0)
 }
 
 /// Map a slice of linear input peaks through [`scale_input_peak`].
-#[must_use] 
+#[must_use]
 pub fn scale_input_wave(peaks: &[f32]) -> Vec<f32> {
     peaks.iter().map(|&p| scale_input_peak(p)).collect()
 }
 
 /// Map a slice of GR dB values through [`scale_gr_db`].
-#[must_use] 
+#[must_use]
 pub fn scale_gr_wave(gr_db: &[f32]) -> Vec<f32> {
     gr_db.iter().map(|&g| scale_gr_db(g)).collect()
 }
@@ -98,7 +98,7 @@ pub fn scale_gr_wave(gr_db: &[f32]) -> Vec<f32> {
 ///
 /// `from_bottom = true` draws amplitude up from the bottom edge (the
 /// input waveform); `false` draws downward from the top (the GR trace).
-#[must_use] 
+#[must_use]
 pub fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) -> String {
     let n = samples.len();
     if n == 0 {
@@ -150,12 +150,17 @@ pub fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bo
 
 /// SVG polyline path of the transfer curve across the full display range
 /// (input −[`RANGE_DB`]..0 dB left→right), 61 sample points.
-#[must_use] 
+#[must_use]
 pub fn transfer_curve_path(threshold_db: f32, ratio: f32, knee_db: f32, w: f64, h: f64) -> String {
     let mut d = String::new();
     for i in 0..=60 {
         let input = (f64::from(i) / 60.0).mul_add(f64::from(RANGE_DB), -f64::from(RANGE_DB));
-        let output = f64::from(compress_transfer(input as f32, threshold_db, ratio, knee_db));
+        let output = f64::from(compress_transfer(
+            input as f32,
+            threshold_db,
+            ratio,
+            knee_db,
+        ));
         let x = db_to_x(input, w);
         let y = db_to_y(output, h);
         d.push_str(if i == 0 { "M " } else { "L " });
@@ -165,7 +170,7 @@ pub fn transfer_curve_path(threshold_db: f32, ratio: f32, knee_db: f32, w: f64, 
 }
 
 /// Graph position of the live input "ball" riding the transfer curve.
-#[must_use] 
+#[must_use]
 pub fn transfer_ball(
     in_db: f32,
     threshold_db: f32,

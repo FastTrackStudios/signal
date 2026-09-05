@@ -93,7 +93,7 @@ impl AutomationLane {
     }
 
     /// Get all events in a time range (inclusive start, exclusive end).
-    #[must_use] 
+    #[must_use]
     pub fn events_in_range(&self, start_beats: f64, end_beats: f64) -> Vec<&AutomationEvent> {
         self.events
             .iter()
@@ -111,7 +111,7 @@ pub struct SnapshotAutomation {
 }
 
 impl SnapshotAutomation {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self { lanes: Vec::new() }
     }
@@ -128,7 +128,11 @@ impl SnapshotAutomation {
             .iter()
             .flat_map(|lane| lane.events_in_range(start_beats, end_beats))
             .collect();
-        events.sort_by(|a, b| a.position_beats.partial_cmp(&b.position_beats).unwrap_or(std::cmp::Ordering::Equal));
+        events.sort_by(|a, b| {
+            a.position_beats
+                .partial_cmp(&b.position_beats)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         events
     }
 }

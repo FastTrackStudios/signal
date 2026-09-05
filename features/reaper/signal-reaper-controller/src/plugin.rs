@@ -229,7 +229,7 @@ impl Default for FtsSignalController {
 }
 
 impl FtsSignalController {
-    #[must_use] 
+    #[must_use]
     pub fn queue_producer(&self) -> ParamQueueProducer {
         self.queue_producer.clone()
     }

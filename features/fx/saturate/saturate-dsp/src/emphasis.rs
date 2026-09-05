@@ -34,7 +34,7 @@ pub enum EmphShape {
 }
 
 impl EmphShape {
-    #[must_use] 
+    #[must_use]
     pub const fn from_index(i: u32) -> Self {
         match i {
             1 => Self::LowShelf,
@@ -100,7 +100,7 @@ pub struct EmphasisEq {
 }
 
 impl EmphasisEq {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f32) -> Self {
         Self {
             sample_rate: sample_rate.max(1.0),
@@ -118,7 +118,7 @@ impl EmphasisEq {
 
     /// Whether any band does anything — a flat EQ is skipped entirely so the
     /// default plugin stays bit-identical.
-    #[must_use] 
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.active.iter().any(|&a| a)
     }
@@ -141,12 +141,12 @@ impl EmphasisEq {
     }
 
     /// The bands as set.
-    #[must_use] 
+    #[must_use]
     pub const fn bands(&self) -> &[EmphBand; BANDS] {
         &self.bands
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn sigma_gain(&self) -> f32 {
         self.sigma_gain
     }
@@ -199,7 +199,7 @@ impl EmphasisEq {
 
     /// The emphasis curve's magnitude in dB at `freq` — what the editor
     /// draws (`fx.sat.emphasis.display`).
-    #[must_use] 
+    #[must_use]
     pub fn magnitude_db(&self, freq: f32) -> f32 {
         let mut db = 0.0;
         for i in 0..BANDS {

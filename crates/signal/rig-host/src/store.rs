@@ -29,7 +29,7 @@ impl StyxDir {
     }
 
     /// The backing directory.
-    #[must_use] 
+    #[must_use]
     pub fn dir(&self) -> &std::path::Path {
         &self.dir
     }

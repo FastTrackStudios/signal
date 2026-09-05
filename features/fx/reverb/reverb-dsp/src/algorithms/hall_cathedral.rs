@@ -8,7 +8,7 @@
 //!   - More early reflection taps (complex geometry)
 //!   - Stronger cross-coupling (omnidirectional sound field)
 
-use crate::algorithm::{AlgorithmParams, HALL_CATHEDRAL_T60, ReverbAlgorithm, decay_to_t60};
+use crate::algorithm::{decay_to_t60, AlgorithmParams, ReverbAlgorithm, HALL_CATHEDRAL_T60};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;

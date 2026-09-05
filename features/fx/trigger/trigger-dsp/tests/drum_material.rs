@@ -24,7 +24,6 @@
               test/example code, where panicking on bad input is the point"
 )]
 
-
 use audiocore_dsp::{AudioConfig, Processor};
 use trigger_dsp::detector::{DetectMode, TriggerDetector};
 use trigger_dsp::sampler::{MixMode, Sample};
@@ -89,7 +88,9 @@ fn load_wav(filename: &str) -> Option<Audio> {
         if packet.track_id() != track_id {
             continue;
         }
-        let Ok(decoded) = decoder.decode(&packet) else { continue };
+        let Ok(decoded) = decoder.decode(&packet) else {
+            continue;
+        };
 
         match decoded {
             AudioBufferRef::F32(buf) => {
@@ -196,7 +197,9 @@ fn run_detector(audio: &Audio, threshold_db: f64, sc_hpf_freq: f64) -> Vec<Trigg
 #[test]
 #[ignore]
 fn kick_detection_finds_all_hits() {
-    let Some(audio) = load_wav("01_KickIn.wav") else { return };
+    let Some(audio) = load_wav("01_KickIn.wav") else {
+        return;
+    };
 
     let events = run_detector(&audio, -30.0, 0.0);
 
@@ -217,7 +220,9 @@ fn kick_detection_finds_all_hits() {
 #[test]
 #[ignore]
 fn kick_detection_no_false_triggers_on_snare() {
-    let Some(audio) = load_wav("03_SnareUp.wav") else { return };
+    let Some(audio) = load_wav("03_SnareUp.wav") else {
+        return;
+    };
 
     // SC HPF at 200Hz to reject snare, only pass low-freq kick bleed
     let events = run_detector(&audio, -20.0, 200.0);
@@ -238,7 +243,9 @@ fn kick_detection_no_false_triggers_on_snare() {
 #[test]
 #[ignore]
 fn kick_velocity_distribution() {
-    let Some(audio) = load_wav("01_KickIn.wav") else { return };
+    let Some(audio) = load_wav("01_KickIn.wav") else {
+        return;
+    };
 
     let events = run_detector(&audio, -30.0, 0.0);
     assert!(!events.is_empty(), "No triggers detected");
@@ -270,7 +277,9 @@ fn kick_velocity_distribution() {
 #[test]
 #[ignore]
 fn kick_retrigger_spacing() {
-    let Some(audio) = load_wav("01_KickIn.wav") else { return };
+    let Some(audio) = load_wav("01_KickIn.wav") else {
+        return;
+    };
 
     let retrigger_ms = 10.0;
     let min_samples = (retrigger_ms * 0.001 * audio.sample_rate) as usize;
@@ -301,7 +310,9 @@ fn kick_retrigger_spacing() {
 #[test]
 #[ignore]
 fn kick_replacement_output_finite() {
-    let Some(audio) = load_wav("01_KickIn.wav") else { return };
+    let Some(audio) = load_wav("01_KickIn.wav") else {
+        return;
+    };
 
     let mut chain = TriggerChain::new();
     chain.threshold_db = -30.0;
@@ -342,8 +353,12 @@ fn kick_replacement_output_finite() {
 #[test]
 #[ignore]
 fn kick_in_vs_kick_out_hit_count() {
-    let Some(kick_in) = load_wav("01_KickIn.wav") else { return };
-    let Some(kick_out) = load_wav("02_KickOut.wav") else { return };
+    let Some(kick_in) = load_wav("01_KickIn.wav") else {
+        return;
+    };
+    let Some(kick_out) = load_wav("02_KickOut.wav") else {
+        return;
+    };
 
     let events_in = run_detector(&kick_in, -30.0, 0.0);
     let events_out = run_detector(&kick_out, -30.0, 0.0);

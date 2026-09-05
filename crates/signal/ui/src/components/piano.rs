@@ -98,7 +98,7 @@ const BLACK_SEMITONES: [u8; 5] = [1, 3, 6, 8, 10];
 /// White-key boundary indices where black keys sit.
 const BLACK_BOUNDARIES: [u8; 5] = [1, 2, 4, 5, 6];
 
-#[must_use] 
+#[must_use]
 pub const fn is_black(semitone: u8) -> bool {
     matches!(semitone % 12, 1 | 3 | 6 | 8 | 10)
 }
@@ -196,7 +196,7 @@ impl Default for WaterfallPainter {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl WaterfallPainter {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             notes: Vec::new(),

@@ -12,7 +12,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 use audiocore_dsp::{AudioConfig, Processor};
 use fts_modulation::curves::CurveType;
 use fts_modulation::{Modulator, Point};

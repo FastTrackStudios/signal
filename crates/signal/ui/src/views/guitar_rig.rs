@@ -176,17 +176,16 @@ pub fn GuitarRigView() -> Element {
     // A per-render bridge carrying the *current* shared prefs + device lists,
     // handed to the modal + quick picker so their edits round-trip through
     // `apply`.
-    let live_bridge =
-        devices
-            .read()
-            .as_ref()
-            .and_then(std::clone::Clone::clone)
-            .map(|d| AudioSettingsBridge {
-                inputs: d.inputs,
-                outputs: d.outputs,
-                prefs: prefs(),
-                on_save: apply,
-            });
+    let live_bridge = devices
+        .read()
+        .as_ref()
+        .and_then(std::clone::Clone::clone)
+        .map(|d| AudioSettingsBridge {
+            inputs: d.inputs,
+            outputs: d.outputs,
+            prefs: prefs(),
+            on_save: apply,
+        });
 
     let mut running = use_signal(|| false);
     let mut in_level = use_signal(|| 0.0f64);

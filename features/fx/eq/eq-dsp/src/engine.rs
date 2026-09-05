@@ -321,8 +321,7 @@ struct CharacterShaper {
 
 impl CharacterShaper {
     fn update(&mut self, sample_rate: f64) {
-        self.lp_coeff =
-            1.0 - (-core::f64::consts::TAU * CHARACTER_DRIVE_HZ / sample_rate).exp();
+        self.lp_coeff = 1.0 - (-core::f64::consts::TAU * CHARACTER_DRIVE_HZ / sample_rate).exp();
         self.lift = 10.0f64.powf(CHARACTER_DRIVE_DB / 20.0) - 1.0;
         self.dc_r = 1.0 - core::f64::consts::TAU * 5.0 / sample_rate;
         self.lp = 0.0;
@@ -642,7 +641,8 @@ impl FtsEq {
         self.auto_grid_static_db.clear();
         for i in 0..n {
             let hz = self.auto_grid_hz[i];
-            self.auto_grid_static_db.push(self.eq.magnitude_db(hz, self.sample_rate));
+            self.auto_grid_static_db
+                .push(self.eq.magnitude_db(hz, self.sample_rate));
         }
         // And the shape of every band the static chain cannot see.
         self.auto_grid_env.clear();
@@ -797,9 +797,7 @@ impl FtsEq {
                 freq_hz: freq,
                 q,
                 shape: match shape {
-                    crate::slope::FilterShape::LowShelf => {
-                        crate::spectral::SpectralShape::LowShelf
-                    }
+                    crate::slope::FilterShape::LowShelf => crate::spectral::SpectralShape::LowShelf,
                     crate::slope::FilterShape::HighShelf => {
                         crate::spectral::SpectralShape::HighShelf
                     }
@@ -913,8 +911,7 @@ impl FtsEq {
     pub fn process(&mut self, buf_l: &mut [f64], buf_r: &mut [f64]) {
         // Fully-idle block (no active bands, no dynamics, no spectral,
         // no transient split, unity output): straight copy, zero DSP.
-        let any_dyn = self.dyn_active.iter().any(|&a| a)
-            || self.dyn_modulated.iter().any(|&a| a);
+        let any_dyn = self.dyn_active.iter().any(|&a| a) || self.dyn_modulated.iter().any(|&a| a);
         if self.listen.is_none()
             && !self.transient_mode
             && !any_dyn
@@ -1081,7 +1078,8 @@ impl FtsEq {
                     let (pan_neg, pan_pos) = (1.0 + pan.min(0.0), 1.0 - pan.max(0.0));
                     if pan_mid_side {
                         for i in 0..left.len() {
-                            let (mid, side_diff) = (0.5 * (left[i] + right[i]), 0.5 * (left[i] - right[i]));
+                            let (mid, side_diff) =
+                                (0.5 * (left[i] + right[i]), 0.5 * (left[i] - right[i]));
                             let (mid, side_diff) = (mid * pan_pos, side_diff * pan_neg);
                             left[i] = mid + side_diff;
                             right[i] = mid - side_diff;

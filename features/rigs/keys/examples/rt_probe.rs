@@ -276,7 +276,8 @@ fn main() {
     let over = s.rt.over_budget.saturating_sub(over_baseline);
     let play_blocks = s.rt.blocks.saturating_sub(mean_blocks0);
     let play_mean = if play_blocks > 0 {
-        f64::from(s.rt.mean_render_ms).mul_add(s.rt.blocks as f64, -mean_total0) / play_blocks as f64
+        f64::from(s.rt.mean_render_ms).mul_add(s.rt.blocks as f64, -mean_total0)
+            / play_blocks as f64
     } else {
         0.0
     };

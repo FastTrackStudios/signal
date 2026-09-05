@@ -1902,7 +1902,10 @@ fn queue_loop_analysis(key: LoopKey, data: Arc<SampleData>) {
                     // Worker thread, not the audio thread: blocking here is
                     // correct, and the audio side reads the same map with
                     // `try_lock` precisely so it never waits on this.
-                    #[allow(clippy::disallowed_methods, reason = "analysis worker, not the audio thread")]
+                    #[allow(
+                        clippy::disallowed_methods,
+                        reason = "analysis worker, not the audio thread"
+                    )]
                     if let Ok(mut map) = LOOP_REGIONS.lock() {
                         map.get_or_insert_with(HashMap::new)
                             .insert(key, LoopScan::Done(found));

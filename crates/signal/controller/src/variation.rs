@@ -163,7 +163,11 @@ where
 
         // Use the rig scene applier for preloaded switching (<5ms).
         // Clone the Arc out of the lock before the .await to avoid Send issues.
-        let rig_applier = self.daw_rig_applier.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+        let rig_applier = self
+            .daw_rig_applier
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
         if let Some(rig_applier) = rig_applier {
             match rig_applier
                 .switch_scene(rig_id.as_ref(), scene_id.as_ref(), Some(&name))
@@ -216,8 +220,16 @@ where
         info!("switching to song section {}: {}", index + 1, name);
 
         // Clone appliers out of locks before any .await to avoid Send issues.
-        let daw_applier = self.daw_applier.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
-        let rig_applier = self.daw_rig_applier.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+        let daw_applier = self
+            .daw_applier
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let rig_applier = self
+            .daw_rig_applier
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
 
         // Resolve the section's source to a concrete activation target
         match &section.source {

@@ -323,7 +323,7 @@ pub static SPECIAL: SpaceDesign = SpaceDesign {
 /// chosen the space.
 ///
 /// Empty for the engines whose personality the shared controls already cover.
-#[must_use] 
+#[must_use]
 pub fn extras_for(profile_id: &str) -> &'static [KnobSpec] {
     // Statics rather than a match arm building them: a `&[..]` literal inside
     // the arm is a temporary, and this has to outlive the call.
@@ -364,7 +364,7 @@ pub fn extras_for(profile_id: &str) -> &'static [KnobSpec] {
 /// something else — shimmer's amount and pitch, magneto's saturation and wow,
 /// non-linear's gate shape. A knob called "Character A" tells you nothing, so
 /// the panel prints what it actually does here.
-#[must_use] 
+#[must_use]
 pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
     match profile_id {
         "shimmer" => ("Amount", "Pitch"),
@@ -398,7 +398,7 @@ pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
 /// seven more panels that differ only in their silkscreen. The profile's name
 /// is printed on the panel, and its accent shifts with it, so you can still
 /// tell at a glance which one you are on.
-#[must_use] 
+#[must_use]
 pub fn design_for(profile_id: &str) -> &'static SpaceDesign {
     match reverb_profiles::category_of(profile_id).map(|(c, _)| reverb_profiles::CATEGORIES[c].id) {
         Some("ir") => &IR,
@@ -416,7 +416,7 @@ pub fn design_for(profile_id: &str) -> &'static SpaceDesign {
 /// brighter than the first, the Arena brighter than the Concert hall.
 ///
 /// Small, but it means the variants are visibly different and not just re-labelled.
-#[must_use] 
+#[must_use]
 pub fn variant_lift(profile_id: &str) -> f64 {
     match reverb_profiles::category_of(profile_id) {
         Some((_, index)) => (index as f64).mul_add(0.22, 1.0),
@@ -442,11 +442,7 @@ pub fn SpaceFace(
     let scale = fts_audio_ui::hardware::panel::panel_scale(W, H, fts_audio_ui::shell::RAIL_W);
 
     // The picture is drawn from the controls, so it moves with them.
-    let value = |name: &str| {
-        handles
-            .get(name)
-            .map_or(0.5, |h| f64::from(h.normalized()))
-    };
+    let value = |name: &str| handles.get(name).map_or(0.5, |h| f64::from(h.normalized()));
     let (decay, size, damping) = (value("decay"), value("size"), value("damping"));
 
     rsx! {
@@ -563,111 +559,111 @@ fn IrBrowser(ink: String, accent: String) -> Element {
     }
     #[cfg(feature = "native")]
     {
-    let shared = use_context::<nice_plug_dioxus::SharedState>();
-    let ui = shared
-        .get::<crate::control_view::ReverbUi>()
-        .expect("the IR browser was mounted without its ReverbUi");
+        let shared = use_context::<nice_plug_dioxus::SharedState>();
+        let ui = shared
+            .get::<crate::control_view::ReverbUi>()
+            .expect("the IR browser was mounted without its ReverbUi");
 
-    // Scanned once per mount, and again when asked. Walking a directory is
-    // not something to do sixty times a second.
-    let mut entries = use_signal(Vec::<(String, std::path::PathBuf)>::new);
-    let mut scanned = use_signal(|| false);
-    if !*scanned.read() {
-        scanned.set(true);
-        let mut library = reverb_dsp::ir::IrLibrary::new(crate::params::ir_library_root());
-        let _ = library.rescan();
-        entries.set(
-            library
-                .entries()
-                .iter()
-                .map(|e| (e.name.clone(), e.path.clone()))
-                .collect(),
-        );
-    }
+        // Scanned once per mount, and again when asked. Walking a directory is
+        // not something to do sixty times a second.
+        let mut entries = use_signal(Vec::<(String, std::path::PathBuf)>::new);
+        let mut scanned = use_signal(|| false);
+        if !*scanned.read() {
+            scanned.set(true);
+            let mut library = reverb_dsp::ir::IrLibrary::new(crate::params::ir_library_root());
+            let _ = library.rescan();
+            entries.set(
+                library
+                    .entries()
+                    .iter()
+                    .map(|e| (e.name.clone(), e.path.clone()))
+                    .collect(),
+            );
+        }
 
-    let state = ui.state.clone();
-    let params = ui.params.clone();
-    let loading = state.ir_loading.load(std::sync::atomic::Ordering::Relaxed);
-    let loaded = state.ir_loaded.lock().clone();
-    let error = state.ir_error.lock().clone();
-    let list = entries.read().clone();
-    let empty = list.is_empty();
+        let state = ui.state.clone();
+        let params = ui.params.clone();
+        let loading = state.ir_loading.load(std::sync::atomic::Ordering::Relaxed);
+        let loaded = state.ir_loaded.lock().clone();
+        let error = state.ir_error.lock().clone();
+        let list = entries.read().clone();
+        let empty = list.is_empty();
 
-    rsx! {
-        div {
-            "data-testid": "ir-browser",
-            style: format!(
-                "width:100%; height:100%; display:flex; flex-direction:column; \
-                 gap:3px; padding:6px 8px; overflow:hidden; \
-                 background:rgba(0,0,0,0.28); border:1px solid rgba(255,255,255,0.10); \
-                 border-radius:3px; color:{ink};"
-            ),
-
-            // What is loaded, and what the loader is doing about it.
+        rsx! {
             div {
-                style: "display:flex; justify-content:space-between; align-items:center;                         font-size:8px; letter-spacing:0.10em; text-transform:uppercase;                         opacity:0.75;",
-                span { "Impulse Response" }
-                span {
-                    "data-testid": "ir-rescan",
-                    style: "cursor:pointer; opacity:0.8;",
-                    onclick: move |_| {
-                        scanned.set(false);
-                    },
-                    "Rescan"
-                }
-            }
-            div {
-                "data-testid": "ir-current",
+                "data-testid": "ir-browser",
                 style: format!(
-                    "font-size:10px; font-weight:700; white-space:nowrap; \
-                     overflow:hidden; color:{};",
-                    if error.is_some() { "#e2603f".to_string() } else { accent },
+                    "width:100%; height:100%; display:flex; flex-direction:column; \
+                     gap:3px; padding:6px 8px; overflow:hidden; \
+                     background:rgba(0,0,0,0.28); border:1px solid rgba(255,255,255,0.10); \
+                     border-radius:3px; color:{ink};"
                 ),
-                if loading {
-                    "Loading…"
-                } else if let Some(err) = error.clone() {
-                    "{err}"
-                } else if loaded.is_empty() {
-                    "No impulse loaded"
-                } else {
-                    "{loaded}"
-                }
-            }
 
-            // The library.
-            div {
-                style: "flex:1; min-height:0; display:flex; flex-direction:column;                         gap:1px; overflow:hidden;",
-                if empty {
-                    div {
-                        style: "font-size:8px; opacity:0.6; line-height:1.5;",
-                        "Nothing in {crate::params::ir_library_root().display()}"
+                // What is loaded, and what the loader is doing about it.
+                div {
+                    style: "display:flex; justify-content:space-between; align-items:center;                         font-size:8px; letter-spacing:0.10em; text-transform:uppercase;                         opacity:0.75;",
+                    span { "Impulse Response" }
+                    span {
+                        "data-testid": "ir-rescan",
+                        style: "cursor:pointer; opacity:0.8;",
+                        onclick: move |_| {
+                            scanned.set(false);
+                        },
+                        "Rescan"
                     }
                 }
-                for (name , path) in list.into_iter().take(7) {
-                    div {
-                        key: "{name}",
-                        "data-testid": "ir-entry",
-                        style: format!(
-                            "font-size:9px; padding:1px 4px; border-radius:2px; \
-                             white-space:nowrap; overflow:hidden; cursor:pointer; \
-                             background:{};",
-                            if loaded == name { format!("{accent}33") } else { "transparent".into() },
-                        ),
-                        onclick: {
-                            let state = state.clone();
-                            let params = params.clone();
-                            let path = path;
-                            move |_| {
-                                *params.ir_path.write() = path.display().to_string();
-                                state.load_ir(path.clone());
-                            }
-                        },
-                        "{name}"
+                div {
+                    "data-testid": "ir-current",
+                    style: format!(
+                        "font-size:10px; font-weight:700; white-space:nowrap; \
+                         overflow:hidden; color:{};",
+                        if error.is_some() { "#e2603f".to_string() } else { accent },
+                    ),
+                    if loading {
+                        "Loading…"
+                    } else if let Some(err) = error.clone() {
+                        "{err}"
+                    } else if loaded.is_empty() {
+                        "No impulse loaded"
+                    } else {
+                        "{loaded}"
+                    }
+                }
+
+                // The library.
+                div {
+                    style: "flex:1; min-height:0; display:flex; flex-direction:column;                         gap:1px; overflow:hidden;",
+                    if empty {
+                        div {
+                            style: "font-size:8px; opacity:0.6; line-height:1.5;",
+                            "Nothing in {crate::params::ir_library_root().display()}"
+                        }
+                    }
+                    for (name , path) in list.into_iter().take(7) {
+                        div {
+                            key: "{name}",
+                            "data-testid": "ir-entry",
+                            style: format!(
+                                "font-size:9px; padding:1px 4px; border-radius:2px; \
+                                 white-space:nowrap; overflow:hidden; cursor:pointer; \
+                                 background:{};",
+                                if loaded == name { format!("{accent}33") } else { "transparent".into() },
+                            ),
+                            onclick: {
+                                let state = state.clone();
+                                let params = params.clone();
+                                let path = path;
+                                move |_| {
+                                    *params.ir_path.write() = path.display().to_string();
+                                    state.load_ir(path.clone());
+                                }
+                            },
+                            "{name}"
+                        }
                     }
                 }
             }
         }
-    }
     }
 }
 
@@ -806,7 +802,9 @@ fn CentreView(
             while i < turns {
                 let x = x0 + step * (f64::from(i) + 1.0);
                 let dir = if i % 2 == 0 { -1.0 } else { 1.0 };
-                let mid = h / 2.0 + -(sag * (f64::from(i) / f64::from(turns)).mul_add(2.0, -1.0).abs()) + sag;
+                let mid = h / 2.0
+                    + -(sag * (f64::from(i) / f64::from(turns)).mul_add(2.0, -1.0).abs())
+                    + sag;
                 let _ = write!(
                     d,
                     " Q {:.1} {:.1} {:.1} {:.1}",

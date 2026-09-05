@@ -118,7 +118,8 @@ fn main() -> eyre::Result<()> {
 
     let prefix = PathBuf::from(prefix);
     let base = prefix
-        .file_name().map_or_else(|| "render".into(), |s| s.to_string_lossy().to_string());
+        .file_name()
+        .map_or_else(|| "render".into(), |s| s.to_string_lossy().to_string());
     let dir = prefix.parent().unwrap_or(std::path::Path::new("."));
     write_wav(&dir.join(format!("{base}_click.wav")), &mix)?;
     write_wav(&dir.join(format!("{base}_dry.wav")), &res.audio)?;

@@ -56,7 +56,12 @@ fn build_fixture(dir: &Path) -> PathBuf {
     for rr in 0..4u32 {
         for dirn in ["up", "down"] {
             let f = format!("leg_{dirn}_{rr}.wav");
-            write_sine_wav(&dir.join(&f), SR as usize, 40.0f64.mul_add(f64::from(rr), 300.0), 0.4);
+            write_sine_wav(
+                &dir.join(&f),
+                SR as usize,
+                40.0f64.mul_add(f64::from(rr), 300.0),
+                0.4,
+            );
             let _ = writeln!(zones, "    {{ file {f}, key_min 0, key_max 127, root_key 64, articulation Leg, direction {dirn}, rr_index {rr} }}");
         }
         let f = format!("stac_{rr}.wav");

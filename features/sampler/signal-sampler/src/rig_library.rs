@@ -685,7 +685,10 @@ mod tests {
         // Every section's patch resolved to a playable amp NAM (first block).
         for patch in &prof.patches {
             assert!(
-                patch.chain.first().is_some_and(super::super::rig::RigBlock::is_nam),
+                patch
+                    .chain
+                    .first()
+                    .is_some_and(super::super::rig::RigBlock::is_nam),
                 "section {:?} did not resolve to an amp",
                 patch.name
             );

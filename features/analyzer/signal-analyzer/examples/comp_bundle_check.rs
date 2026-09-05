@@ -19,7 +19,9 @@ const BLOCK: usize = 512;
 
 fn arg(name: &str) -> Option<String> {
     let a: Vec<String> = std::env::args().collect();
-    a.iter().position(|x| x == name).and_then(|i| a.get(i + 1).cloned())
+    a.iter()
+        .position(|x| x == name)
+        .and_then(|i| a.get(i + 1).cloned())
 }
 
 fn home(rest: &str) -> String {
@@ -68,7 +70,9 @@ fn rms_db(v: &[f32]) -> f64 {
 }
 
 fn main() {
-    let level = arg("--level").and_then(|v| v.parse().ok()).unwrap_or(-18.8f64);
+    let level = arg("--level")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(-18.8f64);
     let (l, r) = eq_transfer::stimulus(
         eq_transfer::frames_needed(),
         10.0f64.powf(level / 20.0),
@@ -93,13 +97,21 @@ fn main() {
             }
         }
         let out = render(&mut ours, &l, &r);
-        println!("FTS Comp  {:>8.2} dB rms  ({} frames)", rms_db(&out.0), out.0.len());
+        println!(
+            "FTS Comp  {:>8.2} dB rms  ({} frames)",
+            rms_db(&out.0),
+            out.0.len()
+        );
     }
 
     if let Some(path) = arg("--reference") {
         if let Some(mut reference) = open(&path) {
             let out = render(&mut reference, &l, &r);
-            println!("reference {:>8.2} dB rms  ({} frames)", rms_db(&out.0), out.0.len());
+            println!(
+                "reference {:>8.2} dB rms  ({} frames)",
+                rms_db(&out.0),
+                out.0.len()
+            );
         }
     }
 }

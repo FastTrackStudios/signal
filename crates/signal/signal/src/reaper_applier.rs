@@ -82,7 +82,7 @@ impl Default for ReaperPatchApplier {
 }
 
 impl ReaperPatchApplier {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: RwLock::new(None),
@@ -108,7 +108,9 @@ impl ReaperPatchApplier {
         let input_track_name = format!("Input: {fx_id}");
 
         // Look for existing folder or create it
-        let folder_track = if let Ok(Some(t)) = tracks.by_name(&fx_id).await { t } else {
+        let folder_track = if let Ok(Some(t)) = tracks.by_name(&fx_id).await {
+            t
+        } else {
             let t = tracks
                 .add(&fx_id, None)
                 .await
@@ -120,7 +122,9 @@ impl ReaperPatchApplier {
         };
 
         // Look for existing input track or create it
-        let input_track = if let Ok(Some(t)) = tracks.by_name(&input_track_name).await { t } else {
+        let input_track = if let Ok(Some(t)) = tracks.by_name(&input_track_name).await {
+            t
+        } else {
             // Make sure folder track has depth +1 (is a folder)
             folder_track
                 .set_folder_depth(1)
@@ -173,8 +177,9 @@ impl ReaperPatchApplier {
                     .find(|s| s.dest_track_guid.as_deref() == Some(&track_info.guid))
                     .is_none_or(|s| s.muted); // No send found = treat as muted/preloaded
 
-                let Ok(Some(handle)) = tracks.by_guid(&track_info.guid).await else { continue };
-
+                let Ok(Some(handle)) = tracks.by_guid(&track_info.guid).await else {
+                    continue;
+                };
 
                 if send_muted {
                     // Muted send = preloaded patch (inactive, ready for fast-switch)
@@ -204,8 +209,7 @@ impl ReaperPatchApplier {
             }
         }
 
-        let recovered_count =
-            recovered_preloaded.len() + usize::from(recovered_current.is_some());
+        let recovered_count = recovered_preloaded.len() + usize::from(recovered_current.is_some());
         if recovered_count > 0 {
             eprintln!("[INFO] Recovered {recovered_count} existing patch track(s) from REAPER");
         }
@@ -310,7 +314,9 @@ impl ReaperPatchApplier {
         };
 
         let chunks = graph_state_chunks(graph, &fx_id);
-        let Some(chunk) = chunks.first() else { return Ok(()); }; // No state chunks — skip silently
+        let Some(chunk) = chunks.first() else {
+            return Ok(());
+        }; // No state chunks — skip silently
 
         let rfxchain_text = String::from_utf8(chunk.chunk_data.clone())
             .map_err(|e| PatchApplyError::DawError(format!("rfxchain not UTF-8: {e}")))?
@@ -454,7 +460,9 @@ impl ReaperPatchApplier {
             .as_ref()
             .ok_or_else(|| PatchApplyError::NoTarget("no rig configured".into()))?;
 
-        let Some(current) = state.current_patch.as_ref() else { return Ok(None); };
+        let Some(current) = state.current_patch.as_ref() else {
+            return Ok(None);
+        };
 
         let track_chunk = current
             .track
@@ -569,9 +577,7 @@ async fn rename_fx_on_track(track: &TrackHandle, chunk: &DawStateChunk, patch_na
 /// the track chunk couldn't be parsed.
 fn splice_fxchain(track_chunk: &str, rfxchain_content: &str) -> Option<String> {
     // Build the replacement FXCHAIN block
-    let new_fxchain = format!(
-        "<FXCHAIN\nSHOW 0\nLASTSEL 0\nDOCKED 0\n{rfxchain_content}\n>"
-    );
+    let new_fxchain = format!("<FXCHAIN\nSHOW 0\nLASTSEL 0\nDOCKED 0\n{rfxchain_content}\n>");
 
     if let Some(fxchain_start) = track_chunk.find("<FXCHAIN") {
         // Find the matching closing `>` for the FXCHAIN block by counting

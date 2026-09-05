@@ -52,7 +52,8 @@ fn variant_name(algo: u32, variant: usize) -> String {
     VARIANT_NAMES
         .get(algo as usize)
         .and_then(|v| v.get(variant))
-        .filter(|s| !s.is_empty()).map_or_else(|| variant.to_string(), std::string::ToString::to_string)
+        .filter(|s| !s.is_empty())
+        .map_or_else(|| variant.to_string(), std::string::ToString::to_string)
 }
 
 /// Render an impulse through `NativeReverb` at one setting, return the RT60.
@@ -88,7 +89,8 @@ fn measure_with(
     let (mut ol, mut or) = (vec![0.0f32; BLOCK], vec![0.0f32; BLOCK]);
     let quiet = vec![0.0f32; BLOCK];
     for _ in 0..WARMUP_BLOCKS {
-        rev.process_block(&quiet, &quiet, &mut ol, &mut or, &events).ok()?;
+        rev.process_block(&quiet, &quiet, &mut ol, &mut or, &events)
+            .ok()?;
     }
 
     let frames = (TAIL_SECONDS * SAMPLE_RATE) as usize;
@@ -98,7 +100,8 @@ fn measure_with(
     while pos < frames {
         let n = BLOCK.min(frames - pos);
         let inb = &stimulus[pos..pos + n];
-        rev.process_block(inb, inb, &mut ol[..n], &mut or[..n], &events).ok()?;
+        rev.process_block(inb, inb, &mut ol[..n], &mut or[..n], &events)
+            .ok()?;
         out.extend_from_slice(&ol[..n]);
         pos += n;
     }
@@ -186,7 +189,10 @@ fn render_burst_inner(
     while pos < frames {
         let n = BLOCK.min(frames - pos);
         let inb = &stimulus[pos..pos + n];
-        if rev.process_block(inb, inb, &mut ol[..n], &mut or[..n], &events).is_err() {
+        if rev
+            .process_block(inb, inb, &mut ol[..n], &mut or[..n], &events)
+            .is_err()
+        {
             break;
         }
         out.extend_from_slice(&ol[..n]);
@@ -241,7 +247,10 @@ fn render_ir(
     while pos < frames {
         let n = BLOCK.min(frames - pos);
         let inb = &stimulus[pos..pos + n];
-        if rev.process_block(inb, inb, &mut ol[..n], &mut or[..n], &events).is_err() {
+        if rev
+            .process_block(inb, inb, &mut ol[..n], &mut or[..n], &events)
+            .is_err()
+        {
             break;
         }
         out.extend_from_slice(&ol[..n]);
@@ -270,7 +279,13 @@ fn main() {
         // Decay Rate EQ: a low shelf at 0.5x should halve the LOW band's
         // decay and leave the top alone; a high shelf likewise at the top.
         println!("decay_time honoured per engine?");
-        for (algo, variant, name) in [(0u32, 0usize, "Room"), (0, 1, "Chamber"), (1, 0, "Hall"), (1, 1, "Cathedral"), (2, 0, "Plate")] {
+        for (algo, variant, name) in [
+            (0u32, 0usize, "Room"),
+            (0, 1, "Chamber"),
+            (1, 0, "Hall"),
+            (1, 1, "Cathedral"),
+            (2, 0, "Plate"),
+        ] {
             print!("  {name:<10}");
             for want in [1.0f64, 2.5, 5.0] {
                 let ir = render_ir(algo, variant, 0.5, Some(want), &[]);
@@ -297,12 +312,15 @@ fn main() {
             ("low shelf 80Hz 0.5x", dband(1.0, 80.0, 0.5)),
             ("low shelf 300Hz 0.5x", dband(1.0, 300.0, 0.5)),
             ("low shelf 2kHz 0.5x", dband(1.0, 2000.0, 0.5)),
-            ("bell 1kHz 0.5x q4", vec![
-                ("dband1_shape", 0.0),
-                ("dband1_freq", 1000.0),
-                ("dband1_rate", 0.5),
-                ("dband1_q", 4.0),
-            ]),
+            (
+                "bell 1kHz 0.5x q4",
+                vec![
+                    ("dband1_shape", 0.0),
+                    ("dband1_freq", 1000.0),
+                    ("dband1_rate", 0.5),
+                    ("dband1_q", 4.0),
+                ],
+            ),
             ("high shelf 3kHz 0.5x", dband(2.0, 3000.0, 0.5)),
         ] {
             let ir = render_ir(0, 1, 0.5, Some(2.5), &extra);
@@ -323,27 +341,32 @@ fn main() {
         // the decay of the raw output. No band filtering, so no leakage.
         println!("Room/chamber: burst decay at one frequency (no band filter)");
         for (algo, variant, aname) in [(0u32, 1usize, "chamber")] {
-        for (label, extra) in [
-            ("flat", vec![]),
-            ("lowshelf 20Hz 0.5x", dband(1.0, 20.0, 0.5)),
-            ("lowshelf 300Hz 0.5x", dband(1.0, 300.0, 0.5)),
-            ("highshelf 18kHz 0.5x", dband(2.0, 18000.0, 0.5)),
-            ("highshelf 3kHz 0.5x", dband(2.0, 3000.0, 0.5)),
-            ("bell 100Hz 0.5x q0.5", vec![
-                ("dband1_shape", 0.0), ("dband1_freq", 100.0),
-                ("dband1_rate", 0.5), ("dband1_q", 0.5),
-            ]),
-        ] {
-            print!("  {aname:<8} {label:<22}");
-            for probe_hz in [125.0, 1000.0, 4000.0] {
-                let ir = render_burst(algo, variant, Some(2.5), &extra, probe_hz);
-                match signal_analyzer::decay::reverb_time(&ir, SAMPLE_RATE, DecayFit::T20) {
-                    Some(v) => print!("  {probe_hz:.0}Hz {v:5.2}"),
-                    None => print!("  {probe_hz:.0}Hz    ·"),
+            for (label, extra) in [
+                ("flat", vec![]),
+                ("lowshelf 20Hz 0.5x", dband(1.0, 20.0, 0.5)),
+                ("lowshelf 300Hz 0.5x", dband(1.0, 300.0, 0.5)),
+                ("highshelf 18kHz 0.5x", dband(2.0, 18000.0, 0.5)),
+                ("highshelf 3kHz 0.5x", dband(2.0, 3000.0, 0.5)),
+                (
+                    "bell 100Hz 0.5x q0.5",
+                    vec![
+                        ("dband1_shape", 0.0),
+                        ("dband1_freq", 100.0),
+                        ("dband1_rate", 0.5),
+                        ("dband1_q", 0.5),
+                    ],
+                ),
+            ] {
+                print!("  {aname:<8} {label:<22}");
+                for probe_hz in [125.0, 1000.0, 4000.0] {
+                    let ir = render_burst(algo, variant, Some(2.5), &extra, probe_hz);
+                    match signal_analyzer::decay::reverb_time(&ir, SAMPLE_RATE, DecayFit::T20) {
+                        Some(v) => print!("  {probe_hz:.0}Hz {v:5.2}"),
+                        None => print!("  {probe_hz:.0}Hz    ·"),
+                    }
                 }
+                println!();
             }
-            println!();
-        }
         }
         println!();
 
@@ -351,7 +374,10 @@ fn main() {
         // system cannot create 125 Hz from a 4 kHz input; a time-varying one
         // (modulated allpass, rotated feedback) can smear it.
         println!("Room/chamber: octave energy of the tail from a 4 kHz burst");
-        for (label, extra) in [("flat", vec![]), ("lowshelf 300Hz 0.5x", dband(1.0, 300.0, 0.5))] {
+        for (label, extra) in [
+            ("flat", vec![]),
+            ("lowshelf 300Hz 0.5x", dband(1.0, 300.0, 0.5)),
+        ] {
             let tail = render_burst_raw(0, 1, Some(2.5), &extra, 4000.0);
             let bands = signal_analyzer::filters::octave_bands(&tail, SAMPLE_RATE);
             let e: Vec<f64> = bands
@@ -360,7 +386,10 @@ fn main() {
                 .collect();
             let total: f64 = e.iter().sum::<f64>().max(1e-30);
             print!("  {label:<22}");
-            for (i, hz) in signal_analyzer::filters::OCTAVE_CENTRES_HZ.iter().enumerate() {
+            for (i, hz) in signal_analyzer::filters::OCTAVE_CENTRES_HZ
+                .iter()
+                .enumerate()
+            {
                 print!("  {hz:.0}Hz {:5.1}dB", 10.0 * (e[i] / total).log10());
             }
             println!();
@@ -370,7 +399,8 @@ fn main() {
         println!("Hall: per-band RT60 vs low_end");
         for (label, low_end) in [("low_end 0.5 (neutral)", 0.5), ("low_end 0.0 (tamed)", 0.0)] {
             let ir = render_ir(1, 0, 0.9, None, &[("low_end", low_end)]);
-            let bands = signal_analyzer::decay::reverb_time_per_band(&ir, SAMPLE_RATE, DecayFit::T20);
+            let bands =
+                signal_analyzer::decay::reverb_time_per_band(&ir, SAMPLE_RATE, DecayFit::T20);
             print!("  {label:<22}");
             for (hz, rt) in bands.iter().take(5) {
                 match rt {
@@ -402,8 +432,10 @@ fn main() {
     for &(algo, name, variants) in ALGORITHMS {
         for &variant in variants {
             let vname = variant_name(algo, variant);
-            let measured: Vec<(f64, Option<f64>)> =
-                points.iter().map(|&d| (d, measure(algo, variant, d))).collect();
+            let measured: Vec<(f64, Option<f64>)> = points
+                .iter()
+                .map(|&d| (d, measure(algo, variant, d)))
+                .collect();
 
             if tsv {
                 for (d, rt) in &measured {

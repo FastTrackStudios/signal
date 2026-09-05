@@ -10,8 +10,8 @@
 //! a [`ZoomPanel`]: the card *is* the editor; zooming just gives it the
 //! whole screen.
 
-use std::time::Duration;
 use std::fmt::Write;
+use std::time::Duration;
 
 use dioxus::prelude::*;
 
@@ -54,7 +54,9 @@ fn param_v(block: &LiveBlock, name: &str, dflt: f32) -> f32 {
 /// Approximate reverb tail (RT60, seconds) for a decay setting — the Hall
 /// algorithm's feedback law (g = 0.5 + 0.48·d) over an ~80 ms loop.
 fn decay_t60_secs(decay: f32) -> f64 {
-    let g = 0.48f64.mul_add(f64::from(decay.clamp(0.0, 1.0)), 0.5).min(0.995);
+    let g = 0.48f64
+        .mul_add(f64::from(decay.clamp(0.0, 1.0)), 0.5)
+        .min(0.995);
     0.08 * (0.001f64).ln() / g.ln()
 }
 
@@ -295,7 +297,11 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
             spawn(async move {
                 if let Some(r) = rig {
                     let _ = r
-                        .set_block_param(id, "threshold".into(), frac.clamp(0.0, 1.0).mul_add(90.0, -90.0))
+                        .set_block_param(
+                            id,
+                            "threshold".into(),
+                            frac.clamp(0.0, 1.0).mul_add(90.0, -90.0),
+                        )
                         .await;
                 }
             });

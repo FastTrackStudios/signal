@@ -8,7 +8,7 @@
 //!   - Moderate HF damping (air absorption over distance)
 //!   - Wide stereo field (surround-like from distant surfaces)
 
-use crate::algorithm::{AlgorithmParams, HALL_ARENA_T60, ReverbAlgorithm, decay_to_t60};
+use crate::algorithm::{decay_to_t60, AlgorithmParams, ReverbAlgorithm, HALL_ARENA_T60};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;

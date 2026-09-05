@@ -61,7 +61,7 @@ const DEDUP_EPSILON: f64 = 1e-5;
 
 impl ModulationRuntime {
     /// Create a new runtime from modulation routes.
-    #[must_use] 
+    #[must_use]
     pub fn new(routes: Vec<ModulationRoute>) -> Self {
         Self {
             processor: ModulationProcessor::new(routes),
@@ -160,13 +160,13 @@ impl ModulationRuntime {
     }
 
     /// Number of active bindings.
-    #[must_use] 
+    #[must_use]
     pub fn binding_count(&self) -> usize {
         self.bindings.len()
     }
 
     /// Number of routes in the processor.
-    #[must_use] 
+    #[must_use]
     pub const fn route_count(&self) -> usize {
         self.processor.route_count()
     }

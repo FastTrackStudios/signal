@@ -63,9 +63,13 @@ impl Preset {
     /// The text a search query is matched against.
     fn haystack(&self) -> String {
         let mut s = self.name.to_lowercase();
-        for extra in [self.category.as_deref(), self.author.as_deref(), self.origin.as_deref()]
-            .into_iter()
-            .flatten()
+        for extra in [
+            self.category.as_deref(),
+            self.author.as_deref(),
+            self.origin.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
         {
             s.push(' ');
             s.push_str(&extra.to_lowercase());
@@ -92,7 +96,7 @@ pub enum SortMode {
 }
 
 impl SortMode {
-    #[must_use] 
+    #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
             Self::Name => "Name",
@@ -102,7 +106,7 @@ impl SortMode {
     }
 
     /// The next mode, for a control that cycles rather than opening a menu.
-    #[must_use] 
+    #[must_use]
     pub const fn cycle(self) -> Self {
         match self {
             Self::Name => Self::Category,
@@ -129,7 +133,7 @@ pub struct PresetBrowser {
 }
 
 impl PresetBrowser {
-    #[must_use] 
+    #[must_use]
     pub fn new(presets: Vec<Preset>) -> Self {
         Self {
             presets,
@@ -138,18 +142,18 @@ impl PresetBrowser {
     }
 
     /// Every preset, unfiltered.
-    #[must_use] 
+    #[must_use]
     pub fn all(&self) -> &[Preset] {
         &self.presets
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.presets.is_empty()
     }
 
     /// Every category present, sorted, for a filter control.
-    #[must_use] 
+    #[must_use]
     pub fn categories(&self) -> Vec<String> {
         self.presets
             .iter()
@@ -161,7 +165,7 @@ impl PresetBrowser {
 
     // ── Filtering ──────────────────────────────────────────────────────────
 
-    #[must_use] 
+    #[must_use]
     pub fn query(&self) -> &str {
         &self.query
     }
@@ -177,7 +181,7 @@ impl PresetBrowser {
         self.query = query.into();
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn category_filter(&self) -> Option<&str> {
         self.category.as_deref()
     }
@@ -186,7 +190,7 @@ impl PresetBrowser {
         self.category = category;
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn sort_mode(&self) -> SortMode {
         self.sort
     }
@@ -219,7 +223,7 @@ impl PresetBrowser {
     ///
     /// Indices rather than references so a caller can pair them with
     /// [`Self::select`] without borrowing the browser for the whole render.
-    #[must_use] 
+    #[must_use]
     pub fn visible(&self) -> Vec<usize> {
         let mut out: Vec<usize> = (0..self.presets.len())
             .filter(|&i| self.matches(&self.presets[i]))
@@ -241,19 +245,19 @@ impl PresetBrowser {
         out
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn visible_count(&self) -> usize {
         self.presets.iter().filter(|p| self.matches(p)).count()
     }
 
     // ── Selection ──────────────────────────────────────────────────────────
 
-    #[must_use] 
+    #[must_use]
     pub const fn selected_index(&self) -> Option<usize> {
         self.selected
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn selected(&self) -> Option<&Preset> {
         self.selected.and_then(|i| self.presets.get(i))
     }
@@ -279,7 +283,10 @@ impl PresetBrowser {
         if visible.is_empty() {
             return None;
         }
-        let next = match self.selected.and_then(|s| visible.iter().position(|&i| i == s)) {
+        let next = match self
+            .selected
+            .and_then(|s| visible.iter().position(|&i| i == s))
+        {
             Some(pos) => {
                 let target = pos as isize + delta;
                 target.clamp(0, visible.len() as isize - 1) as usize
@@ -300,7 +307,7 @@ impl PresetBrowser {
     }
 
     /// The parameters of the current selection, ready for `set_named`.
-    #[must_use] 
+    #[must_use]
     pub fn selected_parameters(&self) -> &[(String, f64)] {
         self.selected().map_or(&[], |p| p.parameters.as_slice())
     }
@@ -398,7 +405,11 @@ mod tests {
     fn sort_modes_order_differently_and_cycle() {
         let mut b = browser();
         b.set_sort_mode(SortMode::Name);
-        let names: Vec<&str> = b.visible().iter().map(|&i| b.all()[i].name.as_str()).collect();
+        let names: Vec<&str> = b
+            .visible()
+            .iter()
+            .map(|&i| b.all()[i].name.as_str())
+            .collect();
         assert_eq!(names[0], "Acoustic Chamber");
 
         b.set_sort_mode(SortMode::Category);
@@ -421,23 +432,41 @@ mod tests {
         let mut b = browser();
         b.set_sort_mode(SortMode::Library);
 
-        assert_eq!(b.select_next().map(|p| p.name.clone()), Some("Snare Plate".into()));
-        assert_eq!(b.select_next().map(|p| p.name.clone()), Some("Dark Vocal Plate".into()));
-        assert_eq!(b.select_previous().map(|p| p.name.clone()), Some("Snare Plate".into()));
+        assert_eq!(
+            b.select_next().map(|p| p.name.clone()),
+            Some("Snare Plate".into())
+        );
+        assert_eq!(
+            b.select_next().map(|p| p.name.clone()),
+            Some("Dark Vocal Plate".into())
+        );
+        assert_eq!(
+            b.select_previous().map(|p| p.name.clone()),
+            Some("Snare Plate".into())
+        );
 
         // Does not wrap at either end.
-        assert_eq!(b.select_previous().map(|p| p.name.clone()), Some("Snare Plate".into()));
+        assert_eq!(
+            b.select_previous().map(|p| p.name.clone()),
+            Some("Snare Plate".into())
+        );
         for _ in 0..10 {
             b.select_next();
         }
-        assert_eq!(b.selected().map(|p| p.name.clone()), Some("Big Hall".into()));
+        assert_eq!(
+            b.selected().map(|p| p.name.clone()),
+            Some("Big Hall".into())
+        );
     }
 
     #[test]
     fn stepping_backwards_from_nothing_starts_at_the_end() {
         let mut b = browser();
         b.set_sort_mode(SortMode::Library);
-        assert_eq!(b.select_previous().map(|p| p.name.clone()), Some("Big Hall".into()));
+        assert_eq!(
+            b.select_previous().map(|p| p.name.clone()),
+            Some("Big Hall".into())
+        );
     }
 
     #[test]
@@ -450,7 +479,10 @@ mod tests {
         // Only two plates: stepping again stays on the second, never reaching
         // the chamber that follows it in the library.
         b.select_next();
-        assert_eq!(b.selected().map(|p| p.name.clone()), Some("Dark Vocal Plate".into()));
+        assert_eq!(
+            b.selected().map(|p| p.name.clone()),
+            Some("Dark Vocal Plate".into())
+        );
     }
 
     #[test]
@@ -460,12 +492,18 @@ mod tests {
         let mut b = browser();
         b.select(3); // Big Hall
         b.set_category_filter(Some("Plates".into()));
-        assert_eq!(b.selected().map(|p| p.name.clone()), Some("Big Hall".into()));
+        assert_eq!(
+            b.selected().map(|p| p.name.clone()),
+            Some("Big Hall".into())
+        );
 
         // ...and stepping from a hidden selection starts fresh rather than
         // jumping somewhere arbitrary.
         b.set_sort_mode(SortMode::Library);
-        assert_eq!(b.select_next().map(|p| p.name.clone()), Some("Snare Plate".into()));
+        assert_eq!(
+            b.select_next().map(|p| p.name.clone()),
+            Some("Snare Plate".into())
+        );
     }
 
     #[test]

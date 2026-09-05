@@ -431,7 +431,7 @@ const DIFFUSE_DELAYS_L: [f64; 8] = [12.11, 10.49, 8.51, 7.13, 5.37, 4.21, 3.07, 
 const DIFFUSE_DELAYS_R: [f64; 8] = [12.08, 10.47, 8.49, 7.11, 5.35, 4.19, 3.05, 2.09];
 
 impl Diffuser {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64, is_right: bool) -> Self {
         let mps = sample_rate / 343.0; // Samples per meter (speed of sound)
         let base_distance = mps * 3.75;

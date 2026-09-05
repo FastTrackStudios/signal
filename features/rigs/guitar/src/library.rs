@@ -33,7 +33,7 @@ use crate::profiles::{
 };
 
 /// The library directory (`SIGNAL_RIG_DIR` overrides).
-#[must_use] 
+#[must_use]
 pub fn rig_dir() -> PathBuf {
     if let Ok(p) = std::env::var("SIGNAL_RIG_DIR") {
         if !p.is_empty() {
@@ -276,7 +276,7 @@ impl RigLibrary {
     }
 
     /// `None` when the file is missing (fresh install) or unparsable.
-    #[must_use] 
+    #[must_use]
     pub fn load_last_state() -> Option<LastState> {
         store().read("last-state.styx")
     }

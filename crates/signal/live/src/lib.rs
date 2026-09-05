@@ -308,7 +308,7 @@ impl
         RackRepoLive,
     >
 {
-    #[must_use] 
+    #[must_use]
     pub fn from_db(db: DatabaseConnection) -> Self {
         Self::new(
             Arc::new(BlockRepoLive::new(db.clone())),

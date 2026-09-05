@@ -352,8 +352,10 @@ pub fn execute(r: RigClient, effect: Effect, arg: String) {
                 }
             }
             Effect::ImportPreset => {
-                let name = std::path::Path::new(arg.trim())
-                    .file_stem().map_or_else(|| "Imported".to_string(), |s| s.to_string_lossy().to_string());
+                let name = std::path::Path::new(arg.trim()).file_stem().map_or_else(
+                    || "Imported".to_string(),
+                    |s| s.to_string_lossy().to_string(),
+                );
                 drop(r.add_preset(name, arg.trim().to_string()).await);
             }
         }

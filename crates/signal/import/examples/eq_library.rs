@@ -22,12 +22,16 @@ use signal_import::fabfilter::{ffbs, parser, proq4};
 
 fn arg(name: &str) -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
-    args.iter().position(|a| a == name).and_then(|i| args.get(i + 1).cloned())
+    args.iter()
+        .position(|a| a == name)
+        .and_then(|i| args.get(i + 1).cloned())
 }
 
 /// Every `.ffp` under `dir`, recursively.
 fn collect(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for e in entries.flatten() {
         let path = e.path();
         if path.is_dir() {
@@ -90,7 +94,11 @@ fn main() {
 
     let (mut written, mut skipped, mut dynamic, mut spectral) = (0, 0, 0, 0);
     for path in &files {
-        let stem = path.file_stem().unwrap_or_default().to_string_lossy().to_string();
+        let stem = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         let (state, tags, author) = match read_state(path) {
             Ok(v) => v,
             Err(e) => {
@@ -109,7 +117,11 @@ fn main() {
         };
 
         let params = proq4::to_native_eq_params(&eq);
-        let n_dyn = eq.bands.iter().filter(|b| b.is_active() && b.is_dynamic()).count();
+        let n_dyn = eq
+            .bands
+            .iter()
+            .filter(|b| b.is_active() && b.is_dynamic())
+            .count();
         let n_spec = eq
             .bands
             .iter()

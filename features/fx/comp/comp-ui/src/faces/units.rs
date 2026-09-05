@@ -1346,7 +1346,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
 };
 
 /// The design for a profile id, if that profile has a hardware face.
-#[must_use] 
+#[must_use]
 pub fn design_for(profile_id: &str) -> Option<&'static RackDesign> {
     Some(match profile_id {
         "urei_1176" => &UREI_1176,

@@ -1,7 +1,11 @@
 //! Scene template repository — data access for standalone scene templates.
 
 use sea_orm::prelude::Expr;
-use sea_orm::{ConnectionTrait, Schema, ActiveModelBehavior, StatementBuilder, QueryTrait, ActiveEnum, QueryOrder, EntityTrait, Iterable, Iden, ColIdx, IdenStatic, ColumnTrait, PaginatorTrait, ActiveModelTrait, Set, QueryFilter};
+use sea_orm::{
+    ActiveEnum, ActiveModelBehavior, ActiveModelTrait, ColIdx, ColumnTrait, ConnectionTrait,
+    EntityTrait, Iden, IdenStatic, Iterable, PaginatorTrait, QueryFilter, QueryOrder, QueryTrait,
+    Schema, Set, StatementBuilder,
+};
 use signal_proto::metadata::Metadata;
 use signal_proto::overrides::Override;
 use signal_proto::rig::EngineSelection;
@@ -34,7 +38,7 @@ pub struct SceneTemplateRepoLive {
 }
 
 impl SceneTemplateRepoLive {
-    #[must_use] 
+    #[must_use]
     pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
@@ -147,16 +151,19 @@ impl SceneTemplateRepo for SceneTemplateRepoLive {
 
     async fn save_scene_template(&self, template: &SceneTemplate) -> StorageResult<()> {
         // Get current sort_order if updating, or assign next order for new entries.
-        let sort_order =
-            if let Some(existing) = entity::scene_template::Entity::find_by_id(template.id.as_str().to_string())
+        let sort_order = if let Some(existing) =
+            entity::scene_template::Entity::find_by_id(template.id.as_str().to_string())
                 .one(&self.db)
-                .await? { existing.sort_order } else {
-                // Assign next available order.
-                let count = entity::scene_template::Entity::find()
-                    .count(&self.db)
-                    .await? as i32;
-                count
-            };
+                .await?
+        {
+            existing.sort_order
+        } else {
+            // Assign next available order.
+            let count = entity::scene_template::Entity::find()
+                .count(&self.db)
+                .await? as i32;
+            count
+        };
 
         entity::scene_template::Entity::delete_by_id(template.id.as_str().to_string())
             .exec(&self.db)

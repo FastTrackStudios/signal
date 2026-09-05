@@ -92,25 +92,29 @@ pub fn profile_control_handle(
     // Display. A stepped control reads its own label ("Limit", "8"); the
     // others defer to the engine param they front, which already knows its
     // unit and formatting.
-    let display: Arc<dyn Fn() -> String + Send + Sync> = if let ParamMapping::Stepped { labels, .. } = &control.mapping {
-        let ptr = targets[0];
-        let labels = *labels;
-        let values = match &control.mapping {
-            ParamMapping::Stepped { values, .. } => *values,
-            _ => unreachable!(),
+    let display: Arc<dyn Fn() -> String + Send + Sync> =
+        if let ParamMapping::Stepped { labels, .. } = &control.mapping {
+            let ptr = targets[0];
+            let labels = *labels;
+            let values = match &control.mapping {
+                ParamMapping::Stepped { values, .. } => *values,
+                _ => unreachable!(),
+            };
+            Arc::new(move || {
+                let plain = f64::from(unsafe { ptr.modulated_plain_value() });
+                let index = step_index(values, plain);
+                labels
+                    .get(index)
+                    .map(std::string::ToString::to_string)
+                    .unwrap_or_default()
+            })
+        } else {
+            let ptr = targets[0];
+            Arc::new(move || unsafe {
+                let n = ptr.modulated_normalized_value();
+                ptr.normalized_value_to_string(n, true)
+            })
         };
-        Arc::new(move || {
-            let plain = f64::from(unsafe { ptr.modulated_plain_value() });
-            let index = step_index(values, plain);
-            labels.get(index).map(std::string::ToString::to_string).unwrap_or_default()
-        })
-    } else {
-        let ptr = targets[0];
-        Arc::new(move || unsafe {
-            let n = ptr.modulated_normalized_value();
-            ptr.normalized_value_to_string(n, true)
-        })
-    };
 
     let write = {
         let params = params;

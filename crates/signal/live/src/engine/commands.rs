@@ -133,7 +133,7 @@ impl Default for MockRigControlService {
 }
 
 impl MockRigControlService {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             history: std::sync::Mutex::new(Vec::new()),
@@ -142,12 +142,18 @@ impl MockRigControlService {
 
     /// Get the command history for test assertions.
     pub fn history(&self) -> Vec<RigControlCommand> {
-        self.history.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+        self.history
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Clear command history.
     pub fn clear_history(&self) {
-        self.history.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clear();
+        self.history
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
     }
 }
 
@@ -193,7 +199,10 @@ impl RigControlService for MockRigControlService {
             _ => vec![],
         };
 
-        self.history.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(command);
+        self.history
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(command);
         events
     }
 }

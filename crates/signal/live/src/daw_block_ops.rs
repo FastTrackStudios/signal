@@ -87,7 +87,7 @@ impl ResolvedSignalChain {
     ///
     /// Used by callers that only need a flat list regardless of topology —
     /// e.g., existing tests or simple serial modules.
-    #[must_use] 
+    #[must_use]
     pub fn all_fx_loads(&self) -> Vec<&ResolvedFxLoad> {
         let mut out = Vec::new();
         self.collect_fx_loads(&mut out);
@@ -121,7 +121,7 @@ impl ResolvedModuleLoad {
     /// Flat list of all resolved FX loads in depth-first order.
     ///
     /// Backward-compatible accessor for callers that don't need topology.
-    #[must_use] 
+    #[must_use]
     pub fn fx_loads(&self) -> Vec<&ResolvedFxLoad> {
         self.chain.all_fx_loads()
     }
@@ -131,11 +131,10 @@ impl ResolvedModuleLoad {
 
 /// Extract the raw REAPER plugin name from any item's `source:` metadata tag.
 fn raw_plugin_name(item: &impl HasMetadata) -> Option<String> {
-    item.metadata()
-        .tags
-        .as_slice()
-        .iter()
-        .find_map(|t| t.strip_prefix("source:").map(std::string::ToString::to_string))
+    item.metadata().tags.as_slice().iter().find_map(|t| {
+        t.strip_prefix("source:")
+            .map(std::string::ToString::to_string)
+    })
 }
 
 // ─── Plugin parameter mapping ──────────────────────────────────
@@ -709,17 +708,13 @@ async fn configure_fx_free(
                             "[signal]   ✗ FX disappeared after state chunk for '{}', re-adding",
                             resolved.display_name,
                         );
-                        fx =
-                            track
-                                .fx_chain()
-                                .add(&resolved.plugin_name)
-                                .await
-                                .map_err(|e| {
-                                    format!(
-                                        "Failed to re-add FX '{}': {e}",
-                                        resolved.display_name
-                                    )
-                                })?;
+                        fx = track
+                            .fx_chain()
+                            .add(&resolved.plugin_name)
+                            .await
+                            .map_err(|e| {
+                                format!("Failed to re-add FX '{}': {e}", resolved.display_name)
+                            })?;
                     }
                 }
                 Err(e) => {

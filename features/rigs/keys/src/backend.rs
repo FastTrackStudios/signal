@@ -25,7 +25,7 @@ use signal_keys_proto::{
 use crate::profile::{worship_profile, KeysProfile};
 use signal_rig_host::mixer::{self as rig_mixer, db_to_linear};
 use signal_sampler::rig_node::{RigNode, Role};
-use signal_sampler::{Container};
+use signal_sampler::Container;
 
 use crate::KeysRig;
 
@@ -1399,8 +1399,7 @@ impl State {
                     // worked on — a pad under everything hides exactly the
                     // attack detail you need to hear. Unmute them in the
                     // mixer; this only decides where the faders START.
-                    muted: is_drone(&engine.name)
-                        || matches!(engine.name.as_str(), "Aux" | "Pad"),
+                    muted: is_drone(&engine.name) || matches!(engine.name.as_str(), "Aux" | "Pad"),
                     ..EngineState::default()
                 },
             );
@@ -1831,8 +1830,9 @@ impl KeysRigBackend {
         rig.edit_lane(layer, |inst| {
             let render = inst.render_mut();
             // Filter block params (normalized on the block's own scale).
-            let cutoff_norm =
-                f64::from(signal_sampler::native::NativeFilter::norm_from_cutoff(cutoff_hz));
+            let cutoff_norm = f64::from(signal_sampler::native::NativeFilter::norm_from_cutoff(
+                cutoff_hz,
+            ));
             let mut applied = render.set_leaf_param(&module, "Filter 1", "cutoff", cutoff_norm);
             applied |= render.set_leaf_param(
                 &module,
@@ -2079,7 +2079,9 @@ impl KeysRigBackend {
                 if m.patch.is_empty() {
                     continue;
                 }
-                if let Some(name) = canonical(&m.patch) { m.patch = name } else {
+                if let Some(name) = canonical(&m.patch) {
+                    m.patch = name
+                } else {
                     tracing::info!(patch = %m.patch, "keys rig: profile patch not in library — module starts empty");
                     m.patch.clear();
                 }
@@ -2626,7 +2628,11 @@ impl KeysRigBackend {
         match opened {
             Ok(r) => {
                 {
-                    let mut rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let mut rig = self
+                        .inner
+                        .rig
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     *rig = Some(r);
                 }
                 // A freshly opened rig has no MIDI input yet, and every
@@ -2724,7 +2730,11 @@ impl KeysRigBackend {
         // lock before touching the hub, so a slow port open can never wedge
         // status() and with it the whole UI.
         let sink = {
-            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let rig = self
+                .inner
+                .rig
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             match rig.as_ref() {
                 Some(rig) => rig.midi_sink(),
                 None => return, // Not running — nothing to feed.
@@ -2862,7 +2872,11 @@ impl KeysRigSvc for KeysRigBackend {
     fn status(&self) -> KeysStatus {
         tracing::debug!("keys rpc: status →");
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-        let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let s = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let loaded_preset = s
             .loaded
             .and_then(|i| s.presets.get(i))
@@ -3242,10 +3256,9 @@ impl KeysRigSvc for KeysRigBackend {
             return KeysLayerDetail::default();
         };
         let slot = (module as usize).min(lane.modules.len().saturating_sub(1));
-        let (key_lo, key_hi) = s
-            .profile
-            .layer(&layer)
-            .map_or((0, 127), |(_, l)| (u32::from(l.key_lo), u32::from(l.key_hi)));
+        let (key_lo, key_hi) = s.profile.layer(&layer).map_or((0, 127), |(_, l)| {
+            (u32::from(l.key_lo), u32::from(l.key_hi))
+        });
         let modules = lane
             .modules
             .iter()

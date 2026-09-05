@@ -55,9 +55,7 @@ fn main() {
     );
     for ((artic, dir), (count, lo, hi)) in &by_artic {
         let nn = notes.get(artic).map_or(0, std::collections::BTreeSet::len);
-        println!(
-            "{artic:<28} {dir:<8} {count:>6} {lo:>4}..{hi:<4} {nn:>10}"
-        );
+        println!("{artic:<28} {dir:<8} {count:>6} {lo:>4}..{hi:<4} {nn:>10}");
     }
     let parsed: usize = by_artic.values().map(|(c, ..)| *c).sum();
     println!("\nparsed {parsed}/{total}; unparsed {}", total - parsed);

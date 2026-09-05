@@ -152,7 +152,7 @@ const POPUP_REGION_PAD: f64 = 10.0;
 ///
 /// Shared with `EqGraph`'s focus logic — the graph needs the same rect to know
 /// that a pointer heading for the panel has not left the band.
-#[must_use] 
+#[must_use]
 pub fn band_popup_rect(
     bx: f64,
     by: f64,
@@ -178,7 +178,7 @@ pub fn band_popup_rect(
 /// the empty [`POPUP_GAP`] the pointer must cross to reach the panel is part
 /// of it. Without this the panel fades out from under the cursor on the way
 /// there and its controls can never be clicked.
-#[must_use] 
+#[must_use]
 pub fn point_in_popup_region(
     px: f64,
     py: f64,

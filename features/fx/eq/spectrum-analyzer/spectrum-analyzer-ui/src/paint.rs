@@ -73,12 +73,14 @@ pub fn paint_spectrum_fill<FX, FY>(
     // Close the path down to the bottom for the fill.
     let mut fill_path = path.clone();
     let first_x = freq_to_x(min_freq.max(f64::from(freq_hz.first().copied().unwrap_or(0.0))));
-    let last_visible = f64::from(freq_hz
-        .iter()
-        .rev()
-        .find(|&&f| f64::from(f) <= max_freq)
-        .copied()
-        .unwrap_or(0.0));
+    let last_visible = f64::from(
+        freq_hz
+            .iter()
+            .rev()
+            .find(|&&f| f64::from(f) <= max_freq)
+            .copied()
+            .unwrap_or(0.0),
+    );
     fill_path.line_to((freq_to_x(last_visible), bottom_y));
     fill_path.line_to((first_x, bottom_y));
     fill_path.close_path();

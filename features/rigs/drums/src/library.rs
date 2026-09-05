@@ -61,7 +61,7 @@ fn stem(p: &Path) -> String {
 
 /// The engine directory of a library root (kits keep engines in `Engines/`;
 /// fall back to the root so a flat library still scans).
-#[must_use] 
+#[must_use]
 pub fn engines_dir(library_root: &Path) -> PathBuf {
     let e = library_root.join("Engines");
     if e.is_dir() {
@@ -132,7 +132,7 @@ fn title_case(s: &str) -> String {
 
 /// Infer a slot's engine *kind* (for matching library pieces) from the slot id
 /// when the current engine's type can't be read.
-#[must_use] 
+#[must_use]
 pub fn kind_from_slot(slot_id: &str) -> &'static str {
     let s = slot_id.to_ascii_lowercase();
     if s.contains("kick") {
@@ -158,7 +158,7 @@ pub fn kind_from_slot(slot_id: &str) -> &'static str {
 
 /// Read a preset's engine slots (id + current engine path/name). `preset_dir`
 /// resolves the relative engine refs to absolute paths.
-#[must_use] 
+#[must_use]
 pub fn preset_slots(spec: &PresetSpec, preset_dir: &Path) -> Vec<(String, PathBuf)> {
     spec.engines
         .iter()

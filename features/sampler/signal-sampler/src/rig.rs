@@ -1500,14 +1500,18 @@ impl GuitarRig {
             primary_output_level_dbu,
         };
         self.slots.push(info.clone());
-        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).chains.insert(
-            id,
-            ResidentChain {
-                info,
-                boxes,
-                block_ids: ids,
-            },
-        );
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .chains
+            .insert(
+                id,
+                ResidentChain {
+                    info,
+                    boxes,
+                    block_ids: ids,
+                },
+            );
         Ok(id)
     }
 
@@ -1526,7 +1530,11 @@ impl GuitarRig {
         if self.active() == Some(id) {
             self.set_active(None);
         }
-        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).chains.remove(&id);
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .chains
+            .remove(&id);
         self.slots.retain(|s| s.id != id);
     }
 
@@ -1542,7 +1550,10 @@ impl GuitarRig {
     /// `swap.chains`, or if a slot marked present turns out to be empty —
     /// both are internal invariants, not input errors.
     pub fn set_active(&self, id: Option<ModelId>) {
-        let mut swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut swap = self
+            .swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let chain_guids = &self.slot_guids[1..]; // slot 0 is the input probe
         let sr = self.sample_rate as f64;
         let bypass = swap.bypass;
@@ -1609,7 +1620,10 @@ impl GuitarRig {
     }
 
     pub fn active(&self) -> Option<ModelId> {
-        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).active
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .active
     }
 
     /// Convenience for the single-amp case: install a single-NAM chain + activate.
@@ -1630,7 +1644,11 @@ impl GuitarRig {
     /// Remove every chain and fall back to passthrough.
     pub fn clear(&mut self) {
         self.set_active(None);
-        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).chains.clear();
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .chains
+            .clear();
         self.slots.clear();
     }
 
@@ -1645,7 +1663,10 @@ impl GuitarRig {
     }
 
     pub fn set_input_trim_db(&self, db: f32) {
-        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).input_trim_db = db;
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .input_trim_db = db;
         // The input trim is folded into each NAM block's per-block input gain at
         // build time (the resolver sets `RigBlock::input_trim_db`), so the
         // patch-level input trim is a no-op live; kept for API parity. The
@@ -1654,7 +1675,10 @@ impl GuitarRig {
     }
 
     pub fn set_output_trim_db(&self, db: f32) {
-        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).output_trim_db = db;
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .output_trim_db = db;
         // Output trim → the track's post-fader gain (linear).
         let out_lin = signal_rig_host::mixer::db_to_linear(db) as f64;
         let _ = <Standalone as Tracks>::set_volume(
@@ -1667,7 +1691,10 @@ impl GuitarRig {
 
     pub fn set_bypass(&self, bypass: bool) {
         {
-            let mut swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut swap = self
+                .swap
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if swap.bypass == bypass {
                 return;
             }
@@ -1680,15 +1707,24 @@ impl GuitarRig {
     }
 
     pub fn is_bypassed(&self) -> bool {
-        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).bypass
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .bypass
     }
 
     pub fn input_trim_db(&self) -> f32 {
-        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).input_trim_db
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .input_trim_db
     }
 
     pub fn output_trim_db(&self) -> f32 {
-        self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner).output_trim_db
+        self.swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .output_trim_db
     }
 
     /// Post-input peak (linear) — from the `InputProbe` at slot 0.
@@ -1764,15 +1800,15 @@ impl GuitarRig {
     /// Last block's render time in microseconds (the DSP-load numerator),
     /// measured by the duplex engine's realtime callback.
     pub fn render_us(&self) -> u32 {
-        self.engine_stats
-            .as_ref()
-            .map_or(0, |s| (s.render_ns.load(std::sync::atomic::Ordering::Relaxed) / 1000) as u32)
+        self.engine_stats.as_ref().map_or(0, |s| {
+            (s.render_ns.load(std::sync::atomic::Ordering::Relaxed) / 1000) as u32
+        })
     }
 
     pub fn peak_render_us(&self) -> u32 {
-        self.engine_stats
-            .as_ref()
-            .map_or(0, |s| (s.peak_render_ns.load(std::sync::atomic::Ordering::Relaxed) / 1000) as u32)
+        self.engine_stats.as_ref().map_or(0, |s| {
+            (s.peak_render_ns.load(std::sync::atomic::Ordering::Relaxed) / 1000) as u32
+        })
     }
 
     pub fn reset_render_peak(&self) {
@@ -1784,10 +1820,9 @@ impl GuitarRig {
     /// Frames in the last block (the running buffer/quantum) — from the engine's
     /// live metrics, falling back to the configured buffer before the first block.
     pub fn block_frames(&self) -> u32 {
-        let live = self
-            .engine_stats
-            .as_ref()
-            .map_or(0, |s| s.block_frames.load(std::sync::atomic::Ordering::Relaxed));
+        let live = self.engine_stats.as_ref().map_or(0, |s| {
+            s.block_frames.load(std::sync::atomic::Ordering::Relaxed)
+        });
         if live > 0 {
             live
         } else {
@@ -1818,7 +1853,10 @@ impl GuitarRig {
     /// fx_guid)`. `chain_slot_index` is 0-based within the chain (slot 0 of the
     /// chain maps to `slot_guids[1]`, the renderer `fx_idx` is `index + 1`).
     fn active_block_slot(&self, block_id: &str) -> Option<(usize, String)> {
-        let swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let swap = self
+            .swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let active = swap.active?;
         let chain = swap.chains.get(&active)?;
         let slot = chain.block_ids.iter().position(|b| b == block_id)?;
@@ -1829,7 +1867,10 @@ impl GuitarRig {
 
     /// Block ids of the active chain, in order. Empty when nothing is active.
     pub fn active_block_ids(&self) -> Vec<String> {
-        let swap = self.swap.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let swap = self
+            .swap
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         swap.active
             .and_then(|a| swap.chains.get(&a))
             .map(|c| c.block_ids.clone())

@@ -25,7 +25,7 @@ const TRAILER: &[u8] = &[
 
 /// Wrap a `SynthMaster` Multi XML (`.mlt_omn` content) into a VST3 state
 /// chunk Omnisphere accepts via `load_state`.
-#[must_use] 
+#[must_use]
 pub fn build_state(multi_xml: &str) -> Vec<u8> {
     let mut payload = multi_xml
         .trim_end_matches(['\0', ' ', '\n'])
@@ -116,7 +116,7 @@ pub fn patch_into_multi(patch_xml: &str, template_multi_xml: &str) -> Result<Str
 
 /// Rewrite every `attr="…"` occurrence to `attr="value"` — the calibration
 /// sweep hook (values are raw attribute strings, IEEE-754 hex for floats).
-#[must_use] 
+#[must_use]
 pub fn rewrite_attr(xml: &str, attr: &str, value: &str) -> (String, usize) {
     let needle = format!("{attr}=\"");
     let mut out = String::with_capacity(xml.len());

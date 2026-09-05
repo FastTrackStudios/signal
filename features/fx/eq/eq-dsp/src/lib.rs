@@ -1,4 +1,7 @@
-#![expect(rustdoc::broken_intra_doc_links, reason = "large transliterated codebase may have incomplete intra-doc links")]
+#![expect(
+    rustdoc::broken_intra_doc_links,
+    reason = "large transliterated codebase may have incomplete intra-doc links"
+)]
 // The library has a large amount of code transliterated from a reference
 // binary; the following style lints fire heavily on that code without
 // actually flagging bugs. They are suppressed via item-level attributes
@@ -21,7 +24,6 @@
 // clippy.toml's disallowed-methods list (locks, env, sleep) are real bugs here
 // even though they are allowed workspace-wide off the audio thread.
 #![deny(clippy::disallowed_methods)]
-
 // ── TEMPORARY: DSP rewrite pending ───────────────────────────────────────
 // 1252 findings in this crate, held under `expect` rather than fixed one by one.
 //

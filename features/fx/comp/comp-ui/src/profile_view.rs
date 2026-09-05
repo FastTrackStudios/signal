@@ -134,7 +134,7 @@ pub struct ProfileParamWrite {
     pub value: f64,
 }
 
-#[must_use] 
+#[must_use]
 pub fn profile_skin(profile_id: &str) -> ProfileSkin {
     // The FET limiter's three finishes are one unit as far as the rail is
     // concerned, so they share a skin — but not a colour. The rail badge is
@@ -307,7 +307,7 @@ impl ProfileView {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn control(&self, id: &str) -> Option<&ProfileControlView> {
         self.groups
             .iter()

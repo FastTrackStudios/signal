@@ -1509,7 +1509,10 @@ pub fn apply_inline_section_defaults(proto: &mut Prototype) {
     proto.wt = proto.wp * 0.5;
 }
 
-#[expect(dead_code, reason = "placeholder for potential future use in decompilation helpers")]
+#[expect(
+    dead_code,
+    reason = "placeholder for potential future use in decompilation helpers"
+)]
 const _CONST_PI: f64 = PI;
 
 #[cfg(test)]

@@ -19,7 +19,7 @@ use crate::param_adapter::param_handle;
 use crate::params::{FtsEqParams, NUM_BANDS};
 
 /// Where the EQ's presets live.
-#[must_use] 
+#[must_use]
 pub fn preset_library_root() -> std::path::PathBuf {
     preset_browser_ui::library_root(
         "FTS_EQ_PRESETS",
@@ -28,7 +28,7 @@ pub fn preset_library_root() -> std::path::PathBuf {
 }
 
 /// The EQ's library: every bank under the root, as one list.
-#[must_use] 
+#[must_use]
 pub fn load_library() -> (PresetBrowser, String) {
     preset_browser_ui::load_library_tree(&preset_library_root())
 }
@@ -92,9 +92,24 @@ pub fn preset_handles(params: &FtsEqParams, ctx: &ParamContext) -> HashMap<Strin
 /// build) and [`preset_handle_names`] (which does not), so the two cannot
 /// drift into disagreeing about what this plugin can recall.
 const BAND_FIELDS: [&str; 18] = [
-    "on", "freq", "gain", "q", "shape", "slope", "dyn_range", "dyn_thr", "dyn_atk", "dyn_rel",
-    "dyn_auto", "spectral", "placement", "spectral_density", "spectral_tilt", "dyn_side",
-    "dyn_side_lo", "dyn_side_hi",
+    "on",
+    "freq",
+    "gain",
+    "q",
+    "shape",
+    "slope",
+    "dyn_range",
+    "dyn_thr",
+    "dyn_atk",
+    "dyn_rel",
+    "dyn_auto",
+    "spectral",
+    "placement",
+    "spectral_density",
+    "spectral_tilt",
+    "dyn_side",
+    "dyn_side_lo",
+    "dyn_side_hi",
 ];
 
 /// The names [`preset_handles`] builds, without needing a live editor.
@@ -103,7 +118,7 @@ const BAND_FIELDS: [&str; 18] = [
 /// `ParamContext`), which would put the one thing worth asserting — that the
 /// plugin can recall what the library writes — out of reach of a plain test.
 /// This is the same list, derived the same way.
-#[must_use] 
+#[must_use]
 pub fn preset_handle_names() -> Vec<String> {
     let mut names = Vec::new();
     for i in 0..NUM_BANDS {
@@ -128,7 +143,10 @@ pub fn apply(
     if unmatched.is_empty() {
         note.set(String::new());
     } else {
-        note.set(format!("{applied} applied; {} not in this build", unmatched.len()));
+        note.set(format!(
+            "{applied} applied; {} not in this build",
+            unmatched.len()
+        ));
     }
 }
 

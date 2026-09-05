@@ -607,7 +607,9 @@ impl Container {
         };
         out.push_str(prefix);
         out.push_str(branch);
-        let _ = write!(out, "{} \"{}\" [{}]",
+        let _ = write!(
+            out,
+            "{} \"{}\" [{}]",
             self.role.tag(),
             self.name,
             self.combine.tag()
@@ -619,15 +621,15 @@ impl Container {
             }
             // Modules show in/out trim only when set.
             Role::Module if self.input_db != 0.0 || self.output_db != 0.0 => {
-                let _ = write!(out, "  trim {:+.0}/{:+.0}dB",
-                    self.input_db, self.output_db
-                );
+                let _ = write!(out, "  trim {:+.0}/{:+.0}dB", self.input_db, self.output_db);
             }
             Role::Module => {}
         }
         if !self.zone.is_full() {
             let z = &self.zone;
-            let _ = write!(out, "  ⌨ keys {}-{}{}  vel {}-{}{}",
+            let _ = write!(
+                out,
+                "  ⌨ keys {}-{}{}  vel {}-{}{}",
                 z.key_lo,
                 z.key_hi,
                 if z.key_xfade > 0 {
@@ -671,7 +673,9 @@ impl Container {
                     let bb = if is_last { "└─ " } else { "├─ " };
                     out.push_str(&child_prefix);
                     out.push_str(bb);
-                    let _ = write!(out, "Block {} \"{}\"{}\n",
+                    let _ = write!(
+                        out,
+                        "Block {} \"{}\"{}\n",
                         b.block_type_tag(),
                         b.display_name(),
                         if b.has_backend() {

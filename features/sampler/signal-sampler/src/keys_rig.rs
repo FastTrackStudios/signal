@@ -500,7 +500,9 @@ impl KeysRig {
     /// of times a second while its average load read a comfortable 20%.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn engine_stats(&self) -> Option<std::sync::Arc<daw_audio_io::duplex::EngineStats>> {
-        self._host.as_ref().and_then(signal_rig_host::RigHost::stats)
+        self._host
+            .as_ref()
+            .and_then(signal_rig_host::RigHost::stats)
     }
 
     /// Open a device, build the project, and host `tree` as the playable preset.

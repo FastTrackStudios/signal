@@ -394,11 +394,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // exact membership or prefix match (Pacific groups declare
             // prefixes; curated config artics like `sus`/`leg` must survive).
             let (body, n_artics) = filter_list_block(&body, "articulations", |e| {
-                entry_field(e, "id")
-                    .is_some_and(|id| {
-                        member_ids.contains(id.as_str())
-                            || group_for(&groups, &artic_to_group, &id) == Some(group.as_str())
-                    })
+                entry_field(e, "id").is_some_and(|id| {
+                    member_ids.contains(id.as_str())
+                        || group_for(&groups, &artic_to_group, &id) == Some(group.as_str())
+                })
             });
 
             // Zone articulation ids the (filtered) config does NOT declare —

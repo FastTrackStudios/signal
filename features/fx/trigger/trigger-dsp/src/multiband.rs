@@ -66,7 +66,7 @@ pub struct MultibandDetector {
 }
 
 impl MultibandDetector {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let config = AudioConfig {
             sample_rate,
@@ -199,7 +199,7 @@ impl MultibandDetector {
 
     /// Get the dominant band from a set of simultaneous triggers.
     /// Returns the band with the highest ODF value.
-    #[must_use] 
+    #[must_use]
     pub fn dominant_band(triggers: &[BandTrigger]) -> Option<usize> {
         triggers
             .iter()
@@ -212,7 +212,7 @@ impl MultibandDetector {
     }
 
     /// Classify a trigger based on which band fired.
-    #[must_use] 
+    #[must_use]
     pub const fn classify(band: usize) -> &'static str {
         match band {
             0 => "kick",

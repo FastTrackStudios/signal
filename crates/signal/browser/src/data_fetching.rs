@@ -424,7 +424,9 @@ async fn resolve_layer_module_chains(
     all_module_presets: &[ModulePreset],
     block_preset_lookup: &HashMap<String, (BlockType, String)>,
 ) -> Vec<ModuleChainData> {
-    let Some(variant) = layer.default_variant() else { return Vec::new() };
+    let Some(variant) = layer.default_variant() else {
+        return Vec::new();
+    };
     resolve_variant_module_chains(signal, variant, all_module_presets, block_preset_lookup).await
 }
 
@@ -462,9 +464,11 @@ async fn resolve_variant_module_chains(
             .iter()
             .find(|p| p.id().to_string() == collection_id_str);
         let mt = module_preset.map(signal::ModulePreset::module_type);
-        let mc = mt
-            .map_or(signal::ModuleType::Drive.color(), signal::ModuleType::color);
-        let module_name = module_preset.map_or_else(|| format!("Module {}", mr.collection_id), |p| p.name().to_string());
+        let mc = mt.map_or(signal::ModuleType::Drive.color(), signal::ModuleType::color);
+        let module_name = module_preset.map_or_else(
+            || format!("Module {}", mr.collection_id),
+            |p| p.name().to_string(),
+        );
         let chain;
         if let Some(snapshot) = signal
             .module_presets()
@@ -561,15 +565,21 @@ async fn resolve_rig_scene_engines(
     let mut engines = Vec::new();
     for es in &scene.engine_selections {
         let engine_id_str = es.engine_id.as_str();
-        let Some(engine) = signal.engines().load(engine_id_str).await.ok().flatten() else { continue };
+        let Some(engine) = signal.engines().load(engine_id_str).await.ok().flatten() else {
+            continue;
+        };
         let engine_variant = engine
             .variant(&es.variant_id)
             .or_else(|| engine.default_variant());
-        let Some(engine_variant) = engine_variant else { continue };
+        let Some(engine_variant) = engine_variant else {
+            continue;
+        };
         let mut layers = Vec::new();
         for ls in &engine_variant.layer_selections {
             let layer_id_str = ls.layer_id.as_str();
-            let Some(layer) = signal.layers().load(layer_id_str).await.ok().flatten() else { continue };
+            let Some(layer) = signal.layers().load(layer_id_str).await.ok().flatten() else {
+                continue;
+            };
             let module_chains = resolve_layer_module_chains(
                 signal,
                 &layer,
