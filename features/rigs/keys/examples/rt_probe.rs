@@ -151,6 +151,49 @@ fn main() {
     KeysRigSvc::reset_rt_peak(&backend);
     let open_peak = KeysRigSvc::status(&backend).rt.peak_render_ms;
 
+    // `FTS_RT_OFF="Pad,Shimmer"` mutes those lanes before the run. A muted
+    // lane's voices are skipped entirely rather than rendered and multiplied
+    // by zero, so this measures what a patch with switched-off modules
+    // actually costs — which is how these patches are usually played.
+    if let Ok(off) = std::env::var("FTS_RT_OFF") {
+        let names: Vec<&str> = off
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
+        let m = KeysRigSvc::mixer(&backend);
+        let known: Vec<String> = m
+            .engines
+            .iter()
+            .flat_map(|e| e.layers.iter().map(|l| l.name.clone()))
+            .collect();
+        // Switch the lane's MODULES off, not the lane fader. In lane hosting
+        // a lane mute is a daw track mute applied after its instrument has
+        // already rendered; a disabled module zeroes the render tree's own
+        // gain cell, which is what lets the tree skip it.
+        let mut off = 0usize;
+        for e in &m.engines {
+            for l in &e.layers {
+                if !names.iter().any(|n| *n == l.name) {
+                    continue;
+                }
+                for md in &l.modules {
+                    KeysRigSvc::set_module_enabled(&backend, l.name.clone(), md.index, false);
+                    off += 1;
+                }
+            }
+        }
+        println!("modules switched off: {off}");
+        for name in &names {
+            if !known.iter().any(|k| k == name) {
+                println!("WARN: no lane named {name:?}; have {known:?}");
+            }
+        }
+        println!("muted lanes: {names:?}");
+        // Let the mute reach the audio thread and the lanes drain.
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
     // `FTS_RT_NOTES=n` caps how many notes of each chord are played. Playing
     // the same material at 1, 2 and 4 notes says whether the cost is per-note
     // (linear) or something a chord triggers once.
