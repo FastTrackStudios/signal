@@ -21,6 +21,7 @@ pub fn bell_brickwall_proq4(
     n_sections: usize,
     slope_idx: Option<usize>,
 ) -> Vec<Coeffs> {
+    const W_POLE_BUCKETB_MAX: f64 = 3.135_309_468_282_613_5;
     use crate::math::zpk::Complex;
     use std::f64::consts::SQRT_2;
     use dsp_core::num;
@@ -190,7 +191,6 @@ pub fn bell_brickwall_proq4(
 
     let mut sections = Vec::with_capacity(n_sections);
 
-    const W_POLE_BUCKETB_MAX: f64 = 3.135_309_468_282_613_5;
 
     for sec in 0..n_sections {
         let pair_idx = sec / 2;
@@ -919,6 +919,9 @@ pub fn bell_three_point_synth(
     w_eval: f64,
     g_ref: f64,
 ) -> Coeffs {
+    // bell_s2 has its own inline synth path, so this function only sees
+    const W_POLE_MAX: f64 = 3.135_309_468_282_613_5;
+    const W_THIRD_MAX: f64 = 3.133_741_813_548_472_3;
     if trace_bell_inputs() {
         eprintln!(
             "BELL_IN wp={w_pole:.6} wz={w_zero:.6} wt={w_third:.6} we={w_eval:.6} G={g_ref:.6} A={cap_a:.6} B={cap_b:.6} C={cap_c:.6} D={cap_d:.6} E={cap_e:.6} F={cap_f:.6}"
@@ -928,11 +931,8 @@ pub fn bell_three_point_synth(
     // kHz where the warped frequencies hit Nyquist-adjacent limits:
     //   bell_s{3..9}_secparams_audio.json — w_pole and w_third each cap to
     //   distinct constants (3.13530947 and 3.13374181) independent of fc.
-    // bell_s2 has its own inline synth path, so this function only sees
     // bucket-B inputs.
-    const W_POLE_MAX: f64 = 3.135_309_468_282_613_5;
     const W_ZERO_MAX: f64 = 2.827_433_388_230_814; // 0.9π — no captured cell hits it
-    const W_THIRD_MAX: f64 = 3.133_741_813_548_472_3;
 
     let w_pole = w_pole.min(W_POLE_MAX);
     let w_zero = w_zero.min(W_ZERO_MAX);

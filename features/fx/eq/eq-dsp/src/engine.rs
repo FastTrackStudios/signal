@@ -945,10 +945,11 @@ impl FtsEq {
             return;
         }
         let band = band.min(EQ_BANDS - 1);
+        use crate::design::slope::FilterShape as F;
+        use crate::dynamics::SvfShape;
+
         let freq = self.bands[band].freq_hz.clamp(10.0, 30000.0);
         let q = self.bands[band].q.clamp(0.025, 40.0);
-        use crate::dynamics::SvfShape;
-        use crate::design::slope::FilterShape as F;
         let (shape, sf, sq) = match F::from_canonical_index(self.bands[band].shape) {
             F::LowShelf | F::LowCut => (SvfShape::Lowpass, freq, 0.707),
             F::HighShelf | F::HighCut => (SvfShape::Highpass, freq, 0.707),
