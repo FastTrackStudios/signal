@@ -516,18 +516,25 @@ impl SpectralEngine {
         // different densities in one instance each spread by their own amount
         // and with their own profile.
         let (mut peak, mut reach, mut from) = (0.0f64, 1.0f64, f64::NEG_INFINITY);
-        for i in 0..bins {
-            let t = self.target_db.get(i).copied().unwrap_or(0.0);
-            let dist = self.bin_log2[i] - from;
+        let mut spread_index = 0_usize;
+        for ((slot, &log2), &oct) in spread
+            .iter_mut()
+            .zip(&self.bin_log2)
+            .zip(&self.spread_oct)
+            .take(bins)
+        {
+            let t = self.target_db.get(spread_index).copied().unwrap_or(0.0);
+            let dist = log2 - from;
             let carried = if dist < reach { peak * spread_taper(dist / reach) } else { 0.0 };
             if t >= carried {
                 peak = t;
-                reach = self.spread_oct[i].max(1.0e-6);
-                from = self.bin_log2[i];
-                spread[i] = t;
+                reach = oct.max(1.0e-6);
+                from = log2;
+                *slot = t;
             } else {
-                spread[i] = carried;
+                *slot = carried;
             }
+            spread_index = spread_index.saturating_add(1);
         }
 
         let (mut peak, mut reach, mut from) = (0.0f64, 1.0f64, f64::INFINITY);
@@ -791,10 +798,15 @@ impl SpectralEngine {
             for r in 0..self.regions.len() {
                 let env = &self.region_env[r];
                 let (mut num, mut den) = (0.0f64, 0.0f64);
-                for i in 0..bins {
-                    if env[i] > 1.0e-3 && self.bin_owner[i] == r {
-                        num += env[i] * self.gr_db[i];
-                        den += env[i];
+                for ((&e, &owner), &gr) in env
+                    .iter()
+                    .zip(&self.bin_owner)
+                    .zip(&self.gr_db)
+                    .take(bins)
+                {
+                    if e > 1.0e-3 && owner == r {
+                        num += e * gr;
+                        den += e;
                     }
                 }
                 self.region_reduction_db[r] = if den > 0.0 { num / den } else { 0.0 };
@@ -888,8 +900,7 @@ mod tests {
         let mut inp = vec![0.0; n];
         for i in 0..n {
             // Noise bed at low level + screaming 2 kHz resonance.
-            let x = 0.02 * noise(&mut seed)
-                + 0.5 * (core::f64::consts::TAU * 2000.0 * i as f64 / SR).sin();
+            let x = 0.02f64.mul_add(noise(&mut seed), 0.5 * (core::f64::consts::TAU * 2000.0 * i as f64 / SR).sin());
             inp[i] = x;
             let (l, _) = e.tick(x, x);
             out[i] = l;
@@ -949,11 +960,11 @@ mod tests {
             let mut seed = 11u64;
             let n = 48_000;
             let mut out = vec![0.0; n];
-            for i in 0..n {
-                let x = 0.02 * noise(&mut seed)
-                    + 0.4 * (core::f64::consts::TAU * 3000.0 * i as f64 / SR).sin();
+            for (i, slot) in out.iter_mut().enumerate().take(n) {
+                let phase = core::f64::consts::TAU * 3000.0 * num::count_to_f64(i) / SR;
+                let x = 0.02f64.mul_add(noise(&mut seed), 0.4 * phase.sin());
                 let (l, _) = e.tick(x, x);
-                out[i] = l;
+                *slot = l;
             }
             out
         };

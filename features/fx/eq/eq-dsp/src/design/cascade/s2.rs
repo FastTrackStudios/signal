@@ -124,9 +124,7 @@ pub fn bell_s2_proq4(freq_hz: f64, q: f64, gain_db: f64, sample_rate: f64) -> Co
     let den = t3s
         * (((u_zero - u_third) * (g_ref - u_pole)).mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s)))
         + (g_ref - u_third) * (u_pole - u_zero) * t1s * t2s;
-    let num = u_pole * ((t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero)))
-        + u_eval * ((t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third))
-        + (t2s - t3s) * u_third * u_zero;
+    let num = ((t2s - t3s) * u_third).mul_add(u_zero, u_pole * ((t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero))) + u_eval * ((t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third)));
 
     let s2 = if den.abs() > 1e-30 {
         (num / den).max(0.0)
@@ -291,9 +289,7 @@ pub fn proq4_s2_from_prototype_with_subfreq(
     let den = t3s
         * (((u_zero - u_third) * (g_ref - u_pole)).mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s)))
         + (g_ref - u_third) * (u_pole - u_zero) * t1s * t2s;
-    let num = u_pole * ((t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero)))
-        + u_eval * ((t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third))
-        + (t2s - t3s) * u_third * u_zero;
+    let num = ((t2s - t3s) * u_third).mul_add(u_zero, u_pole * ((t3s - t1s).mul_add(u_third, (t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero))) + u_eval * ((t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third)));
 
     // Pro-Q4 alt-path branch decoded from `compute_audio_biquad_lagrange_mzt`
     // 0x180110972..0x1801109ec.  When NUM/DEN < 0.0025/(t2*t3), the binary:

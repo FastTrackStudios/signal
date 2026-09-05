@@ -121,7 +121,7 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
             let mut dvar5 = PI - excess_clamped;
 
             // dVar6_ceiling = fv11·0.3π + 0.7π  ∈ [0.7π, π]
-            let dvar6_ceiling = fv11_d * (0.3 * PI) + 0.7 * PI;
+            let dvar6_ceiling = fv11_d.mul_add(0.3 * PI, 0.7 * PI);
 
             // dvar5 = min(dvar5, wp_new)
             if wp_new <= dvar5 {

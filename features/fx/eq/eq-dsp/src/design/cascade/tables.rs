@@ -2,7 +2,7 @@
 
 use super::{notch_inner_pair, notch_analog_sections, PI};
 
-/// Q-table configuration: (lower_q, lower_table, upper_q, upper_table)
+/// Q-table configuration: (`lower_q`, `lower_table`, `upper_q`, `upper_table`)
 type QTableConfig<'a> = (f64, &'a Vec<(f64, f64)>, f64, &'a Vec<(f64, f64)>);
 
 /// Pro-Q 4 Bandpass-specific cascade values (`a1_sec`, `a2_sec`) per Q per

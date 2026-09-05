@@ -729,7 +729,7 @@ impl FtsEq {
             let step = (1.0_f64 / 12.0).exp2();
             let ceiling = self.sample_rate * 0.45;
             let mut hz = 20.0f64;
-            let max_iterations = ((ceiling / 20.0).log2() / step.log2()).ceil() as usize + 1;
+            let max_iterations = (ceiling / 20.0).log(step).ceil() as usize + 1;
             for _ in 0..max_iterations {
                 if hz >= ceiling {
                     break;
@@ -1132,8 +1132,8 @@ impl FtsEq {
                             1 => (left[i] * tg, right[i] * tg),
                             2 => (scratch_left[i] * sg, scratch_right[i] * sg),
                             _ => (
-                                left[i] * tg + scratch_left[i] * sg,
-                                right[i] * tg + scratch_right[i] * sg,
+                                left[i].mul_add(tg, scratch_left[i] * sg),
+                                right[i].mul_add(tg, scratch_right[i] * sg),
                             ),
                         };
                         left[i] = ol;

@@ -558,8 +558,7 @@ fn bandpass_cascade_section(
                     } else {
                         1.0
                     };
-                    (0.00016_f64 * low).mul_add(q_mid, (sp6 / SQRT_2) * hf_tail_scale * (0.034_f64 * low).mul_add(q_one, 1.0) * q_half_tail
-                        + 0.45 * omega0 * omega0 / q_user
+                    (0.00016_f64 * low).mul_add(q_mid, ((sp6 / SQRT_2) * hf_tail_scale * (0.034_f64 * low).mul_add(q_one, 1.0)).mul_add(q_half_tail, 0.45 * omega0 * omega0 / q_user)
                         + (0.000_134_f64 * low).mul_add(q_low, 0.0))
                 } else if slope == 4 && freq_hz <= 1000.0 {
                     let x = (freq_hz / 1000.0).clamp(0.0, 1.0);

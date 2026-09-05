@@ -275,7 +275,7 @@ pub fn proq4_s2_from_AF_with_subfreq(
     let den = t3s
         * ((u_zero - u_third) * (g_ref - u_pole)).mul_add(t2s, -((u_pole - u_third) * (g_ref - u_zero) * t1s))
         + (g_ref - u_third) * (u_pole - u_zero) * t1s * t2s;
-    let num = ((t2s - t3s) * u_third).mul_add(u_zero, u_pole * ((t2s - t3s) * u_eval + (t1s - t2s) * u_zero + (t3s - t1s) * u_third) + u_eval * ((t3s - t1s) * u_zero + (t1s - t2s) * u_third));
+    let num = ((t2s - t3s) * u_third).mul_add(u_zero, u_pole * ((t2s - t3s).mul_add(u_eval, (t1s - t2s) * u_zero) + (t3s - t1s) * u_third) + u_eval * (t3s - t1s).mul_add(u_zero, (t1s - t2s) * u_third));
 
     let s2 = if den.abs() > 1e-30 {
         (num / den).max(0.0)
@@ -290,7 +290,7 @@ pub fn proq4_s2_from_AF_with_subfreq(
 
     let sp6_den = (u_pole - u_zero) * t1s * t2s;
     let sp6 = if sp6_den.abs() > 1e-30 {
-        let sp6_num = (a1_term * a1_term * t2s).mul_add(u_zero, -((t1s * t2s * (1.0 - s2 * t3s) * (t1s - t2s) * u_zero + a2_term * a2_term * t1s) * u_pole));
+        let sp6_num = (a1_term * a1_term * t2s).mul_add(u_zero, -((t1s * t2s * (1.0 - s2 * t3s) * (t1s - t2s)).mul_add(u_zero, a2_term * a2_term * t1s) * u_pole));
         (sp6_num / sp6_den).max(0.0)
     } else {
         0.0
@@ -566,8 +566,7 @@ mod tests {
                 }
             }
             eprintln!(
-                "LP fc=10k Q=1 sec{} pred={:?} cap={:?}",
-                sec, pred, cap_row
+                "LP fc=10k Q=1 sec{sec} pred={pred:?} cap={cap_row:?}"
             );
         }
         eprintln!("LP fc=10k Q=1 max_err={max_err:.3e} worst_sec={worst_sec}");

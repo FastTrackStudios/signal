@@ -51,11 +51,11 @@ pub fn lagrange_synth_alt_path(
     let hsq = |w: f64| -> f64 {
         let w2 = w * w;
         let w4 = w2 * w2;
-        let den = cap_d.mul_add(w4, cap_e * w2 + cap_f);
+        let den = cap_d.mul_add(w4, cap_e.mul_add(w2, cap_f));
         if den.abs() < 1e-300 {
             0.0
         } else {
-            (cap_a.mul_add(w4, cap_b * w2 + cap_c)) / den
+            (cap_a.mul_add(w4, cap_b.mul_add(w2, cap_c))) / den
         }
     };
 

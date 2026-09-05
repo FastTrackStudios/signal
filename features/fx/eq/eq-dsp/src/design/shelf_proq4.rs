@@ -275,7 +275,7 @@ mod tests {
     fn low_shelf_zero_gain_is_passthrough() {
         let sos = design_low_shelf(1, 1000.0, 0.707, 0.0, 48000.0);
         assert_eq!(sos.len(), 1);
-        assert_eq!(sos[0].map(|x| x.to_bits()), PASSTHROUGH.map(|x| x.to_bits()));
+        assert_eq!(sos[0].map(f64::to_bits), PASSTHROUGH.map(f64::to_bits));
     }
 
     #[test]
@@ -324,7 +324,7 @@ mod tests {
     fn tilt_shelf_zero_gain_is_passthrough() {
         let sos = design_tilt_shelf(1, 1000.0, 0.707, 0.0, 48000.0);
         assert_eq!(sos.len(), 1);
-        assert_eq!(sos[0].map(|x| x.to_bits()), PASSTHROUGH.map(|x| x.to_bits()));
+        assert_eq!(sos[0].map(f64::to_bits), PASSTHROUGH.map(f64::to_bits));
     }
 
     #[test]
@@ -354,7 +354,7 @@ mod tests {
     fn band_shelf_zero_gain_is_passthrough() {
         let sos = design_band_shelf(1, 1000.0, 2.0, 0.0, 48000.0);
         assert_eq!(sos.len(), 1);
-        assert_eq!(sos[0].map(|x| x.to_bits()), PASSTHROUGH.map(|x| x.to_bits()));
+        assert_eq!(sos[0].map(f64::to_bits), PASSTHROUGH.map(f64::to_bits));
     }
 
     #[test]

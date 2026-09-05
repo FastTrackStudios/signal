@@ -159,7 +159,7 @@ pub fn bell_brickwall_proq4(
                 let theta_lp = if is_slope5 && p != n_lp / 2 {
                     PI / 5.0
                 } else {
-                    PI * (2.0 * num::count_to_f64(p) + 1.0) / (2.0 * num::count_to_f64(n_lp))
+                    PI * 2.0f64.mul_add(num::count_to_f64(p), 1.0) / (2.0 * num::count_to_f64(n_lp))
                 };
                 let p_lp = Complex::new(-theta_lp.sin(), theta_lp.cos());
                 let (_, bp_hi) = lp_to_bp(p_lp, b_pole);
@@ -236,7 +236,7 @@ pub fn bell_brickwall_proq4(
             };
             theta_deg.to_radians()
         } else {
-            PI * (2.0 * num::count_to_f64(pair_idx) + 1.0) / (2.0 * num::count_to_f64(n_lp))
+            PI * 2.0f64.mul_add(num::count_to_f64(pair_idx), 1.0) / (2.0 * num::count_to_f64(n_lp))
         };
         let p_lp = Complex::new(-theta_lp.sin(), theta_lp.cos());
 
@@ -514,13 +514,13 @@ pub fn bell_brickwall_proq4(
             if matches!(slope_idx, Some(5 | 6)) && freq_hz >= 21000.0 {
                 let t = ((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0);
                 if (q_user - 10.0).abs() < 1e-6 {
-                    let w_zero_cap = 2.460_405_687_1 + (2.508_442_944_5 - 2.460_405_687_1) * t;
-                    let w_pole_cap = 2.734_469_335_3 + (2.861_225_429_5 - 2.734_469_335_3) * t;
+                    let w_zero_cap = (2.508_442_944_5_f64 - 2.460_405_687_1).mul_add(t, 2.460_405_687_1);
+                    let w_pole_cap = (2.861_225_429_5_f64 - 2.734_469_335_3).mul_add(t, 2.734_469_335_3);
                     a = a.min(w_zero_cap / omega0);
                     b = b.min(w_pole_cap / omega0);
                 } else if (q_user - 4.0).abs() < 1e-6 {
-                    let w_zero_cap = 2.048_067_329_5 + (2.076_469_439_3 - 2.048_067_329_5) * t;
-                    let w_pole_cap = 2.713_852_417_4 + (2.839_626_754_2 - 2.713_852_417_4) * t;
+                    let w_zero_cap = (2.076_469_439_3_f64 - 2.048_067_329_5).mul_add(t, 2.048_067_329_5);
+                    let w_pole_cap = (2.839_626_754_2_f64 - 2.713_852_417_4).mul_add(t, 2.713_852_417_4);
                     a = a.min(w_zero_cap / omega0);
                     b = b.min(w_pole_cap / omega0);
                 }
@@ -633,31 +633,29 @@ pub fn bell_brickwall_proq4(
                     let g_abs = gain_db.abs();
                     let (cap_18k, cap_19k, cap_22k) = match sec {
                         1 => (
-                            2.366_162_264_4 - 0.000_711_189_5 * g_abs,
-                            2.475_888_663_3 - 0.000_788_026_3 * g_abs,
+                            0.000_711_189_5f64.mul_add(-g_abs, 2.366_162_264_4),
+                            0.000_788_026_3f64.mul_add(-g_abs, 2.475_888_663_3),
                             2.457_400_572_6,
                         ),
                         3 => (
-                            2.251_426_935_5 - 0.000_262_395_3 * g_abs,
-                            2.372_916_759_7 - 0.000_257_021_8 * g_abs,
+                            0.000_262_395_3f64.mul_add(-g_abs, 2.251_426_935_5),
+                            0.000_257_021_8f64.mul_add(-g_abs, 2.372_916_759_7),
                             2.457_400_572_6,
                         ),
                         5 => (
-                            2.160_049_605_7 - 0.000_095_278_3 * g_abs,
-                            2.279_836_775_6 - 0.000_100_413_3 * g_abs,
-                            2.512_423_074_1 - 0.000_012_713_1 * g_abs,
+                            0.000_095_278_3f64.mul_add(-g_abs, 2.160_049_605_7),
+                            0.000_100_413_3f64.mul_add(-g_abs, 2.279_836_775_6),
+                            0.000_012_713_1f64.mul_add(-g_abs, 2.512_423_074_1),
                         ),
                         _ => (
                             2.047_834_437_3,
-                            2.161_602_235_0 - 0.000_000_265_7 * g_abs,
-                            2.454_902_032_8 - 0.000_011_031_0 * g_abs,
+                            0.000_000_265_7f64.mul_add(-g_abs, 2.161_602_235_0),
+                            0.000_011_031_0f64.mul_add(-g_abs, 2.454_902_032_8),
                         ),
                     };
                     if freq_hz < 19000.0 {
                         Some(
-                            cap_18k
-                                + (cap_19k - cap_18k)
-                                    * ((freq_hz - 18000.0) / 1000.0).clamp(0.0, 1.0),
+                            (cap_19k - cap_18k).mul_add(((freq_hz - 18000.0) / 1000.0).clamp(0.0, 1.0), cap_18k),
                         )
                     } else if freq_hz >= 21500.0 {
                         Some(cap_22k)
@@ -672,9 +670,9 @@ pub fn bell_brickwall_proq4(
                 {
                     let g_abs = gain_db.abs();
                     match sec {
-                        1 => Some(2.452_612_537_2 - 0.000_363_850_7 * g_abs),
-                        3 => Some(2.319_294_552_2 - 0.000_189_992_7 * g_abs),
-                        _ => Some(2.156_601_095_5 - 0.000_000_008_4 * g_abs),
+                        1 => Some(0.000_363_850_7f64.mul_add(-g_abs, 2.452_612_537_2)),
+                        3 => Some(0.000_189_992_7f64.mul_add(-g_abs, 2.319_294_552_2)),
+                        _ => Some(0.000_000_008_4f64.mul_add(-g_abs, 2.156_601_095_5)),
                     }
                 }
                 q if (q - 4.0).abs() < 1e-6
@@ -695,7 +693,7 @@ pub fn bell_brickwall_proq4(
                     && (19500.0..20500.0).contains(&freq_hz) =>
                 {
                     let g_abs = gain_db.abs();
-                    Some(2.487_836_386_0 - 0.000_991_662_5 * g_abs)
+                    Some(0.000_991_662_5f64.mul_add(-g_abs, 2.487_836_386_0))
                 }
                 q if (q - 4.0).abs() < 1e-6
                     && matches!(slope_idx, Some(5))
@@ -709,48 +707,39 @@ pub fn bell_brickwall_proq4(
                 // rise toward the generic Q=10 ceiling at 22 kHz.
                 q if (q - 10.0).abs() < 1e-6 && matches!(slope_idx, Some(4)) => {
                     let g_abs = gain_db.abs();
-                    let cap_21k = 2.656_967_674_7 - 0.000_569_314_5 * g_abs;
-                    let cap_22k = 2.725_300_124_1 - 0.000_225_001_7 * g_abs;
+                    let cap_21k = 0.000_569_314_5f64.mul_add(-g_abs, 2.656_967_674_7);
+                    let cap_22k = 0.000_225_001_7f64.mul_add(-g_abs, 2.725_300_124_1);
                     Some(
-                        cap_21k
-                            + (cap_22k - cap_21k) * ((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0),
+                        (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                     )
                 }
                 q if (q - 10.0).abs() < 1e-6 && matches!(slope_idx, Some(5)) => {
                     let g_abs = gain_db.abs();
-                    let cap_20k = 2.561_923_435_0 - 0.000_642_448_7 * g_abs;
-                    let cap_21k = 2.670_120_270_9 - 0.000_516_129_5 * g_abs;
-                    let cap_22k = 2.729_080_921_3 - 0.000_138_171_2 * g_abs;
+                    let cap_20k = 0.000_642_448_7f64.mul_add(-g_abs, 2.561_923_435_0);
+                    let cap_21k = 0.000_516_129_5f64.mul_add(-g_abs, 2.670_120_270_9);
+                    let cap_22k = 0.000_138_171_2f64.mul_add(-g_abs, 2.729_080_921_3);
                     if freq_hz < 21000.0 {
                         Some(
-                            cap_20k
-                                + (cap_21k - cap_20k)
-                                    * ((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0),
+                            (cap_21k - cap_20k).mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
                         )
                     } else {
                         Some(
-                            cap_21k
-                                + (cap_22k - cap_21k)
-                                    * ((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0),
+                            (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                         )
                     }
                 }
                 q if (q - 10.0).abs() < 1e-6 && matches!(slope_idx, Some(6)) => {
                     let g_abs = gain_db.abs();
-                    let cap_20k = 2.573_288_297_2 - 0.000_593_994_5 * g_abs;
-                    let cap_21k = 2.678_889_273_4 - 0.000_457_909_2 * g_abs;
-                    let cap_22k = 2.730_453_349_8 - 0.000_070_546_7 * g_abs;
+                    let cap_20k = 0.000_593_994_5f64.mul_add(-g_abs, 2.573_288_297_2);
+                    let cap_21k = 0.000_457_909_2f64.mul_add(-g_abs, 2.678_889_273_4);
+                    let cap_22k = 0.000_070_546_7f64.mul_add(-g_abs, 2.730_453_349_8);
                     if freq_hz < 21000.0 {
                         Some(
-                            cap_20k
-                                + (cap_21k - cap_20k)
-                                    * ((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0),
+                            (cap_21k - cap_20k).mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
                         )
                     } else {
                         Some(
-                            cap_21k
-                                + (cap_22k - cap_21k)
-                                    * ((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0),
+                            (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                         )
                     }
                 }
@@ -762,28 +751,24 @@ pub fn bell_brickwall_proq4(
                     let g_abs = gain_db.abs();
                     let (cap_20k, cap_21k, cap_22k) = if sec == 1 {
                         (
-                            2.588_221_663_3 - 0.000_502_336_7 * g_abs,
-                            2.691_969_619_9 - 0.000_543_394_3 * g_abs,
-                            2.730_444_738_4 + 0.000_013_009_3 * g_abs,
+                            0.000_502_336_7f64.mul_add(-g_abs, 2.588_221_663_3),
+                            0.000_543_394_3f64.mul_add(-g_abs, 2.691_969_619_9),
+                            0.000_013_009_3f64.mul_add(g_abs, 2.730_444_738_4),
                         )
                     } else {
                         (
-                            2.506_083_569_3 - 0.000_068_368_1 * g_abs,
-                            2.622_820_578_6 - 0.000_093_247_6 * g_abs,
-                            2.708_604_210_8 - 0.000_036_650_9 * g_abs,
+                            0.000_068_368_1f64.mul_add(-g_abs, 2.506_083_569_3),
+                            0.000_093_247_6f64.mul_add(-g_abs, 2.622_820_578_6),
+                            0.000_036_650_9f64.mul_add(-g_abs, 2.708_604_210_8),
                         )
                     };
                     if freq_hz < 21000.0 {
                         Some(
-                            cap_20k
-                                + (cap_21k - cap_20k)
-                                    * ((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0),
+                            (cap_21k - cap_20k).mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
                         )
                     } else {
                         Some(
-                            cap_21k
-                                + (cap_22k - cap_21k)
-                                    * ((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0),
+                            (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                         )
                     }
                 }
@@ -795,32 +780,28 @@ pub fn bell_brickwall_proq4(
                     let g_abs = gain_db.abs();
                     let (cap_20k, cap_21k, cap_22k) = match sec {
                         1 => (
-                            2.604_106_681_5 - 0.000_374_938_6 * g_abs,
-                            2.701_983_210_1 - 0.000_368_705_3 * g_abs,
-                            2.727_354_728_6 + 0.000_120_431_0 * g_abs,
+                            0.000_374_938_6f64.mul_add(-g_abs, 2.604_106_681_5),
+                            0.000_368_705_3f64.mul_add(-g_abs, 2.701_983_210_1),
+                            0.000_120_431_0f64.mul_add(g_abs, 2.727_354_728_6),
                         ),
                         3 => (
-                            2.543_913_775_4 - 0.000_123_711_4 * g_abs,
-                            2.655_470_794_3 - 0.000_103_462_2 * g_abs,
-                            2.724_667_766_1 - 0.000_038_792_0 * g_abs,
+                            0.000_123_711_4f64.mul_add(-g_abs, 2.543_913_775_4),
+                            0.000_103_462_2f64.mul_add(-g_abs, 2.655_470_794_3),
+                            0.000_038_792_0f64.mul_add(-g_abs, 2.724_667_766_1),
                         ),
                         _ => (
-                            2.494_336_949_2 - 0.000_029_186_4 * g_abs,
-                            2.611_666_664_0 - 0.000_027_037_1 * g_abs,
-                            2.701_995_325_7 - 0.000_017_280_9 * g_abs,
+                            0.000_029_186_4f64.mul_add(-g_abs, 2.494_336_949_2),
+                            0.000_027_037_1f64.mul_add(-g_abs, 2.611_666_664_0),
+                            0.000_017_280_9f64.mul_add(-g_abs, 2.701_995_325_7),
                         ),
                     };
                     if freq_hz < 21000.0 {
                         Some(
-                            cap_20k
-                                + (cap_21k - cap_20k)
-                                    * ((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0),
+                            (cap_21k - cap_20k).mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
                         )
                     } else {
                         Some(
-                            cap_21k
-                                + (cap_22k - cap_21k)
-                                    * ((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0),
+                            (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                         )
                     }
                 }
@@ -832,37 +813,33 @@ pub fn bell_brickwall_proq4(
                     let g_abs = gain_db.abs();
                     let (cap_20k, cap_21k, cap_22k) = match sec {
                         1 => (
-                            2.612_454_880_7 - 0.000_295_501_5 * g_abs,
-                            2.706_807_803_5 - 0.000_273_682_8 * g_abs,
-                            2.724_646_202_6 + 0.000_146_074_0 * g_abs,
+                            0.000_295_501_5f64.mul_add(-g_abs, 2.612_454_880_7),
+                            0.000_273_682_8f64.mul_add(-g_abs, 2.706_807_803_5),
+                            0.000_146_074_0f64.mul_add(g_abs, 2.724_646_202_6),
                         ),
                         3 => (
-                            2.564_470_288_4 - 0.000_113_220_5 * g_abs,
-                            2.672_080_423_7 - 0.000_088_768_1 * g_abs,
-                            2.729_373_317_8 - 0.000_017_840_5 * g_abs,
+                            0.000_113_220_5f64.mul_add(-g_abs, 2.564_470_288_4),
+                            0.000_088_768_1f64.mul_add(-g_abs, 2.672_080_423_7),
+                            0.000_017_840_5f64.mul_add(-g_abs, 2.729_373_317_8),
                         ),
                         5 => (
-                            2.524_217_455_6 - 0.000_043_065_9 * g_abs,
-                            2.638_627_765_3 - 0.000_038_467_9 * g_abs,
-                            2.717_373_389_7 - 0.000_019_936_5 * g_abs,
+                            0.000_043_065_9f64.mul_add(-g_abs, 2.524_217_455_6),
+                            0.000_038_467_9f64.mul_add(-g_abs, 2.638_627_765_3),
+                            0.000_019_936_5f64.mul_add(-g_abs, 2.717_373_389_7),
                         ),
                         _ => (
-                            2.488_424_190_7 - 0.000_008_079_9 * g_abs,
-                            2.606_160_252_2 - 0.000_007_560_2 * g_abs,
-                            2.698_416_690_5 - 0.000_005_002_6 * g_abs,
+                            0.000_008_079_9f64.mul_add(-g_abs, 2.488_424_190_7),
+                            0.000_007_560_2f64.mul_add(-g_abs, 2.606_160_252_2),
+                            0.000_005_002_6f64.mul_add(-g_abs, 2.698_416_690_5),
                         ),
                     };
                     if freq_hz < 21000.0 {
                         Some(
-                            cap_20k
-                                + (cap_21k - cap_20k)
-                                    * ((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0),
+                            (cap_21k - cap_20k).mul_add(((freq_hz - 20000.0) / 1000.0).clamp(0.0, 1.0), cap_20k),
                         )
                     } else {
                         Some(
-                            cap_21k
-                                + (cap_22k - cap_21k)
-                                    * ((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0),
+                            (cap_22k - cap_21k).mul_add(((freq_hz - 21000.0) / 1000.0).clamp(0.0, 1.0), cap_21k),
                         )
                     }
                 }
@@ -964,9 +941,9 @@ pub(crate) fn bell_three_point_synth(
     let h_sq = |w: f64| -> f64 {
         let w2 = w * w;
         let w4 = w2 * w2;
-        let den = cap_d * w4 + cap_e * w2 + cap_f;
+        let den = cap_d.mul_add(w4, cap_e * w2) + cap_f;
         if den.abs() > 1e-300 {
-            (cap_a * w4 + cap_b * w2 + cap_c) / den
+            (cap_a.mul_add(w4, cap_b * w2) + cap_c) / den
         } else {
             0.0
         }
@@ -995,7 +972,7 @@ pub(crate) fn bell_three_point_synth(
     let _rsp_68 = tp * tz * tt; // [RSP+0x68] from preamble: tz·tp·tt
 
     // D_lag (Lagrange determinant; 0x180110855..0x1801108c1)
-    let d_lag = tt2 * ((mz - mt) * (g - mp) * tz2 - (mp - mt) * (g - mz) * tp2)
+    let d_lag = tt2 * ((mz - mt) * (g - mp)).mul_add(tz2, -((mp - mt) * (g - mz) * tp2))
         + tp2 * tz2 * (g - mt) * (mp - mz);
 
     // (sp5, sp6, p4, p3_eff) computation: emulate the asm post-JZ block exactly.
@@ -1006,8 +983,8 @@ pub(crate) fn bell_three_point_synth(
             bell_synth_post_join(mp, mz, mt, tp2, tz2, tt2, 0.0, Some(0.0), p2, sqrt_me);
         (s5, s6, p4_v, sqrt_me)
     } else {
-        let n_inter = mp * ((tz2 - tt2) * me + (tp2 - tz2) * mz + (tt2 - tp2) * mt)
-            + me * ((tt2 - tp2) * mz + (tp2 - tz2) * mt)
+        let n_inter = mp * ((tz2 - tt2).mul_add(me, (tp2 - tz2) * mz) + (tt2 - tp2) * mt)
+            + me * (tt2 - tp2).mul_add(mz, (tp2 - tz2) * mt)
             + (tz2 - tt2) * mt * mz;
         let xmm4_nd = n_inter / d_lag;
         let threshold = 0.0025 / (tt * tz);
@@ -1022,7 +999,7 @@ pub(crate) fn bell_three_point_synth(
             let rsp_48 = (tp2 - tz2) * mt;
             let rsp_50 = (tt2 - tp2) * mz;
             let rsp_40 = mt * mz;
-            let xmm11 = (tz2 - tt2) * mp + rsp_48 + rsp_50;
+            let xmm11 = (tz2 - tt2).mul_add(mp, rsp_48) + rsp_50;
             let xmm2 = mp * (tp2 * mt - tp2 * mz + tz2 * mz - tt2 * mt)
                 + (tt2 - tz2) * rsp_40
                 + threshold * d_lag;
@@ -1052,8 +1029,8 @@ pub(crate) fn bell_three_point_synth(
         let xmm5 = xmm5_in.unwrap_or_else(|| xmm4.max(0.0).sqrt() * rsp_68);
         let mp_mz_coeff = (mp - mz) * tp2 * tz2;
         let xmm0 = xmm5 * sqrt_g;
-        let xmm3 = tz2 * xmm13_v - xmm0;
-        let xmm2 = tp2 * xmm13_v - xmm0;
+        let xmm3 = tz2.mul_add(xmm13_v, -xmm0);
+        let xmm2 = tp2.mul_add(xmm13_v, -xmm0);
         let xmm1 = if mp_mz_coeff == 0.0 {
             0.0
         } else {
@@ -1065,7 +1042,7 @@ pub(crate) fn bell_three_point_synth(
             let xmm1_b = xmm1_a * xmm0_a;
             let xmm0_sq = xmm5 * xmm5;
             let xmm3_b = xmm3_sq * tp2;
-            let xmm8_b = (xmm8 - xmm0_sq) * xmm4_local + xmm3_b;
+            let xmm8_b = (xmm8 - xmm0_sq).mul_add(xmm4_local, xmm3_b);
             let xmm8_c = xmm8_b * mp;
             ((xmm1_b - xmm8_c) / mp_mz_coeff).max(0.0)
         };
@@ -1249,7 +1226,7 @@ pub(crate) fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db:
     let q_lo = QS[q_idx];
     let q_hi = QS[q_idx + 1];
     let alpha = (q_clamped - q_lo) / (q_hi - q_lo);
-    let lerp = |a: f64, b: f64| a + (b - a) * alpha;
+    let lerp = |a: f64, b: f64| (b - a).mul_add(alpha, a);
 
     // Tables are recovered at |g|=12 dB.  Scale gdB_k linearly with |g|/12.
     let g_scale = gain_db.abs() / 12.0;
@@ -1315,8 +1292,8 @@ pub(crate) fn bell_brickwall_cascade(
     // zpk_to_biquad_coefficients applies is not yet captured.  See
     // numerator_reconstruction_blocker.md.
     let bw_half_oct = 1.0 / q.max(1e-6);
-    let f_lo_target = freq_hz * 2.0_f64.powf(-bw_half_oct);
-    let f_hi_target = freq_hz * 2.0_f64.powf(bw_half_oct);
+    let f_lo_target = freq_hz * (-bw_half_oct).exp2();
+    let f_hi_target = freq_hz * bw_half_oct.exp2();
     let w_lo = 2.0 * sample_rate * (PI * f_lo_target / sample_rate).tan();
     let w_hi = 2.0 * sample_rate * (PI * f_hi_target / sample_rate).tan();
     let w0_a = (w_lo * w_hi).sqrt();
@@ -1343,7 +1320,7 @@ pub(crate) fn bell_brickwall_cascade(
         let scaled_im = half_bw * lp_im;
         let sq_re = scaled_re * scaled_re - scaled_im * scaled_im - w0_a * w0_a;
         let sq_im = 2.0 * scaled_re * scaled_im;
-        let r = (sq_re * sq_re + sq_im * sq_im).sqrt();
+        let r = sq_re.hypot(sq_im);
         let phi = sq_im.atan2(sq_re);
         let sqrt_re = r.sqrt() * (phi * 0.5).cos();
         let sqrt_im = r.sqrt() * (phi * 0.5).sin();
@@ -1364,10 +1341,10 @@ pub(crate) fn bell_brickwall_cascade(
         let (pole_re, pole_im) = blt(bp_pole_a.0, bp_pole_a.1);
         let (zero_re, zero_im) = blt(bp_zero_a.0, bp_zero_a.1);
         let a1 = -2.0 * pole_re;
-        let a2 = pole_re * pole_re + pole_im * pole_im;
+        let a2 = pole_re.mul_add(pole_re, pole_im * pole_im);
         let b0 = 1.0;
         let b1 = -2.0 * zero_re;
-        let b2 = zero_re * zero_re + zero_im * zero_im;
+        let b2 = zero_re.mul_add(zero_re, zero_im * zero_im);
         sections.push([1.0, a1, a2, b0, b1, b2]);
     }
 
@@ -1379,19 +1356,19 @@ pub(crate) fn bell_brickwall_cascade(
     let mut total_re: f64 = 1.0;
     let mut total_im: f64 = 0.0;
     for s in &sections {
-        let n_re = s[3] + s[4] * cw + s[5] * cw2;
-        let n_im = s[4] * sw + s[5] * sw2;
-        let d_re = 1.0 + s[1] * cw + s[2] * cw2;
-        let d_im = s[1] * sw + s[2] * sw2;
+        let n_re = s[5].mul_add(cw2, s[3] + s[4] * cw);
+        let n_im = s[4].mul_add(sw, s[5] * sw2);
+        let d_re = s[2].mul_add(cw2, 1.0 + s[1] * cw);
+        let d_im = s[1].mul_add(sw, s[2] * sw2);
         let dm2 = d_re * d_re + d_im * d_im;
         let qr = (n_re * d_re + n_im * d_im) / dm2;
         let qi = (n_im * d_re - n_re * d_im) / dm2;
-        let nr = total_re * qr - total_im * qi;
-        let ni = total_re * qi + total_im * qr;
+        let nr = total_re.mul_add(qr, -(total_im * qi));
+        let ni = total_re.mul_add(qi, total_im * qr);
         total_re = nr;
         total_im = ni;
     }
-    let cur_peak = (total_re * total_re + total_im * total_im).sqrt();
+    let cur_peak = total_re.hypot(total_im);
     if cur_peak > 1e-12 {
         let target_per_section = (g_lin / cur_peak).powf(1.0 / n as f64);
         for s in &mut sections {
