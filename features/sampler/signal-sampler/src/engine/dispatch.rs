@@ -213,8 +213,15 @@ impl SampleEngine {
         // cache miss on every candidate), the player hears only the release /
         // pedal click — "a click and no note". Flag it loudly.
         if !body_spawned {
+            // Name the library. Without it this line says a key is dead but
+            // not WHOSE — and in a layered rig the first question is always
+            // "which module is that, and did I not just switch it off?",
+            // which the reader cannot answer from `artic` alone.
             tracing::warn!(
                 target: "signal_sampler::trigger",
+                library = %self.patch.spec.name,
+                section = %self.section,
+                mic = %self.mic,
                 note, velocity, artic = %self.articulation, dynamic = %dynamic,
                 "note-on triggered NO body voice (only release/click will sound)"
             );
