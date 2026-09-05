@@ -4,6 +4,28 @@ use crate::design::biquad::Coeffs;
 
 const MAX_CH: usize = 2;
 
+use dsp_core::{Channel, PerChannel};
+
+/// One channel's transposed-direct-form-II state.
+#[derive(Debug, Clone, Copy)]
+struct Tdf2State {
+    s1: f64,
+    s2: f64,
+}
+
+/// One channel's direct-form-I history.
+#[derive(Debug, Clone, Copy)]
+struct Df1State {
+    x1: f64,
+    x2: f64,
+    y1: f64,
+    y2: f64,
+}
+
+impl Df1State {
+    const ZERO: Self = Self { x1: 0.0, x2: 0.0, y1: 0.0, y2: 0.0 };
+}
+
 /// Transposed Direct Form II biquad section.
 ///
 /// Double-precision state matching Pro-Q 4's internal processing path.
@@ -14,8 +36,7 @@ pub struct Tdf2Section {
     c2: f64, // b2/a0
     c3: f64, // a1/a0
     c4: f64, // a2/a0
-    s1: [f64; MAX_CH],
-    s2: [f64; MAX_CH],
+    state: PerChannel<Tdf2State>,
 }
 
 impl Tdf2Section {
@@ -27,8 +48,7 @@ impl Tdf2Section {
             c2: 0.0,
             c3: 0.0,
             c4: 0.0,
-            s1: [0.0; MAX_CH],
-            s2: [0.0; MAX_CH],
+            state: PerChannel::filled(Tdf2State { s1: 0.0, s2: 0.0 }),
         }
     }
 
@@ -55,20 +75,16 @@ impl Tdf2Section {
     /// Process one sample through the biquad (TDF2).
     #[inline]
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
-        let output = input.mul_add(self.c0, self.s1.get(ch).copied().unwrap_or(0.0));
-        if let Some(s1_ref) = self.s1.get_mut(ch) {
-            *s1_ref = input.mul_add(self.c1, -(output * self.c3)) + self.s2.get(ch).copied().unwrap_or(0.0);
-        }
-        if let Some(s2_ref) = self.s2.get_mut(ch) {
-            *s2_ref = input.mul_add(self.c2, -(output * self.c4));
-        }
+        let state = &mut self.state[Channel::new(ch.min(MAX_CH - 1))];
+        let output = input.mul_add(self.c0, state.s1);
+        state.s1 = input.mul_add(self.c1, -(output * self.c3)) + state.s2;
+        state.s2 = input.mul_add(self.c2, -(output * self.c4));
         output
     }
 
     /// Reset all state to zero.
     pub const fn reset(&mut self) {
-        self.s1 = [0.0; MAX_CH];
-        self.s2 = [0.0; MAX_CH];
+        self.state.fill(Tdf2State { s1: 0.0, s2: 0.0 });
     }
 }
 
@@ -93,10 +109,7 @@ pub struct Df1Section {
     b2: f64,
     a1: f64,
     a2: f64,
-    x1: [f64; MAX_CH],
-    x2: [f64; MAX_CH],
-    y1: [f64; MAX_CH],
-    y2: [f64; MAX_CH],
+    state: PerChannel<Df1State>,
 }
 
 impl Df1Section {
@@ -108,10 +121,7 @@ impl Df1Section {
             b2: 0.0,
             a1: 0.0,
             a2: 0.0,
-            x1: [0.0; MAX_CH],
-            x2: [0.0; MAX_CH],
-            y1: [0.0; MAX_CH],
-            y2: [0.0; MAX_CH],
+            state: PerChannel::filled(Df1State::ZERO),
         }
     }
 
@@ -134,20 +144,25 @@ impl Df1Section {
     /// Process one sample through the biquad (Direct Form I).
     #[inline]
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
-        let output = self.a2.mul_add(-self.y2[ch], self.a1.mul_add(-self.y1[ch], self.b2.mul_add(self.x2[ch], self.b0.mul_add(input, self.b1 * self.x1[ch]))));
-        self.x2[ch] = self.x1[ch];
-        self.x1[ch] = input;
-        self.y2[ch] = self.y1[ch];
-        self.y1[ch] = output;
+        let state = &mut self.state[Channel::new(ch.min(MAX_CH - 1))];
+        let output = self.a2.mul_add(
+            -state.y2,
+            self.a1.mul_add(
+                -state.y1,
+                self.b2
+                    .mul_add(state.x2, self.b0.mul_add(input, self.b1 * state.x1)),
+            ),
+        );
+        state.x2 = state.x1;
+        state.x1 = input;
+        state.y2 = state.y1;
+        state.y1 = output;
         output
     }
 
     /// Reset all state to zero.
     pub const fn reset(&mut self) {
-        self.x1 = [0.0; MAX_CH];
-        self.x2 = [0.0; MAX_CH];
-        self.y1 = [0.0; MAX_CH];
-        self.y2 = [0.0; MAX_CH];
+        self.state.fill(Df1State::ZERO);
     }
 }
 

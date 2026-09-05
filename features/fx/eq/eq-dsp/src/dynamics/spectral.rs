@@ -538,16 +538,21 @@ impl SpectralEngine {
         }
 
         let (mut peak, mut reach, mut from) = (0.0f64, 1.0f64, f64::INFINITY);
-        for i in (0..bins).rev() {
-            let t = self.target_db[i];
-            let dist = from - self.bin_log2[i];
+        for ((slot, (&t, &log2)), &oct) in spread
+            .iter_mut()
+            .zip(self.target_db.iter().zip(&self.bin_log2))
+            .zip(&self.spread_oct)
+            .take(bins)
+            .rev()
+        {
+            let dist = from - log2;
             let carried = if dist < reach { peak * spread_taper(dist / reach) } else { 0.0 };
             if t >= carried {
                 peak = t;
-                reach = self.spread_oct[i].max(1.0e-6);
-                from = self.bin_log2[i];
-            } else if carried > spread[i] {
-                spread[i] = carried;
+                reach = oct.max(1.0e-6);
+                from = log2;
+            } else if carried > *slot {
+                *slot = carried;
             }
         }
 
@@ -591,8 +596,11 @@ impl SpectralEngine {
     #[inline]
     pub fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         let pos = self.fill;
-        self.in_buf[0][pos] = left;
-        self.in_buf[1][pos] = right;
+        let [in_l, in_r] = &mut self.in_buf;
+        if let (Some(l), Some(r)) = (in_l.get_mut(pos), in_r.get_mut(pos)) {
+            *l = left;
+            *r = right;
+        }
         self.fill = self.fill.saturating_add(1);
         if self.fill == self.block {
             self.process_frame();
@@ -654,21 +662,34 @@ impl SpectralEngine {
             // Smoothed spectral reference: two-pass (up + down) one-pole
             // across bins with an octave-proportional coefficient —
             // cheap constant-Q-ish neighborhood average.
-            let mut acc = self.mag_db[0];
-            for i in 0..bins {
+            let mut acc = self.mag_db.first().copied().unwrap_or(0.0);
+            for (i, (&mag, slot)) in self
+                .mag_db
+                .iter()
+                .zip(self.ref_db.iter_mut())
+                .enumerate()
+                .take(bins)
+            {
                 let f = num::count_to_f64(i.max(1)) * bin_hz;
                 let neighbors = f * (SMOOTH_OCTAVES.exp2() - 1.0) / bin_hz;
                 let c = 1.0 / (1.0 + neighbors.max(1.0));
-                acc += (self.mag_db[i] - acc) * c;
-                self.ref_db[i] = acc;
+                acc += (mag - acc) * c;
+                *slot = acc;
             }
             let mut acc = self.mag_db.last().copied().unwrap_or(0.0);
-            for i in (0..bins).rev() {
+            for (i, (&mag, slot)) in self
+                .mag_db
+                .iter()
+                .zip(self.ref_db.iter_mut())
+                .enumerate()
+                .take(bins)
+                .rev()
+            {
                 let f = num::count_to_f64(i.max(1)) * bin_hz;
                 let neighbors = f * (SMOOTH_OCTAVES.exp2() - 1.0) / bin_hz;
                 let c = 1.0 / (1.0 + neighbors.max(1.0));
-                acc += (self.mag_db[i] - acc) * c;
-                self.ref_db[i] = 0.5 * (self.ref_db[i] + acc);
+                acc += (mag - acc) * c;
+                *slot = 0.5 * (*slot + acc);
             }
 
             // Each bin's long-term level, which is what an Auto threshold
