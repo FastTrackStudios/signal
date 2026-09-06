@@ -138,15 +138,15 @@ impl PlateLexicon {
             bandwidth,
             input_diffuser,
             loop_a_ap1,
-            loop_a_delay1: DelayLine::new(la_d1_len + 1),
+            loop_a_delay1: DelayLine::new(la_d1_len.saturating_add(1)),
             loop_a_damp1,
             loop_a_ap2,
-            loop_a_delay2: DelayLine::new(la_d2_len + 1),
+            loop_a_delay2: DelayLine::new(la_d2_len.saturating_add(1)),
             loop_b_ap1,
-            loop_b_delay1: DelayLine::new(lb_d1_len + 1),
+            loop_b_delay1: DelayLine::new(lb_d1_len.saturating_add(1)),
             loop_b_damp1,
             loop_b_ap2,
-            loop_b_delay2: DelayLine::new(lb_d2_len + 1),
+            loop_b_delay2: DelayLine::new(lb_d2_len.saturating_add(1)),
             dc_a: DcBlocker::new(),
             dc_b: DcBlocker::new(),
             decay: 0.7,
@@ -190,7 +190,7 @@ impl ReverbAlgorithm for PlateLexicon {
         self.loop_b_damp1.set_freq(freq, self.sample_rate);
 
         // Input bandwidth — Lexicon characteristic: brighter input than Dattorro
-        let bw_freq = 6000.0 + params.damping.mul_add(-0.3, 1.0) * 14000.0;
+        let bw_freq = params.damping.mul_add(-0.3, 1.0).mul_add(14000.0, 6000.0);
         self.bandwidth.set_freq(bw_freq, self.sample_rate);
 
         // Diffusion — affects both input diffusers and loop AP feedback

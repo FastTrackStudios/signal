@@ -67,7 +67,7 @@ impl ModulatedAllpass {
     /// Resize the buffer for the actual sample rate. Allocates; call from
     /// setup, never from the audio tick.
     pub fn set_sample_rate(&mut self, sample_rate: f64) {
-        let len = ((sample_rate * BUFFER_SECONDS) as usize).max(256);
+        let len = num::f64_to_index(sample_rate * BUFFER_SECONDS).max(256);
         if len > self.buffer.len() {
             self.buffer = DelayLine::new(len);
         }
@@ -91,7 +91,7 @@ impl ModulatedAllpass {
 
     #[inline]
     fn tick_no_mod(&mut self, input: f64) -> f64 {
-        let delay = self.sample_delay.min(self.buffer.len() - 2).max(1);
+        let delay = self.sample_delay.min(self.buffer.len().saturating_sub(2)).max(1);
         let buf_out = self.buffer.read(delay);
         self.allpass_step(input, buf_out)
     }
@@ -104,7 +104,7 @@ impl ModulatedAllpass {
         }
 
         self.current_delay += self.delay_step;
-        let max_delay = num::count_to_f64((self.buffer.len() - 4));
+        let max_delay = num::count_to_f64(self.buffer.len().saturating_sub(4));
         let pos = self.current_delay.clamp(1.0, max_delay);
 
         let buf_out = if self.interpolation_enabled {
@@ -113,7 +113,7 @@ impl ModulatedAllpass {
             self.buffer.read(num::f64_to_index(pos))
         };
 
-        self.samples_processed += 1;
+        self.samples_processed = self.samples_processed.saturating_add(1);
         self.allpass_step(input, buf_out)
     }
 
@@ -134,7 +134,7 @@ impl ModulatedAllpass {
         let modulation = (self.mod_phase * 2.0 * PI).sin();
 
         // Prevent modulation from taking delay negative
-        let effective_mod = self.mod_amount.min((self.sample_delay as f64) - 1.0);
+        let effective_mod = self.mod_amount.min(num::count_to_f64(self.sample_delay) - 1.0);
         let target = (num::count_to_f64(self.sample_delay) + effective_mod * modulation).max(1.0);
 
         // Spread the move over the next update window.
@@ -142,18 +142,22 @@ impl ModulatedAllpass {
     }
 
     /// Convenience: set feedback coefficient.
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "const fn cannot have &mut self parameter"
+    )]
     pub fn set_feedback(&mut self, g: f64) {
         self.feedback = g;
     }
 
     /// Convenience: set delay in samples.
     pub fn set_delay(&mut self, samples: f64) {
-        self.sample_delay = (samples as usize).min(self.buffer.len() - 2).max(1);
+        self.sample_delay = num::f64_to_index(samples).min(self.buffer.len().saturating_sub(2)).max(1);
     }
 
     /// Convenience: set delay in integer samples.
     pub fn set_delay_samples(&mut self, samples: usize) {
-        self.sample_delay = samples.min(self.buffer.len() - 2).max(1);
+        self.sample_delay = samples.min(self.buffer.len().saturating_sub(2)).max(1);
     }
 
     /// Convenience: set modulation rate and depth.
@@ -166,6 +170,10 @@ impl ModulatedAllpass {
     }
 
     /// Convenience: set modulation phase (0.0 to 1.0).
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "const fn cannot have &mut self parameter"
+    )]
     pub fn set_phase(&mut self, phase: f64) {
         self.mod_phase = phase;
     }

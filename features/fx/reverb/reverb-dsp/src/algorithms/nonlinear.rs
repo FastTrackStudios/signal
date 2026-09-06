@@ -80,8 +80,8 @@ impl NonLinear {
             fdn: Self::make_fdn(sample_rate),
             diffuser_l: AllpassDiffuser::with_defaults(sample_rate, 0.6),
             diffuser_r: AllpassDiffuser::with_defaults(sample_rate, 0.6),
-            env_buffer_l: DelayLine::new(max_env + 1),
-            env_buffer_r: DelayLine::new(max_env + 1),
+            env_buffer_l: DelayLine::new(max_env.saturating_add(1)),
+            env_buffer_r: DelayLine::new(max_env.saturating_add(1)),
             env_length: num::f64_to_index(sample_rate * 0.5),
             env_write_count: 0,
             shape: EnvelopeShape::Reverse,
@@ -146,6 +146,7 @@ impl NonLinear {
     }
 
     fn envelope_gain(&self, position: f64) -> f64 {
+        const KNEE: f64 = 0.08;
         match self.shape {
             EnvelopeShape::Reverse => {
                 // Ramp up linearly then cut
@@ -157,7 +158,6 @@ impl NonLinear {
                 // knee (~8% of the window) instead of a linear fade —
                 // reads as a gate, not a decay, without clicking.
                 let hold = 0.4f64.mul_add(self.mx.gate_speed.clamp(0.0, 1.0), 0.5);
-                const KNEE: f64 = 0.08;
                 if position < hold {
                     1.0
                 } else if position < hold + KNEE {
@@ -217,7 +217,7 @@ impl ReverbAlgorithm for NonLinear {
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Knob remap (manual): DECAY sets the time of the NONLINEAR
         // portion (the shaped-envelope window).
-        self.env_length = num::f64_to_index((params.decay.mul_add(1.9, 0.1) * self.sample_rate));
+        self.env_length = num::f64_to_index(params.decay.mul_add(1.9, 0.1) * self.sample_rate);
 
         // Shape: the named selector wins; without it fall back to the
         // legacy extra_a thresholds.
@@ -283,7 +283,7 @@ impl ReverbAlgorithm for NonLinear {
 
         // Read back with envelope shaping
         let env_len = self.env_length.max(1);
-        let position = num::count_to_f64(self.env_write_count % env_len) / num::count_to_f64(env_len);
+        let position = num::count_to_f64(self.env_write_count.checked_rem(env_len).unwrap_or(0)) / num::count_to_f64(env_len);
         let gain = self.envelope_gain(position);
 
         let mut out_l = self.env_buffer_l.read(1) * gain;
@@ -296,7 +296,7 @@ impl ReverbAlgorithm for NonLinear {
                 let cutoff = 400.0 * (8000.0f64 / 400.0).powf(position.clamp(0.0, 1.0));
                 self.swoosh_lp.set_freq(cutoff, self.sample_rate);
             }
-            self.swoosh_countdown -= 1;
+            self.swoosh_countdown = self.swoosh_countdown.saturating_sub(1);
             out_l = self.swoosh_lp.tick(out_l);
             out_r = self.swoosh_lp.tick(out_r);
         }

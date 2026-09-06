@@ -116,7 +116,7 @@ impl IrEngine {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err, reason = "SendError contains the full job type; simplifying the error type would break the API")]
     pub fn submit(&self, job: IrJob) -> Result<(), crossbeam_channel::SendError<IrJob>> {
         self.tx_jobs.send(job)
     }
@@ -134,7 +134,7 @@ impl IrEngine {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err, reason = "SendError contains the full job type; simplifying the error type would break the API")]
     pub fn submit_path<P: AsRef<Path>>(
         &self,
         id: u64,
@@ -151,7 +151,7 @@ impl IrEngine {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err, reason = "SendError contains the full job type; simplifying the error type would break the API")]
     pub fn submit_path_slot<P: AsRef<Path>>(
         &self,
         id: u64,
@@ -293,7 +293,7 @@ pub struct ReshapeJob {
     pub transforms: IrTransforms,
     pub sample_rate: f64,
     /// True-stereo cross originals (LR, RL) to shape alongside.
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity, reason = "cross-leg IR pair; Arc avoids clones on every submission")]
     pub cross: Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)>,
 }
 
@@ -417,7 +417,7 @@ impl ImpulseReshaper {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err, reason = "SendError contains the full job type; simplifying the error type would break the API")]
     pub fn submit(&self, job: ReshapeJob) -> Result<(), crossbeam_channel::SendError<ReshapeJob>> {
         self.tx_jobs.send(job)
     }
@@ -456,6 +456,7 @@ fn process_job(job: &IrJob) -> Result<ProcessedIr, IrLoadError> {
     // True-stereo detection: a 4-channel file is [LL, LR, RL, RR]; a
     // stereo file named `*_L` with a `*_R` sibling (or vice versa) is
     // the two-file convention (L file = source-L → LL/LR).
+    #[expect(clippy::indexing_slicing, reason = "bounds checked by asset.num_channels() >= 4")]
     let quad: Option<[Vec<f64>; 4]> = if asset.num_channels() >= 4 {
         Some([
             asset.channels[0].clone(),
@@ -476,12 +477,14 @@ fn process_job(job: &IrJob) -> Result<ProcessedIr, IrLoadError> {
                 IrAsset::load(&r_path, job.target_sample_rate).ok()?
             };
             (l.num_channels() >= 2 && r.num_channels() >= 2).then(|| {
-                [
+                #[expect(clippy::indexing_slicing, reason = "bounds checked by num_channels() >= 2 for both l and r")]
+                let quad = [
                     l.channels[0].clone(),
                     l.channels[1].clone(),
                     r.channels[0].clone(),
                     r.channels[1].clone(),
-                ]
+                ];
+                quad
             })
         })
     } else {
@@ -527,6 +530,7 @@ fn true_stereo_sibling(path: &Path) -> Option<(PathBuf, PathBuf)> {
         } else {
             continue;
         };
+        #[expect(clippy::string_slice, clippy::arithmetic_side_effects, reason = "stem.len() >= this.len() guaranteed by ends_with() check; all suffixes are ASCII")]
         let base = &stem[..stem.len() - this.len()];
         let sibling = path.with_file_name(format!("{base}{other}.{ext}"));
         if sibling.is_file() {

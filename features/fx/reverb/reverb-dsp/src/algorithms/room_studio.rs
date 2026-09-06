@@ -91,15 +91,15 @@ impl RoomStudio {
 
     fn make_fdn(sample_rate: f64, size: f64, offset: bool) -> Fdn {
         // Moderate delays — studio-sized room
-        let base = if !offset {
-            [389, 487, 601, 719, 839, 967, 1097, 1229]
-        } else {
+        let base = if offset {
             [409, 509, 619, 743, 863, 991, 1123, 1259]
+        } else {
+            [389, 487, 601, 719, 839, 967, 1097, 1229]
         };
         let scale = sample_rate / 48000.0 * size.max(0.1);
         let delays: Vec<usize> = base
             .iter()
-            .map(|&d| ((f64::from(d) * scale) as usize).max(4))
+            .map(|&d| num::f64_to_index(f64::from(d) * scale).max(4))
             .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.6);
@@ -226,27 +226,31 @@ impl RoomStudio {
         let base_delays = [59, 79, 101, 127, 157, 191, 229, 269];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.1);
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..FDN_MOD_AP_COUNT {
-            let delay = num::f64_to_index((f64::from(base_delays[i]) * scale));
-            self.mod_ap_l[i].sample_delay = delay.max(4);
-            self.mod_ap_l[i].feedback = 0.3;
-            self.mod_ap_l[i].set_modulation(
+        for (i, ((ap_l, ap_r), &d)) in self.mod_ap_l
+            .iter_mut()
+            .zip(self.mod_ap_r.iter_mut())
+            .zip(base_delays.iter())
+            .enumerate()
+        {
+            let delay = num::f64_to_index(f64::from(d) * scale);
+            ap_l.sample_delay = delay.max(4);
+            ap_l.feedback = 0.3;
+            ap_l.set_modulation(
                 num::count_to_f64(i).mul_add(0.08, 0.25),
                 modulation * self.sample_rate * 0.0002,
                 self.sample_rate,
             );
-            self.mod_ap_l[i].set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
+            ap_l.set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
 
-            let delay_r = num::f64_to_index(((f64::from(base_delays[i]) + 11.0) * scale));
-            self.mod_ap_r[i].sample_delay = delay_r.max(4);
-            self.mod_ap_r[i].feedback = 0.3;
-            self.mod_ap_r[i].set_modulation(
+            let delay_r = num::f64_to_index((f64::from(d) + 11.0) * scale);
+            ap_r.sample_delay = delay_r.max(4);
+            ap_r.feedback = 0.3;
+            ap_r.set_modulation(
                 num::count_to_f64(i).mul_add(0.07, 0.3),
                 modulation * self.sample_rate * 0.0002,
                 self.sample_rate,
             );
-            self.mod_ap_r[i].set_phase((num::count_to_f64(i) + 0.5) / num::count_to_f64(FDN_MOD_AP_COUNT));
+            ap_r.set_phase((num::count_to_f64(i) + 0.5) / num::count_to_f64(FDN_MOD_AP_COUNT));
         }
     }
 
@@ -401,9 +405,9 @@ impl ReverbAlgorithm for RoomStudio {
         let mut late_l = self.fdn_l.tick(diff_l);
         let mut late_r = self.fdn_r.tick(diff_r);
 
-        for i in 0..FDN_MOD_AP_COUNT {
-            late_l = self.mod_ap_l[i].tick(late_l);
-            late_r = self.mod_ap_r[i].tick(late_r);
+        for (ap_l, ap_r) in self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut()) {
+            late_l = ap_l.tick(late_l);
+            late_r = ap_r.tick(late_r);
         }
 
         // Bass trapping: subtract low-passed signal to remove bass energy

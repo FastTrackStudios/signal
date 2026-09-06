@@ -57,7 +57,11 @@ struct SpringUnit {
 }
 
 impl SpringUnit {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "spring parametrization requires: \
+                                                     sample_rate, physical delays (A/B/max), \
+                                                     spectral filter (sections/stretch/coeff), \
+                                                     damping and modulation parameters; \
+                                                     cannot collapse without losing clarity")]
     fn new(
         sample_rate: f64,
         delay_ms: f64,
@@ -71,7 +75,7 @@ impl SpringUnit {
     ) -> Self {
         let delay_samples = num::f64_to_index(sample_rate * delay_ms * 0.001);
         // Allocate for maximum possible delay + modulation headroom
-        let max_delay = num::f64_to_index(sample_rate * max_delay_ms * 0.001) + 32;
+        let max_delay = num::f64_to_index(sample_rate * max_delay_ms * 0.001).saturating_add(32);
 
         let mut damp = Lp1::new();
         damp.set_freq(damp_freq, sample_rate);
@@ -85,7 +89,7 @@ impl SpringUnit {
 
         Self {
             dispersion: SpectralDelay::new(num_sections, stretch, ap_coeff),
-            delay: DelayLine::new(max_delay + 1),
+            delay: DelayLine::new(max_delay.saturating_add(1)),
             delay_samples,
             damp,
             dc_blocker: DcBlocker::with_cutoff(38.0, 48000.0), // matches the old 0.995 pole
@@ -131,7 +135,7 @@ impl SpringUnit {
 
         // Linear interpolation between two delay line samples
         let s0 = self.delay.read(read_int);
-        let s1 = self.delay.read(read_int + 1);
+        let s1 = self.delay.read(read_int.saturating_add(1));
         let delayed = (s1 - s0).mul_add(frac, s0);
 
         // Frequency-dependent decay (lowpass in feedback)
@@ -154,10 +158,10 @@ impl SpringUnit {
 
 /// Classic 2-spring reverb tank.
 pub struct Spring {
-    spring_a: SpringUnit,
-    spring_b: SpringUnit,
+    a: SpringUnit,
+    b: SpringUnit,
     /// Third spring (mid length/character) for the 3-spring tank.
-    spring_c: SpringUnit,
+    c: SpringUnit,
     /// Active springs 1–3 (manual "Number of Springs").
     num_springs: usize,
     /// Preamp drive stage (manual "Dwell").
@@ -179,7 +183,7 @@ impl Spring {
 
         // Spring A: shorter, brighter, moderate chirp
         // ~80 sections × stretch 4 = equivalent to ~320 unit-delay allpasses
-        let spring_a = SpringUnit::new(
+        let a = SpringUnit::new(
             sample_rate,
             30.0, // 30ms echo delay
             max_delay_ms,
@@ -193,7 +197,7 @@ impl Spring {
 
         // Spring B: longer, darker, stronger chirp
         // Slightly detuned for stereo decorrelation
-        let spring_b = SpringUnit::new(
+        let b = SpringUnit::new(
             sample_rate,
             42.0, // 42ms echo delay (different from A)
             max_delay_ms,
@@ -207,7 +211,7 @@ impl Spring {
 
         // Spring C: mid length, its own detune — engages with the
         // 3-spring tank for denser interference.
-        let spring_c = SpringUnit::new(
+        let c = SpringUnit::new(
             sample_rate,
             36.0, // between A and B
             max_delay_ms,
@@ -225,9 +229,9 @@ impl Spring {
         tone_lp.set_freq(6000.0, sample_rate);
 
         Self {
-            spring_a,
-            spring_b,
-            spring_c,
+            a,
+            b,
+            c,
             num_springs: 2,
             dwell: SpringDwell::Clean,
             input_lp,
@@ -239,9 +243,9 @@ impl Spring {
 
 impl ReverbAlgorithm for Spring {
     fn reset(&mut self) {
-        self.spring_c.reset();
-        self.spring_a.reset();
-        self.spring_b.reset();
+        self.c.reset();
+        self.a.reset();
+        self.b.reset();
         self.input_lp.reset();
         self.tone_lp.reset();
     }
@@ -254,38 +258,38 @@ impl ReverbAlgorithm for Spring {
         // Decay → loop gain (dwell control)
         // 0.0 → short splashy decay, 1.0 → long sustain
         let gain = params.decay.mul_add(0.45, 0.5); // 0.5 to 0.95
-        self.spring_a.loop_gain = gain;
-        self.spring_b.loop_gain = gain;
+        self.a.loop_gain = gain;
+        self.b.loop_gain = gain;
 
         // Size → echo delay length (spring physical length)
         let delay_a = params.size.mul_add(35.0, 20.0); // 20ms to 55ms
         let delay_b = delay_a * 1.38; // Spring B is ~38% longer
-        self.spring_a.delay_samples = num::f64_to_index(self.sample_rate * delay_a * 0.001);
-        self.spring_b.delay_samples = num::f64_to_index(self.sample_rate * delay_b * 0.001);
+        self.a.delay_samples = num::f64_to_index(self.sample_rate * delay_a * 0.001);
+        self.b.delay_samples = num::f64_to_index(self.sample_rate * delay_b * 0.001);
 
         // Diffusion → allpass coefficient (chirp intensity / "drip" amount)
         // Low diffusion = mild chirp, high = aggressive drippy chirp
         let ap_a = params.diffusion.mul_add(0.35, 0.35); // 0.35 to 0.70
         let ap_b = ap_a + 0.03; // Spring B slightly chirpier
-        self.spring_a.dispersion.coefficient = ap_a;
-        self.spring_b.dispersion.coefficient = ap_b;
+        self.a.dispersion.coefficient = ap_a;
+        self.b.dispersion.coefficient = ap_b;
 
         // Also adjust number of active sections with diffusion
-        let sections_a = 40 + num::f64_to_index(params.diffusion * 80.0); // 40 to 120
-        let sections_b = 50 + num::f64_to_index(params.diffusion * 100.0); // 50 to 150
-        self.spring_a.dispersion.active_sections = sections_a;
-        self.spring_b.dispersion.active_sections = sections_b;
+        let sections_a = 40usize.saturating_add(num::f64_to_index(params.diffusion * 80.0)); // 40 to 120
+        let sections_b = 50usize.saturating_add(num::f64_to_index(params.diffusion * 100.0)); // 50 to 150
+        self.a.dispersion.active_sections = sections_a;
+        self.b.dispersion.active_sections = sections_b;
 
         // Damping → feedback LP frequency
         let damp_a = (1.0 - params.damping).mul_add(8000.0, 2000.0); // 2k to 10k
         let damp_b = damp_a * 0.8; // Spring B always darker
-        self.spring_a.damp.set_freq(damp_a, self.sample_rate);
-        self.spring_b.damp.set_freq(damp_b, self.sample_rate);
+        self.a.damp.set_freq(damp_a, self.sample_rate);
+        self.b.damp.set_freq(damp_b, self.sample_rate);
 
         // Modulation → delay modulation depth (echo smearing)
         let mod_depth = params.modulation.mul_add(6.0, 1.0); // 1 to 7 samples
-        self.spring_a.mod_depth = mod_depth;
-        self.spring_b.mod_depth = mod_depth * 1.2;
+        self.a.mod_depth = mod_depth;
+        self.b.mod_depth = mod_depth * 1.2;
 
         // Tone → output LP
         let tone_freq = ((1.0 + params.tone) * 0.5).mul_add(9000.0, 3000.0); // 3k to 12k
@@ -298,8 +302,8 @@ impl ReverbAlgorithm for Spring {
         // Extra A → spring tension (adjusts mod rate — tighter = less flutter)
         let mod_rate_a = (1.0 - params.extra_a).mul_add(1.5, 0.3); // 0.3 to 1.8 Hz
         let mod_rate_b = mod_rate_a * 0.7;
-        self.spring_a.mod_rate = mod_rate_a / self.sample_rate;
-        self.spring_b.mod_rate = mod_rate_b / self.sample_rate;
+        self.a.mod_rate = mod_rate_a / self.sample_rate;
+        self.b.mod_rate = mod_rate_b / self.sample_rate;
     }
 
     fn set_spring_params(&mut self, params: &SpringParams) -> bool {
@@ -330,7 +334,7 @@ impl ReverbAlgorithm for Spring {
         let input = self.input_lp.tick(driven);
 
         // Active springs: 1 = A centered, 2 = A/B panned, 3 = +C center.
-        let a_out = self.spring_a.tick(input);
+        let a_out = self.a.tick(input);
         let (out_l, out_r);
         match self.num_springs {
             1 => {
@@ -338,13 +342,13 @@ impl ReverbAlgorithm for Spring {
                 out_r = a_out * 0.5;
             }
             3 => {
-                let b_out = self.spring_b.tick(input);
-                let c_out = self.spring_c.tick(input);
+                let b_out = self.b.tick(input);
+                let c_out = self.c.tick(input);
                 out_l = a_out * 0.55 + b_out * 0.25 + c_out * 0.33;
                 out_r = a_out * 0.25 + b_out * 0.55 + c_out * 0.33;
             }
             _ => {
-                let b_out = self.spring_b.tick(input);
+                let b_out = self.b.tick(input);
                 out_l = a_out * 0.65 + b_out * 0.35;
                 out_r = a_out * 0.35 + b_out * 0.65;
             }

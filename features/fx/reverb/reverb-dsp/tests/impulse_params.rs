@@ -10,6 +10,7 @@ use reverb_dsp::ir::ImpulseReshaper;
 use reverb_dsp::AlgorithmType;
 
 use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::num;
 
 const SR: f64 = 48000.0;
 /// Convolver latency: one partition block.
@@ -17,7 +18,7 @@ const LATENCY: usize = 512;
 
 /// Deterministic 0.5 s decaying-noise IR (identical L/R for simplicity).
 fn test_ir() -> Vec<f64> {
-    let n = (SR * 0.5) as usize;
+    let n = num::f64_to_index(SR * 0.5);
     let mut state = 0x1234_5678_u32;
     let mut rng = || {
         state ^= state << 13;
@@ -26,7 +27,7 @@ fn test_ir() -> Vec<f64> {
         f64::from(state as i32) / f64::from(i32::MAX)
     };
     (0..n)
-        .map(|i| rng() * 10f64.powf(-3.0 * i as f64 / n as f64))
+        .map(|i| rng() * 10f64.powf(-3.0 * num::count_to_f64(i) / num::count_to_f64(n)))
         .collect()
 }
 
@@ -37,7 +38,7 @@ fn render(params: &ImpulseParams, seconds: f64) -> Vec<f64> {
     conv.load_ir_stereo(&ir, &ir);
     conv.set_impulse(params, true);
     conv.reprepare_now();
-    let n = (SR * seconds) as usize;
+    let n = num::f64_to_index(SR * seconds);
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
         let x = if i == 0 { 1.0 } else { 0.0 };
@@ -64,7 +65,7 @@ fn defaults_are_transparent() {
     b.set_impulse(&ImpulseParams::default(), true);
     b.reprepare_now();
 
-    for i in 0..(SR as usize) {
+    for i in 0..num::f64_to_index(SR) {
         let x = if i == 0 { 1.0 } else { 0.0 };
         let (la, _) = a.tick(x, x);
         let (lb, _) = b.tick(x, x);
@@ -82,7 +83,7 @@ fn decay_gate_truncates_hard() {
         },
         1.0,
     );
-    let ir_len = (SR * 0.5) as usize;
+    let ir_len = num::f64_to_index(SR * 0.5);
     let cut = LATENCY + ir_len / 2;
     // Everything after the gate point (plus one FFT block of slop).
     let after = energy(&out[cut + 2 * LATENCY..]);
@@ -111,11 +112,11 @@ fn envelope_ramps_gate_cuts() {
         },
         1.0,
     );
-    let ir_len = (SR * 0.5) as usize;
+    let ir_len = num::f64_to_index(SR * 0.5);
     // Window just before the cut: the envelope has ramped down, the
     // gate is still at full level.
-    let w0 = LATENCY + (ir_len as f64 * 0.45) as usize;
-    let w1 = LATENCY + (ir_len as f64 * 0.49) as usize;
+    let w0 = LATENCY + num::f64_to_index(num::count_to_f64(ir_len) * 0.45);
+    let w1 = LATENCY + num::f64_to_index(num::count_to_f64(ir_len) * 0.49);
     let e_env = energy(&env[w0..w1]);
     let e_gate = energy(&gate[w0..w1]);
     assert!(
@@ -134,7 +135,7 @@ fn attack_softens_onset() {
         },
         0.8,
     );
-    let ir_len = (SR * 0.5) as usize;
+    let ir_len = num::f64_to_index(SR * 0.5);
     let head = LATENCY + ir_len / 10;
     let total_hard = energy(&hard);
     let total_soft = energy(&soft);
@@ -156,7 +157,7 @@ fn stretch_lengthens_and_darkens() {
         },
         1.6,
     );
-    let ir_len = (SR * 0.5) as usize;
+    let ir_len = num::f64_to_index(SR * 0.5);
     // Energy beyond the original IR length: near-zero unstretched,
     // substantial at 2x.
     let past = LATENCY + ir_len + 2 * LATENCY;
@@ -168,9 +169,9 @@ fn stretch_lengthens_and_darkens() {
     );
     // Zero-crossing rate down = darker (resampled to half rate).
     let zcr = |buf: &[f64]| {
-        buf.windows(2)
+        num::count_to_f64(buf.windows(2)
             .filter(|w| (w[0] <= 0.0) != (w[1] <= 0.0))
-            .count() as f64
+            .count())
     };
     let body = LATENCY..LATENCY + ir_len / 2;
     let z_norm = zcr(&normal[body.clone()]);
@@ -190,7 +191,7 @@ fn reverse_is_a_riser() {
         },
         1.0,
     );
-    let ir_len = (SR * 0.5) as usize;
+    let ir_len = num::f64_to_index(SR * 0.5);
     let third = ir_len / 3;
     let first = energy(&out[LATENCY..LATENCY + third]);
     let last = energy(&out[LATENCY + 2 * third..LATENCY + ir_len]);
@@ -218,14 +219,14 @@ fn feedback_recirculates_and_stays_stable() {
 
     let render_fb = |p: &ImpulseParams, secs: f64| {
         let mut conv = Convolution::new(SR);
-        let ir: Vec<f64> = test_ir()[..(SR * 0.2) as usize].to_vec();
+        let ir: Vec<f64> = test_ir()[..num::f64_to_index(SR * 0.2)].to_vec();
         conv.load_ir_stereo(&ir, &ir);
         let mut mods = conv.mod_params();
         mods.predelay_ms = 80.0;
         conv.set_mod_params(&mods, true);
         conv.set_impulse(p, true);
         conv.reprepare_now();
-        let n = (SR * secs) as usize;
+        let n = num::f64_to_index(SR * secs);
         let mut out = Vec::with_capacity(n);
         for i in 0..n {
             let x = if i == 0 { 1.0 } else { 0.0 };
@@ -238,7 +239,7 @@ fn feedback_recirculates_and_stays_stable() {
 
     let dry = render_fb(&base, 2.0);
     let wet = render_fb(&fb, 2.0);
-    let late = (SR * 1.2) as usize;
+    let late = num::f64_to_index(SR * 1.2);
     let e_dry = energy(&dry[late..]);
     let e_wet = energy(&wet[late..]);
     assert!(
@@ -306,7 +307,7 @@ fn chain_reshape_worker_applies() {
     chain.impulse.tail = ImpulseTail::Gate;
     chain.update_params();
 
-    let ir_len = (SR * 0.5) as usize;
+    let ir_len = num::f64_to_index(SR * 0.5);
     let render_tail = |chain: &mut ReverbChain| {
         chain.reset();
         let n = ir_len + 8 * LATENCY;
@@ -360,7 +361,7 @@ fn reshape_swap_does_not_duck_the_tail() {
     let mut l = vec![0.0f64; 4096];
     let mut r = vec![0.0f64; 4096];
     for i in 0..256 {
-        l[i] = (core::f64::consts::TAU * 500.0 * i as f64 / SR).sin() * 0.8;
+        l[i] = (core::f64::consts::TAU * 500.0 * num::count_to_f64(i) / SR).sin() * 0.8;
         r[i] = l[i];
     }
     chain.process(&mut l, &mut r);

@@ -47,10 +47,10 @@ impl Swell {
     }
 
     fn make_fdn(sample_rate: f64, offset: bool) -> Fdn {
-        let base = if !offset {
-            [1201, 1499, 1801, 2099, 2399, 2699, 2999, 3301]
-        } else {
+        let base = if offset {
             [1279, 1567, 1873, 2179, 2473, 2777, 3079, 3389]
+        } else {
+            [1201, 1499, 1801, 2099, 2399, 2699, 2999, 3301]
         };
         let scale = sample_rate / 48000.0;
         let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index(f64::from(d) * scale)).collect();

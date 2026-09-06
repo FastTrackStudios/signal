@@ -5,7 +5,9 @@
 //! Loads each file via `IrAsset` -> `IrTransforms` -> Convolution, renders a
 //! unit impulse, and prints length / peak / RT60-style decay stats.
 
+use dsp_core::num;
 use reverb_dsp::algorithms::convolution::Convolution;
+use reverb_dsp::algorithm::ReverbAlgorithm;
 use reverb_dsp::ir::{IrAsset, IrTransforms};
 
 const SR: f64 = 48000.0;
@@ -27,8 +29,7 @@ fn main() {
                 conv.load_ir_stereo(&ir_l, &ir_r);
 
                 // Render impulse through the convolver.
-                use reverb_dsp::algorithm::ReverbAlgorithm;
-                let n = (SR * asset.duration_seconds().min(10.0)) as usize + 4800;
+                let n = num::f64_to_index(SR * asset.duration_seconds().min(10.0)).saturating_add(4800);
                 let mut energy = 0.0f64;
                 let mut peak = 0.0f64;
                 let mut last_above_60 = 0usize;
@@ -54,7 +55,7 @@ fn main() {
                     asset.num_channels(),
                     peak,
                     energy,
-                    last_above_60 as f64 / SR,
+                    num::count_to_f64(last_above_60) / SR,
                     path
                 );
             }

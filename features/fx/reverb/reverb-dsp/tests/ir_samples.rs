@@ -14,6 +14,7 @@
 use std::path::PathBuf;
 
 use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::num;
 use reverb_dsp::ir::asset::IrAsset;
 use reverb_dsp::ir::engine::IrEngine;
 use reverb_dsp::ir::prepared::PreparedIrPair;
@@ -115,7 +116,7 @@ fn engine_pipeline_hot_swaps_real_ir() {
     // Pump the chain until the worker + relay finish and the swap lands.
     // Worst case: a few hundred ms of work; cap at 5s of audio to be safe.
     let block = 512usize;
-    let max_blocks = (SR as usize * 5) / block;
+    let max_blocks = (num::f64_to_index(SR) * 5) / block;
     let mut got_swap = false;
 
     for _ in 0..max_blocks {

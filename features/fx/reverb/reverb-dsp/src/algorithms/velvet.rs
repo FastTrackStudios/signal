@@ -56,7 +56,7 @@ impl VelvetFir {
     /// * `t60` — exponential 60dB decay time in samples.
     /// * `seed` — randomization seed.
     fn rebuild(&mut self, length_samples: usize, density_hz: f64, t60: f64, seed: u64) {
-        let length = length_samples.min(self.buffer_size - 1);
+        let length = length_samples.min(self.buffer_size.saturating_sub(1));
         let mut rng = LcgRandom::new(seed);
         // Average spacing between impulses (Karjalainen 2007).
         let avg_spacing = (48000.0_f64 / density_hz).max(1.0);
@@ -67,7 +67,7 @@ impl VelvetFir {
         for k in 0..count {
             // Random position within the k-th grid cell.
             let jitter = rng.next_float() * (num::count_to_f64(spacing) - 1.0);
-            let pos = num::count_to_f64(k).mul_add(avg_spacing, jitter) as usize;
+            let pos = num::f64_to_index(num::count_to_f64(k).mul_add(avg_spacing, jitter));
             if pos >= length {
                 break;
             }
@@ -87,15 +87,15 @@ impl VelvetFir {
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
         self.buffer[self.write_idx] = input;
-        let mask = self.buffer_size - 1;
+        let mask = self.buffer_size.saturating_sub(1);
 
         let mut acc = 0.0;
         for &(delay, gain) in &self.taps {
-            let idx = (self.write_idx + self.buffer_size - delay) & mask;
+            let idx = (self.write_idx.wrapping_add(self.buffer_size).wrapping_sub(delay)) & mask;
             acc += self.buffer[idx] * gain;
         }
 
-        self.write_idx = (self.write_idx + 1) & mask;
+        self.write_idx = self.write_idx.wrapping_add(1) & mask;
         acc
     }
 }
@@ -119,7 +119,7 @@ pub struct Velvet {
 impl Velvet {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_samples = num::f64_to_index(sample_rate * MAX_TAIL_SECONDS) + 32;
+        let max_samples = num::f64_to_index(sample_rate * MAX_TAIL_SECONDS).saturating_add(32);
         let mut v = Self {
             fir_l: VelvetFir::new(max_samples),
             fir_r: VelvetFir::new(max_samples),
@@ -143,7 +143,7 @@ impl Velvet {
 
     fn rebuild_firs(&mut self) {
         // Length: 0.2s..MAX_TAIL_SECONDS, scaled jointly by size & decay.
-        let length_s = 0.2 + self.size.mul_add(0.5, self.decay * 0.5) * (MAX_TAIL_SECONDS - 0.2);
+        let length_s = self.size.mul_add(0.5, self.decay * 0.5).mul_add(MAX_TAIL_SECONDS - 0.2, 0.2);
         let length_samples = num::f64_to_index(length_s * self.sample_rate);
         let t60_samples = num::count_to_f64(length_samples);
         let density = DENSITY_HZ * self.diffusion.mul_add(1.5, 0.5);

@@ -54,7 +54,7 @@ impl Magneto {
 
         let head_diffusers = std::array::from_fn(|i| {
             let mut d = AllpassDiffuser::with_defaults(sample_rate, num::count_to_f64(i).mul_add(0.2, 0.3));
-            d.set_active_stages(2 + i * 2); // Progressive diffusion
+            d.set_active_stages(2usize.saturating_add(i.saturating_mul(2))); // Progressive diffusion
             d.set_feedback(0.5);
             d.set_modulation(0.5, 4.0, sample_rate);
             d
@@ -62,9 +62,9 @@ impl Magneto {
 
         let base_delay = num::f64_to_index(sample_rate * 0.15);
         let mut magneto = Self {
-            tape_l: DelayLine::new(max_delay + 1),
-            tape_r: DelayLine::new(max_delay + 1),
-            head_delays: std::array::from_fn(|i| base_delay * (i + 1)),
+            tape_l: DelayLine::new(max_delay.saturating_add(1)),
+            tape_r: DelayLine::new(max_delay.saturating_add(1)),
+            head_delays: std::array::from_fn(|i| base_delay * (i.saturating_add(1))),
             head_gains: HEAD_GAINS,
             head_diffusers,
             feedback: 0.4,
@@ -91,18 +91,19 @@ impl Magneto {
     fn reposition_heads(&mut self) {
         let n = self.active_heads.clamp(1, NUM_HEADS);
         let last = (self.last_delay_s * self.sample_rate)
-            .min(num::count_to_f64((self.tape_l.len() - 1)))
+            .min(num::count_to_f64(self.tape_l.len().saturating_sub(1)))
             .max(1.0);
-        for i in 0..NUM_HEADS {
+        for (i, head_delay) in self.head_delays.iter_mut().enumerate() {
             let frac = match self.spacing {
-                MagnetoSpacing::Even => num::count_to_f64(i + 1) / num::count_to_f64(n),
+                MagnetoSpacing::Even => num::count_to_f64(i.saturating_add(1)) / num::count_to_f64(n),
                 MagnetoSpacing::Uneven => {
                     // Take the last n entries of the irregular grid so
                     // the final head stays at the full delay time.
-                    UNEVEN_POS[NUM_HEADS - n + i.min(n - 1)]
+                    let idx = (NUM_HEADS - n).saturating_add(i.min(n.saturating_sub(1))).min(NUM_HEADS - 1);
+                    UNEVEN_POS[idx]
                 }
             };
-            self.head_delays[i] = ((last * frac.min(1.0)) as usize).max(1);
+            *head_delay = num::f64_to_index(last * frac.min(1.0)).max(1);
         }
     }
 
@@ -144,7 +145,7 @@ impl ReverbAlgorithm for Magneto {
 
         // Diffusion -> how much each head is diffused
         for (i, diff) in self.head_diffusers.iter_mut().enumerate() {
-            let stages = ((params.diffusion * num::count_to_f64(i).mul_add(2.0, 2.0)) as usize).min(8);
+            let stages = num::f64_to_index(params.diffusion * num::count_to_f64(i).mul_add(2.0, 2.0)).min(8);
             diff.set_active_stages(stages);
             diff.set_feedback(params.diffusion.mul_add(0.3, 0.4));
         }
@@ -217,7 +218,7 @@ impl ReverbAlgorithm for Magneto {
             // Feedback tap: last head with Even spacing, last TWO
             // heads with Uneven (the manual's spacing side-effect).
             let takes_fb =
-                i + 1 == n || (self.spacing == MagnetoSpacing::Uneven && n >= 2 && i + 2 == n);
+                i.saturating_add(1) == n || (self.spacing == MagnetoSpacing::Uneven && n >= 2 && i.saturating_add(2) == n);
             if takes_fb {
                 fb_l += diff_l;
                 fb_r += diff_r;

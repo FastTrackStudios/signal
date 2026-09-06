@@ -120,8 +120,8 @@ impl IrTransforms {
         let (mut l, mut r) = (l, r);
 
         // 1. Trim
-        let start = num::f64_to_index(((self.trim_start_s.max(0.0)) * sr));
-        let end_drop = num::f64_to_index(((self.trim_end_s.max(0.0)) * sr));
+        let start = num::f64_to_index((self.trim_start_s.max(0.0)) * sr);
+        let end_drop = num::f64_to_index((self.trim_end_s.max(0.0)) * sr);
         l = trim(l, start, end_drop);
         r = trim(r, start, end_drop);
 
@@ -168,13 +168,13 @@ impl IrTransforms {
         // head of whatever now plays first (post-reverse/stretch).
         let af = self.attack_frac.clamp(0.0, 1.0);
         if af > 1e-9 {
-            let n = num::f64_to_index(((l.len() as f64) * 0.25 * af));
+            let n = num::f64_to_index(num::count_to_f64(l.len()) * 0.25 * af);
             apply_attack_samples(&mut l, n);
             apply_attack_samples(&mut r, n);
         }
 
         // 5. Predelay
-        let predelay = num::f64_to_index((self.predelay_s.max(0.0) * sr));
+        let predelay = num::f64_to_index(self.predelay_s.max(0.0) * sr);
         if predelay > 0 {
             l = prepend_zeros(&l, predelay);
             r = prepend_zeros(&r, predelay);
@@ -214,7 +214,10 @@ fn trim(buf: Vec<f64>, start: usize, end_drop: usize) -> Vec<f64> {
         return Vec::new();
     }
     let end = buf.len().saturating_sub(end_drop).max(start);
-    buf[start..end].to_vec()
+    #[expect(clippy::indexing_slicing, reason = "end = buf.len().saturating_sub(...).max(start), ensuring start <= end <= buf.len()")]
+    {
+        buf[start..end].to_vec()
+    }
 }
 
 /// Linear-interpolated resampling — stretches duration by `factor`.
@@ -223,22 +226,25 @@ fn stretch(buf: &[f64], factor: f64) -> Vec<f64> {
     if buf.is_empty() || factor <= 0.0 {
         return Vec::new();
     }
-    let new_len = num::f64_to_index(((buf.len() as f64) * factor));
+    let new_len = num::f64_to_index(num::count_to_f64(buf.len()) * factor);
     let mut out = Vec::with_capacity(new_len);
     let inv = 1.0 / factor;
     for i in 0..new_len {
         let src = num::count_to_f64(i) * inv;
         let idx = num::f64_to_index(src.floor());
         let frac = src - num::count_to_f64(idx);
-        let a = buf[idx.min(buf.len() - 1)];
-        let b = buf[(idx + 1).min(buf.len() - 1)];
-        out.push((b - a).mul_add(frac, a));
+        #[expect(clippy::indexing_slicing, reason = "idx is clamped to [0, buf.len()-1], which is always valid when buf.is_empty() is false")]
+        {
+            let a = buf[idx.min(buf.len().saturating_sub(1))];
+            let b = buf[idx.saturating_add(1).min(buf.len().saturating_sub(1))];
+            out.push((b - a).mul_add(frac, a));
+        }
     }
     out
 }
 
 fn apply_attack(buf: &mut [f64], attack_s: f64, sr: f64) {
-    let n = ((attack_s * sr) as usize).min(buf.len());
+    let n = num::f64_to_index(attack_s * sr).min(buf.len());
     apply_attack_samples(buf, n);
 }
 
@@ -257,17 +263,20 @@ fn apply_attack_samples(buf: &mut [f64], n: usize) {
 /// ramp-down (envelope) or truncate hard (gate). The buffer is
 /// truncated to the window so partition counts shrink with decay.
 fn apply_decay_window(buf: &mut Vec<f64>, frac: f64, gate: bool) {
-    let keep = (((buf.len() as f64) * frac) as usize).max(1);
+    let keep = num::f64_to_index(num::count_to_f64(buf.len()) * frac).max(1);
     buf.truncate(keep);
     if !gate {
         // Envelope: ramp the kept portion down to zero across its
         // second half so the shortening is smooth, not a cliff.
         let ramp_start = keep / 2;
-        let ramp_len = (keep - ramp_start).max(1);
-        #[allow(clippy::needless_range_loop)]
+        let ramp_len = keep.saturating_sub(ramp_start).max(1);
+        #[expect(clippy::needless_range_loop, reason = "loop accesses both index i and relative value (i - ramp_start) for gain calculation")]
         for i in ramp_start..keep {
-            let g = 1.0 - num::count_to_f64(i - ramp_start) / num::count_to_f64(ramp_len);
-            buf[i] *= g;
+            let g = 1.0 - num::count_to_f64(i.saturating_sub(ramp_start)) / num::count_to_f64(ramp_len);
+            #[expect(clippy::indexing_slicing, reason = "i ranges from ramp_start..keep, and buf was truncated to keep")]
+            {
+                buf[i] *= g;
+            }
         }
     }
 }
@@ -295,7 +304,7 @@ fn apply_decay_eq(x: &mut [f64], bands: &[(f64, f64); 2], sample_rate: f64) {
         return;
     }
     let n = x.len();
-    let chunk = ((sample_rate * 0.01) as usize).max(64);
+    let chunk = num::f64_to_index(sample_rate * 0.01).max(64);
     let (lo_f, lo_db) = bands[0];
     let (hi_f, hi_db) = bands[1];
     // One-pole crossover states.
@@ -305,10 +314,11 @@ fn apply_decay_eq(x: &mut [f64], bands: &[(f64, f64); 2], sample_rate: f64) {
     let mut lp_hi = 0.0;
     let mut i = 0;
     while i < n {
-        let end = (i + chunk).min(n);
+        let end = i.saturating_add(chunk).min(n);
         let t = num::count_to_f64(i) / num::count_to_f64(n);
         let g_lo = 10.0f64.powf(lo_db * t / 20.0);
         let g_hi = 10.0f64.powf(hi_db * t / 20.0);
+        #[expect(clippy::indexing_slicing, reason = "end = (i + chunk).min(n), and n = x.len(), so end <= n")]
         for v in &mut x[i..end] {
             let inp = *v;
             lp_lo = (1.0 - a_lo).mul_add(inp, a_lo * lp_lo);
@@ -363,7 +373,7 @@ mod tests {
 
     #[test]
     fn trim_shortens() {
-        let ir = IrAsset::from_mono((0..100).map(|i| f64::from(i)).collect(), 1000.0);
+        let ir = IrAsset::from_mono((0..100).map(f64::from).collect(), 1000.0);
         let t = IrTransforms {
             trim_start_s: 0.010,
             trim_end_s: 0.010,

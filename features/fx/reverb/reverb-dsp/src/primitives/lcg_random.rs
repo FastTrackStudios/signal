@@ -13,15 +13,21 @@ impl LcgRandom {
     const C: u64 = 1;
 
     #[must_use]
-    pub fn new(seed: u64) -> Self {
+    pub const fn new(seed: u64) -> Self {
         Self { x: seed }
     }
 
     #[inline]
-    pub fn next_uint(&mut self) -> u32 {
+    pub const fn next_uint(&mut self) -> u32 {
         let axc = Self::A.wrapping_mul(self.x).wrapping_add(Self::C);
         self.x = axc & 0xFFFF_FFFF;
-        self.x as u32
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::as_conversions,
+            reason = "self.x is masked to u32 range above"
+        )]
+        let result = self.x as u32;
+        result
     }
 
     #[inline]

@@ -3,6 +3,7 @@
 
 use std::f64::consts::PI;
 
+use dsp_core::num;
 use reverb_dsp::algorithm::{ConvolutionModParams, IrSlot, ReverbAlgorithm};
 use reverb_dsp::algorithms::convolution::Convolution;
 
@@ -11,7 +12,7 @@ const SR: f64 = 48000.0;
 /// Deterministic probe input: impulse + two sines (matches the
 /// pre-change baseline capture exactly).
 fn probe_input(i: usize) -> f64 {
-    let t = i as f64 / SR;
+    let t = num::count_to_f64(i) / SR;
     0.1f64.mul_add((2.0 * PI * 1337.0 * t).sin(), 0.25f64.mul_add((2.0 * PI * 440.0 * t).sin(), if i == 0 { 1.0 } else { 0.0 }))
 }
 
@@ -74,7 +75,7 @@ fn render(setup: impl Fn(&mut ConvolutionModParams), seconds: f64) -> (Vec<f64>,
     let mut p = ConvolutionModParams::default();
     setup(&mut p);
     c.set_conv_mod_params(&p, true);
-    let n = (SR * seconds) as usize;
+    let n = num::f64_to_index(SR * seconds);
     let mut out_l = Vec::with_capacity(n);
     let mut out_r = Vec::with_capacity(n);
     for i in 0..n {
@@ -141,13 +142,13 @@ fn duck_reduces_wet_during_burst() {
         };
         c.set_conv_mod_params(&p, true);
         // Prime the tail with an impulse, then a loud sustained burst.
-        let n = (SR * 1.5) as usize;
+        let n = num::f64_to_index(SR * 1.5);
         let mut burst_energy = 0.0;
         for i in 0..n {
             let x = if i < 100 {
                 0.8
             } else if i > 24000 {
-                0.9 * (2.0 * PI * 220.0 * i as f64 / SR).sin()
+                0.9 * (2.0 * PI * 220.0 * num::count_to_f64(i) / SR).sin()
             } else {
                 0.0
             };
@@ -193,7 +194,7 @@ fn predelay_shifts_arrival() {
     let base = arrival(0.0);
     let delayed = arrival(50.0);
     let shift = delayed as i64 - base as i64;
-    let expect = (0.050 * SR) as i64;
+    let expect = num::trunc_to_i64(0.050 * SR);
     assert!(
         (shift - expect).abs() < 256,
         "50 ms predelay should shift arrival ~{expect} samples, got {shift} (base {base}, delayed {delayed})"

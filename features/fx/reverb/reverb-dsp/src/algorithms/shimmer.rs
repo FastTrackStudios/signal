@@ -103,10 +103,10 @@ impl Shimmer {
     }
 
     fn make_fdn(sample_rate: f64, offset: bool) -> Fdn {
-        let base = if !offset {
-            [1049, 1327, 1559, 1801, 2069, 2297, 2557, 2803]
-        } else {
+        let base = if offset {
             [1117, 1381, 1613, 1873, 2131, 2371, 2617, 2879]
+        } else {
+            [1049, 1327, 1559, 1801, 2069, 2297, 2557, 2803]
         };
         let scale = sample_rate / 48000.0;
         let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index(f64::from(d) * scale)).collect();

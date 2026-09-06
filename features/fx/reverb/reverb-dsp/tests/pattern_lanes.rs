@@ -1,6 +1,7 @@
 //! Pattern-lane behavior on the reverb chain (fts-modulation lanes).
 
 use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::num;
 use fts_modulation::curves::CurveType;
 use fts_modulation::{Modulator, Point};
 use reverb_dsp::{AlgorithmType, ReverbChain};
@@ -90,7 +91,7 @@ fn send_lane_gates_the_reverb_input() {
         let n = cyc * 3;
         let mut l = vec![0.0f64; n];
         for i in 0..2000 {
-            l[note_start + i] = (core::f64::consts::TAU * 400.0 * i as f64 / SR).sin() * 0.6;
+            l[note_start + i] = (core::f64::consts::TAU * 400.0 * num::count_to_f64(i) / SR).sin() * 0.6;
         }
         let mut r = l.clone();
         c.process(&mut l, &mut r);
@@ -130,7 +131,7 @@ fn clear_tails_point_kills_the_wash() {
     let n = 96_000;
     let mut l = vec![0.0f64; n];
     for (i, s) in l.iter_mut().enumerate().take(4000) {
-        *s = (core::f64::consts::TAU * 350.0 * i as f64 / SR).sin() * 0.7;
+        *s = (core::f64::consts::TAU * 350.0 * num::count_to_f64(i) / SR).sin() * 0.7;
     }
     let mut r = l.clone();
     c.process(&mut l, &mut r);

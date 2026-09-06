@@ -12,7 +12,7 @@ pub struct Saturator {
 
 impl Saturator {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             drive: 0.0,
             drive_gain: 1.0,
@@ -29,7 +29,7 @@ impl Saturator {
     }
 
     #[must_use]
-    pub fn drive(&self) -> f64 {
+    pub const fn drive(&self) -> f64 {
         self.drive
     }
 

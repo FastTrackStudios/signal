@@ -167,15 +167,15 @@ impl Plate {
                 Allpass::new(id[3]),
             ],
             tank_a_ap1,
-            tank_a_delay1: DelayLine::new(ta_d1_len + 1),
+            tank_a_delay1: DelayLine::new(ta_d1_len.saturating_add(1)),
             tank_a_damp,
             tank_a_ap2,
-            tank_a_delay2: DelayLine::new(ta_d2_len + 1),
+            tank_a_delay2: DelayLine::new(ta_d2_len.saturating_add(1)),
             tank_b_ap1,
-            tank_b_delay1: DelayLine::new(tb_d1_len + 1),
+            tank_b_delay1: DelayLine::new(tb_d1_len.saturating_add(1)),
             tank_b_damp,
             tank_b_ap2,
-            tank_b_delay2: DelayLine::new(tb_d2_len + 1),
+            tank_b_delay2: DelayLine::new(tb_d2_len.saturating_add(1)),
             dc_a: DcBlocker::new(),
             dc_b: DcBlocker::new(),
             decay: 0.7,
@@ -256,7 +256,7 @@ impl ReverbAlgorithm for Plate {
             .set_freq(params.band_crossover_hz.max(80.0), self.sample_rate);
 
         // Input bandwidth (tone control)
-        let bw_freq = 4000.0 + params.damping.mul_add(-0.5, 1.0) * 12000.0;
+        let bw_freq = params.damping.mul_add(-0.5, 1.0).mul_add(12000.0, 4000.0);
         self.bandwidth.set_freq(bw_freq, self.sample_rate);
 
         // Diffusion → decay_diffusion_1 and input diffuser strength

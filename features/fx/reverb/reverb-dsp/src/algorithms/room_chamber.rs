@@ -89,15 +89,15 @@ impl RoomChamber {
         // inaudible while a feedback-gain model capped the decay near 0.18 s,
         // but the first thing you hear once a chamber can actually sustain
         // for seconds. Modal density scales with total loop length.
-        let base = if !offset {
-            [787, 967, 1153, 1373, 1607, 1861, 2129, 2411]
-        } else {
+        let base = if offset {
             [821, 1013, 1201, 1427, 1663, 1913, 2203, 2477]
+        } else {
+            [787, 967, 1153, 1373, 1607, 1861, 2129, 2411]
         };
         let scale = sample_rate / 48000.0 * size.max(0.05);
         let delays: Vec<usize> = base
             .iter()
-            .map(|&d| ((f64::from(d) * scale) as usize).max(4))
+            .map(|&d| num::f64_to_index(f64::from(d) * scale).max(4))
             .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.65);
@@ -239,27 +239,31 @@ impl RoomChamber {
         let base_delays = [41, 53, 67, 83, 101, 127, 151, 179];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.05);
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..FDN_MOD_AP_COUNT {
-            let delay = num::f64_to_index((f64::from(base_delays[i]) * scale));
-            self.mod_ap_l[i].sample_delay = delay.max(4);
-            self.mod_ap_l[i].feedback = 0.3;
-            self.mod_ap_l[i].set_modulation(
+        let &[d0, d1, d2, d3, d4, d5, d6, d7] = &base_delays;
+        for (i, (&d, (ap_l, ap_r))) in [d0, d1, d2, d3, d4, d5, d6, d7]
+            .iter()
+            .zip(self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut()))
+            .enumerate()
+        {
+            let delay = num::f64_to_index(f64::from(d) * scale);
+            ap_l.sample_delay = delay.max(4);
+            ap_l.feedback = 0.3;
+            ap_l.set_modulation(
                 num::count_to_f64(i).mul_add(0.12, 0.3),
                 modulation * self.sample_rate * 0.0002,
                 self.sample_rate,
             );
-            self.mod_ap_l[i].set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
+            ap_l.set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
 
-            let delay_r = num::f64_to_index(((f64::from(base_delays[i]) + 7.0) * scale));
-            self.mod_ap_r[i].sample_delay = delay_r.max(4);
-            self.mod_ap_r[i].feedback = 0.3;
-            self.mod_ap_r[i].set_modulation(
+            let delay_r = num::f64_to_index((f64::from(d) + 7.0) * scale);
+            ap_r.sample_delay = delay_r.max(4);
+            ap_r.feedback = 0.3;
+            ap_r.set_modulation(
                 num::count_to_f64(i).mul_add(0.1, 0.35),
                 modulation * self.sample_rate * 0.0002,
                 self.sample_rate,
             );
-            self.mod_ap_r[i].set_phase((num::count_to_f64(i) + 0.5) / num::count_to_f64(FDN_MOD_AP_COUNT));
+            ap_r.set_phase((num::count_to_f64(i) + 0.5) / num::count_to_f64(FDN_MOD_AP_COUNT));
         }
     }
 
@@ -438,9 +442,9 @@ impl ReverbAlgorithm for RoomChamber {
         let mut late_l = self.fdn_l.tick(diff_l);
         let mut late_r = self.fdn_r.tick(diff_r);
 
-        for i in 0..FDN_MOD_AP_COUNT {
-            late_l = self.mod_ap_l[i].tick(late_l);
-            late_r = self.mod_ap_r[i].tick(late_r);
+        for (ap_l, ap_r) in self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut()) {
+            late_l = ap_l.tick(late_l);
+            late_r = ap_r.tick(late_r);
         }
 
         late_l = self.tone_lp_l.tick(late_l) * self.late_level;

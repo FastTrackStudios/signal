@@ -6,9 +6,16 @@
 //!
 //! Supports N = power of 2 (2, 4, 8, 16).
 
+use dsp_core::num;
+
 /// In-place Hadamard transform with normalization.
 ///
 /// `channels.len()` must be a power of 2.
+#[expect(
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "butterfly operations guaranteed safe by power-of-2 loop invariants"
+)]
 #[inline]
 pub fn mix(channels: &mut [f64]) {
     let n = channels.len();
@@ -18,18 +25,18 @@ pub fn mix(channels: &mut [f64]) {
     let mut half = n;
     while half > 1 {
         half >>= 1;
-        for i in (0..n).step_by(half * 2) {
-            for j in i..i + half {
+        for i in (0..n).step_by(half.saturating_mul(2)) {
+            for j in i..i.saturating_add(half) {
                 let a = channels[j];
-                let b = channels[j + half];
+                let b = channels[j.saturating_add(half)];
                 channels[j] = a + b;
-                channels[j + half] = a - b;
+                channels[j.saturating_add(half)] = a - b;
             }
         }
     }
 
     // Normalize to preserve energy
-    let scale = 1.0 / (n as f64).sqrt();
+    let scale = 1.0 / num::count_to_f64(n).sqrt();
     for ch in channels.iter_mut() {
         *ch *= scale;
     }

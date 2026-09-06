@@ -16,6 +16,7 @@
 
 use std::f64::consts::PI;
 
+use dsp_core::num;
 use realfft::RealFftPlanner;
 use reverb_dsp::algorithm::{AlgorithmParams, AlgorithmType};
 use reverb_dsp::algorithms::create;
@@ -63,13 +64,13 @@ fn render_ir(alg: AlgorithmType, variant: usize) -> Ir {
         peak = peak.max(e);
         window_energy += e;
         if n >= window {
-            let l0 = left[n - window];
-            let r0 = right[n - window];
+            let l0 = left[n.saturating_sub(window)];
+            let r0 = right[n.saturating_sub(window)];
             window_energy -= l0.mul_add(l0, r0 * r0);
             window_energy = window_energy.max(0.0);
         }
         if n >= MIN_LEN && peak > 0.0 {
-            let rel = (window_energy / window as f64) / peak;
+            let rel = (window_energy / num::count_to_f64(window)) / peak;
             if rel < 1e-9 {
                 break; // < -90 dB
             }
@@ -119,7 +120,7 @@ fn rt60(left: &[f64], right: &[f64]) -> (f64, bool) {
     }
     match (i5, i35) {
         (Some(a), Some(b)) if b > a => {
-            let slope_db_per_s = 30.0 / ((b - a) as f64 / SR);
+            let slope_db_per_s = 30.0 / (num::count_to_f64(b.saturating_sub(a)) / SR);
             (60.0 / slope_db_per_s, i60.is_some())
         }
         _ => (f64::INFINITY, false),
@@ -161,28 +162,28 @@ fn echo_density(left: &[f64], right: &[f64]) -> (f64, f64) {
 
     let mut peak = 0.0f64;
     let mut dense_at = f64::INFINITY;
-    let mut consecutive = 0;
+    let mut consecutive = 0_usize;
 
-    let mut pos = 0;
-    while pos + WIN <= n {
-        let w = &mono[pos..pos + WIN];
+    let mut pos = 0_usize;
+    while pos.saturating_add(WIN) <= n {
+        let w = &mono[pos..pos.saturating_add(WIN)];
         let energy: f64 = w.iter().map(|x| x * x).sum();
         if energy < 1e-24 {
             // Silent window — onset pre-delay or a decayed tail; either
             // way it carries no density information.
-            pos += HOP;
+            pos = pos.saturating_add(HOP);
             consecutive = 0;
             continue;
         }
-        let sigma = (energy / WIN as f64).sqrt();
+        let sigma = (energy / num::count_to_f64(WIN)).sqrt();
         let outside = w.iter().filter(|x| x.abs() > sigma).count() as f64;
-        let density = (outside / WIN as f64) / GAUSSIAN_FRACTION;
+        let density = (outside / num::count_to_f64(WIN)) / GAUSSIAN_FRACTION;
         peak = peak.max(density);
 
         if density >= 0.9 {
-            consecutive += 1;
+            consecutive = consecutive.saturating_add(1);
             if consecutive == 3 && dense_at.is_infinite() {
-                dense_at = (pos + WIN / 2) as f64 / SR;
+                dense_at = num::count_to_f64(pos.saturating_add(WIN / 2)) / SR;
             }
         } else {
             consecutive = 0;
@@ -190,7 +191,7 @@ fn echo_density(left: &[f64], right: &[f64]) -> (f64, f64) {
             // early, keep the first sustained mark anyway (profiles
             // naturally fluctuate deep in the tail as SNR drops).
         }
-        pos += HOP;
+        pos = pos.saturating_add(HOP);
     }
     (dense_at, peak)
 }
@@ -203,13 +204,13 @@ fn echo_density(left: &[f64], right: &[f64]) -> (f64, f64) {
 fn welch_spectrum(x: &[f64], start: usize, end: usize) -> Vec<f64> {
     const NFFT: usize = 8192;
     let end = end.min(x.len());
-    if end <= start + NFFT {
+    if end <= start.saturating_add(NFFT) {
         return vec![];
     }
     let mut planner = RealFftPlanner::<f64>::new();
     let fft = planner.plan_fft_forward(NFFT);
     let hann: Vec<f64> = (0..NFFT)
-        .map(|i| 0.5f64.mul_add(-(2.0 * PI * i as f64 / NFFT as f64).cos(), 0.5))
+        .map(|i| 0.5f64.mul_add(-(2.0 * PI * num::count_to_f64(i) / num::count_to_f64(NFFT)).cos(), 0.5))
         .collect();
 
     let mut acc = vec![0.0f64; NFFT / 2 + 1];
@@ -217,22 +218,25 @@ fn welch_spectrum(x: &[f64], start: usize, end: usize) -> Vec<f64> {
     let mut pos = start;
     let mut buf = fft.make_input_vec();
     let mut spec = fft.make_output_vec();
-    while pos + NFFT <= end {
+    while pos.saturating_add(NFFT) <= end {
         for i in 0..NFFT {
-            buf[i] = x[pos + i] * hann[i];
+            buf[i] = x[pos.saturating_add(i)] * hann[i];
         }
-        fft.process(&mut buf, &mut spec).unwrap();
+        #[expect(clippy::unwrap_used, reason = "FFT plan is valid for valid NFFT")]
+        {
+            fft.process(&mut buf, &mut spec).unwrap();
+        }
         for (a, s) in acc.iter_mut().zip(spec.iter()) {
             *a += s.norm_sqr();
         }
-        frames += 1;
-        pos += NFFT / 2;
+        frames = frames.saturating_add(1);
+        pos = pos.saturating_add(NFFT / 2);
     }
     if frames == 0 {
         return vec![];
     }
     for a in &mut acc {
-        *a /= frames as f64;
+        *a /= num::count_to_f64(frames);
     }
     acc
 }
@@ -241,27 +245,33 @@ fn welch_spectrum(x: &[f64], start: usize, end: usize) -> Vec<f64> {
 /// and the frequency it occurs at. High values (> ~12 dB) mean an
 /// isolated ringing mode (metallic tail).
 fn worst_mode_db(spectrum: &[f64]) -> (f64, f64) {
+    const NFFT: usize = 8192;
     if spectrum.is_empty() {
         return (0.0, 0.0);
     }
-    const NFFT: usize = 8192;
-    let bin_hz = SR / NFFT as f64;
-    let lo = (200.0 / bin_hz) as usize;
-    let hi = ((4000.0 / bin_hz) as usize).min(spectrum.len() - 1);
+    let bin_hz = SR / num::count_to_f64(NFFT);
+    let lo = num::f64_to_index(200.0 / bin_hz);
+    let hi = num::f64_to_index(4000.0 / bin_hz).min(spectrum.len().saturating_sub(1));
 
     let mut worst = 0.0f64;
     let mut worst_hz = 0.0f64;
     for i in lo..=hi {
         let a = i.saturating_sub(50).max(1);
-        let b = (i + 50).min(spectrum.len() - 1);
-        let mut local: Vec<f64> = spectrum[a..=b].to_vec();
-        local.sort_by(|x, y| x.partial_cmp(y).unwrap());
-        let median = local[local.len() / 2];
-        if median > 0.0 && spectrum[i] > 0.0 {
-            let db = 10.0 * (spectrum[i] / median).log10();
-            if db > worst {
-                worst = db;
-                worst_hz = i as f64 * bin_hz;
+        let b = i.saturating_add(50).min(spectrum.len().saturating_sub(1));
+        let mut local: Vec<f64> = spectrum.get(a..=b).unwrap_or(&[]).to_vec();
+        #[expect(clippy::unwrap_used, reason = "partial_cmp on f64 only returns None for NaN, which should not occur in spectrum values")]
+        {
+            local.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        }
+        if let Some(&median) = local.get(local.len() / 2) {
+            if median > 0.0 && spectrum.get(i).map_or(false, |&v| v > 0.0) {
+                if let Some(&spec_i) = spectrum.get(i) {
+                    let db = 10.0 * (spec_i / median).log10();
+                    if db > worst {
+                        worst = db;
+                        worst_hz = num::count_to_f64(i) * bin_hz;
+                    }
+                }
             }
         }
     }
@@ -279,12 +289,17 @@ fn subsonic_ratio(left: &[f64], right: &[f64]) -> f64 {
     let mut planner = RealFftPlanner::<f64>::new();
     let fft = planner.plan_fft_forward(nfft);
     let mut buf = vec![0.0; nfft];
-    buf[..n].copy_from_slice(&mono);
+    if let Some(slice) = buf.get_mut(..n) {
+        slice.copy_from_slice(&mono);
+    }
     let mut spec = fft.make_output_vec();
-    fft.process(&mut buf, &mut spec).unwrap();
-    let bin_hz = SR / nfft as f64;
-    let cutoff_bin = ((20.0 / bin_hz).ceil() as usize).min(spec.len());
-    let low: f64 = spec[..cutoff_bin].iter().map(realfft::num_complex::Complex::norm_sqr).sum();
+    #[expect(clippy::unwrap_used, reason = "FFT plan is valid for valid nfft")]
+    {
+        fft.process(&mut buf, &mut spec).unwrap();
+    }
+    let bin_hz = SR / num::count_to_f64(nfft);
+    let cutoff_bin = num::f64_to_index((20.0 / bin_hz).ceil()).min(spec.len());
+    let low: f64 = spec.get(..cutoff_bin).unwrap_or(&[]).iter().map(realfft::num_complex::Complex::norm_sqr).sum();
     let total: f64 = spec.iter().map(realfft::num_complex::Complex::norm_sqr).sum();
     if total > 0.0 {
         low / total
@@ -320,7 +335,7 @@ fn edc_crossing(left: &[f64], right: &[f64], db: f64) -> Option<usize> {
 /// Early Decay Time: RT extrapolated from the 0 → −10 dB EDC segment
 /// (ISO 3382). Tracks PERCEIVED reverberance better than T30 — the
 /// `BigSky` dial-in metric for "how long does it feel".
-#[expect(dead_code)]
+#[expect(dead_code, reason = "Used in test that is currently disabled")]
 fn edt(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
     let n = left.len().min(right.len());
     let mut edc = vec![0.0f64; n];
@@ -336,14 +351,14 @@ fn edt(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
     let t10 = edc
         .iter()
         .position(|&e| 10.0 * (e / total).log10() <= -10.0)?;
-    Some(6.0 * t10 as f64 / sample_rate)
+    Some(6.0 * num::count_to_f64(t10) / sample_rate)
 }
 
 /// Clarity index `C_te` (dB): early-vs-late energy split at `te` seconds
 /// (0.050 for speech C50, 0.080 for music C80).
-#[expect(dead_code)]
+#[expect(dead_code, reason = "Used in test that is currently disabled")]
 fn clarity_db(left: &[f64], right: &[f64], te: f64, sample_rate: f64) -> f64 {
-    let split = (te * sample_rate) as usize;
+    let split = num::f64_to_index(te * sample_rate);
     let n = left.len().min(right.len());
     let energy = |a: usize, b: usize| -> f64 {
         (a..b.min(n))
@@ -357,7 +372,7 @@ fn clarity_db(left: &[f64], right: &[f64], te: f64, sample_rate: f64) -> f64 {
 
 /// Spectral centroid (Hz) of the late tail — the decay-brightness
 /// trajectory metric for damping dial-in.
-#[expect(dead_code)]
+#[expect(dead_code, reason = "Used in test that is currently disabled")]
 fn late_centroid(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
     let (start, end) = tail_window(left, right)?;
     let spec = welch_spectrum(left, start, end);
@@ -365,7 +380,7 @@ fn late_centroid(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
     let mut num = 0.0;
     let mut den = 0.0;
     for (k, &p) in spec.iter().enumerate() {
-        let f = k as f64 * sample_rate / (2.0 * bins as f64);
+        let f = num::count_to_f64(k) * sample_rate / (2.0 * num::count_to_f64(bins));
         num += f * p;
         den += p;
     }
@@ -375,7 +390,7 @@ fn late_centroid(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
 fn tail_window(left: &[f64], right: &[f64]) -> Option<(usize, usize)> {
     let start = edc_crossing(left, right, -15.0)?;
     let end = edc_crossing(left, right, -50.0).unwrap_or(left.len());
-    if end > start + 2400 {
+    if end > start.saturating_add(2400) {
         Some((start, end))
     } else {
         None // less than 50 ms of usable tail — skip tail metrics
@@ -420,7 +435,7 @@ fn lr_correlation(left: &[f64], right: &[f64]) -> f64 {
 struct Report {
     name: String,
     rt60_s: f64,
-    #[expect(dead_code)]
+    #[expect(dead_code, reason = "Used in test that is currently disabled")]
     reached_60: bool,
     rt_250: f64,
     rt_1k: f64,
@@ -512,7 +527,7 @@ const fn correlation_exempt(alg: AlgorithmType) -> bool {
 
 /// Temporary probe: localize Room/Chamber's subsonic energy in frequency.
 #[test]
-#[ignore]
+#[ignore = "temporary probe"]
 fn probe_chamber() {
     for (alg, v, label) in [
         (AlgorithmType::Room, 1usize, "chamber"),
@@ -533,12 +548,15 @@ fn probe_chamber() {
         let mut buf = vec![0.0; nfft];
         buf[..n].copy_from_slice(&mono);
         let mut spec = fft.make_output_vec();
-        fft.process(&mut buf, &mut spec).unwrap();
-        let bin_hz = SR / nfft as f64;
+        #[expect(clippy::unwrap_used, reason = "FFT plan is valid for valid nfft")]
+        {
+            fft.process(&mut buf, &mut spec).unwrap();
+        }
+        let bin_hz = SR / num::count_to_f64(nfft);
         let band = |lo: f64, hi: f64| -> f64 {
-            let a = (lo / bin_hz) as usize;
-            let b = ((hi / bin_hz) as usize).min(spec.len() - 1);
-            spec[a..=b].iter().map(realfft::num_complex::Complex::norm_sqr).sum::<f64>()
+            let a = num::f64_to_index(lo / bin_hz);
+            let b = num::f64_to_index(hi / bin_hz).min(spec.len().saturating_sub(1));
+            spec.get(a..=b).unwrap_or(&[]).iter().map(realfft::num_complex::Complex::norm_sqr).sum::<f64>()
         };
         let total = band(0.0, SR / 2.0);
         for (lo, hi) in [

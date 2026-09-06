@@ -44,7 +44,7 @@ impl LpComb {
         }
     }
 
-    fn set_feedback(&mut self, fb: f64) {
+    const fn set_feedback(&mut self, fb: f64) {
         self.feedback = fb;
     }
 
@@ -63,10 +63,7 @@ impl LpComb {
         let out = self.buffer[self.idx];
         self.filterstore = flush(out.mul_add(self.damp2, self.filterstore * self.damp1));
         self.buffer[self.idx] = self.filterstore.mul_add(self.feedback, input);
-        self.idx += 1;
-        if self.idx >= self.buffer.len() {
-            self.idx = 0;
-        }
+        self.idx = (self.idx + 1) % self.buffer.len();
         out
     }
 }
@@ -95,10 +92,7 @@ impl AllpassF {
         let bufout = self.buffer[self.idx];
         let output = -input + bufout;
         self.buffer[self.idx] = bufout.mul_add(self.feedback, input);
-        self.idx += 1;
-        if self.idx >= self.buffer.len() {
-            self.idx = 0;
-        }
+        self.idx = (self.idx + 1) % self.buffer.len();
         output
     }
 }
@@ -120,14 +114,14 @@ impl FreeVerb {
         let _ = sample_rate;
         let scale = sample_rate / 44100.0;
         let comb_l =
-            std::array::from_fn(|i| LpComb::new((num::count_to_f64(COMB_TUNINGS[i]) * scale) as usize));
+            std::array::from_fn(|i| LpComb::new(num::f64_to_index(num::count_to_f64(COMB_TUNINGS[i]) * scale)));
         let comb_r = std::array::from_fn(|i| {
-            LpComb::new((num::count_to_f64(COMB_TUNINGS[i] + STEREO_SPREAD) * scale) as usize)
+            LpComb::new(num::f64_to_index(num::count_to_f64(COMB_TUNINGS[i].saturating_add(STEREO_SPREAD)) * scale))
         });
         let ap_l =
-            std::array::from_fn(|i| AllpassF::new((num::count_to_f64(ALLPASS_TUNINGS[i]) * scale) as usize));
+            std::array::from_fn(|i| AllpassF::new(num::f64_to_index(num::count_to_f64(ALLPASS_TUNINGS[i]) * scale)));
         let ap_r = std::array::from_fn(|i| {
-            AllpassF::new((num::count_to_f64(ALLPASS_TUNINGS[i] + STEREO_SPREAD) * scale) as usize)
+            AllpassF::new(num::f64_to_index(num::count_to_f64(ALLPASS_TUNINGS[i].saturating_add(STEREO_SPREAD)) * scale))
         });
         Self {
             dc_in: DcBlocker::new(),
@@ -187,13 +181,17 @@ impl ReverbAlgorithm for FreeVerb {
         let mut out_l = 0.0;
         let mut out_r = 0.0;
 
-        for i in 0..8 {
-            out_l += self.combs_l[i].tick(input);
-            out_r += self.combs_r[i].tick(input);
+        for c in &mut self.combs_l {
+            out_l += c.tick(input);
         }
-        for i in 0..4 {
-            out_l = self.allpass_l[i].tick(out_l);
-            out_r = self.allpass_r[i].tick(out_r);
+        for c in &mut self.combs_r {
+            out_r += c.tick(input);
+        }
+        for a in &mut self.allpass_l {
+            out_l = a.tick(out_l);
+        }
+        for a in &mut self.allpass_r {
+            out_r = a.tick(out_r);
         }
 
         (out_l, out_r)

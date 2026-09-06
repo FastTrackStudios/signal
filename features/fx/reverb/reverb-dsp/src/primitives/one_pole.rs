@@ -84,7 +84,7 @@ impl Lp1 {
         self.output
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.output = 0.0;
     }
 }
@@ -164,7 +164,7 @@ impl Hp1 {
         self.output
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.lp_out = 0.0;
         self.output = 0.0;
     }

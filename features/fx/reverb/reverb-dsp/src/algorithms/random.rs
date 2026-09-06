@@ -21,6 +21,8 @@
 //! time model at all, so a translated preset could not even be tuned to the
 //! right length.
 
+use dsp_core::num;
+
 use crate::algorithm::{
     decay_to_t60, t60_shelf_targets, AlgorithmParams, ReverbAlgorithm, RANDOM_T60,
 };
@@ -74,15 +76,15 @@ impl Random {
         // Mutually prime, and deliberately not harmonically related — with
         // the lines wandering, any near-common factor would drift in and out
         // of alignment audibly.
-        let base = if !offset {
-            [1123, 1483, 1801, 2179, 2557, 2939, 3313, 3671]
-        } else {
+        let base = if offset {
             [1187, 1531, 1867, 2237, 2617, 3001, 3391, 3739]
+        } else {
+            [1123, 1483, 1801, 2179, 2557, 2939, 3313, 3671]
         };
         let scale = sample_rate / 48_000.0 * size.max(0.2);
         let delays: Vec<usize> = base
             .iter()
-            .map(|&d| ((f64::from(d) * scale) as usize).max(4))
+            .map(|&d| num::f64_to_index(f64::from(d) * scale).max(4))
             .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_damping(9_000.0, sample_rate);

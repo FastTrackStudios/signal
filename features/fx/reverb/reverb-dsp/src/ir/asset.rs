@@ -89,7 +89,7 @@ impl IrAsset {
     }
 
     #[must_use]
-    pub fn num_channels(&self) -> usize {
+    pub const fn num_channels(&self) -> usize {
         self.channels.len()
     }
 

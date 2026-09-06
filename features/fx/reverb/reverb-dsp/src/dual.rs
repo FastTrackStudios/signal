@@ -44,7 +44,7 @@ impl DualRouting {
     pub const COUNT: usize = 6;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Series12,
             2 => Self::Series21,
@@ -56,7 +56,7 @@ impl DualRouting {
     }
 
     #[must_use]
-    pub fn to_index(self) -> usize {
+    pub const fn to_index(self) -> usize {
         match self {
             Self::Single => 0,
             Self::Series12 => 1,
@@ -68,7 +68,7 @@ impl DualRouting {
     }
 
     #[must_use]
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Single => "Single",
             Self::Series12 => "Series 1>2",
@@ -124,7 +124,7 @@ impl DualReverb {
     }
 
     /// Max samples per inner chunk (scratch capacity).
-    fn chunk_capacity(&self) -> usize {
+    const fn chunk_capacity(&self) -> usize {
         self.dry_l.len()
     }
 
@@ -143,13 +143,16 @@ impl DualReverb {
                 self.a.process(left, right);
             }
             DualRouting::Parallel => {
-                self.dry_l[..n].copy_from_slice(left);
-                self.dry_r[..n].copy_from_slice(right);
-                self.b_l[..n].copy_from_slice(left);
-                self.b_r[..n].copy_from_slice(right);
+                self.dry_l.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(left);
+                self.dry_r.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(right);
+                self.b_l.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(left);
+                self.b_r.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(right);
 
                 self.a.process(left, right);
-                self.b.process(&mut self.b_l[..n], &mut self.b_r[..n]);
+                self.b.process(
+                    self.b_l.get_mut(..n).expect("n <= chunk capacity"),
+                    self.b_r.get_mut(..n).expect("n <= chunk capacity"),
+                );
 
                 // Sum of both chains' mix laws, dry counted once:
                 // out = dry·(1 − mixA − mixB) + wetA·mixA + wetB·mixB.
@@ -159,11 +162,14 @@ impl DualReverb {
                 }
             }
             DualRouting::Split | DualRouting::SplitSwapped => {
-                self.b_l[..n].copy_from_slice(left);
-                self.b_r[..n].copy_from_slice(right);
+                self.b_l.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(left);
+                self.b_r.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(right);
 
                 self.a.process(left, right);
-                self.b.process(&mut self.b_l[..n], &mut self.b_r[..n]);
+                self.b.process(
+                    self.b_l.get_mut(..n).expect("n <= chunk capacity"),
+                    self.b_r.get_mut(..n).expect("n <= chunk capacity"),
+                );
 
                 let swapped = self.routing == DualRouting::SplitSwapped;
                 for i in 0..n {
@@ -212,8 +218,11 @@ impl Processor for DualReverb {
         let cap = self.chunk_capacity();
         let mut pos = 0;
         while pos < n {
-            let end = (pos + cap).min(n);
-            let (l, r) = (&mut left[pos..end], &mut right[pos..end]);
+            let end = pos.saturating_add(cap).min(n);
+            let (l, r) = (
+                left.get_mut(pos..end).expect("pos..end within bounds"),
+                right.get_mut(pos..end).expect("pos..end within bounds"),
+            );
             self.process_chunk(l, r);
             pos = end;
         }
@@ -411,10 +420,10 @@ mod tests {
         d.a.params.decay = 0.9;
         d.a.trem_depth = 0.4;
         d.copy_params(true);
-        assert_eq!(d.b.mix, 0.77);
-        assert_eq!(d.b.pan, -0.5);
-        assert_eq!(d.b.params.decay, 0.9);
-        assert_eq!(d.b.trem_depth, 0.4);
+        assert_eq!(d.b.mix.to_bits(), 0.77_f64.to_bits());
+        assert_eq!(d.b.pan.to_bits(), (-0.5_f64).to_bits());
+        assert_eq!(d.b.params.decay.to_bits(), 0.9_f64.to_bits());
+        assert_eq!(d.b.trem_depth.to_bits(), 0.4_f64.to_bits());
         assert_eq!(
             d.b.algorithm_type(),
             AlgorithmType::Hall,

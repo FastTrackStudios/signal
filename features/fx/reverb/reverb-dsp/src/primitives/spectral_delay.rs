@@ -60,23 +60,31 @@ impl StretchedAllpass {
     fn tick(&mut self, input: f64, a: f64) -> f64 {
         // Read x[n-k] and y[n-k] from circular buffer
         let read_idx = if self.idx >= self.k {
-            self.idx - self.k
+            self.idx.saturating_sub(self.k)
         } else {
-            self.idx + MAX_STRETCH - self.k
+            self.idx.saturating_add(MAX_STRETCH).saturating_sub(self.k)
         };
 
+        #[expect(clippy::indexing_slicing, reason = "read_idx computed from circular buffer invariant: idx in [0, MAX_STRETCH), k in [1, MAX_STRETCH)")]
         let x_delayed = self.x_buf[read_idx];
+        #[expect(clippy::indexing_slicing, reason = "read_idx computed from circular buffer invariant: idx in [0, MAX_STRETCH), k in [1, MAX_STRETCH)")]
         let y_delayed = self.y_buf[read_idx];
 
         // y[n] = a·x[n] + x[n-k] - a·y[n-k]
-        let output = a.mul_add(-y_delayed, a * input + x_delayed);
+        let output = a.mul_add(-y_delayed, a.mul_add(input, x_delayed));
 
         // Store current input and output
-        self.x_buf[self.idx] = input;
-        self.y_buf[self.idx] = output;
+        #[expect(clippy::indexing_slicing, reason = "self.idx guaranteed in [0, MAX_STRETCH) by wrapping logic")]
+        {
+            self.x_buf[self.idx] = input;
+        }
+        #[expect(clippy::indexing_slicing, reason = "self.idx guaranteed in [0, MAX_STRETCH) by wrapping logic")]
+        {
+            self.y_buf[self.idx] = output;
+        }
 
         // Advance circular index
-        self.idx += 1;
+        self.idx = self.idx.saturating_add(1);
         if self.idx >= MAX_STRETCH {
             self.idx = 0;
         }
@@ -130,8 +138,8 @@ impl SpectralDelay {
         let a = self.coefficient;
         let n = self.active_sections.min(self.sections.len());
         let mut x = input;
-        for i in 0..n {
-            x = self.sections[i].tick(x, a);
+        for section in self.sections[..n].iter_mut() {
+            x = section.tick(x, a);
         }
         x
     }

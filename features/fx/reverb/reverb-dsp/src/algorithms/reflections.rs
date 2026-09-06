@@ -67,9 +67,26 @@ impl Reflections {
         for (i, (&delay, &gain)) in base_delays.iter().zip(base_gains.iter()).enumerate() {
             let d = num::f64_to_index(delay * scale * room_scale);
             // Offset L/R timing based on source position
+            #[expect(
+                clippy::as_conversions,
+                clippy::cast_possible_truncation,
+                reason = "isize conversions not in dsp_core::num"
+            )]
             let lr_offset = (offset * delay * 0.15 * scale) as isize;
-            let d_l = (d as isize + lr_offset).max(1) as usize;
-            let d_r = (d as isize - lr_offset).max(1) as usize;
+            #[expect(
+                clippy::as_conversions,
+                clippy::cast_possible_wrap,
+                clippy::cast_sign_loss,
+                reason = "isize conversions not in dsp_core::num"
+            )]
+            let d_l = (d as isize).saturating_add(lr_offset).max(1) as usize;
+            #[expect(
+                clippy::as_conversions,
+                clippy::cast_possible_wrap,
+                clippy::cast_sign_loss,
+                reason = "isize conversions not in dsp_core::num"
+            )]
+            let d_r = (d as isize).saturating_sub(lr_offset).max(1) as usize;
 
             // Alternate polarity: an all-positive spike train has a net
             // positive area = subsonic thump (6.5% of IR energy < 20 Hz
@@ -95,14 +112,34 @@ impl Reflections {
             // Alternate polarity here too — 32 same-sign taps summed to
             // ~3x net DC area (the bulk of the subsonic energy).
             let gain = 0.15 * (0.97_f64).powi(num::count_to_i32(i)) * if i % 2 == 0 { 1.0 } else { -1.0 };
+            #[expect(
+                clippy::as_conversions,
+                clippy::cast_possible_truncation,
+                reason = "isize conversions not in dsp_core::num"
+            )]
             let lr_offset = ((rng.next_bipolar()) * delay * 0.1 * scale) as isize;
 
+            #[expect(
+                clippy::as_conversions,
+                clippy::cast_possible_wrap,
+                clippy::cast_sign_loss,
+                reason = "isize conversions not in dsp_core::num"
+            )]
+            let delay_l = (d as isize).saturating_add(lr_offset).max(1) as usize;
             taps_l.push(Tap {
-                delay_samples: (d as isize + lr_offset).max(1) as usize,
+                delay_samples: delay_l,
                 gain,
             });
+
+            #[expect(
+                clippy::as_conversions,
+                clippy::cast_possible_wrap,
+                clippy::cast_sign_loss,
+                reason = "isize conversions not in dsp_core::num"
+            )]
+            let delay_r = (d as isize).saturating_sub(lr_offset).max(1) as usize;
             taps_r.push(Tap {
-                delay_samples: (d as isize - lr_offset).max(1) as usize,
+                delay_samples: delay_r,
                 gain,
             });
         }

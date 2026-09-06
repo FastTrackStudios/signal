@@ -70,12 +70,12 @@ impl ModulatedDelay {
         self.current_delay += self.delay_step;
 
         self.buffer.write(input);
-        let max_delay = num::count_to_f64((self.buffer.len() - 4));
+        let max_delay = num::count_to_f64(self.buffer.len().saturating_sub(4));
         let output = self
             .buffer
             .read_cubic(self.current_delay.clamp(1.0, max_delay));
 
-        self.samples_processed += 1;
+        self.samples_processed = self.samples_processed.saturating_add(1);
         output
     }
 

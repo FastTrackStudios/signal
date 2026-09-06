@@ -60,6 +60,7 @@ pub struct PlateProgenitor {
 
 impl PlateProgenitor {
     #[must_use]
+    #[expect(clippy::too_many_lines, reason = "large constructor initializes many DSP components")]
     pub fn new(sample_rate: f64) -> Self {
         let s = sample_rate / 29761.0;
 
@@ -166,20 +167,20 @@ impl PlateProgenitor {
             input_diffuser,
             tank_a_ap1,
             tank_a_ap2,
-            tank_a_delay1: DelayLine::new(ta_d1_len + 1),
+            tank_a_delay1: DelayLine::new(ta_d1_len.saturating_add(1)),
             tank_a_damp_lp,
             tank_a_damp_hp,
             tank_a_ap3,
             tank_a_ap4,
-            tank_a_delay2: DelayLine::new(ta_d2_len + 1),
+            tank_a_delay2: DelayLine::new(ta_d2_len.saturating_add(1)),
             tank_b_ap1,
             tank_b_ap2,
-            tank_b_delay1: DelayLine::new(tb_d1_len + 1),
+            tank_b_delay1: DelayLine::new(tb_d1_len.saturating_add(1)),
             tank_b_damp_lp,
             tank_b_damp_hp,
             tank_b_ap3,
             tank_b_ap4,
-            tank_b_delay2: DelayLine::new(tb_d2_len + 1),
+            tank_b_delay2: DelayLine::new(tb_d2_len.saturating_add(1)),
             dc_a: DcBlocker::new(),
             dc_b: DcBlocker::new(),
             decay: 0.7,
@@ -237,7 +238,7 @@ impl ReverbAlgorithm for PlateProgenitor {
         self.bass_mult = params.extra_a.mul_add(-0.3, 1.0); // 1.0 to 0.7
 
         // Input bandwidth
-        let bw_freq = 4000.0 + params.damping.mul_add(-0.5, 1.0) * 12000.0;
+        let bw_freq = params.damping.mul_add(-0.5, 1.0).mul_add(12000.0, 4000.0);
         self.bandwidth.set_freq(bw_freq, self.sample_rate);
 
         // Diffusion — 4 AP stages allow finer control

@@ -19,7 +19,7 @@ use crate::primitives::lcg_random::random_buffer_cross_seed;
 use crate::primitives::modulated_delay::ModulatedDelay;
 use crate::primitives::multitap_delay::MultitapDelay;
 use crate::primitives::one_pole::{Hp1, Lp1};
-use crate::primitives::response_curves::*;
+use crate::primitives::response_curves::{resp4oct, resp1dec, resp2dec, resp3dec, resp3oct, db2gain};
 use crate::primitives::reverb_line::ReverbLine;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 
@@ -411,7 +411,7 @@ impl CloudChannel {
     }
 
     fn per_line_gain(&self) -> f64 {
-        1.0 / (self.line_count.max(1) as f64).sqrt()
+        1.0 / num::count_to_f64(self.line_count.max(1)).sqrt()
     }
 
     /// Exact port of `ReverbChannel::UpdateLines`.
@@ -433,10 +433,10 @@ impl CloudChannel {
         for i in 0..TOTAL_LINE_COUNT {
             let mod_amount = line_mod_amount * 0.3f64.mul_add(seeds[i], 0.7);
             let mod_rate =
-                line_mod_rate * 0.3f64.mul_add(seeds[TOTAL_LINE_COUNT + i], 0.7) / self.sample_rate;
+                line_mod_rate * 0.3f64.mul_add(seeds[TOTAL_LINE_COUNT.saturating_add(i)], 0.7) / self.sample_rate;
 
             let mut delay_samples =
-                1.0f64.mul_add(seeds[TOTAL_LINE_COUNT * 2 + i], 0.5) * line_delay_samples;
+                1.0f64.mul_add(seeds[TOTAL_LINE_COUNT.saturating_mul(2).saturating_add(i)], 0.5) * line_delay_samples;
             // When delay is really short and modulation is high,
             // mod could take delay time negative — prevent that
             if delay_samples < mod_amount + 2.0 {
@@ -460,7 +460,7 @@ impl CloudChannel {
     fn update_post_diffusion(&mut self) {
         for i in 0..TOTAL_LINE_COUNT {
             self.lines[i]
-                .set_diffuser_seed(self.post_diffusion_seed * (i as u64 + 1), self.cross_seed);
+                .set_diffuser_seed(self.post_diffusion_seed.saturating_mul(u64::try_from(i).unwrap_or(u64::MAX).saturating_add(1)), self.cross_seed);
         }
     }
 

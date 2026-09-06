@@ -17,17 +17,17 @@ impl Allpass {
     #[must_use]
     pub fn new(max_delay: usize) -> Self {
         Self {
-            delay: DelayLine::new(max_delay + 1),
+            delay: DelayLine::new(max_delay.saturating_add(1)),
             delay_samples: max_delay,
             feedback: 0.5,
         }
     }
 
     pub fn set_delay(&mut self, samples: usize) {
-        self.delay_samples = samples.min(self.delay.len() - 1);
+        self.delay_samples = samples.min(self.delay.len().saturating_sub(1));
     }
 
-    pub fn set_feedback(&mut self, g: f64) {
+    pub const fn set_feedback(&mut self, g: f64) {
         self.feedback = g;
     }
 

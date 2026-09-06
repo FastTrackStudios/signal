@@ -40,7 +40,7 @@ struct VintageSpringUnit {
 }
 
 impl VintageSpringUnit {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "constructor needs all spring parameters for initialization")]
     fn new(
         sample_rate: f64,
         delay_ms: f64,
@@ -54,14 +54,14 @@ impl VintageSpringUnit {
         initial_phase: f64,
     ) -> Self {
         let delay_samples = num::f64_to_index(sample_rate * delay_ms * 0.001);
-        let max_delay = num::f64_to_index(sample_rate * max_delay_ms * 0.001) + 48;
+        let max_delay = num::f64_to_index(sample_rate * max_delay_ms * 0.001).saturating_add(48);
 
         let mut damp = Lp1::new();
         damp.set_freq(damp_freq, sample_rate);
 
         Self {
             dispersion: SpectralDelay::new(num_sections, stretch, ap_coeff),
-            delay: DelayLine::new(max_delay + 1),
+            delay: DelayLine::new(max_delay.saturating_add(1)),
             delay_samples,
             damp,
             dc_blocker: DcBlocker::with_cutoff(38.0, 48000.0), // matches the old 0.995 pole
@@ -108,7 +108,7 @@ impl VintageSpringUnit {
         let frac = read_pos - num::count_to_f64(read_int);
 
         let s0 = self.delay.read(read_int);
-        let s1 = self.delay.read(read_int + 1);
+        let s1 = self.delay.read(read_int.saturating_add(1));
         let delayed = (s1 - s0).mul_add(frac, s0);
 
         // Damping + saturation in feedback
@@ -261,9 +261,9 @@ impl ReverbAlgorithm for SpringVintage {
         self.spring_b.dispersion.coefficient = ap_b;
         self.spring_c.dispersion.coefficient = ap_c;
 
-        let sec_a = 50 + num::f64_to_index(params.diffusion * 100.0); // 50-150
-        let sec_b = 60 + num::f64_to_index(params.diffusion * 120.0); // 60-180
-        let sec_c = 80 + num::f64_to_index(params.diffusion * 140.0); // 80-220
+        let sec_a = 50_usize.saturating_add(num::f64_to_index(params.diffusion * 100.0)); // 50-150
+        let sec_b = 60_usize.saturating_add(num::f64_to_index(params.diffusion * 120.0)); // 60-180
+        let sec_c = 80_usize.saturating_add(num::f64_to_index(params.diffusion * 140.0)); // 80-220
         self.spring_a.dispersion.active_sections = sec_a;
         self.spring_b.dispersion.active_sections = sec_b;
         self.spring_c.dispersion.active_sections = sec_c;
@@ -306,7 +306,7 @@ impl ReverbAlgorithm for SpringVintage {
 
     fn set_spring_params(&mut self, params: &SpringParams) -> bool {
         self.dwell = params.dwell;
-        self.named_springs = Some((params.springs as usize).clamp(1, 3));
+        self.named_springs = Some(usize::from(params.springs).clamp(1, 3));
         self.num_active = self.named_springs.unwrap_or(self.num_active);
         true
     }

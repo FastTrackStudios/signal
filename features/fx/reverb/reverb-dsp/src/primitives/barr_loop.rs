@@ -41,7 +41,7 @@ struct Ap {
 impl Ap {
     fn new(len: f64) -> Self {
         Self {
-            line: DelayLine::new(num::f64_to_index(len) + 8),
+            line: DelayLine::new(num::f64_to_index(len).saturating_add(8)),
             len,
         }
     }
@@ -82,15 +82,27 @@ impl BarrLoop {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let k = sample_rate / 32_768.0;
-        let sections = core::array::from_fn(|i| Section {
-            delay: DelayLine::new(num::f64_to_index(SECTION_LEN_32K[i] * k) + 8),
-            len: num::f64_to_index(SECTION_LEN_32K[i] * k),
-            ap: [Ap::new(AP_LEN_32K[i][0] * k), Ap::new(AP_LEN_32K[i][1] * k)],
-            damp: Lp1::new(),
+        let sections = core::array::from_fn(|i| {
+            #[expect(clippy::indexing_slicing, reason = "i from from_fn(|i|) is guaranteed in bounds for const arrays")]
+            let section_len = SECTION_LEN_32K[i];
+            #[expect(clippy::indexing_slicing, reason = "i from from_fn(|i|) is guaranteed in bounds for const arrays")]
+            let ap0_len = AP_LEN_32K[i][0];
+            #[expect(clippy::indexing_slicing, reason = "i from from_fn(|i|) is guaranteed in bounds for const arrays")]
+            let ap1_len = AP_LEN_32K[i][1];
+            Section {
+                delay: DelayLine::new(num::f64_to_index(section_len * k).saturating_add(8)),
+                len: num::f64_to_index(section_len * k),
+                ap: [Ap::new(ap0_len * k), Ap::new(ap1_len * k)],
+                damp: Lp1::new(),
+            }
         });
         let mut this = Self {
             sections,
-            input_aps: core::array::from_fn(|i| Ap::new(INPUT_AP_32K[i] * k)),
+            input_aps: core::array::from_fn(|i| {
+                #[expect(clippy::indexing_slicing, reason = "i from from_fn(|i|) is guaranteed in bounds for const arrays")]
+                let len = INPUT_AP_32K[i];
+                Ap::new(len * k)
+            }),
             gain: 0.6,
             mod_phase: 0.0,
             mod_inc: 0.5 / sample_rate,
@@ -143,15 +155,23 @@ impl BarrLoop {
         let mut out_r = 0.0;
         // Index-based: `i` walks sections, tap gains, and the modulated
         // AP selector together (enumerate can't span the self borrows).
-        #[allow(clippy::needless_range_loop)]
+        #[expect(clippy::needless_range_loop, reason = "multiple self borrows prevent enumerate")]
         for i in 0..4 {
+            #[expect(clippy::indexing_slicing, reason = "i from 0..4 loop matches [Section; 4] bounds")]
             let len = self.sections[i].len;
-            self.sections[i].delay.write(sig);
+            #[expect(clippy::indexing_slicing, reason = "i from 0..4 loop matches [Section; 4] bounds")]
+            {
+                self.sections[i].delay.write(sig);
+            }
+            #[expect(clippy::indexing_slicing, reason = "i from 0..4 loop matches [Section; 4] bounds")]
             let read = self.sections[i].delay.read(len);
 
             // Two output taps per section at staggered offsets.
+            #[expect(clippy::indexing_slicing, reason = "i from 0..4 loop matches [Section; 4] bounds")]
             let t1 = self.sections[i].delay.read(len / 3);
-            let t2 = self.sections[i].delay.read(2 * len / 3);
+            #[expect(clippy::indexing_slicing, reason = "i from 0..4 loop matches [Section; 4] bounds")]
+            let t2 = self.sections[i].delay.read(len.saturating_mul(2) / 3);
+            #[expect(clippy::indexing_slicing, reason = "i from 0..4 loop is valid for TAP_GAINS[4]")]
             let g = TAP_GAINS[i] * 0.22;
             if i % 2 == 0 {
                 out_l += t1 * g;
@@ -164,12 +184,23 @@ impl BarrLoop {
             let mut v = read * self.gain;
             // Section 1 carries the modulated allpass (FV-1 style: one
             // moving allpass keeps the whole ring alive).
+            #[expect(clippy::indexing_slicing, reason = "i from 0..4 loop matches [Section; 4] bounds")]
             let base0 = self.sections[i].ap[0].len;
             let l0 = if i == 1 { base0 + mod_off } else { base0 };
-            v = self.sections[i].ap[0].tick(v, l0);
+            #[expect(clippy::indexing_slicing, reason = "i from 0..4 loop matches [Section; 4] bounds")]
+            {
+                v = self.sections[i].ap[0].tick(v, l0);
+            }
+            #[expect(clippy::indexing_slicing, reason = "i from 0..4 loop matches [Section; 4] bounds")]
             let l1 = self.sections[i].ap[1].len;
-            v = self.sections[i].ap[1].tick(v, l1);
-            sig = self.sections[i].damp.tick(v);
+            #[expect(clippy::indexing_slicing, reason = "i from 0..4 loop matches [Section; 4] bounds")]
+            {
+                v = self.sections[i].ap[1].tick(v, l1);
+            }
+            #[expect(clippy::indexing_slicing, reason = "i from 0..4 loop matches [Section; 4] bounds")]
+            {
+                sig = self.sections[i].damp.tick(v);
+            }
         }
         self.ring = sig;
 

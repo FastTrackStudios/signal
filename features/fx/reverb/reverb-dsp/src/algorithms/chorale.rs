@@ -66,7 +66,7 @@ pub struct Chorale {
     // 20 Hz without it (IR-metric verified).
     out_hp_l: OnePoleHp,
     out_hp_r: OnePoleHp,
-    chorale_amount: f64,
+    amount: f64,
     vowel_mix: f64, // 0.0 = "ah", 1.0 = "oo"
     // Legacy choir level from extra_a (used when mx.choir_level is None).
     legacy_amount: f64,
@@ -116,7 +116,7 @@ impl Chorale {
             fb_r: 0.0,
             out_hp_l: OnePoleHp::new(24.0, sample_rate),
             out_hp_r: OnePoleHp::new(24.0, sample_rate),
-            chorale_amount: 0.5,
+            amount: 0.5,
             vowel_mix: 0.0,
             legacy_amount: 0.5 * 0.6,
             mx: ChoraleParams::default(),
@@ -144,10 +144,10 @@ impl Chorale {
     }
 
     fn make_fdn(sample_rate: f64, offset: bool) -> Fdn {
-        let base = if !offset {
-            [1049, 1327, 1559, 1801, 2069, 2297, 2557, 2803]
-        } else {
+        let base = if offset {
             [1117, 1381, 1613, 1873, 2131, 2371, 2617, 2879]
+        } else {
+            [1049, 1327, 1559, 1801, 2069, 2297, 2557, 2803]
         };
         let scale = sample_rate / 48000.0;
         let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index(f64::from(d) * scale)).collect();
@@ -158,7 +158,7 @@ impl Chorale {
         // Interpolate between vowels
         let idx = (mix * 3.0).min(2.999);
         let lo = num::f64_to_index(idx);
-        let hi = (lo + 1).min(3);
+        let hi = lo.saturating_add(1).min(3);
         let frac = idx - num::count_to_f64(lo);
 
         // Choir Voice range: Baritone shifts the formant centers DOWN
@@ -169,7 +169,11 @@ impl Chorale {
             ChoirVoice::Baritone => 0.78,
         };
 
-        #[allow(clippy::needless_range_loop)]
+        #[expect(
+            clippy::needless_range_loop,
+            clippy::indexing_slicing,
+            reason = "iterating by index to access parallel arrays VOWEL_F/A_DB/BW; indices guaranteed: lo in [0,2] from f64_to_index(idx<3.0), hi=lo.saturating_add(1).min(3) in [0,3], arrays have 4 rows"
+        )]
         for i in 0..N_FORMANTS {
             // Morph F / amplitude / bandwidth in log-frequency space
             // between the measured vowel columns.
@@ -188,8 +192,8 @@ impl Chorale {
             let (q_scale, base_gain) = self.mx.resonance.q_gain();
             let gain_db = (base_gain + amp * 0.35).max(1.0);
             let q = (f / bw * q_scale / 3.0).clamp(1.5, 9.0);
-            self.formants_l[i].set(FilterType::Peak { gain_db }, freq_l, q, sample_rate);
-            self.formants_r[i].set(FilterType::Peak { gain_db }, freq_r, q, sample_rate);
+            self.formants_l.get_mut(i).map(|f| f.set(FilterType::Peak { gain_db }, freq_l, q, sample_rate));
+            self.formants_r.get_mut(i).map(|f| f.set(FilterType::Peak { gain_db }, freq_r, q, sample_rate));
         }
     }
 
@@ -197,7 +201,7 @@ impl Chorale {
     #[inline]
     fn rand_bipolar(&mut self) -> f64 {
         self.rng = self.rng.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-        f64::from(self.rng >> 8) / f64::from(u32::MAX >> 8) * 2.0 - 1.0
+        (f64::from(self.rng >> 8) / f64::from(u32::MAX >> 8)).mul_add(2.0, -1.0)
     }
 
     /// Control-rate vowel-program update: static programs pin
@@ -255,18 +259,20 @@ impl Chorale {
         }
         // New walk targets every ~80 ms.
         if self.walk_countdown == 0 {
+            #[expect(clippy::indexing_slicing, reason = "ch in [0,2) from loop bound, arrays have 2 elements")]
             for ch in 0..2 {
                 self.rand_target_speed[ch] = self.rand_bipolar() * 0.02 * amount;
                 self.rand_target_formant[ch] = self.rand_bipolar() * 0.06 * amount;
             }
             self.walk_countdown = (num::f64_to_index(0.08 * self.sample_rate) / CTRL_BLOCK).max(1);
         }
-        self.walk_countdown -= 1;
+        self.walk_countdown = self.walk_countdown.saturating_sub(1);
 
         // One-pole toward the targets (smooth, click-free).
+        #[expect(clippy::indexing_slicing, reason = "ch in [0,2) from loop bound, arrays have 2 elements")]
         for ch in 0..2 {
-            self.rand_speed[ch] += (self.rand_target_speed[ch] - self.rand_speed[ch]) * 0.08;
-            self.rand_formant[ch] += (self.rand_target_formant[ch] - self.rand_formant[ch]) * 0.08;
+            self.rand_speed[ch] = (self.rand_target_speed[ch] - self.rand_speed[ch]).mul_add(0.08, self.rand_speed[ch]);
+            self.rand_formant[ch] = (self.rand_target_formant[ch] - self.rand_formant[ch]).mul_add(0.08, self.rand_formant[ch]);
         }
 
         self.shifter_l.set_speed(2.0 * (1.0 + self.rand_speed[0]));
@@ -321,7 +327,7 @@ impl ReverbAlgorithm for Chorale {
         // Chorale amount (extra_a) — legacy mapping, overridable by
         // the MX Choir level param.
         self.legacy_amount = params.extra_a * 0.6;
-        self.chorale_amount = self
+        self.amount = self
             .mx
             .choir_level
             .map_or(self.legacy_amount, |v| v.clamp(0.0, 1.0) * 0.6);
@@ -346,7 +352,7 @@ impl ReverbAlgorithm for Chorale {
         let voice_changed = params.voice != self.mx.voice;
         let mod_off = params.mod_amount <= 1e-9 && self.mx.mod_amount > 1e-9;
         self.mx = *params;
-        self.chorale_amount = self
+        self.amount = self
             .mx
             .choir_level
             .map_or(self.legacy_amount, |v| v.clamp(0.0, 1.0) * 0.6);
@@ -376,11 +382,11 @@ impl ReverbAlgorithm for Chorale {
             }
             self.ctrl_countdown = CTRL_BLOCK;
         }
-        self.ctrl_countdown -= 1;
+        self.ctrl_countdown = self.ctrl_countdown.saturating_sub(1);
 
         // Mix input with formant-filtered pitch-shifted feedback
-        let in_l = self.fb_l.mul_add(self.chorale_amount, left);
-        let in_r = self.fb_r.mul_add(self.chorale_amount, right);
+        let in_l = self.fb_l.mul_add(self.amount, left);
+        let in_r = self.fb_r.mul_add(self.amount, right);
 
         // Diffuse
         let diff_l = self.diffuser_l.tick(in_l);

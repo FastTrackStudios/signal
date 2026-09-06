@@ -88,15 +88,15 @@ impl Hall {
 
     fn make_fdn(sample_rate: f64, size: f64, offset: bool) -> Fdn {
         // Prime-ish delay lengths for maximum density, longer than room
-        let base = if !offset {
-            [1549, 1877, 2237, 2663, 3109, 3571, 4019, 4507]
-        } else {
+        let base = if offset {
             [1607, 1949, 2311, 2741, 3191, 3637, 4091, 4583]
+        } else {
+            [1549, 1877, 2237, 2663, 3109, 3571, 4019, 4507]
         };
         let scale = sample_rate / 48000.0 * size.max(0.2);
         let delays: Vec<usize> = base
             .iter()
-            .map(|&d| ((f64::from(d) * scale) as usize).max(4))
+            .map(|&d| num::f64_to_index(f64::from(d) * scale).max(4))
             .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.85);
@@ -185,27 +185,26 @@ impl Hall {
         let base_delays = [137, 173, 211, 257, 307, 359, 419, 479];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.2);
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..FDN_MOD_AP_COUNT {
-            let delay = num::f64_to_index((f64::from(base_delays[i]) * scale));
-            self.mod_ap_l[i].sample_delay = delay.max(4);
-            self.mod_ap_l[i].feedback = 0.4;
-            self.mod_ap_l[i].set_modulation(
+        for ((i, &d), (ap_l, ap_r)) in base_delays.iter().enumerate().zip(self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut())) {
+            let delay = num::f64_to_index(f64::from(d) * scale);
+            ap_l.sample_delay = delay.max(4);
+            ap_l.feedback = 0.4;
+            ap_l.set_modulation(
                 num::count_to_f64(i).mul_add(0.15, 0.3),
                 modulation * self.sample_rate * 0.0005,
                 self.sample_rate,
             );
-            self.mod_ap_l[i].set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
+            ap_l.set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
 
-            let delay_r = num::f64_to_index(((f64::from(base_delays[i]) + 17.0) * scale));
-            self.mod_ap_r[i].sample_delay = delay_r.max(4);
-            self.mod_ap_r[i].feedback = 0.4;
-            self.mod_ap_r[i].set_modulation(
+            let delay_r = num::f64_to_index((f64::from(d) + 17.0) * scale);
+            ap_r.sample_delay = delay_r.max(4);
+            ap_r.feedback = 0.4;
+            ap_r.set_modulation(
                 num::count_to_f64(i).mul_add(0.12, 0.35),
                 modulation * self.sample_rate * 0.0005,
                 self.sample_rate,
             );
-            self.mod_ap_r[i].set_phase((num::count_to_f64(i) + 0.5) / num::count_to_f64(FDN_MOD_AP_COUNT));
+            ap_r.set_phase((num::count_to_f64(i) + 0.5) / num::count_to_f64(FDN_MOD_AP_COUNT));
         }
     }
 
@@ -339,9 +338,9 @@ impl ReverbAlgorithm for Hall {
         let mut late_r = self.fdn_r.tick(fdn_in_r);
 
         // Modulated allpass in feedback path (chorus detuning in tail)
-        for i in 0..FDN_MOD_AP_COUNT {
-            late_l = self.mod_ap_l[i].tick(late_l);
-            late_r = self.mod_ap_r[i].tick(late_r);
+        for (ap_l, ap_r) in self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut()) {
+            late_l = ap_l.tick(late_l);
+            late_r = ap_r.tick(late_r);
         }
 
         // Tone filter

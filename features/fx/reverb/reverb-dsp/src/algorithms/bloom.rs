@@ -40,8 +40,8 @@ struct BloomVoice {
 impl BloomVoice {
     fn new(base_delay_48k: usize, sample_rate: f64, diffuser_seed: u64) -> Self {
         let scale = sample_rate / 48000.0;
-        let base_delay = (num::count_to_f64(base_delay_48k) * scale) as usize;
-        let max_delay = base_delay * 3 + 256; // headroom for size scaling
+        let base_delay = num::f64_to_index(num::count_to_f64(base_delay_48k) * scale);
+        let max_delay = base_delay.saturating_mul(3).saturating_add(256); // headroom for size scaling
 
         let mut diffuser = AllpassDiffuser::with_defaults(sample_rate, 0.6);
         diffuser.set_seed(diffuser_seed);
@@ -53,7 +53,7 @@ impl BloomVoice {
         damping.set_freq(8000.0, sample_rate);
 
         Self {
-            delay: DelayLine::new(max_delay + 1),
+            delay: DelayLine::new(max_delay.saturating_add(1)),
             diffuser,
             damping,
             dc_block: DcBlocker::new(),
@@ -120,12 +120,14 @@ impl Bloom {
         input_diffuser_r.set_modulation(0.6, 6.0, sample_rate);
 
         // Create delay voices with unique diffuser seeds
-        let voices_l: Vec<BloomVoice> = (0..NUM_LINES)
-            .map(|i| BloomVoice::new(BASE_DELAYS_L[i], sample_rate, 45678 + i as u64 * 111))
+        let voices_l: Vec<BloomVoice> = BASE_DELAYS_L.iter()
+            .enumerate()
+            .map(|(i, &delay)| BloomVoice::new(delay, sample_rate, 45678u64.saturating_add(u64::try_from(i).unwrap_or(u64::MAX).saturating_mul(111))))
             .collect();
 
-        let voices_r: Vec<BloomVoice> = (0..NUM_LINES)
-            .map(|i| BloomVoice::new(BASE_DELAYS_R[i], sample_rate, 56789 + i as u64 * 111))
+        let voices_r: Vec<BloomVoice> = BASE_DELAYS_R.iter()
+            .enumerate()
+            .map(|(i, &delay)| BloomVoice::new(delay, sample_rate, 56789u64.saturating_add(u64::try_from(i).unwrap_or(u64::MAX).saturating_mul(111))))
             .collect();
 
         let mut tone_lp_l = Lp1::new();
@@ -167,17 +169,12 @@ impl Bloom {
     fn rotate_mix(vals: &[f64; NUM_LINES], amount: f64) -> [f64; NUM_LINES] {
         let direct = amount.mul_add(-0.5, 1.0);
         let cross = amount * 0.5 / num::count_to_f64(NUM_LINES - 1);
-        let mut out = [0.0; NUM_LINES];
-        for i in 0..NUM_LINES {
-            out[i] = vals[i] * direct;
-            #[allow(clippy::needless_range_loop)]
-            for j in 0..NUM_LINES {
-                if j != i {
-                    out[i] += vals[j] * cross;
-                }
-            }
-        }
-        out
+        let &[v0, v1, v2, v3] = vals;
+        let out_0 = v0 * direct + (v1 + v2 + v3) * cross;
+        let out_1 = v1 * direct + (v0 + v2 + v3) * cross;
+        let out_2 = v2 * direct + (v0 + v1 + v3) * cross;
+        let out_3 = v3 * direct + (v0 + v1 + v2) * cross;
+        [out_0, out_1, out_2, out_3]
     }
 }
 
@@ -215,17 +212,17 @@ impl ReverbAlgorithm for Bloom {
         // -- Size: scale delay line lengths --
         // Map 0..1 to 0.3..2.5 for small-to-massive space
         self.size_scale = params.size.mul_add(2.2, 0.3);
-        for (i, voice) in self.voices_l.iter_mut().enumerate() {
-            let scaled = (num::count_to_f64(BASE_DELAYS_L[i]) * (sr / 48000.0) * self.size_scale) as usize;
+        for (voice, &base_delay) in self.voices_l.iter_mut().zip(&BASE_DELAYS_L) {
+            let scaled = num::f64_to_index(num::count_to_f64(base_delay) * (sr / 48000.0) * self.size_scale);
             voice.current_delay = num::count_to_f64(scaled);
         }
-        for (i, voice) in self.voices_r.iter_mut().enumerate() {
-            let scaled = (num::count_to_f64(BASE_DELAYS_R[i]) * (sr / 48000.0) * self.size_scale) as usize;
+        for (voice, &base_delay) in self.voices_r.iter_mut().zip(&BASE_DELAYS_R) {
+            let scaled = num::f64_to_index(num::count_to_f64(base_delay) * (sr / 48000.0) * self.size_scale);
             voice.current_delay = num::count_to_f64(scaled);
         }
 
         // -- Diffusion: input diffuser stages and feedback (bloom density) --
-        let input_stages = 2 + num::f64_to_index(params.diffusion * 6.0); // 2..8 stages
+        let input_stages = 2usize.saturating_add(num::f64_to_index(params.diffusion * 6.0)); // 2..8 stages
         let input_fb = params.diffusion.mul_add(0.45, 0.3); // 0.3..0.75
         self.input_diffuser_l.set_active_stages(input_stages);
         self.input_diffuser_r.set_active_stages(input_stages);
@@ -254,7 +251,7 @@ impl ReverbAlgorithm for Bloom {
             .chain(self.voices_r.iter_mut())
             .enumerate()
         {
-            let rate_offset = (i as f64).mul_add(0.05, 1.0);
+            let rate_offset = num::count_to_f64(i).mul_add(0.05, 1.0);
             voice
                 .diffuser
                 .set_modulation(mod_rate * rate_offset, mod_depth * 0.7, sr);
@@ -268,7 +265,7 @@ impl ReverbAlgorithm for Bloom {
 
         // -- Extra A: bloom rate (diffuser strength in feedback path) --
         // Controls how quickly density builds: more feedback diffuser stages + stronger feedback
-        let fb_stages = 2 + num::f64_to_index(params.extra_a * 6.0); // 2..8
+        let fb_stages = 2usize.saturating_add(num::f64_to_index(params.extra_a * 6.0)); // 2..8
         let fb_diffuser_fb = params.extra_a.mul_add(0.5, 0.2); // 0.2..0.7
         for voice in self.voices_l.iter_mut().chain(self.voices_r.iter_mut()) {
             voice.diffuser.set_active_stages(fb_stages);
@@ -342,7 +339,7 @@ impl ReverbAlgorithm for Bloom {
 
                 // Mix: input + feedback (with stereo cross-feed)
                 let fb_in = fb_l_mixed[i].mul_add(direct, fb_r_mixed[i] * cross);
-                let write_val = (fb_in * decay).mul_add(0.15, diffused_l * inv_n + clean * decay);
+                let write_val = (fb_in * decay).mul_add(0.15, diffused_l.mul_add(inv_n, clean * decay));
 
                 voice.delay.write(write_val);
                 new_fb_l[i] = clean * decay;
@@ -360,7 +357,7 @@ impl ReverbAlgorithm for Bloom {
                 let clean = voice.dc_block.tick(diffused);
 
                 let fb_in = fb_r_mixed[i].mul_add(direct, fb_l_mixed[i] * cross);
-                let write_val = (fb_in * decay).mul_add(0.15, diffused_r * inv_n + clean * decay);
+                let write_val = (fb_in * decay).mul_add(0.15, diffused_r.mul_add(inv_n, clean * decay));
 
                 voice.delay.write(write_val);
                 new_fb_r[i] = clean * decay;
