@@ -73,7 +73,21 @@ impl Line {
     }
 }
 
+/// Which optional in-loop stages are active. One struct rather than
+/// three loose `*_active` bools spread down the field list.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+struct ActiveStages {
+    /// Split decay: low and high bands decay at different rates.
+    band_split: bool,
+    /// The drawn per-band decay-rate curve.
+    decay_eq: bool,
+    /// The per-line in-loop shelving EQ.
+    loop_eq: bool,
+}
+
 pub struct Fdn {
+    /// Which optional in-loop stages are engaged.
+    active: ActiveStages,
     /// One entry per delay line.
     lines: Vec<Line>,
     /// Each line's last output, kept as its own vector because the mixing
@@ -88,7 +102,6 @@ pub struct Fdn {
     // (1.0, 1.0) is a no-op.
     low_decay_mult: f64,
     high_decay_mult: f64,
-    band_split_active: bool,
 
     // ── Jot per-line T60 shelf (opt-in via `set_t60`) ──────────────
     // Exact frequency-dependent decay: per line i with length Mi,
@@ -109,7 +122,6 @@ pub struct Fdn {
     // band's decay-time multiplier demands. Boost totals are scaled
     // down per line so the loop gain always keeps a safety margin
     // below unity.
-    decay_eq_active: bool,
     decay_eq_on: [bool; crate::algorithm::DECAY_BANDS],
 
     // ── Slow orthogonal rotation (opt-in via `set_rotation`) ───────
@@ -133,7 +145,6 @@ pub struct Fdn {
     // path: tonal color compounds per recirculation (the CloudSeed
     // per-line EQ trick). Boosts are clamped small — a shelf gain in
     // the loop multiplies the per-band loop gain.
-    loop_eq_active: bool,
     eq_low_gain: f64,
     eq_high_gain: f64,
 
@@ -162,6 +173,7 @@ impl Fdn {
         let feedback = vec![0.0; n];
 
         Self {
+            active: ActiveStages::default(),
             lines,
             feedback,
             decay_gain: 0.85,
@@ -169,11 +181,9 @@ impl Fdn {
             num_lines: n,
             low_decay_mult: 1.0,
             high_decay_mult: 1.0,
-            band_split_active: false,
             t60_mode: false,
             tc_b: 0.0,
             tc_prev: 0.0,
-            decay_eq_active: false,
             decay_eq_on: [false; crate::algorithm::DECAY_BANDS],
             rot_depth: 0.0,
             rot_inc: 0.0,
@@ -182,7 +192,6 @@ impl Fdn {
             rot_countdown: 0,
             loop_ap: Vec::new(),
             loop_ap_coeff: 0.0,
-            loop_eq_active: false,
             eq_low_gain: 1.0,
             eq_high_gain: 1.0,
             vintage: false,
@@ -206,7 +215,7 @@ impl Fdn {
     ) {
         self.low_decay_mult = low_mult.clamp(0.0, 2.0);
         self.high_decay_mult = high_mult.clamp(0.0, 2.0);
-        self.band_split_active = (low_mult - 1.0).abs() > 1e-4 || (high_mult - 1.0).abs() > 1e-4;
+        self.active.band_split = (low_mult - 1.0).abs() > 1e-4 || (high_mult - 1.0).abs() > 1e-4;
         for line in &mut self.lines {
             let b = &mut line.band_split;
             b.set_freq(crossover_hz, sample_rate);
@@ -313,7 +322,7 @@ impl Fdn {
         const PROBE_POINTS: usize = 48;
         use audiocore_dsp::biquad::FilterType;
         let any = bands.iter().any(crate::algorithm::DecayBand::is_active);
-        self.decay_eq_active = any;
+        self.active.decay_eq = any;
         if !any {
             return;
         }
@@ -438,7 +447,7 @@ impl Fdn {
     ) {
         self.eq_low_gain = 10.0f64.powf(low_gain_db.min(2.0) / 20.0);
         self.eq_high_gain = 10.0f64.powf(high_gain_db.min(2.0) / 20.0);
-        self.loop_eq_active =
+        self.active.loop_eq =
             (self.eq_low_gain - 1.0).abs() > 1e-3 || (self.eq_high_gain - 1.0).abs() > 1e-3;
         for line in &mut self.lines {
             let lp = &mut line.eq_low_lp;
@@ -574,7 +583,7 @@ impl Fdn {
                 y
             } else {
                 let mut sig = line.damping.tick(*fb) * self.decay_gain;
-                if self.band_split_active {
+                if self.active.band_split {
                     let low = line.band_split.tick(sig);
                     let high = sig - low;
                     sig = low.mul_add(self.low_decay_mult, high * self.high_decay_mult);
@@ -585,7 +594,7 @@ impl Fdn {
             // Decay Rate EQ: the per-line curve filters, multiplying the
             // loop response so decay time follows the drawn curve
             // (`fx.reverb.decay-eq`).
-            if self.decay_eq_active {
+            if self.active.decay_eq {
                 for (on, band) in decay_eq_on.iter().zip(line.decay_eq.iter_mut()) {
                     if *on {
                         sig = band.tick(sig, 0);
@@ -611,7 +620,7 @@ impl Fdn {
             }
 
             // Per-line loop shelving EQ (color compounds per pass).
-            if self.loop_eq_active {
+            if self.active.loop_eq {
                 let low = line.eq_low_lp.tick(sig);
                 sig += (self.eq_low_gain - 1.0) * low;
                 let lp2 = line.eq_high_lp.tick(sig);

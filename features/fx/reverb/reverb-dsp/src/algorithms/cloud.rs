@@ -130,6 +130,15 @@ fn scale_param(val: f64, index: usize) -> f64 {
     }
 }
 
+/// Which of a channel's input stages are engaged. One struct rather
+/// than three loose `*_enabled` bools sitting next to each other.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+struct InputStages {
+    low_cut: bool,
+    high_cut: bool,
+    multitap: bool,
+}
+
 /// Single `CloudSeed` reverb channel (mono).
 struct CloudChannel {
     params_scaled: [f64; param::COUNT],
@@ -146,9 +155,9 @@ struct CloudChannel {
     post_diffusion_seed: u64,
     line_count: usize,
 
-    low_cut_enabled: bool,
-    high_cut_enabled: bool,
-    multitap_enabled: bool,
+    /// The three input stages ahead of the late reverb, engaged
+    /// independently.
+    input_stages: InputStages,
     diffuser_enabled: bool,
     input_mix: f64,
     early_out: f64,
@@ -187,9 +196,10 @@ impl CloudChannel {
             delay_line_seed: 0,
             post_diffusion_seed: 0,
             line_count: 8,
-            low_cut_enabled: false,
-            high_cut_enabled: false,
-            multitap_enabled: true,
+            input_stages: InputStages {
+                multitap: true,
+                ..InputStages::default()
+            },
             diffuser_enabled: true,
             input_mix: 0.0,
             early_out: 1.0,
@@ -237,14 +247,14 @@ impl CloudChannel {
                 }
             }
             param::LOW_CUT_ENABLED => {
-                self.low_cut_enabled = scaled >= 0.5;
-                if self.low_cut_enabled {
+                self.input_stages.low_cut = scaled >= 0.5;
+                if self.input_stages.low_cut {
                     self.high_pass.reset();
                 }
             }
             param::HIGH_CUT_ENABLED => {
-                self.high_cut_enabled = scaled >= 0.5;
-                if self.high_cut_enabled {
+                self.input_stages.high_cut = scaled >= 0.5;
+                if self.input_stages.high_cut {
                     self.low_pass.reset();
                 }
             }
@@ -268,10 +278,10 @@ impl CloudChannel {
 
             param::TAP_ENABLED => {
                 let new_val = scaled >= 0.5;
-                if new_val != self.multitap_enabled {
+                if new_val != self.input_stages.multitap {
                     self.multitap.clear();
                 }
-                self.multitap_enabled = new_val;
+                self.input_stages.multitap = new_val;
             }
             param::TAP_COUNT => self.multitap.set_tap_count(num::f64_to_index(scaled)),
             param::TAP_DECAY => self.multitap.set_tap_decay(scaled),
@@ -343,17 +353,17 @@ impl CloudChannel {
 
             param::EQ_LOW_SHELF_ENABLED => {
                 for line in &mut self.lines {
-                    line.low_shelf_enabled = scaled >= 0.5;
+                    line.filters.low_shelf = scaled >= 0.5;
                 }
             }
             param::EQ_HIGH_SHELF_ENABLED => {
                 for line in &mut self.lines {
-                    line.high_shelf_enabled = scaled >= 0.5;
+                    line.filters.high_shelf = scaled >= 0.5;
                 }
             }
             param::EQ_LOWPASS_ENABLED => {
                 for line in &mut self.lines {
-                    line.cutoff_enabled = scaled >= 0.5;
+                    line.filters.cutoff = scaled >= 0.5;
                 }
             }
             param::EQ_LOW_FREQ => {
@@ -482,10 +492,10 @@ impl CloudChannel {
         let mut x = input;
 
         // Input filters
-        if self.low_cut_enabled {
+        if self.input_stages.low_cut {
             x = self.high_pass.tick(x);
         }
-        if self.high_cut_enabled {
+        if self.input_stages.high_cut {
             x = self.low_pass.tick(x);
         }
 
@@ -498,7 +508,7 @@ impl CloudChannel {
         x = self.pre_delay.tick(x);
 
         // Multitap early reflections
-        if self.multitap_enabled {
+        if self.input_stages.multitap {
             x = self.multitap.tick(x);
         }
 

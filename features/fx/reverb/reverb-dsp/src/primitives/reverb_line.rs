@@ -12,6 +12,16 @@ use super::biquad::{Biquad, FilterType};
 use super::modulated_delay::ModulatedDelay;
 use super::one_pole::Lp1;
 
+/// Which of a line's in-loop filters are engaged. One struct rather
+/// than three loose `*_enabled` bools, so a caller cannot set the low
+/// shelf while meaning the high one.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub struct FilterStages {
+    pub low_shelf: bool,
+    pub high_shelf: bool,
+    pub cutoff: bool,
+}
+
 pub struct ReverbLine {
     delay: ModulatedDelay,
     diffuser: AllpassDiffuser,
@@ -22,9 +32,8 @@ pub struct ReverbLine {
     feedback_value: f64,
     feedback_coeff: f64,
     pub diffuser_enabled: bool,
-    pub low_shelf_enabled: bool,
-    pub high_shelf_enabled: bool,
-    pub cutoff_enabled: bool,
+    /// The three in-loop filter stages, engaged independently.
+    pub filters: FilterStages,
     pub tap_post_diffuser: bool,
 }
 
@@ -59,9 +68,7 @@ impl ReverbLine {
             feedback_value: 0.0,
             feedback_coeff: 0.0,
             diffuser_enabled: false,
-            low_shelf_enabled: false,
-            high_shelf_enabled: false,
-            cutoff_enabled: false,
+            filters: FilterStages::default(),
             tap_post_diffuser: false,
         }
     }
@@ -161,13 +168,13 @@ impl ReverbLine {
 
         let output_post = x;
 
-        if self.low_shelf_enabled {
+        if self.filters.low_shelf {
             x = self.low_shelf.tick(x);
         }
-        if self.high_shelf_enabled {
+        if self.filters.high_shelf {
             x = self.high_shelf.tick(x);
         }
-        if self.cutoff_enabled {
+        if self.filters.cutoff {
             x = self.low_pass.tick(x);
         }
 

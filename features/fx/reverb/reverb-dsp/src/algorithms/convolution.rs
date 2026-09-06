@@ -531,6 +531,15 @@ impl ConvPair {
     }
 }
 
+/// The optional stages around the convolver, engaged independently by
+/// `ctrl_refresh`. One struct rather than three loose `*_engaged` bools.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+struct Stages {
+    predelay: bool,
+    motion: bool,
+    damping: bool,
+}
+
 pub struct Convolution {
     planner: RealFftPlanner<f64>,
     /// IR slot A's direct legs.
@@ -548,8 +557,6 @@ pub struct Convolution {
     ir_seconds: f64,
     /// True once a user-supplied IR has been loaded — disables the
     /// synthetic-IR rebuild on `set_params` so user choices stick.
-    user_ir_loaded: bool,
-    user_ir_loaded_b: bool,
     /// Disposal channel for buffers displaced by audio-thread swaps.
     /// `None` (tests / offline) drops inline.
     trash_tx: Option<crossbeam_channel::Sender<IrTrash>>,
@@ -565,19 +572,20 @@ pub struct Convolution {
     /// Control-rate countdown for coefficient-level refreshes.
     ctrl_countdown: u32,
 
+    /// Which of the three post/pre-convolution stages are engaged. The
+    /// control-rate pass sets them; the sample loop reads them.
+    engaged: Stages,
+
     // Option 2: modulatable predelay before the convolver.
     predelay_l: ModulatedDelay,
     predelay_r: ModulatedDelay,
-    predelay_engaged: bool,
 
     // Option 1: post-conv motion stage [L1, L2, R1, R2].
     motion: [ModulatedAllpass; 4],
-    motion_engaged: bool,
 
     // Option 2: post-conv damping filters.
     damp_l: Lp1,
     damp_r: Lp1,
-    damp_engaged: bool,
     /// Base damping cutoff derived from `AlgorithmParams::damping`.
     base_damp_cutoff: f64,
 
@@ -606,6 +614,9 @@ struct IrSlotState {
     applied_shape: ImpulseParams,
     /// Set when the partitions are stale against `impulse`'s shaping params.
     shape_dirty: bool,
+    /// Set once the user loads their own IR into this slot; until then
+    /// `set_params` keeps rebuilding the synthetic one.
+    user_loaded: bool,
     /// The original, un-shaped stereo IR, kept for re-preparation.
     #[expect(
         clippy::type_complexity,
@@ -694,6 +705,7 @@ impl Convolution {
 
         Self {
             planner,
+            engaged: Stages::default(),
             direct_a,
             direct_b,
             cross,
@@ -701,8 +713,6 @@ impl Convolution {
             cross_originals: None,
             sample_rate,
             ir_seconds: 1.5,
-            user_ir_loaded: false,
-            user_ir_loaded_b: false,
             trash_tx: None,
             mod_params,
             sm: ModSmoothers::new(sample_rate),
@@ -712,12 +722,9 @@ impl Convolution {
             ctrl_countdown: 0,
             predelay_l,
             predelay_r,
-            predelay_engaged: false,
             motion,
-            motion_engaged: false,
             damp_l: Lp1::new(),
             damp_r: Lp1::new(),
-            damp_engaged: false,
             base_damp_cutoff: (1.0_f64 - 0.3).mul_add(14000.0, 2000.0),
             b_engaged: false,
             impulse: ImpulseParams::default(),
@@ -766,12 +773,12 @@ impl Convolution {
         match slot {
             IrSlot::A => {
                 self.direct_a.load_ir(cap_l, cap_r);
-                self.user_ir_loaded = true;
+                self.slots[IrSlot::A].user_loaded = true;
                 self.disengage_true_stereo();
             }
             IrSlot::B => {
                 self.direct_b.load_ir(cap_l, cap_r);
-                self.user_ir_loaded_b = true;
+                self.slots[IrSlot::B].user_loaded = true;
             }
         }
         self.slots[slot].original = Some((Arc::new(cap_l.to_vec()), Arc::new(cap_r.to_vec())));
@@ -787,7 +794,7 @@ impl Convolution {
         let (ll, lr, rl, rr) = (cap(ll), cap(lr), cap(rl), cap(rr));
         self.direct_a.load_ir(&ll, &rr);
         self.cross.load_ir(&lr, &rl);
-        self.user_ir_loaded = true;
+        self.slots[IrSlot::A].user_loaded = true;
         self.true_stereo = true;
         self.slots[IrSlot::A].original = Some((Arc::new(ll), Arc::new(rr)));
         self.cross_originals = Some((Arc::new(lr), Arc::new(rl)));
@@ -831,8 +838,8 @@ impl Convolution {
     /// Forget the user IRs (both slots) and resume synthetic-IR rebuilds
     /// on `set_params`. Restores the default procedural reverb.
     pub fn clear_user_ir(&mut self) {
-        self.user_ir_loaded = false;
-        self.user_ir_loaded_b = false;
+        self.slots[IrSlot::A].user_loaded = false;
+        self.slots[IrSlot::B].user_loaded = false;
         self.disengage_true_stereo();
         self.rebuild_synth_ir(self.ir_seconds);
     }
@@ -859,7 +866,7 @@ impl Convolution {
             IrSlot::A => {
                 let l = self.direct_a.l.swap_prepared(pair.left);
                 let r = self.direct_a.r.swap_prepared(pair.right);
-                self.user_ir_loaded = true;
+                self.slots[IrSlot::A].user_loaded = true;
                 // True-stereo pairs install the cross legs; plain
                 // stereo pairs disengage them.
                 if let Some(cross) = pair.cross {
@@ -885,7 +892,7 @@ impl Convolution {
             IrSlot::B => {
                 let l = self.direct_b.l.swap_prepared(pair.left);
                 let r = self.direct_b.r.swap_prepared(pair.right);
-                self.user_ir_loaded_b = true;
+                self.slots[IrSlot::B].user_loaded = true;
                 (l, r)
             }
         };
@@ -1027,7 +1034,7 @@ impl Convolution {
     }
 
     fn rebuild_synth_ir(&mut self, seconds: f64) {
-        if !self.user_ir_loaded {
+        if !self.slots[IrSlot::A].user_loaded {
             let ir_l = synthesize_ir(self.sample_rate, seconds, 0x00C0_FFEE);
             let ir_r = synthesize_ir(self.sample_rate, seconds, 0x0BAD_BEEF);
             self.direct_a.l.load_ir(&ir_l);
@@ -1035,7 +1042,7 @@ impl Convolution {
             self.slots[IrSlot::A].original = Some((Arc::new(ir_l), Arc::new(ir_r)));
             self.slots[IrSlot::A].applied_shape = ImpulseParams::default();
         }
-        if !self.user_ir_loaded_b {
+        if !self.slots[IrSlot::B].user_loaded {
             let ir_l = synthesize_ir(self.sample_rate, seconds, 0x005E_ED0B);
             let ir_r = synthesize_ir(self.sample_rate, seconds, 0x000D_DB17);
             self.direct_b.l.load_ir(&ir_l);
@@ -1061,27 +1068,27 @@ impl Convolution {
             self.predelay_l.mod_amount = mod_amount;
             self.predelay_r.mod_amount = mod_amount;
         }
-        self.predelay_engaged = want_pd;
+        self.engaged.predelay = want_pd;
 
         // ── Motion gate ──
         let want_motion = self.sm.motion_depth.value() > GATE_EPS;
         if want_motion {
-            if !self.motion_engaged {
+            if !self.engaged.motion {
                 for ap in &mut self.motion {
                     ap.reset();
                 }
             }
-            if !self.sm.motion_depth.is_settled() || !self.motion_engaged {
+            if !self.sm.motion_depth.is_settled() || !self.engaged.motion {
                 self.refresh_motion_rates();
             }
         }
-        self.motion_engaged = want_motion;
+        self.engaged.motion = want_motion;
 
         // ── Damping gate ──
         let damp_depth = self.sm.damp_depth.value();
         let want_damp = damp_depth.abs() > GATE_EPS;
         if want_damp {
-            if !self.damp_engaged {
+            if !self.engaged.damping {
                 self.damp_l.reset();
                 self.damp_r.reset();
             }
@@ -1096,7 +1103,7 @@ impl Convolution {
             self.damp_l.set_freq(cutoff, self.sample_rate);
             self.damp_r.set_freq(cutoff, self.sample_rate);
         }
-        self.damp_engaged = want_damp;
+        self.engaged.damping = want_damp;
 
         // ── Morph gate ──
         let want_b = self.sm.morph.value() > GATE_EPS
@@ -1176,7 +1183,7 @@ impl ReverbAlgorithm for Convolution {
         // matching the cutoff map the algorithmic reverbs use.
         self.base_damp_cutoff = (1.0 - params.damping).mul_add(14000.0, 2000.0);
 
-        if self.user_ir_loaded {
+        if self.slots[IrSlot::A].user_loaded {
             // User IR locked in — size/decay no longer regenerate
             // synthetic IRs (for EITHER slot: set_params runs on the
             // audio thread during automation, and a slot-B synth rebuild
@@ -1267,8 +1274,8 @@ impl ReverbAlgorithm for Convolution {
         // Rectified input drives the wet ducker.
         let env = self.env.tick(0.5 * (left.abs() + right.abs()));
 
-        let need_lfo = self.predelay_engaged
-            || self.damp_engaged
+        let need_lfo = self.engaged.predelay
+            || self.engaged.damping
             || self.b_engaged
             || self.sm.wet_depth.value().abs() > GATE_EPS
             || self.sm.morph_lfo.value() > GATE_EPS;
@@ -1302,7 +1309,7 @@ impl ReverbAlgorithm for Convolution {
         };
 
         // ── Option 2: modulatable predelay before the convolver ──────
-        let (in_l, in_r) = if self.predelay_engaged {
+        let (in_l, in_r) = if self.engaged.predelay {
             (self.predelay_l.tick(left), self.predelay_r.tick(right))
         } else {
             // Keep the buffers warm so engaging later reads real audio,
@@ -1409,7 +1416,7 @@ impl ReverbAlgorithm for Convolution {
         self.fb_r = wet_r;
 
         // ── Option 1: motion stage ────────────────────────────────────
-        if self.motion_engaged {
+        if self.engaged.motion {
             // Depth blends dry/moved so the gate edge is click-free and
             // depth doubles as an intensity control.
             let d = self.sm.motion_depth.value();
@@ -1422,7 +1429,7 @@ impl ReverbAlgorithm for Convolution {
         }
 
         // ── Option 2: damping + wet gain ──────────────────────────────
-        if self.damp_engaged {
+        if self.engaged.damping {
             wet_l = self.damp_l.tick(wet_l);
             wet_r = self.damp_r.tick(wet_r);
         }
