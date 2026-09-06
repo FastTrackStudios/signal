@@ -215,11 +215,8 @@ impl Fdn {
 
     /// Set all delay lengths (in samples). Must match the number of lines.
     pub fn set_delays(&mut self, lengths: &[usize]) {
-        for (i, &len) in lengths.iter().enumerate().take(self.num_lines) {
-            #[expect(clippy::indexing_slicing, reason = "i is bounded by take(self.num_lines) which matches delays and delay_samples initialization")]
-            {
-                self.lines[i].delay_samples = len.min(self.lines[i].delay.len().saturating_sub(1));
-            }
+        for (line, &len) in self.lines.iter_mut().zip(lengths).take(self.num_lines) {
+            line.delay_samples = len.min(line.delay.len().saturating_sub(1));
         }
     }
 
@@ -268,22 +265,18 @@ impl Fdn {
     pub fn set_t60(&mut self, t60_dc: f64, t60_nyq: f64, sample_rate: f64) {
         let t_dc = t60_dc.max(0.01);
         let t_ny = t60_nyq.max(0.01);
-        for i in 0..self.num_lines {
+        for line in self.lines.iter_mut().take(self.num_lines) {
             // The loop length is the delay line PLUS any in-loop allpass:
             // that allpass sits inside the feedback path, so it lengthens
             // every recirculation. Ignoring it makes the tail run long —
             // measurably so, ~1.16x for Hall's 0.6 coefficient and ~2x for
             // the Room engines once they were given the same diffusion.
-            #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..self.num_lines")]
-            let total_len = self.lines[i].delay_samples.saturating_add(self.lines[i].loop_ap_len);
+            let total_len = line.delay_samples.saturating_add(line.loop_ap_len);
             let mi = num::count_to_f64(total_len);
             let r0 = 10.0f64.powf(-3.0 * mi / (sample_rate * t_dc));
             let rp = 10.0f64.powf(-3.0 * mi / (sample_rate * t_ny));
-            #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..self.num_lines")]
-            {
-                self.lines[i].shelf_p = (r0 - rp) / (r0 + rp);
-                self.lines[i].shelf_g = 2.0 * r0 * rp / (r0 + rp);
-            }
+            line.shelf_p = (r0 - rp) / (r0 + rp);
+            line.shelf_g = 2.0 * r0 * rp / (r0 + rp);
         }
         // Tonal correction: |E(ω)|² ∝ 1/T60(ω) via a one-zero.
         let alpha = (t_ny / t_dc).clamp(0.05, 20.0);
@@ -325,18 +318,15 @@ impl Fdn {
             return;
         }
         let t60 = t60_mid.max(0.01);
-        for i in 0..self.num_lines {
-            #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..self.num_lines")]
-            let mi = num::count_to_f64(self.lines[i].delay_samples);
+        let decay_eq_on = &mut self.decay_eq_on;
+        for line in self.lines.iter_mut().take(self.num_lines) {
+            let mi = num::count_to_f64(line.delay_samples);
             let gmid_db = -60.0 * mi / (sample_rate * t60);
             // First pass: per-band target gains at this line.
             let mut gains = [0.0f64; crate::algorithm::DECAY_BANDS];
 
-            for (b, (band, gain)) in bands.iter().zip(&mut gains).enumerate() {
-                #[expect(clippy::indexing_slicing, reason = "b is bounded by bands.len() which equals DECAY_BANDS")]
-                {
-                    self.decay_eq_on[b] = band.is_active();
-                }
+            for (on, (band, gain)) in decay_eq_on.iter_mut().zip(bands.iter().zip(&mut gains)) {
+                *on = band.is_active();
                 if !band.is_active() {
                     continue;
                 }
@@ -367,7 +357,7 @@ impl Fdn {
             let mut f = f_lo;
             for _ in 0..PROBE_POINTS {
                 let mut total = 0.0f64;
-                for (_b, (band, gain)) in bands.iter().zip(&gains).enumerate() {
+                for (band, gain) in bands.iter().zip(&gains) {
                     if band.is_active() && gain > &0.0 {
                         total += gain * band.shape_weight_at(f);
                     }
@@ -382,7 +372,8 @@ impl Fdn {
             } else {
                 1.0
             };
-            for (b, (band, gain)) in bands.iter().zip(&gains).enumerate() {
+            let curves = line.decay_eq.iter_mut().zip(bands.iter());
+            for ((filter, band), gain) in curves.zip(&gains) {
                 if !band.is_active() {
                     continue;
                 }
@@ -398,8 +389,7 @@ impl Fdn {
                     2 => FilterType::HighShelf { gain_db },
                     _ => FilterType::Peak { gain_db },
                 };
-                #[expect(clippy::indexing_slicing, reason = "b is bounded by bands.len() which equals DECAY_BANDS")]
-                self.lines[i].decay_eq[b].set(ftype, f, q, sample_rate);
+                filter.set(ftype, f, q, sample_rate);
             }
         }
     }
@@ -421,15 +411,15 @@ impl Fdn {
     pub fn set_loop_allpass(&mut self, coeff: f64) {
         self.loop_ap_coeff = coeff.clamp(-0.9, 0.9);
         if self.loop_ap_coeff.abs() > 1e-4 && self.loop_ap.is_empty() {
-            for i in 0..self.num_lines {
+            let loop_ap = &mut self.loop_ap;
+            for (i, line) in self.lines.iter_mut().take(self.num_lines).enumerate() {
                 // Short prime-ish lengths derived from the line length.
-                #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..self.num_lines")]
-                #[expect(clippy::arithmetic_side_effects, reason = "arithmetic operations on bounded delay lengths")]
-                {
-                    let len = (self.lines[i].delay_samples / 7 + 19 + 26 * i) | 1;
-                    self.lines[i].loop_ap_len = len;
-                    self.loop_ap.push(DelayLine::new(len.saturating_add(4)));
-                }
+                let len = (line.delay_samples.saturating_div(7))
+                    .saturating_add(19)
+                    .saturating_add(i.saturating_mul(26))
+                    | 1;
+                line.loop_ap_len = len;
+                loop_ap.push(DelayLine::new(len.saturating_add(4)));
             }
         }
     }
@@ -475,6 +465,10 @@ impl Fdn {
     }
 
     /// Process one mono input sample, return the mixed output of all lines.
+    ///
+    /// Every walk over the lines pairs `lines` with `feedback` through a
+    /// `zip`, so `num_lines` running ahead of either vector shortens the
+    /// walk instead of panicking.
     #[inline]
     pub fn tick(&mut self, input: f64) -> f64 {
         let n = self.num_lines;
@@ -488,69 +482,50 @@ impl Fdn {
                 self.vintage_phase -= 1.0;
             }
             let sweep = (self.vintage_phase * core::f64::consts::TAU).sin() * 3.5;
-            for i in 0..n {
-                #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
-                {
-                    let pos = (num::count_to_f64(self.lines[i].delay_samples) + sweep)
-                        .clamp(1.0, num::count_to_f64(self.lines[i].delay.len().saturating_sub(2)));
-                    self.feedback[i] = self.lines[i].delay.read(num::f64_to_index(pos));
-                }
+            for (line, fb) in self.lines.iter_mut().zip(&mut self.feedback).take(n) {
+                let pos = (num::count_to_f64(line.delay_samples) + sweep)
+                    .clamp(1.0, num::count_to_f64(line.delay.len().saturating_sub(2)));
+                *fb = line.delay.read(num::f64_to_index(pos));
             }
         } else if self.jitter_depth > 1e-9 {
-            for i in 0..n {
-                #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
-                {
-                    if self.lines[i].jitter_count == 0 {
-                        // New random drift target, glide over 300–1500 samples.
-                        #[expect(clippy::as_conversions, reason = "conversion from f64 to u32 is in no conversion table")]
-                        #[expect(clippy::cast_possible_truncation, reason = "conversion from f64 to u32 is intentional")]
-                        #[expect(clippy::cast_sign_loss, reason = "conversion from f64 to u32 is intentional")]
-                        let interval = 300u32.saturating_add((self.jitter_rng.next_bipolar().abs() * 1200.0) as u32);
-                        let target = self.jitter_rng.next_bipolar() * self.jitter_depth;
-                        self.lines[i].jitter_step = (target - self.lines[i].jitter_cur) / f64::from(interval);
-                        self.lines[i].jitter_count = interval;
-                    }
-                    self.lines[i].jitter_count = self.lines[i].jitter_count.saturating_sub(1);
-                    self.lines[i].jitter_cur += self.lines[i].jitter_step;
-                    let pos = (num::count_to_f64(self.lines[i].delay_samples) + self.lines[i].jitter_cur)
-                        .clamp(1.0, num::count_to_f64(self.lines[i].delay.len().saturating_sub(2)));
-                    self.feedback[i] = self.lines[i].delay.read_linear(pos);
+            let rng = &mut self.jitter_rng;
+            let depth = self.jitter_depth;
+            for (line, fb) in self.lines.iter_mut().zip(&mut self.feedback).take(n) {
+                if line.jitter_count == 0 {
+                    // New random drift target, glide over 300–1500 samples.
+                    let interval =
+                        300u32.saturating_add(num::f64_to_u32(rng.next_bipolar().abs() * 1200.0));
+                    let target = rng.next_bipolar() * depth;
+                    line.jitter_step = (target - line.jitter_cur) / f64::from(interval);
+                    line.jitter_count = interval;
                 }
+                line.jitter_count = line.jitter_count.saturating_sub(1);
+                line.jitter_cur += line.jitter_step;
+                let pos = (num::count_to_f64(line.delay_samples) + line.jitter_cur)
+                    .clamp(1.0, num::count_to_f64(line.delay.len().saturating_sub(2)));
+                *fb = line.delay.read_linear(pos);
             }
         } else {
-            for i in 0..n {
-                #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
-                {
-                    self.feedback[i] = self.lines[i].delay.read(self.lines[i].delay_samples);
-                }
+            for (line, fb) in self.lines.iter_mut().zip(&mut self.feedback).take(n) {
+                *fb = line.delay.read(line.delay_samples);
             }
         }
 
         // Sum output before mixing (tap from raw delay outputs).
         let mut output = 0.0;
         let output_scale = 1.0 / num::count_to_f64(n).sqrt();
-        for i in 0..n {
-            #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
-            {
-                output += self.feedback[i] * output_scale;
-            }
+        for fb in self.feedback.iter().take(n) {
+            output += *fb * output_scale;
         }
 
-        // Apply mixing matrix
-        match self.mix_matrix {
-            MixMatrix::Householder => {
-                #[expect(clippy::indexing_slicing, reason = "feedback slice [..n] is within bounds")]
-                householder::mix(&mut self.feedback[..n])
-            },
-            MixMatrix::Hadamard => {
+        // Apply mixing matrix. `n <= feedback.len()` by construction, so
+        // the `else` never runs; it just keeps the mix off a panic.
+        let matrix = self.mix_matrix;
+        if let Some(bus) = self.feedback.get_mut(..n) {
+            match matrix {
                 // Hadamard requires power of 2 — if not, fall back to Householder
-                if n.is_power_of_two() {
-                    #[expect(clippy::indexing_slicing, reason = "feedback slice [..n] is within bounds")]
-                    super::hadamard::mix(&mut self.feedback[..n]);
-                } else {
-                    #[expect(clippy::indexing_slicing, reason = "feedback slice [..n] is within bounds")]
-                    householder::mix(&mut self.feedback[..n]);
-                }
+                MixMatrix::Hadamard if n.is_power_of_two() => super::hadamard::mix(bus),
+                MixMatrix::Householder | MixMatrix::Hadamard => householder::mix(bus),
             }
         }
 
@@ -566,31 +541,41 @@ impl Fdn {
                 }
             }
             self.rot_countdown = self.rot_countdown.saturating_sub(1);
-            for k in 0..n / 2 {
-                #[expect(clippy::indexing_slicing, reason = "k is bounded by for loop 0..n/2")]
-                #[expect(clippy::arithmetic_side_effects, reason = "2*k and 2*k+1 bounded by n/2")]
-                {
-                    let (c, sn) = self.rot_cs[k];
-                    let a = self.feedback[2 * k];
-                    let b = self.feedback[2 * k + 1];
-                    self.feedback[2 * k] = c.mul_add(a, -(sn * b));
-                    self.feedback[2 * k + 1] = sn.mul_add(a, c * b);
-                }
+            // Chunks of two are the (2k, 2k + 1) pairs the rotation used
+            // to address by hand.
+            for (pair, &(c, sn)) in self
+                .feedback
+                .chunks_exact_mut(2)
+                .zip(&self.rot_cs)
+                .take(n / 2)
+            {
+                let [first, second] = pair else {
+                    continue;
+                };
+                let (a, b) = (*first, *second);
+                *first = c.mul_add(a, -(sn * b));
+                *second = sn.mul_add(a, c * b);
             }
         }
 
-        for i in 0..n {
+        let Self {
+            lines,
+            feedback,
+            loop_ap,
+            decay_eq_on,
+            ..
+        } = self;
+        for (i, (line, fb)) in lines.iter_mut().zip(feedback.iter()).take(n).enumerate() {
             // Per-line decay: exact Jot T60 shelf when engaged,
             // otherwise the legacy damping · decay · band-split path.
-            #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
             let mut sig = if self.t60_mode {
-                let y = self.lines[i].shelf_g.mul_add(self.feedback[i], self.lines[i].shelf_p * self.lines[i].shelf_state);
-                self.lines[i].shelf_state = flush(y);
+                let y = line.shelf_g.mul_add(*fb, line.shelf_p * line.shelf_state);
+                line.shelf_state = flush(y);
                 y
             } else {
-                let mut sig = self.lines[i].damping.tick(self.feedback[i]) * self.decay_gain;
+                let mut sig = line.damping.tick(*fb) * self.decay_gain;
                 if self.band_split_active {
-                    let low = self.lines[i].band_split.tick(sig);
+                    let low = line.band_split.tick(sig);
                     let high = sig - low;
                     sig = low.mul_add(self.low_decay_mult, high * self.high_decay_mult);
                 }
@@ -601,51 +586,43 @@ impl Fdn {
             // loop response so decay time follows the drawn curve
             // (`fx.reverb.decay-eq`).
             if self.decay_eq_active {
-                for b in 0..crate::algorithm::DECAY_BANDS {
-                    #[expect(clippy::indexing_slicing, reason = "b is bounded by DECAY_BANDS")]
-                    {
-                        if self.decay_eq_on[b] {
-                            sig = self.lines[i].decay_eq[b].tick(sig, 0);
-                        }
+                for (on, band) in decay_eq_on.iter().zip(line.decay_eq.iter_mut()) {
+                    if *on {
+                        sig = band.tick(sig, 0);
                     }
                 }
             }
 
             // In-loop allpass: density compounds each recirculation.
-            if self.loop_ap_coeff.abs() > 1e-4 && !self.loop_ap.is_empty() {
+            if self.loop_ap_coeff.abs() > 1e-4 {
                 let g = if i % 2 == 0 {
                     self.loop_ap_coeff
                 } else {
                     -self.loop_ap_coeff
                 };
-                #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
-                {
-                    let delayed = self.loop_ap[i].read(self.lines[i].loop_ap_len);
+                // `loop_ap` is empty until sized, which is why this is a
+                // lookup rather than a fourth arm of the zip.
+                if let Some(ap) = loop_ap.get_mut(i) {
+                    let delayed = ap.read(line.loop_ap_len);
                     let v = sig - g * delayed;
-                    self.loop_ap[i].write(v);
+                    ap.write(v);
                     sig = delayed + g * v;
                 }
             }
 
             // Per-line loop shelving EQ (color compounds per pass).
             if self.loop_eq_active {
-                #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
-                {
-                    let low = self.lines[i].eq_low_lp.tick(sig);
-                    sig += (self.eq_low_gain - 1.0) * low;
-                    let lp2 = self.lines[i].eq_high_lp.tick(sig);
-                    sig += (self.eq_high_gain - 1.0) * (sig - lp2);
-                }
+                let low = line.eq_low_lp.tick(sig);
+                sig += (self.eq_low_gain - 1.0) * low;
+                let lp2 = line.eq_high_lp.tick(sig);
+                sig += (self.eq_high_gain - 1.0) * (sig - lp2);
             }
 
             // Block DC in the recirculating path — long tails otherwise
             // accumulate subsonic offset (worst with pitch-shifted or
             // saturated feedback around the FDN).
-            #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
-            {
-                sig = self.lines[i].dc_blocker.tick(sig);
-                self.lines[i].delay.write(flush(input + sig));
-            }
+            sig = line.dc_blocker.tick(sig);
+            line.delay.write(flush(input + sig));
         }
 
         // Jot tonal correction (one-zero) so T60 changes don't recolor
