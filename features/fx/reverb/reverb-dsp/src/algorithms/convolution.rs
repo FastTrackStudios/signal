@@ -522,13 +522,8 @@ pub struct Convolution {
 
     // ── BigSky MX Impulse live params ─────────────────────────────────
     impulse: ImpulseParams,
-    /// Shape actually baked into the active partitions, per slot.
-    applied_shape: [ImpulseParams; 2],
-    /// Slots whose partitions are stale vs `impulse`'s shaping params.
-    shape_dirty: [bool; 2],
-    /// Original (un-shaped) IRs per slot, kept for re-preparation.
-    #[expect(clippy::type_complexity, reason = "stereo IR storage requires paired tuples per slot")]
-    originals: [Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)>; 2],
+    /// Per-slot IR state — see [`IrSlotState`].
+    slots: [IrSlotState; 2],
     /// Smoothed feedback amount (10 ms) + recirculation state.
     fb_smoother: ParamSmoother,
     fb_l: f64,
@@ -537,7 +532,26 @@ pub struct Convolution {
     fb_dc_r: DcBlocker,
 }
 
+/// Everything one IR slot owns.
+///
+/// Three parallel `[_; 2]` arrays before, all indexed by `slot_idx(slot)` at
+/// twenty-two call sites.
+#[derive(Default)]
+struct IrSlotState {
+    /// Shape actually baked into the active partitions.
+    applied_shape: ImpulseParams,
+    /// Set when the partitions are stale against `impulse`'s shaping params.
+    shape_dirty: bool,
+    /// The original, un-shaped stereo IR, kept for re-preparation.
+    #[expect(
+        clippy::type_complexity,
+        reason = "a stereo IR is a pair of shared buffers; naming the pair would not make it simpler"
+    )]
+    original: Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)>,
+}
+
 #[inline]
+
 const fn slot_idx(slot: IrSlot) -> usize {
     match slot {
         IrSlot::A => 0,
@@ -566,9 +580,15 @@ impl Convolution {
         let ir_r_b = synthesize_ir(sample_rate, 1.5, 0x000D_DB17);
         conv_l_b.load_ir(&ir_l_b);
         conv_r_b.load_ir(&ir_r_b);
-        let originals = [
-            Some((Arc::new(ir_l), Arc::new(ir_r))),
-            Some((Arc::new(ir_l_b), Arc::new(ir_r_b))),
+        let slots = [
+            IrSlotState {
+                original: Some((Arc::new(ir_l), Arc::new(ir_r))),
+                ..IrSlotState::default()
+            },
+            IrSlotState {
+                original: Some((Arc::new(ir_l_b), Arc::new(ir_r_b))),
+                ..IrSlotState::default()
+            },
         ];
 
         let mut env = EnvelopeFollower::new(0.0);
@@ -617,9 +637,8 @@ impl Convolution {
             base_damp_cutoff: (1.0_f64 - 0.3).mul_add(14000.0, 2000.0),
             b_engaged: false,
             impulse: ImpulseParams::default(),
-            applied_shape: [ImpulseParams::default(); 2],
-            shape_dirty: [false; 2],
-            originals,
+
+            slots,
             fb_smoother: {
                 let mut s = ParamSmoother::new(0.0);
                 s.set_time_ms(10.0, sample_rate);
@@ -673,7 +692,7 @@ impl Convolution {
                 self.user_ir_loaded_b = true;
             }
         }
-        self.originals[slot_idx(slot)] = Some((Arc::new(cap_l.to_vec()), Arc::new(cap_r.to_vec())));
+        self.slots[slot_idx(slot)].original = Some((Arc::new(cap_l.to_vec()), Arc::new(cap_r.to_vec())));
         self.on_new_r_loaded(slot);
     }
 
@@ -690,7 +709,7 @@ impl Convolution {
         self.conv_rl.load_ir(&rl);
         self.user_ir_loaded = true;
         self.true_stereo = true;
-        self.originals[0] = Some((Arc::new(ll), Arc::new(rr)));
+        self.slots[0].original = Some((Arc::new(ll), Arc::new(rr)));
         self.cross_originals = Some((Arc::new(lr), Arc::new(rl)));
         self.on_new_r_loaded(IrSlot::A);
         true
@@ -725,8 +744,8 @@ impl Convolution {
         let fb = 0.0;
         self.impulse = ImpulseParams::default();
         self.fb_smoother.set_target(fb);
-        self.applied_shape[slot_idx(slot)] = ImpulseParams::default();
-        self.shape_dirty[slot_idx(slot)] = false;
+        self.slots[slot_idx(slot)].applied_shape = ImpulseParams::default();
+        self.slots[slot_idx(slot)].shape_dirty = false;
     }
 
     /// Forget the user IRs (both slots) and resume synthetic-IR rebuilds
@@ -796,10 +815,10 @@ impl Convolution {
         // refcount decrement also goes through the trash chute — it may
         // be the last reference.
         let prev = match raw {
-            Some(raw) => self.originals[slot_idx(slot)].replace(raw),
+            Some(raw) => self.slots[slot_idx(slot)].original.replace(raw),
             // No raw retained (direct PreparedIrPair::build) — shaping
             // can't re-derive from this load.
-            None => self.originals[slot_idx(slot)].take(),
+            None => self.slots[slot_idx(slot)].original.take(),
         };
         if let Some((prev_l, prev_r)) = prev {
             self.discard(IrTrash::Raw(prev_l));
@@ -861,11 +880,11 @@ impl Convolution {
         } else {
             self.fb_smoother.set_target(fb);
         }
-        let shape_changed_a = p.shape_key() != self.applied_shape[0].shape_key();
-        let shape_changed_b = p.shape_key() != self.applied_shape[1].shape_key();
+        let shape_changed_a = p.shape_key() != self.slots[0].applied_shape.shape_key();
+        let shape_changed_b = p.shape_key() != self.slots[1].applied_shape.shape_key();
         self.impulse = *p;
-        self.shape_dirty[0] = shape_changed_a && self.originals[0].is_some();
-        self.shape_dirty[1] = shape_changed_b && self.originals[1].is_some();
+        self.slots[0].shape_dirty = shape_changed_a && self.slots[0].original.is_some();
+        self.slots[1].shape_dirty = shape_changed_b && self.slots[1].original.is_some();
     }
 
     /// Synchronous re-preparation for headless/test use. Applies the
@@ -875,7 +894,7 @@ impl Convolution {
     pub fn reprepare_now(&mut self) {
         for slot in [IrSlot::A, IrSlot::B] {
             let idx = slot_idx(slot);
-            let Some((l, r)) = self.originals[idx].clone() else {
+            let Some((l, r)) = self.slots[idx].original.clone() else {
                 continue;
             };
             let t = IrTransforms::from_impulse(&self.impulse);
@@ -899,8 +918,8 @@ impl Convolution {
                     self.conv_r_b.load_ir(&sr);
                 }
             }
-            self.applied_shape[idx] = self.impulse;
-            self.shape_dirty[idx] = false;
+            self.slots[idx].applied_shape = self.impulse;
+            self.slots[idx].shape_dirty = false;
         }
     }
 
@@ -937,16 +956,16 @@ impl Convolution {
             let ir_r = synthesize_ir(self.sample_rate, seconds, 0x0BAD_BEEF);
             self.conv_l.load_ir(&ir_l);
             self.conv_r.load_ir(&ir_r);
-            self.originals[0] = Some((Arc::new(ir_l), Arc::new(ir_r)));
-            self.applied_shape[0] = ImpulseParams::default();
+            self.slots[0].original = Some((Arc::new(ir_l), Arc::new(ir_r)));
+            self.slots[0].applied_shape = ImpulseParams::default();
         }
         if !self.user_ir_loaded_b {
             let ir_l = synthesize_ir(self.sample_rate, seconds, 0x005E_ED0B);
             let ir_r = synthesize_ir(self.sample_rate, seconds, 0x000D_DB17);
             self.conv_l_b.load_ir(&ir_l);
             self.conv_r_b.load_ir(&ir_r);
-            self.originals[1] = Some((Arc::new(ir_l), Arc::new(ir_r)));
-            self.applied_shape[1] = ImpulseParams::default();
+            self.slots[1].original = Some((Arc::new(ir_l), Arc::new(ir_r)));
+            self.slots[1].applied_shape = ImpulseParams::default();
         }
         self.ir_seconds = seconds;
     }
@@ -1066,7 +1085,9 @@ impl ReverbAlgorithm for Convolution {
         // Partitions were rebuilt from originals at identity shape; a
         // non-identity shape needs re-baking.
         if !self.impulse.shape_is_identity() {
-            self.shape_dirty = [self.originals[0].is_some(), self.originals[1].is_some()];
+            for slot in &mut self.slots {
+                slot.shape_dirty = slot.original.is_some();
+            }
         }
         // Reconfiguration point — land on the targets instantly.
         let p = self.mod_params;
@@ -1143,15 +1164,15 @@ impl ReverbAlgorithm for Convolution {
 
     fn impulse_reshape_source(&mut self, slot: IrSlot) -> Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)> {
         let idx = slot_idx(slot);
-        if !self.shape_dirty[idx] {
+        if !self.slots[idx].shape_dirty {
             return None;
         }
-        let src = self.originals[idx].clone()?;
+        let src = self.slots[idx].original.clone()?;
         // Optimistic: mark the current shape as applied so we don't
         // resubmit every block. If the job is lost, the next param
         // change re-dirties the slot.
-        self.applied_shape[idx] = self.impulse;
-        self.shape_dirty[idx] = false;
+        self.slots[idx].applied_shape = self.impulse;
+        self.slots[idx].shape_dirty = false;
         Some(src)
     }
 
