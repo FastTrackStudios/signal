@@ -11,11 +11,6 @@ use dsp_core::num;
 /// In-place Hadamard transform with normalization.
 ///
 /// `channels.len()` must be a power of 2.
-#[expect(
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    reason = "butterfly operations guaranteed safe by power-of-2 loop invariants"
-)]
 #[inline]
 pub fn mix(channels: &mut [f64]) {
     let n = channels.len();

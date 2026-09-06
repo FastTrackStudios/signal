@@ -27,7 +27,6 @@ pub fn resp3dec(x: f64) -> f64 {
 
 /// 4-decade response: 10000x range.
 #[must_use]
-#[expect(dead_code, reason = "part of the public response-curve API")]
 pub fn resp4dec(x: f64) -> f64 {
     const MULT: f64 = (10000.0 / 9999.0) * 0.0001;
     (10.0_f64.powf(4.0 * x) - 1.0) * MULT
@@ -35,7 +34,6 @@ pub fn resp4dec(x: f64) -> f64 {
 
 /// 1-octave response: 2x range.
 #[must_use]
-#[expect(dead_code, reason = "part of the public response-curve API")]
 pub fn resp1oct(x: f64) -> f64 {
     const MULT: f64 = (2.0 / 1.0) * 0.5;
     (x.exp2() - 1.0) * MULT
@@ -43,7 +41,6 @@ pub fn resp1oct(x: f64) -> f64 {
 
 /// 2-octave response: 4x range.
 #[must_use]
-#[expect(dead_code, reason = "part of the public response-curve API")]
 pub fn resp2oct(x: f64) -> f64 {
     const MULT: f64 = (4.0 / 3.0) * 0.25;
     ((2.0 * x).exp2() - 1.0) * MULT
@@ -65,7 +62,6 @@ pub fn resp4oct(x: f64) -> f64 {
 
 /// 5-octave response: 32x range.
 #[must_use]
-#[expect(dead_code, reason = "part of the public response-curve API")]
 pub fn resp5oct(x: f64) -> f64 {
     const MULT: f64 = (32.0 / 31.0) * 0.03125;
     ((5.0 * x).exp2() - 1.0) * MULT
@@ -79,7 +75,6 @@ pub fn db2gain(db: f64) -> f64 {
 
 /// Convert linear gain to dB.
 #[must_use]
-#[expect(dead_code, reason = "part of the public response-curve API")]
 pub fn gain2db(gain: f64) -> f64 {
     audiocore_dsp::db::linear_to_db(gain)
 }

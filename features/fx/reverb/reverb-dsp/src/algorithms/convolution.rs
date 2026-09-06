@@ -254,12 +254,12 @@ impl PartitionedConv {
         self.prev_input_tail.copy_from_slice(in_block);
 
         // Forward FFT.
-        let spec = &mut self.input_history[self.history_head];
-        // Buffer lengths are fixed at construction, so this cannot fail.
-        // Ignore rather than panic: this runs on the render callback.
-        let _ = self
-            .fft_fwd
-            .process(&mut self.input_block.clone(), spec);
+        // Buffer lengths are fixed at construction, so neither the slot lookup
+        // nor the transform can fail. Skip rather than panic: this runs on the
+        // render callback.
+        if let Some(spec) = self.input_history.get_mut(self.history_head) {
+            let _ = self.fft_fwd.process(&mut self.input_block.clone(), spec);
+        }
 
         // Accumulate Σ_k IR[k] * Input[t - k]. Ring modulus is the
         // history length so differently-sized partition sets (during a
@@ -278,24 +278,48 @@ impl PartitionedConv {
             w_old = theta.cos();
             self.xfade_pos = self.xfade_pos.saturating_sub(1);
         }
-        for p in 0..n_parts {
-            let hist_idx = (self.history_head.saturating_add(hist_len).saturating_sub(p)) % hist_len;
-            let ir_p = &self.ir_partitions[p];
-            let in_p = &self.input_history[hist_idx];
-            let w = Complex::new(w_new * self.gain, 0.0);
-            for k in 0..SPECTRUM_LEN {
-                self.accumulator[k] = self.accumulator[k] + ir_p[k] * in_p[k] * w;
+        let w = Complex::new(w_new * self.gain, 0.0);
+        for (p, ir_p) in self.ir_partitions.iter().enumerate().take(n_parts) {
+            let hist_idx = self
+                .history_head
+                .saturating_add(hist_len)
+                .saturating_sub(p)
+                .checked_rem(hist_len)
+                .unwrap_or(0);
+            let Some(in_p) = self.input_history.get(hist_idx) else {
+                continue;
+            };
+            for ((acc, ir), inp) in self
+                .accumulator
+                .iter_mut()
+                .zip(ir_p.iter())
+                .zip(in_p.iter())
+                .take(SPECTRUM_LEN)
+            {
+                *acc = *acc + *ir * *inp * w;
             }
         }
         if w_old > 0.0 {
             let n_old = self.old_partitions.len().min(hist_len);
             let w = Complex::new(w_old * self.old_gain, 0.0);
-            for p in 0..n_old {
-                let hist_idx = (self.history_head.saturating_add(hist_len).saturating_sub(p)) % hist_len;
-                let ir_p = &self.old_partitions[p];
-                let in_p = &self.input_history[hist_idx];
-                for k in 0..SPECTRUM_LEN {
-                    self.accumulator[k] = self.accumulator[k] + ir_p[k] * in_p[k] * w;
+            for (p, ir_p) in self.old_partitions.iter().enumerate().take(n_old) {
+                let hist_idx = self
+                    .history_head
+                    .saturating_add(hist_len)
+                    .saturating_sub(p)
+                    .checked_rem(hist_len)
+                    .unwrap_or(0);
+                let Some(in_p) = self.input_history.get(hist_idx) else {
+                    continue;
+                };
+                for ((acc, ir), inp) in self
+                    .accumulator
+                    .iter_mut()
+                    .zip(ir_p.iter())
+                    .zip(in_p.iter())
+                    .take(SPECTRUM_LEN)
+                {
+                    *acc = *acc + *ir * *inp * w;
                 }
             }
         }
@@ -309,12 +333,22 @@ impl PartitionedConv {
         // Take the second half — discard wrap-around (overlap-save).
         // Gains are already folded into the accumulation weights (the
         // two IRs in a crossfade can carry different makeup gains).
-        for i in 0..BLOCK {
-            self.output_block[i] = self.ifft_out[BLOCK.saturating_add(i)];
+        // Take the second half — discard wrap-around (overlap-save).
+        for (out, tail) in self
+            .output_block
+            .iter_mut()
+            .zip(self.ifft_out.iter().skip(BLOCK))
+            .take(BLOCK)
+        {
+            *out = *tail;
         }
 
         // Advance ring buffer head (modulo the history length).
-        self.history_head = (self.history_head.saturating_add(1)) % hist_len;
+        self.history_head = self
+            .history_head
+            .saturating_add(1)
+            .checked_rem(hist_len)
+            .unwrap_or(0);
     }
 }
 

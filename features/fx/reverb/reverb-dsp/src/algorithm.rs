@@ -484,7 +484,6 @@ impl Default for ImpulseParams {
 impl ImpulseParams {
     /// The shaping subset (everything except `feedback`) — equality on
     /// this tuple decides whether a re-preparation is needed.
-    #[expect(clippy::type_complexity, reason = "tuple shape mirrors the layout of impulse shaping parameters")]
     #[must_use]
     pub const fn shape_key(&self) -> (u64, ImpulseTail, u64, u64, ImpulseDirection, u64, u64) {
         (

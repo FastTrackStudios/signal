@@ -219,14 +219,16 @@ impl CloudChannel {
 
     fn reapply_all_params(&mut self) {
         for i in 0..param::COUNT {
-            let val = self.params_scaled[i];
+            let val = self.params_scaled.get(i).copied().unwrap_or(0.0);
             self.apply_param(i, val);
         }
     }
 
     /// Apply a single scaled parameter — exact port of `ReverbChannel::SetParameter`.
     fn apply_param(&mut self, para: usize, scaled: f64) {
-        self.params_scaled[para] = scaled;
+        if let Some(slot) = self.params_scaled.get_mut(para) {
+            *slot = scaled;
+        }
 
         match para {
             param::INTERPOLATION => {
@@ -416,27 +418,35 @@ impl CloudChannel {
 
     /// Exact port of `ReverbChannel::UpdateLines`.
     fn update_lines(&mut self) {
-        let line_delay_samples = self.ms2samples(self.params_scaled[param::LATE_LINE_SIZE]);
-        let line_decay_millis = self.params_scaled[param::LATE_LINE_DECAY] * 1000.0;
+        let line_delay_samples = self.ms2samples(self.params_scaled.get(param::LATE_LINE_SIZE).copied().unwrap_or(0.0));
+        let line_decay_millis = self.params_scaled.get(param::LATE_LINE_DECAY).copied().unwrap_or(0.0) * 1000.0;
         let line_decay_samples = self.ms2samples(line_decay_millis);
 
-        let line_mod_amount = self.ms2samples(self.params_scaled[param::LATE_LINE_MOD_AMOUNT]);
-        let line_mod_rate = self.params_scaled[param::LATE_LINE_MOD_RATE];
+        let line_mod_amount = self.ms2samples(self.params_scaled.get(param::LATE_LINE_MOD_AMOUNT).copied().unwrap_or(0.0));
+        let line_mod_rate = self.params_scaled.get(param::LATE_LINE_MOD_RATE).copied().unwrap_or(0.0);
 
         let late_diff_mod_amount =
-            self.ms2samples(self.params_scaled[param::LATE_DIFFUSE_MOD_AMOUNT]);
-        let late_diff_mod_rate = self.params_scaled[param::LATE_DIFFUSE_MOD_RATE];
+            self.ms2samples(self.params_scaled.get(param::LATE_DIFFUSE_MOD_AMOUNT).copied().unwrap_or(0.0));
+        let late_diff_mod_rate = self.params_scaled.get(param::LATE_DIFFUSE_MOD_RATE).copied().unwrap_or(0.0);
 
         let seeds =
             random_buffer_cross_seed(self.delay_line_seed, TOTAL_LINE_COUNT * 3, self.cross_seed);
 
-        for i in 0..TOTAL_LINE_COUNT {
-            let mod_amount = line_mod_amount * 0.3f64.mul_add(seeds[i], 0.7);
+        // `seeds` is three per line, laid out as three consecutive blocks:
+        // modulation amount, modulation rate, then delay length.
+        let seed_at = |block: usize, i: usize| {
+            seeds
+                .get(TOTAL_LINE_COUNT.saturating_mul(block).saturating_add(i))
+                .copied()
+                .unwrap_or(0.0)
+        };
+        for (i, line) in self.lines.iter_mut().enumerate().take(TOTAL_LINE_COUNT) {
+            let mod_amount = line_mod_amount * 0.3f64.mul_add(seed_at(0, i), 0.7);
             let mod_rate =
-                line_mod_rate * 0.3f64.mul_add(seeds[TOTAL_LINE_COUNT.saturating_add(i)], 0.7) / self.sample_rate;
+                line_mod_rate * 0.3f64.mul_add(seed_at(1, i), 0.7) / self.sample_rate;
 
             let mut delay_samples =
-                1.0f64.mul_add(seeds[TOTAL_LINE_COUNT.saturating_mul(2).saturating_add(i)], 0.5) * line_delay_samples;
+                1.0f64.mul_add(seed_at(2, i), 0.5) * line_delay_samples;
             // When delay is really short and modulation is high,
             // mod could take delay time negative — prevent that
             if delay_samples < mod_amount + 2.0 {
@@ -447,12 +457,12 @@ impl CloudChannel {
             let db_after_1iter = delay_samples / line_decay_samples.max(1.0) * (-60.0);
             let gain_after_1iter = db2gain(db_after_1iter);
 
-            self.lines[i].set_delay(num::f64_to_index(delay_samples));
-            self.lines[i].set_feedback(gain_after_1iter);
-            self.lines[i].set_line_mod_amount(mod_amount);
-            self.lines[i].set_line_mod_rate(mod_rate);
-            self.lines[i].set_diffuser_mod_amount(late_diff_mod_amount);
-            self.lines[i].set_diffuser_mod_rate(late_diff_mod_rate);
+            line.set_delay(num::f64_to_index(delay_samples));
+            line.set_feedback(gain_after_1iter);
+            line.set_line_mod_amount(mod_amount);
+            line.set_line_mod_rate(mod_rate);
+            line.set_diffuser_mod_amount(late_diff_mod_amount);
+            line.set_diffuser_mod_rate(late_diff_mod_rate);
         }
     }
 

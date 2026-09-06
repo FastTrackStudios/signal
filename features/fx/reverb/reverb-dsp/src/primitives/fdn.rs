@@ -217,7 +217,6 @@ impl Fdn {
     pub fn set_delays(&mut self, lengths: &[usize]) {
         for (i, &len) in lengths.iter().enumerate().take(self.num_lines) {
             #[expect(clippy::indexing_slicing, reason = "i is bounded by take(self.num_lines) which matches delays and delay_samples initialization")]
-            #[expect(clippy::arithmetic_side_effects, reason = "len() never underflows usize subtraction")]
             {
                 self.lines[i].delay_samples = len.min(self.lines[i].delay.len().saturating_sub(1));
             }
@@ -491,7 +490,6 @@ impl Fdn {
             let sweep = (self.vintage_phase * core::f64::consts::TAU).sin() * 3.5;
             for i in 0..n {
                 #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
-                #[expect(clippy::arithmetic_side_effects, reason = "len() never underflows on usize")]
                 {
                     let pos = (num::count_to_f64(self.lines[i].delay_samples) + sweep)
                         .clamp(1.0, num::count_to_f64(self.lines[i].delay.len().saturating_sub(2)));

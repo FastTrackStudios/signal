@@ -169,11 +169,6 @@ impl Chorale {
             ChoirVoice::Baritone => 0.78,
         };
 
-        #[expect(
-            clippy::needless_range_loop,
-            clippy::indexing_slicing,
-            reason = "iterating by index to access parallel arrays VOWEL_F/A_DB/BW; indices guaranteed: lo in [0,2] from f64_to_index(idx<3.0), hi=lo.saturating_add(1).min(3) in [0,3], arrays have 4 rows"
-        )]
         for i in 0..N_FORMANTS {
             // Morph F / amplitude / bandwidth in log-frequency space
             // between the measured vowel columns.
