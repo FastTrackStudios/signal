@@ -542,16 +542,27 @@ impl CloudChannel {
 /// and 3× the band center, amplitude riding the band envelope with an
 /// HF rolloff. Inherently polyphonic, no tracking to glitch.
 struct Ensemble {
-    bands: [Biquad; ENSEMBLE_BANDS],
-    envs: [f64; ENSEMBLE_BANDS],
-    centers: [f64; ENSEMBLE_BANDS],
-    phase2: [f64; ENSEMBLE_BANDS],
-    phase3: [f64; ENSEMBLE_BANDS],
-    lfo: [f64; ENSEMBLE_BANDS],
+    bands: [EnsembleBand; ENSEMBLE_BANDS],
     attack: f64,
     release: f64,
     lp: crate::primitives::one_pole::Lp1,
     sample_rate: f64,
+}
+
+/// One analysis band and the two partials it drives.
+///
+/// Six parallel `[_; ENSEMBLE_BANDS]` arrays before, walked by a shared index
+/// through the whole of `tick`.
+struct EnsembleBand {
+    filter: Biquad,
+    /// Swell envelope following this band's level.
+    env: f64,
+    /// Band centre frequency, Hz.
+    center: f64,
+    /// Running phase of the 2x and 3x partials, and of the detune wobble.
+    phase2: f64,
+    phase3: f64,
+    lfo: f64,
 }
 
 /// Analysis bands: ~third-octave log spacing, 80 Hz – 6 kHz.
@@ -562,12 +573,14 @@ impl Ensemble {
         let mut lp = crate::primitives::one_pole::Lp1::new();
         lp.set_freq(3200.0, sample_rate);
         let mut e = Self {
-            bands: core::array::from_fn(|_| Biquad::new()),
-            envs: [0.0; ENSEMBLE_BANDS],
-            centers: [0.0; ENSEMBLE_BANDS],
-            phase2: core::array::from_fn(|i| num::count_to_f64(i) * 0.041),
-            phase3: core::array::from_fn(|i| num::count_to_f64(i) * 0.067),
-            lfo: core::array::from_fn(|i| num::count_to_f64(i) / num::count_to_f64(ENSEMBLE_BANDS)),
+            bands: core::array::from_fn(|i| EnsembleBand {
+                filter: Biquad::new(),
+                env: 0.0,
+                center: 0.0,
+                phase2: num::count_to_f64(i) * 0.041,
+                phase3: num::count_to_f64(i) * 0.067,
+                lfo: num::count_to_f64(i) / num::count_to_f64(ENSEMBLE_BANDS),
+            }),
             attack: 0.001,
             release: 0.0005,
             lp,
@@ -581,9 +594,9 @@ impl Ensemble {
         self.sample_rate = sample_rate;
         let ratio = (6000.0f64 / 80.0).powf(1.0 / (num::count_to_f64(ENSEMBLE_BANDS) - 1.0));
         let mut f = 80.0;
-        for i in 0..ENSEMBLE_BANDS {
-            self.centers[i] = f;
-            self.bands[i].set(FilterType::Bandpass, f, 5.3, sample_rate);
+        for band in &mut self.bands {
+            band.center = f;
+            band.filter.set(FilterType::Bandpass, f, 5.3, sample_rate);
             f *= ratio;
         }
         // Slow swell per band: ~180 ms attack, ~450 ms release — the
@@ -594,9 +607,9 @@ impl Ensemble {
     }
 
     fn reset(&mut self) {
-        self.envs = [0.0; ENSEMBLE_BANDS];
-        for b in &mut self.bands {
-            b.reset();
+        for band in &mut self.bands {
+            band.env = 0.0;
+            band.filter.reset();
         }
         self.lp.reset();
     }
@@ -610,38 +623,38 @@ impl Ensemble {
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
         let mut sum = 0.0;
-        for i in 0..ENSEMBLE_BANDS {
-            let band = self.bands[i].tick(input, 0);
+        // Captured before the loop: `bands` is borrowed mutably below, so the
+        // scalars it reads cannot come off `self` inside it.
+        let first_center = self.bands.first().map_or(1.0, |b| b.center);
+        let (attack, release, rate) = (self.attack, self.release, self.sample_rate);
+        for (i, state) in self.bands.iter_mut().enumerate() {
+            let band = state.filter.tick(input, 0);
             let level = band.abs();
-            let coeff = if level > self.envs[i] {
-                self.attack
-            } else {
-                self.release
-            };
-            self.envs[i] += (level - self.envs[i]) * coeff;
-            let env = self.envs[i];
+            let coeff = if level > state.env { attack } else { release };
+            state.env += (level - state.env) * coeff;
+            let env = state.env;
             if env < 1.0e-5 {
                 continue; // silent band: skip the oscillators entirely
             }
 
             // Slow per-band detune wobble (string-machine shimmer).
             let lfo_rate = 0.12 + num::count_to_f64(i % 5) * 0.06;
-            self.lfo[i] += lfo_rate / self.sample_rate;
-            if self.lfo[i] >= 1.0 {
-                self.lfo[i] -= 1.0;
+            state.lfo += lfo_rate / rate;
+            if state.lfo >= 1.0 {
+                state.lfo -= 1.0;
             }
-            let wobble = (self.lfo[i] * std::f64::consts::TAU).sin();
+            let wobble = (state.lfo * std::f64::consts::TAU).sin();
             let detune = (wobble * 5.0 / 1200.0).exp2();
 
             // Upper partials at 2× and 3× the band center; HF rolloff
             // keeps the top registers airy instead of piercing.
-            let roll = (self.centers[0] / self.centers[i]).sqrt();
-            let f2 = (2.0 * self.centers[i] * detune).min(self.sample_rate * 0.45);
-            let f3 = (3.0 * self.centers[i] * detune).min(self.sample_rate * 0.45);
-            self.phase2[i] = (self.phase2[i] + f2 / self.sample_rate).fract();
-            self.phase3[i] = (self.phase3[i] + f3 / self.sample_rate).fract();
-            sum += (self.phase2[i] * std::f64::consts::TAU).sin() * env * roll;
-            sum += (self.phase3[i] * std::f64::consts::TAU).sin() * env * roll * 0.5;
+            let roll = (first_center / state.center).sqrt();
+            let f2 = (2.0 * state.center * detune).min(rate * 0.45);
+            let f3 = (3.0 * state.center * detune).min(rate * 0.45);
+            state.phase2 = (state.phase2 + f2 / rate).fract();
+            state.phase3 = (state.phase3 + f3 / rate).fract();
+            sum += (state.phase2 * std::f64::consts::TAU).sin() * env * roll;
+            sum += (state.phase3 * std::f64::consts::TAU).sin() * env * roll * 0.5;
         }
 
         self.lp.tick(sum * 0.7)
