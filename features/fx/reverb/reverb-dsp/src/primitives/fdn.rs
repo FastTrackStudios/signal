@@ -21,19 +21,71 @@ pub enum MixMatrix {
 }
 
 /// Generic FDN with N delay lines.
+/// Everything one delay line of the network owns.
+///
+/// This replaced sixteen parallel `Vec`s indexed by line number. The network
+/// is the core primitive under most of the algorithms in this crate, and the
+/// parallel form meant that adding a per-line term — a shelf, a jitter
+/// counter, a decay EQ — took sixteen edits to keep aligned and gave the
+/// compiler no way to notice when one was missed.
+struct Line {
+    delay: DelayLine,
+    /// Read distance in samples, clamped to the line's own length.
+    delay_samples: usize,
+    damping: Lp1,
+    dc_blocker: DcBlocker,
+    band_split: Lp1,
+    /// One-pole decay shelf: gain, pole, and its running state.
+    shelf_g: f64,
+    shelf_p: f64,
+    shelf_state: f64,
+    decay_eq: [audiocore_dsp::biquad::Biquad; crate::algorithm::DECAY_BANDS],
+    /// Length of this line's in-loop allpass, when one is fitted.
+    loop_ap_len: usize,
+    eq_low_lp: Lp1,
+    eq_high_lp: Lp1,
+    /// Random-walk delay modulation: current offset, step, and samples left
+    /// before a new step is drawn.
+    jitter_cur: f64,
+    jitter_step: f64,
+    jitter_count: u32,
+}
+
+impl Line {
+    fn new(len: usize) -> Self {
+        Self {
+            delay: DelayLine::new(len.saturating_add(1)),
+            delay_samples: len,
+            damping: Lp1::new(),
+            dc_blocker: DcBlocker::new(),
+            band_split: Lp1::new(),
+            shelf_g: 0.0,
+            shelf_p: 0.0,
+            shelf_state: 0.0,
+            decay_eq: core::array::from_fn(|_| audiocore_dsp::biquad::Biquad::new()),
+            loop_ap_len: 0,
+            eq_low_lp: Lp1::new(),
+            eq_high_lp: Lp1::new(),
+            jitter_cur: 0.0,
+            jitter_step: 0.0,
+            jitter_count: 0,
+        }
+    }
+}
+
 pub struct Fdn {
-    delays: Vec<DelayLine>,
-    delay_samples: Vec<usize>,
-    damping: Vec<Lp1>,
-    dc_blockers: Vec<DcBlocker>,
-    feedback: Vec<f64>, // Per-line state (output of delay -> matrix input)
+    /// One entry per delay line.
+    lines: Vec<Line>,
+    /// Each line's last output, kept as its own vector because the mixing
+    /// matrix operates on it as a contiguous slice — that is the one piece of
+    /// per-line state the network treats as a vector rather than per line.
+    feedback: Vec<f64>,
     decay_gain: f64,    // Overall decay multiplier
     mix_matrix: MixMatrix,
     num_lines: usize,
     // 2-band decay control: split feedback into low/high via one-pole
     // crossover, multiply each by its own decay coefficient. Default
     // (1.0, 1.0) is a no-op.
-    band_split: Vec<Lp1>,
     low_decay_mult: f64,
     high_decay_mult: f64,
     band_split_active: bool,
@@ -46,9 +98,6 @@ pub struct Fdn {
     // tonal-correction one-zero on the summed output so decay changes
     // don't recolor the wet spectrum.
     t60_mode: bool,
-    shelf_g: Vec<f64>,
-    shelf_p: Vec<f64>,
-    shelf_state: Vec<f64>,
     tc_b: f64,
     tc_prev: f64,
 
@@ -62,7 +111,6 @@ pub struct Fdn {
     // below unity.
     decay_eq_active: bool,
     decay_eq_on: [bool; crate::algorithm::DECAY_BANDS],
-    decay_eq: Vec<[audiocore_dsp::biquad::Biquad; crate::algorithm::DECAY_BANDS]>,
 
     // ── Slow orthogonal rotation (opt-in via `set_rotation`) ───────
     // Post-matrix Givens rotations between line pairs with slowly
@@ -78,7 +126,6 @@ pub struct Fdn {
     // Zita-style Schroeder allpass inside each line's feedback path,
     // coefficients alternating ±coeff: density compounds every pass.
     loop_ap: Vec<DelayLine>,
-    loop_ap_len: Vec<usize>,
     loop_ap_coeff: f64,
 
     // ── Per-line in-loop shelving EQ (opt-in, CloudSeed-style) ─────
@@ -87,8 +134,6 @@ pub struct Fdn {
     // per-line EQ trick). Boosts are clamped small — a shelf gain in
     // the loop multiplies the per-band loop gain.
     loop_eq_active: bool,
-    eq_low_lp: Vec<Lp1>,
-    eq_high_lp: Vec<Lp1>,
     eq_low_gain: f64,
     eq_high_gain: f64,
 
@@ -105,9 +150,6 @@ pub struct Fdn {
     // reverbsc-style per-line drift: random targets, linear glide,
     // fractional reads — huge-but-unchorused tail animation.
     jitter_depth: f64,
-    jitter_cur: Vec<f64>,
-    jitter_step: Vec<f64>,
-    jitter_count: Vec<u32>,
     jitter_rng: XorShift32,
 }
 
@@ -116,60 +158,37 @@ impl Fdn {
     #[must_use]
     pub fn new(delay_lengths: &[usize], matrix: MixMatrix) -> Self {
         let n = delay_lengths.len();
-        let delays = delay_lengths
-            .iter()
-            .map(|&len| DelayLine::new(len.saturating_add(1)))
-            .collect();
-        let delay_samples = delay_lengths.to_vec();
-        let damping = (0..n).map(|_| Lp1::new()).collect();
-        let dc_blockers = (0..n).map(|_| DcBlocker::new()).collect();
-        let band_split = (0..n).map(|_| Lp1::new()).collect();
+        let lines = delay_lengths.iter().map(|&len| Line::new(len)).collect();
         let feedback = vec![0.0; n];
 
         Self {
-            delays,
-            delay_samples,
-            damping,
-            dc_blockers,
+            lines,
             feedback,
             decay_gain: 0.85,
             mix_matrix: matrix,
             num_lines: n,
-            band_split,
             low_decay_mult: 1.0,
             high_decay_mult: 1.0,
             band_split_active: false,
             t60_mode: false,
-            shelf_g: vec![0.0; n],
-            shelf_p: vec![0.0; n],
-            shelf_state: vec![0.0; n],
             tc_b: 0.0,
             tc_prev: 0.0,
             decay_eq_active: false,
             decay_eq_on: [false; crate::algorithm::DECAY_BANDS],
-            decay_eq: (0..n)
-                .map(|_| core::array::from_fn(|_| audiocore_dsp::biquad::Biquad::new()))
-                .collect(),
             rot_depth: 0.0,
             rot_inc: 0.0,
             rot_phase: 0.0,
             rot_cs: vec![(1.0, 0.0); n / 2],
             rot_countdown: 0,
             loop_ap: Vec::new(),
-            loop_ap_len: vec![0; n],
             loop_ap_coeff: 0.0,
             loop_eq_active: false,
-            eq_low_lp: (0..n).map(|_| Lp1::new()).collect(),
-            eq_high_lp: (0..n).map(|_| Lp1::new()).collect(),
             eq_low_gain: 1.0,
             eq_high_gain: 1.0,
             vintage: false,
             vintage_phase: 0.0,
             vintage_inc: 0.9 / 48_000.0,
             jitter_depth: 0.0,
-            jitter_cur: vec![0.0; n],
-            jitter_step: vec![0.0; n],
-            jitter_count: vec![0; n],
             jitter_rng: XorShift32::new(0xFD4_517E5),
         }
     }
@@ -188,7 +207,8 @@ impl Fdn {
         self.low_decay_mult = low_mult.clamp(0.0, 2.0);
         self.high_decay_mult = high_mult.clamp(0.0, 2.0);
         self.band_split_active = (low_mult - 1.0).abs() > 1e-4 || (high_mult - 1.0).abs() > 1e-4;
-        for b in &mut self.band_split {
+        for line in &mut self.lines {
+            let b = &mut line.band_split;
             b.set_freq(crossover_hz, sample_rate);
         }
     }
@@ -199,14 +219,15 @@ impl Fdn {
             #[expect(clippy::indexing_slicing, reason = "i is bounded by take(self.num_lines) which matches delays and delay_samples initialization")]
             #[expect(clippy::arithmetic_side_effects, reason = "len() never underflows usize subtraction")]
             {
-                self.delay_samples[i] = len.min(self.delays[i].len().saturating_sub(1));
+                self.lines[i].delay_samples = len.min(self.lines[i].delay.len().saturating_sub(1));
             }
         }
     }
 
     /// Set the damping filter cutoff for all lines.
     pub fn set_damping(&mut self, freq_hz: f64, sample_rate: f64) {
-        for d in &mut self.damping {
+        for line in &mut self.lines {
+            let d = &mut line.damping;
             d.set_freq(freq_hz, sample_rate);
         }
         // Re-tune the in-loop DC blockers while we have the sample rate.
@@ -222,14 +243,16 @@ impl Fdn {
         //
         // 3 Hz costs 0.018 dB a pass, about 5 dB over the same tail, and still
         // blocks the subsonic offset that long feedback paths accumulate.
-        for dc in &mut self.dc_blockers {
+        for line in &mut self.lines {
+            let dc = &mut line.dc_blocker;
             dc.set_cutoff(3.0, sample_rate);
         }
     }
 
     /// Set the damping coefficient directly (0.0 = no damping, 1.0 = max).
     pub fn set_damping_coeff(&mut self, g: f64) {
-        for d in &mut self.damping {
+        for line in &mut self.lines {
+            let d = &mut line.damping;
             d.set_coeff(g);
         }
     }
@@ -253,14 +276,14 @@ impl Fdn {
             // measurably so, ~1.16x for Hall's 0.6 coefficient and ~2x for
             // the Room engines once they were given the same diffusion.
             #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..self.num_lines")]
-            let total_len = self.delay_samples[i].saturating_add(self.loop_ap_len[i]);
+            let total_len = self.lines[i].delay_samples.saturating_add(self.lines[i].loop_ap_len);
             let mi = num::count_to_f64(total_len);
             let r0 = 10.0f64.powf(-3.0 * mi / (sample_rate * t_dc));
             let rp = 10.0f64.powf(-3.0 * mi / (sample_rate * t_ny));
             #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..self.num_lines")]
             {
-                self.shelf_p[i] = (r0 - rp) / (r0 + rp);
-                self.shelf_g[i] = 2.0 * r0 * rp / (r0 + rp);
+                self.lines[i].shelf_p = (r0 - rp) / (r0 + rp);
+                self.lines[i].shelf_g = 2.0 * r0 * rp / (r0 + rp);
             }
         }
         // Tonal correction: |E(ω)|² ∝ 1/T60(ω) via a one-zero.
@@ -305,7 +328,7 @@ impl Fdn {
         let t60 = t60_mid.max(0.01);
         for i in 0..self.num_lines {
             #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..self.num_lines")]
-            let mi = num::count_to_f64(self.delay_samples[i]);
+            let mi = num::count_to_f64(self.lines[i].delay_samples);
             let gmid_db = -60.0 * mi / (sample_rate * t60);
             // First pass: per-band target gains at this line.
             let mut gains = [0.0f64; crate::algorithm::DECAY_BANDS];
@@ -377,7 +400,7 @@ impl Fdn {
                     _ => FilterType::Peak { gain_db },
                 };
                 #[expect(clippy::indexing_slicing, reason = "b is bounded by bands.len() which equals DECAY_BANDS")]
-                self.decay_eq[i][b].set(ftype, f, q, sample_rate);
+                self.lines[i].decay_eq[b].set(ftype, f, q, sample_rate);
             }
         }
     }
@@ -404,8 +427,8 @@ impl Fdn {
                 #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..self.num_lines")]
                 #[expect(clippy::arithmetic_side_effects, reason = "arithmetic operations on bounded delay lengths")]
                 {
-                    let len = (self.delay_samples[i] / 7 + 19 + 26 * i) | 1;
-                    self.loop_ap_len[i] = len;
+                    let len = (self.lines[i].delay_samples / 7 + 19 + 26 * i) | 1;
+                    self.lines[i].loop_ap_len = len;
                     self.loop_ap.push(DelayLine::new(len.saturating_add(4)));
                 }
             }
@@ -428,10 +451,12 @@ impl Fdn {
         self.eq_high_gain = 10.0f64.powf(high_gain_db.min(2.0) / 20.0);
         self.loop_eq_active =
             (self.eq_low_gain - 1.0).abs() > 1e-3 || (self.eq_high_gain - 1.0).abs() > 1e-3;
-        for lp in &mut self.eq_low_lp {
+        for line in &mut self.lines {
+            let lp = &mut line.eq_low_lp;
             lp.set_freq(low_hz.clamp(40.0, 2000.0), sample_rate);
         }
-        for lp in &mut self.eq_high_lp {
+        for line in &mut self.lines {
+            let lp = &mut line.eq_high_lp;
             lp.set_freq(high_hz.clamp(800.0, 12000.0), sample_rate);
         }
     }
@@ -468,37 +493,37 @@ impl Fdn {
                 #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
                 #[expect(clippy::arithmetic_side_effects, reason = "len() never underflows on usize")]
                 {
-                    let pos = (num::count_to_f64(self.delay_samples[i]) + sweep)
-                        .clamp(1.0, num::count_to_f64(self.delays[i].len().saturating_sub(2)));
-                    self.feedback[i] = self.delays[i].read(num::f64_to_index(pos));
+                    let pos = (num::count_to_f64(self.lines[i].delay_samples) + sweep)
+                        .clamp(1.0, num::count_to_f64(self.lines[i].delay.len().saturating_sub(2)));
+                    self.feedback[i] = self.lines[i].delay.read(num::f64_to_index(pos));
                 }
             }
         } else if self.jitter_depth > 1e-9 {
             for i in 0..n {
                 #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
                 {
-                    if self.jitter_count[i] == 0 {
+                    if self.lines[i].jitter_count == 0 {
                         // New random drift target, glide over 300–1500 samples.
                         #[expect(clippy::as_conversions, reason = "conversion from f64 to u32 is in no conversion table")]
                         #[expect(clippy::cast_possible_truncation, reason = "conversion from f64 to u32 is intentional")]
                         #[expect(clippy::cast_sign_loss, reason = "conversion from f64 to u32 is intentional")]
                         let interval = 300u32.saturating_add((self.jitter_rng.next_bipolar().abs() * 1200.0) as u32);
                         let target = self.jitter_rng.next_bipolar() * self.jitter_depth;
-                        self.jitter_step[i] = (target - self.jitter_cur[i]) / f64::from(interval);
-                        self.jitter_count[i] = interval;
+                        self.lines[i].jitter_step = (target - self.lines[i].jitter_cur) / f64::from(interval);
+                        self.lines[i].jitter_count = interval;
                     }
-                    self.jitter_count[i] = self.jitter_count[i].saturating_sub(1);
-                    self.jitter_cur[i] += self.jitter_step[i];
-                    let pos = (num::count_to_f64(self.delay_samples[i]) + self.jitter_cur[i])
-                        .clamp(1.0, num::count_to_f64(self.delays[i].len().saturating_sub(2)));
-                    self.feedback[i] = self.delays[i].read_linear(pos);
+                    self.lines[i].jitter_count = self.lines[i].jitter_count.saturating_sub(1);
+                    self.lines[i].jitter_cur += self.lines[i].jitter_step;
+                    let pos = (num::count_to_f64(self.lines[i].delay_samples) + self.lines[i].jitter_cur)
+                        .clamp(1.0, num::count_to_f64(self.lines[i].delay.len().saturating_sub(2)));
+                    self.feedback[i] = self.lines[i].delay.read_linear(pos);
                 }
             }
         } else {
             for i in 0..n {
                 #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
                 {
-                    self.feedback[i] = self.delays[i].read(self.delay_samples[i]);
+                    self.feedback[i] = self.lines[i].delay.read(self.lines[i].delay_samples);
                 }
             }
         }
@@ -561,13 +586,13 @@ impl Fdn {
             // otherwise the legacy damping · decay · band-split path.
             #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
             let mut sig = if self.t60_mode {
-                let y = self.shelf_g[i].mul_add(self.feedback[i], self.shelf_p[i] * self.shelf_state[i]);
-                self.shelf_state[i] = flush(y);
+                let y = self.lines[i].shelf_g.mul_add(self.feedback[i], self.lines[i].shelf_p * self.lines[i].shelf_state);
+                self.lines[i].shelf_state = flush(y);
                 y
             } else {
-                let mut sig = self.damping[i].tick(self.feedback[i]) * self.decay_gain;
+                let mut sig = self.lines[i].damping.tick(self.feedback[i]) * self.decay_gain;
                 if self.band_split_active {
-                    let low = self.band_split[i].tick(sig);
+                    let low = self.lines[i].band_split.tick(sig);
                     let high = sig - low;
                     sig = low.mul_add(self.low_decay_mult, high * self.high_decay_mult);
                 }
@@ -582,7 +607,7 @@ impl Fdn {
                     #[expect(clippy::indexing_slicing, reason = "b is bounded by DECAY_BANDS")]
                     {
                         if self.decay_eq_on[b] {
-                            sig = self.decay_eq[i][b].tick(sig, 0);
+                            sig = self.lines[i].decay_eq[b].tick(sig, 0);
                         }
                     }
                 }
@@ -597,7 +622,7 @@ impl Fdn {
                 };
                 #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
                 {
-                    let delayed = self.loop_ap[i].read(self.loop_ap_len[i]);
+                    let delayed = self.loop_ap[i].read(self.lines[i].loop_ap_len);
                     let v = sig - g * delayed;
                     self.loop_ap[i].write(v);
                     sig = delayed + g * v;
@@ -608,9 +633,9 @@ impl Fdn {
             if self.loop_eq_active {
                 #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
                 {
-                    let low = self.eq_low_lp[i].tick(sig);
+                    let low = self.lines[i].eq_low_lp.tick(sig);
                     sig += (self.eq_low_gain - 1.0) * low;
-                    let lp2 = self.eq_high_lp[i].tick(sig);
+                    let lp2 = self.lines[i].eq_high_lp.tick(sig);
                     sig += (self.eq_high_gain - 1.0) * (sig - lp2);
                 }
             }
@@ -620,8 +645,8 @@ impl Fdn {
             // saturated feedback around the FDN).
             #[expect(clippy::indexing_slicing, reason = "i is bounded by for loop 0..n")]
             {
-                sig = self.dc_blockers[i].tick(sig);
-                self.delays[i].write(flush(input + sig));
+                sig = self.lines[i].dc_blocker.tick(sig);
+                self.lines[i].delay.write(flush(input + sig));
             }
         }
 
@@ -637,37 +662,46 @@ impl Fdn {
     }
 
     pub fn reset(&mut self) {
-        for d in &mut self.delays {
+        for line in &mut self.lines {
+            let d = &mut line.delay;
             d.clear();
         }
-        for d in &mut self.damping {
+        for line in &mut self.lines {
+            let d = &mut line.damping;
             d.reset();
         }
-        for b in &mut self.band_split {
+        for line in &mut self.lines {
+            let b = &mut line.band_split;
             b.reset();
         }
-        for dc in &mut self.dc_blockers {
+        for line in &mut self.lines {
+            let dc = &mut line.dc_blocker;
             dc.reset();
         }
         for ap in &mut self.loop_ap {
             ap.clear();
         }
-        for line in &mut self.decay_eq {
+        for line in &mut self.lines {
+            let line = &mut line.decay_eq;
             for bq in line.iter_mut() {
                 bq.reset();
             }
         }
-        for lp in &mut self.eq_low_lp {
+        for line in &mut self.lines {
+            let lp = &mut line.eq_low_lp;
             lp.reset();
         }
-        for lp in &mut self.eq_high_lp {
+        for line in &mut self.lines {
+            let lp = &mut line.eq_high_lp;
             lp.reset();
         }
-        self.shelf_state.fill(0.0);
+        for line in &mut self.lines {
+            line.shelf_state = 0.0;
+            line.jitter_cur = 0.0;
+            line.jitter_step = 0.0;
+            line.jitter_count = 0;
+        }
         self.tc_prev = 0.0;
-        self.jitter_cur.fill(0.0);
-        self.jitter_step.fill(0.0);
-        self.jitter_count.fill(0);
         self.feedback.fill(0.0);
     }
 }
