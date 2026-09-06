@@ -122,8 +122,8 @@ impl IrTransforms {
         // 1. Trim
         let start = num::f64_to_index((self.trim_start_s.max(0.0)) * sr);
         let end_drop = num::f64_to_index((self.trim_end_s.max(0.0)) * sr);
-        l = trim(l, start, end_drop);
-        r = trim(r, start, end_drop);
+        l = trim(&l, start, end_drop);
+        r = trim(&r, start, end_drop);
 
         // 1.5. Decay window (MX Impulse Decay + Tail) — take the first
         // `decay_frac` of the file, shaped by envelope or gate. Runs
@@ -209,15 +209,9 @@ fn extract_stereo(ir: &IrAsset, layout: ChannelLayout) -> (Vec<f64>, Vec<f64>) {
     }
 }
 
-fn trim(buf: Vec<f64>, start: usize, end_drop: usize) -> Vec<f64> {
-    if start >= buf.len() {
-        return Vec::new();
-    }
+fn trim(buf: &[f64], start: usize, end_drop: usize) -> Vec<f64> {
     let end = buf.len().saturating_sub(end_drop).max(start);
-    #[expect(clippy::indexing_slicing, reason = "end = buf.len().saturating_sub(...).max(start), ensuring start <= end <= buf.len()")]
-    {
-        buf[start..end].to_vec()
-    }
+    buf.get(start..end).unwrap_or_default().to_vec()
 }
 
 /// Linear-interpolated resampling — stretches duration by `factor`.
@@ -233,12 +227,12 @@ fn stretch(buf: &[f64], factor: f64) -> Vec<f64> {
         let src = num::count_to_f64(i) * inv;
         let idx = num::f64_to_index(src.floor());
         let frac = src - num::count_to_f64(idx);
-        #[expect(clippy::indexing_slicing, reason = "idx is clamped to [0, buf.len()-1], which is always valid when buf.is_empty() is false")]
-        {
-            let a = buf[idx.min(buf.len().saturating_sub(1))];
-            let b = buf[idx.saturating_add(1).min(buf.len().saturating_sub(1))];
-            out.push((b - a).mul_add(frac, a));
-        }
+        // `buf` is non-empty here, so both clamped reads land; the zero
+        // fallback is unreachable.
+        let last = buf.len().saturating_sub(1);
+        let a = buf.get(idx.min(last)).copied().unwrap_or(0.0);
+        let b = buf.get(idx.saturating_add(1).min(last)).copied().unwrap_or(0.0);
+        out.push((b - a).mul_add(frac, a));
     }
     out
 }
@@ -270,13 +264,9 @@ fn apply_decay_window(buf: &mut Vec<f64>, frac: f64, gate: bool) {
         // second half so the shortening is smooth, not a cliff.
         let ramp_start = keep / 2;
         let ramp_len = keep.saturating_sub(ramp_start).max(1);
-        #[expect(clippy::needless_range_loop, reason = "loop accesses both index i and relative value (i - ramp_start) for gain calculation")]
-        for i in ramp_start..keep {
+        for (i, sample) in buf.iter_mut().enumerate().skip(ramp_start).take(ramp_len) {
             let g = 1.0 - num::count_to_f64(i.saturating_sub(ramp_start)) / num::count_to_f64(ramp_len);
-            #[expect(clippy::indexing_slicing, reason = "i ranges from ramp_start..keep, and buf was truncated to keep")]
-            {
-                buf[i] *= g;
-            }
+            *sample *= g;
         }
     }
 }
@@ -318,8 +308,8 @@ fn apply_decay_eq(x: &mut [f64], bands: &[(f64, f64); 2], sample_rate: f64) {
         let t = num::count_to_f64(i) / num::count_to_f64(n);
         let g_lo = 10.0f64.powf(lo_db * t / 20.0);
         let g_hi = 10.0f64.powf(hi_db * t / 20.0);
-        #[expect(clippy::indexing_slicing, reason = "end = (i + chunk).min(n), and n = x.len(), so end <= n")]
-        for v in &mut x[i..end] {
+        // `end <= n == x.len()`, so the sub-slice always exists.
+        for v in x.get_mut(i..end).unwrap_or_default() {
             let inp = *v;
             lp_lo = (1.0 - a_lo).mul_add(inp, a_lo * lp_lo);
             lp_hi = (1.0 - a_hi).mul_add(inp, a_hi * lp_hi);

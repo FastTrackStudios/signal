@@ -288,20 +288,31 @@ impl Chorale {
         }
         // New walk targets every ~80 ms.
         if self.walk_countdown == 0 {
-            #[expect(clippy::indexing_slicing, reason = "ch in [0,2) from loop bound, arrays have 2 elements")]
-            for ch in 0..2 {
-                self.rand_target_speed[ch] = self.rand_bipolar() * 0.02 * amount;
-                self.rand_target_formant[ch] = self.rand_bipolar() * 0.06 * amount;
+            // Drawn per channel, in channel order, before the assignment
+            // so the walk keeps consuming the RNG in the same sequence.
+            let targets: [(f64, f64); 2] = core::array::from_fn(|_| {
+                (
+                    self.rand_bipolar() * 0.02 * amount,
+                    self.rand_bipolar() * 0.06 * amount,
+                )
+            });
+            let speeds = self.rand_target_speed.iter_mut();
+            for ((target_speed, target_formant), (speed, formant)) in
+                speeds.zip(&mut self.rand_target_formant).zip(targets)
+            {
+                *target_speed = speed;
+                *target_formant = formant;
             }
             self.walk_countdown = (num::f64_to_index(0.08 * self.sample_rate) / CTRL_BLOCK).max(1);
         }
         self.walk_countdown = self.walk_countdown.saturating_sub(1);
 
         // One-pole toward the targets (smooth, click-free).
-        #[expect(clippy::indexing_slicing, reason = "ch in [0,2) from loop bound, arrays have 2 elements")]
-        for ch in 0..2 {
-            self.rand_speed[ch] = (self.rand_target_speed[ch] - self.rand_speed[ch]).mul_add(0.08, self.rand_speed[ch]);
-            self.rand_formant[ch] = (self.rand_target_formant[ch] - self.rand_formant[ch]).mul_add(0.08, self.rand_formant[ch]);
+        for (speed, target) in self.rand_speed.iter_mut().zip(&self.rand_target_speed) {
+            *speed = (target - *speed).mul_add(0.08, *speed);
+        }
+        for (formant, target) in self.rand_formant.iter_mut().zip(&self.rand_target_formant) {
+            *formant = (target - *formant).mul_add(0.08, *formant);
         }
 
         self.shifter_l.set_speed(2.0 * (1.0 + self.rand_speed[0]));

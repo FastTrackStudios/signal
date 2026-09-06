@@ -456,14 +456,8 @@ fn process_job(job: &IrJob) -> Result<ProcessedIr, IrLoadError> {
     // True-stereo detection: a 4-channel file is [LL, LR, RL, RR]; a
     // stereo file named `*_L` with a `*_R` sibling (or vice versa) is
     // the two-file convention (L file = source-L → LL/LR).
-    #[expect(clippy::indexing_slicing, reason = "bounds checked by asset.num_channels() >= 4")]
-    let quad: Option<[Vec<f64>; 4]> = if asset.num_channels() >= 4 {
-        Some([
-            asset.channels[0].clone(),
-            asset.channels[1].clone(),
-            asset.channels[2].clone(),
-            asset.channels[3].clone(),
-        ])
+    let quad: Option<[Vec<f64>; 4]> = if let [ll, lr, rl, rr, ..] = asset.channels.as_slice() {
+        Some([ll.clone(), lr.clone(), rl.clone(), rr.clone()])
     } else if asset.num_channels() == 2 {
         true_stereo_sibling(&job.path).and_then(|(l_path, r_path)| {
             let l = if l_path == job.path {
@@ -476,16 +470,11 @@ fn process_job(job: &IrJob) -> Result<ProcessedIr, IrLoadError> {
             } else {
                 IrAsset::load(&r_path, job.target_sample_rate).ok()?
             };
-            (l.num_channels() >= 2 && r.num_channels() >= 2).then(|| {
-                #[expect(clippy::indexing_slicing, reason = "bounds checked by num_channels() >= 2 for both l and r")]
-                let quad = [
-                    l.channels[0].clone(),
-                    l.channels[1].clone(),
-                    r.channels[0].clone(),
-                    r.channels[1].clone(),
-                ];
-                quad
-            })
+            let ([ll, lr, ..], [rl, rr, ..]) = (l.channels.as_slice(), r.channels.as_slice())
+            else {
+                return None;
+            };
+            Some([ll.clone(), lr.clone(), rl.clone(), rr.clone()])
         })
     } else {
         None

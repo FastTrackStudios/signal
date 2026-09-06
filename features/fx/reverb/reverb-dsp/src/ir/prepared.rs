@@ -81,13 +81,12 @@ impl PreparedIr {
 
             padded.fill(0.0);
             // Overlap-save convention: IR data lives in the second half.
-            #[expect(clippy::indexing_slicing, reason = "bounds guaranteed: \
-                                                         end clamped to ir.len(), \
-                                                         end >= start and end - start <= BLOCK, \
-                                                         so BLOCK + (end - start) <= 2*BLOCK = FFT_LEN")]
-            {
-                let end_pos = BLOCK.saturating_add(end.saturating_sub(start));
-                padded[BLOCK..end_pos].copy_from_slice(&ir[start..end]);
+            // `end - start <= BLOCK`, so the destination ends at or before
+            // `2 * BLOCK == FFT_LEN`; a partition that somehow fell outside
+            // stays zero rather than panicking.
+            let end_pos = BLOCK.saturating_add(end.saturating_sub(start));
+            if let (Some(dst), Some(src)) = (padded.get_mut(BLOCK..end_pos), ir.get(start..end)) {
+                dst.copy_from_slice(src);
             }
 
             let mut spec = vec![Complex::new(0.0, 0.0); SPECTRUM_LEN];

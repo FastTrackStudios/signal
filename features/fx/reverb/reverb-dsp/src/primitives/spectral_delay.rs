@@ -40,17 +40,26 @@ const MAX_STRETCH: usize = 8;
 ///
 /// `H(z) = (a + z^{-k}) / (1 + a·z^{-k})`
 struct StretchedAllpass {
-    x_buf: [f64; MAX_STRETCH], // Input delay buffer (circular)
-    y_buf: [f64; MAX_STRETCH], // Output delay buffer (circular)
-    idx: usize,                // Write position in circular buffers
-    k: usize,                  // Stretch factor
+    hist: [Delayed; MAX_STRETCH], // Input/output history (circular)
+    idx: usize,                   // Write position in the circular buffer
+    k: usize,                     // Stretch factor
+}
+
+/// One sample of the section's history. `x_buf` and `y_buf`, two
+/// parallel `[f64; MAX_STRETCH]` circular buffers sharing one index,
+/// before.
+#[derive(Clone, Copy, Default)]
+struct Delayed {
+    /// x[n] — the input at this position.
+    x: f64,
+    /// y[n] — the output at this position.
+    y: f64,
 }
 
 impl StretchedAllpass {
     fn new(k: usize) -> Self {
         Self {
-            x_buf: [0.0; MAX_STRETCH],
-            y_buf: [0.0; MAX_STRETCH],
+            hist: [Delayed::default(); MAX_STRETCH],
             idx: 0,
             k: k.min(MAX_STRETCH),
         }
@@ -65,22 +74,20 @@ impl StretchedAllpass {
             self.idx.saturating_add(MAX_STRETCH).saturating_sub(self.k)
         };
 
-        #[expect(clippy::indexing_slicing, reason = "read_idx computed from circular buffer invariant: idx in [0, MAX_STRETCH), k in [1, MAX_STRETCH)")]
-        let x_delayed = self.x_buf[read_idx];
-        #[expect(clippy::indexing_slicing, reason = "read_idx computed from circular buffer invariant: idx in [0, MAX_STRETCH), k in [1, MAX_STRETCH)")]
-        let y_delayed = self.y_buf[read_idx];
+        // `read_idx` stays inside the buffer by the wrapping above, so
+        // the zero fallback is unreachable.
+        let Delayed {
+            x: x_delayed,
+            y: y_delayed,
+        } = self.hist.get(read_idx).copied().unwrap_or_default();
 
         // y[n] = a·x[n] + x[n-k] - a·y[n-k]
         let output = a.mul_add(-y_delayed, a.mul_add(input, x_delayed));
 
         // Store current input and output
-        #[expect(clippy::indexing_slicing, reason = "self.idx guaranteed in [0, MAX_STRETCH) by wrapping logic")]
-        {
-            self.x_buf[self.idx] = input;
-        }
-        #[expect(clippy::indexing_slicing, reason = "self.idx guaranteed in [0, MAX_STRETCH) by wrapping logic")]
-        {
-            self.y_buf[self.idx] = output;
+        if let Some(slot) = self.hist.get_mut(self.idx) {
+            slot.x = input;
+            slot.y = output;
         }
 
         // Advance circular index
@@ -93,8 +100,7 @@ impl StretchedAllpass {
     }
 
     fn clear(&mut self) {
-        self.x_buf.fill(0.0);
-        self.y_buf.fill(0.0);
+        self.hist.fill(Delayed::default());
     }
 }
 
