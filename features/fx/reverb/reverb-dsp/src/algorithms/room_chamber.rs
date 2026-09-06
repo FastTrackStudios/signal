@@ -13,11 +13,46 @@ use crate::algorithm::{AlgorithmParams, ChamberColor, ChamberParams, ROOM_CHAMBE
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
-use crate::primitives::multitap_delay::{MultitapDelay, Tap};
+use crate::primitives::multitap_delay::{MultitapDelay, Tap, sign_balance};
 use crate::primitives::one_pole::Lp1;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 
 const FDN_MOD_AP_COUNT: usize = 8;
+
+/// Chamber ER: very dense and close together — a small room with the
+/// walls nearby.
+///
+/// `(delay in samples at 48 kHz, gain)`, scaled by rate and size.
+const ER_TAPS_L: [(f64, f64); 12] = [
+    (31.0, 0.92),
+    (59.0, 0.85),
+    (89.0, 0.78),
+    (127.0, 0.68),
+    (167.0, 0.58),
+    (211.0, 0.48),
+    (263.0, 0.38),
+    (317.0, 0.28),
+    (379.0, 0.20),
+    (443.0, 0.14),
+    (509.0, 0.09),
+    (577.0, 0.05),
+];
+
+/// The right channel's train, offset from the left for decorrelation.
+const ER_TAPS_R: [(f64, f64); 12] = [
+    (37.0, 0.92),
+    (67.0, 0.85),
+    (101.0, 0.78),
+    (139.0, 0.68),
+    (181.0, 0.58),
+    (227.0, 0.48),
+    (277.0, 0.38),
+    (331.0, 0.28),
+    (397.0, 0.20),
+    (461.0, 0.14),
+    (523.0, 0.09),
+    (593.0, 0.05),
+];
 
 pub struct RoomChamber {
     er_l: MultitapDelay,
@@ -107,129 +142,14 @@ impl RoomChamber {
 
     fn setup_er_taps(&mut self, size: f64) {
         let scale = self.sample_rate / 48000.0 * size.max(0.05);
-        // Chamber ER: very dense, close together (small room, walls nearby)
-        let taps_l = [
-            Tap {
-                delay_samples: num::f64_to_index(31.0 * scale),
-                gain: 0.92,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(59.0 * scale),
-                gain: 0.85,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(89.0 * scale),
-                gain: 0.78,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(127.0 * scale),
-                gain: 0.68,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(167.0 * scale),
-                gain: 0.58,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(211.0 * scale),
-                gain: 0.48,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(263.0 * scale),
-                gain: 0.38,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(317.0 * scale),
-                gain: 0.28,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(379.0 * scale),
-                gain: 0.20,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(443.0 * scale),
-                gain: 0.14,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(509.0 * scale),
-                gain: 0.09,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(577.0 * scale),
-                gain: 0.05,
-            },
-        ];
-        let taps_r = [
-            Tap {
-                delay_samples: num::f64_to_index(37.0 * scale),
-                gain: 0.92,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(67.0 * scale),
-                gain: 0.85,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(101.0 * scale),
-                gain: 0.78,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(139.0 * scale),
-                gain: 0.68,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(181.0 * scale),
-                gain: 0.58,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(227.0 * scale),
-                gain: 0.48,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(277.0 * scale),
-                gain: 0.38,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(331.0 * scale),
-                gain: 0.28,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(397.0 * scale),
-                gain: 0.20,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(461.0 * scale),
-                gain: 0.14,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(523.0 * scale),
-                gain: 0.09,
-            },
-            Tap {
-                delay_samples: num::f64_to_index(593.0 * scale),
-                gain: 0.05,
-            },
-        ];
-        // Alternate tap polarity (Moorer-style): all-positive spike trains
-        // carry a net-positive area = subsonic thump in the IR spectrum.
-        // Alternating signs keeps timing/level, zeroes the DC lobe.
-        let mut taps_l = taps_l;
-        let mut taps_r = taps_r;
-        // Greedy sign balance: flip each tap against the running sum so
-        // the net area stays near zero (plain alternation leaves ~0.4 of
-        // residual area because the gains decay).
-        let mut sum = 0.0;
-        for t in &mut taps_l {
-            if sum > 0.0 {
-                t.gain = -t.gain;
-            }
-            sum += t.gain;
-        }
-        sum = 0.0;
-        for t in &mut taps_r {
-            if sum > 0.0 {
-                t.gain = -t.gain;
-            }
-            sum += t.gain;
-        }
+        let tap = |(delay, gain): (f64, f64)| Tap {
+            delay_samples: num::f64_to_index(delay * scale),
+            gain,
+        };
+        let mut taps_l = ER_TAPS_L.map(tap);
+        let mut taps_r = ER_TAPS_R.map(tap);
+        sign_balance(&mut taps_l);
+        sign_balance(&mut taps_r);
         self.er_l.set_taps(&taps_l);
         self.er_r.set_taps(&taps_r);
     }
