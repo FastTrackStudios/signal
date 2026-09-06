@@ -2211,7 +2211,7 @@ mod tests {
                 q: 0.707,
             };
             c.update(config());
-            let n = (SR as usize) * 2;
+            let n = num::f64_to_index(SR).saturating_mul(2);
             let mut l: Vec<f64> = (0..n).map(|i| if i < 32 { 0.5 } else { 0.0 }).collect();
             let mut r = l.clone();
             c.process(&mut l, &mut r);

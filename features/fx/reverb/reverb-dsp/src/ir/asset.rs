@@ -33,7 +33,7 @@ impl IrAsset {
     pub fn load<P: AsRef<Path>>(path: P, target_sample_rate: f64) -> Result<Self, IrLoadError> {
         let path = path.as_ref();
         let mut loader = SymphoniumLoader::new();
-        let target_sr = target_sample_rate as u32;
+        let target_sr = num::f64_to_u32(target_sample_rate);
         let decoded = loader
             .load_f32(
                 path,

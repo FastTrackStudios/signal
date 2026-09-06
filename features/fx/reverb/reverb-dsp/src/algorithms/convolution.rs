@@ -203,7 +203,8 @@ impl PartitionedConv {
             core::mem::swap(&mut self.ir_partitions, &mut self.old_partitions);
             self.old_gain = self.gain;
             self.gain = prepared.gain;
-            self.xfade_len = ((0.08 * 48_000.0) / num::count_to_f64(BLOCK)) as u32 + 1;
+            self.xfade_len =
+                num::f64_to_u32((0.08 * 48_000.0) / num::count_to_f64(BLOCK)).saturating_add(1);
             self.xfade_pos = self.xfade_len;
         } else {
             // Growth (or first load): the history ring must be resized,

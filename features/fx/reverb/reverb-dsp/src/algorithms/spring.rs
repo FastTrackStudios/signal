@@ -308,7 +308,7 @@ impl ReverbAlgorithm for Spring {
 
     fn set_spring_params(&mut self, params: &SpringParams) -> bool {
         self.dwell = params.dwell;
-        self.num_springs = (params.springs as usize).clamp(1, 3);
+        self.num_springs = usize::from(params.springs).clamp(1, 3);
         true
     }
 

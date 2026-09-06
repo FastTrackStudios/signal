@@ -189,6 +189,44 @@ pub fn f64_to_index(x: f64) -> usize {
     x as usize
 }
 
+/// A non-negative `f64` as `u64`, truncating toward zero.
+///
+/// For the seed and hash-key conversions, where the value is a scaled
+/// parameter rather than a count. Same decided answers as
+/// [`f64_to_index`]: NaN and negatives give `0`, and anything past
+/// `u64::MAX` saturates.
+#[must_use]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the audited boundary: float-to-int `as` saturates in Rust, and every case is enumerated above"
+)]
+pub fn f64_to_u64(x: f64) -> u64 {
+    if x.is_nan() || x <= 0.0 {
+        return 0;
+    }
+    x as u64
+}
+
+/// A non-negative `f64` as `u32`, truncating toward zero.
+///
+/// The narrow counterpart of [`f64_to_u64`], for sample rates and block
+/// counts. NaN and negatives give `0`; anything past `u32::MAX` saturates.
+#[must_use]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the audited boundary: float-to-int `as` saturates in Rust, and every case is enumerated above"
+)]
+pub fn f64_to_u32(x: f64) -> u32 {
+    if x.is_nan() || x <= 0.0 {
+        return 0;
+    }
+    x as u32
+}
+
 /// An `i32` as `f32`, exact within ±2^24 and clamped beyond.
 #[must_use]
 #[expect(

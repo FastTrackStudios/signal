@@ -181,9 +181,9 @@ impl ReverbAlgorithm for Velvet {
 
         // Build IR only when one of the size/decay/diffusion buckets changes
         // — rebuilding every set_params would be costly on the audio thread.
-        let key = ((params.size * 100.0) as u64) << 32
-            | ((params.decay * 100.0) as u64) << 16
-            | ((params.diffusion * 100.0) as u64);
+        let key = num::f64_to_u64(params.size * 100.0) << 32
+            | num::f64_to_u64(params.decay * 100.0) << 16
+            | num::f64_to_u64(params.diffusion * 100.0);
         if key != self.last_built_key {
             self.rebuild_firs();
             self.last_built_key = key;

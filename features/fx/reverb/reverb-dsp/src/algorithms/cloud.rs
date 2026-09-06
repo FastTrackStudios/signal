@@ -393,14 +393,14 @@ impl CloudChannel {
                 self.update_post_diffusion();
             }
 
-            param::SEED_TAP => self.multitap.set_seed(scaled as u64),
-            param::SEED_DIFFUSION => self.diffuser.set_seed(scaled as u64),
+            param::SEED_TAP => self.multitap.set_seed(num::f64_to_u64(scaled)),
+            param::SEED_DIFFUSION => self.diffuser.set_seed(num::f64_to_u64(scaled)),
             param::SEED_DELAY => {
-                self.delay_line_seed = scaled as u64;
+                self.delay_line_seed = num::f64_to_u64(scaled);
                 self.update_lines();
             }
             param::SEED_POST_DIFFUSION => {
-                self.post_diffusion_seed = scaled as u64;
+                self.post_diffusion_seed = num::f64_to_u64(scaled);
                 self.update_post_diffusion();
             }
 
