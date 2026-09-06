@@ -170,10 +170,10 @@ impl Bloom {
         let direct = amount.mul_add(-0.5, 1.0);
         let cross = amount * 0.5 / num::count_to_f64(NUM_LINES - 1);
         let &[v0, v1, v2, v3] = vals;
-        let out_0 = v0 * direct + (v1 + v2 + v3) * cross;
-        let out_1 = v1 * direct + (v0 + v2 + v3) * cross;
-        let out_2 = v2 * direct + (v0 + v1 + v3) * cross;
-        let out_3 = v3 * direct + (v0 + v1 + v2) * cross;
+        let out_0 = v0.mul_add(direct, (v1 + v2 + v3) * cross);
+        let out_1 = v1.mul_add(direct, (v0 + v2 + v3) * cross);
+        let out_2 = v2.mul_add(direct, (v0 + v1 + v3) * cross);
+        let out_3 = v3.mul_add(direct, (v0 + v1 + v2) * cross);
         [out_0, out_1, out_2, out_3]
     }
 }

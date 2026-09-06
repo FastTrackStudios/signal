@@ -1389,7 +1389,10 @@ impl ReverbAlgorithm for Convolution {
             let pos = self.sm.morph_lfo.value().mul_add(lfo, self.sm.morph.value()).clamp(0.0, 1.0);
             let theta = pos * FRAC_PI_2;
             let (ga, gb) = (theta.cos(), theta.sin());
-            (out_l * ga + out_l_b * gb, out_r * ga + out_r_b * gb)
+            (
+                out_l.mul_add(ga, out_l_b * gb),
+                out_r.mul_add(ga, out_r_b * gb),
+            )
         } else {
             (out_l, out_r)
         };
