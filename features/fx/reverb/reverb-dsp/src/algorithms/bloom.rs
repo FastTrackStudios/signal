@@ -11,6 +11,8 @@
 //! - Diffusers in feedback paths mean each echo pass gets progressively smeared
 //! - Longer feedback = more bloom time
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, BloomParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::one_pole::Lp1;
@@ -38,7 +40,7 @@ struct BloomVoice {
 impl BloomVoice {
     fn new(base_delay_48k: usize, sample_rate: f64, diffuser_seed: u64) -> Self {
         let scale = sample_rate / 48000.0;
-        let base_delay = (base_delay_48k as f64 * scale) as usize;
+        let base_delay = (num::count_to_f64(base_delay_48k) * scale) as usize;
         let max_delay = base_delay * 3 + 256; // headroom for size scaling
 
         let mut diffuser = AllpassDiffuser::with_defaults(sample_rate, 0.6);
@@ -55,7 +57,7 @@ impl BloomVoice {
             diffuser,
             damping,
             dc_block: DcBlocker::new(),
-            current_delay: base_delay as f64,
+            current_delay: num::count_to_f64(base_delay),
         }
     }
 
@@ -164,7 +166,7 @@ impl Bloom {
     #[inline]
     fn rotate_mix(vals: &[f64; NUM_LINES], amount: f64) -> [f64; NUM_LINES] {
         let direct = 1.0 - amount * 0.5;
-        let cross = amount * 0.5 / (NUM_LINES - 1) as f64;
+        let cross = amount * 0.5 / num::count_to_f64((NUM_LINES - 1));
         let mut out = [0.0; NUM_LINES];
         for i in 0..NUM_LINES {
             out[i] = vals[i] * direct;
@@ -214,16 +216,16 @@ impl ReverbAlgorithm for Bloom {
         // Map 0..1 to 0.3..2.5 for small-to-massive space
         self.size_scale = 0.3 + params.size * 2.2;
         for (i, voice) in self.voices_l.iter_mut().enumerate() {
-            let scaled = (BASE_DELAYS_L[i] as f64 * (sr / 48000.0) * self.size_scale) as usize;
-            voice.current_delay = scaled as f64;
+            let scaled = (num::count_to_f64(BASE_DELAYS_L[i]) * (sr / 48000.0) * self.size_scale) as usize;
+            voice.current_delay = num::count_to_f64(scaled);
         }
         for (i, voice) in self.voices_r.iter_mut().enumerate() {
-            let scaled = (BASE_DELAYS_R[i] as f64 * (sr / 48000.0) * self.size_scale) as usize;
-            voice.current_delay = scaled as f64;
+            let scaled = (num::count_to_f64(BASE_DELAYS_R[i]) * (sr / 48000.0) * self.size_scale) as usize;
+            voice.current_delay = num::count_to_f64(scaled);
         }
 
         // -- Diffusion: input diffuser stages and feedback (bloom density) --
-        let input_stages = 2 + (params.diffusion * 6.0) as usize; // 2..8 stages
+        let input_stages = 2 + num::f64_to_index((params.diffusion * 6.0)); // 2..8 stages
         let input_fb = 0.3 + params.diffusion * 0.45; // 0.3..0.75
         self.input_diffuser_l.set_active_stages(input_stages);
         self.input_diffuser_r.set_active_stages(input_stages);
@@ -266,7 +268,7 @@ impl ReverbAlgorithm for Bloom {
 
         // -- Extra A: bloom rate (diffuser strength in feedback path) --
         // Controls how quickly density builds: more feedback diffuser stages + stronger feedback
-        let fb_stages = 2 + (params.extra_a * 6.0) as usize; // 2..8
+        let fb_stages = 2 + num::f64_to_index((params.extra_a * 6.0)); // 2..8
         let fb_diffuser_fb = 0.2 + params.extra_a * 0.5; // 0.2..0.7
         for voice in self.voices_l.iter_mut().chain(self.voices_r.iter_mut()) {
             voice.diffuser.set_active_stages(fb_stages);
@@ -322,7 +324,7 @@ impl ReverbAlgorithm for Bloom {
 
         // === Step 4: Process each delay voice ===
         let decay = self.decay_gain;
-        let inv_n = 1.0 / NUM_LINES as f64;
+        let inv_n = 1.0 / num::count_to_f64(NUM_LINES);
 
         for i in 0..NUM_LINES {
             // Left channel voice

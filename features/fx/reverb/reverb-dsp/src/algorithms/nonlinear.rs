@@ -3,6 +3,8 @@
 //! Based on Strymon `BigSky` Non-Linear: applies envelope shaping
 //! to a reverb tail, creating reverse, gated, swell, and ramp effects.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, NlShape, NonLinearParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -72,7 +74,7 @@ pub struct NonLinear {
 impl NonLinear {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_env = (sample_rate * 2.0) as usize; // 2s max envelope
+        let max_env = num::f64_to_index((sample_rate * 2.0)); // 2s max envelope
 
         Self {
             fdn: Self::make_fdn(sample_rate),
@@ -80,7 +82,7 @@ impl NonLinear {
             diffuser_r: AllpassDiffuser::with_defaults(sample_rate, 0.6),
             env_buffer_l: DelayLine::new(max_env + 1),
             env_buffer_r: DelayLine::new(max_env + 1),
-            env_length: (sample_rate * 0.5) as usize,
+            env_length: num::f64_to_index((sample_rate * 0.5)),
             env_write_count: 0,
             shape: EnvelopeShape::Reverse,
             mx: NonLinearParams::default(),
@@ -99,7 +101,7 @@ impl NonLinear {
     fn make_fdn(sample_rate: f64) -> Fdn {
         let base = [743, 941, 1163, 1399, 1627, 1861, 2083, 2311];
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| (d as f64 * scale) as usize).collect();
+        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index((d as f64 * scale))).collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.95); // Long decay — envelope does the shaping
         fdn
@@ -110,7 +112,7 @@ impl NonLinear {
     fn make_late_fdn(sample_rate: f64) -> Fdn {
         let base = [809, 1021, 1249, 1481, 1693, 1931, 2143, 2399];
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| (d as f64 * scale) as usize).collect();
+        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index((d as f64 * scale))).collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.9);
         fdn
@@ -215,7 +217,7 @@ impl ReverbAlgorithm for NonLinear {
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Knob remap (manual): DECAY sets the time of the NONLINEAR
         // portion (the shaped-envelope window).
-        self.env_length = ((0.1 + params.decay * 1.9) * self.sample_rate) as usize;
+        self.env_length = num::f64_to_index(((0.1 + params.decay * 1.9) * self.sample_rate));
 
         // Shape: the named selector wins; without it fall back to the
         // legacy extra_a thresholds.
@@ -240,7 +242,7 @@ impl ReverbAlgorithm for NonLinear {
         };
 
         // Diffusion
-        let stages = (params.diffusion * 8.0) as usize;
+        let stages = num::f64_to_index((params.diffusion * 8.0));
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
         self.diffuser_l.set_feedback(0.5 + params.diffusion * 0.2);
@@ -281,7 +283,7 @@ impl ReverbAlgorithm for NonLinear {
 
         // Read back with envelope shaping
         let env_len = self.env_length.max(1);
-        let position = (self.env_write_count % env_len) as f64 / env_len as f64;
+        let position = num::count_to_f64((self.env_write_count % env_len)) / num::count_to_f64(env_len);
         let gain = self.envelope_gain(position);
 
         let mut out_l = self.env_buffer_l.read(1) * gain;

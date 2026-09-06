@@ -4,6 +4,8 @@
 //! Chains up to 12 modulated allpass stages in series with seed-based
 //! delay distribution: `d = pow(10, r) * 0.1 * baseDelay`.
 
+use dsp_core::num;
+
 use super::lcg_random::random_buffer_cross_seed;
 use super::modulated_allpass::ModulatedAllpass;
 
@@ -56,7 +58,7 @@ impl AllpassDiffuser {
     pub fn with_defaults(sample_rate: f64, size: f64) -> Self {
         let mut d = Self::new_default();
         d.sample_rate = sample_rate;
-        d.delay = (sample_rate * 0.01 * size.max(0.1)) as usize; // ~10ms base
+        d.delay = num::f64_to_index((sample_rate * 0.01 * size.max(0.1))); // ~10ms base
         d.update_seeds();
         d.stages = 8;
         d
@@ -136,7 +138,7 @@ impl AllpassDiffuser {
     /// instantaneous delay changes cancel in aggregate.
     pub fn set_quadrature_phases(&mut self) {
         for (i, f) in self.filters.iter_mut().enumerate() {
-            f.set_phase(i as f64 * 0.25 + 0.31);
+            f.set_phase(num::count_to_f64(i) * 0.25 + 0.31);
         }
     }
 
@@ -177,7 +179,7 @@ impl AllpassDiffuser {
             if i < self.seed_values.len() {
                 let r = self.seed_values[i];
                 let d = 10.0_f64.powf(r) * 0.1; // 0.1 ... 1.0
-                self.filters[i].sample_delay = ((self.delay as f64 * d) as usize).max(1);
+                self.filters[i].sample_delay = ((num::count_to_f64(self.delay) * d) as usize).max(1);
             }
         }
     }

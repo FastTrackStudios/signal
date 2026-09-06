@@ -17,6 +17,8 @@
 //!   velvet FIRs (L/R) with exponential envelope and 4 sub-bands of
 //!   decay (low/low-mid/high-mid/high) → Output.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::lcg_random::LcgRandom;
 use crate::primitives::one_pole::{Hp1, Lp1};
@@ -58,21 +60,21 @@ impl VelvetFir {
         let mut rng = LcgRandom::new(seed);
         // Average spacing between impulses (Karjalainen 2007).
         let avg_spacing = (48000.0_f64 / density_hz).max(1.0);
-        let spacing = avg_spacing as usize;
+        let spacing = num::f64_to_index(avg_spacing);
         let count = length / spacing.max(1);
 
         self.taps.clear();
         for k in 0..count {
             // Random position within the k-th grid cell.
-            let jitter = rng.next_float() * (spacing as f64 - 1.0);
-            let pos = (k as f64 * avg_spacing + jitter) as usize;
+            let jitter = rng.next_float() * (num::count_to_f64(spacing) - 1.0);
+            let pos = (num::count_to_f64(k) * avg_spacing + jitter) as usize;
             if pos >= length {
                 break;
             }
             // Sign: ±1 with equal probability.
             let sign = if rng.next_float() < 0.5 { -1.0 } else { 1.0 };
             // Exponential envelope: gain = 10^(-3 * pos / t60).
-            let env = 10f64.powf(-3.0 * pos as f64 / t60.max(1.0));
+            let env = 10f64.powf(-3.0 * num::count_to_f64(pos) / t60.max(1.0));
             self.taps.push((pos, sign * env));
         }
     }
@@ -117,7 +119,7 @@ pub struct Velvet {
 impl Velvet {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_samples = (sample_rate * MAX_TAIL_SECONDS) as usize + 32;
+        let max_samples = num::f64_to_index((sample_rate * MAX_TAIL_SECONDS)) + 32;
         let mut v = Self {
             fir_l: VelvetFir::new(max_samples),
             fir_r: VelvetFir::new(max_samples),
@@ -142,8 +144,8 @@ impl Velvet {
     fn rebuild_firs(&mut self) {
         // Length: 0.2s..MAX_TAIL_SECONDS, scaled jointly by size & decay.
         let length_s = 0.2 + (self.size * 0.5 + self.decay * 0.5) * (MAX_TAIL_SECONDS - 0.2);
-        let length_samples = (length_s * self.sample_rate) as usize;
-        let t60_samples = length_samples as f64;
+        let length_samples = num::f64_to_index((length_s * self.sample_rate));
+        let t60_samples = num::count_to_f64(length_samples);
         let density = DENSITY_HZ * (0.5 + self.diffusion * 1.5);
 
         self.fir_l

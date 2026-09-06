@@ -1,5 +1,7 @@
 //! Reverb algorithm trait and type enum.
 
+use dsp_core::num;
+
 /// All available reverb algorithm types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlgorithmType {
@@ -1531,6 +1533,7 @@ mod decay_eq_filter_probe {
 
 #[cfg(test)]
 mod decay_eq_localization {
+    use dsp_core::num;
     use crate::algorithm::{DecayBand, DECAY_BANDS};
     use crate::primitives::fdn::{Fdn, MixMatrix};
 
@@ -1556,13 +1559,13 @@ mod decay_eq_localization {
         fdn.set_t60(2.5, 2.5, SR);
         fdn.set_decay_curve(2.5, &bands, SR);
 
-        let drive = (SR * 0.2) as usize;
-        let total = (SR * 4.0) as usize;
+        let drive = num::f64_to_index((SR * 0.2));
+        let total = num::f64_to_index((SR * 4.0));
         let mut out = Vec::with_capacity(total);
         for i in 0..total {
             let x = if i < drive {
-                let env = (std::f64::consts::PI * i as f64 / drive as f64).sin();
-                (std::f64::consts::TAU * probe_hz * i as f64 / SR).sin() * env
+                let env = (std::f64::consts::PI * num::count_to_f64(i) / num::count_to_f64(drive)).sin();
+                (std::f64::consts::TAU * probe_hz * num::count_to_f64(i) / SR).sin() * env
             } else {
                 0.0
             };
@@ -1570,9 +1573,9 @@ mod decay_eq_localization {
         }
 
         // Energy in two windows well after the drive stops.
-        let win = (SR * 0.4) as usize;
-        let a0 = drive + (SR * 0.3) as usize;
-        let b0 = a0 + (SR * 1.0) as usize;
+        let win = num::f64_to_index((SR * 0.4));
+        let a0 = drive + num::f64_to_index((SR * 0.3));
+        let b0 = a0 + num::f64_to_index((SR * 1.0));
         let energy = |start: usize| -> f64 {
             out[start..(start + win).min(out.len())]
                 .iter()

@@ -10,6 +10,8 @@
 //! [`PreparedIr`] / [`PreparedIrPair`] are the wire format between the
 //! loader thread and the audio thread.
 
+use dsp_core::num;
+
 use realfft::num_complex::Complex;
 use realfft::RealFftPlanner;
 
@@ -98,7 +100,7 @@ impl PreparedIr {
         }
 
         let ir_energy: f64 = ir.iter().map(|x| x * x).sum::<f64>().sqrt().max(1e-9);
-        let gain = 1.0 / (FFT_LEN as f64 * ir_energy * 0.5).max(1.0);
+        let gain = 1.0 / (num::count_to_f64(FFT_LEN) * ir_energy * 0.5).max(1.0);
 
         Self {
             partitions,

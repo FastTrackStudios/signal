@@ -13,6 +13,8 @@
 //! The 3 springs create a complex interference pattern that's denser
 //! and warmer than the 2-spring Classic tank.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm, SpringDwell, SpringParams};
 use crate::primitives::one_pole::Lp1;
 use crate::primitives::spectral_delay::SpectralDelay;
@@ -51,8 +53,8 @@ impl VintageSpringUnit {
         mod_depth: f64,
         initial_phase: f64,
     ) -> Self {
-        let delay_samples = (sample_rate * delay_ms * 0.001) as usize;
-        let max_delay = (sample_rate * max_delay_ms * 0.001) as usize + 48;
+        let delay_samples = num::f64_to_index((sample_rate * delay_ms * 0.001));
+        let max_delay = num::f64_to_index((sample_rate * max_delay_ms * 0.001)) + 48;
 
         let mut damp = Lp1::new();
         damp.set_freq(damp_freq, sample_rate);
@@ -101,10 +103,10 @@ impl VintageSpringUnit {
         let mod_sig = (self.mod_phase * 2.0 * PI).sin() * 0.7
             + (self.mod_phase * 2.0 * PI * 1.47).sin() * 0.3; // Irrational ratio
         let mod_offset = mod_sig * self.mod_depth;
-        let read_pos = self.delay_samples as f64 + mod_offset;
+        let read_pos = num::count_to_f64(self.delay_samples) + mod_offset;
         let read_pos = read_pos.max(1.0);
-        let read_int = read_pos as usize;
-        let frac = read_pos - read_int as f64;
+        let read_int = num::f64_to_index(read_pos);
+        let frac = read_pos - num::count_to_f64(read_int);
 
         let s0 = self.delay.read(read_int);
         let s1 = self.delay.read(read_int + 1);
@@ -248,9 +250,9 @@ impl ReverbAlgorithm for SpringVintage {
         let base_a = 18.0 + params.size * 25.0; // 18ms to 43ms
         let base_b = base_a * 1.5; // 50% longer
         let base_c = base_a * 2.2; // 120% longer
-        self.spring_a.delay_samples = (self.sample_rate * base_a * 0.001) as usize;
-        self.spring_b.delay_samples = (self.sample_rate * base_b * 0.001) as usize;
-        self.spring_c.delay_samples = (self.sample_rate * base_c * 0.001) as usize;
+        self.spring_a.delay_samples = num::f64_to_index((self.sample_rate * base_a * 0.001));
+        self.spring_b.delay_samples = num::f64_to_index((self.sample_rate * base_b * 0.001));
+        self.spring_c.delay_samples = num::f64_to_index((self.sample_rate * base_c * 0.001));
 
         // Diffusion → chirp intensity (allpass coefficient + section count)
         let ap_a = 0.40 + params.diffusion * 0.30; // 0.40 to 0.70
@@ -260,9 +262,9 @@ impl ReverbAlgorithm for SpringVintage {
         self.spring_b.dispersion.coefficient = ap_b;
         self.spring_c.dispersion.coefficient = ap_c;
 
-        let sec_a = 50 + (params.diffusion * 100.0) as usize; // 50-150
-        let sec_b = 60 + (params.diffusion * 120.0) as usize; // 60-180
-        let sec_c = 80 + (params.diffusion * 140.0) as usize; // 80-220
+        let sec_a = 50 + num::f64_to_index((params.diffusion * 100.0)); // 50-150
+        let sec_b = 60 + num::f64_to_index((params.diffusion * 120.0)); // 60-180
+        let sec_c = 80 + num::f64_to_index((params.diffusion * 140.0)); // 80-220
         self.spring_a.dispersion.active_sections = sec_a;
         self.spring_b.dispersion.active_sections = sec_b;
         self.spring_c.dispersion.active_sections = sec_c;

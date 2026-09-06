@@ -12424,6 +12424,7 @@ version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
  "crossbeam-channel",
+ "dsp-core",
  "dsp-golden",
  "fts-modulation",
  "pitch-dsp",

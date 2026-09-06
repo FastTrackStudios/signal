@@ -1,6 +1,8 @@
 //! Reverb chain — top-level processor with algorithm dispatch,
 //! pre/post processing, mix, width, freeze, output EQ, ducker, saturation.
 
+use dsp_core::num;
+
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::{AudioConfig, Processor};
@@ -382,7 +384,7 @@ impl ReverbChain {
     #[must_use]
     pub fn new() -> Self {
         let sample_rate = 48000.0;
-        let max_predelay = (sample_rate * 0.5) as usize; // 500ms
+        let max_predelay = num::f64_to_index((sample_rate * 0.5)); // 500ms
 
         Self {
             algorithm: algorithms::create(AlgorithmType::Room, 0, sample_rate),
@@ -1014,7 +1016,7 @@ impl ReverbChain {
             const POINTS: usize = 24;
             let mean_db: f64 = (0..POINTS)
                 .map(|k| {
-                    let f = 20.0 * 10.0f64.powf(3.0 * k as f64 / (POINTS - 1) as f64);
+                    let f = 20.0 * 10.0f64.powf(3.0 * num::count_to_f64(k) / num::count_to_f64((POINTS - 1)));
                     self.post_eq
                         .iter()
                         .filter(|b| b.is_active())
@@ -1022,7 +1024,7 @@ impl ReverbChain {
                         .sum::<f64>()
                 })
                 .sum::<f64>()
-                / POINTS as f64;
+                / num::count_to_f64(POINTS);
             10.0f64.powf(-mean_db / 20.0).clamp(0.1, 10.0)
         } else {
             1.0
@@ -1122,7 +1124,7 @@ impl Processor for ReverbChain {
             1.0
         };
 
-        let max_predelay = (config.sample_rate * 0.5) as usize;
+        let max_predelay = num::f64_to_index((config.sample_rate * 0.5));
         self.predelay = DelayLine::new(max_predelay + 1);
         self.predelay_samples = if matches!(
             self.algorithm_type,
@@ -1130,7 +1132,7 @@ impl Processor for ReverbChain {
         ) {
             0
         } else {
-            (self.predelay_ms * 0.001 * config.sample_rate) as usize
+            num::f64_to_index((self.predelay_ms * 0.001 * config.sample_rate))
         };
 
         self.input_hp.set(
@@ -1314,7 +1316,7 @@ impl Processor for ReverbChain {
                 }
                 _ => self.predelay_ms,
             };
-            self.predelay_samples = (ms * 0.001 * self.sample_rate) as usize;
+            self.predelay_samples = num::f64_to_index((ms * 0.001 * self.sample_rate));
         }
 
         // Re-apply the input LP here too: the Classic-voice vintage cap
@@ -1917,7 +1919,7 @@ mod tests {
         let n = 9600;
         let sine = |off: usize| -> Vec<f64> {
             (0..n)
-                .map(|i| (2.0 * PI * freq * (off + i) as f64 / SR).sin() * 0.5)
+                .map(|i| (2.0 * PI * freq * num::count_to_f64((off + i)) / SR).sin() * 0.5)
                 .collect()
         };
 
@@ -2014,7 +2016,7 @@ mod tests {
             let mut l: Vec<f64> = (0..n)
                 .map(|i| {
                     if i < 4800 {
-                        (2.0 * PI * 300.0 * i as f64 / SR).sin() * 0.5
+                        (2.0 * PI * 300.0 * num::count_to_f64(i) / SR).sin() * 0.5
                     } else {
                         0.0
                     }
@@ -2050,13 +2052,13 @@ mod tests {
         c.update(config());
         c.set_decay_seconds(2.5);
 
-        let drive = (SR * 0.2) as usize;
-        let total = (SR * 4.0) as usize;
+        let drive = num::f64_to_index((SR * 0.2));
+        let total = num::f64_to_index((SR * 4.0));
         let mut l: Vec<f64> = (0..total)
             .map(|i| {
                 if i < drive {
-                    let env = (PI * i as f64 / drive as f64).sin();
-                    (2.0 * PI * probe_hz * i as f64 / SR).sin() * env
+                    let env = (PI * num::count_to_f64(i) / num::count_to_f64(drive)).sin();
+                    (2.0 * PI * probe_hz * num::count_to_f64(i) / SR).sin() * env
                 } else {
                     0.0
                 }
@@ -2065,9 +2067,9 @@ mod tests {
         let mut r = l.clone();
         c.process(&mut l, &mut r);
 
-        let win = (SR * 0.4) as usize;
-        let a0 = drive + (SR * 0.3) as usize;
-        let b0 = a0 + (SR * 1.0) as usize;
+        let win = num::f64_to_index((SR * 0.4));
+        let a0 = drive + num::f64_to_index((SR * 0.3));
+        let b0 = a0 + num::f64_to_index((SR * 1.0));
         let energy = |start: usize| -> f64 {
             l[start..(start + win).min(l.len())]
                 .iter()
@@ -2133,7 +2135,7 @@ mod tests {
             let mut l: Vec<f64> = (0..n)
                 .map(|i| {
                     if i < drive {
-                        (2.0 * PI * 100.0 * i as f64 / SR).sin() * 0.4
+                        (2.0 * PI * 100.0 * num::count_to_f64(i) / SR).sin() * 0.4
                     } else {
                         0.0
                     }
@@ -2142,7 +2144,7 @@ mod tests {
             let mut r = l.clone();
             c.process(&mut l, &mut r);
             // Energy in the last second — pure tail, well after the input.
-            l[(n - SR as usize)..].iter().map(|x| x * x).sum::<f64>()
+            l[(n - num::f64_to_index(SR))..].iter().map(|x| x * x).sum::<f64>()
         };
         let low_kept = make(1.0);
         let low_cut = make(0.3);
@@ -2238,7 +2240,7 @@ mod tests {
             c.update(config());
             let n = (SR as usize) * 2;
             let mut l: Vec<f64> = (0..n)
-                .map(|i| (2.0 * PI * 100.0 * i as f64 / SR).sin() * 0.4 * f64::from(i < 4800))
+                .map(|i| (2.0 * PI * 100.0 * num::count_to_f64(i) / SR).sin() * 0.4 * f64::from(i < 4800))
                 .collect();
             let mut r = l.clone();
             c.process(&mut l, &mut r);
@@ -2363,7 +2365,7 @@ mod tests {
 
         let n = 96000;
         let mut l: Vec<f64> = (0..n)
-            .map(|i| (2.0 * PI * 220.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 220.0 * num::count_to_f64(i) / SR).sin() * 0.5)
             .collect();
         let mut r = l.clone();
         c.process(&mut l, &mut r);
@@ -2372,7 +2374,7 @@ mod tests {
         let win = 1000;
         let rms: Vec<f64> = (24000..n - win)
             .step_by(win)
-            .map(|s| (l[s..s + win].iter().map(|x| x * x).sum::<f64>() / win as f64).sqrt())
+            .map(|s| (l[s..s + win].iter().map(|x| x * x).sum::<f64>() / num::count_to_f64(win)).sqrt())
             .collect();
         let max = rms.iter().cloned().fold(0.0f64, f64::max);
         let min = rms.iter().cloned().fold(f64::MAX, f64::min);
@@ -2431,7 +2433,7 @@ mod tests {
                 let mut energy = 0.0;
                 for b in 0..blocks {
                     for i in 0..256 {
-                        let t = (b * 256 + i) as f64;
+                        let t = num::count_to_f64((b * 256 + i));
                         let x = (core::f64::consts::TAU * 220.0 * t / sr).sin() * level;
                         buf_l[i] = x;
                         buf_r[i] = x;

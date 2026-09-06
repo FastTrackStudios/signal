@@ -22,6 +22,8 @@
 //! Each trip around the feedback loop applies dispersion again, making
 //! successive echoes progressively more "chirpy" and diffuse.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm, SpringDwell, SpringParams};
 use crate::primitives::one_pole::Lp1;
 use crate::primitives::spectral_delay::SpectralDelay;
@@ -67,9 +69,9 @@ impl SpringUnit {
         mod_rate: f64,
         mod_depth: f64,
     ) -> Self {
-        let delay_samples = (sample_rate * delay_ms * 0.001) as usize;
+        let delay_samples = num::f64_to_index((sample_rate * delay_ms * 0.001));
         // Allocate for maximum possible delay + modulation headroom
-        let max_delay = (sample_rate * max_delay_ms * 0.001) as usize + 32;
+        let max_delay = num::f64_to_index((sample_rate * max_delay_ms * 0.001)) + 32;
 
         let mut damp = Lp1::new();
         damp.set_freq(damp_freq, sample_rate);
@@ -123,9 +125,9 @@ impl SpringUnit {
             self.mod_phase -= 1.0;
         }
         let mod_offset = (self.mod_phase * 2.0 * PI).sin() * self.mod_depth;
-        let read_pos = self.delay_samples as f64 + mod_offset;
-        let read_int = read_pos as usize;
-        let frac = read_pos - read_int as f64;
+        let read_pos = num::count_to_f64(self.delay_samples) + mod_offset;
+        let read_int = num::f64_to_index(read_pos);
+        let frac = read_pos - num::count_to_f64(read_int);
 
         // Linear interpolation between two delay line samples
         let s0 = self.delay.read(read_int);
@@ -258,8 +260,8 @@ impl ReverbAlgorithm for Spring {
         // Size → echo delay length (spring physical length)
         let delay_a = 20.0 + params.size * 35.0; // 20ms to 55ms
         let delay_b = delay_a * 1.38; // Spring B is ~38% longer
-        self.spring_a.delay_samples = (self.sample_rate * delay_a * 0.001) as usize;
-        self.spring_b.delay_samples = (self.sample_rate * delay_b * 0.001) as usize;
+        self.spring_a.delay_samples = num::f64_to_index((self.sample_rate * delay_a * 0.001));
+        self.spring_b.delay_samples = num::f64_to_index((self.sample_rate * delay_b * 0.001));
 
         // Diffusion → allpass coefficient (chirp intensity / "drip" amount)
         // Low diffusion = mild chirp, high = aggressive drippy chirp
@@ -269,8 +271,8 @@ impl ReverbAlgorithm for Spring {
         self.spring_b.dispersion.coefficient = ap_b;
 
         // Also adjust number of active sections with diffusion
-        let sections_a = 40 + (params.diffusion * 80.0) as usize; // 40 to 120
-        let sections_b = 50 + (params.diffusion * 100.0) as usize; // 50 to 150
+        let sections_a = 40 + num::f64_to_index((params.diffusion * 80.0)); // 40 to 120
+        let sections_b = 50 + num::f64_to_index((params.diffusion * 100.0)); // 50 to 150
         self.spring_a.dispersion.active_sections = sections_a;
         self.spring_b.dispersion.active_sections = sections_b;
 

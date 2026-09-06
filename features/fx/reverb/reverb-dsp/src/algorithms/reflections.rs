@@ -4,6 +4,8 @@
 //! early reflections based on source position within a modeled room.
 //! Pure early reflections with no late reverb tail.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::multitap_delay::{MultitapDelay, Tap};
 use crate::primitives::one_pole::Lp1;
@@ -23,7 +25,7 @@ pub struct Reflections {
 impl Reflections {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_delay = (sample_rate * 0.3) as usize; // 300ms max reflection
+        let max_delay = num::f64_to_index((sample_rate * 0.3)); // 300ms max reflection
 
         let mut refl = Self {
             taps_l: MultitapDelay::new(max_delay),
@@ -63,7 +65,7 @@ impl Reflections {
         ];
 
         for (i, (&delay, &gain)) in base_delays.iter().zip(base_gains.iter()).enumerate() {
-            let d = (delay * scale * room_scale) as usize;
+            let d = num::f64_to_index((delay * scale * room_scale));
             // Offset L/R timing based on source position
             let lr_offset = (offset * delay * 0.15 * scale) as isize;
             let d_l = (d as isize + lr_offset).max(1) as usize;
@@ -89,10 +91,10 @@ impl Reflections {
         for i in 0..MAX_REFLECTIONS.saturating_sub(base_delays.len()) {
             let r = (rng.next() as f64) / (u32::MAX as f64);
             let delay = 400.0 + r * 2000.0;
-            let d = (delay * scale * room_scale) as usize;
+            let d = num::f64_to_index((delay * scale * room_scale));
             // Alternate polarity here too — 32 same-sign taps summed to
             // ~3x net DC area (the bulk of the subsonic energy).
-            let gain = 0.15 * (0.97_f64).powi(i as i32) * if i % 2 == 0 { 1.0 } else { -1.0 };
+            let gain = 0.15 * (0.97_f64).powi(num::count_to_i32(i)) * if i % 2 == 0 { 1.0 } else { -1.0 };
             let lr_offset = ((rng.next_bipolar()) * delay * 0.1 * scale) as isize;
 
             taps_l.push(Tap {

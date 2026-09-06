@@ -14,6 +14,8 @@
 //!   Input → AP1 (mod) → AP2 → Delay1 → LF damp → HF damp → ×decay
 //!   → AP3 (mod) → AP4 → Delay2 → cross-feed to other half
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
@@ -63,27 +65,27 @@ impl PlateProgenitor {
 
         // Input diffuser delays
         let id = [
-            (156.0 * s) as usize,
-            (113.0 * s) as usize,
-            (341.0 * s) as usize,
-            (251.0 * s) as usize,
+            num::f64_to_index((156.0 * s)),
+            num::f64_to_index((113.0 * s)),
+            num::f64_to_index((341.0 * s)),
+            num::f64_to_index((251.0 * s)),
         ];
 
         // Tank A delays — Progenitor uses longer, more varied delays
-        let ta_ap1_len = (617.0 * s) as usize;
-        let ta_ap2_len = (439.0 * s) as usize;
-        let ta_d1_len = (4597.0 * s) as usize;
-        let ta_ap3_len = (1559.0 * s) as usize;
-        let ta_ap4_len = (887.0 * s) as usize;
-        let ta_d2_len = (3823.0 * s) as usize;
+        let ta_ap1_len = num::f64_to_index((617.0 * s));
+        let ta_ap2_len = num::f64_to_index((439.0 * s));
+        let ta_d1_len = num::f64_to_index((4597.0 * s));
+        let ta_ap3_len = num::f64_to_index((1559.0 * s));
+        let ta_ap4_len = num::f64_to_index((887.0 * s));
+        let ta_d2_len = num::f64_to_index((3823.0 * s));
 
         // Tank B delays — offset for stereo decorrelation
-        let tb_ap1_len = (773.0 * s) as usize;
-        let tb_ap2_len = (521.0 * s) as usize;
-        let tb_d1_len = (4357.0 * s) as usize;
-        let tb_ap3_len = (1801.0 * s) as usize;
-        let tb_ap4_len = (1019.0 * s) as usize;
-        let tb_d2_len = (3467.0 * s) as usize;
+        let tb_ap1_len = num::f64_to_index((773.0 * s));
+        let tb_ap2_len = num::f64_to_index((521.0 * s));
+        let tb_d1_len = num::f64_to_index((4357.0 * s));
+        let tb_ap3_len = num::f64_to_index((1801.0 * s));
+        let tb_ap4_len = num::f64_to_index((1019.0 * s));
+        let tb_d2_len = num::f64_to_index((3467.0 * s));
 
         // Tank A AP1 (modulated, negative coeff — Dattorro convention)
         let mut tank_a_ap1 = ModulatedAllpass::new();
@@ -286,17 +288,17 @@ impl ReverbAlgorithm for PlateProgenitor {
         // Cross-feed from end of each tank
         let fb_a = self
             .dc_a
-            .tick(self.tank_b_delay2.read((3467.0 * s) as usize));
+            .tick(self.tank_b_delay2.read(num::f64_to_index((3467.0 * s))));
         let fb_b = self
             .dc_b
-            .tick(self.tank_a_delay2.read((3823.0 * s) as usize));
+            .tick(self.tank_a_delay2.read(num::f64_to_index((3823.0 * s))));
 
         // ---- Tank A ----
         // AP1 (modulated) → AP2 → Delay1
         let a1 = self.tank_a_ap1.tick(x + fb_a * self.decay);
         let a2 = self.tank_a_ap2.tick(a1);
         self.tank_a_delay1.write(a2);
-        let a_d1 = self.tank_a_delay1.read((4597.0 * s) as usize);
+        let a_d1 = self.tank_a_delay1.read(num::f64_to_index((4597.0 * s)));
 
         // Frequency-dependent decay: LP damping + HP bass control
         let a_lp = self.tank_a_damp_lp.tick(a_d1);
@@ -313,7 +315,7 @@ impl ReverbAlgorithm for PlateProgenitor {
         let b1 = self.tank_b_ap1.tick(x + fb_b * self.decay);
         let b2 = self.tank_b_ap2.tick(b1);
         self.tank_b_delay1.write(b2);
-        let b_d1 = self.tank_b_delay1.read((4357.0 * s) as usize);
+        let b_d1 = self.tank_b_delay1.read(num::f64_to_index((4357.0 * s)));
 
         let b_lp = self.tank_b_damp_lp.tick(b_d1);
         let b_hp_part = b_d1 - self.tank_b_damp_hp.tick(b_d1);
@@ -325,21 +327,21 @@ impl ReverbAlgorithm for PlateProgenitor {
 
         // ---- Multi-tap output (more taps than basic Dattorro) ----
         // Tapping from all 4 delay lines for maximum density
-        let out_l = self.tank_a_delay1.read((241.0 * s) as usize)
-            + self.tank_a_delay1.read((3079.0 * s) as usize)
-            - self.tank_b_delay1.read((1747.0 * s) as usize)
-            + self.tank_b_delay2.read((1979.0 * s) as usize)
-            - self.tank_a_delay2.read((953.0 * s) as usize)
-            - self.tank_b_delay2.read((2521.0 * s) as usize)
-            + self.tank_a_delay2.read((2711.0 * s) as usize);
+        let out_l = self.tank_a_delay1.read(num::f64_to_index((241.0 * s)))
+            + self.tank_a_delay1.read(num::f64_to_index((3079.0 * s)))
+            - self.tank_b_delay1.read(num::f64_to_index((1747.0 * s)))
+            + self.tank_b_delay2.read(num::f64_to_index((1979.0 * s)))
+            - self.tank_a_delay2.read(num::f64_to_index((953.0 * s)))
+            - self.tank_b_delay2.read(num::f64_to_index((2521.0 * s)))
+            + self.tank_a_delay2.read(num::f64_to_index((2711.0 * s)));
 
-        let out_r = self.tank_b_delay1.read((317.0 * s) as usize)
-            + self.tank_b_delay1.read((3251.0 * s) as usize)
-            - self.tank_a_delay1.read((1913.0 * s) as usize)
-            + self.tank_a_delay2.read((1571.0 * s) as usize)
-            - self.tank_b_delay2.read((811.0 * s) as usize)
-            - self.tank_a_delay2.read((2243.0 * s) as usize)
-            + self.tank_b_delay2.read((2857.0 * s) as usize);
+        let out_r = self.tank_b_delay1.read(num::f64_to_index((317.0 * s)))
+            + self.tank_b_delay1.read(num::f64_to_index((3251.0 * s)))
+            - self.tank_a_delay1.read(num::f64_to_index((1913.0 * s)))
+            + self.tank_a_delay2.read(num::f64_to_index((1571.0 * s)))
+            - self.tank_b_delay2.read(num::f64_to_index((811.0 * s)))
+            - self.tank_a_delay2.read(num::f64_to_index((2243.0 * s)))
+            + self.tank_b_delay2.read(num::f64_to_index((2857.0 * s)));
 
         (out_l * 0.2, out_r * 0.2)
     }

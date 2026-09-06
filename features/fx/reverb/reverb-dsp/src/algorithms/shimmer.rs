@@ -8,6 +8,8 @@
 //! Input (one-pass shimmer, no laddering), Regenerative (shift inside
 //! the loop → octave ladders), or both summed.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm, ShimmerFeedbackMode, ShimmerParams};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -58,7 +60,7 @@ pub struct Shimmer {
 impl Shimmer {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let grain_samples = (sample_rate * 0.05) as usize; // 50ms grains
+        let grain_samples = num::f64_to_index((sample_rate * 0.05)); // 50ms grains
 
         let mut shimmer = Self {
             fdn_l: Self::make_fdn(sample_rate, false),
@@ -107,7 +109,7 @@ impl Shimmer {
             [1117, 1381, 1613, 1873, 2131, 2371, 2617, 2879]
         };
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| (d as f64 * scale) as usize).collect();
+        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index((d as f64 * scale))).collect();
         Fdn::new(&delays, MixMatrix::Householder)
     }
 
@@ -205,7 +207,7 @@ impl ReverbAlgorithm for Shimmer {
             .set_modulation(0.8, params.modulation * 10.0, self.sample_rate);
 
         // Diffusion
-        let stages = (params.diffusion * 8.0) as usize;
+        let stages = num::f64_to_index((params.diffusion * 8.0));
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
 

@@ -5,6 +5,8 @@
 //! fractional delay ramps per-sample between updates and the buffer is
 //! read with cubic interpolation — no more whole-sample stair-stepping.
 
+use dsp_core::num;
+
 use std::f64::consts::PI;
 
 use audiocore_dsp::delay_line::DelayLine;
@@ -38,7 +40,7 @@ impl ModulatedAllpass {
     #[must_use]
     pub fn new() -> Self {
         let mut ap = Self {
-            buffer: DelayLine::new((DEFAULT_SAMPLE_RATE * BUFFER_SECONDS) as usize),
+            buffer: DelayLine::new(num::f64_to_index((DEFAULT_SAMPLE_RATE * BUFFER_SECONDS))),
             samples_processed: 0,
             mod_phase: 0.31, // Arbitrary initial phase
             current_delay: 100.0,
@@ -70,7 +72,7 @@ impl ModulatedAllpass {
             self.buffer = DelayLine::new(len);
         }
         self.samples_processed = 0;
-        self.current_delay = self.sample_delay as f64;
+        self.current_delay = num::count_to_f64(self.sample_delay);
         self.delay_step = 0.0;
     }
 
@@ -102,13 +104,13 @@ impl ModulatedAllpass {
         }
 
         self.current_delay += self.delay_step;
-        let max_delay = (self.buffer.len() - 4) as f64;
+        let max_delay = num::count_to_f64((self.buffer.len() - 4));
         let pos = self.current_delay.clamp(1.0, max_delay);
 
         let buf_out = if self.interpolation_enabled {
             self.buffer.read_cubic(pos)
         } else {
-            self.buffer.read(pos as usize)
+            self.buffer.read(num::f64_to_index(pos))
         };
 
         self.samples_processed += 1;
@@ -124,7 +126,7 @@ impl ModulatedAllpass {
     }
 
     fn update_mod(&mut self) {
-        self.mod_phase += self.mod_rate * MOD_UPDATE_RATE as f64;
+        self.mod_phase += self.mod_rate * num::u64_to_f64(MOD_UPDATE_RATE);
         if self.mod_phase > 1.0 {
             self.mod_phase %= 1.0;
         }
@@ -133,10 +135,10 @@ impl ModulatedAllpass {
 
         // Prevent modulation from taking delay negative
         let effective_mod = self.mod_amount.min((self.sample_delay as f64) - 1.0);
-        let target = (self.sample_delay as f64 + effective_mod * modulation).max(1.0);
+        let target = (num::count_to_f64(self.sample_delay) + effective_mod * modulation).max(1.0);
 
         // Spread the move over the next update window.
-        self.delay_step = (target - self.current_delay) / MOD_UPDATE_RATE as f64;
+        self.delay_step = (target - self.current_delay) / num::u64_to_f64(MOD_UPDATE_RATE);
     }
 
     /// Convenience: set feedback coefficient.
@@ -171,7 +173,7 @@ impl ModulatedAllpass {
     pub fn reset(&mut self) {
         self.clear();
         self.samples_processed = 0;
-        self.current_delay = self.sample_delay as f64;
+        self.current_delay = num::count_to_f64(self.sample_delay);
         self.delay_step = 0.0;
     }
 }

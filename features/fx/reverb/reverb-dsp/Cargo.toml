@@ -10,6 +10,7 @@ description = "Reverb processing engine — plate, shimmer, hall/room algorithms
 workspace = true
 
 [dependencies]
+dsp-core = { workspace = true }
 audiocore-dsp = { workspace = true }
 fts-modulation = { workspace = true }
 crossbeam-channel = { workspace = true }

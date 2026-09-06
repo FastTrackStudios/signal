@@ -5,6 +5,8 @@
 //! Inspired by REEV-R (<https://github.com/tiagolr/reevr>): stretch,
 //! trim, reverse, attack and decay, plus IR predelay.
 
+use dsp_core::num;
+
 use super::asset::IrAsset;
 
 /// How to reconcile the source IR's channel count with the convolver's
@@ -118,8 +120,8 @@ impl IrTransforms {
         let (mut l, mut r) = (l, r);
 
         // 1. Trim
-        let start = ((self.trim_start_s.max(0.0)) * sr) as usize;
-        let end_drop = ((self.trim_end_s.max(0.0)) * sr) as usize;
+        let start = num::f64_to_index(((self.trim_start_s.max(0.0)) * sr));
+        let end_drop = num::f64_to_index(((self.trim_end_s.max(0.0)) * sr));
         l = trim(l, start, end_drop);
         r = trim(r, start, end_drop);
 
@@ -166,13 +168,13 @@ impl IrTransforms {
         // head of whatever now plays first (post-reverse/stretch).
         let af = self.attack_frac.clamp(0.0, 1.0);
         if af > 1e-9 {
-            let n = ((l.len() as f64) * 0.25 * af) as usize;
+            let n = num::f64_to_index(((l.len() as f64) * 0.25 * af));
             apply_attack_samples(&mut l, n);
             apply_attack_samples(&mut r, n);
         }
 
         // 5. Predelay
-        let predelay = (self.predelay_s.max(0.0) * sr) as usize;
+        let predelay = num::f64_to_index((self.predelay_s.max(0.0) * sr));
         if predelay > 0 {
             l = prepend_zeros(&l, predelay);
             r = prepend_zeros(&r, predelay);
@@ -221,13 +223,13 @@ fn stretch(buf: &[f64], factor: f64) -> Vec<f64> {
     if buf.is_empty() || factor <= 0.0 {
         return Vec::new();
     }
-    let new_len = ((buf.len() as f64) * factor) as usize;
+    let new_len = num::f64_to_index(((buf.len() as f64) * factor));
     let mut out = Vec::with_capacity(new_len);
     let inv = 1.0 / factor;
     for i in 0..new_len {
-        let src = i as f64 * inv;
-        let idx = src.floor() as usize;
-        let frac = src - idx as f64;
+        let src = num::count_to_f64(i) * inv;
+        let idx = num::f64_to_index(src.floor());
+        let frac = src - num::count_to_f64(idx);
         let a = buf[idx.min(buf.len() - 1)];
         let b = buf[(idx + 1).min(buf.len() - 1)];
         out.push(a + (b - a) * frac);
@@ -245,9 +247,9 @@ fn apply_attack_samples(buf: &mut [f64], n: usize) {
     if n == 0 {
         return;
     }
-    let inv = 1.0 / n as f64;
+    let inv = 1.0 / num::count_to_f64(n);
     for (i, s) in buf.iter_mut().take(n).enumerate() {
-        *s *= i as f64 * inv;
+        *s *= num::count_to_f64(i) * inv;
     }
 }
 
@@ -264,7 +266,7 @@ fn apply_decay_window(buf: &mut Vec<f64>, frac: f64, gate: bool) {
         let ramp_len = (keep - ramp_start).max(1);
         #[allow(clippy::needless_range_loop)]
         for i in ramp_start..keep {
-            let g = 1.0 - (i - ramp_start) as f64 / ramp_len as f64;
+            let g = 1.0 - num::count_to_f64((i - ramp_start)) / num::count_to_f64(ramp_len);
             buf[i] *= g;
         }
     }
@@ -273,7 +275,7 @@ fn apply_decay_window(buf: &mut Vec<f64>, frac: f64, gate: bool) {
 fn apply_decay(buf: &mut [f64], decay_s: f64, sr: f64) {
     let t60_samples = (decay_s * sr).max(1.0);
     for (i, s) in buf.iter_mut().enumerate() {
-        let env = 10f64.powf(-3.0 * i as f64 / t60_samples);
+        let env = 10f64.powf(-3.0 * num::count_to_f64(i) / t60_samples);
         *s *= env;
     }
 }
@@ -304,7 +306,7 @@ fn apply_decay_eq(x: &mut [f64], bands: &[(f64, f64); 2], sample_rate: f64) {
     let mut i = 0;
     while i < n {
         let end = (i + chunk).min(n);
-        let t = i as f64 / n as f64;
+        let t = num::count_to_f64(i) / num::count_to_f64(n);
         let g_lo = 10.0f64.powf(lo_db * t / 20.0);
         let g_hi = 10.0f64.powf(hi_db * t / 20.0);
         for v in &mut x[i..end] {

@@ -11,6 +11,8 @@
 //! The 8 `AlgorithmParams` are mapped to `CloudSeed`'s 45 internal parameters
 //! using the original `ScaleParam()` response curves.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, CloudParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::lcg_random::random_buffer_cross_seed;
@@ -269,14 +271,14 @@ impl CloudChannel {
                 }
                 self.multitap_enabled = new_val;
             }
-            param::TAP_COUNT => self.multitap.set_tap_count(scaled as usize),
+            param::TAP_COUNT => self.multitap.set_tap_count(num::f64_to_index(scaled)),
             param::TAP_DECAY => self.multitap.set_tap_decay(scaled),
             param::TAP_PREDELAY => {
-                self.pre_delay.sample_delay = self.ms2samples(scaled) as usize;
+                self.pre_delay.sample_delay = num::f64_to_index(self.ms2samples(scaled));
             }
             param::TAP_LENGTH => {
                 self.multitap
-                    .set_tap_length(self.ms2samples(scaled) as usize);
+                    .set_tap_length(num::f64_to_index(self.ms2samples(scaled)));
             }
 
             param::EARLY_DIFFUSE_ENABLED => {
@@ -286,9 +288,9 @@ impl CloudChannel {
                 }
                 self.diffuser_enabled = new_val;
             }
-            param::EARLY_DIFFUSE_COUNT => self.diffuser.stages = scaled as usize,
+            param::EARLY_DIFFUSE_COUNT => self.diffuser.stages = num::f64_to_index(scaled),
             param::EARLY_DIFFUSE_DELAY => {
-                self.diffuser.set_delay(self.ms2samples(scaled) as usize);
+                self.diffuser.set_delay(num::f64_to_index(self.ms2samples(scaled)));
             }
             param::EARLY_DIFFUSE_MOD_AMOUNT => {
                 self.diffuser.set_modulation_enabled(scaled > 0.5);
@@ -302,7 +304,7 @@ impl CloudChannel {
                     line.tap_post_diffuser = scaled >= 0.5;
                 }
             }
-            param::LATE_LINE_COUNT => self.line_count = scaled as usize,
+            param::LATE_LINE_COUNT => self.line_count = num::f64_to_index(scaled),
             param::LATE_DIFFUSE_ENABLED => {
                 for line in &mut self.lines {
                     let new_val = scaled >= 0.5;
@@ -314,7 +316,7 @@ impl CloudChannel {
             }
             param::LATE_DIFFUSE_COUNT => {
                 for line in &mut self.lines {
-                    line.set_diffuser_stages(scaled as usize);
+                    line.set_diffuser_stages(num::f64_to_index(scaled));
                 }
             }
             param::LATE_LINE_SIZE
@@ -326,7 +328,7 @@ impl CloudChannel {
                 self.update_lines();
             }
             param::LATE_DIFFUSE_DELAY => {
-                let samples = self.ms2samples(scaled) as usize;
+                let samples = num::f64_to_index(self.ms2samples(scaled));
                 for line in &mut self.lines {
                     line.set_diffuser_delay(samples);
                 }
@@ -445,7 +447,7 @@ impl CloudChannel {
             let db_after_1iter = delay_samples / line_decay_samples.max(1.0) * (-60.0);
             let gain_after_1iter = db2gain(db_after_1iter);
 
-            self.lines[i].set_delay(delay_samples as usize);
+            self.lines[i].set_delay(num::f64_to_index(delay_samples));
             self.lines[i].set_feedback(gain_after_1iter);
             self.lines[i].set_line_mod_amount(mod_amount);
             self.lines[i].set_line_mod_rate(mod_rate);
@@ -553,9 +555,9 @@ impl Ensemble {
             bands: core::array::from_fn(|_| Biquad::new()),
             envs: [0.0; ENSEMBLE_BANDS],
             centers: [0.0; ENSEMBLE_BANDS],
-            phase2: core::array::from_fn(|i| i as f64 * 0.041),
-            phase3: core::array::from_fn(|i| i as f64 * 0.067),
-            lfo: core::array::from_fn(|i| i as f64 / ENSEMBLE_BANDS as f64),
+            phase2: core::array::from_fn(|i| num::count_to_f64(i) * 0.041),
+            phase3: core::array::from_fn(|i| num::count_to_f64(i) * 0.067),
+            lfo: core::array::from_fn(|i| num::count_to_f64(i) / num::count_to_f64(ENSEMBLE_BANDS)),
             attack: 0.001,
             release: 0.0005,
             lp,
@@ -567,7 +569,7 @@ impl Ensemble {
 
     fn configure(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        let ratio = (6000.0f64 / 80.0).powf(1.0 / (ENSEMBLE_BANDS as f64 - 1.0));
+        let ratio = (6000.0f64 / 80.0).powf(1.0 / (num::count_to_f64(ENSEMBLE_BANDS) - 1.0));
         let mut f = 80.0;
         for i in 0..ENSEMBLE_BANDS {
             self.centers[i] = f;
@@ -613,7 +615,7 @@ impl Ensemble {
             }
 
             // Slow per-band detune wobble (string-machine shimmer).
-            let lfo_rate = 0.12 + (i % 5) as f64 * 0.06;
+            let lfo_rate = 0.12 + num::count_to_f64((i % 5)) * 0.06;
             self.lfo[i] += lfo_rate / self.sample_rate;
             if self.lfo[i] >= 1.0 {
                 self.lfo[i] -= 1.0;

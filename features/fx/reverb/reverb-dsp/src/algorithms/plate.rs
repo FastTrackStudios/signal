@@ -14,6 +14,8 @@
 //! All delay lengths from Dattorro's published values at 29761 Hz
 //! reference rate, scaled to the actual sample rate.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, PLATE_DECAY_APPLICATIONS, PLATE_LOOP_SECONDS, PLATE_T60, ReverbAlgorithm, dattorro_gain_for_t60, decay_to_t60};
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
@@ -105,22 +107,22 @@ impl Plate {
 
         // Input diffuser delay lengths
         let id = [
-            (142.0 * s) as usize,
-            (107.0 * s) as usize,
-            (379.0 * s) as usize,
-            (277.0 * s) as usize,
+            num::f64_to_index((142.0 * s)),
+            num::f64_to_index((107.0 * s)),
+            num::f64_to_index((379.0 * s)),
+            num::f64_to_index((277.0 * s)),
         ];
 
         // Tank delay lengths
-        let ta_ap1_len = (672.0 * s) as usize;
-        let ta_d1_len = (4453.0 * s) as usize;
-        let ta_ap2_len = (1800.0 * s) as usize;
-        let ta_d2_len = (3720.0 * s) as usize;
+        let ta_ap1_len = num::f64_to_index((672.0 * s));
+        let ta_d1_len = num::f64_to_index((4453.0 * s));
+        let ta_ap2_len = num::f64_to_index((1800.0 * s));
+        let ta_d2_len = num::f64_to_index((3720.0 * s));
 
-        let tb_ap1_len = (908.0 * s) as usize;
-        let tb_d1_len = (4217.0 * s) as usize;
-        let tb_ap2_len = (2656.0 * s) as usize;
-        let tb_d2_len = (3163.0 * s) as usize;
+        let tb_ap1_len = num::f64_to_index((908.0 * s));
+        let tb_d1_len = num::f64_to_index((4217.0 * s));
+        let tb_ap2_len = num::f64_to_index((2656.0 * s));
+        let tb_d2_len = num::f64_to_index((3163.0 * s));
 
         // Tank A AP1 (modulated, decay_diffusion_1)
         let mut tank_a_ap1 = ModulatedAllpass::new();
@@ -299,10 +301,10 @@ impl ReverbAlgorithm for Plate {
         let s = self.s;
         let fb_a = self
             .dc_a
-            .tick(self.tank_b_delay2.read((3163.0 * s) as usize));
+            .tick(self.tank_b_delay2.read(num::f64_to_index((3163.0 * s))));
         let fb_b = self
             .dc_b
-            .tick(self.tank_a_delay2.read((3720.0 * s) as usize));
+            .tick(self.tank_a_delay2.read(num::f64_to_index((3720.0 * s))));
 
         // ---- Tank A processing ----
         // decay_diffusion_1 AP (modulated)
@@ -313,7 +315,7 @@ impl ReverbAlgorithm for Plate {
         let a_ap1_out = self.tank_a_ap1.tick(x + fb_a);
         // delay_4
         self.tank_a_delay1.write(a_ap1_out);
-        let a_d1_out = self.tank_a_delay1.read((4453.0 * s) as usize);
+        let a_d1_out = self.tank_a_delay1.read(num::f64_to_index((4453.0 * s)));
         // damping LP → multiply by decay
         let a_damped = self.tank_a_damp.tick(a_d1_out) * self.decay;
         // decay_diffusion_2 AP
@@ -328,7 +330,7 @@ impl ReverbAlgorithm for Plate {
         };
         let b_ap1_out = self.tank_b_ap1.tick(x + fb_b);
         self.tank_b_delay1.write(b_ap1_out);
-        let b_d1_out = self.tank_b_delay1.read((4217.0 * s) as usize);
+        let b_d1_out = self.tank_b_delay1.read(num::f64_to_index((4217.0 * s)));
         let b_damped = self.tank_b_damp.tick(b_d1_out) * self.decay;
         let b_ap2_out = self.tank_b_ap2.tick(b_damped);
         self.tank_b_delay2.write(b_ap2_out);
@@ -346,21 +348,21 @@ impl ReverbAlgorithm for Plate {
         // (tank A delay 2). Earlier revisions approximated the allpass
         // taps with adjacent delay lines and had drifted tank/sign
         // assignments; Allpass::tap restores the published matrix.
-        let out_l = self.tank_b_delay1.read((266.0 * s) as usize)
-            + self.tank_b_delay1.read((2974.0 * s) as usize)
-            - self.tank_b_ap2.tap((1913.0 * s) as usize)
-            + self.tank_b_delay2.read((1996.0 * s) as usize)
-            - self.tank_a_delay1.read((1990.0 * s) as usize)
-            - self.tank_a_ap2.tap((187.0 * s) as usize)
-            - self.tank_a_delay2.read((1066.0 * s) as usize);
+        let out_l = self.tank_b_delay1.read(num::f64_to_index((266.0 * s)))
+            + self.tank_b_delay1.read(num::f64_to_index((2974.0 * s)))
+            - self.tank_b_ap2.tap(num::f64_to_index((1913.0 * s)))
+            + self.tank_b_delay2.read(num::f64_to_index((1996.0 * s)))
+            - self.tank_a_delay1.read(num::f64_to_index((1990.0 * s)))
+            - self.tank_a_ap2.tap(num::f64_to_index((187.0 * s)))
+            - self.tank_a_delay2.read(num::f64_to_index((1066.0 * s)));
 
-        let out_r = self.tank_a_delay1.read((353.0 * s) as usize)
-            + self.tank_a_delay1.read((3627.0 * s) as usize)
-            - self.tank_a_ap2.tap((1228.0 * s) as usize)
-            + self.tank_a_delay2.read((2673.0 * s) as usize)
-            - self.tank_b_delay1.read((2111.0 * s) as usize)
-            - self.tank_b_ap2.tap((335.0 * s) as usize)
-            - self.tank_b_delay2.read((121.0 * s) as usize);
+        let out_r = self.tank_a_delay1.read(num::f64_to_index((353.0 * s)))
+            + self.tank_a_delay1.read(num::f64_to_index((3627.0 * s)))
+            - self.tank_a_ap2.tap(num::f64_to_index((1228.0 * s)))
+            + self.tank_a_delay2.read(num::f64_to_index((2673.0 * s)))
+            - self.tank_b_delay1.read(num::f64_to_index((2111.0 * s)))
+            - self.tank_b_ap2.tap(num::f64_to_index((335.0 * s)))
+            - self.tank_b_delay2.read(num::f64_to_index((121.0 * s)));
 
         // Paper output scale is 0.6; 0.25 preserves this port's level
         // relative to the other algorithms (chain-level normalization).

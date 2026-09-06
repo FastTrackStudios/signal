@@ -6,6 +6,8 @@
 //! all delay lines with only 2N-1 additions — no multiplications
 //! except the final scaling.
 
+use dsp_core::num;
+
 /// Apply Householder reflection in-place.
 ///
 /// For N channels: compute mean, then `out[i] = 2*mean - in[i]`.
@@ -17,7 +19,7 @@ pub fn mix(channels: &mut [f64]) {
         return;
     }
     let sum: f64 = channels.iter().sum();
-    let scale = 2.0 / n as f64;
+    let scale = 2.0 / num::count_to_f64(n);
     for ch in channels.iter_mut() {
         *ch = sum * scale - *ch;
     }

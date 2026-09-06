@@ -8,6 +8,8 @@
 //!   - More early reflection taps (complex geometry)
 //!   - Stronger cross-coupling (omnidirectional sound field)
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, HALL_CATHEDRAL_T60, ReverbAlgorithm, decay_to_t60};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -42,7 +44,7 @@ pub struct HallCathedral {
 impl HallCathedral {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_er = (sample_rate * 0.25) as usize; // 250ms max ER (cathedral is huge)
+        let max_er = num::f64_to_index((sample_rate * 0.25)); // 250ms max ER (cathedral is huge)
 
         let mod_ap_l = std::array::from_fn(|_| ModulatedAllpass::new());
         let mod_ap_r = std::array::from_fn(|_| ModulatedAllpass::new());
@@ -98,85 +100,85 @@ impl HallCathedral {
         // Long initial gap (sound travels far to first wall)
         let taps_l = [
             Tap {
-                delay_samples: (347.0 * scale) as usize,
+                delay_samples: num::f64_to_index((347.0 * scale)),
                 gain: 0.80,
             },
             Tap {
-                delay_samples: (631.0 * scale) as usize,
+                delay_samples: num::f64_to_index((631.0 * scale)),
                 gain: 0.68,
             },
             Tap {
-                delay_samples: (887.0 * scale) as usize,
+                delay_samples: num::f64_to_index((887.0 * scale)),
                 gain: 0.58,
             },
             Tap {
-                delay_samples: (1153.0 * scale) as usize,
+                delay_samples: num::f64_to_index((1153.0 * scale)),
                 gain: 0.48,
             },
             Tap {
-                delay_samples: (1471.0 * scale) as usize,
+                delay_samples: num::f64_to_index((1471.0 * scale)),
                 gain: 0.39,
             },
             Tap {
-                delay_samples: (1789.0 * scale) as usize,
+                delay_samples: num::f64_to_index((1789.0 * scale)),
                 gain: 0.31,
             },
             Tap {
-                delay_samples: (2111.0 * scale) as usize,
+                delay_samples: num::f64_to_index((2111.0 * scale)),
                 gain: 0.24,
             },
             Tap {
-                delay_samples: (2503.0 * scale) as usize,
+                delay_samples: num::f64_to_index((2503.0 * scale)),
                 gain: 0.18,
             },
             Tap {
-                delay_samples: (2897.0 * scale) as usize,
+                delay_samples: num::f64_to_index((2897.0 * scale)),
                 gain: 0.13,
             },
             Tap {
-                delay_samples: (3307.0 * scale) as usize,
+                delay_samples: num::f64_to_index((3307.0 * scale)),
                 gain: 0.09,
             },
         ];
         let taps_r = [
             Tap {
-                delay_samples: (389.0 * scale) as usize,
+                delay_samples: num::f64_to_index((389.0 * scale)),
                 gain: 0.80,
             },
             Tap {
-                delay_samples: (701.0 * scale) as usize,
+                delay_samples: num::f64_to_index((701.0 * scale)),
                 gain: 0.68,
             },
             Tap {
-                delay_samples: (953.0 * scale) as usize,
+                delay_samples: num::f64_to_index((953.0 * scale)),
                 gain: 0.58,
             },
             Tap {
-                delay_samples: (1231.0 * scale) as usize,
+                delay_samples: num::f64_to_index((1231.0 * scale)),
                 gain: 0.48,
             },
             Tap {
-                delay_samples: (1559.0 * scale) as usize,
+                delay_samples: num::f64_to_index((1559.0 * scale)),
                 gain: 0.39,
             },
             Tap {
-                delay_samples: (1877.0 * scale) as usize,
+                delay_samples: num::f64_to_index((1877.0 * scale)),
                 gain: 0.31,
             },
             Tap {
-                delay_samples: (2237.0 * scale) as usize,
+                delay_samples: num::f64_to_index((2237.0 * scale)),
                 gain: 0.24,
             },
             Tap {
-                delay_samples: (2633.0 * scale) as usize,
+                delay_samples: num::f64_to_index((2633.0 * scale)),
                 gain: 0.18,
             },
             Tap {
-                delay_samples: (3041.0 * scale) as usize,
+                delay_samples: num::f64_to_index((3041.0 * scale)),
                 gain: 0.13,
             },
             Tap {
-                delay_samples: (3461.0 * scale) as usize,
+                delay_samples: num::f64_to_index((3461.0 * scale)),
                 gain: 0.09,
             },
         ];
@@ -191,25 +193,25 @@ impl HallCathedral {
 
         #[allow(clippy::needless_range_loop)]
         for i in 0..FDN_MOD_AP_COUNT {
-            let delay = ((base_delays[i] as f64) * scale) as usize;
+            let delay = num::f64_to_index(((base_delays[i] as f64) * scale));
             self.mod_ap_l[i].sample_delay = delay.max(4);
             self.mod_ap_l[i].feedback = 0.45;
             self.mod_ap_l[i].set_modulation(
-                0.25 + i as f64 * 0.12,
+                0.25 + num::count_to_f64(i) * 0.12,
                 modulation * self.sample_rate * 0.0006,
                 self.sample_rate,
             );
-            self.mod_ap_l[i].set_phase(i as f64 / FDN_MOD_AP_COUNT as f64);
+            self.mod_ap_l[i].set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
 
-            let delay_r = ((base_delays[i] as f64 + 19.0) * scale) as usize;
+            let delay_r = num::f64_to_index(((base_delays[i] as f64 + 19.0) * scale));
             self.mod_ap_r[i].sample_delay = delay_r.max(4);
             self.mod_ap_r[i].feedback = 0.45;
             self.mod_ap_r[i].set_modulation(
-                0.3 + i as f64 * 0.1,
+                0.3 + num::count_to_f64(i) * 0.1,
                 modulation * self.sample_rate * 0.0006,
                 self.sample_rate,
             );
-            self.mod_ap_r[i].set_phase((i as f64 + 0.5) / FDN_MOD_AP_COUNT as f64);
+            self.mod_ap_r[i].set_phase((num::count_to_f64(i) + 0.5) / num::count_to_f64(FDN_MOD_AP_COUNT));
         }
     }
 
@@ -293,7 +295,7 @@ impl ReverbAlgorithm for HallCathedral {
         );
 
         // Diffusion — more stages, cathedral scatters heavily
-        let stages = (params.diffusion * 12.0) as usize;
+        let stages = num::f64_to_index((params.diffusion * 12.0));
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
         self.diffuser_l.set_feedback(0.55 + params.diffusion * 0.25);

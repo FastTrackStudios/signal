@@ -4,6 +4,8 @@
 //! filtered through formant resonances to create vocal/choral textures.
 //! Combines shimmer architecture with a formant filter bank.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ChoirVoice, ChoraleParams, ChoraleVowel, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -95,7 +97,7 @@ const CTRL_BLOCK: usize = 64;
 impl Chorale {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let grain = (sample_rate * 0.06) as usize;
+        let grain = num::f64_to_index((sample_rate * 0.06));
 
         let mut chorale = Self {
             fdn_l: Self::make_fdn(sample_rate, false),
@@ -148,16 +150,16 @@ impl Chorale {
             [1117, 1381, 1613, 1873, 2131, 2371, 2617, 2879]
         };
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| (d as f64 * scale) as usize).collect();
+        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index((d as f64 * scale))).collect();
         Fdn::new(&delays, MixMatrix::Householder)
     }
 
     fn set_vowel(&mut self, mix: f64, sample_rate: f64) {
         // Interpolate between vowels
         let idx = (mix * 3.0).min(2.999);
-        let lo = idx as usize;
+        let lo = num::f64_to_index(idx);
         let hi = (lo + 1).min(3);
-        let frac = idx - lo as f64;
+        let frac = idx - num::count_to_f64(lo);
 
         // Choir Voice range: Baritone shifts the formant centers DOWN
         // (larger vocal tract, low chorale range — the pedal's second
@@ -206,7 +208,7 @@ impl Chorale {
         let Some(program) = self.mx.vowel else {
             return; // legacy continuous morph via extra_b
         };
-        let dt = CTRL_BLOCK as f64 / self.sample_rate;
+        let dt = num::count_to_f64(CTRL_BLOCK) / self.sample_rate;
         let sweep = |phase: f64, a: f64, b: f64| -> f64 {
             let x = 0.5 - 0.5 * (phase * std::f64::consts::TAU).cos();
             a + (b - a) * x
@@ -257,7 +259,7 @@ impl Chorale {
                 self.rand_target_speed[ch] = self.rand_bipolar() * 0.02 * amount;
                 self.rand_target_formant[ch] = self.rand_bipolar() * 0.06 * amount;
             }
-            self.walk_countdown = ((0.08 * self.sample_rate) as usize / CTRL_BLOCK).max(1);
+            self.walk_countdown = (num::f64_to_index((0.08 * self.sample_rate)) / CTRL_BLOCK).max(1);
         }
         self.walk_countdown -= 1;
 
@@ -329,7 +331,7 @@ impl ReverbAlgorithm for Chorale {
         self.set_vowel(params.extra_b, self.sample_rate);
 
         // Diffusion
-        let stages = (params.diffusion * 8.0) as usize;
+        let stages = num::f64_to_index((params.diffusion * 8.0));
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
 

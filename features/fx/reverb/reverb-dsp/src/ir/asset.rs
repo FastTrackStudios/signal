@@ -5,6 +5,8 @@
 //! the `symphonium` dep (default workspace config: wav/pcm + fft
 //! resampler).
 
+use dsp_core::num;
+
 use std::path::{Path, PathBuf};
 
 use symphonium::{ResampleQuality, SymphoniumLoader};
@@ -93,7 +95,7 @@ impl IrAsset {
 
     #[must_use]
     pub fn duration_seconds(&self) -> f64 {
-        self.frames() as f64 / self.sample_rate.max(1.0)
+        num::count_to_f64(self.frames()) / self.sample_rate.max(1.0)
     }
 }
 

@@ -33,6 +33,8 @@
 //! - <https://github.com/tiagolr/reevr> — modulated-convolution design
 //!   the mod-source option mirrors.
 
+use dsp_core::num;
+
 use std::f64::consts::{FRAC_PI_2, PI};
 use std::sync::Arc;
 
@@ -188,7 +190,7 @@ impl PartitionedConv {
             core::mem::swap(&mut self.ir_partitions, &mut self.old_partitions);
             self.old_gain = self.gain;
             self.gain = prepared.gain;
-            self.xfade_len = ((0.08 * 48_000.0) / BLOCK as f64) as u32 + 1;
+            self.xfade_len = ((0.08 * 48_000.0) / num::count_to_f64(BLOCK)) as u32 + 1;
             self.xfade_pos = self.xfade_len;
         } else {
             // Growth (or first load): the history ring must be resized,
@@ -320,30 +322,30 @@ impl PartitionedConv {
 /// pattern. Used as the default IR until the user loads their own.
 fn synthesize_ir(sample_rate: f64, seconds: f64, seed: u64) -> Vec<f64> {
     use crate::primitives::lcg_random::LcgRandom;
-    let n = (sample_rate * seconds) as usize;
+    let n = num::f64_to_index((sample_rate * seconds));
     let mut rng = LcgRandom::new(seed);
     let mut ir = vec![0.0; n];
 
     // Sparse positive/negative impulses with exponential envelope.
     let density = 2500.0;
     let spacing = ((sample_rate / density) as usize).max(1);
-    let t60_samples = n as f64;
+    let t60_samples = num::count_to_f64(n);
     let mut pos = 0usize;
     while pos < n {
-        let jitter = (rng.next_float() * spacing as f64) as usize;
+        let jitter = (rng.next_float() * num::count_to_f64(spacing)) as usize;
         let idx = (pos + jitter).min(n - 1);
         let sign = if rng.next_float() < 0.5 { -1.0 } else { 1.0 };
-        let env = 10f64.powf(-3.0 * idx as f64 / t60_samples);
+        let env = 10f64.powf(-3.0 * num::count_to_f64(idx) / t60_samples);
         ir[idx] = sign * env;
         pos += spacing;
     }
 
     // Pre-delay window: blend out the first ~5ms so direct signal isn't
     // doubled when wet/dry are summed.
-    let predelay = (sample_rate * 0.005) as usize;
+    let predelay = num::f64_to_index((sample_rate * 0.005));
     #[allow(clippy::needless_range_loop)]
     for i in 0..predelay.min(n) {
-        ir[i] *= i as f64 / predelay as f64;
+        ir[i] *= num::count_to_f64(i) / num::count_to_f64(predelay);
     }
     ir
 }
@@ -602,7 +604,7 @@ impl Convolution {
         std::array::from_fn(|i| {
             let mut ap = ModulatedAllpass::with_phase(MOTION_PHASE[i]);
             ap.set_sample_rate(sample_rate);
-            ap.set_delay_samples(((MOTION_DELAYS_48K[i] as f64) * s) as usize);
+            ap.set_delay_samples(num::f64_to_index(((MOTION_DELAYS_48K[i] as f64) * s)));
             ap.set_feedback(0.5);
             ap
         })
@@ -621,7 +623,7 @@ impl Convolution {
     /// Per the `BigSky` MX manual, loading a new IR resets the Impulse
     /// shaping params to defaults (the chain preserves mix).
     pub fn load_ir_stereo_slot(&mut self, ir_l: &[f64], ir_r: &[f64], slot: IrSlot) {
-        let max = (self.sample_rate * MAX_IR_SECONDS) as usize;
+        let max = num::f64_to_index((self.sample_rate * MAX_IR_SECONDS));
         let cap_l = &ir_l[..ir_l.len().min(max)];
         let cap_r = &ir_r[..ir_r.len().min(max)];
         match slot {
@@ -645,7 +647,7 @@ impl Convolution {
     /// the direct convolvers, LR/RL the cross pair. Runs FFTs —
     /// background/setup use only.
     pub fn load_ir_true_stereo(&mut self, ll: &[f64], lr: &[f64], rl: &[f64], rr: &[f64]) -> bool {
-        let max = (self.sample_rate * MAX_IR_SECONDS) as usize;
+        let max = num::f64_to_index((self.sample_rate * MAX_IR_SECONDS));
         let cap = |x: &[f64]| x[..x.len().min(max)].to_vec();
         let (ll, lr, rl, rr) = (cap(ll), cap(lr), cap(rl), cap(rr));
         self.conv_l.load_ir(&ll);

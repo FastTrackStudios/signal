@@ -4,6 +4,8 @@
 //! machine where the echoes are progressively diffused, blurring
 //! the boundary between delay and reverb.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, MagnetoParams, MagnetoSpacing, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::one_pole::Lp1;
@@ -48,17 +50,17 @@ pub struct Magneto {
 impl Magneto {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_delay = (sample_rate * 1.5) as usize; // 1.5s max tape
+        let max_delay = num::f64_to_index((sample_rate * 1.5)); // 1.5s max tape
 
         let head_diffusers = std::array::from_fn(|i| {
-            let mut d = AllpassDiffuser::with_defaults(sample_rate, 0.3 + i as f64 * 0.2);
+            let mut d = AllpassDiffuser::with_defaults(sample_rate, 0.3 + num::count_to_f64(i) * 0.2);
             d.set_active_stages(2 + i * 2); // Progressive diffusion
             d.set_feedback(0.5);
             d.set_modulation(0.5, 4.0, sample_rate);
             d
         });
 
-        let base_delay = (sample_rate * 0.15) as usize;
+        let base_delay = num::f64_to_index((sample_rate * 0.15));
         let mut magneto = Self {
             tape_l: DelayLine::new(max_delay + 1),
             tape_r: DelayLine::new(max_delay + 1),
@@ -89,11 +91,11 @@ impl Magneto {
     fn reposition_heads(&mut self) {
         let n = self.active_heads.clamp(1, NUM_HEADS);
         let last = (self.last_delay_s * self.sample_rate)
-            .min((self.tape_l.len() - 1) as f64)
+            .min(num::count_to_f64((self.tape_l.len() - 1)))
             .max(1.0);
         for i in 0..NUM_HEADS {
             let frac = match self.spacing {
-                MagnetoSpacing::Even => (i + 1) as f64 / n as f64,
+                MagnetoSpacing::Even => num::count_to_f64((i + 1)) / num::count_to_f64(n),
                 MagnetoSpacing::Uneven => {
                     // Take the last n entries of the irregular grid so
                     // the final head stays at the full delay time.
@@ -142,7 +144,7 @@ impl ReverbAlgorithm for Magneto {
 
         // Diffusion -> how much each head is diffused
         for (i, diff) in self.head_diffusers.iter_mut().enumerate() {
-            let stages = ((params.diffusion * (2.0 + i as f64 * 2.0)) as usize).min(8);
+            let stages = ((params.diffusion * (2.0 + num::count_to_f64(i) * 2.0)) as usize).min(8);
             diff.set_active_stages(stages);
             diff.set_feedback(0.4 + params.diffusion * 0.3);
         }
@@ -155,7 +157,7 @@ impl ReverbAlgorithm for Magneto {
         // Modulation
         for (i, diff) in self.head_diffusers.iter_mut().enumerate() {
             diff.set_modulation(
-                0.3 + i as f64 * 0.2,
+                0.3 + num::count_to_f64(i) * 0.2,
                 params.modulation * 8.0,
                 self.sample_rate,
             );

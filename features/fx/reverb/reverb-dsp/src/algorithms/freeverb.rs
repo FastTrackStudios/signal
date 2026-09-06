@@ -12,6 +12,8 @@
 //! The published constants are tuned for 44.1 kHz. We scale them to the
 //! actual sample rate at construction.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::denormal::flush;
@@ -118,14 +120,14 @@ impl FreeVerb {
         let _ = sample_rate;
         let scale = sample_rate / 44100.0;
         let comb_l =
-            std::array::from_fn(|i| LpComb::new((COMB_TUNINGS[i] as f64 * scale) as usize));
+            std::array::from_fn(|i| LpComb::new((num::count_to_f64(COMB_TUNINGS[i]) * scale) as usize));
         let comb_r = std::array::from_fn(|i| {
-            LpComb::new(((COMB_TUNINGS[i] + STEREO_SPREAD) as f64 * scale) as usize)
+            LpComb::new((num::count_to_f64((COMB_TUNINGS[i] + STEREO_SPREAD)) * scale) as usize)
         });
         let ap_l =
-            std::array::from_fn(|i| AllpassF::new((ALLPASS_TUNINGS[i] as f64 * scale) as usize));
+            std::array::from_fn(|i| AllpassF::new((num::count_to_f64(ALLPASS_TUNINGS[i]) * scale) as usize));
         let ap_r = std::array::from_fn(|i| {
-            AllpassF::new(((ALLPASS_TUNINGS[i] + STEREO_SPREAD) as f64 * scale) as usize)
+            AllpassF::new((num::count_to_f64((ALLPASS_TUNINGS[i] + STEREO_SPREAD)) * scale) as usize)
         });
         Self {
             dc_in: DcBlocker::new(),

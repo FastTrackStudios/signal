@@ -29,6 +29,8 @@
 //! For `a = 0.6`: DC delay ≈ 0.25·N samples, Nyquist delay ≈ 4·N samples.
 //! The frequency-dependent spread creates the chirp.
 
+use dsp_core::num;
+
 /// Maximum number of allpass sections in the cascade.
 const MAX_SECTIONS: usize = 300;
 /// Maximum stretch factor per section.
@@ -138,16 +140,16 @@ impl SpectralDelay {
     #[must_use]
     pub fn group_delay_dc(&self) -> f64 {
         let a = self.coefficient;
-        let k = self.sections.first().map_or(1, |s| s.k) as f64;
-        self.active_sections as f64 * k * (1.0 - a) / (1.0 + a)
+        let k = num::count_to_f64(self.sections.first().map_or(1, |s| s.k));
+        num::count_to_f64(self.active_sections) * k * (1.0 - a) / (1.0 + a)
     }
 
     /// Get the approximate group delay at Nyquist in samples.
     #[must_use]
     pub fn group_delay_nyquist(&self) -> f64 {
         let a = self.coefficient;
-        let k = self.sections.first().map_or(1, |s| s.k) as f64;
-        self.active_sections as f64 * k * (1.0 + a) / (1.0 - a)
+        let k = num::count_to_f64(self.sections.first().map_or(1, |s| s.k));
+        num::count_to_f64(self.active_sections) * k * (1.0 + a) / (1.0 - a)
     }
 
     pub fn clear(&mut self) {

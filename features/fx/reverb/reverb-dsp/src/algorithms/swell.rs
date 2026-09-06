@@ -5,6 +5,8 @@
 //! the reverb level. Creates pad-like textures that swell up
 //! during sustained notes and fade during silence.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -51,7 +53,7 @@ impl Swell {
             [1279, 1567, 1873, 2179, 2473, 2777, 3079, 3389]
         };
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| (d as f64 * scale) as usize).collect();
+        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index((d as f64 * scale))).collect();
         Fdn::new(&delays, MixMatrix::Householder)
     }
 }
@@ -92,7 +94,7 @@ impl ReverbAlgorithm for Swell {
             .set_times_ms(attack_ms, release_ms, self.sample_rate);
 
         // Diffusion
-        let stages = (params.diffusion * 10.0) as usize;
+        let stages = num::f64_to_index((params.diffusion * 10.0));
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
         self.diffuser_l.set_feedback(0.5 + params.diffusion * 0.25);

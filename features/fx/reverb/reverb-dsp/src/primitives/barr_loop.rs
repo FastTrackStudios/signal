@@ -12,6 +12,8 @@
 //! This is the *Classic voice* late core: sparser and ringier than an
 //! FDN, with the early-'80s single-loop character.
 
+use dsp_core::num;
+
 use super::one_pole::Lp1;
 use audiocore_dsp::delay_line::DelayLine;
 
@@ -39,7 +41,7 @@ struct Ap {
 impl Ap {
     fn new(len: f64) -> Self {
         Self {
-            line: DelayLine::new(len as usize + 8),
+            line: DelayLine::new(num::f64_to_index(len) + 8),
             len,
         }
     }
@@ -48,7 +50,7 @@ impl Ap {
     fn tick(&mut self, x: f64, len: f64) -> f64 {
         let delayed = self
             .line
-            .read_linear(len.clamp(1.0, self.line.len() as f64 - 4.0));
+            .read_linear(len.clamp(1.0, num::count_to_f64(self.line.len()) - 4.0));
         let v = x - AP_COEFF * delayed;
         self.line.write(v);
         delayed + AP_COEFF * v
@@ -81,8 +83,8 @@ impl BarrLoop {
     pub fn new(sample_rate: f64) -> Self {
         let k = sample_rate / 32_768.0;
         let sections = core::array::from_fn(|i| Section {
-            delay: DelayLine::new((SECTION_LEN_32K[i] * k) as usize + 8),
-            len: (SECTION_LEN_32K[i] * k) as usize,
+            delay: DelayLine::new(num::f64_to_index((SECTION_LEN_32K[i] * k)) + 8),
+            len: num::f64_to_index((SECTION_LEN_32K[i] * k)),
             ap: [Ap::new(AP_LEN_32K[i][0] * k), Ap::new(AP_LEN_32K[i][1] * k)],
             damp: Lp1::new(),
         });
@@ -104,7 +106,7 @@ impl BarrLoop {
     /// per trip, total trip length Σ section delays.
     pub fn set_t60(&mut self, t60_s: f64) {
         let trip: usize = self.sections.iter().map(|s| s.len).sum();
-        let trip_s = trip as f64 / self.sample_rate;
+        let trip_s = num::count_to_f64(trip) / self.sample_rate;
         // Per-SECTION gain g with 4 applications per trip:
         // g^4 = 10^(−3·trip_s/t60) → uniform dB/s decay.
         let g4 = 10.0f64.powf(-3.0 * trip_s / t60_s.max(0.05));

@@ -3,6 +3,8 @@
 //! N parallel delay lines mixed through a unitary feedback matrix
 //! (Householder or Hadamard) with per-line damping filters.
 
+use dsp_core::num;
+
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::denormal::flush;
@@ -246,7 +248,7 @@ impl Fdn {
             // every recirculation. Ignoring it makes the tail run long —
             // measurably so, ~1.16x for Hall's 0.6 coefficient and ~2x for
             // the Room engines once they were given the same diffusion.
-            let mi = (self.delay_samples[i] + self.loop_ap_len[i]) as f64;
+            let mi = num::count_to_f64((self.delay_samples[i] + self.loop_ap_len[i]));
             let r0 = 10.0f64.powf(-3.0 * mi / (sample_rate * t_dc));
             let rp = 10.0f64.powf(-3.0 * mi / (sample_rate * t_ny));
             self.shelf_p[i] = (r0 - rp) / (r0 + rp);
@@ -292,7 +294,7 @@ impl Fdn {
         }
         let t60 = t60_mid.max(0.01);
         for i in 0..self.num_lines {
-            let mi = self.delay_samples[i] as f64;
+            let mi = num::count_to_f64(self.delay_samples[i]);
             let gmid_db = -60.0 * mi / (sample_rate * t60);
             // First pass: per-band target gains at this line.
             let mut gains = [0.0f64; crate::algorithm::DECAY_BANDS];
@@ -326,7 +328,7 @@ impl Fdn {
             const PROBE_POINTS: usize = 48;
             let f_lo = 20.0f64;
             let f_hi = (sample_rate * 0.45).max(f_lo * 2.0);
-            let ratio = (f_hi / f_lo).powf(1.0 / (PROBE_POINTS - 1) as f64);
+            let ratio = (f_hi / f_lo).powf(1.0 / num::count_to_f64((PROBE_POINTS - 1)));
             let mut f = f_lo;
             for _ in 0..PROBE_POINTS {
                 let mut total = 0.0f64;
@@ -445,9 +447,9 @@ impl Fdn {
             }
             let sweep = (self.vintage_phase * core::f64::consts::TAU).sin() * 3.5;
             for i in 0..n {
-                let pos = (self.delay_samples[i] as f64 + sweep)
-                    .clamp(1.0, (self.delays[i].len() - 2) as f64);
-                self.feedback[i] = self.delays[i].read(pos as usize);
+                let pos = (num::count_to_f64(self.delay_samples[i]) + sweep)
+                    .clamp(1.0, num::count_to_f64((self.delays[i].len() - 2)));
+                self.feedback[i] = self.delays[i].read(num::f64_to_index(pos));
             }
         } else if self.jitter_depth > 1e-9 {
             for i in 0..n {
@@ -460,8 +462,8 @@ impl Fdn {
                 }
                 self.jitter_count[i] -= 1;
                 self.jitter_cur[i] += self.jitter_step[i];
-                let pos = (self.delay_samples[i] as f64 + self.jitter_cur[i])
-                    .clamp(1.0, (self.delays[i].len() - 2) as f64);
+                let pos = (num::count_to_f64(self.delay_samples[i]) + self.jitter_cur[i])
+                    .clamp(1.0, num::count_to_f64((self.delays[i].len() - 2)));
                 self.feedback[i] = self.delays[i].read_linear(pos);
             }
         } else {
@@ -497,7 +499,7 @@ impl Fdn {
                 self.rot_phase = (self.rot_phase + self.rot_inc * 16.0).fract();
                 for (k, cs) in self.rot_cs.iter_mut().enumerate() {
                     let theta = self.rot_depth
-                        * (core::f64::consts::TAU * (self.rot_phase + k as f64 * 0.31)).sin();
+                        * (core::f64::consts::TAU * (self.rot_phase + num::count_to_f64(k) * 0.31)).sin();
                     *cs = (theta.cos(), theta.sin());
                 }
             }
