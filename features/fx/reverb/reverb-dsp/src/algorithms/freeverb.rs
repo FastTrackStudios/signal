@@ -121,15 +121,13 @@ impl FreeVerb {
     pub fn new(sample_rate: f64) -> Self {
         let _ = sample_rate;
         let scale = sample_rate / 44100.0;
-        let comb_l =
-            std::array::from_fn(|i| LpComb::new(num::f64_to_index(num::count_to_f64(COMB_TUNINGS[i]) * scale)));
-        let comb_r = std::array::from_fn(|i| {
-            LpComb::new(num::f64_to_index(num::count_to_f64(COMB_TUNINGS[i].saturating_add(STEREO_SPREAD)) * scale))
+        let comb_l = COMB_TUNINGS.map(|t| LpComb::new(num::f64_to_index(num::count_to_f64(t) * scale)));
+        let comb_r = COMB_TUNINGS.map(|t| {
+            LpComb::new(num::f64_to_index(num::count_to_f64(t.saturating_add(STEREO_SPREAD)) * scale))
         });
-        let ap_l =
-            std::array::from_fn(|i| AllpassF::new(num::f64_to_index(num::count_to_f64(ALLPASS_TUNINGS[i]) * scale)));
-        let ap_r = std::array::from_fn(|i| {
-            AllpassF::new(num::f64_to_index(num::count_to_f64(ALLPASS_TUNINGS[i].saturating_add(STEREO_SPREAD)) * scale))
+        let ap_l = ALLPASS_TUNINGS.map(|t| AllpassF::new(num::f64_to_index(num::count_to_f64(t) * scale)));
+        let ap_r = ALLPASS_TUNINGS.map(|t| {
+            AllpassF::new(num::f64_to_index(num::count_to_f64(t.saturating_add(STEREO_SPREAD)) * scale))
         });
         Self {
             dc_in: DcBlocker::new(),

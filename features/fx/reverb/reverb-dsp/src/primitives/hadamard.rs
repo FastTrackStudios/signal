@@ -20,12 +20,16 @@ pub fn mix(channels: &mut [f64]) {
     let mut half = n;
     while half > 1 {
         half >>= 1;
-        for i in (0..n).step_by(half.saturating_mul(2)) {
-            for j in i..i.saturating_add(half) {
-                let a = channels[j];
-                let b = channels[j.saturating_add(half)];
-                channels[j] = a + b;
-                channels[j.saturating_add(half)] = a - b;
+        // Each butterfly block is `2 * half` wide; splitting it in two
+        // pairs j with j + half without any index arithmetic. The `min`
+        // only matters for a non-power-of-2 length, where the last chunk
+        // is short and the extra entries stay untouched.
+        for block in channels.chunks_mut(half.saturating_mul(2)) {
+            let (top, bottom) = block.split_at_mut(half.min(block.len()));
+            for (upper, lower) in top.iter_mut().zip(bottom.iter_mut()) {
+                let (a, b) = (*upper, *lower);
+                *upper = a + b;
+                *lower = a - b;
             }
         }
     }

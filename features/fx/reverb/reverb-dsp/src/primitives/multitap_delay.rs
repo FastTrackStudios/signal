@@ -25,10 +25,19 @@ pub struct Tap {
     pub gain: f64,
 }
 
+/// One tap's live state. `tap_gains` and `tap_positions`, two parallel
+/// `[f64; MAX_TAPS]` arrays walked by the same index, before.
+#[derive(Clone, Copy, Default)]
+struct TapSlot {
+    /// Tap position, scaled by `length_scaler` in `tick`.
+    position: f64,
+    /// Tap gain, phase included (`CloudSeed` randomizes the sign).
+    gain: f64,
+}
+
 pub struct MultitapDelay {
     buffer: DelayLine,
-    tap_gains: [f64; MAX_TAPS],
-    tap_positions: [f64; MAX_TAPS],
+    taps: [TapSlot; MAX_TAPS],
     seed_values: Vec<f64>,
     seed: u64,
     cross_seed: f64,
@@ -43,8 +52,7 @@ impl MultitapDelay {
         let default_len = num::f64_to_index(DEFAULT_SAMPLE_RATE * BUFFER_SECONDS);
         let mut mt = Self {
             buffer: DelayLine::new(max_delay.saturating_add(2).max(default_len)),
-            tap_gains: [0.0; MAX_TAPS],
-            tap_positions: [0.0; MAX_TAPS],
+            taps: [TapSlot::default(); MAX_TAPS],
             seed_values: Vec::new(),
             seed: 0,
             cross_seed: 0.0,
@@ -85,7 +93,7 @@ impl MultitapDelay {
         self.update_taps();
     }
 
-    pub fn set_tap_decay(&mut self, decay: f64) {
+    pub const fn set_tap_decay(&mut self, decay: f64) {
         self.decay = decay;
     }
 
@@ -96,12 +104,10 @@ impl MultitapDelay {
         // making tap_positions work as absolute sample offsets.
         self.length_samples = num::count_to_f64(self.count);
         self.decay = 0.0; // Gains are already baked into tap_gains
-        for (i, t) in taps.iter().enumerate() {
-            if i >= MAX_TAPS {
-                break;
-            }
-            self.tap_positions[i] = num::count_to_f64(t.delay_samples);
-            self.tap_gains[i] = t.gain;
+        // Zipping against the fixed-size slot array is the MAX_TAPS cap.
+        for (slot, tap) in self.taps.iter_mut().zip(taps) {
+            slot.position = num::count_to_f64(tap.delay_samples);
+            slot.gain = tap.gain;
         }
     }
 
@@ -124,15 +130,14 @@ impl MultitapDelay {
         let max_offset = self.buffer.len().saturating_sub(2);
         let mut output = 0.0;
 
-        for (pos, gain) in self.tap_positions.iter().zip(self.tap_gains.iter()).take(self.count) {
-            let offset = *pos * length_scaler;
+        for tap in self.taps.iter().take(self.count) {
+            let offset = tap.position * length_scaler;
             let decay_effective =
                 (-offset / self.length_samples * 3.3).exp().mul_add(self.decay, 1.0 - self.decay);
             // +1 because the read is relative to the write that just happened:
             // read(1) is the sample written this tick (offset 0 in the old code).
-            let read_offset = num::f64_to_index(offset).min(max_offset) + 1;
-            output +=
-                self.buffer.read(read_offset) * *gain * decay_effective * total_gain;
+            let read_offset = num::f64_to_index(offset).min(max_offset).saturating_add(1);
+            output += self.buffer.read(read_offset) * tap.gain * decay_effective * total_gain;
         }
 
         output
@@ -148,22 +153,22 @@ impl MultitapDelay {
 
     /// `CloudSeed` tap generation: seed-based positions with phase-randomized gains.
     fn update_taps(&mut self) {
-        let mut s = 0_usize;
-        for i in 0..MAX_TAPS {
-            if s.saturating_add(2) < self.seed_values.len() {
-                if let Some(&seed_phase) = self.seed_values.get(s) {
-                    let phase = if seed_phase < 0.5 { 1.0 } else { -1.0 };
-                    s = s.saturating_add(1);
-                    if let Some(&r) = self.seed_values.get(s) {
-                        self.tap_gains[i] = db_to_linear(r.mul_add(20.0, -20.0)) * phase;
-                        s = s.saturating_add(1);
-                        if let Some(&seed_pos) = self.seed_values.get(s) {
-                            self.tap_positions[i] = num::count_to_f64(i) + seed_pos;
-                            s = s.saturating_add(1);
-                        }
-                    }
-                }
-            }
+        // Three seed values per tap: phase sign, gain in dB, position
+        // offset. `chunks_exact` is the "enough seeds left" test the
+        // nested `get` chain was doing by hand; slots past the end of
+        // the seed buffer keep their previous values.
+        for (i, (slot, seeds)) in self
+            .taps
+            .iter_mut()
+            .zip(self.seed_values.chunks_exact(3))
+            .enumerate()
+        {
+            let [seed_phase, seed_gain, seed_pos] = seeds else {
+                continue;
+            };
+            let phase = if *seed_phase < 0.5 { 1.0 } else { -1.0 };
+            slot.gain = db_to_linear(seed_gain.mul_add(20.0, -20.0)) * phase;
+            slot.position = num::count_to_f64(i) + seed_pos;
         }
     }
 
