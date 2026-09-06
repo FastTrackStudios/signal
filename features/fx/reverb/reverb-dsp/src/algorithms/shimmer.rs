@@ -45,7 +45,7 @@ pub struct Shimmer {
     out_hp_l: OnePoleHp,
     out_hp_r: OnePoleHp,
     // Shimmer amount (how much pitch-shifted signal feeds back)
-    shimmer_amount: f64,
+    amount: f64,
     decay: f64,
     // MX param overlay (voice intervals / amount / feedback mode).
     mx: ShimmerParams,
@@ -79,7 +79,7 @@ impl Shimmer {
             fb_r: 0.0,
             out_hp_l: OnePoleHp::new(24.0, sample_rate),
             out_hp_r: OnePoleHp::new(24.0, sample_rate),
-            shimmer_amount: 0.5,
+            amount: 0.5,
             decay: 0.8,
             mx: ShimmerParams::default(),
             legacy_speed: 2.0,
@@ -129,7 +129,7 @@ impl Shimmer {
             self.shifter2_r.set_speed(speed2);
         }
 
-        self.shimmer_amount = self
+        self.amount = self
             .mx
             .amount
             .map_or(self.legacy_amount, |a| a.clamp(0.0, 1.0));
@@ -226,8 +226,8 @@ impl ReverbAlgorithm for Shimmer {
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         // Mix input with pitch-shifted feedback
-        let in_l = self.fb_l.mul_add(self.shimmer_amount, left);
-        let in_r = self.fb_r.mul_add(self.shimmer_amount, right);
+        let in_l = self.fb_l.mul_add(self.amount, left);
+        let in_r = self.fb_r.mul_add(self.amount, right);
 
         // Diffuse
         let diff_l = self.diffuser_l.tick(in_l);

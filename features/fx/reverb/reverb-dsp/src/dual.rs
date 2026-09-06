@@ -113,7 +113,7 @@ impl DualReverb {
     /// carry one slot's settings onto a different engine. Call
     /// `update()` (or `update_params()` on the destination) afterwards
     /// so filters and smoothers pick the values up.
-    pub fn copy_params(&mut self, from_a: bool) {
+    pub const fn copy_params(&mut self, from_a: bool) {
         let (src, dst) = if from_a {
             (&self.a, &mut self.b)
         } else {

@@ -85,7 +85,7 @@ impl Biquad {
         self.gain_db = value.log10() * 20.0;
     }
 
-    pub fn set_q(&mut self, value: f64) {
+    pub const fn set_q(&mut self, value: f64) {
         self.q = value.max(0.001);
     }
 
@@ -213,7 +213,7 @@ impl Biquad {
         self.y
     }
 
-    pub fn clear(&mut self) {
+    pub const fn clear(&mut self) {
         self.y = 0.0;
         self.x1 = 0.0;
         self.x2 = 0.0;

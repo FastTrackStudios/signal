@@ -37,3 +37,11 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
+
+# `arithmetic_side_effects` fires on any operator it cannot prove is a
+# primitive's, which includes complex-number arithmetic. A `Complex<f64>`
+# add or multiply is four float ops — it cannot overflow into a panic, and
+# the FFT convolution paths are written as arithmetic because that is what
+# they are. Listing the type here keeps the lint's real subject (integer
+# overflow and division by zero) enforced everywhere else.
+arithmetic-side-effects-allowed = ["realfft::num_complex::Complex"]

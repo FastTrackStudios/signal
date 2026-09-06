@@ -61,7 +61,7 @@ impl VelvetFir {
         // Average spacing between impulses (Karjalainen 2007).
         let avg_spacing = (48000.0_f64 / density_hz).max(1.0);
         let spacing = num::f64_to_index(avg_spacing);
-        let count = length / spacing.max(1);
+        let count = length.checked_div(spacing.max(1)).unwrap_or(0);
 
         self.taps.clear();
         for k in 0..count {

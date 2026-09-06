@@ -144,7 +144,7 @@ pub struct PreparedIrPair {
 
 impl PreparedIrPair {
     #[must_use]
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
             left: PreparedIr::empty(),
             right: PreparedIr::empty(),

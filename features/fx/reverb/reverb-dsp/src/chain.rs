@@ -723,7 +723,7 @@ impl ReverbChain {
 
     /// The reverberation-time range the active engine's `decay` spans.
     #[must_use]
-    pub fn decay_seconds_range(&self) -> Option<(f64, f64)> {
+    pub const fn decay_seconds_range(&self) -> Option<(f64, f64)> {
         self.algorithm_type.t60_range(self.variant)
     }
 
@@ -788,7 +788,7 @@ impl ReverbChain {
 
     /// Apply a copied parameter surface. Call `update_params()`
     /// afterwards so filters and smoothers pick the values up.
-    pub fn apply_surface(&mut self, s: &ChainParamSurface) {
+    pub const fn apply_surface(&mut self, s: &ChainParamSurface) {
         self.params = s.params;
         self.conv_mod = s.conv_mod;
         self.shimmer = s.shimmer;

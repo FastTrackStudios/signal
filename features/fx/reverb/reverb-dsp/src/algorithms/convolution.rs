@@ -331,7 +331,7 @@ impl PartitionedConv {
                 .zip(in_p.iter())
                 .take(SPECTRUM_LEN)
             {
-                *acc = *acc + *ir * *inp * w;
+                *acc += *ir * *inp * w;
             }
         }
         if w_old > 0.0 {
@@ -354,7 +354,7 @@ impl PartitionedConv {
                     .zip(in_p.iter())
                     .take(SPECTRUM_LEN)
                 {
-                    *acc = *acc + *ir * *inp * w;
+                    *acc += *ir * *inp * w;
                 }
             }
         }
@@ -1008,7 +1008,7 @@ impl Convolution {
 
     /// Current modulation options (targets, not ramp positions).
     #[must_use]
-    pub fn mod_params(&self) -> ConvolutionModParams {
+    pub const fn mod_params(&self) -> ConvolutionModParams {
         self.mod_params
     }
 

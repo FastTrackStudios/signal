@@ -21,9 +21,9 @@ pub struct Swell {
     // Envelope follower for swell control
     env_follower: EnvelopeFollower,
     // Swell state
-    swell_level: f64,
-    swell_rate: f64, // How fast the reverb builds
-    swell_target: f64,
+    level: f64,
+    rate: f64, // How fast the reverb builds
+    target: f64,
     sample_rate: f64,
 }
 
@@ -39,9 +39,9 @@ impl Swell {
             diffuser_l: AllpassDiffuser::with_defaults(sample_rate, 0.8),
             diffuser_r: AllpassDiffuser::with_defaults(sample_rate, 0.8),
             env_follower: env,
-            swell_level: 0.0,
-            swell_rate: 0.0001,
-            swell_target: 0.0,
+            level: 0.0,
+            rate: 0.0001,
+            target: 0.0,
             sample_rate,
         }
     }
@@ -65,7 +65,7 @@ impl ReverbAlgorithm for Swell {
         self.diffuser_l.reset();
         self.diffuser_r.reset();
         self.env_follower.reset(0.0);
-        self.swell_level = 0.0;
+        self.level = 0.0;
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
@@ -85,7 +85,7 @@ impl ReverbAlgorithm for Swell {
         self.fdn_r.set_damping_coeff(damp_coeff);
 
         // Swell rate (extra_a: slow → fast build)
-        self.swell_rate = params.extra_a.mul_add(0.0005, 0.00001);
+        self.rate = params.extra_a.mul_add(0.0005, 0.00001);
 
         // Envelope follower timing
         let attack_ms = (1.0 - params.extra_a).mul_add(200.0, 20.0);
@@ -114,16 +114,16 @@ impl ReverbAlgorithm for Swell {
         let env = self.env_follower.tick(input_level);
 
         // Swell: build up reverb level when signal is present
-        self.swell_target = env.min(1.0);
-        if self.swell_level < self.swell_target {
-            self.swell_level += self.swell_rate;
-            if self.swell_level > self.swell_target {
-                self.swell_level = self.swell_target;
+        self.target = env.min(1.0);
+        if self.level < self.target {
+            self.level += self.rate;
+            if self.level > self.target {
+                self.level = self.target;
             }
         } else {
-            self.swell_level -= self.swell_rate * 0.5; // Slower release
-            if self.swell_level < 0.0 {
-                self.swell_level = 0.0;
+            self.level -= self.rate * 0.5; // Slower release
+            if self.level < 0.0 {
+                self.level = 0.0;
             }
         }
 
@@ -135,6 +135,6 @@ impl ReverbAlgorithm for Swell {
         let wet_r = self.fdn_r.tick(diff_r);
 
         // Apply swell envelope to output
-        (wet_l * self.swell_level, wet_r * self.swell_level)
+        (wet_l * self.level, wet_r * self.level)
     }
 }

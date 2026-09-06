@@ -186,8 +186,8 @@ impl HallArena {
         let base_delays = [251, 317, 389, 461, 541, 631, 727, 829];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.5);
 
-        for (i, (ap_l, ap_r)) in self.mod_ap_l.iter_mut().zip(&mut self.mod_ap_r).enumerate() {
-            let &d = base_delays.get(i).expect("loop bounds match array size");
+        let pairs = self.mod_ap_l.iter_mut().zip(&mut self.mod_ap_r);
+        for (i, ((ap_l, ap_r), d)) in pairs.zip(base_delays).enumerate() {
             let delay = num::f64_to_index(f64::from(d) * scale);
             ap_l.sample_delay = delay.max(4);
             ap_l.feedback = 0.4;

@@ -79,11 +79,11 @@ impl ReverbLine {
         self.diffuser.set_cross_seed(cross_seed);
     }
 
-    pub fn set_delay(&mut self, samples: usize) {
+    pub const fn set_delay(&mut self, samples: usize) {
         self.delay.sample_delay = samples;
     }
 
-    pub fn set_feedback(&mut self, feedback: f64) {
+    pub const fn set_feedback(&mut self, feedback: f64) {
         self.feedback_coeff = feedback;
     }
 
@@ -95,7 +95,7 @@ impl ReverbLine {
         self.diffuser.set_feedback(feedback);
     }
 
-    pub fn set_diffuser_stages(&mut self, stages: usize) {
+    pub const fn set_diffuser_stages(&mut self, stages: usize) {
         self.diffuser.stages = stages;
     }
 
@@ -123,11 +123,11 @@ impl ReverbLine {
         self.low_pass.set_cutoff(freq);
     }
 
-    pub fn set_line_mod_amount(&mut self, amount: f64) {
+    pub const fn set_line_mod_amount(&mut self, amount: f64) {
         self.delay.mod_amount = amount;
     }
 
-    pub fn set_line_mod_rate(&mut self, rate: f64) {
+    pub const fn set_line_mod_rate(&mut self, rate: f64) {
         self.delay.mod_rate = rate;
     }
 
