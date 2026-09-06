@@ -138,7 +138,7 @@ impl SpectralDelay {
         let a = self.coefficient;
         let n = self.active_sections.min(self.sections.len());
         let mut x = input;
-        for section in self.sections[..n].iter_mut() {
+        for section in self.sections.iter_mut().take(n) {
             x = section.tick(x, a);
         }
         x

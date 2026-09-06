@@ -384,9 +384,13 @@ impl ReverbAlgorithm for Bloom {
         let mut out_l = 0.0;
         let mut out_r = 0.0;
 
-        for i in 0..NUM_LINES {
-            let voice_l = &self.voices_l[i];
-            let voice_r = &self.voices_r[i];
+        for (i, (voice_l, voice_r)) in self
+            .voices_l
+            .iter()
+            .zip(self.voices_r.iter())
+            .take(NUM_LINES)
+            .enumerate()
+        {
 
             // Read at the main delay point (already processed through feedback path above)
             let tap_l = voice_l.delay.read_linear(voice_l.current_delay * 0.73);

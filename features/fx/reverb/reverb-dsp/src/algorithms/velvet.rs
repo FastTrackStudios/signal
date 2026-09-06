@@ -86,13 +86,17 @@ impl VelvetFir {
 
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
-        self.buffer[self.write_idx] = input;
+        if let Some(cell) = self.buffer.get_mut(self.write_idx) {
+            *cell = input;
+        }
         let mask = self.buffer_size.saturating_sub(1);
 
         let mut acc = 0.0;
         for &(delay, gain) in &self.taps {
             let idx = (self.write_idx.wrapping_add(self.buffer_size).wrapping_sub(delay)) & mask;
-            acc += self.buffer[idx] * gain;
+            if let Some(&sample) = self.buffer.get(idx) {
+                acc += sample * gain;
+            }
         }
 
         self.write_idx = self.write_idx.wrapping_add(1) & mask;

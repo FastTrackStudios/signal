@@ -1376,10 +1376,16 @@ impl Processor for ReverbChain {
                 self.sat_r.set_drive(drive);
             }
 
-            for (out_l, out_r) in left[block_start..block_end]
-                .iter_mut()
-                .zip(right[block_start..block_end].iter_mut())
-            {
+            // `block_end <= n <= min(len)`, so both sub-blocks exist;
+            // bailing on the impossible `None` keeps the render callback
+            // panic-free.
+            let (Some(block_l), Some(block_r)) = (
+                left.get_mut(block_start..block_end),
+                right.get_mut(block_start..block_end),
+            ) else {
+                return;
+            };
+            for (out_l, out_r) in block_l.iter_mut().zip(block_r.iter_mut()) {
                 // Advance the coefficient ramps per-sample so their rate is
                 // independent of buffer/sub-block size.
                 self.decay_smoother.tick();

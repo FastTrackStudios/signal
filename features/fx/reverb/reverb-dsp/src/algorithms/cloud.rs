@@ -468,9 +468,11 @@ impl CloudChannel {
 
     /// Exact port of `ReverbChannel::UpdatePostDiffusion`.
     fn update_post_diffusion(&mut self) {
-        for i in 0..TOTAL_LINE_COUNT {
-            self.lines[i]
-                .set_diffuser_seed(self.post_diffusion_seed.saturating_mul(u64::try_from(i).unwrap_or(u64::MAX).saturating_add(1)), self.cross_seed);
+        for (i, line) in self.lines.iter_mut().enumerate() {
+            let seed = self
+                .post_diffusion_seed
+                .saturating_mul(u64::try_from(i).unwrap_or(u64::MAX).saturating_add(1));
+            line.set_diffuser_seed(seed, self.cross_seed);
         }
     }
 
@@ -509,8 +511,8 @@ impl CloudChannel {
 
         // Late reverb: parallel delay lines
         let mut line_sum = 0.0;
-        for i in 0..self.line_count.min(TOTAL_LINE_COUNT) {
-            line_sum += self.lines[i].tick(x);
+        for line in self.lines.iter_mut().take(self.line_count.min(TOTAL_LINE_COUNT)) {
+            line_sum += line.tick(x);
         }
         line_sum *= self.per_line_gain();
 
@@ -730,7 +732,9 @@ impl Cloud {
 
     /// Set a raw [0, 1] parameter and apply through `ScaleParam` to both channels.
     fn set_raw_param(&mut self, param_id: usize, value: f64) {
-        self.raw_params[param_id] = value;
+        if let Some(slot) = self.raw_params.get_mut(param_id) {
+            *slot = value;
+        }
         let scaled = scale_param(value, param_id);
         self.left.apply_param(param_id, scaled);
         self.right.apply_param(param_id, scaled);

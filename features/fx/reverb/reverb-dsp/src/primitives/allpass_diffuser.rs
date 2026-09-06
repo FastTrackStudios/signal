@@ -157,7 +157,7 @@ impl AllpassDiffuser {
     #[inline]
     pub fn tick(&mut self, input: f64) -> f64 {
         let mut x = input;
-        for f in &mut self.filters[..self.stages] {
+        for f in self.filters.iter_mut().take(self.stages) {
             x = f.tick(x);
         }
         x
