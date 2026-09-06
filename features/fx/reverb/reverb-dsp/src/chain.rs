@@ -380,6 +380,16 @@ impl Default for ReverbChain {
     }
 }
 
+/// A `ParamSmoother` at `initial`, ramping over `time_ms`, settling
+/// within `epsilon`. Eight of these were spelled out as four-line block
+/// expressions in `ReverbChain::new`.
+fn smoother(initial: f64, time_ms: f64, epsilon: f64, sample_rate: f64) -> ParamSmoother {
+    let mut s = ParamSmoother::new(initial);
+    s.set_time_ms(time_ms, sample_rate);
+    s.set_epsilon(epsilon);
+    s
+}
+
 impl ReverbChain {
     #[must_use]
     pub fn new() -> Self {
@@ -403,57 +413,16 @@ impl ReverbChain {
             duck_env: EnvelopeFollower::new(0.0),
             duck_gain: 1.0,
             duck_smooth: EnvelopeFollower::coeff(0.001, sample_rate),
-            mix_smoother: {
-                let mut s = ParamSmoother::new(0.5);
-                s.set_time_ms(5.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
-            width_smoother: {
-                let mut s = ParamSmoother::new(1.0);
-                s.set_time_ms(5.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
-            pan_smoother: {
-                let mut s = ParamSmoother::new(0.0);
-                s.set_time_ms(5.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
-            trem_depth_smoother: {
-                let mut s = ParamSmoother::new(0.0);
-                s.set_time_ms(10.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
+            mix_smoother: smoother(0.5, 5.0, 1e-4, sample_rate),
+            width_smoother: smoother(1.0, 5.0, 1e-4, sample_rate),
+            pan_smoother: smoother(0.0, 5.0, 1e-4, sample_rate),
+            trem_depth_smoother: smoother(0.0, 10.0, 1e-4, sample_rate),
             trem_phase: 0.0,
-            decay_smoother: {
-                // Matches AlgorithmParams::default().decay
-                let mut s = ParamSmoother::new(0.5);
-                s.set_time_ms(30.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
-            damping_smoother: {
-                // Matches AlgorithmParams::default().damping
-                let mut s = ParamSmoother::new(0.3);
-                s.set_time_ms(30.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
-            tilt_smoother: {
-                let mut s = ParamSmoother::new(0.0);
-                s.set_time_ms(30.0, sample_rate);
-                s.set_epsilon(1e-3);
-                s
-            },
-            sat_smoother: {
-                let mut s = ParamSmoother::new(0.0);
-                s.set_time_ms(10.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
+            // Initial values match AlgorithmParams::default().
+            decay_smoother: smoother(0.5, 30.0, 1e-4, sample_rate),
+            damping_smoother: smoother(0.3, 30.0, 1e-4, sample_rate),
+            tilt_smoother: smoother(0.0, 30.0, 1e-3, sample_rate),
+            sat_smoother: smoother(0.0, 10.0, 1e-4, sample_rate),
             params: AlgorithmParams::default(),
             conv_mod: ConvolutionModParams::default(),
             impulse: ImpulseParams::default(),
@@ -1234,14 +1203,67 @@ impl Processor for ReverbChain {
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
         let n = left.len().min(right.len());
 
-        // The wet bus's level: this algorithm's calibration constant, so
-        // every engine sits at the same output for the same decay, plus the
-        // user's trim. Both are per-block, not per-sample — neither changes
-        // inside a buffer.
-        let wet_gain = audiocore_dsp::db::db_to_linear(
-            self.wet_gain_db.clamp(-36.0, 36.0) + self.algorithm_type.wet_calibration_db(),
-        );
 
+        self.drain_ir_queues();
+        let block = self.begin_block();
+
+        let mut block_start = 0;
+        while block_start < n {
+            let block_end = (block_start.saturating_add(SMOOTH_BLOCK)).min(n);
+
+            // Refresh coefficient-level params only while a ramp is in
+            // motion; settled smoothers cost one comparison per sub-block.
+            if !self.decay_smoother.is_settled() || !self.damping_smoother.is_settled() {
+                let mut p = self.effective_params();
+                p.decay = self.decay_smoother.value();
+                p.damping = self.damping_smoother.value();
+                self.algorithm.set_params(&p);
+            }
+            if !self.tilt_smoother.is_settled() {
+                let tilt = self.tilt_smoother.value();
+                self.tilt_l.set_tilt_db(tilt);
+                self.tilt_r.set_tilt_db(tilt);
+            }
+            if !self.sat_smoother.is_settled() {
+                let drive = self.sat_smoother.value();
+                self.sat_l.set_drive(drive);
+                self.sat_r.set_drive(drive);
+            }
+
+            // `block_end <= n <= min(len)`, so both sub-blocks exist;
+            // bailing on the impossible `None` keeps the render callback
+            // panic-free.
+            let (Some(block_l), Some(block_r)) = (
+                left.get_mut(block_start..block_end),
+                right.get_mut(block_start..block_end),
+            ) else {
+                return;
+            };
+            self.render_sub_block(block_l, block_r, &block);
+
+            block_start = block_end;
+        }
+    }
+}
+
+/// The per-block values `process` computes once and the sample loop
+/// reads — the return of [`ReverbChain::begin_block`].
+struct BlockSetup {
+    /// Wet-bus level: the algorithm's calibration constant plus the
+    /// user's trim. Per-block, not per-sample.
+    wet_gain: f64,
+    duck_thresh: f64,
+    mid_on: bool,
+    swell_on: bool,
+    swell_rate: f64,
+    trem_inc: f64,
+}
+
+impl ReverbChain {
+    /// Take whatever IRs arrived since the last block. Runs on the audio
+    /// thread, so the prepared path is preferred and the raw path is
+    /// last-one-wins per slot.
+    fn drain_ir_queues(&mut self) {
         // Prepared (pre-FFT'd) IRs — preferred path. No FFT cost here.
         // Applied in arrival order: swaps are cheap (buffer moves) and
         // the reshape worker already debounces bursts, so ordering
@@ -1307,84 +1329,195 @@ impl Processor for ReverbChain {
                 self.reset_impulse_after_load();
             }
         }
+    }
 
-        // Magneto knob remap (manual): PRE-DELAY becomes the engine's
-        // feedback (see `effective_magneto`) and the chain's own
-        // pre-delay line disengages (DECAY -> last-head time happens
-        // inside the engine).
-        if matches!(
-            self.algorithm_type,
-            AlgorithmType::Magneto | AlgorithmType::NonLinear
-        ) {
-            self.predelay_samples = 0;
-        } else {
-            // Tempo sync wins over the ms knob when both are set.
-            let ms = match (self.predelay_sync_beats, self.tempo_bpm) {
-                (Some(beats), Some(bpm)) if beats > 0.0 && bpm > 0.0 => {
-                    (beats * 60_000.0 / bpm).min(490.0)
-                }
-                _ => self.predelay_ms,
-            };
-            self.predelay_samples = num::f64_to_index(ms * 0.001 * self.sample_rate);
+    /// Everything between the dry input and the algorithm: the ducking
+    /// sidechain, the Hall swell envelope, input filtering, freeze and
+    /// pre-delay, and the send pattern's rhythmic gate.
+    fn drive_algorithm_input(
+        &mut self,
+        dry_l: f64,
+        dry_r: f64,
+        duck_thresh: f64,
+        swell_on: bool,
+        swell_rate: f64,
+    ) -> (f64, f64) {
+        // Sidechain envelope from dry sum (rectified — the follower is
+        // domain-agnostic and needs |x|).
+        let env = self.duck_env.tick((dry_l + dry_r).abs());
+        let over = (env / duck_thresh - 1.0).max(0.0);
+        let target_duck = over.min(1.0).mul_add(-self.duck_amount, 1.0);
+        // 1-pole smooth toward target_duck (independent of attack/release
+        // — env already shapes the rate).
+        self.duck_gain = self.duck_smooth.mul_add(self.duck_gain - target_duck, target_duck);
+
+        // Hall Swell: gain builds behind each note (envelope
+        // logic borrowed from the Swell algorithm).
+        if swell_on {
+            let env = self.swell_env.tick((dry_l + dry_r).abs());
+            let target = (env * 4.0).min(1.0);
+            if self.swell_level < target {
+                self.swell_level = (self.swell_level + swell_rate).min(target);
+            } else {
+                self.swell_level = swell_rate.mul_add(-0.5, self.swell_level).max(0.0);
+            }
         }
 
-        // Re-apply the input LP here too: the Classic-voice vintage cap
-        // must engage when the voice changes via update_params, not
-        // only on the next full config update.
-        self.input_lp.set(
-            FilterType::Lowpass,
-            self.effective_input_lp(),
-            0.707,
-            self.sample_rate,
-        );
-        let duck_thresh = self.duck_threshold.max(1.0e-6);
+        // Input filtering
+        let filt_l = self.input_lp.tick(self.input_hp.tick(dry_l, 0), 0);
+        let filt_r = self.input_lp.tick(self.input_hp.tick(dry_r, 1), 1);
 
-        // Hall Mid EQ + Swell engage flags (chain-level Hall params).
-        let hall_active = self.algorithm_type == AlgorithmType::Hall;
-        let mid_on = hall_active && self.hall.mid_db.abs() > 0.01;
-        let swell_on = hall_active && self.hall.swell_rise > 1e-9;
-        // Rise 0..1 → 50 ms .. ~2 s swell.
-        let swell_rate =
-            1.0 / (self.hall.swell_rise.clamp(0.0, 1.0).mul_add(2.0, 0.05) * self.sample_rate.max(1.0));
-        self.mix_smoother.set_target(self.mix);
-        self.width_smoother.set_target(self.width);
-        self.pan_smoother.set_target(self.pan);
-        self.trem_depth_smoother.set_target(self.trem_depth);
-        let trem_inc =
-            2.0 * std::f64::consts::PI * self.trem_rate_hz.clamp(0.1, 12.0) / self.sample_rate;
-
-        let mut block_start = 0;
-        while block_start < n {
-            let block_end = (block_start.saturating_add(SMOOTH_BLOCK)).min(n);
-
-            // Refresh coefficient-level params only while a ramp is in
-            // motion; settled smoothers cost one comparison per sub-block.
-            if !self.decay_smoother.is_settled() || !self.damping_smoother.is_settled() {
-                let mut p = self.effective_params();
-                p.decay = self.decay_smoother.value();
-                p.damping = self.damping_smoother.value();
-                self.algorithm.set_params(&p);
-            }
-            if !self.tilt_smoother.is_settled() {
-                let tilt = self.tilt_smoother.value();
-                self.tilt_l.set_tilt_db(tilt);
-                self.tilt_r.set_tilt_db(tilt);
-            }
-            if !self.sat_smoother.is_settled() {
-                let drive = self.sat_smoother.value();
-                self.sat_l.set_drive(drive);
-                self.sat_r.set_drive(drive);
-            }
-
-            // `block_end <= n <= min(len)`, so both sub-blocks exist;
-            // bailing on the impossible `None` keeps the render callback
-            // panic-free.
-            let (Some(block_l), Some(block_r)) = (
-                left.get_mut(block_start..block_end),
-                right.get_mut(block_start..block_end),
-            ) else {
-                return;
+        // Freeze: kill input to the algorithm but keep feedback
+        // running. Infinite keeps feeding input into the
+        // sustained wash instead.
+        let (mut alg_in_l, mut alg_in_r) =
+            if self.freeze && self.infinite_mode == InfiniteMode::Freeze {
+                (0.0, 0.0)
+            } else if self.predelay_samples > 0 {
+                self.predelay.write(filt_l);
+                let delayed = self.predelay.read(self.predelay_samples);
+                (delayed, filt_r)
+            } else {
+                (filt_l, filt_r)
             };
+
+        // Send pattern: rhythmic gate on the algorithm input.
+        // The modulator's Audio trigger listens to the dry
+        // input; clear-tails points hard-reset the algorithm.
+        if let Some(m) = &mut self.send_mod {
+            let transport = TransportInfo {
+                position_qn: self.transport_qn,
+                tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
+                playing: true,
+            };
+            let g = m.tick(&transport, dry_l + dry_r);
+            let phase = m.trigger.phase();
+            if m.patterns
+                .active()
+                .clear_crossed(self.send_prev_phase, phase)
+            {
+                self.algorithm.reset();
+            }
+            self.send_prev_phase = phase;
+            alg_in_l *= g;
+            alg_in_r *= g;
+        }
+        (alg_in_l, alg_in_r)
+    }
+
+    /// Everything between the algorithm's wet output and the mix: width,
+    /// pan, the wet pattern and follower lanes, tremolo, the ducker, the
+    /// Hall swell's wet form, and the wet-bus level.
+    fn stage_wet(
+        &mut self,
+        wet_l: f64,
+        wet_r: f64,
+        dry_l: f64,
+        dry_r: f64,
+        width: f64,
+        block: &BlockSetup,
+    ) -> (f64, f64) {
+        let &BlockSetup {
+            wet_gain,
+            swell_on,
+            trem_inc,
+            ..
+        } = block;
+        // Width (mid-side)
+        let (mut final_l, mut final_r) = if (width - 1.0).abs() > 0.001 {
+            audiocore_dsp::stereo::width(wet_l, wet_r, width)
+        } else {
+            (wet_l, wet_r)
+        };
+
+        // Wet pan (equal-power, unity at center — same law as
+        // delay's pan_gains; a mid setting weights the field,
+        // leaving decay audible on the far side).
+        let pan = self.pan_smoother.tick();
+        if pan.abs() > 1e-6 {
+            let (gl, gr) = audiocore_dsp::stereo::pan_equal_power(pan);
+            final_l *= gl;
+            final_r *= gr;
+        }
+
+        // Wet pattern: rhythmic gate on the reverb output.
+        if let Some(m) = &mut self.wet_mod {
+            let transport = TransportInfo {
+                position_qn: self.transport_qn,
+                tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
+                playing: true,
+            };
+            let g = m.tick(&transport, dry_l + dry_r);
+            let phase = m.trigger.phase();
+            if m.patterns
+                .active()
+                .clear_crossed(self.wet_prev_phase, phase)
+            {
+                self.algorithm.reset();
+            }
+            self.wet_prev_phase = phase;
+            final_l *= g;
+            final_r *= g;
+        }
+
+        // Follower lane: dry envelope rides/ducks the wet.
+        if let Some(f) = &mut self.wet_follower {
+            let g = f.tick((dry_l + dry_r) * 0.5);
+            final_l *= g;
+            final_r *= g;
+        }
+
+        // Advance the chain's transport clock.
+        self.transport_qn += self.tempo_bpm.unwrap_or(120.0) / 60.0 / self.sample_rate;
+
+        // Wet tremolo (sine, wet path only). Phase advances only
+        // while the ramped depth is non-zero, so depth 0 stays
+        // bit-identical and re-engaging starts at full gain.
+        let trem_depth = self.trem_depth_smoother.tick();
+        if trem_depth > 1e-6 {
+            let g = (trem_depth * 0.5).mul_add(-(1.0 - self.trem_phase.cos()), 1.0);
+            final_l *= g;
+            final_r *= g;
+            self.trem_phase += trem_inc;
+            if self.trem_phase > 2.0 * std::f64::consts::PI {
+                self.trem_phase -= 2.0 * std::f64::consts::PI;
+            }
+        }
+
+        // Ducker
+        if self.duck_amount > 0.0 {
+            final_l *= self.duck_gain;
+            final_r *= self.duck_gain;
+        }
+
+        // Hall Swell, Wet type: shape the reverb only.
+        if swell_on && self.hall.swell_type == SwellType::Wet {
+            final_l *= self.swell_level;
+            final_r *= self.swell_level;
+        }
+
+        // Wet-bus level: the algorithm's calibration (so every
+        // engine puts out the same level for the same decay) and the
+        // user's own trim on top of it.
+        if (wet_gain - 1.0).abs() > 1e-9 {
+            final_l *= wet_gain;
+            final_r *= wet_gain;
+        }
+
+        (final_l, final_r)
+    }
+
+    /// The sample loop: one sub-block of at most `SMOOTH_BLOCK` samples,
+    /// with every per-sample smoother advanced inside it so a ramp's rate
+    /// is independent of the host's buffer size.
+    fn render_sub_block(&mut self, block_l: &mut [f64], block_r: &mut [f64], block: &BlockSetup) {
+        let &BlockSetup {
+            duck_thresh,
+            mid_on,
+            swell_on,
+            swell_rate,
+            ..
+        } = block;
             for (out_l, out_r) in block_l.iter_mut().zip(block_r.iter_mut()) {
                 // Advance the coefficient ramps per-sample so their rate is
                 // independent of buffer/sub-block size.
@@ -1397,66 +1530,8 @@ impl Processor for ReverbChain {
                 let mix = self.mix_smoother.tick();
                 let width = self.width_smoother.tick();
 
-                // Sidechain envelope from dry sum (rectified — the follower is
-                // domain-agnostic and needs |x|).
-                let env = self.duck_env.tick((dry_l + dry_r).abs());
-                let over = (env / duck_thresh - 1.0).max(0.0);
-                let target_duck = over.min(1.0).mul_add(-self.duck_amount, 1.0);
-                // 1-pole smooth toward target_duck (independent of attack/release
-                // — env already shapes the rate).
-                self.duck_gain = self.duck_smooth.mul_add(self.duck_gain - target_duck, target_duck);
-
-                // Hall Swell: gain builds behind each note (envelope
-                // logic borrowed from the Swell algorithm).
-                if swell_on {
-                    let env = self.swell_env.tick((dry_l + dry_r).abs());
-                    let target = (env * 4.0).min(1.0);
-                    if self.swell_level < target {
-                        self.swell_level = (self.swell_level + swell_rate).min(target);
-                    } else {
-                        self.swell_level = (self.swell_level - swell_rate * 0.5).max(0.0);
-                    }
-                }
-
-                // Input filtering
-                let filt_l = self.input_lp.tick(self.input_hp.tick(dry_l, 0), 0);
-                let filt_r = self.input_lp.tick(self.input_hp.tick(dry_r, 1), 1);
-
-                // Freeze: kill input to the algorithm but keep feedback
-                // running. Infinite keeps feeding input into the
-                // sustained wash instead.
-                let (mut alg_in_l, mut alg_in_r) =
-                    if self.freeze && self.infinite_mode == InfiniteMode::Freeze {
-                        (0.0, 0.0)
-                    } else if self.predelay_samples > 0 {
-                        self.predelay.write(filt_l);
-                        let delayed = self.predelay.read(self.predelay_samples);
-                        (delayed, filt_r)
-                    } else {
-                        (filt_l, filt_r)
-                    };
-
-                // Send pattern: rhythmic gate on the algorithm input.
-                // The modulator's Audio trigger listens to the dry
-                // input; clear-tails points hard-reset the algorithm.
-                if let Some(m) = &mut self.send_mod {
-                    let transport = TransportInfo {
-                        position_qn: self.transport_qn,
-                        tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
-                        playing: true,
-                    };
-                    let g = m.tick(&transport, dry_l + dry_r);
-                    let phase = m.trigger.phase();
-                    if m.patterns
-                        .active()
-                        .clear_crossed(self.send_prev_phase, phase)
-                    {
-                        self.algorithm.reset();
-                    }
-                    self.send_prev_phase = phase;
-                    alg_in_l *= g;
-                    alg_in_r *= g;
-                }
+                let (alg_in_l, alg_in_r) =
+                    self.drive_algorithm_input(dry_l, dry_r, duck_thresh, swell_on, swell_rate);
 
                 // Algorithm
                 let (mut wet_l, mut wet_r) = self.algorithm.tick(alg_in_l, alg_in_r);
@@ -1501,86 +1576,8 @@ impl Processor for ReverbChain {
                     wet_r *= self.post_eq_comp;
                 }
 
-                // Width (mid-side)
-                let (mut final_l, mut final_r) = if (width - 1.0).abs() > 0.001 {
-                    audiocore_dsp::stereo::width(wet_l, wet_r, width)
-                } else {
-                    (wet_l, wet_r)
-                };
-
-                // Wet pan (equal-power, unity at center — same law as
-                // delay's pan_gains; a mid setting weights the field,
-                // leaving decay audible on the far side).
-                let pan = self.pan_smoother.tick();
-                if pan.abs() > 1e-6 {
-                    let (gl, gr) = audiocore_dsp::stereo::pan_equal_power(pan);
-                    final_l *= gl;
-                    final_r *= gr;
-                }
-
-                // Wet pattern: rhythmic gate on the reverb output.
-                if let Some(m) = &mut self.wet_mod {
-                    let transport = TransportInfo {
-                        position_qn: self.transport_qn,
-                        tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
-                        playing: true,
-                    };
-                    let g = m.tick(&transport, dry_l + dry_r);
-                    let phase = m.trigger.phase();
-                    if m.patterns
-                        .active()
-                        .clear_crossed(self.wet_prev_phase, phase)
-                    {
-                        self.algorithm.reset();
-                    }
-                    self.wet_prev_phase = phase;
-                    final_l *= g;
-                    final_r *= g;
-                }
-
-                // Follower lane: dry envelope rides/ducks the wet.
-                if let Some(f) = &mut self.wet_follower {
-                    let g = f.tick((dry_l + dry_r) * 0.5);
-                    final_l *= g;
-                    final_r *= g;
-                }
-
-                // Advance the chain's transport clock.
-                self.transport_qn += self.tempo_bpm.unwrap_or(120.0) / 60.0 / self.sample_rate;
-
-                // Wet tremolo (sine, wet path only). Phase advances only
-                // while the ramped depth is non-zero, so depth 0 stays
-                // bit-identical and re-engaging starts at full gain.
-                let trem_depth = self.trem_depth_smoother.tick();
-                if trem_depth > 1e-6 {
-                    let g = (trem_depth * 0.5).mul_add(-(1.0 - self.trem_phase.cos()), 1.0);
-                    final_l *= g;
-                    final_r *= g;
-                    self.trem_phase += trem_inc;
-                    if self.trem_phase > 2.0 * std::f64::consts::PI {
-                        self.trem_phase -= 2.0 * std::f64::consts::PI;
-                    }
-                }
-
-                // Ducker
-                if self.duck_amount > 0.0 {
-                    final_l *= self.duck_gain;
-                    final_r *= self.duck_gain;
-                }
-
-                // Hall Swell, Wet type: shape the reverb only.
-                if swell_on && self.hall.swell_type == SwellType::Wet {
-                    final_l *= self.swell_level;
-                    final_r *= self.swell_level;
-                }
-
-                // Wet-bus level: the algorithm's calibration (so every
-                // engine puts out the same level for the same decay) and the
-                // user's own trim on top of it.
-                if (wet_gain - 1.0).abs() > 1e-9 {
-                    final_l *= wet_gain;
-                    final_r *= wet_gain;
-                }
+                let (final_l, final_r) =
+                    self.stage_wet(wet_l, wet_r, dry_l, dry_r, width, block);
 
                 // Mix
                 *out_l = dry_l.mul_add(1.0 - mix, final_l * mix);
@@ -1593,8 +1590,69 @@ impl Processor for ReverbChain {
                     *out_r *= self.swell_level;
                 }
             }
+    }
 
-            block_start = block_end;
+    /// Push this block's parameter targets into the engines and smoothers,
+    /// and hand back the values the sample loop needs.
+    fn begin_block(&mut self) -> BlockSetup {
+        // The wet bus's level: this algorithm's calibration constant, so
+        // every engine sits at the same output for the same decay, plus the
+        // user's trim. Both are per-block, not per-sample — neither changes
+        // inside a buffer.
+        let wet_gain = audiocore_dsp::db::db_to_linear(
+            self.wet_gain_db.clamp(-36.0, 36.0) + self.algorithm_type.wet_calibration_db(),
+        );
+        // Magneto knob remap (manual): PRE-DELAY becomes the engine's
+        // feedback (see `effective_magneto`) and the chain's own
+        // pre-delay line disengages (DECAY -> last-head time happens
+        // inside the engine).
+        if matches!(
+            self.algorithm_type,
+            AlgorithmType::Magneto | AlgorithmType::NonLinear
+        ) {
+            self.predelay_samples = 0;
+        } else {
+            // Tempo sync wins over the ms knob when both are set.
+            let ms = match (self.predelay_sync_beats, self.tempo_bpm) {
+                (Some(beats), Some(bpm)) if beats > 0.0 && bpm > 0.0 => {
+                    (beats * 60_000.0 / bpm).min(490.0)
+                }
+                _ => self.predelay_ms,
+            };
+            self.predelay_samples = num::f64_to_index(ms * 0.001 * self.sample_rate);
+        }
+
+        // Re-apply the input LP here too: the Classic-voice vintage cap
+        // must engage when the voice changes via update_params, not
+        // only on the next full config update.
+        self.input_lp.set(
+            FilterType::Lowpass,
+            self.effective_input_lp(),
+            0.707,
+            self.sample_rate,
+        );
+        let duck_thresh = self.duck_threshold.max(1.0e-6);
+
+        // Hall Mid EQ + Swell engage flags (chain-level Hall params).
+        let hall_active = self.algorithm_type == AlgorithmType::Hall;
+        let mid_on = hall_active && self.hall.mid_db.abs() > 0.01;
+        let swell_on = hall_active && self.hall.swell_rise > 1e-9;
+        // Rise 0..1 → 50 ms .. ~2 s swell.
+        let swell_rate =
+            1.0 / (self.hall.swell_rise.clamp(0.0, 1.0).mul_add(2.0, 0.05) * self.sample_rate.max(1.0));
+        self.mix_smoother.set_target(self.mix);
+        self.width_smoother.set_target(self.width);
+        self.pan_smoother.set_target(self.pan);
+        self.trem_depth_smoother.set_target(self.trem_depth);
+        let trem_inc =
+            2.0 * std::f64::consts::PI * self.trem_rate_hz.clamp(0.1, 12.0) / self.sample_rate;
+        BlockSetup {
+            wet_gain,
+            duck_thresh,
+            mid_on,
+            swell_on,
+            swell_rate,
+            trem_inc,
         }
     }
 }
