@@ -130,6 +130,10 @@ impl DualReverb {
 
     fn process_chunk(&mut self, left: &mut [f64], right: &mut [f64]) {
         let n = left.len();
+        // The caller chunks to `chunk_capacity()`, so the scratch buffers are
+        // always long enough. Clamping rather than asserting keeps the render
+        // callback panic-free if that ever stops holding.
+        let n = n.min(self.chunk_capacity()).min(right.len());
         match self.routing {
             DualRouting::Single => {
                 self.a.process(left, right);
@@ -143,45 +147,55 @@ impl DualReverb {
                 self.a.process(left, right);
             }
             DualRouting::Parallel => {
-                self.dry_l.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(left);
-                self.dry_r.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(right);
-                self.b_l.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(left);
-                self.b_r.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(right);
+                let (Some(dry_l), Some(dry_r)) =
+                    (self.dry_l.get_mut(..n), self.dry_r.get_mut(..n))
+                else {
+                    return;
+                };
+                dry_l.copy_from_slice(&left[..n]);
+                dry_r.copy_from_slice(&right[..n]);
+                let (Some(b_l), Some(b_r)) = (self.b_l.get_mut(..n), self.b_r.get_mut(..n)) else {
+                    return;
+                };
+                b_l.copy_from_slice(&left[..n]);
+                b_r.copy_from_slice(&right[..n]);
 
                 self.a.process(left, right);
-                self.b.process(
-                    self.b_l.get_mut(..n).expect("n <= chunk capacity"),
-                    self.b_r.get_mut(..n).expect("n <= chunk capacity"),
-                );
+                self.b.process(b_l, b_r);
 
                 // Sum of both chains' mix laws, dry counted once:
                 // out = dry·(1 − mixA − mixB) + wetA·mixA + wetB·mixB.
-                for i in 0..n {
-                    left[i] += self.b_l[i] - self.dry_l[i];
-                    right[i] += self.b_r[i] - self.dry_r[i];
+                for (((l, r), (bl, br)), (dl, dr)) in left
+                    .iter_mut()
+                    .zip(right.iter_mut())
+                    .zip(b_l.iter().zip(b_r.iter()))
+                    .zip(self.dry_l.iter().zip(self.dry_r.iter()))
+                    .take(n)
+                {
+                    *l += *bl - *dl;
+                    *r += *br - *dr;
                 }
             }
             DualRouting::Split | DualRouting::SplitSwapped => {
-                self.b_l.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(left);
-                self.b_r.get_mut(..n).expect("n <= chunk capacity").copy_from_slice(right);
+                let (Some(b_l), Some(b_r)) = (self.b_l.get_mut(..n), self.b_r.get_mut(..n)) else {
+                    return;
+                };
+                b_l.copy_from_slice(&left[..n]);
+                b_r.copy_from_slice(&right[..n]);
 
                 self.a.process(left, right);
-                self.b.process(
-                    self.b_l.get_mut(..n).expect("n <= chunk capacity"),
-                    self.b_r.get_mut(..n).expect("n <= chunk capacity"),
-                );
+                self.b.process(b_l, b_r);
 
                 let swapped = self.routing == DualRouting::SplitSwapped;
-                for i in 0..n {
-                    let a_mono = (left[i] + right[i]) * 0.5;
-                    let b_mono = (self.b_l[i] + self.b_r[i]) * 0.5;
-                    if swapped {
-                        left[i] = b_mono;
-                        right[i] = a_mono;
-                    } else {
-                        left[i] = a_mono;
-                        right[i] = b_mono;
-                    }
+                for ((l, r), (bl, br)) in left
+                    .iter_mut()
+                    .zip(right.iter_mut())
+                    .zip(b_l.iter().zip(b_r.iter()))
+                    .take(n)
+                {
+                    let a_mono = (*l + *r) * 0.5;
+                    let b_mono = (*bl + *br) * 0.5;
+                    (*l, *r) = if swapped { (b_mono, a_mono) } else { (a_mono, b_mono) };
                 }
             }
         }
