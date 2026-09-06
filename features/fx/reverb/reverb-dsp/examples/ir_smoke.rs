@@ -35,15 +35,15 @@ fn main() {
                 let mut last_above_60 = 0usize;
                 for i in 0..n {
                     let x = if i == 0 { 1.0 } else { 0.0 };
-                    let (l, r) = conv.tick(x, x);
-                    let e = l.mul_add(l, r * r);
-                    energy += e;
-                    peak = peak.max(l.abs()).max(r.abs());
-                    if e > 1e-6 {
+                    let (wet_l, wet_r) = conv.tick(x, x);
+                    let sample_energy = wet_l.mul_add(wet_l, wet_r * wet_r);
+                    energy += sample_energy;
+                    peak = peak.max(wet_l.abs()).max(wet_r.abs());
+                    if sample_energy > 1e-6 {
                         last_above_60 = i;
                     }
                     assert!(
-                        l.is_finite() && r.is_finite(),
+                        wet_l.is_finite() && wet_r.is_finite(),
                         "NaN at sample {i} in {path}"
                     );
                 }

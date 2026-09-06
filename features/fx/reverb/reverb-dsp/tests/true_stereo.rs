@@ -9,8 +9,8 @@ const SR: f64 = 48000.0;
 /// A one-tap IR: unit spike at `at` samples.
 fn spike(at: usize, len: usize) -> Vec<f64> {
     let mut v = vec![0.0; len];
-    if at < v.len() {
-        v[at] = 1.0;
+    if let Some(slot) = v.get_mut(at) {
+        *slot = 1.0;
     }
     v
 }

@@ -24,7 +24,7 @@ fn test_ir() -> Vec<f64> {
         state ^= state << 13;
         state ^= state >> 17;
         state ^= state << 5;
-        f64::from(state as i32) / f64::from(i32::MAX)
+        f64::from(state.cast_signed()) / f64::from(i32::MAX)
     };
     (0..n)
         .map(|i| rng() * 10f64.powf(-3.0 * num::count_to_f64(i) / num::count_to_f64(n)))

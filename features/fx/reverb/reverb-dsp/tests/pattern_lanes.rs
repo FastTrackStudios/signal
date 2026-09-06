@@ -112,32 +112,37 @@ fn send_lane_gates_the_reverb_input() {
 
 #[test]
 fn clear_tails_point_kills_the_wash() {
-    let mut c = make();
-    c.params.decay = 0.9;
-    c.update_params();
+    let mut chain = make();
+    chain.params.decay = 0.9;
+    chain.update_params();
     // Full-level pattern with a clear-tails point mid-cycle: the gain
     // stays at 1 throughout — only the hard reset should cut the tail.
-    let mut m = Box::new(Modulator::new());
+    let mut modulator = Box::new(Modulator::new());
     let mut clear_pt = hold_point(0.5, 1.0);
     clear_pt.clear_tails = true;
-    m.patterns
+    modulator
+        .patterns
         .active_mut()
         .set_points(vec![hold_point(0.0, 1.0), clear_pt, hold_point(1.0, 1.0)]);
-    m.trigger.sync_index = SYNC_2_BEATS; // one cycle = 2 beats = 48000 samples
-    c.set_wet_modulator(Some(m));
+    // One cycle = 2 beats = 48000 samples.
+    modulator.trigger.sync_index = SYNC_2_BEATS;
+    chain.set_wet_modulator(Some(modulator));
 
     // Ring the hall, go silent; the tail must die abruptly when the
     // clear point crosses at 24000 samples into the cycle.
     let n = 96_000;
-    let mut l = vec![0.0f64; n];
-    for (i, s) in l.iter_mut().enumerate().take(4000) {
-        *s = (core::f64::consts::TAU * 350.0 * num::count_to_f64(i) / SR).sin() * 0.7;
+    let mut buf_l = vec![0.0f64; n];
+    for (i, sample) in buf_l.iter_mut().enumerate().take(4000) {
+        *sample = (core::f64::consts::TAU * 350.0 * num::count_to_f64(i) / SR).sin() * 0.7;
     }
-    let mut r = l.clone();
-    c.process(&mut l, &mut r);
+    let mut buf_r = buf_l.clone();
+    chain.process(&mut buf_l, &mut buf_r);
 
-    let before: f64 = l[18_000..23_000].iter().map(|x| x * x).sum();
-    let after: f64 = l[25_000..30_000].iter().map(|x| x * x).sum();
+    let window = |from: usize, to: usize| -> f64 {
+        buf_l.get(from..to).unwrap_or_default().iter().map(|x| x * x).sum()
+    };
+    let before: f64 = window(18_000, 23_000);
+    let after: f64 = window(25_000, 30_000);
     assert!(
         after < before * 0.05,
         "clear-tails point should kill the wash: before={before:.4} after={after:.4}"

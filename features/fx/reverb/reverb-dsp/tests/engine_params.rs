@@ -65,9 +65,9 @@ fn render_sine(chain: &mut ReverbChain, secs: f64) -> (Vec<f64>, Vec<f64>) {
 fn render_impulse(chain: &mut ReverbChain, n: usize) -> (Vec<f64>, Vec<f64>) {
     let mut l = vec![0.0; n];
     let mut r = vec![0.0; n];
-    if n > 0 {
-        l[0] = 1.0;
-        r[0] = 1.0;
+    if let (Some(first_l), Some(first_r)) = (l.first_mut(), r.first_mut()) {
+        *first_l = 1.0;
+        *first_r = 1.0;
     }
     chain.process(&mut l, &mut r);
     (l, r)
@@ -198,18 +198,18 @@ fn magneto_ping_pong_alternates_heads() {
     let head = num::f64_to_index(0.5f64.mul_add(1.4, 0.1) / 4.0 * SR);
     let n = head * 5;
 
-    let (l, r) = render_impulse(&mut make(true), n);
+    let (out_l, out_r) = render_impulse(&mut make(true), n);
     // Window around each tap.
     let win = |buf: &[f64], center: usize| {
-        let a = center.saturating_sub(400);
-        let b = (center + 2400).min(buf.len());
-        energy(&buf[a..b])
+        let from = center.saturating_sub(400);
+        let to = center.saturating_add(2400).min(buf.len());
+        energy(buf.get(from..to).unwrap_or_default())
     };
     // Head 0 (even) → left, head 1 (odd) → right.
-    let h0_l = win(&l, head);
-    let h0_r = win(&r, head);
-    let h1_l = win(&l, head * 2);
-    let h1_r = win(&r, head * 2);
+    let h0_l = win(&out_l, head);
+    let h0_r = win(&out_r, head);
+    let h1_l = win(&out_l, head.saturating_mul(2));
+    let h1_r = win(&out_r, head.saturating_mul(2));
     assert!(
         h0_l > h0_r * 20.0,
         "head 1 must be hard left: L={h0_l:e} R={h0_r:e}"

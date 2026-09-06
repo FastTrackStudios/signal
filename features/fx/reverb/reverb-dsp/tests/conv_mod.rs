@@ -71,18 +71,18 @@ fn defaults_are_bit_transparent() {
 
 /// Render `seconds` of output for a given config mutation.
 fn render(setup: impl Fn(&mut ConvolutionModParams), seconds: f64) -> (Vec<f64>, Vec<f64>) {
-    let mut c = Convolution::new(SR);
-    let mut p = ConvolutionModParams::default();
-    setup(&mut p);
-    c.set_conv_mod_params(&p, true);
+    let mut conv = Convolution::new(SR);
+    let mut params = ConvolutionModParams::default();
+    setup(&mut params);
+    conv.set_conv_mod_params(&params, true);
     let n = num::f64_to_index(SR * seconds);
     let mut out_l = Vec::with_capacity(n);
     let mut out_r = Vec::with_capacity(n);
     for i in 0..n {
         let x = probe_input(i);
-        let (l, r) = c.tick(x, x);
-        out_l.push(l);
-        out_r.push(r);
+        let (wet_l, wet_r) = conv.tick(x, x);
+        out_l.push(wet_l);
+        out_r.push(wet_r);
     }
     (out_l, out_r)
 }
@@ -135,12 +135,12 @@ fn motion_moves_and_is_finite() {
 #[test]
 fn duck_reduces_wet_during_burst() {
     let run = |duck: f64| -> f64 {
-        let mut c = Convolution::new(SR);
-        let p = ConvolutionModParams {
+        let mut conv = Convolution::new(SR);
+        let params = ConvolutionModParams {
             duck_wet_depth: duck,
             ..Default::default()
         };
-        c.set_conv_mod_params(&p, true);
+        conv.set_conv_mod_params(&params, true);
         // Prime the tail with an impulse, then a loud sustained burst.
         let n = num::f64_to_index(SR * 1.5);
         let mut burst_energy = 0.0;
@@ -152,9 +152,9 @@ fn duck_reduces_wet_during_burst() {
             } else {
                 0.0
             };
-            let (l, r) = c.tick(x, x);
+            let (wet_l, wet_r) = conv.tick(x, x);
             if i > 30000 {
-                burst_energy += l.mul_add(l, r * r);
+                burst_energy += wet_l.mul_add(wet_l, wet_r * wet_r);
             }
         }
         burst_energy
@@ -193,7 +193,7 @@ fn predelay_shifts_arrival() {
 
     let base = arrival(0.0);
     let delayed = arrival(50.0);
-    let shift = delayed as i64 - base as i64;
+    let shift = i64::try_from(delayed).unwrap_or(i64::MAX) - i64::try_from(base).unwrap_or(i64::MAX);
     let expect = num::trunc_to_i64(0.050 * SR);
     assert!(
         (shift - expect).abs() < 256,
