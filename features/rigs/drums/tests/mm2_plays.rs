@@ -8,7 +8,7 @@
 
 use std::time::{Duration, Instant};
 
-use signal_drums::{load_preset_kit, GM_DRUM_CHANNEL};
+use signal_drums::{GM_DRUM_CHANNEL, load_preset_kit};
 use signal_sampler::SamplerRig;
 
 const PRESET: &str = "/run/media/AudioHaven/Signal/Libraries/Drum Kits/\

@@ -52,19 +52,19 @@ pub mod reaper_applier;
 #[cfg(feature = "daw")]
 pub mod rig_scene_manager;
 
+pub use signal_controller::SignalController;
 pub use signal_controller::active_context::{ActiveContext, ActiveContextState};
 pub use signal_controller::ops;
 pub use signal_controller::variation::SwitchResult;
-pub use signal_controller::SignalController;
 pub use signal_live::engine::patch_applier::{DawPatchApplier, PatchApplyError};
 pub use signal_live::engine::rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
 
 /// Ergonomic alias: `let signal = Signal::new(service);`
 pub type Signal = SignalController;
 pub use signal_live::engine::{
-    block_to_snapshot, find_param_index, graph_state_chunks, graph_to_snapshot,
-    live_params_into_block, param_name_matches, DawParamValue, DawParameterSnapshot, DawStateChunk,
-    LiveParam, MorphDiffEntry, MorphEngine, MorphParamChange,
+    DawParamValue, DawParameterSnapshot, DawStateChunk, LiveParam, MorphDiffEntry, MorphEngine,
+    MorphParamChange, block_to_snapshot, find_param_index, graph_state_chunks, graph_to_snapshot,
+    live_params_into_block, param_name_matches,
 };
 
 // Re-export companion crates through the facade so external consumers
@@ -72,23 +72,23 @@ pub use signal_live::engine::{
 pub use signal_controller;
 pub use signal_daw_bridge;
 pub use signal_import;
+pub use signal_live::SignalLive;
 pub use signal_live::daw_block_ops::{
     LoadBlockResult, LoadModuleResult, ResolvedFxLoad, ResolvedModuleLoad,
 };
 pub use signal_live::macro_registry;
 pub use signal_live::macro_setup::{self, LiveMacroBinding, MacroSetupResult};
-pub use signal_live::SignalLive;
 pub use signal_live::{MacroRecord, MacroRecorder};
 pub use signal_nam;
 pub use signal_proto::*;
 pub use signal_storage::{
+    BlockRepo, BlockRepoLive, Database, DatabaseConnection, DbErr, EngineRepo, EngineRepoLive,
+    LayerRepo, LayerRepoLive, ModuleRepo, ModuleRepoLive, ProfileRepo, ProfileRepoLive, RackRepo,
+    RackRepoLive, RigRepo, RigRepoLive, SceneTemplateRepo, SceneTemplateRepoLive, SetlistRepo,
+    SetlistRepoLive, SongRepo, SongRepoLive, StorageError, StorageResult,
     default_block_collections, default_module_collections, default_seed_engines,
     default_seed_layers, default_seed_profiles, default_seed_rigs, default_seed_setlists,
-    default_seed_songs, runtime_seed_bundle, BlockRepo, BlockRepoLive, Database,
-    DatabaseConnection, DbErr, EngineRepo, EngineRepoLive, LayerRepo, LayerRepoLive, ModuleRepo,
-    ModuleRepoLive, ProfileRepo, ProfileRepoLive, RackRepo, RackRepoLive, RigRepo, RigRepoLive,
-    SceneTemplateRepo, SceneTemplateRepoLive, SetlistRepo, SetlistRepoLive, SongRepo, SongRepoLive,
-    StorageError, StorageResult,
+    default_seed_songs, runtime_seed_bundle,
 };
 
 /// Sidecar metadata for REAPER-native signal presets (`.signal.styx` files).
@@ -110,13 +110,11 @@ pub mod fxchains {
 ///
 /// REAPER's `.RfxChain` format is the *inner* content only — no `<FXCHAIN>` delimiters.
 /// This function removes the header line and closing `>`, returning just the bare FX blocks.
-#[must_use] 
+#[must_use]
 pub fn strip_fxchain_wrapper(chunk: &str) -> String {
     let trimmed = chunk.trim();
     if trimmed.starts_with("<FXCHAIN") {
-        let after_header = trimmed
-            .find('\n')
-            .map_or(trimmed, |i| &trimmed[i + 1..]);
+        let after_header = trimmed.find('\n').map_or(trimmed, |i| &trimmed[i + 1..]);
         let inner = after_header.trim_end();
         if let Some(stripped) = inner.strip_suffix('>') {
             stripped.trim_end().to_string()

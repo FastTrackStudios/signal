@@ -80,9 +80,7 @@ impl FilterLfoShape {
     /// their own sweep phase.
     fn cyclic_value(self, phase: f64, sh: f64) -> f64 {
         match self {
-            Self::SinePos | Self::Down | Self::Up => {
-                (std::f64::consts::TAU * phase).cos()
-            }
+            Self::SinePos | Self::Down | Self::Up => (std::f64::consts::TAU * phase).cos(),
             Self::SineNeg => -(std::f64::consts::TAU * phase).cos(),
             Self::TrianglePos => 1.0 - 4.0 * (phase - 0.5).abs(),
             Self::TriangleNeg => 4.0 * (phase - 0.5).abs() - 1.0,

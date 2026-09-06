@@ -23,10 +23,10 @@
 //! delivered to every node; sources consume note on/off, effects ignore them.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::rig::{build_block, build_sample_source, RigBlock};
+use crate::rig::{RigBlock, build_block, build_sample_source};
 use crate::rig_node::{Combine, Container, RigNode, Role, Zone};
 use crate::soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent, PluginParamInfo};
@@ -47,7 +47,7 @@ pub enum LeafBackend {
 
 impl LeafBackend {
     /// The generator kind when this leaf is a source slot.
-    #[must_use] 
+    #[must_use]
     pub fn soundsource_kind(&self) -> Option<SoundsourceKind> {
         match self {
             Self::Source(s) => Some(s.kind()),
@@ -136,7 +136,7 @@ pub(crate) fn build_leaf_backend(block: &RigBlock, sample_rate: u32) -> Option<L
 /// generic [`SoundsourceLeaf`] — this is the graph-boundary form; the
 /// compiled tree itself uses `build_leaf_backend` and holds sources
 /// directly.
-#[must_use] 
+#[must_use]
 pub fn build_node_backend(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn PluginInstance>> {
     build_leaf_backend(block, sample_rate).map(|backend| match backend {
         LeafBackend::Source(src) => {
@@ -151,7 +151,7 @@ pub fn build_node_backend(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn 
 mod modmatrix;
 
 pub use modmatrix::ModEngine;
-use modmatrix::{build_arp, ModCompiler};
+use modmatrix::{ModCompiler, build_arp};
 
 /// A compiled, renderable node mirroring the container tree.
 pub enum RenderNode {
@@ -184,13 +184,14 @@ pub enum RenderNode {
         /// audio thread with its own decay (see `METER_RELEASE_S`) so any
         /// number of readers can sample it without stealing each other's peak.
         meter: Option<Arc<AtomicU32>>,
+        /// This container is muted AND has finished decaying, so `inner` is
+        /// not processed at all — see the `Gain` arm of `process_inner`.
+        /// Audio-thread state, reset the moment the fader comes back up.
+        asleep: bool,
         inner: Box<Self>,
     },
     /// A subtree whose output also feeds one or more send buses (unity gain).
-    SendTap {
-        buses: Vec<usize>,
-        inner: Box<Self>,
-    },
+    SendTap { buses: Vec<usize>, inner: Box<Self> },
     /// A send-bus **return**: `inner` processes the bus content and its
     /// output is summed with the pass-through main signal (send/return
     /// semantics — the main chain is not re-processed by the return).
@@ -212,6 +213,14 @@ struct RenderCtx {
     bus_l: Vec<Vec<f32>>,
     bus_r: Vec<Vec<f32>>,
 }
+
+/// Output level below which a MUTED container is treated as finished and
+/// stops being rendered (see the `Gain` arm of `process_inner`). The same
+/// ~-84 dBFS the voice pool calls inaudible (`RETIRE_FLOOR`): a branch
+/// sleeps exactly when what is left in it would not be worth hearing even
+/// un-muted. Set lower and it never sleeps at all, because a decaying tail
+/// sits above it indefinitely.
+const SLEEP_FLOOR: f32 = 6.0e-5;
 
 /// Meter release: how long a peak takes to fall by `1/e`. The audio thread
 /// applies it per block, so a meter reads the same however often it is polled.
@@ -243,13 +252,13 @@ pub struct GainCells {
 
 impl GainCells {
     /// The cell for one container, if the tree had it.
-    #[must_use] 
+    #[must_use]
     pub fn get(&self, role: Role, name: &str) -> Option<&Arc<AtomicU32>> {
         self.gains.get(&(role, name.to_string()))
     }
 
     /// Set a container's live gain (linear; `0.0` = muted).
-    #[must_use] 
+    #[must_use]
     pub fn set(&self, role: Role, name: &str, gain: f32) -> bool {
         match self.gains.get(&(role, name.to_string())) {
             Some(cell) => {
@@ -267,7 +276,7 @@ impl GainCells {
 
     /// A container's post-fader peak (linear, already decaying) — `0.0` when
     /// the tree has no such container.
-    #[must_use] 
+    #[must_use]
     pub fn peak(&self, role: Role, name: &str) -> f32 {
         self.peaks
             .get(&(role, name.to_string()))
@@ -276,7 +285,7 @@ impl GainCells {
 
     /// Every metered container and its current peak — the payload a mixer
     /// publishes at meter rate.
-    #[must_use] 
+    #[must_use]
     pub fn peaks(&self) -> Vec<(Role, String, f32)> {
         self.peaks
             .iter()
@@ -295,14 +304,14 @@ impl RenderNode {
     /// Compile a container tree into a render tree at `sample_rate`,
     /// resolving its `ModMatrix` routes. A container with a non-full [`Zone`]
     /// is wrapped in [`RenderNode::Zoned`] so only its in-window notes reach it.
-    #[must_use] 
+    #[must_use]
     pub fn compile(container: &Container, sample_rate: u32) -> Self {
         Self::compile_with_cells(container, sample_rate).0
     }
 
     /// As [`compile`](Self::compile), also returning the [`GainCells`] for the
     /// tree's Engine/Layer containers — the mixer's live fader handles.
-    #[must_use] 
+    #[must_use]
     pub fn compile_with_cells(container: &Container, sample_rate: u32) -> (Self, GainCells) {
         let mut mc = ModCompiler::new(sample_rate);
         mc.collect_buses(container);
@@ -311,12 +320,7 @@ impl RenderNode {
         (Self::finish(root, mc, container, sample_rate), cells)
     }
 
-    fn finish(
-        root: Self,
-        mc: ModCompiler,
-        container: &Container,
-        sample_rate: u32,
-    ) -> Self {
+    fn finish(root: Self, mc: ModCompiler, container: &Container, sample_rate: u32) -> Self {
         // Always wrap: the ModEngine is also the tree's live-edit address
         // book (leaf/source registries + parameter overlay), so even a
         // route-less tree keeps it — an empty tick is a few clears.
@@ -413,6 +417,7 @@ impl RenderNode {
                 cell
             });
             node = Self::Gain {
+                asleep: false,
                 input: 10f32.powf(container.input_db / 20.0),
                 output: 10f32.powf(container.output_db / 20.0),
                 cell,
@@ -593,9 +598,7 @@ impl RenderNode {
     fn leaf_count(&self) -> usize {
         match self {
             Self::Leaf { .. } => 1,
-            Self::Serial(v) | Self::Parallel(v) => {
-                v.iter().map(Self::leaf_count).sum()
-            }
+            Self::Serial(v) | Self::Parallel(v) => v.iter().map(Self::leaf_count).sum(),
             Self::Zoned { inner, .. }
             | Self::Modulated { inner, .. }
             | Self::Gain { inner, .. }
@@ -605,13 +608,11 @@ impl RenderNode {
     }
 
     /// Count the leaf processors that actually have a backend (for tests/metering).
-    #[must_use] 
+    #[must_use]
     pub fn live_leaves(&self) -> usize {
         match self {
             Self::Leaf { inst, .. } => inst.is_some() as usize,
-            Self::Serial(v) | Self::Parallel(v) => {
-                v.iter().map(Self::live_leaves).sum()
-            }
+            Self::Serial(v) | Self::Parallel(v) => v.iter().map(Self::live_leaves).sum(),
             Self::Zoned { inner, .. }
             | Self::Modulated { inner, .. }
             | Self::Gain { inner, .. }
@@ -923,9 +924,7 @@ impl RenderNode {
                 .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
                 .map_or(0, |s| s.engine().active_voices()),
             Self::Leaf { .. } => 0,
-            Self::Serial(v) | Self::Parallel(v) => {
-                v.iter_mut().map(Self::active_voices).sum()
-            }
+            Self::Serial(v) | Self::Parallel(v) => v.iter_mut().map(Self::active_voices).sum(),
             Self::Zoned { inner, .. }
             | Self::Gain { inner, .. }
             | Self::Modulated { inner, .. }
@@ -937,7 +936,7 @@ impl RenderNode {
     /// The generator kinds of this subtree's **source** leaves, in compile
     /// order — the tree-side view remotes classify layers by (processors
     /// and placeholders are skipped).
-    #[must_use] 
+    #[must_use]
     pub fn source_kinds(&self) -> Vec<SoundsourceKind> {
         fn walk(node: &RenderNode, out: &mut Vec<SoundsourceKind>) {
             match node {
@@ -964,7 +963,7 @@ impl RenderNode {
     }
 
     /// The compiled `ModMatrix`, when any routes resolved (for tests/UI).
-    #[must_use] 
+    #[must_use]
     pub fn mod_engine(&self) -> Option<&ModEngine> {
         match self {
             Self::Modulated { engine, .. } => Some(engine),
@@ -1111,8 +1110,90 @@ impl RenderNode {
                 output,
                 cell,
                 meter,
+                asleep,
                 inner,
             } => {
+                // Read the fader FIRST. A container the mixer has muted — or
+                // whose module is switched off, which is the same thing: a
+                // zero in its cell — multiplies its output by zero at the
+                // bottom of this arm. Every voice underneath it is rendered
+                // only to be thrown away, and voice count is the whole cost
+                // of this engine (measured: render time is linear in it).
+                //
+                // So once a muted branch has gone quiet, stop processing it.
+                // Not the moment it is muted: voices sounding at that instant
+                // would freeze mid-note and come back as STUCK NOTES when the
+                // fader returns, because nothing would ever advance them to
+                // their note-off. Instead it keeps rendering (into silence)
+                // until its own output has decayed below `SLEEP_FLOOR`, and
+                // only then sleeps — by which point there is nothing left to
+                // strand. Waking is immediate and needs no reset, since a
+                // branch only ever sleeps with no audible voices in it.
+                //
+                // While asleep the subtree sees no events at all, which is
+                // deliberate for notes (a switched-off module must not
+                // accumulate voices) but does mean its CC state is stale
+                // until the next controller move after it wakes.
+                let live = cell
+                    .as_ref()
+                    .map_or(1.0, |c| f32::from_bits(c.load(Ordering::Relaxed)));
+                let out_gain = *output * live;
+                let silent = out_gain == 0.0;
+                if silent && *asleep {
+                    out_l[..frames].fill(0.0);
+                    out_r[..frames].fill(0.0);
+                    // Keep the meter's ballistics running so it falls at the
+                    // same rate whether or not the branch is being rendered.
+                    if let Some(m) = meter {
+                        let held = f32::from_bits(m.load(Ordering::Relaxed));
+                        let decayed =
+                            held * (-(frames as f32) / (METER_RELEASE_S * METER_RATE_HZ)).exp();
+                        m.store(decayed.to_bits(), Ordering::Relaxed);
+                    }
+                    return;
+                }
+                *asleep = false;
+
+                // While muted, start no new voices. Passing the block through
+                // untouched would let a switched-off module bank a chord's
+                // worth of voices that cost full price to render and then get
+                // multiplied by zero — and a HELD one never decays, so the
+                // branch could never reach the quiet that lets it sleep.
+                //
+                // Note-offs, CC and everything else still go through, which
+                // is what makes the drain terminate: notes already sounding
+                // when the fader closed get their release and fade out
+                // normally, rather than sustaining forever under a mute.
+                let drained: Option<Vec<PluginMidiEvent>> = if silent
+                    && events
+                        .midi
+                        .iter()
+                        .any(|e| matches!(e.message, midicore::MidiEvent::NoteOn { .. }))
+                {
+                    Some(
+                        events
+                            .midi
+                            .iter()
+                            .filter(|e| !matches!(e.message, midicore::MidiEvent::NoteOn { .. }))
+                            .cloned()
+                            .collect(),
+                    )
+                } else {
+                    None
+                };
+                let muted_events;
+                let events = match &drained {
+                    Some(midi) => {
+                        muted_events = PluginEvents {
+                            params: events.params,
+                            midi,
+                            note_expressions: events.note_expressions,
+                        };
+                        &muted_events
+                    }
+                    None => events,
+                };
+
                 if *input == 1.0 {
                     inner.process_inner(in_l, in_r, out_l, out_r, events, ctx);
                 } else {
@@ -1126,11 +1207,17 @@ impl RenderNode {
                         .collect();
                     inner.process_inner(&gl, &gr, out_l, out_r, events, ctx);
                 }
-                // Authored fader × the live cell (mixer rides / mutes).
-                let live = cell
-                    .as_ref()
-                    .map_or(1.0, |c| f32::from_bits(c.load(Ordering::Relaxed)));
-                let out_gain = *output * live;
+                // A muted branch that has now decayed to nothing can sleep
+                // from the next block on. Measured pre-gain, because the
+                // post-gain signal is zero by definition here and would say
+                // nothing about whether the voices underneath have finished.
+                if silent {
+                    let mut pre_peak = 0.0f32;
+                    for f in 0..frames {
+                        pre_peak = pre_peak.max(out_l[f].abs()).max(out_r[f].abs());
+                    }
+                    *asleep = pre_peak < SLEEP_FLOOR;
+                }
                 if out_gain != 1.0 {
                     for f in 0..frames {
                         out_l[f] *= out_gain;
@@ -1172,10 +1259,12 @@ impl RenderNode {
                 // output sums onto the pass-through main signal.
                 let bl: Vec<f32> = ctx
                     .bus_l
-                    .get(*bus).map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
+                    .get(*bus)
+                    .map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
                 let br: Vec<f32> = ctx
                     .bus_r
-                    .get(*bus).map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
+                    .get(*bus)
+                    .map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
                 let mut tl = vec![0.0f32; frames];
                 let mut tr = vec![0.0f32; frames];
                 inner.process_inner(&bl, &br, &mut tl, &mut tr, events, ctx);
@@ -1244,6 +1333,18 @@ mod tests {
     use crate::rig_node::Container;
     use signal_plugin_host::PluginMidiEvent;
     use signal_proto::block::BlockType;
+
+    fn note_off(note: u8) -> PluginMidiEvent {
+        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+        PluginMidiEvent {
+            offset: 0,
+            message: MidiEvent::NoteOff {
+                channel: Channel::new(0),
+                key: KeyNumber::new(note),
+                velocity: Velocity::new(0),
+            },
+        }
+    }
 
     fn note_on(note: u8, vel: u8) -> PluginMidiEvent {
         use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
@@ -1352,6 +1453,91 @@ mod tests {
             engine,
             cells.peak(Role::Engine, "Keys")
         );
+    }
+
+    /// **A muted container stops being rendered, and wakes without stuck
+    /// notes.** Voice count is the entire cost of this engine, so rendering
+    /// voices under a fader that multiplies them by zero is pure waste — a
+    /// switched-off module in a big layered patch costs exactly as much as a
+    /// playing one. This asserts the two halves that make skipping safe:
+    ///
+    /// - notes arriving while muted do not accumulate (they never reach the
+    ///   subtree at all), so unmuting cannot dump a pile of stale voices;
+    /// - unmuting with nothing played is silent, i.e. no voice was frozen
+    ///   mid-note by the skip and left with no note-off to retire it.
+    ///
+    /// Before the skip, both of these produced sound: the voices were still
+    /// spawned and rendered, just multiplied by zero on the way out.
+    #[test]
+    fn a_muted_container_sleeps_and_wakes_without_stuck_notes() {
+        let tree = Container::engine("Keys").add(
+            Container::layer("Keys")
+                .add(Container::module("Osc").block(BlockType::Oscillator, "Osc")),
+        );
+        let (mut rn, cells) = RenderNode::compile_with_cells(&tree, 48_000);
+        rn.prepare(48_000.0, 256);
+        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+
+        let held = PluginEvents {
+            params: &[],
+            midi: &[],
+            note_expressions: &[],
+        };
+        let struck = [note_on(69, 110)];
+        let strike = PluginEvents {
+            params: &[],
+            midi: &struck,
+            note_expressions: &[],
+        };
+
+        // It sounds at all, so the rest of the test means something.
+        rn.render(&mut l, &mut r, &strike);
+        assert!(rms(&l) > 1e-4, "the engine sounds when its fader is up");
+
+        // Release it, mute, and let it decay. The drain is the point: the
+        // branch keeps rendering (into silence) while the released note fades,
+        // and only sleeps once it is genuinely quiet. A note still HELD under
+        // a mute keeps the branch awake and resumes when the fader returns,
+        // which is what a mixer mute is supposed to do.
+        let released = [note_off(69)];
+        let release = PluginEvents {
+            params: &[],
+            midi: &released,
+            note_expressions: &[],
+        };
+        rn.render(&mut l, &mut r, &release);
+        assert!(
+            cells.set(Role::Engine, "Keys", 0.0),
+            "the engine has a cell"
+        );
+        for _ in 0..200 {
+            rn.render(&mut l, &mut r, &held);
+        }
+        assert!(rms(&l) < 1e-6, "a muted engine is silent");
+
+        // Play into it while it is asleep. A switched-off module must not
+        // bank voices to unleash later.
+        for _ in 0..8 {
+            rn.render(&mut l, &mut r, &strike);
+        }
+
+        // Fader back up, nothing played: silence. Anything here is a voice
+        // the skip stranded (no note-off will ever reach it) or one that was
+        // banked while muted.
+        assert!(cells.set(Role::Engine, "Keys", 1.0), "and it comes back up");
+        rn.render(&mut l, &mut r, &held);
+        // Threshold well under the ~0.07 those eight banked strikes read
+        // before the note-on gate, and well over the inaudible tail of the
+        // released note (~5e-5) that is legitimately still decaying.
+        assert!(
+            rms(&l) < 1e-3,
+            "waking is quiet — no stranded or banked voices, rms={}",
+            rms(&l)
+        );
+
+        // And it is genuinely awake, not merely quiet.
+        rn.render(&mut l, &mut r, &strike);
+        assert!(rms(&l) > 1e-4, "a woken engine plays again");
     }
 
     /// **An engine and a lane with the same name are two different cells.**
@@ -1763,7 +1949,8 @@ zones (
             // The engine (live-edit address book) is always present now;
             // only the ROUTE count depends on the tree.
             assert_eq!(
-                rn.mod_engine().map(super::modmatrix::ModEngine::route_count),
+                rn.mod_engine()
+                    .map(super::modmatrix::ModEngine::route_count),
                 Some(if with_route { 1 } else { 0 }),
                 "route resolution matches"
             );
@@ -1799,7 +1986,11 @@ zones (
             .block(BlockType::Filter, "Filter")
             .route("Wheel", "Filter.cutoff", -1.0);
         let mut rn = RenderNode::compile(&tree, 48_000);
-        assert_eq!(rn.mod_engine().map(super::modmatrix::ModEngine::route_count), Some(1));
+        assert_eq!(
+            rn.mod_engine()
+                .map(super::modmatrix::ModEngine::route_count),
+            Some(1)
+        );
         rn.prepare(48_000.0, 512);
 
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
@@ -2084,7 +2275,8 @@ zones (
         // The engine is always present (live-edit address book); the broken
         // routes just resolve to nothing.
         assert_eq!(
-            rn.mod_engine().map(super::modmatrix::ModEngine::route_count),
+            rn.mod_engine()
+                .map(super::modmatrix::ModEngine::route_count),
             Some(0),
             "no routes resolved"
         );

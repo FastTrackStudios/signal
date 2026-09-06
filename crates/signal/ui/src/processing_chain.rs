@@ -8,8 +8,8 @@
 //! Moved here from the retired `signal-audio` crate (whose real I/O —
 //! hardware MIDI input — now lives in `midicore`).
 
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Shared processing-chain state.
 ///
@@ -29,7 +29,7 @@ impl PartialEq for ProcessingChain {
 
 impl ProcessingChain {
     /// Create a new chain. The sample rate is accepted for API compatibility.
-    #[must_use] 
+    #[must_use]
     pub fn new(_sample_rate: f64) -> Self {
         Self {
             gr_db: Arc::new(AtomicU32::new(0)),
@@ -37,7 +37,7 @@ impl ProcessingChain {
     }
 
     /// Read the current gain reduction in dB (positive = reducing).
-    #[must_use] 
+    #[must_use]
     pub fn gain_reduction_db(&self) -> f32 {
         f32::from_bits(self.gr_db.load(Ordering::Relaxed))
     }

@@ -62,8 +62,7 @@ pub static PROFILES: &[Profile] = &[
         id: "filter",
         name: "Filtered",
         style: DelayStyle::Filter,
-        voice:
-            "The same repeat with tone controls inside the loop — each pass darker than the last.",
+        voice: "The same repeat with tone controls inside the loop — each pass darker than the last.",
     },
     // ── Tape: a medium, with all that implies ────────────────────────────
     Profile {
@@ -96,8 +95,7 @@ pub static PROFILES: &[Profile] = &[
         id: "pitch",
         name: "Pitch",
         style: DelayStyle::Pitch,
-        voice:
-            "Each repeat shifted — a fifth up, an octave down, or something that does not settle.",
+        voice: "Each repeat shifted — a fifth up, an octave down, or something that does not settle.",
     },
     Profile {
         id: "shimmer",
@@ -187,18 +185,18 @@ pub static CATEGORIES: &[Category] = &[
     },
 ];
 
-#[must_use] 
+#[must_use]
 pub fn profile_by_id(id: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.id == id)
 }
 
-#[must_use] 
+#[must_use]
 pub fn profile_index(id: &str) -> Option<usize> {
     PROFILES.iter().position(|p| p.id == id)
 }
 
 /// The family a profile belongs to, and its position inside it.
-#[must_use] 
+#[must_use]
 pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
     CATEGORIES.iter().enumerate().find_map(|(ci, category)| {
         category
@@ -211,7 +209,7 @@ pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
 
 /// The profile index a rail click selects: clicking the family you are in
 /// advances through it and wraps, clicking another lands on its first.
-#[must_use] 
+#[must_use]
 pub fn rail_click_target(current_index: usize, clicked_category: usize) -> usize {
     let current_id = PROFILES.get(current_index).map_or("", |p| p.id);
     let Some(category) = CATEGORIES.get(clicked_category) else {

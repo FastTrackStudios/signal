@@ -29,7 +29,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 use audiocore_dsp::db::linear_to_db;
 use comp_dsp::ProC3Compressor;
 use std::fs::File;

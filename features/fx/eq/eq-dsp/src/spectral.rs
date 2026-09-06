@@ -519,7 +519,11 @@ impl SpectralEngine {
         for i in 0..bins {
             let t = self.target_db.get(i).copied().unwrap_or(0.0);
             let dist = self.bin_log2[i] - from;
-            let carried = if dist < reach { peak * spread_taper(dist / reach) } else { 0.0 };
+            let carried = if dist < reach {
+                peak * spread_taper(dist / reach)
+            } else {
+                0.0
+            };
             if t >= carried {
                 peak = t;
                 reach = self.spread_oct[i].max(1.0e-6);
@@ -534,7 +538,11 @@ impl SpectralEngine {
         for i in (0..bins).rev() {
             let t = self.target_db[i];
             let dist = from - self.bin_log2[i];
-            let carried = if dist < reach { peak * spread_taper(dist / reach) } else { 0.0 };
+            let carried = if dist < reach {
+                peak * spread_taper(dist / reach)
+            } else {
+                0.0
+            };
             if t >= carried {
                 peak = t;
                 reach = self.spread_oct[i].max(1.0e-6);
@@ -707,8 +715,7 @@ impl SpectralEngine {
                                 } else {
                                     SPECTRAL_SHELF_HEADROOM_DB
                                 };
-                                self.learned_db[i]
-                                    - (r.max_depth_db - SPECTRAL_HEADROOM_DB - extra)
+                                self.learned_db[i] - (r.max_depth_db - SPECTRAL_HEADROOM_DB - extra)
                             } else {
                                 r.threshold_db
                             },

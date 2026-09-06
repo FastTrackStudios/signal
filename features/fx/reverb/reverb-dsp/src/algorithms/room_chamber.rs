@@ -7,7 +7,10 @@
 //!   - Bright, present character
 //!   - Fast density saturation (small volume fills quickly)
 
-use crate::algorithm::{AlgorithmParams, ChamberColor, ChamberParams, ROOM_CHAMBER_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets};
+use crate::algorithm::{
+    AlgorithmParams, ChamberColor, ChamberParams, ROOM_CHAMBER_T60, ReverbAlgorithm, decay_to_t60,
+    t60_shelf_targets,
+};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;

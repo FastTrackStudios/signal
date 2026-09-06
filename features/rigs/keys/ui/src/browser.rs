@@ -23,11 +23,11 @@
 
 use dioxus::prelude::*;
 use signal_browser::{ColumnItem, NavCategory, SortMode};
-use signal_keys_proto::keys::KeysRigClient;
 use signal_keys_proto::KeysPreset;
+use signal_keys_proto::keys::KeysRigClient;
 
 use crate::control::engine_color;
-use crate::selection::{use_selection, Selection};
+use crate::selection::{Selection, use_selection};
 use crate::state::KeysViewState;
 
 /// How many rows the list draws before it asks you to narrow it. The library

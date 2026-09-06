@@ -3,7 +3,7 @@ name = "delay-dsp"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+edition.workspace = true
 description = "Delay processing engine — tape / pitch / clean delays"
 
 [lints]

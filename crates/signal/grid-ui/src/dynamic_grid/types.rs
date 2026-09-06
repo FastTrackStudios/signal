@@ -163,9 +163,7 @@ impl ModuleVisualState {
     pub fn selection_glow(&self, bg_color: &str) -> String {
         match self {
             Self::Selected => {
-                format!(
-                    "box-shadow: 0 0 0 2px {bg_color}90, 0 0 12px {bg_color}30;"
-                )
+                format!("box-shadow: 0 0 0 2px {bg_color}90, 0 0 12px {bg_color}30;")
             }
             _ => "box-shadow: none;".to_string(),
         }

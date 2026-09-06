@@ -12,9 +12,9 @@
 //! are the repeats you will hear.
 
 use dioxus::prelude::*;
+use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
-use fts_audio_ui::ParamHandle;
 
 /// Panel drawing size — 2U, like the compressor's faces.
 pub const W: f64 = 960.0;
@@ -241,7 +241,7 @@ pub static SPECIAL: EchoDesign = EchoDesign {
 
 /// The panel a profile is drawn on — per family, with the profile's name
 /// silkscreened and its accent shifted so the variants are still distinct.
-#[must_use] 
+#[must_use]
 pub fn design_for(profile_id: &str) -> &'static EchoDesign {
     match delay_profiles::category_of(profile_id).map(|(c, _)| delay_profiles::CATEGORIES[c].id) {
         Some("digital") => &DIGITAL,
@@ -254,7 +254,7 @@ pub fn design_for(profile_id: &str) -> &'static EchoDesign {
 }
 
 /// How lit the centrepiece is for a variant inside its family.
-#[must_use] 
+#[must_use]
 pub fn variant_lift(profile_id: &str) -> f64 {
     match delay_profiles::category_of(profile_id) {
         Some((_, index)) => (index as f64).mul_add(0.22, 1.0),
@@ -266,7 +266,7 @@ pub fn variant_lift(profile_id: &str) -> f64 {
 ///
 /// The pair reaches every engine and each reads it differently. A knob called
 /// "Character A" tells you nothing, so the panel prints what it does here.
-#[must_use] 
+#[must_use]
 pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
     match profile_id {
         "digital" => ("Width", "Sync"),
@@ -302,11 +302,7 @@ pub fn EchoFace(
         delay_profiles::profile_by_id(&profile_id).unwrap_or(&delay_profiles::PROFILES[0]);
     let scale = fts_audio_ui::hardware::panel::panel_scale(W, H, crate::control_view::RAIL_W);
 
-    let value = |name: &str| {
-        handles
-            .get(name)
-            .map_or(0.5, |h| f64::from(h.normalized()))
-    };
+    let value = |name: &str| handles.get(name).map_or(0.5, |h| f64::from(h.normalized()));
     let (feedback, time, tone) = (value("feedback"), value("time_l"), value("tone"));
 
     rsx! {

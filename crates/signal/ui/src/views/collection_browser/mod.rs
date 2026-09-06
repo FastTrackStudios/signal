@@ -20,7 +20,7 @@ mod toolbar;
 
 use architect_ui::prelude::*;
 use dioxus::prelude::*;
-use signal::{BlockType, ALL_BLOCK_TYPES, ALL_MODULE_TYPES};
+use signal::{ALL_BLOCK_TYPES, ALL_MODULE_TYPES, BlockType};
 use signal_proto::rig::RigType;
 use signal_proto::tagging::TagSet;
 
@@ -29,11 +29,11 @@ use signal_browser::data_fetching::{
 };
 use signal_browser::grid_conversion::ParamLookup;
 use signal_browser::types::{
-    ColumnItem, DetailData, DetailParam, NavCategory, SortMode, RIG_TYPES,
+    ColumnItem, DetailData, DetailParam, NavCategory, RIG_TYPES, SortMode,
 };
 
 use detail_panel::{
-    collect_available_tags, filter_and_sort, find_detail, rig_type_display, DetailPanel,
+    DetailPanel, collect_available_tags, filter_and_sort, find_detail, rig_type_display,
 };
 use toolbar::Toolbar;
 
@@ -41,7 +41,7 @@ use toolbar::Toolbar;
 pub use rig_grid_panel::RigGridPanel;
 pub use signal_browser::data_fetching::rig_type_to_engine_type;
 pub use signal_browser::grid_conversion::{
-    engines_to_grid_slots, ParamLookup as EngineParamLookup,
+    ParamLookup as EngineParamLookup, engines_to_grid_slots,
 };
 pub use signal_browser::types::{EngineFlowData, LayerFlowData, ModuleChainData};
 
@@ -107,7 +107,7 @@ pub enum BrowseLevel {
 }
 
 impl BrowseLevel {
-    #[must_use] 
+    #[must_use]
     pub const fn label(&self) -> &'static str {
         match self {
             Self::Presets => "Presets",
@@ -837,7 +837,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                         bg-amber-600 hover:bg-amber-500 text-white \
                                         transition-colors duration-150",
                                 onclick: move |_| {
-                                    if let (Some(ref cb), Some(ref assign)) = (&on_assign, &assignment) {
+                                    if let (Some(cb), Some(assign)) = (&on_assign, &assignment) {
                                         cb.call(assign.clone());
                                     }
                                 },

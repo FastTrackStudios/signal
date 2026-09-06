@@ -34,7 +34,7 @@ const fn default_curve_type() -> u8 {
 }
 
 impl PatternPoint {
-    #[must_use] 
+    #[must_use]
     pub const fn new(x: f32, y: f32) -> Self {
         Self {
             x,
@@ -93,7 +93,7 @@ impl Default for PatternConfig {
 
 impl PatternConfig {
     /// Convert the point list into the DSP engine's evaluator.
-    #[must_use] 
+    #[must_use]
     pub fn build_pattern(&self) -> fts_modulation::Pattern {
         let mut pattern = fts_modulation::Pattern::new();
         pattern.set_points(
@@ -113,7 +113,7 @@ impl PatternConfig {
     }
 
     /// Effective cycle frequency in Hz.
-    #[must_use] 
+    #[must_use]
     pub fn effective_rate_hz(&self, bpm: f32) -> f32 {
         if self.tempo_sync {
             let beats = self

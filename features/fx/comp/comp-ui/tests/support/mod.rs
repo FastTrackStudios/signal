@@ -13,7 +13,7 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-use dioxus_test::{by_testid, render, DocumentTester};
+use dioxus_test::{DocumentTester, by_testid, render};
 
 use comp_ui::control_view::App;
 use comp_ui::params::{CompParams, CompUiState};
@@ -198,12 +198,14 @@ impl Fixture {
     /// also the SVG's viewBox height, which is what keeps element y and
     /// viewBox y the same thing.
     pub fn graph_h(&self) -> f64 {
-        f64::from(self.tester
-            .query(by_testid("comp-graph"))
-            .immediately()
-            .expect("comp-graph container not in DOM")
-            .size()
-            .1)
+        f64::from(
+            self.tester
+                .query(by_testid("comp-graph"))
+                .immediately()
+                .expect("comp-graph container not in DOM")
+                .size()
+                .1,
+        )
     }
 
     /// Document-space origin of the compressor-graph interaction surface.

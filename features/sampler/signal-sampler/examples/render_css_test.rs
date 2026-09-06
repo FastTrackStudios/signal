@@ -15,8 +15,8 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 
-use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
 
 const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
@@ -41,7 +41,7 @@ fn read_vlq(d: &[u8], p: &mut usize) -> u32 {
 fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
     let div = f64::from(u16::from_be_bytes([d[12], d[13]])); // ticks/quarter
     let mut us_per_q = 500_000.0f64; // default 120 BPM
-                                     // Locate MTrk.
+    // Locate MTrk.
     let mut p = 14;
     while &d[p..p + 4] != b"MTrk" {
         let len = u32::from_be_bytes([d[p + 4], d[p + 5], d[p + 6], d[p + 7]]) as usize;
@@ -71,8 +71,8 @@ fn parse_smf(d: &[u8]) -> Vec<(f64, u8, u8, u8)> {
                 p += 1;
                 let len = read_vlq(d, &mut p) as usize;
                 if meta == 0x51 {
-                    us_per_q =
-                        f64::from(d[p]).mul_add(65536.0, f64::from(d[p + 1]) * 256.0) + f64::from(d[p + 2]);
+                    us_per_q = f64::from(d[p]).mul_add(65536.0, f64::from(d[p + 1]) * 256.0)
+                        + f64::from(d[p + 2]);
                 }
                 p += len;
             }

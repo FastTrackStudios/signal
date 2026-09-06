@@ -6,7 +6,7 @@
 
 use crate::biquad::Coeffs;
 use crate::calibration::{
-    fit_response, CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget,
+    CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget, fit_response,
 };
 use crate::design::{self, FilterType};
 use crate::neve_1073::apply_gain_compensated_arctan;
@@ -382,7 +382,15 @@ fn add_pultec_low_sections(
     let low_boost = settings.low_boost_db.clamp(0.0, 13.0);
     let low_atten = settings.low_atten_db.clamp(0.0, 13.0);
     if low_boost > 1.0e-9 {
-        push(sections, FilterType::LowShelf, low_freq, 0.52, low_boost, sample_rate, 2);
+        push(
+            sections,
+            FilterType::LowShelf,
+            low_freq,
+            0.52,
+            low_boost,
+            sample_rate,
+            2,
+        );
         push(
             sections,
             FilterType::Peak,
@@ -404,7 +412,15 @@ fn add_pultec_low_sections(
             2,
         );
         if low_boost > 1.0e-9 {
-            push(sections, FilterType::Peak, low_freq * 5.0, 0.55, -0.10 * low_atten, sample_rate, 2);
+            push(
+                sections,
+                FilterType::Peak,
+                low_freq * 5.0,
+                0.55,
+                -0.10 * low_atten,
+                sample_rate,
+                2,
+            );
         }
     }
 }
@@ -420,7 +436,15 @@ fn add_pultec_high_sections(
         let bandwidth = settings.high_bandwidth.clamp(0.0, 10.0);
         let q = 0.35 + bandwidth * 0.115;
         let freq = settings.high_boost_freq_hz.clamp(1000.0, 16000.0);
-        push(sections, FilterType::Peak, freq, q, high_boost, sample_rate, 2);
+        push(
+            sections,
+            FilterType::Peak,
+            freq,
+            q,
+            high_boost,
+            sample_rate,
+            2,
+        );
         push(
             sections,
             FilterType::HighShelf,
@@ -462,9 +486,33 @@ pub fn build_pultec_eqp1a_sections_with_calibration(
     calibration: &HardwareEqCalibration,
 ) -> Vec<Coeffs> {
     let mut sections = Vec::new();
-    push(&mut sections, FilterType::Highpass, 14.0, 0.58, 0.0, sample_rate, 2);
-    push(&mut sections, FilterType::Lowpass, 28000.0, 0.62, 0.0, sample_rate, 2);
-    push(&mut sections, FilterType::Peak, 900.0, 0.45, -0.18, sample_rate, 2);
+    push(
+        &mut sections,
+        FilterType::Highpass,
+        14.0,
+        0.58,
+        0.0,
+        sample_rate,
+        2,
+    );
+    push(
+        &mut sections,
+        FilterType::Lowpass,
+        28000.0,
+        0.62,
+        0.0,
+        sample_rate,
+        2,
+    );
+    push(
+        &mut sections,
+        FilterType::Peak,
+        900.0,
+        0.45,
+        -0.18,
+        sample_rate,
+        2,
+    );
 
     if !settings.eq_in {
         return sections;

@@ -5,12 +5,14 @@ use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("warn").init();
-    let root = std::env::args()
-        .nth(1).map_or_else(|| {
+    let root = std::env::args().nth(1).map_or_else(
+        || {
             PathBuf::from(
                 "/run/media/AudioHaven/Signal/Libraries/Drum Kits/GGD Modern and Massive 2",
             )
-        }, PathBuf::from);
+        },
+        PathBuf::from,
+    );
     let t0 = std::time::Instant::now();
     let (dir, analyzed, skipped) = signal_drums::piece_space::build(&root)?;
     println!(

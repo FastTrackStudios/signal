@@ -79,7 +79,7 @@ pub struct SignalSidecar {
 ///
 /// `Foo.RfxChain` → `Foo.signal.styx`
 /// `Foo.RTrackTemplate` → `Foo.signal.styx`
-#[must_use] 
+#[must_use]
 pub fn sidecar_path(preset_path: &Path) -> std::path::PathBuf {
     let stem = preset_path
         .file_stem()
@@ -89,7 +89,7 @@ pub fn sidecar_path(preset_path: &Path) -> std::path::PathBuf {
 }
 
 /// Read and parse a `.signal.styx` sidecar file, returning `None` if missing or malformed.
-#[must_use] 
+#[must_use]
 pub fn read_sidecar(preset_path: &Path) -> Option<SignalSidecar> {
     let path = sidecar_path(preset_path);
     let content = std::fs::read_to_string(&path).ok()?;
@@ -120,7 +120,7 @@ pub fn write_sidecar(preset_path: &Path, sidecar: &SignalSidecar) -> std::io::Re
 ///
 /// We hand-render rather than using a serializer since facet-styx is
 /// deserialization-focused and the output is simple enough to template.
-#[must_use] 
+#[must_use]
 pub fn render_sidecar_styx(s: &SignalSidecar) -> String {
     let mut out = String::new();
 
@@ -153,10 +153,13 @@ pub fn render_sidecar_styx(s: &SignalSidecar) -> String {
     if !s.parameters.is_empty() {
         out.push_str("parameters (\n");
         for p in &s.parameters {
-            let _ = writeln!(out, "  {{id {}, name {}, value {}}}",
+            let _ = writeln!(
+                out,
+                "  {{id {}, name {}, value {}}}",
                 quote_if_needed(&p.id),
                 quote_if_needed(&p.name),
-                p.value);
+                p.value
+            );
         }
         out.push_str(")\n");
     }

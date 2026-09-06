@@ -25,9 +25,9 @@ pub mod eq_graph_svg;
 #[cfg(feature = "native")]
 pub mod control_view;
 #[cfg(feature = "native")]
-pub mod preset_view;
-#[cfg(feature = "native")]
 pub mod eq_graph;
+#[cfg(feature = "native")]
+pub mod preset_view;
 
 /// The compiled utilities + theme tokens the EQ surface's DOM parts
 /// (band popup, context menus, selectors) style themselves with.

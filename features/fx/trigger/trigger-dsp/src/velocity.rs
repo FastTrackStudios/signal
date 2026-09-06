@@ -38,7 +38,7 @@ pub struct VelocityMapper {
 }
 
 impl VelocityMapper {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             dynamics: 0.5,
@@ -57,7 +57,7 @@ impl VelocityMapper {
     ///
     /// # Returns
     /// Velocity in range [`min_velocity`, `max_velocity`].
-    #[must_use] 
+    #[must_use]
     pub fn map(&self, peak_level: f64, threshold: f64) -> f64 {
         if matches!(self.curve, VelocityCurve::Fixed) || self.dynamics <= 0.0 {
             return self
@@ -109,13 +109,13 @@ impl VelocityMapper {
     }
 
     /// Convert velocity (0.0-1.0) to MIDI velocity (1-127).
-    #[must_use] 
+    #[must_use]
     pub const fn to_midi(velocity: f64) -> u8 {
         velocity.clamp(0.0, 1.0).mul_add(126.0, 1.0).round() as u8
     }
 
     /// Convert MIDI velocity (1-127) to velocity (0.0-1.0).
-    #[must_use] 
+    #[must_use]
     pub fn from_midi(midi_vel: u8) -> f64 {
         (f64::from(midi_vel) - 1.0) / 126.0
     }

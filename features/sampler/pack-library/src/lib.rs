@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 
 use std::collections::HashMap;
 
-use architect::{layers, Layer, Services};
+use architect::{Layer, Services, layers};
 use signal_packs_proto::packs::PackLibrary;
 use signal_packs_proto::{PackChunk, PackError, PackInfo, PackRange, PackSegment};
 use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _};
@@ -51,7 +51,7 @@ impl Default for PackLibraryBackend {
 impl PackLibraryBackend {
     /// Scan `FTS_PACK_LIBRARY` (default the studio library root) and
     /// start the background hasher.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         let root = std::env::var("FTS_PACK_LIBRARY").unwrap_or_else(|_| LIBRARY_ROOT.into());
         Self::with_root(root)
@@ -71,7 +71,7 @@ impl PackLibraryBackend {
     }
 
     /// The composed service router — mount on any vox transport.
-    #[must_use] 
+    #[must_use]
     pub fn router(&self) -> architect::LayerRouter {
         self.clone().into_router()
     }
@@ -276,7 +276,9 @@ impl PackLibrary for PackLibraryBackend {
         let key = (name, variant);
         let cached = self.plans.lock().ok().and_then(|p| p.get(&key).cloned());
         architect_telemetry::wide::set("pack.plan_cached", cached.is_some());
-        let json = if let Some(json) = cached { json } else {
+        let json = if let Some(json) = cached {
+            json
+        } else {
             let path = entry.path.clone();
             let planned = tokio::task::spawn_blocking(move || {
                 signal_sampler::pack_plan::plan_pack_file(&path)

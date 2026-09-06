@@ -12,7 +12,6 @@
 // clippy.toml's disallowed-methods list (locks, env, sleep) are real bugs here
 // even though they are allowed workspace-wide off the audio thread.
 #![deny(clippy::disallowed_methods)]
-
 // ── TEMPORARY: DSP rewrite pending ───────────────────────────────────────
 // 182 findings in this crate, held under `expect` rather than fixed one by one.
 //
@@ -67,7 +66,7 @@ pub mod multiband;
 pub mod smoother;
 pub mod styles;
 
-pub use biquad::{design_highpass_biquad, design_lowpass_biquad, Biquad};
+pub use biquad::{Biquad, design_highpass_biquad, design_lowpass_biquad};
 pub use chain::CompChain;
 pub use detector::Detector;
 pub use gain_curve::GainCurve;

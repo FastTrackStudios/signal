@@ -6,8 +6,8 @@
 
 use audiocore_core::prelude::*;
 use fts_plug_ui::prelude::{PeakMeter, WaveRing};
-use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 
 /// Audio-thread → UI metering.
 pub struct LimiterUiState {

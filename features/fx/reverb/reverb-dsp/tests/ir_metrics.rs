@@ -35,7 +35,6 @@
               test/example code, where panicking on bad input is the point"
 )]
 
-
 use std::f64::consts::PI;
 
 use realfft::RealFftPlanner;
@@ -306,13 +305,15 @@ fn subsonic_ratio(left: &[f64], right: &[f64]) -> f64 {
     fft.process(&mut buf, &mut spec).unwrap();
     let bin_hz = SR / nfft as f64;
     let cutoff_bin = ((20.0 / bin_hz).ceil() as usize).min(spec.len());
-    let low: f64 = spec[..cutoff_bin].iter().map(realfft::num_complex::Complex::norm_sqr).sum();
-    let total: f64 = spec.iter().map(realfft::num_complex::Complex::norm_sqr).sum();
-    if total > 0.0 {
-        low / total
-    } else {
-        0.0
-    }
+    let low: f64 = spec[..cutoff_bin]
+        .iter()
+        .map(realfft::num_complex::Complex::norm_sqr)
+        .sum();
+    let total: f64 = spec
+        .iter()
+        .map(realfft::num_complex::Complex::norm_sqr)
+        .sum();
+    if total > 0.0 { low / total } else { 0.0 }
 }
 
 // ---------------------------------------------------------------------------
@@ -560,7 +561,10 @@ fn probe_chamber() {
         let band = |lo: f64, hi: f64| -> f64 {
             let a = (lo / bin_hz) as usize;
             let b = ((hi / bin_hz) as usize).min(spec.len() - 1);
-            spec[a..=b].iter().map(realfft::num_complex::Complex::norm_sqr).sum::<f64>()
+            spec[a..=b]
+                .iter()
+                .map(realfft::num_complex::Complex::norm_sqr)
+                .sum::<f64>()
         };
         let total = band(0.0, SR / 2.0);
         for (lo, hi) in [

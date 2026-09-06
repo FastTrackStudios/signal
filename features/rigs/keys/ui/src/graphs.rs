@@ -385,7 +385,9 @@ fn env_path(a: &Adsr, h: f64) -> String {
     let xs = (xd + 34.0).min(W - PAD - 20.0);
     let xr = (xs + x_for(a.release_ms as f64) - PAD).min(W - PAD);
     let (y0, ytop) = (h - PAD, PAD);
-    format!("M {PAD:.1} {y0:.1} L {xa:.1} {ytop:.1} L {xd:.1} {sus_y:.1} L {xs:.1} {sus_y:.1} L {xr:.1} {y0:.1}")
+    format!(
+        "M {PAD:.1} {y0:.1} L {xa:.1} {ytop:.1} L {xd:.1} {sus_y:.1} L {xs:.1} {sus_y:.1} L {xr:.1} {y0:.1}"
+    )
 }
 
 /// **Amp + Filter envelopes of every module, on one set of axes.** Amp is

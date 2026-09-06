@@ -44,8 +44,10 @@ members = [
     "crates/signal/space",
     "crates/signal/space/proto",
     "crates/signal/storage",
+    "crates/signal/account",
     "crates/signal/tone3000",
     "crates/signal/tone3000-proto",
+    "crates/signal/tone3000-ui",
     "crates/signal/ui",
     "crates/signal/widgets",
     "features/analyzer/signal-analyzer",
@@ -160,8 +162,10 @@ neural-amp-modeler = { git = "https://github.com/FastTrackStudios/neural-amp-mod
 # TONE3000 tone library — the wire client (upstream, MIT) and our wrapper
 # around it (session + download into signal-library/nam/).
 tone3000 = "0.1"
+signal-account = { path = "crates/signal/account" }
 signal-tone3000 = { path = "crates/signal/tone3000" }
 signal-tone3000-proto = { path = "crates/signal/tone3000-proto" }
+signal-tone3000-ui = { path = "crates/signal/tone3000-ui" }
 audiocore-core = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.2" }
 audiocore-dsp = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.2", default-features = false }
 audiocore-gui = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.2" }
@@ -490,7 +494,11 @@ architect-auth = { git = "https://github.com/FastTrackStudios/architect", tag = 
 auth = { git = "https://github.com/FastTrackStudios/architect", rev = "5e4bb829674fe8b2d3527c3b65b9ab3a2b6baa86" }
 auth-proto = { git = "https://github.com/FastTrackStudios/architect", rev = "5e4bb829674fe8b2d3527c3b65b9ab3a2b6baa86" }
 auth-db = { git = "https://github.com/FastTrackStudios/architect", rev = "5e4bb829674fe8b2d3527c3b65b9ab3a2b6baa86" }
-auth-client = { git = "https://github.com/FastTrackStudios/architect", rev = "5e4bb829674fe8b2d3527c3b65b9ab3a2b6baa86" }
+# Newer than its siblings on purpose: the `oidc` module (the shared
+# redirect sign-in — PKCE, the two request shapes, the two response
+# shapes) landed after that rev, and signing in to fts-auth is what
+# `signal-account` is built on. Pinned by rev, which is v0.8.2.
+auth-client = { git = "https://github.com/FastTrackStudios/architect", rev = "1b007bb68d29e921a2b4ef98f23a815c8a9183c1" }
 crdt = { git = "https://github.com/FastTrackStudios/architect", rev = "5e4bb829674fe8b2d3527c3b65b9ab3a2b6baa86" }
 crdt-derive = { git = "https://github.com/FastTrackStudios/architect", rev = "5e4bb829674fe8b2d3527c3b65b9ab3a2b6baa86" }
 crdt-seaorm = { git = "https://github.com/FastTrackStudios/architect", rev = "5e4bb829674fe8b2d3527c3b65b9ab3a2b6baa86" }

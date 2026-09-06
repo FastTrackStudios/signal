@@ -57,7 +57,8 @@ impl Tdf2Section {
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
         let output = input.mul_add(self.c0, self.s1.get(ch).copied().unwrap_or(0.0));
         if let Some(s1_ref) = self.s1.get_mut(ch) {
-            *s1_ref = input.mul_add(self.c1, -(output * self.c3)) + self.s2.get(ch).copied().unwrap_or(0.0);
+            *s1_ref = input.mul_add(self.c1, -(output * self.c3))
+                + self.s2.get(ch).copied().unwrap_or(0.0);
         }
         if let Some(s2_ref) = self.s2.get_mut(ch) {
             *s2_ref = input.mul_add(self.c2, -(output * self.c4));

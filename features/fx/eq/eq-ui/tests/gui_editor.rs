@@ -34,7 +34,7 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-use dioxus_test::{matchers::inner_html, render, DocumentTester};
+use dioxus_test::{DocumentTester, matchers::inner_html, render};
 use test_that::prelude::*;
 
 use eq_ui::control_view::App;
@@ -286,7 +286,7 @@ mod support {
     }
 }
 
-use support::{mount, ptr_key, Gesture};
+use support::{Gesture, mount, ptr_key};
 
 // ─────────────────────────────────────────────────────────────────────────
 // Tests

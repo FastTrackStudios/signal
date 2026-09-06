@@ -14,8 +14,8 @@ use std::time::Instant;
 
 use rayon::prelude::*;
 
-use crate::pack_rewrite::rewrite_embedded_spec;
 use crate::SamplerError;
+use crate::pack_rewrite::rewrite_embedded_spec;
 
 #[derive(Debug, Default, Clone)]
 pub struct Derived {

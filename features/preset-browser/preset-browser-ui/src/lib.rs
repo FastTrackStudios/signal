@@ -213,12 +213,7 @@ pub fn PresetBrowserPanel(props: PresetBrowserProps) -> Element {
 }
 
 #[component]
-fn CategoryChip(
-    label: String,
-    active: bool,
-    accent: String,
-    onpick: EventHandler<()>,
-) -> Element {
+fn CategoryChip(label: String, active: bool, accent: String, onpick: EventHandler<()>) -> Element {
     rsx! {
         span {
             "data-testid": "preset-category",
@@ -318,7 +313,7 @@ mod tests {
 /// Lives here rather than in each `*-ui` crate deliberately: the adapter this
 /// builds on carries a note that it was copied verbatim into seven crates
 /// before being lifted, and the copies drifted.
-#[must_use] 
+#[must_use]
 pub fn apply_to_handles(
     parameters: &[(String, f64)],
     handles: &std::collections::HashMap<String, fts_audio_ui::ParamHandle>,
@@ -376,7 +371,10 @@ mod apply_tests {
     fn every_named_parameter_is_written_as_a_complete_gesture() {
         let log = Arc::new(Mutex::new(Vec::new()));
         let mut handles = HashMap::new();
-        handles.insert("decay_time".to_string(), recording("decay_time", log.clone()));
+        handles.insert(
+            "decay_time".to_string(),
+            recording("decay_time", log.clone()),
+        );
         handles.insert("mix".to_string(), recording("mix", log.clone()));
 
         let (applied, unmatched) = apply_to_handles(
@@ -559,7 +557,7 @@ pub fn PresetBar(
 /// load — an empty library, or files that could not be read. Shared rather
 /// than written per plugin, because "where are my presets" has the same answer
 /// everywhere and only the root differs.
-#[must_use] 
+#[must_use]
 pub fn load_library_tree(root: &std::path::Path) -> (PresetBrowser, String) {
     let mut presets = Vec::new();
     let mut skipped = 0usize;
@@ -596,7 +594,7 @@ pub fn load_library_tree(root: &std::path::Path) -> (PresetBrowser, String) {
 ///
 /// Every plugin wants the same escape hatch — the tests point it at a fixture,
 /// and a user can point it at a library that is not on the default path.
-#[must_use] 
+#[must_use]
 pub fn library_root(env_var: &str, default: &str) -> std::path::PathBuf {
     match std::env::var_os(env_var) {
         Some(dir) => std::path::PathBuf::from(dir),

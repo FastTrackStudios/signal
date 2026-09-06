@@ -15,7 +15,7 @@ use fts_audio_ui::ParamHandle;
 use preset_browser::PresetBrowser;
 
 /// Where the reverb's presets live.
-#[must_use] 
+#[must_use]
 pub fn preset_library_root() -> std::path::PathBuf {
     preset_browser_ui::library_root(
         "FTS_REVERB_PRESETS",
@@ -24,7 +24,7 @@ pub fn preset_library_root() -> std::path::PathBuf {
 }
 
 /// The reverb's library: every bank under the root, as one list.
-#[must_use] 
+#[must_use]
 pub fn load_library() -> (PresetBrowser, String) {
     preset_browser_ui::load_library_tree(&preset_library_root())
 }

@@ -93,7 +93,8 @@ fn prototype() -> Zpk {
     // sc(w, k1') = 1/ep, which is a real sn of a real value.
     let k1p = (1.0 - k1 * k1).max(0.0).sqrt();
     let v0_param = elliptic_asn(1.0 / (1.0 + ep * ep).sqrt(), k1p);
-    let v0 = v0_param / (f64::from(u32::try_from(ORDER).unwrap_or(u32::MAX)) * elliptic_k_complete(k1 * k1));
+    let v0 = v0_param
+        / (f64::from(u32::try_from(ORDER).unwrap_or(u32::MAX)) * elliptic_k_complete(k1 * k1));
 
     // cd(x + jy, k) = cn(x + jy) / dn(x + jy); the shared denominator of the
     // complex-argument formulas cancels, leaving only real sn/cn/dn at x
@@ -152,8 +153,16 @@ pub(super) fn brickwall_cascade(freq_hz: f64, sample_rate: f64, highpass: bool) 
         // the inversion leaves the counts matched — nothing has to be added
         // at the origin.
         Zpk::new(
-            proto.zeros.iter().map(|&z| Complex::new(wa, 0.0) / z).collect(),
-            proto.poles.iter().map(|&p| Complex::new(wa, 0.0) / p).collect(),
+            proto
+                .zeros
+                .iter()
+                .map(|&z| Complex::new(wa, 0.0) / z)
+                .collect(),
+            proto
+                .poles
+                .iter()
+                .map(|&p| Complex::new(wa, 0.0) / p)
+                .collect(),
             1.0,
         )
     } else {
@@ -206,7 +215,10 @@ mod tests {
         }
         // Ninety decibels down within an eighth of an octave.
         let edge = db_at(&sos, 5658.0);
-        assert!(edge < -85.0, "should be past 85 dB down at 5658 Hz, got {edge:.2}");
+        assert!(
+            edge < -85.0,
+            "should be past 85 dB down at 5658 Hz, got {edge:.2}"
+        );
         // And it must STAY there rather than running away like an all-pole
         // cascade — this is the half of the shape a Butterworth cannot do.
         // Equiripple means the stopband dips to a null at every transmission
@@ -226,13 +238,25 @@ mod tests {
     #[test]
     fn low_cut_is_the_mirror() {
         let sos = brickwall_cascade(1000.0, SR, true);
-        assert!(db_at(&sos, 4000.0).abs() < 0.1, "passband above the corner is flat");
-        assert!(db_at(&sos, 1004.0).abs() < 0.2, "flat right up to the corner");
+        assert!(
+            db_at(&sos, 4000.0).abs() < 0.1,
+            "passband above the corner is flat"
+        );
+        assert!(
+            db_at(&sos, 1004.0).abs() < 0.2,
+            "flat right up to the corner"
+        );
         let edge = db_at(&sos, 1000.0 / 1.14);
-        assert!(edge < -85.0, "85 dB down an eighth of an octave below, got {edge:.2}");
+        assert!(
+            edge < -85.0,
+            "85 dB down an eighth of an octave below, got {edge:.2}"
+        );
         for hz in [100.0, 300.0, 700.0] {
             let got = db_at(&sos, hz);
-            assert!(got < -80.0, "stopband at {hz} Hz should hold down, got {got:.2}");
+            assert!(
+                got < -80.0,
+                "stopband at {hz} Hz should hold down, got {got:.2}"
+            );
         }
     }
 

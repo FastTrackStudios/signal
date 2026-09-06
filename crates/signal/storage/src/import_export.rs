@@ -5,8 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 use signal_proto::{
-    engine::Engine, layer::Layer, profile::Profile, rig::Rig, setlist::Setlist, song::Song,
-    ModulePreset, Preset,
+    ModulePreset, Preset, engine::Engine, layer::Layer, profile::Profile, rig::Rig,
+    setlist::Setlist, song::Song,
 };
 
 use crate::StorageResult;
@@ -70,7 +70,7 @@ impl ExportBundle {
     pub const CURRENT_FORMAT: u32 = 1;
 
     /// Create an empty bundle with current format version.
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             format_version: Self::CURRENT_FORMAT,
@@ -89,7 +89,7 @@ impl ExportBundle {
     }
 
     /// Total number of entities in this bundle.
-    #[must_use] 
+    #[must_use]
     pub const fn entity_count(&self) -> usize {
         self.block_presets.len()
             + self.module_presets.len()
@@ -216,7 +216,7 @@ pub struct ImportResult {
 }
 
 impl ImportResult {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             imported: 0,
@@ -226,7 +226,7 @@ impl ImportResult {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn total_processed(&self) -> usize {
         self.imported + self.skipped + self.overwritten
     }

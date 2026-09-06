@@ -51,7 +51,10 @@ fn goertzel(buf: &[f64], freq: f64) -> f64 {
 struct Lcg(u64);
 impl Lcg {
     fn next(&mut self) -> f64 {
-        self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1);
         ((self.0 >> 33) as f64 / (1u64 << 31) as f64) - 1.0
     }
 }
@@ -83,7 +86,8 @@ fn render(eq: &mut NativeEq, input: &[f64]) -> Vec<f64> {
         let l: Vec<f32> = input[pos..pos + n].iter().map(|s| *s as f32).collect();
         let r = l.clone();
         let (mut ol, mut or) = (vec![0.0f32; n], vec![0.0f32; n]);
-        eq.process_block(&l, &r, &mut ol, &mut or, &events).expect("process");
+        eq.process_block(&l, &r, &mut ol, &mut or, &events)
+            .expect("process");
         out.extend(ol.iter().map(|s| f64::from(*s)));
         pos += n;
     }
@@ -123,7 +127,10 @@ fn noise_floor(buf: &[f64], centre: f64) -> f64 {
     let n = 9;
     let mut sum = 0.0;
     for k in 0..n {
-        let f = NEIGHBOUR_SPAN_HZ.mul_add(f64::from(k) / f64::from(n - 1), centre - NEIGHBOUR_SPAN_HZ / 2.0);
+        let f = NEIGHBOUR_SPAN_HZ.mul_add(
+            f64::from(k) / f64::from(n - 1),
+            centre - NEIGHBOUR_SPAN_HZ / 2.0,
+        );
         sum += goertzel(buf, f);
     }
     sum / f64::from(n)

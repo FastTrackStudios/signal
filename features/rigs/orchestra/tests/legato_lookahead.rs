@@ -15,9 +15,9 @@
 //! Gated on the CSS library + config being present (same pattern as
 //! `score_to_audio.rs`).
 
-use signal_orchestra::{load_strings, CSS_CONFIG, CSS_ROOT};
-use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TrackDocument};
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TrackDocument};
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
@@ -40,7 +40,10 @@ fn rms_db(audio: &[f32], start_frame: usize, len: usize) -> f32 {
     if b <= a {
         return -120.0;
     }
-    let s: f64 = audio[a..b].iter().map(|&x| f64::from(x) * f64::from(x)).sum();
+    let s: f64 = audio[a..b]
+        .iter()
+        .map(|&x| f64::from(x) * f64::from(x))
+        .sum();
     let rms = (s / (b - a) as f64).sqrt();
     if rms <= 1e-9 {
         -120.0

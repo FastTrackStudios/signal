@@ -17,8 +17,7 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
-use eq_dsp::design::{design_filter, FilterType};
+use eq_dsp::design::{FilterType, design_filter};
 use eq_dsp::response::compute_magnitude_response;
 use std::collections::BTreeMap;
 use std::fs;
@@ -115,9 +114,13 @@ fn all_filters_all_slopes_scan() {
             if !stem.starts_with(&format!("{prefix}_")) {
                 continue;
             }
-            let Some((fc, gain, q, slope)) = parse_filename(&stem, prefix, *has_gain) else { break };
+            let Some((fc, gain, q, slope)) = parse_filename(&stem, prefix, *has_gain) else {
+                break;
+            };
             let order = slope_to_order(slope);
-            let Some((freqs, ref_mags)) = load_ref(&path) else { break };
+            let Some((freqs, ref_mags)) = load_ref(&path) else {
+                break;
+            };
             let sos = design_filter(*ftype, fc, q, gain, SR, order);
             if sos.is_empty() {
                 break;
@@ -173,9 +176,7 @@ fn all_filters_all_slopes_scan() {
             filter_total = 0;
         }
         last_filter = prefix.clone();
-        println!(
-            "  {prefix:>12}  {slope:>5}  {pass:>5}  {total:>5}  {max_err:>10.4}"
-        );
+        println!("  {prefix:>12}  {slope:>5}  {pass:>5}  {total:>5}  {max_err:>10.4}");
         filter_pass += pass;
         filter_total += total;
         grand_pass += pass;

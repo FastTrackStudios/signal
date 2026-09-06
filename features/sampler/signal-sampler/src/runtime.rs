@@ -694,11 +694,7 @@ impl PresetRuntime {
                 })
                 .collect();
             let m = crate::mixer::DrumMixer::build(&engine_mics, sample_rate);
-            if m.is_empty() {
-                None
-            } else {
-                Some(m)
-            }
+            if m.is_empty() { None } else { Some(m) }
         };
 
         Ok(Self {
@@ -832,7 +828,8 @@ impl PresetRuntime {
                 let BufferRef::ModuleInput {
                     module_idx: target_mod_idx,
                     port_idx: target_port_idx,
-                } = edge.to else {
+                } = edge.to
+                else {
                     continue;
                 };
                 if target_mod_idx != mod_idx {

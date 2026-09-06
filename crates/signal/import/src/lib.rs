@@ -38,13 +38,13 @@
 
 pub mod fabfilter;
 pub mod library_writer;
-pub mod rpp;
 pub mod rfxchain;
+pub mod rpp;
 pub mod types;
 pub mod valhalla;
 
-use std::path::Path;
 use std::fmt::Write as FmtWrite;
+use std::path::Path;
 
 use eyre::Result;
 use signal_controller::SignalController;
@@ -262,7 +262,12 @@ pub async fn import_presets_with_library(
 #[must_use]
 pub fn dry_run_report(collection: &ImportedPresetCollection) -> String {
     let mut out = String::new();
-    let _ = write!(out, "Preset: {} ({})\n", collection.plugin_name, collection.block_type.display_name());
+    let _ = write!(
+        out,
+        "Preset: {} ({})\n",
+        collection.plugin_name,
+        collection.block_type.display_name()
+    );
     let _ = write!(out, "Vendor: {}\n", collection.vendor);
     let _ = write!(out, "Snapshots: {}\n", collection.snapshots.len());
 

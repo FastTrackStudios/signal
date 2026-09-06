@@ -10,6 +10,10 @@ use crate::store::{DownloadOutcome, TokenStore, Tokens};
 pub enum SessionError {
     #[error("not signed in to TONE3000")]
     NotSignedIn,
+    /// No publishable key. Distinct from being signed out: the user cannot
+    /// fix this by signing in, so a UI must not send them round that loop.
+    #[error("this build has no TONE3000 publishable key configured")]
+    NotConfigured,
     /// The callback did not match the request that started it. Treated as a
     /// hard failure rather than a retry: a mismatched `state` is what a CSRF
     /// attempt looks like, and it is indistinguishable from one.
@@ -17,6 +21,10 @@ pub enum SessionError {
     StateMismatch,
     #[error("the authorization callback carried no code")]
     MissingCode,
+    /// The user closed TONE3000's picker. An outcome, not a fault — the
+    /// caller should return to where it was, quietly.
+    #[error("sign-in was canceled")]
+    Canceled,
     #[error("TONE3000 rejected the request: {0}")]
     Api(String),
     #[error(transparent)]
@@ -40,12 +48,16 @@ pub struct AuthStart {
 }
 
 impl AuthStart {
-    #[must_use] 
+    #[must_use]
     pub const fn new(authorize_url: String, verifier: String, state: String) -> Self {
-        Self { authorize_url, verifier, state }
+        Self {
+            authorize_url,
+            verifier,
+            state,
+        }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn verifier(&self) -> &str {
         &self.verifier
     }
@@ -60,8 +72,8 @@ impl AuthStart {
     /// Returns `SessionError::StateMismatch` if the echoed state does not match the stored one.
     pub fn verify_state(&self, echoed: &str) -> Result<(), SessionError> {
         let (a, b) = (self.state.as_bytes(), echoed.as_bytes());
-        let equal = a.len() == b.len()
-            && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0;
+        let equal =
+            a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0;
         if equal {
             Ok(())
         } else {
@@ -82,15 +94,18 @@ pub struct Session {
 
 impl Session {
     pub fn new(tokens: TokenStore, library_root: impl Into<PathBuf>) -> Self {
-        Self { tokens, library_root: library_root.into() }
+        Self {
+            tokens,
+            library_root: library_root.into(),
+        }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn token_store(&self) -> &TokenStore {
         &self.tokens
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn library_root(&self) -> &Path {
         &self.library_root
     }
@@ -98,7 +113,7 @@ impl Session {
     /// Whether a session is stored. Not whether it is still valid — that is
     /// only knowable by spending a request, and the caller's next step (start
     /// the flow, or try and refresh) is the same either way.
-    #[must_use] 
+    #[must_use]
     pub fn is_signed_in(&self) -> bool {
         matches!(self.tokens.load(), Ok(Some(_)))
     }
@@ -128,7 +143,7 @@ impl Session {
     /// between a file we may re-fetch and one we must never touch. The name is
     /// sanitised because it comes from a public catalog: a creator-supplied
     /// name containing a separator would otherwise choose its own directory.
-    #[must_use] 
+    #[must_use]
     pub fn destination(&self, tone_id: &str, filename: &str) -> PathBuf {
         self.library_root
             .join("tone3000")
@@ -157,7 +172,11 @@ impl Session {
 
         if let Ok(existing) = std::fs::read(&path) {
             if hex(&Sha256::digest(&existing)) == hash {
-                return Ok(DownloadOutcome { path, hash, written: false });
+                return Ok(DownloadOutcome {
+                    path,
+                    hash,
+                    written: false,
+                });
             }
         }
         if let Some(parent) = path.parent() {
@@ -168,7 +187,11 @@ impl Session {
         let tmp = path.with_extension("part");
         std::fs::write(&tmp, bytes)?;
         std::fs::rename(&tmp, &path)?;
-        Ok(DownloadOutcome { path, hash, written: true })
+        Ok(DownloadOutcome {
+            path,
+            hash,
+            written: true,
+        })
     }
 }
 
@@ -211,13 +234,20 @@ mod tests {
 
     #[test]
     fn state_must_match_the_request_that_started_it() {
-        let start = AuthStart::new("https://example/authorize".into(), "v".into(), "s123".into());
+        let start = AuthStart::new(
+            "https://example/authorize".into(),
+            "v".into(),
+            "s123".into(),
+        );
         assert!(start.verify_state("s123").is_ok());
         assert!(matches!(
             start.verify_state("other"),
             Err(SessionError::StateMismatch)
         ));
-        assert!(matches!(start.verify_state(""), Err(SessionError::StateMismatch)));
+        assert!(matches!(
+            start.verify_state(""),
+            Err(SessionError::StateMismatch)
+        ));
     }
 
     #[test]
@@ -226,7 +256,11 @@ mod tests {
         let s = session(dir.path());
         let out = s.place_model("1234", "amp.nam", b"weights").unwrap();
         assert!(out.written);
-        assert!(out.path.ends_with("nam/tone3000/1234/amp.nam"), "{:?}", out.path);
+        assert!(
+            out.path.ends_with("nam/tone3000/1234/amp.nam"),
+            "{:?}",
+            out.path
+        );
         assert_eq!(std::fs::read(&out.path).unwrap(), b"weights");
     }
 

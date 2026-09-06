@@ -12,7 +12,7 @@
 use audiocore_dsp::db::{db_to_linear, linear_to_db};
 use audiocore_dsp::envelope::EnvelopeFollower;
 
-use crate::spectral_flux::{FluxMode, SpectralFluxDetector, DEFAULT_FFT_SIZE, DEFAULT_HOP_SIZE};
+use crate::spectral_flux::{DEFAULT_FFT_SIZE, DEFAULT_HOP_SIZE, FluxMode, SpectralFluxDetector};
 
 /// Sidechain detection mode — how the raw input is converted to a level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -124,7 +124,7 @@ pub struct TriggerDetector {
 }
 
 impl TriggerDetector {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             state: State::Off,
@@ -326,26 +326,26 @@ impl TriggerDetector {
     }
 
     /// Whether the trigger is currently active (On or Detect states).
-    #[must_use] 
+    #[must_use]
     pub const fn is_active(&self) -> bool {
         matches!(self.state, State::On | State::Detect)
     }
 
     /// Get the current smoothed level (linear).
-    #[must_use] 
+    #[must_use]
     pub const fn level(&self) -> f64 {
         self.level
     }
 
     /// Get the current smoothed level in dB.
-    #[must_use] 
+    #[must_use]
     pub fn level_db(&self) -> f64 {
         linear_to_db(self.level)
     }
 
     /// Returns the latency in samples introduced by the current algorithm.
     /// `PeakEnvelope` has zero latency; spectral modes have FFT latency.
-    #[must_use] 
+    #[must_use]
     pub const fn latency_samples(&self) -> usize {
         match &self.spectral {
             Some(s) => s.latency_samples(),

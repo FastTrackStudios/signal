@@ -9,7 +9,7 @@
 //! widgets (knobs, toggle, segmented, drag provider) come from
 //! [`fts_audio_ui`]; theme + layout primitives from [`architect_ui`].
 
-use architect_ui::prelude::{default_theme_preset, ThemeMode, ThemeProvider, ThemeState};
+use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
 use audiocore_core::prelude::*;
 use fts_audio_ui::prelude::*;
 

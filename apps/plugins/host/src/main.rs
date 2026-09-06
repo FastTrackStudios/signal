@@ -34,7 +34,7 @@ use std::path::PathBuf;
 
 use baseview::{Event, EventStatus, Window, WindowEvent, WindowHandler, WindowOpenOptions};
 use daw_standalone::audio_engine::plugin_host::{
-    gui_api_uses_logical_size, ClapHost, LoadedClapPlugin,
+    ClapHost, LoadedClapPlugin, gui_api_uses_logical_size,
 };
 use raw_window_handle::HasWindowHandle;
 
@@ -46,7 +46,10 @@ use raw_window_handle::HasWindowHandle;
 /// half the size it asked for.
 fn resize_to_plugin_size(ctx: &baseview::WindowContext, width: u32, height: u32) {
     if gui_api_uses_logical_size() {
-        ctx.resize(baseview::dpi::LogicalSize::new(f64::from(width), f64::from(height)));
+        ctx.resize(baseview::dpi::LogicalSize::new(
+            f64::from(width),
+            f64::from(height),
+        ));
     } else {
         ctx.resize(baseview::dpi::PhysicalSize::new(
             f64::from(width),

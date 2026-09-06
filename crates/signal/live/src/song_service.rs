@@ -3,7 +3,11 @@
 //! Implements [`SongService`] on [`SignalLive`], delegating persistence
 //! to the underlying [`SongRepo`].
 
-use super::{SongService, SignalLive, BlockRepo, ModuleRepo, LayerRepo, EngineRepo, RigRepo, ProfileRepo, SongRepo, SetlistRepo, SceneTemplateRepo, RackRepo, Song, SignalServiceError, SongId, SectionId, Section};
+use super::{
+    BlockRepo, EngineRepo, LayerRepo, ModuleRepo, ProfileRepo, RackRepo, RigRepo,
+    SceneTemplateRepo, Section, SectionId, SetlistRepo, SignalLive, SignalServiceError, Song,
+    SongId, SongRepo, SongService,
+};
 
 impl<B, M, L, E, R, P, So, Se, St, Ra> SongService for SignalLive<B, M, L, E, R, P, So, Se, St, Ra>
 where

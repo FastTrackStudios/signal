@@ -18,8 +18,8 @@ use std::fs::File;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
-use crate::engine::cache::PackFileHeader;
 use crate::SamplerError;
+use crate::engine::cache::PackFileHeader;
 
 const SPEC_BEGIN: &str = "# spec_begin\n";
 const SPEC_END: &str = "# spec_end";

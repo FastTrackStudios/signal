@@ -23,16 +23,16 @@
 //! theme + layout primitives from [`architect_ui`]; the section wrappers from
 //! [`crate::sections`].
 
-use architect_ui::prelude::{default_theme_preset, ThemeMode, ThemeProvider, ThemeState};
+use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
 use audiocore_core::prelude::*;
 use fts_audio_ui::prelude::*;
-use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::editor::ResizeHint;
+use nice_plug::editor::dpi::LogicalSize;
 
-use crate::faces::{profile_id_for_index, Face};
+use crate::faces::{Face, profile_id_for_index};
 use crate::param_adapter::param_handle;
 use crate::params::{CompUiState, PROFILE_LABELS};
-use crate::profile_view::{profile_skin, ProfileSkin};
+use crate::profile_view::{ProfileSkin, profile_skin};
 
 /// Width the shell rail takes out of the window, in CSS px.
 ///
@@ -79,13 +79,13 @@ fn bounds() -> ((u32, u32), (u32, u32)) {
     fts_audio_ui::EditorForm::size_bounds(RAIL_W, crate::faces::preferred_editor_size(0))
 }
 
-#[must_use] 
+#[must_use]
 pub fn min_editor_size() -> (f32, f32) {
     let ((w, h), _) = bounds();
     (w as f32, h as f32)
 }
 
-#[must_use] 
+#[must_use]
 pub fn max_editor_size() -> (f32, f32) {
     let (_, (w, h)) = bounds();
     // Room to stretch past the largest preset — a host may hand over a bigger
@@ -97,7 +97,7 @@ pub fn max_editor_size() -> (f32, f32) {
 
 /// How the host may resize this editor: freely on both axes between
 /// [`min_editor_size`] and [`max_editor_size`], no aspect-ratio lock.
-#[must_use] 
+#[must_use]
 pub fn resize_hint() -> ResizeHint {
     let (min_w, min_h) = min_editor_size();
     let (max_w, max_h) = max_editor_size();
@@ -313,8 +313,7 @@ fn AppShell() -> Element {
     let profile_count = PROFILE_LABELS.len();
     // One rail entry per compressor family, badged with the active unit.
     let items = crate::faces::rail_items(profile_idx);
-    let active_category = comp_profiles::category_of(profile_id)
-        .map_or(0, |(c, _)| c);
+    let active_category = comp_profiles::category_of(profile_id).map_or(0, |(c, _)| c);
 
     rsx! {
         document::Style { {base_css} }
@@ -671,7 +670,7 @@ fn StageRow(
 
 /// Re-exported so callers (and tests) can resolve a profile index to its skin
 /// the same way `AppShell` does.
-#[must_use] 
+#[must_use]
 pub fn skin_for_profile_index(index: usize) -> ProfileSkin {
     profile_skin(profile_id_for_index(index))
 }

@@ -12,7 +12,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 use reverb_dsp::algorithm::ReverbAlgorithm;
 use reverb_dsp::algorithms::convolution::Convolution;
 

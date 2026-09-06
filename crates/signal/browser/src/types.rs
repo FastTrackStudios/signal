@@ -1,9 +1,9 @@
 //! Type definitions for the collection browser.
 
+use signal_proto::SignalChain;
 use signal_proto::metadata::Metadata as MetadataModel;
 use signal_proto::rig::RigType;
 use signal_proto::tagging::{TagCategory, TagSet};
-use signal_proto::SignalChain;
 
 // region: --- Navigation & Sort
 
@@ -25,7 +25,7 @@ impl NavCategory {
         Self::Blocks,
     ];
 
-    #[must_use] 
+    #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
             Self::Presets => "Presets",
@@ -48,7 +48,7 @@ pub enum SortMode {
 impl SortMode {
     pub const ALL: &[Self] = &[Self::Name, Self::NameDesc, Self::Variants, Self::BlockType];
 
-    #[must_use] 
+    #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
             Self::Name => "A \u{2192} Z",
@@ -58,7 +58,7 @@ impl SortMode {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn value(self) -> &'static str {
         match self {
             Self::Name => "name",
@@ -68,7 +68,7 @@ impl SortMode {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn from_value(s: &str) -> Self {
         match s {
             "name_desc" => Self::NameDesc,

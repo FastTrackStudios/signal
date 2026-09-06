@@ -1259,11 +1259,7 @@ thread_local! {
 /// CPU. The branch is predictable (almost always false) and cheap.
 #[inline(always)]
 fn flush_denormal(x: f32) -> f32 {
-    if x.abs() < 1.0e-30 {
-        0.0
-    } else {
-        x
-    }
+    if x.abs() < 1.0e-30 { 0.0 } else { x }
 }
 
 // ── Voice pool ────────────────────────────────────────────────────────────────
@@ -1953,10 +1949,11 @@ mod tests {
 
         assert_eq!(pool.stolen_count(), 1);
         assert_eq!(pool.active_count(), MAX_VOICES + 1);
-        assert!(pool
-            .voices
-            .iter()
-            .any(|v| matches!(v.state, VoiceState::Releasing { .. })));
+        assert!(
+            pool.voices
+                .iter()
+                .any(|v| matches!(v.state, VoiceState::Releasing { .. }))
+        );
     }
 
     #[test]
@@ -1970,10 +1967,11 @@ mod tests {
         assert_eq!(pool.max_voices(), 2);
         assert_eq!(pool.stolen_count(), 1);
         assert_eq!(pool.active_count(), 3);
-        assert!(pool
-            .voices
-            .iter()
-            .any(|v| matches!(v.state, VoiceState::Releasing { .. })));
+        assert!(
+            pool.voices
+                .iter()
+                .any(|v| matches!(v.state, VoiceState::Releasing { .. }))
+        );
     }
 
     #[test]
@@ -2077,10 +2075,11 @@ mod tests {
         for v in pool.voices_mut() {
             v.note_off();
         }
-        assert!(pool
-            .voices_mut()
-            .iter()
-            .all(|v| matches!(v.state, VoiceState::Releasing { .. })));
+        assert!(
+            pool.voices_mut()
+                .iter()
+                .all(|v| matches!(v.state, VoiceState::Releasing { .. }))
+        );
 
         // The player is still holding 60 (its key is down); 64 was released.
         let restored = pool.repedal_held(&|n| n == 60);
@@ -2242,7 +2241,7 @@ mod tests {
         let sr = 48_000;
         let data = click_tone(sr, sr as usize / 10, 220.0, 0.5, 0.4); // samples in [0.1, 0.9]
         let declick = sr as usize * 6 / 1000; // 6 ms
-                                              // Start mid-sample, as a prefired legato transition does (start_offset).
+        // Start mid-sample, as a prefired legato transition does (start_offset).
         let mut declicked = Voice::with_rate(Arc::clone(&data), 60, VoiceKind::Legato, 1.0, 1.0, 8)
             .with_sample_window(1000, None)
             .with_attack(declick);

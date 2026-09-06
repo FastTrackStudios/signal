@@ -145,7 +145,7 @@ impl LayerDef {
     }
 
     /// Every module's patch, module A first, padded to the quad.
-    #[must_use] 
+    #[must_use]
     pub fn module_patches(&self) -> Vec<String> {
         // Exactly what the layer declares — a patch that uses two modules
         // gets two, and more can be added at any time.
@@ -155,7 +155,7 @@ impl LayerDef {
     }
 
     /// Restrict this lane to a key window (a Nord-style split).
-    #[must_use] 
+    #[must_use]
     pub const fn split(mut self, lo: u8, hi: u8) -> Self {
         self.key_lo = lo;
         self.key_hi = hi;
@@ -163,7 +163,7 @@ impl LayerDef {
     }
 
     /// Whether the lane covers the whole keyboard.
-    #[must_use] 
+    #[must_use]
     pub const fn is_full_range(&self) -> bool {
         self.key_lo == 0 && self.key_hi == 127
     }
@@ -209,13 +209,13 @@ impl KeysProfile {
     }
 
     /// Find an engine by name.
-    #[must_use] 
+    #[must_use]
     pub fn engine(&self, name: &str) -> Option<&EngineDef> {
         self.engines.iter().find(|e| e.name == name)
     }
 
     /// Find a layer (and its engine) by layer name.
-    #[must_use] 
+    #[must_use]
     pub fn layer(&self, name: &str) -> Option<(&EngineDef, &LayerDef)> {
         self.engines
             .iter()
@@ -241,7 +241,7 @@ impl KeysProfile {
     }
 
     /// The current engine order, left to right.
-    #[must_use] 
+    #[must_use]
     pub fn engine_order(&self) -> Vec<String> {
         self.engines.iter().map(|e| e.name.clone()).collect()
     }
@@ -313,7 +313,7 @@ impl KeysProfile {
     }
 
     /// Every layer name, in engine order — the mixer's column order.
-    #[must_use] 
+    #[must_use]
     pub fn layer_names(&self) -> Vec<String> {
         self.engines
             .iter()
@@ -442,7 +442,7 @@ impl KeysProfile {
     }
 
     /// Scene lookup for a stack index.
-    #[must_use] 
+    #[must_use]
     pub fn stack(&self, index: usize) -> Option<&KeysStackDef> {
         self.stacks.get(index)
     }
@@ -457,7 +457,7 @@ impl KeysProfile {
 /// - **Energy** — full band: piano + EP + bright synth + pad, organ ready.
 /// - **Hooks** — the signature line: lead synth on top of the piano bed.
 /// - **Underscore** — pad and swell only, under speaking / prayer.
-#[must_use] 
+#[must_use]
 pub fn worship_profile() -> KeysProfile {
     KeysProfile {
         name: "Worship".into(),

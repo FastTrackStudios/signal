@@ -25,9 +25,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::{
+    SamplerError,
     midi::{nearest_grid_note, note_name_to_midi},
     spec::LibrarySpec,
-    SamplerError,
 };
 
 // ── Sample key ────────────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ fn group_hash(section: &str, articulation: &str, mic: &str, note: u8) -> u64 {
 
 impl SampleMap {
     /// Build an empty map. Useful in tests.
-    #[must_use] 
+    #[must_use]
     pub fn empty() -> Self {
         Self::from_map(HashMap::new())
     }
@@ -155,7 +155,9 @@ impl SampleMap {
                     && g.articulation == key.articulation
                     && g.mic == key.mic
                     && g.note == key.note
-            }) { i } else {
+            }) {
+                i
+            } else {
                 groups.push(NoteGroup {
                     section: key.section.clone(),
                     articulation: key.articulation.clone(),
@@ -225,7 +227,7 @@ impl SampleMap {
     }
 
     /// Total number of sample files indexed.
-    #[must_use] 
+    #[must_use]
     pub fn total(&self) -> usize {
         self.total
     }
@@ -236,7 +238,7 @@ impl SampleMap {
     }
 
     /// Look up the exact path for a sample key.
-    #[must_use] 
+    #[must_use]
     pub fn get(&self, key: &SampleKey) -> Option<&PathBuf> {
         self.map.get(key)
     }
@@ -246,7 +248,7 @@ impl SampleMap {
     ///
     /// If `target_note` is not directly sampled, the nearest grid note is
     /// used and the engine is expected to transpose the sample at playback.
-    #[must_use] 
+    #[must_use]
     pub fn resolve(
         &self,
         spec: &LibrarySpec,
@@ -362,7 +364,7 @@ impl SampleMap {
     /// `["rel", "relm", "relsl"]` for a release, or `["", "2"]` for a body
     /// that ships a second hard-hit layer. Empty when nothing matches (the
     /// caller then falls back to a single nearest-match voice).
-    #[must_use] 
+    #[must_use]
     pub fn layer_directions(
         &self,
         section: &str,
@@ -389,7 +391,7 @@ impl SampleMap {
     }
 
     /// All (`section_id`, `articulation_id`) pairs present in the map.
-    #[must_use] 
+    #[must_use]
     pub fn articulations_present(&self) -> Vec<(String, String)> {
         let mut pairs: Vec<(String, String)> = self
             .map
@@ -467,12 +469,12 @@ fn is_supported_sample_ext(ext: &str) -> bool {
 ///   (Leg / `NVLeg` / Port have direction **before** the note in CSS filenames)
 ///
 /// Returns `None` if the stem cannot be parsed (non-CS file, etc.).
-#[must_use] 
+#[must_use]
 pub fn parse_wav_stem(stem: &str) -> Option<SampleKey> {
     parse_sample_stem(stem)
 }
 
-#[must_use] 
+#[must_use]
 pub fn parse_sample_stem(stem: &str) -> Option<SampleKey> {
     parse_signal_stem(stem)
         .or_else(|| parse_keyscape_c7_stem(stem))
@@ -822,7 +824,8 @@ fn parse_keyscape_loose_stem(stem: &str) -> Option<SampleKey> {
         numeric
             .iter()
             .rev()
-            .find(|(idx, value)| *idx != note_idx && *value <= 127).map_or_else(|| "127".to_string(), |(_, value)| value.to_string())
+            .find(|(idx, value)| *idx != note_idx && *value <= 127)
+            .map_or_else(|| "127".to_string(), |(_, value)| value.to_string())
     });
 
     let articulation = loose_articulation(&tokens, note_idx)?;

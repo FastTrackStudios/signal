@@ -21,7 +21,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = vec![0.0f32; 512 * 2];
     let warm = |rig: &SamplerRig, buf: &mut Vec<f32>| {
         for _ in 0..70 {
-            for s in buf.iter_mut() { *s = 0.0; }
+            for s in buf.iter_mut() {
+                *s = 0.0;
+            }
             let _ = rig.render_offline(buf);
             std::thread::sleep(std::time::Duration::from_millis(8));
         }
@@ -31,7 +33,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (mut pk, mut rms) = (0.0f32, 0.0f64);
         let mut n = 0u64;
         for _ in 0..40 {
-            for s in buf.iter_mut() { *s = 0.0; }
+            for s in buf.iter_mut() {
+                *s = 0.0;
+            }
             let _ = rig.render_offline(buf);
             for &s in buf.iter() {
                 pk = pk.max(s.abs());
@@ -79,12 +83,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut installed = 0;
     for fx in kick_strip.fx_slots() {
-        if let Some(plugin) = mm2fx::build_processor(&fx, f64::from(sr)) {
-            rig.install_mixer_plugin(KIT, FxTarget::Channel(kick_ch), plugin)?;
-            println!("  installed {}", fx.fx_type);
-            installed += 1;
-        } else {
-            println!("  skipped   {}", fx.fx_type);
+        match mm2fx::build_processor(&fx, f64::from(sr)) {
+            Some(plugin) => {
+                rig.install_mixer_plugin(KIT, FxTarget::Channel(kick_ch), plugin)?;
+                println!("  installed {}", fx.fx_type);
+                installed += 1;
+            }
+            _ => {
+                println!("  skipped   {}", fx.fx_type);
+            }
         }
     }
 

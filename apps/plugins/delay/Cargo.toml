@@ -1,7 +1,7 @@
 [package]
 name = "delay-plugin"
 version.workspace = true
-edition = "2021"          # matches the nice-plug plugin stack (level-plugin, tune-plugin)
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "FTS Delay — CLAP/VST3 stereo delay plugin (tape/digital/BBD/... styles, wow/flutter, saturation, ducking) over the delay engine"

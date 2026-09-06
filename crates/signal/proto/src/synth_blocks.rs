@@ -39,12 +39,12 @@ pub struct ParamRange {
 }
 
 impl ParamRange {
-    #[must_use] 
+    #[must_use]
     pub const fn new(min: f32, max: f32, default: f32) -> Self {
         Self { min, max, default }
     }
     /// Unipolar `[0, 1]` with a default.
-    #[must_use] 
+    #[must_use]
     pub const fn unipolar(default: f32) -> Self {
         Self {
             min: 0.0,
@@ -53,7 +53,7 @@ impl ParamRange {
         }
     }
     /// Bipolar `[-1, 1]` with a default.
-    #[must_use] 
+    #[must_use]
     pub const fn bipolar(default: f32) -> Self {
         Self {
             min: -1.0,

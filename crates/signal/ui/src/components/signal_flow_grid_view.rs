@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use signal_proto::BlockType;
 
-use super::grid_model::{BlockWidget, GridBlock, GridJack, SignalFlowGrid, GRID_COLS, GRID_ROWS};
+use super::grid_model::{BlockWidget, GRID_COLS, GRID_ROWS, GridBlock, GridJack, SignalFlowGrid};
 
 use audio_controls::widgets::{CompressorGraph, CompressorParams, GateGraph, GateParams, Knob};
 // EqBand/EqBandShape/EqGraph moved to audiocore-gui in the newer daw stack.
@@ -531,7 +531,7 @@ impl ModuleCategory {
         Self::Utility,
     ];
 
-    #[must_use] 
+    #[must_use]
     pub const fn label(&self) -> &'static str {
         match self {
             Self::All => "All",
@@ -543,7 +543,7 @@ impl ModuleCategory {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn matches(&self, block_type: BlockType) -> bool {
         match self {
             Self::All => true,

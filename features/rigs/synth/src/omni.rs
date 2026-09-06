@@ -90,7 +90,7 @@ fn build_part(name: &str, sources: [Option<String>; 4]) -> Container {
 
 /// The complete Omnisphere 3 Part as a placeholder routing tree. Inspect with
 /// [`Container::dump`].
-#[must_use] 
+#[must_use]
 pub fn omnisphere_preset() -> Container {
     build_part("Omnisphere", [None, None, None, None])
 }
@@ -115,7 +115,7 @@ fn soundsource_spec(relative: &str) -> Option<String> {
 /// The Omnisphere Part with Layers A/B realized by real extracted
 /// soundsources (Dream Piano + CS-80 Strings). `None` on machines without
 /// the extraction — callers register it conditionally.
-#[must_use] 
+#[must_use]
 pub fn omnisphere_soundsource_preset() -> Option<Container> {
     let a = soundsource_spec("Keyboards/Dream Piano/library.styx")?;
     let b = soundsource_spec("Synth Classic/CS-80 Strings/library.styx");
@@ -165,14 +165,16 @@ mod tests {
             .filter(|m| m.block_type == BlockType::Lfo)
             .count();
         assert_eq!(lfos, 8, "8 independent LFOs");
-        assert!(p
-            .modulators
-            .iter()
-            .any(|m| m.block_type == BlockType::ModMatrix));
-        assert!(p
-            .modulators
-            .iter()
-            .any(|m| m.block_type == BlockType::Arpeggiator));
+        assert!(
+            p.modulators
+                .iter()
+                .any(|m| m.block_type == BlockType::ModMatrix)
+        );
+        assert!(
+            p.modulators
+                .iter()
+                .any(|m| m.block_type == BlockType::Arpeggiator)
+        );
         // 12 envelopes: 3 per module × the Part's 4 modules.
         let envs: usize = ["Layer A", "Layer B", "Layer C", "Layer D"]
             .iter()

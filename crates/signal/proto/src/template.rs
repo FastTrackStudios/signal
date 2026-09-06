@@ -146,7 +146,7 @@ impl fmt::Display for InstantiateError {
 impl std::error::Error for InstantiateError {}
 
 impl InstantiateError {
-    #[must_use] 
+    #[must_use]
     pub const fn new(missing: Vec<MissingAssignment>) -> Self {
         Self { missing }
     }
@@ -166,7 +166,7 @@ pub struct TemplateMetadata {
 }
 
 impl TemplateMetadata {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -288,7 +288,7 @@ pub struct SignalChainTemplate {
 }
 
 impl SignalChainTemplate {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self { nodes: Vec::new() }
     }
@@ -313,7 +313,7 @@ impl SignalChainTemplate {
     }
 
     /// Collect missing assignments recursively.
-    #[must_use] 
+    #[must_use]
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         for node in &self.nodes {
@@ -392,7 +392,7 @@ impl ModuleTemplate {
     }
 
     /// Collect missing assignments from all blocks in the chain.
-    #[must_use] 
+    #[must_use]
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         self.chain.missing_assignments()
     }
@@ -437,7 +437,7 @@ impl LayerTemplate {
         self
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         if self.layer_id.is_unassigned() {
@@ -492,7 +492,7 @@ impl EngineTemplate {
         self
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         if self.engine_id.is_unassigned() {
@@ -555,7 +555,7 @@ impl RigTemplate {
         self
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         if self.rig_id.is_unassigned() {
@@ -618,7 +618,7 @@ impl ProfileTemplate {
         self
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         if self.profile_id.is_unassigned() {
@@ -681,7 +681,7 @@ impl SongTemplate {
         self
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn missing_assignments(&self) -> Vec<MissingAssignment> {
         let mut missing = Vec::new();
         if self.song_id.is_unassigned() {
@@ -810,7 +810,7 @@ impl Templateable for crate::Module {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{seed_id, ModuleType};
+    use crate::{ModuleType, seed_id};
 
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 

@@ -15,8 +15,8 @@
 //! scratch buffers); this module holds the routing config, the bus + master
 //! accumulators, and the lock-free peak meters.
 
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use signal_plugin_host::HostedPlugin;
 
@@ -575,7 +575,9 @@ impl DrumMixer {
         backend: FxBackend,
         display_name: String,
     ) -> Result<usize, String> {
-        let Some(chain) = self.chain_mut(target) else { return Err("FX target not found".into()) };
+        let Some(chain) = self.chain_mut(target) else {
+            return Err("FX target not found".into());
+        };
         chain.slots.push(FxSlot {
             backend,
             bypassed: false,
@@ -853,7 +855,11 @@ mod tests {
     use super::*;
 
     fn mm2_like() -> Vec<(String, Vec<String>)> {
-        let mics = |v: &[&str]| v.iter().map(std::string::ToString::to_string).collect::<Vec<_>>();
+        let mics = |v: &[&str]| {
+            v.iter()
+                .map(std::string::ToString::to_string)
+                .collect::<Vec<_>>()
+        };
         vec![
             (
                 "kick".into(),

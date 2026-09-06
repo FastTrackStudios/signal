@@ -53,8 +53,8 @@ use std::sync::{Arc, Mutex};
 use midicore::MidiMonitor;
 
 use daw::service::{FxChainContext, FxChains, ProjectContext, TrackRef, Tracks};
-use daw::standalone::metering::{linear_to_db, Meters};
 use daw::standalone::Standalone;
+use daw::standalone::metering::{Meters, linear_to_db};
 use daw_audio_io::AudioIoPrefs;
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
@@ -62,10 +62,10 @@ use signal_plugin_host::{
 use signal_rig_host::{RigHost, RigProject};
 
 use crate::bank::{PreloadProfile, SamplerBank};
-use crate::engine::cache::{EvictStats, PreloadStats};
 use crate::engine::SampleEngine;
+use crate::engine::cache::{EvictStats, PreloadStats};
 use crate::instrument::SamplerInstrument;
-use crate::mixer::{MixerLayout, FX_PREPARE_BLOCK};
+use crate::mixer::{FX_PREPARE_BLOCK, MixerLayout};
 use crate::stats::AudioStatsSnapshot;
 
 /// Stable identifier for a loaded instrument within the rig (e.g. a piece id
@@ -661,10 +661,13 @@ impl SamplerRig {
     }
 
     pub fn unload_instrument(&self, id: &str) {
-        if let Ok(mut bank) = self.bank().lock() {
-            bank.unload_instrument(id);
-        } else {
-            tracing::warn!("signal-sampler: sampler bank lock poisoned; unload skipped");
+        match self.bank().lock() {
+            Ok(mut bank) => {
+                bank.unload_instrument(id);
+            }
+            _ => {
+                tracing::warn!("signal-sampler: sampler bank lock poisoned; unload skipped");
+            }
         }
     }
 
@@ -689,10 +692,13 @@ impl SamplerRig {
     }
 
     pub fn set_muted(&self, id: &str, muted: bool) {
-        if let Ok(mut bank) = self.bank().lock() {
-            bank.set_muted(id, muted);
-        } else {
-            tracing::warn!("signal-sampler: sampler bank lock poisoned; mute skipped");
+        match self.bank().lock() {
+            Ok(mut bank) => {
+                bank.set_muted(id, muted);
+            }
+            _ => {
+                tracing::warn!("signal-sampler: sampler bank lock poisoned; mute skipped");
+            }
         }
     }
 
@@ -700,10 +706,13 @@ impl SamplerRig {
     /// `None` clears the pin. Without a pin, a multi-articulation zone set fires
     /// every articulation matching the note — pin one to play just sustains.
     pub fn pin_articulation(&self, id: &str, artic: Option<String>) {
-        if let Ok(mut bank) = self.bank().lock() {
-            bank.pin_articulation(id, artic);
-        } else {
-            tracing::warn!("signal-sampler: bank lock poisoned; pin skipped");
+        match self.bank().lock() {
+            Ok(mut bank) => {
+                bank.pin_articulation(id, artic);
+            }
+            _ => {
+                tracing::warn!("signal-sampler: bank lock poisoned; pin skipped");
+            }
         }
     }
 
@@ -973,10 +982,13 @@ impl SamplerRig {
 
     /// Switch an instrument's active microphone position (e.g. `"Mix"`).
     pub fn set_mic(&self, id: &str, mic_id: impl Into<String>) {
-        if let Ok(mut bank) = self.bank().lock() {
-            bank.set_mic(id, mic_id);
-        } else {
-            tracing::warn!("signal-sampler: bank lock poisoned; set_mic skipped");
+        match self.bank().lock() {
+            Ok(mut bank) => {
+                bank.set_mic(id, mic_id);
+            }
+            _ => {
+                tracing::warn!("signal-sampler: bank lock poisoned; set_mic skipped");
+            }
         }
     }
 
@@ -984,10 +996,13 @@ impl SamplerRig {
     /// all. Needed for multi-mic libraries (CSS ships Main + Mix in one zone
     /// set with no `mics` block, so all mics otherwise sound at once).
     pub fn set_solo_mic(&self, id: &str, mic_id: Option<String>) {
-        if let Ok(mut bank) = self.bank().lock() {
-            bank.set_solo_mic(id, mic_id);
-        } else {
-            tracing::warn!("signal-sampler: bank lock poisoned; set_solo_mic skipped");
+        match self.bank().lock() {
+            Ok(mut bank) => {
+                bank.set_solo_mic(id, mic_id);
+            }
+            _ => {
+                tracing::warn!("signal-sampler: bank lock poisoned; set_solo_mic skipped");
+            }
         }
     }
 
@@ -1039,8 +1054,13 @@ impl SamplerRig {
     fn dispatch(&self, msg: midicore::MidiEvent) {
         if let Some((daw, track)) = self.bank_io() {
             daw.push_live_midi(&track, msg);
-        } else if let Ok(mut bank) = self.bank().lock() {
-            apply_midi(&mut bank, &msg);
+        } else {
+            match self.bank().lock() {
+                Ok(mut bank) => {
+                    apply_midi(&mut bank, &msg);
+                }
+                _ => {}
+            }
         }
     }
 
@@ -1055,19 +1075,25 @@ impl SamplerRig {
     /// neither can drive a bank of many instruments that must each answer
     /// independently (a pad grid, where every pad is its own instrument).
     pub fn note_on_instrument(&self, id: &str, note: u8, velocity: u8) {
-        if let Ok(mut bank) = self.bank().lock() {
-            bank.note_on(id, note, velocity);
-        } else {
-            tracing::warn!("signal-sampler: bank lock poisoned; note_on skipped");
+        match self.bank().lock() {
+            Ok(mut bank) => {
+                bank.note_on(id, note, velocity);
+            }
+            _ => {
+                tracing::warn!("signal-sampler: bank lock poisoned; note_on skipped");
+            }
         }
     }
 
     /// The [`note_on_instrument`](Self::note_on_instrument) counterpart.
     pub fn note_off_instrument(&self, id: &str, note: u8, velocity: u8) {
-        if let Ok(mut bank) = self.bank().lock() {
-            bank.note_off_with_velocity(id, note, velocity);
-        } else {
-            tracing::warn!("signal-sampler: bank lock poisoned; note_off skipped");
+        match self.bank().lock() {
+            Ok(mut bank) => {
+                bank.note_off_with_velocity(id, note, velocity);
+            }
+            _ => {
+                tracing::warn!("signal-sampler: bank lock poisoned; note_off skipped");
+            }
         }
     }
 
@@ -1623,7 +1649,11 @@ impl SamplerRig {
         tables.instruments.insert(id.clone(), track.clone());
         tables.order.push(id);
         drop(tables);
-        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tables = self
+            .inner
+            .tracks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(track)
     }
@@ -1672,7 +1702,11 @@ impl SamplerRig {
         };
         tables.buses.insert(bus_id.to_string(), bus.clone());
         drop(tables);
-        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tables = self
+            .inner
+            .tracks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(bus)
     }
@@ -2030,7 +2064,11 @@ impl SamplerRig {
         }
         // Meter indices are compacted on the next load (resize_meters).
         drop(tables);
-        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tables = self
+            .inner
+            .tracks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(())
     }
@@ -2075,7 +2113,11 @@ impl SamplerRig {
         tables.instruments.insert(id.to_string(), track.clone());
         tables.order.push(id.to_string());
         drop(tables);
-        let tables = self.inner.tracks.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tables = self
+            .inner
+            .tracks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.resize_meters(&tables);
         Ok(track)
     }
@@ -2348,7 +2390,11 @@ mod tests {
 
     /// A 2-piece kit (kick, snare), each with a close mic + an Overhead bus mic.
     fn kit_layout() -> MixerLayout {
-        let mics = |v: &[&str]| v.iter().map(std::string::ToString::to_string).collect::<Vec<_>>();
+        let mics = |v: &[&str]| {
+            v.iter()
+                .map(std::string::ToString::to_string)
+                .collect::<Vec<_>>()
+        };
         let engine_mics = vec![
             ("kick".to_string(), mics(&["In 1", "Overhead"])),
             ("snare".to_string(), mics(&["In 1", "Overhead"])),

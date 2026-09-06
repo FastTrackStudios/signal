@@ -113,7 +113,9 @@ fn spectrum(buf: &[f32]) -> Vec<f64> {
         pos += FFT / 2;
     }
     let n = used.max(1) as f64;
-    for m in &mut mag { *m /= n; }
+    for m in &mut mag {
+        *m /= n;
+    }
     mag
 }
 

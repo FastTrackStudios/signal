@@ -7,7 +7,7 @@
 //! ```
 
 use signal_sampler::rig_node::{Container, RigNode};
-use signal_synth::omni_import::{load_patch_file, SoundsourceIndex};
+use signal_synth::omni_import::{SoundsourceIndex, load_patch_file};
 
 fn walk<'a>(c: &'a Container, out: &mut Vec<&'a Container>) {
     out.push(c);
@@ -89,9 +89,19 @@ fn dump_raw(path: &std::path::Path) {
     for (i, l) in p.layers.iter().enumerate() {
         println!(
             "  L{i}: ss={:?} lib={:?} lvl={:.3} filt={}({:.3}/{:.3}) act={} uni={}x{:.2} amp={:?} fenv={:?} fdepth={:.3} fx={:?}",
-            l.soundsource, l.ss_library, l.level, l.filter_name, l.filter_freq, l.filter_res,
-            l.filter_active, l.unison_count, l.unison_detune, l.amp_env, l.filter_env,
-            l.filter_env_depth, l.fx,
+            l.soundsource,
+            l.ss_library,
+            l.level,
+            l.filter_name,
+            l.filter_freq,
+            l.filter_res,
+            l.filter_active,
+            l.unison_count,
+            l.unison_detune,
+            l.amp_env,
+            l.filter_env,
+            l.filter_env_depth,
+            l.fx,
         );
     }
     println!("  lfos: {:?}", p.lfos);

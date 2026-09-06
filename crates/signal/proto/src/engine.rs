@@ -6,12 +6,12 @@
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
+use crate::EngineType;
 use crate::fx_send::FxSend;
 use crate::layer::{LayerId, LayerSnapshotId};
 use crate::metadata::Metadata;
-use crate::override_policy::{validate_overrides, OverridePolicyError, ScenePolicy};
+use crate::override_policy::{OverridePolicyError, ScenePolicy, validate_overrides};
 use crate::overrides::Override;
-use crate::EngineType;
 
 // ─── IDs ────────────────────────────────────────────────────────
 
@@ -174,19 +174,19 @@ impl Engine {
         Some(self.variants.remove(pos))
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_variant(&self) -> Option<&EngineScene> {
         self.variants
             .iter()
             .find(|v| v.id == self.default_variant_id)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn variant(&self, id: &EngineSceneId) -> Option<&EngineScene> {
         self.variants.iter().find(|v| &v.id == id)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_layer_type_compatible(&self, layer_type: EngineType) -> bool {
         self.engine_type == layer_type
     }

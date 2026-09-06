@@ -97,7 +97,6 @@ fn scale_param(val: f64, index: usize) -> f64 {
         // EARLY_DIFFUSE_FEEDBACK, TAP_DECAY, LATE_DIFFUSE_FEEDBACK,
         // EQ_CROSS_SEED. Listed here because "which params are unscaled" is
         // not otherwise readable from this table.
-
         param::SEED_TAP
         | param::SEED_DIFFUSION
         | param::SEED_DELAY
@@ -114,8 +113,12 @@ fn scale_param(val: f64, index: usize) -> f64 {
 
         param::EARLY_DIFFUSE_COUNT | param::LATE_LINE_COUNT => (1.0 + val * 11.999).floor(),
         param::EARLY_DIFFUSE_DELAY | param::LATE_DIFFUSE_DELAY => 10.0 + val * 90.0,
-        param::EARLY_DIFFUSE_MOD_AMOUNT | param::LATE_LINE_MOD_AMOUNT | param::LATE_DIFFUSE_MOD_AMOUNT => val * 2.5,
-        param::EARLY_DIFFUSE_MOD_RATE | param::LATE_LINE_MOD_RATE | param::LATE_DIFFUSE_MOD_RATE => resp2dec(val) * 5.0,
+        param::EARLY_DIFFUSE_MOD_AMOUNT
+        | param::LATE_LINE_MOD_AMOUNT
+        | param::LATE_DIFFUSE_MOD_AMOUNT => val * 2.5,
+        param::EARLY_DIFFUSE_MOD_RATE
+        | param::LATE_LINE_MOD_RATE
+        | param::LATE_DIFFUSE_MOD_RATE => resp2dec(val) * 5.0,
 
         param::LATE_DIFFUSE_COUNT => (1.0 + val * 7.999).floor(),
         param::LATE_LINE_SIZE => 20.0 + resp2dec(val) * 980.0,

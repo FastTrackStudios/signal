@@ -4,11 +4,13 @@
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let root = std::env::args()
-        .nth(1).map_or_else(|| {
+    let root = std::env::args().nth(1).map_or_else(
+        || {
             PathBuf::from(std::env::var("HOME").unwrap_or_default())
                 .join(".config/signal/rig/models")
-        }, PathBuf::from);
+        },
+        PathBuf::from,
+    );
     let t0 = std::time::Instant::now();
     let (dir, probed, skipped) = signal_nam::space::build(&root)?;
     println!(

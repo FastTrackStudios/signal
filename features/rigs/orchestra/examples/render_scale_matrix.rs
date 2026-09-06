@@ -14,10 +14,10 @@
 use std::io::Write as _;
 use std::path::PathBuf;
 
-use signal_orchestra::timing::{mix_click, render_click, CountIn, COUNT_IN_QN};
-use signal_orchestra::{load_strings, CSS_CONFIG, CSS_ROOT};
-use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
+use signal_orchestra::timing::{COUNT_IN_QN, CountIn, mix_click, render_click};
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
 
 const SR: u32 = 48_000;
 const ID: &str = "strings_1v";
@@ -87,7 +87,8 @@ fn write_wav(path: &std::path::Path, samples: &[f32]) -> eyre::Result<()> {
 
 fn main() -> eyre::Result<()> {
     // The owner's chosen lane.
-    std::env::set_var("SIGNAL_ARRIVAL_SEMANTICS", "kontakt");
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::set_var("SIGNAL_ARRIVAL_SEMANTICS", "kontakt") };
 
     let out = PathBuf::from(
         std::env::args()
@@ -172,12 +173,18 @@ fn main() -> eyre::Result<()> {
             let emitted = res
                 .emitted_markers
                 .iter()
-                .find(|m| m.note == t.to_note && (m.frame as i64 - grid).abs() < (i64::from(SR) / 2)).map_or_else(|| "  (none)".into(), |m| {
-                    format!(
-                        "{:+7.1}ms",
-                        (m.frame as i64 - grid) as f64 * 1000.0 / f64::from(SR)
-                    )
-                });
+                .find(|m| {
+                    m.note == t.to_note && (m.frame as i64 - grid).abs() < (i64::from(SR) / 2)
+                })
+                .map_or_else(
+                    || "  (none)".into(),
+                    |m| {
+                        format!(
+                            "{:+7.1}ms",
+                            (m.frame as i64 - grid) as f64 * 1000.0 / f64::from(SR)
+                        )
+                    },
+                );
             let line = format!(
                 "  pos {} {:>3}→{:<3} {dir} predicted {:+7.1}ms emitted {emitted}",
                 i + 2,

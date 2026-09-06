@@ -83,7 +83,7 @@ pub struct MacroRecorder {
 
 impl MacroRecorder {
     /// Create a new recorder in idle state.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(RecordingState::Idle)),
@@ -94,7 +94,10 @@ impl MacroRecorder {
     /// Clears any previous recording.
     pub fn start(&self) {
         let now = current_time_ms();
-        let mut state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *state = RecordingState::Recording {
             start_time_ms: now,
             records: Vec::new(),
@@ -105,7 +108,10 @@ impl MacroRecorder {
     /// No-op if not recording.
     pub fn record(&self, knob_id: String, value: f32) {
         let now = current_time_ms();
-        let mut state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         if let RecordingState::Recording {
             start_time_ms,
@@ -125,7 +131,10 @@ impl MacroRecorder {
     /// Returns empty vec if not recording.
     #[must_use]
     pub fn stop(&self) -> Vec<MacroRecord> {
-        let mut state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match &*state {
             RecordingState::Recording { records, .. } => {
                 let captured = records.clone();
@@ -139,7 +148,10 @@ impl MacroRecorder {
     /// Get current recording state without stopping.
     #[must_use]
     pub fn peek(&self) -> Vec<MacroRecord> {
-        let state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match &*state {
             RecordingState::Recording { records, .. } => records.clone(),
             RecordingState::Idle => Vec::new(),
@@ -149,14 +161,20 @@ impl MacroRecorder {
     /// Check if currently recording.
     #[must_use]
     pub fn is_recording(&self) -> bool {
-        let state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         matches!(&*state, RecordingState::Recording { .. })
     }
 
     /// Get the number of recorded changes without stopping.
     #[must_use]
     pub fn record_count(&self) -> usize {
-        let state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match &*state {
             RecordingState::Recording { records, .. } => records.len(),
             RecordingState::Idle => 0,
@@ -168,7 +186,10 @@ impl MacroRecorder {
     #[must_use]
     pub fn elapsed_ms(&self) -> Option<u64> {
         let now = current_time_ms();
-        let state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match &*state {
             RecordingState::Recording { start_time_ms, .. } => {
                 Some(now.saturating_sub(*start_time_ms))
@@ -182,7 +203,10 @@ impl MacroRecorder {
     #[must_use]
     pub fn stats(&self) -> (usize, u64, Vec<String>) {
         let now = current_time_ms();
-        let state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         match &*state {
             RecordingState::Recording {

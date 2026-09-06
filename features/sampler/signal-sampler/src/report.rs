@@ -12,12 +12,12 @@
 
 use std::path::Path;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
+use crate::SamplerError;
 use crate::engine::trace::{RenderTrace, TraceKind};
 use crate::engine::{EmittedMarker, LegatoFireEvent};
 use crate::spec::ZoneSpec;
-use crate::SamplerError;
 
 /// Min/max peak pairs over `block`-frame windows of an interleaved buffer,
 /// mixed to mono (same shape as daw-proto's `TakePeakData`; reused by the

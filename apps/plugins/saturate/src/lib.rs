@@ -23,8 +23,8 @@
 // `audiocore_core::prelude` re-exports nice-plug's, plus the Dioxus editor
 // pieces — one import rather than two that overlap.
 use audiocore_core::prelude::*;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use saturate::digital::DigitalStage;
 use saturate::emphasis::EmphasisEq;

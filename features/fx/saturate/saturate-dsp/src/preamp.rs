@@ -46,7 +46,7 @@ pub enum SideShaper {
 }
 
 impl SideShaper {
-    #[must_use] 
+    #[must_use]
     pub const fn from_index(idx: u32) -> Self {
         match idx {
             1 => Self::OpAmp,
@@ -60,7 +60,7 @@ impl SideShaper {
 
     /// Static transfer (stateless): input in shaper units.
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn shape(self, x: f32) -> f32 {
         match self {
             Self::Clean => x,
@@ -206,7 +206,7 @@ pub struct ClassAPreamp {
 }
 
 impl ClassAPreamp {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f32) -> Self {
         let mut p = Self {
             drive: 1.0,
@@ -264,7 +264,7 @@ impl ClassAPreamp {
         self.sag_coeff = x / (1.0 + x);
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn sag_ms(&self) -> f32 {
         self.sag_ms
     }
@@ -298,7 +298,7 @@ impl ClassAPreamp {
         );
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn tilt_db(&self) -> f32 {
         self.tilt_db
     }
@@ -373,7 +373,7 @@ impl ClassAPreamp {
     /// single transfer curve to draw. Everything a panel *can* draw is
     /// here, and it is the same arithmetic `process` runs.
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn transfer(&self, x: f32) -> f32 {
         let v = self.deadband(x * self.drive) + self.q_point;
         self.shape_side(v) - self.shape_side(self.q_point)
@@ -434,7 +434,7 @@ impl ClassAPreamp {
     /// The makeup as a plain multiplier — what the display has to divide by
     /// to draw the curve the listener will actually hear.
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn makeup_gain(&self) -> f32 {
         match self.makeup {
             Makeup::InverseDrive => 1.0 / self.drive.max(1.0e-3),

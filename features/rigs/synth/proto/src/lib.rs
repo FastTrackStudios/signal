@@ -270,7 +270,7 @@ pub struct SynthGlobals {
 
 impl SynthGlobals {
     /// The neutral state — every control at its no-effect value.
-    #[must_use] 
+    #[must_use]
     pub const fn neutral() -> Self {
         Self {
             vibrato_rate: 0.0,

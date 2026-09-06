@@ -44,7 +44,6 @@
 // clippy.toml's disallowed-methods list (locks, env, sleep) are real bugs here
 // even though they are allowed workspace-wide off the audio thread.
 #![deny(clippy::disallowed_methods)]
-
 // ── TEMPORARY: DSP rewrite pending ───────────────────────────────────────
 // 11 findings in this crate, held under `expect` rather than fixed one by one.
 //
@@ -162,7 +161,7 @@ impl Analysis {
     }
 
     /// The strongest hit in a window, if any — "was there a hit here?"
-    #[must_use] 
+    #[must_use]
     pub fn strongest_between(&self, from: f64, to: f64) -> Option<&Hit> {
         self.hits
             .iter()
@@ -196,7 +195,7 @@ pub struct Config {
 }
 
 impl Config {
-    #[must_use] 
+    #[must_use]
     pub const fn for_rate(sample_rate: f64) -> Self {
         Self {
             sample_rate,
@@ -213,7 +212,7 @@ impl Config {
 ///
 /// Stereo should be summed to mono first: hits are not a stereo
 /// phenomenon, and summing halves the work.
-#[must_use] 
+#[must_use]
 pub fn analyze(samples: &[f32], config: &Config) -> Analysis {
     let frame_rate = config.sample_rate / config.hop_size as f64;
 
@@ -477,7 +476,11 @@ impl Biquad {
         let a0 = 1.0 + alpha;
         let (b0, b1, b2) = match shape {
             Shape::LowPass => ((1.0 - cos) / 2.0, 1.0 - cos, (1.0 - cos) / 2.0),
-            Shape::HighPass => (f64::midpoint(1.0, cos), -(1.0 + cos), f64::midpoint(1.0, cos)),
+            Shape::HighPass => (
+                f64::midpoint(1.0, cos),
+                -(1.0 + cos),
+                f64::midpoint(1.0, cos),
+            ),
             Shape::BandPass => (alpha, 0.0, -alpha),
         };
         Self {
@@ -494,7 +497,14 @@ impl Biquad {
     }
 
     fn tick(&mut self, x: f64) -> f64 {
-        let y = self.a2.mul_add(-self.y2, self.a1.mul_add(-self.y1, self.b2.mul_add(self.x2, self.b0.mul_add(x, self.b1 * self.x1))));
+        let y = self.a2.mul_add(
+            -self.y2,
+            self.a1.mul_add(
+                -self.y1,
+                self.b2
+                    .mul_add(self.x2, self.b0.mul_add(x, self.b1 * self.x1)),
+            ),
+        );
         self.x2 = self.x1;
         self.x1 = x;
         self.y2 = self.y1;

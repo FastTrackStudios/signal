@@ -27,14 +27,14 @@ fn tokens(name: &str) -> Vec<String> {
 }
 
 /// Find the MM2 strip whose name matches `target` (token-set equality).
-#[must_use] 
+#[must_use]
 pub fn match_strip<'a>(mixer: &'a Mixer, target: &str) -> Option<&'a Strip> {
     let want = tokens(target);
     mixer.strips.iter().find(|s| tokens(&s.name) == want)
 }
 
 /// Linear level → dB (MM2 `level` is a linear fader value).
-#[must_use] 
+#[must_use]
 pub fn level_to_db(level: f32) -> f32 {
     if level > 0.0 {
         20.0 * level.log10()

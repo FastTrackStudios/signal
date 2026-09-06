@@ -12,8 +12,8 @@
 //! Gapless switching: `load()` → `activate()` → old Active becomes Tailing →
 //! `cleanup_tails()` reclaims silent instances.
 
-use signal_proto::module_type::ModuleType;
 use signal_proto::ModuleSnapshot;
+use signal_proto::module_type::ModuleType;
 
 use super::error::EngineError;
 use super::target::ModuleTarget;
@@ -23,7 +23,7 @@ use super::target::ModuleTarget;
 pub struct InstanceHandle(pub u64);
 
 impl InstanceHandle {
-    #[must_use] 
+    #[must_use]
     pub const fn new(id: u64) -> Self {
         Self(id)
     }
@@ -48,7 +48,7 @@ pub enum InstanceState {
 
 impl InstanceState {
     /// Instance has resources allocated (not yet freed).
-    #[must_use] 
+    #[must_use]
     pub const fn is_alive(self) -> bool {
         matches!(
             self,
@@ -57,7 +57,7 @@ impl InstanceState {
     }
 
     /// Instance is producing audio output.
-    #[must_use] 
+    #[must_use]
     pub const fn is_audible(self) -> bool {
         matches!(self, Self::Active | Self::Tailing)
     }

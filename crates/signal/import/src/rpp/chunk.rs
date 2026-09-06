@@ -50,7 +50,8 @@
 
 use base64::Engine;
 
-const B64: base64::engine::general_purpose::GeneralPurpose = base64::engine::general_purpose::STANDARD;
+const B64: base64::engine::general_purpose::GeneralPurpose =
+    base64::engine::general_purpose::STANDARD;
 
 /// REAPER wraps base64 payloads at this many characters per line.
 const WRAP: usize = 128;

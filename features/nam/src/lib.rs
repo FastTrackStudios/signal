@@ -52,10 +52,10 @@ pub use ir::IrMetadata;
 pub use nam_file::{NamFileEntry, NamFileKind, NamMetadata};
 pub use pack::{FileOverride, PackCategory, PackDefinition};
 pub use resolve::{nam_root_from_env, resolve_path, resolve_path_unchecked};
-pub use scanner::{apply_packs, merge_into_catalog, scan_directory, sha256_hex};
+pub use scanner::{apply_packs, merge_into_catalog, scan_directory, scan_one, sha256_hex};
 pub use vst_chunk::{
-    create_default_chunk, decode_chunk, encode_chunk, extract_state_base64, first_base64_segment,
-    rebuild_chunk_with_state, rebuild_clap_chunk_with_state, rewrite_paths, NamVstChunk,
+    NamVstChunk, create_default_chunk, decode_chunk, encode_chunk, extract_state_base64,
+    first_base64_segment, rebuild_chunk_with_state, rebuild_clap_chunk_with_state, rewrite_paths,
 };
 
 /// Errors that can occur in nam-manager operations.
@@ -80,7 +80,7 @@ pub enum NamError {
 
 /// Slugify a string for use as a directory name.
 /// Converts to lowercase, replaces non-alphanumeric chars with hyphens, collapses runs.
-#[must_use] 
+#[must_use]
 pub fn slugify(s: &str) -> String {
     s.to_lowercase()
         .chars()
@@ -482,7 +482,9 @@ pub fn full_rig_models_by_pack(
                 continue;
             }
 
-            let Some(abs_path) = filename_index.get(filename) else { continue };
+            let Some(abs_path) = filename_index.get(filename) else {
+                continue;
+            };
 
             // Tone: prefer per-file override, then pack default, then infer from filename
             let tone = file_override
@@ -557,7 +559,9 @@ pub fn drive_models_by_pack(
 
         let mut models = Vec::new();
         for (filename, file_override) in &pack.files {
-            let Some(abs_path) = filename_index.get(filename) else { continue };
+            let Some(abs_path) = filename_index.get(filename) else {
+                continue;
+            };
 
             let tone = file_override
                 .tone

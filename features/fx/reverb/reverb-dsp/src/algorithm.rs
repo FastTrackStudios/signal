@@ -307,7 +307,6 @@ impl DecayBand {
             }
         }
     }
-
 }
 
 /// The whole curve's decay-rate multiplier at `freq` (bands sum in rate-dB,
@@ -1344,7 +1343,7 @@ impl AlgorithmType {
 /// nearest end rather than producing an out-of-range control value. Callers
 /// that need to know they were clamped should compare against
 /// [`AlgorithmType::t60_range`] first.
-#[must_use] 
+#[must_use]
 pub fn t60_to_decay(t60_s: f64, min_s: f64, max_s: f64) -> f64 {
     let min_s = min_s.max(0.01);
     let max_s = max_s.max(min_s * 1.001);
@@ -1531,7 +1530,7 @@ mod decay_eq_filter_probe {
 
 #[cfg(test)]
 mod decay_eq_localization {
-    use crate::algorithm::{DecayBand, DECAY_BANDS};
+    use crate::algorithm::{DECAY_BANDS, DecayBand};
     use crate::primitives::fdn::{Fdn, MixMatrix};
 
     const SR: f64 = 48_000.0;

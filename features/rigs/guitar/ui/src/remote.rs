@@ -9,9 +9,9 @@
 
 use dioxus::prelude::*;
 
+use signal_guitar_proto::AudioPrefs;
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::RigClient;
-use signal_guitar_proto::AudioPrefs;
 
 use crate::perform::PerformGrid;
 use crate::settings::{AudioSettingsBridge, AudioSettingsModal};
@@ -33,6 +33,10 @@ enum Mode {
     Perform,
     /// Integration layer (DAW sync, external control) — landing here.
     Session,
+    /// The TONE3000 catalog: find a capture, download it, load it as a
+    /// preset. Lives beside the rig rather than behind a file dialog
+    /// because picking an amp is a playing decision, not a filing one.
+    Tones,
 }
 
 /// The remote rig UI. Prop-less: everything arrives via context
@@ -101,17 +105,16 @@ pub fn GuitarRigRemote() -> Element {
         })
     };
 
-    let live_bridge =
-        devices
-            .read()
-            .as_ref()
-            .and_then(std::clone::Clone::clone)
-            .map(|d| AudioSettingsBridge {
-                inputs: d.inputs,
-                outputs: d.outputs,
-                prefs: prefs(),
-                on_save: apply,
-            });
+    let live_bridge = devices
+        .read()
+        .as_ref()
+        .and_then(std::clone::Clone::clone)
+        .map(|d| AudioSettingsBridge {
+            inputs: d.inputs,
+            outputs: d.outputs,
+            prefs: prefs(),
+            on_save: apply,
+        });
 
     let perf = state.perf;
     let blocks = state.blocks;
@@ -124,8 +127,9 @@ pub fn GuitarRigRemote() -> Element {
     // the raw patch name before any footswitch has been pressed.
     let perf_now = perf();
     let active_stack = perf_now.stacks.iter().find(|s| s.is_active);
-    let (lens_bg, lens_fg) = active_stack
-        .map_or(("#27272a", "#e4e4e7"), |s| crate::perform::folder_color(&s.name));
+    let (lens_bg, lens_fg) = active_stack.map_or(("#27272a", "#e4e4e7"), |s| {
+        crate::perform::folder_color(&s.name)
+    });
     let lens_label = match active_stack {
         Some(s) => {
             // Folder-as-main naming: the stack IS the sound; variations
@@ -377,6 +381,7 @@ pub fn GuitarRigRemote() -> Element {
                         (Mode::Routing, "Routing"),
                         (Mode::Control, "Control"),
                         (Mode::Session, "Session"),
+                        (Mode::Tones, "Tones"),
                     ] {
                         button {
                             key: "{label}",
@@ -494,6 +499,28 @@ pub fn GuitarRigRemote() -> Element {
                                 style: "flex: 2 1 0%;",
                                 if mode() == Mode::Routing {
                                     crate::grid::RigGraph { blocks: blocks() }
+                                } else if mode() == Mode::Tones {
+                                    // A downloaded model becomes a preset:
+                                    // the browser hands back a name and the
+                                    // path it landed at on the engine, which
+                                    // is exactly what `add_preset` takes.
+                                    {
+                                        let rig = rig.clone();
+                                        rsx! {
+                                            div { class: "h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card",
+                                                signal_tone3000_ui::ToneBrowser {
+                                                    on_loaded: move |(name, path): (String, String)| {
+                                                        let rig = rig.clone();
+                                                        spawn(async move {
+                                                            if let Some(r) = rig {
+                                                                let _ = r.add_preset(name, path).await;
+                                                            }
+                                                        });
+                                                    },
+                                                }
+                                            }
+                                        }
+                                    }
                                 } else if mode() == Mode::Session {
                                     // The session domain's performance view —
                                     // songs, sections, charts + chords — fed

@@ -6,7 +6,7 @@
 
 use crate::biquad::Coeffs;
 use crate::calibration::{
-    fit_response, CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget,
+    CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget, fit_response,
 };
 use crate::design::{self, FilterType};
 use crate::response::compute_magnitude_response;

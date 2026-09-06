@@ -1,7 +1,7 @@
 [package]
 name = "fts-clap-host"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "fts-clap-host — launch any CLAP plugin's embedded GUI in a window (the REAPER-parity way to iterate on FTS plugin editors)"

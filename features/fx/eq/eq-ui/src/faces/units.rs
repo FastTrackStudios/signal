@@ -972,7 +972,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
 };
 
 /// The panel for a `model` value, if that model has one.
-#[must_use] 
+#[must_use]
 pub fn design_for(model: i32) -> Option<&'static RackDesign> {
     Some(match model {
         1 => &PULTEC,

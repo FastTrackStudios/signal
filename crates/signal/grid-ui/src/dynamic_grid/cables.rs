@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 
 use super::interaction::GridConnection;
-use super::layout::{input_port_pos, output_port_pos, CELL_GAP, CELL_SIZE, GROUP_PAD};
+use super::layout::{CELL_GAP, CELL_SIZE, GROUP_PAD, input_port_pos, output_port_pos};
 use super::types::GridSlot;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -21,7 +21,12 @@ pub struct Cable {
 }
 
 impl Cable {
-    pub(crate) const fn new(from: (f64, f64), to: (f64, f64), color: String, bypassed: bool) -> Self {
+    pub(crate) const fn new(
+        from: (f64, f64),
+        to: (f64, f64),
+        color: String,
+        bypassed: bool,
+    ) -> Self {
         Self {
             from,
             to,
@@ -348,13 +353,19 @@ pub fn resolve_cables(chain: &[GridSlot]) -> Vec<Cable> {
                     let is_wrap = to_pt.0 < from_pt.0 && to_pt.1 > from_pt.1;
 
                     if is_wrap {
-                        let channel_y = (CELL_GAP as f64).mul_add(0.12, (from_mod.max_row as f64).mul_add(step, CELL_SIZE as f64));
+                        let channel_y = (CELL_GAP as f64).mul_add(
+                            0.12,
+                            (from_mod.max_row as f64).mul_add(step, CELL_SIZE as f64),
+                        );
                         let mut c = Cable::new(from_pt, to_pt, color, both_bypassed);
                         c.route_y = Some(channel_y);
                         cables.push(c);
                     } else {
                         let upper_bottom_row = from_mod.max_row.min(to_mod.max_row);
-                        let channel_y = (CELL_GAP as f64).mul_add(0.25, (upper_bottom_row as f64).mul_add(step, CELL_SIZE as f64));
+                        let channel_y = (CELL_GAP as f64).mul_add(
+                            0.25,
+                            (upper_bottom_row as f64).mul_add(step, CELL_SIZE as f64),
+                        );
 
                         cables.push(Cable::routed(
                             from_pt,

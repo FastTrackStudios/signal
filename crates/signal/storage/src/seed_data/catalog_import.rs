@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use signal_proto::catalog::{BlockMetadata, Catalog, SnapshotMetadata};
 use signal_proto::metadata::Metadata;
-use signal_proto::{seed_id, Block, BlockParameter, BlockType, Preset, Snapshot};
+use signal_proto::{Block, BlockParameter, BlockType, Preset, Snapshot, seed_id};
 
 /// Read the catalog from `library_path` and return one `Preset` per NDSP plugin.
 ///
@@ -18,7 +18,7 @@ use signal_proto::{seed_id, Block, BlockParameter, BlockType, Preset, Snapshot};
 /// on disk becomes a `Snapshot` within that collection.
 ///
 /// Returns an empty `Vec` if the catalog directory doesn't exist.
-#[must_use] 
+#[must_use]
 pub fn catalog_block_collections(library_path: &Path) -> Vec<Preset> {
     let catalog_path = library_path.join("catalog.json");
     if !catalog_path.exists() {
@@ -55,7 +55,8 @@ pub fn catalog_block_collections(library_path: &Path) -> Vec<Preset> {
             .and_then(|s| serde_json::from_str(&s).ok());
 
         let plugin_name = block_meta
-            .as_ref().map_or_else(|| plugin.name.clone(), |m| m.name.clone());
+            .as_ref()
+            .map_or_else(|| plugin.name.clone(), |m| m.name.clone());
 
         // Collect all snapshot JSONs recursively
         let snapshots_dir = block_dir.join("snapshots");
@@ -180,7 +181,7 @@ pub fn catalog_block_collections(library_path: &Path) -> Vec<Preset> {
 /// the rfxchain IS the data.
 ///
 /// Returns an empty `Vec` if no rfxchain files are found.
-#[must_use] 
+#[must_use]
 pub fn rfxchain_block_collections(library_path: &Path) -> Vec<Preset> {
     let mut presets = Vec::new();
 
@@ -311,7 +312,9 @@ fn rfxchain_preset_from_dir(
 
 /// Recursively walk a directory collecting `SnapshotMetadata` + parent dir from `*.json` files.
 fn collect_snapshot_metas(dir: &Path, out: &mut Vec<(SnapshotMetadata, PathBuf)>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
 
     for entry in entries.flatten() {
         let path = entry.path();

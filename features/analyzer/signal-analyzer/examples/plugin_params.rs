@@ -35,17 +35,19 @@ const DEFAULT_STEPS: usize = 60;
 
 fn arg(name: &str) -> Option<String> {
     let a: Vec<String> = std::env::args().collect();
-    a.iter().position(|x| x == name).and_then(|i| a.get(i + 1).cloned())
+    a.iter()
+        .position(|x| x == name)
+        .and_then(|i| a.get(i + 1).cloned())
 }
 
 fn main() {
     let Some(path) = arg("--plugin") else {
-        eprintln!(
-            "usage: plugin_params --plugin <path> [--only a,b] [--rust <name>] [--steps n]"
-        );
+        eprintln!("usage: plugin_params --plugin <path> [--only a,b] [--rust <name>] [--steps n]");
         std::process::exit(2);
     };
-    let steps: usize = arg("--steps").and_then(|v| v.parse().ok()).unwrap_or(DEFAULT_STEPS);
+    let steps: usize = arg("--steps")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_STEPS);
     // `--rust` emits an interpolation table for one parameter instead of a
     // human listing, so a measured curve reaches the code without anyone
     // retyping sixty pairs of numbers.
@@ -53,12 +55,15 @@ fn main() {
     let only: Option<Vec<String>> =
         arg("--only").map(|s| s.split(',').map(|p| p.trim().to_lowercase()).collect());
 
-    let mut plugin = if let Ok(Some(mut p)) = HostedPlugin::load(&path) {
-        p.prepare(SR, BLOCK as u32).expect("prepare");
-        p
-    } else {
-        eprintln!("{path}: could not load");
-        std::process::exit(1);
+    let mut plugin = match HostedPlugin::load(&path) {
+        Ok(Some(mut p)) => {
+            p.prepare(SR, BLOCK as u32).expect("prepare");
+            p
+        }
+        _ => {
+            eprintln!("{path}: could not load");
+            std::process::exit(1);
+        }
     };
 
     let all = plugin.params();
@@ -76,7 +81,10 @@ fn main() {
         let samples: Vec<(f64, String)> = (0..=steps)
             .map(|step| {
                 let stored = (p.max - p.min).mul_add(step as f64 / steps as f64, p.min);
-                (stored, plugin.value_to_text(p.id, stored).unwrap_or_default())
+                (
+                    stored,
+                    plugin.value_to_text(p.id, stored).unwrap_or_default(),
+                )
             })
             .collect();
 
@@ -132,7 +140,13 @@ fn emit_rust_table(name: &str, samples: Vec<(f64, String)>) {
 
     let ident: String = name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_uppercase() } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
         .collect();
     println!("/// `{name}`, measured off the plugin with `plugin_params --rust`.");
     if !notes.is_empty() {
@@ -144,7 +158,10 @@ fn emit_rust_table(name: &str, samples: Vec<(f64, String)>) {
     }
     println!("const {ident}_CURVE: [(f64, f64); {}] = [", rows.len());
     for chunk in rows.chunks(4) {
-        let row: Vec<String> = chunk.iter().map(|(x, y)| format!("({x:.4}, {y:.6})")).collect();
+        let row: Vec<String> = chunk
+            .iter()
+            .map(|(x, y)| format!("({x:.4}, {y:.6})"))
+            .collect();
         println!("    {},", row.join(", "));
     }
     println!("];");

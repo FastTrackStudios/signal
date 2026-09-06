@@ -38,7 +38,7 @@ pub struct EnvelopeState {
 }
 
 impl EnvelopeState {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             stage: EnvelopeStage::Idle,
@@ -50,19 +50,19 @@ impl EnvelopeState {
     }
 
     /// Current stage.
-    #[must_use] 
+    #[must_use]
     pub const fn stage(&self) -> EnvelopeStage {
         self.stage
     }
 
     /// Current envelope level [0.0, 1.0].
-    #[must_use] 
+    #[must_use]
     pub const fn level(&self) -> f64 {
         self.level
     }
 
     /// Whether the envelope is producing a non-zero output.
-    #[must_use] 
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.stage != EnvelopeStage::Idle
     }

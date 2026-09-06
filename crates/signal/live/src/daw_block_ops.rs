@@ -20,8 +20,8 @@ use signal_proto::{
     SignalChain, SignalNode, SnapshotId,
 };
 
-use crate::macro_setup::MacroSetupResult;
 use crate::SignalLive;
+use crate::macro_setup::MacroSetupResult;
 use signal_storage::{
     BlockRepo, EngineRepo, LayerRepo, ModuleRepo, ProfileRepo, RackRepo, RigRepo,
     SceneTemplateRepo, SetlistRepo, SongRepo,
@@ -87,7 +87,7 @@ impl ResolvedSignalChain {
     ///
     /// Used by callers that only need a flat list regardless of topology —
     /// e.g., existing tests or simple serial modules.
-    #[must_use] 
+    #[must_use]
     pub fn all_fx_loads(&self) -> Vec<&ResolvedFxLoad> {
         let mut out = Vec::new();
         self.collect_fx_loads(&mut out);
@@ -121,7 +121,7 @@ impl ResolvedModuleLoad {
     /// Flat list of all resolved FX loads in depth-first order.
     ///
     /// Backward-compatible accessor for callers that don't need topology.
-    #[must_use] 
+    #[must_use]
     pub fn fx_loads(&self) -> Vec<&ResolvedFxLoad> {
         self.chain.all_fx_loads()
     }
@@ -131,11 +131,10 @@ impl ResolvedModuleLoad {
 
 /// Extract the raw REAPER plugin name from any item's `source:` metadata tag.
 fn raw_plugin_name(item: &impl HasMetadata) -> Option<String> {
-    item.metadata()
-        .tags
-        .as_slice()
-        .iter()
-        .find_map(|t| t.strip_prefix("source:").map(std::string::ToString::to_string))
+    item.metadata().tags.as_slice().iter().find_map(|t| {
+        t.strip_prefix("source:")
+            .map(std::string::ToString::to_string)
+    })
 }
 
 // ─── Plugin parameter mapping ──────────────────────────────────
@@ -261,7 +260,7 @@ fn map_js_volume_params(block: &Block) -> Block {
     let volume_norm = (level / 2.0).clamp(0.0, 1.0);
 
     Block::from_parameters(vec![
-        BP::new("level", "Level", volume_norm).with_daw_name("Volume")
+        BP::new("level", "Level", volume_norm).with_daw_name("Volume"),
     ])
 }
 
@@ -695,31 +694,34 @@ async fn configure_fx_free(
             match fx.set_state_chunk(data.clone()).await {
                 Ok(()) => {
                     // Re-acquire by index — fallback may have changed the GUID.
-                    if let Ok(Some(reacquired)) = track.fx_chain().by_index(fx_index).await {
-                        fx = reacquired;
-                        eprintln!(
-                            "[signal]   ✓ state chunk applied for '{}' (guid={})",
-                            resolved.display_name,
-                            fx.guid(),
-                        );
-                    } else {
-                        // FX disappeared — fallback corrupted the track chunk.
-                        // Re-add the plugin with default state.
-                        eprintln!(
-                            "[signal]   ✗ FX disappeared after state chunk for '{}', re-adding",
-                            resolved.display_name,
-                        );
-                        fx =
-                            track
-                                .fx_chain()
-                                .add(&resolved.plugin_name)
-                                .await
-                                .map_err(|e| {
-                                    format!(
-                                        "Failed to re-add FX '{}': {e}",
-                                        resolved.display_name
-                                    )
-                                })?;
+                    match track.fx_chain().by_index(fx_index).await {
+                        Ok(Some(reacquired)) => {
+                            fx = reacquired;
+                            eprintln!(
+                                "[signal]   ✓ state chunk applied for '{}' (guid={})",
+                                resolved.display_name,
+                                fx.guid(),
+                            );
+                        }
+                        _ => {
+                            // FX disappeared — fallback corrupted the track chunk.
+                            // Re-add the plugin with default state.
+                            eprintln!(
+                                "[signal]   ✗ FX disappeared after state chunk for '{}', re-adding",
+                                resolved.display_name,
+                            );
+                            fx =
+                                track
+                                    .fx_chain()
+                                    .add(&resolved.plugin_name)
+                                    .await
+                                    .map_err(|e| {
+                                        format!(
+                                            "Failed to re-add FX '{}': {e}",
+                                            resolved.display_name
+                                        )
+                                    })?;
+                        }
                     }
                 }
                 Err(e) => {
@@ -912,7 +914,7 @@ async fn inject_nam_model_state(fx: &daw::rpc::FxHandle, model_path: &str) -> Re
 /// Replaces the base64 state segment in the FX's existing REAPER chunk
 /// with the provided binary data (base64-encoded).
 async fn inject_binary_state(fx: &daw::rpc::FxHandle, binary_state: &[u8]) -> Result<(), String> {
-    use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+    use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 
     let existing = fx
         .state_chunk_encoded()

@@ -3,10 +3,13 @@
 use std::collections::HashMap;
 
 use sea_orm::sea_query::Index;
-use sea_orm::{ActiveModelBehavior, StatementBuilder, QueryTrait, ActiveEnum, EntityTrait, ActiveModelTrait, Set, Iden, ColIdx, IdenStatic, Iterable, QueryFilter, QueryOrder, ColumnTrait};
+use sea_orm::{
+    ActiveEnum, ActiveModelBehavior, ActiveModelTrait, ColIdx, ColumnTrait, EntityTrait, Iden,
+    IdenStatic, Iterable, QueryFilter, QueryOrder, QueryTrait, Set, StatementBuilder,
+};
 use sea_orm::{ConnectionTrait, Schema};
 use signal_proto::{
-    metadata::Metadata, Module, ModulePreset, ModulePresetId, ModuleSnapshot, ModuleSnapshotId,
+    Module, ModulePreset, ModulePresetId, ModuleSnapshot, ModuleSnapshotId, metadata::Metadata,
 };
 
 use crate::entity;
@@ -40,7 +43,7 @@ pub struct ModuleRepoLive {
 }
 
 impl ModuleRepoLive {
-    #[must_use] 
+    #[must_use]
     pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
@@ -409,8 +412,8 @@ impl ModuleRepo for ModuleRepoLive {
 mod tests {
     use super::*;
     use signal_proto::{
-        metadata::Metadata, seed_id, Block, BlockParameter, BlockParameterOverride, BlockType,
-        ModuleBlock, ModuleBlockSource, ModuleType, PresetId, SignalChain, SignalNode,
+        Block, BlockParameter, BlockParameterOverride, BlockType, ModuleBlock, ModuleBlockSource,
+        ModuleType, PresetId, SignalChain, SignalNode, metadata::Metadata, seed_id,
     };
 
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
@@ -795,29 +798,33 @@ mod tests {
             ))),
             SignalNode::Split {
                 lanes: vec![
-                    SignalChain::serial(vec![ModuleBlock::new(
-                        "delay",
-                        "Delay",
-                        BlockType::Delay,
-                        ModuleBlockSource::PresetDefault {
-                            preset_id: PresetId::from_uuid(seed_id("delay-timeline")),
-                            saved_at_version: None,
-                        },
-                    )
-                    .with_overrides(vec![
-                        BlockParameterOverride::new("time", 0.65),
-                        BlockParameterOverride::new("feedback", 0.40),
-                    ])]),
-                    SignalChain::serial(vec![ModuleBlock::new(
-                        "reverb",
-                        "Reverb",
-                        BlockType::Reverb,
-                        ModuleBlockSource::PresetDefault {
-                            preset_id: PresetId::from_uuid(seed_id("reverb-bigsky")),
-                            saved_at_version: None,
-                        },
-                    )
-                    .with_overrides(vec![BlockParameterOverride::new("decay", 0.80)])]),
+                    SignalChain::serial(vec![
+                        ModuleBlock::new(
+                            "delay",
+                            "Delay",
+                            BlockType::Delay,
+                            ModuleBlockSource::PresetDefault {
+                                preset_id: PresetId::from_uuid(seed_id("delay-timeline")),
+                                saved_at_version: None,
+                            },
+                        )
+                        .with_overrides(vec![
+                            BlockParameterOverride::new("time", 0.65),
+                            BlockParameterOverride::new("feedback", 0.40),
+                        ]),
+                    ]),
+                    SignalChain::serial(vec![
+                        ModuleBlock::new(
+                            "reverb",
+                            "Reverb",
+                            BlockType::Reverb,
+                            ModuleBlockSource::PresetDefault {
+                                preset_id: PresetId::from_uuid(seed_id("reverb-bigsky")),
+                                saved_at_version: None,
+                            },
+                        )
+                        .with_overrides(vec![BlockParameterOverride::new("decay", 0.80)]),
+                    ]),
                 ],
             },
             SignalNode::Block(Box::new(ModuleBlock::new(
@@ -996,11 +1003,13 @@ mod tests {
 
         assert!(loaded.metadata().tags.contains("module-preset"));
         assert_eq!(loaded.metadata().description.as_deref(), Some("desc"));
-        assert!(loaded
-            .default_snapshot()
-            .metadata()
-            .tags
-            .contains("module-snapshot"));
+        assert!(
+            loaded
+                .default_snapshot()
+                .metadata()
+                .tags
+                .contains("module-snapshot")
+        );
         assert_eq!(
             loaded.default_snapshot().metadata().notes.as_deref(),
             Some("snapshot")

@@ -7,8 +7,8 @@
 
 use architect::rig::RigBackend as _;
 use architect::{LocalServer, Scope};
-use signal_guitar::proto::rig::{RigClient, RigEvent, RigStreamClient};
 use signal_guitar::GuitarRigBackend;
+use signal_guitar::proto::rig::{RigClient, RigEvent, RigStreamClient};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {

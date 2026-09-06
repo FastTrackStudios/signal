@@ -29,7 +29,7 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
 
     let macro_bank = &props.block.macro_bank;
 
-    let Some(ref bank) = macro_bank else {
+    let Some(bank) = macro_bank else {
         return rsx! {
             div { class: "flex flex-col items-center justify-center h-32 text-center px-4",
                 div { class: "text-zinc-600 text-xs", "No Macros" }

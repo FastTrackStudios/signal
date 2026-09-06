@@ -12,9 +12,9 @@
 use std::path::PathBuf;
 
 use signal_orchestra::timing::{mix_click, render_click};
-use signal_orchestra::{load_strings, render_part_offline, CSS_CONFIG, CSS_ROOT};
-use signal_sampler::document::TempoPoint;
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings, render_part_offline};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::TempoPoint;
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
@@ -118,7 +118,8 @@ fn main() -> eyre::Result<()> {
 
     let prefix = PathBuf::from(prefix);
     let base = prefix
-        .file_name().map_or_else(|| "render".into(), |s| s.to_string_lossy().to_string());
+        .file_name()
+        .map_or_else(|| "render".into(), |s| s.to_string_lossy().to_string());
     let dir = prefix.parent().unwrap_or(std::path::Path::new("."));
     write_wav(&dir.join(format!("{base}_click.wav")), &mix)?;
     write_wav(&dir.join(format!("{base}_dry.wav")), &res.audio)?;

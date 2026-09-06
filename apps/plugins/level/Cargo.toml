@@ -1,7 +1,7 @@
 [package]
 name = "level-plugin"
 version.workspace = true
-edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap)
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "FTS Level — CLAP/VST3 vocal-leveling plugin (riding + gate + de-ess + de-breath) over the level engine"

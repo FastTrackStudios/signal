@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (attack, sustain) = render_window(&rig, &mut buf, 1.3, 0.95, 1.05);
         rig.midi_message(0, 0x80, note, 0);
         let _ = render_window(&rig, &mut buf, 0.8, 0.0, 0.1); // let the tail die
-                                                              // Audible at 1 s = still ≥1% of the attack and above the noise floor.
+        // Audible at 1 s = still ≥1% of the attack and above the noise floor.
         let ok = sustain >= 0.002 && sustain >= 0.01 * attack;
         if ok {
             alive += 1;

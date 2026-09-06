@@ -28,7 +28,7 @@ impl EasingCurve {
     /// Apply the easing function to a normalized time value `t` in `[0.0, 1.0]`.
     ///
     /// Returns a normalized output in `[0.0, 1.0]` representing the eased position.
-    #[must_use] 
+    #[must_use]
     pub fn apply(self, t: f64) -> f64 {
         let t = t.clamp(0.0, 1.0);
         match self {
@@ -70,7 +70,7 @@ impl EasingCurve {
     ];
 
     /// Human-readable display name.
-    #[must_use] 
+    #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Linear => "Linear",
@@ -85,7 +85,7 @@ impl EasingCurve {
 }
 
 /// Linearly interpolate between two values using an eased `t`.
-#[must_use] 
+#[must_use]
 pub fn lerp_eased(from: f64, to: f64, t: f64, curve: EasingCurve) -> f64 {
     let eased = curve.apply(t);
     (to - from).mul_add(eased, from)

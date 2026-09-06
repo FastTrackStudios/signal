@@ -299,8 +299,7 @@ impl Detector {
                     // plugin only gives up a decibel or so, and most of the
                     // library's dynamic bands are band-limited enough to sit
                     // near that edge.
-                    let learned =
-                        AUTO_TRACKING.mul_add(tracking, (1.0 - AUTO_TRACKING) * absolute);
+                    let learned = AUTO_TRACKING.mul_add(tracking, (1.0 - AUTO_TRACKING) * absolute);
                     // A cold band sits a little SHY of where it will end up —
                     // the plugin walks up into its engagement, it does not
                     // fall back into it. So the handover is a threshold that
@@ -330,7 +329,9 @@ impl Detector {
             //
             // The knob stays an offset around it, which is how Pro-Q's reads.
             return (
-                self.params.threshold_db.mul_add(0.25, AUTO_FULL_RANGE_AT_DB - self.params.span_db),
+                self.params
+                    .threshold_db
+                    .mul_add(0.25, AUTO_FULL_RANGE_AT_DB - self.params.span_db),
                 self.params.knee_db,
             );
         }
@@ -412,11 +413,16 @@ impl Detector {
         self.ar_state += (drive - self.ar_state) * coeff;
 
         // Punch variant: release-tracked peak hold, then attack-smoothed.
-        self.hold_state = self.hold_state.mul_add(-self.release_coeff, self.hold_state).max(drive);
+        self.hold_state = self
+            .hold_state
+            .mul_add(-self.release_coeff, self.hold_state)
+            .max(drive);
         let punched = (self.hold_state - self.ar_state).mul_add(self.attack_coeff, self.ar_state);
 
         let s = self.params.smooth.clamp(0.0, 1.0);
-        (punched - self.ar_state).mul_add(s, self.ar_state).clamp(0.0, 1.0)
+        (punched - self.ar_state)
+            .mul_add(s, self.ar_state)
+            .clamp(0.0, 1.0)
     }
 
     pub fn reset(&mut self) {
@@ -573,7 +579,10 @@ mod tests {
         };
         let buried = run(0.5);
         let dominant = run(0.1);
-        assert!(buried < 0.05, "band buried in the mix must not trigger ({buried})");
+        assert!(
+            buried < 0.05,
+            "band buried in the mix must not trigger ({buried})"
+        );
         // 6 dB over threshold across a 12 dB span is half travel.
         assert!(
             (dominant - 0.5).abs() < 0.15,

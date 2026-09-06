@@ -8,8 +8,8 @@
 
 use atomic_float::AtomicF32;
 use audiocore_core::prelude::*;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 /// Samples kept in the waveform history ring (one per processed block —
 /// ~2.7 s at 512-sample blocks / 48 kHz).
@@ -40,7 +40,7 @@ impl Default for WaveRing {
 }
 
 impl WaveRing {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             buf: std::array::from_fn(|_| AtomicF32::new(0.0)),
@@ -93,7 +93,7 @@ impl Default for HitRing {
 }
 
 impl HitRing {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             buf: std::array::from_fn(|_| AtomicU64::new(0)),

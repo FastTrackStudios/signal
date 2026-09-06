@@ -3,14 +3,14 @@
 //! Each `fetch_col*` function queries the `Signal` for the
 //! appropriate domain entities and maps them into `ColumnItem` rows.
 
+use signal::Signal;
 use signal::layer::Layer;
 use signal::rig::RigType;
 use signal::tagging::{StructuredTag, TagCategory, TagSet};
 use signal::traits::HasMetadata;
-use signal::Signal;
 use signal::{
-    BlockType, ModuleBlock, ModuleBlockSource, ModulePreset, Preset, SignalChain, SignalNode,
-    ALL_BLOCK_TYPES,
+    ALL_BLOCK_TYPES, BlockType, ModuleBlock, ModuleBlockSource, ModulePreset, Preset, SignalChain,
+    SignalNode,
 };
 use std::collections::HashMap;
 
@@ -200,7 +200,131 @@ pub async fn fetch_col3(
         NavCategory::Presets => {
             let is_layer = col2_tag == Some(LAYER_PRESET_TAG);
             let items = if is_layer {
-                if let Some(layer) = signal.layers().load(col2_id).await.ok().flatten() {
+                match signal.layers().load(col2_id).await.ok().flatten() {
+                    Some(layer) => {
+                        let all_module_presets =
+                            signal.module_presets().list().await.unwrap_or_default();
+                        let block_preset_lookup = build_block_preset_lookup(signal).await;
+                        let mut out = Vec::new();
+                        for v in &layer.variants {
+                            let module_chains = resolve_variant_module_chains(
+                                signal,
+                                v,
+                                &all_module_presets,
+                                &block_preset_lookup,
+                            )
+                            .await;
+                            let ref_count =
+                                v.module_refs.len() + v.block_refs.len() + v.plugin_refs.len();
+                            let meta = v.metadata().clone();
+                            let tags = TagSet::from_tags(&meta.tags);
+                            out.push(ColumnItem {
+                                id: v.id.to_string(),
+                                name: v.name.clone(),
+                                subtitle: Some(format!("{ref_count} module(s)")),
+                                badge: None,
+                                metadata: Some(meta),
+                                structured_tags: tags,
+                                detail: DetailData {
+                                    module_chains,
+                                    ..Default::default()
+                                },
+                                tag: None,
+                                folder: None,
+                            });
+                        }
+                        out
+                    }
+                    _ => Vec::new(),
+                }
+            } else {
+                match signal.rigs().load(col2_id).await.ok().flatten() {
+                    Some(rig) => {
+                        let all_module_presets =
+                            signal.module_presets().list().await.unwrap_or_default();
+                        let block_preset_lookup = build_block_preset_lookup(signal).await;
+                        let mut out = Vec::new();
+                        for (idx, v) in rig.variants.iter().enumerate() {
+                            let engines = if idx == 0 {
+                                resolve_rig_scene_engines(
+                                    signal,
+                                    v,
+                                    &all_module_presets,
+                                    &block_preset_lookup,
+                                )
+                                .await
+                            } else {
+                                Vec::new()
+                            };
+                            let meta = v.metadata().clone();
+                            let tags = TagSet::from_tags(&meta.tags);
+                            out.push(ColumnItem {
+                                id: v.id.to_string(),
+                                name: v.name.clone(),
+                                subtitle: Some(format!("{} engine(s)", v.engine_selections.len())),
+                                badge: None,
+                                metadata: Some(meta),
+                                structured_tags: tags,
+                                detail: DetailData {
+                                    engines,
+                                    ..Default::default()
+                                },
+                                tag: None,
+                                folder: None,
+                            });
+                        }
+                        out
+                    }
+                    _ => Vec::new(),
+                }
+            };
+            (items, Vec::new())
+        }
+        NavCategory::Engines => {
+            let items = match signal.engines().load(col2_id).await.ok().flatten() {
+                Some(engine) => {
+                    let all_module_presets =
+                        signal.module_presets().list().await.unwrap_or_default();
+                    let block_preset_lookup = build_block_preset_lookup(signal).await;
+                    let mut items = Vec::new();
+                    for layer_id in &engine.layer_ids {
+                        if let Some(layer) =
+                            signal.layers().load(layer_id.as_str()).await.ok().flatten()
+                        {
+                            let module_chains = resolve_layer_module_chains(
+                                signal,
+                                &layer,
+                                &all_module_presets,
+                                &block_preset_lookup,
+                            )
+                            .await;
+                            let meta = layer.metadata().clone();
+                            let tags = TagSet::from_tags(&meta.tags);
+                            items.push(ColumnItem {
+                                id: layer.id.to_string(),
+                                name: layer.name.clone(),
+                                subtitle: Some(format!("{} variant(s)", layer.variants.len())),
+                                badge: None,
+                                metadata: Some(meta),
+                                structured_tags: tags,
+                                detail: DetailData {
+                                    module_chains,
+                                    ..Default::default()
+                                },
+                                tag: None,
+                                folder: None,
+                            });
+                        }
+                    }
+                    items
+                }
+                _ => Vec::new(),
+            };
+            (items, Vec::new())
+        }
+        NavCategory::Layers => {
+            let items = match signal.layers().load(col2_id).await.ok().flatten() {
+                Some(layer) => {
                     let all_module_presets =
                         signal.module_presets().list().await.unwrap_or_default();
                     let block_preset_lookup = build_block_preset_lookup(signal).await;
@@ -233,125 +357,8 @@ pub async fn fetch_col3(
                         });
                     }
                     out
-                } else {
-                    Vec::new()
                 }
-            } else {
-                if let Some(rig) = signal.rigs().load(col2_id).await.ok().flatten() {
-                    let all_module_presets =
-                        signal.module_presets().list().await.unwrap_or_default();
-                    let block_preset_lookup = build_block_preset_lookup(signal).await;
-                    let mut out = Vec::new();
-                    for (idx, v) in rig.variants.iter().enumerate() {
-                        let engines = if idx == 0 {
-                            resolve_rig_scene_engines(
-                                signal,
-                                v,
-                                &all_module_presets,
-                                &block_preset_lookup,
-                            )
-                            .await
-                        } else {
-                            Vec::new()
-                        };
-                        let meta = v.metadata().clone();
-                        let tags = TagSet::from_tags(&meta.tags);
-                        out.push(ColumnItem {
-                            id: v.id.to_string(),
-                            name: v.name.clone(),
-                            subtitle: Some(format!("{} engine(s)", v.engine_selections.len())),
-                            badge: None,
-                            metadata: Some(meta),
-                            structured_tags: tags,
-                            detail: DetailData {
-                                engines,
-                                ..Default::default()
-                            },
-                            tag: None,
-                            folder: None,
-                        });
-                    }
-                    out
-                } else {
-                    Vec::new()
-                }
-            };
-            (items, Vec::new())
-        }
-        NavCategory::Engines => {
-            let items = if let Some(engine) = signal.engines().load(col2_id).await.ok().flatten() {
-                let all_module_presets = signal.module_presets().list().await.unwrap_or_default();
-                let block_preset_lookup = build_block_preset_lookup(signal).await;
-                let mut items = Vec::new();
-                for layer_id in &engine.layer_ids {
-                    if let Some(layer) =
-                        signal.layers().load(layer_id.as_str()).await.ok().flatten()
-                    {
-                        let module_chains = resolve_layer_module_chains(
-                            signal,
-                            &layer,
-                            &all_module_presets,
-                            &block_preset_lookup,
-                        )
-                        .await;
-                        let meta = layer.metadata().clone();
-                        let tags = TagSet::from_tags(&meta.tags);
-                        items.push(ColumnItem {
-                            id: layer.id.to_string(),
-                            name: layer.name.clone(),
-                            subtitle: Some(format!("{} variant(s)", layer.variants.len())),
-                            badge: None,
-                            metadata: Some(meta),
-                            structured_tags: tags,
-                            detail: DetailData {
-                                module_chains,
-                                ..Default::default()
-                            },
-                            tag: None,
-                            folder: None,
-                        });
-                    }
-                }
-                items
-            } else {
-                Vec::new()
-            };
-            (items, Vec::new())
-        }
-        NavCategory::Layers => {
-            let items = if let Some(layer) = signal.layers().load(col2_id).await.ok().flatten() {
-                let all_module_presets = signal.module_presets().list().await.unwrap_or_default();
-                let block_preset_lookup = build_block_preset_lookup(signal).await;
-                let mut out = Vec::new();
-                for v in &layer.variants {
-                    let module_chains = resolve_variant_module_chains(
-                        signal,
-                        v,
-                        &all_module_presets,
-                        &block_preset_lookup,
-                    )
-                    .await;
-                    let ref_count = v.module_refs.len() + v.block_refs.len() + v.plugin_refs.len();
-                    let meta = v.metadata().clone();
-                    let tags = TagSet::from_tags(&meta.tags);
-                    out.push(ColumnItem {
-                        id: v.id.to_string(),
-                        name: v.name.clone(),
-                        subtitle: Some(format!("{ref_count} module(s)")),
-                        badge: None,
-                        metadata: Some(meta),
-                        structured_tags: tags,
-                        detail: DetailData {
-                            module_chains,
-                            ..Default::default()
-                        },
-                        tag: None,
-                        folder: None,
-                    });
-                }
-                out
-            } else {
-                Vec::new()
+                _ => Vec::new(),
             };
             (items, Vec::new())
         }
@@ -424,7 +431,9 @@ async fn resolve_layer_module_chains(
     all_module_presets: &[ModulePreset],
     block_preset_lookup: &HashMap<String, (BlockType, String)>,
 ) -> Vec<ModuleChainData> {
-    let Some(variant) = layer.default_variant() else { return Vec::new() };
+    let Some(variant) = layer.default_variant() else {
+        return Vec::new();
+    };
     resolve_variant_module_chains(signal, variant, all_module_presets, block_preset_lookup).await
 }
 
@@ -462,20 +471,25 @@ async fn resolve_variant_module_chains(
             .iter()
             .find(|p| p.id().to_string() == collection_id_str);
         let mt = module_preset.map(signal::ModulePreset::module_type);
-        let mc = mt
-            .map_or(signal::ModuleType::Drive.color(), signal::ModuleType::color);
-        let module_name = module_preset.map_or_else(|| format!("Module {}", mr.collection_id), |p| p.name().to_string());
+        let mc = mt.map_or(signal::ModuleType::Drive.color(), signal::ModuleType::color);
+        let module_name = module_preset.map_or_else(
+            || format!("Module {}", mr.collection_id),
+            |p| p.name().to_string(),
+        );
         let chain;
-        if let Some(snapshot) = signal
+        match signal
             .module_presets()
             .load_default(collection_id_str)
             .await
             .ok()
             .flatten()
         {
-            chain = snapshot.module().chain().clone();
-        } else {
-            chain = SignalChain::new(vec![]);
+            Some(snapshot) => {
+                chain = snapshot.module().chain().clone();
+            }
+            _ => {
+                chain = SignalChain::new(vec![]);
+            }
         }
         out.push(ModuleChainData {
             name: module_name,
@@ -561,15 +575,21 @@ async fn resolve_rig_scene_engines(
     let mut engines = Vec::new();
     for es in &scene.engine_selections {
         let engine_id_str = es.engine_id.as_str();
-        let Some(engine) = signal.engines().load(engine_id_str).await.ok().flatten() else { continue };
+        let Some(engine) = signal.engines().load(engine_id_str).await.ok().flatten() else {
+            continue;
+        };
         let engine_variant = engine
             .variant(&es.variant_id)
             .or_else(|| engine.default_variant());
-        let Some(engine_variant) = engine_variant else { continue };
+        let Some(engine_variant) = engine_variant else {
+            continue;
+        };
         let mut layers = Vec::new();
         for ls in &engine_variant.layer_selections {
             let layer_id_str = ls.layer_id.as_str();
-            let Some(layer) = signal.layers().load(layer_id_str).await.ok().flatten() else { continue };
+            let Some(layer) = signal.layers().load(layer_id_str).await.ok().flatten() else {
+                continue;
+            };
             let module_chains = resolve_layer_module_chains(
                 signal,
                 &layer,

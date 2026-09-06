@@ -85,15 +85,12 @@ fn compute_shelf_params(
     let qk = if sec_idx == 0 { q_eff } else { 1.0 };
     let two_sin_theta = 2.0 * theta_k.sin();
     let damping = two_sin_theta * g_half_section / qk;
-    let helper_alpha = if effective_order == 16
-        && sec_idx == 0
-        && q >= 9.99
-        && band_omega_ref > 0.9 * PI
-    {
-        (1.0 / (std::f64::consts::SQRT_2 * 2.0 * q.max(1e-6))) as f32
-    } else {
-        (theta_k.sin() / qk) as f32
-    };
+    let helper_alpha =
+        if effective_order == 16 && sec_idx == 0 && q >= 9.99 && band_omega_ref > 0.9 * PI {
+            (1.0 / (std::f64::consts::SQRT_2 * 2.0 * q.max(1e-6))) as f32
+        } else {
+            (theta_k.sin() / qk) as f32
+        };
     (theta_k, damping, qk, helper_alpha)
 }
 
@@ -142,7 +139,7 @@ fn shelf_normal_section(
     high_shelf: bool,
     omega_scale: f64,
 ) -> Coeffs {
-    use crate::proq4_per_section_helpers::{proq4_universal_section_synth, Prototype};
+    use crate::proq4_per_section_helpers::{Prototype, proq4_universal_section_synth};
 
     let (theta_k, damping, _qk, helper_alpha) = compute_shelf_params(
         sec_idx,
@@ -193,13 +190,8 @@ fn shelf_normal_section(
         ..Prototype::default()
     };
 
-    let (coeffs, _fallback) = proq4_universal_section_synth(
-        &mut proto,
-        &analog,
-        freq_hz,
-        sample_rate,
-        omega_scale,
-    );
+    let (coeffs, _fallback) =
+        proq4_universal_section_synth(&mut proto, &analog, freq_hz, sample_rate, omega_scale);
     if effective_order == 2 && matches!(section_type, 2 | 5) {
         const SHELF_ORDER2_HIGH_ROOT: f64 = 2.607_521_902_479_528_6;
         const NOTCH46_UPPER_ROOT: f64 = 2.984_513_020_910_303_5;
@@ -260,7 +252,10 @@ pub(super) fn shelf_universal_synth_cascade(
     let gain = db_to_linear(gain_db);
     let effective_order = if order == 7 { 8 } else { order };
     let q_eff = ui_q_to_bandwidth_q(q);
-    #[expect(clippy::cast_precision_loss, reason = "effective_order is small (max 16), precision loss is not a concern")]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "effective_order is small (max 16), precision loss is not a concern"
+    )]
     let order_f = effective_order as f64;
     let g_section = gain.powf(1.0 / order_f);
     let g_half_section = gain.powf(1.0 / (2.0 * order_f));

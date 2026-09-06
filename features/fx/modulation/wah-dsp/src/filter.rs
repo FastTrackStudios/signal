@@ -74,7 +74,7 @@ impl WahFilter {
     /// Exponential mapping base (from rkrlv2).
     const FREQ_BASE: f64 = 7.0;
 
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             mode: WahMode::Classic,
@@ -157,7 +157,7 @@ impl WahFilter {
     }
 
     /// Get the current cutoff frequency.
-    #[must_use] 
+    #[must_use]
     pub const fn freq(&self) -> f64 {
         self.current_freq
     }
@@ -186,7 +186,7 @@ pub struct TripleSmoother {
 }
 
 impl TripleSmoother {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             s1: 0.0,
@@ -215,7 +215,7 @@ impl TripleSmoother {
         self.s3
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn value(&self) -> f64 {
         self.s3
     }

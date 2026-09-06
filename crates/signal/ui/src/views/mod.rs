@@ -47,9 +47,9 @@ pub use block_detail::{
 };
 pub use block_editor::{BlockCard, BlockEditor, MiniKnob};
 pub use collection_browser::{
-    engines_to_grid_slots, resolve_layer_engines, resolve_scene_engines, rig_type_to_engine_type,
     BrowseLevel, BrowserAssignment, CollectionBrowser, EngineFlowData, EngineParamLookup,
-    LayerFlowData, ModuleChainData, RigGridPanel,
+    LayerFlowData, ModuleChainData, RigGridPanel, engines_to_grid_slots, resolve_layer_engines,
+    resolve_scene_engines, rig_type_to_engine_type,
 };
 pub use guitar_rig::GuitarRigView;
 pub use metadata_display::MetadataDisplay;

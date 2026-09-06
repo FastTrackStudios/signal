@@ -4,7 +4,7 @@
 //! collections and their snapshot variants.
 
 use super::error::OpsError;
-use crate::{events, SignalApi, SignalController};
+use crate::{SignalApi, SignalController, events};
 use signal_proto::engine::{EngineId, EngineSceneId};
 use signal_proto::layer::{LayerId, LayerSnapshotId};
 use signal_proto::resolve::{
@@ -222,7 +222,12 @@ impl<S: SignalApi> BlockPresetOps<S> {
         let snapshot_name = snapshot.name().to_string();
         // Clone out of the lock in its own statement — an if-let scrutinee
         // temporary would hold the guard across the await below.
-        let applier = self.0.daw_applier.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+        let applier = self
+            .0
+            .daw_applier
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
         let applied_to_daw = if let Some(applier) = applier {
             match applier.apply_graph(&graph, Some(&snapshot_name)).await {
                 Ok(_) => true,

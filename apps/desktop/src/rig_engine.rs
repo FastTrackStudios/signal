@@ -19,6 +19,7 @@ use signal_guitar::proto::audio::AudioSettingsClient;
 use signal_guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
 #[cfg(feature = "signal-keys-rig")]
 use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
+use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
 
 /// The embedded rig: the backend + the established in-process clients.
 #[derive(Clone)]
@@ -26,6 +27,10 @@ pub struct RigEngine {
     pub rig: RigClient,
     pub stream: RigStreamClient,
     pub settings: AudioSettingsClient,
+    /// The TONE3000 catalog. `Option` for symmetry with the network path,
+    /// where an older engine may not serve it; in-process it is always here.
+    pub tones: Option<Tone3000Client>,
+    pub tones_stream: Option<Tone3000StreamClient>,
     /// The in-process keys rig (sampler engine) — dormant until the keys
     /// view starts it.
     #[cfg(feature = "signal-keys-rig")]
@@ -77,6 +82,16 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         #[cfg(feature = "signal-keys-rig")]
         let router = router.merge_router(keys_backend.router());
 
+        // TONE3000 on the same in-process router. The phone is exactly the
+        // case the detachable-GUI rule was written for: no separate engine
+        // process to hold the session, so the embedded one holds it.
+        let config_dir = signal_sampler::rig_prefs::signal_config_dir();
+        let tone3000 = signal_tone3000::Tone3000Backend::new(signal_tone3000::Config::from_env(
+            &config_dir,
+            signal_nam::nam_root_from_env(&config_dir.join("nam")),
+        ));
+        let router = router.merge_router(tone3000.router());
+
         let scope = architect::Scope::new();
         let server = architect::LocalServer::serve(router, scope.clone());
         let rig: RigClient = server
@@ -115,9 +130,14 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             backend.start();
         }
 
+        let tones: Option<Tone3000Client> = server.establish().await.ok();
+        let tones_stream: Option<Tone3000StreamClient> = server.establish().await.ok();
+
         Ok::<_, eyre::Report>(RigEngine {
             rig,
             stream,
+            tones,
+            tones_stream,
             settings,
             #[cfg(feature = "signal-keys-rig")]
             keys,

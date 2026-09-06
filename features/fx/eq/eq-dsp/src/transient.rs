@@ -206,7 +206,9 @@ mod tests {
 
     /// Drum-ish test signal: steady 220 Hz tone + periodic clicks.
     fn test_signal(i: usize) -> f64 {
-        let tone = 0.2 * (core::f64::consts::TAU * 220.0 * f64::from(i32::try_from(i).unwrap_or(0)) / SR).sin();
+        let tone = 0.2
+            * (core::f64::consts::TAU * 220.0 * f64::from(i32::try_from(i).unwrap_or(0)) / SR)
+                .sin();
         let click = if i % 12000 < 48 { 0.7 } else { 0.0 };
         tone + click
     }

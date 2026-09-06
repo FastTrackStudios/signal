@@ -163,9 +163,7 @@ pub fn plugin_params(comp: &ProC3) -> BTreeMap<String, ParamValue> {
     // FTS Comp's fold stops at fully wet; Pro-C's dry/wet goes to 200%.
     set(&mut out, "mix", F32(comp.mix.clamp(0.0, 1.0) as f32));
 
-    let style = *STYLE_MAP
-        .get(comp.style as usize)
-        .unwrap_or(&0);
+    let style = *STYLE_MAP.get(comp.style as usize).unwrap_or(&0);
     set(&mut out, "style", I32(style as i32));
 
     // Character Off means no drive at all, whatever waveshaper is selected.
@@ -327,7 +325,10 @@ mod tests {
         for (name, _) in DEFAULTS {
             assert!(p.contains_key(*name), "{name} is unstated");
         }
-        assert!(p.contains_key("scq_6"), "the sixth side-chain band is unstated");
+        assert!(
+            p.contains_key("scq_6"),
+            "the sixth side-chain band is unstated"
+        );
     }
 
     #[test]
@@ -345,9 +346,18 @@ mod tests {
         c.side_chain_input = 1;
         c.mix = 2.0;
         let missing = unmapped(&c);
-        assert!(missing.iter().any(|m| m.contains("auto threshold")), "{missing:?}");
-        assert!(missing.iter().any(|m| m.contains("external side chain")), "{missing:?}");
-        assert!(missing.iter().any(|m| m.contains("200% mix")), "{missing:?}");
+        assert!(
+            missing.iter().any(|m| m.contains("auto threshold")),
+            "{missing:?}"
+        );
+        assert!(
+            missing.iter().any(|m| m.contains("external side chain")),
+            "{missing:?}"
+        );
+        assert!(
+            missing.iter().any(|m| m.contains("200% mix")),
+            "{missing:?}"
+        );
         // And it is clamped, not passed through.
         assert_eq!(plugin_params(&c)["mix"], ParamValue::F32(1.0));
     }

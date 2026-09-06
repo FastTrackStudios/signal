@@ -4,7 +4,7 @@
 //! Skipped (with a printed reason) when the `AudioHaven` sample tree isn't
 //! mounted, mirroring the `aiff_real.rs` skip pattern.
 
-use signal_sampler::{read_pack_header, SamplerBank};
+use signal_sampler::{SamplerBank, read_pack_header};
 use std::path::Path;
 
 const STYLUS_DEFAULT_PACK: &str = "/run/media/AudioHaven/Sampled/Drum Kits/Stylus RMX-fresh/Stylus RMX/Core Library/Default/_ Please Select a Directory/library.signalpack";
@@ -51,7 +51,12 @@ fn load_stylus_pack_renders_audio() {
     let mut out = vec![0.0f32; 1024 * 2];
     bank.render(&mut out);
 
-    let rms = (out.iter().map(|&s| f64::from(s) * f64::from(s)).sum::<f64>() / out.len() as f64).sqrt();
+    let rms = (out
+        .iter()
+        .map(|&s| f64::from(s) * f64::from(s))
+        .sum::<f64>()
+        / out.len() as f64)
+        .sqrt();
     assert!(
         rms > 1e-5,
         "expected non-zero RMS after note_on; got {rms} (peak={})",

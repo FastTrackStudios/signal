@@ -68,7 +68,7 @@ impl Rack {
         self
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn active_rig_id(&self) -> Option<&crate::rig::RigId> {
         self.active_slot
             .and_then(|idx| self.slots.iter().find(|s| s.position == idx && s.active))

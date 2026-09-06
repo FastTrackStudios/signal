@@ -21,12 +21,12 @@ use std::io::Write as _;
 use std::path::PathBuf;
 
 use signal_orchestra::timing::{
-    mix_click, pitch_arrival, render_click, render_live_replay, spectral_flux, timing_corpus,
-    CountIn, OnsetKind,
+    CountIn, OnsetKind, mix_click, pitch_arrival, render_click, render_live_replay, spectral_flux,
+    timing_corpus,
 };
-use signal_orchestra::{load_strings, CSS_CONFIG, CSS_ROOT};
-use signal_sampler::document::{qn_to_frame, qn_to_sec, DocumentRenderOptions};
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{DocumentRenderOptions, qn_to_frame, qn_to_sec};
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
@@ -159,7 +159,10 @@ fn main() -> eyre::Result<()> {
                 }
                 OnsetKind::PhraseStart => (flux.leading_edge(exp.sec, 0.10, 0.25), "flux-edge"),
             };
-            let err = measured.map_or_else(|| "n/a".into(), |t| format!("{:+.1} ms", (t - exp.sec) * 1000.0));
+            let err = measured.map_or_else(
+                || "n/a".into(),
+                |t| format!("{:+.1} ms", (t - exp.sec) * 1000.0),
+            );
             prev_pitch = Some(exp.pitch);
             println!(
                 "   note {i:2} qn {:5.2} pitch {:3} {:12} {label:9} err {err}",

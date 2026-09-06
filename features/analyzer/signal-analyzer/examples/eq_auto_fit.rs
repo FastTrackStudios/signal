@@ -25,7 +25,9 @@ const BLOCK: usize = 512;
 
 fn arg(name: &str) -> Option<String> {
     let a: Vec<String> = std::env::args().collect();
-    a.iter().position(|x| x == name).and_then(|i| a.get(i + 1).cloned())
+    a.iter()
+        .position(|x| x == name)
+        .and_then(|i| a.get(i + 1).cloned())
 }
 
 /// The probe's stimulus, verbatim — the fit is meaningless against different
@@ -61,7 +63,8 @@ fn render(eq: &mut NativeEq, input: &[f32]) -> Vec<f32> {
         let n = BLOCK.min(input.len() - pos);
         let l = &input[pos..pos + n];
         let (mut ol, mut or) = (vec![0.0f32; n], vec![0.0f32; n]);
-        eq.process_block(l, l, &mut ol, &mut or, &ev).expect("process");
+        eq.process_block(l, l, &mut ol, &mut or, &ev)
+            .expect("process");
         out.extend_from_slice(&ol);
         pos += n;
     }
@@ -161,7 +164,10 @@ fn main() {
     };
     let doc: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&path).expect("read reference")).expect("parse");
-    let runs = doc["trajectories"].as_array().expect("trajectories").clone();
+    let runs = doc["trajectories"]
+        .as_array()
+        .expect("trajectories")
+        .clone();
 
     println!(
         "  {:>7} {:>8} {:>4} {:>9} {:>9} {:>9}",

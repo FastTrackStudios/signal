@@ -7,11 +7,11 @@
 use crate::bbd_delay::BbdDelay;
 use crate::bbd_delay::BbdVoice;
 use crate::clean_delay::{CleanDelay, DigitalVoice};
-use crate::drum_delay::{DrumDelay, DrumHead, DrumSpacing, HeadPlayback, GOLDEN_HEADS};
+use crate::drum_delay::{DrumDelay, DrumHead, DrumSpacing, GOLDEN_HEADS, HeadPlayback};
 use crate::filter_delay::{FilterDelay, FilterLfoShape, FilterLocation};
 use crate::lofi_delay::{LoFiDelay, LoFiFilterShape};
 use crate::modulation::WobbleShape;
-use crate::multitap_delay::{FeedbackMode, MultiTapDelay, Tap, TapGrid, TapPreset, MAX_TAPS};
+use crate::multitap_delay::{FeedbackMode, MAX_TAPS, MultiTapDelay, Tap, TapGrid, TapPreset};
 use crate::oilcan_delay::{OilCanDelay, OilCanHeads};
 use crate::pitch_delay::{IceInterval, IceSlice, PitchDelay};
 use crate::reverb_delay::ReverbDelay;
@@ -1035,10 +1035,7 @@ mod tests {
             for s in 0..96000 {
                 let input = (std::f64::consts::TAU * 440.0 * s as f64 / SR).sin() * 0.5;
                 let out = e.tick(input, 0);
-                assert!(
-                    out.is_finite(),
-                    "{style:?} produced NaN/Inf at sample {s}"
-                );
+                assert!(out.is_finite(), "{style:?} produced NaN/Inf at sample {s}");
             }
         }
     }

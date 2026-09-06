@@ -82,14 +82,14 @@ pub struct GaplessSwapEngine {
 }
 
 impl GaplessSwapEngine {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: SwapConfig::default(),
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn with_config(config: SwapConfig) -> Self {
         Self { config }
     }

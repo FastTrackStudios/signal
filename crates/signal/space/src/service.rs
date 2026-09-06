@@ -56,7 +56,7 @@ impl SpaceBackend {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn router(&self) -> architect::LayerRouter {
         self.clone().into_router()
     }
@@ -67,7 +67,13 @@ impl SpaceBackend {
     }
 
     fn load(&self, name: &str) -> Option<Arc<Loaded>> {
-        if let Some(l) = self.inner.cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(name) {
+        if let Some(l) = self
+            .inner
+            .cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(name)
+        {
             return Some(l.clone());
         }
         let dir = Self::discover()
@@ -188,7 +194,11 @@ impl SampleSpace for SpaceBackend {
         };
         // Placeholder preview path until a proper engine preview lane lands:
         // a PipeWire client per audition (default sink), previous one killed.
-        let mut slot = self.inner.audition.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut slot = self
+            .inner
+            .audition
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(mut old) = slot.take() {
             let _ = old.kill();
             let _ = old.wait();
@@ -211,14 +221,18 @@ impl SampleSpace for SpaceBackend {
             it.favorite = favorite;
         }
         if s.save(&l.dir, &l.features).is_ok() {
-            self.inner.cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(
-                space,
-                Arc::new(Loaded {
-                    dir: l.dir.clone(),
-                    space: s,
-                    features: l.features.clone(),
-                }),
-            );
+            self.inner
+                .cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(
+                    space,
+                    Arc::new(Loaded {
+                        dir: l.dir.clone(),
+                        space: s,
+                        features: l.features.clone(),
+                    }),
+                );
             self.inner.events.publish(SpaceEvent::Changed);
         }
     }
@@ -249,7 +263,11 @@ impl SampleSpace for SpaceBackend {
                 );
                 match report.space.save(&dir, &report.features) {
                     Ok(()) => {
-                        b.inner.cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&name);
+                        b.inner
+                            .cache
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .remove(&name);
                         tracing::info!(
                             name,
                             items = report.space.items.len(),

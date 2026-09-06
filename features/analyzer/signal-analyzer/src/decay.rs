@@ -9,7 +9,7 @@
 //! to get the Schroeder energy-decay curve, then fit a line to a segment of it
 //! and extrapolate to −60 dB.
 
-use crate::filters::{octave_bands, OCTAVE_CENTRES_HZ};
+use crate::filters::{OCTAVE_CENTRES_HZ, octave_bands};
 
 /// Which segment of the decay curve the fit uses.
 ///
@@ -263,7 +263,9 @@ pub fn compare_decay_against(
         .iter()
         .filter_map(|b| b.ratio)
         .map(|r| (r - 1.0).abs())
-        .fold(None, |acc: Option<f64>, e| Some(acc.map_or(e, |a| a.max(e))));
+        .fold(None, |acc: Option<f64>, e| {
+            Some(acc.map_or(e, |a| a.max(e)))
+        });
 
     DecayComparison {
         bands,
@@ -311,7 +313,10 @@ mod tests {
             let ir = synthetic_ir(target, target * 3.0, 11);
             let measured = reverb_time(&ir, SR, DecayFit::T20).expect("fittable");
             let err = (measured - target).abs() / target;
-            assert!(err < 0.1, "RT60 {target}: measured {measured}, off by {err:.3}");
+            assert!(
+                err < 0.1,
+                "RT60 {target}: measured {measured}, off by {err:.3}"
+            );
         }
     }
 
@@ -342,7 +347,10 @@ mod tests {
         // Falling back must not turn "not a decay" into a number.
         let steady = crate::generators::white_noise(48_000, 33);
         assert_eq!(reverb_time_best_effort(&steady, SR, DecayFit::T20), None);
-        assert_eq!(reverb_time_best_effort(&vec![0.0; 4800], SR, DecayFit::T20), None);
+        assert_eq!(
+            reverb_time_best_effort(&vec![0.0; 4800], SR, DecayFit::T20),
+            None
+        );
     }
 
     #[test]
@@ -378,7 +386,10 @@ mod tests {
         let ir = synthetic_ir(1.2, 4.0, 17);
         let cmp = compare_decay(&ir, &ir, SR, DecayFit::T20);
         let worst = cmp.worst_ratio_error.expect("some band compares");
-        assert!(worst < 1e-9, "identical IRs must match exactly, got {worst}");
+        assert!(
+            worst < 1e-9,
+            "identical IRs must match exactly, got {worst}"
+        );
     }
 
     #[test]
@@ -389,7 +400,10 @@ mod tests {
 
         let mid = cmp.bands.iter().find(|b| b.centre_hz == 1000.0).unwrap();
         let ratio = mid.ratio.expect("1 kHz should compare");
-        assert!((ratio - 2.0).abs() < 0.2, "twice the decay → ratio ~2, got {ratio}");
+        assert!(
+            (ratio - 2.0).abs() < 0.2,
+            "twice the decay → ratio ~2, got {ratio}"
+        );
         assert!(cmp.worst_ratio_error.unwrap() > 0.5);
     }
 

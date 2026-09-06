@@ -119,9 +119,7 @@ async fn proq4_set_param_by_index(ctx: &ReaperTestContext) -> eyre::Result<()> {
 
     let delta = (readback - target_value).abs();
     if delta < 0.01 {
-        println!(
-            "[proq4] SUCCESS: param set by index works (delta={delta:.6})"
-        );
+        println!("[proq4] SUCCESS: param set by index works (delta={delta:.6})");
     } else {
         println!(
             "[proq4] FAIL: param set by index did NOT take effect. Expected {target_value:.6}, got {readback:.6} (delta={delta:.6})"
@@ -300,9 +298,7 @@ async fn proq4_state_chunk_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()
 
     // Check if state actually changed
     let chunks_differ = default_chunk != modified_chunk;
-    println!(
-        "[proq4] State chunks differ after param set: {chunks_differ}"
-    );
+    println!("[proq4] State chunks differ after param set: {chunks_differ}");
 
     // Restore original state
     fx.set_state_chunk(default_chunk.clone()).await?;
@@ -359,9 +355,7 @@ async fn proq4_state_chunk_reflects_in_params(ctx: &ReaperTestContext) -> eyre::
         .find(|p| p.name == "Output Level")
         .map_or(0, |p| p.index);
     let default_output = fx.param(output_idx).get().await?;
-    println!(
-        "[proq4] Default Output Level (idx {output_idx}): {default_output:.6}"
-    );
+    println!("[proq4] Default Output Level (idx {output_idx}): {default_output:.6}");
 
     // Save default chunk
     let default_chunk = fx
@@ -374,9 +368,7 @@ async fn proq4_state_chunk_reflects_in_params(ctx: &ReaperTestContext) -> eyre::
     fx.param(output_idx).set(new_value).await?;
     settle().await;
     let after_set = fx.param(output_idx).get().await?;
-    println!(
-        "[proq4] After param set to {new_value:.4}: readback={after_set:.6}"
-    );
+    println!("[proq4] After param set to {new_value:.4}: readback={after_set:.6}");
 
     // Now save this (possibly changed) chunk
     let changed_chunk = fx
@@ -396,9 +388,7 @@ async fn proq4_state_chunk_reflects_in_params(ctx: &ReaperTestContext) -> eyre::
     fx.set_state_chunk(changed_chunk.clone()).await?;
     settle().await;
     let after_reapply = fx.param(output_idx).get().await?;
-    println!(
-        "[proq4] After restoring changed chunk: Output Level={after_reapply:.6}"
-    );
+    println!("[proq4] After restoring changed chunk: Output Level={after_reapply:.6}");
 
     ctx.log(&format!(
         "chunk_params: default={default_output:.6} after_set={after_set:.6} after_restore={after_restore:.6} after_reapply={after_reapply:.6}"

@@ -48,7 +48,7 @@ pub struct Tremolo {
 }
 
 impl Tremolo {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             depth: 0.5,
@@ -138,7 +138,7 @@ pub struct AnalogProcessor {
 }
 
 impl AnalogProcessor {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             style: AnalogStyle::Clean,

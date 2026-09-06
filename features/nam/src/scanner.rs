@@ -1,6 +1,6 @@
 use crate::ir::parse_wav_header;
 use crate::nam_file::{
-    infer_tags_from_metadata, kind_from_path, parse_nam_metadata, NamFileEntry, NamFileKind,
+    NamFileEntry, NamFileKind, infer_tags_from_metadata, kind_from_path, parse_nam_metadata,
 };
 use crate::{NamCatalog, NamError};
 use sha2::{Digest, Sha256};
@@ -30,13 +30,32 @@ pub fn scan_directory(nam_root: &Path) -> Result<HashMap<String, NamFileEntry>, 
             continue;
         }
 
-        let Some(kind) = kind_from_path(path) else { continue };
+        let Some(kind) = kind_from_path(path) else {
+            continue;
+        };
 
         let file_entry = scan_file(path, nam_root, kind)?;
         entries.insert(file_entry.hash.clone(), file_entry);
     }
 
     Ok(entries)
+}
+
+/// Index one file the way a full scan would, without walking the tree.
+///
+/// `Ok(None)` means the path is not a library file (not `.nam`/`.wav`) — a
+/// non-event, not an error. This exists for the downloaders: a fetched model
+/// is one known file, and re-hashing every capture in the library to notice it
+/// would cost seconds per download and grow with the library.
+///
+/// # Errors
+///
+/// Returns `NamError::IoError` if the file cannot be read.
+pub fn scan_one(path: &Path, nam_root: &Path) -> Result<Option<NamFileEntry>, NamError> {
+    let Some(kind) = kind_from_path(path) else {
+        return Ok(None);
+    };
+    scan_file(path, nam_root, kind).map(Some)
 }
 
 /// Scan a single file: hash it, extract metadata, build a `NamFileEntry`.
@@ -122,7 +141,7 @@ pub fn merge_into_catalog(catalog: &mut NamCatalog, scanned: HashMap<String, Nam
 }
 
 /// Compute SHA-256 hex digest of data.
-#[must_use] 
+#[must_use]
 pub fn sha256_hex(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
@@ -144,7 +163,7 @@ pub fn apply_packs(entries: &mut HashMap<String, NamFileEntry>, packs: &[crate::
 
 /// Collect all files from a source directory and return their paths grouped by subdirectory.
 /// Used during import to map source structure to signal-library layout.
-#[must_use] 
+#[must_use]
 pub fn collect_source_files(source_dir: &Path) -> Vec<PathBuf> {
     WalkDir::new(source_dir)
         .follow_links(true)

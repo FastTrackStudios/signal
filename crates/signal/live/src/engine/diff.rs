@@ -38,7 +38,7 @@ pub enum SlotDiff {
 }
 
 impl SlotDiff {
-    #[must_use] 
+    #[must_use]
     pub const fn module_type(&self) -> ModuleType {
         match self {
             Self::LoadAndActivate { module_type, .. }

@@ -16,7 +16,6 @@
 // clippy.toml's disallowed-methods list (locks, env, sleep) are real bugs here
 // even though they are allowed workspace-wide off the audio thread.
 #![deny(clippy::disallowed_methods)]
-
 // ── TEMPORARY: DSP rewrite pending ───────────────────────────────────────
 // 97 findings in this crate, held under `expect` rather than fixed one by one.
 //

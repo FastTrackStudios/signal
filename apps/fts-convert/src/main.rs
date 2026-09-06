@@ -15,7 +15,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_import::rpp::{convert, Document};
+use signal_import::rpp::{Document, convert};
 
 mod verify;
 
@@ -54,7 +54,15 @@ fn main() {
 
     let mut any_failed = false;
     for input in &inputs {
-        if !run(input, dry_run, in_place, quiet, verifying, engine_too, curves_for.as_deref()) {
+        if !run(
+            input,
+            dry_run,
+            in_place,
+            quiet,
+            verifying,
+            engine_too,
+            curves_for.as_deref(),
+        ) {
             any_failed = true;
         }
     }
@@ -119,7 +127,11 @@ fn run(
 
     // The rig bridges each plugin pair the first time it meets one, and
     // keeps them for the whole project.
-    let mut rig = if verifying { Some(verify::Rig::new()) } else { None };
+    let mut rig = if verifying {
+        Some(verify::Rig::new())
+    } else {
+        None
+    };
 
     let mut worst_seen = 0.0f64;
     if !quiet || rig.is_some() {
@@ -192,7 +204,12 @@ fn run(
         }
     }
     for s in &report.skipped {
-        println!("  {:<28} fx {:<3} LEFT  {}", truncate(&s.track, 28), s.slot, s.reason);
+        println!(
+            "  {:<28} fx {:<3} LEFT  {}",
+            truncate(&s.track, 28),
+            s.slot,
+            s.reason
+        );
     }
 
     println!(
@@ -224,7 +241,10 @@ fn run(
     let output = if in_place {
         let backup = with_suffix(input, "rpp.bak");
         if let Err(e) = std::fs::write(&backup, &text) {
-            eprintln!("  could not write the backup {}: {e} — refusing to overwrite", backup.display());
+            eprintln!(
+                "  could not write the backup {}: {e} — refusing to overwrite",
+                backup.display()
+            );
             return false;
         }
         println!("  original saved as {}", backup.display());
@@ -246,7 +266,10 @@ fn run(
 }
 
 fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
-    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
     path.with_file_name(format!("{stem}.{suffix}"))
 }
 

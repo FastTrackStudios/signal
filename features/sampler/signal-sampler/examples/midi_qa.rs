@@ -21,8 +21,8 @@
 
 use std::path::PathBuf;
 
-use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
 
 const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
@@ -442,9 +442,7 @@ fn main() -> eyre::Result<()> {
         total_fail += fails.len();
     }
 
-    println!(
-        "\n{total_fail} total boundary failures across the battery."
-    );
+    println!("\n{total_fail} total boundary failures across the battery.");
     if total_fail > 0 {
         std::process::exit(1);
     }

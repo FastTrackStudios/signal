@@ -13,12 +13,12 @@ pub struct Model {
 }
 
 impl Model {
-    #[must_use] 
+    #[must_use]
     pub fn layer_id_branded(&self) -> LayerId {
         LayerId::from(self.id.clone())
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_variant_id_branded(&self) -> LayerSnapshotId {
         LayerSnapshotId::from(self.default_variant_id.clone())
     }

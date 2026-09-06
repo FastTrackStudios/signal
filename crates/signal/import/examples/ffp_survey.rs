@@ -42,7 +42,10 @@ fn collect(root: &Path, out: &mut Vec<PathBuf>) {
     for path in items {
         if path.is_dir() {
             collect(&path, out);
-        } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ffp")) {
+        } else if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("ffp"))
+        {
             out.push(path);
         }
     }
@@ -126,8 +129,14 @@ fn main() {
     let Some(((sig, count), group)) = variants.iter().max_by_key(|(_, g)| g.len()) else {
         return;
     };
-    println!("\n── {sig}, {count} parameters, across {} presets ──", group.len());
-    println!("  {:>3} {:<38} {:>11} {:>11} {:>9}", "#", "parameter", "min", "max", "distinct");
+    println!(
+        "\n── {sig}, {count} parameters, across {} presets ──",
+        group.len()
+    );
+    println!(
+        "  {:>3} {:<38} {:>11} {:>11} {:>9}",
+        "#", "parameter", "min", "max", "distinct"
+    );
 
     let keys = &group[0].keys;
     for (i, key) in keys.iter().enumerate() {
@@ -137,7 +146,10 @@ fn main() {
             println!("  {i:>3} {key:<38} {:>33}", "key order differs");
             continue;
         }
-        let vals: Vec<f64> = group.iter().filter_map(|p| p.values.get(i).copied()).collect();
+        let vals: Vec<f64> = group
+            .iter()
+            .filter_map(|p| p.values.get(i).copied())
+            .collect();
         if vals.is_empty() {
             continue;
         }
@@ -147,7 +159,10 @@ fn main() {
         sorted.sort_unstable();
         sorted.dedup();
         let note = if sorted.len() == 1 { "  constant" } else { "" };
-        println!("  {i:>3} {key:<38} {min:>11.4} {max:>11.4} {:>9}{note}", sorted.len());
+        println!(
+            "  {i:>3} {key:<38} {min:>11.4} {max:>11.4} {:>9}{note}",
+            sorted.len()
+        );
     }
 
     println!(

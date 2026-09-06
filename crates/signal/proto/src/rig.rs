@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::engine::{EngineId, EngineSceneId};
 use crate::fx_send::FxSend;
 use crate::metadata::Metadata;
-use crate::override_policy::{validate_overrides, OverridePolicyError, ScenePolicy};
+use crate::override_policy::{OverridePolicyError, ScenePolicy, validate_overrides};
 use crate::overrides::Override;
 
 // ─── IDs ────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ pub enum RigType {
 }
 
 impl RigType {
-    #[must_use] 
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Guitar => "guitar",
@@ -65,7 +65,7 @@ impl RigType {
     }
 
     #[expect(clippy::should_implement_trait)]
-    #[must_use] 
+    #[must_use]
     pub fn from_str(value: &str) -> Option<Self> {
         match value {
             "guitar" => Some(Self::Guitar),
@@ -229,14 +229,14 @@ impl Rig {
         Some(self.variants.remove(pos))
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_variant(&self) -> Option<&RigScene> {
         self.variants
             .iter()
             .find(|v| v.id == self.default_variant_id)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn variant(&self, id: &RigSceneId) -> Option<&RigScene> {
         self.variants.iter().find(|v| &v.id == id)
     }

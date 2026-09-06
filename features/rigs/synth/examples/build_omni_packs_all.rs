@@ -15,7 +15,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_synth::pack::{build_soundsource_pack, PackTags};
+use signal_synth::pack::{PackTags, build_soundsource_pack};
 
 const EXTRACTION: &str = "/run/media/AudioHaven/Sampled/Keys/Omnisphere";
 const PACKS: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";

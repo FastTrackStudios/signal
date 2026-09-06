@@ -17,11 +17,7 @@ const SR: u32 = 48_000;
 
 fn rms_db(b: &[f32]) -> f32 {
     let r = (b.iter().map(|x| x * x).sum::<f32>() / b.len() as f32).sqrt();
-    if r > 0.0 {
-        20.0 * r.log10()
-    } else {
-        -99.0
-    }
+    if r > 0.0 { 20.0 * r.log10() } else { -99.0 }
 }
 
 fn main() -> eyre::Result<()> {

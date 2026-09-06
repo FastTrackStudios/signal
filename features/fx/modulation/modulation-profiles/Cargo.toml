@@ -3,7 +3,7 @@ name = "modulation-profiles"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-edition = "2021"
+edition.workspace = true
 description = "Modulation profiles — the five circuits, and what each one modulates"
 
 [lints]

@@ -8,7 +8,7 @@
 //! learns it through `CompUiState::focused_stage` (an atomic), never through
 //! this signal.
 
-use nice_plug_dioxus::prelude::{try_consume_context, ReadableExt, Signal};
+use nice_plug_dioxus::prelude::{ReadableExt, Signal, try_consume_context};
 
 /// The focused stage, 0-based.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -16,7 +16,7 @@ pub struct FocusedStage(pub usize);
 
 /// The focused stage index, or stage 0 where no provider is mounted (unit
 /// tests, isolated components).
-#[must_use] 
+#[must_use]
 pub fn use_focused_stage() -> usize {
     match try_consume_context::<Signal<FocusedStage>>() {
         Some(sig) => sig.read().0,
@@ -25,7 +25,7 @@ pub fn use_focused_stage() -> usize {
 }
 
 /// The focus signal itself, for components that *set* focus (the strip).
-#[must_use] 
+#[must_use]
 pub fn use_focus_signal() -> Option<Signal<FocusedStage>> {
     try_consume_context::<Signal<FocusedStage>>()
 }

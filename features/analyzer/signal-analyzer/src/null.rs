@@ -144,7 +144,11 @@ mod tests {
         // 1% amplitude error → residual 40 dB down.
         let y: Vec<f32> = x.iter().map(|&s| s * 1.01).collect();
         let t = null_test(&x, &y);
-        assert!((t.null_depth_db - 40.0).abs() < 0.5, "got {}", t.null_depth_db);
+        assert!(
+            (t.null_depth_db - 40.0).abs() < 0.5,
+            "got {}",
+            t.null_depth_db
+        );
         assert!(t.passes(35.0));
         assert!(!t.passes(45.0));
     }

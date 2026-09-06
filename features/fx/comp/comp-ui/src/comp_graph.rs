@@ -32,8 +32,8 @@ use std::sync::atomic::Ordering;
 use audiocore_core::prelude::*;
 
 use crate::comp_graph_svg::{
-    db_to_y, scale_gr_wave, scale_input_wave, smooth_path, transfer_ball, transfer_curve_path,
-    y_to_db, RANGE_DB,
+    RANGE_DB, db_to_y, scale_gr_wave, scale_input_wave, smooth_path, transfer_ball,
+    transfer_curve_path, y_to_db,
 };
 use crate::params::CompUiState;
 
@@ -54,7 +54,7 @@ pub const GRAPH_H: f64 = 300.0;
 /// gets letterboxed. Feeding it the real pixel size makes the scale exactly 1,
 /// which both fills the surface and keeps pointer coordinates equal to viewBox
 /// coordinates.
-#[must_use] 
+#[must_use]
 pub fn graph_size() -> (f64, f64) {
     match crate::hardware::panel::window_logical_size() {
         Some((win_w, win_h)) => (
@@ -73,7 +73,7 @@ pub fn graph_size() -> (f64, f64) {
 /// container height and for the viewBox, so element-relative pointer y is
 /// still viewBox y at any size. Falls back to the design height when no host
 /// window size is in context (headless tests, non-plugin mounts).
-#[must_use] 
+#[must_use]
 pub fn graph_height() -> f64 {
     graph_size().1
 }
@@ -117,9 +117,11 @@ pub fn CompGraph(
     let frame_tick: Signal<u64> = use_signal(|| 0);
     use_hook(|| {
         let updater = dioxus_core::schedule_update();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_millis(33));
-            updater();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(33));
+                updater();
+            }
         });
     });
     let _ = *frame_tick.read();

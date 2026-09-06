@@ -843,18 +843,19 @@ impl SampleEngine {
             .performance
             .attack_ms
             .map_or(0, |ms| ms_to_frames(ms, sample_rate));
-        let cache = if let Some(pack) = patch.pack.clone() {
-            SampleCache::with_pack(pack)
-        } else {
-            // The prepared-cache dir is a native (on-disk) concept —
-            // `engine-native` only. Wasm patches always carry a pack.
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                SampleCache::with_prepared(patch.prepared_cache_dir.as_deref())
-            }
-            #[cfg(target_arch = "wasm32")]
-            {
-                SampleCache::new()
+        let cache = match patch.pack.clone() {
+            Some(pack) => SampleCache::with_pack(pack),
+            _ => {
+                // The prepared-cache dir is a native (on-disk) concept —
+                // `engine-native` only. Wasm patches always carry a pack.
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    SampleCache::with_prepared(patch.prepared_cache_dir.as_deref())
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    SampleCache::new()
+                }
             }
         };
 
@@ -1902,7 +1903,10 @@ fn queue_loop_analysis(key: LoopKey, data: Arc<SampleData>) {
                     // Worker thread, not the audio thread: blocking here is
                     // correct, and the audio side reads the same map with
                     // `try_lock` precisely so it never waits on this.
-                    #[allow(clippy::disallowed_methods, reason = "analysis worker, not the audio thread")]
+                    #[allow(
+                        clippy::disallowed_methods,
+                        reason = "analysis worker, not the audio thread"
+                    )]
                     if let Ok(mut map) = LOOP_REGIONS.lock() {
                         map.get_or_insert_with(HashMap::new)
                             .insert(key, LoopScan::Done(found));

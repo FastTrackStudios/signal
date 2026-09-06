@@ -12,9 +12,9 @@
 //! watch a tube's curve lean as you move its bias in a way no number shows.
 
 use dioxus::prelude::*;
+use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
-use fts_audio_ui::ParamHandle;
 use std::fmt::Write;
 
 /// Panel drawing size — 2U, like the compressor's faces.
@@ -205,7 +205,7 @@ pub static DIGITAL: SatDesign = SatDesign {
     knobs: DIGITAL_KNOBS,
 };
 
-#[must_use] 
+#[must_use]
 pub fn design_for(profile_id: &str) -> &'static SatDesign {
     match saturate_profiles::category_of(profile_id)
         .map(|(c, _)| saturate_profiles::CATEGORIES[c].id)
@@ -218,7 +218,7 @@ pub fn design_for(profile_id: &str) -> &'static SatDesign {
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn variant_lift(profile_id: &str) -> f64 {
     match saturate_profiles::category_of(profile_id) {
         Some((_, index)) => (index as f64).mul_add(0.25, 1.0),
@@ -227,7 +227,7 @@ pub fn variant_lift(profile_id: &str) -> f64 {
 }
 
 /// What this profile's circuit does with `character_a` / `character_b`.
-#[must_use] 
+#[must_use]
 pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
     match profile_id {
         "triode" => ("Heat", "Grid"),

@@ -542,7 +542,9 @@ fn transport_btn(running: bool) -> String {
     } else {
         ("#14321e", "#166534")
     };
-    format!("padding:4px 12px; border-radius:6px; background:{bg}; color:#e4e4e7; border:1px solid {br}; font-size:12px; cursor:pointer;")
+    format!(
+        "padding:4px 12px; border-radius:6px; background:{bg}; color:#e4e4e7; border:1px solid {br}; font-size:12px; cursor:pointer;"
+    )
 }
 
 fn kit_btn(loaded: bool) -> String {
@@ -551,13 +553,17 @@ fn kit_btn(loaded: bool) -> String {
     } else {
         ("#111113", "#27272a", "#a1a1aa")
     };
-    format!("text-align:left; padding:6px 8px; border-radius:6px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:12px; cursor:pointer;")
+    format!(
+        "text-align:left; padding:6px 8px; border-radius:6px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:12px; cursor:pointer;"
+    )
 }
 
 #[expect(dead_code, reason = "pad-grid styling helper, not yet wired to a view")]
 fn pad_btn(ready: bool) -> String {
     let border = if ready { "#3f3f46" } else { "#52341a" };
-    format!("display:flex; flex-direction:column; align-items:center; gap:2px; width:78px; height:56px; justify-content:center; border-radius:8px; background:#161618; color:#e4e4e7; border:1px solid {border}; cursor:pointer;")
+    format!(
+        "display:flex; flex-direction:column; align-items:center; gap:2px; width:78px; height:56px; justify-content:center; border-radius:8px; background:#161618; color:#e4e4e7; border:1px solid {border}; cursor:pointer;"
+    )
 }
 
 fn mute_btn(muted: bool) -> String {
@@ -566,7 +572,9 @@ fn mute_btn(muted: bool) -> String {
     } else {
         ("#18181b", "#71717a")
     };
-    format!("width:20px; height:18px; border-radius:4px; background:{bg}; color:{fg}; border:1px solid #27272a; font-size:10px; cursor:pointer;")
+    format!(
+        "width:20px; height:18px; border-radius:4px; background:{bg}; color:{fg}; border:1px solid #27272a; font-size:10px; cursor:pointer;"
+    )
 }
 
 /// The kit as a simple icon grid — one tile per piece (icon + type + the
@@ -579,12 +587,7 @@ fn DrumKit(
     lit: Vec<u8>,
     on_hit: EventHandler<u32>,
 ) -> Element {
-    let note_of = |id: &str| {
-        notes
-            .iter()
-            .find(|(i, _)| i == id)
-            .map_or(0, |(_, n)| *n)
-    };
+    let note_of = |id: &str| notes.iter().find(|(i, _)| i == id).map_or(0, |(_, n)| *n);
     rsx! {
         div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",
             for slot in slots.iter() {
@@ -671,5 +674,7 @@ fn solo_btn(soloed: bool) -> String {
     } else {
         ("#18181b", "#71717a")
     };
-    format!("width:20px; height:18px; border-radius:4px; background:{bg}; color:{fg}; border:1px solid #27272a; font-size:10px; cursor:pointer;")
+    format!(
+        "width:20px; height:18px; border-radius:4px; background:{bg}; color:{fg}; border:1px solid #27272a; font-size:10px; cursor:pointer;"
+    )
 }

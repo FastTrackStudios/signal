@@ -97,7 +97,7 @@ impl GigProcessor {
     ///
     /// Returns `None` for any other plugin — a Kontakt chunk (`hsin`) or an
     /// Arturia one (`22 serialization`) is a different format entirely.
-    #[must_use] 
+    #[must_use]
     pub fn omni_multi_xml(&self) -> Option<String> {
         state::parse_state(&self.state).ok()
     }
@@ -128,7 +128,7 @@ fn unescape(s: &str) -> String {
 /// Processors whose state fails to decode are skipped rather than fatal — a
 /// gig holds dozens of them and one unreadable utility block should not cost
 /// you the instruments.
-#[must_use] 
+#[must_use]
 pub fn read_gig(xml: &str) -> Vec<GigProcessor> {
     let mut out = Vec::new();
     let (mut rackspace, mut node, mut plugin) = (String::new(), String::new(), String::new());
@@ -307,7 +307,7 @@ pub struct GigPreset {
 
 impl GigPreset {
     /// Value of the first param with this caption.
-    #[must_use] 
+    #[must_use]
     pub fn get(&self, caption: &str) -> Option<f32> {
         self.params
             .iter()
@@ -317,7 +317,7 @@ impl GigPreset {
 
     /// Captions whose value reads as "on" (>= 0.5), restricted to `names`.
     /// This is how you recover which instruments a patch actually loads.
-    #[must_use] 
+    #[must_use]
     pub fn enabled<'a>(&self, names: &[&'a str]) -> Vec<&'a str> {
         names
             .iter()
@@ -350,7 +350,7 @@ const NOTE_NAMES: [&str; 12] = [
 
 impl GigSong {
     /// The stored key — `rootNote` rendered as a note name plus `m` for minor.
-    #[must_use] 
+    #[must_use]
     pub fn stored_key(&self) -> String {
         format!(
             "{}{}",
@@ -366,7 +366,7 @@ impl GigSong {
     /// `rootNote` disagreed with the title on 6 of 19 titled songs (and
     /// `transpose` was 0 throughout, so it does not explain the gap). A title
     /// says `Center - D` while `rootNote` says G.
-    #[must_use] 
+    #[must_use]
     pub fn key_from_name(&self) -> Option<&str> {
         let suffix = self.name.rsplit_once(" - ")?.1.trim();
         let head = suffix.trim_end_matches('m');
@@ -377,7 +377,7 @@ impl GigSong {
     }
 
     /// Title with the trailing key suffix removed.
-    #[must_use] 
+    #[must_use]
     pub fn title(&self) -> &str {
         match (self.key_from_name(), self.name.rsplit_once(" - ")) {
             (Some(_), Some((head, _))) => head.trim(),
@@ -421,7 +421,7 @@ fn walk_tags(xml: &str, mut f: impl FnMut(&str, &str, bool)) {
 }
 
 /// Read the patch list, with widget ids resolved to their captions.
-#[must_use] 
+#[must_use]
 pub fn read_presets(xml: &str) -> Vec<GigPreset> {
     // Pass 1: widget id -> caption.
     let mut captions: Vec<(String, String)> = Vec::new();
@@ -474,7 +474,7 @@ pub fn read_presets(xml: &str) -> Vec<GigPreset> {
 
 /// Read the song library. Songs recur across setlists; this returns every
 /// occurrence, so dedupe by name for the library view.
-#[must_use] 
+#[must_use]
 pub fn read_songs(xml: &str) -> Vec<GigSong> {
     let mut out: Vec<GigSong> = Vec::new();
     let num = |tag: &str, k: &str, d: f32| attr(tag, k).and_then(|v| v.parse().ok()).unwrap_or(d);
@@ -505,7 +505,7 @@ pub fn read_songs(xml: &str) -> Vec<GigSong> {
 }
 
 /// Read the setlists, each an ordered run of song names.
-#[must_use] 
+#[must_use]
 pub fn read_setlists(xml: &str) -> Vec<GigSetlist> {
     let mut out: Vec<GigSetlist> = Vec::new();
     let mut depth_in_setlist = false;

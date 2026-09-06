@@ -35,14 +35,14 @@ use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwapOption;
 use audiocore_core::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 use signal_sampler::spec::LibrarySpec;
 use signal_sampler::{
-    annotate, BlockTransport, RealtimeScheduler, SamplerBank, Schedule, TrackDocument,
+    BlockTransport, RealtimeScheduler, SamplerBank, Schedule, TrackDocument, annotate,
 };
 
-use crate::config::{PatchConfig, INSTRUMENT_ID};
+use crate::config::{INSTRUMENT_ID, PatchConfig};
 
 const PLUGIN_NAME: &str = "Signal Sampler";
 
@@ -87,20 +87,31 @@ impl SharedState {
     ///
     /// Returns an error if the patch is not yet loaded or annotation fails.
     pub fn set_document(&self, doc: TrackDocument) -> eyre::Result<()> {
-        *self.doc.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(doc);
+        *self
+            .doc
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(doc);
         self.annotate_stored()
     }
 
     /// Drop the document: next block boundary falls back to `StrictLive`.
     pub fn clear_document(&self) {
-        *self.doc.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        *self
+            .doc
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         self.schedule.store(None);
     }
 
     /// (Re-)annotate the stored document against the current spec + sample
     /// rate. No-op without a stored document.
     fn annotate_stored(&self) -> eyre::Result<()> {
-        let Some(doc) = self.doc.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone() else {
+        let Some(doc) = self
+            .doc
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+        else {
             return Ok(());
         };
         if !self.patch_loaded.load(Ordering::Acquire) {
@@ -178,8 +189,14 @@ fn load_patch(shared: &SharedState, sr: u32) {
     let spec = bank.instrument_spec(INSTRUMENT_ID);
 
     // Swap the finished bank in (one locked assignment).
-    *shared.bank.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = bank;
-    *shared.spec.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = spec;
+    *shared
+        .bank
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = bank;
+    *shared
+        .spec
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = spec;
     shared.sample_rate.store(sr, Ordering::Release);
     shared.patch_loaded.store(true, Ordering::Release);
     tracing::info!(sr, "patch ready");

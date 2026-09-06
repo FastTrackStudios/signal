@@ -12,12 +12,12 @@ pub struct Model {
 }
 
 impl Model {
-    #[must_use] 
+    #[must_use]
     pub fn setlist_id_branded(&self) -> SetlistId {
         SetlistId::from(self.id.clone())
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_entry_id_branded(&self) -> SetlistEntryId {
         SetlistEntryId::from(self.default_entry_id.clone())
     }

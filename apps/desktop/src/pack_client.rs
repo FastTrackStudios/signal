@@ -128,8 +128,7 @@ pub fn fetch_packs(
 
 /// List the HTTPS mirror's packs. Resolves to `Err` with the reason on
 /// any network/parse failure.
-pub fn fetch_mirror_packs()
--> futures_channel::oneshot::Receiver<Result<Vec<PackInfo>, String>> {
+pub fn fetch_mirror_packs() -> futures_channel::oneshot::Receiver<Result<Vec<PackInfo>, String>> {
     let (tx, rx) = futures_channel::oneshot::channel();
     runtime().spawn(async move {
         let attempt = async {

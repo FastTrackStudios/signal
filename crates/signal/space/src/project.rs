@@ -84,7 +84,7 @@ pub fn pca(data: &[f32], count: usize, dim: usize, k: usize) -> Vec<f32> {
 
 /// Project to 2D map coordinates (0..1). PCA-compact → t-SNE for real sets;
 /// small sets (< 32) fall straight through PCA-2D.
-#[must_use] 
+#[must_use]
 pub fn project_2d(data: &[f32], count: usize, dim: usize) -> Vec<(f32, f32)> {
     if count == 0 {
         return Vec::new();

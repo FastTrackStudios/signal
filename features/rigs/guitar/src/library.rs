@@ -25,15 +25,15 @@
 use std::path::PathBuf;
 
 use facet::Facet;
-use signal_rig_host::store::{signal_config_dir, StyxDir};
+use signal_rig_host::store::{StyxDir, signal_config_dir};
 
 use crate::profiles::{
-    default_keymap, default_midi_map, default_setlists, drive_presets, song_library, worship_def,
-    DrivePresetDef, KeyBindingDef, MidiMapDef, ProfileDef, SetlistDef, SongDef,
+    DrivePresetDef, KeyBindingDef, MidiMapDef, ProfileDef, SetlistDef, SongDef, default_keymap,
+    default_midi_map, default_setlists, drive_presets, song_library, worship_def,
 };
 
 /// The library directory (`SIGNAL_RIG_DIR` overrides).
-#[must_use] 
+#[must_use]
 pub fn rig_dir() -> PathBuf {
     if let Ok(p) = std::env::var("SIGNAL_RIG_DIR") {
         if !p.is_empty() {
@@ -276,7 +276,7 @@ impl RigLibrary {
     }
 
     /// `None` when the file is missing (fresh install) or unparsable.
-    #[must_use] 
+    #[must_use]
     pub fn load_last_state() -> Option<LastState> {
         store().read("last-state.styx")
     }
@@ -286,7 +286,8 @@ impl RigLibrary {
 mod tests {
     #[test]
     fn nam_paths_roundtrip_relative() {
-        std::env::set_var("SIGNAL_RIG_DIR", "/tmp/fts-test-rig");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("SIGNAL_RIG_DIR", "/tmp/fts-test-rig") };
         let store = super::store();
         let mut p = String::from("models/x.nam");
         store.resolve(&mut p);
@@ -302,7 +303,8 @@ mod tests {
     #[test]
     fn last_state_roundtrips() {
         // Same dir as the sibling test — tests share the process env.
-        std::env::set_var("SIGNAL_RIG_DIR", "/tmp/fts-test-rig");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("SIGNAL_RIG_DIR", "/tmp/fts-test-rig") };
         let state = super::LastState {
             setlist_index: 2,
             song_index: 5,

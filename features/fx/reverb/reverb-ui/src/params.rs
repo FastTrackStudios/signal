@@ -8,8 +8,8 @@
 //! reverb.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use atomic_float::AtomicF32;
 use crossbeam_channel::Sender;
@@ -61,8 +61,10 @@ impl ReverbUiState {
         state.ir_loading.store(true, Ordering::Relaxed);
         *state.ir_error.lock() = None;
         std::thread::spawn(move || {
-            let name = path
-                .file_stem().map_or_else(|| path.display().to_string(), |s| s.to_string_lossy().into_owned());
+            let name = path.file_stem().map_or_else(
+                || path.display().to_string(),
+                |s| s.to_string_lossy().into_owned(),
+            );
             let sample_rate = f64::from(state.sample_rate.load(Ordering::Relaxed));
             let sample_rate = if sample_rate > 0.0 {
                 sample_rate
@@ -107,12 +109,15 @@ impl ReverbUiState {
 ///
 /// `FTS_IR_DIR` overrides; otherwise the user's own IR folder. A missing
 /// directory is not an error — it is an empty library, and the panel says so.
-#[must_use] 
+#[must_use]
 pub fn ir_library_root() -> PathBuf {
     if let Some(dir) = std::env::var_os("FTS_IR_DIR") {
         return PathBuf::from(dir);
     }
-    dirs_home().map_or_else(|| PathBuf::from("irs"), |home| home.join(".local/share/fts/irs"))
+    dirs_home().map_or_else(
+        || PathBuf::from("irs"),
+        |home| home.join(".local/share/fts/irs"),
+    )
 }
 
 fn dirs_home() -> Option<PathBuf> {
@@ -266,7 +271,8 @@ impl PostBandParams {
             shape: IntParam::new("Post Shape", 0, IntRange::Linear { min: 0, max: 4 })
                 .with_value_to_string(Arc::new(|v| {
                     POST_SHAPE_LABELS
-                        .get(v.max(0) as usize).map_or_else(|| v.to_string(), std::string::ToString::to_string)
+                        .get(v.max(0) as usize)
+                        .map_or_else(|| v.to_string(), std::string::ToString::to_string)
                 })),
             freq_hz: band_freq_param("Post Freq", default_freq),
             gain_db: FloatParam::new(
@@ -318,7 +324,8 @@ impl DecayBandParams {
             shape: IntParam::new("Decay Shape", 0, IntRange::Linear { min: 0, max: 2 })
                 .with_value_to_string(Arc::new(|v| {
                     DECAY_SHAPE_LABELS
-                        .get(v.max(0) as usize).map_or_else(|| v.to_string(), std::string::ToString::to_string)
+                        .get(v.max(0) as usize)
+                        .map_or_else(|| v.to_string(), std::string::ToString::to_string)
                 })),
             freq_hz: band_freq_param("Decay Freq", default_freq),
             rate_db: FloatParam::new(
@@ -383,7 +390,7 @@ fn band_q_param(name: &'static str) -> FloatParam {
 /// decay array indexed straight off the end of it.
 ///
 /// Log-spaced from 80 Hz to 10 kHz, because that is how the spacing is heard.
-#[must_use] 
+#[must_use]
 pub fn eq_default_freq(i: usize, count: usize) -> f32 {
     const LOW_HZ: f32 = 80.0;
     const HIGH_HZ: f32 = 10_000.0;
@@ -407,7 +414,8 @@ impl Default for ReverbParams {
             )
             .with_value_to_string(Arc::new(|v| {
                 reverb_profiles::PROFILES
-                    .get(v.max(0) as usize).map_or_else(|| "—".to_string(), |p| p.name.to_string())
+                    .get(v.max(0) as usize)
+                    .map_or_else(|| "—".to_string(), |p| p.name.to_string())
             })),
 
             decay: FloatParam::new("Decay", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })

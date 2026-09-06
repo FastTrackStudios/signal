@@ -3,7 +3,7 @@ name = "limiter-ui"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-edition = "2021"
+edition.workspace = true
 description = "FTS Limiter GUI — params, shared UI state, and the Dioxus control view"
 
 [dependencies]

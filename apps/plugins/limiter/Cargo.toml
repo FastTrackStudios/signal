@@ -1,7 +1,7 @@
 [package]
 name = "limiter-plugin"
 version.workspace = true
-edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap)
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "FTS Limiter — CLAP/VST3 brickwall limiter plugin over the comp facade's limiter engine"

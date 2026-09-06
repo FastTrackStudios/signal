@@ -32,7 +32,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 
-use signal_sampler::engine::cache::{create_signal_pack_with, PackCodec, PackSpecSource};
+use signal_sampler::engine::cache::{PackCodec, PackSpecSource, create_signal_pack_with};
 use signal_sampler::styx_edit::{entry_field, find_list_block, scan, split_entries};
 
 /// Replace a top-level list block's entries with `kept` (verbatim entry texts).
@@ -394,11 +394,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // exact membership or prefix match (Pacific groups declare
             // prefixes; curated config artics like `sus`/`leg` must survive).
             let (body, n_artics) = filter_list_block(&body, "articulations", |e| {
-                entry_field(e, "id")
-                    .is_some_and(|id| {
-                        member_ids.contains(id.as_str())
-                            || group_for(&groups, &artic_to_group, &id) == Some(group.as_str())
-                    })
+                entry_field(e, "id").is_some_and(|id| {
+                    member_ids.contains(id.as_str())
+                        || group_for(&groups, &artic_to_group, &id) == Some(group.as_str())
+                })
             });
 
             // Zone articulation ids the (filtered) config does NOT declare —

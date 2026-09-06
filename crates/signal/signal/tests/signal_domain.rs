@@ -11,10 +11,10 @@
 mod fixtures;
 
 use signal::{
-    bootstrap_in_memory_controller_async,
+    BlockType, ModuleBlockSource, bootstrap_in_memory_controller_async,
     overrides::{NodePath, Override},
     rig::{EngineSelection, RigScene},
-    seed_id, BlockType, ModuleBlockSource,
+    seed_id,
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -324,9 +324,7 @@ async fn jm_pedals_lead_variant_uses_edge_snapshot() {
             );
             println!("✓ Lead variant correctly selects jm-justa-boost-edge");
         }
-        other => panic!(
-            "expected PresetSnapshot source for lead boost, got {other:?}"
-        ),
+        other => panic!("expected PresetSnapshot source for lead boost, got {other:?}"),
     }
 }
 

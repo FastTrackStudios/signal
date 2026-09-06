@@ -27,6 +27,10 @@ mod engine_main;
 // can't speak vox over WebSocket).
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 mod engine_watch;
+// The TONE3000 OAuth landing strip — the registered redirect URI, served
+// by the engine because no GUI here can host the authorization page.
+#[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
+mod engine_tone3000;
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 mod engines;
 /// In-memory log ring (tracing capture + panic hook) — rendered by the

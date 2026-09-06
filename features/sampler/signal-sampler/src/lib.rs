@@ -160,9 +160,8 @@ pub use bank::{PreloadProfile, SamplerBank};
 pub use block::{BlockParams, BlockSpec, SamplerBlock};
 pub use convolver::Convolver;
 pub use document::{
-    annotate, line_for_chan, DocCc, DocEvent, DocNote, DocumentBusRenderResult,
-    DocumentRenderOptions, DocumentRenderResult, Schedule, ScheduledEvent, TempoPoint,
-    TrackDocument,
+    DocCc, DocEvent, DocNote, DocumentBusRenderResult, DocumentRenderOptions, DocumentRenderResult,
+    Schedule, ScheduledEvent, TempoPoint, TrackDocument, annotate, line_for_chan,
 };
 pub use document_rt::{BlockTransport, RealtimeScheduler};
 pub use engine::cache::SignalPcmPack;
@@ -180,7 +179,7 @@ pub use module_spec::{ModulePort, ModuleSpec};
 #[cfg(not(target_arch = "wasm32"))]
 pub use nam::NamProcessor;
 pub use native_osc::{NativeOscillator, OscWave};
-pub use node_render::{build_node_backend, LeafBackend, RenderNode};
+pub use node_render::{LeafBackend, RenderNode, build_node_backend};
 pub use preset_registry::{PresetRegistry, PresetSource, RegisteredPreset};
 pub use preset_spec::{
     MacroDef, MacroTarget, MasterFxSlot, NoteRoute, PresetEngineRef, PresetModuleRef, PresetSpec,
@@ -210,10 +209,10 @@ pub use soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 // re-export the selector + handle + event types so rig consumers (e.g. the
 // strings TUI) don't need a direct midicore dependency.
 pub use midicore;
-#[cfg(not(target_arch = "wasm32"))]
-pub use midicore::pipewire::MidiInput as MidiInputHandle;
 pub use midicore::MidiEvent;
 pub use midicore::PortSelector as MidiSelection;
+#[cfg(not(target_arch = "wasm32"))]
+pub use midicore::pipewire::MidiInput as MidiInputHandle;
 pub use spec::LibrarySpec;
 pub use stats::AudioStatsSnapshot;
 
@@ -268,9 +267,9 @@ pub mod pack {
     }
 }
 
+pub use pack::PackHeader;
 #[cfg(not(target_arch = "wasm32"))]
 pub use pack::read_pack_header;
-pub use pack::PackHeader;
 
 pub mod pack_registry {
     //! In-memory `.signalpack`s, keyed by the spec-path string lanes reference (`RigBlock.sample`).

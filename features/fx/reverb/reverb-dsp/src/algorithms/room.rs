@@ -14,7 +14,9 @@
 //!   - Less modulation (less chorus in tail)
 //!   - Faster density buildup
 
-use crate::algorithm::{AlgorithmParams, ROOM_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets};
+use crate::algorithm::{
+    AlgorithmParams, ROOM_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets,
+};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::barr_loop::BarrLoop;
 use crate::primitives::fdn::{Fdn, MixMatrix};

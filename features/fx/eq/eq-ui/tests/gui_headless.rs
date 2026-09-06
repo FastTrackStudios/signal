@@ -7,7 +7,7 @@
 //! plain `cargo test -p eq-ui`.
 
 use dioxus::prelude::*;
-use dioxus_test::{matchers::inner_html, render, Result};
+use dioxus_test::{Result, matchers::inner_html, render};
 use test_that::prelude::*;
 
 use eq_ui::eq_graph_model::{EqBand, EqBandShape};

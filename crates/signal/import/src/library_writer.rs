@@ -69,8 +69,10 @@ pub struct SnapshotParameter {
 
 /// Extract the `source:` tag value from a metadata tag list.
 fn extract_source_tag(tags: &[String]) -> Option<String> {
-    tags.iter()
-        .find_map(|t| t.strip_prefix("source:").map(std::string::ToString::to_string))
+    tags.iter().find_map(|t| {
+        t.strip_prefix("source:")
+            .map(std::string::ToString::to_string)
+    })
 }
 
 /// Extract the `folder:` value from metadata, if present.

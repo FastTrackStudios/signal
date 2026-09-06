@@ -6,7 +6,7 @@
 //!     "<in.signalpack>" "<out.signalpack>" [quality]
 //! ```
 
-use signal_sampler::engine::cache::{transcode_signal_pack, PackCodec};
+use signal_sampler::engine::cache::{PackCodec, transcode_signal_pack};
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

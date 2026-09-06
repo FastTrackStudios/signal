@@ -32,7 +32,7 @@ use std::sync::{Mutex, OnceLock};
 use facet::Facet;
 use sha2::{Digest, Sha256};
 
-use crate::loudness::{integrated_lufs, SILENCE_LUFS};
+use crate::loudness::{SILENCE_LUFS, integrated_lufs};
 use crate::rig_prefs::signal_config_dir;
 use neural_amp_modeler::NamModel;
 
@@ -151,7 +151,7 @@ impl DiReference {
             for i in 0..note_len {
                 let t = i as f64 / sr;
                 let env = (-6.0 * t / note_secs).exp(); // plucked decay
-                                                        // Fundamental + a few decaying harmonics (string-like).
+                // Fundamental + a few decaying harmonics (string-like).
                 let mut s = 0.0;
                 for (h, amp) in [(1.0, 1.0), (2.0, 0.5), (3.0, 0.28), (4.0, 0.14)] {
                     s += amp * (2.0 * core::f64::consts::PI * f0 * h * t).sin();
@@ -327,7 +327,9 @@ pub fn measured_loudness(
     };
 
     let guard = context();
-    let mut slot = guard.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut slot = guard
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     // (Re)initialise the context if absent or the DI sample rate changed.
     if slot
         .as_ref()
@@ -406,7 +408,7 @@ mod tests {
         let w = center_window(&s, 10);
         assert_eq!(w.len(), 10);
         assert_eq!(w[0], 45.0); // (100-10)/2 = 45
-                                // Shorter-than-window input is returned whole.
+        // Shorter-than-window input is returned whole.
         assert_eq!(center_window(&s, 1000).len(), 100);
         assert_eq!(center_window(&s, 0).len(), 100);
     }
@@ -607,7 +609,9 @@ pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntr
     let model_hash = hash_file(model_path).ok()?;
     let di = DiReference::load_or_synthetic(sample_rate);
     {
-        let cache = drive_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cache = drive_cache()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(e) = cache.lookup(&model_hash, &di.id, sr_key) {
             return Some(e.clone());
         }
@@ -628,7 +632,9 @@ pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntr
         lufs,
         thd,
     };
-    let mut cache = drive_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut cache = drive_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     // Re-check under the lock — a concurrent caller may have measured the
     // same model while we were (the lock is dropped during measurement).
     if cache
@@ -705,8 +711,14 @@ pub fn install_di_reference(samples: &[f32], sample_rate: u32) -> Result<(), Str
     // Invalidate everything measured against the old DI.
     let _ = std::fs::remove_file(dir.join("loudness-cache.styx"));
     let _ = std::fs::remove_file(DriveCurveCache::path());
-    *drive_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner) = DriveCurveCache::default();
-    if let Some(ctx) = context().lock().unwrap_or_else(std::sync::PoisonError::into_inner).as_mut() {
+    *drive_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = DriveCurveCache::default();
+    if let Some(ctx) = context()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_mut()
+    {
         ctx.di = DiReference::load_or_synthetic(sample_rate as f64);
         ctx.cache = LoudnessCache::load();
     }

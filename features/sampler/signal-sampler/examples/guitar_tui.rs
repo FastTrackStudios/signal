@@ -21,12 +21,12 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use daw_audio_io::pw::{self, ClockSettings, DeviceLatency};
+use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Gauge, List, ListItem, ListState, Paragraph};
-use ratatui::Frame;
 use signal_sampler::{DeviceInfo, GuitarRig, Library, ProfileRig, RigManager};
 
 fn arg(args: &[String], flag: &str) -> Option<String> {
@@ -1132,14 +1132,8 @@ fn settings_overlay(f: &mut Frame, s: &Settings, rate: u32, ring: u32) {
     // Latency breakdown — each stage's frames → ms, summed. Device stages use
     // (headroom + period-size); the graph quantum and rig ring add on top. The
     // interface's USB transport + converters are real but unmeasurable here.
-    let cap_fr = s
-        .cap
-        .as_ref()
-        .map_or(0, |c| c.headroom + c.period_size);
-    let play_fr = s
-        .play
-        .as_ref()
-        .map_or(0, |p| p.headroom + p.period_size);
+    let cap_fr = s.cap.as_ref().map_or(0, |c| c.headroom + c.period_size);
+    let play_fr = s.play.as_ref().map_or(0, |p| p.headroom + p.period_size);
     let total_fr = cap_fr + s.buffer() + ring + play_fr;
     let cap_d = s.cap.clone().unwrap_or_default();
     let play_d = s.play.clone().unwrap_or_default();

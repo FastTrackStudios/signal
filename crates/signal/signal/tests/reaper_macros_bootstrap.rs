@@ -133,9 +133,7 @@ async fn instantiate_fts_macros_plugin(ctx: &daw::test::ReaperTestContext) -> ey
     param0.set(0.42).await?;
     tokio::time::sleep(Duration::from_millis(100)).await;
     let readback = param0.get().await?;
-    println!(
-        "\n  Param 0 round-trip: original={original:.4}, set=0.42, readback={readback:.4}"
-    );
+    println!("\n  Param 0 round-trip: original={original:.4}, set=0.42, readback={readback:.4}");
     assert!(
         (readback - 0.42).abs() < 0.02,
         "parameter should be near 0.42, got {readback:.4}"

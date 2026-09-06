@@ -21,7 +21,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 use eq_dsp::band::Placement;
 use eq_dsp::engine::{BandConfig, BandDynamics, FtsEq};
 
@@ -42,7 +41,9 @@ fn goertzel(buf: &[f64], freq: f64) -> f64 {
 
 fn tone(freq: f64, amplitude: f64, frames: usize) -> Vec<f64> {
     let inc = std::f64::consts::TAU * freq / SR;
-    (0..frames).map(|i| amplitude * (inc * i as f64).sin()).collect()
+    (0..frames)
+        .map(|i| amplitude * (inc * i as f64).sin())
+        .collect()
 }
 
 /// Run a signal through and return the settled second half.
@@ -82,10 +83,7 @@ fn a_static_band_shapes_the_signal() {
     let out = render(&mut eq, &input);
     let dry = input.split_at(input.len() / 2).1.to_vec();
     let db = 10.0 * (goertzel(&out, 1000.0) / goertzel(&dry, 1000.0)).log10();
-    assert!(
-        (db + 12.0).abs() < 1.0,
-        "a -12 dB bell applied {db:+.2} dB",
-    );
+    assert!((db + 12.0).abs() < 1.0, "a -12 dB bell applied {db:+.2} dB",);
 }
 
 /// The engine is silent-in, silent-out and transparent when nothing is set.
@@ -101,7 +99,10 @@ fn an_untouched_engine_is_a_pass_through() {
         .zip(dry.iter())
         .map(|(a, b)| (a - b).abs())
         .fold(0.0f64, f64::max);
-    assert!(worst < 1e-12, "an idle EQ must not touch the signal ({worst:e})");
+    assert!(
+        worst < 1e-12,
+        "an idle EQ must not touch the signal ({worst:e})"
+    );
 }
 
 /// Dynamics reach the filter — the property the plugin used to lack entirely.
@@ -131,7 +132,10 @@ fn a_dynamic_band_rides_with_level() {
 
     let quiet = gain_at(0.003);
     let loud = gain_at(0.7);
-    assert!(quiet.abs() < 1.5, "a quiet signal should pass ({quiet:+.2} dB)");
+    assert!(
+        quiet.abs() < 1.5,
+        "a quiet signal should pass ({quiet:+.2} dB)"
+    );
     assert!(
         loud < quiet - 3.0,
         "a loud signal should be pulled down: {quiet:+.2} against {loud:+.2} dB",
@@ -154,8 +158,14 @@ fn a_spectral_band_engages_the_stft() {
             ..BandDynamics::default()
         },
     );
-    assert!(eq.spectral_engaged(), "a spectral band must engage the engine");
-    assert!(eq.latency() > 0, "and it costs latency, which a host must report");
+    assert!(
+        eq.spectral_engaged(),
+        "a spectral band must engage the engine"
+    );
+    assert!(
+        eq.latency() > 0,
+        "and it costs latency, which a host must report"
+    );
 }
 
 /// Stereo placement is honoured — the rig had it, the plugin did not.
@@ -184,8 +194,14 @@ fn placement_restricts_a_band_to_its_side() {
     let half = input.len() / 2;
     let left_db = 10.0 * (goertzel(&l[half..], 1000.0) / goertzel(&input[half..], 1000.0)).log10();
     let right_db = 10.0 * (goertzel(&r[half..], 1000.0) / goertzel(&input[half..], 1000.0)).log10();
-    assert!(left_db < -10.0, "the left side should be cut ({left_db:+.2} dB)");
-    assert!(right_db.abs() < 0.5, "the right side must be untouched ({right_db:+.2} dB)");
+    assert!(
+        left_db < -10.0,
+        "the left side should be cut ({left_db:+.2} dB)"
+    );
+    assert!(
+        right_db.abs() < 0.5,
+        "the right side must be untouched ({right_db:+.2} dB)"
+    );
 }
 
 /// Every band index the engine advertises actually works.
@@ -237,7 +253,10 @@ fn a_band_index_past_the_end_is_ignored() {
 struct Lcg(u64);
 impl Lcg {
     fn next(&mut self) -> f64 {
-        self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1);
         ((self.0 >> 33) as f64 / (1u64 << 31) as f64) - 1.0
     }
 }
@@ -346,8 +365,14 @@ fn two_spectral_bands_keep_their_own_density() {
     let dry = &input[input.len() / 2..];
     let low = 10.0 * (power_at(&out, 500.0) / power_at(dry, 500.0)).log10();
     let high = 10.0 * (power_at(&out, 5000.0) / power_at(dry, 5000.0)).log10();
-    assert!(low < -2.0, "the low resonance should be suppressed ({low:+.2} dB)");
-    assert!(high < -2.0, "the high resonance should be suppressed ({high:+.2} dB)");
+    assert!(
+        low < -2.0,
+        "the low resonance should be suppressed ({low:+.2} dB)"
+    );
+    assert!(
+        high < -2.0,
+        "the high resonance should be suppressed ({high:+.2} dB)"
+    );
 }
 
 /// Tilt weights the trigger by frequency.

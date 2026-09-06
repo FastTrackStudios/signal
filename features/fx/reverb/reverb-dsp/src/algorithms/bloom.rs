@@ -240,7 +240,7 @@ impl ReverbAlgorithm for Bloom {
         // -- Modulation: delay modulation depth (chorus in bloom tail) --
         let mod_rate = 0.3 + params.modulation * 1.2; // 0.3..1.5 Hz
         let mod_depth = params.modulation * 12.0; // 0..12 samples
-                                                  // Input diffusers
+        // Input diffusers
         self.input_diffuser_l
             .set_modulation(mod_rate, mod_depth * 0.5, sr);
         self.input_diffuser_r

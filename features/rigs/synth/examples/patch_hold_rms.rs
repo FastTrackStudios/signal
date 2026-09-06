@@ -10,7 +10,7 @@
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use signal_sampler::node_render::RenderNode;
 use signal_sampler::rig_node::{Container, RigNode};
-use signal_synth::omni_import::{load_patch_file, SoundsourceIndex};
+use signal_synth::omni_import::{SoundsourceIndex, load_patch_file};
 
 /// Clone the tree, dropping any container named "Filters".
 fn strip_filters(c: &Container) -> Container {

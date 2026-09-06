@@ -113,9 +113,13 @@ mod song_service;
 mod tests;
 
 use signal_proto::{
+    ALL_BLOCK_TYPES, Block, BlockParameterOverride, BlockService, BlockType, BrowserService,
+    EngineService, LayerService, ModuleBlockSource, ModulePreset, ModulePresetId, ModuleSnapshot,
+    ModuleSnapshotId, Preset, PresetId, ProfileService, RackService, ResolveService, RigService,
+    SceneTemplateService, SetlistService, SignalServiceError, Snapshot, SnapshotId, SongService,
     engine::{Engine, EngineId, EngineScene, EngineSceneId},
     layer::{Layer, LayerId, LayerSnapshot, LayerSnapshotId},
-    override_policy::{validate_overrides, FreePolicy, ScenePolicy, SnapshotPolicy},
+    override_policy::{FreePolicy, ScenePolicy, SnapshotPolicy, validate_overrides},
     overrides::{NodeOverrideOp, NodePathSegment},
     profile::{Patch, PatchId, PatchTarget, Profile, ProfileId},
     rack::{Rack, RackId},
@@ -128,14 +132,9 @@ use signal_proto::{
     setlist::{Setlist, SetlistEntry, SetlistEntryId, SetlistId},
     song::{Section, SectionId, Song, SongId},
     tagging::{
-        infer_tags_from_name, BrowserEntityKind, BrowserEntry, BrowserHit, BrowserIndex,
-        BrowserNodeId, BrowserQuery, StructuredTag, TagCategory, TagSet, TagWeights,
+        BrowserEntityKind, BrowserEntry, BrowserHit, BrowserIndex, BrowserNodeId, BrowserQuery,
+        StructuredTag, TagCategory, TagSet, TagWeights, infer_tags_from_name,
     },
-    Block, BlockParameterOverride, BlockService, BlockType, BrowserService, EngineService,
-    LayerService, ModuleBlockSource, ModulePreset, ModulePresetId, ModuleSnapshot,
-    ModuleSnapshotId, Preset, PresetId, ProfileService, RackService, ResolveService, RigService,
-    SceneTemplateService, SetlistService, SignalServiceError, Snapshot, SnapshotId, SongService,
-    ALL_BLOCK_TYPES,
 };
 use signal_storage::{
     BlockRepo, BlockRepoLive, DatabaseConnection, EngineRepo, EngineRepoLive, LayerRepo,
@@ -308,7 +307,7 @@ impl
         RackRepoLive,
     >
 {
-    #[must_use] 
+    #[must_use]
     pub fn from_db(db: DatabaseConnection) -> Self {
         Self::new(
             Arc::new(BlockRepoLive::new(db.clone())),

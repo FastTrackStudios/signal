@@ -110,8 +110,8 @@ pub mod modulation {
 // ─── Re-exports from ids ────────────────────────────────────────
 
 pub use ids::{
-    seed_id, IdFactory, ModulePresetId, ModuleSnapshotId, PresetId, RuntimeIdFactory, SnapshotId,
-    SEED_UUID_NS,
+    IdFactory, ModulePresetId, ModuleSnapshotId, PresetId, RuntimeIdFactory, SEED_UUID_NS,
+    SnapshotId, seed_id,
 };
 
 // ─── Re-exports from model ──────────────────────────────────────

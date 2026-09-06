@@ -14,7 +14,7 @@
 use std::path::Path;
 
 use signal_sampler::engine::cache::{SampleCache, SignalPcmPack};
-use signal_sampler::engine::stream::{StreamedSample, CHUNK_FRAMES, HEAD_FRAMES};
+use signal_sampler::engine::stream::{CHUNK_FRAMES, HEAD_FRAMES, StreamedSample};
 
 fn main() -> eyre::Result<()> {
     let pack_path = std::env::args()

@@ -3,12 +3,12 @@
 //! Stereo passthrough that controls other FX on the same track.
 
 use std::num::NonZeroU32;
-use std::sync::atomic::{AtomicI32, AtomicU32, AtomicU8, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI32, AtomicU8, AtomicU32, Ordering};
 
 use atomic_float::AtomicF32;
 use audiocore_core::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 use crate::param_queue::{self, ParamQueueConsumer, ParamQueueProducer};
 use signal_proto::ParamWriteRequest;
@@ -193,10 +193,11 @@ impl ControllerUiState {
     }
 
     pub fn macro_colors(&self) -> Vec<String> {
-        if let Ok(colors) = self.macro_colors.read() {
-            colors.to_vec()
-        } else {
-            vec![String::new(); NUM_MACROS]
+        match self.macro_colors.read() {
+            Ok(colors) => colors.to_vec(),
+            _ => {
+                vec![String::new(); NUM_MACROS]
+            }
         }
     }
 }
@@ -229,7 +230,7 @@ impl Default for FtsSignalController {
 }
 
 impl FtsSignalController {
-    #[must_use] 
+    #[must_use]
     pub fn queue_producer(&self) -> ParamQueueProducer {
         self.queue_producer.clone()
     }

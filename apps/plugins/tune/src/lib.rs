@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use audiocore_dsp::{AudioConfig, Processor};
 use tune::shifter::chain::{Algorithm, PitchChain};
-use tune::{hz_to_midi, Scale, YinConfig, YinDetector};
+use tune::{Scale, YinConfig, YinDetector, hz_to_midi};
 
 const PLUGIN_NAME: &str = "FTS Tune";
 

@@ -2,11 +2,11 @@
 //! each opening into the layer zoom.
 
 use dioxus::prelude::*;
-use signal_keys_proto::keys::KeysRigClient;
 use signal_keys_proto::KeysEngineModel;
+use signal_keys_proto::keys::KeysRigClient;
 
 use crate::control::engine_color;
-use crate::fader::{fmt_db, Fader};
+use crate::fader::{Fader, fmt_db};
 use crate::zoom::{OpenButton, Zoom};
 
 #[component]

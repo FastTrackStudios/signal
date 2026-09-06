@@ -7,7 +7,7 @@ use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 use crate::metadata::Metadata;
-use crate::override_policy::{validate_overrides, FreePolicy, OverridePolicyError};
+use crate::override_policy::{FreePolicy, OverridePolicyError, validate_overrides};
 use crate::overrides::Override;
 use crate::profile::PatchId;
 use crate::rig::{RigId, RigSceneId};
@@ -142,19 +142,19 @@ impl Song {
     }
 
     /// Semantic alias for `variants()` — returns all sections in this song.
-    #[must_use] 
+    #[must_use]
     pub fn sections(&self) -> &[Section] {
         &self.sections
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_section(&self) -> Option<&Section> {
         self.sections
             .iter()
             .find(|s| s.id == self.default_section_id)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn section(&self, id: &SectionId) -> Option<&Section> {
         self.sections.iter().find(|s| &s.id == id)
     }
@@ -445,8 +445,7 @@ mod tests {
             Patch::from_rig_scene(PatchId::new(), "Funk", rig_id.clone(), scene_id.clone());
         let new_solo =
             Patch::from_rig_scene(PatchId::new(), "Solo", rig_id.clone(), scene_id.clone());
-        let new_ambient =
-            Patch::from_rig_scene(PatchId::new(), "Ambient", rig_id, scene_id);
+        let new_ambient = Patch::from_rig_scene(PatchId::new(), "Ambient", rig_id, scene_id);
         let new_shimmer_pid = new_shimmer.id.clone();
         let _new_funk_pid = new_funk.id.clone();
         let new_solo_pid = new_solo.id.clone();

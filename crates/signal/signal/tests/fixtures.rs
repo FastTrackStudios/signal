@@ -14,10 +14,10 @@
 
 #![allow(dead_code)]
 
+use signal::Signal;
 use signal::builder::BuiltRig;
 use signal::rig::{RigId, RigSceneId};
 use signal::seed_id;
-use signal::Signal;
 
 // ─── Controller bootstrap ───────────────────────────────────────
 
@@ -32,44 +32,44 @@ pub async fn controller() -> Signal {
 
 // ─── Guitar MegaRig seed IDs ────────────────────────────────────
 
-#[must_use] 
+#[must_use]
 pub fn guitar_megarig_id() -> RigId {
     seed_id("guitar-megarig").into()
 }
 
-#[must_use] 
+#[must_use]
 pub fn guitar_megarig_default_scene() -> RigSceneId {
     seed_id("guitar-megarig-default").into()
 }
 
-#[must_use] 
+#[must_use]
 pub fn guitar_megarig_lead_scene() -> RigSceneId {
     seed_id("guitar-megarig-lead").into()
 }
 
 // ─── Keys MegaRig seed IDs ─────────────────────────────────────
 
-#[must_use] 
+#[must_use]
 pub fn keys_megarig_id() -> RigId {
     seed_id("keys-megarig").into()
 }
 
-#[must_use] 
+#[must_use]
 pub fn keys_megarig_default_scene() -> RigSceneId {
     seed_id("keys-megarig-default").into()
 }
 
-#[must_use] 
+#[must_use]
 pub fn keys_megarig_wide_scene() -> RigSceneId {
     seed_id("keys-megarig-wide").into()
 }
 
-#[must_use] 
+#[must_use]
 pub fn keys_megarig_focus_scene() -> RigSceneId {
     seed_id("keys-megarig-focus").into()
 }
 
-#[must_use] 
+#[must_use]
 pub fn keys_megarig_air_scene() -> RigSceneId {
     seed_id("keys-megarig-air").into()
 }
@@ -694,7 +694,7 @@ pub async fn seed_everything(signal: &Signal) {
 
 // ── Block presets (one per virtual block) ──
 
-#[must_use] 
+#[must_use]
 pub fn jm_block_presets() -> Vec<Preset> {
     vec![
         justa_boost(),
@@ -1161,7 +1161,7 @@ fn studio_verb() -> Preset {
 
 // ── Module presets (one per virtual module grouping) ──
 
-#[must_use] 
+#[must_use]
 pub fn jm_module_presets() -> Vec<ModulePreset> {
     vec![
         jm_pedals(),

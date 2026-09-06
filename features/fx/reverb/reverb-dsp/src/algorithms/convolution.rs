@@ -46,9 +46,9 @@ use audiocore_dsp::smoothing::ParamSmoother;
 use crate::algorithm::{
     AlgorithmParams, ConvolutionModParams, ImpulseParams, IrSlot, ReverbAlgorithm,
 };
-use crate::ir::prepared::{IrTrash, PreparedIr, PreparedIrPair, BLOCK, FFT_LEN, SPECTRUM_LEN};
-use crate::ir::transforms::IrTransforms;
 use crate::ir::IrAsset;
+use crate::ir::prepared::{BLOCK, FFT_LEN, IrTrash, PreparedIr, PreparedIrPair, SPECTRUM_LEN};
+use crate::ir::transforms::IrTransforms;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::modulated_delay::ModulatedDelay;
 use crate::primitives::one_pole::Lp1;
@@ -255,9 +255,7 @@ impl PartitionedConv {
         let spec = &mut self.input_history[self.history_head];
         // Buffer lengths are fixed at construction, so this cannot fail.
         // Ignore rather than panic: this runs on the render callback.
-        let _ = self
-            .fft_fwd
-            .process(&mut self.input_block.clone(), spec);
+        let _ = self.fft_fwd.process(&mut self.input_block.clone(), spec);
 
         // Accumulate Σ_k IR[k] * Input[t - k]. Ring modulus is the
         // history length so differently-sized partition sets (during a
@@ -301,7 +299,8 @@ impl PartitionedConv {
         // Inverse FFT.
         self.spectrum_scratch.copy_from_slice(&self.accumulator);
         // Fixed-length buffers; cannot fail. Never panic on the render path.
-        let _ = self.fft_inv
+        let _ = self
+            .fft_inv
             .process(&mut self.spectrum_scratch, &mut self.ifft_out);
 
         // Take the second half — discard wrap-around (overlap-save).

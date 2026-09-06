@@ -238,7 +238,7 @@ pub fn classify_type1(v: f32) -> Option<(&'static str, u32)> {
 
 /// Filter cutoff: normalized → Hz, measured through the real engine
 /// (knee sweep with keytracking off): **cutoff ≈ 15 Hz × 2^(9.55·v)**.
-#[must_use] 
+#[must_use]
 pub fn omni_cutoff_hz(v: f32) -> f32 {
     15.0 * (9.55 * v.clamp(0.0, 1.0)).exp2()
 }
@@ -252,7 +252,7 @@ pub fn omni_cutoff_hz(v: f32) -> f32 {
 /// Defaults: LP 12 dB. Classification including the engine character: the saturating families
 /// (Juicy / Moogie / OB / Jupiter / FATBOY / Sauce / Beefy / Warm / Power /
 /// French / Brit) map onto the ladder engine.
-#[must_use] 
+#[must_use]
 pub fn classify_filter_full(name: &str) -> (&'static str, u32, &'static str) {
     let (mode, poles) = classify_filter_inner(name);
     let k = name.to_ascii_lowercase();
@@ -358,7 +358,7 @@ fn parse_env_breakpoints(e: &XmlNode) -> Option<(f32, f32, f32, f32)> {
     let peak_idx = pts
         .iter()
         .enumerate()
-        .max_by(|a, b| a.1 .0.total_cmp(&b.1 .0))
+        .max_by(|a, b| a.1.0.total_cmp(&b.1.0))
         .map(|(i, _)| i)?;
     let last = pts.len() - 1;
     let sus_idx = if last > peak_idx { last - 1 } else { peak_idx };
@@ -501,11 +501,7 @@ pub fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
                 // inv flips the direction.
                 let hz = |f: Option<f32>, inv: bool| {
                     let v = (f.unwrap_or(0.5) - 0.5) * 4000.0;
-                    if inv {
-                        -v
-                    } else {
-                        v
-                    }
+                    if inv { -v } else { v }
                 };
                 layer.dfs = Some((
                     hz(dfs.num("freqA"), dfs.num("invA").unwrap_or(0.0) != 0.0),

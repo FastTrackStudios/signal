@@ -84,11 +84,7 @@ pub fn eval_mag_sq(poly: &MagSqPoly, w: f64) -> f64 {
     let w4 = w2 * w2;
     let num = w4.mul_add(poly.num_w4, w2 * poly.num_w2) + poly.num_w0;
     let den = w4.mul_add(poly.den_w4, w2 * poly.den_w2) + poly.den_w0;
-    if den.abs() > 1e-30 {
-        num / den
-    } else {
-        1.0
-    }
+    if den.abs() > 1e-30 { num / den } else { 1.0 }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -113,8 +109,13 @@ pub struct PoleFreqs {
 pub fn solve_pole_frequencies(poly: &MagSqPoly) -> PoleFreqs {
     // Cross-determinant quadratic: finds w² where |`H_num`|² / |`H_den`|² = 1
     // `A`·w⁴ + `B`·w² + `C` = 0 where:
-    let qa = poly.num_w4.mul_add(poly.den_w2, -(poly.num_w2 * poly.den_w4));
-    let qb = 2.0 * poly.num_w0.mul_add(poly.den_w4, -(poly.den_w0 * poly.num_w4));
+    let qa = poly
+        .num_w4
+        .mul_add(poly.den_w2, -(poly.num_w2 * poly.den_w4));
+    let qb = 2.0
+        * poly
+            .num_w0
+            .mul_add(poly.den_w4, -(poly.den_w0 * poly.num_w4));
     let qc = poly.num_w0 * poly.den_w2 - poly.den_w0 * poly.num_w2;
 
     if qa.abs() < 1e-30 {

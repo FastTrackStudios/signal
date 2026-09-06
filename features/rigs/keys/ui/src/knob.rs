@@ -2,7 +2,7 @@
 //! as the guitar rig's knob (150 px per sweep), sized for dense panels.
 
 use dioxus::prelude::*;
-use signal_widgets::arc::{arc_path, arc_point, SENSITIVITY, START_ANGLE, SWEEP};
+use signal_widgets::arc::{SENSITIVITY, START_ANGLE, SWEEP, arc_path, arc_point};
 
 /// Format a macro value for its unit.
 pub fn fmt_value(value: f32, unit: &str) -> String {

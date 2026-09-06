@@ -18,11 +18,11 @@
 //! them without a circular dep.
 
 use nice_plug::prelude::*;
-use nice_plug_dioxus::{create_dioxus_editor_with_state, DioxusState};
-use std::sync::atomic::Ordering;
+use nice_plug_dioxus::{DioxusState, create_dioxus_editor_with_state};
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
-use comp::limiter::{sin_clip, GoldenClip};
+use comp::limiter::{GoldenClip, sin_clip};
 use limiter_ui::params::{LimiterParams, LimiterUiState};
 
 const PLUGIN_NAME: &str = "FTS Limiter";
@@ -48,7 +48,11 @@ impl IspEstimator {
             let t2 = t * t;
             let t3 = t2 * t;
             let v = 0.5
-                * (3.0f64.mul_add(-c, 3.0f64.mul_add(b, -a)) + d).mul_add(t3, (4.0f64.mul_add(c, 2.0f64.mul_add(a, -(5.0 * b))) - d).mul_add(t2, 2.0f64.mul_add(b, (-a + c) * t)));
+                * (3.0f64.mul_add(-c, 3.0f64.mul_add(b, -a)) + d).mul_add(
+                    t3,
+                    (4.0f64.mul_add(c, 2.0f64.mul_add(a, -(5.0 * b))) - d)
+                        .mul_add(t2, 2.0f64.mul_add(b, (-a + c) * t)),
+                );
             peak = peak.max(v.abs());
         }
         peak

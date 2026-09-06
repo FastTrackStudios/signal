@@ -16,13 +16,13 @@ use std::fmt::Write;
 
 use eq_ui::cheatsheet::GUITAR_ELECTRIC;
 use eq_ui::eq_graph_interaction::{
-    drag_gain_for_shape, filter_type_for_position, nearest_band, wheel_q_for_shape, GraphMapper,
+    GraphMapper, drag_gain_for_shape, filter_type_for_position, nearest_band, wheel_q_for_shape,
 };
-use eq_ui::eq_graph_model::{freq_to_color, EqBand, EqBandShape};
+use eq_ui::eq_graph_model::{EqBand, EqBandShape, freq_to_color};
 use eq_ui::eq_graph_svg::{generate_all_eq_curves, generate_freq_labels, generate_grid_elements};
 
-use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::LiveBlock;
+use signal_guitar_proto::rig::RigClient;
 
 const NUM_BANDS: usize = 24;
 const H: f64 = 270.0; // viewBox height; width follows the panel's aspect

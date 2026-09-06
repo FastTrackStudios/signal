@@ -146,8 +146,8 @@ impl Model {
     ///
     /// Returns an error if the config file cannot be read or if the declared instruments do not match the checkpoint's stems.
     pub fn verify_config(&self, path: &Path) -> Result<()> {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let declared = config_instruments(&text)
             .with_context(|| format!("no instruments list in {}", path.display()))?;
 
@@ -297,9 +297,7 @@ pub fn default_cache() -> PathBuf {
 
 fn dirs_cache() -> PathBuf {
     std::env::var("XDG_CACHE_HOME").map_or_else(
-        |_| {
-            PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".cache")
-        },
+        |_| PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".cache"),
         PathBuf::from,
     )
 }
@@ -350,7 +348,9 @@ training:
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("six.yaml");
         std::fs::write(&p, SIX_STEM).unwrap();
-        DRUMSEP.verify_config(&p).expect("six-stem config should pass");
+        DRUMSEP
+            .verify_config(&p)
+            .expect("six-stem config should pass");
     }
 
     /// The trap: this config exists, downloads fine, and would mislabel

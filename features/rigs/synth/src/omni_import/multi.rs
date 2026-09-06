@@ -2,9 +2,9 @@
 
 use std::path::Path;
 
-use super::model::{parse_patch_node, OmniPatch};
+use super::model::{OmniPatch, parse_patch_node};
 use super::tree::patch_to_container;
-use super::{parse_xml, SoundsourceIndex};
+use super::{SoundsourceIndex, parse_xml};
 use signal_sampler::rig_node::Container;
 
 // ── Multis ───────────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ pub fn parse_multi(xml: &str) -> Result<OmniMulti, String> {
 
 /// Map a Multi onto one composition tree: Parts sum in parallel, each with
 /// its mixer level (0.75 ≈ unity — CALIBRATE) and mute (bypass).
-#[must_use] 
+#[must_use]
 pub fn multi_to_container(multi: &OmniMulti, index: &SoundsourceIndex) -> Container {
     let title = if multi.name.is_empty() {
         "Omnisphere Multi".to_string()

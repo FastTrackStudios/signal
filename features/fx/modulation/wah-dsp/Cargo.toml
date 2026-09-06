@@ -1,7 +1,7 @@
 [package]
 name = "wah-dsp"
 version.workspace = true
-edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "Auto-wah DSP engine — envelope/pattern-driven resonant filter"

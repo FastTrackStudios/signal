@@ -7,11 +7,7 @@ impl SampleEngine {
     /// Advance and return the round-robin take index for this
     /// (section, articulation, dynamic).
     pub(crate) fn next_rr(&self, section: &str, artic_id: &str, dynamic: &str) -> usize {
-        let max_rr = self
-            .patch
-            .spec
-            .articulation(artic_id)
-            .map_or(1, |a| a.rr);
+        let max_rr = self.patch.spec.articulation(artic_id).map_or(1, |a| a.rr);
         self.rr
             .borrow_mut()
             .next(section, artic_id, dynamic, max_rr)

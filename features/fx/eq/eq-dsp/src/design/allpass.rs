@@ -49,7 +49,11 @@ pub(super) fn design_allpass(n: usize, freq_hz: f64, q: f64, sample_rate: f64) -
     //   slope=4 → n=2 → N=4
     //   slope=6 → n=3 → N=6
     //   slope=8 → n=4 → N=12 (Pro-Q 4 doubles the cascade order at slope=8)
-    let n_filter = if n >= 4 { 12 } else { n.saturating_mul(2).max(2) };
+    let n_filter = if n >= 4 {
+        12
+    } else {
+        n.saturating_mul(2).max(2)
+    };
     let n_sec = n_filter.div_ceil(2);
     let q_user = q.max(1e-6);
 
@@ -60,7 +64,10 @@ pub(super) fn design_allpass(n: usize, freq_hz: f64, q: f64, sample_rate: f64) -
     for k in 0..n_sec {
         let k_int = u32::try_from(k).unwrap_or(0);
         let n_int = u32::try_from(n_filter).unwrap_or(1);
-        let alpha_butter = 2.0 * ((f64::from(k_int.saturating_mul(2).saturating_add(1))) * PI / (2.0 * f64::from(n_int))).sin();
+        let alpha_butter = 2.0
+            * ((f64::from(k_int.saturating_mul(2).saturating_add(1))) * PI
+                / (2.0 * f64::from(n_int)))
+            .sin();
         // Section-0 Q modulation. At slope=8 (N=12) Pro-Q clamps Q_eff to
         // ~7.4 (verified bit-exact via PROBE_HOOK_AUDIO_BIQUAD across fc).
         // Slopes 2/4/6 (N=2/4/6) use plain butter/Q for all Q.

@@ -23,7 +23,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 use std::path::PathBuf;
 
 use audiocore_dsp::{AudioConfig, Processor};

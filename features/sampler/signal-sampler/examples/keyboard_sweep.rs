@@ -171,11 +171,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for z in &spec.zones {
             *tunes.entry(z.tune_cents.round() as i32).or_default() += 1;
         }
-        let summary: Vec<String> = tunes
-            .iter()
-            .map(|(c, n)| format!("{c:+}c x{n}"))
-            .collect();
-        println!("master tune: {:+} cents", spec.performance.master_tune_cents);
+        let summary: Vec<String> = tunes.iter().map(|(c, n)| format!("{c:+}c x{n}")).collect();
+        println!(
+            "master tune: {:+} cents",
+            spec.performance.master_tune_cents
+        );
         println!("zone tuning: {}", summary.join("  "));
         // The systematic-tuning check. A real library fine-tunes individual
         // zones by a few cents; it does not put the SAME large offset on all
@@ -283,11 +283,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match &e.kind {
                         TraceKind::VoiceSpawn(v) => println!(
                             "   spawn kind={} note={} root={} rate={:.4} gain={:.3} artic={} start={} loop={}..{}\n        file={}",
-                            v.voice_kind, v.note, v.root_key, v.rate, v.gain,
+                            v.voice_kind,
+                            v.note,
+                            v.root_key,
+                            v.rate,
+                            v.gain,
                             v.articulation,
-                            v.start_frame, v.loop_start, v.loop_end, v.file
+                            v.start_frame,
+                            v.loop_start,
+                            v.loop_end,
+                            v.file
                         ),
-                        TraceKind::SampleMiss { note, articulation, dynamic, rr, reason } => println!(
+                        TraceKind::SampleMiss {
+                            note,
+                            articulation,
+                            dynamic,
+                            rr,
+                            reason,
+                        } => println!(
                             "   MISS note={note} artic={articulation} dyn={dynamic} rr={rr} reason={reason:?}"
                         ),
                         other => println!("   {other:?}"),
@@ -354,10 +367,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let total = (hi - lo + 1) as usize * vels.len();
     let bad = fails.no_body.len() + fails.not_loaded.len() + fails.pitch.len();
-    println!("{}/{} note×velocity triggers produced a correct body", total - bad, total);
+    println!(
+        "{}/{} note×velocity triggers produced a correct body",
+        total - bad,
+        total
+    );
 
     if !fails.no_body.is_empty() {
-        println!("\nNO BODY ({}): a dead key — only a release/click sounds", fails.no_body.len());
+        println!(
+            "\nNO BODY ({}): a dead key — only a release/click sounds",
+            fails.no_body.len()
+        );
         for (n, v) in fails.no_body.iter().take(30) {
             println!("  {} (note {n}) vel {v}", nm(*n));
         }

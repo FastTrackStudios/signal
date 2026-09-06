@@ -22,5 +22,5 @@ pub use comp_dsp::*;
 pub mod limiter {
     /// Golden-ratio interpolated hard clip (`ClipOnly2` / `ADClip8` lineage) and
     /// the `ClipSoftly` sine waveshaper.
-    pub use audiocore_dsp::soft_clip::{sin_clip, GoldenClip};
+    pub use audiocore_dsp::soft_clip::{GoldenClip, sin_clip};
 }

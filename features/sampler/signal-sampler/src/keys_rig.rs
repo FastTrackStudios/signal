@@ -16,8 +16,8 @@
 use std::sync::Arc;
 
 use daw::service::handle::DawHandle as _;
-use daw::standalone::metering::Meters;
 use daw::standalone::Standalone;
+use daw::standalone::metering::Meters;
 #[cfg(not(target_arch = "wasm32"))]
 use daw_audio_io::AudioIoPrefs;
 use signal_plugin_host::{
@@ -27,9 +27,9 @@ use signal_plugin_host::{
 use signal_rig_host::DuplexRigHost;
 use signal_rig_host::RigProject;
 
+use crate::MidiMonitor;
 use crate::node_render::{GainCells, RenderNode};
 use crate::rig_node::{Container, Role};
-use crate::MidiMonitor;
 
 /// Whether any sampler block in `tree` plays the library at `spec_path` —
 /// the test for "does this lane care that this pack just arrived?" (see
@@ -178,11 +178,7 @@ impl KeysInstrument {
             .retiring
             .as_mut()
             .is_some_and(|r| r.active_voices() == 0);
-        if done {
-            self.retiring.take()
-        } else {
-            None
-        }
+        if done { self.retiring.take() } else { None }
     }
 
     /// Whether a swapped-out tree is still sounding.
@@ -500,7 +496,9 @@ impl KeysRig {
     /// of times a second while its average load read a comfortable 20%.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn engine_stats(&self) -> Option<std::sync::Arc<daw_audio_io::duplex::EngineStats>> {
-        self._host.as_ref().and_then(signal_rig_host::RigHost::stats)
+        self._host
+            .as_ref()
+            .and_then(signal_rig_host::RigHost::stats)
     }
 
     /// Open a device, build the project, and host `tree` as the playable preset.
@@ -1225,7 +1223,7 @@ impl KeysRig {
     /// opening hardware ports takes seconds and can stall outright while the
     /// `PipeWire` graph reconfigures, and that stall must not pin a rig mutex.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn midi_sink(&self) -> impl Fn(midicore::TimedEvent) + Send + Clone + 'static {
+    pub fn midi_sink(&self) -> impl Fn(midicore::TimedEvent) + Send + Clone + 'static + use<> {
         let daw = self.daw.clone();
         let targets = self.midi_targets();
         midicore::attach::tap_sink(self.midi_monitor.clone(), move |ev| {

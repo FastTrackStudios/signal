@@ -6,12 +6,12 @@
 
 use audiocore_core::prelude::*;
 use fts_plug_ui::prelude::*;
-use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::editor::ResizeHint;
+use nice_plug::editor::dpi::LogicalSize;
 use nice_plug_dioxus::SharedState;
 use std::sync::atomic::Ordering;
 
-use crate::gr_trace::{GrTrace, GRAPH_H};
+use crate::gr_trace::{GRAPH_H, GrTrace};
 use crate::params::LimiterUiState;
 
 /// Editor size requested from the host on open.
@@ -45,7 +45,7 @@ pub const MAX_EDITOR_H: f32 = 1200.0;
 ///
 /// The trace is the part that benefits from extra width — a longer time window
 /// makes the limiter's release behaviour much easier to read.
-#[must_use] 
+#[must_use]
 pub const fn resize_hint() -> ResizeHint {
     ResizeHint::RESIZABLE.with_min_max_logical_size(
         Some(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H)),
@@ -54,7 +54,7 @@ pub const fn resize_hint() -> ResizeHint {
 }
 
 /// The limiter's identity colour.
-#[must_use] 
+#[must_use]
 pub const fn skin() -> Skin {
     Skin::accented(accents::LIMITER)
 }

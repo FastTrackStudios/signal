@@ -87,7 +87,7 @@ pub struct InferredBlock {
 ///   - Depth-1 **sub-container** → Block (multi-FX); its children are ignored
 /// - `FxRoutingMode::Parallel` → `SignalChain` with a `Split` node
 /// - `FxRoutingMode::Serial` → sequential `SignalChain`
-#[must_use] 
+#[must_use]
 pub fn infer_chain_from_fx_tree(tree: &FxTree) -> InferredChain {
     let mut modules = Vec::new();
     let mut standalone_blocks = Vec::new();
@@ -297,8 +297,8 @@ fn clean_container_name(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use daw::service::fx::tree::{FxContainerChannelConfig, FxNodeId};
     use daw::service::fx::Fx;
+    use daw::service::fx::tree::{FxContainerChannelConfig, FxNodeId};
 
     fn plugin_node(guid: &str, name: &str, plugin_name: &str) -> FxNode {
         FxNode {

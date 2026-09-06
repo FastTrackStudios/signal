@@ -17,7 +17,7 @@ use std::f64::consts::TAU;
 ///
 /// # Returns
 /// Bipolar value in `[-1.0, 1.0]`.
-#[must_use] 
+#[must_use]
 pub fn evaluate_waveform(
     waveform: LfoWaveform,
     phase: f64,
@@ -38,11 +38,7 @@ pub fn evaluate_waveform(
 
         LfoWaveform::Square => {
             let pw = pulse_width.clamp(0.01, 0.99);
-            if phase < pw {
-                1.0
-            } else {
-                -1.0
-            }
+            if phase < pw { 1.0 } else { -1.0 }
         }
 
         LfoWaveform::Sawtooth => 2.0f64.mul_add(phase, -1.0),

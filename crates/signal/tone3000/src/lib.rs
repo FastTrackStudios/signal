@@ -31,8 +31,13 @@
 //! file into [`signal_nam::nam_file::Provenance`], because stripping them is
 //! forbidden and because a download outlives the session that made it.
 
+pub mod config;
+mod map;
+mod service;
 mod session;
 mod store;
 
+pub use config::Config;
+pub use service::Tone3000Backend;
 pub use session::{AuthStart, Session, SessionError};
 pub use store::{DownloadOutcome, TokenStore, Tokens};
