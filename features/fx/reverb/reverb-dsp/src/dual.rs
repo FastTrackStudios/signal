@@ -152,13 +152,16 @@ impl DualReverb {
                 else {
                     return;
                 };
-                dry_l.copy_from_slice(&left[..n]);
-                dry_r.copy_from_slice(&right[..n]);
+                let (Some(head_l), Some(head_r)) = (left.get(..n), right.get(..n)) else {
+                    return;
+                };
+                dry_l.copy_from_slice(head_l);
+                dry_r.copy_from_slice(head_r);
                 let (Some(b_l), Some(b_r)) = (self.b_l.get_mut(..n), self.b_r.get_mut(..n)) else {
                     return;
                 };
-                b_l.copy_from_slice(&left[..n]);
-                b_r.copy_from_slice(&right[..n]);
+                b_l.copy_from_slice(head_l);
+                b_r.copy_from_slice(head_r);
 
                 self.a.process(left, right);
                 self.b.process(b_l, b_r);
@@ -180,8 +183,11 @@ impl DualReverb {
                 let (Some(b_l), Some(b_r)) = (self.b_l.get_mut(..n), self.b_r.get_mut(..n)) else {
                     return;
                 };
-                b_l.copy_from_slice(&left[..n]);
-                b_r.copy_from_slice(&right[..n]);
+                let (Some(head_l), Some(head_r)) = (left.get(..n), right.get(..n)) else {
+                    return;
+                };
+                b_l.copy_from_slice(head_l);
+                b_r.copy_from_slice(head_r);
 
                 self.a.process(left, right);
                 self.b.process(b_l, b_r);
@@ -233,10 +239,11 @@ impl Processor for DualReverb {
         let mut pos = 0;
         while pos < n {
             let end = pos.saturating_add(cap).min(n);
-            let (l, r) = (
-                left.get_mut(pos..end).expect("pos..end within bounds"),
-                right.get_mut(pos..end).expect("pos..end within bounds"),
-            );
+            // `end <= n <= min(len)`, so both slices exist; bailing on the
+            // impossible `None` keeps the render callback panic-free.
+            let (Some(l), Some(r)) = (left.get_mut(pos..end), right.get_mut(pos..end)) else {
+                return;
+            };
             self.process_chunk(l, r);
             pos = end;
         }

@@ -15,30 +15,62 @@ use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::grain_pitch::GrainPitchShifter;
 use audiocore_dsp::one_pole::OnePoleHp;
 
-/// Vowel formant frequencies for "ah", "ee", "oh", "oo"
-/// Measured tenor vowel formants (Csound's appendix tables — F, dB
-/// amplitude relative to F1, bandwidth): five formants per vowel; the
-/// fixed 2.6–3.6 kHz F3–F5 cluster is the "singer's formant" that
-/// reads as SUNG rather than filtered — it survives the vowel morph.
-/// Rows: "ah", "e", "oh", "oo" (the morph axis).
-const VOWEL_F: [[f64; 5]; 4] = [
-    [650.0, 1080.0, 2650.0, 2900.0, 3250.0],
-    [400.0, 1700.0, 2600.0, 3200.0, 3580.0],
-    [400.0, 800.0, 2600.0, 2800.0, 3000.0],
-    [350.0, 600.0, 2700.0, 2900.0, 3300.0],
+/// One measured formant of one vowel: centre frequency, amplitude in dB
+/// relative to F1, and bandwidth. Three parallel `[[f64; 5]; 4]` tables
+/// before, all walked by the same pair of indices.
+struct Formant {
+    f: f64,
+    a_db: f64,
+    bw: f64,
+}
+
+/// Measured tenor vowel formants (Csound's appendix tables): five
+/// formants per vowel; the fixed 2.6–3.6 kHz F3–F5 cluster is the
+/// "singer's formant" that reads as SUNG rather than filtered — it
+/// survives the vowel morph. Rows: "ah", "e", "oh", "oo" (the morph
+/// axis).
+const VOWELS: [[Formant; 5]; 4] = [
+    // "ah"
+    [
+        Formant { f: 650.0, a_db: 0.0, bw: 80.0 },
+        Formant { f: 1080.0, a_db: -6.0, bw: 90.0 },
+        Formant { f: 2650.0, a_db: -7.0, bw: 120.0 },
+        Formant { f: 2900.0, a_db: -8.0, bw: 130.0 },
+        Formant { f: 3250.0, a_db: -22.0, bw: 140.0 },
+    ],
+    // "e"
+    [
+        Formant { f: 400.0, a_db: 0.0, bw: 70.0 },
+        Formant { f: 1700.0, a_db: -14.0, bw: 80.0 },
+        Formant { f: 2600.0, a_db: -12.0, bw: 100.0 },
+        Formant { f: 3200.0, a_db: -14.0, bw: 120.0 },
+        Formant { f: 3580.0, a_db: -20.0, bw: 120.0 },
+    ],
+    // "oh"
+    [
+        Formant { f: 400.0, a_db: 0.0, bw: 70.0 },
+        Formant { f: 800.0, a_db: -10.0, bw: 80.0 },
+        Formant { f: 2600.0, a_db: -12.0, bw: 100.0 },
+        Formant { f: 2800.0, a_db: -12.0, bw: 130.0 },
+        Formant { f: 3000.0, a_db: -26.0, bw: 135.0 },
+    ],
+    // "oo"
+    [
+        Formant { f: 350.0, a_db: 0.0, bw: 40.0 },
+        Formant { f: 600.0, a_db: -20.0, bw: 60.0 },
+        Formant { f: 2700.0, a_db: -17.0, bw: 100.0 },
+        Formant { f: 2900.0, a_db: -14.0, bw: 120.0 },
+        Formant { f: 3300.0, a_db: -26.0, bw: 120.0 },
+    ],
 ];
-const VOWEL_A_DB: [[f64; 5]; 4] = [
-    [0.0, -6.0, -7.0, -8.0, -22.0],
-    [0.0, -14.0, -12.0, -14.0, -20.0],
-    [0.0, -10.0, -12.0, -12.0, -26.0],
-    [0.0, -20.0, -17.0, -14.0, -26.0],
-];
-const VOWEL_BW: [[f64; 5]; 4] = [
-    [80.0, 90.0, 120.0, 130.0, 140.0],
-    [70.0, 80.0, 100.0, 120.0, 120.0],
-    [70.0, 80.0, 100.0, 130.0, 135.0],
-    [40.0, 60.0, 100.0, 120.0, 120.0],
-];
+
+/// Total row lookup. `set_vowel` clamps the morph index into the table,
+/// so the fallback is unreachable — it just keeps the lookup infallible.
+fn vowel(idx: usize) -> &'static [Formant; 5] {
+    let [ah, ..] = &VOWELS;
+    VOWELS.get(idx).unwrap_or(ah)
+}
+
 const N_FORMANTS: usize = 5;
 
 pub struct Chorale {
@@ -169,12 +201,14 @@ impl Chorale {
             ChoirVoice::Baritone => 0.78,
         };
 
-        for i in 0..N_FORMANTS {
+        let morph = vowel(lo).iter().zip(vowel(hi));
+        let filters = self.formants_l.iter_mut().zip(self.formants_r.iter_mut());
+        for ((lo_fmt, hi_fmt), (filter_l, filter_r)) in morph.zip(filters) {
             // Morph F / amplitude / bandwidth in log-frequency space
             // between the measured vowel columns.
-            let f = VOWEL_F[lo][i].ln().mul_add(1.0 - frac, VOWEL_F[hi][i].ln() * frac).exp();
-            let amp = VOWEL_A_DB[lo][i].mul_add(1.0 - frac, VOWEL_A_DB[hi][i] * frac);
-            let bw = VOWEL_BW[lo][i].mul_add(1.0 - frac, VOWEL_BW[hi][i] * frac);
+            let f = lo_fmt.f.ln().mul_add(1.0 - frac, hi_fmt.f.ln() * frac).exp();
+            let amp = lo_fmt.a_db.mul_add(1.0 - frac, hi_fmt.a_db * frac);
+            let bw = lo_fmt.bw.mul_add(1.0 - frac, hi_fmt.bw * frac);
             // Per-channel formant drift from the mod randomization.
             let freq_l = f * voice_scale * (1.0 + self.rand_formant[0]);
             let freq_r = f * voice_scale * (1.0 + self.rand_formant[1]);
@@ -187,8 +221,8 @@ impl Chorale {
             let (q_scale, base_gain) = self.mx.resonance.q_gain();
             let gain_db = (base_gain + amp * 0.35).max(1.0);
             let q = (f / bw * q_scale / 3.0).clamp(1.5, 9.0);
-            self.formants_l.get_mut(i).map(|f| f.set(FilterType::Peak { gain_db }, freq_l, q, sample_rate));
-            self.formants_r.get_mut(i).map(|f| f.set(FilterType::Peak { gain_db }, freq_r, q, sample_rate));
+            filter_l.set(FilterType::Peak { gain_db }, freq_l, q, sample_rate);
+            filter_r.set(FilterType::Peak { gain_db }, freq_r, q, sample_rate);
         }
     }
 
