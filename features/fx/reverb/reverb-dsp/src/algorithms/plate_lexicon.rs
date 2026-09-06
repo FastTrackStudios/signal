@@ -25,25 +25,77 @@ use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 
 /// Lexicon 224-style plate.
+/// One recirculating loop: a nested modulated-allpass pair with a delay
+/// and a damping lowpass between them.
+struct Loop {
+    ap1: ModulatedAllpass,
+    delay1: DelayLine,
+    damp1: Lp1,
+    ap2: ModulatedAllpass,
+    delay2: DelayLine,
+}
+
+/// One loop's lengths, modulation and phases, already scaled to the host
+/// rate where they are lengths.
+struct LoopVoicing {
+    ap1_len: usize,
+    delay1_len: usize,
+    ap2_len: usize,
+    delay2_len: usize,
+    /// Modulation rate of each allpass, in Hz.
+    ap1_rate: f64,
+    ap2_rate: f64,
+    /// Starting LFO phase of each allpass (stereo decorrelation).
+    ap1_phase: f64,
+    ap2_phase: f64,
+}
+
+impl Loop {
+    fn new(v: &LoopVoicing, s: f64, sample_rate: f64) -> Self {
+        let mut ap1 = ModulatedAllpass::new();
+        ap1.sample_delay = v.ap1_len;
+        ap1.feedback = -0.65;
+        ap1.set_modulation(v.ap1_rate, 12.0 * s, sample_rate);
+        ap1.set_phase(v.ap1_phase);
+
+        let mut ap2 = ModulatedAllpass::new();
+        ap2.sample_delay = v.ap2_len;
+        ap2.feedback = 0.55;
+        ap2.set_modulation(v.ap2_rate, 10.0 * s, sample_rate);
+        ap2.set_phase(v.ap2_phase);
+
+        let mut damp1 = Lp1::new();
+        damp1.set_freq(8000.0, sample_rate);
+
+        Self {
+            ap1,
+            delay1: DelayLine::new(v.delay1_len.saturating_add(1)),
+            damp1,
+            ap2,
+            delay2: DelayLine::new(v.delay2_len.saturating_add(1)),
+        }
+    }
+
+    fn reset(&mut self) {
+        self.ap1.reset();
+        self.delay1.clear();
+        self.damp1.reset();
+        self.ap2.reset();
+        self.delay2.clear();
+    }
+}
+
 pub struct PlateLexicon {
     // Input bandwidth control
     bandwidth: Lp1,
     // Input diffusion (4 series allpass)
     input_diffuser: [Allpass; 4],
 
-    // Loop A — nested allpass pair + delays
-    loop_a_ap1: ModulatedAllpass,
-    loop_a_delay1: DelayLine,
-    loop_a_damp1: Lp1,
-    loop_a_ap2: ModulatedAllpass,
-    loop_a_delay2: DelayLine,
-
-    // Loop B — nested allpass pair + delays
-    loop_b_ap1: ModulatedAllpass,
-    loop_b_delay1: DelayLine,
-    loop_b_damp1: Lp1,
-    loop_b_ap2: ModulatedAllpass,
-    loop_b_delay2: DelayLine,
+    // The two loops. Same shape, different lengths, modulation rates
+    // and phases — a `Loop` each rather than ten `loop_a_*` /
+    // `loop_b_*` fields walked in parallel.
+    loop_a: Loop,
+    loop_b: Loop,
 
     // Parameters
     // DC blockers on the loop cross-feeds.
@@ -68,51 +120,35 @@ impl PlateLexicon {
             num::f64_to_index(339.0 * s),
         ];
 
-        // Loop A allpass delays — nested pair
-        let la_ap1_len = num::f64_to_index(547.0 * s);
-        let la_d1_len = num::f64_to_index(3571.0 * s);
-        let la_ap2_len = num::f64_to_index(1187.0 * s);
-        let la_d2_len = num::f64_to_index(2833.0 * s);
-
-        // Loop B allpass delays — offset for stereo
-        let lb_ap1_len = num::f64_to_index(709.0 * s);
-        let lb_d1_len = num::f64_to_index(3373.0 * s);
-        let lb_ap2_len = num::f64_to_index(1493.0 * s);
-        let lb_d2_len = num::f64_to_index(2999.0 * s);
-
-        // Loop A AP1 (modulated)
-        let mut loop_a_ap1 = ModulatedAllpass::new();
-        loop_a_ap1.sample_delay = la_ap1_len;
-        loop_a_ap1.feedback = -0.65;
-        loop_a_ap1.set_modulation(0.8, 12.0 * s, sample_rate);
-        loop_a_ap1.set_phase(0.0);
-
-        // Loop A AP2 (modulated, different rate)
-        let mut loop_a_ap2 = ModulatedAllpass::new();
-        loop_a_ap2.sample_delay = la_ap2_len;
-        loop_a_ap2.feedback = 0.55;
-        loop_a_ap2.set_modulation(1.2, 10.0 * s, sample_rate);
-        loop_a_ap2.set_phase(0.25);
-
-        // Loop B AP1 (modulated)
-        let mut loop_b_ap1 = ModulatedAllpass::new();
-        loop_b_ap1.sample_delay = lb_ap1_len;
-        loop_b_ap1.feedback = -0.65;
-        loop_b_ap1.set_modulation(0.9, 12.0 * s, sample_rate);
-        loop_b_ap1.set_phase(0.5);
-
-        // Loop B AP2 (modulated, different rate)
-        let mut loop_b_ap2 = ModulatedAllpass::new();
-        loop_b_ap2.sample_delay = lb_ap2_len;
-        loop_b_ap2.feedback = 0.55;
-        loop_b_ap2.set_modulation(1.1, 10.0 * s, sample_rate);
-        loop_b_ap2.set_phase(0.75);
-
-        // Damping
-        let mut loop_a_damp1 = Lp1::new();
-        loop_a_damp1.set_freq(8000.0, sample_rate);
-        let mut loop_b_damp1 = Lp1::new();
-        loop_b_damp1.set_freq(8000.0, sample_rate);
+        // Loop A — nested pair; Loop B offset for stereo.
+        let loop_a = Loop::new(
+            &LoopVoicing {
+                ap1_len: num::f64_to_index(547.0 * s),
+                delay1_len: num::f64_to_index(3571.0 * s),
+                ap2_len: num::f64_to_index(1187.0 * s),
+                delay2_len: num::f64_to_index(2833.0 * s),
+                ap1_rate: 0.8,
+                ap2_rate: 1.2,
+                ap1_phase: 0.0,
+                ap2_phase: 0.25,
+            },
+            s,
+            sample_rate,
+        );
+        let loop_b = Loop::new(
+            &LoopVoicing {
+                ap1_len: num::f64_to_index(709.0 * s),
+                delay1_len: num::f64_to_index(3373.0 * s),
+                ap2_len: num::f64_to_index(1493.0 * s),
+                delay2_len: num::f64_to_index(2999.0 * s),
+                ap1_rate: 0.9,
+                ap2_rate: 1.1,
+                ap1_phase: 0.5,
+                ap2_phase: 0.75,
+            },
+            s,
+            sample_rate,
+        );
 
         // Input bandwidth
         let mut bandwidth = Lp1::new();
@@ -137,16 +173,8 @@ impl PlateLexicon {
         Self {
             bandwidth,
             input_diffuser,
-            loop_a_ap1,
-            loop_a_delay1: DelayLine::new(la_d1_len.saturating_add(1)),
-            loop_a_damp1,
-            loop_a_ap2,
-            loop_a_delay2: DelayLine::new(la_d2_len.saturating_add(1)),
-            loop_b_ap1,
-            loop_b_delay1: DelayLine::new(lb_d1_len.saturating_add(1)),
-            loop_b_damp1,
-            loop_b_ap2,
-            loop_b_delay2: DelayLine::new(lb_d2_len.saturating_add(1)),
+            loop_a,
+            loop_b,
             dc_a: DcBlocker::new(),
             dc_b: DcBlocker::new(),
             decay: 0.7,
@@ -164,16 +192,8 @@ impl ReverbAlgorithm for PlateLexicon {
         for d in &mut self.input_diffuser {
             d.reset();
         }
-        self.loop_a_ap1.reset();
-        self.loop_a_delay1.clear();
-        self.loop_a_damp1.reset();
-        self.loop_a_ap2.reset();
-        self.loop_a_delay2.clear();
-        self.loop_b_ap1.reset();
-        self.loop_b_delay1.clear();
-        self.loop_b_damp1.reset();
-        self.loop_b_ap2.reset();
-        self.loop_b_delay2.clear();
+        self.loop_a.reset();
+        self.loop_b.reset();
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
@@ -186,8 +206,8 @@ impl ReverbAlgorithm for PlateLexicon {
 
         // Damping
         let freq = (1.0 - params.damping).mul_add(14000.0, 2000.0);
-        self.loop_a_damp1.set_freq(freq, self.sample_rate);
-        self.loop_b_damp1.set_freq(freq, self.sample_rate);
+        self.loop_a.damp1.set_freq(freq, self.sample_rate);
+        self.loop_b.damp1.set_freq(freq, self.sample_rate);
 
         // Input bandwidth — Lexicon characteristic: brighter input than Dattorro
         let bw_freq = params.damping.mul_add(-0.3, 1.0).mul_add(14000.0, 6000.0);
@@ -203,20 +223,20 @@ impl ReverbAlgorithm for PlateLexicon {
 
         let loop_fb1 = -params.diffusion.mul_add(0.2, 0.5);
         let loop_fb2 = params.diffusion.mul_add(0.15, 0.4);
-        self.loop_a_ap1.feedback = loop_fb1;
-        self.loop_b_ap1.feedback = loop_fb1;
-        self.loop_a_ap2.feedback = loop_fb2;
-        self.loop_b_ap2.feedback = loop_fb2;
+        self.loop_a.ap1.feedback = loop_fb1;
+        self.loop_b.ap1.feedback = loop_fb1;
+        self.loop_a.ap2.feedback = loop_fb2;
+        self.loop_b.ap2.feedback = loop_fb2;
 
         // Modulation — Lexicon has more modulation points than Dattorro
         let mod_depth = params.modulation * 20.0 * self.s;
-        self.loop_a_ap1
+        self.loop_a.ap1
             .set_modulation(0.8, mod_depth, self.sample_rate);
-        self.loop_a_ap2
+        self.loop_a.ap2
             .set_modulation(1.2, mod_depth * 0.7, self.sample_rate);
-        self.loop_b_ap1
+        self.loop_b.ap1
             .set_modulation(0.9, mod_depth, self.sample_rate);
-        self.loop_b_ap2
+        self.loop_b.ap2
             .set_modulation(1.1, mod_depth * 0.7, self.sample_rate);
     }
 
@@ -235,47 +255,47 @@ impl ReverbAlgorithm for PlateLexicon {
         let s = self.s;
         let fb_a = self
             .dc_a
-            .tick(self.loop_b_delay2.read(num::f64_to_index(2999.0 * s)));
+            .tick(self.loop_b.delay2.read(num::f64_to_index(2999.0 * s)));
         let fb_b = self
             .dc_b
-            .tick(self.loop_a_delay2.read(num::f64_to_index(2833.0 * s)));
+            .tick(self.loop_a.delay2.read(num::f64_to_index(2833.0 * s)));
 
         // --- Loop A ---
         // AP1 (modulated, negative feedback — characteristic Lexicon)
-        let a_ap1 = self.loop_a_ap1.tick(x + fb_a * self.decay);
+        let a_ap1 = self.loop_a.ap1.tick(x + fb_a * self.decay);
         // Delay 1
-        self.loop_a_delay1.write(a_ap1);
-        let a_d1 = self.loop_a_delay1.read(num::f64_to_index(3571.0 * s));
+        self.loop_a.delay1.write(a_ap1);
+        let a_d1 = self.loop_a.delay1.read(num::f64_to_index(3571.0 * s));
         // Damping + decay
-        let a_damped = self.loop_a_damp1.tick(a_d1) * self.decay;
+        let a_damped = self.loop_a.damp1.tick(a_d1) * self.decay;
         // AP2 (modulated — extra modulation point vs Dattorro)
-        let a_ap2 = self.loop_a_ap2.tick(a_damped);
+        let a_ap2 = self.loop_a.ap2.tick(a_damped);
         // Delay 2
-        self.loop_a_delay2.write(a_ap2);
+        self.loop_a.delay2.write(a_ap2);
 
         // --- Loop B ---
-        let b_ap1 = self.loop_b_ap1.tick(x + fb_b * self.decay);
-        self.loop_b_delay1.write(b_ap1);
-        let b_d1 = self.loop_b_delay1.read(num::f64_to_index(3373.0 * s));
-        let b_damped = self.loop_b_damp1.tick(b_d1) * self.decay;
-        let b_ap2 = self.loop_b_ap2.tick(b_damped);
-        self.loop_b_delay2.write(b_ap2);
+        let b_ap1 = self.loop_b.ap1.tick(x + fb_b * self.decay);
+        self.loop_b.delay1.write(b_ap1);
+        let b_d1 = self.loop_b.delay1.read(num::f64_to_index(3373.0 * s));
+        let b_damped = self.loop_b.damp1.tick(b_d1) * self.decay;
+        let b_ap2 = self.loop_b.ap2.tick(b_damped);
+        self.loop_b.delay2.write(b_ap2);
 
         // Multi-tap output — Lexicon-style decorrelated tapping
         // More taps than Dattorro for smoother stereo field
-        let out_l = self.loop_a_delay1.read(num::f64_to_index(213.0 * s))
-            + self.loop_a_delay1.read(num::f64_to_index(2491.0 * s))
-            - self.loop_b_delay1.read(num::f64_to_index(1571.0 * s))
-            + self.loop_b_delay2.read(num::f64_to_index(1667.0 * s))
-            - self.loop_a_delay2.read(num::f64_to_index(887.0 * s))
-            - self.loop_b_delay2.read(num::f64_to_index(2311.0 * s));
+        let out_l = self.loop_a.delay1.read(num::f64_to_index(213.0 * s))
+            + self.loop_a.delay1.read(num::f64_to_index(2491.0 * s))
+            - self.loop_b.delay1.read(num::f64_to_index(1571.0 * s))
+            + self.loop_b.delay2.read(num::f64_to_index(1667.0 * s))
+            - self.loop_a.delay2.read(num::f64_to_index(887.0 * s))
+            - self.loop_b.delay2.read(num::f64_to_index(2311.0 * s));
 
-        let out_r = self.loop_b_delay1.read(num::f64_to_index(281.0 * s))
-            + self.loop_b_delay1.read(num::f64_to_index(2719.0 * s))
-            - self.loop_a_delay1.read(num::f64_to_index(1831.0 * s))
-            + self.loop_a_delay2.read(num::f64_to_index(1423.0 * s))
-            - self.loop_b_delay2.read(num::f64_to_index(773.0 * s))
-            - self.loop_a_delay2.read(num::f64_to_index(2143.0 * s));
+        let out_r = self.loop_b.delay1.read(num::f64_to_index(281.0 * s))
+            + self.loop_b.delay1.read(num::f64_to_index(2719.0 * s))
+            - self.loop_a.delay1.read(num::f64_to_index(1831.0 * s))
+            + self.loop_a.delay2.read(num::f64_to_index(1423.0 * s))
+            - self.loop_b.delay2.read(num::f64_to_index(773.0 * s))
+            - self.loop_a.delay2.read(num::f64_to_index(2143.0 * s));
 
         (out_l * 0.22, out_r * 0.22)
     }
