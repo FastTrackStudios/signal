@@ -76,13 +76,25 @@ const PREDELAY_MAX_S: f64 = 0.2;
 const DAMP_MOD_OCTAVES: f64 = 2.0;
 /// Motion allpass max excursion at full depth, in seconds.
 const MOTION_EXCURSION_S: f64 = 0.0015;
-/// Motion allpass delays in samples at 48 kHz — mutually prime,
-/// ~5–12 ms. Scaled by the actual sample rate.
-const MOTION_DELAYS_48K: [usize; 4] = [241, 379, 467, 587];
-/// Per-stage rate multipliers so the four motion LFOs never phase-lock.
-const MOTION_RATE_MULT: [f64; 4] = [1.0, 1.13, 0.91, 1.07];
-/// Per-stage LFO starting phases (stereo decorrelation).
-const MOTION_PHASE: [f64; 4] = [0.0, 0.25, 0.5, 0.75];
+/// One motion-allpass voice. Three parallel `[_; 4]` tables before, all
+/// walked by the same index.
+struct MotionVoice {
+    /// Allpass delay in samples at 48 kHz. The four are mutually prime,
+    /// ~5–12 ms; scaled by the actual sample rate.
+    delay_48k: usize,
+    /// Rate multiplier, so the four motion LFOs never phase-lock.
+    rate_mult: f64,
+    /// LFO starting phase (stereo decorrelation).
+    phase: f64,
+}
+
+/// The four motion voices, in stage order.
+const MOTION_VOICES: [MotionVoice; 4] = [
+    MotionVoice { delay_48k: 241, rate_mult: 1.0, phase: 0.0 },
+    MotionVoice { delay_48k: 379, rate_mult: 1.13, phase: 0.25 },
+    MotionVoice { delay_48k: 467, rate_mult: 0.91, phase: 0.5 },
+    MotionVoice { delay_48k: 587, rate_mult: 1.07, phase: 0.75 },
+];
 
 /// Per-channel partitioned convolver.
 struct PartitionedConv {
@@ -230,6 +242,27 @@ impl PartitionedConv {
     }
 
     /// Zero the frequency-domain history + time-domain context, leaving
+    /// Pop the next sample of the finished output block, or silence once
+    /// the block is exhausted. Total: `get` returns `None` exactly where
+    /// the read pointer has run past `BLOCK`.
+    #[inline]
+    fn next_output(&mut self) -> f64 {
+        let Some(&v) = self.output_block.get(self.output_block_read) else {
+            return 0.0;
+        };
+        self.output_block_read = self.output_block_read.saturating_add(1);
+        v
+    }
+
+    /// Stage one input sample at `fill`. Total: a `fill` past `FFT_LEN`
+    /// drops the sample, which is what the caller's bounds check did.
+    #[inline]
+    fn push_input(&mut self, fill: usize, sample: f64) {
+        if let Some(cell) = self.input_block.get_mut(fill) {
+            *cell = sample;
+        }
+    }
+
     /// the staged input samples alone. Used when a gated-off slot B
     /// re-engages, so seconds-old audio doesn't burst out of its tail.
     fn clear_history(&mut self) {
@@ -353,6 +386,12 @@ impl PartitionedConv {
     }
 }
 
+/// Truncate an IR to at most `max` samples. Total: an IR already shorter
+/// than the cap passes through unchanged.
+fn cap_ir(ir: &[f64], max: usize) -> &[f64] {
+    ir.get(..max).unwrap_or(ir)
+}
+
 /// Generate a synthetic stereo IR — exponentially decaying velvet-style
 /// pattern. Used as the default IR until the user loads their own.
 fn synthesize_ir(sample_rate: f64, seconds: f64, seed: u64) -> Vec<f64> {
@@ -371,16 +410,18 @@ fn synthesize_ir(sample_rate: f64, seconds: f64, seed: u64) -> Vec<f64> {
         let idx = (pos.saturating_add(jitter)).min(n.saturating_sub(1));
         let sign = if rng.next_float() < 0.5 { -1.0 } else { 1.0 };
         let env = 10f64.powf(-3.0 * num::count_to_f64(idx) / t60_samples);
-        ir[idx] = sign * env;
+        if let Some(sample) = ir.get_mut(idx) {
+            *sample = sign * env;
+        }
         pos = pos.saturating_add(spacing);
     }
 
     // Pre-delay window: blend out the first ~5ms so direct signal isn't
     // doubled when wet/dry are summed.
     let predelay = num::f64_to_index(sample_rate * 0.005);
-    #[expect(clippy::needless_range_loop, reason = "range loop needed for index-based IR shaping")]
-    for i in 0..predelay.min(n) {
-        ir[i] *= num::count_to_f64(i) / num::count_to_f64(predelay);
+    let window = num::count_to_f64(predelay);
+    for (i, sample) in ir.iter_mut().take(predelay).enumerate() {
+        *sample *= num::count_to_f64(i) / window;
     }
     ir
 }
@@ -683,10 +724,10 @@ impl Convolution {
 
     fn build_motion(sample_rate: f64) -> [ModulatedAllpass; 4] {
         let s = sample_rate / 48000.0;
-        std::array::from_fn(|i| {
-            let mut ap = ModulatedAllpass::with_phase(MOTION_PHASE[i]);
+        MOTION_VOICES.map(|voice| {
+            let mut ap = ModulatedAllpass::with_phase(voice.phase);
             ap.set_sample_rate(sample_rate);
-            ap.set_delay_samples(num::f64_to_index((MOTION_DELAYS_48K[i] as f64) * s));
+            ap.set_delay_samples(num::f64_to_index(num::count_to_f64(voice.delay_48k) * s));
             ap.set_feedback(0.5);
             ap
         })
@@ -706,8 +747,8 @@ impl Convolution {
     /// shaping params to defaults (the chain preserves mix).
     pub fn load_ir_stereo_slot(&mut self, ir_l: &[f64], ir_r: &[f64], slot: IrSlot) {
         let max = num::f64_to_index(self.sample_rate * MAX_IR_SECONDS);
-        let cap_l = &ir_l[..ir_l.len().min(max)];
-        let cap_r = &ir_r[..ir_r.len().min(max)];
+        let cap_l = cap_ir(ir_l, max);
+        let cap_r = cap_ir(ir_r, max);
         match slot {
             IrSlot::A => {
                 self.conv_l.load_ir(cap_l);
@@ -730,7 +771,7 @@ impl Convolution {
     /// background/setup use only.
     pub fn load_ir_true_stereo(&mut self, ll: &[f64], lr: &[f64], rl: &[f64], rr: &[f64]) -> bool {
         let max = num::f64_to_index(self.sample_rate * MAX_IR_SECONDS);
-        let cap = |x: &[f64]| x[..x.len().min(max)].to_vec();
+        let cap = |x: &[f64]| cap_ir(x, max).to_vec();
         let (ll, lr, rl, rr) = (cap(ll), cap(lr), cap(rl), cap(rr));
         self.conv_l.load_ir(&ll);
         self.conv_r.load_ir(&rr);
@@ -973,8 +1014,8 @@ impl Convolution {
     fn refresh_motion_rates(&mut self) {
         let rate = self.mod_params.motion_rate.clamp(0.02, 10.0);
         let depth_samples = self.sm.motion_depth.value() * MOTION_EXCURSION_S * self.sample_rate;
-        for (i, ap) in self.motion.iter_mut().enumerate() {
-            ap.set_modulation(rate * MOTION_RATE_MULT[i], depth_samples, self.sample_rate);
+        for (ap, voice) in self.motion.iter_mut().zip(&MOTION_VOICES) {
+            ap.set_modulation(rate * voice.rate_mult, depth_samples, self.sample_rate);
         }
     }
 
@@ -1266,51 +1307,15 @@ impl ReverbAlgorithm for Convolution {
 
         // ── Convolution slot A (and mirrored staging for slot B) ─────
         // Take output sample if available.
-        let out_l = if self.conv_l.output_block_read < BLOCK {
-            let v = self.conv_l.output_block[self.conv_l.output_block_read];
-            self.conv_l.output_block_read = self.conv_l.output_block_read.saturating_add(1);
-            v
-        } else {
-            0.0
-        };
-        let out_r = if self.conv_r.output_block_read < BLOCK {
-            let v = self.conv_r.output_block[self.conv_r.output_block_read];
-            self.conv_r.output_block_read = self.conv_r.output_block_read.saturating_add(1);
-            v
-        } else {
-            0.0
-        };
-        let out_l_b = if self.conv_l_b.output_block_read < BLOCK {
-            let v = self.conv_l_b.output_block[self.conv_l_b.output_block_read];
-            self.conv_l_b.output_block_read = self.conv_l_b.output_block_read.saturating_add(1);
-            v
-        } else {
-            0.0
-        };
-        let out_r_b = if self.conv_r_b.output_block_read < BLOCK {
-            let v = self.conv_r_b.output_block[self.conv_r_b.output_block_read];
-            self.conv_r_b.output_block_read = self.conv_r_b.output_block_read.saturating_add(1);
-            v
-        } else {
-            0.0
-        };
+        let out_l = self.conv_l.next_output();
+        let out_r = self.conv_r.next_output();
+        let out_l_b = self.conv_l_b.next_output();
+        let out_r_b = self.conv_r_b.next_output();
         // True-stereo cross legs: input L convolved toward R and vice
         // versa. Zero cost while disengaged (blocks never processed).
         let (out_cross_r, out_cross_l) = if self.true_stereo {
-            let cr = if self.conv_lr.output_block_read < BLOCK {
-                let v = self.conv_lr.output_block[self.conv_lr.output_block_read];
-                self.conv_lr.output_block_read = self.conv_lr.output_block_read.saturating_add(1);
-                v
-            } else {
-                0.0
-            };
-            let cl = if self.conv_rl.output_block_read < BLOCK {
-                let v = self.conv_rl.output_block[self.conv_rl.output_block_read];
-                self.conv_rl.output_block_read = self.conv_rl.output_block_read.saturating_add(1);
-                v
-            } else {
-                0.0
-            };
+            let cr = self.conv_lr.next_output();
+            let cl = self.conv_rl.next_output();
             (cr, cl)
         } else {
             (0.0, 0.0)
@@ -1321,15 +1326,13 @@ impl ReverbAlgorithm for Convolution {
         // process_block while the morph has it engaged.
         let fill = self.conv_l.input_block_fill;
         debug_assert_eq!(fill, self.conv_r.input_block_fill);
-        if fill < FFT_LEN {
-            self.conv_l.input_block[fill] = in_l;
-            self.conv_r.input_block[fill] = in_r;
-            self.conv_l_b.input_block[fill] = in_l;
-            self.conv_r_b.input_block[fill] = in_r;
-            if self.true_stereo {
-                self.conv_lr.input_block[fill] = in_l;
-                self.conv_rl.input_block[fill] = in_r;
-            }
+        self.conv_l.push_input(fill, in_l);
+        self.conv_r.push_input(fill, in_r);
+        self.conv_l_b.push_input(fill, in_l);
+        self.conv_r_b.push_input(fill, in_r);
+        if self.true_stereo {
+            self.conv_lr.push_input(fill, in_l);
+            self.conv_rl.push_input(fill, in_r);
         }
         let new_fill = fill.saturating_add(1);
 
