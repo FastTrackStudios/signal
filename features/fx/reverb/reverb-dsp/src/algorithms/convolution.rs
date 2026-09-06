@@ -1117,6 +1117,69 @@ impl Convolution {
         }
         self.b_engaged = want_b;
     }
+
+    /// Stage one input sample into every convolver and, when the block
+    /// fills, run the FFTs and rewind the output readers. Slot B stages
+    /// in lockstep (cheap) but only pays for `process_block` while the
+    /// morph has it engaged.
+    fn stage_input(&mut self, in_l: f64, in_r: f64) {
+        let fill = self.direct_a.l.input_block_fill;
+        debug_assert_eq!(fill, self.direct_a.r.input_block_fill);
+        self.direct_a.l.push_input(fill, in_l);
+        self.direct_a.r.push_input(fill, in_r);
+        self.direct_b.l.push_input(fill, in_l);
+        self.direct_b.r.push_input(fill, in_r);
+        if self.true_stereo {
+            self.cross.l.push_input(fill, in_l);
+            self.cross.r.push_input(fill, in_r);
+    }
+    let new_fill = fill.saturating_add(1);
+
+    if new_fill >= BLOCK {
+        let mut block_l = [0.0; BLOCK];
+        let mut block_r = [0.0; BLOCK];
+        block_l.copy_from_slice(&self.direct_a.l.input_block[..BLOCK]);
+        block_r.copy_from_slice(&self.direct_a.r.input_block[..BLOCK]);
+        self.direct_a.l.input_block_fill = 0;
+        self.direct_a.r.input_block_fill = 0;
+        self.direct_b.l.input_block_fill = 0;
+        self.direct_b.r.input_block_fill = 0;
+        self.direct_a.l.process_block(&block_l);
+        self.direct_a.r.process_block(&block_r);
+        if self.true_stereo {
+            self.cross.l.input_block_fill = 0;
+            self.cross.l.process_block(&block_l);
+            self.cross.r.input_block_fill = 0;
+            self.cross.r.process_block(&block_r);
+            self.cross.l.output_block_read = 0;
+            self.cross.r.output_block_read = 0;
+        }
+        if self.b_engaged {
+            let mut b_block_l = [0.0; BLOCK];
+            let mut b_block_r = [0.0; BLOCK];
+            b_block_l.copy_from_slice(&self.direct_b.l.input_block[..BLOCK]);
+            b_block_r.copy_from_slice(&self.direct_b.r.input_block[..BLOCK]);
+            self.direct_b.l.process_block(&b_block_l);
+            self.direct_b.r.process_block(&b_block_r);
+        } else {
+            self.direct_b.l.output_block.fill(0.0);
+            self.direct_b.r.output_block.fill(0.0);
+        }
+        self.direct_a.l.output_block_read = 0;
+        self.direct_a.r.output_block_read = 0;
+        self.direct_b.l.output_block_read = 0;
+        self.direct_b.r.output_block_read = 0;
+    } else {
+        self.direct_a.l.input_block_fill = new_fill;
+        self.direct_a.r.input_block_fill = new_fill;
+        self.direct_b.l.input_block_fill = new_fill;
+        self.direct_b.r.input_block_fill = new_fill;
+        if self.true_stereo {
+            self.cross.l.input_block_fill = new_fill;
+            self.cross.r.input_block_fill = new_fill;
+        }
+    }
+    }
 }
 
 impl ReverbAlgorithm for Convolution {
@@ -1335,65 +1398,7 @@ impl ReverbAlgorithm for Convolution {
             (0.0, 0.0)
         };
 
-        // Push input sample. When block is full, run FFT and reset read
-        // ptr. Slot B stages in lockstep (cheap) but only pays for
-        // process_block while the morph has it engaged.
-        let fill = self.direct_a.l.input_block_fill;
-        debug_assert_eq!(fill, self.direct_a.r.input_block_fill);
-        self.direct_a.l.push_input(fill, in_l);
-        self.direct_a.r.push_input(fill, in_r);
-        self.direct_b.l.push_input(fill, in_l);
-        self.direct_b.r.push_input(fill, in_r);
-        if self.true_stereo {
-            self.cross.l.push_input(fill, in_l);
-            self.cross.r.push_input(fill, in_r);
-        }
-        let new_fill = fill.saturating_add(1);
-
-        if new_fill >= BLOCK {
-            let mut block_l = [0.0; BLOCK];
-            let mut block_r = [0.0; BLOCK];
-            block_l.copy_from_slice(&self.direct_a.l.input_block[..BLOCK]);
-            block_r.copy_from_slice(&self.direct_a.r.input_block[..BLOCK]);
-            self.direct_a.l.input_block_fill = 0;
-            self.direct_a.r.input_block_fill = 0;
-            self.direct_b.l.input_block_fill = 0;
-            self.direct_b.r.input_block_fill = 0;
-            self.direct_a.l.process_block(&block_l);
-            self.direct_a.r.process_block(&block_r);
-            if self.true_stereo {
-                self.cross.l.input_block_fill = 0;
-                self.cross.l.process_block(&block_l);
-                self.cross.r.input_block_fill = 0;
-                self.cross.r.process_block(&block_r);
-                self.cross.l.output_block_read = 0;
-                self.cross.r.output_block_read = 0;
-            }
-            if self.b_engaged {
-                let mut b_block_l = [0.0; BLOCK];
-                let mut b_block_r = [0.0; BLOCK];
-                b_block_l.copy_from_slice(&self.direct_b.l.input_block[..BLOCK]);
-                b_block_r.copy_from_slice(&self.direct_b.r.input_block[..BLOCK]);
-                self.direct_b.l.process_block(&b_block_l);
-                self.direct_b.r.process_block(&b_block_r);
-            } else {
-                self.direct_b.l.output_block.fill(0.0);
-                self.direct_b.r.output_block.fill(0.0);
-            }
-            self.direct_a.l.output_block_read = 0;
-            self.direct_a.r.output_block_read = 0;
-            self.direct_b.l.output_block_read = 0;
-            self.direct_b.r.output_block_read = 0;
-        } else {
-            self.direct_a.l.input_block_fill = new_fill;
-            self.direct_a.r.input_block_fill = new_fill;
-            self.direct_b.l.input_block_fill = new_fill;
-            self.direct_b.r.input_block_fill = new_fill;
-            if self.true_stereo {
-                self.cross.l.input_block_fill = new_fill;
-                self.cross.r.input_block_fill = new_fill;
-            }
-        }
+        self.stage_input(in_l, in_r);
 
         // ── Option 3: equal-power A/B morph ───────────────────────────
         let out_l = out_l + out_cross_l;

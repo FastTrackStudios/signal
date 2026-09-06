@@ -35,11 +35,13 @@ struct TapSlot {
     gain: f64,
 }
 
-/// Sign-balance a tap train (Moorer): an all-positive spike train has a
-/// strong net-positive area, which reads as a subsonic thump in the IR
-/// spectrum. Flipping each tap against the running sum keeps the timing
-/// and level while cancelling the DC lobe — plain alternation leaves
-/// ~0.4 of residual area, because the gains decay.
+/// Sign-balance a tap train (Moorer).
+///
+/// An all-positive spike train has a strong net-positive area, which
+/// reads as a subsonic thump in the IR spectrum. Flipping each tap
+/// against the running sum keeps the timing and level while cancelling
+/// the DC lobe — plain alternation leaves ~0.4 of residual area,
+/// because the gains decay.
 pub fn sign_balance(taps: &mut [Tap]) {
     let mut sum = 0.0;
     for tap in taps {

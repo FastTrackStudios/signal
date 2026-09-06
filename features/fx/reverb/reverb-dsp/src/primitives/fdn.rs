@@ -593,7 +593,7 @@ impl Fdn {
     /// Apply the mixing matrix, then the slow Givens rotation between
     /// line pairs.
     fn mix(&mut self, n: usize) {
-    // Apply mixing matrix. `n <= feedback.len()` by construction, so
+        // `n <= feedback.len()` by construction, so
         // the `else` never runs; it just keeps the mix off a panic.
         let matrix = self.mix_matrix;
         if let Some(bus) = self.feedback.get_mut(..n) {
@@ -636,7 +636,7 @@ impl Fdn {
 
     /// Per-line decay, EQ and diffusion, back into each delay line.
     fn recirculate(&mut self, n: usize, input: f64) {
-    let Self {
+        let Self {
             lines,
             feedback,
             loop_ap,
