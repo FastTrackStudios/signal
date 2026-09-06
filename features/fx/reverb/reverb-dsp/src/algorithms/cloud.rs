@@ -235,11 +235,23 @@ impl CloudChannel {
     }
 
     /// Apply a single scaled parameter — exact port of `ReverbChannel::SetParameter`.
+    ///
+    /// The port's one 175-line match is split by section; the ids are
+    /// distinct, so trying each in turn is the same dispatch.
     fn apply_param(&mut self, para: usize, scaled: f64) {
         if let Some(slot) = self.params_scaled.get_mut(para) {
             *slot = scaled;
         }
 
+        let _handled = self.apply_input_param(para, scaled)
+            || self.apply_early_param(para, scaled)
+            || self.apply_late_param(para, scaled)
+            || self.apply_eq_param(para, scaled)
+            || self.apply_seed_param(para, scaled);
+    }
+
+    /// Handles the input filters, mix and the two output taps. Returns whether `para` was one of them.
+    fn apply_input_param(&mut self, para: usize, scaled: f64) -> bool {
         match para {
             param::INTERPOLATION => {
                 for line in &mut self.lines {
@@ -275,7 +287,14 @@ impl CloudChannel {
                     db2gain(scaled)
                 };
             }
+            _ => return false,
+        }
+        true
+    }
 
+    /// Handles the multitap early reflections and the early diffuser. Returns whether `para` was one of them.
+    fn apply_early_param(&mut self, para: usize, scaled: f64) -> bool {
+        match para {
             param::TAP_ENABLED => {
                 let new_val = scaled >= 0.5;
                 if new_val != self.input_stages.multitap {
@@ -310,7 +329,14 @@ impl CloudChannel {
             }
             param::EARLY_DIFFUSE_FEEDBACK => self.diffuser.set_feedback(scaled),
             param::EARLY_DIFFUSE_MOD_RATE => self.diffuser.set_mod_rate(scaled),
+            _ => return false,
+        }
+        true
+    }
 
+    /// Handles the late reverb lines and their diffusers. Returns whether `para` was one of them.
+    fn apply_late_param(&mut self, para: usize, scaled: f64) -> bool {
+        match para {
             param::LATE_MODE => {
                 for line in &mut self.lines {
                     line.tap_post_diffuser = scaled >= 0.5;
@@ -350,7 +376,14 @@ impl CloudChannel {
                     line.set_diffuser_feedback(scaled);
                 }
             }
+            _ => return false,
+        }
+        true
+    }
 
+    /// Handles the per-line EQ, and the cross-seed that derives from it. Returns whether `para` was one of them.
+    fn apply_eq_param(&mut self, para: usize, scaled: f64) -> bool {
+        match para {
             param::EQ_LOW_SHELF_ENABLED => {
                 for line in &mut self.lines {
                     line.filters.low_shelf = scaled >= 0.5;
@@ -402,7 +435,14 @@ impl CloudChannel {
                 self.update_lines();
                 self.update_post_diffusion();
             }
+            _ => return false,
+        }
+        true
+    }
 
+    /// Handles the four generator seeds. Returns whether `para` was one of them.
+    fn apply_seed_param(&mut self, para: usize, scaled: f64) -> bool {
+        match para {
             param::SEED_TAP => self.multitap.set_seed(num::f64_to_u64(scaled)),
             param::SEED_DIFFUSION => self.diffuser.set_seed(num::f64_to_u64(scaled)),
             param::SEED_DELAY => {
@@ -413,9 +453,9 @@ impl CloudChannel {
                 self.post_diffusion_seed = num::f64_to_u64(scaled);
                 self.update_post_diffusion();
             }
-
-            _ => {}
+            _ => return false,
         }
+        true
     }
 
     fn ms2samples(&self, ms: f64) -> f64 {

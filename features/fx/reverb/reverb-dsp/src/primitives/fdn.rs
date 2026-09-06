@@ -482,7 +482,76 @@ impl Fdn {
     pub fn tick(&mut self, input: f64) -> f64 {
         let n = self.num_lines;
 
-        // Read from all delay lines (fractional when jittered).
+        self.read_lines(n);
+
+        // Sum output before mixing (tap from raw delay outputs).
+        let output_scale = 1.0 / num::count_to_f64(n).sqrt();
+        let mut output = 0.0;
+        for fb in self.feedback.iter().take(n) {
+            output += *fb * output_scale;
+        }
+
+        self.mix(n);
+        self.recirculate(n, input);
+
+        // Jot tonal correction (one-zero) so T60 changes don't recolor
+        // the wet spectrum.
+        if self.t60_mode && self.tc_b.abs() > 1e-9 {
+            let corrected = self.tc_b.mul_add(-self.tc_prev, output) / (1.0 - self.tc_b);
+            self.tc_prev = output;
+            corrected
+        } else {
+            output
+        }
+    }
+
+    pub fn reset(&mut self) {
+        for line in &mut self.lines {
+            let d = &mut line.delay;
+            d.clear();
+        }
+        for line in &mut self.lines {
+            let d = &mut line.damping;
+            d.reset();
+        }
+        for line in &mut self.lines {
+            let b = &mut line.band_split;
+            b.reset();
+        }
+        for line in &mut self.lines {
+            let dc = &mut line.dc_blocker;
+            dc.reset();
+        }
+        for ap in &mut self.loop_ap {
+            ap.clear();
+        }
+        for line in &mut self.lines {
+            let line = &mut line.decay_eq;
+            for bq in line.iter_mut() {
+                bq.reset();
+            }
+        }
+        for line in &mut self.lines {
+            let lp = &mut line.eq_low_lp;
+            lp.reset();
+        }
+        for line in &mut self.lines {
+            let lp = &mut line.eq_high_lp;
+            lp.reset();
+        }
+        for line in &mut self.lines {
+            line.shelf_state = 0.0;
+            line.jitter_cur = 0.0;
+            line.jitter_step = 0.0;
+            line.jitter_count = 0;
+        }
+        self.tc_prev = 0.0;
+        self.feedback.fill(0.0);
+    }
+
+    /// Fill `feedback` from each line's delay output — a fractional read
+    /// when the vintage sweep or the jitter walk is moving it.
+    fn read_lines(&mut self, n: usize) {
         if self.vintage {
             // Classic voice: one shared sine sweeps every line (common-
             // mode = audible chorus), truncated reads grind the sweep.
@@ -519,15 +588,12 @@ impl Fdn {
                 *fb = line.delay.read(line.delay_samples);
             }
         }
+    }
 
-        // Sum output before mixing (tap from raw delay outputs).
-        let mut output = 0.0;
-        let output_scale = 1.0 / num::count_to_f64(n).sqrt();
-        for fb in self.feedback.iter().take(n) {
-            output += *fb * output_scale;
-        }
-
-        // Apply mixing matrix. `n <= feedback.len()` by construction, so
+    /// Apply the mixing matrix, then the slow Givens rotation between
+    /// line pairs.
+    fn mix(&mut self, n: usize) {
+    // Apply mixing matrix. `n <= feedback.len()` by construction, so
         // the `else` never runs; it just keeps the mix off a panic.
         let matrix = self.mix_matrix;
         if let Some(bus) = self.feedback.get_mut(..n) {
@@ -566,8 +632,11 @@ impl Fdn {
                 *second = sn.mul_add(a, c * b);
             }
         }
+    }
 
-        let Self {
+    /// Per-line decay, EQ and diffusion, back into each delay line.
+    fn recirculate(&mut self, n: usize, input: f64) {
+    let Self {
             lines,
             feedback,
             loop_ap,
@@ -633,60 +702,6 @@ impl Fdn {
             sig = line.dc_blocker.tick(sig);
             line.delay.write(flush(input + sig));
         }
-
-        // Jot tonal correction (one-zero) so T60 changes don't recolor
-        // the wet spectrum.
-        if self.t60_mode && self.tc_b.abs() > 1e-9 {
-            let corrected = self.tc_b.mul_add(-self.tc_prev, output) / (1.0 - self.tc_b);
-            self.tc_prev = output;
-            corrected
-        } else {
-            output
-        }
-    }
-
-    pub fn reset(&mut self) {
-        for line in &mut self.lines {
-            let d = &mut line.delay;
-            d.clear();
-        }
-        for line in &mut self.lines {
-            let d = &mut line.damping;
-            d.reset();
-        }
-        for line in &mut self.lines {
-            let b = &mut line.band_split;
-            b.reset();
-        }
-        for line in &mut self.lines {
-            let dc = &mut line.dc_blocker;
-            dc.reset();
-        }
-        for ap in &mut self.loop_ap {
-            ap.clear();
-        }
-        for line in &mut self.lines {
-            let line = &mut line.decay_eq;
-            for bq in line.iter_mut() {
-                bq.reset();
-            }
-        }
-        for line in &mut self.lines {
-            let lp = &mut line.eq_low_lp;
-            lp.reset();
-        }
-        for line in &mut self.lines {
-            let lp = &mut line.eq_high_lp;
-            lp.reset();
-        }
-        for line in &mut self.lines {
-            line.shelf_state = 0.0;
-            line.jitter_cur = 0.0;
-            line.jitter_step = 0.0;
-            line.jitter_count = 0;
-        }
-        self.tc_prev = 0.0;
-        self.feedback.fill(0.0);
     }
 }
 
