@@ -105,26 +105,26 @@ fn scale_param(val: f64, index: usize) -> f64 {
         | param::SEED_DELAY
         | param::SEED_POST_DIFFUSION => (val * 999.999).floor(),
 
-        param::LOW_CUT => 20.0 + resp4oct(val) * 980.0,
-        param::HIGH_CUT | param::EQ_HIGH_FREQ | param::EQ_CUTOFF => 400.0 + resp4oct(val) * 19600.0,
+        param::LOW_CUT => resp4oct(val).mul_add(980.0, 20.0),
+        param::HIGH_CUT | param::EQ_HIGH_FREQ | param::EQ_CUTOFF => resp4oct(val).mul_add(19600.0, 400.0),
 
-        param::DRY_OUT | param::EARLY_OUT | param::LATE_OUT => -30.0 + val * 30.0,
+        param::DRY_OUT | param::EARLY_OUT | param::LATE_OUT => val.mul_add(30.0, -30.0),
 
-        param::TAP_COUNT => (1.0 + val * 255.0).floor(),
+        param::TAP_COUNT => val.mul_add(255.0, 1.0).floor(),
         param::TAP_PREDELAY => resp1dec(val) * 500.0,
-        param::TAP_LENGTH => 10.0 + val * 990.0,
+        param::TAP_LENGTH => val.mul_add(990.0, 10.0),
 
-        param::EARLY_DIFFUSE_COUNT | param::LATE_LINE_COUNT => (1.0 + val * 11.999).floor(),
-        param::EARLY_DIFFUSE_DELAY | param::LATE_DIFFUSE_DELAY => 10.0 + val * 90.0,
+        param::EARLY_DIFFUSE_COUNT | param::LATE_LINE_COUNT => val.mul_add(11.999, 1.0).floor(),
+        param::EARLY_DIFFUSE_DELAY | param::LATE_DIFFUSE_DELAY => val.mul_add(90.0, 10.0),
         param::EARLY_DIFFUSE_MOD_AMOUNT | param::LATE_LINE_MOD_AMOUNT | param::LATE_DIFFUSE_MOD_AMOUNT => val * 2.5,
         param::EARLY_DIFFUSE_MOD_RATE | param::LATE_LINE_MOD_RATE | param::LATE_DIFFUSE_MOD_RATE => resp2dec(val) * 5.0,
 
-        param::LATE_DIFFUSE_COUNT => (1.0 + val * 7.999).floor(),
-        param::LATE_LINE_SIZE => 20.0 + resp2dec(val) * 980.0,
-        param::LATE_LINE_DECAY => 0.05 + resp3dec(val) * 59.95,
+        param::LATE_DIFFUSE_COUNT => val.mul_add(7.999, 1.0).floor(),
+        param::LATE_LINE_SIZE => resp2dec(val).mul_add(980.0, 20.0),
+        param::LATE_LINE_DECAY => resp3dec(val).mul_add(59.95, 0.05),
 
-        param::EQ_LOW_FREQ => 20.0 + resp3oct(val) * 980.0,
-        param::EQ_LOW_GAIN | param::EQ_HIGH_GAIN => -20.0 + val * 20.0,
+        param::EQ_LOW_FREQ => resp3oct(val).mul_add(980.0, 20.0),
+        param::EQ_LOW_GAIN | param::EQ_HIGH_GAIN => val.mul_add(20.0, -20.0),
 
         _ => val,
     }
@@ -383,7 +383,7 @@ impl CloudChannel {
                 self.cross_seed = if self.is_right {
                     0.5 * scaled
                 } else {
-                    1.0 - 0.5 * scaled
+                    0.5f64.mul_add(-scaled, 1.0)
                 };
                 self.multitap.set_cross_seed(self.cross_seed);
                 self.diffuser.set_cross_seed(self.cross_seed);
@@ -431,12 +431,12 @@ impl CloudChannel {
             random_buffer_cross_seed(self.delay_line_seed, TOTAL_LINE_COUNT * 3, self.cross_seed);
 
         for i in 0..TOTAL_LINE_COUNT {
-            let mod_amount = line_mod_amount * (0.7 + 0.3 * seeds[i]);
+            let mod_amount = line_mod_amount * 0.3f64.mul_add(seeds[i], 0.7);
             let mod_rate =
-                line_mod_rate * (0.7 + 0.3 * seeds[TOTAL_LINE_COUNT + i]) / self.sample_rate;
+                line_mod_rate * 0.3f64.mul_add(seeds[TOTAL_LINE_COUNT + i], 0.7) / self.sample_rate;
 
             let mut delay_samples =
-                (0.5 + 1.0 * seeds[TOTAL_LINE_COUNT * 2 + i]) * line_delay_samples;
+                1.0f64.mul_add(seeds[TOTAL_LINE_COUNT * 2 + i], 0.5) * line_delay_samples;
             // When delay is really short and modulation is high,
             // mod could take delay time negative — prevent that
             if delay_samples < mod_amount + 2.0 {
@@ -505,7 +505,7 @@ impl CloudChannel {
         line_sum *= self.per_line_gain();
 
         // Output = early * earlyOut + late * lineOut
-        let output = self.early_out * early + self.line_out * line_sum;
+        let output = self.early_out.mul_add(early, self.line_out * line_sum);
         (output, line_sum)
     }
 
@@ -615,13 +615,13 @@ impl Ensemble {
             }
 
             // Slow per-band detune wobble (string-machine shimmer).
-            let lfo_rate = 0.12 + num::count_to_f64((i % 5)) * 0.06;
+            let lfo_rate = 0.12 + num::count_to_f64(i % 5) * 0.06;
             self.lfo[i] += lfo_rate / self.sample_rate;
             if self.lfo[i] >= 1.0 {
                 self.lfo[i] -= 1.0;
             }
             let wobble = (self.lfo[i] * std::f64::consts::TAU).sin();
-            let detune = 2f64.powf(wobble * 5.0 / 1200.0);
+            let detune = (wobble * 5.0 / 1200.0).exp2();
 
             // Upper partials at 2× and 3× the band center; HF rolloff
             // keeps the top registers airy instead of piercing.
@@ -735,7 +735,7 @@ impl ReverbAlgorithm for Cloud {
         // Decay → late line decay (0.05-60s via resp3dec)
         self.set_raw_param(param::LATE_LINE_DECAY, params.decay);
         // Also affect tap decay
-        self.set_raw_param(param::TAP_DECAY, 0.3 + params.decay * 0.5);
+        self.set_raw_param(param::TAP_DECAY, params.decay.mul_add(0.5, 0.3));
 
         // Size → late line size, tap length, early diffuse delay, late diffuse delay
         self.set_raw_param(param::LATE_LINE_SIZE, params.size);
@@ -751,7 +751,7 @@ impl ReverbAlgorithm for Cloud {
         let d = params.diffusion;
         self.set_raw_param(param::TAP_ENABLED, 1.0);
         // ~21 discrete taps (grainy) → ~72 blended taps (dense).
-        self.set_raw_param(param::TAP_COUNT, 0.08 + d * 0.2);
+        self.set_raw_param(param::TAP_COUNT, d.mul_add(0.2, 0.08));
         self.set_raw_param(param::EARLY_DIFFUSE_COUNT, d);
         self.set_raw_param(param::EARLY_DIFFUSE_FEEDBACK, d * 0.85);
         self.set_raw_param(param::LATE_DIFFUSE_COUNT, d);
@@ -766,8 +766,8 @@ impl ReverbAlgorithm for Cloud {
         );
         // Early/late balance rides the knob: grainy = the tap field
         // stays prominent; foggy = the tank dominates.
-        self.set_raw_param(param::EARLY_OUT, 0.95 - d * 0.25);
-        self.set_raw_param(param::LATE_OUT, 0.85 + d * 0.15);
+        self.set_raw_param(param::EARLY_OUT, d.mul_add(-0.25, 0.95));
+        self.set_raw_param(param::LATE_OUT, d.mul_add(0.15, 0.85));
 
         // Damping → EQ lowpass cutoff
         let cutoff_raw = 1.0 - params.damping;
@@ -803,7 +803,7 @@ impl ReverbAlgorithm for Cloud {
             self.set_raw_param(param::EQ_LOW_FREQ, 0.35);
             self.set_raw_param(
                 param::EQ_LOW_GAIN,
-                (0.5 + (le - 1.0) * 0.4).clamp(0.1, 0.75),
+                (le - 1.0).mul_add(0.4, 0.5).clamp(0.1, 0.75),
             );
         }
 
@@ -811,7 +811,7 @@ impl ReverbAlgorithm for Cloud {
         if params.tone < 0.0 {
             // Dark: cut highs
             self.set_raw_param(param::EQ_HIGH_SHELF_ENABLED, 1.0);
-            self.set_raw_param(param::EQ_HIGH_GAIN, 0.5 + params.tone * 0.5);
+            self.set_raw_param(param::EQ_HIGH_GAIN, params.tone.mul_add(0.5, 0.5));
             self.set_raw_param(param::EQ_HIGH_FREQ, 0.5);
             if !low_end_active {
                 self.set_raw_param(param::EQ_LOW_SHELF_ENABLED, 0.0);
@@ -819,7 +819,7 @@ impl ReverbAlgorithm for Cloud {
         } else if params.tone > 0.0 {
             // Bright: cut lows
             self.set_raw_param(param::EQ_LOW_SHELF_ENABLED, 1.0);
-            self.set_raw_param(param::EQ_LOW_GAIN, 0.5 - params.tone * 0.5);
+            self.set_raw_param(param::EQ_LOW_GAIN, params.tone.mul_add(-0.5, 0.5));
             self.set_raw_param(param::EQ_LOW_FREQ, 0.3);
             self.set_raw_param(param::EQ_HIGH_SHELF_ENABLED, 0.0);
         } else {
@@ -832,7 +832,7 @@ impl ReverbAlgorithm for Cloud {
         // Extra A → pre-delay (0-500ms via resp1dec) + line count
         // (tap count is owned by the Diffusion continuum above).
         self.set_raw_param(param::TAP_PREDELAY, params.extra_a * 0.5);
-        self.set_raw_param(param::LATE_LINE_COUNT, 0.4 + params.extra_a * 0.5);
+        self.set_raw_param(param::LATE_LINE_COUNT, params.extra_a.mul_add(0.5, 0.4));
 
         // Extra B → cross-seed, seeds (character/stereo width)
         self.set_raw_param(param::EQ_CROSS_SEED, params.extra_b);
@@ -859,8 +859,8 @@ impl ReverbAlgorithm for Cloud {
         let cm = input_mix * 0.5;
         let cmi = 1.0 - cm;
 
-        let left_in = left * cmi + right * cm;
-        let right_in = right * cmi + left * cm;
+        let left_in = left.mul_add(cmi, right * cm);
+        let right_in = right.mul_add(cmi, left * cm);
 
         let (out_l, _) = self.left.tick(left_in);
         let (out_r, _) = self.right.tick(right_in);

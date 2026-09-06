@@ -50,17 +50,17 @@ pub struct Magneto {
 impl Magneto {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_delay = num::f64_to_index((sample_rate * 1.5)); // 1.5s max tape
+        let max_delay = num::f64_to_index(sample_rate * 1.5); // 1.5s max tape
 
         let head_diffusers = std::array::from_fn(|i| {
-            let mut d = AllpassDiffuser::with_defaults(sample_rate, 0.3 + num::count_to_f64(i) * 0.2);
+            let mut d = AllpassDiffuser::with_defaults(sample_rate, num::count_to_f64(i).mul_add(0.2, 0.3));
             d.set_active_stages(2 + i * 2); // Progressive diffusion
             d.set_feedback(0.5);
             d.set_modulation(0.5, 4.0, sample_rate);
             d
         });
 
-        let base_delay = num::f64_to_index((sample_rate * 0.15));
+        let base_delay = num::f64_to_index(sample_rate * 0.15);
         let mut magneto = Self {
             tape_l: DelayLine::new(max_delay + 1),
             tape_r: DelayLine::new(max_delay + 1),
@@ -95,7 +95,7 @@ impl Magneto {
             .max(1.0);
         for i in 0..NUM_HEADS {
             let frac = match self.spacing {
-                MagnetoSpacing::Even => num::count_to_f64((i + 1)) / num::count_to_f64(n),
+                MagnetoSpacing::Even => num::count_to_f64(i + 1) / num::count_to_f64(n),
                 MagnetoSpacing::Uneven => {
                     // Take the last n entries of the irregular grid so
                     // the final head stays at the full delay time.
@@ -112,7 +112,7 @@ impl Magneto {
         if amount < 0.001 {
             return x;
         }
-        let driven = x * (1.0 + amount * 2.0);
+        let driven = x * amount.mul_add(2.0, 1.0);
         driven / (1.0 + driven.abs())
     }
 }
@@ -139,25 +139,25 @@ impl ReverbAlgorithm for Magneto {
         // Knob remap (manual): DECAY -> delay time of the LAST head, up
         // to 1500 ms. Feedback comes from MagnetoParams (the PRE-DELAY
         // remap), not from decay.
-        self.last_delay_s = 0.1 + params.decay * 1.4;
+        self.last_delay_s = params.decay.mul_add(1.4, 0.1);
         self.reposition_heads();
 
         // Diffusion -> how much each head is diffused
         for (i, diff) in self.head_diffusers.iter_mut().enumerate() {
-            let stages = ((params.diffusion * (2.0 + num::count_to_f64(i) * 2.0)) as usize).min(8);
+            let stages = ((params.diffusion * num::count_to_f64(i).mul_add(2.0, 2.0)) as usize).min(8);
             diff.set_active_stages(stages);
-            diff.set_feedback(0.4 + params.diffusion * 0.3);
+            diff.set_feedback(params.diffusion.mul_add(0.3, 0.4));
         }
 
         // Damping
-        let freq = 2000.0 + (1.0 - params.damping) * 8000.0;
+        let freq = (1.0 - params.damping).mul_add(8000.0, 2000.0);
         self.fb_damp_l.set_freq(freq, self.sample_rate);
         self.fb_damp_r.set_freq(freq, self.sample_rate);
 
         // Modulation
         for (i, diff) in self.head_diffusers.iter_mut().enumerate() {
             diff.set_modulation(
-                0.3 + num::count_to_f64(i) * 0.2,
+                num::count_to_f64(i).mul_add(0.2, 0.3),
                 params.modulation * 8.0,
                 self.sample_rate,
             );
@@ -179,8 +179,8 @@ impl ReverbAlgorithm for Magneto {
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         // Write input + feedback to tape
-        let in_l = Self::saturate(left + self.fb_state_l * self.feedback, self.saturation);
-        let in_r = Self::saturate(right + self.fb_state_r * self.feedback, self.saturation);
+        let in_l = Self::saturate(self.fb_state_l.mul_add(self.feedback, left), self.saturation);
+        let in_r = Self::saturate(self.fb_state_r.mul_add(self.feedback, right), self.saturation);
         self.tape_l.write(in_l);
         self.tape_r.write(in_r);
 

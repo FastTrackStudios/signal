@@ -34,7 +34,7 @@ impl ModulatedDelay {
     #[must_use]
     pub fn new() -> Self {
         let mut d = Self {
-            buffer: DelayLine::new(num::f64_to_index((DEFAULT_SAMPLE_RATE * BUFFER_SECONDS))),
+            buffer: DelayLine::new(num::f64_to_index(DEFAULT_SAMPLE_RATE * BUFFER_SECONDS)),
             samples_processed: 0,
             mod_phase: 0.31,
             current_delay: 100.0,
@@ -50,7 +50,7 @@ impl ModulatedDelay {
     /// Resize the buffer for the actual sample rate. Allocates; call from
     /// setup, never from the audio tick.
     pub fn set_sample_rate(&mut self, sample_rate: f64) {
-        let len = num::f64_to_index((sample_rate * BUFFER_SECONDS));
+        let len = num::f64_to_index(sample_rate * BUFFER_SECONDS);
         if len > self.buffer.len() {
             self.buffer = DelayLine::new(len);
         }
@@ -105,7 +105,7 @@ impl ModulatedDelay {
         }
 
         let modulation = (self.mod_phase * 2.0 * PI).sin();
-        let target = (num::count_to_f64(self.sample_delay) + self.mod_amount * modulation).max(1.0);
+        let target = self.mod_amount.mul_add(modulation, num::count_to_f64(self.sample_delay)).max(1.0);
 
         // Spread the move over the next update window.
         self.delay_step = (target - self.current_delay) / num::u64_to_f64(MOD_UPDATE_RATE);
@@ -138,7 +138,7 @@ mod tests {
         }
         let n = arrival.expect("impulse should come out");
         assert!(
-            (n as i64 - 100).unsigned_abs() <= 2,
+            (i64::from(n) - 100).unsigned_abs() <= 2,
             "impulse should arrive near sample 100, got {n}"
         );
     }
@@ -152,7 +152,7 @@ mod tests {
         d.reset();
 
         for i in 0..96000 {
-            let x = ((i as f64) * 0.05).sin();
+            let x = (f64::from(i) * 0.05).sin();
             let y = d.tick(x);
             assert!(y.is_finite(), "NaN at {i}");
             assert!(y.abs() < 10.0, "blowup at {i}: {y}");
@@ -172,7 +172,7 @@ mod tests {
         let mut prev = 0.0;
         let mut max_jump: f64 = 0.0;
         for i in 0..48000 {
-            let x = (2.0 * PI * 220.0 * i as f64 / 48000.0).sin();
+            let x = (2.0 * PI * 220.0 * f64::from(i) / 48000.0).sin();
             let y = d.tick(x);
             if i > 2000 {
                 max_jump = max_jump.max((y - prev).abs());

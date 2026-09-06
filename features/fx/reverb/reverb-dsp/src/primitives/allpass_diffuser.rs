@@ -105,7 +105,7 @@ impl AllpassDiffuser {
             } else {
                 0.5
             };
-            self.filters[i].mod_amount = amount * (0.85 + 0.3 * sv);
+            self.filters[i].mod_amount = amount * 0.3f64.mul_add(sv, 0.85);
         }
     }
 
@@ -117,7 +117,7 @@ impl AllpassDiffuser {
             } else {
                 0.5
             };
-            self.filters[i].mod_rate = rate * (0.85 + 0.3 * sv) / self.sample_rate;
+            self.filters[i].mod_rate = rate * 0.3f64.mul_add(sv, 0.85) / self.sample_rate;
         }
     }
 
@@ -138,7 +138,7 @@ impl AllpassDiffuser {
     /// instantaneous delay changes cancel in aggregate.
     pub fn set_quadrature_phases(&mut self) {
         for (i, f) in self.filters.iter_mut().enumerate() {
-            f.set_phase(num::count_to_f64(i) * 0.25 + 0.31);
+            f.set_phase(num::count_to_f64(i).mul_add(0.25, 0.31));
         }
     }
 

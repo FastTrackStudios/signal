@@ -165,8 +165,8 @@ impl Bloom {
     /// Rotates outputs to create density: each line feeds partially into the next.
     #[inline]
     fn rotate_mix(vals: &[f64; NUM_LINES], amount: f64) -> [f64; NUM_LINES] {
-        let direct = 1.0 - amount * 0.5;
-        let cross = amount * 0.5 / num::count_to_f64((NUM_LINES - 1));
+        let direct = amount.mul_add(-0.5, 1.0);
+        let cross = amount * 0.5 / num::count_to_f64(NUM_LINES - 1);
         let mut out = [0.0; NUM_LINES];
         for i in 0..NUM_LINES {
             out[i] = vals[i] * direct;
@@ -210,11 +210,11 @@ impl ReverbAlgorithm for Bloom {
 
         // -- Decay: feedback gain of delay lines (bloom sustain) --
         // Map 0..1 to ~0.3..0.97 for useful reverb range, with a long tail at high values
-        self.decay_gain = 0.3 + params.decay * 0.67;
+        self.decay_gain = params.decay.mul_add(0.67, 0.3);
 
         // -- Size: scale delay line lengths --
         // Map 0..1 to 0.3..2.5 for small-to-massive space
-        self.size_scale = 0.3 + params.size * 2.2;
+        self.size_scale = params.size.mul_add(2.2, 0.3);
         for (i, voice) in self.voices_l.iter_mut().enumerate() {
             let scaled = (num::count_to_f64(BASE_DELAYS_L[i]) * (sr / 48000.0) * self.size_scale) as usize;
             voice.current_delay = num::count_to_f64(scaled);
@@ -225,8 +225,8 @@ impl ReverbAlgorithm for Bloom {
         }
 
         // -- Diffusion: input diffuser stages and feedback (bloom density) --
-        let input_stages = 2 + num::f64_to_index((params.diffusion * 6.0)); // 2..8 stages
-        let input_fb = 0.3 + params.diffusion * 0.45; // 0.3..0.75
+        let input_stages = 2 + num::f64_to_index(params.diffusion * 6.0); // 2..8 stages
+        let input_fb = params.diffusion.mul_add(0.45, 0.3); // 0.3..0.75
         self.input_diffuser_l.set_active_stages(input_stages);
         self.input_diffuser_r.set_active_stages(input_stages);
         self.input_diffuser_l.set_feedback(input_fb);
@@ -234,13 +234,13 @@ impl ReverbAlgorithm for Bloom {
 
         // -- Damping: LP cutoff in feedback (bloom brightness) --
         // Map 0..1 to 12kHz..1.5kHz (higher damping = darker)
-        let damp_freq = 12000.0 * (1.0 - params.damping * 0.875);
+        let damp_freq = 12000.0 * params.damping.mul_add(-0.875, 1.0);
         for voice in self.voices_l.iter_mut().chain(self.voices_r.iter_mut()) {
             voice.damping.set_freq(damp_freq, sr);
         }
 
         // -- Modulation: delay modulation depth (chorus in bloom tail) --
-        let mod_rate = 0.3 + params.modulation * 1.2; // 0.3..1.5 Hz
+        let mod_rate = params.modulation.mul_add(1.2, 0.3); // 0.3..1.5 Hz
         let mod_depth = params.modulation * 12.0; // 0..12 samples
                                                   // Input diffusers
         self.input_diffuser_l
@@ -254,7 +254,7 @@ impl ReverbAlgorithm for Bloom {
             .chain(self.voices_r.iter_mut())
             .enumerate()
         {
-            let rate_offset = 1.0 + (i as f64) * 0.05;
+            let rate_offset = (i as f64).mul_add(0.05, 1.0);
             voice
                 .diffuser
                 .set_modulation(mod_rate * rate_offset, mod_depth * 0.7, sr);
@@ -268,8 +268,8 @@ impl ReverbAlgorithm for Bloom {
 
         // -- Extra A: bloom rate (diffuser strength in feedback path) --
         // Controls how quickly density builds: more feedback diffuser stages + stronger feedback
-        let fb_stages = 2 + num::f64_to_index((params.extra_a * 6.0)); // 2..8
-        let fb_diffuser_fb = 0.2 + params.extra_a * 0.5; // 0.2..0.7
+        let fb_stages = 2 + num::f64_to_index(params.extra_a * 6.0); // 2..8
+        let fb_diffuser_fb = params.extra_a.mul_add(0.5, 0.2); // 0.2..0.7
         for voice in self.voices_l.iter_mut().chain(self.voices_r.iter_mut()) {
             voice.diffuser.set_active_stages(fb_stages);
             voice.diffuser.set_feedback(fb_diffuser_fb);
@@ -341,8 +341,8 @@ impl ReverbAlgorithm for Bloom {
                 let clean = voice.dc_block.tick(diffused);
 
                 // Mix: input + feedback (with stereo cross-feed)
-                let fb_in = fb_l_mixed[i] * direct + fb_r_mixed[i] * cross;
-                let write_val = diffused_l * inv_n + clean * decay + fb_in * decay * 0.15;
+                let fb_in = fb_l_mixed[i].mul_add(direct, fb_r_mixed[i] * cross);
+                let write_val = (fb_in * decay).mul_add(0.15, diffused_l * inv_n + clean * decay);
 
                 voice.delay.write(write_val);
                 new_fb_l[i] = clean * decay;
@@ -359,8 +359,8 @@ impl ReverbAlgorithm for Bloom {
                 let diffused = voice.diffuser.tick(damped);
                 let clean = voice.dc_block.tick(diffused);
 
-                let fb_in = fb_r_mixed[i] * direct + fb_l_mixed[i] * cross;
-                let write_val = diffused_r * inv_n + clean * decay + fb_in * decay * 0.15;
+                let fb_in = fb_r_mixed[i].mul_add(direct, fb_l_mixed[i] * cross);
+                let write_val = (fb_in * decay).mul_add(0.15, diffused_r * inv_n + clean * decay);
 
                 voice.delay.write(write_val);
                 new_fb_r[i] = clean * decay;
@@ -397,7 +397,7 @@ impl ReverbAlgorithm for Bloom {
         // Apply stereo width to output (mid-side processing)
         let mid = (out_l + out_r) * 0.5;
         let side = (out_l - out_r) * 0.5;
-        let width_gain = 0.5 + self.stereo_width * 0.5; // 0.5..1.0
+        let width_gain = self.stereo_width.mul_add(0.5, 0.5); // 0.5..1.0
         out_l = mid + side * width_gain;
         out_r = mid - side * width_gain;
 

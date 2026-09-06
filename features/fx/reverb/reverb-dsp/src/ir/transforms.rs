@@ -232,7 +232,7 @@ fn stretch(buf: &[f64], factor: f64) -> Vec<f64> {
         let frac = src - num::count_to_f64(idx);
         let a = buf[idx.min(buf.len() - 1)];
         let b = buf[(idx + 1).min(buf.len() - 1)];
-        out.push(a + (b - a) * frac);
+        out.push((b - a).mul_add(frac, a));
     }
     out
 }
@@ -266,7 +266,7 @@ fn apply_decay_window(buf: &mut Vec<f64>, frac: f64, gate: bool) {
         let ramp_len = (keep - ramp_start).max(1);
         #[allow(clippy::needless_range_loop)]
         for i in ramp_start..keep {
-            let g = 1.0 - num::count_to_f64((i - ramp_start)) / num::count_to_f64(ramp_len);
+            let g = 1.0 - num::count_to_f64(i - ramp_start) / num::count_to_f64(ramp_len);
             buf[i] *= g;
         }
     }
@@ -311,8 +311,8 @@ fn apply_decay_eq(x: &mut [f64], bands: &[(f64, f64); 2], sample_rate: f64) {
         let g_hi = 10.0f64.powf(hi_db * t / 20.0);
         for v in &mut x[i..end] {
             let inp = *v;
-            lp_lo = (1.0 - a_lo) * inp + a_lo * lp_lo;
-            lp_hi = (1.0 - a_hi) * inp + a_hi * lp_hi;
+            lp_lo = (1.0 - a_lo).mul_add(inp, a_lo * lp_lo);
+            lp_hi = (1.0 - a_hi).mul_add(inp, a_hi * lp_hi);
             let low = lp_lo;
             let high = inp - lp_hi;
             let mid = inp - low - high;
@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn trim_shortens() {
-        let ir = IrAsset::from_mono((0..100).map(|i| i as f64).collect(), 1000.0);
+        let ir = IrAsset::from_mono((0..100).map(|i| f64::from(i)).collect(), 1000.0);
         let t = IrTransforms {
             trim_start_s: 0.010,
             trim_end_s: 0.010,

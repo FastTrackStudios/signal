@@ -21,7 +21,7 @@ pub fn mix(channels: &mut [f64]) {
     let sum: f64 = channels.iter().sum();
     let scale = 2.0 / num::count_to_f64(n);
     for ch in channels.iter_mut() {
-        *ch = sum * scale - *ch;
+        *ch = sum.mul_add(scale, -*ch);
     }
 }
 

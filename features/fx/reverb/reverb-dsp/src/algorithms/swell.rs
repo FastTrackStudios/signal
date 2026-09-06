@@ -53,7 +53,7 @@ impl Swell {
             [1279, 1567, 1873, 2179, 2473, 2777, 3079, 3389]
         };
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index((d as f64 * scale))).collect();
+        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index(f64::from(d) * scale)).collect();
         Fdn::new(&delays, MixMatrix::Householder)
     }
 }
@@ -75,7 +75,7 @@ impl ReverbAlgorithm for Swell {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Decay
-        let decay = 0.5 + params.decay * 0.48;
+        let decay = params.decay.mul_add(0.48, 0.5);
         self.fdn_l.set_decay(decay);
         self.fdn_r.set_decay(decay);
 
@@ -85,20 +85,20 @@ impl ReverbAlgorithm for Swell {
         self.fdn_r.set_damping_coeff(damp_coeff);
 
         // Swell rate (extra_a: slow → fast build)
-        self.swell_rate = 0.00001 + params.extra_a * 0.0005;
+        self.swell_rate = params.extra_a.mul_add(0.0005, 0.00001);
 
         // Envelope follower timing
-        let attack_ms = 20.0 + (1.0 - params.extra_a) * 200.0;
-        let release_ms = 100.0 + params.extra_b * 2000.0;
+        let attack_ms = (1.0 - params.extra_a).mul_add(200.0, 20.0);
+        let release_ms = params.extra_b.mul_add(2000.0, 100.0);
         self.env_follower
             .set_times_ms(attack_ms, release_ms, self.sample_rate);
 
         // Diffusion
-        let stages = num::f64_to_index((params.diffusion * 10.0));
+        let stages = num::f64_to_index(params.diffusion * 10.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(0.5 + params.diffusion * 0.25);
-        self.diffuser_r.set_feedback(0.5 + params.diffusion * 0.25);
+        self.diffuser_l.set_feedback(params.diffusion.mul_add(0.25, 0.5));
+        self.diffuser_r.set_feedback(params.diffusion.mul_add(0.25, 0.5));
 
         // Modulation
         self.diffuser_l

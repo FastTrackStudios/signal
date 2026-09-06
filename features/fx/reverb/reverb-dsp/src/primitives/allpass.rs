@@ -44,9 +44,9 @@ impl Allpass {
     #[inline]
     pub fn tick(&mut self, input: f64) -> f64 {
         let delayed = self.delay.read(self.delay_samples);
-        let v = input + self.feedback * delayed;
+        let v = self.feedback.mul_add(delayed, input);
         self.delay.write(v);
-        delayed - self.feedback * v
+        self.feedback.mul_add(-v, delayed)
     }
 
     pub fn reset(&mut self) {

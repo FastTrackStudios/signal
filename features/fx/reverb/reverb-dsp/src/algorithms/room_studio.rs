@@ -48,7 +48,7 @@ pub struct RoomStudio {
 impl RoomStudio {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_er = num::f64_to_index((sample_rate * 0.06)); // 60ms max ER
+        let max_er = num::f64_to_index(sample_rate * 0.06); // 60ms max ER
 
         let mod_ap_l = std::array::from_fn(|_| ModulatedAllpass::new());
         let mod_ap_r = std::array::from_fn(|_| ModulatedAllpass::new());
@@ -99,7 +99,7 @@ impl RoomStudio {
         let scale = sample_rate / 48000.0 * size.max(0.1);
         let delays: Vec<usize> = base
             .iter()
-            .map(|&d| ((d as f64 * scale) as usize).max(4))
+            .map(|&d| ((f64::from(d) * scale) as usize).max(4))
             .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.6);
@@ -114,85 +114,85 @@ impl RoomStudio {
         // More uniform gain decay than raw room (treatment controls reflections)
         let taps_l = [
             Tap {
-                delay_samples: num::f64_to_index((53.0 * scale)),
+                delay_samples: num::f64_to_index(53.0 * scale),
                 gain: 0.82,
             },
             Tap {
-                delay_samples: num::f64_to_index((109.0 * scale)),
+                delay_samples: num::f64_to_index(109.0 * scale),
                 gain: 0.72,
             },
             Tap {
-                delay_samples: num::f64_to_index((163.0 * scale)),
+                delay_samples: num::f64_to_index(163.0 * scale),
                 gain: 0.63,
             },
             Tap {
-                delay_samples: num::f64_to_index((223.0 * scale)),
+                delay_samples: num::f64_to_index(223.0 * scale),
                 gain: 0.54,
             },
             Tap {
-                delay_samples: num::f64_to_index((281.0 * scale)),
+                delay_samples: num::f64_to_index(281.0 * scale),
                 gain: 0.46,
             },
             Tap {
-                delay_samples: num::f64_to_index((347.0 * scale)),
+                delay_samples: num::f64_to_index(347.0 * scale),
                 gain: 0.38,
             },
             Tap {
-                delay_samples: num::f64_to_index((419.0 * scale)),
+                delay_samples: num::f64_to_index(419.0 * scale),
                 gain: 0.31,
             },
             Tap {
-                delay_samples: num::f64_to_index((491.0 * scale)),
+                delay_samples: num::f64_to_index(491.0 * scale),
                 gain: 0.24,
             },
             Tap {
-                delay_samples: num::f64_to_index((569.0 * scale)),
+                delay_samples: num::f64_to_index(569.0 * scale),
                 gain: 0.18,
             },
             Tap {
-                delay_samples: num::f64_to_index((647.0 * scale)),
+                delay_samples: num::f64_to_index(647.0 * scale),
                 gain: 0.13,
             },
         ];
         let taps_r = [
             Tap {
-                delay_samples: num::f64_to_index((61.0 * scale)),
+                delay_samples: num::f64_to_index(61.0 * scale),
                 gain: 0.82,
             },
             Tap {
-                delay_samples: num::f64_to_index((119.0 * scale)),
+                delay_samples: num::f64_to_index(119.0 * scale),
                 gain: 0.72,
             },
             Tap {
-                delay_samples: num::f64_to_index((179.0 * scale)),
+                delay_samples: num::f64_to_index(179.0 * scale),
                 gain: 0.63,
             },
             Tap {
-                delay_samples: num::f64_to_index((241.0 * scale)),
+                delay_samples: num::f64_to_index(241.0 * scale),
                 gain: 0.54,
             },
             Tap {
-                delay_samples: num::f64_to_index((307.0 * scale)),
+                delay_samples: num::f64_to_index(307.0 * scale),
                 gain: 0.46,
             },
             Tap {
-                delay_samples: num::f64_to_index((373.0 * scale)),
+                delay_samples: num::f64_to_index(373.0 * scale),
                 gain: 0.38,
             },
             Tap {
-                delay_samples: num::f64_to_index((443.0 * scale)),
+                delay_samples: num::f64_to_index(443.0 * scale),
                 gain: 0.31,
             },
             Tap {
-                delay_samples: num::f64_to_index((517.0 * scale)),
+                delay_samples: num::f64_to_index(517.0 * scale),
                 gain: 0.24,
             },
             Tap {
-                delay_samples: num::f64_to_index((593.0 * scale)),
+                delay_samples: num::f64_to_index(593.0 * scale),
                 gain: 0.18,
             },
             Tap {
-                delay_samples: num::f64_to_index((673.0 * scale)),
+                delay_samples: num::f64_to_index(673.0 * scale),
                 gain: 0.13,
             },
         ];
@@ -228,21 +228,21 @@ impl RoomStudio {
 
         #[allow(clippy::needless_range_loop)]
         for i in 0..FDN_MOD_AP_COUNT {
-            let delay = num::f64_to_index(((base_delays[i] as f64) * scale));
+            let delay = num::f64_to_index((f64::from(base_delays[i]) * scale));
             self.mod_ap_l[i].sample_delay = delay.max(4);
             self.mod_ap_l[i].feedback = 0.3;
             self.mod_ap_l[i].set_modulation(
-                0.25 + num::count_to_f64(i) * 0.08,
+                num::count_to_f64(i).mul_add(0.08, 0.25),
                 modulation * self.sample_rate * 0.0002,
                 self.sample_rate,
             );
             self.mod_ap_l[i].set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
 
-            let delay_r = num::f64_to_index(((base_delays[i] as f64 + 11.0) * scale));
+            let delay_r = num::f64_to_index(((f64::from(base_delays[i]) + 11.0) * scale));
             self.mod_ap_r[i].sample_delay = delay_r.max(4);
             self.mod_ap_r[i].feedback = 0.3;
             self.mod_ap_r[i].set_modulation(
-                0.3 + num::count_to_f64(i) * 0.07,
+                num::count_to_f64(i).mul_add(0.07, 0.3),
                 modulation * self.sample_rate * 0.0002,
                 self.sample_rate,
             );
@@ -288,7 +288,7 @@ impl ReverbAlgorithm for RoomStudio {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size — small to medium studio
-        let new_size = 0.15 + params.size * 0.85; // 0.15x to 1.0x
+        let new_size = params.size.mul_add(0.85, 0.15); // 0.15x to 1.0x
         if (new_size - self.size).abs() > 0.01 {
             self.size = new_size;
             self.rebuild_fdns();
@@ -307,13 +307,13 @@ impl ReverbAlgorithm for RoomStudio {
         self.fdn_l.set_loop_allpass(0.5);
         self.fdn_r.set_loop_allpass(0.5);
         self.fdn_l.set_rotation(
-            0.3 + params.modulation * 0.6,
-            0.04 + params.modulation * 0.16,
+            params.modulation.mul_add(0.6, 0.3),
+            params.modulation.mul_add(0.16, 0.04),
             self.sample_rate,
         );
         self.fdn_r.set_rotation(
-            (0.3 + params.modulation * 0.6) * 1.11,
-            0.04 + params.modulation * 0.16,
+            params.modulation.mul_add(0.6, 0.3) * 1.11,
+            params.modulation.mul_add(0.16, 0.04),
             self.sample_rate,
         );
 
@@ -340,7 +340,7 @@ impl ReverbAlgorithm for RoomStudio {
             .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
 
         // Damping — acoustic treatment absorbs more consistently
-        let damp_freq = 1500.0 + (1.0 - params.damping) * 8500.0;
+        let damp_freq = (1.0 - params.damping).mul_add(8500.0, 1500.0);
         self.fdn_l.set_damping(damp_freq, self.sample_rate);
         self.fdn_r.set_damping(damp_freq, self.sample_rate);
 
@@ -359,16 +359,16 @@ impl ReverbAlgorithm for RoomStudio {
         );
 
         // Bass trapping — extra_a controls bass tightness
-        let bass_freq = 80.0 + params.extra_a * 300.0; // 80-380 Hz
+        let bass_freq = params.extra_a.mul_add(300.0, 80.0); // 80-380 Hz
         self.bass_hp_l.set_freq(bass_freq, self.sample_rate);
         self.bass_hp_r.set_freq(bass_freq, self.sample_rate);
 
         // Diffusion — studios have diffusers, so density builds fast
-        let stages = num::f64_to_index((params.diffusion * 10.0));
+        let stages = num::f64_to_index(params.diffusion * 10.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(0.55 + params.diffusion * 0.2);
-        self.diffuser_r.set_feedback(0.55 + params.diffusion * 0.2);
+        self.diffuser_l.set_feedback(params.diffusion.mul_add(0.2, 0.55));
+        self.diffuser_r.set_feedback(params.diffusion.mul_add(0.2, 0.55));
 
         // Modulation (very subtle in studio)
         self.setup_mod_allpass(params.modulation);
@@ -379,7 +379,7 @@ impl ReverbAlgorithm for RoomStudio {
             .set_modulation(0.3, diff_mod_depth, self.sample_rate);
 
         // Tone
-        let tone_freq = 4000.0 + (1.0 + params.tone) * 0.5 * 8000.0;
+        let tone_freq = ((1.0 + params.tone) * 0.5).mul_add(8000.0, 4000.0);
         self.tone_lp_l.set_freq(tone_freq, self.sample_rate);
         self.tone_lp_r.set_freq(tone_freq, self.sample_rate);
 

@@ -40,7 +40,7 @@ impl ModulatedAllpass {
     #[must_use]
     pub fn new() -> Self {
         let mut ap = Self {
-            buffer: DelayLine::new(num::f64_to_index((DEFAULT_SAMPLE_RATE * BUFFER_SECONDS))),
+            buffer: DelayLine::new(num::f64_to_index(DEFAULT_SAMPLE_RATE * BUFFER_SECONDS)),
             samples_processed: 0,
             mod_phase: 0.31, // Arbitrary initial phase
             current_delay: 100.0,
@@ -120,9 +120,9 @@ impl ModulatedAllpass {
     /// Shared Schroeder allpass update: write `input + fb`, output `delayed - fb * written`.
     #[inline]
     fn allpass_step(&mut self, input: f64, buf_out: f64) -> f64 {
-        let in_val = input + buf_out * self.feedback;
+        let in_val = buf_out.mul_add(self.feedback, input);
         self.buffer.write(in_val);
-        buf_out - in_val * self.feedback
+        in_val.mul_add(-self.feedback, buf_out)
     }
 
     fn update_mod(&mut self) {

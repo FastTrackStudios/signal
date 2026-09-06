@@ -114,88 +114,88 @@ impl Biquad {
                 self.a2 = 0.0;
             }
             FilterType::LowPass => {
-                let norm = 1.0 / (1.0 + k / q + k * k);
+                let norm = 1.0 / k.mul_add(k, 1.0 + k / q);
                 self.b0 = k * k * norm;
                 self.b1 = 2.0 * self.b0;
                 self.b2 = self.b0;
-                self.a1 = 2.0 * (k * k - 1.0) * norm;
-                self.a2 = (1.0 - k / q + k * k) * norm;
+                self.a1 = 2.0 * k.mul_add(k, -1.0) * norm;
+                self.a2 = k.mul_add(k, 1.0 - k / q) * norm;
             }
             FilterType::HighPass => {
-                let norm = 1.0 / (1.0 + k / q + k * k);
+                let norm = 1.0 / k.mul_add(k, 1.0 + k / q);
                 self.b0 = norm;
                 self.b1 = -2.0 * self.b0;
                 self.b2 = self.b0;
-                self.a1 = 2.0 * (k * k - 1.0) * norm;
-                self.a2 = (1.0 - k / q + k * k) * norm;
+                self.a1 = 2.0 * k.mul_add(k, -1.0) * norm;
+                self.a2 = k.mul_add(k, 1.0 - k / q) * norm;
             }
             FilterType::BandPass => {
-                let norm = 1.0 / (1.0 + k / q + k * k);
+                let norm = 1.0 / k.mul_add(k, 1.0 + k / q);
                 self.b0 = k / q * norm;
                 self.b1 = 0.0;
                 self.b2 = -self.b0;
-                self.a1 = 2.0 * (k * k - 1.0) * norm;
-                self.a2 = (1.0 - k / q + k * k) * norm;
+                self.a1 = 2.0 * k.mul_add(k, -1.0) * norm;
+                self.a2 = k.mul_add(k, 1.0 - k / q) * norm;
             }
             FilterType::Notch => {
-                let norm = 1.0 / (1.0 + k / q + k * k);
-                self.b0 = (1.0 + k * k) * norm;
-                self.b1 = 2.0 * (k * k - 1.0) * norm;
+                let norm = 1.0 / k.mul_add(k, 1.0 + k / q);
+                self.b0 = k.mul_add(k, 1.0) * norm;
+                self.b1 = 2.0 * k.mul_add(k, -1.0) * norm;
                 self.b2 = self.b0;
                 self.a1 = self.b1;
-                self.a2 = (1.0 - k / q + k * k) * norm;
+                self.a2 = k.mul_add(k, 1.0 - k / q) * norm;
             }
             FilterType::Peak => {
                 if self.gain_db >= 0.0 {
-                    let norm = 1.0 / (1.0 + 1.0 / q * k + k * k);
-                    self.b0 = (1.0 + v / q * k + k * k) * norm;
-                    self.b1 = 2.0 * (k * k - 1.0) * norm;
-                    self.b2 = (1.0 - v / q * k + k * k) * norm;
+                    let norm = 1.0 / ((1.0 / q).mul_add(k, 1.0) + k * k);
+                    self.b0 = ((v / q).mul_add(k, 1.0) + k * k) * norm;
+                    self.b1 = 2.0 * k.mul_add(k, -1.0) * norm;
+                    self.b2 = ((v / q).mul_add(-k, 1.0) + k * k) * norm;
                     self.a1 = self.b1;
-                    self.a2 = (1.0 - 1.0 / q * k + k * k) * norm;
+                    self.a2 = ((1.0 / q).mul_add(-k, 1.0) + k * k) * norm;
                 } else {
-                    let norm = 1.0 / (1.0 + v / q * k + k * k);
-                    self.b0 = (1.0 + 1.0 / q * k + k * k) * norm;
-                    self.b1 = 2.0 * (k * k - 1.0) * norm;
-                    self.b2 = (1.0 - 1.0 / q * k + k * k) * norm;
+                    let norm = 1.0 / ((v / q).mul_add(k, 1.0) + k * k);
+                    self.b0 = ((1.0 / q).mul_add(k, 1.0) + k * k) * norm;
+                    self.b1 = 2.0 * k.mul_add(k, -1.0) * norm;
+                    self.b2 = ((1.0 / q).mul_add(-k, 1.0) + k * k) * norm;
                     self.a1 = self.b1;
-                    self.a2 = (1.0 - v / q * k + k * k) * norm;
+                    self.a2 = ((v / q).mul_add(-k, 1.0) + k * k) * norm;
                 }
             }
             FilterType::LowShelf => {
                 let sqrt2 = std::f64::consts::SQRT_2;
                 if self.gain_db >= 0.0 {
-                    let norm = 1.0 / (1.0 + sqrt2 * k + k * k);
-                    self.b0 = (1.0 + (2.0 * v).sqrt() * k + v * k * k) * norm;
-                    self.b1 = 2.0 * (v * k * k - 1.0) * norm;
-                    self.b2 = (1.0 - (2.0 * v).sqrt() * k + v * k * k) * norm;
-                    self.a1 = 2.0 * (k * k - 1.0) * norm;
-                    self.a2 = (1.0 - sqrt2 * k + k * k) * norm;
+                    let norm = 1.0 / (sqrt2.mul_add(k, 1.0) + k * k);
+                    self.b0 = ((2.0 * v).sqrt().mul_add(k, 1.0) + v * k * k) * norm;
+                    self.b1 = 2.0 * (v * k).mul_add(k, -1.0) * norm;
+                    self.b2 = ((2.0 * v).sqrt().mul_add(-k, 1.0) + v * k * k) * norm;
+                    self.a1 = 2.0 * k.mul_add(k, -1.0) * norm;
+                    self.a2 = (sqrt2.mul_add(-k, 1.0) + k * k) * norm;
                 } else {
-                    let norm = 1.0 / (1.0 + (2.0 * v).sqrt() * k + v * k * k);
-                    self.b0 = (1.0 + sqrt2 * k + k * k) * norm;
-                    self.b1 = 2.0 * (k * k - 1.0) * norm;
-                    self.b2 = (1.0 - sqrt2 * k + k * k) * norm;
-                    self.a1 = 2.0 * (v * k * k - 1.0) * norm;
-                    self.a2 = (1.0 - (2.0 * v).sqrt() * k + v * k * k) * norm;
+                    let norm = 1.0 / ((2.0 * v).sqrt().mul_add(k, 1.0) + v * k * k);
+                    self.b0 = (sqrt2.mul_add(k, 1.0) + k * k) * norm;
+                    self.b1 = 2.0 * k.mul_add(k, -1.0) * norm;
+                    self.b2 = (sqrt2.mul_add(-k, 1.0) + k * k) * norm;
+                    self.a1 = 2.0 * (v * k).mul_add(k, -1.0) * norm;
+                    self.a2 = ((2.0 * v).sqrt().mul_add(-k, 1.0) + v * k * k) * norm;
                 }
             }
             FilterType::HighShelf => {
                 let sqrt2 = std::f64::consts::SQRT_2;
                 if self.gain_db >= 0.0 {
-                    let norm = 1.0 / (1.0 + sqrt2 * k + k * k);
-                    self.b0 = (v + (2.0 * v).sqrt() * k + k * k) * norm;
-                    self.b1 = 2.0 * (k * k - v) * norm;
-                    self.b2 = (v - (2.0 * v).sqrt() * k + k * k) * norm;
-                    self.a1 = 2.0 * (k * k - 1.0) * norm;
-                    self.a2 = (1.0 - sqrt2 * k + k * k) * norm;
+                    let norm = 1.0 / (sqrt2.mul_add(k, 1.0) + k * k);
+                    self.b0 = ((2.0 * v).sqrt().mul_add(k, v) + k * k) * norm;
+                    self.b1 = 2.0 * k.mul_add(k, -v) * norm;
+                    self.b2 = ((2.0 * v).sqrt().mul_add(-k, v) + k * k) * norm;
+                    self.a1 = 2.0 * k.mul_add(k, -1.0) * norm;
+                    self.a2 = (sqrt2.mul_add(-k, 1.0) + k * k) * norm;
                 } else {
-                    let norm = 1.0 / (v + (2.0 * v).sqrt() * k + k * k);
-                    self.b0 = (1.0 + sqrt2 * k + k * k) * norm;
-                    self.b1 = 2.0 * (k * k - 1.0) * norm;
-                    self.b2 = (1.0 - sqrt2 * k + k * k) * norm;
-                    self.a1 = 2.0 * (k * k - v) * norm;
-                    self.a2 = (v - (2.0 * v).sqrt() * k + k * k) * norm;
+                    let norm = 1.0 / ((2.0 * v).sqrt().mul_add(k, v) + k * k);
+                    self.b0 = (sqrt2.mul_add(k, 1.0) + k * k) * norm;
+                    self.b1 = 2.0 * k.mul_add(k, -1.0) * norm;
+                    self.b2 = (sqrt2.mul_add(-k, 1.0) + k * k) * norm;
+                    self.a1 = 2.0 * k.mul_add(k, -v) * norm;
+                    self.a2 = ((2.0 * v).sqrt().mul_add(-k, v) + k * k) * norm;
                 }
             }
         }
@@ -204,9 +204,7 @@ impl Biquad {
     #[inline]
     pub fn tick(&mut self, x: f64) -> f64 {
         self.y = audiocore_dsp::denormal::flush(
-            self.b0 * x + self.b1 * self.x1 + self.b2 * self.x2
-                - self.a1 * self.y1
-                - self.a2 * self.y2,
+            self.a2.mul_add(-self.y2, self.b0 * x + self.b1 * self.x1 + self.b2 * self.x2 - self.a1 * self.y1),
         );
         self.x2 = self.x1;
         self.y2 = self.y1;

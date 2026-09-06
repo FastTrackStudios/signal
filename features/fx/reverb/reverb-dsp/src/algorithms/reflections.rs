@@ -25,7 +25,7 @@ pub struct Reflections {
 impl Reflections {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_delay = num::f64_to_index((sample_rate * 0.3)); // 300ms max reflection
+        let max_delay = num::f64_to_index(sample_rate * 0.3); // 300ms max reflection
 
         let mut refl = Self {
             taps_l: MultitapDelay::new(max_delay),
@@ -45,7 +45,7 @@ impl Reflections {
     /// Generate reflection taps based on room size and source position.
     fn generate_reflections(&mut self, size: f64, position: f64) {
         let scale = self.sample_rate / 48000.0;
-        let room_scale = 0.2 + size * 1.6; // Room size multiplier
+        let room_scale = size.mul_add(1.6, 0.2); // Room size multiplier
 
         // Generate geometrically-inspired reflection pattern
         // Simulates first and second order reflections in a rectangular room
@@ -65,7 +65,7 @@ impl Reflections {
         ];
 
         for (i, (&delay, &gain)) in base_delays.iter().zip(base_gains.iter()).enumerate() {
-            let d = num::f64_to_index((delay * scale * room_scale));
+            let d = num::f64_to_index(delay * scale * room_scale);
             // Offset L/R timing based on source position
             let lr_offset = (offset * delay * 0.15 * scale) as isize;
             let d_l = (d as isize + lr_offset).max(1) as usize;
@@ -89,9 +89,9 @@ impl Reflections {
         // Second-order reflections (wall-to-wall bounces)
         let mut rng = audiocore_dsp::prng::XorShift32::new(12345);
         for i in 0..MAX_REFLECTIONS.saturating_sub(base_delays.len()) {
-            let r = (rng.next() as f64) / (u32::MAX as f64);
+            let r = f64::from(rng.next()) / f64::from(u32::MAX);
             let delay = 400.0 + r * 2000.0;
-            let d = num::f64_to_index((delay * scale * room_scale));
+            let d = num::f64_to_index(delay * scale * room_scale);
             // Alternate polarity here too — 32 same-sign taps summed to
             // ~3x net DC area (the bulk of the subsonic energy).
             let gain = 0.15 * (0.97_f64).powi(num::count_to_i32(i)) * if i % 2 == 0 { 1.0 } else { -1.0 };
@@ -130,7 +130,7 @@ impl ReverbAlgorithm for Reflections {
         self.generate_reflections(params.size, params.extra_a);
 
         // Damping -> wall absorption
-        let freq = 2000.0 + (1.0 - params.damping) * 14000.0;
+        let freq = (1.0 - params.damping).mul_add(14000.0, 2000.0);
         self.damp_l.set_freq(freq, self.sample_rate);
         self.damp_r.set_freq(freq, self.sample_rate);
     }

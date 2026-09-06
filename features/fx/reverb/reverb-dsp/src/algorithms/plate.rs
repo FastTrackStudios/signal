@@ -47,8 +47,8 @@ impl Dispersion {
         let a = self.coeff;
         for st in &mut self.state {
             // First-order allpass H(z) = (a + z⁻¹)/(1 + a·z⁻¹).
-            let y = a * x + *st;
-            *st = x - a * y;
+            let y = a.mul_add(x, *st);
+            *st = a.mul_add(-y, x);
             x = y;
         }
         x
@@ -107,22 +107,22 @@ impl Plate {
 
         // Input diffuser delay lengths
         let id = [
-            num::f64_to_index((142.0 * s)),
-            num::f64_to_index((107.0 * s)),
-            num::f64_to_index((379.0 * s)),
-            num::f64_to_index((277.0 * s)),
+            num::f64_to_index(142.0 * s),
+            num::f64_to_index(107.0 * s),
+            num::f64_to_index(379.0 * s),
+            num::f64_to_index(277.0 * s),
         ];
 
         // Tank delay lengths
-        let ta_ap1_len = num::f64_to_index((672.0 * s));
-        let ta_d1_len = num::f64_to_index((4453.0 * s));
-        let ta_ap2_len = num::f64_to_index((1800.0 * s));
-        let ta_d2_len = num::f64_to_index((3720.0 * s));
+        let ta_ap1_len = num::f64_to_index(672.0 * s);
+        let ta_d1_len = num::f64_to_index(4453.0 * s);
+        let ta_ap2_len = num::f64_to_index(1800.0 * s);
+        let ta_d2_len = num::f64_to_index(3720.0 * s);
 
-        let tb_ap1_len = num::f64_to_index((908.0 * s));
-        let tb_d1_len = num::f64_to_index((4217.0 * s));
-        let tb_ap2_len = num::f64_to_index((2656.0 * s));
-        let tb_d2_len = num::f64_to_index((3163.0 * s));
+        let tb_ap1_len = num::f64_to_index(908.0 * s);
+        let tb_d1_len = num::f64_to_index(4217.0 * s);
+        let tb_ap2_len = num::f64_to_index(2656.0 * s);
+        let tb_d2_len = num::f64_to_index(3163.0 * s);
 
         // Tank A AP1 (modulated, decay_diffusion_1)
         let mut tank_a_ap1 = ModulatedAllpass::new();
@@ -242,7 +242,7 @@ impl ReverbAlgorithm for Plate {
             dattorro_gain_for_t60(t60, PLATE_LOOP_SECONDS, PLATE_DECAY_APPLICATIONS);
 
         // Damping → tank LP cutoff (2k–16k Hz)
-        let freq = 2000.0 + (1.0 - params.damping) * 14000.0;
+        let freq = (1.0 - params.damping).mul_add(14000.0, 2000.0);
         self.tank_a_damp.set_freq(freq, self.sample_rate);
         self.tank_b_damp.set_freq(freq, self.sample_rate);
 
@@ -256,20 +256,20 @@ impl ReverbAlgorithm for Plate {
             .set_freq(params.band_crossover_hz.max(80.0), self.sample_rate);
 
         // Input bandwidth (tone control)
-        let bw_freq = 4000.0 + (1.0 - params.damping * 0.5) * 12000.0;
+        let bw_freq = 4000.0 + params.damping.mul_add(-0.5, 1.0) * 12000.0;
         self.bandwidth.set_freq(bw_freq, self.sample_rate);
 
         // Diffusion → decay_diffusion_1 and input diffuser strength
-        self.decay_diffusion_1 = 0.5 + params.diffusion * 0.2; // 0.5–0.7
-        self.decay_diffusion_2 = 0.35 + params.diffusion * 0.15; // 0.35–0.5
+        self.decay_diffusion_1 = params.diffusion.mul_add(0.2, 0.5); // 0.5–0.7
+        self.decay_diffusion_2 = params.diffusion.mul_add(0.15, 0.35); // 0.35–0.5
         self.tank_a_ap1.feedback = -self.decay_diffusion_1; // Negative per Dattorro
         self.tank_b_ap1.feedback = -self.decay_diffusion_1;
         self.tank_a_ap2.set_feedback(self.decay_diffusion_2);
         self.tank_b_ap2.set_feedback(self.decay_diffusion_2);
 
         // Input diffusion strength
-        let id1 = 0.6 + params.diffusion * 0.15; // 0.6–0.75
-        let id2 = 0.5 + params.diffusion * 0.125; // 0.5–0.625
+        let id1 = params.diffusion.mul_add(0.15, 0.6); // 0.6–0.75
+        let id2 = params.diffusion.mul_add(0.125, 0.5); // 0.5–0.625
         self.input_diffuser[0].set_feedback(id1);
         self.input_diffuser[1].set_feedback(id1);
         self.input_diffuser[2].set_feedback(id2);
@@ -301,10 +301,10 @@ impl ReverbAlgorithm for Plate {
         let s = self.s;
         let fb_a = self
             .dc_a
-            .tick(self.tank_b_delay2.read(num::f64_to_index((3163.0 * s))));
+            .tick(self.tank_b_delay2.read(num::f64_to_index(3163.0 * s)));
         let fb_b = self
             .dc_b
-            .tick(self.tank_a_delay2.read(num::f64_to_index((3720.0 * s))));
+            .tick(self.tank_a_delay2.read(num::f64_to_index(3720.0 * s)));
 
         // ---- Tank A processing ----
         // decay_diffusion_1 AP (modulated)
@@ -315,7 +315,7 @@ impl ReverbAlgorithm for Plate {
         let a_ap1_out = self.tank_a_ap1.tick(x + fb_a);
         // delay_4
         self.tank_a_delay1.write(a_ap1_out);
-        let a_d1_out = self.tank_a_delay1.read(num::f64_to_index((4453.0 * s)));
+        let a_d1_out = self.tank_a_delay1.read(num::f64_to_index(4453.0 * s));
         // damping LP → multiply by decay
         let a_damped = self.tank_a_damp.tick(a_d1_out) * self.decay;
         // decay_diffusion_2 AP
@@ -330,7 +330,7 @@ impl ReverbAlgorithm for Plate {
         };
         let b_ap1_out = self.tank_b_ap1.tick(x + fb_b);
         self.tank_b_delay1.write(b_ap1_out);
-        let b_d1_out = self.tank_b_delay1.read(num::f64_to_index((4217.0 * s)));
+        let b_d1_out = self.tank_b_delay1.read(num::f64_to_index(4217.0 * s));
         let b_damped = self.tank_b_damp.tick(b_d1_out) * self.decay;
         let b_ap2_out = self.tank_b_ap2.tick(b_damped);
         self.tank_b_delay2.write(b_ap2_out);
@@ -348,21 +348,21 @@ impl ReverbAlgorithm for Plate {
         // (tank A delay 2). Earlier revisions approximated the allpass
         // taps with adjacent delay lines and had drifted tank/sign
         // assignments; Allpass::tap restores the published matrix.
-        let out_l = self.tank_b_delay1.read(num::f64_to_index((266.0 * s)))
-            + self.tank_b_delay1.read(num::f64_to_index((2974.0 * s)))
-            - self.tank_b_ap2.tap(num::f64_to_index((1913.0 * s)))
-            + self.tank_b_delay2.read(num::f64_to_index((1996.0 * s)))
-            - self.tank_a_delay1.read(num::f64_to_index((1990.0 * s)))
-            - self.tank_a_ap2.tap(num::f64_to_index((187.0 * s)))
-            - self.tank_a_delay2.read(num::f64_to_index((1066.0 * s)));
+        let out_l = self.tank_b_delay1.read(num::f64_to_index(266.0 * s))
+            + self.tank_b_delay1.read(num::f64_to_index(2974.0 * s))
+            - self.tank_b_ap2.tap(num::f64_to_index(1913.0 * s))
+            + self.tank_b_delay2.read(num::f64_to_index(1996.0 * s))
+            - self.tank_a_delay1.read(num::f64_to_index(1990.0 * s))
+            - self.tank_a_ap2.tap(num::f64_to_index(187.0 * s))
+            - self.tank_a_delay2.read(num::f64_to_index(1066.0 * s));
 
-        let out_r = self.tank_a_delay1.read(num::f64_to_index((353.0 * s)))
-            + self.tank_a_delay1.read(num::f64_to_index((3627.0 * s)))
-            - self.tank_a_ap2.tap(num::f64_to_index((1228.0 * s)))
-            + self.tank_a_delay2.read(num::f64_to_index((2673.0 * s)))
-            - self.tank_b_delay1.read(num::f64_to_index((2111.0 * s)))
-            - self.tank_b_ap2.tap(num::f64_to_index((335.0 * s)))
-            - self.tank_b_delay2.read(num::f64_to_index((121.0 * s)));
+        let out_r = self.tank_a_delay1.read(num::f64_to_index(353.0 * s))
+            + self.tank_a_delay1.read(num::f64_to_index(3627.0 * s))
+            - self.tank_a_ap2.tap(num::f64_to_index(1228.0 * s))
+            + self.tank_a_delay2.read(num::f64_to_index(2673.0 * s))
+            - self.tank_b_delay1.read(num::f64_to_index(2111.0 * s))
+            - self.tank_b_ap2.tap(num::f64_to_index(335.0 * s))
+            - self.tank_b_delay2.read(num::f64_to_index(121.0 * s));
 
         // Paper output scale is 0.6; 0.25 preserves this port's level
         // relative to the other algorithms (chain-level normalization).

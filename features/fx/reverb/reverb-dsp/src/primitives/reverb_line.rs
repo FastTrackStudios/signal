@@ -148,7 +148,7 @@ impl ReverbLine {
     /// Returns the output sample (tapped pre- or post-diffuser).
     #[inline]
     pub fn tick(&mut self, input: f64) -> f64 {
-        let combined = input + self.feedback_value * self.feedback_coeff;
+        let combined = self.feedback_value.mul_add(self.feedback_coeff, input);
 
         let delayed = self.delay.tick(combined);
 

@@ -40,7 +40,7 @@ pub struct MultitapDelay {
 impl MultitapDelay {
     #[must_use]
     pub fn new(max_delay: usize) -> Self {
-        let default_len = num::f64_to_index((DEFAULT_SAMPLE_RATE * BUFFER_SECONDS));
+        let default_len = num::f64_to_index(DEFAULT_SAMPLE_RATE * BUFFER_SECONDS);
         let mut mt = Self {
             buffer: DelayLine::new((max_delay + 2).max(default_len)),
             tap_gains: [0.0; MAX_TAPS],
@@ -59,7 +59,7 @@ impl MultitapDelay {
     /// Resize the buffer for the actual sample rate. Allocates; call from
     /// setup, never from the audio tick.
     pub fn set_sample_rate(&mut self, sample_rate: f64) {
-        let len = num::f64_to_index((sample_rate * BUFFER_SECONDS));
+        let len = num::f64_to_index(sample_rate * BUFFER_SECONDS);
         if len > self.buffer.len() {
             self.buffer = DelayLine::new(len);
         }
@@ -104,7 +104,7 @@ impl MultitapDelay {
 
     /// Generate randomized taps with exponential decay (legacy API).
     pub fn set_random_taps(&mut self, count: usize, max_delay: usize, decay: f64, seed: u32) {
-        self.seed = seed as u64;
+        self.seed = u64::from(seed);
         self.count = count.min(MAX_TAPS);
         self.length_samples = num::count_to_f64(max_delay);
         self.decay = decay;
@@ -115,7 +115,7 @@ impl MultitapDelay {
     #[inline]
     pub fn tick(&mut self, input: f64) -> f64 {
         let length_scaler = self.length_samples / num::count_to_f64(self.count.max(1));
-        let total_gain = 3.0 / (1.0 + num::count_to_f64(self.count)).sqrt() * (1.0 + self.decay * 2.0);
+        let total_gain = 3.0 / (1.0 + num::count_to_f64(self.count)).sqrt() * self.decay.mul_add(2.0, 1.0);
 
         self.buffer.write(input);
         let max_offset = self.buffer.len() - 2;
@@ -124,7 +124,7 @@ impl MultitapDelay {
         for j in 0..self.count {
             let offset = self.tap_positions[j] * length_scaler;
             let decay_effective =
-                (-offset / self.length_samples * 3.3).exp() * self.decay + (1.0 - self.decay);
+                (-offset / self.length_samples * 3.3).exp().mul_add(self.decay, 1.0 - self.decay);
             // +1 because the read is relative to the write that just happened:
             // read(1) is the sample written this tick (offset 0 in the old code).
             let read_offset = (offset as usize).min(max_offset) + 1;
@@ -151,7 +151,7 @@ impl MultitapDelay {
                 let phase = if self.seed_values[s] < 0.5 { 1.0 } else { -1.0 };
                 s += 1;
                 let r = self.seed_values[s];
-                self.tap_gains[i] = db_to_linear(-20.0 + r * 20.0) * phase;
+                self.tap_gains[i] = db_to_linear(r.mul_add(20.0, -20.0)) * phase;
                 s += 1;
                 self.tap_positions[i] = num::count_to_f64(i) + self.seed_values[s];
                 s += 1;
@@ -203,7 +203,7 @@ mod tests {
         let mut mt = MultitapDelay::new(48000);
         mt.set_random_taps(64, 24000, 0.8, 1234);
         for i in 0..48000 {
-            let y = mt.tick(((i as f64) * 0.1).sin());
+            let y = mt.tick((f64::from(i) * 0.1).sin());
             assert!(y.is_finite());
         }
     }

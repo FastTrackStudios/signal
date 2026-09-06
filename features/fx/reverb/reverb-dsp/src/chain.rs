@@ -132,11 +132,11 @@ impl PostEqBand {
         let w = freq / f0;
         match self.shape {
             1 => {
-                let t = 1.0 / (1.0 + (w * q * 1.414).powi(2));
+                let t = 1.0 / (w * q * 1.414).mul_add(w * q * 1.414, 1.0);
                 self.gain_db * t
             }
             2 => {
-                let t = (1.0 - 1.0 / (1.0 + (w * (q * 1.414)).powi(2))).clamp(0.0, 1.0);
+                let t = (1.0 - 1.0 / (w * (q * 1.414)).mul_add(w * (q * 1.414), 1.0)).clamp(0.0, 1.0);
                 self.gain_db * t
             }
             // 2nd-order cuts: −12 dB/oct past the corner, clamped for the
@@ -145,7 +145,7 @@ impl PostEqBand {
             4 => (-40.0 * w.max(1e-6).log10()).clamp(-24.0, 0.0),
             _ => {
                 let bw = w - 1.0 / w.max(1e-9);
-                self.gain_db / (1.0 + (bw * q).powi(2))
+                self.gain_db / (bw * q).mul_add(bw * q, 1.0)
             }
         }
     }
@@ -384,7 +384,7 @@ impl ReverbChain {
     #[must_use]
     pub fn new() -> Self {
         let sample_rate = 48000.0;
-        let max_predelay = num::f64_to_index((sample_rate * 0.5)); // 500ms
+        let max_predelay = num::f64_to_index(sample_rate * 0.5); // 500ms
 
         Self {
             algorithm: algorithms::create(AlgorithmType::Room, 0, sample_rate),
@@ -1016,7 +1016,7 @@ impl ReverbChain {
             const POINTS: usize = 24;
             let mean_db: f64 = (0..POINTS)
                 .map(|k| {
-                    let f = 20.0 * 10.0f64.powf(3.0 * num::count_to_f64(k) / num::count_to_f64((POINTS - 1)));
+                    let f = 20.0 * 10.0f64.powf(3.0 * num::count_to_f64(k) / num::count_to_f64(POINTS - 1));
                     self.post_eq
                         .iter()
                         .filter(|b| b.is_active())
@@ -1124,7 +1124,7 @@ impl Processor for ReverbChain {
             1.0
         };
 
-        let max_predelay = num::f64_to_index((config.sample_rate * 0.5));
+        let max_predelay = num::f64_to_index(config.sample_rate * 0.5);
         self.predelay = DelayLine::new(max_predelay + 1);
         self.predelay_samples = if matches!(
             self.algorithm_type,
@@ -1132,7 +1132,7 @@ impl Processor for ReverbChain {
         ) {
             0
         } else {
-            num::f64_to_index((self.predelay_ms * 0.001 * config.sample_rate))
+            num::f64_to_index(self.predelay_ms * 0.001 * config.sample_rate)
         };
 
         self.input_hp.set(
@@ -1316,7 +1316,7 @@ impl Processor for ReverbChain {
                 }
                 _ => self.predelay_ms,
             };
-            self.predelay_samples = num::f64_to_index((ms * 0.001 * self.sample_rate));
+            self.predelay_samples = num::f64_to_index(ms * 0.001 * self.sample_rate);
         }
 
         // Re-apply the input LP here too: the Classic-voice vintage cap
@@ -1336,7 +1336,7 @@ impl Processor for ReverbChain {
         let swell_on = hall_active && self.hall.swell_rise > 1e-9;
         // Rise 0..1 → 50 ms .. ~2 s swell.
         let swell_rate =
-            1.0 / ((0.05 + self.hall.swell_rise.clamp(0.0, 1.0) * 2.0) * self.sample_rate.max(1.0));
+            1.0 / (self.hall.swell_rise.clamp(0.0, 1.0).mul_add(2.0, 0.05) * self.sample_rate.max(1.0));
         self.mix_smoother.set_target(self.mix);
         self.width_smoother.set_target(self.width);
         self.pan_smoother.set_target(self.pan);
@@ -1383,10 +1383,10 @@ impl Processor for ReverbChain {
                 // domain-agnostic and needs |x|).
                 let env = self.duck_env.tick((dry_l + dry_r).abs());
                 let over = (env / duck_thresh - 1.0).max(0.0);
-                let target_duck = 1.0 - (over.min(1.0) * self.duck_amount);
+                let target_duck = over.min(1.0).mul_add(-self.duck_amount, 1.0);
                 // 1-pole smooth toward target_duck (independent of attack/release
                 // — env already shapes the rate).
-                self.duck_gain = self.duck_smooth * (self.duck_gain - target_duck) + target_duck;
+                self.duck_gain = self.duck_smooth.mul_add(self.duck_gain - target_duck, target_duck);
 
                 // Hall Swell: gain builds behind each note (envelope
                 // logic borrowed from the Swell algorithm).
@@ -1535,7 +1535,7 @@ impl Processor for ReverbChain {
                 // bit-identical and re-engaging starts at full gain.
                 let trem_depth = self.trem_depth_smoother.tick();
                 if trem_depth > 1e-6 {
-                    let g = 1.0 - trem_depth * 0.5 * (1.0 - self.trem_phase.cos());
+                    let g = (trem_depth * 0.5).mul_add(-(1.0 - self.trem_phase.cos()), 1.0);
                     final_l *= g;
                     final_r *= g;
                     self.trem_phase += trem_inc;
@@ -1565,8 +1565,8 @@ impl Processor for ReverbChain {
                 }
 
                 // Mix
-                left[i] = dry_l * (1.0 - mix) + final_l * mix;
-                right[i] = dry_r * (1.0 - mix) + final_r * mix;
+                left[i] = dry_l.mul_add(1.0 - mix, final_l * mix);
+                right[i] = dry_r.mul_add(1.0 - mix, final_r * mix);
 
                 // Hall Swell, Wet+Dry type: volume-pedal feel on the
                 // whole output.
@@ -1638,7 +1638,7 @@ mod tests {
 
                 let n = 4800;
                 let mut l: Vec<f64> = (0..n)
-                    .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+                    .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
                     .collect();
                 let mut r = l.clone();
 
@@ -1712,7 +1712,7 @@ mod tests {
 
         // Excite for ~50ms, then freeze with input=0
         let mut l: Vec<f64> = (0..2400)
-            .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut r = l.clone();
         c.process(&mut l, &mut r);
@@ -1773,7 +1773,7 @@ mod tests {
         // mix=1.0 means output = wet alone, so |output| measures wet level.
         let n = 9600;
         let mut l: Vec<f64> = (0..n)
-            .map(|i| (2.0 * PI * 200.0 * i as f64 / SR).sin() * 0.6)
+            .map(|i| (2.0 * PI * 200.0 * f64::from(i) / SR).sin() * 0.6)
             .collect();
         let mut r = l.clone();
         c.process(&mut l, &mut r);
@@ -1784,7 +1784,7 @@ mod tests {
         c2.duck_amount = 0.0;
         c2.update(config());
         let mut l2: Vec<f64> = (0..n)
-            .map(|i| (2.0 * PI * 200.0 * i as f64 / SR).sin() * 0.6)
+            .map(|i| (2.0 * PI * 200.0 * f64::from(i) / SR).sin() * 0.6)
             .collect();
         let mut r2 = l2.clone();
         c2.process(&mut l2, &mut r2);
@@ -1919,7 +1919,7 @@ mod tests {
         let n = 9600;
         let sine = |off: usize| -> Vec<f64> {
             (0..n)
-                .map(|i| (2.0 * PI * freq * num::count_to_f64((off + i)) / SR).sin() * 0.5)
+                .map(|i| (2.0 * PI * freq * num::count_to_f64(off + i) / SR).sin() * 0.5)
                 .collect()
         };
 
@@ -2052,8 +2052,8 @@ mod tests {
         c.update(config());
         c.set_decay_seconds(2.5);
 
-        let drive = num::f64_to_index((SR * 0.2));
-        let total = num::f64_to_index((SR * 4.0));
+        let drive = num::f64_to_index(SR * 0.2);
+        let total = num::f64_to_index(SR * 4.0);
         let mut l: Vec<f64> = (0..total)
             .map(|i| {
                 if i < drive {
@@ -2067,9 +2067,9 @@ mod tests {
         let mut r = l.clone();
         c.process(&mut l, &mut r);
 
-        let win = num::f64_to_index((SR * 0.4));
-        let a0 = drive + num::f64_to_index((SR * 0.3));
-        let b0 = a0 + num::f64_to_index((SR * 1.0));
+        let win = num::f64_to_index(SR * 0.4);
+        let a0 = drive + num::f64_to_index(SR * 0.3);
+        let b0 = a0 + num::f64_to_index(SR * 1.0);
         let energy = |start: usize| -> f64 {
             l[start..(start + win).min(l.len())]
                 .iter()
@@ -2331,7 +2331,7 @@ mod tests {
             c.trem_rate_hz = 6.0;
             c.update(config());
             let mut l: Vec<f64> = (0..9600)
-                .map(|i| (2.0 * PI * 220.0 * i as f64 / SR).sin() * 0.5)
+                .map(|i| (2.0 * PI * 220.0 * f64::from(i) / SR).sin() * 0.5)
                 .collect();
             let mut r = l.clone();
             c.process(&mut l, &mut r);
@@ -2391,7 +2391,7 @@ mod tests {
         c.output_tilt_db = -12.0; // dark
         c.update(config());
         let mut l: Vec<f64> = (0..4800)
-            .map(|i| (2.0 * PI * 8000.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 8000.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut r = l.clone();
         c.process(&mut l, &mut r);
@@ -2402,7 +2402,7 @@ mod tests {
         c2.output_tilt_db = 12.0; // bright
         c2.update(config());
         let mut l2: Vec<f64> = (0..4800)
-            .map(|i| (2.0 * PI * 8000.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 8000.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut r2 = l2.clone();
         c2.process(&mut l2, &mut r2);
@@ -2433,7 +2433,7 @@ mod tests {
                 let mut energy = 0.0;
                 for b in 0..blocks {
                     for i in 0..256 {
-                        let t = num::count_to_f64((b * 256 + i));
+                        let t = num::count_to_f64(b * 256 + i);
                         let x = (core::f64::consts::TAU * 220.0 * t / sr).sin() * level;
                         buf_l[i] = x;
                         buf_r[i] = x;

@@ -69,9 +69,9 @@ impl SpringUnit {
         mod_rate: f64,
         mod_depth: f64,
     ) -> Self {
-        let delay_samples = num::f64_to_index((sample_rate * delay_ms * 0.001));
+        let delay_samples = num::f64_to_index(sample_rate * delay_ms * 0.001);
         // Allocate for maximum possible delay + modulation headroom
-        let max_delay = num::f64_to_index((sample_rate * max_delay_ms * 0.001)) + 32;
+        let max_delay = num::f64_to_index(sample_rate * max_delay_ms * 0.001) + 32;
 
         let mut damp = Lp1::new();
         damp.set_freq(damp_freq, sample_rate);
@@ -132,7 +132,7 @@ impl SpringUnit {
         // Linear interpolation between two delay line samples
         let s0 = self.delay.read(read_int);
         let s1 = self.delay.read(read_int + 1);
-        let delayed = s0 + (s1 - s0) * frac;
+        let delayed = (s1 - s0).mul_add(frac, s0);
 
         // Frequency-dependent decay (lowpass in feedback)
         let damped = self.damp.tick(delayed);
@@ -253,50 +253,50 @@ impl ReverbAlgorithm for Spring {
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Decay → loop gain (dwell control)
         // 0.0 → short splashy decay, 1.0 → long sustain
-        let gain = 0.5 + params.decay * 0.45; // 0.5 to 0.95
+        let gain = params.decay.mul_add(0.45, 0.5); // 0.5 to 0.95
         self.spring_a.loop_gain = gain;
         self.spring_b.loop_gain = gain;
 
         // Size → echo delay length (spring physical length)
-        let delay_a = 20.0 + params.size * 35.0; // 20ms to 55ms
+        let delay_a = params.size.mul_add(35.0, 20.0); // 20ms to 55ms
         let delay_b = delay_a * 1.38; // Spring B is ~38% longer
-        self.spring_a.delay_samples = num::f64_to_index((self.sample_rate * delay_a * 0.001));
-        self.spring_b.delay_samples = num::f64_to_index((self.sample_rate * delay_b * 0.001));
+        self.spring_a.delay_samples = num::f64_to_index(self.sample_rate * delay_a * 0.001);
+        self.spring_b.delay_samples = num::f64_to_index(self.sample_rate * delay_b * 0.001);
 
         // Diffusion → allpass coefficient (chirp intensity / "drip" amount)
         // Low diffusion = mild chirp, high = aggressive drippy chirp
-        let ap_a = 0.35 + params.diffusion * 0.35; // 0.35 to 0.70
+        let ap_a = params.diffusion.mul_add(0.35, 0.35); // 0.35 to 0.70
         let ap_b = ap_a + 0.03; // Spring B slightly chirpier
         self.spring_a.dispersion.coefficient = ap_a;
         self.spring_b.dispersion.coefficient = ap_b;
 
         // Also adjust number of active sections with diffusion
-        let sections_a = 40 + num::f64_to_index((params.diffusion * 80.0)); // 40 to 120
-        let sections_b = 50 + num::f64_to_index((params.diffusion * 100.0)); // 50 to 150
+        let sections_a = 40 + num::f64_to_index(params.diffusion * 80.0); // 40 to 120
+        let sections_b = 50 + num::f64_to_index(params.diffusion * 100.0); // 50 to 150
         self.spring_a.dispersion.active_sections = sections_a;
         self.spring_b.dispersion.active_sections = sections_b;
 
         // Damping → feedback LP frequency
-        let damp_a = 2000.0 + (1.0 - params.damping) * 8000.0; // 2k to 10k
+        let damp_a = (1.0 - params.damping).mul_add(8000.0, 2000.0); // 2k to 10k
         let damp_b = damp_a * 0.8; // Spring B always darker
         self.spring_a.damp.set_freq(damp_a, self.sample_rate);
         self.spring_b.damp.set_freq(damp_b, self.sample_rate);
 
         // Modulation → delay modulation depth (echo smearing)
-        let mod_depth = 1.0 + params.modulation * 6.0; // 1 to 7 samples
+        let mod_depth = params.modulation.mul_add(6.0, 1.0); // 1 to 7 samples
         self.spring_a.mod_depth = mod_depth;
         self.spring_b.mod_depth = mod_depth * 1.2;
 
         // Tone → output LP
-        let tone_freq = 3000.0 + (1.0 + params.tone) * 0.5 * 9000.0; // 3k to 12k
+        let tone_freq = ((1.0 + params.tone) * 0.5).mul_add(9000.0, 3000.0); // 3k to 12k
         self.tone_lp.set_freq(tone_freq, self.sample_rate);
 
         // Input bandwidth
-        let input_freq = 4000.0 + (1.0 + params.tone) * 0.5 * 8000.0;
+        let input_freq = ((1.0 + params.tone) * 0.5).mul_add(8000.0, 4000.0);
         self.input_lp.set_freq(input_freq, self.sample_rate);
 
         // Extra A → spring tension (adjusts mod rate — tighter = less flutter)
-        let mod_rate_a = 0.3 + (1.0 - params.extra_a) * 1.5; // 0.3 to 1.8 Hz
+        let mod_rate_a = (1.0 - params.extra_a).mul_add(1.5, 0.3); // 0.3 to 1.8 Hz
         let mod_rate_b = mod_rate_a * 0.7;
         self.spring_a.mod_rate = mod_rate_a / self.sample_rate;
         self.spring_b.mod_rate = mod_rate_b / self.sample_rate;
@@ -321,7 +321,7 @@ impl ReverbAlgorithm for Spring {
             let asym = if self.dwell == SpringDwell::Clean || self.dwell == SpringDwell::Combo {
                 x
             } else {
-                x + 0.12 * x * x.abs()
+                (0.12 * x).mul_add(x.abs(), x)
             };
             asym.tanh() / drive.tanh()
         } else {

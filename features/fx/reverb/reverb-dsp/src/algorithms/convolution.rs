@@ -272,7 +272,7 @@ impl PartitionedConv {
         let (mut w_new, mut w_old) = (1.0f64, 0.0f64);
         if self.xfade_pos > 0 {
             // Equal-power fade, advanced per block.
-            let t = 1.0 - self.xfade_pos as f64 / self.xfade_len as f64;
+            let t = 1.0 - f64::from(self.xfade_pos) / f64::from(self.xfade_len);
             let theta = t * core::f64::consts::FRAC_PI_2;
             w_new = theta.sin();
             w_old = theta.cos();
@@ -322,7 +322,7 @@ impl PartitionedConv {
 /// pattern. Used as the default IR until the user loads their own.
 fn synthesize_ir(sample_rate: f64, seconds: f64, seed: u64) -> Vec<f64> {
     use crate::primitives::lcg_random::LcgRandom;
-    let n = num::f64_to_index((sample_rate * seconds));
+    let n = num::f64_to_index(sample_rate * seconds);
     let mut rng = LcgRandom::new(seed);
     let mut ir = vec![0.0; n];
 
@@ -342,7 +342,7 @@ fn synthesize_ir(sample_rate: f64, seconds: f64, seed: u64) -> Vec<f64> {
 
     // Pre-delay window: blend out the first ~5ms so direct signal isn't
     // doubled when wet/dry are summed.
-    let predelay = num::f64_to_index((sample_rate * 0.005));
+    let predelay = num::f64_to_index(sample_rate * 0.005);
     #[allow(clippy::needless_range_loop)]
     for i in 0..predelay.min(n) {
         ir[i] *= num::count_to_f64(i) / num::count_to_f64(predelay);
@@ -580,7 +580,7 @@ impl Convolution {
             damp_l: Lp1::new(),
             damp_r: Lp1::new(),
             damp_engaged: false,
-            base_damp_cutoff: 2000.0 + (1.0 - 0.3) * 14000.0,
+            base_damp_cutoff: (1.0_f64 - 0.3).mul_add(14000.0, 2000.0),
             b_engaged: false,
             impulse: ImpulseParams::default(),
             applied_shape: [ImpulseParams::default(); 2],
@@ -623,7 +623,7 @@ impl Convolution {
     /// Per the `BigSky` MX manual, loading a new IR resets the Impulse
     /// shaping params to defaults (the chain preserves mix).
     pub fn load_ir_stereo_slot(&mut self, ir_l: &[f64], ir_r: &[f64], slot: IrSlot) {
-        let max = num::f64_to_index((self.sample_rate * MAX_IR_SECONDS));
+        let max = num::f64_to_index(self.sample_rate * MAX_IR_SECONDS);
         let cap_l = &ir_l[..ir_l.len().min(max)];
         let cap_r = &ir_r[..ir_r.len().min(max)];
         match slot {
@@ -647,7 +647,7 @@ impl Convolution {
     /// the direct convolvers, LR/RL the cross pair. Runs FFTs —
     /// background/setup use only.
     pub fn load_ir_true_stereo(&mut self, ll: &[f64], lr: &[f64], rl: &[f64], rr: &[f64]) -> bool {
-        let max = num::f64_to_index((self.sample_rate * MAX_IR_SECONDS));
+        let max = num::f64_to_index(self.sample_rate * MAX_IR_SECONDS);
         let cap = |x: &[f64]| x[..x.len().min(max)].to_vec();
         let (ll, lr, rl, rr) = (cap(ll), cap(lr), cap(rl), cap(rr));
         self.conv_l.load_ir(&ll);
@@ -962,7 +962,7 @@ impl Convolution {
             let w = damp_depth.abs().min(1.0);
             let base = self.base_damp_cutoff.clamp(200.0, 20000.0);
             let anchored = base.powf(w) * 20000.0_f64.powf(1.0 - w);
-            let swung = anchored * (2.0_f64).powf(DAMP_MOD_OCTAVES * damp_depth * lfo);
+            let swung = anchored * (DAMP_MOD_OCTAVES * damp_depth * lfo).exp2();
             let cutoff = swung.clamp(200.0, 20000.0);
             self.damp_l.set_freq(cutoff, self.sample_rate);
             self.damp_r.set_freq(cutoff, self.sample_rate);
@@ -1043,7 +1043,7 @@ impl ReverbAlgorithm for Convolution {
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Damping always feeds the (gated) post-conv damping filters,
         // matching the cutoff map the algorithmic reverbs use.
-        self.base_damp_cutoff = 2000.0 + (1.0 - params.damping) * 14000.0;
+        self.base_damp_cutoff = (1.0 - params.damping).mul_add(14000.0, 2000.0);
 
         if self.user_ir_loaded {
             // User IR locked in — size/decay no longer regenerate
@@ -1054,7 +1054,7 @@ impl ReverbAlgorithm for Convolution {
             // To re-engage synth IRs, call clear_user_ir().
             return;
         }
-        let target_seconds = 0.2 + (params.size * 0.5 + params.decay * 0.5) * 5.0;
+        let target_seconds = 0.2 + params.size.mul_add(0.5, params.decay * 0.5) * 5.0;
         if (target_seconds - self.ir_seconds).abs() > 0.1 {
             self.rebuild_synth_ir(target_seconds);
         }
@@ -1298,7 +1298,7 @@ impl ReverbAlgorithm for Convolution {
         let out_l = out_l + out_cross_l;
         let out_r = out_r + out_cross_r;
         let (mut wet_l, mut wet_r) = if self.b_engaged {
-            let pos = (self.sm.morph.value() + self.sm.morph_lfo.value() * lfo).clamp(0.0, 1.0);
+            let pos = self.sm.morph_lfo.value().mul_add(lfo, self.sm.morph.value()).clamp(0.0, 1.0);
             let theta = pos * FRAC_PI_2;
             let (ga, gb) = (theta.cos(), theta.sin());
             (out_l * ga + out_l_b * gb, out_r * ga + out_r_b * gb)
@@ -1338,7 +1338,7 @@ impl ReverbAlgorithm for Convolution {
             } else {
                 1.0
             };
-            let duck_gain = 1.0 - duck_depth * env.min(1.0);
+            let duck_gain = duck_depth.mul_add(-env.min(1.0), 1.0);
             let g = lfo_gain * duck_gain;
             wet_l *= g;
             wet_r *= g;

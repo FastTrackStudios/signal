@@ -46,7 +46,7 @@ impl IrAsset {
         let channels: Vec<Vec<f64>> = decoded
             .data
             .iter()
-            .map(|ch| ch.iter().map(|&s| s as f64).collect())
+            .map(|ch| ch.iter().map(|&s| f64::from(s)).collect())
             .collect();
 
         if channels.is_empty() || channels.iter().any(Vec::is_empty) {
@@ -57,7 +57,7 @@ impl IrAsset {
             channels,
             sample_rate: target_sample_rate,
             source_path: Some(path.to_path_buf()),
-            original_sample_rate: decoded.sample_rate as f64,
+            original_sample_rate: f64::from(decoded.sample_rate),
         })
     }
 

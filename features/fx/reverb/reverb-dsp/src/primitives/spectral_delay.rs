@@ -69,7 +69,7 @@ impl StretchedAllpass {
         let y_delayed = self.y_buf[read_idx];
 
         // y[n] = a·x[n] + x[n-k] - a·y[n-k]
-        let output = a * input + x_delayed - a * y_delayed;
+        let output = a.mul_add(-y_delayed, a * input + x_delayed);
 
         // Store current input and output
         self.x_buf[self.idx] = input;

@@ -67,7 +67,7 @@ impl VelvetFir {
         for k in 0..count {
             // Random position within the k-th grid cell.
             let jitter = rng.next_float() * (num::count_to_f64(spacing) - 1.0);
-            let pos = (num::count_to_f64(k) * avg_spacing + jitter) as usize;
+            let pos = num::count_to_f64(k).mul_add(avg_spacing, jitter) as usize;
             if pos >= length {
                 break;
             }
@@ -119,7 +119,7 @@ pub struct Velvet {
 impl Velvet {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_samples = num::f64_to_index((sample_rate * MAX_TAIL_SECONDS)) + 32;
+        let max_samples = num::f64_to_index(sample_rate * MAX_TAIL_SECONDS) + 32;
         let mut v = Self {
             fir_l: VelvetFir::new(max_samples),
             fir_r: VelvetFir::new(max_samples),
@@ -143,10 +143,10 @@ impl Velvet {
 
     fn rebuild_firs(&mut self) {
         // Length: 0.2s..MAX_TAIL_SECONDS, scaled jointly by size & decay.
-        let length_s = 0.2 + (self.size * 0.5 + self.decay * 0.5) * (MAX_TAIL_SECONDS - 0.2);
-        let length_samples = num::f64_to_index((length_s * self.sample_rate));
+        let length_s = 0.2 + self.size.mul_add(0.5, self.decay * 0.5) * (MAX_TAIL_SECONDS - 0.2);
+        let length_samples = num::f64_to_index(length_s * self.sample_rate);
         let t60_samples = num::count_to_f64(length_samples);
-        let density = DENSITY_HZ * (0.5 + self.diffusion * 1.5);
+        let density = DENSITY_HZ * self.diffusion.mul_add(1.5, 0.5);
 
         self.fir_l
             .rebuild(length_samples, density, t60_samples, 0x00C0_FFEE);
@@ -185,11 +185,11 @@ impl ReverbAlgorithm for Velvet {
             self.last_built_key = key;
         }
 
-        let lp_hz = 1500.0 + (1.0 - params.damping) * 14000.0;
+        let lp_hz = (1.0 - params.damping).mul_add(14000.0, 1500.0);
         self.lp_l.set_freq(lp_hz, self.sample_rate);
         self.lp_r.set_freq(lp_hz, self.sample_rate);
 
-        let hp_hz = 20.0 + params.extra_a * 480.0; // extra_a = low-cut sweep
+        let hp_hz = params.extra_a.mul_add(480.0, 20.0); // extra_a = low-cut sweep
         self.hp_l.set_freq(hp_hz, self.sample_rate);
         self.hp_r.set_freq(hp_hz, self.sample_rate);
     }

@@ -51,9 +51,9 @@ impl Ap {
         let delayed = self
             .line
             .read_linear(len.clamp(1.0, num::count_to_f64(self.line.len()) - 4.0));
-        let v = x - AP_COEFF * delayed;
+        let v = AP_COEFF.mul_add(-delayed, x);
         self.line.write(v);
-        delayed + AP_COEFF * v
+        AP_COEFF.mul_add(v, delayed)
     }
 }
 
@@ -83,8 +83,8 @@ impl BarrLoop {
     pub fn new(sample_rate: f64) -> Self {
         let k = sample_rate / 32_768.0;
         let sections = core::array::from_fn(|i| Section {
-            delay: DelayLine::new(num::f64_to_index((SECTION_LEN_32K[i] * k)) + 8),
-            len: num::f64_to_index((SECTION_LEN_32K[i] * k)),
+            delay: DelayLine::new(num::f64_to_index(SECTION_LEN_32K[i] * k) + 8),
+            len: num::f64_to_index(SECTION_LEN_32K[i] * k),
             ap: [Ap::new(AP_LEN_32K[i][0] * k), Ap::new(AP_LEN_32K[i][1] * k)],
             damp: Lp1::new(),
         });
@@ -207,10 +207,10 @@ mod tests {
             let (l, r) = b.tick(x);
             assert!(l.is_finite() && r.is_finite());
             if (24_000..48_000).contains(&n) {
-                e_early += l * l + r * r;
+                e_early += l.mul_add(l, r * r);
             }
             if (72_000..96_000).contains(&n) {
-                e_late += l * l + r * r;
+                e_late += l.mul_add(l, r * r);
             }
         }
         // 1 s apart at T60 = 1.5 s → −40 dB = 1e-4 (generous band:

@@ -27,7 +27,7 @@ impl LcgRandom {
     #[inline]
     pub fn next_float(&mut self) -> f64 {
         let n = self.next_uint();
-        n as f64 / u32::MAX as f64
+        f64::from(n) / f64::from(u32::MAX)
     }
 }
 
@@ -50,6 +50,6 @@ pub fn random_buffer_cross_seed(seed: u64, count: usize, cross_seed: f64) -> Vec
     series_a
         .iter()
         .zip(series_b.iter())
-        .map(|(&a, &b)| a * (1.0 - cross_seed) + b * cross_seed)
+        .map(|(&a, &b)| a.mul_add(1.0 - cross_seed, b * cross_seed))
         .collect()
 }

@@ -248,7 +248,7 @@ impl Fdn {
             // every recirculation. Ignoring it makes the tail run long —
             // measurably so, ~1.16x for Hall's 0.6 coefficient and ~2x for
             // the Room engines once they were given the same diffusion.
-            let mi = num::count_to_f64((self.delay_samples[i] + self.loop_ap_len[i]));
+            let mi = num::count_to_f64(self.delay_samples[i] + self.loop_ap_len[i]);
             let r0 = 10.0f64.powf(-3.0 * mi / (sample_rate * t_dc));
             let rp = 10.0f64.powf(-3.0 * mi / (sample_rate * t_ny));
             self.shelf_p[i] = (r0 - rp) / (r0 + rp);
@@ -328,7 +328,7 @@ impl Fdn {
             const PROBE_POINTS: usize = 48;
             let f_lo = 20.0f64;
             let f_hi = (sample_rate * 0.45).max(f_lo * 2.0);
-            let ratio = (f_hi / f_lo).powf(1.0 / num::count_to_f64((PROBE_POINTS - 1)));
+            let ratio = (f_hi / f_lo).powf(1.0 / num::count_to_f64(PROBE_POINTS - 1));
             let mut f = f_lo;
             for _ in 0..PROBE_POINTS {
                 let mut total = 0.0f64;
@@ -457,7 +457,7 @@ impl Fdn {
                     // New random drift target, glide over 300–1500 samples.
                     let interval = 300 + (self.jitter_rng.next_bipolar().abs() * 1200.0) as u32;
                     let target = self.jitter_rng.next_bipolar() * self.jitter_depth;
-                    self.jitter_step[i] = (target - self.jitter_cur[i]) / interval as f64;
+                    self.jitter_step[i] = (target - self.jitter_cur[i]) / f64::from(interval);
                     self.jitter_count[i] = interval;
                 }
                 self.jitter_count[i] -= 1;
@@ -496,10 +496,10 @@ impl Fdn {
         if self.rot_depth > 1e-9 && n >= 2 {
             if self.rot_countdown == 0 {
                 self.rot_countdown = 16;
-                self.rot_phase = (self.rot_phase + self.rot_inc * 16.0).fract();
+                self.rot_phase = self.rot_inc.mul_add(16.0, self.rot_phase).fract();
                 for (k, cs) in self.rot_cs.iter_mut().enumerate() {
                     let theta = self.rot_depth
-                        * (core::f64::consts::TAU * (self.rot_phase + num::count_to_f64(k) * 0.31)).sin();
+                        * (core::f64::consts::TAU * num::count_to_f64(k).mul_add(0.31, self.rot_phase)).sin();
                     *cs = (theta.cos(), theta.sin());
                 }
             }
@@ -508,8 +508,8 @@ impl Fdn {
                 let (c, sn) = self.rot_cs[k];
                 let a = self.feedback[2 * k];
                 let b = self.feedback[2 * k + 1];
-                self.feedback[2 * k] = c * a - sn * b;
-                self.feedback[2 * k + 1] = sn * a + c * b;
+                self.feedback[2 * k] = c.mul_add(a, -(sn * b));
+                self.feedback[2 * k + 1] = sn.mul_add(a, c * b);
             }
         }
 
@@ -517,7 +517,7 @@ impl Fdn {
             // Per-line decay: exact Jot T60 shelf when engaged,
             // otherwise the legacy damping · decay · band-split path.
             let mut sig = if self.t60_mode {
-                let y = self.shelf_g[i] * self.feedback[i] + self.shelf_p[i] * self.shelf_state[i];
+                let y = self.shelf_g[i].mul_add(self.feedback[i], self.shelf_p[i] * self.shelf_state[i]);
                 self.shelf_state[i] = flush(y);
                 y
             } else {
@@ -525,7 +525,7 @@ impl Fdn {
                 if self.band_split_active {
                     let low = self.band_split[i].tick(sig);
                     let high = sig - low;
-                    sig = low * self.low_decay_mult + high * self.high_decay_mult;
+                    sig = low.mul_add(self.low_decay_mult, high * self.high_decay_mult);
                 }
                 sig
             };
@@ -572,7 +572,7 @@ impl Fdn {
         // Jot tonal correction (one-zero) so T60 changes don't recolor
         // the wet spectrum.
         if self.t60_mode && self.tc_b.abs() > 1e-9 {
-            let corrected = (output - self.tc_b * self.tc_prev) / (1.0 - self.tc_b);
+            let corrected = self.tc_b.mul_add(-self.tc_prev, output) / (1.0 - self.tc_b);
             self.tc_prev = output;
             corrected
         } else {

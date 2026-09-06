@@ -61,8 +61,8 @@ impl LpComb {
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
         let out = self.buffer[self.idx];
-        self.filterstore = flush(out * self.damp2 + self.filterstore * self.damp1);
-        self.buffer[self.idx] = input + self.filterstore * self.feedback;
+        self.filterstore = flush(out.mul_add(self.damp2, self.filterstore * self.damp1));
+        self.buffer[self.idx] = self.filterstore.mul_add(self.feedback, input);
         self.idx += 1;
         if self.idx >= self.buffer.len() {
             self.idx = 0;
@@ -94,7 +94,7 @@ impl AllpassF {
     fn tick(&mut self, input: f64) -> f64 {
         let bufout = self.buffer[self.idx];
         let output = -input + bufout;
-        self.buffer[self.idx] = input + bufout * self.feedback;
+        self.buffer[self.idx] = bufout.mul_add(self.feedback, input);
         self.idx += 1;
         if self.idx >= self.buffer.len() {
             self.idx = 0;
@@ -122,12 +122,12 @@ impl FreeVerb {
         let comb_l =
             std::array::from_fn(|i| LpComb::new((num::count_to_f64(COMB_TUNINGS[i]) * scale) as usize));
         let comb_r = std::array::from_fn(|i| {
-            LpComb::new((num::count_to_f64((COMB_TUNINGS[i] + STEREO_SPREAD)) * scale) as usize)
+            LpComb::new((num::count_to_f64(COMB_TUNINGS[i] + STEREO_SPREAD) * scale) as usize)
         });
         let ap_l =
             std::array::from_fn(|i| AllpassF::new((num::count_to_f64(ALLPASS_TUNINGS[i]) * scale) as usize));
         let ap_r = std::array::from_fn(|i| {
-            AllpassF::new((num::count_to_f64((ALLPASS_TUNINGS[i] + STEREO_SPREAD)) * scale) as usize)
+            AllpassF::new((num::count_to_f64(ALLPASS_TUNINGS[i] + STEREO_SPREAD) * scale) as usize)
         });
         Self {
             dc_in: DcBlocker::new(),
@@ -163,11 +163,11 @@ impl ReverbAlgorithm for FreeVerb {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Room size (Jezar): 0.28..1.00 mapped from size.
-        let room_size = 0.7 + params.size * 0.28;
+        let room_size = params.size.mul_add(0.28, 0.7);
         // Damping: 0..0.4.
         let damp = params.damping * 0.4;
         // Decay multiplier
-        let decay_boost = 0.7 + params.decay * 0.29; // 0.7..0.99
+        let decay_boost = params.decay.mul_add(0.29, 0.7); // 0.7..0.99
 
         let feedback = room_size * decay_boost;
         for c in &mut self.combs_l {

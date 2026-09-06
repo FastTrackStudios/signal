@@ -60,7 +60,7 @@ pub struct Shimmer {
 impl Shimmer {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let grain_samples = num::f64_to_index((sample_rate * 0.05)); // 50ms grains
+        let grain_samples = num::f64_to_index(sample_rate * 0.05); // 50ms grains
 
         let mut shimmer = Self {
             fdn_l: Self::make_fdn(sample_rate, false),
@@ -109,7 +109,7 @@ impl Shimmer {
             [1117, 1381, 1613, 1873, 2131, 2371, 2617, 2879]
         };
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index((d as f64 * scale))).collect();
+        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index(f64::from(d) * scale)).collect();
         Fdn::new(&delays, MixMatrix::Householder)
     }
 
@@ -138,7 +138,7 @@ impl Shimmer {
 
 #[inline]
 fn semitones_to_speed(st: f64) -> f64 {
-    2f64.powf(st.clamp(-12.0, 12.0) / 12.0)
+    (st.clamp(-12.0, 12.0) / 12.0).exp2()
 }
 
 impl ReverbAlgorithm for Shimmer {
@@ -176,7 +176,7 @@ impl ReverbAlgorithm for Shimmer {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Decay
-        self.decay = 0.4 + params.decay * 0.55;
+        self.decay = params.decay.mul_add(0.55, 0.4);
         self.fdn_l.set_decay(self.decay);
         self.fdn_r.set_decay(self.decay);
 
@@ -207,12 +207,12 @@ impl ReverbAlgorithm for Shimmer {
             .set_modulation(0.8, params.modulation * 10.0, self.sample_rate);
 
         // Diffusion
-        let stages = num::f64_to_index((params.diffusion * 8.0));
+        let stages = num::f64_to_index(params.diffusion * 8.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
 
         // Feedback damping
-        let freq = 3000.0 + (1.0 - params.damping) * 8000.0;
+        let freq = (1.0 - params.damping).mul_add(8000.0, 3000.0);
         self.fb_damp_l.set_freq(freq, self.sample_rate);
         self.fb_damp_r.set_freq(freq, self.sample_rate);
     }
@@ -226,8 +226,8 @@ impl ReverbAlgorithm for Shimmer {
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         // Mix input with pitch-shifted feedback
-        let in_l = left + self.fb_l * self.shimmer_amount;
-        let in_r = right + self.fb_r * self.shimmer_amount;
+        let in_l = self.fb_l.mul_add(self.shimmer_amount, left);
+        let in_r = self.fb_r.mul_add(self.shimmer_amount, right);
 
         // Diffuse
         let diff_l = self.diffuser_l.tick(in_l);

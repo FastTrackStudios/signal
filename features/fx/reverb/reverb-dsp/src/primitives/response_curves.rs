@@ -38,7 +38,7 @@ pub fn resp4dec(x: f64) -> f64 {
 #[allow(dead_code)]
 pub fn resp1oct(x: f64) -> f64 {
     const MULT: f64 = (2.0 / 1.0) * 0.5;
-    (2.0_f64.powf(x) - 1.0) * MULT
+    (x.exp2() - 1.0) * MULT
 }
 
 /// 2-octave response: 4x range.
@@ -46,21 +46,21 @@ pub fn resp1oct(x: f64) -> f64 {
 #[allow(dead_code)]
 pub fn resp2oct(x: f64) -> f64 {
     const MULT: f64 = (4.0 / 3.0) * 0.25;
-    (2.0_f64.powf(2.0 * x) - 1.0) * MULT
+    ((2.0 * x).exp2() - 1.0) * MULT
 }
 
 /// 3-octave response: 8x range.
 #[must_use]
 pub fn resp3oct(x: f64) -> f64 {
     const MULT: f64 = (8.0 / 7.0) * 0.125;
-    (2.0_f64.powf(3.0 * x) - 1.0) * MULT
+    ((3.0 * x).exp2() - 1.0) * MULT
 }
 
 /// 4-octave response: 16x range.
 #[must_use]
 pub fn resp4oct(x: f64) -> f64 {
     const MULT: f64 = (16.0 / 15.0) * 0.0625;
-    (2.0_f64.powf(4.0 * x) - 1.0) * MULT
+    ((4.0 * x).exp2() - 1.0) * MULT
 }
 
 /// 5-octave response: 32x range.
@@ -68,7 +68,7 @@ pub fn resp4oct(x: f64) -> f64 {
 #[allow(dead_code)]
 pub fn resp5oct(x: f64) -> f64 {
     const MULT: f64 = (32.0 / 31.0) * 0.03125;
-    (2.0_f64.powf(5.0 * x) - 1.0) * MULT
+    ((5.0 * x).exp2() - 1.0) * MULT
 }
 
 /// Convert dB to linear gain.

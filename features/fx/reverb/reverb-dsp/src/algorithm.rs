@@ -299,13 +299,13 @@ impl DecayBand {
         let w = freq / f0;
         match self.shape {
             // Low shelf: full below f0, none far above.
-            1 => 1.0 / (1.0 + (w * q * 1.414).powi(2)),
+            1 => 1.0 / (w * q * 1.414).mul_add(w * q * 1.414, 1.0),
             // High shelf: full above f0.
-            2 => (1.0 - 1.0 / (1.0 + (w / (q * 1.414).recip()).powi(2))).clamp(0.0, 1.0),
+            2 => (1.0 - 1.0 / (w / (q * 1.414).recip()).mul_add(w / (q * 1.414).recip(), 1.0)).clamp(0.0, 1.0),
             // Bell.
             _ => {
                 let bw = w - 1.0 / w.max(1e-9);
-                1.0 / (1.0 + (bw * q).powi(2))
+                1.0 / (bw * q).mul_add(bw * q, 1.0)
             }
         }
     }
@@ -1201,7 +1201,7 @@ pub fn t60_shelf_targets(
     damping: f64,
 ) -> (f64, f64) {
     let t60_dc = (t60 * low_decay_mult.max(0.05)).max(0.05);
-    let hf_ratio = ((0.15 + 0.85 * (1.0 - damping)) * high_decay_mult.max(0.05)).clamp(0.02, 1.5);
+    let hf_ratio = (0.85f64.mul_add(1.0 - damping, 0.15) * high_decay_mult.max(0.05)).clamp(0.02, 1.5);
     let t60_ny = (t60 * hf_ratio).max(0.02);
     (t60_dc, t60_ny)
 }
@@ -1351,7 +1351,7 @@ pub fn t60_to_decay(t60_s: f64, min_s: f64, max_s: f64) -> f64 {
     let min_s = min_s.max(0.01);
     let max_s = max_s.max(min_s * 1.001);
     let t = t60_s.clamp(min_s, max_s);
-    (t / min_s).ln() / (max_s / min_s).ln()
+    (t / min_s).log(max_s / min_s)
 }
 
 #[cfg(test)]
@@ -1471,7 +1471,7 @@ mod decay_time_tests {
         assert!(midband < 2.5);
 
         let factor = tilt_midband_factor(0.5, 1.0);
-        assert!((midband - 2.5 * factor * (0.15f64 + 0.85).sqrt()).abs() < 1e-9);
+        assert!((2.5 * factor).mul_add(-(0.15f64 + 0.85).sqrt(), midband).abs() < 1e-9);
 
         // Pre-compensating restores the requested midband.
         let (dc2, ny2) = t60_shelf_targets(2.5 / factor, 0.5, 1.0, 0.0);
@@ -1505,7 +1505,7 @@ mod decay_eq_filter_probe {
         let n = 48_000;
         let mut peak = 0.0f64;
         for i in 0..n {
-            let x = (std::f64::consts::TAU * f * i as f64 / sr).sin();
+            let x = (std::f64::consts::TAU * f * f64::from(i) / sr).sin();
             let y = bq.tick(x, 0);
             if i > n / 2 {
                 peak = peak.max(y.abs());
@@ -1559,8 +1559,8 @@ mod decay_eq_localization {
         fdn.set_t60(2.5, 2.5, SR);
         fdn.set_decay_curve(2.5, &bands, SR);
 
-        let drive = num::f64_to_index((SR * 0.2));
-        let total = num::f64_to_index((SR * 4.0));
+        let drive = num::f64_to_index(SR * 0.2);
+        let total = num::f64_to_index(SR * 4.0);
         let mut out = Vec::with_capacity(total);
         for i in 0..total {
             let x = if i < drive {
@@ -1573,9 +1573,9 @@ mod decay_eq_localization {
         }
 
         // Energy in two windows well after the drive stops.
-        let win = num::f64_to_index((SR * 0.4));
-        let a0 = drive + num::f64_to_index((SR * 0.3));
-        let b0 = a0 + num::f64_to_index((SR * 1.0));
+        let win = num::f64_to_index(SR * 0.4);
+        let a0 = drive + num::f64_to_index(SR * 0.3);
+        let b0 = a0 + num::f64_to_index(SR * 1.0);
         let energy = |start: usize| -> f64 {
             out[start..(start + win).min(out.len())]
                 .iter()

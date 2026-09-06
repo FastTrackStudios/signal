@@ -82,7 +82,7 @@ impl Random {
         let scale = sample_rate / 48_000.0 * size.max(0.2);
         let delays: Vec<usize> = base
             .iter()
-            .map(|&d| ((d as f64 * scale) as usize).max(4))
+            .map(|&d| ((f64::from(d) * scale) as usize).max(4))
             .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_damping(9_000.0, sample_rate);
@@ -110,7 +110,7 @@ impl ReverbAlgorithm for Random {
     }
 
     fn set_params(&mut self, params: &AlgorithmParams) {
-        let new_size = 0.3 + params.size * 1.2;
+        let new_size = params.size.mul_add(1.2, 0.3);
         if (new_size - self.size).abs() > 0.01 {
             self.size = new_size;
             self.rebuild_fdns();
@@ -118,25 +118,25 @@ impl ReverbAlgorithm for Random {
 
         // Density first: the in-loop allpasses lengthen every recirculation,
         // and `set_t60` reads that length.
-        let ap = 0.55 + params.diffusion * 0.25;
+        let ap = params.diffusion.mul_add(0.25, 0.55);
         self.fdn_l.set_loop_allpass(ap);
         self.fdn_r.set_loop_allpass(ap);
 
         // The engine's defining feature: independent random-walk drift per
         // line, never fully off.
-        let jitter = MIN_JITTER_MS + params.modulation * (MAX_JITTER_MS - MIN_JITTER_MS);
+        let jitter = params.modulation.mul_add(MAX_JITTER_MS - MIN_JITTER_MS, MIN_JITTER_MS);
         self.fdn_l.set_jitter(jitter, self.sample_rate);
         self.fdn_r.set_jitter(jitter * 1.17, self.sample_rate);
 
         // Slow orthogonal rotation of the feedback mix, on top of the drift.
         self.fdn_l.set_rotation(
-            0.25 + params.modulation * 0.5,
-            0.05 + params.modulation * 0.2,
+            params.modulation.mul_add(0.5, 0.25),
+            params.modulation.mul_add(0.2, 0.05),
             self.sample_rate,
         );
         self.fdn_r.set_rotation(
-            (0.25 + params.modulation * 0.5) * 1.09,
-            0.05 + params.modulation * 0.2,
+            params.modulation.mul_add(0.5, 0.25) * 1.09,
+            params.modulation.mul_add(0.2, 0.05),
             self.sample_rate,
         );
 
@@ -156,23 +156,23 @@ impl ReverbAlgorithm for Random {
         self.fdn_r
             .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
 
-        let damp_freq = 1_500.0 + (1.0 - params.damping) * 12_000.0;
+        let damp_freq = (1.0 - params.damping).mul_add(12_000.0, 1_500.0);
         self.fdn_l.set_damping(damp_freq, self.sample_rate);
         self.fdn_r.set_damping(damp_freq, self.sample_rate);
 
-        let tone_freq = 3_000.0 + (params.tone + 1.0) * 0.5 * 15_000.0;
+        let tone_freq = ((params.tone + 1.0) * 0.5).mul_add(15_000.0, 3_000.0);
         self.tone_lp_l.set_freq(tone_freq, self.sample_rate);
         self.tone_lp_r.set_freq(tone_freq, self.sample_rate);
 
-        self.cross_feed = 0.15 + params.diffusion * 0.2;
+        self.cross_feed = params.diffusion.mul_add(0.2, 0.15);
     }
 
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         let diff_l = self.diffuser_l.tick(left);
         let diff_r = self.diffuser_r.tick(right);
 
-        let in_l = diff_l + diff_r * self.cross_feed;
-        let in_r = diff_r + diff_l * self.cross_feed;
+        let in_l = diff_r.mul_add(self.cross_feed, diff_l);
+        let in_r = diff_l.mul_add(self.cross_feed, diff_r);
 
         let late_l = self.tone_lp_l.tick(self.fdn_l.tick(in_l));
         let late_r = self.tone_lp_r.tick(self.fdn_r.tick(in_r));
