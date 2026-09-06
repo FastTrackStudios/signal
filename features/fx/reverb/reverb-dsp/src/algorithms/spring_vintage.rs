@@ -137,7 +137,8 @@ pub struct SpringVintage {
     spring_c: VintageSpringUnit,
     /// Input band-limiting (vintage character).
     input_lp: Lp1,
-    input_hp: Lp1,
+    /// The LF content subtracted back out of the band-limited input.
+    bass_split: Lp1,
     /// Output tone.
     output_lp: Lp1,
     /// Number of active springs (1–3).
@@ -204,8 +205,8 @@ impl SpringVintage {
         // Vintage input is band-limited (smaller transducer)
         let mut input_lp = Lp1::new();
         input_lp.set_freq(5000.0, sample_rate);
-        let mut input_hp = Lp1::new();
-        input_hp.set_freq(120.0, sample_rate);
+        let mut bass_split = Lp1::new();
+        bass_split.set_freq(120.0, sample_rate);
         let mut output_lp = Lp1::new();
         output_lp.set_freq(4500.0, sample_rate);
 
@@ -214,7 +215,7 @@ impl SpringVintage {
             spring_b,
             spring_c,
             input_lp,
-            input_hp,
+            bass_split,
             output_lp,
             num_active: 3,
             named_springs: None,
@@ -230,7 +231,7 @@ impl ReverbAlgorithm for SpringVintage {
         self.spring_b.reset();
         self.spring_c.reset();
         self.input_lp.reset();
-        self.input_hp.reset();
+        self.bass_split.reset();
         self.output_lp.reset();
     }
 
@@ -329,7 +330,7 @@ impl ReverbAlgorithm for SpringVintage {
 
         // Vintage band-limited input
         let lp = self.input_lp.tick(mono);
-        let hp_removed = self.input_hp.tick(mono);
+        let hp_removed = self.bass_split.tick(mono);
         let input = lp - hp_removed + mono * 0.15; // Mostly LP, subtract LF, add a touch of full-range
 
         // Process active springs

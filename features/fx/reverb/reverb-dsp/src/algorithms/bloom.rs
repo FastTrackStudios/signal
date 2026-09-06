@@ -307,8 +307,8 @@ impl ReverbAlgorithm for Bloom {
 
         // === Step 2: Read feedback from delay lines ===
         // Apply internal cross-coupling between voices for density
-        let fb_l_mixed = Self::rotate_mix(&self.fb_l, 0.3);
-        let fb_r_mixed = Self::rotate_mix(&self.fb_r, 0.3);
+        let mixed_l = Self::rotate_mix(&self.fb_l, 0.3);
+        let mixed_r = Self::rotate_mix(&self.fb_r, 0.3);
 
         // === Step 3: Stereo cross-coupling ===
         // Blend some of the opposite channel's feedback for width
@@ -328,9 +328,9 @@ impl ReverbAlgorithm for Bloom {
             .iter_mut()
             .zip(self.voices_r.iter_mut())
             .zip(
-                fb_l_mixed
+                mixed_l
                     .iter()
-                    .zip(fb_r_mixed.iter())
+                    .zip(mixed_r.iter())
                     .zip(new_fb_l.iter_mut().zip(new_fb_r.iter_mut())),
             )
             .zip(0..NUM_LINES)

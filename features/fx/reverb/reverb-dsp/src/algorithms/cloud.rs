@@ -418,9 +418,9 @@ impl CloudChannel {
 
     /// Exact port of `ReverbChannel::UpdateLines`.
     fn update_lines(&mut self) {
-        let line_delay_samples = self.ms2samples(self.params_scaled.get(param::LATE_LINE_SIZE).copied().unwrap_or(0.0));
-        let line_decay_millis = self.params_scaled.get(param::LATE_LINE_DECAY).copied().unwrap_or(0.0) * 1000.0;
-        let line_decay_samples = self.ms2samples(line_decay_millis);
+        let base_delay_samples = self.ms2samples(self.params_scaled.get(param::LATE_LINE_SIZE).copied().unwrap_or(0.0));
+        let decay_ms = self.params_scaled.get(param::LATE_LINE_DECAY).copied().unwrap_or(0.0) * 1000.0;
+        let t60_samples = self.ms2samples(decay_ms);
 
         let line_mod_amount = self.ms2samples(self.params_scaled.get(param::LATE_LINE_MOD_AMOUNT).copied().unwrap_or(0.0));
         let line_mod_rate = self.params_scaled.get(param::LATE_LINE_MOD_RATE).copied().unwrap_or(0.0);
@@ -446,7 +446,7 @@ impl CloudChannel {
                 line_mod_rate * 0.3f64.mul_add(seed_at(1, i), 0.7) / self.sample_rate;
 
             let mut delay_samples =
-                1.0f64.mul_add(seed_at(2, i), 0.5) * line_delay_samples;
+                1.0f64.mul_add(seed_at(2, i), 0.5) * base_delay_samples;
             // When delay is really short and modulation is high,
             // mod could take delay time negative — prevent that
             if delay_samples < mod_amount + 2.0 {
@@ -454,7 +454,7 @@ impl CloudChannel {
             }
 
             // T60 decay calculation
-            let db_after_1iter = delay_samples / line_decay_samples.max(1.0) * (-60.0);
+            let db_after_1iter = delay_samples / t60_samples.max(1.0) * (-60.0);
             let gain_after_1iter = db2gain(db_after_1iter);
 
             line.set_delay(num::f64_to_index(delay_samples));
