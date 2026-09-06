@@ -35,9 +35,9 @@ struct Ir {
 }
 
 fn render_ir(alg: AlgorithmType, variant: usize) -> Ir {
-    let mut a = create(alg, variant, SR);
-    a.set_params(&AlgorithmParams::default());
-    a.reset();
+    let mut engine = create(alg, variant, SR);
+    engine.set_params(&AlgorithmParams::default());
+    engine.reset();
 
     let mut left = Vec::with_capacity(MAX_LEN);
     let mut right = Vec::with_capacity(MAX_LEN);
@@ -50,23 +50,23 @@ fn render_ir(alg: AlgorithmType, variant: usize) -> Ir {
 
     for n in 0..MAX_LEN {
         let x = if n == 0 { 1.0 } else { 0.0 };
-        let (l, r) = a.tick(x, x);
+        let (sample_l, sample_r) = engine.tick(x, x);
         assert!(
-            l.is_finite() && r.is_finite(),
+            sample_l.is_finite() && sample_r.is_finite(),
             "{}[{}]: NaN/inf at sample {n}",
             alg.name(),
             variant
         );
-        left.push(l);
-        right.push(r);
+        left.push(sample_l);
+        right.push(sample_r);
 
-        let e = l.mul_add(l, r * r);
+        let e = sample_l.mul_add(sample_l, sample_r * sample_r);
         peak = peak.max(e);
         window_energy += e;
         if n >= window {
-            let l0 = left[n.saturating_sub(window)];
-            let r0 = right[n.saturating_sub(window)];
-            window_energy -= l0.mul_add(l0, r0 * r0);
+            let old_l = left.get(n.saturating_sub(window)).copied().unwrap_or(0.0);
+            let old_r = right.get(n.saturating_sub(window)).copied().unwrap_or(0.0);
+            window_energy -= old_l.mul_add(old_l, old_r * old_r);
             window_energy = window_energy.max(0.0);
         }
         if n >= MIN_LEN && peak > 0.0 {
@@ -80,23 +80,45 @@ fn render_ir(alg: AlgorithmType, variant: usize) -> Ir {
 }
 
 // ---------------------------------------------------------------------------
+// Shared stereo reductions
+// ---------------------------------------------------------------------------
+
+/// Per-sample stereo energy, `l^2 + r^2`. Shorter of the two channels wins.
+fn energy(left: &[f64], right: &[f64]) -> Vec<f64> {
+    left.iter()
+        .zip(right)
+        .map(|(l, r)| l.mul_add(*l, r * r))
+        .collect()
+}
+
+/// Mono sum at -6 dB. Shorter of the two channels wins.
+fn mono(left: &[f64], right: &[f64]) -> Vec<f64> {
+    left.iter().zip(right).map(|(l, r)| 0.5 * (l + r)).collect()
+}
+
+/// Backward-integrated (Schroeder) energy decay curve. `edc[0]` is the
+/// total energy, and the curve falls monotonically to zero.
+fn edc(left: &[f64], right: &[f64]) -> Vec<f64> {
+    let mut curve = energy(left, right);
+    let mut acc = 0.0;
+    for e in curve.iter_mut().rev() {
+        acc += *e;
+        *e = acc;
+    }
+    curve
+}
+
+// ---------------------------------------------------------------------------
 // Metric: RT60 (Schroeder backward integration)
 // ---------------------------------------------------------------------------
 
 /// Schroeder RT60 from stereo energy. Returns (`rt60_seconds`, `reached_minus_60db`).
 /// Fits the -5..-35 dB region of the backward-integrated decay curve.
 fn rt60(left: &[f64], right: &[f64]) -> (f64, bool) {
-    let n = left.len();
-    let mut edc = vec![0.0f64; n];
-    let mut acc = 0.0;
-    for i in (0..n).rev() {
-        acc += left[i].mul_add(left[i], right[i] * right[i]);
-        edc[i] = acc;
-    }
-    let total = edc[0];
-    if total <= 0.0 {
+    let edc = edc(left, right);
+    let Some(&total) = edc.first().filter(|&&t| t > 0.0) else {
         return (f64::INFINITY, false);
-    }
+    };
 
     // Decay curve in dB
     let db = |e: f64| 10.0 * (e / total).max(1e-30).log10();
@@ -157,8 +179,8 @@ fn echo_density(left: &[f64], right: &[f64]) -> (f64, f64) {
     const HOP: usize = 512;
     const GAUSSIAN_FRACTION: f64 = 0.317_310_5;
 
-    let n = left.len();
-    let mono: Vec<f64> = (0..n).map(|i| 0.5 * (left[i] + right[i])).collect();
+    let mono = mono(left, right);
+    let n = mono.len();
 
     let mut peak = 0.0f64;
     let mut dense_at = f64::INFINITY;
@@ -166,7 +188,9 @@ fn echo_density(left: &[f64], right: &[f64]) -> (f64, f64) {
 
     let mut pos = 0_usize;
     while pos.saturating_add(WIN) <= n {
-        let w = &mono[pos..pos.saturating_add(WIN)];
+        let Some(w) = mono.get(pos..pos.saturating_add(WIN)) else {
+            break;
+        };
         let energy: f64 = w.iter().map(|x| x * x).sum();
         if energy < 1e-24 {
             // Silent window — onset pre-delay or a decayed tail; either
@@ -176,7 +200,7 @@ fn echo_density(left: &[f64], right: &[f64]) -> (f64, f64) {
             continue;
         }
         let sigma = (energy / num::count_to_f64(WIN)).sqrt();
-        let outside = w.iter().filter(|x| x.abs() > sigma).count() as f64;
+        let outside = num::count_to_f64(w.iter().filter(|x| x.abs() > sigma).count());
         let density = (outside / num::count_to_f64(WIN)) / GAUSSIAN_FRACTION;
         peak = peak.max(density);
 
@@ -219,8 +243,11 @@ fn welch_spectrum(x: &[f64], start: usize, end: usize) -> Vec<f64> {
     let mut buf = fft.make_input_vec();
     let mut spec = fft.make_output_vec();
     while pos.saturating_add(NFFT) <= end {
-        for i in 0..NFFT {
-            buf[i] = x[pos.saturating_add(i)] * hann[i];
+        let Some(frame) = x.get(pos..pos.saturating_add(NFFT)) else {
+            break;
+        };
+        for ((slot, sample), w) in buf.iter_mut().zip(frame).zip(&hann) {
+            *slot = sample * w;
         }
         #[expect(clippy::unwrap_used, reason = "FFT plan is valid for valid NFFT")]
         {
@@ -264,7 +291,7 @@ fn worst_mode_db(spectrum: &[f64]) -> (f64, f64) {
             local.sort_by(|x, y| x.partial_cmp(y).unwrap());
         }
         if let Some(&median) = local.get(local.len() / 2) {
-            if median > 0.0 && spectrum.get(i).map_or(false, |&v| v > 0.0) {
+            if median > 0.0 && spectrum.get(i).is_some_and(|&v| v > 0.0) {
                 if let Some(&spec_i) = spectrum.get(i) {
                     let db = 10.0 * (spec_i / median).log10();
                     if db > worst {
@@ -283,8 +310,8 @@ fn worst_mode_db(spectrum: &[f64]) -> (f64, f64) {
 /// onset burst that carries most of the energy, so the ratio ends up
 /// dominated by whatever microscopic drift is left in the tail.)
 fn subsonic_ratio(left: &[f64], right: &[f64]) -> f64 {
-    let n = left.len();
-    let mono: Vec<f64> = (0..n).map(|i| 0.5 * (left[i] + right[i])).collect();
+    let mono = mono(left, right);
+    let n = mono.len();
     let nfft = n.next_power_of_two();
     let mut planner = RealFftPlanner::<f64>::new();
     let fft = planner.plan_fft_forward(nfft);
@@ -314,17 +341,8 @@ fn subsonic_ratio(left: &[f64], right: &[f64]) -> f64 {
 
 /// Index where the backward-integrated decay curve crosses `db` (rel total).
 fn edc_crossing(left: &[f64], right: &[f64], db: f64) -> Option<usize> {
-    let n = left.len();
-    let mut acc = 0.0;
-    let mut edc = vec![0.0f64; n];
-    for i in (0..n).rev() {
-        acc += left[i].mul_add(left[i], right[i] * right[i]);
-        edc[i] = acc;
-    }
-    let total = edc[0];
-    if total <= 0.0 {
-        return None;
-    }
+    let edc = edc(left, right);
+    let total = *edc.first().filter(|&&t| t > 0.0)?;
     edc.iter()
         .position(|&e| 10.0 * (e / total).max(1e-30).log10() <= db)
 }
@@ -335,19 +353,9 @@ fn edc_crossing(left: &[f64], right: &[f64], db: f64) -> Option<usize> {
 /// Early Decay Time: RT extrapolated from the 0 → −10 dB EDC segment
 /// (ISO 3382). Tracks PERCEIVED reverberance better than T30 — the
 /// `BigSky` dial-in metric for "how long does it feel".
-#[expect(dead_code, reason = "Used in test that is currently disabled")]
 fn edt(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
-    let n = left.len().min(right.len());
-    let mut edc = vec![0.0f64; n];
-    let mut acc = 0.0;
-    for i in (0..n).rev() {
-        acc += left[i].mul_add(left[i], right[i] * right[i]);
-        edc[i] = acc;
-    }
-    let total = edc[0];
-    if total <= 0.0 {
-        return None;
-    }
+    let edc = edc(left, right);
+    let total = *edc.first().filter(|&&t| t > 0.0)?;
     let t10 = edc
         .iter()
         .position(|&e| 10.0 * (e / total).log10() <= -10.0)?;
@@ -356,23 +364,16 @@ fn edt(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
 
 /// Clarity index `C_te` (dB): early-vs-late energy split at `te` seconds
 /// (0.050 for speech C50, 0.080 for music C80).
-#[expect(dead_code, reason = "Used in test that is currently disabled")]
 fn clarity_db(left: &[f64], right: &[f64], te: f64, sample_rate: f64) -> f64 {
     let split = num::f64_to_index(te * sample_rate);
-    let n = left.len().min(right.len());
-    let energy = |a: usize, b: usize| -> f64 {
-        (a..b.min(n))
-            .map(|i| left[i].mul_add(left[i], right[i] * right[i]))
-            .sum()
-    };
-    let early = energy(0, split);
-    let late = energy(split, n).max(1e-30);
+    let per_sample = energy(left, right);
+    let early: f64 = per_sample.iter().take(split).sum();
+    let late: f64 = per_sample.iter().skip(split).sum::<f64>().max(1e-30);
     10.0 * (early / late).log10()
 }
 
 /// Spectral centroid (Hz) of the late tail — the decay-brightness
 /// trajectory metric for damping dial-in.
-#[expect(dead_code, reason = "Used in test that is currently disabled")]
 fn late_centroid(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
     let (start, end) = tail_window(left, right)?;
     let spec = welch_spectrum(left, start, end);
@@ -404,26 +405,33 @@ fn lr_correlation(left: &[f64], right: &[f64]) -> f64 {
     let Some((start, end)) = tail_window(left, right) else {
         return f64::NAN;
     };
-    let l = &left[start..end];
-    let r = &right[start..end];
+    let (Some(l), Some(r)) = (left.get(start..end), right.get(start..end)) else {
+        return f64::NAN;
+    };
     let el: f64 = l.iter().map(|x| x * x).sum();
     let er: f64 = r.iter().map(|x| x * x).sum();
     if el <= 1e-24 || er <= 1e-24 {
         return f64::NAN;
     }
     let norm = (el * er).sqrt();
-    let max_lag = (0.002 * SR) as isize; // 2 ms
+    let max_lag = num::f64_to_index(0.002 * SR); // 2 ms
+    // The lag scan, as an offset into `r` rather than a signed shift:
+    // `offset = max_lag + lag`, so offset 0 is lag -2 ms and offset
+    // 2 * max_lag is lag +2 ms. `core` is `l` with both margins trimmed,
+    // which is exactly the overlap every lag shares.
+    let Some(core) = l.get(max_lag..l.len().saturating_sub(max_lag)) else {
+        return f64::NAN;
+    };
     let mut peak = 0.0f64;
-    let mut lag = -max_lag;
-    while lag <= max_lag {
-        let mut acc = 0.0;
-        let mut i = max_lag as usize;
-        while i < l.len() - max_lag as usize {
-            acc += l[i] * r[(i as isize + lag) as usize];
-            i += 1;
-        }
+    let mut offset = 0_usize;
+    while offset <= max_lag.saturating_mul(2) {
+        let Some(shifted) = r.get(offset..) else {
+            break;
+        };
+        let acc: f64 = core.iter().zip(shifted).map(|(a, b)| a * b).sum();
         peak = peak.max((acc / norm).abs());
-        lag += 8; // ~6 candidate lags per ms is plenty for a peak estimate
+        // ~6 candidate lags per ms is plenty for a peak estimate.
+        offset = offset.saturating_add(8);
     }
     peak
 }
@@ -458,7 +466,7 @@ fn analyze(alg: AlgorithmType, variant: usize) -> Report {
 
     // Tail region for mode detection: the -15..-50 dB stretch of the
     // decay curve (fixed absolute windows bias short IRs).
-    let mono: Vec<f64> = (0..n).map(|i| 0.5 * (ir.left[i] + ir.right[i])).collect();
+    let mono = mono(&ir.left, &ir.right);
     let (worst_mode, worst_mode_hz) = match tail_window(&ir.left, &ir.right) {
         Some((t0, t1)) => worst_mode_db(&welch_spectrum(&mono, t0, t1)),
         None => (0.0, 0.0),
@@ -478,7 +486,7 @@ fn analyze(alg: AlgorithmType, variant: usize) -> Report {
         worst_mode_hz,
         lr_corr: lr_correlation(&ir.left, &ir.right),
         subsonic: subsonic_ratio(&ir.left, &ir.right),
-        len_s: n as f64 / SR,
+        len_s: num::count_to_f64(n) / SR,
     }
 }
 
@@ -536,7 +544,7 @@ fn probe_chamber() {
     ] {
         let ir = render_ir(alg, v);
         let n = ir.left.len();
-        let mono: Vec<f64> = (0..n).map(|i| 0.5 * (ir.left[i] + ir.right[i])).collect();
+        let mono = mono(&ir.left, &ir.right);
         let sum: f64 = mono.iter().sum();
         let energy: f64 = mono.iter().map(|x| x * x).sum();
         println!("{label}: len {n} sum {sum:.4} energy {energy:.4}");
@@ -548,10 +556,7 @@ fn probe_chamber() {
         let mut buf = vec![0.0; nfft];
         buf[..n].copy_from_slice(&mono);
         let mut spec = fft.make_output_vec();
-        #[expect(clippy::unwrap_used, reason = "FFT plan is valid for valid nfft")]
-        {
-            fft.process(&mut buf, &mut spec).unwrap();
-        }
+        fft.process(&mut buf, &mut spec).unwrap();
         let bin_hz = SR / num::count_to_f64(nfft);
         let band = |lo: f64, hi: f64| -> f64 {
             let a = num::f64_to_index(lo / bin_hz);
