@@ -191,14 +191,20 @@ impl ReverbAlgorithm for Magneto {
         let mut fb_l = 0.0;
         let mut fb_r = 0.0;
         let n = self.active_heads.clamp(1, NUM_HEADS);
-        for i in 0..n {
-            let raw_l = self.tape_l.read(self.head_delays[i]);
-            let raw_r = self.tape_r.read(self.head_delays[i]);
+        for (i, (delay, diffuser)) in self
+            .head_delays
+            .iter()
+            .zip(self.head_diffusers.iter_mut())
+            .enumerate()
+            .take(n)
+        {
+            let raw_l = self.tape_l.read(*delay);
+            let raw_r = self.tape_r.read(*delay);
 
             // Later heads get more diffusion (blurring delay→reverb)
-            let diff_l = self.head_diffusers[i].tick(raw_l);
+            let diff_l = diffuser.tick(raw_l);
             // Re-use same diffuser for R (slightly different phase from L input)
-            let diff_r = self.head_diffusers[i].tick(raw_r);
+            let diff_r = diffuser.tick(raw_r);
 
             if self.ping_pong {
                 // Alternate taps hard L/R: mono-sum the head, then pan

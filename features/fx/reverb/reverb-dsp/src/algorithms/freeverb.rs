@@ -60,10 +60,14 @@ impl LpComb {
 
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
-        let out = self.buffer[self.idx];
+        let len = self.buffer.len();
+        let Some(slot) = self.buffer.get_mut(self.idx) else {
+            return 0.0;
+        };
+        let out = *slot;
         self.filterstore = flush(out.mul_add(self.damp2, self.filterstore * self.damp1));
-        self.buffer[self.idx] = self.filterstore.mul_add(self.feedback, input);
-        self.idx = (self.idx + 1) % self.buffer.len();
+        *slot = self.filterstore.mul_add(self.feedback, input);
+        self.idx = self.idx.saturating_add(1).checked_rem(len).unwrap_or(0);
         out
     }
 }
@@ -89,10 +93,14 @@ impl AllpassF {
 
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
-        let bufout = self.buffer[self.idx];
+        let len = self.buffer.len();
+        let Some(slot) = self.buffer.get_mut(self.idx) else {
+            return -input;
+        };
+        let bufout = *slot;
         let output = -input + bufout;
-        self.buffer[self.idx] = bufout.mul_add(self.feedback, input);
-        self.idx = (self.idx + 1) % self.buffer.len();
+        *slot = bufout.mul_add(self.feedback, input);
+        self.idx = self.idx.saturating_add(1).checked_rem(len).unwrap_or(0);
         output
     }
 }

@@ -323,10 +323,21 @@ impl ReverbAlgorithm for Bloom {
         let decay = self.decay_gain;
         let inv_n = 1.0 / num::count_to_f64(NUM_LINES);
 
-        for i in 0..NUM_LINES {
+        for (((voice_l, voice_r), ((fb_l_in, fb_r_in), (new_l, new_r))), _) in self
+            .voices_l
+            .iter_mut()
+            .zip(self.voices_r.iter_mut())
+            .zip(
+                fb_l_mixed
+                    .iter()
+                    .zip(fb_r_mixed.iter())
+                    .zip(new_fb_l.iter_mut().zip(new_fb_r.iter_mut())),
+            )
+            .zip(0..NUM_LINES)
+        {
             // Left channel voice
             {
-                let voice = &mut self.voices_l[i];
+                let voice = voice_l;
                 let delay_samp = voice.current_delay;
 
                 // Read from delay with fractional interpolation
@@ -338,16 +349,16 @@ impl ReverbAlgorithm for Bloom {
                 let clean = voice.dc_block.tick(diffused);
 
                 // Mix: input + feedback (with stereo cross-feed)
-                let fb_in = fb_l_mixed[i].mul_add(direct, fb_r_mixed[i] * cross);
+                let fb_in = fb_l_in.mul_add(direct, fb_r_in * cross);
                 let write_val = (fb_in * decay).mul_add(0.15, diffused_l.mul_add(inv_n, clean * decay));
 
                 voice.delay.write(write_val);
-                new_fb_l[i] = clean * decay;
+                *new_l = clean * decay;
             }
 
             // Right channel voice
             {
-                let voice = &mut self.voices_r[i];
+                let voice = voice_r;
                 let delay_samp = voice.current_delay;
 
                 let delayed = voice.delay.read_linear(delay_samp);
@@ -356,11 +367,11 @@ impl ReverbAlgorithm for Bloom {
                 let diffused = voice.diffuser.tick(damped);
                 let clean = voice.dc_block.tick(diffused);
 
-                let fb_in = fb_r_mixed[i].mul_add(direct, fb_l_mixed[i] * cross);
+                let fb_in = fb_r_in.mul_add(direct, fb_l_in * cross);
                 let write_val = (fb_in * decay).mul_add(0.15, diffused_r.mul_add(inv_n, clean * decay));
 
                 voice.delay.write(write_val);
-                new_fb_r[i] = clean * decay;
+                *new_r = clean * decay;
             }
         }
 
