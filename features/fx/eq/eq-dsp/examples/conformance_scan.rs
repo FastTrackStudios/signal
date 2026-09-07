@@ -1,9 +1,25 @@
 //! Data-driven conformance scanner across every filter type × every slope.
 //!
-//! Reports per-(filter, slope) pass / total + max error.  Useful for
-//! tracking algorithmic conformance progress (run with `FTSEQ_BYPASS_LOOKUP`
-//! to bypass per-filter lookup tables) and for spot-checking lookup
-//! coverage.
+//! Reports per-(filter, slope) pass / total + max error. Useful for tracking
+//! algorithmic conformance progress (run with `FTSEQ_BYPASS_LOOKUP` to bypass
+//! per-filter lookup tables) and for spot-checking lookup coverage.
+//!
+//! ```text
+//! cargo run -p eq-dsp --example conformance_scan [ref_dir]
+//! ```
+//!
+//! This was a `#[test]`, but it asserted nothing: it printed a table and
+//! returned, so no conformance number could ever fail it. The only way it
+//! could go red was the one that kept happening — the reference captures it
+//! reads have never been in the repository, so on any clean checkout it
+//! failed on a missing directory and told you nothing about the filters.
+//!
+//! It is a report, so it is an example. Point it at a directory of captures
+//! (`<filter>_<fc>hz_[<gain>db_]q<q>_s<slope>.csv`, one `freq,mag_db` pair
+//! per line after a header) and it prints the pass rate per filter and slope.
+//! `src/design/cascade/brickwall.rs` cites these captures as the source of
+//! truth for its cascade, which is why the default path is still
+//! `tests/reference`.
 
 // TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
 // A test/example target is its own crate, so the crate-root allow there does
@@ -22,6 +38,7 @@ use eq_dsp::runtime::response::compute_magnitude_response;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
+use std::process::ExitCode;
 
 const TOL_DB: f64 = 0.005;
 const SR: f64 = 48000.0;
@@ -98,13 +115,26 @@ fn load_ref(path: &Path) -> Option<(Vec<f64>, Vec<f64>)> {
     Some((freqs, mags))
 }
 
-#[test]
-fn all_filters_all_slopes_scan() {
-    let ref_dir = Path::new("tests/reference");
+fn main() -> ExitCode {
+    let arg = std::env::args().nth(1);
+    let ref_dir = Path::new(arg.as_deref().unwrap_or("tests/reference"));
     let mut by: BTreeMap<(String, usize), (usize, usize, f64)> = BTreeMap::new();
 
-    for entry in fs::read_dir(ref_dir).expect("ref dir") {
-        let entry = entry.unwrap();
+    let entries = match fs::read_dir(ref_dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            eprintln!("no reference captures at {}: {e}", ref_dir.display());
+            eprintln!(
+                "These are not in the repository. Point the scanner at a local \
+                 capture directory:\n  cargo run -p eq-dsp --example \
+                 conformance_scan -- <dir>"
+            );
+            return ExitCode::FAILURE;
+        }
+    };
+
+    for entry in entries {
+        let Ok(entry) = entry else { continue };
         let path = entry.path();
         let stem = match path.file_stem().and_then(|s| s.to_str()) {
             Some(s) => s.to_string(),
@@ -145,9 +175,9 @@ fn all_filters_all_slopes_scan() {
                 }
             }
             let entry = by.entry((prefix.to_string(), slope)).or_insert((0, 0, 0.0));
-            entry.1 += 1;
+            entry.1 = entry.1.saturating_add(1);
             if pass {
-                entry.0 += 1;
+                entry.0 = entry.0.saturating_add(1);
             }
             if max_err > entry.2 {
                 entry.2 = max_err;
@@ -156,17 +186,23 @@ fn all_filters_all_slopes_scan() {
         }
     }
 
+    report(&by);
+    ExitCode::SUCCESS
+}
+
+/// Print the pass rate per filter and slope, then the grand total.
+fn report(by: &BTreeMap<(String, usize), (usize, usize, f64)>) {
     println!("\nFilter conformance per slope (TOL_DB={TOL_DB}):");
     println!(
         "  {:>12}  {:>5}  {:>5}  {:>5}  {:>10}",
         "filter", "slope", "pass", "total", "max_err"
     );
     let mut last_filter = String::new();
-    let mut filter_pass = 0;
-    let mut filter_total = 0;
-    let mut grand_pass = 0;
-    let mut grand_total = 0;
-    for ((prefix, slope), (pass, total, max_err)) in &by {
+    let mut filter_pass = 0_usize;
+    let mut filter_total = 0_usize;
+    let mut grand_pass = 0_usize;
+    let mut grand_total = 0_usize;
+    for ((prefix, slope), (pass, total, max_err)) in by {
         if prefix != &last_filter && !last_filter.is_empty() {
             println!(
                 "  {:>12}  {:>5}  {:>5}  {:>5}",
@@ -175,12 +211,12 @@ fn all_filters_all_slopes_scan() {
             filter_pass = 0;
             filter_total = 0;
         }
-        last_filter = prefix.clone();
+        last_filter.clone_from(prefix);
         println!("  {prefix:>12}  {slope:>5}  {pass:>5}  {total:>5}  {max_err:>10.4}");
-        filter_pass += pass;
-        filter_total += total;
-        grand_pass += pass;
-        grand_total += total;
+        filter_pass = filter_pass.saturating_add(*pass);
+        filter_total = filter_total.saturating_add(*total);
+        grand_pass = grand_pass.saturating_add(*pass);
+        grand_total = grand_total.saturating_add(*total);
     }
     println!(
         "  {:>12}  {:>5}  {:>5}  {:>5}",

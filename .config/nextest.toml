@@ -8,3 +8,18 @@ slow-timeout = { period = "30s", terminate-after = 1 }
 [[profile.default.overrides]]
 filter = 'test(=shoot_every_scene)'
 slow-timeout = { period = "60s", terminate-after = 10 }
+
+# The reverb stability sweep renders every algorithm at three decays and
+# five pre-delays — 225 impulse responses of four seconds each, so a
+# quarter-hour of 48 kHz audio through an unoptimised build. Measured at
+# 85 s locally; it passes, it is simply long.
+#
+# It is not padding: the NonLinear regeneration this file was written for
+# only showed up at particular knob combinations, and pre-delay is the
+# engine's feedback control on Magneto and NonLinear rather than a plain
+# pre-loop delay. Trimming the sweep would drop the coverage that found
+# the bug, so the budget moves instead. `terminate-after` still catches a
+# genuine hang, just at four minutes rather than thirty seconds.
+[[profile.default.overrides]]
+filter = 'test(=every_algorithm_stays_bounded_across_its_knob_range)'
+slow-timeout = { period = "120s", terminate-after = 2 }

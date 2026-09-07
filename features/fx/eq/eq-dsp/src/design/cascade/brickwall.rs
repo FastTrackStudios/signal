@@ -5,7 +5,9 @@
 //! contiguous routine in the binary, and its commentary cites the captured
 //! rows each branch was verified bit-exact against — cutting it into pieces
 //! would separate the arithmetic from its evidence. Splitting it wants the
-//! conformance captures in `tests/reference`, not a refactor.
+//! conformance captures, not a refactor — those are not in the repository,
+//! and `cargo run -p eq-dsp --example conformance_scan -- <dir>` is what
+//! reads them.
 
 use dsp_core::num;
 
