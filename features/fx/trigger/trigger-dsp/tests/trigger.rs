@@ -448,10 +448,27 @@ fn chain_sidechain_hpf_blocks_bass_trigger() {
     chain_hpf.set_sc_hpf(500.0);
     chain_hpf.update(config());
 
+    // Fade the tone in over 20 ms. Starting a full-amplitude sine at
+    // sample 0 is a step, and a step is broadband — the 500 Hz HPF
+    // passes that onset at -16.9 dB, over the -20 dB threshold, so the
+    // detector fires on the click rather than on the bass. Firing on a
+    // real transient is what a drum trigger is FOR; the stimulus has to
+    // be sustained bass for the assertion below to mean anything. With
+    // the ramp the onset lands at -34.7 dB and the steady state at
+    // -50.1 dB, both clear of the threshold.
     let len = 8192;
     let amp = 10.0_f64.powf(-10.0 / 20.0);
+    let fade = (SAMPLE_RATE * 0.020) as u32;
     let bass: Vec<f64> = (0..len)
-        .map(|i| (2.0 * std::f64::consts::PI * 50.0 * f64::from(i) / SAMPLE_RATE).sin() * amp)
+        .map(|i| {
+            let t = f64::from(i);
+            let ramp = if i < fade {
+                0.5 * (1.0 - (std::f64::consts::PI * t / f64::from(fade)).cos())
+            } else {
+                1.0
+            };
+            (2.0 * std::f64::consts::PI * 50.0 * t / SAMPLE_RATE).sin() * amp * ramp
+        })
         .collect();
 
     let mut l1 = bass.clone();
