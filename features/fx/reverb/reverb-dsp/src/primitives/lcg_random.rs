@@ -13,21 +13,27 @@ impl LcgRandom {
     const C: u64 = 1;
 
     #[must_use]
-    pub fn new(seed: u64) -> Self {
+    pub const fn new(seed: u64) -> Self {
         Self { x: seed }
     }
 
     #[inline]
-    pub fn next_uint(&mut self) -> u32 {
+    pub const fn next_uint(&mut self) -> u32 {
         let axc = Self::A.wrapping_mul(self.x).wrapping_add(Self::C);
         self.x = axc & 0xFFFF_FFFF;
-        self.x as u32
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::as_conversions,
+            reason = "self.x is masked to u32 range above"
+        )]
+        let result = self.x as u32;
+        result
     }
 
     #[inline]
     pub fn next_float(&mut self) -> f64 {
         let n = self.next_uint();
-        n as f64 / u32::MAX as f64
+        f64::from(n) / f64::from(u32::MAX)
     }
 }
 
@@ -50,6 +56,6 @@ pub fn random_buffer_cross_seed(seed: u64, count: usize, cross_seed: f64) -> Vec
     series_a
         .iter()
         .zip(series_b.iter())
-        .map(|(&a, &b)| a * (1.0 - cross_seed) + b * cross_seed)
+        .map(|(&a, &b)| a.mul_add(1.0 - cross_seed, b * cross_seed))
         .collect()
 }

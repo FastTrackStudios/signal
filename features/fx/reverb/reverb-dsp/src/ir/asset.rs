@@ -5,6 +5,8 @@
 //! the `symphonium` dep (default workspace config: wav/pcm + fft
 //! resampler).
 
+use dsp_core::num;
+
 use std::path::{Path, PathBuf};
 
 use symphonium::{ResampleQuality, SymphoniumLoader};
@@ -31,7 +33,7 @@ impl IrAsset {
     pub fn load<P: AsRef<Path>>(path: P, target_sample_rate: f64) -> Result<Self, IrLoadError> {
         let path = path.as_ref();
         let mut loader = SymphoniumLoader::new();
-        let target_sr = target_sample_rate as u32;
+        let target_sr = num::f64_to_u32(target_sample_rate);
         let decoded = loader
             .load_f32(
                 path,
@@ -44,7 +46,7 @@ impl IrAsset {
         let channels: Vec<Vec<f64>> = decoded
             .data
             .iter()
-            .map(|ch| ch.iter().map(|&s| s as f64).collect())
+            .map(|ch| ch.iter().map(|&s| f64::from(s)).collect())
             .collect();
 
         if channels.is_empty() || channels.iter().any(Vec::is_empty) {
@@ -55,7 +57,7 @@ impl IrAsset {
             channels,
             sample_rate: target_sample_rate,
             source_path: Some(path.to_path_buf()),
-            original_sample_rate: decoded.sample_rate as f64,
+            original_sample_rate: f64::from(decoded.sample_rate),
         })
     }
 
@@ -87,13 +89,13 @@ impl IrAsset {
     }
 
     #[must_use]
-    pub fn num_channels(&self) -> usize {
+    pub const fn num_channels(&self) -> usize {
         self.channels.len()
     }
 
     #[must_use]
     pub fn duration_seconds(&self) -> f64 {
-        self.frames() as f64 / self.sample_rate.max(1.0)
+        num::count_to_f64(self.frames()) / self.sample_rate.max(1.0)
     }
 }
 

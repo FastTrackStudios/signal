@@ -46,10 +46,11 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::{self, Coeffs};
-use crate::elliptic::{ellipdeg, elliptic_asn, elliptic_k_complete, elliptic_sncndn};
-use crate::transform;
-use crate::zpk::{Complex, Zpk};
+use crate::design::biquad::{self, Coeffs};
+use crate::math::elliptic::{ellipdeg, elliptic_asn, elliptic_k_complete, elliptic_sncndn};
+use crate::math::transform;
+use crate::math::zpk::{Complex, Zpk};
+use dsp_core::num;
 
 /// Prototype order. Even, so the response has no real pole and no zero at
 /// infinity — every one of the twelve zeros is a finite notch in the stopband.
@@ -75,6 +76,10 @@ const ORDER: usize = 12;
 /// 0.00..0.03 spread the plugin's passband was measured at.
 const PASSBAND_RIPPLE_DB: f64 = 0.02;
 
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "complex/float arithmetic — `Complex` is two `f64`s, so its operators cannot panic or overflow; the lint cannot see through an operator overload"
+)]
 /// The elliptic analog prototype, passband edge at `omega = 1`.
 ///
 /// Orfanidis' construction: the transmission zeros are `j / (k * cd(u_i K, k))`
@@ -105,14 +110,13 @@ fn prototype() -> Zpk {
         let k_squared = mod_k * mod_k;
         let num = Complex::new(cn * c1, -sn * dn * s1 * d1);
         let den = Complex::new(dn * c1 * d1, -k_squared * sn * cn * s1);
-        let inv_den = den.inv();
-        num * inv_den
+        num / den
     };
 
     let mut zeros = Vec::with_capacity(ORDER);
     let mut poles = Vec::with_capacity(ORDER);
     for i in 1..=ORDER / 2 {
-        let u = 2.0f64.mul_add(i as i32 as f64, -1.0) / (ORDER as f64);
+        let u = 2.0f64.mul_add(num::count_to_f64(i), -1.0) / num::count_to_f64(ORDER);
         let x = u * big_k;
 
         // Zero: purely imaginary, at 1/(k * cd(u K, k)) up the axis.
@@ -152,25 +156,37 @@ pub(super) fn brickwall_cascade(freq_hz: f64, sample_rate: f64, highpass: bool) 
         // LP->HP is s -> wa/s. The order is even, so every zero is finite and
         // the inversion leaves the counts matched — nothing has to be added
         // at the origin.
-        Zpk::new(
-            proto
-                .zeros
-                .iter()
-                .map(|&z| Complex::new(wa, 0.0) / z)
-                .collect(),
-            proto
-                .poles
-                .iter()
-                .map(|&p| Complex::new(wa, 0.0) / p)
-                .collect(),
-            1.0,
-        )
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "Essential complex division for bilinear analog-to-digital transform"
+        )]
+        let zeros = proto
+            .zeros
+            .iter()
+            .map(|&z| Complex::new(wa, 0.0) / z)
+            .collect();
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "Essential complex division for bilinear analog-to-digital transform"
+        )]
+        let poles = proto
+            .poles
+            .iter()
+            .map(|&p| Complex::new(wa, 0.0) / p)
+            .collect();
+        Zpk::new(zeros, poles, 1.0)
     } else {
-        Zpk::new(
-            proto.zeros.iter().map(|&z| z * wa).collect(),
-            proto.poles.iter().map(|&p| p * wa).collect(),
-            1.0,
-        )
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "Essential complex multiplication for bilinear analog-to-digital transform"
+        )]
+        let zeros = proto.zeros.iter().map(|&z| z * wa).collect();
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "Essential complex multiplication for bilinear analog-to-digital transform"
+        )]
+        let poles = proto.poles.iter().map(|&p| p * wa).collect();
+        Zpk::new(zeros, poles, 1.0)
     };
 
     let digital = transform::bilinear(&analog, sample_rate);
@@ -225,7 +241,10 @@ mod tests {
         // zero, so what is testable is the ceiling between them.
         let mut peak = f64::NEG_INFINITY;
         let mut hz = 5800.0;
-        while hz < 23_000.0 {
+        loop {
+            if hz >= 23_000.0 {
+                break;
+            }
             peak = peak.max(db_at(&sos, hz));
             hz *= 1.002;
         }

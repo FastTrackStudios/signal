@@ -5,7 +5,8 @@
 
 use std::f64::consts::PI;
 
-use crate::constants::LN10_OVER_20;
+use crate::design::constants::LN10_OVER_20;
+use dsp_core::num;
 
 /// Map filter `pole_count` (= order arg from `design_filter`) to the Pro-Q 4
 /// slope index used by lookup tables and slope-dispatch matches.
@@ -62,7 +63,8 @@ pub fn cascade_qs(n: usize, user_q: f64) -> Vec<f64> {
     let sqrt2 = std::f64::consts::SQRT_2;
     let natural_qs: Vec<f64> = (0..n)
         .map(|k| {
-            let theta = PI * (2.0 * (k as f64) + 1.0) / (2.0 * (order as f64));
+            let theta =
+                PI * 2.0_f64.mul_add(num::count_to_f64(k), 1.0) / (2.0 * num::count_to_f64(order));
             sqrt2 / (2.0 * theta.cos())
         })
         .collect();

@@ -1,21 +1,8 @@
 //! Cloud engine character tests: the manual's Diffusion continuum and
 //! two-segment Mod law.
 
-// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
-// A test/example target is its own crate, so the crate-root allow there does
-// not reach this file and it needs its own copy.
-#![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::indexing_slicing,
-    reason = "pending the DSP algorithm rewrite"
-)]
-
 use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::num;
 use reverb_dsp::{AlgorithmType, ReverbChain};
 
 const SR: f64 = 48000.0;
@@ -37,8 +24,12 @@ fn make(diffusion: f64, modulation: f64) -> ReverbChain {
 fn render_impulse(c: &mut ReverbChain, n: usize) -> Vec<f64> {
     let mut l = vec![0.0f64; n];
     let mut r = vec![0.0f64; n];
-    l[0] = 1.0;
-    r[0] = 1.0;
+    if let Some(v) = l.get_mut(0) {
+        *v = 1.0;
+    }
+    if let Some(v) = r.get_mut(0) {
+        *v = 1.0;
+    }
     c.process(&mut l, &mut r);
     l
 }
@@ -51,10 +42,11 @@ fn diffusion_min_is_grainy_max_is_fog() {
     // discrete taps spike, fog is statistically smooth.
     let crest = |diffusion: f64| -> f64 {
         let mut c = make(diffusion, 0.2);
-        let out = render_impulse(&mut c, (0.25 * SR) as usize);
-        let window = &out[(0.01 * SR) as usize..];
+        let out = render_impulse(&mut c, num::f64_to_index(0.25 * SR));
+        let window = &out[num::f64_to_index(0.01 * SR)..];
         let peak = window.iter().fold(0.0f64, |a, &x| a.max(x.abs()));
-        let rms = (window.iter().map(|x| x * x).sum::<f64>() / window.len() as f64).sqrt();
+        let rms =
+            (window.iter().map(|x| x * x).sum::<f64>() / num::count_to_f64(window.len())).sqrt();
         peak / rms.max(1e-12)
     };
     let grainy = crest(0.0);
@@ -71,9 +63,9 @@ fn mod_law_two_segments_stay_finite_and_distinct() {
     // the unmodulated render and from each other, without instability.
     let render = |modulation: f64| -> Vec<f64> {
         let mut c = make(0.6, modulation);
-        let n = (1.0 * SR) as usize;
+        let n = num::f64_to_index(1.0 * SR);
         let mut l: Vec<f64> = (0..n)
-            .map(|i| (core::f64::consts::TAU * 330.0 * i as f64 / SR).sin() * 0.4)
+            .map(|i| (core::f64::consts::TAU * 330.0 * num::count_to_f64(i) / SR).sin() * 0.4)
             .collect();
         let mut r = l.clone();
         c.process(&mut l, &mut r);

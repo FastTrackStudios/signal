@@ -24,3 +24,5 @@ pub use dyn_band::{DynBand, DynBandParams, DynShape, SideMode};
 pub use histogram::LoudnessHistogram;
 pub use svf::{Svf, SvfShape};
 pub use taper::LogMidTaper;
+pub mod spectral;
+pub mod transient;

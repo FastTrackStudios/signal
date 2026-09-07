@@ -1,6 +1,8 @@
 //! Reverb chain — top-level processor with algorithm dispatch,
 //! pre/post processing, mix, width, freeze, output EQ, ducker, saturation.
 
+use dsp_core::num;
+
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::{AudioConfig, Processor};
@@ -130,11 +132,12 @@ impl PostEqBand {
         let w = freq / f0;
         match self.shape {
             1 => {
-                let t = 1.0 / (1.0 + (w * q * 1.414).powi(2));
+                let t = 1.0 / (w * q * 1.414).mul_add(w * q * 1.414, 1.0);
                 self.gain_db * t
             }
             2 => {
-                let t = (1.0 - 1.0 / (1.0 + (w * (q * 1.414)).powi(2))).clamp(0.0, 1.0);
+                let t =
+                    (1.0 - 1.0 / (w * (q * 1.414)).mul_add(w * (q * 1.414), 1.0)).clamp(0.0, 1.0);
                 self.gain_db * t
             }
             // 2nd-order cuts: −12 dB/oct past the corner, clamped for the
@@ -143,7 +146,7 @@ impl PostEqBand {
             4 => (-40.0 * w.max(1e-6).log10()).clamp(-24.0, 0.0),
             _ => {
                 let bw = w - 1.0 / w.max(1e-9);
-                self.gain_db / (1.0 + (bw * q).powi(2))
+                self.gain_db / (bw * q).mul_add(bw * q, 1.0)
             }
         }
     }
@@ -378,17 +381,27 @@ impl Default for ReverbChain {
     }
 }
 
+/// A `ParamSmoother` at `initial`, ramping over `time_ms`, settling
+/// within `epsilon`. Eight of these were spelled out as four-line block
+/// expressions in `ReverbChain::new`.
+fn smoother(initial: f64, time_ms: f64, epsilon: f64, sample_rate: f64) -> ParamSmoother {
+    let mut s = ParamSmoother::new(initial);
+    s.set_time_ms(time_ms, sample_rate);
+    s.set_epsilon(epsilon);
+    s
+}
+
 impl ReverbChain {
     #[must_use]
     pub fn new() -> Self {
         let sample_rate = 48000.0;
-        let max_predelay = (sample_rate * 0.5) as usize; // 500ms
+        let max_predelay = num::f64_to_index(sample_rate * 0.5); // 500ms
 
         Self {
             algorithm: algorithms::create(AlgorithmType::Room, 0, sample_rate),
             algorithm_type: AlgorithmType::Room,
             variant: 0,
-            predelay: DelayLine::new(max_predelay + 1),
+            predelay: DelayLine::new(max_predelay.saturating_add(1)),
             predelay_samples: 0,
             input_hp: Biquad::new(),
             input_lp: Biquad::new(),
@@ -401,57 +414,16 @@ impl ReverbChain {
             duck_env: EnvelopeFollower::new(0.0),
             duck_gain: 1.0,
             duck_smooth: EnvelopeFollower::coeff(0.001, sample_rate),
-            mix_smoother: {
-                let mut s = ParamSmoother::new(0.5);
-                s.set_time_ms(5.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
-            width_smoother: {
-                let mut s = ParamSmoother::new(1.0);
-                s.set_time_ms(5.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
-            pan_smoother: {
-                let mut s = ParamSmoother::new(0.0);
-                s.set_time_ms(5.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
-            trem_depth_smoother: {
-                let mut s = ParamSmoother::new(0.0);
-                s.set_time_ms(10.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
+            mix_smoother: smoother(0.5, 5.0, 1e-4, sample_rate),
+            width_smoother: smoother(1.0, 5.0, 1e-4, sample_rate),
+            pan_smoother: smoother(0.0, 5.0, 1e-4, sample_rate),
+            trem_depth_smoother: smoother(0.0, 10.0, 1e-4, sample_rate),
             trem_phase: 0.0,
-            decay_smoother: {
-                // Matches AlgorithmParams::default().decay
-                let mut s = ParamSmoother::new(0.5);
-                s.set_time_ms(30.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
-            damping_smoother: {
-                // Matches AlgorithmParams::default().damping
-                let mut s = ParamSmoother::new(0.3);
-                s.set_time_ms(30.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
-            tilt_smoother: {
-                let mut s = ParamSmoother::new(0.0);
-                s.set_time_ms(30.0, sample_rate);
-                s.set_epsilon(1e-3);
-                s
-            },
-            sat_smoother: {
-                let mut s = ParamSmoother::new(0.0);
-                s.set_time_ms(10.0, sample_rate);
-                s.set_epsilon(1e-4);
-                s
-            },
+            // Initial values match AlgorithmParams::default().
+            decay_smoother: smoother(0.5, 30.0, 1e-4, sample_rate),
+            damping_smoother: smoother(0.3, 30.0, 1e-4, sample_rate),
+            tilt_smoother: smoother(0.0, 30.0, 1e-3, sample_rate),
+            sat_smoother: smoother(0.0, 10.0, 1e-4, sample_rate),
             params: AlgorithmParams::default(),
             conv_mod: ConvolutionModParams::default(),
             impulse: ImpulseParams::default(),
@@ -721,7 +693,7 @@ impl ReverbChain {
 
     /// The reverberation-time range the active engine's `decay` spans.
     #[must_use]
-    pub fn decay_seconds_range(&self) -> Option<(f64, f64)> {
+    pub const fn decay_seconds_range(&self) -> Option<(f64, f64)> {
         self.algorithm_type.t60_range(self.variant)
     }
 
@@ -732,20 +704,20 @@ impl ReverbChain {
 
     /// Get the current algorithm type.
     #[must_use]
-    pub fn algorithm_type(&self) -> AlgorithmType {
+    pub const fn algorithm_type(&self) -> AlgorithmType {
         self.algorithm_type
     }
 
     /// Get the current variant index.
     #[must_use]
-    pub fn variant(&self) -> usize {
+    pub const fn variant(&self) -> usize {
         self.variant
     }
 
     /// Snapshot the copyable parameter surface (see
     /// [`ChainParamSurface`]).
     #[must_use]
-    pub fn param_surface(&self) -> ChainParamSurface {
+    pub const fn param_surface(&self) -> ChainParamSurface {
         ChainParamSurface {
             params: self.params,
             conv_mod: self.conv_mod,
@@ -786,7 +758,7 @@ impl ReverbChain {
 
     /// Apply a copied parameter surface. Call `update_params()`
     /// afterwards so filters and smoothers pick the values up.
-    pub fn apply_surface(&mut self, s: &ChainParamSurface) {
+    pub const fn apply_surface(&mut self, s: &ChainParamSurface) {
         self.params = s.params;
         self.conv_mod = s.conv_mod;
         self.shimmer = s.shimmer;
@@ -942,16 +914,22 @@ impl ReverbChain {
     pub fn set_size_index(&mut self, idx: usize) {
         match self.algorithm_type {
             AlgorithmType::Hall => {
-                let v = [0usize, 2][idx.min(1)];
+                let v = if idx == 0 { 0usize } else { 2usize };
                 self.set_variant(v);
             }
             AlgorithmType::Room => {
-                let v = [2usize, 0][idx.min(1)];
+                let v = if idx == 0 { 2usize } else { 0usize };
                 self.set_variant(v);
             }
             _ => {
-                let steps = [0.3, 0.55, 0.8];
-                self.params.size = steps[idx.min(2)];
+                let size = if idx == 0 {
+                    0.3
+                } else if idx == 1 {
+                    0.55
+                } else {
+                    0.8
+                };
+                self.params.size = size;
                 self.update_params();
             }
         }
@@ -986,8 +964,12 @@ impl ReverbChain {
         }
         self.post_eq_applied = self.post_eq;
         self.post_eq_any = false;
-        for (i, band) in self.post_eq.iter().enumerate() {
-            self.post_eq_on[i] = band.is_active();
+        for (band, (on, filter)) in self.post_eq.iter().zip(
+            self.post_eq_on
+                .iter_mut()
+                .zip(self.post_eq_filters.iter_mut()),
+        ) {
+            *on = band.is_active();
             if !band.is_active() {
                 continue;
             }
@@ -1002,8 +984,8 @@ impl ReverbChain {
                 4 => FilterType::Lowpass,
                 _ => FilterType::Peak { gain_db },
             };
-            self.post_eq_filters[i].set(ftype, f, q, self.sample_rate);
-            self.post_eq_filters[i].reset();
+            filter.set(ftype, f, q, self.sample_rate);
+            filter.reset();
         }
         // Wet-gain compensation: undo the curve's pink-weighted mean gain
         // (equal power per octave → log-spaced points weight equally), so
@@ -1012,7 +994,8 @@ impl ReverbChain {
             const POINTS: usize = 24;
             let mean_db: f64 = (0..POINTS)
                 .map(|k| {
-                    let f = 20.0 * 10.0f64.powf(3.0 * k as f64 / (POINTS - 1) as f64);
+                    let f = 20.0
+                        * 10.0f64.powf(3.0 * num::count_to_f64(k) / num::count_to_f64(POINTS - 1));
                     self.post_eq
                         .iter()
                         .filter(|b| b.is_active())
@@ -1020,7 +1003,7 @@ impl ReverbChain {
                         .sum::<f64>()
                 })
                 .sum::<f64>()
-                / POINTS as f64;
+                / num::count_to_f64(POINTS);
             10.0f64.powf(-mean_db / 20.0).clamp(0.1, 10.0)
         } else {
             1.0
@@ -1120,15 +1103,15 @@ impl Processor for ReverbChain {
             1.0
         };
 
-        let max_predelay = (config.sample_rate * 0.5) as usize;
-        self.predelay = DelayLine::new(max_predelay + 1);
+        let max_predelay = num::f64_to_index(config.sample_rate * 0.5);
+        self.predelay = DelayLine::new(max_predelay.saturating_add(1));
         self.predelay_samples = if matches!(
             self.algorithm_type,
             AlgorithmType::Magneto | AlgorithmType::NonLinear
         ) {
             0
         } else {
-            (self.predelay_ms * 0.001 * config.sample_rate) as usize
+            num::f64_to_index(self.predelay_ms * 0.001 * config.sample_rate)
         };
 
         self.input_hp.set(
@@ -1221,14 +1204,66 @@ impl Processor for ReverbChain {
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
         let n = left.len().min(right.len());
 
-        // The wet bus's level: this algorithm's calibration constant, so
-        // every engine sits at the same output for the same decay, plus the
-        // user's trim. Both are per-block, not per-sample — neither changes
-        // inside a buffer.
-        let wet_gain = audiocore_dsp::db::db_to_linear(
-            self.wet_gain_db.clamp(-36.0, 36.0) + self.algorithm_type.wet_calibration_db(),
-        );
+        self.drain_ir_queues();
+        let block = self.begin_block();
 
+        let mut block_start = 0;
+        while block_start < n {
+            let block_end = (block_start.saturating_add(SMOOTH_BLOCK)).min(n);
+
+            // Refresh coefficient-level params only while a ramp is in
+            // motion; settled smoothers cost one comparison per sub-block.
+            if !self.decay_smoother.is_settled() || !self.damping_smoother.is_settled() {
+                let mut p = self.effective_params();
+                p.decay = self.decay_smoother.value();
+                p.damping = self.damping_smoother.value();
+                self.algorithm.set_params(&p);
+            }
+            if !self.tilt_smoother.is_settled() {
+                let tilt = self.tilt_smoother.value();
+                self.tilt_l.set_tilt_db(tilt);
+                self.tilt_r.set_tilt_db(tilt);
+            }
+            if !self.sat_smoother.is_settled() {
+                let drive = self.sat_smoother.value();
+                self.sat_l.set_drive(drive);
+                self.sat_r.set_drive(drive);
+            }
+
+            // `block_end <= n <= min(len)`, so both sub-blocks exist;
+            // bailing on the impossible `None` keeps the render callback
+            // panic-free.
+            let (Some(block_l), Some(block_r)) = (
+                left.get_mut(block_start..block_end),
+                right.get_mut(block_start..block_end),
+            ) else {
+                return;
+            };
+            self.render_sub_block(block_l, block_r, &block);
+
+            block_start = block_end;
+        }
+    }
+}
+
+/// The per-block values `process` computes once and the sample loop
+/// reads — the return of [`ReverbChain::begin_block`].
+struct BlockSetup {
+    /// Wet-bus level: the algorithm's calibration constant plus the
+    /// user's trim. Per-block, not per-sample.
+    wet_gain: f64,
+    duck_thresh: f64,
+    mid_on: bool,
+    swell_on: bool,
+    swell_rate: f64,
+    trem_inc: f64,
+}
+
+impl ReverbChain {
+    /// Take whatever IRs arrived since the last block. Runs on the audio
+    /// thread, so the prepared path is preferred and the raw path is
+    /// last-one-wins per slot.
+    fn drain_ir_queues(&mut self) {
         // Prepared (pre-FFT'd) IRs — preferred path. No FFT cost here.
         // Applied in arrival order: swaps are cheap (buffer moves) and
         // the reshape worker already debounces bursts, so ordering
@@ -1294,7 +1329,280 @@ impl Processor for ReverbChain {
                 self.reset_impulse_after_load();
             }
         }
+    }
 
+    /// Everything between the dry input and the algorithm: the ducking
+    /// sidechain, the Hall swell envelope, input filtering, freeze and
+    /// pre-delay, and the send pattern's rhythmic gate.
+    fn drive_algorithm_input(
+        &mut self,
+        dry_l: f64,
+        dry_r: f64,
+        duck_thresh: f64,
+        swell_on: bool,
+        swell_rate: f64,
+    ) -> (f64, f64) {
+        // Sidechain envelope from dry sum (rectified — the follower is
+        // domain-agnostic and needs |x|).
+        let env = self.duck_env.tick((dry_l + dry_r).abs());
+        let over = (env / duck_thresh - 1.0).max(0.0);
+        let target_duck = over.min(1.0).mul_add(-self.duck_amount, 1.0);
+        // 1-pole smooth toward target_duck (independent of attack/release
+        // — env already shapes the rate).
+        self.duck_gain = self
+            .duck_smooth
+            .mul_add(self.duck_gain - target_duck, target_duck);
+
+        // Hall Swell: gain builds behind each note (envelope
+        // logic borrowed from the Swell algorithm).
+        if swell_on {
+            let env = self.swell_env.tick((dry_l + dry_r).abs());
+            let target = (env * 4.0).min(1.0);
+            if self.swell_level < target {
+                self.swell_level = (self.swell_level + swell_rate).min(target);
+            } else {
+                self.swell_level = swell_rate.mul_add(-0.5, self.swell_level).max(0.0);
+            }
+        }
+
+        // Input filtering
+        let filt_l = self.input_lp.tick(self.input_hp.tick(dry_l, 0), 0);
+        let filt_r = self.input_lp.tick(self.input_hp.tick(dry_r, 1), 1);
+
+        // Freeze: kill input to the algorithm but keep feedback
+        // running. Infinite keeps feeding input into the
+        // sustained wash instead.
+        let (mut alg_in_l, mut alg_in_r) =
+            if self.freeze && self.infinite_mode == InfiniteMode::Freeze {
+                (0.0, 0.0)
+            } else if self.predelay_samples > 0 {
+                self.predelay.write(filt_l);
+                let delayed = self.predelay.read(self.predelay_samples);
+                (delayed, filt_r)
+            } else {
+                (filt_l, filt_r)
+            };
+
+        // Send pattern: rhythmic gate on the algorithm input.
+        // The modulator's Audio trigger listens to the dry
+        // input; clear-tails points hard-reset the algorithm.
+        if let Some(m) = &mut self.send_mod {
+            let transport = TransportInfo {
+                position_qn: self.transport_qn,
+                tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
+                playing: true,
+            };
+            let g = m.tick(&transport, dry_l + dry_r);
+            let phase = m.trigger.phase();
+            if m.patterns
+                .active()
+                .clear_crossed(self.send_prev_phase, phase)
+            {
+                self.algorithm.reset();
+            }
+            self.send_prev_phase = phase;
+            alg_in_l *= g;
+            alg_in_r *= g;
+        }
+        (alg_in_l, alg_in_r)
+    }
+
+    /// Everything between the algorithm's wet output and the mix: width,
+    /// pan, the wet pattern and follower lanes, tremolo, the ducker, the
+    /// Hall swell's wet form, and the wet-bus level.
+    fn stage_wet(
+        &mut self,
+        wet_l: f64,
+        wet_r: f64,
+        dry_l: f64,
+        dry_r: f64,
+        width: f64,
+        block: &BlockSetup,
+    ) -> (f64, f64) {
+        let &BlockSetup {
+            wet_gain,
+            swell_on,
+            trem_inc,
+            ..
+        } = block;
+        // Width (mid-side)
+        let (mut final_l, mut final_r) = if (width - 1.0).abs() > 0.001 {
+            audiocore_dsp::stereo::width(wet_l, wet_r, width)
+        } else {
+            (wet_l, wet_r)
+        };
+
+        // Wet pan (equal-power, unity at center — same law as
+        // delay's pan_gains; a mid setting weights the field,
+        // leaving decay audible on the far side).
+        let pan = self.pan_smoother.tick();
+        if pan.abs() > 1e-6 {
+            let (gl, gr) = audiocore_dsp::stereo::pan_equal_power(pan);
+            final_l *= gl;
+            final_r *= gr;
+        }
+
+        // Wet pattern: rhythmic gate on the reverb output.
+        if let Some(m) = &mut self.wet_mod {
+            let transport = TransportInfo {
+                position_qn: self.transport_qn,
+                tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
+                playing: true,
+            };
+            let g = m.tick(&transport, dry_l + dry_r);
+            let phase = m.trigger.phase();
+            if m.patterns
+                .active()
+                .clear_crossed(self.wet_prev_phase, phase)
+            {
+                self.algorithm.reset();
+            }
+            self.wet_prev_phase = phase;
+            final_l *= g;
+            final_r *= g;
+        }
+
+        // Follower lane: dry envelope rides/ducks the wet.
+        if let Some(f) = &mut self.wet_follower {
+            let g = f.tick((dry_l + dry_r) * 0.5);
+            final_l *= g;
+            final_r *= g;
+        }
+
+        // Advance the chain's transport clock.
+        self.transport_qn += self.tempo_bpm.unwrap_or(120.0) / 60.0 / self.sample_rate;
+
+        // Wet tremolo (sine, wet path only). Phase advances only
+        // while the ramped depth is non-zero, so depth 0 stays
+        // bit-identical and re-engaging starts at full gain.
+        let trem_depth = self.trem_depth_smoother.tick();
+        if trem_depth > 1e-6 {
+            let g = (trem_depth * 0.5).mul_add(-(1.0 - self.trem_phase.cos()), 1.0);
+            final_l *= g;
+            final_r *= g;
+            self.trem_phase += trem_inc;
+            if self.trem_phase > 2.0 * std::f64::consts::PI {
+                self.trem_phase -= 2.0 * std::f64::consts::PI;
+            }
+        }
+
+        // Ducker
+        if self.duck_amount > 0.0 {
+            final_l *= self.duck_gain;
+            final_r *= self.duck_gain;
+        }
+
+        // Hall Swell, Wet type: shape the reverb only.
+        if swell_on && self.hall.swell_type == SwellType::Wet {
+            final_l *= self.swell_level;
+            final_r *= self.swell_level;
+        }
+
+        // Wet-bus level: the algorithm's calibration (so every
+        // engine puts out the same level for the same decay) and the
+        // user's own trim on top of it.
+        if (wet_gain - 1.0).abs() > 1e-9 {
+            final_l *= wet_gain;
+            final_r *= wet_gain;
+        }
+
+        (final_l, final_r)
+    }
+
+    /// The sample loop: one sub-block of at most `SMOOTH_BLOCK` samples,
+    /// with every per-sample smoother advanced inside it so a ramp's rate
+    /// is independent of the host's buffer size.
+    fn render_sub_block(&mut self, block_l: &mut [f64], block_r: &mut [f64], block: &BlockSetup) {
+        let &BlockSetup {
+            duck_thresh,
+            mid_on,
+            swell_on,
+            swell_rate,
+            ..
+        } = block;
+        for (out_l, out_r) in block_l.iter_mut().zip(block_r.iter_mut()) {
+            // Advance the coefficient ramps per-sample so their rate is
+            // independent of buffer/sub-block size.
+            self.decay_smoother.tick();
+            self.damping_smoother.tick();
+            self.tilt_smoother.tick();
+            self.sat_smoother.tick();
+            let dry_l = *out_l;
+            let dry_r = *out_r;
+            let mix = self.mix_smoother.tick();
+            let width = self.width_smoother.tick();
+
+            let (alg_in_l, alg_in_r) =
+                self.drive_algorithm_input(dry_l, dry_r, duck_thresh, swell_on, swell_rate);
+
+            // Algorithm
+            let (mut wet_l, mut wet_r) = self.algorithm.tick(alg_in_l, alg_in_r);
+
+            // Wet saturation (gate on the ramped drive, not the raw param,
+            // so a saturation fade-out stays engaged until it lands on 0)
+            if self.sat_l.drive() > 0.0 {
+                wet_l = self.sat_l.tick(wet_l);
+                wet_r = self.sat_r.tick(wet_r);
+            }
+
+            // Output band-shaping
+            wet_l = self.output_hp.tick(wet_l, 0);
+            wet_l = self.output_lp.tick(wet_l, 0);
+            wet_r = self.output_hp.tick(wet_r, 1);
+            wet_r = self.output_lp.tick(wet_r, 1);
+
+            // Tilt EQ (gate on the ramped tilt for the same reason)
+            if self.tilt_smoother.value().abs() > 0.01 {
+                wet_l = self.tilt_l.tick(wet_l);
+                wet_r = self.tilt_r.tick(wet_r);
+            }
+
+            // Hall Mid EQ (~1 kHz peak on the wet bus; negative =
+            // the mid-scooped "space for the dry" curve).
+            if mid_on {
+                wet_l = self.mid_eq.tick(wet_l, 0);
+                wet_r = self.mid_eq.tick(wet_r, 1);
+            }
+
+            // Post EQ (`fx.reverb.post-eq`): the 6-band curve on the
+            // final reverb sound, wet path only, with the wet gain
+            // compensated for the curve so shaping never rides the mix.
+            if self.post_eq_any {
+                for (on, filter) in self.post_eq_on.iter().zip(self.post_eq_filters.iter_mut()) {
+                    if *on {
+                        wet_l = filter.tick(wet_l, 0);
+                        wet_r = filter.tick(wet_r, 1);
+                    }
+                }
+                wet_l *= self.post_eq_comp;
+                wet_r *= self.post_eq_comp;
+            }
+
+            let (final_l, final_r) = self.stage_wet(wet_l, wet_r, dry_l, dry_r, width, block);
+
+            // Mix
+            *out_l = dry_l.mul_add(1.0 - mix, final_l * mix);
+            *out_r = dry_r.mul_add(1.0 - mix, final_r * mix);
+
+            // Hall Swell, Wet+Dry type: volume-pedal feel on the
+            // whole output.
+            if swell_on && self.hall.swell_type == SwellType::WetPlusDry {
+                *out_l *= self.swell_level;
+                *out_r *= self.swell_level;
+            }
+        }
+    }
+
+    /// Push this block's parameter targets into the engines and smoothers,
+    /// and hand back the values the sample loop needs.
+    fn begin_block(&mut self) -> BlockSetup {
+        // The wet bus's level: this algorithm's calibration constant, so
+        // every engine sits at the same output for the same decay, plus the
+        // user's trim. Both are per-block, not per-sample — neither changes
+        // inside a buffer.
+        let wet_gain = audiocore_dsp::db::db_to_linear(
+            self.wet_gain_db.clamp(-36.0, 36.0) + self.algorithm_type.wet_calibration_db(),
+        );
         // Magneto knob remap (manual): PRE-DELAY becomes the engine's
         // feedback (see `effective_magneto`) and the chain's own
         // pre-delay line disengages (DECAY -> last-head time happens
@@ -1312,7 +1620,7 @@ impl Processor for ReverbChain {
                 }
                 _ => self.predelay_ms,
             };
-            self.predelay_samples = (ms * 0.001 * self.sample_rate) as usize;
+            self.predelay_samples = num::f64_to_index(ms * 0.001 * self.sample_rate);
         }
 
         // Re-apply the input LP here too: the Classic-voice vintage cap
@@ -1331,248 +1639,21 @@ impl Processor for ReverbChain {
         let mid_on = hall_active && self.hall.mid_db.abs() > 0.01;
         let swell_on = hall_active && self.hall.swell_rise > 1e-9;
         // Rise 0..1 → 50 ms .. ~2 s swell.
-        let swell_rate =
-            1.0 / ((0.05 + self.hall.swell_rise.clamp(0.0, 1.0) * 2.0) * self.sample_rate.max(1.0));
+        let swell_rate = 1.0
+            / (self.hall.swell_rise.clamp(0.0, 1.0).mul_add(2.0, 0.05) * self.sample_rate.max(1.0));
         self.mix_smoother.set_target(self.mix);
         self.width_smoother.set_target(self.width);
         self.pan_smoother.set_target(self.pan);
         self.trem_depth_smoother.set_target(self.trem_depth);
         let trem_inc =
             2.0 * std::f64::consts::PI * self.trem_rate_hz.clamp(0.1, 12.0) / self.sample_rate;
-
-        let mut block_start = 0;
-        while block_start < n {
-            let block_end = (block_start + SMOOTH_BLOCK).min(n);
-
-            // Refresh coefficient-level params only while a ramp is in
-            // motion; settled smoothers cost one comparison per sub-block.
-            if !self.decay_smoother.is_settled() || !self.damping_smoother.is_settled() {
-                let mut p = self.effective_params();
-                p.decay = self.decay_smoother.value();
-                p.damping = self.damping_smoother.value();
-                self.algorithm.set_params(&p);
-            }
-            if !self.tilt_smoother.is_settled() {
-                let tilt = self.tilt_smoother.value();
-                self.tilt_l.set_tilt_db(tilt);
-                self.tilt_r.set_tilt_db(tilt);
-            }
-            if !self.sat_smoother.is_settled() {
-                let drive = self.sat_smoother.value();
-                self.sat_l.set_drive(drive);
-                self.sat_r.set_drive(drive);
-            }
-
-            for i in block_start..block_end {
-                // Advance the coefficient ramps per-sample so their rate is
-                // independent of buffer/sub-block size.
-                self.decay_smoother.tick();
-                self.damping_smoother.tick();
-                self.tilt_smoother.tick();
-                self.sat_smoother.tick();
-                let dry_l = left[i];
-                let dry_r = right[i];
-                let mix = self.mix_smoother.tick();
-                let width = self.width_smoother.tick();
-
-                // Sidechain envelope from dry sum (rectified — the follower is
-                // domain-agnostic and needs |x|).
-                let env = self.duck_env.tick((dry_l + dry_r).abs());
-                let over = (env / duck_thresh - 1.0).max(0.0);
-                let target_duck = 1.0 - (over.min(1.0) * self.duck_amount);
-                // 1-pole smooth toward target_duck (independent of attack/release
-                // — env already shapes the rate).
-                self.duck_gain = self.duck_smooth * (self.duck_gain - target_duck) + target_duck;
-
-                // Hall Swell: gain builds behind each note (envelope
-                // logic borrowed from the Swell algorithm).
-                if swell_on {
-                    let env = self.swell_env.tick((dry_l + dry_r).abs());
-                    let target = (env * 4.0).min(1.0);
-                    if self.swell_level < target {
-                        self.swell_level = (self.swell_level + swell_rate).min(target);
-                    } else {
-                        self.swell_level = (self.swell_level - swell_rate * 0.5).max(0.0);
-                    }
-                }
-
-                // Input filtering
-                let filt_l = self.input_lp.tick(self.input_hp.tick(dry_l, 0), 0);
-                let filt_r = self.input_lp.tick(self.input_hp.tick(dry_r, 1), 1);
-
-                // Freeze: kill input to the algorithm but keep feedback
-                // running. Infinite keeps feeding input into the
-                // sustained wash instead.
-                let (mut alg_in_l, mut alg_in_r) =
-                    if self.freeze && self.infinite_mode == InfiniteMode::Freeze {
-                        (0.0, 0.0)
-                    } else if self.predelay_samples > 0 {
-                        self.predelay.write(filt_l);
-                        let delayed = self.predelay.read(self.predelay_samples);
-                        (delayed, filt_r)
-                    } else {
-                        (filt_l, filt_r)
-                    };
-
-                // Send pattern: rhythmic gate on the algorithm input.
-                // The modulator's Audio trigger listens to the dry
-                // input; clear-tails points hard-reset the algorithm.
-                if let Some(m) = &mut self.send_mod {
-                    let transport = TransportInfo {
-                        position_qn: self.transport_qn,
-                        tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
-                        playing: true,
-                    };
-                    let g = m.tick(&transport, dry_l + dry_r);
-                    let phase = m.trigger.phase();
-                    if m.patterns
-                        .active()
-                        .clear_crossed(self.send_prev_phase, phase)
-                    {
-                        self.algorithm.reset();
-                    }
-                    self.send_prev_phase = phase;
-                    alg_in_l *= g;
-                    alg_in_r *= g;
-                }
-
-                // Algorithm
-                let (mut wet_l, mut wet_r) = self.algorithm.tick(alg_in_l, alg_in_r);
-
-                // Wet saturation (gate on the ramped drive, not the raw param,
-                // so a saturation fade-out stays engaged until it lands on 0)
-                if self.sat_l.drive() > 0.0 {
-                    wet_l = self.sat_l.tick(wet_l);
-                    wet_r = self.sat_r.tick(wet_r);
-                }
-
-                // Output band-shaping
-                wet_l = self.output_hp.tick(wet_l, 0);
-                wet_l = self.output_lp.tick(wet_l, 0);
-                wet_r = self.output_hp.tick(wet_r, 1);
-                wet_r = self.output_lp.tick(wet_r, 1);
-
-                // Tilt EQ (gate on the ramped tilt for the same reason)
-                if self.tilt_smoother.value().abs() > 0.01 {
-                    wet_l = self.tilt_l.tick(wet_l);
-                    wet_r = self.tilt_r.tick(wet_r);
-                }
-
-                // Hall Mid EQ (~1 kHz peak on the wet bus; negative =
-                // the mid-scooped "space for the dry" curve).
-                if mid_on {
-                    wet_l = self.mid_eq.tick(wet_l, 0);
-                    wet_r = self.mid_eq.tick(wet_r, 1);
-                }
-
-                // Post EQ (`fx.reverb.post-eq`): the 6-band curve on the
-                // final reverb sound, wet path only, with the wet gain
-                // compensated for the curve so shaping never rides the mix.
-                if self.post_eq_any {
-                    for (i, on) in self.post_eq_on.iter().enumerate() {
-                        if *on {
-                            wet_l = self.post_eq_filters[i].tick(wet_l, 0);
-                            wet_r = self.post_eq_filters[i].tick(wet_r, 1);
-                        }
-                    }
-                    wet_l *= self.post_eq_comp;
-                    wet_r *= self.post_eq_comp;
-                }
-
-                // Width (mid-side)
-                let (mut final_l, mut final_r) = if (width - 1.0).abs() > 0.001 {
-                    audiocore_dsp::stereo::width(wet_l, wet_r, width)
-                } else {
-                    (wet_l, wet_r)
-                };
-
-                // Wet pan (equal-power, unity at center — same law as
-                // delay's pan_gains; a mid setting weights the field,
-                // leaving decay audible on the far side).
-                let pan = self.pan_smoother.tick();
-                if pan.abs() > 1e-6 {
-                    let (gl, gr) = audiocore_dsp::stereo::pan_equal_power(pan);
-                    final_l *= gl;
-                    final_r *= gr;
-                }
-
-                // Wet pattern: rhythmic gate on the reverb output.
-                if let Some(m) = &mut self.wet_mod {
-                    let transport = TransportInfo {
-                        position_qn: self.transport_qn,
-                        tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
-                        playing: true,
-                    };
-                    let g = m.tick(&transport, dry_l + dry_r);
-                    let phase = m.trigger.phase();
-                    if m.patterns
-                        .active()
-                        .clear_crossed(self.wet_prev_phase, phase)
-                    {
-                        self.algorithm.reset();
-                    }
-                    self.wet_prev_phase = phase;
-                    final_l *= g;
-                    final_r *= g;
-                }
-
-                // Follower lane: dry envelope rides/ducks the wet.
-                if let Some(f) = &mut self.wet_follower {
-                    let g = f.tick((dry_l + dry_r) * 0.5);
-                    final_l *= g;
-                    final_r *= g;
-                }
-
-                // Advance the chain's transport clock.
-                self.transport_qn += self.tempo_bpm.unwrap_or(120.0) / 60.0 / self.sample_rate;
-
-                // Wet tremolo (sine, wet path only). Phase advances only
-                // while the ramped depth is non-zero, so depth 0 stays
-                // bit-identical and re-engaging starts at full gain.
-                let trem_depth = self.trem_depth_smoother.tick();
-                if trem_depth > 1e-6 {
-                    let g = 1.0 - trem_depth * 0.5 * (1.0 - self.trem_phase.cos());
-                    final_l *= g;
-                    final_r *= g;
-                    self.trem_phase += trem_inc;
-                    if self.trem_phase > 2.0 * std::f64::consts::PI {
-                        self.trem_phase -= 2.0 * std::f64::consts::PI;
-                    }
-                }
-
-                // Ducker
-                if self.duck_amount > 0.0 {
-                    final_l *= self.duck_gain;
-                    final_r *= self.duck_gain;
-                }
-
-                // Hall Swell, Wet type: shape the reverb only.
-                if swell_on && self.hall.swell_type == SwellType::Wet {
-                    final_l *= self.swell_level;
-                    final_r *= self.swell_level;
-                }
-
-                // Wet-bus level: the algorithm's calibration (so every
-                // engine puts out the same level for the same decay) and the
-                // user's own trim on top of it.
-                if (wet_gain - 1.0).abs() > 1e-9 {
-                    final_l *= wet_gain;
-                    final_r *= wet_gain;
-                }
-
-                // Mix
-                left[i] = dry_l * (1.0 - mix) + final_l * mix;
-                right[i] = dry_r * (1.0 - mix) + final_r * mix;
-
-                // Hall Swell, Wet+Dry type: volume-pedal feel on the
-                // whole output.
-                if swell_on && self.hall.swell_type == SwellType::WetPlusDry {
-                    left[i] *= self.swell_level;
-                    right[i] *= self.swell_level;
-                }
-            }
-
-            block_start = block_end;
+        BlockSetup {
+            wet_gain,
+            duck_thresh,
+            mid_on,
+            swell_on,
+            swell_rate,
+            trem_inc,
         }
     }
 }
@@ -1634,7 +1715,7 @@ mod tests {
 
                 let n = 4800;
                 let mut l: Vec<f64> = (0..n)
-                    .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+                    .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
                     .collect();
                 let mut r = l.clone();
 
@@ -1708,7 +1789,7 @@ mod tests {
 
         // Excite for ~50ms, then freeze with input=0
         let mut l: Vec<f64> = (0..2400)
-            .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut r = l.clone();
         c.process(&mut l, &mut r);
@@ -1717,7 +1798,7 @@ mod tests {
         c.update_params();
 
         // Now feed silence for 2 seconds, then check tail still has energy.
-        let mut l2 = vec![0.0; (SR as usize) * 2];
+        let mut l2 = vec![0.0; num::f64_to_index(SR) * 2];
         let mut r2 = l2.clone();
         c.process(&mut l2, &mut r2);
 
@@ -1769,7 +1850,7 @@ mod tests {
         // mix=1.0 means output = wet alone, so |output| measures wet level.
         let n = 9600;
         let mut l: Vec<f64> = (0..n)
-            .map(|i| (2.0 * PI * 200.0 * i as f64 / SR).sin() * 0.6)
+            .map(|i| (2.0 * PI * 200.0 * f64::from(i) / SR).sin() * 0.6)
             .collect();
         let mut r = l.clone();
         c.process(&mut l, &mut r);
@@ -1780,7 +1861,7 @@ mod tests {
         c2.duck_amount = 0.0;
         c2.update(config());
         let mut l2: Vec<f64> = (0..n)
-            .map(|i| (2.0 * PI * 200.0 * i as f64 / SR).sin() * 0.6)
+            .map(|i| (2.0 * PI * 200.0 * f64::from(i) / SR).sin() * 0.6)
             .collect();
         let mut r2 = l2.clone();
         c2.process(&mut l2, &mut r2);
@@ -1915,7 +1996,9 @@ mod tests {
         let n = 9600;
         let sine = |off: usize| -> Vec<f64> {
             (0..n)
-                .map(|i| (2.0 * PI * freq * (off + i) as f64 / SR).sin() * 0.5)
+                .map(|i| {
+                    (2.0 * PI * freq * num::count_to_f64(off.saturating_add(i)) / SR).sin() * 0.5
+                })
                 .collect()
         };
 
@@ -1928,13 +2011,13 @@ mod tests {
             let mut lp = sine(off);
             let mut rp = lp.clone();
             c.process(&mut lp, &mut rp);
-            off += n;
+            off = off.saturating_add(n);
         }
 
         let mut l1 = sine(off);
         let mut r1 = l1.clone();
         c.process(&mut l1, &mut r1);
-        off += n;
+        off = off.saturating_add(n);
         // Natural signal slope, measured after the reverb has built up.
         let before = max_step(&l1[4800..]);
 
@@ -2008,11 +2091,11 @@ mod tests {
                 c.params.decay = decay;
                 c.update_params(); // ramped path
             }
-            let n = (SR as usize) * 2;
+            let n = num::f64_to_index(SR) * 2;
             let mut l: Vec<f64> = (0..n)
                 .map(|i| {
                     if i < 4800 {
-                        (2.0 * PI * 300.0 * i as f64 / SR).sin() * 0.5
+                        (2.0 * PI * 300.0 * num::count_to_f64(i) / SR).sin() * 0.5
                     } else {
                         0.0
                     }
@@ -2048,13 +2131,13 @@ mod tests {
         c.update(config());
         c.set_decay_seconds(2.5);
 
-        let drive = (SR * 0.2) as usize;
-        let total = (SR * 4.0) as usize;
+        let drive = num::f64_to_index(SR * 0.2);
+        let total = num::f64_to_index(SR * 4.0);
         let mut l: Vec<f64> = (0..total)
             .map(|i| {
                 if i < drive {
-                    let env = (PI * i as f64 / drive as f64).sin();
-                    (2.0 * PI * probe_hz * i as f64 / SR).sin() * env
+                    let env = (PI * num::count_to_f64(i) / num::count_to_f64(drive)).sin();
+                    (2.0 * PI * probe_hz * num::count_to_f64(i) / SR).sin() * env
                 } else {
                     0.0
                 }
@@ -2063,11 +2146,11 @@ mod tests {
         let mut r = l.clone();
         c.process(&mut l, &mut r);
 
-        let win = (SR * 0.4) as usize;
-        let a0 = drive + (SR * 0.3) as usize;
-        let b0 = a0 + (SR * 1.0) as usize;
+        let win = num::f64_to_index(SR * 0.4);
+        let a0 = drive.saturating_add(num::f64_to_index(SR * 0.3));
+        let b0 = a0.saturating_add(num::f64_to_index(SR * 1.0));
         let energy = |start: usize| -> f64 {
-            l[start..(start + win).min(l.len())]
+            l[start..(start.saturating_add(win)).min(l.len())]
                 .iter()
                 .map(|x| x * x)
                 .sum::<f64>()
@@ -2126,12 +2209,12 @@ mod tests {
             c.params.band_crossover_hz = 400.0;
             c.update(config());
 
-            let n = (SR as usize) * 3;
-            let drive = (SR as usize) / 2; // 0.5 s of excitation, then silence
+            let n = num::f64_to_index(SR) * 3;
+            let drive = num::f64_to_index(SR) / 2; // 0.5 s of excitation, then silence
             let mut l: Vec<f64> = (0..n)
                 .map(|i| {
                     if i < drive {
-                        (2.0 * PI * 100.0 * i as f64 / SR).sin() * 0.4
+                        (2.0 * PI * 100.0 * num::count_to_f64(i) / SR).sin() * 0.4
                     } else {
                         0.0
                     }
@@ -2140,7 +2223,10 @@ mod tests {
             let mut r = l.clone();
             c.process(&mut l, &mut r);
             // Energy in the last second — pure tail, well after the input.
-            l[(n - SR as usize)..].iter().map(|x| x * x).sum::<f64>()
+            l[(n - num::f64_to_index(SR))..]
+                .iter()
+                .map(|x| x * x)
+                .sum::<f64>()
         };
         let low_kept = make(1.0);
         let low_cut = make(0.3);
@@ -2189,7 +2275,7 @@ mod tests {
                 q: 0.707,
             };
             c.update(config());
-            let n = (SR as usize) * 2;
+            let n = num::f64_to_index(SR).saturating_mul(2);
             let mut l: Vec<f64> = (0..n).map(|i| if i < 32 { 0.5 } else { 0.0 }).collect();
             let mut r = l.clone();
             c.process(&mut l, &mut r);
@@ -2234,9 +2320,11 @@ mod tests {
                 q: 0.707,
             };
             c.update(config());
-            let n = (SR as usize) * 2;
+            let n = num::f64_to_index(SR) * 2;
             let mut l: Vec<f64> = (0..n)
-                .map(|i| (2.0 * PI * 100.0 * i as f64 / SR).sin() * 0.4 * f64::from(i < 4800))
+                .map(|i| {
+                    (2.0 * PI * 100.0 * num::count_to_f64(i) / SR).sin() * 0.4 * f64::from(i < 4800)
+                })
                 .collect();
             let mut r = l.clone();
             c.process(&mut l, &mut r);
@@ -2327,7 +2415,7 @@ mod tests {
             c.trem_rate_hz = 6.0;
             c.update(config());
             let mut l: Vec<f64> = (0..9600)
-                .map(|i| (2.0 * PI * 220.0 * i as f64 / SR).sin() * 0.5)
+                .map(|i| (2.0 * PI * 220.0 * f64::from(i) / SR).sin() * 0.5)
                 .collect();
             let mut r = l.clone();
             c.process(&mut l, &mut r);
@@ -2361,7 +2449,7 @@ mod tests {
 
         let n = 96000;
         let mut l: Vec<f64> = (0..n)
-            .map(|i| (2.0 * PI * 220.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 220.0 * num::count_to_f64(i) / SR).sin() * 0.5)
             .collect();
         let mut r = l.clone();
         c.process(&mut l, &mut r);
@@ -2370,10 +2458,12 @@ mod tests {
         let win = 1000;
         let rms: Vec<f64> = (24000..n - win)
             .step_by(win)
-            .map(|s| (l[s..s + win].iter().map(|x| x * x).sum::<f64>() / win as f64).sqrt())
+            .map(|s| {
+                (l[s..s + win].iter().map(|x| x * x).sum::<f64>() / num::count_to_f64(win)).sqrt()
+            })
             .collect();
-        let max = rms.iter().cloned().fold(0.0f64, f64::max);
-        let min = rms.iter().cloned().fold(f64::MAX, f64::min);
+        let max = rms.iter().copied().fold(0.0f64, f64::max);
+        let min = rms.iter().copied().fold(f64::MAX, f64::min);
         assert!(
             min < max * 0.6,
             "trem at depth 1 should visibly modulate the wet envelope: min={min}, max={max}"
@@ -2387,7 +2477,7 @@ mod tests {
         c.output_tilt_db = -12.0; // dark
         c.update(config());
         let mut l: Vec<f64> = (0..4800)
-            .map(|i| (2.0 * PI * 8000.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 8000.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut r = l.clone();
         c.process(&mut l, &mut r);
@@ -2398,7 +2488,7 @@ mod tests {
         c2.output_tilt_db = 12.0; // bright
         c2.update(config());
         let mut l2: Vec<f64> = (0..4800)
-            .map(|i| (2.0 * PI * 8000.0 * i as f64 / SR).sin() * 0.5)
+            .map(|i| (2.0 * PI * 8000.0 * f64::from(i) / SR).sin() * 0.5)
             .collect();
         let mut r2 = l2.clone();
         c2.process(&mut l2, &mut r2);
@@ -2429,7 +2519,7 @@ mod tests {
                 let mut energy = 0.0;
                 for b in 0..blocks {
                     for i in 0..256 {
-                        let t = (b * 256 + i) as f64;
+                        let t = num::count_to_f64(b * 256 + i);
                         let x = (core::f64::consts::TAU * 220.0 * t / sr).sin() * level;
                         buf_l[i] = x;
                         buf_r[i] = x;

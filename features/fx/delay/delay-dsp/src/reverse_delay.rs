@@ -16,6 +16,7 @@ use crate::modulation::Diffuser;
 use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::num;
 
 /// Reverse delay using onset-synced alternating reversed grains.
 pub struct ReverseDelay {
@@ -101,7 +102,7 @@ impl ReverseDelay {
 
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S).saturating_add(1024);
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -130,11 +131,11 @@ impl ReverseDelay {
         self.diffuser.smear = self.smear.clamp(0.0, 1.0) * 0.5;
         self.diffuser.update(sample_rate, false);
 
-        self.grain_samples = ((self.time_ms * 0.001 * sample_rate) as usize).max(64);
+        self.grain_samples = num::f64_to_index(self.time_ms * 0.001 * sample_rate).max(64);
     }
 
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
-        let grain_len = ((self.time_ms * 0.001 * self.sample_rate) as usize).max(64);
+        let grain_len = num::f64_to_index(self.time_ms * 0.001 * self.sample_rate).max(64);
         self.grain_samples = grain_len;
 
         // ── Onset detection: re-sync the window cycle to the attack ──
@@ -171,7 +172,12 @@ impl ReverseDelay {
 
         // Two reversed read heads, half a cycle apart.
         let pos_a = self.grain_pos;
-        let pos_b = (self.grain_pos + grain_len) % (grain_len * 2);
+        let cycle = grain_len.saturating_mul(2);
+        let pos_b = self
+            .grain_pos
+            .saturating_add(grain_len)
+            .checked_rem(cycle)
+            .unwrap_or(0);
 
         let read_a = self.read_reversed(pos_a, grain_len, mod_off);
         let read_b = self.read_reversed(pos_b, grain_len, mod_off);
@@ -189,7 +195,11 @@ impl ReverseDelay {
         }
 
         // Advance position
-        self.grain_pos = (self.grain_pos + 1) % (grain_len * 2);
+        self.grain_pos = self
+            .grain_pos
+            .saturating_add(1)
+            .checked_rem(grain_len.saturating_mul(2))
+            .unwrap_or(0);
 
         // Feedback path
         let mut fb = output * self.feedback;
@@ -213,9 +223,9 @@ impl ReverseDelay {
     /// before this window started.
     #[inline]
     fn read_reversed(&self, pos: usize, grain_len: usize, mod_off: f64) -> f64 {
-        let pos_in_grain = (pos % grain_len) as f64;
-        let read_offset = 2.0 * pos_in_grain + 1.0 + mod_off;
-        let max_read = (self.delay.len() - 4) as f64;
+        let pos_in_grain = num::count_to_f64(pos.checked_rem(grain_len).unwrap_or(0));
+        let read_offset = 2.0f64.mul_add(pos_in_grain, 1.0) + mod_off;
+        let max_read = num::count_to_f64(self.delay.len().saturating_sub(4));
         self.delay.read_cubic(read_offset.clamp(1.0, max_read))
     }
 
@@ -223,17 +233,18 @@ impl ReverseDelay {
     /// `cf` is the crossfade fraction (0.01–0.5).
     #[inline]
     fn grain_window(pos: usize, grain_len: usize, cf: f64) -> f64 {
-        let pos_in_grain = pos % grain_len;
-        let fade_samples = (grain_len as f64 * cf) as usize;
+        let pos_in_grain = pos.checked_rem(grain_len).unwrap_or(0);
+        let fade_samples = num::f64_to_index(num::count_to_f64(grain_len) * cf);
         let fade_samples = fade_samples.max(1);
 
         if pos_in_grain < fade_samples {
             // Fade in: raised cosine
-            let t = pos_in_grain as f64 / fade_samples as f64;
+            let t = num::count_to_f64(pos_in_grain) / num::count_to_f64(fade_samples);
             0.5 * (1.0 - (core::f64::consts::PI * t).cos())
-        } else if pos_in_grain >= grain_len - fade_samples {
+        } else if pos_in_grain >= grain_len.saturating_sub(fade_samples) {
             // Fade out: raised cosine
-            let t = (grain_len - 1 - pos_in_grain) as f64 / fade_samples as f64;
+            let t = num::count_to_f64(grain_len.saturating_sub(1).saturating_sub(pos_in_grain))
+                / num::count_to_f64(fade_samples);
             0.5 * (1.0 - (core::f64::consts::PI * t).cos())
         } else {
             1.0
@@ -241,7 +252,7 @@ impl ReverseDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -292,7 +303,7 @@ mod tests {
         for i in 0..(grain * 3) {
             // Loud onset then a ramp so the onset sync fires at i=0.
             let input = if i < grain {
-                0.5 + 0.5 * (i as f64 / grain as f64)
+                0.5f64.mul_add(num::count_to_f64(i) / num::count_to_f64(grain), 0.5)
             } else {
                 0.0
             };
@@ -320,7 +331,7 @@ mod tests {
         d.feedback = 0.0;
         d.update(SR);
 
-        let grain = (0.08 * SR) as usize;
+        let grain = num::f64_to_index(0.08 * SR);
         let gap = grain * 3 + 517; // deliberately NOT a multiple of the cycle
         let burst = |d: &mut ReverseDelay| -> usize {
             // Feed a 3 ms burst, then silence; return samples from burst
@@ -362,21 +373,32 @@ mod tests {
             d.feedback = 0.0;
             d.smear = smear;
             d.update(SR);
-            let mut w_sum = 0.0;
-            let mut t_sum = 0.0;
-            let mut t2_sum = 0.0;
+            // `weight_sum` / `time_sum` / `time_sq_sum`: the moments of the
+            // smear window. Spelled out rather than `w_sum`/`t_sum`/`t2_sum`
+            // because clippy cannot tell the last two apart, and neither
+            // could a reader skimming.
+            let mut weightime_sum = 0.0;
+            let mut time_sum = 0.0;
+            let mut time_sq_sum = 0.0;
             for i in 0..(48000 / 2) {
                 let input = if i < 24 { 0.9 } else { 0.0 };
                 let out = d.tick(input, 0);
                 let w = out * out;
-                let t = i as f64;
-                w_sum += w;
-                t_sum += w * t;
-                t2_sum += w * t * t;
+                let t = f64::from(i);
+                weightime_sum += w;
+                time_sum += w * t;
+                time_sq_sum += w * t * t;
             }
-            assert!(w_sum > 0.0, "no wet output");
-            let mean = t_sum / w_sum;
-            (t2_sum / w_sum - mean * mean).sqrt()
+            assert!(weightime_sum > 0.0, "no wet output");
+            let mean = time_sum / weightime_sum;
+            // Variance as E[X²] − E[X]², then its root. Clippy reads the
+            // `mean * mean` as a mis-typed `time_sq_sum * mean`; the regrouping it
+            // suggests is a different quantity entirely.
+            #[expect(
+                clippy::suspicious_operation_groupings,
+                reason = "the standard variance identity, not a transposed operand"
+            )]
+            ((time_sq_sum / weightime_sum) - (mean * mean)).sqrt()
         };
         let dry_width = run(0.0);
         let wet_width = run(0.9);
@@ -399,7 +421,7 @@ mod tests {
             d.update(SR);
             (0..48000)
                 .map(|i| {
-                    let input = (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
+                    let input = (core::f64::consts::TAU * 220.0 * f64::from(i) / SR).sin() * 0.5;
                     d.tick(input, 0)
                 })
                 .collect()
@@ -430,7 +452,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (core::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input = (core::f64::consts::PI * 2.0 * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at sample {i}");
             assert!(out.abs() < 10.0, "Runaway at {i}: {out}");

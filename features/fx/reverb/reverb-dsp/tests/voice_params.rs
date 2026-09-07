@@ -1,25 +1,12 @@
 //! `BigSky` MX pass-E: Voice pairs (MX/Classic), Hall Mid EQ + Swell,
 //! named-Size selection. Defaults must be bit-transparent.
 
-// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
-// A test/example target is its own crate, so the crate-root allow there does
-// not reach this file and it needs its own copy.
-#![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::default_trait_access,
-    reason = "pending the DSP algorithm rewrite"
-)]
-
 use reverb_dsp::AlgorithmType;
-use reverb_dsp::algorithm::{ReverbVoice, SwellType};
+use reverb_dsp::algorithm::{HallParams, ReverbVoice, SwellType};
 use reverb_dsp::chain::ReverbChain;
 
 use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::num;
 
 const SR: f64 = 48000.0;
 
@@ -51,16 +38,16 @@ fn goertzel(buf: &[f64], freq: f64) -> f64 {
         s2 = s1;
         s1 = s0;
     }
-    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / num::count_to_f64(buf.len()).powi(2)
 }
 
 fn render_burst(chain: &mut ReverbChain, secs: f64) -> (Vec<f64>, Vec<f64>) {
-    let n = (SR * secs) as usize;
-    let burst = (SR * 0.4) as usize;
+    let n = num::f64_to_index(SR * secs);
+    let burst = num::f64_to_index(SR * 0.4);
     let mut l: Vec<f64> = (0..n)
         .map(|i| {
             if i < burst {
-                (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5
+                (std::f64::consts::TAU * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5
             } else {
                 0.0
             }
@@ -83,7 +70,7 @@ fn defaults_are_transparent() {
         let mut plain = make_chain(algo);
         let mut touched = make_chain(algo);
         touched.voice = ReverbVoice::Mx;
-        touched.hall = Default::default();
+        touched.hall = HallParams::default();
         touched.update_params();
 
         let (pl, _) = render_burst(&mut plain, 1.5);
@@ -168,7 +155,7 @@ fn hall_mid_cut_scoops_1k() {
     let flat = render(0.0);
     let cut = render(-6.0);
     let boost = render(6.0);
-    let body = (SR * 0.1) as usize..(SR * 1.6) as usize;
+    let body = num::f64_to_index(SR * 0.1)..num::f64_to_index(SR * 1.6);
     // Normalize the 1 kHz band by an out-of-band reference (200 Hz) so
     // the comparison reads EQ shape, not overall level.
     let shape = |buf: &[f64]| {
@@ -208,7 +195,7 @@ fn hall_swell_ramps_the_wet() {
     }
     // Early wet (during the first 150 ms) is suppressed by the swell;
     // late wet recovers.
-    let early = (SR * 0.02) as usize..(SR * 0.15) as usize;
+    let early = num::f64_to_index(SR * 0.02)..num::f64_to_index(SR * 0.15);
     let e_plain = energy(&plain[early.clone()]);
     let e_swell = energy(&swelled[early]);
     assert!(
@@ -233,7 +220,7 @@ fn hall_swell_wet_plus_dry_shapes_dry() {
 
     let wet_only = render(SwellType::Wet);
     let wet_dry = render(SwellType::WetPlusDry);
-    let onset = (SR * 0.005) as usize..(SR * 0.08) as usize;
+    let onset = num::f64_to_index(SR * 0.005)..num::f64_to_index(SR * 0.08);
     let e_wet_only = energy(&wet_only[onset.clone()]);
     let e_wet_dry = energy(&wet_dry[onset]);
     assert!(

@@ -9,4 +9,8 @@ description = "FTS compressor (ProC3-style) DSP"
 workspace = true
 
 [dependencies]
+dsp-core = { workspace = true }
 audiocore-dsp = { workspace = true }
+
+[dev-dependencies]
+dsp-golden = { workspace = true }

@@ -5,6 +5,8 @@
 //! Inspired by REEV-R (<https://github.com/tiagolr/reevr>): stretch,
 //! trim, reverse, attack and decay, plus IR predelay.
 
+use dsp_core::num;
+
 use super::asset::IrAsset;
 
 /// How to reconcile the source IR's channel count with the convolver's
@@ -118,10 +120,10 @@ impl IrTransforms {
         let (mut l, mut r) = (l, r);
 
         // 1. Trim
-        let start = ((self.trim_start_s.max(0.0)) * sr) as usize;
-        let end_drop = ((self.trim_end_s.max(0.0)) * sr) as usize;
-        l = trim(l, start, end_drop);
-        r = trim(r, start, end_drop);
+        let start = num::f64_to_index((self.trim_start_s.max(0.0)) * sr);
+        let end_drop = num::f64_to_index((self.trim_end_s.max(0.0)) * sr);
+        l = trim(&l, start, end_drop);
+        r = trim(&r, start, end_drop);
 
         // 1.5. Decay window (MX Impulse Decay + Tail) — take the first
         // `decay_frac` of the file, shaped by envelope or gate. Runs
@@ -166,13 +168,13 @@ impl IrTransforms {
         // head of whatever now plays first (post-reverse/stretch).
         let af = self.attack_frac.clamp(0.0, 1.0);
         if af > 1e-9 {
-            let n = ((l.len() as f64) * 0.25 * af) as usize;
+            let n = num::f64_to_index(num::count_to_f64(l.len()) * 0.25 * af);
             apply_attack_samples(&mut l, n);
             apply_attack_samples(&mut r, n);
         }
 
         // 5. Predelay
-        let predelay = (self.predelay_s.max(0.0) * sr) as usize;
+        let predelay = num::f64_to_index(self.predelay_s.max(0.0) * sr);
         if predelay > 0 {
             l = prepend_zeros(&l, predelay);
             r = prepend_zeros(&r, predelay);
@@ -207,12 +209,9 @@ fn extract_stereo(ir: &IrAsset, layout: ChannelLayout) -> (Vec<f64>, Vec<f64>) {
     }
 }
 
-fn trim(buf: Vec<f64>, start: usize, end_drop: usize) -> Vec<f64> {
-    if start >= buf.len() {
-        return Vec::new();
-    }
+fn trim(buf: &[f64], start: usize, end_drop: usize) -> Vec<f64> {
     let end = buf.len().saturating_sub(end_drop).max(start);
-    buf[start..end].to_vec()
+    buf.get(start..end).unwrap_or_default().to_vec()
 }
 
 /// Linear-interpolated resampling — stretches duration by `factor`.
@@ -221,22 +220,28 @@ fn stretch(buf: &[f64], factor: f64) -> Vec<f64> {
     if buf.is_empty() || factor <= 0.0 {
         return Vec::new();
     }
-    let new_len = ((buf.len() as f64) * factor) as usize;
+    let new_len = num::f64_to_index(num::count_to_f64(buf.len()) * factor);
     let mut out = Vec::with_capacity(new_len);
     let inv = 1.0 / factor;
     for i in 0..new_len {
-        let src = i as f64 * inv;
-        let idx = src.floor() as usize;
-        let frac = src - idx as f64;
-        let a = buf[idx.min(buf.len() - 1)];
-        let b = buf[(idx + 1).min(buf.len() - 1)];
-        out.push(a + (b - a) * frac);
+        let src = num::count_to_f64(i) * inv;
+        let idx = num::f64_to_index(src.floor());
+        let frac = src - num::count_to_f64(idx);
+        // `buf` is non-empty here, so both clamped reads land; the zero
+        // fallback is unreachable.
+        let last = buf.len().saturating_sub(1);
+        let a = buf.get(idx.min(last)).copied().unwrap_or(0.0);
+        let b = buf
+            .get(idx.saturating_add(1).min(last))
+            .copied()
+            .unwrap_or(0.0);
+        out.push((b - a).mul_add(frac, a));
     }
     out
 }
 
 fn apply_attack(buf: &mut [f64], attack_s: f64, sr: f64) {
-    let n = ((attack_s * sr) as usize).min(buf.len());
+    let n = num::f64_to_index(attack_s * sr).min(buf.len());
     apply_attack_samples(buf, n);
 }
 
@@ -245,9 +250,9 @@ fn apply_attack_samples(buf: &mut [f64], n: usize) {
     if n == 0 {
         return;
     }
-    let inv = 1.0 / n as f64;
+    let inv = 1.0 / num::count_to_f64(n);
     for (i, s) in buf.iter_mut().take(n).enumerate() {
-        *s *= i as f64 * inv;
+        *s *= num::count_to_f64(i) * inv;
     }
 }
 
@@ -255,17 +260,17 @@ fn apply_attack_samples(buf: &mut [f64], n: usize) {
 /// ramp-down (envelope) or truncate hard (gate). The buffer is
 /// truncated to the window so partition counts shrink with decay.
 fn apply_decay_window(buf: &mut Vec<f64>, frac: f64, gate: bool) {
-    let keep = (((buf.len() as f64) * frac) as usize).max(1);
+    let keep = num::f64_to_index(num::count_to_f64(buf.len()) * frac).max(1);
     buf.truncate(keep);
     if !gate {
         // Envelope: ramp the kept portion down to zero across its
         // second half so the shortening is smooth, not a cliff.
         let ramp_start = keep / 2;
-        let ramp_len = (keep - ramp_start).max(1);
-        #[allow(clippy::needless_range_loop)]
-        for i in ramp_start..keep {
-            let g = 1.0 - (i - ramp_start) as f64 / ramp_len as f64;
-            buf[i] *= g;
+        let ramp_len = keep.saturating_sub(ramp_start).max(1);
+        for (i, sample) in buf.iter_mut().enumerate().skip(ramp_start).take(ramp_len) {
+            let g =
+                1.0 - num::count_to_f64(i.saturating_sub(ramp_start)) / num::count_to_f64(ramp_len);
+            *sample *= g;
         }
     }
 }
@@ -273,7 +278,7 @@ fn apply_decay_window(buf: &mut Vec<f64>, frac: f64, gate: bool) {
 fn apply_decay(buf: &mut [f64], decay_s: f64, sr: f64) {
     let t60_samples = (decay_s * sr).max(1.0);
     for (i, s) in buf.iter_mut().enumerate() {
-        let env = 10f64.powf(-3.0 * i as f64 / t60_samples);
+        let env = 10f64.powf(-3.0 * num::count_to_f64(i) / t60_samples);
         *s *= env;
     }
 }
@@ -293,7 +298,7 @@ fn apply_decay_eq(x: &mut [f64], bands: &[(f64, f64); 2], sample_rate: f64) {
         return;
     }
     let n = x.len();
-    let chunk = ((sample_rate * 0.01) as usize).max(64);
+    let chunk = num::f64_to_index(sample_rate * 0.01).max(64);
     let (lo_f, lo_db) = bands[0];
     let (hi_f, hi_db) = bands[1];
     // One-pole crossover states.
@@ -303,14 +308,15 @@ fn apply_decay_eq(x: &mut [f64], bands: &[(f64, f64); 2], sample_rate: f64) {
     let mut lp_hi = 0.0;
     let mut i = 0;
     while i < n {
-        let end = (i + chunk).min(n);
-        let t = i as f64 / n as f64;
+        let end = i.saturating_add(chunk).min(n);
+        let t = num::count_to_f64(i) / num::count_to_f64(n);
         let g_lo = 10.0f64.powf(lo_db * t / 20.0);
         let g_hi = 10.0f64.powf(hi_db * t / 20.0);
-        for v in &mut x[i..end] {
+        // `end <= n == x.len()`, so the sub-slice always exists.
+        for v in x.get_mut(i..end).unwrap_or_default() {
             let inp = *v;
-            lp_lo = (1.0 - a_lo) * inp + a_lo * lp_lo;
-            lp_hi = (1.0 - a_hi) * inp + a_hi * lp_hi;
+            lp_lo = (1.0 - a_lo).mul_add(inp, a_lo * lp_lo);
+            lp_hi = (1.0 - a_hi).mul_add(inp, a_hi * lp_hi);
             let low = lp_lo;
             let high = inp - lp_hi;
             let mid = inp - low - high;
@@ -361,7 +367,7 @@ mod tests {
 
     #[test]
     fn trim_shortens() {
-        let ir = IrAsset::from_mono((0..100).map(|i| i as f64).collect(), 1000.0);
+        let ir = IrAsset::from_mono((0..100).map(f64::from).collect(), 1000.0);
         let t = IrTransforms {
             trim_start_s: 0.010,
             trim_end_s: 0.010,

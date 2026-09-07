@@ -13,6 +13,8 @@
 //! The 3 springs create a complex interference pattern that's denser
 //! and warmer than the 2-spring Classic tank.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm, SpringDwell, SpringParams};
 use crate::primitives::one_pole::Lp1;
 use crate::primitives::spectral_delay::SpectralDelay;
@@ -38,7 +40,10 @@ struct VintageSpringUnit {
 }
 
 impl VintageSpringUnit {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "constructor needs all spring parameters for initialization"
+    )]
     fn new(
         sample_rate: f64,
         delay_ms: f64,
@@ -51,15 +56,15 @@ impl VintageSpringUnit {
         mod_depth: f64,
         initial_phase: f64,
     ) -> Self {
-        let delay_samples = (sample_rate * delay_ms * 0.001) as usize;
-        let max_delay = (sample_rate * max_delay_ms * 0.001) as usize + 48;
+        let delay_samples = num::f64_to_index(sample_rate * delay_ms * 0.001);
+        let max_delay = num::f64_to_index(sample_rate * max_delay_ms * 0.001).saturating_add(48);
 
         let mut damp = Lp1::new();
         damp.set_freq(damp_freq, sample_rate);
 
         Self {
             dispersion: SpectralDelay::new(num_sections, stretch, ap_coeff),
-            delay: DelayLine::new(max_delay + 1),
+            delay: DelayLine::new(max_delay.saturating_add(1)),
             delay_samples,
             damp,
             dc_blocker: DcBlocker::with_cutoff(38.0, 48000.0), // matches the old 0.995 pole
@@ -98,17 +103,18 @@ impl VintageSpringUnit {
             self.mod_phase -= 1.0;
         }
         // Use a more complex modulation shape (sum of two sines for irregular flutter)
-        let mod_sig = (self.mod_phase * 2.0 * PI).sin() * 0.7
-            + (self.mod_phase * 2.0 * PI * 1.47).sin() * 0.3; // Irrational ratio
+        let mod_sig = (self.mod_phase * 2.0 * PI)
+            .sin()
+            .mul_add(0.7, (self.mod_phase * 2.0 * PI * 1.47).sin() * 0.3); // Irrational ratio
         let mod_offset = mod_sig * self.mod_depth;
-        let read_pos = self.delay_samples as f64 + mod_offset;
+        let read_pos = num::count_to_f64(self.delay_samples) + mod_offset;
         let read_pos = read_pos.max(1.0);
-        let read_int = read_pos as usize;
-        let frac = read_pos - read_int as f64;
+        let read_int = num::f64_to_index(read_pos);
+        let frac = read_pos - num::count_to_f64(read_int);
 
         let s0 = self.delay.read(read_int);
-        let s1 = self.delay.read(read_int + 1);
-        let delayed = s0 + (s1 - s0) * frac;
+        let s1 = self.delay.read(read_int.saturating_add(1));
+        let delayed = (s1 - s0).mul_add(frac, s0);
 
         // Damping + saturation in feedback
         let damped = self.damp.tick(delayed);
@@ -136,7 +142,8 @@ pub struct SpringVintage {
     spring_c: VintageSpringUnit,
     /// Input band-limiting (vintage character).
     input_lp: Lp1,
-    input_hp: Lp1,
+    /// The LF content subtracted back out of the band-limited input.
+    bass_split: Lp1,
     /// Output tone.
     output_lp: Lp1,
     /// Number of active springs (1–3).
@@ -203,8 +210,8 @@ impl SpringVintage {
         // Vintage input is band-limited (smaller transducer)
         let mut input_lp = Lp1::new();
         input_lp.set_freq(5000.0, sample_rate);
-        let mut input_hp = Lp1::new();
-        input_hp.set_freq(120.0, sample_rate);
+        let mut bass_split = Lp1::new();
+        bass_split.set_freq(120.0, sample_rate);
         let mut output_lp = Lp1::new();
         output_lp.set_freq(4500.0, sample_rate);
 
@@ -213,7 +220,7 @@ impl SpringVintage {
             spring_b,
             spring_c,
             input_lp,
-            input_hp,
+            bass_split,
             output_lp,
             num_active: 3,
             named_springs: None,
@@ -229,7 +236,7 @@ impl ReverbAlgorithm for SpringVintage {
         self.spring_b.reset();
         self.spring_c.reset();
         self.input_lp.reset();
-        self.input_hp.reset();
+        self.bass_split.reset();
         self.output_lp.reset();
     }
 
@@ -239,36 +246,36 @@ impl ReverbAlgorithm for SpringVintage {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Decay → loop gain (vintage tanks can go into self-oscillation)
-        let gain = 0.45 + params.decay * 0.5; // 0.45 to 0.95
+        let gain = params.decay.mul_add(0.5, 0.45); // 0.45 to 0.95
         self.spring_a.loop_gain = gain;
         self.spring_b.loop_gain = gain;
         self.spring_c.loop_gain = gain;
 
         // Size → spring lengths
-        let base_a = 18.0 + params.size * 25.0; // 18ms to 43ms
+        let base_a = params.size.mul_add(25.0, 18.0); // 18ms to 43ms
         let base_b = base_a * 1.5; // 50% longer
         let base_c = base_a * 2.2; // 120% longer
-        self.spring_a.delay_samples = (self.sample_rate * base_a * 0.001) as usize;
-        self.spring_b.delay_samples = (self.sample_rate * base_b * 0.001) as usize;
-        self.spring_c.delay_samples = (self.sample_rate * base_c * 0.001) as usize;
+        self.spring_a.delay_samples = num::f64_to_index(self.sample_rate * base_a * 0.001);
+        self.spring_b.delay_samples = num::f64_to_index(self.sample_rate * base_b * 0.001);
+        self.spring_c.delay_samples = num::f64_to_index(self.sample_rate * base_c * 0.001);
 
         // Diffusion → chirp intensity (allpass coefficient + section count)
-        let ap_a = 0.40 + params.diffusion * 0.30; // 0.40 to 0.70
+        let ap_a = params.diffusion.mul_add(0.30, 0.40); // 0.40 to 0.70
         let ap_b = ap_a + 0.02;
         let ap_c = ap_a + 0.05; // Long spring is always chirpiest
         self.spring_a.dispersion.coefficient = ap_a;
         self.spring_b.dispersion.coefficient = ap_b;
         self.spring_c.dispersion.coefficient = ap_c;
 
-        let sec_a = 50 + (params.diffusion * 100.0) as usize; // 50-150
-        let sec_b = 60 + (params.diffusion * 120.0) as usize; // 60-180
-        let sec_c = 80 + (params.diffusion * 140.0) as usize; // 80-220
+        let sec_a = 50_usize.saturating_add(num::f64_to_index(params.diffusion * 100.0)); // 50-150
+        let sec_b = 60_usize.saturating_add(num::f64_to_index(params.diffusion * 120.0)); // 60-180
+        let sec_c = 80_usize.saturating_add(num::f64_to_index(params.diffusion * 140.0)); // 80-220
         self.spring_a.dispersion.active_sections = sec_a;
         self.spring_b.dispersion.active_sections = sec_b;
         self.spring_c.dispersion.active_sections = sec_c;
 
         // Damping → feedback LP
-        let damp_a = 1500.0 + (1.0 - params.damping) * 5500.0; // 1.5k to 7k (darker than classic)
+        let damp_a = (1.0 - params.damping).mul_add(5500.0, 1500.0); // 1.5k to 7k (darker than classic)
         let damp_b = damp_a * 0.8;
         let damp_c = damp_a * 0.6;
         self.spring_a.damp.set_freq(damp_a, self.sample_rate);
@@ -276,15 +283,15 @@ impl ReverbAlgorithm for SpringVintage {
         self.spring_c.damp.set_freq(damp_c, self.sample_rate);
 
         // Modulation → delay modulation depth (vintage flutter)
-        let mod_depth = 2.0 + params.modulation * 10.0; // 2 to 12 samples (more than classic)
+        let mod_depth = params.modulation.mul_add(10.0, 2.0); // 2 to 12 samples (more than classic)
         self.spring_a.mod_depth = mod_depth;
         self.spring_b.mod_depth = mod_depth * 1.15;
         self.spring_c.mod_depth = mod_depth * 1.3;
 
         // Tone → output LP + input LP
-        let tone_freq = 2000.0 + (1.0 + params.tone) * 0.5 * 5000.0; // 2k to 7k (lo-fi range)
+        let tone_freq = ((1.0 + params.tone) * 0.5).mul_add(5000.0, 2000.0); // 2k to 7k (lo-fi range)
         self.output_lp.set_freq(tone_freq, self.sample_rate);
-        let input_freq = 3000.0 + (1.0 + params.tone) * 0.5 * 4000.0; // 3k to 7k
+        let input_freq = ((1.0 + params.tone) * 0.5).mul_add(4000.0, 3000.0); // 3k to 7k
         self.input_lp.set_freq(input_freq, self.sample_rate);
 
         // Extra A → saturation drive (tube warmth)
@@ -305,7 +312,7 @@ impl ReverbAlgorithm for SpringVintage {
 
     fn set_spring_params(&mut self, params: &SpringParams) -> bool {
         self.dwell = params.dwell;
-        self.named_springs = Some((params.springs as usize).clamp(1, 3));
+        self.named_springs = Some(usize::from(params.springs).clamp(1, 3));
         self.num_active = self.named_springs.unwrap_or(self.num_active);
         true
     }
@@ -319,7 +326,7 @@ impl ReverbAlgorithm for SpringVintage {
         if drive > 1.001 {
             let x = mono * drive;
             let asym = if matches!(self.dwell, SpringDwell::Tube | SpringDwell::Overdrive) {
-                x + 0.12 * x * x.abs()
+                (0.12 * x).mul_add(x.abs(), x)
             } else {
                 x
             };
@@ -328,7 +335,7 @@ impl ReverbAlgorithm for SpringVintage {
 
         // Vintage band-limited input
         let lp = self.input_lp.tick(mono);
-        let hp_removed = self.input_hp.tick(mono);
+        let hp_removed = self.bass_split.tick(mono);
         let input = lp - hp_removed + mono * 0.15; // Mostly LP, subtract LF, add a touch of full-range
 
         // Process active springs

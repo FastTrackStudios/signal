@@ -3,6 +3,8 @@
 //! N parallel delay lines mixed through a unitary feedback matrix
 //! (Householder or Hadamard) with per-line damping filters.
 
+use dsp_core::num;
+
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::denormal::flush;
@@ -19,22 +21,87 @@ pub enum MixMatrix {
 }
 
 /// Generic FDN with N delay lines.
+/// Everything one delay line of the network owns.
+///
+/// This replaced sixteen parallel `Vec`s indexed by line number. The network
+/// is the core primitive under most of the algorithms in this crate, and the
+/// parallel form meant that adding a per-line term — a shelf, a jitter
+/// counter, a decay EQ — took sixteen edits to keep aligned and gave the
+/// compiler no way to notice when one was missed.
+struct Line {
+    delay: DelayLine,
+    /// Read distance in samples, clamped to the line's own length.
+    delay_samples: usize,
+    damping: Lp1,
+    dc_blocker: DcBlocker,
+    band_split: Lp1,
+    /// One-pole decay shelf: gain, pole, and its running state.
+    shelf_g: f64,
+    shelf_p: f64,
+    shelf_state: f64,
+    decay_eq: [audiocore_dsp::biquad::Biquad; crate::algorithm::DECAY_BANDS],
+    /// Length of this line's in-loop allpass, when one is fitted.
+    loop_ap_len: usize,
+    eq_low_lp: Lp1,
+    eq_high_lp: Lp1,
+    /// Random-walk delay modulation: current offset, step, and samples left
+    /// before a new step is drawn.
+    jitter_cur: f64,
+    jitter_step: f64,
+    jitter_count: u32,
+}
+
+impl Line {
+    fn new(len: usize) -> Self {
+        Self {
+            delay: DelayLine::new(len.saturating_add(1)),
+            delay_samples: len,
+            damping: Lp1::new(),
+            dc_blocker: DcBlocker::new(),
+            band_split: Lp1::new(),
+            shelf_g: 0.0,
+            shelf_p: 0.0,
+            shelf_state: 0.0,
+            decay_eq: core::array::from_fn(|_| audiocore_dsp::biquad::Biquad::new()),
+            loop_ap_len: 0,
+            eq_low_lp: Lp1::new(),
+            eq_high_lp: Lp1::new(),
+            jitter_cur: 0.0,
+            jitter_step: 0.0,
+            jitter_count: 0,
+        }
+    }
+}
+
+/// Which optional in-loop stages are active. One struct rather than
+/// three loose `*_active` bools spread down the field list.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+struct ActiveStages {
+    /// Split decay: low and high bands decay at different rates.
+    band_split: bool,
+    /// The drawn per-band decay-rate curve.
+    decay_eq: bool,
+    /// The per-line in-loop shelving EQ.
+    loop_eq: bool,
+}
+
 pub struct Fdn {
-    delays: Vec<DelayLine>,
-    delay_samples: Vec<usize>,
-    damping: Vec<Lp1>,
-    dc_blockers: Vec<DcBlocker>,
-    feedback: Vec<f64>, // Per-line state (output of delay -> matrix input)
-    decay_gain: f64,    // Overall decay multiplier
+    /// Which optional in-loop stages are engaged.
+    active: ActiveStages,
+    /// One entry per delay line.
+    lines: Vec<Line>,
+    /// Each line's last output, kept as its own vector because the mixing
+    /// matrix operates on it as a contiguous slice — that is the one piece of
+    /// per-line state the network treats as a vector rather than per line.
+    feedback: Vec<f64>,
+    decay_gain: f64, // Overall decay multiplier
     mix_matrix: MixMatrix,
     num_lines: usize,
     // 2-band decay control: split feedback into low/high via one-pole
     // crossover, multiply each by its own decay coefficient. Default
     // (1.0, 1.0) is a no-op.
-    band_split: Vec<Lp1>,
     low_decay_mult: f64,
     high_decay_mult: f64,
-    band_split_active: bool,
 
     // ── Jot per-line T60 shelf (opt-in via `set_t60`) ──────────────
     // Exact frequency-dependent decay: per line i with length Mi,
@@ -44,9 +111,6 @@ pub struct Fdn {
     // tonal-correction one-zero on the summed output so decay changes
     // don't recolor the wet spectrum.
     t60_mode: bool,
-    shelf_g: Vec<f64>,
-    shelf_p: Vec<f64>,
-    shelf_state: Vec<f64>,
     tc_b: f64,
     tc_prev: f64,
 
@@ -58,9 +122,7 @@ pub struct Fdn {
     // band's decay-time multiplier demands. Boost totals are scaled
     // down per line so the loop gain always keeps a safety margin
     // below unity.
-    decay_eq_active: bool,
     decay_eq_on: [bool; crate::algorithm::DECAY_BANDS],
-    decay_eq: Vec<[audiocore_dsp::biquad::Biquad; crate::algorithm::DECAY_BANDS]>,
 
     // ── Slow orthogonal rotation (opt-in via `set_rotation`) ───────
     // Post-matrix Givens rotations between line pairs with slowly
@@ -76,7 +138,6 @@ pub struct Fdn {
     // Zita-style Schroeder allpass inside each line's feedback path,
     // coefficients alternating ±coeff: density compounds every pass.
     loop_ap: Vec<DelayLine>,
-    loop_ap_len: Vec<usize>,
     loop_ap_coeff: f64,
 
     // ── Per-line in-loop shelving EQ (opt-in, CloudSeed-style) ─────
@@ -84,9 +145,6 @@ pub struct Fdn {
     // path: tonal color compounds per recirculation (the CloudSeed
     // per-line EQ trick). Boosts are clamped small — a shelf gain in
     // the loop multiplies the per-band loop gain.
-    loop_eq_active: bool,
-    eq_low_lp: Vec<Lp1>,
-    eq_high_lp: Vec<Lp1>,
     eq_low_gain: f64,
     eq_high_gain: f64,
 
@@ -103,9 +161,6 @@ pub struct Fdn {
     // reverbsc-style per-line drift: random targets, linear glide,
     // fractional reads — huge-but-unchorused tail animation.
     jitter_depth: f64,
-    jitter_cur: Vec<f64>,
-    jitter_step: Vec<f64>,
-    jitter_count: Vec<u32>,
     jitter_rng: XorShift32,
 }
 
@@ -114,60 +169,35 @@ impl Fdn {
     #[must_use]
     pub fn new(delay_lengths: &[usize], matrix: MixMatrix) -> Self {
         let n = delay_lengths.len();
-        let delays = delay_lengths
-            .iter()
-            .map(|&len| DelayLine::new(len + 1))
-            .collect();
-        let delay_samples = delay_lengths.to_vec();
-        let damping = (0..n).map(|_| Lp1::new()).collect();
-        let dc_blockers = (0..n).map(|_| DcBlocker::new()).collect();
-        let band_split = (0..n).map(|_| Lp1::new()).collect();
+        let lines = delay_lengths.iter().map(|&len| Line::new(len)).collect();
         let feedback = vec![0.0; n];
 
         Self {
-            delays,
-            delay_samples,
-            damping,
-            dc_blockers,
+            active: ActiveStages::default(),
+            lines,
             feedback,
             decay_gain: 0.85,
             mix_matrix: matrix,
             num_lines: n,
-            band_split,
             low_decay_mult: 1.0,
             high_decay_mult: 1.0,
-            band_split_active: false,
             t60_mode: false,
-            shelf_g: vec![0.0; n],
-            shelf_p: vec![0.0; n],
-            shelf_state: vec![0.0; n],
             tc_b: 0.0,
             tc_prev: 0.0,
-            decay_eq_active: false,
             decay_eq_on: [false; crate::algorithm::DECAY_BANDS],
-            decay_eq: (0..n)
-                .map(|_| core::array::from_fn(|_| audiocore_dsp::biquad::Biquad::new()))
-                .collect(),
             rot_depth: 0.0,
             rot_inc: 0.0,
             rot_phase: 0.0,
             rot_cs: vec![(1.0, 0.0); n / 2],
             rot_countdown: 0,
             loop_ap: Vec::new(),
-            loop_ap_len: vec![0; n],
             loop_ap_coeff: 0.0,
-            loop_eq_active: false,
-            eq_low_lp: (0..n).map(|_| Lp1::new()).collect(),
-            eq_high_lp: (0..n).map(|_| Lp1::new()).collect(),
             eq_low_gain: 1.0,
             eq_high_gain: 1.0,
             vintage: false,
             vintage_phase: 0.0,
             vintage_inc: 0.9 / 48_000.0,
             jitter_depth: 0.0,
-            jitter_cur: vec![0.0; n],
-            jitter_step: vec![0.0; n],
-            jitter_count: vec![0; n],
             jitter_rng: XorShift32::new(0xFD4_517E5),
         }
     }
@@ -185,22 +215,24 @@ impl Fdn {
     ) {
         self.low_decay_mult = low_mult.clamp(0.0, 2.0);
         self.high_decay_mult = high_mult.clamp(0.0, 2.0);
-        self.band_split_active = (low_mult - 1.0).abs() > 1e-4 || (high_mult - 1.0).abs() > 1e-4;
-        for b in &mut self.band_split {
+        self.active.band_split = (low_mult - 1.0).abs() > 1e-4 || (high_mult - 1.0).abs() > 1e-4;
+        for line in &mut self.lines {
+            let b = &mut line.band_split;
             b.set_freq(crossover_hz, sample_rate);
         }
     }
 
     /// Set all delay lengths (in samples). Must match the number of lines.
     pub fn set_delays(&mut self, lengths: &[usize]) {
-        for (i, &len) in lengths.iter().enumerate().take(self.num_lines) {
-            self.delay_samples[i] = len.min(self.delays[i].len() - 1);
+        for (line, &len) in self.lines.iter_mut().zip(lengths).take(self.num_lines) {
+            line.delay_samples = len.min(line.delay.len().saturating_sub(1));
         }
     }
 
     /// Set the damping filter cutoff for all lines.
     pub fn set_damping(&mut self, freq_hz: f64, sample_rate: f64) {
-        for d in &mut self.damping {
+        for line in &mut self.lines {
+            let d = &mut line.damping;
             d.set_freq(freq_hz, sample_rate);
         }
         // Re-tune the in-loop DC blockers while we have the sample rate.
@@ -216,20 +248,22 @@ impl Fdn {
         //
         // 3 Hz costs 0.018 dB a pass, about 5 dB over the same tail, and still
         // blocks the subsonic offset that long feedback paths accumulate.
-        for dc in &mut self.dc_blockers {
+        for line in &mut self.lines {
+            let dc = &mut line.dc_blocker;
             dc.set_cutoff(3.0, sample_rate);
         }
     }
 
     /// Set the damping coefficient directly (0.0 = no damping, 1.0 = max).
     pub fn set_damping_coeff(&mut self, g: f64) {
-        for d in &mut self.damping {
+        for line in &mut self.lines {
+            let d = &mut line.damping;
             d.set_coeff(g);
         }
     }
 
     /// Set the overall decay gain (0.0 = no feedback, 1.0 = infinite).
-    pub fn set_decay(&mut self, gain: f64) {
+    pub const fn set_decay(&mut self, gain: f64) {
         self.decay_gain = gain.clamp(0.0, 0.999);
     }
 
@@ -240,17 +274,18 @@ impl Fdn {
     pub fn set_t60(&mut self, t60_dc: f64, t60_nyq: f64, sample_rate: f64) {
         let t_dc = t60_dc.max(0.01);
         let t_ny = t60_nyq.max(0.01);
-        for i in 0..self.num_lines {
+        for line in self.lines.iter_mut().take(self.num_lines) {
             // The loop length is the delay line PLUS any in-loop allpass:
             // that allpass sits inside the feedback path, so it lengthens
             // every recirculation. Ignoring it makes the tail run long —
             // measurably so, ~1.16x for Hall's 0.6 coefficient and ~2x for
             // the Room engines once they were given the same diffusion.
-            let mi = (self.delay_samples[i] + self.loop_ap_len[i]) as f64;
+            let total_len = line.delay_samples.saturating_add(line.loop_ap_len);
+            let mi = num::count_to_f64(total_len);
             let r0 = 10.0f64.powf(-3.0 * mi / (sample_rate * t_dc));
             let rp = 10.0f64.powf(-3.0 * mi / (sample_rate * t_ny));
-            self.shelf_p[i] = (r0 - rp) / (r0 + rp);
-            self.shelf_g[i] = 2.0 * r0 * rp / (r0 + rp);
+            line.shelf_p = (r0 - rp) / (r0 + rp);
+            line.shelf_g = 2.0 * r0 * rp / (r0 + rp);
         }
         // Tonal correction: |E(ω)|² ∝ 1/T60(ω) via a one-zero.
         let alpha = (t_ny / t_dc).clamp(0.05, 20.0);
@@ -258,7 +293,7 @@ impl Fdn {
         self.t60_mode = true;
     }
 
-    pub fn clear_t60(&mut self) {
+    pub const fn clear_t60(&mut self) {
         self.t60_mode = false;
     }
 
@@ -284,21 +319,23 @@ impl Fdn {
         bands: &[crate::algorithm::DecayBand; crate::algorithm::DECAY_BANDS],
         sample_rate: f64,
     ) {
+        const PROBE_POINTS: usize = 48;
         use audiocore_dsp::biquad::FilterType;
         let any = bands.iter().any(crate::algorithm::DecayBand::is_active);
-        self.decay_eq_active = any;
+        self.active.decay_eq = any;
         if !any {
             return;
         }
         let t60 = t60_mid.max(0.01);
-        for i in 0..self.num_lines {
-            let mi = self.delay_samples[i] as f64;
+        let decay_eq_on = &mut self.decay_eq_on;
+        for line in self.lines.iter_mut().take(self.num_lines) {
+            let mi = num::count_to_f64(line.delay_samples);
             let gmid_db = -60.0 * mi / (sample_rate * t60);
             // First pass: per-band target gains at this line.
             let mut gains = [0.0f64; crate::algorithm::DECAY_BANDS];
 
-            for (b, band) in bands.iter().enumerate() {
-                self.decay_eq_on[b] = band.is_active();
+            for (on, (band, gain)) in decay_eq_on.iter_mut().zip(bands.iter().zip(&mut gains)) {
+                *on = band.is_active();
                 if !band.is_active() {
                     continue;
                 }
@@ -307,7 +344,7 @@ impl Fdn {
                     crate::algorithm::DECAY_RATE_MAX,
                 );
                 let g = gmid_db * (1.0 / r - 1.0);
-                gains[b] = g;
+                *gain = g;
             }
             // Keep >=5 % of the base attenuation however boosts overlap.
             //
@@ -323,16 +360,15 @@ impl Fdn {
             // multiplies per parameter change, off the audio thread.
             let headroom = -gmid_db * 0.95;
             let mut peak_boost = 0.0f64;
-            const PROBE_POINTS: usize = 48;
             let f_lo = 20.0f64;
             let f_hi = (sample_rate * 0.45).max(f_lo * 2.0);
-            let ratio = (f_hi / f_lo).powf(1.0 / (PROBE_POINTS - 1) as f64);
+            let ratio = (f_hi / f_lo).powf(1.0 / num::count_to_f64(PROBE_POINTS - 1));
             let mut f = f_lo;
             for _ in 0..PROBE_POINTS {
                 let mut total = 0.0f64;
-                for (b, band) in bands.iter().enumerate() {
-                    if band.is_active() && gains[b] > 0.0 {
-                        total += gains[b] * band.shape_weight_at(f);
+                for (band, gain) in bands.iter().zip(&gains) {
+                    if band.is_active() && gain > &0.0 {
+                        total += gain * band.shape_weight_at(f);
                     }
                 }
                 if total > peak_boost {
@@ -345,15 +381,12 @@ impl Fdn {
             } else {
                 1.0
             };
-            for (b, band) in bands.iter().enumerate() {
+            let curves = line.decay_eq.iter_mut().zip(bands.iter());
+            for ((filter, band), gain) in curves.zip(&gains) {
                 if !band.is_active() {
                     continue;
                 }
-                let gain_db = if gains[b] > 0.0 {
-                    gains[b] * scale
-                } else {
-                    gains[b]
-                };
+                let gain_db = if gain > &0.0 { gain * scale } else { *gain };
                 let q = band.q.clamp(0.1, 18.0);
                 let f = band.freq_hz.clamp(20.0, sample_rate * 0.45);
                 let ftype = match band.shape {
@@ -361,7 +394,7 @@ impl Fdn {
                     2 => FilterType::HighShelf { gain_db },
                     _ => FilterType::Peak { gain_db },
                 };
-                self.decay_eq[i][b].set(ftype, f, q, sample_rate);
+                filter.set(ftype, f, q, sample_rate);
             }
         }
     }
@@ -383,11 +416,15 @@ impl Fdn {
     pub fn set_loop_allpass(&mut self, coeff: f64) {
         self.loop_ap_coeff = coeff.clamp(-0.9, 0.9);
         if self.loop_ap_coeff.abs() > 1e-4 && self.loop_ap.is_empty() {
-            for i in 0..self.num_lines {
+            let loop_ap = &mut self.loop_ap;
+            for (i, line) in self.lines.iter_mut().take(self.num_lines).enumerate() {
                 // Short prime-ish lengths derived from the line length.
-                let len = (self.delay_samples[i] / 7 + 19 + 26 * i) | 1;
-                self.loop_ap_len[i] = len;
-                self.loop_ap.push(DelayLine::new(len + 4));
+                let len = (line.delay_samples.saturating_div(7))
+                    .saturating_add(19)
+                    .saturating_add(i.saturating_mul(26))
+                    | 1;
+                line.loop_ap_len = len;
+                loop_ap.push(DelayLine::new(len.saturating_add(4)));
             }
         }
     }
@@ -406,12 +443,14 @@ impl Fdn {
     ) {
         self.eq_low_gain = 10.0f64.powf(low_gain_db.min(2.0) / 20.0);
         self.eq_high_gain = 10.0f64.powf(high_gain_db.min(2.0) / 20.0);
-        self.loop_eq_active =
+        self.active.loop_eq =
             (self.eq_low_gain - 1.0).abs() > 1e-3 || (self.eq_high_gain - 1.0).abs() > 1e-3;
-        for lp in &mut self.eq_low_lp {
+        for line in &mut self.lines {
+            let lp = &mut line.eq_low_lp;
             lp.set_freq(low_hz.clamp(40.0, 2000.0), sample_rate);
         }
-        for lp in &mut self.eq_high_lp {
+        for line in &mut self.lines {
+            let lp = &mut line.eq_high_lp;
             lp.set_freq(high_hz.clamp(800.0, 12000.0), sample_rate);
         }
     }
@@ -431,146 +470,30 @@ impl Fdn {
     }
 
     /// Process one mono input sample, return the mixed output of all lines.
+    ///
+    /// Every walk over the lines pairs `lines` with `feedback` through a
+    /// `zip`, so `num_lines` running ahead of either vector shortens the
+    /// walk instead of panicking.
     #[inline]
     pub fn tick(&mut self, input: f64) -> f64 {
         let n = self.num_lines;
 
-        // Read from all delay lines (fractional when jittered).
-        if self.vintage {
-            // Classic voice: one shared sine sweeps every line (common-
-            // mode = audible chorus), truncated reads grind the sweep.
-            self.vintage_phase += self.vintage_inc;
-            if self.vintage_phase >= 1.0 {
-                self.vintage_phase -= 1.0;
-            }
-            let sweep = (self.vintage_phase * core::f64::consts::TAU).sin() * 3.5;
-            for i in 0..n {
-                let pos = (self.delay_samples[i] as f64 + sweep)
-                    .clamp(1.0, (self.delays[i].len() - 2) as f64);
-                self.feedback[i] = self.delays[i].read(pos as usize);
-            }
-        } else if self.jitter_depth > 1e-9 {
-            for i in 0..n {
-                if self.jitter_count[i] == 0 {
-                    // New random drift target, glide over 300–1500 samples.
-                    let interval = 300 + (self.jitter_rng.next_bipolar().abs() * 1200.0) as u32;
-                    let target = self.jitter_rng.next_bipolar() * self.jitter_depth;
-                    self.jitter_step[i] = (target - self.jitter_cur[i]) / interval as f64;
-                    self.jitter_count[i] = interval;
-                }
-                self.jitter_count[i] -= 1;
-                self.jitter_cur[i] += self.jitter_step[i];
-                let pos = (self.delay_samples[i] as f64 + self.jitter_cur[i])
-                    .clamp(1.0, (self.delays[i].len() - 2) as f64);
-                self.feedback[i] = self.delays[i].read_linear(pos);
-            }
-        } else {
-            for i in 0..n {
-                self.feedback[i] = self.delays[i].read(self.delay_samples[i]);
-            }
-        }
+        self.read_lines(n);
 
         // Sum output before mixing (tap from raw delay outputs).
+        let output_scale = 1.0 / num::count_to_f64(n).sqrt();
         let mut output = 0.0;
-        let output_scale = 1.0 / (n as f64).sqrt();
-        for i in 0..n {
-            output += self.feedback[i] * output_scale;
+        for fb in self.feedback.iter().take(n) {
+            output += *fb * output_scale;
         }
 
-        // Apply mixing matrix
-        match self.mix_matrix {
-            MixMatrix::Householder => householder::mix(&mut self.feedback[..n]),
-            MixMatrix::Hadamard => {
-                // Hadamard requires power of 2 — if not, fall back to Householder
-                if n.is_power_of_two() {
-                    super::hadamard::mix(&mut self.feedback[..n]);
-                } else {
-                    householder::mix(&mut self.feedback[..n]);
-                }
-            }
-        }
-
-        // Slow orthogonal rotation between line pairs (tail animation).
-        if self.rot_depth > 1e-9 && n >= 2 {
-            if self.rot_countdown == 0 {
-                self.rot_countdown = 16;
-                self.rot_phase = (self.rot_phase + self.rot_inc * 16.0).fract();
-                for (k, cs) in self.rot_cs.iter_mut().enumerate() {
-                    let theta = self.rot_depth
-                        * (core::f64::consts::TAU * (self.rot_phase + k as f64 * 0.31)).sin();
-                    *cs = (theta.cos(), theta.sin());
-                }
-            }
-            self.rot_countdown -= 1;
-            for k in 0..n / 2 {
-                let (c, sn) = self.rot_cs[k];
-                let a = self.feedback[2 * k];
-                let b = self.feedback[2 * k + 1];
-                self.feedback[2 * k] = c * a - sn * b;
-                self.feedback[2 * k + 1] = sn * a + c * b;
-            }
-        }
-
-        for i in 0..n {
-            // Per-line decay: exact Jot T60 shelf when engaged,
-            // otherwise the legacy damping · decay · band-split path.
-            let mut sig = if self.t60_mode {
-                let y = self.shelf_g[i] * self.feedback[i] + self.shelf_p[i] * self.shelf_state[i];
-                self.shelf_state[i] = flush(y);
-                y
-            } else {
-                let mut sig = self.damping[i].tick(self.feedback[i]) * self.decay_gain;
-                if self.band_split_active {
-                    let low = self.band_split[i].tick(sig);
-                    let high = sig - low;
-                    sig = low * self.low_decay_mult + high * self.high_decay_mult;
-                }
-                sig
-            };
-
-            // Decay Rate EQ: the per-line curve filters, multiplying the
-            // loop response so decay time follows the drawn curve
-            // (`fx.reverb.decay-eq`).
-            if self.decay_eq_active {
-                for b in 0..crate::algorithm::DECAY_BANDS {
-                    if self.decay_eq_on[b] {
-                        sig = self.decay_eq[i][b].tick(sig, 0);
-                    }
-                }
-            }
-
-            // In-loop allpass: density compounds each recirculation.
-            if self.loop_ap_coeff.abs() > 1e-4 && !self.loop_ap.is_empty() {
-                let g = if i % 2 == 0 {
-                    self.loop_ap_coeff
-                } else {
-                    -self.loop_ap_coeff
-                };
-                let delayed = self.loop_ap[i].read(self.loop_ap_len[i]);
-                let v = sig - g * delayed;
-                self.loop_ap[i].write(v);
-                sig = delayed + g * v;
-            }
-
-            // Per-line loop shelving EQ (color compounds per pass).
-            if self.loop_eq_active {
-                let low = self.eq_low_lp[i].tick(sig);
-                sig += (self.eq_low_gain - 1.0) * low;
-                let lp2 = self.eq_high_lp[i].tick(sig);
-                sig += (self.eq_high_gain - 1.0) * (sig - lp2);
-            }
-
-            // Block DC in the recirculating path — long tails otherwise
-            // accumulate subsonic offset (worst with pitch-shifted or
-            // saturated feedback around the FDN).
-            sig = self.dc_blockers[i].tick(sig);
-            self.delays[i].write(flush(input + sig));
-        }
+        self.mix(n);
+        self.recirculate(n, input);
 
         // Jot tonal correction (one-zero) so T60 changes don't recolor
         // the wet spectrum.
         if self.t60_mode && self.tc_b.abs() > 1e-9 {
-            let corrected = (output - self.tc_b * self.tc_prev) / (1.0 - self.tc_b);
+            let corrected = self.tc_b.mul_add(-self.tc_prev, output) / (1.0 - self.tc_b);
             self.tc_prev = output;
             corrected
         } else {
@@ -579,38 +502,204 @@ impl Fdn {
     }
 
     pub fn reset(&mut self) {
-        for d in &mut self.delays {
+        for line in &mut self.lines {
+            let d = &mut line.delay;
             d.clear();
         }
-        for d in &mut self.damping {
+        for line in &mut self.lines {
+            let d = &mut line.damping;
             d.reset();
         }
-        for b in &mut self.band_split {
+        for line in &mut self.lines {
+            let b = &mut line.band_split;
             b.reset();
         }
-        for dc in &mut self.dc_blockers {
+        for line in &mut self.lines {
+            let dc = &mut line.dc_blocker;
             dc.reset();
         }
         for ap in &mut self.loop_ap {
             ap.clear();
         }
-        for line in &mut self.decay_eq {
+        for line in &mut self.lines {
+            let line = &mut line.decay_eq;
             for bq in line.iter_mut() {
                 bq.reset();
             }
         }
-        for lp in &mut self.eq_low_lp {
+        for line in &mut self.lines {
+            let lp = &mut line.eq_low_lp;
             lp.reset();
         }
-        for lp in &mut self.eq_high_lp {
+        for line in &mut self.lines {
+            let lp = &mut line.eq_high_lp;
             lp.reset();
         }
-        self.shelf_state.fill(0.0);
+        for line in &mut self.lines {
+            line.shelf_state = 0.0;
+            line.jitter_cur = 0.0;
+            line.jitter_step = 0.0;
+            line.jitter_count = 0;
+        }
         self.tc_prev = 0.0;
-        self.jitter_cur.fill(0.0);
-        self.jitter_step.fill(0.0);
-        self.jitter_count.fill(0);
         self.feedback.fill(0.0);
+    }
+
+    /// Fill `feedback` from each line's delay output — a fractional read
+    /// when the vintage sweep or the jitter walk is moving it.
+    fn read_lines(&mut self, n: usize) {
+        if self.vintage {
+            // Classic voice: one shared sine sweeps every line (common-
+            // mode = audible chorus), truncated reads grind the sweep.
+            self.vintage_phase += self.vintage_inc;
+            if self.vintage_phase >= 1.0 {
+                self.vintage_phase -= 1.0;
+            }
+            let sweep = (self.vintage_phase * core::f64::consts::TAU).sin() * 3.5;
+            for (line, fb) in self.lines.iter_mut().zip(&mut self.feedback).take(n) {
+                let pos = (num::count_to_f64(line.delay_samples) + sweep)
+                    .clamp(1.0, num::count_to_f64(line.delay.len().saturating_sub(2)));
+                *fb = line.delay.read(num::f64_to_index(pos));
+            }
+        } else if self.jitter_depth > 1e-9 {
+            let rng = &mut self.jitter_rng;
+            let depth = self.jitter_depth;
+            for (line, fb) in self.lines.iter_mut().zip(&mut self.feedback).take(n) {
+                if line.jitter_count == 0 {
+                    // New random drift target, glide over 300–1500 samples.
+                    let interval =
+                        300u32.saturating_add(num::f64_to_u32(rng.next_bipolar().abs() * 1200.0));
+                    let target = rng.next_bipolar() * depth;
+                    line.jitter_step = (target - line.jitter_cur) / f64::from(interval);
+                    line.jitter_count = interval;
+                }
+                line.jitter_count = line.jitter_count.saturating_sub(1);
+                line.jitter_cur += line.jitter_step;
+                let pos = (num::count_to_f64(line.delay_samples) + line.jitter_cur)
+                    .clamp(1.0, num::count_to_f64(line.delay.len().saturating_sub(2)));
+                *fb = line.delay.read_linear(pos);
+            }
+        } else {
+            for (line, fb) in self.lines.iter_mut().zip(&mut self.feedback).take(n) {
+                *fb = line.delay.read(line.delay_samples);
+            }
+        }
+    }
+
+    /// Apply the mixing matrix, then the slow Givens rotation between
+    /// line pairs.
+    fn mix(&mut self, n: usize) {
+        // `n <= feedback.len()` by construction, so
+        // the `else` never runs; it just keeps the mix off a panic.
+        let matrix = self.mix_matrix;
+        if let Some(bus) = self.feedback.get_mut(..n) {
+            match matrix {
+                // Hadamard requires power of 2 — if not, fall back to Householder
+                MixMatrix::Hadamard if n.is_power_of_two() => super::hadamard::mix(bus),
+                MixMatrix::Householder | MixMatrix::Hadamard => householder::mix(bus),
+            }
+        }
+
+        // Slow orthogonal rotation between line pairs (tail animation).
+        if self.rot_depth > 1e-9 && n >= 2 {
+            if self.rot_countdown == 0 {
+                self.rot_countdown = 16;
+                self.rot_phase = self.rot_inc.mul_add(16.0, self.rot_phase).fract();
+                for (k, cs) in self.rot_cs.iter_mut().enumerate() {
+                    let theta = self.rot_depth
+                        * (core::f64::consts::TAU
+                            * num::count_to_f64(k).mul_add(0.31, self.rot_phase))
+                        .sin();
+                    *cs = (theta.cos(), theta.sin());
+                }
+            }
+            self.rot_countdown = self.rot_countdown.saturating_sub(1);
+            // Chunks of two are the (2k, 2k + 1) pairs the rotation used
+            // to address by hand.
+            for (pair, &(c, sn)) in self
+                .feedback
+                .chunks_exact_mut(2)
+                .zip(&self.rot_cs)
+                .take(n / 2)
+            {
+                let [first, second] = pair else {
+                    continue;
+                };
+                let (a, b) = (*first, *second);
+                *first = c.mul_add(a, -(sn * b));
+                *second = sn.mul_add(a, c * b);
+            }
+        }
+    }
+
+    /// Per-line decay, EQ and diffusion, back into each delay line.
+    fn recirculate(&mut self, n: usize, input: f64) {
+        let Self {
+            lines,
+            feedback,
+            loop_ap,
+            decay_eq_on,
+            ..
+        } = self;
+        for (i, (line, fb)) in lines.iter_mut().zip(feedback.iter()).take(n).enumerate() {
+            // Per-line decay: exact Jot T60 shelf when engaged,
+            // otherwise the legacy damping · decay · band-split path.
+            let mut sig = if self.t60_mode {
+                let y = line.shelf_g.mul_add(*fb, line.shelf_p * line.shelf_state);
+                line.shelf_state = flush(y);
+                y
+            } else {
+                let mut sig = line.damping.tick(*fb) * self.decay_gain;
+                if self.active.band_split {
+                    let low = line.band_split.tick(sig);
+                    let high = sig - low;
+                    sig = low.mul_add(self.low_decay_mult, high * self.high_decay_mult);
+                }
+                sig
+            };
+
+            // Decay Rate EQ: the per-line curve filters, multiplying the
+            // loop response so decay time follows the drawn curve
+            // (`fx.reverb.decay-eq`).
+            if self.active.decay_eq {
+                for (on, band) in decay_eq_on.iter().zip(line.decay_eq.iter_mut()) {
+                    if *on {
+                        sig = band.tick(sig, 0);
+                    }
+                }
+            }
+
+            // In-loop allpass: density compounds each recirculation.
+            if self.loop_ap_coeff.abs() > 1e-4 {
+                let g = if i % 2 == 0 {
+                    self.loop_ap_coeff
+                } else {
+                    -self.loop_ap_coeff
+                };
+                // `loop_ap` is empty until sized, which is why this is a
+                // lookup rather than a fourth arm of the zip.
+                if let Some(ap) = loop_ap.get_mut(i) {
+                    let delayed = ap.read(line.loop_ap_len);
+                    let v = sig - g * delayed;
+                    ap.write(v);
+                    sig = delayed + g * v;
+                }
+            }
+
+            // Per-line loop shelving EQ (color compounds per pass).
+            if self.active.loop_eq {
+                let low = line.eq_low_lp.tick(sig);
+                sig += (self.eq_low_gain - 1.0) * low;
+                let lp2 = line.eq_high_lp.tick(sig);
+                sig += (self.eq_high_gain - 1.0) * (sig - lp2);
+            }
+
+            // Block DC in the recirculating path — long tails otherwise
+            // accumulate subsonic offset (worst with pitch-shifted or
+            // saturated feedback around the FDN).
+            sig = line.dc_blocker.tick(sig);
+            line.delay.write(flush(input + sig));
+        }
     }
 }
 

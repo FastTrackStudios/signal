@@ -15,7 +15,7 @@
 
 use audiocore_dsp::AudioConfig;
 use eq_dsp::FilterType;
-use eq_dsp::band::Band;
+use eq_dsp::runtime::band::Band;
 
 use crate::spectral_flux::{FluxMode, SpectralFluxDetector};
 
@@ -38,14 +38,56 @@ pub struct BandTrigger {
 }
 
 /// Multi-band onset detector.
+/// The two halves of one crossover point, both tuned to the same
+/// frequency: `lo_filters` and `hi_filters`, two parallel `[Band; 3]`
+/// arrays walked by the same index, before.
+///
+/// A `Band` carries two full section cascades, so three of them do not
+/// belong in a stack local — hence the `Box` at the use site.
+struct Split {
+    lo: Band,
+    hi: Band,
+}
+
+impl Split {
+    fn new(freq_hz: f64, sample_rate: f64) -> Self {
+        let band = |filter_type: FilterType| {
+            let mut b = Band::new();
+            b.filter_type = filter_type;
+            b.freq_hz = freq_hz;
+            b.q = 0.707; // Butterworth
+            b.order = 2;
+            b.enabled = true;
+            b.update(sample_rate);
+            b
+        };
+        Self {
+            lo: band(FilterType::Lowpass),
+            hi: band(FilterType::Highpass),
+        }
+    }
+
+    fn set_freq(&mut self, freq_hz: f64, sample_rate: f64) {
+        self.lo.freq_hz = freq_hz;
+        self.lo.update(sample_rate);
+        self.hi.freq_hz = freq_hz;
+        self.hi.update(sample_rate);
+    }
+
+    fn reset(&mut self) {
+        self.lo.reset();
+        self.hi.reset();
+    }
+}
+
 pub struct MultibandDetector {
     // Crossover filters: 3 crossover points = 6 filter bands
     // Band 0: LPF at crossover[0]
     // Band 1: HPF at crossover[0], LPF at crossover[1]
     // Band 2: HPF at crossover[1], LPF at crossover[2]
     // Band 3: HPF at crossover[2]
-    lo_filters: [Band; 3], // Low-pass at each crossover
-    hi_filters: [Band; 3], // High-pass at each crossover
+    /// One split per crossover point, in ascending frequency order.
+    splits: [Box<Split>; 3],
 
     // Per-band onset detectors
     detectors: [SpectralFluxDetector; NUM_BANDS],
@@ -73,38 +115,7 @@ impl MultibandDetector {
             max_buffer_size: 512,
         };
 
-        let make_lpf = |freq: f64| -> Band {
-            let mut b = Band::new();
-            b.filter_type = FilterType::Lowpass;
-            b.freq_hz = freq;
-            b.q = 0.707; // Butterworth
-            b.order = 2;
-            b.enabled = true;
-            b.update(config.sample_rate);
-            b
-        };
-
-        let make_hpf = |freq: f64| -> Band {
-            let mut b = Band::new();
-            b.filter_type = FilterType::Highpass;
-            b.freq_hz = freq;
-            b.q = 0.707;
-            b.order = 2;
-            b.enabled = true;
-            b.update(config.sample_rate);
-            b
-        };
-
-        let lo_filters = [
-            make_lpf(DEFAULT_CROSSOVERS[0]),
-            make_lpf(DEFAULT_CROSSOVERS[1]),
-            make_lpf(DEFAULT_CROSSOVERS[2]),
-        ];
-        let hi_filters = [
-            make_hpf(DEFAULT_CROSSOVERS[0]),
-            make_hpf(DEFAULT_CROSSOVERS[1]),
-            make_hpf(DEFAULT_CROSSOVERS[2]),
-        ];
+        let splits = DEFAULT_CROSSOVERS.map(|freq| Box::new(Split::new(freq, config.sample_rate)));
 
         // Use smaller FFT for lower latency in multiband mode
         let fft_size = 1024;
@@ -115,8 +126,7 @@ impl MultibandDetector {
         });
 
         Self {
-            lo_filters,
-            hi_filters,
+            splits,
             detectors,
             thresholds: [0.5; NUM_BANDS],
             enabled: [true; NUM_BANDS],
@@ -130,11 +140,8 @@ impl MultibandDetector {
     pub fn update(&mut self, config: AudioConfig) {
         self.config = config;
 
-        for (i, &freq) in self.crossovers.iter().enumerate() {
-            self.lo_filters[i].freq_hz = freq;
-            self.lo_filters[i].update(config.sample_rate);
-            self.hi_filters[i].freq_hz = freq;
-            self.hi_filters[i].update(config.sample_rate);
+        for (split, &freq) in self.splits.iter_mut().zip(&self.crossovers) {
+            split.set_freq(freq, config.sample_rate);
         }
 
         for det in &mut self.detectors {
@@ -144,11 +151,8 @@ impl MultibandDetector {
 
     /// Reset all state.
     pub fn reset(&mut self) {
-        for f in &mut self.lo_filters {
-            f.reset();
-        }
-        for f in &mut self.hi_filters {
-            f.reset();
+        for split in &mut self.splits {
+            split.reset();
         }
         for d in &mut self.detectors {
             d.reset();
@@ -166,19 +170,18 @@ impl MultibandDetector {
 
         // Split into bands using crossover filters
         // Band 0: LPF(crossover[0])
-        let band0 = self.lo_filters[0].tick(sample, 0);
+        let band0 = self.splits[0].lo.tick(sample, 0);
 
         // Band 1: HPF(crossover[0]) → LPF(crossover[1])
-        let hp0 = self.hi_filters[0].tick(sample, 0);
-        let band1 = self.lo_filters[1].tick(hp0, 0);
+        let hp0 = self.splits[0].hi.tick(sample, 0);
+        let band1 = self.splits[1].lo.tick(hp0, 0);
 
         // Band 2: HPF(crossover[1]) → LPF(crossover[2])
-        let hp1 = self.hi_filters[1].tick(sample, 0);
-        let hp1_lp = self.lo_filters[2].tick(hp1, 0);
-        let band2 = hp1_lp;
+        let hp1 = self.splits[1].hi.tick(sample, 0);
+        let band2 = self.splits[2].lo.tick(hp1, 0);
 
         // Band 3: HPF(crossover[2])
-        let band3 = self.hi_filters[2].tick(sample, 0);
+        let band3 = self.splits[2].hi.tick(sample, 0);
 
         let band_signals = [band0, band1, band2, band3];
 
@@ -187,10 +190,10 @@ impl MultibandDetector {
                 continue;
             }
 
-            if let Some(odf) = self.detectors[b].tick(sig) {
-                if self.detectors[b].is_peak(odf, self.thresholds[b]) {
-                    triggers[b] = Some(BandTrigger { band: b, odf });
-                }
+            if let Some(odf) = self.detectors[b].tick(sig)
+                && self.detectors[b].is_peak(odf, self.thresholds[b])
+            {
+                triggers[b] = Some(BandTrigger { band: b, odf });
             }
         }
 

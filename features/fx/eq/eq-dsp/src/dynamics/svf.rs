@@ -161,10 +161,10 @@ impl Svf {
         if let Some(ic2) = self.ic2.get_mut(ch) {
             *ic2 = 2.0f64.mul_add(v2, -*ic2);
         }
-        self.m0 * x + self.m1 * v1 + self.m2 * v2
+        self.m2.mul_add(v2, self.m0.mul_add(x, self.m1 * v1))
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.ic1 = [0.0; 2];
         self.ic2 = [0.0; 2];
     }
@@ -182,7 +182,7 @@ mod tests {
         let mut in_e = 0.0;
         let mut out_e = 0.0;
         for i in 0..n {
-            let x = (core::f64::consts::TAU * freq * i as f64 / SR).sin();
+            let x = (core::f64::consts::TAU * freq * f64::from(i) / SR).sin();
             let y = svf.tick(0, x);
             if i > n / 2 {
                 in_e += x * x;

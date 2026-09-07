@@ -6,7 +6,7 @@
 
 use audiocore_dsp::{AudioConfig, Processor};
 use eq_dsp::FilterType;
-use eq_dsp::band::Band;
+use eq_dsp::runtime::band::Band;
 
 use crate::detector::{DetectMode, TriggerDetector};
 use crate::sampler::{MixMode, Sampler};

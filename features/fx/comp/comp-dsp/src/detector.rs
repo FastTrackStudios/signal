@@ -22,7 +22,7 @@ impl Default for Detector {
 
 impl Detector {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             peak: 0.0,
             rms_power: 0.0,
@@ -30,7 +30,7 @@ impl Detector {
         }
     }
 
-    pub fn update_sample_rate(&mut self, sample_rate: f64) {
+    pub const fn update_sample_rate(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate.max(1.0);
     }
 
@@ -55,11 +55,11 @@ impl Detector {
 
         let rms = self.rms_power.sqrt();
         let mix = rms_mix.clamp(0.0, 1.0);
-        let detected = input_abs * (1.0 - mix) + rms * mix;
+        let detected = input_abs.mul_add(1.0 - mix, rms * mix);
         linear_to_db(detected).max(DB_FLOOR)
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.peak = 0.0;
         self.rms_power = 0.0;
     }

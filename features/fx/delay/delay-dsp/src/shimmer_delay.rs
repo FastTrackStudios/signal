@@ -14,6 +14,7 @@ use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::num;
 use pitch_dsp::wsola::WsolaShifter;
 
 /// Shimmer delay with pitch shifting in the feedback path.
@@ -84,7 +85,7 @@ impl ShimmerDelay {
 
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S).saturating_add(1024);
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -104,13 +105,13 @@ impl ShimmerDelay {
         // WSOLA grain: derived from grain_ms but bounded — the splice
         // correlation search cost grows with grain size. Reconfigure only
         // on real change (update resets the shifter pipeline).
-        let base_grain = ((self.grain_ms * 0.001 * 48000.0) as usize).clamp(256, 2048);
+        let base_grain = num::f64_to_index(self.grain_ms * 0.001 * 48000.0).clamp(256, 2048);
         if base_grain != self.shifter.base_grain_size
             || (sample_rate - self.sample_rate).abs() > 1e-9
         {
             self.shifter.base_grain_size = base_grain;
             self.shifter.update(sample_rate);
-            self.shifter_latency = self.shifter.latency() as f64;
+            self.shifter_latency = num::count_to_f64(self.shifter.latency());
         }
 
         self.dc_blocker.set_cutoff(10.0, sample_rate);
@@ -123,7 +124,7 @@ impl ShimmerDelay {
         self.smoother.set_target(target_delay);
         let smooth_delay = self.smoother.tick();
 
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.delay.len()) - 4.0;
 
         // === Normal (unpitched) read ===
         let normal_output = self.delay.read_cubic(smooth_delay.clamp(1.0, max_read));
@@ -150,7 +151,7 @@ impl ShimmerDelay {
 
         // Self-limiting feedback (from PitchDelay)
         if fb.abs() > 0.001 {
-            fb = fb * (3.0 - fb.abs() * 2.0).max(0.0) / 3.0;
+            fb = fb * fb.abs().mul_add(-2.0, 3.0).max(0.0) / 3.0;
         }
         // Pitch-shifted feedback is the classic DC/subsonic accumulator —
         // block it inside the loop.
@@ -163,7 +164,7 @@ impl ShimmerDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -206,7 +207,7 @@ mod tests {
         }
 
         assert!(
-            (peak_pos as i64 - 4800).unsigned_abs() < 10,
+            (i64::from(peak_pos) - 4800).unsigned_abs() < 10,
             "Peak at {peak_pos}, expected near 4800"
         );
     }
@@ -229,7 +230,7 @@ mod tests {
 
         let mut diff = 0.0;
         for i in 0..19200 {
-            let s = (std::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+            let s = (std::f64::consts::PI * 2.0 * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let a = d_dry.tick(s, 0);
             let b = d_shimmer.tick(s, 0);
             diff += (a - b).abs();
@@ -249,7 +250,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (std::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input = (std::f64::consts::PI * 2.0 * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at sample {i}");
         }

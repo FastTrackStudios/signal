@@ -23,14 +23,14 @@ pub use audiocore_dsp::biquad::Biquad;
 pub fn design_lowpass_biquad(normalized_cutoff: f64) -> Biquad {
     let fc = normalized_cutoff.clamp(0.001, 0.999);
     let tan_half_omega = (PI * fc / 2.0).tan();
-    let a = 1.0 / (1.0 + 2.0 * tan_half_omega + tan_half_omega * tan_half_omega);
+    let a = 1.0 / (2.0f64.mul_add(tan_half_omega, 1.0) + tan_half_omega * tan_half_omega);
 
     let mut filter = Biquad::new();
     filter.b0 = a * tan_half_omega * tan_half_omega;
     filter.b1 = 2.0 * a * tan_half_omega * tan_half_omega;
     filter.b2 = a * tan_half_omega * tan_half_omega;
     filter.a1 = 2.0 * a * (tan_half_omega * tan_half_omega - 1.0);
-    filter.a2 = a * (1.0 - 2.0 * tan_half_omega + tan_half_omega * tan_half_omega);
+    filter.a2 = a * (2.0f64.mul_add(-tan_half_omega, 1.0) + tan_half_omega * tan_half_omega);
     filter
 }
 
@@ -41,14 +41,14 @@ pub fn design_lowpass_biquad(normalized_cutoff: f64) -> Biquad {
 pub fn design_highpass_biquad(normalized_cutoff: f64) -> Biquad {
     let fc = normalized_cutoff.clamp(0.001, 0.999);
     let tan_half_omega = (PI * fc / 2.0).tan();
-    let a = 1.0 / (1.0 + 2.0 * tan_half_omega + tan_half_omega * tan_half_omega);
+    let a = 1.0 / (2.0f64.mul_add(tan_half_omega, 1.0) + tan_half_omega * tan_half_omega);
 
     let mut filter = Biquad::new();
     filter.b0 = a;
     filter.b1 = -2.0 * a;
     filter.b2 = a;
     filter.a1 = 2.0 * a * (tan_half_omega * tan_half_omega - 1.0);
-    filter.a2 = a * (1.0 - 2.0 * tan_half_omega + tan_half_omega * tan_half_omega);
+    filter.a2 = a * (2.0f64.mul_add(-tan_half_omega, 1.0) + tan_half_omega * tan_half_omega);
     filter
 }
 
@@ -108,7 +108,7 @@ mod tests {
         let mut hp = design_highpass_biquad(norm);
         let mut peak: f64 = 0.0;
         for n in 0..48000 {
-            let x = (2.0 * PI * 1000.0 * n as f64 / sr).sin();
+            let x = (2.0 * PI * 1000.0 * f64::from(n) / sr).sin();
             let y = hp.tick(x, 0);
             if n > 4800 {
                 peak = peak.max(y.abs());
@@ -133,7 +133,7 @@ mod tests {
         let mut lp = design_lowpass_biquad(norm);
         let mut peak: f64 = 0.0;
         for n in 0..48000 {
-            let x = (2.0 * PI * 10000.0 * n as f64 / sr).sin();
+            let x = (2.0 * PI * 10000.0 * f64::from(n) / sr).sin();
             let y = lp.tick(x, 0);
             if n > 4800 {
                 peak = peak.max(y.abs());

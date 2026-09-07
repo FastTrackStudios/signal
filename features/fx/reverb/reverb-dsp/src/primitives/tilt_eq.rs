@@ -91,7 +91,7 @@ mod tests {
         let n = 9600;
         let mut sum = 0.0;
         for i in 0..n {
-            let x = (2.0 * PI * freq * i as f64 / SR).sin();
+            let x = (2.0 * PI * freq * f64::from(i) / SR).sin();
             let y = eq.tick(x);
             if i > n / 2 {
                 sum += y * y;
@@ -123,7 +123,7 @@ mod tests {
         let mut eq = TiltEq::new(SR);
         eq.set_tilt_db(0.0);
         for i in 0..4800 {
-            let x = (2.0 * PI * 1000.0 * i as f64 / SR).sin() * 0.5;
+            let x = (2.0 * PI * 1000.0 * f64::from(i) / SR).sin() * 0.5;
             let y = eq.tick(x);
             assert!(y.is_finite());
         }

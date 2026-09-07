@@ -7,6 +7,8 @@
 //!   - Bright, present character
 //!   - Fast density saturation (small volume fills quickly)
 
+use dsp_core::num;
+
 use crate::algorithm::{
     AlgorithmParams, ChamberColor, ChamberParams, ROOM_CHAMBER_T60, ReverbAlgorithm, decay_to_t60,
     t60_shelf_targets,
@@ -14,11 +16,46 @@ use crate::algorithm::{
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
-use crate::primitives::multitap_delay::{MultitapDelay, Tap};
+use crate::primitives::multitap_delay::{MultitapDelay, Tap, sign_balance};
 use crate::primitives::one_pole::Lp1;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 
 const FDN_MOD_AP_COUNT: usize = 8;
+
+/// Chamber ER: very dense and close together — a small room with the
+/// walls nearby.
+///
+/// `(delay in samples at 48 kHz, gain)`, scaled by rate and size.
+const ER_TAPS_L: [(f64, f64); 12] = [
+    (31.0, 0.92),
+    (59.0, 0.85),
+    (89.0, 0.78),
+    (127.0, 0.68),
+    (167.0, 0.58),
+    (211.0, 0.48),
+    (263.0, 0.38),
+    (317.0, 0.28),
+    (379.0, 0.20),
+    (443.0, 0.14),
+    (509.0, 0.09),
+    (577.0, 0.05),
+];
+
+/// The right channel's train, offset from the left for decorrelation.
+const ER_TAPS_R: [(f64, f64); 12] = [
+    (37.0, 0.92),
+    (67.0, 0.85),
+    (101.0, 0.78),
+    (139.0, 0.68),
+    (181.0, 0.58),
+    (227.0, 0.48),
+    (277.0, 0.38),
+    (331.0, 0.28),
+    (397.0, 0.20),
+    (461.0, 0.14),
+    (523.0, 0.09),
+    (593.0, 0.05),
+];
 
 pub struct RoomChamber {
     er_l: MultitapDelay,
@@ -49,7 +86,7 @@ pub struct RoomChamber {
 impl RoomChamber {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_er = (sample_rate * 0.04) as usize; // 40ms max ER (small space)
+        let max_er = num::f64_to_index(sample_rate * 0.04); // 40ms max ER (small space)
 
         let mod_ap_l = std::array::from_fn(|_| ModulatedAllpass::new());
         let mod_ap_r = std::array::from_fn(|_| ModulatedAllpass::new());
@@ -90,15 +127,15 @@ impl RoomChamber {
         // inaudible while a feedback-gain model capped the decay near 0.18 s,
         // but the first thing you hear once a chamber can actually sustain
         // for seconds. Modal density scales with total loop length.
-        let base = if !offset {
-            [787, 967, 1153, 1373, 1607, 1861, 2129, 2411]
-        } else {
+        let base = if offset {
             [821, 1013, 1201, 1427, 1663, 1913, 2203, 2477]
+        } else {
+            [787, 967, 1153, 1373, 1607, 1861, 2129, 2411]
         };
         let scale = sample_rate / 48000.0 * size.max(0.05);
         let delays: Vec<usize> = base
             .iter()
-            .map(|&d| ((d as f64 * scale) as usize).max(4))
+            .map(|&d| num::f64_to_index(f64::from(d) * scale).max(4))
             .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.65);
@@ -108,129 +145,14 @@ impl RoomChamber {
 
     fn setup_er_taps(&mut self, size: f64) {
         let scale = self.sample_rate / 48000.0 * size.max(0.05);
-        // Chamber ER: very dense, close together (small room, walls nearby)
-        let taps_l = [
-            Tap {
-                delay_samples: (31.0 * scale) as usize,
-                gain: 0.92,
-            },
-            Tap {
-                delay_samples: (59.0 * scale) as usize,
-                gain: 0.85,
-            },
-            Tap {
-                delay_samples: (89.0 * scale) as usize,
-                gain: 0.78,
-            },
-            Tap {
-                delay_samples: (127.0 * scale) as usize,
-                gain: 0.68,
-            },
-            Tap {
-                delay_samples: (167.0 * scale) as usize,
-                gain: 0.58,
-            },
-            Tap {
-                delay_samples: (211.0 * scale) as usize,
-                gain: 0.48,
-            },
-            Tap {
-                delay_samples: (263.0 * scale) as usize,
-                gain: 0.38,
-            },
-            Tap {
-                delay_samples: (317.0 * scale) as usize,
-                gain: 0.28,
-            },
-            Tap {
-                delay_samples: (379.0 * scale) as usize,
-                gain: 0.20,
-            },
-            Tap {
-                delay_samples: (443.0 * scale) as usize,
-                gain: 0.14,
-            },
-            Tap {
-                delay_samples: (509.0 * scale) as usize,
-                gain: 0.09,
-            },
-            Tap {
-                delay_samples: (577.0 * scale) as usize,
-                gain: 0.05,
-            },
-        ];
-        let taps_r = [
-            Tap {
-                delay_samples: (37.0 * scale) as usize,
-                gain: 0.92,
-            },
-            Tap {
-                delay_samples: (67.0 * scale) as usize,
-                gain: 0.85,
-            },
-            Tap {
-                delay_samples: (101.0 * scale) as usize,
-                gain: 0.78,
-            },
-            Tap {
-                delay_samples: (139.0 * scale) as usize,
-                gain: 0.68,
-            },
-            Tap {
-                delay_samples: (181.0 * scale) as usize,
-                gain: 0.58,
-            },
-            Tap {
-                delay_samples: (227.0 * scale) as usize,
-                gain: 0.48,
-            },
-            Tap {
-                delay_samples: (277.0 * scale) as usize,
-                gain: 0.38,
-            },
-            Tap {
-                delay_samples: (331.0 * scale) as usize,
-                gain: 0.28,
-            },
-            Tap {
-                delay_samples: (397.0 * scale) as usize,
-                gain: 0.20,
-            },
-            Tap {
-                delay_samples: (461.0 * scale) as usize,
-                gain: 0.14,
-            },
-            Tap {
-                delay_samples: (523.0 * scale) as usize,
-                gain: 0.09,
-            },
-            Tap {
-                delay_samples: (593.0 * scale) as usize,
-                gain: 0.05,
-            },
-        ];
-        // Alternate tap polarity (Moorer-style): all-positive spike trains
-        // carry a net-positive area = subsonic thump in the IR spectrum.
-        // Alternating signs keeps timing/level, zeroes the DC lobe.
-        let mut taps_l = taps_l;
-        let mut taps_r = taps_r;
-        // Greedy sign balance: flip each tap against the running sum so
-        // the net area stays near zero (plain alternation leaves ~0.4 of
-        // residual area because the gains decay).
-        let mut sum = 0.0;
-        for t in &mut taps_l {
-            if sum > 0.0 {
-                t.gain = -t.gain;
-            }
-            sum += t.gain;
-        }
-        sum = 0.0;
-        for t in &mut taps_r {
-            if sum > 0.0 {
-                t.gain = -t.gain;
-            }
-            sum += t.gain;
-        }
+        let tap = |(delay, gain): (f64, f64)| Tap {
+            delay_samples: num::f64_to_index(delay * scale),
+            gain,
+        };
+        let mut taps_l = ER_TAPS_L.map(tap);
+        let mut taps_r = ER_TAPS_R.map(tap);
+        sign_balance(&mut taps_l);
+        sign_balance(&mut taps_r);
         self.er_l.set_taps(&taps_l);
         self.er_r.set_taps(&taps_r);
     }
@@ -240,27 +162,31 @@ impl RoomChamber {
         let base_delays = [41, 53, 67, 83, 101, 127, 151, 179];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.05);
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..FDN_MOD_AP_COUNT {
-            let delay = ((base_delays[i] as f64) * scale) as usize;
-            self.mod_ap_l[i].sample_delay = delay.max(4);
-            self.mod_ap_l[i].feedback = 0.3;
-            self.mod_ap_l[i].set_modulation(
-                0.3 + i as f64 * 0.12,
+        let &[d0, d1, d2, d3, d4, d5, d6, d7] = &base_delays;
+        for (i, (&d, (ap_l, ap_r))) in [d0, d1, d2, d3, d4, d5, d6, d7]
+            .iter()
+            .zip(self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut()))
+            .enumerate()
+        {
+            let delay = num::f64_to_index(f64::from(d) * scale);
+            ap_l.sample_delay = delay.max(4);
+            ap_l.feedback = 0.3;
+            ap_l.set_modulation(
+                num::count_to_f64(i).mul_add(0.12, 0.3),
                 modulation * self.sample_rate * 0.0002,
                 self.sample_rate,
             );
-            self.mod_ap_l[i].set_phase(i as f64 / FDN_MOD_AP_COUNT as f64);
+            ap_l.set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
 
-            let delay_r = ((base_delays[i] as f64 + 7.0) * scale) as usize;
-            self.mod_ap_r[i].sample_delay = delay_r.max(4);
-            self.mod_ap_r[i].feedback = 0.3;
-            self.mod_ap_r[i].set_modulation(
-                0.35 + i as f64 * 0.1,
+            let delay_r = num::f64_to_index((f64::from(d) + 7.0) * scale);
+            ap_r.sample_delay = delay_r.max(4);
+            ap_r.feedback = 0.3;
+            ap_r.set_modulation(
+                num::count_to_f64(i).mul_add(0.1, 0.35),
                 modulation * self.sample_rate * 0.0002,
                 self.sample_rate,
             );
-            self.mod_ap_r[i].set_phase((i as f64 + 0.5) / FDN_MOD_AP_COUNT as f64);
+            ap_r.set_phase((num::count_to_f64(i) + 0.5) / num::count_to_f64(FDN_MOD_AP_COUNT));
         }
     }
 
@@ -334,7 +260,7 @@ impl ReverbAlgorithm for RoomChamber {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size — chamber is small: closet to small room
-        let new_size = 0.05 + params.size * 0.5; // 0.05x to 0.55x
+        let new_size = params.size.mul_add(0.5, 0.05); // 0.05x to 0.55x
         if (new_size - self.size).abs() > 0.005 {
             self.size = new_size;
             self.rebuild_fdns();
@@ -352,13 +278,13 @@ impl ReverbAlgorithm for RoomChamber {
         self.fdn_l.set_loop_allpass(0.7);
         self.fdn_r.set_loop_allpass(0.7);
         self.fdn_l.set_rotation(
-            0.3 + params.modulation * 0.6,
-            0.04 + params.modulation * 0.16,
+            params.modulation.mul_add(0.6, 0.3),
+            params.modulation.mul_add(0.16, 0.04),
             self.sample_rate,
         );
         self.fdn_r.set_rotation(
-            (0.3 + params.modulation * 0.6) * 1.11,
-            0.04 + params.modulation * 0.16,
+            params.modulation.mul_add(0.6, 0.3) * 1.11,
+            params.modulation.mul_add(0.16, 0.04),
             self.sample_rate,
         );
 
@@ -385,7 +311,7 @@ impl ReverbAlgorithm for RoomChamber {
             .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
 
         // Damping — hard surfaces = bright
-        let damp_freq = 2000.0 + (1.0 - params.damping) * 14000.0;
+        let damp_freq = (1.0 - params.damping).mul_add(14000.0, 2000.0);
         self.fdn_l.set_damping(damp_freq, self.sample_rate);
         self.fdn_r.set_damping(damp_freq, self.sample_rate);
 
@@ -404,11 +330,13 @@ impl ReverbAlgorithm for RoomChamber {
         );
 
         // Diffusion
-        let stages = (params.diffusion * 8.0) as usize;
+        let stages = num::f64_to_index(params.diffusion * 8.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(0.5 + params.diffusion * 0.25);
-        self.diffuser_r.set_feedback(0.5 + params.diffusion * 0.25);
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
 
         // Modulation (subtle in chamber)
         self.setup_mod_allpass(params.modulation);
@@ -419,12 +347,12 @@ impl ReverbAlgorithm for RoomChamber {
             .set_modulation(0.5, diff_mod_depth, self.sample_rate);
 
         // Tone
-        let tone_freq = 5000.0 + (1.0 + params.tone) * 0.5 * 11000.0;
+        let tone_freq = ((1.0 + params.tone) * 0.5).mul_add(11000.0, 5000.0);
         self.tone_lp_l.set_freq(tone_freq, self.sample_rate);
         self.tone_lp_r.set_freq(tone_freq, self.sample_rate);
 
         // Extra A → ER/late balance
-        self.er_level = 0.4 + params.extra_a * 0.6;
+        self.er_level = params.extra_a.mul_add(0.6, 0.4);
         self.late_level = 1.0;
     }
 
@@ -439,9 +367,9 @@ impl ReverbAlgorithm for RoomChamber {
         let mut late_l = self.fdn_l.tick(diff_l);
         let mut late_r = self.fdn_r.tick(diff_r);
 
-        for i in 0..FDN_MOD_AP_COUNT {
-            late_l = self.mod_ap_l[i].tick(late_l);
-            late_r = self.mod_ap_r[i].tick(late_r);
+        for (ap_l, ap_r) in self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut()) {
+            late_l = ap_l.tick(late_l);
+            late_r = ap_r.tick(late_r);
         }
 
         late_l = self.tone_lp_l.tick(late_l) * self.late_level;

@@ -12,7 +12,7 @@ pub struct Saturator {
 
 impl Saturator {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             drive: 0.0,
             drive_gain: 1.0,
@@ -23,13 +23,13 @@ impl Saturator {
     /// 0.0 = clean, 1.0 = heavy. Internal: pre-gain 1x..8x.
     pub fn set_drive(&mut self, drive: f64) {
         self.drive = drive.clamp(0.0, 1.0);
-        self.drive_gain = 1.0 + self.drive * 7.0;
+        self.drive_gain = self.drive.mul_add(7.0, 1.0);
         // Compensate by 1/sqrt(drive_gain) so loudness stays roughly even.
         self.makeup = 1.0 / self.drive_gain.sqrt();
     }
 
     #[must_use]
-    pub fn drive(&self) -> f64 {
+    pub const fn drive(&self) -> f64 {
         self.drive
     }
 

@@ -12,50 +12,8 @@
 // clippy.toml's disallowed-methods list (locks, env, sleep) are real bugs here
 // even though they are allowed workspace-wide off the audio thread.
 #![deny(clippy::disallowed_methods)]
-// ── TEMPORARY: DSP rewrite pending ───────────────────────────────────────
-// 182 findings in this crate, held under `expect` rather than fixed one by one.
-//
-// These are the judgment lints — casts, indexing and integer arithmetic in
-// per-sample math. The correct rewrite for each depends on whether the code
-// runs on an audio callback, so editing them individually would be thousands
-// of unreviewable changes to code with no characterization tests behind it.
-// The plan is to restructure these algorithms into idiomatic Rust (typed
-// sample indices, iterators over raw indexing, checked conversions at the
-// boundary) against a golden-master harness that proves the output is
-// unchanged — which removes whole classes of these at once instead of
-// suppressing them.
-//
-// This is `allow`, not `expect`, and that is a deliberate compromise: `lib`
-// and `lib test` are separate compilations, so a lint can fire in one and be
-// unfulfilled in the other, and no single crate-root `expect` list satisfies
-// both — it oscillates. The cost is that this block does NOT delete itself
-// when the rewrite lands; it has to be removed by hand, and it will silently
-// keep hiding new violations until then. Shrink it as crates are rewritten.
-//
-// The realtime guard and every panic lint stay DENIED here — deliberately not
-// in this list. `unwrap`, `expect`, `panic`, and the disallowed-methods
-// realtime guard still fail the build in this crate.
-#![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_lossless,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::float_cmp,
-    clippy::if_not_else,
-    clippy::imprecise_flops,
-    clippy::indexing_slicing,
-    clippy::items_after_statements,
-    clippy::missing_const_for_fn,
-    clippy::similar_names,
-    clippy::suboptimal_flops,
-    clippy::too_many_lines,
-    clippy::useless_let_if_seq,
-    reason = "pending the DSP algorithm rewrite; see the note above"
-)]
+
+use dsp_core::{Channel, PerChannel, num};
 
 pub mod biquad;
 pub mod chain;
@@ -77,16 +35,58 @@ pub use styles::{CompressionStyle, StyleCoefficients};
 
 const PARAM_SMOOTHING_MS: f64 = 10.0;
 
+/// Channels this compressor keeps state for.
+///
+/// Stereo — the plugin is stereo, and a host asking for more folds onto the
+/// last slot rather than growing state it will never read.
+pub const CHANNELS: usize = 2;
+
+/// Everything one channel remembers between samples.
+///
+/// These were eight parallel `[_; CHANNELS]` arrays reached by a clamped index
+/// at every use. One struct per channel means `reset()` cannot miss a field,
+/// adding state is a single edit, and the index is validated once by
+/// [`Channel`] instead of at each access.
+#[derive(Debug, Clone, Copy)]
+struct ChannelState {
+    /// Gain reduction as displayed, and as applied.
+    last_gr_db: f64,
+    last_gr_linear: f64,
+    /// Samples left in the release-hold window.
+    hold_remaining: usize,
+    auto_makeup_db: f64,
+    expander_gain_db: f64,
+    upward_gain_db: f64,
+    /// One-sample history for the character/drive stage.
+    drive_previous_input: f64,
+    /// One-pole split for the "bright" character mode.
+    bright_lowpass: f64,
+}
+
+impl Default for ChannelState {
+    fn default() -> Self {
+        Self {
+            last_gr_db: 0.0,
+            // Unity, not zero: this is a linear gain, and starting at zero
+            // would mute the first sample after a reset.
+            last_gr_linear: 1.0,
+            hold_remaining: 0,
+            auto_makeup_db: 0.0,
+            expander_gain_db: 0.0,
+            upward_gain_db: 0.0,
+            drive_previous_input: 0.0,
+            bright_lowpass: 0.0,
+        }
+    }
+}
+
 /// Compressor core used by the plugin chain.
 pub struct ProC3Compressor {
     detector: Detector,
     gain_curve: GainCurve,
     hermite_smoother: HermiteCubicSmoother,
     sample_rate: f64,
-    last_gr_db: [f64; 2],
-    last_gr_linear: [f64; 2],
-    hold_remaining: [usize; 2],
-    auto_makeup_db: [f64; 2],
+    channels: PerChannel<ChannelState>,
     crest_peak_power: f64,
     crest_rms_power: f64,
     adaptive_attack_ms: f64,
@@ -104,10 +104,6 @@ pub struct ProC3Compressor {
     smoothed_upward_threshold_db: f64,
     smoothed_upward_ratio: f64,
     smoothed_ceiling: f64,
-    expander_gain_db: [f64; 2],
-    upward_gain_db: [f64; 2],
-    drive_previous_input: [f64; 2],
-    bright_lowpass: [f64; 2],
 
     // Core parameters
     pub threshold_db: f64,
@@ -148,10 +144,7 @@ impl ProC3Compressor {
             gain_curve: GainCurve::new(sample_rate),
             hermite_smoother: HermiteCubicSmoother::new(StateFuncHypothesis::Identity),
             sample_rate,
-            last_gr_db: [0.0; 2],
-            last_gr_linear: [1.0; 2],
-            hold_remaining: [0; 2],
-            auto_makeup_db: [0.0; 2],
+            channels: PerChannel::filled(ChannelState::default()),
             crest_peak_power: 0.0,
             crest_rms_power: 0.0,
             adaptive_attack_ms: 10.0,
@@ -169,10 +162,6 @@ impl ProC3Compressor {
             smoothed_upward_threshold_db: -60.0,
             smoothed_upward_ratio: 1.0,
             smoothed_ceiling: 0.0,
-            expander_gain_db: [0.0; 2],
-            upward_gain_db: [0.0; 2],
-            drive_previous_input: [0.0; 2],
-            bright_lowpass: [0.0; 2],
             threshold_db: -20.0,
             ratio: 4.0,
             attack_ms: 10.0,
@@ -222,7 +211,9 @@ impl ProC3Compressor {
     /// This lets the chain share a linked/filtered stereo detector while keeping
     /// per-channel gain smoothing and metering state.
     pub fn process_with_level(&mut self, input_linear: f64, level_db: f64, channel: usize) -> f64 {
-        let channel = channel.min(1);
+        // Fold onto the stereo width first, so a host asking for channel 5
+        // lands on the slot it always did.
+        let channel = Channel::new(channel.min(CHANNELS - 1));
         self.smooth_auxiliary_params();
 
         // Step 2: COMPUTE GAIN REDUCTION
@@ -234,11 +225,12 @@ impl ProC3Compressor {
         // Hold freezes release for a short window after gain reduction deepens.
         // This keeps short gaps from pumping the detector while leaving attacks
         // fully responsive.
-        if gr_instant < self.last_gr_linear[channel] {
-            self.hold_remaining[channel] = self.hold_samples();
-        } else if self.hold_remaining[channel] > 0 {
-            gr_instant = self.last_gr_linear[channel];
-            self.hold_remaining[channel] -= 1;
+        if gr_instant < self.channels[channel].last_gr_linear {
+            self.channels[channel].hold_remaining = self.hold_samples();
+        } else if self.channels[channel].hold_remaining > 0 {
+            gr_instant = self.channels[channel].last_gr_linear;
+            self.channels[channel].hold_remaining =
+                self.channels[channel].hold_remaining.saturating_sub(1);
         }
 
         // Step 3: SMOOTH GAIN REDUCTION WITH HERMITE CUBIC
@@ -246,19 +238,10 @@ impl ProC3Compressor {
         // - Use attack/release coefficients
         // - Compare gr_inst with prior GR history values
         // - Detect change with a small relative threshold
-        let log_rel = self.gain_curve.release_coeff.ln();
-        let log_atk = self.gain_curve.attack_coeff.ln();
-        let sqrt_h0 = gr_instant.sqrt();
-        let sqrt_h1 = (gr_instant * 0.9).sqrt(); // Approximate for h1
-
         let gr_smoothed = self.hermite_smoother.process(
             gr_instant,
             self.gain_curve.attack_coeff,
             self.gain_curve.release_coeff,
-            log_rel,
-            log_atk,
-            sqrt_h0,
-            sqrt_h1,
             channel,
         );
 
@@ -269,17 +252,20 @@ impl ProC3Compressor {
 
         // Step 5: OUTPUT GAIN
         let gr_db = -audiocore_dsp::db::linear_to_db(gr_smoothed.max(1e-10)).min(0.0);
-        self.auto_makeup_db[channel] = if self.auto_makeup {
+        self.channels[channel].auto_makeup_db = if self.auto_makeup {
             // Use half of the current reduction for conservative gain matching.
             // Full compensation tends to over-brighten and overload transients.
-            0.995 * self.auto_makeup_db[channel] + 0.005 * (gr_db * 0.5).min(24.0)
+            0.995f64.mul_add(
+                self.channels[channel].auto_makeup_db,
+                0.005 * (gr_db * 0.5).min(24.0),
+            )
         } else {
-            0.995 * self.auto_makeup_db[channel]
+            0.995 * self.channels[channel].auto_makeup_db
         };
         self.smoothed_output_gain_db =
             self.smooth_parameter(self.smoothed_output_gain_db, self.output_gain_db);
         let output_gain = audiocore_dsp::db::db_to_linear(
-            self.smoothed_output_gain_db + self.auto_makeup_db[channel],
+            self.smoothed_output_gain_db + self.channels[channel].auto_makeup_db,
         );
         output *= output_gain;
         output = self.apply_drive(output, channel);
@@ -295,8 +281,8 @@ impl ProC3Compressor {
         output = compressed * self.smoothed_fold + input_linear * (1.0 - self.smoothed_fold);
 
         // Track GR for metering
-        self.last_gr_linear[channel] = gr_smoothed;
-        self.last_gr_db[channel] = gr_db;
+        self.channels[channel].last_gr_linear = gr_smoothed;
+        self.channels[channel].last_gr_db = gr_db;
 
         output
     }
@@ -317,38 +303,46 @@ impl ProC3Compressor {
         }
     }
 
+    /// Gain reduction on one channel, in dB.
+    #[must_use]
+    pub fn gain_reduction_db_for(&self, channel: Channel) -> f64 {
+        self.channels[channel].last_gr_db
+    }
+
     /// Get current gain reduction in dB
     #[must_use]
     pub fn gain_reduction_db(&self) -> f64 {
-        self.last_gr_db[0].max(self.last_gr_db[1])
+        self.channels[Channel::LEFT]
+            .last_gr_db
+            .max(self.channels[Channel::RIGHT].last_gr_db)
     }
 
     /// Set threshold in dB
-    pub fn set_threshold(&mut self, threshold_db: f64) {
+    pub const fn set_threshold(&mut self, threshold_db: f64) {
         self.threshold_db = threshold_db;
         self.gain_curve.threshold_db = threshold_db;
     }
 
     /// Set ratio (e.g., 4.0 = 4:1)
-    pub fn set_ratio(&mut self, ratio: f64) {
+    pub const fn set_ratio(&mut self, ratio: f64) {
         self.ratio = ratio;
         self.gain_curve.ratio = ratio;
     }
 
     /// Set knee width in dB
-    pub fn set_knee(&mut self, knee_db: f64) {
+    pub const fn set_knee(&mut self, knee_db: f64) {
         self.knee_db = knee_db;
         self.gain_curve.knee_db = knee_db;
     }
 
     /// Set maximum gain-reduction range in dB.
-    pub fn set_range_db(&mut self, range_db: f64) {
+    pub const fn set_range_db(&mut self, range_db: f64) {
         self.range_db = range_db.clamp(0.0, 120.0);
         self.gain_curve.range_db = self.range_db;
     }
 
     fn hold_samples(&self) -> usize {
-        (self.hold_ms.max(0.0) * self.sample_rate / 1000.0).round() as usize
+        num::f64_to_index((self.hold_ms.max(0.0) * self.sample_rate / 1000.0).round())
     }
 
     fn smooth_parameter(&self, current: f64, target: f64) -> f64 {
@@ -358,7 +352,7 @@ impl ProC3Compressor {
 
         let samples = (self.sample_rate * PARAM_SMOOTHING_MS / 1000.0).max(1.0);
         let coeff = 1.0 - (-1.0 / samples).exp();
-        current + (target - current) * coeff
+        (target - current).mul_add(coeff, current)
     }
 
     fn smooth_gain_computer_params(&mut self) {
@@ -396,7 +390,7 @@ impl ProC3Compressor {
         self.smooth_parameter(current, target)
     }
 
-    fn process_expander(&mut self, level_db: f64, channel: usize) -> f64 {
+    fn process_expander(&mut self, level_db: f64, channel: Channel) -> f64 {
         let ratio = self.smoothed_expander_ratio.clamp(1.0, 20.0);
         let target_db = if ratio <= 1.0001 || level_db >= self.smoothed_expander_threshold_db {
             0.0
@@ -405,7 +399,7 @@ impl ProC3Compressor {
             (below_threshold * (1.0 - ratio)).max(-120.0)
         };
 
-        let moving_deeper = target_db < self.expander_gain_db[channel];
+        let moving_deeper = target_db < self.channels[channel].expander_gain_db;
         let time_ms = if moving_deeper {
             self.attack_ms.max(0.1)
         } else {
@@ -413,11 +407,12 @@ impl ProC3Compressor {
         };
         let samples = (self.sample_rate * time_ms / 1000.0).max(1.0);
         let coeff = 1.0 - (-1.0 / samples).exp();
-        self.expander_gain_db[channel] += (target_db - self.expander_gain_db[channel]) * coeff;
-        self.expander_gain_db[channel]
+        self.channels[channel].expander_gain_db +=
+            (target_db - self.channels[channel].expander_gain_db) * coeff;
+        self.channels[channel].expander_gain_db
     }
 
-    fn process_upward(&mut self, level_db: f64, channel: usize) -> f64 {
+    fn process_upward(&mut self, level_db: f64, channel: Channel) -> f64 {
         let ratio = self.smoothed_upward_ratio.clamp(1.0, 20.0);
         let target_db = if ratio <= 1.0001 || level_db >= self.smoothed_upward_threshold_db {
             0.0
@@ -426,7 +421,7 @@ impl ProC3Compressor {
             (below_threshold * (1.0 - 1.0 / ratio)).min(36.0)
         };
 
-        let moving_louder = target_db > self.upward_gain_db[channel];
+        let moving_louder = target_db > self.channels[channel].upward_gain_db;
         let time_ms = if moving_louder {
             self.attack_ms.max(0.1)
         } else {
@@ -434,15 +429,16 @@ impl ProC3Compressor {
         };
         let samples = (self.sample_rate * time_ms / 1000.0).max(1.0);
         let coeff = 1.0 - (-1.0 / samples).exp();
-        self.upward_gain_db[channel] += (target_db - self.upward_gain_db[channel]) * coeff;
-        self.upward_gain_db[channel]
+        self.channels[channel].upward_gain_db +=
+            (target_db - self.channels[channel].upward_gain_db) * coeff;
+        self.channels[channel].upward_gain_db
     }
 
-    fn apply_drive(&mut self, sample: f64, channel: usize) -> f64 {
+    fn apply_drive(&mut self, sample: f64, channel: Channel) -> f64 {
         self.smoothed_drive = self.smooth_parameter(self.smoothed_drive, self.drive);
         let drive = self.smoothed_drive.clamp(0.0, 1.0);
         if drive <= 1e-6 {
-            self.drive_previous_input[channel] = sample;
+            self.channels[channel].drive_previous_input = sample;
             return sample;
         }
 
@@ -452,8 +448,8 @@ impl ProC3Compressor {
             return self.apply_bright_drive(sample, pre_gain, channel);
         }
 
-        let previous = self.drive_previous_input[channel];
-        self.drive_previous_input[channel] = sample;
+        let previous = self.channels[channel].drive_previous_input;
+        self.channels[channel].drive_previous_input = sample;
 
         let normalization = Self::drive_transfer_raw(pre_gain, mode).abs().max(1e-9);
         let delta = sample - previous;
@@ -467,15 +463,16 @@ impl ProC3Compressor {
             / delta
     }
 
-    fn apply_bright_drive(&mut self, sample: f64, pre_gain: f64, channel: usize) -> f64 {
+    fn apply_bright_drive(&mut self, sample: f64, pre_gain: f64, channel: Channel) -> f64 {
         let cutoff_hz = 8_000.0;
         let coeff = 1.0 - (-2.0 * std::f64::consts::PI * cutoff_hz / self.sample_rate).exp();
-        self.bright_lowpass[channel] += (sample - self.bright_lowpass[channel]) * coeff;
+        self.channels[channel].bright_lowpass +=
+            (sample - self.channels[channel].bright_lowpass) * coeff;
 
-        let low = self.bright_lowpass[channel];
+        let low = self.channels[channel].bright_lowpass;
         let high = sample - low;
-        let previous_high = self.drive_previous_input[channel];
-        self.drive_previous_input[channel] = high;
+        let previous_high = self.channels[channel].drive_previous_input;
+        self.channels[channel].drive_previous_input = high;
 
         let normalization = Self::drive_transfer_raw(pre_gain, 0).abs().max(1e-9);
         let delta = high - previous_high;
@@ -508,8 +505,8 @@ impl ProC3Compressor {
     fn drive_antiderivative(sample: f64, pre_gain: f64, normalization: f64, mode: i32) -> f64 {
         let x = sample * pre_gain;
         let integral = match mode {
-            1 => x * x.atan() - 0.5 * (1.0 + x * x).ln(),
-            2 if x >= 0.0 => x - (1.0 + x).ln(),
+            1 => x.mul_add(x.atan(), -(0.5 * (x * x).ln_1p())),
+            2 if x >= 0.0 => x - x.ln_1p(),
             2 => -x - (1.0 - x).ln(),
             4 => cubic_drive_antiderivative_raw(x),
             5 => hard_clip_antiderivative_raw(x),
@@ -534,8 +531,9 @@ impl ProC3Compressor {
         let crest = (self.crest_peak_power / self.crest_rms_power.max(1e-12)).clamp(1.0, 64.0);
         let transient = ((crest.sqrt() - 1.0) / 7.0).clamp(0.0, 1.0);
 
-        let target_attack = self.attack_ms * (1.0 - amount * 0.85 * transient).clamp(0.05, 2.0);
-        let release_shape = (1.0 + amount * (1.5 * transient - 0.4)).clamp(0.25, 4.0);
+        let target_attack =
+            self.attack_ms * (amount * 0.85).mul_add(-transient, 1.0).clamp(0.05, 2.0);
+        let release_shape = (1.0 + amount * 1.5f64.mul_add(transient, -0.4)).clamp(0.25, 4.0);
         let style_shape =
             Self::style_auto_release_multiplier(CompressionStyle::from_id(self.style), transient);
         let target_release = self.release_ms * (release_shape * style_shape).clamp(0.1, 6.0);
@@ -554,9 +552,9 @@ impl ProC3Compressor {
         let transient = transient.clamp(0.0, 1.0);
         let sustained = 1.0 - transient;
         match style {
-            CompressionStyle::Fet => 1.0 - 0.45 * transient,
-            CompressionStyle::Vca => 1.0 - 0.2 * transient + 0.15 * sustained,
-            CompressionStyle::Optical => 1.0 + 0.35 * transient + 0.9 * sustained,
+            CompressionStyle::Fet => 0.45f64.mul_add(-transient, 1.0),
+            CompressionStyle::Vca => 0.15f64.mul_add(sustained, 0.2f64.mul_add(-transient, 1.0)),
+            CompressionStyle::Optical => 0.9f64.mul_add(sustained, 0.35f64.mul_add(transient, 1.0)),
             _ => 1.0,
         }
         .clamp(0.25, 2.5)
@@ -597,7 +595,7 @@ impl ProC3Compressor {
     }
 
     /// Set parallel compression fold parameter (0-1)
-    pub fn set_fold(&mut self, fold: f64) {
+    pub const fn set_fold(&mut self, fold: f64) {
         self.fold = fold.clamp(0.0, 1.0);
     }
 
@@ -612,10 +610,7 @@ impl ProC3Compressor {
     pub fn reset(&mut self) {
         self.detector.reset();
         self.hermite_smoother.reset();
-        self.last_gr_db = [0.0; 2];
-        self.last_gr_linear = [1.0; 2];
-        self.hold_remaining = [0; 2];
-        self.auto_makeup_db = [0.0; 2];
+        self.channels.fill(ChannelState::default());
         self.crest_peak_power = 0.0;
         self.crest_rms_power = 0.0;
         self.adaptive_attack_ms = self.attack_ms;
@@ -633,10 +628,6 @@ impl ProC3Compressor {
         self.smoothed_upward_threshold_db = self.upward_threshold_db;
         self.smoothed_upward_ratio = self.upward_ratio;
         self.smoothed_ceiling = self.ceiling;
-        self.expander_gain_db = [0.0; 2];
-        self.upward_gain_db = [0.0; 2];
-        self.drive_previous_input = [0.0; 2];
-        self.bright_lowpass = [0.0; 2];
     }
 }
 
@@ -661,11 +652,11 @@ fn cubic_drive_raw(x: f64) -> f64 {
 
 fn cubic_drive_antiderivative_raw(x: f64) -> f64 {
     if x <= -1.0 {
-        (-2.0 / 3.0) * x - 0.25
+        (-2.0_f64 / 3.0).mul_add(x, -0.25)
     } else if x >= 1.0 {
-        (2.0 / 3.0) * x - 0.25
+        (2.0_f64 / 3.0).mul_add(x, -0.25)
     } else {
-        0.5 * x * x - x.powi(4) / 12.0
+        (0.5 * x).mul_add(x, -(x.powi(4) / 12.0))
     }
 }
 
@@ -762,7 +753,7 @@ mod tests {
             "auto makeup should raise compressed output level"
         );
         assert!(
-            auto.auto_makeup_db[0] <= 24.0,
+            auto.channels[Channel::LEFT].auto_makeup_db <= 24.0,
             "auto makeup should remain bounded"
         );
     }
@@ -981,7 +972,7 @@ mod tests {
         comp.drive = 1.0;
         comp.smoothed_drive = 1.0;
 
-        let pre_gain = 1.0 + comp.drive * 11.0;
+        let pre_gain = comp.drive.mul_add(11.0, 1.0);
         let normalization = ProC3Compressor::drive_transfer_raw(pre_gain, 0)
             .abs()
             .max(1e-9);
@@ -991,7 +982,7 @@ mod tests {
         let mut adaa = 0.0;
         for n in 0..32 {
             let sample = if n % 2 == 0 { 0.9 } else { -0.9 };
-            adaa = comp.apply_drive(sample, 0).abs();
+            adaa = comp.apply_drive(sample, Channel::LEFT).abs();
         }
 
         assert!(
@@ -1012,7 +1003,7 @@ mod tests {
 
             let mut positive = 0.0;
             for _ in 0..64 {
-                positive = comp.apply_drive(0.05, 0);
+                positive = comp.apply_drive(0.05, Channel::LEFT);
             }
             comp.reset();
             comp.drive = 1.0;
@@ -1021,7 +1012,7 @@ mod tests {
 
             let mut negative = 0.0;
             for _ in 0..64 {
-                negative = comp.apply_drive(-0.05, 0);
+                negative = comp.apply_drive(-0.05, Channel::LEFT);
             }
             signatures.push((positive, negative));
         }
@@ -1057,8 +1048,8 @@ mod tests {
         let mut full_low = 0.0;
         let mut bright_low = 0.0;
         for _ in 0..4_800 {
-            full_low = full_band.apply_drive(low, 0);
-            bright_low = bright.apply_drive(low, 0);
+            full_low = full_band.apply_drive(low, Channel::LEFT);
+            bright_low = bright.apply_drive(low, Channel::LEFT);
         }
 
         assert!(
@@ -1146,7 +1137,8 @@ mod tests {
         comp.ceiling = 1.0;
         comp.process(0.5, 0);
         assert_eq!(
-            comp.smoothed_ceiling, 1.0,
+            comp.smoothed_ceiling.to_bits(),
+            1.0_f64.to_bits(),
             "enabling the ceiling should not ramp through near-zero values"
         );
 

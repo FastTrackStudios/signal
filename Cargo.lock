@@ -2319,6 +2319,8 @@ name = "comp-dsp"
 version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
+ "dsp-core",
+ "dsp-golden",
 ]
 
 [[package]]
@@ -3536,6 +3538,8 @@ name = "delay-dsp"
 version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
+ "dsp-core",
+ "dsp-golden",
  "pitch-dsp",
 ]
 
@@ -4710,6 +4714,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
+name = "dsp-core"
+version = "0.1.0"
+
+[[package]]
+name = "dsp-golden"
+version = "0.1.0"
+dependencies = [
+ "dsp-core",
+]
+
+[[package]]
 name = "dtoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4936,6 +4951,8 @@ name = "eq-dsp"
 version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
+ "dsp-core",
+ "dsp-golden",
  "realfft",
 ]
 
@@ -12451,6 +12468,8 @@ version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
  "crossbeam-channel",
+ "dsp-core",
+ "dsp-golden",
  "fts-modulation",
  "pitch-dsp",
  "realfft",
@@ -12894,6 +12913,8 @@ name = "saturate-dsp"
 version = "0.1.0"
 dependencies = [
  "approx",
+ "dsp-core",
+ "dsp-golden",
 ]
 
 [[package]]

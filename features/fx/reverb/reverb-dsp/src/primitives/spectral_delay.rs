@@ -29,6 +29,8 @@
 //! For `a = 0.6`: DC delay ≈ 0.25·N samples, Nyquist delay ≈ 4·N samples.
 //! The frequency-dependent spread creates the chirp.
 
+use dsp_core::num;
+
 /// Maximum number of allpass sections in the cascade.
 const MAX_SECTIONS: usize = 300;
 /// Maximum stretch factor per section.
@@ -38,17 +40,26 @@ const MAX_STRETCH: usize = 8;
 ///
 /// `H(z) = (a + z^{-k}) / (1 + a·z^{-k})`
 struct StretchedAllpass {
-    x_buf: [f64; MAX_STRETCH], // Input delay buffer (circular)
-    y_buf: [f64; MAX_STRETCH], // Output delay buffer (circular)
-    idx: usize,                // Write position in circular buffers
-    k: usize,                  // Stretch factor
+    hist: [Delayed; MAX_STRETCH], // Input/output history (circular)
+    idx: usize,                   // Write position in the circular buffer
+    k: usize,                     // Stretch factor
+}
+
+/// One sample of the section's history. `x_buf` and `y_buf`, two
+/// parallel `[f64; MAX_STRETCH]` circular buffers sharing one index,
+/// before.
+#[derive(Clone, Copy, Default)]
+struct Delayed {
+    /// x[n] — the input at this position.
+    x: f64,
+    /// y[n] — the output at this position.
+    y: f64,
 }
 
 impl StretchedAllpass {
     fn new(k: usize) -> Self {
         Self {
-            x_buf: [0.0; MAX_STRETCH],
-            y_buf: [0.0; MAX_STRETCH],
+            hist: [Delayed::default(); MAX_STRETCH],
             idx: 0,
             k: k.min(MAX_STRETCH),
         }
@@ -58,23 +69,29 @@ impl StretchedAllpass {
     fn tick(&mut self, input: f64, a: f64) -> f64 {
         // Read x[n-k] and y[n-k] from circular buffer
         let read_idx = if self.idx >= self.k {
-            self.idx - self.k
+            self.idx.saturating_sub(self.k)
         } else {
-            self.idx + MAX_STRETCH - self.k
+            self.idx.saturating_add(MAX_STRETCH).saturating_sub(self.k)
         };
 
-        let x_delayed = self.x_buf[read_idx];
-        let y_delayed = self.y_buf[read_idx];
+        // `read_idx` stays inside the buffer by the wrapping above, so
+        // the zero fallback is unreachable.
+        let Delayed {
+            x: x_delayed,
+            y: y_delayed,
+        } = self.hist.get(read_idx).copied().unwrap_or_default();
 
         // y[n] = a·x[n] + x[n-k] - a·y[n-k]
-        let output = a * input + x_delayed - a * y_delayed;
+        let output = a.mul_add(-y_delayed, a.mul_add(input, x_delayed));
 
         // Store current input and output
-        self.x_buf[self.idx] = input;
-        self.y_buf[self.idx] = output;
+        if let Some(slot) = self.hist.get_mut(self.idx) {
+            slot.x = input;
+            slot.y = output;
+        }
 
         // Advance circular index
-        self.idx += 1;
+        self.idx = self.idx.saturating_add(1);
         if self.idx >= MAX_STRETCH {
             self.idx = 0;
         }
@@ -83,8 +100,7 @@ impl StretchedAllpass {
     }
 
     fn clear(&mut self) {
-        self.x_buf.fill(0.0);
-        self.y_buf.fill(0.0);
+        self.hist.fill(Delayed::default());
     }
 }
 
@@ -128,8 +144,8 @@ impl SpectralDelay {
         let a = self.coefficient;
         let n = self.active_sections.min(self.sections.len());
         let mut x = input;
-        for i in 0..n {
-            x = self.sections[i].tick(x, a);
+        for section in self.sections.iter_mut().take(n) {
+            x = section.tick(x, a);
         }
         x
     }
@@ -138,16 +154,16 @@ impl SpectralDelay {
     #[must_use]
     pub fn group_delay_dc(&self) -> f64 {
         let a = self.coefficient;
-        let k = self.sections.first().map_or(1, |s| s.k) as f64;
-        self.active_sections as f64 * k * (1.0 - a) / (1.0 + a)
+        let k = num::count_to_f64(self.sections.first().map_or(1, |s| s.k));
+        num::count_to_f64(self.active_sections) * k * (1.0 - a) / (1.0 + a)
     }
 
     /// Get the approximate group delay at Nyquist in samples.
     #[must_use]
     pub fn group_delay_nyquist(&self) -> f64 {
         let a = self.coefficient;
-        let k = self.sections.first().map_or(1, |s| s.k) as f64;
-        self.active_sections as f64 * k * (1.0 + a) / (1.0 - a)
+        let k = num::count_to_f64(self.sections.first().map_or(1, |s| s.k));
+        num::count_to_f64(self.active_sections) * k * (1.0 + a) / (1.0 - a)
     }
 
     pub fn clear(&mut self) {

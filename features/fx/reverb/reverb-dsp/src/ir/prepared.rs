@@ -10,6 +10,8 @@
 //! [`PreparedIr`] / [`PreparedIrPair`] are the wire format between the
 //! loader thread and the audio thread.
 
+use dsp_core::num;
+
 use realfft::RealFftPlanner;
 use realfft::num_complex::Complex;
 
@@ -35,7 +37,7 @@ pub struct PreparedIr {
 impl PreparedIr {
     /// Empty IR — convolver will produce silence.
     #[must_use]
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
             partitions: Vec::new(),
             gain: 1.0,
@@ -44,7 +46,7 @@ impl PreparedIr {
     }
 
     #[must_use]
-    pub fn num_partitions(&self) -> usize {
+    pub const fn num_partitions(&self) -> usize {
         self.partitions.len()
     }
 
@@ -74,14 +76,18 @@ impl PreparedIr {
         let mut padded = vec![0.0_f64; FFT_LEN];
 
         for p in 0..num_partitions {
-            let start = p * BLOCK;
-            let end = (start + BLOCK).min(ir.len());
+            let start = p.saturating_mul(BLOCK);
+            let end = start.saturating_add(BLOCK).min(ir.len());
 
-            for x in &mut padded {
-                *x = 0.0;
-            }
+            padded.fill(0.0);
             // Overlap-save convention: IR data lives in the second half.
-            padded[BLOCK..(BLOCK + (end - start))].copy_from_slice(&ir[start..end]);
+            // `end - start <= BLOCK`, so the destination ends at or before
+            // `2 * BLOCK == FFT_LEN`; a partition that somehow fell outside
+            // stays zero rather than panicking.
+            let end_pos = BLOCK.saturating_add(end.saturating_sub(start));
+            if let (Some(dst), Some(src)) = (padded.get_mut(BLOCK..end_pos), ir.get(start..end)) {
+                dst.copy_from_slice(src);
+            }
 
             let mut spec = vec![Complex::new(0.0, 0.0); SPECTRUM_LEN];
             // process() consumes the input buffer in place; we hand it
@@ -98,7 +104,7 @@ impl PreparedIr {
         }
 
         let ir_energy: f64 = ir.iter().map(|x| x * x).sum::<f64>().sqrt().max(1e-9);
-        let gain = 1.0 / (FFT_LEN as f64 * ir_energy * 0.5).max(1.0);
+        let gain = 1.0 / (num::count_to_f64(FFT_LEN) * ir_energy * 0.5).max(1.0);
 
         Self {
             partitions,
@@ -122,19 +128,29 @@ pub struct PreparedIrPair {
     /// The un-shaped time-domain IR, carried along so the Impulse
     /// engine can re-shape later without re-decoding from disk.
     /// `Arc` so audio-thread clones are allocation-free.
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "IR payload tuple is load-bearing: \
+                                                 Arc-wrapped vecs for audio-thread \
+                                                 allocation-free sharing"
+    )]
     pub raw: Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)>,
     /// True-stereo cross legs (L→R, R→L), prepared. `None` = plain
     /// stereo. Boxed so the common case stays small.
     pub cross: Option<Box<(PreparedIr, PreparedIr)>>,
     /// Un-shaped cross originals, mirroring `raw`.
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "IR payload tuple is load-bearing: \
+                                                 Arc-wrapped vecs for audio-thread \
+                                                 allocation-free sharing"
+    )]
     pub cross_raw: Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)>,
 }
 
 impl PreparedIrPair {
     #[must_use]
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
             left: PreparedIr::empty(),
             right: PreparedIr::empty(),

@@ -3,25 +3,12 @@
 //! bit-transparent; the generators must be audible, pitch-relevant,
 //! and numerically stable when engaged.
 
-// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
-// A test/example target is its own crate, so the crate-root allow there does
-// not reach this file and it needs its own copy.
-#![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::default_trait_access,
-    reason = "pending the DSP algorithm rewrite"
-)]
-
 use reverb_dsp::AlgorithmType;
 use reverb_dsp::algorithm::{ChoirVoice, ChoraleParams};
 use reverb_dsp::chain::ReverbChain;
 
 use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::num;
 
 const SR: f64 = 48000.0;
 
@@ -53,14 +40,14 @@ fn goertzel(buf: &[f64], freq: f64) -> f64 {
         s2 = s1;
         s1 = s0;
     }
-    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / num::count_to_f64(buf.len()).powi(2)
 }
 
 /// Sustained sine (whole render) so pitch trackers can lock.
 fn render_sine(chain: &mut ReverbChain, freq: f64, secs: f64) -> (Vec<f64>, Vec<f64>) {
-    let n = (SR * secs) as usize;
+    let n = num::f64_to_index(SR * secs);
     let mut l: Vec<f64> = (0..n)
-        .map(|i| (std::f64::consts::TAU * freq * i as f64 / SR).sin() * 0.5)
+        .map(|i| (std::f64::consts::TAU * freq * num::count_to_f64(i) / SR).sin() * 0.5)
         .collect();
     let mut r = l.clone();
     chain.process(&mut l, &mut r);
@@ -76,9 +63,9 @@ fn defaults_are_transparent() {
     ] {
         let mut plain = make_chain(algo);
         let mut touched = make_chain(algo);
-        touched.cloud = Default::default();
-        touched.bloom = Default::default();
-        touched.chorale = Default::default();
+        touched.cloud = reverb_dsp::algorithm::CloudParams::default();
+        touched.bloom = reverb_dsp::algorithm::BloomParams::default();
+        touched.chorale = ChoraleParams::default();
         touched.update_params();
 
         let (pl, _) = render_sine(&mut plain, 330.0, 1.5);
@@ -112,11 +99,11 @@ fn cloud_ensemble_adds_synth_layer() {
     // The two renders share every deterministic reverb path, so the
     // difference signal IS the ensemble's contribution. Require it to
     // carry a meaningful fraction of the wet energy.
-    let body = (SR * 1.0) as usize..(SR * 2.8) as usize;
+    let body = num::f64_to_index(SR * 1.0)..num::f64_to_index(SR * 2.8);
     let e_off = energy(&off[body.clone()]);
     let d: f64 = on[body]
         .iter()
-        .zip(&off[(SR * 1.0) as usize..(SR * 2.8) as usize])
+        .zip(&off[num::f64_to_index(SR * 1.0)..num::f64_to_index(SR * 2.8)])
         .map(|(a, b)| (a - b) * (a - b))
         .sum();
     assert!(
@@ -130,7 +117,7 @@ fn cloud_ensemble_is_silent_without_input() {
     let mut c = make_chain(AlgorithmType::Cloud);
     c.cloud.ensemble = 1.0;
     c.update_params();
-    let n = (SR * 2.0) as usize;
+    let n = num::f64_to_index(SR * 2.0);
     let mut l = vec![0.0; n];
     let mut r = vec![0.0; n];
     c.process(&mut l, &mut r);
@@ -151,14 +138,14 @@ fn cloud_ensemble_tracks_pitch() {
         c.cloud.ensemble = 1.0;
         c.update_params();
         let (l, _) = render_sine(&mut c, input_freq, 3.0);
-        let body = &l[(SR * 1.2) as usize..(SR * 2.8) as usize];
+        let body = &l[num::f64_to_index(SR * 1.2)..num::f64_to_index(SR * 2.8)];
         goertzel(body, input_freq * 2.0) / goertzel(body, input_freq).max(1e-30)
     };
     let base_ratio = |input_freq: f64| {
         let mut c = make_chain(AlgorithmType::Cloud);
         c.update_params();
         let (l, _) = render_sine(&mut c, input_freq, 3.0);
-        let body = &l[(SR * 1.2) as usize..(SR * 2.8) as usize];
+        let body = &l[num::f64_to_index(SR * 1.2)..num::f64_to_index(SR * 2.8)];
         goertzel(body, input_freq * 2.0) / goertzel(body, input_freq).max(1e-30)
     };
 
@@ -187,7 +174,7 @@ fn bloom_harmonics_adds_octave_partial() {
     for v in &on {
         assert!(v.is_finite(), "harmonics produced non-finite output");
     }
-    let body = (SR * 1.0) as usize..(SR * 2.8) as usize;
+    let body = num::f64_to_index(SR * 1.0)..num::f64_to_index(SR * 2.8);
     let ratio = |buf: &[f64]| goertzel(buf, 660.0) / goertzel(buf, 330.0).max(1e-30);
     let r_on = ratio(&on[body.clone()]);
     let r_off = ratio(&off[body]);
@@ -223,7 +210,7 @@ fn chorale_choir_level_overrides_and_scales() {
     }
     // The choir voice recirculates — max level rings noticeably harder
     // in the sustained body than level 0 (feedback off).
-    let body = (SR * 1.5) as usize..(SR * 2.8) as usize;
+    let body = num::f64_to_index(SR * 1.5)..num::f64_to_index(SR * 2.8);
     let e_q = energy(&quiet[body.clone()]);
     let e_l = energy(&loud[body]);
     assert!(

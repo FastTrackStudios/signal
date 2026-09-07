@@ -4,6 +4,8 @@
 //! read from the histogram give a program-adaptive threshold
 //! (P50) and knee (half the P10–P90 loudness spread, floored at 5 dB).
 
+use dsp_core::num;
+
 const N_BINS: usize = 120;
 const DB_MIN: f64 = -100.0;
 const DB_MAX: f64 = 0.0;
@@ -30,7 +32,6 @@ impl LoudnessHistogram {
     #[inline]
     #[expect(
         clippy::as_conversions,
-        clippy::cast_precision_loss,
         clippy::cast_sign_loss,
         clippy::cast_possible_truncation,
         reason = "float-to-int cast after safe clamp to [0, N_BINS-1]"
@@ -69,7 +70,7 @@ impl LoudnessHistogram {
         for (i, &b) in self.bins.iter().enumerate() {
             acc += b;
             if acc >= target {
-                let frac = ((i as i32 as f64) + 0.5) / (N_BINS as i32 as f64);
+                let frac = (num::count_to_f64(i) + 0.5) / num::count_to_f64(N_BINS);
                 return Some(DB_MIN + frac * (DB_MAX - DB_MIN));
             }
         }
@@ -86,7 +87,7 @@ impl LoudnessHistogram {
         Some((thr, (0.5 * (hi - lo)).max(5.0)))
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.bins = [0.0; N_BINS];
         self.total = 0.0;
     }

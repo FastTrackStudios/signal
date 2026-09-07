@@ -10,6 +10,8 @@
 //! The size parameter scales all delay lengths simultaneously.
 //! Modulation is applied in the FDN feedback path for chorus-like detuning.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, HALL_T60, ReverbAlgorithm, decay_to_t60};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -52,7 +54,7 @@ pub struct Hall {
 impl Hall {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_er = (sample_rate * 0.15) as usize; // 150ms max ER
+        let max_er = num::f64_to_index(sample_rate * 0.15); // 150ms max ER
 
         let mod_ap_l = std::array::from_fn(|_| ModulatedAllpass::new());
         let mod_ap_r = std::array::from_fn(|_| ModulatedAllpass::new());
@@ -86,15 +88,15 @@ impl Hall {
 
     fn make_fdn(sample_rate: f64, size: f64, offset: bool) -> Fdn {
         // Prime-ish delay lengths for maximum density, longer than room
-        let base = if !offset {
-            [1549, 1877, 2237, 2663, 3109, 3571, 4019, 4507]
-        } else {
+        let base = if offset {
             [1607, 1949, 2311, 2741, 3191, 3637, 4091, 4583]
+        } else {
+            [1549, 1877, 2237, 2663, 3109, 3571, 4019, 4507]
         };
         let scale = sample_rate / 48000.0 * size.max(0.2);
         let delays: Vec<usize> = base
             .iter()
-            .map(|&d| ((d as f64 * scale) as usize).max(4))
+            .map(|&d| num::f64_to_index(f64::from(d) * scale).max(4))
             .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.85);
@@ -108,69 +110,69 @@ impl Hall {
         // More taps at longer delays for increasing density
         let taps_l = [
             Tap {
-                delay_samples: (197.0 * scale) as usize,
+                delay_samples: num::f64_to_index(197.0 * scale),
                 gain: 0.85,
             },
             Tap {
-                delay_samples: (373.0 * scale) as usize,
+                delay_samples: num::f64_to_index(373.0 * scale),
                 gain: 0.72,
             },
             Tap {
-                delay_samples: (521.0 * scale) as usize,
+                delay_samples: num::f64_to_index(521.0 * scale),
                 gain: 0.60,
             },
             Tap {
-                delay_samples: (743.0 * scale) as usize,
+                delay_samples: num::f64_to_index(743.0 * scale),
                 gain: 0.48,
             },
             Tap {
-                delay_samples: (977.0 * scale) as usize,
+                delay_samples: num::f64_to_index(977.0 * scale),
                 gain: 0.37,
             },
             Tap {
-                delay_samples: (1259.0 * scale) as usize,
+                delay_samples: num::f64_to_index(1259.0 * scale),
                 gain: 0.28,
             },
             Tap {
-                delay_samples: (1571.0 * scale) as usize,
+                delay_samples: num::f64_to_index(1571.0 * scale),
                 gain: 0.20,
             },
             Tap {
-                delay_samples: (1889.0 * scale) as usize,
+                delay_samples: num::f64_to_index(1889.0 * scale),
                 gain: 0.14,
             },
         ];
         let taps_r = [
             Tap {
-                delay_samples: (229.0 * scale) as usize,
+                delay_samples: num::f64_to_index(229.0 * scale),
                 gain: 0.85,
             },
             Tap {
-                delay_samples: (409.0 * scale) as usize,
+                delay_samples: num::f64_to_index(409.0 * scale),
                 gain: 0.72,
             },
             Tap {
-                delay_samples: (577.0 * scale) as usize,
+                delay_samples: num::f64_to_index(577.0 * scale),
                 gain: 0.60,
             },
             Tap {
-                delay_samples: (811.0 * scale) as usize,
+                delay_samples: num::f64_to_index(811.0 * scale),
                 gain: 0.48,
             },
             Tap {
-                delay_samples: (1051.0 * scale) as usize,
+                delay_samples: num::f64_to_index(1051.0 * scale),
                 gain: 0.37,
             },
             Tap {
-                delay_samples: (1327.0 * scale) as usize,
+                delay_samples: num::f64_to_index(1327.0 * scale),
                 gain: 0.28,
             },
             Tap {
-                delay_samples: (1637.0 * scale) as usize,
+                delay_samples: num::f64_to_index(1637.0 * scale),
                 gain: 0.20,
             },
             Tap {
-                delay_samples: (1979.0 * scale) as usize,
+                delay_samples: num::f64_to_index(1979.0 * scale),
                 gain: 0.14,
             },
         ];
@@ -183,27 +185,30 @@ impl Hall {
         let base_delays = [137, 173, 211, 257, 307, 359, 419, 479];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.2);
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..FDN_MOD_AP_COUNT {
-            let delay = ((base_delays[i] as f64) * scale) as usize;
-            self.mod_ap_l[i].sample_delay = delay.max(4);
-            self.mod_ap_l[i].feedback = 0.4;
-            self.mod_ap_l[i].set_modulation(
-                0.3 + i as f64 * 0.15,
+        for ((i, &d), (ap_l, ap_r)) in base_delays
+            .iter()
+            .enumerate()
+            .zip(self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut()))
+        {
+            let delay = num::f64_to_index(f64::from(d) * scale);
+            ap_l.sample_delay = delay.max(4);
+            ap_l.feedback = 0.4;
+            ap_l.set_modulation(
+                num::count_to_f64(i).mul_add(0.15, 0.3),
                 modulation * self.sample_rate * 0.0005,
                 self.sample_rate,
             );
-            self.mod_ap_l[i].set_phase(i as f64 / FDN_MOD_AP_COUNT as f64);
+            ap_l.set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
 
-            let delay_r = ((base_delays[i] as f64 + 17.0) * scale) as usize;
-            self.mod_ap_r[i].sample_delay = delay_r.max(4);
-            self.mod_ap_r[i].feedback = 0.4;
-            self.mod_ap_r[i].set_modulation(
-                0.35 + i as f64 * 0.12,
+            let delay_r = num::f64_to_index((f64::from(d) + 17.0) * scale);
+            ap_r.sample_delay = delay_r.max(4);
+            ap_r.feedback = 0.4;
+            ap_r.set_modulation(
+                num::count_to_f64(i).mul_add(0.12, 0.35),
                 modulation * self.sample_rate * 0.0005,
                 self.sample_rate,
             );
-            self.mod_ap_r[i].set_phase((i as f64 + 0.5) / FDN_MOD_AP_COUNT as f64);
+            ap_r.set_phase((num::count_to_f64(i) + 0.5) / num::count_to_f64(FDN_MOD_AP_COUNT));
         }
     }
 
@@ -244,7 +249,7 @@ impl ReverbAlgorithm for Hall {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size → scale all delay lengths
-        let new_size = 0.3 + params.size * 2.0; // 0.3x to 2.3x
+        let new_size = params.size.mul_add(2.0, 0.3); // 0.3x to 2.3x
         if (new_size - self.size).abs() > 0.01 {
             self.size = new_size;
             self.rebuild_fdns();
@@ -263,8 +268,9 @@ impl ReverbAlgorithm for Hall {
 
         let t60 = decay_to_t60(params.decay, HALL_T60.0, HALL_T60.1);
         let t60_dc = (t60 * params.low_decay_mult.max(0.05)).max(0.05);
-        let hf_ratio = ((0.15 + 0.85 * (1.0 - params.damping)) * params.high_decay_mult.max(0.05))
-            .clamp(0.02, 1.5);
+        let hf_ratio = (0.85f64.mul_add(1.0 - params.damping, 0.15)
+            * params.high_decay_mult.max(0.05))
+        .clamp(0.02, 1.5);
         let t60_ny = (t60 * hf_ratio).max(0.02);
         self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
         self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
@@ -279,22 +285,24 @@ impl ReverbAlgorithm for Hall {
         // Artifact-free tail animation: slow orthogonal rotation of the
         // feedback mix (no decay error, no pitch wobble).
         self.fdn_l.set_rotation(
-            0.4 + params.modulation * 0.8,
+            params.modulation.mul_add(0.8, 0.4),
             params.modulation * 0.25,
             self.sample_rate,
         );
         self.fdn_r.set_rotation(
-            (0.4 + params.modulation * 0.8) * 1.13,
+            params.modulation.mul_add(0.8, 0.4) * 1.13,
             params.modulation * 0.25,
             self.sample_rate,
         );
 
         // Diffusion → input diffuser stages and feedback
-        let stages = (params.diffusion * 10.0) as usize;
+        let stages = num::f64_to_index(params.diffusion * 10.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(0.5 + params.diffusion * 0.25);
-        self.diffuser_r.set_feedback(0.5 + params.diffusion * 0.25);
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
 
         // Modulation → modulated AP in feedback path
         self.setup_mod_allpass(params.modulation);
@@ -307,7 +315,7 @@ impl ReverbAlgorithm for Hall {
             .set_modulation(0.5, diff_mod_depth, self.sample_rate);
 
         // Tone → output lowpass
-        let tone_freq = 4000.0 + (1.0 + params.tone) * 0.5 * 12000.0; // 4k–16k
+        let tone_freq = ((1.0 + params.tone) * 0.5).mul_add(12000.0, 4000.0); // 4k–16k
         self.tone_lp_l.set_freq(tone_freq, self.sample_rate);
         self.tone_lp_r.set_freq(tone_freq, self.sample_rate);
 
@@ -329,17 +337,17 @@ impl ReverbAlgorithm for Hall {
         let diff_r = self.diffuser_r.tick(right);
 
         // Cross-feed injection
-        let fdn_in_l = diff_l + er_r * self.cross_feed;
-        let fdn_in_r = diff_r + er_l * self.cross_feed;
+        let fdn_in_l = er_r.mul_add(self.cross_feed, diff_l);
+        let fdn_in_r = er_l.mul_add(self.cross_feed, diff_r);
 
         // FDN late reverb
         let mut late_l = self.fdn_l.tick(fdn_in_l);
         let mut late_r = self.fdn_r.tick(fdn_in_r);
 
         // Modulated allpass in feedback path (chorus detuning in tail)
-        for i in 0..FDN_MOD_AP_COUNT {
-            late_l = self.mod_ap_l[i].tick(late_l);
-            late_r = self.mod_ap_r[i].tick(late_r);
+        for (ap_l, ap_r) in self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut()) {
+            late_l = ap_l.tick(late_l);
+            late_r = ap_r.tick(late_r);
         }
 
         // Tone filter

@@ -9,10 +9,10 @@ use std::sync::atomic::Ordering;
 
 use spectrum_analyzer::dsp::AudioFeed;
 
-use eq_dsp::hardware_eq::{
+use eq_dsp::hardware::hardware_eq::{
     Api550aSettings, HardwareEqModel, HardwareEqSettings, PultecEqp1aSettings, SslChannelSettings,
 };
-use eq_dsp::neve_1073::{
+use eq_dsp::hardware::neve_1073::{
     Neve1073Hpf, Neve1073LowFreq, Neve1073MidFreq, Neve1073Model, Neve1073Settings,
 };
 use eq_ui::params::{EqUiState, FtsEqParams, NUM_BANDS, SPECTRUM_BINS};
@@ -112,8 +112,8 @@ impl FtsEqPlugin {
                     q: f64::from(bp.q.value()) * std::f64::consts::FRAC_1_SQRT_2,
                     shape: bp.filter_type.value().max(0) as u32,
                     slope: f64::from(bp.slope.value().max(0.0)),
-                    placement: eq_dsp::band::Placement::from_index(
-                        bp.placement.value().max(0) as u32
+                    placement: eq_dsp::runtime::band::Placement::from_index(
+                        bp.placement.value().max(0) as u32,
                     ),
                     stream: 0,
                 },

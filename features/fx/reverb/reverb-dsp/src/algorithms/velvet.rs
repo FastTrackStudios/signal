@@ -17,6 +17,8 @@
 //!   velvet FIRs (L/R) with exponential envelope and 4 sub-bands of
 //!   decay (low/low-mid/high-mid/high) → Output.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::lcg_random::LcgRandom;
 use crate::primitives::one_pole::{Hp1, Lp1};
@@ -54,25 +56,25 @@ impl VelvetFir {
     /// * `t60` — exponential 60dB decay time in samples.
     /// * `seed` — randomization seed.
     fn rebuild(&mut self, length_samples: usize, density_hz: f64, t60: f64, seed: u64) {
-        let length = length_samples.min(self.buffer_size - 1);
+        let length = length_samples.min(self.buffer_size.saturating_sub(1));
         let mut rng = LcgRandom::new(seed);
         // Average spacing between impulses (Karjalainen 2007).
         let avg_spacing = (48000.0_f64 / density_hz).max(1.0);
-        let spacing = avg_spacing as usize;
-        let count = length / spacing.max(1);
+        let spacing = num::f64_to_index(avg_spacing);
+        let count = length.checked_div(spacing.max(1)).unwrap_or(0);
 
         self.taps.clear();
         for k in 0..count {
             // Random position within the k-th grid cell.
-            let jitter = rng.next_float() * (spacing as f64 - 1.0);
-            let pos = (k as f64 * avg_spacing + jitter) as usize;
+            let jitter = rng.next_float() * (num::count_to_f64(spacing) - 1.0);
+            let pos = num::f64_to_index(num::count_to_f64(k).mul_add(avg_spacing, jitter));
             if pos >= length {
                 break;
             }
             // Sign: ±1 with equal probability.
             let sign = if rng.next_float() < 0.5 { -1.0 } else { 1.0 };
             // Exponential envelope: gain = 10^(-3 * pos / t60).
-            let env = 10f64.powf(-3.0 * pos as f64 / t60.max(1.0));
+            let env = 10f64.powf(-3.0 * num::count_to_f64(pos) / t60.max(1.0));
             self.taps.push((pos, sign * env));
         }
     }
@@ -84,16 +86,24 @@ impl VelvetFir {
 
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
-        self.buffer[self.write_idx] = input;
-        let mask = self.buffer_size - 1;
+        if let Some(cell) = self.buffer.get_mut(self.write_idx) {
+            *cell = input;
+        }
+        let mask = self.buffer_size.saturating_sub(1);
 
         let mut acc = 0.0;
         for &(delay, gain) in &self.taps {
-            let idx = (self.write_idx + self.buffer_size - delay) & mask;
-            acc += self.buffer[idx] * gain;
+            let idx = (self
+                .write_idx
+                .wrapping_add(self.buffer_size)
+                .wrapping_sub(delay))
+                & mask;
+            if let Some(&sample) = self.buffer.get(idx) {
+                acc += sample * gain;
+            }
         }
 
-        self.write_idx = (self.write_idx + 1) & mask;
+        self.write_idx = self.write_idx.wrapping_add(1) & mask;
         acc
     }
 }
@@ -117,7 +127,7 @@ pub struct Velvet {
 impl Velvet {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_samples = (sample_rate * MAX_TAIL_SECONDS) as usize + 32;
+        let max_samples = num::f64_to_index(sample_rate * MAX_TAIL_SECONDS).saturating_add(32);
         let mut v = Self {
             fir_l: VelvetFir::new(max_samples),
             fir_r: VelvetFir::new(max_samples),
@@ -141,10 +151,13 @@ impl Velvet {
 
     fn rebuild_firs(&mut self) {
         // Length: 0.2s..MAX_TAIL_SECONDS, scaled jointly by size & decay.
-        let length_s = 0.2 + (self.size * 0.5 + self.decay * 0.5) * (MAX_TAIL_SECONDS - 0.2);
-        let length_samples = (length_s * self.sample_rate) as usize;
-        let t60_samples = length_samples as f64;
-        let density = DENSITY_HZ * (0.5 + self.diffusion * 1.5);
+        let length_s = self
+            .size
+            .mul_add(0.5, self.decay * 0.5)
+            .mul_add(MAX_TAIL_SECONDS - 0.2, 0.2);
+        let length_samples = num::f64_to_index(length_s * self.sample_rate);
+        let t60_samples = num::count_to_f64(length_samples);
+        let density = DENSITY_HZ * self.diffusion.mul_add(1.5, 0.5);
 
         self.fir_l
             .rebuild(length_samples, density, t60_samples, 0x00C0_FFEE);
@@ -175,19 +188,19 @@ impl ReverbAlgorithm for Velvet {
 
         // Build IR only when one of the size/decay/diffusion buckets changes
         // — rebuilding every set_params would be costly on the audio thread.
-        let key = ((params.size * 100.0) as u64) << 32
-            | ((params.decay * 100.0) as u64) << 16
-            | ((params.diffusion * 100.0) as u64);
+        let key = num::f64_to_u64(params.size * 100.0) << 32
+            | num::f64_to_u64(params.decay * 100.0) << 16
+            | num::f64_to_u64(params.diffusion * 100.0);
         if key != self.last_built_key {
             self.rebuild_firs();
             self.last_built_key = key;
         }
 
-        let lp_hz = 1500.0 + (1.0 - params.damping) * 14000.0;
+        let lp_hz = (1.0 - params.damping).mul_add(14000.0, 1500.0);
         self.lp_l.set_freq(lp_hz, self.sample_rate);
         self.lp_r.set_freq(lp_hz, self.sample_rate);
 
-        let hp_hz = 20.0 + params.extra_a * 480.0; // extra_a = low-cut sweep
+        let hp_hz = params.extra_a.mul_add(480.0, 20.0); // extra_a = low-cut sweep
         self.hp_l.set_freq(hp_hz, self.sample_rate);
         self.hp_r.set_freq(hp_hz, self.sample_rate);
     }

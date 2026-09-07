@@ -1,7 +1,8 @@
 //! High-pass slope 6 (Db30, N=6 poles, 3 sections).
 
-use crate::biquad::Coeffs;
-use crate::cascade;
+use crate::design::biquad::Coeffs;
+use crate::design::cascade;
+use dsp_core::num;
 
 use super::super::common::cascade_qs;
 
@@ -17,6 +18,10 @@ pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> Vec<Coeffs> {
         .collect()
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "a decoded routine: one contiguous function in the binary, whose commentary cites the captured rows each branch was verified against. Splitting it would separate the arithmetic from its evidence"
+)]
 fn highpass_slope6_section(
     freq_hz: f64,
     sample_rate: f64,
@@ -26,7 +31,7 @@ fn highpass_slope6_section(
 ) -> Coeffs {
     let fc_48k = freq_hz / (sample_rate / 48000.0);
     if sec == 0 && (q_user - 0.5).abs() < 1.0e-12 && (16000.0..=22000.0).contains(&fc_48k) {
-        match fc_48k as i32 {
+        match num::trunc_to_i32(num::narrow(fc_48k)) {
             16000 => [
                 1.0,
                 0.122_993_973_930,
@@ -112,7 +117,7 @@ fn highpass_slope6_section(
         && (q_user - 10.0).abs() < 1.0e-12
         && ((16000.0..=18000.0).contains(&fc_48k) || (21000.0..=22000.0).contains(&fc_48k))
     {
-        match fc_48k as i32 {
+        match num::trunc_to_i32(num::narrow(fc_48k)) {
             16000 => [
                 1.0,
                 0.940_572_271_439,
@@ -233,25 +238,30 @@ fn highpass_slope6_section(
         } else {
             None
         };
-        if let Some(wp_scale) = wp_scale {
-            highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0)
-        } else {
-            cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
-        }
+        wp_scale.map_or_else(
+            || cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate),
+            |wp_scale| {
+                highpass_s2_with_subfreq_scales(freq_hz, sample_rate, q_section, wp_scale, 1.0)
+            },
+        )
     } else {
         cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
     }
 }
 fn highpass_slope6_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
-    let mut qs: Vec<f64> = cascade_qs(3, q_user).into_iter().rev().collect();
+    let reversed: Vec<f64> = cascade_qs(3, q_user).into_iter().rev().collect();
+    // `cascade_qs(3)` returns exactly three; the fallback keeps this total.
+    let [mut q0, q1, q2] = <[f64; 3]>::try_from(reversed).unwrap_or([q_user; 3]);
+
     if (q_user - 0.5).abs() < 1.0e-12 {
-        qs[0] = highpass_slope6_sec0_q05(freq_hz, sample_rate);
+        q0 = highpass_slope6_sec0_q05(freq_hz, sample_rate);
     } else if (q_user - 1.0).abs() < 1.0e-12 {
-        qs[0] = highpass_slope6_sec0_q1(freq_hz, sample_rate);
+        q0 = highpass_slope6_sec0_q1(freq_hz, sample_rate);
     } else if (q_user - 10.0).abs() < 1.0e-12 {
-        qs[0] = highpass_slope6_sec0_q10(freq_hz, sample_rate, qs[0]);
+        q0 = highpass_slope6_sec0_q10(freq_hz, sample_rate, q0);
     }
-    qs
+
+    vec![q0, q1, q2]
 }
 fn highpass_slope6_sec0_q05(freq_hz: f64, sample_rate: f64) -> f64 {
     const QS_48K: &[(f64, f64)] = &[

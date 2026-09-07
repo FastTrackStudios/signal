@@ -12,6 +12,16 @@ use super::biquad::{Biquad, FilterType};
 use super::modulated_delay::ModulatedDelay;
 use super::one_pole::Lp1;
 
+/// Which of a line's in-loop filters are engaged. One struct rather
+/// than three loose `*_enabled` bools, so a caller cannot set the low
+/// shelf while meaning the high one.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub struct FilterStages {
+    pub low_shelf: bool,
+    pub high_shelf: bool,
+    pub cutoff: bool,
+}
+
 pub struct ReverbLine {
     delay: ModulatedDelay,
     diffuser: AllpassDiffuser,
@@ -22,9 +32,8 @@ pub struct ReverbLine {
     feedback_value: f64,
     feedback_coeff: f64,
     pub diffuser_enabled: bool,
-    pub low_shelf_enabled: bool,
-    pub high_shelf_enabled: bool,
-    pub cutoff_enabled: bool,
+    /// The three in-loop filter stages, engaged independently.
+    pub filters: FilterStages,
     pub tap_post_diffuser: bool,
 }
 
@@ -59,9 +68,7 @@ impl ReverbLine {
             feedback_value: 0.0,
             feedback_coeff: 0.0,
             diffuser_enabled: false,
-            low_shelf_enabled: false,
-            high_shelf_enabled: false,
-            cutoff_enabled: false,
+            filters: FilterStages::default(),
             tap_post_diffuser: false,
         }
     }
@@ -79,11 +86,11 @@ impl ReverbLine {
         self.diffuser.set_cross_seed(cross_seed);
     }
 
-    pub fn set_delay(&mut self, samples: usize) {
+    pub const fn set_delay(&mut self, samples: usize) {
         self.delay.sample_delay = samples;
     }
 
-    pub fn set_feedback(&mut self, feedback: f64) {
+    pub const fn set_feedback(&mut self, feedback: f64) {
         self.feedback_coeff = feedback;
     }
 
@@ -95,7 +102,7 @@ impl ReverbLine {
         self.diffuser.set_feedback(feedback);
     }
 
-    pub fn set_diffuser_stages(&mut self, stages: usize) {
+    pub const fn set_diffuser_stages(&mut self, stages: usize) {
         self.diffuser.stages = stages;
     }
 
@@ -123,11 +130,11 @@ impl ReverbLine {
         self.low_pass.set_cutoff(freq);
     }
 
-    pub fn set_line_mod_amount(&mut self, amount: f64) {
+    pub const fn set_line_mod_amount(&mut self, amount: f64) {
         self.delay.mod_amount = amount;
     }
 
-    pub fn set_line_mod_rate(&mut self, rate: f64) {
+    pub const fn set_line_mod_rate(&mut self, rate: f64) {
         self.delay.mod_rate = rate;
     }
 
@@ -148,7 +155,7 @@ impl ReverbLine {
     /// Returns the output sample (tapped pre- or post-diffuser).
     #[inline]
     pub fn tick(&mut self, input: f64) -> f64 {
-        let combined = input + self.feedback_value * self.feedback_coeff;
+        let combined = self.feedback_value.mul_add(self.feedback_coeff, input);
 
         let delayed = self.delay.tick(combined);
 
@@ -161,13 +168,13 @@ impl ReverbLine {
 
         let output_post = x;
 
-        if self.low_shelf_enabled {
+        if self.filters.low_shelf {
             x = self.low_shelf.tick(x);
         }
-        if self.high_shelf_enabled {
+        if self.filters.high_shelf {
             x = self.high_shelf.tick(x);
         }
-        if self.cutoff_enabled {
+        if self.filters.cutoff {
             x = self.low_pass.tick(x);
         }
 

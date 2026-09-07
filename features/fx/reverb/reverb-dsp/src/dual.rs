@@ -44,7 +44,7 @@ impl DualRouting {
     pub const COUNT: usize = 6;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Series12,
             2 => Self::Series21,
@@ -56,7 +56,7 @@ impl DualRouting {
     }
 
     #[must_use]
-    pub fn to_index(self) -> usize {
+    pub const fn to_index(self) -> usize {
         match self {
             Self::Single => 0,
             Self::Series12 => 1,
@@ -68,7 +68,7 @@ impl DualRouting {
     }
 
     #[must_use]
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Single => "Single",
             Self::Series12 => "Series 1>2",
@@ -113,7 +113,7 @@ impl DualReverb {
     /// carry one slot's settings onto a different engine. Call
     /// `update()` (or `update_params()` on the destination) afterwards
     /// so filters and smoothers pick the values up.
-    pub fn copy_params(&mut self, from_a: bool) {
+    pub const fn copy_params(&mut self, from_a: bool) {
         let (src, dst) = if from_a {
             (&self.a, &mut self.b)
         } else {
@@ -124,12 +124,16 @@ impl DualReverb {
     }
 
     /// Max samples per inner chunk (scratch capacity).
-    fn chunk_capacity(&self) -> usize {
+    const fn chunk_capacity(&self) -> usize {
         self.dry_l.len()
     }
 
     fn process_chunk(&mut self, left: &mut [f64], right: &mut [f64]) {
         let n = left.len();
+        // The caller chunks to `chunk_capacity()`, so the scratch buffers are
+        // always long enough. Clamping rather than asserting keeps the render
+        // callback panic-free if that ever stops holding.
+        let n = n.min(self.chunk_capacity()).min(right.len());
         match self.routing {
             DualRouting::Single => {
                 self.a.process(left, right);
@@ -143,39 +147,64 @@ impl DualReverb {
                 self.a.process(left, right);
             }
             DualRouting::Parallel => {
-                self.dry_l[..n].copy_from_slice(left);
-                self.dry_r[..n].copy_from_slice(right);
-                self.b_l[..n].copy_from_slice(left);
-                self.b_r[..n].copy_from_slice(right);
+                let (Some(dry_l), Some(dry_r)) = (self.dry_l.get_mut(..n), self.dry_r.get_mut(..n))
+                else {
+                    return;
+                };
+                let (Some(head_l), Some(head_r)) = (left.get(..n), right.get(..n)) else {
+                    return;
+                };
+                dry_l.copy_from_slice(head_l);
+                dry_r.copy_from_slice(head_r);
+                let (Some(b_l), Some(b_r)) = (self.b_l.get_mut(..n), self.b_r.get_mut(..n)) else {
+                    return;
+                };
+                b_l.copy_from_slice(head_l);
+                b_r.copy_from_slice(head_r);
 
                 self.a.process(left, right);
-                self.b.process(&mut self.b_l[..n], &mut self.b_r[..n]);
+                self.b.process(b_l, b_r);
 
                 // Sum of both chains' mix laws, dry counted once:
                 // out = dry·(1 − mixA − mixB) + wetA·mixA + wetB·mixB.
-                for i in 0..n {
-                    left[i] += self.b_l[i] - self.dry_l[i];
-                    right[i] += self.b_r[i] - self.dry_r[i];
+                for (((l, r), (bl, br)), (dl, dr)) in left
+                    .iter_mut()
+                    .zip(right.iter_mut())
+                    .zip(b_l.iter().zip(b_r.iter()))
+                    .zip(self.dry_l.iter().zip(self.dry_r.iter()))
+                    .take(n)
+                {
+                    *l += *bl - *dl;
+                    *r += *br - *dr;
                 }
             }
             DualRouting::Split | DualRouting::SplitSwapped => {
-                self.b_l[..n].copy_from_slice(left);
-                self.b_r[..n].copy_from_slice(right);
+                let (Some(b_l), Some(b_r)) = (self.b_l.get_mut(..n), self.b_r.get_mut(..n)) else {
+                    return;
+                };
+                let (Some(head_l), Some(head_r)) = (left.get(..n), right.get(..n)) else {
+                    return;
+                };
+                b_l.copy_from_slice(head_l);
+                b_r.copy_from_slice(head_r);
 
                 self.a.process(left, right);
-                self.b.process(&mut self.b_l[..n], &mut self.b_r[..n]);
+                self.b.process(b_l, b_r);
 
                 let swapped = self.routing == DualRouting::SplitSwapped;
-                for i in 0..n {
-                    let a_mono = (left[i] + right[i]) * 0.5;
-                    let b_mono = (self.b_l[i] + self.b_r[i]) * 0.5;
-                    if swapped {
-                        left[i] = b_mono;
-                        right[i] = a_mono;
+                for ((l, r), (bl, br)) in left
+                    .iter_mut()
+                    .zip(right.iter_mut())
+                    .zip(b_l.iter().zip(b_r.iter()))
+                    .take(n)
+                {
+                    let a_mono = (*l + *r) * 0.5;
+                    let b_mono = (*bl + *br) * 0.5;
+                    (*l, *r) = if swapped {
+                        (b_mono, a_mono)
                     } else {
-                        left[i] = a_mono;
-                        right[i] = b_mono;
-                    }
+                        (a_mono, b_mono)
+                    };
                 }
             }
         }
@@ -212,8 +241,12 @@ impl Processor for DualReverb {
         let cap = self.chunk_capacity();
         let mut pos = 0;
         while pos < n {
-            let end = (pos + cap).min(n);
-            let (l, r) = (&mut left[pos..end], &mut right[pos..end]);
+            let end = pos.saturating_add(cap).min(n);
+            // `end <= n <= min(len)`, so both slices exist; bailing on the
+            // impossible `None` keeps the render callback panic-free.
+            let (Some(l), Some(r)) = (left.get_mut(pos..end), right.get_mut(pos..end)) else {
+                return;
+            };
             self.process_chunk(l, r);
             pos = end;
         }
@@ -417,10 +450,10 @@ mod tests {
         d.a.params.decay = 0.9;
         d.a.trem_depth = 0.4;
         d.copy_params(true);
-        assert_eq!(d.b.mix, 0.77);
-        assert_eq!(d.b.pan, -0.5);
-        assert_eq!(d.b.params.decay, 0.9);
-        assert_eq!(d.b.trem_depth, 0.4);
+        assert_eq!(d.b.mix.to_bits(), 0.77_f64.to_bits());
+        assert_eq!(d.b.pan.to_bits(), (-0.5_f64).to_bits());
+        assert_eq!(d.b.params.decay.to_bits(), 0.9_f64.to_bits());
+        assert_eq!(d.b.trem_depth.to_bits(), 0.4_f64.to_bits());
         assert_eq!(
             d.b.algorithm_type(),
             AlgorithmType::Hall,

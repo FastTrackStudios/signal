@@ -12,6 +12,8 @@
 //! The published constants are tuned for 44.1 kHz. We scale them to the
 //! actual sample rate at construction.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::denormal::flush;
@@ -42,7 +44,7 @@ impl LpComb {
         }
     }
 
-    fn set_feedback(&mut self, fb: f64) {
+    const fn set_feedback(&mut self, fb: f64) {
         self.feedback = fb;
     }
 
@@ -58,13 +60,14 @@ impl LpComb {
 
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
-        let out = self.buffer[self.idx];
-        self.filterstore = flush(out * self.damp2 + self.filterstore * self.damp1);
-        self.buffer[self.idx] = input + self.filterstore * self.feedback;
-        self.idx += 1;
-        if self.idx >= self.buffer.len() {
-            self.idx = 0;
-        }
+        let len = self.buffer.len();
+        let Some(slot) = self.buffer.get_mut(self.idx) else {
+            return 0.0;
+        };
+        let out = *slot;
+        self.filterstore = flush(out.mul_add(self.damp2, self.filterstore * self.damp1));
+        *slot = self.filterstore.mul_add(self.feedback, input);
+        self.idx = self.idx.saturating_add(1).checked_rem(len).unwrap_or(0);
         out
     }
 }
@@ -90,13 +93,14 @@ impl AllpassF {
 
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
-        let bufout = self.buffer[self.idx];
+        let len = self.buffer.len();
+        let Some(slot) = self.buffer.get_mut(self.idx) else {
+            return -input;
+        };
+        let bufout = *slot;
         let output = -input + bufout;
-        self.buffer[self.idx] = input + bufout * self.feedback;
-        self.idx += 1;
-        if self.idx >= self.buffer.len() {
-            self.idx = 0;
-        }
+        *slot = bufout.mul_add(self.feedback, input);
+        self.idx = self.idx.saturating_add(1).checked_rem(len).unwrap_or(0);
         output
     }
 }
@@ -118,14 +122,18 @@ impl FreeVerb {
         let _ = sample_rate;
         let scale = sample_rate / 44100.0;
         let comb_l =
-            std::array::from_fn(|i| LpComb::new((COMB_TUNINGS[i] as f64 * scale) as usize));
-        let comb_r = std::array::from_fn(|i| {
-            LpComb::new(((COMB_TUNINGS[i] + STEREO_SPREAD) as f64 * scale) as usize)
+            COMB_TUNINGS.map(|t| LpComb::new(num::f64_to_index(num::count_to_f64(t) * scale)));
+        let comb_r = COMB_TUNINGS.map(|t| {
+            LpComb::new(num::f64_to_index(
+                num::count_to_f64(t.saturating_add(STEREO_SPREAD)) * scale,
+            ))
         });
         let ap_l =
-            std::array::from_fn(|i| AllpassF::new((ALLPASS_TUNINGS[i] as f64 * scale) as usize));
-        let ap_r = std::array::from_fn(|i| {
-            AllpassF::new(((ALLPASS_TUNINGS[i] + STEREO_SPREAD) as f64 * scale) as usize)
+            ALLPASS_TUNINGS.map(|t| AllpassF::new(num::f64_to_index(num::count_to_f64(t) * scale)));
+        let ap_r = ALLPASS_TUNINGS.map(|t| {
+            AllpassF::new(num::f64_to_index(
+                num::count_to_f64(t.saturating_add(STEREO_SPREAD)) * scale,
+            ))
         });
         Self {
             dc_in: DcBlocker::new(),
@@ -161,11 +169,11 @@ impl ReverbAlgorithm for FreeVerb {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Room size (Jezar): 0.28..1.00 mapped from size.
-        let room_size = 0.7 + params.size * 0.28;
+        let room_size = params.size.mul_add(0.28, 0.7);
         // Damping: 0..0.4.
         let damp = params.damping * 0.4;
         // Decay multiplier
-        let decay_boost = 0.7 + params.decay * 0.29; // 0.7..0.99
+        let decay_boost = params.decay.mul_add(0.29, 0.7); // 0.7..0.99
 
         let feedback = room_size * decay_boost;
         for c in &mut self.combs_l {
@@ -185,13 +193,17 @@ impl ReverbAlgorithm for FreeVerb {
         let mut out_l = 0.0;
         let mut out_r = 0.0;
 
-        for i in 0..8 {
-            out_l += self.combs_l[i].tick(input);
-            out_r += self.combs_r[i].tick(input);
+        for c in &mut self.combs_l {
+            out_l += c.tick(input);
         }
-        for i in 0..4 {
-            out_l = self.allpass_l[i].tick(out_l);
-            out_r = self.allpass_r[i].tick(out_r);
+        for c in &mut self.combs_r {
+            out_r += c.tick(input);
+        }
+        for a in &mut self.allpass_l {
+            out_l = a.tick(out_l);
+        }
+        for a in &mut self.allpass_r {
+            out_r = a.tick(out_r);
         }
 
         (out_l, out_r)

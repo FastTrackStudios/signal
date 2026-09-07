@@ -8,6 +8,8 @@
 //! Input (one-pass shimmer, no laddering), Regenerative (shift inside
 //! the loop → octave ladders), or both summed.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm, ShimmerFeedbackMode, ShimmerParams};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -43,7 +45,7 @@ pub struct Shimmer {
     out_hp_l: OnePoleHp,
     out_hp_r: OnePoleHp,
     // Shimmer amount (how much pitch-shifted signal feeds back)
-    shimmer_amount: f64,
+    amount: f64,
     decay: f64,
     // MX param overlay (voice intervals / amount / feedback mode).
     mx: ShimmerParams,
@@ -58,7 +60,7 @@ pub struct Shimmer {
 impl Shimmer {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let grain_samples = (sample_rate * 0.05) as usize; // 50ms grains
+        let grain_samples = num::f64_to_index(sample_rate * 0.05); // 50ms grains
 
         let mut shimmer = Self {
             fdn_l: Self::make_fdn(sample_rate, false),
@@ -77,7 +79,7 @@ impl Shimmer {
             fb_r: 0.0,
             out_hp_l: OnePoleHp::new(24.0, sample_rate),
             out_hp_r: OnePoleHp::new(24.0, sample_rate),
-            shimmer_amount: 0.5,
+            amount: 0.5,
             decay: 0.8,
             mx: ShimmerParams::default(),
             legacy_speed: 2.0,
@@ -101,13 +103,16 @@ impl Shimmer {
     }
 
     fn make_fdn(sample_rate: f64, offset: bool) -> Fdn {
-        let base = if !offset {
-            [1049, 1327, 1559, 1801, 2069, 2297, 2557, 2803]
-        } else {
+        let base = if offset {
             [1117, 1381, 1613, 1873, 2131, 2371, 2617, 2879]
+        } else {
+            [1049, 1327, 1559, 1801, 2069, 2297, 2557, 2803]
         };
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| (d as f64 * scale) as usize).collect();
+        let delays: Vec<usize> = base
+            .iter()
+            .map(|&d| num::f64_to_index(f64::from(d) * scale))
+            .collect();
         Fdn::new(&delays, MixMatrix::Householder)
     }
 
@@ -127,7 +132,7 @@ impl Shimmer {
             self.shifter2_r.set_speed(speed2);
         }
 
-        self.shimmer_amount = self
+        self.amount = self
             .mx
             .amount
             .map_or(self.legacy_amount, |a| a.clamp(0.0, 1.0));
@@ -136,7 +141,7 @@ impl Shimmer {
 
 #[inline]
 fn semitones_to_speed(st: f64) -> f64 {
-    2f64.powf(st.clamp(-12.0, 12.0) / 12.0)
+    (st.clamp(-12.0, 12.0) / 12.0).exp2()
 }
 
 impl ReverbAlgorithm for Shimmer {
@@ -174,7 +179,7 @@ impl ReverbAlgorithm for Shimmer {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Decay
-        self.decay = 0.4 + params.decay * 0.55;
+        self.decay = params.decay.mul_add(0.55, 0.4);
         self.fdn_l.set_decay(self.decay);
         self.fdn_r.set_decay(self.decay);
 
@@ -205,12 +210,12 @@ impl ReverbAlgorithm for Shimmer {
             .set_modulation(0.8, params.modulation * 10.0, self.sample_rate);
 
         // Diffusion
-        let stages = (params.diffusion * 8.0) as usize;
+        let stages = num::f64_to_index(params.diffusion * 8.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
 
         // Feedback damping
-        let freq = 3000.0 + (1.0 - params.damping) * 8000.0;
+        let freq = (1.0 - params.damping).mul_add(8000.0, 3000.0);
         self.fb_damp_l.set_freq(freq, self.sample_rate);
         self.fb_damp_r.set_freq(freq, self.sample_rate);
     }
@@ -224,8 +229,8 @@ impl ReverbAlgorithm for Shimmer {
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         // Mix input with pitch-shifted feedback
-        let in_l = left + self.fb_l * self.shimmer_amount;
-        let in_r = right + self.fb_r * self.shimmer_amount;
+        let in_l = self.fb_l.mul_add(self.amount, left);
+        let in_r = self.fb_r.mul_add(self.amount, right);
 
         // Diffuse
         let diff_l = self.diffuser_l.tick(in_l);

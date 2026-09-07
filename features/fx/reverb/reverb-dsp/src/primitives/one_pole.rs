@@ -79,12 +79,12 @@ impl Lp1 {
         if input == 0.0 && self.output.abs() < 1e-10 {
             self.output = 0.0;
         } else {
-            self.output = self.b0 * input + self.a1 * self.output;
+            self.output = self.b0.mul_add(input, self.a1 * self.output);
         }
         self.output
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.output = 0.0;
     }
 }
@@ -158,13 +158,13 @@ impl Hp1 {
         if input == 0.0 && self.lp_out.abs() < 1e-10 {
             self.output = 0.0;
         } else {
-            self.lp_out = self.b0 * input + self.a1 * self.lp_out;
+            self.lp_out = self.b0.mul_add(input, self.a1 * self.lp_out);
             self.output = input - self.lp_out;
         }
         self.output
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.lp_out = 0.0;
         self.output = 0.0;
     }

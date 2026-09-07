@@ -7,7 +7,7 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 pub(super) fn design_allpass_with_lookup(
     n: usize,
@@ -20,7 +20,7 @@ pub(super) fn design_allpass_with_lookup(
     design_allpass(n, freq_hz, q, sample_rate)
 }
 /// + `allpass_q_dependence_decoded.md`).  Each cascade section is a
-/// canonical analog allpass:
+///   canonical analog allpass:
 ///
 /// ```text
 ///   H_k(s) = (s² − α_k·s + 1) / (s² + α_k·s + 1)

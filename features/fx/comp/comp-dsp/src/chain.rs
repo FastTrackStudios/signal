@@ -1,5 +1,7 @@
 //! Compressor chain — wrapper with lookahead delay and sidechain EQ.
 
+use dsp_core::num;
+
 use crate::{Biquad, Detector, design_highpass_biquad, design_lowpass_biquad};
 use audiocore_dsp::AudioConfig;
 use audiocore_dsp::biquad::{Biquad as EqBiquad, FilterType as EqFilterType};
@@ -45,6 +47,53 @@ impl SidechainBand {
 }
 
 /// Complete compressor processing chain.
+/// The lookahead delay: a stereo ring the compressor reads behind.
+///
+/// Interleaved rather than two parallel `Vec`s with a shared cursor. The two
+/// channels' read and write positions are then identical by construction
+/// instead of by convention, and there is one length to keep in step with the
+/// sample count instead of two.
+#[derive(Debug, Clone, Default)]
+struct Lookahead {
+    ring: Vec<(f64, f64)>,
+    pos: usize,
+}
+
+impl Lookahead {
+    /// Size the ring for `samples` of delay.
+    ///
+    /// Allocates, so it belongs on the setter path — never in `process`.
+    fn resize(&mut self, samples: usize) {
+        self.ring.clear();
+        self.ring.resize(samples.max(1), (0.0, 0.0));
+        self.pos = 0;
+    }
+
+    /// Zero the ring without resizing it — what `reset()` wants.
+    fn clear(&mut self) {
+        for slot in &mut self.ring {
+            *slot = (0.0, 0.0);
+        }
+        self.pos = 0;
+    }
+
+    /// Write the newest pair and return the one a full ring ago.
+    ///
+    /// An empty ring returns the input unchanged: the caller only reaches here
+    /// with a non-zero lookahead, and passing the signal through is the right
+    /// answer for a delay of nothing anyway.
+    fn exchange(&mut self, input: (f64, f64)) -> (f64, f64) {
+        let length = self.ring.len();
+        let Some(slot) = self.ring.get_mut(self.pos) else {
+            return input;
+        };
+        let delayed = *slot;
+        *slot = input;
+        self.pos = self.pos.saturating_add(1).checked_rem(length).unwrap_or(0);
+        delayed
+    }
+}
+
 pub struct CompChain {
     pub comp: super::ProC3Compressor,
     pub sidechain_freq: f64,
@@ -60,9 +109,7 @@ pub struct CompChain {
     sc_eq_any: bool,
     lookahead_ms: f64,
     pub lookahead_samples: usize,
-    delay_l: Vec<f64>,
-    delay_r: Vec<f64>,
-    delay_pos: usize,
+    lookahead: Lookahead,
     feedback_l: f64,
     feedback_r: f64,
     detector_l: Detector,
@@ -87,9 +134,7 @@ impl CompChain {
             sc_eq_any: false,
             lookahead_ms: 0.0,
             lookahead_samples: 0,
-            delay_l: Vec::new(),
-            delay_r: Vec::new(),
-            delay_pos: 0,
+            lookahead: Lookahead::default(),
             feedback_l: 0.0,
             feedback_r: 0.0,
             detector_l: Detector::new(),
@@ -113,21 +158,15 @@ impl CompChain {
     ) {
         // Handle lookahead delay buffer
         let (audio_l, audio_r) = if self.lookahead_samples > 0 {
-            let pos = self.delay_pos;
-            let dl = self.delay_l[pos];
-            let dr = self.delay_r[pos];
-            self.delay_l[pos] = *left;
-            self.delay_r[pos] = *right;
-            self.delay_pos = (pos + 1) % self.lookahead_samples;
-            (dl, dr)
+            self.lookahead.exchange((*left, *right))
         } else {
             (*left, *right)
         };
 
         let (ff_key_l, ff_key_r) = self.sidechain_key(sidechain_l, sidechain_r);
         let feedback = self.comp.feedback.clamp(0.0, 1.0);
-        let key_l = ff_key_l * (1.0 - feedback) + self.feedback_l.abs() * feedback;
-        let key_r = ff_key_r * (1.0 - feedback) + self.feedback_r.abs() * feedback;
+        let key_l = ff_key_l.mul_add(1.0 - feedback, self.feedback_l.abs() * feedback);
+        let key_r = ff_key_r.mul_add(1.0 - feedback, self.feedback_r.abs() * feedback);
 
         let link = self.comp.channel_link.clamp(0.0, 1.0);
         let linked = key_l.max(key_r);
@@ -199,12 +238,10 @@ impl CompChain {
     /// Set the lookahead time in ms.
     pub fn set_lookahead(&mut self, lookahead_ms: f64) {
         self.lookahead_ms = lookahead_ms;
-        let n = (lookahead_ms / 1000.0 * self.sample_rate).round() as usize;
+        let n = num::f64_to_index((lookahead_ms / 1000.0 * self.sample_rate).round());
         if n != self.lookahead_samples {
             self.lookahead_samples = n;
-            self.delay_l = vec![0.0; n.max(1)];
-            self.delay_r = vec![0.0; n.max(1)];
-            self.delay_pos = 0;
+            self.lookahead.resize(n);
         }
     }
 
@@ -233,9 +270,7 @@ impl CompChain {
     /// Reset internal state.
     pub fn reset(&mut self) {
         self.comp.reset();
-        self.delay_l.iter_mut().for_each(|x| *x = 0.0);
-        self.delay_r.iter_mut().for_each(|x| *x = 0.0);
-        self.delay_pos = 0;
+        self.lookahead.clear();
         self.feedback_l = 0.0;
         self.feedback_r = 0.0;
         self.detector_l.reset();
@@ -261,8 +296,12 @@ impl CompChain {
         }
         self.sc_eq = bands;
         self.sc_eq_any = false;
-        for (i, band) in bands.iter().enumerate() {
-            self.sc_eq_on[i] = band.is_active();
+        for ((band, on), filter) in bands
+            .iter()
+            .zip(&mut self.sc_eq_on)
+            .zip(&mut self.sc_eq_filters)
+        {
+            *on = band.is_active();
             if !band.is_active() {
                 continue;
             }
@@ -277,14 +316,14 @@ impl CompChain {
                 4 => EqFilterType::Lowpass,
                 _ => EqFilterType::Peak { gain_db },
             };
-            self.sc_eq_filters[i].set(ftype, f, q, self.sample_rate);
-            self.sc_eq_filters[i].reset();
+            filter.set(ftype, f, q, self.sample_rate);
+            filter.reset();
         }
     }
 
     /// The sidechain EQ bands as set.
     #[must_use]
-    pub fn sidechain_eq(&self) -> &[SidechainBand; SC_EQ_BANDS] {
+    pub const fn sidechain_eq(&self) -> &[SidechainBand; SC_EQ_BANDS] {
         &self.sc_eq
     }
 
@@ -293,21 +332,22 @@ impl CompChain {
         // key before rectification (a filter after abs() would be wrong).
         let (mut left, mut right) = (left, right);
         if self.sc_eq_any {
-            for (i, on) in self.sc_eq_on.iter().enumerate() {
+            for (on, filter) in self.sc_eq_on.iter().zip(&mut self.sc_eq_filters) {
                 if *on {
-                    left = self.sc_eq_filters[i].tick(left, 0);
-                    right = self.sc_eq_filters[i].tick(right, 1);
+                    left = filter.tick(left, 0);
+                    right = filter.tick(right, 1);
                 }
             }
         }
 
-        let mut key_l = left.abs();
-        let mut key_r = right.abs();
-
-        if self.sidechain_freq > 20.0 {
-            key_l = self.sidechain_hpf_l.tick(left, 0).abs();
-            key_r = self.sidechain_hpf_r.tick(right, 0).abs();
-        }
+        let (mut key_l, mut key_r) = if self.sidechain_freq > 20.0 {
+            (
+                self.sidechain_hpf_l.tick(left, 0).abs(),
+                self.sidechain_hpf_r.tick(right, 0).abs(),
+            )
+        } else {
+            (left.abs(), right.abs())
+        };
 
         if self.sidechain_lowpass_freq > 20.0 {
             key_l = self.sidechain_lpf_l.tick(key_l, 0).abs();
@@ -326,6 +366,8 @@ impl Default for CompChain {
 
 #[cfg(test)]
 mod tests {
+    use dsp_core::Channel;
+
     use super::*;
 
     #[test]
@@ -344,7 +386,7 @@ mod tests {
         high_passed.set_sidechain_freq(1_000.0);
 
         for n in 0..2_000 {
-            let s = (2.0 * std::f64::consts::PI * 60.0 * n as f64 / 48_000.0).sin() * 0.8;
+            let s = (2.0 * std::f64::consts::PI * 60.0 * f64::from(n) / 48_000.0).sin() * 0.8;
             let mut l1 = s;
             let mut r1 = s;
             full_band.process_sample(&mut l1, &mut r1);
@@ -377,7 +419,7 @@ mod tests {
                 chain.set_sidechain_eq(b);
             }
             for n in 0..2_000 {
-                let s = (2.0 * std::f64::consts::PI * 60.0 * n as f64 / 48_000.0).sin() * 0.8;
+                let s = (2.0 * std::f64::consts::PI * 60.0 * f64::from(n) / 48_000.0).sin() * 0.8;
                 let (mut l, mut r) = (s, s);
                 chain.process_sample(&mut l, &mut r);
             }
@@ -386,7 +428,10 @@ mod tests {
 
         let plain = run(None);
         // A flat table is bit-inert.
-        assert_eq!(run(Some([SidechainBand::default(); SC_EQ_BANDS])), plain);
+        assert_eq!(
+            run(Some([SidechainBand::default(); SC_EQ_BANDS])).to_bits(),
+            plain.to_bits(),
+        );
         // A deep low-frequency cut stops the 60 Hz tone from triggering.
         let mut cut = [SidechainBand::default(); SC_EQ_BANDS];
         cut[0] = SidechainBand {
@@ -429,7 +474,7 @@ mod tests {
         low_passed.set_sidechain_lowpass_freq(1_000.0);
 
         for n in 0..2_000 {
-            let key = (2.0 * std::f64::consts::PI * 10_000.0 * n as f64 / 48_000.0).sin() * 0.8;
+            let key = (2.0 * std::f64::consts::PI * 10_000.0 * f64::from(n) / 48_000.0).sin() * 0.8;
 
             let mut l1 = 0.5;
             let mut r1 = 0.5;
@@ -462,7 +507,7 @@ mod tests {
         }
 
         assert!(
-            linked.comp.last_gr_db[1] > 1.0,
+            linked.comp.gain_reduction_db_for(Channel::RIGHT) > 1.0,
             "linked quiet channel should still receive gain reduction"
         );
     }
@@ -481,25 +526,25 @@ mod tests {
         }
         feedback.comp.feedback = 1.0;
 
-        let mut ff_gr_after_first = 0.0;
-        let mut fb_gr_after_first = 0.0;
+        let mut feedforward_first_gr = 0.0;
+        let mut feedback_first_gr = 0.0;
         for n in 0..200 {
-            let mut ff_l = 0.9;
-            let mut ff_r = 0.9;
-            feedforward.process_sample(&mut ff_l, &mut ff_r);
+            let mut forward_left = 0.9;
+            let mut forward_right = 0.9;
+            feedforward.process_sample(&mut forward_left, &mut forward_right);
 
-            let mut fb_l = 0.9;
-            let mut fb_r = 0.9;
-            feedback.process_sample(&mut fb_l, &mut fb_r);
+            let mut back_left = 0.9;
+            let mut back_right = 0.9;
+            feedback.process_sample(&mut back_left, &mut back_right);
 
             if n == 0 {
-                ff_gr_after_first = feedforward.comp.gain_reduction_db();
-                fb_gr_after_first = feedback.comp.gain_reduction_db();
+                feedforward_first_gr = feedforward.comp.gain_reduction_db();
+                feedback_first_gr = feedback.comp.gain_reduction_db();
             }
         }
 
         assert!(
-            fb_gr_after_first < ff_gr_after_first,
+            feedback_first_gr < feedforward_first_gr,
             "feedback topology should not react before output feedback exists"
         );
         assert!(

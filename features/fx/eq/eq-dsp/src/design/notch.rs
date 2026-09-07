@@ -17,7 +17,7 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 /// RBJ notch biquad at digital corner `ω = 2π·fc/fs` with given section Q.
 fn rbj_notch_section(freq_hz: f64, q_section: f64, sample_rate: f64) -> Coeffs {

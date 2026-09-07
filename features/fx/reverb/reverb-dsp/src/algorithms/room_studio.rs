@@ -8,16 +8,49 @@
 //!   - Neutral, transparent character
 //!   - Quick density buildup (diffused surfaces)
 
+use dsp_core::num;
+
 use crate::algorithm::{
     AlgorithmParams, ROOM_STUDIO_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets,
 };
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
-use crate::primitives::multitap_delay::{MultitapDelay, Tap};
+use crate::primitives::multitap_delay::{MultitapDelay, Tap, sign_balance};
 use crate::primitives::one_pole::Lp1;
 
 const FDN_MOD_AP_COUNT: usize = 8;
+
+/// Studio ER: smooth, even spacing — wall treatment scatters evenly, so
+/// the gain decay is more uniform than the raw room's.
+///
+/// `(delay in samples at 48 kHz, gain)`, scaled by rate and size.
+const ER_TAPS_L: [(f64, f64); 10] = [
+    (53.0, 0.82),
+    (109.0, 0.72),
+    (163.0, 0.63),
+    (223.0, 0.54),
+    (281.0, 0.46),
+    (347.0, 0.38),
+    (419.0, 0.31),
+    (491.0, 0.24),
+    (569.0, 0.18),
+    (647.0, 0.13),
+];
+
+/// The right channel's train, offset from the left for decorrelation.
+const ER_TAPS_R: [(f64, f64); 10] = [
+    (61.0, 0.82),
+    (119.0, 0.72),
+    (179.0, 0.63),
+    (241.0, 0.54),
+    (307.0, 0.46),
+    (373.0, 0.38),
+    (443.0, 0.31),
+    (517.0, 0.24),
+    (593.0, 0.18),
+    (673.0, 0.13),
+];
 
 pub struct RoomStudio {
     er_l: MultitapDelay,
@@ -48,7 +81,7 @@ pub struct RoomStudio {
 impl RoomStudio {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_er = (sample_rate * 0.06) as usize; // 60ms max ER
+        let max_er = num::f64_to_index(sample_rate * 0.06); // 60ms max ER
 
         let mod_ap_l = std::array::from_fn(|_| ModulatedAllpass::new());
         let mod_ap_r = std::array::from_fn(|_| ModulatedAllpass::new());
@@ -91,15 +124,15 @@ impl RoomStudio {
 
     fn make_fdn(sample_rate: f64, size: f64, offset: bool) -> Fdn {
         // Moderate delays — studio-sized room
-        let base = if !offset {
-            [389, 487, 601, 719, 839, 967, 1097, 1229]
-        } else {
+        let base = if offset {
             [409, 509, 619, 743, 863, 991, 1123, 1259]
+        } else {
+            [389, 487, 601, 719, 839, 967, 1097, 1229]
         };
         let scale = sample_rate / 48000.0 * size.max(0.1);
         let delays: Vec<usize> = base
             .iter()
-            .map(|&d| ((d as f64 * scale) as usize).max(4))
+            .map(|&d| num::f64_to_index(f64::from(d) * scale).max(4))
             .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.6);
@@ -110,114 +143,14 @@ impl RoomStudio {
 
     fn setup_er_taps(&mut self, size: f64) {
         let scale = self.sample_rate / 48000.0 * size.max(0.1);
-        // Studio ER: smooth, even spacing (wall diffusers scatter evenly)
-        // More uniform gain decay than raw room (treatment controls reflections)
-        let taps_l = [
-            Tap {
-                delay_samples: (53.0 * scale) as usize,
-                gain: 0.82,
-            },
-            Tap {
-                delay_samples: (109.0 * scale) as usize,
-                gain: 0.72,
-            },
-            Tap {
-                delay_samples: (163.0 * scale) as usize,
-                gain: 0.63,
-            },
-            Tap {
-                delay_samples: (223.0 * scale) as usize,
-                gain: 0.54,
-            },
-            Tap {
-                delay_samples: (281.0 * scale) as usize,
-                gain: 0.46,
-            },
-            Tap {
-                delay_samples: (347.0 * scale) as usize,
-                gain: 0.38,
-            },
-            Tap {
-                delay_samples: (419.0 * scale) as usize,
-                gain: 0.31,
-            },
-            Tap {
-                delay_samples: (491.0 * scale) as usize,
-                gain: 0.24,
-            },
-            Tap {
-                delay_samples: (569.0 * scale) as usize,
-                gain: 0.18,
-            },
-            Tap {
-                delay_samples: (647.0 * scale) as usize,
-                gain: 0.13,
-            },
-        ];
-        let taps_r = [
-            Tap {
-                delay_samples: (61.0 * scale) as usize,
-                gain: 0.82,
-            },
-            Tap {
-                delay_samples: (119.0 * scale) as usize,
-                gain: 0.72,
-            },
-            Tap {
-                delay_samples: (179.0 * scale) as usize,
-                gain: 0.63,
-            },
-            Tap {
-                delay_samples: (241.0 * scale) as usize,
-                gain: 0.54,
-            },
-            Tap {
-                delay_samples: (307.0 * scale) as usize,
-                gain: 0.46,
-            },
-            Tap {
-                delay_samples: (373.0 * scale) as usize,
-                gain: 0.38,
-            },
-            Tap {
-                delay_samples: (443.0 * scale) as usize,
-                gain: 0.31,
-            },
-            Tap {
-                delay_samples: (517.0 * scale) as usize,
-                gain: 0.24,
-            },
-            Tap {
-                delay_samples: (593.0 * scale) as usize,
-                gain: 0.18,
-            },
-            Tap {
-                delay_samples: (673.0 * scale) as usize,
-                gain: 0.13,
-            },
-        ];
-        // Alternate tap polarity (Moorer-style): all-positive spike trains
-        // carry a net-positive area = subsonic thump in the IR spectrum.
-        // Alternating signs keeps timing/level, zeroes the DC lobe.
-        let mut taps_l = taps_l;
-        let mut taps_r = taps_r;
-        // Greedy sign balance: flip each tap against the running sum so
-        // the net area stays near zero (plain alternation leaves ~0.4 of
-        // residual area because the gains decay).
-        let mut sum = 0.0;
-        for t in &mut taps_l {
-            if sum > 0.0 {
-                t.gain = -t.gain;
-            }
-            sum += t.gain;
-        }
-        sum = 0.0;
-        for t in &mut taps_r {
-            if sum > 0.0 {
-                t.gain = -t.gain;
-            }
-            sum += t.gain;
-        }
+        let tap = |(delay, gain): (f64, f64)| Tap {
+            delay_samples: num::f64_to_index(delay * scale),
+            gain,
+        };
+        let mut taps_l = ER_TAPS_L.map(tap);
+        let mut taps_r = ER_TAPS_R.map(tap);
+        sign_balance(&mut taps_l);
+        sign_balance(&mut taps_r);
         self.er_l.set_taps(&taps_l);
         self.er_r.set_taps(&taps_r);
     }
@@ -226,27 +159,32 @@ impl RoomStudio {
         let base_delays = [59, 79, 101, 127, 157, 191, 229, 269];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.1);
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..FDN_MOD_AP_COUNT {
-            let delay = ((base_delays[i] as f64) * scale) as usize;
-            self.mod_ap_l[i].sample_delay = delay.max(4);
-            self.mod_ap_l[i].feedback = 0.3;
-            self.mod_ap_l[i].set_modulation(
-                0.25 + i as f64 * 0.08,
+        for (i, ((ap_l, ap_r), &d)) in self
+            .mod_ap_l
+            .iter_mut()
+            .zip(self.mod_ap_r.iter_mut())
+            .zip(base_delays.iter())
+            .enumerate()
+        {
+            let delay = num::f64_to_index(f64::from(d) * scale);
+            ap_l.sample_delay = delay.max(4);
+            ap_l.feedback = 0.3;
+            ap_l.set_modulation(
+                num::count_to_f64(i).mul_add(0.08, 0.25),
                 modulation * self.sample_rate * 0.0002,
                 self.sample_rate,
             );
-            self.mod_ap_l[i].set_phase(i as f64 / FDN_MOD_AP_COUNT as f64);
+            ap_l.set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
 
-            let delay_r = ((base_delays[i] as f64 + 11.0) * scale) as usize;
-            self.mod_ap_r[i].sample_delay = delay_r.max(4);
-            self.mod_ap_r[i].feedback = 0.3;
-            self.mod_ap_r[i].set_modulation(
-                0.3 + i as f64 * 0.07,
+            let delay_r = num::f64_to_index((f64::from(d) + 11.0) * scale);
+            ap_r.sample_delay = delay_r.max(4);
+            ap_r.feedback = 0.3;
+            ap_r.set_modulation(
+                num::count_to_f64(i).mul_add(0.07, 0.3),
                 modulation * self.sample_rate * 0.0002,
                 self.sample_rate,
             );
-            self.mod_ap_r[i].set_phase((i as f64 + 0.5) / FDN_MOD_AP_COUNT as f64);
+            ap_r.set_phase((num::count_to_f64(i) + 0.5) / num::count_to_f64(FDN_MOD_AP_COUNT));
         }
     }
 
@@ -288,7 +226,7 @@ impl ReverbAlgorithm for RoomStudio {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size — small to medium studio
-        let new_size = 0.15 + params.size * 0.85; // 0.15x to 1.0x
+        let new_size = params.size.mul_add(0.85, 0.15); // 0.15x to 1.0x
         if (new_size - self.size).abs() > 0.01 {
             self.size = new_size;
             self.rebuild_fdns();
@@ -307,13 +245,13 @@ impl ReverbAlgorithm for RoomStudio {
         self.fdn_l.set_loop_allpass(0.5);
         self.fdn_r.set_loop_allpass(0.5);
         self.fdn_l.set_rotation(
-            0.3 + params.modulation * 0.6,
-            0.04 + params.modulation * 0.16,
+            params.modulation.mul_add(0.6, 0.3),
+            params.modulation.mul_add(0.16, 0.04),
             self.sample_rate,
         );
         self.fdn_r.set_rotation(
-            (0.3 + params.modulation * 0.6) * 1.11,
-            0.04 + params.modulation * 0.16,
+            params.modulation.mul_add(0.6, 0.3) * 1.11,
+            params.modulation.mul_add(0.16, 0.04),
             self.sample_rate,
         );
 
@@ -340,7 +278,7 @@ impl ReverbAlgorithm for RoomStudio {
             .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
 
         // Damping — acoustic treatment absorbs more consistently
-        let damp_freq = 1500.0 + (1.0 - params.damping) * 8500.0;
+        let damp_freq = (1.0 - params.damping).mul_add(8500.0, 1500.0);
         self.fdn_l.set_damping(damp_freq, self.sample_rate);
         self.fdn_r.set_damping(damp_freq, self.sample_rate);
 
@@ -359,16 +297,18 @@ impl ReverbAlgorithm for RoomStudio {
         );
 
         // Bass trapping — extra_a controls bass tightness
-        let bass_freq = 80.0 + params.extra_a * 300.0; // 80-380 Hz
+        let bass_freq = params.extra_a.mul_add(300.0, 80.0); // 80-380 Hz
         self.bass_hp_l.set_freq(bass_freq, self.sample_rate);
         self.bass_hp_r.set_freq(bass_freq, self.sample_rate);
 
         // Diffusion — studios have diffusers, so density builds fast
-        let stages = (params.diffusion * 10.0) as usize;
+        let stages = num::f64_to_index(params.diffusion * 10.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(0.55 + params.diffusion * 0.2);
-        self.diffuser_r.set_feedback(0.55 + params.diffusion * 0.2);
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.2, 0.55));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.2, 0.55));
 
         // Modulation (very subtle in studio)
         self.setup_mod_allpass(params.modulation);
@@ -379,7 +319,7 @@ impl ReverbAlgorithm for RoomStudio {
             .set_modulation(0.3, diff_mod_depth, self.sample_rate);
 
         // Tone
-        let tone_freq = 4000.0 + (1.0 + params.tone) * 0.5 * 8000.0;
+        let tone_freq = ((1.0 + params.tone) * 0.5).mul_add(8000.0, 4000.0);
         self.tone_lp_l.set_freq(tone_freq, self.sample_rate);
         self.tone_lp_r.set_freq(tone_freq, self.sample_rate);
 
@@ -401,9 +341,9 @@ impl ReverbAlgorithm for RoomStudio {
         let mut late_l = self.fdn_l.tick(diff_l);
         let mut late_r = self.fdn_r.tick(diff_r);
 
-        for i in 0..FDN_MOD_AP_COUNT {
-            late_l = self.mod_ap_l[i].tick(late_l);
-            late_r = self.mod_ap_r[i].tick(late_r);
+        for (ap_l, ap_r) in self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut()) {
+            late_l = ap_l.tick(late_l);
+            late_r = ap_r.tick(late_r);
         }
 
         // Bass trapping: subtract low-passed signal to remove bass energy

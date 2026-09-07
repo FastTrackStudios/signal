@@ -81,7 +81,7 @@ impl GainCurve {
 
     /// Get current compression style
     #[must_use]
-    pub fn style(&self) -> CompressionStyle {
+    pub const fn style(&self) -> CompressionStyle {
         self.style
     }
 
@@ -130,17 +130,17 @@ impl GainCurve {
     }
 
     /// Set threshold in dB.
-    pub fn set_threshold(&mut self, threshold_db: f64) {
+    pub const fn set_threshold(&mut self, threshold_db: f64) {
         self.threshold_db = threshold_db;
     }
 
     /// Set ratio (e.g., 4.0 = 4:1).
-    pub fn set_ratio(&mut self, ratio: f64) {
+    pub const fn set_ratio(&mut self, ratio: f64) {
         self.ratio = ratio.max(1.0);
     }
 
     /// Set knee width in dB.
-    pub fn set_knee(&mut self, knee_db: f64) {
+    pub const fn set_knee(&mut self, knee_db: f64) {
         self.knee_db = knee_db.max(0.0);
     }
 

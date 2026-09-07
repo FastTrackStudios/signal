@@ -23,6 +23,7 @@ use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::num;
 
 /// Digital machine voicing (`TimeLine` MX `Voice`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -42,7 +43,7 @@ impl DigitalVoice {
     pub const COUNT: usize = 4;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Adm,
             2 => Self::TwelveBit,
@@ -52,7 +53,7 @@ impl DigitalVoice {
     }
 
     #[must_use]
-    pub fn to_index(self) -> usize {
+    pub const fn to_index(self) -> usize {
         match self {
             Self::TwentyFour96 => 0,
             Self::Adm => 1,
@@ -62,7 +63,7 @@ impl DigitalVoice {
     }
 
     #[must_use]
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::TwentyFour96 => "24/96",
             Self::Adm => "ADM",
@@ -120,7 +121,7 @@ impl AdmCodec {
     }
 
     fn configure(&mut self, sample_rate: f64) {
-        let clock = sample_rate * Self::OVERSAMPLE as f64;
+        let clock = sample_rate * num::count_to_f64(Self::OVERSAMPLE);
         self.syllabic = (-1.0 / (Self::SYLLABIC_S * clock)).exp();
         self.leak = (-1.0 / (Self::PRINCIPAL_S * clock)).exp();
     }
@@ -130,21 +131,23 @@ impl AdmCodec {
         let mask = (1u32 << Self::HISTORY_BITS) - 1;
         for _ in 0..Self::OVERSAMPLE {
             let bit = x > self.level;
-            self.history = ((self.history << 1) | bit as u32) & mask;
+            self.history = ((self.history << 1) | u32::from(bit)) & mask;
             let run = self.history == 0 || self.history == mask;
             self.step = if run {
                 // Charge toward MAX at the syllabic rate.
-                Self::MAX_STEP + (self.step - Self::MAX_STEP) * self.syllabic
+                (self.step - Self::MAX_STEP).mul_add(self.syllabic, Self::MAX_STEP)
             } else {
                 // Decay toward MIN at the syllabic rate.
-                Self::MIN_STEP + (self.step - Self::MIN_STEP) * self.syllabic
+                (self.step - Self::MIN_STEP).mul_add(self.syllabic, Self::MIN_STEP)
             };
-            self.level = self.level * self.leak + if bit { self.step } else { -self.step };
+            self.level = self
+                .level
+                .mul_add(self.leak, if bit { self.step } else { -self.step });
         }
         self.level
     }
 
-    fn reset(&mut self) {
+    const fn reset(&mut self) {
         self.level = 0.0;
         self.step = Self::MIN_STEP;
         self.history = 0;
@@ -249,7 +252,7 @@ impl CleanDelay {
 
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S).saturating_add(1024);
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -308,7 +311,7 @@ impl CleanDelay {
                 // read head turns that fixed floor into the era's
                 // signal-tracking breathing.
                 let compressed = self.comp_env.compress(x);
-                let noisy = compressed + self.noise.next_bipolar() * (1.5 / 2048.0);
+                let noisy = self.noise.next_bipolar().mul_add(1.5 / 2048.0, compressed);
                 self.twelve_lp.tick(quantize_12bit(noisy), ch)
             }
             DigitalVoice::Classic => {
@@ -354,7 +357,7 @@ impl CleanDelay {
             0.0
         };
 
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.delay.len()) - 4.0;
         let read_pos = (smooth_delay + mod_off).clamp(1.0, max_read);
         let output = self.decode(self.delay.read_cubic(read_pos));
 
@@ -380,7 +383,7 @@ impl CleanDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -439,7 +442,7 @@ mod tests {
         }
 
         assert!(
-            (peak_idx as i64 - 4800).abs() < 10,
+            (i64::from(peak_idx) - 4800).abs() < 10,
             "Peak at {peak_idx}, expected ~4800"
         );
         assert!(peak_val > 0.9, "Peak {peak_val} should be near unity");
@@ -455,7 +458,7 @@ mod tests {
         (0..n)
             .map(|i| {
                 let input = if i < 480 {
-                    (core::f64::consts::TAU * 330.0 * i as f64 / SR).sin() * 0.7
+                    (core::f64::consts::TAU * 330.0 * num::count_to_f64(i) / SR).sin() * 0.7
                 } else {
                     0.0
                 };
@@ -501,7 +504,7 @@ mod tests {
                 d.update(SR);
                 (0..9600)
                     .map(|i| {
-                        let input = (core::f64::consts::TAU * freq * i as f64 / SR).sin() * 0.7;
+                        let input = (core::f64::consts::TAU * freq * f64::from(i) / SR).sin() * 0.7;
                         d.tick(input, 0)
                     })
                     .collect()
@@ -527,11 +530,6 @@ mod tests {
     fn twelve_bit_is_darker() {
         // Broadband content through the 12-Bit loop loses more HF than
         // the clean voice.
-        let hf_energy = |voice: DigitalVoice| -> f64 {
-            let out = run_voice_noise(voice);
-            // crude HF meter: first-difference energy
-            out.windows(2).map(|w| (w[1] - w[0]) * (w[1] - w[0])).sum()
-        };
         fn run_voice_noise(voice: DigitalVoice) -> Vec<f64> {
             let mut d = CleanDelay::new();
             d.time_ms = 40.0;
@@ -542,13 +540,18 @@ mod tests {
             (0..48000)
                 .map(|i| {
                     seed = seed.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
-                    let noise = (seed >> 9) as f64 / (1u32 << 23) as f64 - 1.0;
+                    let noise = f64::from(seed >> 9) / f64::from(1u32 << 23) - 1.0;
                     let input = if i < 4800 { noise * 0.5 } else { 0.0 };
                     d.tick(input, 0)
                 })
                 .skip(6000)
                 .collect()
         }
+        let hf_energy = |voice: DigitalVoice| -> f64 {
+            let out = run_voice_noise(voice);
+            // crude HF meter: first-difference energy
+            out.windows(2).map(|w| (w[1] - w[0]) * (w[1] - w[0])).sum()
+        };
         let clean_hf = hf_energy(DigitalVoice::TwentyFour96);
         let twelve_hf = hf_energy(DigitalVoice::TwelveBit);
         assert!(
@@ -570,7 +573,7 @@ mod tests {
             let out: Vec<f64> = (0..48000)
                 .map(|i| {
                     seed = seed.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
-                    let noise = (seed >> 9) as f64 / (1u32 << 23) as f64 - 1.0;
+                    let noise = f64::from(seed >> 9) / f64::from(1u32 << 23) - 1.0;
                     let input = if i < 4800 { noise * 0.5 } else { 0.0 };
                     d.tick(input, 0)
                 })
@@ -598,7 +601,7 @@ mod tests {
             d.update(SR);
             (0..48000)
                 .map(|i| {
-                    let input = (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
+                    let input = (core::f64::consts::TAU * 220.0 * f64::from(i) / SR).sin() * 0.5;
                     d.tick(input, 0)
                 })
                 .collect()
@@ -632,7 +635,7 @@ mod tests {
             d.update(SR);
 
             for i in 0..96000 {
-                let input = (core::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+                let input = (core::f64::consts::PI * 2.0 * 440.0 * f64::from(i) / SR).sin() * 0.5;
                 let out = d.tick(input, 0);
                 assert!(out.is_finite(), "NaN at sample {i} voice {vi}");
                 assert!(out.abs() < 10.0, "Runaway at {i} voice {vi}: {out}");

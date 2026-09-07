@@ -16,6 +16,9 @@
 //! Processing-core rules: no allocation, no threads, no I/O. `process` is
 //! arithmetic and one branch per sample.
 
+use dsp_core::num;
+use dsp_core::{Channel, PerChannel};
+
 use crate::preamp::MAX_CHANNELS;
 
 /// Word lengths at or above this are treated as off — a 32-bit float path
@@ -36,9 +39,9 @@ pub struct DigitalStage {
     pub dither: f32,
 
     /// Zero-order hold, per channel.
-    hold: [f32; MAX_CHANNELS],
+    hold: PerChannel<f32>,
     /// Fractional sample counter driving the hold.
-    phase: [f32; MAX_CHANNELS],
+    phase: PerChannel<f32>,
     /// The dither generator. One per stage, not per channel — two channels
     /// sharing a noise sequence would put the dither in the middle of the
     /// image, so each channel takes a different draw.
@@ -58,8 +61,8 @@ impl DigitalStage {
             bits: BITS_OFF,
             rate: 1.0,
             dither: 0.0,
-            hold: [0.0; MAX_CHANNELS],
-            phase: [0.0; MAX_CHANNELS],
+            hold: PerChannel::filled(0.0),
+            phase: PerChannel::filled(0.0),
             rng: 0x2545_f491,
         }
     }
@@ -73,14 +76,16 @@ impl DigitalStage {
     }
 
     pub const fn reset(&mut self) {
-        self.hold = [0.0; MAX_CHANNELS];
-        self.phase = [0.0; MAX_CHANNELS];
+        self.hold.fill(0.0);
+        self.phase.fill(0.0);
     }
 
     /// One sample on channel `ch`.
     #[inline]
     pub fn process(&mut self, ch: usize, input: f32) -> f32 {
-        let ch = ch.min(MAX_CHANNELS - 1);
+        // Fold onto the crate's processing width first, so a host asking for
+        // channel 5 of a stereo stage gets the same slot it always did.
+        let ch = Channel::new(ch.min(MAX_CHANNELS - 1));
 
         // Decimate: hold the last sample until the divisor rolls over. No
         // anti-alias filter, deliberately — the aliases ARE the effect.
@@ -126,7 +131,7 @@ impl DigitalStage {
         s ^= s << 5;
         self.rng = s;
         // Top 24 bits → [0, 1), then centred.
-        ((s >> 8) as f32) * (1.0 / 8_388_608.0) - 1.0
+        num::u32_to_f32(s >> 8) * (1.0 / 8_388_608.0) - 1.0
     }
 }
 
@@ -139,7 +144,7 @@ fn round_half_away(x: f32) -> f32 {
     if shifted.abs() > 2_000_000_000.0 {
         x
     } else {
-        shifted as i32 as f32
+        num::i32_to_f32(num::trunc_to_i32(shifted))
     }
 }
 
@@ -152,8 +157,10 @@ mod tests {
         let mut d = DigitalStage::new();
         assert!(d.is_transparent());
         for i in -50..=50 {
-            let x = i as f32 / 50.0;
-            assert_eq!(d.process(0, x), x);
+            let x = num::i32_to_f32(i) / 50.0;
+            // Bit patterns, not approximate equality: "transparent" here
+            // means the samples come back untouched, not merely close.
+            assert_eq!(d.process(0, x).to_bits(), x.to_bits());
         }
     }
 
@@ -162,7 +169,7 @@ mod tests {
         let mut d = DigitalStage::new();
         d.bits = 4.0; // 8 steps either side of zero
         for i in -100..=100 {
-            let x = i as f32 / 100.0;
+            let x = num::i32_to_f32(i) / 100.0;
             let y = d.process(0, x);
             let on_grid = (y * 8.0 - round_half_away(y * 8.0)).abs();
             assert!(on_grid < 1.0e-4, "{x} -> {y} is off the 4-bit grid");
@@ -178,7 +185,7 @@ mod tests {
             d.bits = bits;
             let mut worst = 0.0f32;
             for i in -500..=500 {
-                let x = i as f32 / 500.0;
+                let x = num::i32_to_f32(i) / 500.0;
                 worst = worst.max((d.process(0, x) - x).abs());
             }
             worst
@@ -196,11 +203,15 @@ mod tests {
         // A fixed array rather than a Vec — the crate is no_std.
         let mut taken = [0.0f32; 8];
         for (i, slot) in taken.iter_mut().enumerate() {
-            *slot = d.process(0, i as f32);
+            *slot = d.process(0, num::count_to_f32(i));
         }
         // One new value every four samples, held in between — and the
         // first sample is a real one.
-        assert_eq!(taken, [0.0, 0.0, 0.0, 0.0, 4.0, 4.0, 4.0, 4.0]);
+        let held: [u32; 8] = taken.map(f32::to_bits);
+        assert_eq!(
+            held,
+            [0.0f32, 0.0, 0.0, 0.0, 4.0, 4.0, 4.0, 4.0].map(f32::to_bits)
+        );
     }
 
     #[test]
@@ -210,7 +221,7 @@ mod tests {
         d.dither = 1.0;
         let mut worst = 0.0f32;
         for i in -500..=500 {
-            let x = i as f32 / 500.0;
+            let x = num::i32_to_f32(i) / 500.0;
             worst = worst.max((d.process(0, x) - x).abs());
         }
         // Dither trades a bounded error for a random one: still small

@@ -14,6 +14,8 @@
 //! All delay lengths from Dattorro's published values at 29761 Hz
 //! reference rate, scaled to the actual sample rate.
 
+use dsp_core::num;
+
 use crate::algorithm::{
     AlgorithmParams, PLATE_DECAY_APPLICATIONS, PLATE_LOOP_SECONDS, PLATE_T60, ReverbAlgorithm,
     dattorro_gain_for_t60, decay_to_t60,
@@ -48,8 +50,8 @@ impl Dispersion {
         let a = self.coeff;
         for st in &mut self.state {
             // First-order allpass H(z) = (a + z⁻¹)/(1 + a·z⁻¹).
-            let y = a * x + *st;
-            *st = x - a * y;
+            let y = a.mul_add(x, *st);
+            *st = a.mul_add(-y, x);
             x = y;
         }
         x
@@ -60,25 +62,73 @@ impl Dispersion {
     }
 }
 
+/// One half of the Dattorro figure-8: allpass, delay, damping lowpass,
+/// second allpass, second delay.
+struct Tank {
+    /// `decay_diffusion_1`, modulated.
+    ap1: ModulatedAllpass,
+    delay1: DelayLine,
+    /// Damping lowpass.
+    damp: Lp1,
+    /// `decay_diffusion_2`, static.
+    ap2: Allpass,
+    delay2: DelayLine,
+}
+
+/// The four Dattorro delay lengths of one tank, already scaled to the
+/// host rate.
+struct TankLengths {
+    ap1: usize,
+    delay1: usize,
+    ap2: usize,
+    delay2: usize,
+}
+
+impl Tank {
+    /// `phase` staggers the two tanks' allpass modulation.
+    fn new(lengths: &TankLengths, phase: f64, s: f64, sample_rate: f64) -> Self {
+        let mut ap1 = ModulatedAllpass::new();
+        ap1.sample_delay = lengths.ap1;
+        ap1.feedback = -0.7; // Negative sign per Dattorro
+        ap1.set_modulation(1.0, 16.0 * s, sample_rate);
+        ap1.set_phase(phase);
+
+        let mut ap2 = Allpass::new(lengths.ap2);
+        ap2.set_delay(lengths.ap2);
+        ap2.set_feedback(0.5);
+
+        let mut damp = Lp1::new();
+        damp.set_freq(8000.0, sample_rate);
+
+        Self {
+            ap1,
+            delay1: DelayLine::new(lengths.delay1.saturating_add(1)),
+            damp,
+            ap2,
+            delay2: DelayLine::new(lengths.delay2.saturating_add(1)),
+        }
+    }
+
+    fn reset(&mut self) {
+        self.ap1.reset();
+        self.delay1.clear();
+        self.damp.reset();
+        self.ap2.reset();
+        self.delay2.clear();
+    }
+}
+
 pub struct Plate {
     // Input bandwidth control (1-pole LP)
     bandwidth: Lp1,
     // Input diffusers (4 series allpass filters)
     input_diffuser: [Allpass; 4],
 
-    // Tank A
-    tank_a_ap1: ModulatedAllpass, // decay_diffusion_1 (delay 672)
-    tank_a_delay1: DelayLine,     // delay_4 (4453 samples)
-    tank_a_damp: Lp1,             // damping lowpass
-    tank_a_ap2: Allpass,          // decay_diffusion_2 (delay 1800)
-    tank_a_delay2: DelayLine,     // delay_5 (3720 samples)
-
-    // Tank B
-    tank_b_ap1: ModulatedAllpass, // decay_diffusion_1 (delay 908)
-    tank_b_delay1: DelayLine,     // delay_6 (4217 samples)
-    tank_b_damp: Lp1,             // damping lowpass
-    tank_b_ap2: Allpass,          // decay_diffusion_2 (delay 2656)
-    tank_b_delay2: DelayLine,     // delay_7 (3163 samples)
+    // The figure-8's two tanks. Same shape, different lengths and
+    // modulation phase — a `Tank` each rather than ten `tank_a_*` /
+    // `tank_b_*` fields walked in parallel.
+    tank_a: Tank,
+    tank_b: Tank,
 
     // Parameters
     // DC blockers on the tank cross-feeds — the recirculating
@@ -108,52 +158,35 @@ impl Plate {
 
         // Input diffuser delay lengths
         let id = [
-            (142.0 * s) as usize,
-            (107.0 * s) as usize,
-            (379.0 * s) as usize,
-            (277.0 * s) as usize,
+            num::f64_to_index(142.0 * s),
+            num::f64_to_index(107.0 * s),
+            num::f64_to_index(379.0 * s),
+            num::f64_to_index(277.0 * s),
         ];
 
         // Tank delay lengths
-        let ta_ap1_len = (672.0 * s) as usize;
-        let ta_d1_len = (4453.0 * s) as usize;
-        let ta_ap2_len = (1800.0 * s) as usize;
-        let ta_d2_len = (3720.0 * s) as usize;
-
-        let tb_ap1_len = (908.0 * s) as usize;
-        let tb_d1_len = (4217.0 * s) as usize;
-        let tb_ap2_len = (2656.0 * s) as usize;
-        let tb_d2_len = (3163.0 * s) as usize;
-
-        // Tank A AP1 (modulated, decay_diffusion_1)
-        let mut tank_a_ap1 = ModulatedAllpass::new();
-        tank_a_ap1.sample_delay = ta_ap1_len;
-        tank_a_ap1.feedback = -0.7; // Negative sign per Dattorro
-        tank_a_ap1.set_modulation(1.0, 16.0 * s, sample_rate);
-        tank_a_ap1.set_phase(0.0);
-
-        // Tank B AP1 (modulated, decay_diffusion_1)
-        let mut tank_b_ap1 = ModulatedAllpass::new();
-        tank_b_ap1.sample_delay = tb_ap1_len;
-        tank_b_ap1.feedback = -0.7;
-        tank_b_ap1.set_modulation(1.0, 16.0 * s, sample_rate);
-        tank_b_ap1.set_phase(0.5);
-
-        // Tank A AP2 (non-modulated, decay_diffusion_2)
-        let mut tank_a_ap2 = Allpass::new(ta_ap2_len);
-        tank_a_ap2.set_delay(ta_ap2_len);
-        tank_a_ap2.set_feedback(0.5);
-
-        // Tank B AP2 (non-modulated, decay_diffusion_2)
-        let mut tank_b_ap2 = Allpass::new(tb_ap2_len);
-        tank_b_ap2.set_delay(tb_ap2_len);
-        tank_b_ap2.set_feedback(0.5);
-
-        // Damping filters
-        let mut tank_a_damp = Lp1::new();
-        tank_a_damp.set_freq(8000.0, sample_rate);
-        let mut tank_b_damp = Lp1::new();
-        tank_b_damp.set_freq(8000.0, sample_rate);
+        let tank_a = Tank::new(
+            &TankLengths {
+                ap1: num::f64_to_index(672.0 * s),
+                delay1: num::f64_to_index(4453.0 * s),
+                ap2: num::f64_to_index(1800.0 * s),
+                delay2: num::f64_to_index(3720.0 * s),
+            },
+            0.0,
+            s,
+            sample_rate,
+        );
+        let tank_b = Tank::new(
+            &TankLengths {
+                ap1: num::f64_to_index(908.0 * s),
+                delay1: num::f64_to_index(4217.0 * s),
+                ap2: num::f64_to_index(2656.0 * s),
+                delay2: num::f64_to_index(3163.0 * s),
+            },
+            0.5,
+            s,
+            sample_rate,
+        );
 
         // Input bandwidth
         let mut bandwidth = Lp1::new();
@@ -167,16 +200,8 @@ impl Plate {
                 Allpass::new(id[2]),
                 Allpass::new(id[3]),
             ],
-            tank_a_ap1,
-            tank_a_delay1: DelayLine::new(ta_d1_len + 1),
-            tank_a_damp,
-            tank_a_ap2,
-            tank_a_delay2: DelayLine::new(ta_d2_len + 1),
-            tank_b_ap1,
-            tank_b_delay1: DelayLine::new(tb_d1_len + 1),
-            tank_b_damp,
-            tank_b_ap2,
-            tank_b_delay2: DelayLine::new(tb_d2_len + 1),
+            tank_a,
+            tank_b,
             dc_a: DcBlocker::new(),
             dc_b: DcBlocker::new(),
             decay: 0.7,
@@ -215,16 +240,8 @@ impl ReverbAlgorithm for Plate {
         for d in &mut self.input_diffuser {
             d.reset();
         }
-        self.tank_a_ap1.reset();
-        self.tank_a_delay1.clear();
-        self.tank_a_damp.reset();
-        self.tank_a_ap2.reset();
-        self.tank_a_delay2.clear();
-        self.tank_b_ap1.reset();
-        self.tank_b_delay1.clear();
-        self.tank_b_damp.reset();
-        self.tank_b_ap2.reset();
-        self.tank_b_delay2.clear();
+        self.tank_a.reset();
+        self.tank_b.reset();
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
@@ -242,9 +259,9 @@ impl ReverbAlgorithm for Plate {
         self.decay = dattorro_gain_for_t60(t60, PLATE_LOOP_SECONDS, PLATE_DECAY_APPLICATIONS);
 
         // Damping → tank LP cutoff (2k–16k Hz)
-        let freq = 2000.0 + (1.0 - params.damping) * 14000.0;
-        self.tank_a_damp.set_freq(freq, self.sample_rate);
-        self.tank_b_damp.set_freq(freq, self.sample_rate);
+        let freq = (1.0 - params.damping).mul_add(14000.0, 2000.0);
+        self.tank_a.damp.set_freq(freq, self.sample_rate);
+        self.tank_b.damp.set_freq(freq, self.sample_rate);
 
         // Decoupled LF decay (real plates: low decay can run longer or
         // shorter than the mids — ValhallaPlate's core lesson). The Low
@@ -256,20 +273,20 @@ impl ReverbAlgorithm for Plate {
             .set_freq(params.band_crossover_hz.max(80.0), self.sample_rate);
 
         // Input bandwidth (tone control)
-        let bw_freq = 4000.0 + (1.0 - params.damping * 0.5) * 12000.0;
+        let bw_freq = params.damping.mul_add(-0.5, 1.0).mul_add(12000.0, 4000.0);
         self.bandwidth.set_freq(bw_freq, self.sample_rate);
 
         // Diffusion → decay_diffusion_1 and input diffuser strength
-        self.decay_diffusion_1 = 0.5 + params.diffusion * 0.2; // 0.5–0.7
-        self.decay_diffusion_2 = 0.35 + params.diffusion * 0.15; // 0.35–0.5
-        self.tank_a_ap1.feedback = -self.decay_diffusion_1; // Negative per Dattorro
-        self.tank_b_ap1.feedback = -self.decay_diffusion_1;
-        self.tank_a_ap2.set_feedback(self.decay_diffusion_2);
-        self.tank_b_ap2.set_feedback(self.decay_diffusion_2);
+        self.decay_diffusion_1 = params.diffusion.mul_add(0.2, 0.5); // 0.5–0.7
+        self.decay_diffusion_2 = params.diffusion.mul_add(0.15, 0.35); // 0.35–0.5
+        self.tank_a.ap1.feedback = -self.decay_diffusion_1; // Negative per Dattorro
+        self.tank_b.ap1.feedback = -self.decay_diffusion_1;
+        self.tank_a.ap2.set_feedback(self.decay_diffusion_2);
+        self.tank_b.ap2.set_feedback(self.decay_diffusion_2);
 
         // Input diffusion strength
-        let id1 = 0.6 + params.diffusion * 0.15; // 0.6–0.75
-        let id2 = 0.5 + params.diffusion * 0.125; // 0.5–0.625
+        let id1 = params.diffusion.mul_add(0.15, 0.6); // 0.6–0.75
+        let id2 = params.diffusion.mul_add(0.125, 0.5); // 0.5–0.625
         self.input_diffuser[0].set_feedback(id1);
         self.input_diffuser[1].set_feedback(id1);
         self.input_diffuser[2].set_feedback(id2);
@@ -277,9 +294,11 @@ impl ReverbAlgorithm for Plate {
 
         // Modulation depth
         let mod_depth = params.modulation * 24.0 * self.s;
-        self.tank_a_ap1
+        self.tank_a
+            .ap1
             .set_modulation(1.0, mod_depth, self.sample_rate);
-        self.tank_b_ap1
+        self.tank_b
+            .ap1
             .set_modulation(1.0, mod_depth, self.sample_rate);
     }
 
@@ -297,14 +316,14 @@ impl ReverbAlgorithm for Plate {
         }
 
         // ---- Read cross-feed from the END of each tank ----
-        // Tank A feeds from end of tank_b_delay2, Tank B from end of tank_a_delay2
+        // Tank A feeds from end of tank_b.delay2, Tank B from end of tank_a.delay2
         let s = self.s;
         let fb_a = self
             .dc_a
-            .tick(self.tank_b_delay2.read((3163.0 * s) as usize));
+            .tick(self.tank_b.delay2.read(num::f64_to_index(3163.0 * s)));
         let fb_b = self
             .dc_b
-            .tick(self.tank_a_delay2.read((3720.0 * s) as usize));
+            .tick(self.tank_a.delay2.read(num::f64_to_index(3720.0 * s)));
 
         // ---- Tank A processing ----
         // decay_diffusion_1 AP (modulated)
@@ -312,28 +331,28 @@ impl ReverbAlgorithm for Plate {
             let low = self.lf_split_a.tick(fb_a);
             low * (self.decay * self.low_decay_mult).min(0.997) + (fb_a - low) * self.decay
         };
-        let a_ap1_out = self.tank_a_ap1.tick(x + fb_a);
+        let a_ap1_out = self.tank_a.ap1.tick(x + fb_a);
         // delay_4
-        self.tank_a_delay1.write(a_ap1_out);
-        let a_d1_out = self.tank_a_delay1.read((4453.0 * s) as usize);
+        self.tank_a.delay1.write(a_ap1_out);
+        let a_d1_out = self.tank_a.delay1.read(num::f64_to_index(4453.0 * s));
         // damping LP → multiply by decay
-        let a_damped = self.tank_a_damp.tick(a_d1_out) * self.decay;
+        let a_damped = self.tank_a.damp.tick(a_d1_out) * self.decay;
         // decay_diffusion_2 AP
-        let a_ap2_out = self.tank_a_ap2.tick(a_damped);
+        let a_ap2_out = self.tank_a.ap2.tick(a_damped);
         // delay_5
-        self.tank_a_delay2.write(a_ap2_out);
+        self.tank_a.delay2.write(a_ap2_out);
 
         // ---- Tank B processing ----
         let fb_b = {
             let low = self.lf_split_b.tick(fb_b);
             low * (self.decay * self.low_decay_mult).min(0.997) + (fb_b - low) * self.decay
         };
-        let b_ap1_out = self.tank_b_ap1.tick(x + fb_b);
-        self.tank_b_delay1.write(b_ap1_out);
-        let b_d1_out = self.tank_b_delay1.read((4217.0 * s) as usize);
-        let b_damped = self.tank_b_damp.tick(b_d1_out) * self.decay;
-        let b_ap2_out = self.tank_b_ap2.tick(b_damped);
-        self.tank_b_delay2.write(b_ap2_out);
+        let b_ap1_out = self.tank_b.ap1.tick(x + fb_b);
+        self.tank_b.delay1.write(b_ap1_out);
+        let b_d1_out = self.tank_b.delay1.read(num::f64_to_index(4217.0 * s));
+        let b_damped = self.tank_b.damp.tick(b_d1_out) * self.decay;
+        let b_ap2_out = self.tank_b.ap2.tick(b_damped);
+        self.tank_b.delay2.write(b_ap2_out);
 
         // ---- 7-tap output per channel — Dattorro 1997, Table 2 ----
         //
@@ -348,21 +367,21 @@ impl ReverbAlgorithm for Plate {
         // (tank A delay 2). Earlier revisions approximated the allpass
         // taps with adjacent delay lines and had drifted tank/sign
         // assignments; Allpass::tap restores the published matrix.
-        let out_l = self.tank_b_delay1.read((266.0 * s) as usize)
-            + self.tank_b_delay1.read((2974.0 * s) as usize)
-            - self.tank_b_ap2.tap((1913.0 * s) as usize)
-            + self.tank_b_delay2.read((1996.0 * s) as usize)
-            - self.tank_a_delay1.read((1990.0 * s) as usize)
-            - self.tank_a_ap2.tap((187.0 * s) as usize)
-            - self.tank_a_delay2.read((1066.0 * s) as usize);
+        let out_l = self.tank_b.delay1.read(num::f64_to_index(266.0 * s))
+            + self.tank_b.delay1.read(num::f64_to_index(2974.0 * s))
+            - self.tank_b.ap2.tap(num::f64_to_index(1913.0 * s))
+            + self.tank_b.delay2.read(num::f64_to_index(1996.0 * s))
+            - self.tank_a.delay1.read(num::f64_to_index(1990.0 * s))
+            - self.tank_a.ap2.tap(num::f64_to_index(187.0 * s))
+            - self.tank_a.delay2.read(num::f64_to_index(1066.0 * s));
 
-        let out_r = self.tank_a_delay1.read((353.0 * s) as usize)
-            + self.tank_a_delay1.read((3627.0 * s) as usize)
-            - self.tank_a_ap2.tap((1228.0 * s) as usize)
-            + self.tank_a_delay2.read((2673.0 * s) as usize)
-            - self.tank_b_delay1.read((2111.0 * s) as usize)
-            - self.tank_b_ap2.tap((335.0 * s) as usize)
-            - self.tank_b_delay2.read((121.0 * s) as usize);
+        let out_r = self.tank_a.delay1.read(num::f64_to_index(353.0 * s))
+            + self.tank_a.delay1.read(num::f64_to_index(3627.0 * s))
+            - self.tank_a.ap2.tap(num::f64_to_index(1228.0 * s))
+            + self.tank_a.delay2.read(num::f64_to_index(2673.0 * s))
+            - self.tank_b.delay1.read(num::f64_to_index(2111.0 * s))
+            - self.tank_b.ap2.tap(num::f64_to_index(335.0 * s))
+            - self.tank_b.delay2.read(num::f64_to_index(121.0 * s));
 
         // Paper output scale is 0.6; 0.25 preserves this port's level
         // relative to the other algorithms (chain-level normalization).

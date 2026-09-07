@@ -21,8 +21,8 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-use eq_dsp::band::Placement;
 use eq_dsp::engine::{BandConfig, BandDynamics, FtsEq};
+use eq_dsp::runtime::band::Placement;
 
 const SR: f64 = 48_000.0;
 

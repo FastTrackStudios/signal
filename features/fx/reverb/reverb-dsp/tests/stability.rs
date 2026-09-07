@@ -22,22 +22,8 @@
 //! Swept across the knobs that close feedback loops — decay, and the
 //! PRE-DELAY-as-feedback remap that Magneto and `NonLinear` share.
 
-// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
-// A test/example target is its own crate, so the crate-root allow there does
-// not reach this file and it needs its own copy.
-#![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::indexing_slicing,
-    reason = "pending the DSP algorithm rewrite"
-)]
-
 use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::num;
 use reverb_dsp::AlgorithmType;
 use reverb_dsp::chain::ReverbChain;
 
@@ -71,21 +57,25 @@ fn impulse_response(algo: AlgorithmType, decay: f64, predelay_ms: f64, seconds: 
     c.predelay_ms = predelay_ms;
     c.update(config());
 
-    let frames = (SR * seconds) as usize;
+    let frames = num::f64_to_index(SR * seconds);
     let mut out = Vec::with_capacity(frames);
     let block = 512;
     let mut pos = 0;
     while pos < frames {
-        let n = block.min(frames - pos);
+        let n = block.min(frames.saturating_sub(pos));
         let mut l = vec![0.0f64; n];
         let mut r = vec![0.0f64; n];
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "n > 0 guaranteed by loop invariant"
+        )]
         if pos == 0 {
             l[0] = 1.0;
             r[0] = 1.0;
         }
         c.process(&mut l, &mut r);
         out.extend_from_slice(&l);
-        pos += n;
+        pos = pos.saturating_add(n);
     }
     out
 }
@@ -104,21 +94,25 @@ fn impulse_response_t60(algo: AlgorithmType, t60_s: f64, seconds: f64) -> Vec<f6
         c.update(config());
     }
 
-    let frames = (SR * seconds) as usize;
+    let frames = num::f64_to_index(SR * seconds);
     let mut out = Vec::with_capacity(frames);
     let block = 512;
     let mut pos = 0;
     while pos < frames {
-        let n = block.min(frames - pos);
+        let n = block.min(frames.saturating_sub(pos));
         let mut l = vec![0.0f64; n];
         let mut r = vec![0.0f64; n];
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "n > 0 guaranteed by loop invariant"
+        )]
         if pos == 0 {
             l[0] = 1.0;
             r[0] = 1.0;
         }
         c.process(&mut l, &mut r);
         out.extend_from_slice(&l);
-        pos += n;
+        pos = pos.saturating_add(n);
     }
     out
 }
@@ -127,7 +121,7 @@ fn rms(buf: &[f64]) -> f64 {
     if buf.is_empty() {
         return 0.0;
     }
-    (buf.iter().map(|s| s * s).sum::<f64>() / buf.len() as f64).sqrt()
+    (buf.iter().map(|s| s * s).sum::<f64>() / num::count_to_f64(buf.len())).sqrt()
 }
 
 /// Assert a rendered tail is bounded and finite.
@@ -306,7 +300,7 @@ fn the_wet_trim_scales_the_wet_bus() {
         c.mix = 1.0;
         c.wet_gain_db = trim_db;
         c.update(config());
-        let mut l = vec![0.0f64; (SR * 2.0) as usize];
+        let mut l = vec![0.0f64; num::f64_to_index(SR * 2.0)];
         let mut r = l.clone();
         l[0] = 1.0;
         r[0] = 1.0;

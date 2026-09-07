@@ -14,6 +14,7 @@ use crate::tilt::DecayTilt;
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::num;
 use pitch_dsp::granular::GranularShifter;
 
 /// `TimeLine` MX Ice interval menu. `Free` uses `PitchDelay::speed` raw.
@@ -37,9 +38,9 @@ impl IceInterval {
     pub fn ratio(self) -> Option<f64> {
         match self {
             Self::Free => None,
-            Self::Semitones(s) => Some(2f64.powf(f64::from(s) / 12.0)),
-            Self::Cents(c) => Some(2f64.powf(f64::from(c) / 1200.0)),
-            Self::OctaveAndFifth => Some(2f64.powf(19.0 / 12.0)),
+            Self::Semitones(s) => Some((f64::from(s) / 12.0).exp2()),
+            Self::Cents(c) => Some((f64::from(c) / 1200.0).exp2()),
+            Self::OctaveAndFifth => Some((19.0_f64 / 12.0).exp2()),
             Self::TwoOctaves => Some(4.0),
         }
     }
@@ -47,14 +48,14 @@ impl IceInterval {
     /// The 30-entry MX menu order: −12..−1, −50c, −25c, +25c, +50c,
     /// +1..+11, +12, +19, +24. Out-of-range indices clamp to the ends.
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
-            0..=11 => Self::Semitones(i as i8 - 12),
+            0..=11 => Self::Semitones(semitone_from_index(i, 12)),
             12 => Self::Cents(-50),
             13 => Self::Cents(-25),
             14 => Self::Cents(25),
             15 => Self::Cents(50),
-            16..=26 => Self::Semitones(i as i8 - 15),
+            16..=26 => Self::Semitones(semitone_from_index(i, 15)),
             27 => Self::Semitones(12),
             28 => Self::OctaveAndFifth,
             _ => Self::TwoOctaves,
@@ -65,6 +66,25 @@ impl IceInterval {
 }
 
 /// Slice size — scales with the delay time (per the MX manual).
+/// `i - offset` as a semitone count, for the index ranges `from_index` matches.
+///
+/// Written as `const` arithmetic on `i8` rather than `i8::try_from(i).expect(..)`:
+/// `TryFrom` is not const, `expect` is not const, and this crate denies
+/// `clippy::expect_used` anyway. The callers' match arms bound `i` to 0..=26,
+/// so the truncation below cannot lose information — and `saturating_sub`
+/// keeps it total regardless.
+#[inline]
+const fn semitone_from_index(i: usize, offset: i8) -> i8 {
+    // `i` is at most 26 here, so the low byte is the whole value.
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        reason = "i <= 26 (guaranteed by match arms in from_index), safe narrowing to i8"
+    )]
+    let low = (i & 0x7F) as i8;
+    low.saturating_sub(offset)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IceSlice {
     /// ~1/4 of the delay time (max 200 ms) — small regenerating fragments.
@@ -155,7 +175,7 @@ impl PitchDelay {
 
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        let max_len = num::f64_to_index(sample_rate * Self::MAX_DELAY_S).saturating_add(1024);
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
         }
@@ -178,7 +198,7 @@ impl PitchDelay {
         // the grain or rate actually changed (update runs at control rate).
         if (grain - self.grain_samples).abs() > 1.0 {
             self.grain_samples = grain;
-            self.shifter.grain_size = grain as usize;
+            self.shifter.grain_size = num::f64_to_index(grain);
             self.shifter.update(sample_rate);
         }
 
@@ -208,7 +228,7 @@ impl PitchDelay {
                 * self.sample_rate;
         }
 
-        let max_read = self.delay.len() as f64 - 4.0;
+        let max_read = num::count_to_f64(self.delay.len()) - 4.0;
 
         // Dry path reads at the delay time. The ice path taps early to
         // compensate the shifter's re-delay, whose MEAN is speed-dependent:
@@ -217,7 +237,7 @@ impl PitchDelay {
         // extreme up-shifts the compensation floors at zero (repeats land
         // slightly late — can't tap the future).
         let dry_tap = self.delay.read_cubic(smooth_delay.clamp(1.0, max_read));
-        let comp = (self.grain_samples * (1.0 + (1.0 - self.speed) * 0.5)).max(0.0);
+        let comp = (self.grain_samples * (1.0 - self.speed).mul_add(0.5, 1.0)).max(0.0);
         let early = (smooth_delay - comp).clamp(1.0, max_read);
         let ice_tap = self.delay.read_cubic(early);
 
@@ -232,7 +252,7 @@ impl PitchDelay {
         let mut fb = output * self.feedback;
         fb = self.decay_tilt_eq.tick(fb, 0);
         let limited_fb = if fb.abs() > 0.001 {
-            fb * (3.0 - fb.abs() * 2.0).max(0.0) / 3.0
+            fb * fb.abs().mul_add(-2.0, 3.0).max(0.0) / 3.0
         } else {
             fb
         };
@@ -247,7 +267,7 @@ impl PitchDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -294,7 +314,7 @@ mod tests {
             s2 = s1;
             s1 = s0;
         }
-        (s1 * s1 + s2 * s2 - coeff * s1 * s2) / sig.len() as f64
+        (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / num::count_to_f64(sig.len())
     }
 
     /// Which of `candidates` dominates the window?
@@ -364,20 +384,20 @@ mod tests {
         d.update(SR);
 
         // 200 ms 300 Hz burst; measure the repeat's frequency.
-        let burst = (SR * 0.2) as usize;
-        let n = (SR * 1.0) as usize;
+        let burst = num::f64_to_index(SR * 0.2);
+        let n = num::f64_to_index(SR * 1.0);
         let mut out = Vec::with_capacity(n);
         for i in 0..n {
             let x = if i < burst {
-                (2.0 * PI * 300.0 * i as f64 / SR).sin() * 0.5
+                (2.0 * PI * 300.0 * num::count_to_f64(i) / SR).sin() * 0.5
             } else {
                 0.0
             };
             out.push(d.tick(x));
         }
         // Repeat window: starts at 400 ms; sample its middle.
-        let w0 = (SR * 0.45) as usize;
-        let w1 = (SR * 0.55) as usize;
+        let w0 = num::f64_to_index(SR * 0.45);
+        let w1 = num::f64_to_index(SR * 0.55);
         let f = dominant(&out[w0..w1], &[150.0, 300.0, 600.0, 1200.0]);
         assert!(
             (f - 600.0).abs() < 1.0,
@@ -395,12 +415,12 @@ mod tests {
         d.slice = Some(IceSlice::Medium);
         d.update(SR);
 
-        let burst = (SR * 0.15) as usize;
-        let n = (SR * 1.2) as usize;
+        let burst = num::f64_to_index(SR * 0.15);
+        let n = num::f64_to_index(SR * 1.2);
         let mut out = Vec::with_capacity(n);
         for i in 0..n {
             let x = if i < burst {
-                (2.0 * PI * 220.0 * i as f64 / SR).sin() * 0.5
+                (2.0 * PI * 220.0 * num::count_to_f64(i) / SR).sin() * 0.5
             } else {
                 0.0
             };
@@ -408,8 +428,14 @@ mod tests {
         }
         // Repeat 1 at 300 ms (≈440), repeat 2 at 600 ms (≈880).
         let cands = [220.0, 440.0, 880.0, 1760.0];
-        let f1 = dominant(&out[(SR * 0.33) as usize..(SR * 0.42) as usize], &cands);
-        let f2 = dominant(&out[(SR * 0.63) as usize..(SR * 0.72) as usize], &cands);
+        let f1 = dominant(
+            &out[num::f64_to_index(SR * 0.33)..num::f64_to_index(SR * 0.42)],
+            &cands,
+        );
+        let f2 = dominant(
+            &out[num::f64_to_index(SR * 0.63)..num::f64_to_index(SR * 0.72)],
+            &cands,
+        );
         assert!(
             (f1 - 440.0).abs() < 1.0 && (f2 - 880.0).abs() < 1.0,
             "successive repeats should climb an octave: f1={f1} f2={f2}"
@@ -430,7 +456,7 @@ mod tests {
 
         let mut max_err = 0.0f64;
         for i in 0..24000 {
-            let x = (2.0 * PI * 330.0 * i as f64 / SR).sin() * 0.5;
+            let x = (2.0 * PI * 330.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(x);
             // Match PitchDelay's read-before-write order.
             let want = reference.read_cubic(delay_samples);
@@ -460,7 +486,7 @@ mod tests {
             d.update(SR);
             (0..48000)
                 .map(|i| {
-                    let x = (2.0 * PI * 220.0 * i as f64 / SR).sin() * 0.5;
+                    let x = (2.0 * PI * 220.0 * f64::from(i) / SR).sin() * 0.5;
                     d.tick(x)
                 })
                 .collect()
@@ -485,7 +511,7 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5;
             let out = d.tick(input);
             assert!(out.is_finite(), "NaN at sample {i}");
         }
@@ -524,7 +550,7 @@ mod tests {
         let mut out_shifted = Vec::new();
 
         for i in 0..9600 {
-            let s = (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5;
+            let s = (2.0 * PI * 440.0 * f64::from(i) / SR).sin() * 0.5;
             out_normal.push(d_normal.tick(s));
             out_shifted.push(d_shifted.tick(s));
         }

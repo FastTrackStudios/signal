@@ -4,6 +4,8 @@
 //! filtered through formant resonances to create vocal/choral textures.
 //! Combines shimmer architecture with a formant filter bank.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ChoirVoice, ChoraleParams, ChoraleVowel, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -13,30 +15,142 @@ use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::grain_pitch::GrainPitchShifter;
 use audiocore_dsp::one_pole::OnePoleHp;
 
-/// Vowel formant frequencies for "ah", "ee", "oh", "oo"
-/// Measured tenor vowel formants (Csound's appendix tables — F, dB
-/// amplitude relative to F1, bandwidth): five formants per vowel; the
-/// fixed 2.6–3.6 kHz F3–F5 cluster is the "singer's formant" that
-/// reads as SUNG rather than filtered — it survives the vowel morph.
-/// Rows: "ah", "e", "oh", "oo" (the morph axis).
-const VOWEL_F: [[f64; 5]; 4] = [
-    [650.0, 1080.0, 2650.0, 2900.0, 3250.0],
-    [400.0, 1700.0, 2600.0, 3200.0, 3580.0],
-    [400.0, 800.0, 2600.0, 2800.0, 3000.0],
-    [350.0, 600.0, 2700.0, 2900.0, 3300.0],
+/// One measured formant of one vowel: centre frequency, amplitude in dB
+/// relative to F1, and bandwidth. Three parallel `[[f64; 5]; 4]` tables
+/// before, all walked by the same pair of indices.
+struct Formant {
+    f: f64,
+    a_db: f64,
+    bw: f64,
+}
+
+/// Measured tenor vowel formants (Csound's appendix tables): five
+/// formants per vowel; the fixed 2.6–3.6 kHz F3–F5 cluster is the
+/// "singer's formant" that reads as SUNG rather than filtered — it
+/// survives the vowel morph. Rows: "ah", "e", "oh", "oo" (the morph
+/// axis).
+const VOWELS: [[Formant; 5]; 4] = [
+    // "ah"
+    [
+        Formant {
+            f: 650.0,
+            a_db: 0.0,
+            bw: 80.0,
+        },
+        Formant {
+            f: 1080.0,
+            a_db: -6.0,
+            bw: 90.0,
+        },
+        Formant {
+            f: 2650.0,
+            a_db: -7.0,
+            bw: 120.0,
+        },
+        Formant {
+            f: 2900.0,
+            a_db: -8.0,
+            bw: 130.0,
+        },
+        Formant {
+            f: 3250.0,
+            a_db: -22.0,
+            bw: 140.0,
+        },
+    ],
+    // "e"
+    [
+        Formant {
+            f: 400.0,
+            a_db: 0.0,
+            bw: 70.0,
+        },
+        Formant {
+            f: 1700.0,
+            a_db: -14.0,
+            bw: 80.0,
+        },
+        Formant {
+            f: 2600.0,
+            a_db: -12.0,
+            bw: 100.0,
+        },
+        Formant {
+            f: 3200.0,
+            a_db: -14.0,
+            bw: 120.0,
+        },
+        Formant {
+            f: 3580.0,
+            a_db: -20.0,
+            bw: 120.0,
+        },
+    ],
+    // "oh"
+    [
+        Formant {
+            f: 400.0,
+            a_db: 0.0,
+            bw: 70.0,
+        },
+        Formant {
+            f: 800.0,
+            a_db: -10.0,
+            bw: 80.0,
+        },
+        Formant {
+            f: 2600.0,
+            a_db: -12.0,
+            bw: 100.0,
+        },
+        Formant {
+            f: 2800.0,
+            a_db: -12.0,
+            bw: 130.0,
+        },
+        Formant {
+            f: 3000.0,
+            a_db: -26.0,
+            bw: 135.0,
+        },
+    ],
+    // "oo"
+    [
+        Formant {
+            f: 350.0,
+            a_db: 0.0,
+            bw: 40.0,
+        },
+        Formant {
+            f: 600.0,
+            a_db: -20.0,
+            bw: 60.0,
+        },
+        Formant {
+            f: 2700.0,
+            a_db: -17.0,
+            bw: 100.0,
+        },
+        Formant {
+            f: 2900.0,
+            a_db: -14.0,
+            bw: 120.0,
+        },
+        Formant {
+            f: 3300.0,
+            a_db: -26.0,
+            bw: 120.0,
+        },
+    ],
 ];
-const VOWEL_A_DB: [[f64; 5]; 4] = [
-    [0.0, -6.0, -7.0, -8.0, -22.0],
-    [0.0, -14.0, -12.0, -14.0, -20.0],
-    [0.0, -10.0, -12.0, -12.0, -26.0],
-    [0.0, -20.0, -17.0, -14.0, -26.0],
-];
-const VOWEL_BW: [[f64; 5]; 4] = [
-    [80.0, 90.0, 120.0, 130.0, 140.0],
-    [70.0, 80.0, 100.0, 120.0, 120.0],
-    [70.0, 80.0, 100.0, 130.0, 135.0],
-    [40.0, 60.0, 100.0, 120.0, 120.0],
-];
+
+/// Total row lookup. `set_vowel` clamps the morph index into the table,
+/// so the fallback is unreachable — it just keeps the lookup infallible.
+fn vowel(idx: usize) -> &'static [Formant; 5] {
+    let [ah, ..] = &VOWELS;
+    VOWELS.get(idx).unwrap_or(ah)
+}
+
 const N_FORMANTS: usize = 5;
 
 pub struct Chorale {
@@ -64,7 +178,7 @@ pub struct Chorale {
     // 20 Hz without it (IR-metric verified).
     out_hp_l: OnePoleHp,
     out_hp_r: OnePoleHp,
-    chorale_amount: f64,
+    amount: f64,
     vowel_mix: f64, // 0.0 = "ah", 1.0 = "oo"
     // Legacy choir level from extra_a (used when mx.choir_level is None).
     legacy_amount: f64,
@@ -95,7 +209,7 @@ const CTRL_BLOCK: usize = 64;
 impl Chorale {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let grain = (sample_rate * 0.06) as usize;
+        let grain = num::f64_to_index(sample_rate * 0.06);
 
         let mut chorale = Self {
             fdn_l: Self::make_fdn(sample_rate, false),
@@ -114,7 +228,7 @@ impl Chorale {
             fb_r: 0.0,
             out_hp_l: OnePoleHp::new(24.0, sample_rate),
             out_hp_r: OnePoleHp::new(24.0, sample_rate),
-            chorale_amount: 0.5,
+            amount: 0.5,
             vowel_mix: 0.0,
             legacy_amount: 0.5 * 0.6,
             mx: ChoraleParams::default(),
@@ -142,22 +256,25 @@ impl Chorale {
     }
 
     fn make_fdn(sample_rate: f64, offset: bool) -> Fdn {
-        let base = if !offset {
-            [1049, 1327, 1559, 1801, 2069, 2297, 2557, 2803]
-        } else {
+        let base = if offset {
             [1117, 1381, 1613, 1873, 2131, 2371, 2617, 2879]
+        } else {
+            [1049, 1327, 1559, 1801, 2069, 2297, 2557, 2803]
         };
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| (d as f64 * scale) as usize).collect();
+        let delays: Vec<usize> = base
+            .iter()
+            .map(|&d| num::f64_to_index(f64::from(d) * scale))
+            .collect();
         Fdn::new(&delays, MixMatrix::Householder)
     }
 
     fn set_vowel(&mut self, mix: f64, sample_rate: f64) {
         // Interpolate between vowels
         let idx = (mix * 3.0).min(2.999);
-        let lo = idx as usize;
-        let hi = (lo + 1).min(3);
-        let frac = idx - lo as f64;
+        let lo = num::f64_to_index(idx);
+        let hi = lo.saturating_add(1).min(3);
+        let frac = idx - num::count_to_f64(lo);
 
         // Choir Voice range: Baritone shifts the formant centers DOWN
         // (larger vocal tract, low chorale range — the pedal's second
@@ -167,13 +284,18 @@ impl Chorale {
             ChoirVoice::Baritone => 0.78,
         };
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..N_FORMANTS {
+        let morph = vowel(lo).iter().zip(vowel(hi));
+        let filters = self.formants_l.iter_mut().zip(self.formants_r.iter_mut());
+        for ((lo_fmt, hi_fmt), (filter_l, filter_r)) in morph.zip(filters) {
             // Morph F / amplitude / bandwidth in log-frequency space
             // between the measured vowel columns.
-            let f = (VOWEL_F[lo][i].ln() * (1.0 - frac) + VOWEL_F[hi][i].ln() * frac).exp();
-            let amp = VOWEL_A_DB[lo][i] * (1.0 - frac) + VOWEL_A_DB[hi][i] * frac;
-            let bw = VOWEL_BW[lo][i] * (1.0 - frac) + VOWEL_BW[hi][i] * frac;
+            let f = lo_fmt
+                .f
+                .ln()
+                .mul_add(1.0 - frac, hi_fmt.f.ln() * frac)
+                .exp();
+            let amp = lo_fmt.a_db.mul_add(1.0 - frac, hi_fmt.a_db * frac);
+            let bw = lo_fmt.bw.mul_add(1.0 - frac, hi_fmt.bw * frac);
             // Per-channel formant drift from the mod randomization.
             let freq_l = f * voice_scale * (1.0 + self.rand_formant[0]);
             let freq_r = f * voice_scale * (1.0 + self.rand_formant[1]);
@@ -186,8 +308,8 @@ impl Chorale {
             let (q_scale, base_gain) = self.mx.resonance.q_gain();
             let gain_db = (base_gain + amp * 0.35).max(1.0);
             let q = (f / bw * q_scale / 3.0).clamp(1.5, 9.0);
-            self.formants_l[i].set(FilterType::Peak { gain_db }, freq_l, q, sample_rate);
-            self.formants_r[i].set(FilterType::Peak { gain_db }, freq_r, q, sample_rate);
+            filter_l.set(FilterType::Peak { gain_db }, freq_l, q, sample_rate);
+            filter_r.set(FilterType::Peak { gain_db }, freq_r, q, sample_rate);
         }
     }
 
@@ -195,7 +317,7 @@ impl Chorale {
     #[inline]
     fn rand_bipolar(&mut self) -> f64 {
         self.rng = self.rng.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-        (self.rng >> 8) as f64 / ((u32::MAX >> 8) as f64) * 2.0 - 1.0
+        (f64::from(self.rng >> 8) / f64::from(u32::MAX >> 8)).mul_add(2.0, -1.0)
     }
 
     /// Control-rate vowel-program update: static programs pin
@@ -206,25 +328,25 @@ impl Chorale {
         let Some(program) = self.mx.vowel else {
             return; // legacy continuous morph via extra_b
         };
-        let dt = CTRL_BLOCK as f64 / self.sample_rate;
+        let dt = num::count_to_f64(CTRL_BLOCK) / self.sample_rate;
         let sweep = |phase: f64, a: f64, b: f64| -> f64 {
-            let x = 0.5 - 0.5 * (phase * std::f64::consts::TAU).cos();
-            a + (b - a) * x
+            let x = 0.5f64.mul_add(-(phase * std::f64::consts::TAU).cos(), 0.5);
+            (b - a).mul_add(x, a)
         };
         let target = match program {
             ChoraleVowel::Aahh => 0.0,
             ChoraleVowel::Oh => 2.0 / 3.0,
             ChoraleVowel::Ooo => 1.0,
             ChoraleVowel::Aahhoo => {
-                self.vowel_phase = (self.vowel_phase + 0.07 * dt).fract();
+                self.vowel_phase = 0.07f64.mul_add(dt, self.vowel_phase).fract();
                 sweep(self.vowel_phase, 0.0, 1.0)
             }
             ChoraleVowel::Aahhoh => {
-                self.vowel_phase = (self.vowel_phase + 0.07 * dt).fract();
+                self.vowel_phase = 0.07f64.mul_add(dt, self.vowel_phase).fract();
                 sweep(self.vowel_phase, 0.0, 2.0 / 3.0)
             }
             ChoraleVowel::Ooohoh => {
-                self.vowel_phase = (self.vowel_phase + 0.07 * dt).fract();
+                self.vowel_phase = 0.07f64.mul_add(dt, self.vowel_phase).fract();
                 sweep(self.vowel_phase, 1.0, 2.0 / 3.0)
             }
             ChoraleVowel::Random => {
@@ -234,7 +356,7 @@ impl Chorale {
                     self.vowel_phase = 0.0;
                     self.vowel_walk_target = (self.rand_bipolar() + 1.0) * 0.5;
                 }
-                self.vowel_mix + (self.vowel_walk_target - self.vowel_mix) * 0.06
+                (self.vowel_walk_target - self.vowel_mix).mul_add(0.06, self.vowel_mix)
             }
         };
         if (target - self.vowel_mix).abs() > 1e-4 {
@@ -253,18 +375,31 @@ impl Chorale {
         }
         // New walk targets every ~80 ms.
         if self.walk_countdown == 0 {
-            for ch in 0..2 {
-                self.rand_target_speed[ch] = self.rand_bipolar() * 0.02 * amount;
-                self.rand_target_formant[ch] = self.rand_bipolar() * 0.06 * amount;
+            // Drawn per channel, in channel order, before the assignment
+            // so the walk keeps consuming the RNG in the same sequence.
+            let targets: [(f64, f64); 2] = core::array::from_fn(|_| {
+                (
+                    self.rand_bipolar() * 0.02 * amount,
+                    self.rand_bipolar() * 0.06 * amount,
+                )
+            });
+            let speeds = self.rand_target_speed.iter_mut();
+            for ((target_speed, target_formant), (speed, formant)) in
+                speeds.zip(&mut self.rand_target_formant).zip(targets)
+            {
+                *target_speed = speed;
+                *target_formant = formant;
             }
-            self.walk_countdown = ((0.08 * self.sample_rate) as usize / CTRL_BLOCK).max(1);
+            self.walk_countdown = (num::f64_to_index(0.08 * self.sample_rate) / CTRL_BLOCK).max(1);
         }
-        self.walk_countdown -= 1;
+        self.walk_countdown = self.walk_countdown.saturating_sub(1);
 
         // One-pole toward the targets (smooth, click-free).
-        for ch in 0..2 {
-            self.rand_speed[ch] += (self.rand_target_speed[ch] - self.rand_speed[ch]) * 0.08;
-            self.rand_formant[ch] += (self.rand_target_formant[ch] - self.rand_formant[ch]) * 0.08;
+        for (speed, target) in self.rand_speed.iter_mut().zip(&self.rand_target_speed) {
+            *speed = (target - *speed).mul_add(0.08, *speed);
+        }
+        for (formant, target) in self.rand_formant.iter_mut().zip(&self.rand_target_formant) {
+            *formant = (target - *formant).mul_add(0.08, *formant);
         }
 
         self.shifter_l.set_speed(2.0 * (1.0 + self.rand_speed[0]));
@@ -307,7 +442,7 @@ impl ReverbAlgorithm for Chorale {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Decay
-        let decay = 0.4 + params.decay * 0.55;
+        let decay = params.decay.mul_add(0.55, 0.4);
         self.fdn_l.set_decay(decay);
         self.fdn_r.set_decay(decay);
 
@@ -319,7 +454,7 @@ impl ReverbAlgorithm for Chorale {
         // Chorale amount (extra_a) — legacy mapping, overridable by
         // the MX Choir level param.
         self.legacy_amount = params.extra_a * 0.6;
-        self.chorale_amount = self
+        self.amount = self
             .mx
             .choir_level
             .map_or(self.legacy_amount, |v| v.clamp(0.0, 1.0) * 0.6);
@@ -329,7 +464,7 @@ impl ReverbAlgorithm for Chorale {
         self.set_vowel(params.extra_b, self.sample_rate);
 
         // Diffusion
-        let stages = (params.diffusion * 8.0) as usize;
+        let stages = num::f64_to_index(params.diffusion * 8.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
 
@@ -344,7 +479,7 @@ impl ReverbAlgorithm for Chorale {
         let voice_changed = params.voice != self.mx.voice;
         let mod_off = params.mod_amount <= 1e-9 && self.mx.mod_amount > 1e-9;
         self.mx = *params;
-        self.chorale_amount = self
+        self.amount = self
             .mx
             .choir_level
             .map_or(self.legacy_amount, |v| v.clamp(0.0, 1.0) * 0.6);
@@ -374,11 +509,11 @@ impl ReverbAlgorithm for Chorale {
             }
             self.ctrl_countdown = CTRL_BLOCK;
         }
-        self.ctrl_countdown -= 1;
+        self.ctrl_countdown = self.ctrl_countdown.saturating_sub(1);
 
         // Mix input with formant-filtered pitch-shifted feedback
-        let in_l = left + self.fb_l * self.chorale_amount;
-        let in_r = right + self.fb_r * self.chorale_amount;
+        let in_l = self.fb_l.mul_add(self.amount, left);
+        let in_r = self.fb_r.mul_add(self.amount, right);
 
         // Diffuse
         let diff_l = self.diffuser_l.tick(in_l);

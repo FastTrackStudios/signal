@@ -5,22 +5,8 @@
 //! Loads each file via `IrAsset` -> `IrTransforms` -> Convolution, renders a
 //! unit impulse, and prints length / peak / RT60-style decay stats.
 
-// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
-// A test/example target is its own crate, so the crate-root allow there does
-// not reach this file and it needs its own copy.
-#![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::items_after_statements,
-    clippy::many_single_char_names,
-    reason = "pending the DSP algorithm rewrite"
-)]
-
+use dsp_core::num;
+use reverb_dsp::algorithm::ReverbAlgorithm;
 use reverb_dsp::algorithms::convolution::Convolution;
 use reverb_dsp::ir::{IrAsset, IrTransforms};
 
@@ -43,22 +29,22 @@ fn main() {
                 conv.load_ir_stereo(&ir_l, &ir_r);
 
                 // Render impulse through the convolver.
-                use reverb_dsp::algorithm::ReverbAlgorithm;
-                let n = (SR * asset.duration_seconds().min(10.0)) as usize + 4800;
+                let n =
+                    num::f64_to_index(SR * asset.duration_seconds().min(10.0)).saturating_add(4800);
                 let mut energy = 0.0f64;
                 let mut peak = 0.0f64;
                 let mut last_above_60 = 0usize;
                 for i in 0..n {
                     let x = if i == 0 { 1.0 } else { 0.0 };
-                    let (l, r) = conv.tick(x, x);
-                    let e = l.mul_add(l, r * r);
-                    energy += e;
-                    peak = peak.max(l.abs()).max(r.abs());
-                    if e > 1e-6 {
+                    let (wet_l, wet_r) = conv.tick(x, x);
+                    let sample_energy = wet_l.mul_add(wet_l, wet_r * wet_r);
+                    energy += sample_energy;
+                    peak = peak.max(wet_l.abs()).max(wet_r.abs());
+                    if sample_energy > 1e-6 {
                         last_above_60 = i;
                     }
                     assert!(
-                        l.is_finite() && r.is_finite(),
+                        wet_l.is_finite() && wet_r.is_finite(),
                         "NaN at sample {i} in {path}"
                     );
                 }
@@ -70,7 +56,7 @@ fn main() {
                     asset.num_channels(),
                     peak,
                     energy,
-                    last_above_60 as f64 / SR,
+                    num::count_to_f64(last_above_60) / SR,
                     path
                 );
             }

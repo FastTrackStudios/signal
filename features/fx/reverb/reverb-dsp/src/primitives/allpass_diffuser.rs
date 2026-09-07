@@ -4,6 +4,8 @@
 //! Chains up to 12 modulated allpass stages in series with seed-based
 //! delay distribution: `d = pow(10, r) * 0.1 * baseDelay`.
 
+use dsp_core::num;
+
 use super::lcg_random::random_buffer_cross_seed;
 use super::modulated_allpass::ModulatedAllpass;
 
@@ -44,8 +46,12 @@ impl AllpassDiffuser {
     pub fn new(delay_lengths: &[usize]) -> Self {
         let mut d = Self::new_default();
         // Set individual stage delays directly (non-seed mode)
-        for (i, &len) in delay_lengths.iter().enumerate().take(MAX_STAGES) {
-            d.filters[i].sample_delay = len.max(1);
+        for (&len, f) in delay_lengths
+            .iter()
+            .zip(d.filters.iter_mut())
+            .take(MAX_STAGES)
+        {
+            f.sample_delay = len.max(1);
         }
         d.stages = delay_lengths.len().min(MAX_STAGES);
         d
@@ -56,7 +62,7 @@ impl AllpassDiffuser {
     pub fn with_defaults(sample_rate: f64, size: f64) -> Self {
         let mut d = Self::new_default();
         d.sample_rate = sample_rate;
-        d.delay = (sample_rate * 0.01 * size.max(0.1)) as usize; // ~10ms base
+        d.delay = num::f64_to_index(sample_rate * 0.01 * size.max(0.1)); // ~10ms base
         d.update_seeds();
         d.stages = 8;
         d
@@ -97,25 +103,25 @@ impl AllpassDiffuser {
     }
 
     pub fn set_mod_amount(&mut self, amount: f64) {
-        for i in 0..MAX_STAGES {
-            let sv = if i + MAX_STAGES < self.seed_values.len() {
-                self.seed_values[MAX_STAGES + i]
+        for (i, filter) in self.filters.iter_mut().enumerate() {
+            let sv = if let Some(&val) = self.seed_values.get(i.saturating_add(MAX_STAGES)) {
+                val
             } else {
                 0.5
             };
-            self.filters[i].mod_amount = amount * (0.85 + 0.3 * sv);
+            filter.mod_amount = amount * 0.3f64.mul_add(sv, 0.85);
         }
     }
 
     pub fn set_mod_rate(&mut self, rate: f64) {
         self.mod_rate = rate;
-        for i in 0..MAX_STAGES {
-            let sv = if i + MAX_STAGES * 2 < self.seed_values.len() {
-                self.seed_values[MAX_STAGES * 2 + i]
+        for (i, filter) in self.filters.iter_mut().enumerate() {
+            let sv = if let Some(&val) = self.seed_values.get(i.saturating_add(MAX_STAGES * 2)) {
+                val
             } else {
                 0.5
             };
-            self.filters[i].mod_rate = rate * (0.85 + 0.3 * sv) / self.sample_rate;
+            filter.mod_rate = rate * 0.3f64.mul_add(sv, 0.85) / self.sample_rate;
         }
     }
 
@@ -136,7 +142,7 @@ impl AllpassDiffuser {
     /// instantaneous delay changes cancel in aggregate.
     pub fn set_quadrature_phases(&mut self) {
         for (i, f) in self.filters.iter_mut().enumerate() {
-            f.set_phase(i as f64 * 0.25 + 0.31);
+            f.set_phase(num::count_to_f64(i).mul_add(0.25, 0.31));
         }
     }
 
@@ -155,8 +161,8 @@ impl AllpassDiffuser {
     #[inline]
     pub fn tick(&mut self, input: f64) -> f64 {
         let mut x = input;
-        for i in 0..self.stages {
-            x = self.filters[i].tick(x);
+        for f in self.filters.iter_mut().take(self.stages) {
+            x = f.tick(x);
         }
         x
     }
@@ -173,11 +179,10 @@ impl AllpassDiffuser {
 
     /// `CloudSeed` delay distribution: `d = pow(10, r) * 0.1 * baseDelay`.
     fn update_delays(&mut self) {
-        for i in 0..MAX_STAGES {
-            if i < self.seed_values.len() {
-                let r = self.seed_values[i];
+        for (i, f) in self.filters.iter_mut().enumerate() {
+            if let Some(&r) = self.seed_values.get(i) {
                 let d = 10.0_f64.powf(r) * 0.1; // 0.1 ... 1.0
-                self.filters[i].sample_delay = ((self.delay as f64 * d) as usize).max(1);
+                f.sample_delay = num::f64_to_index(num::count_to_f64(self.delay) * d).max(1);
             }
         }
     }

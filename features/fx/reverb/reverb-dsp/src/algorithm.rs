@@ -44,7 +44,7 @@ impl AlgorithmType {
     /// `algorithms_share_one_output_level` in `tests/stability.rs` fails if a
     /// change to an engine invalidates its constant.
     #[must_use]
-    pub fn wet_calibration_db(self) -> f64 {
+    pub const fn wet_calibration_db(self) -> f64 {
         match self {
             Self::Room => -3.03,
             Self::Hall => 0.47,
@@ -89,7 +89,7 @@ impl AlgorithmType {
     ];
 
     #[must_use]
-    pub fn name(self) -> &'static str {
+    pub const fn name(self) -> &'static str {
         match self {
             Self::Room => "Room",
             Self::Hall => "Hall",
@@ -112,7 +112,7 @@ impl AlgorithmType {
 
     /// Number of sub-type variants for this algorithm.
     #[must_use]
-    pub fn variant_count(self) -> usize {
+    pub const fn variant_count(self) -> usize {
         match self {
             // Medium, Chamber, Studio / Concert, Cathedral, Arena /
             // Dattorro, Lexicon 224, Progenitor
@@ -124,7 +124,7 @@ impl AlgorithmType {
 
     /// Name of a specific variant.
     #[must_use]
-    pub fn variant_name(self, variant: usize) -> &'static str {
+    pub const fn variant_name(self, variant: usize) -> &'static str {
         match self {
             Self::Room => match variant {
                 1 => "Chamber",
@@ -154,7 +154,7 @@ impl AlgorithmType {
     /// map onto the variant system; everything else steps
     /// `params.size`.
     #[must_use]
-    pub fn size_names(self) -> &'static [&'static str] {
+    pub const fn size_names(self) -> &'static [&'static str] {
         match self {
             Self::Hall => &["Concert", "Arena"],
             Self::Room => &["Studio", "Club"],
@@ -297,13 +297,14 @@ impl DecayBand {
         let w = freq / f0;
         match self.shape {
             // Low shelf: full below f0, none far above.
-            1 => 1.0 / (1.0 + (w * q * 1.414).powi(2)),
+            1 => 1.0 / (w * q * 1.414).mul_add(w * q * 1.414, 1.0),
             // High shelf: full above f0.
-            2 => (1.0 - 1.0 / (1.0 + (w / (q * 1.414).recip()).powi(2))).clamp(0.0, 1.0),
+            2 => (1.0 - 1.0 / (w / (q * 1.414).recip()).mul_add(w / (q * 1.414).recip(), 1.0))
+                .clamp(0.0, 1.0),
             // Bell.
             _ => {
                 let bw = w - 1.0 / w.max(1e-9);
-                1.0 / (1.0 + (bw * q).powi(2))
+                1.0 / (bw * q).mul_add(bw * q, 1.0)
             }
         }
     }
@@ -482,9 +483,8 @@ impl Default for ImpulseParams {
 impl ImpulseParams {
     /// The shaping subset (everything except `feedback`) — equality on
     /// this tuple decides whether a re-preparation is needed.
-    #[allow(clippy::type_complexity)]
     #[must_use]
-    pub fn shape_key(&self) -> (u64, ImpulseTail, u64, u64, ImpulseDirection, u64, u64) {
+    pub const fn shape_key(&self) -> (u64, ImpulseTail, u64, u64, ImpulseDirection, u64, u64) {
         (
             self.decay.clamp(0.01, 1.0).to_bits(),
             self.tail,
@@ -527,7 +527,7 @@ pub enum ShimmerFeedbackMode {
 
 impl ShimmerFeedbackMode {
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             0 => Self::Input,
             2 => Self::InputPlusRegen,
@@ -588,7 +588,7 @@ impl MagnetoHeads {
     pub const COUNT: usize = 5;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             0 => Self::One,
             1 => Self::Two,
@@ -599,7 +599,7 @@ impl MagnetoHeads {
     }
 
     #[must_use]
-    pub fn count(self) -> usize {
+    pub const fn count(self) -> usize {
         match self {
             Self::One => 1,
             Self::Two => 2,
@@ -636,7 +636,7 @@ impl SpringDwell {
     pub const COUNT: usize = 4;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Combo,
             2 => Self::Tube,
@@ -647,7 +647,7 @@ impl SpringDwell {
 
     /// Preamp drive into the tank (1.0 = unity/clean).
     #[must_use]
-    pub fn drive(self) -> f64 {
+    pub const fn drive(self) -> f64 {
         match self {
             Self::Clean => 1.0,
             Self::Combo => 1.7,
@@ -695,7 +695,7 @@ impl NlShape {
     pub const COUNT: usize = 6;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             0 => Self::Swoosh,
             1 => Self::Reverse,
@@ -729,7 +729,7 @@ impl ChamberColor {
     pub const COUNT: usize = 5;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Clear,
             2 => Self::Smooth,
@@ -840,7 +840,7 @@ impl ChoraleVowel {
     pub const COUNT: usize = 7;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             0 => Self::Aahhoo,
             1 => Self::Aahh,
@@ -868,7 +868,7 @@ pub enum ChoraleResonance {
 
 impl ChoraleResonance {
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Medium,
             2 => Self::High,
@@ -878,7 +878,7 @@ impl ChoraleResonance {
 
     /// (Q, peak dB) for the formant filters.
     #[must_use]
-    pub fn q_gain(self) -> (f64, f64) {
+    pub const fn q_gain(self) -> (f64, f64) {
         match self {
             Self::Mild => (3.0, 8.0),
             Self::Medium => (4.5, 10.0),
@@ -1012,7 +1012,10 @@ pub trait ReverbAlgorithm: Send {
 
     /// Cross-leg reshape originals (LR, RL) for a true-stereo slot A
     /// impulse, if loaded.
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "tuple shape represents stereo IR pair"
+    )]
     fn impulse_reshape_cross_source(
         &self,
     ) -> Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)> {
@@ -1125,7 +1128,10 @@ pub trait ReverbAlgorithm: Send {
     /// the slot as cheap `Arc` clones (RT-safe — no allocation) and
     /// clears the dirty flag for that slot. `None` = nothing to do or
     /// original unavailable.
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "tuple shape represents stereo IR pair"
+    )]
     fn impulse_reshape_source(
         &mut self,
         slot: IrSlot,
@@ -1198,7 +1204,8 @@ pub fn t60_shelf_targets(
     damping: f64,
 ) -> (f64, f64) {
     let t60_dc = (t60 * low_decay_mult.max(0.05)).max(0.05);
-    let hf_ratio = ((0.15 + 0.85 * (1.0 - damping)) * high_decay_mult.max(0.05)).clamp(0.02, 1.5);
+    let hf_ratio =
+        (0.85f64.mul_add(1.0 - damping, 0.15) * high_decay_mult.max(0.05)).clamp(0.02, 1.5);
     let t60_ny = (t60 * hf_ratio).max(0.02);
     (t60_dc, t60_ny)
 }
@@ -1309,7 +1316,7 @@ impl AlgorithmType {
     /// site, so wiring `set_decay_curve` into another engine means updating
     /// one place rather than silently double-applying.
     #[must_use]
-    pub fn realizes_decay_curve(self) -> bool {
+    pub const fn realizes_decay_curve(self) -> bool {
         matches!(self, Self::Hall | Self::Room | Self::Random)
     }
 
@@ -1320,7 +1327,7 @@ impl AlgorithmType {
     /// and the character engines set a feedback coefficient directly, so
     /// there is no honest time to report.
     #[must_use]
-    pub fn t60_range(self, variant: usize) -> Option<(f64, f64)> {
+    pub const fn t60_range(self, variant: usize) -> Option<(f64, f64)> {
         match (self, variant) {
             (Self::Room, 1) => Some(ROOM_CHAMBER_T60),
             (Self::Room, 2) => Some(ROOM_STUDIO_T60),
@@ -1348,7 +1355,7 @@ pub fn t60_to_decay(t60_s: f64, min_s: f64, max_s: f64) -> f64 {
     let min_s = min_s.max(0.01);
     let max_s = max_s.max(min_s * 1.001);
     let t = t60_s.clamp(min_s, max_s);
-    (t / min_s).ln() / (max_s / min_s).ln()
+    (t / min_s).log(max_s / min_s)
 }
 
 #[cfg(test)]
@@ -1377,8 +1384,14 @@ mod decay_time_tests {
 
     #[test]
     fn freezes_at_the_top() {
-        assert_eq!(decay_to_t60(0.999, 0.2, 8.0), INFINITE_T60);
-        assert_eq!(decay_to_t60(1.5, 0.2, 8.0), INFINITE_T60);
+        assert_eq!(
+            decay_to_t60(0.999, 0.2, 8.0).to_bits(),
+            INFINITE_T60.to_bits()
+        );
+        assert_eq!(
+            decay_to_t60(1.5, 0.2, 8.0).to_bits(),
+            INFINITE_T60.to_bits()
+        );
     }
 
     #[test]
@@ -1404,8 +1417,8 @@ mod decay_time_tests {
     #[test]
     fn a_time_outside_the_range_saturates_rather_than_escaping_0_1() {
         let (lo, hi) = ROOM_STUDIO_T60;
-        assert_eq!(t60_to_decay(0.001, lo, hi), 0.0);
-        assert_eq!(t60_to_decay(600.0, lo, hi), 1.0);
+        assert_eq!(t60_to_decay(0.001, lo, hi).to_bits(), 0.0_f64.to_bits());
+        assert_eq!(t60_to_decay(600.0, lo, hi).to_bits(), 1.0_f64.to_bits());
     }
 
     #[test]
@@ -1468,7 +1481,12 @@ mod decay_time_tests {
         assert!(midband < 2.5);
 
         let factor = tilt_midband_factor(0.5, 1.0);
-        assert!((midband - 2.5 * factor * (0.15f64 + 0.85).sqrt()).abs() < 1e-9);
+        assert!(
+            (2.5 * factor)
+                .mul_add(-(0.15f64 + 0.85).sqrt(), midband)
+                .abs()
+                < 1e-9
+        );
 
         // Pre-compensating restores the requested midband.
         let (dc2, ny2) = t60_shelf_targets(2.5 / factor, 0.5, 1.0, 0.0);
@@ -1502,7 +1520,7 @@ mod decay_eq_filter_probe {
         let n = 48_000;
         let mut peak = 0.0f64;
         for i in 0..n {
-            let x = (std::f64::consts::TAU * f * i as f64 / sr).sin();
+            let x = (std::f64::consts::TAU * f * f64::from(i) / sr).sin();
             let y = bq.tick(x, 0);
             if i > n / 2 {
                 peak = peak.max(y.abs());
@@ -1532,6 +1550,7 @@ mod decay_eq_filter_probe {
 mod decay_eq_localization {
     use crate::algorithm::{DECAY_BANDS, DecayBand};
     use crate::primitives::fdn::{Fdn, MixMatrix};
+    use dsp_core::num;
 
     const SR: f64 = 48_000.0;
 
@@ -1555,13 +1574,14 @@ mod decay_eq_localization {
         fdn.set_t60(2.5, 2.5, SR);
         fdn.set_decay_curve(2.5, &bands, SR);
 
-        let drive = (SR * 0.2) as usize;
-        let total = (SR * 4.0) as usize;
+        let drive = num::f64_to_index(SR * 0.2);
+        let total = num::f64_to_index(SR * 4.0);
         let mut out = Vec::with_capacity(total);
         for i in 0..total {
             let x = if i < drive {
-                let env = (std::f64::consts::PI * i as f64 / drive as f64).sin();
-                (std::f64::consts::TAU * probe_hz * i as f64 / SR).sin() * env
+                let env =
+                    (std::f64::consts::PI * num::count_to_f64(i) / num::count_to_f64(drive)).sin();
+                (std::f64::consts::TAU * probe_hz * num::count_to_f64(i) / SR).sin() * env
             } else {
                 0.0
             };
@@ -1569,11 +1589,11 @@ mod decay_eq_localization {
         }
 
         // Energy in two windows well after the drive stops.
-        let win = (SR * 0.4) as usize;
-        let a0 = drive + (SR * 0.3) as usize;
-        let b0 = a0 + (SR * 1.0) as usize;
+        let win = num::f64_to_index(SR * 0.4);
+        let a0 = drive.saturating_add(num::f64_to_index(SR * 0.3));
+        let b0 = a0.saturating_add(num::f64_to_index(SR * 1.0));
         let energy = |start: usize| -> f64 {
-            out[start..(start + win).min(out.len())]
+            out[start..(start.saturating_add(win)).min(out.len())]
                 .iter()
                 .map(|x| x * x)
                 .sum::<f64>()

@@ -8,6 +8,8 @@
 //!   - Moderate HF damping (air absorption over distance)
 //!   - Wide stereo field (surround-like from distant surfaces)
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, HALL_ARENA_T60, ReverbAlgorithm, decay_to_t60};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -45,7 +47,7 @@ pub struct HallArena {
 impl HallArena {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_er = (sample_rate * 0.4) as usize; // 400ms — sound takes time to reach arena walls
+        let max_er = num::f64_to_index(sample_rate * 0.4); // 400ms — sound takes time to reach arena walls
 
         let mod_ap_l = std::array::from_fn(|_| ModulatedAllpass::new());
         let mod_ap_r = std::array::from_fn(|_| ModulatedAllpass::new());
@@ -87,15 +89,15 @@ impl HallArena {
 
     fn make_fdn(sample_rate: f64, size: f64, offset: bool) -> Fdn {
         // Very long delays — arena scale (2-4x hall)
-        let base = if !offset {
-            [3001, 3631, 4327, 5147, 6011, 6907, 7793, 8731]
-        } else {
+        let base = if offset {
             [3121, 3779, 4493, 5347, 6247, 7177, 8089, 9059]
+        } else {
+            [3001, 3631, 4327, 5147, 6011, 6907, 7793, 8731]
         };
         let scale = sample_rate / 48000.0 * size.max(0.5);
         let delays: Vec<usize> = base
             .iter()
-            .map(|&d| ((d as f64 * scale) as usize).max(4))
+            .map(|&d| num::f64_to_index(f64::from(d) * scale).max(4))
             .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.90);
@@ -109,69 +111,69 @@ impl HallArena {
         // Simulates distant walls in a large open venue
         let taps_l = [
             Tap {
-                delay_samples: (701.0 * scale) as usize,
+                delay_samples: num::f64_to_index(701.0 * scale),
                 gain: 0.65,
             },
             Tap {
-                delay_samples: (1301.0 * scale) as usize,
+                delay_samples: num::f64_to_index(1301.0 * scale),
                 gain: 0.52,
             },
             Tap {
-                delay_samples: (1907.0 * scale) as usize,
+                delay_samples: num::f64_to_index(1907.0 * scale),
                 gain: 0.41,
             },
             Tap {
-                delay_samples: (2503.0 * scale) as usize,
+                delay_samples: num::f64_to_index(2503.0 * scale),
                 gain: 0.32,
             },
             Tap {
-                delay_samples: (3109.0 * scale) as usize,
+                delay_samples: num::f64_to_index(3109.0 * scale),
                 gain: 0.24,
             },
             Tap {
-                delay_samples: (3701.0 * scale) as usize,
+                delay_samples: num::f64_to_index(3701.0 * scale),
                 gain: 0.18,
             },
             Tap {
-                delay_samples: (4297.0 * scale) as usize,
+                delay_samples: num::f64_to_index(4297.0 * scale),
                 gain: 0.13,
             },
             Tap {
-                delay_samples: (4903.0 * scale) as usize,
+                delay_samples: num::f64_to_index(4903.0 * scale),
                 gain: 0.09,
             },
         ];
         let taps_r = [
             Tap {
-                delay_samples: (797.0 * scale) as usize,
+                delay_samples: num::f64_to_index(797.0 * scale),
                 gain: 0.65,
             },
             Tap {
-                delay_samples: (1409.0 * scale) as usize,
+                delay_samples: num::f64_to_index(1409.0 * scale),
                 gain: 0.52,
             },
             Tap {
-                delay_samples: (2017.0 * scale) as usize,
+                delay_samples: num::f64_to_index(2017.0 * scale),
                 gain: 0.41,
             },
             Tap {
-                delay_samples: (2621.0 * scale) as usize,
+                delay_samples: num::f64_to_index(2621.0 * scale),
                 gain: 0.32,
             },
             Tap {
-                delay_samples: (3217.0 * scale) as usize,
+                delay_samples: num::f64_to_index(3217.0 * scale),
                 gain: 0.24,
             },
             Tap {
-                delay_samples: (3823.0 * scale) as usize,
+                delay_samples: num::f64_to_index(3823.0 * scale),
                 gain: 0.18,
             },
             Tap {
-                delay_samples: (4421.0 * scale) as usize,
+                delay_samples: num::f64_to_index(4421.0 * scale),
                 gain: 0.13,
             },
             Tap {
-                delay_samples: (5021.0 * scale) as usize,
+                delay_samples: num::f64_to_index(5021.0 * scale),
                 gain: 0.09,
             },
         ];
@@ -184,27 +186,27 @@ impl HallArena {
         let base_delays = [251, 317, 389, 461, 541, 631, 727, 829];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.5);
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..FDN_MOD_AP_COUNT {
-            let delay = ((base_delays[i] as f64) * scale) as usize;
-            self.mod_ap_l[i].sample_delay = delay.max(4);
-            self.mod_ap_l[i].feedback = 0.4;
-            self.mod_ap_l[i].set_modulation(
-                0.2 + i as f64 * 0.08,
+        let pairs = self.mod_ap_l.iter_mut().zip(&mut self.mod_ap_r);
+        for (i, ((ap_l, ap_r), d)) in pairs.zip(base_delays).enumerate() {
+            let delay = num::f64_to_index(f64::from(d) * scale);
+            ap_l.sample_delay = delay.max(4);
+            ap_l.feedback = 0.4;
+            ap_l.set_modulation(
+                num::count_to_f64(i).mul_add(0.08, 0.2),
                 modulation * self.sample_rate * 0.0004,
                 self.sample_rate,
             );
-            self.mod_ap_l[i].set_phase(i as f64 / FDN_MOD_AP_COUNT as f64);
+            ap_l.set_phase(num::count_to_f64(i) / num::count_to_f64(FDN_MOD_AP_COUNT));
 
-            let delay_r = ((base_delays[i] as f64 + 23.0) * scale) as usize;
-            self.mod_ap_r[i].sample_delay = delay_r.max(4);
-            self.mod_ap_r[i].feedback = 0.4;
-            self.mod_ap_r[i].set_modulation(
-                0.25 + i as f64 * 0.07,
+            let delay_r = num::f64_to_index((f64::from(d) + 23.0) * scale);
+            ap_r.sample_delay = delay_r.max(4);
+            ap_r.feedback = 0.4;
+            ap_r.set_modulation(
+                num::count_to_f64(i).mul_add(0.07, 0.25),
                 modulation * self.sample_rate * 0.0004,
                 self.sample_rate,
             );
-            self.mod_ap_r[i].set_phase((i as f64 + 0.5) / FDN_MOD_AP_COUNT as f64);
+            ap_r.set_phase((num::count_to_f64(i) + 0.5) / num::count_to_f64(FDN_MOD_AP_COUNT));
         }
     }
 
@@ -246,7 +248,7 @@ impl ReverbAlgorithm for HallArena {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size — arena ranges from large venue to stadium
-        let new_size = 1.5 + params.size * 3.5; // 1.5x to 5.0x
+        let new_size = params.size.mul_add(3.5, 1.5); // 1.5x to 5.0x
         if (new_size - self.size).abs() > 0.02 {
             self.size = new_size;
             self.rebuild_fdns();
@@ -265,8 +267,9 @@ impl ReverbAlgorithm for HallArena {
 
         let t60 = decay_to_t60(params.decay, HALL_ARENA_T60.0, HALL_ARENA_T60.1);
         let t60_dc = (t60 * params.low_decay_mult.max(0.05)).max(0.05);
-        let hf_ratio = ((0.15 + 0.85 * (1.0 - params.damping)) * params.high_decay_mult.max(0.05))
-            .clamp(0.02, 1.5);
+        let hf_ratio = (0.85f64.mul_add(1.0 - params.damping, 0.15)
+            * params.high_decay_mult.max(0.05))
+        .clamp(0.02, 1.5);
         let t60_ny = (t60 * hf_ratio).max(0.02);
         self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
         self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
@@ -279,12 +282,12 @@ impl ReverbAlgorithm for HallArena {
         // Artifact-free tail animation: slow orthogonal rotation of the
         // feedback mix (no decay error, no pitch wobble).
         self.fdn_l.set_rotation(
-            0.3 + params.modulation * 0.5,
+            params.modulation.mul_add(0.5, 0.3),
             params.modulation * 0.12,
             self.sample_rate,
         );
         self.fdn_r.set_rotation(
-            (0.3 + params.modulation * 0.5) * 1.13,
+            params.modulation.mul_add(0.5, 0.3) * 1.13,
             params.modulation * 0.12,
             self.sample_rate,
         );
@@ -295,16 +298,18 @@ impl ReverbAlgorithm for HallArena {
         self.fdn_r.set_jitter(1.2, self.sample_rate);
 
         // Air absorption LP
-        let air_freq = 3000.0 + (1.0 - params.damping) * 9000.0;
+        let air_freq = (1.0 - params.damping).mul_add(9000.0, 3000.0);
         self.air_lp_l.set_freq(air_freq, self.sample_rate);
         self.air_lp_r.set_freq(air_freq, self.sample_rate);
 
         // Diffusion — slow buildup in arena
-        let stages = (params.diffusion * 10.0) as usize;
+        let stages = num::f64_to_index(params.diffusion * 10.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(0.5 + params.diffusion * 0.2);
-        self.diffuser_r.set_feedback(0.5 + params.diffusion * 0.2);
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.2, 0.5));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.2, 0.5));
 
         // Modulation
         self.setup_mod_allpass(params.modulation);
@@ -315,7 +320,7 @@ impl ReverbAlgorithm for HallArena {
             .set_modulation(0.3, diff_mod_depth, self.sample_rate);
 
         // Tone
-        let tone_freq = 3000.0 + (1.0 + params.tone) * 0.5 * 11000.0;
+        let tone_freq = ((1.0 + params.tone) * 0.5).mul_add(11000.0, 3000.0);
         self.tone_lp_l.set_freq(tone_freq, self.sample_rate);
         self.tone_lp_r.set_freq(tone_freq, self.sample_rate);
 
@@ -323,7 +328,7 @@ impl ReverbAlgorithm for HallArena {
         self.er_level = params.extra_a * 0.4;
 
         // Extra B → cross-feed
-        self.cross_feed = 0.15 + params.extra_b * 0.35;
+        self.cross_feed = params.extra_b.mul_add(0.35, 0.15);
     }
 
     #[inline]
@@ -334,15 +339,15 @@ impl ReverbAlgorithm for HallArena {
         let diff_l = self.diffuser_l.tick(left);
         let diff_r = self.diffuser_r.tick(right);
 
-        let fdn_in_l = diff_l + er_r * self.cross_feed;
-        let fdn_in_r = diff_r + er_l * self.cross_feed;
+        let fdn_in_l = er_r.mul_add(self.cross_feed, diff_l);
+        let fdn_in_r = er_l.mul_add(self.cross_feed, diff_r);
 
         let mut late_l = self.fdn_l.tick(fdn_in_l);
         let mut late_r = self.fdn_r.tick(fdn_in_r);
 
-        for i in 0..FDN_MOD_AP_COUNT {
-            late_l = self.mod_ap_l[i].tick(late_l);
-            late_r = self.mod_ap_r[i].tick(late_r);
+        for (ap_l, ap_r) in self.mod_ap_l.iter_mut().zip(&mut self.mod_ap_r) {
+            late_l = ap_l.tick(late_l);
+            late_r = ap_r.tick(late_r);
         }
 
         // Air absorption

@@ -11,12 +11,13 @@
 
 use std::f64::consts::PI;
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
+use dsp_core::num;
 
 use super::common::{db_to_linear, ui_q_to_bandwidth_q};
 
 fn section_internal_type(proq_internal_filter_type: u8, _slope_n: usize, _sec_idx: usize) -> i32 {
-    i32::try_from(proq_internal_filter_type).unwrap_or(0)
+    i32::from(proq_internal_filter_type)
 }
 
 /// Handle the odd-order tail section for shelf filters.
@@ -28,7 +29,7 @@ fn shelf_odd_order_tail(
     g_half_section: f64,
     high_shelf: bool,
 ) -> Coeffs {
-    use crate::proq4_per_section_helpers::AnalogBiquad;
+    use crate::design::per_section::AnalogBiquad;
 
     let analog = if high_shelf {
         AnalogBiquad {
@@ -55,7 +56,7 @@ fn shelf_odd_order_tail(
     } else {
         (omega * 10.8).min(0.9 * PI)
     };
-    crate::cascade::proq4_s2_from_prototype_with_subfreq_pub(
+    crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub(
         freq_hz,
         sample_rate,
         analog.b2z,
@@ -81,15 +82,15 @@ fn compute_shelf_params(
     g_half_section: f64,
     band_omega_ref: f64,
 ) -> (f64, f64, f64, f32) {
-    let theta_k = PI * (2.0_f64.mul_add(sec_idx as f64, 1.0)) / (2.0 * order_f);
+    let theta_k = PI * (2.0_f64.mul_add(num::count_to_f64(sec_idx), 1.0)) / (2.0 * order_f);
     let qk = if sec_idx == 0 { q_eff } else { 1.0 };
     let two_sin_theta = 2.0 * theta_k.sin();
     let damping = two_sin_theta * g_half_section / qk;
     let helper_alpha =
         if effective_order == 16 && sec_idx == 0 && q >= 9.99 && band_omega_ref > 0.9 * PI {
-            (1.0 / (std::f64::consts::SQRT_2 * 2.0 * q.max(1e-6))) as f32
+            num::narrow(1.0 / (std::f64::consts::SQRT_2 * 2.0 * q.max(1e-6)))
         } else {
-            (theta_k.sin() / qk) as f32
+            num::narrow(theta_k.sin() / qk)
         };
     (theta_k, damping, qk, helper_alpha)
 }
@@ -98,11 +99,11 @@ fn create_shelf_analog_biquad(
     damping: f64,
     g_section: f64,
     high_shelf: bool,
-) -> crate::proq4_per_section_helpers::AnalogBiquad {
-    use crate::proq4_per_section_helpers::AnalogBiquad;
+) -> crate::design::per_section::AnalogBiquad {
+    use crate::design::per_section::AnalogBiquad;
 
     if high_shelf {
-        let b2z = (g_section as f32 * g_section as f32) as f64;
+        let b2z = f64::from(num::narrow(g_section) * num::narrow(g_section));
         AnalogBiquad {
             b2z,
             b1z: damping * g_section,
@@ -123,6 +124,10 @@ fn create_shelf_analog_biquad(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a decoded routine's parameter list: each argument is one coefficient or pole term the reference implementation passes separately. Bundling them into a struct would rename the maths for no gain and break the correspondence with the decode notes"
+)]
 fn shelf_normal_section(
     sec_idx: usize,
     n: usize,
@@ -139,9 +144,9 @@ fn shelf_normal_section(
     high_shelf: bool,
     omega_scale: f64,
 ) -> Coeffs {
-    use crate::proq4_per_section_helpers::{Prototype, proq4_universal_section_synth};
+    use crate::design::per_section::{Prototype, proq4_universal_section_synth};
 
-    let (theta_k, damping, _qk, helper_alpha) = compute_shelf_params(
+    let (_theta_k, damping, _qk, helper_alpha) = compute_shelf_params(
         sec_idx,
         order_f,
         effective_order,
@@ -156,11 +161,11 @@ fn shelf_normal_section(
     let section_subtype = if effective_order <= 2 {
         -1
     } else {
-        sec_idx as i32
+        i32::try_from(sec_idx).unwrap_or(i32::MAX)
     };
     if effective_order == 16 && sec_idx >= n / 2 && q >= 9.99 && band_omega_ref > 0.9 * PI {
         let wp = band_omega_ref * 0.5;
-        return crate::cascade::proq4_s2_from_prototype_with_subfreq_pub(
+        return crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub(
             freq_hz,
             sample_rate,
             analog.b2z,
@@ -197,8 +202,8 @@ fn shelf_normal_section(
         const NOTCH46_UPPER_ROOT: f64 = 2.984_513_020_910_303_5;
         if proto.wp > SHELF_ORDER2_HIGH_ROOT && proto.wp < NOTCH46_UPPER_ROOT {
             let wz = proto.wz;
-            let wt = (1.0 - (helper_alpha as f64) * 0.05) * wz;
-            return crate::cascade::proq4_s2_from_prototype_with_subfreq_pub(
+            let wt = f64::from(helper_alpha).mul_add(-0.05, 1.0) * wz;
+            return crate::design::cascade::proq4_s2_from_prototype_with_subfreq_pub(
                 freq_hz,
                 sample_rate,
                 analog.b2z,
@@ -254,6 +259,7 @@ pub(super) fn shelf_universal_synth_cascade(
     let q_eff = ui_q_to_bandwidth_q(q);
     #[expect(
         clippy::cast_precision_loss,
+        clippy::as_conversions,
         reason = "effective_order is small (max 16), precision loss is not a concern"
     )]
     let order_f = effective_order as f64;
@@ -262,7 +268,7 @@ pub(super) fn shelf_universal_synth_cascade(
 
     (0..n)
         .map(|sec_idx| {
-            if effective_order % 2 == 1 && sec_idx + 1 == n {
+            if effective_order % 2 == 1 && sec_idx.saturating_add(1) == n {
                 return shelf_odd_order_tail(
                     freq_hz,
                     sample_rate,

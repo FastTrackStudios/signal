@@ -3,6 +3,8 @@
 //! Based on Strymon `BigSky` Non-Linear: applies envelope shaping
 //! to a reverb tail, creating reverse, gated, swell, and ramp effects.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, NlShape, NonLinearParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -72,15 +74,15 @@ pub struct NonLinear {
 impl NonLinear {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let max_env = (sample_rate * 2.0) as usize; // 2s max envelope
+        let max_env = num::f64_to_index(sample_rate * 2.0); // 2s max envelope
 
         Self {
             fdn: Self::make_fdn(sample_rate),
             diffuser_l: AllpassDiffuser::with_defaults(sample_rate, 0.6),
             diffuser_r: AllpassDiffuser::with_defaults(sample_rate, 0.6),
-            env_buffer_l: DelayLine::new(max_env + 1),
-            env_buffer_r: DelayLine::new(max_env + 1),
-            env_length: (sample_rate * 0.5) as usize,
+            env_buffer_l: DelayLine::new(max_env.saturating_add(1)),
+            env_buffer_r: DelayLine::new(max_env.saturating_add(1)),
+            env_length: num::f64_to_index(sample_rate * 0.5),
             env_write_count: 0,
             shape: EnvelopeShape::Reverse,
             mx: NonLinearParams::default(),
@@ -99,7 +101,10 @@ impl NonLinear {
     fn make_fdn(sample_rate: f64) -> Fdn {
         let base = [743, 941, 1163, 1399, 1627, 1861, 2083, 2311];
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| (d as f64 * scale) as usize).collect();
+        let delays: Vec<usize> = base
+            .iter()
+            .map(|&d| num::f64_to_index(f64::from(d) * scale))
+            .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.95); // Long decay — envelope does the shaping
         fdn
@@ -110,7 +115,10 @@ impl NonLinear {
     fn make_late_fdn(sample_rate: f64) -> Fdn {
         let base = [809, 1021, 1249, 1481, 1693, 1931, 2143, 2399];
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| (d as f64 * scale) as usize).collect();
+        let delays: Vec<usize> = base
+            .iter()
+            .map(|&d| num::f64_to_index(f64::from(d) * scale))
+            .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.9);
         fdn
@@ -144,6 +152,7 @@ impl NonLinear {
     }
 
     fn envelope_gain(&self, position: f64) -> f64 {
+        const KNEE: f64 = 0.08;
         match self.shape {
             EnvelopeShape::Reverse => {
                 // Ramp up linearly then cut
@@ -154,8 +163,7 @@ impl NonLinear {
                 // level until the hold point, then a short half-cosine
                 // knee (~8% of the window) instead of a linear fade —
                 // reads as a gate, not a decay, without clicking.
-                let hold = 0.5 + 0.4 * self.mx.gate_speed.clamp(0.0, 1.0);
-                const KNEE: f64 = 0.08;
+                let hold = 0.4f64.mul_add(self.mx.gate_speed.clamp(0.0, 1.0), 0.5);
                 if position < hold {
                     1.0
                 } else if position < hold + KNEE {
@@ -184,7 +192,7 @@ impl NonLinear {
             EnvelopeShape::Bounce => {
                 // Inverted bell: full at the edges, dipped mid-window.
                 let d = position - 0.5;
-                1.0 - 0.92 * (-d * d / (2.0 * 0.15 * 0.15)).exp()
+                0.92f64.mul_add(-(-d * d / (2.0 * 0.15 * 0.15)).exp(), 1.0)
             }
         }
     }
@@ -215,7 +223,7 @@ impl ReverbAlgorithm for NonLinear {
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Knob remap (manual): DECAY sets the time of the NONLINEAR
         // portion (the shaped-envelope window).
-        self.env_length = ((0.1 + params.decay * 1.9) * self.sample_rate) as usize;
+        self.env_length = num::f64_to_index(params.decay.mul_add(1.9, 0.1) * self.sample_rate);
 
         // Shape: the named selector wins; without it fall back to the
         // legacy extra_a thresholds.
@@ -240,18 +248,20 @@ impl ReverbAlgorithm for NonLinear {
         };
 
         // Diffusion
-        let stages = (params.diffusion * 8.0) as usize;
+        let stages = num::f64_to_index(params.diffusion * 8.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(0.5 + params.diffusion * 0.2);
-        self.diffuser_r.set_feedback(0.5 + params.diffusion * 0.2);
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.2, 0.5));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.2, 0.5));
 
         // Damping on FDN
         let damp_coeff = params.damping * 0.5;
         self.fdn.set_damping_coeff(damp_coeff);
 
         // Decay (internal reverb)
-        self.fdn_decay = 0.7 + params.decay * 0.28;
+        self.fdn_decay = params.decay.mul_add(0.28, 0.7);
         self.fdn.set_decay(self.fdn_decay);
     }
 
@@ -259,7 +269,7 @@ impl ReverbAlgorithm for NonLinear {
         self.mx = *params;
         // late_decay 0..1 → late tank decay 0.7..0.98 (same span as the
         // shared decay mapping).
-        self.late_fdn_decay = 0.7 + params.late_decay.clamp(0.0, 1.0) * 0.28;
+        self.late_fdn_decay = params.late_decay.clamp(0.0, 1.0).mul_add(0.28, 0.7);
         self.late_fdn.set_decay(self.late_fdn_decay);
         true
     }
@@ -269,7 +279,7 @@ impl ReverbAlgorithm for NonLinear {
         // PRE-DELAY remap: shaped nonlinear output feeds back into the
         // generator input (before the late stage) — repeating shapes.
         let fb = self.regeneration_gain();
-        let input = (left + right) * 0.5 + self.nl_fb_state * fb;
+        let input = (left + right).mul_add(0.5, self.nl_fb_state * fb);
 
         // Generate dense reverb
         let diff = self.diffuser_l.tick(input);
@@ -281,7 +291,8 @@ impl ReverbAlgorithm for NonLinear {
 
         // Read back with envelope shaping
         let env_len = self.env_length.max(1);
-        let position = (self.env_write_count % env_len) as f64 / env_len as f64;
+        let position = num::count_to_f64(self.env_write_count.checked_rem(env_len).unwrap_or(0))
+            / num::count_to_f64(env_len);
         let gain = self.envelope_gain(position);
 
         let mut out_l = self.env_buffer_l.read(1) * gain;
@@ -294,7 +305,7 @@ impl ReverbAlgorithm for NonLinear {
                 let cutoff = 400.0 * (8000.0f64 / 400.0).powf(position.clamp(0.0, 1.0));
                 self.swoosh_lp.set_freq(cutoff, self.sample_rate);
             }
-            self.swoosh_countdown -= 1;
+            self.swoosh_countdown = self.swoosh_countdown.saturating_sub(1);
             out_l = self.swoosh_lp.tick(out_l);
             out_r = self.swoosh_lp.tick(out_r);
         }
@@ -303,8 +314,9 @@ impl ReverbAlgorithm for NonLinear {
         // Raised-cosine tremolo; depth 0 is bit-transparent.
         let chop_depth = self.mx.chop_depth.clamp(0.0, 1.0);
         if chop_depth > 1e-9 {
-            let trem =
-                1.0 - chop_depth * (0.5 - 0.5 * (self.chop_phase * std::f64::consts::TAU).cos());
+            let trem = 1.0
+                - chop_depth
+                    * 0.5f64.mul_add(-(self.chop_phase * std::f64::consts::TAU).cos(), 0.5);
             out_l *= trem;
             out_r *= trem;
             self.chop_phase += self.mx.chop_rate_hz.clamp(0.05, 20.0) / self.sample_rate;
@@ -324,7 +336,7 @@ impl ReverbAlgorithm for NonLinear {
             // per late_decay): rises while input energy is present, at
             // the late_speed-controlled rate.
             let speed = self.mx.late_speed.clamp(0.0, 1.0);
-            let attack_s = 0.5 - 0.49 * speed; // 500 ms .. 10 ms
+            let attack_s = 0.49f64.mul_add(-speed, 0.5); // 500 ms .. 10 ms
             let coeff = 1.0 - (-1.0 / (attack_s * self.sample_rate)).exp();
             let drive = (input.abs() * 4.0).min(1.0);
             self.late_env += (drive - self.late_env) * coeff.min(1.0);

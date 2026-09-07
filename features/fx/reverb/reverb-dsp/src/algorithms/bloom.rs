@@ -11,6 +11,8 @@
 //! - Diffusers in feedback paths mean each echo pass gets progressively smeared
 //! - Longer feedback = more bloom time
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, BloomParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::one_pole::Lp1;
@@ -38,8 +40,8 @@ struct BloomVoice {
 impl BloomVoice {
     fn new(base_delay_48k: usize, sample_rate: f64, diffuser_seed: u64) -> Self {
         let scale = sample_rate / 48000.0;
-        let base_delay = (base_delay_48k as f64 * scale) as usize;
-        let max_delay = base_delay * 3 + 256; // headroom for size scaling
+        let base_delay = num::f64_to_index(num::count_to_f64(base_delay_48k) * scale);
+        let max_delay = base_delay.saturating_mul(3).saturating_add(256); // headroom for size scaling
 
         let mut diffuser = AllpassDiffuser::with_defaults(sample_rate, 0.6);
         diffuser.set_seed(diffuser_seed);
@@ -51,11 +53,11 @@ impl BloomVoice {
         damping.set_freq(8000.0, sample_rate);
 
         Self {
-            delay: DelayLine::new(max_delay + 1),
+            delay: DelayLine::new(max_delay.saturating_add(1)),
             diffuser,
             damping,
             dc_block: DcBlocker::new(),
-            current_delay: base_delay as f64,
+            current_delay: num::count_to_f64(base_delay),
         }
     }
 
@@ -118,12 +120,30 @@ impl Bloom {
         input_diffuser_r.set_modulation(0.6, 6.0, sample_rate);
 
         // Create delay voices with unique diffuser seeds
-        let voices_l: Vec<BloomVoice> = (0..NUM_LINES)
-            .map(|i| BloomVoice::new(BASE_DELAYS_L[i], sample_rate, 45678 + i as u64 * 111))
+        let voices_l: Vec<BloomVoice> = BASE_DELAYS_L
+            .iter()
+            .enumerate()
+            .map(|(i, &delay)| {
+                BloomVoice::new(
+                    delay,
+                    sample_rate,
+                    45678u64
+                        .saturating_add(u64::try_from(i).unwrap_or(u64::MAX).saturating_mul(111)),
+                )
+            })
             .collect();
 
-        let voices_r: Vec<BloomVoice> = (0..NUM_LINES)
-            .map(|i| BloomVoice::new(BASE_DELAYS_R[i], sample_rate, 56789 + i as u64 * 111))
+        let voices_r: Vec<BloomVoice> = BASE_DELAYS_R
+            .iter()
+            .enumerate()
+            .map(|(i, &delay)| {
+                BloomVoice::new(
+                    delay,
+                    sample_rate,
+                    56789u64
+                        .saturating_add(u64::try_from(i).unwrap_or(u64::MAX).saturating_mul(111)),
+                )
+            })
             .collect();
 
         let mut tone_lp_l = Lp1::new();
@@ -163,19 +183,14 @@ impl Bloom {
     /// Rotates outputs to create density: each line feeds partially into the next.
     #[inline]
     fn rotate_mix(vals: &[f64; NUM_LINES], amount: f64) -> [f64; NUM_LINES] {
-        let direct = 1.0 - amount * 0.5;
-        let cross = amount * 0.5 / (NUM_LINES - 1) as f64;
-        let mut out = [0.0; NUM_LINES];
-        for i in 0..NUM_LINES {
-            out[i] = vals[i] * direct;
-            #[allow(clippy::needless_range_loop)]
-            for j in 0..NUM_LINES {
-                if j != i {
-                    out[i] += vals[j] * cross;
-                }
-            }
-        }
-        out
+        let direct = amount.mul_add(-0.5, 1.0);
+        let cross = amount * 0.5 / num::count_to_f64(NUM_LINES - 1);
+        let &[v0, v1, v2, v3] = vals;
+        let out_0 = v0.mul_add(direct, (v1 + v2 + v3) * cross);
+        let out_1 = v1.mul_add(direct, (v0 + v2 + v3) * cross);
+        let out_2 = v2.mul_add(direct, (v0 + v1 + v3) * cross);
+        let out_3 = v3.mul_add(direct, (v0 + v1 + v2) * cross);
+        [out_0, out_1, out_2, out_3]
     }
 }
 
@@ -208,23 +223,25 @@ impl ReverbAlgorithm for Bloom {
 
         // -- Decay: feedback gain of delay lines (bloom sustain) --
         // Map 0..1 to ~0.3..0.97 for useful reverb range, with a long tail at high values
-        self.decay_gain = 0.3 + params.decay * 0.67;
+        self.decay_gain = params.decay.mul_add(0.67, 0.3);
 
         // -- Size: scale delay line lengths --
         // Map 0..1 to 0.3..2.5 for small-to-massive space
-        self.size_scale = 0.3 + params.size * 2.2;
-        for (i, voice) in self.voices_l.iter_mut().enumerate() {
-            let scaled = (BASE_DELAYS_L[i] as f64 * (sr / 48000.0) * self.size_scale) as usize;
-            voice.current_delay = scaled as f64;
+        self.size_scale = params.size.mul_add(2.2, 0.3);
+        for (voice, &base_delay) in self.voices_l.iter_mut().zip(&BASE_DELAYS_L) {
+            let scaled =
+                num::f64_to_index(num::count_to_f64(base_delay) * (sr / 48000.0) * self.size_scale);
+            voice.current_delay = num::count_to_f64(scaled);
         }
-        for (i, voice) in self.voices_r.iter_mut().enumerate() {
-            let scaled = (BASE_DELAYS_R[i] as f64 * (sr / 48000.0) * self.size_scale) as usize;
-            voice.current_delay = scaled as f64;
+        for (voice, &base_delay) in self.voices_r.iter_mut().zip(&BASE_DELAYS_R) {
+            let scaled =
+                num::f64_to_index(num::count_to_f64(base_delay) * (sr / 48000.0) * self.size_scale);
+            voice.current_delay = num::count_to_f64(scaled);
         }
 
         // -- Diffusion: input diffuser stages and feedback (bloom density) --
-        let input_stages = 2 + (params.diffusion * 6.0) as usize; // 2..8 stages
-        let input_fb = 0.3 + params.diffusion * 0.45; // 0.3..0.75
+        let input_stages = 2usize.saturating_add(num::f64_to_index(params.diffusion * 6.0)); // 2..8 stages
+        let input_fb = params.diffusion.mul_add(0.45, 0.3); // 0.3..0.75
         self.input_diffuser_l.set_active_stages(input_stages);
         self.input_diffuser_r.set_active_stages(input_stages);
         self.input_diffuser_l.set_feedback(input_fb);
@@ -232,13 +249,13 @@ impl ReverbAlgorithm for Bloom {
 
         // -- Damping: LP cutoff in feedback (bloom brightness) --
         // Map 0..1 to 12kHz..1.5kHz (higher damping = darker)
-        let damp_freq = 12000.0 * (1.0 - params.damping * 0.875);
+        let damp_freq = 12000.0 * params.damping.mul_add(-0.875, 1.0);
         for voice in self.voices_l.iter_mut().chain(self.voices_r.iter_mut()) {
             voice.damping.set_freq(damp_freq, sr);
         }
 
         // -- Modulation: delay modulation depth (chorus in bloom tail) --
-        let mod_rate = 0.3 + params.modulation * 1.2; // 0.3..1.5 Hz
+        let mod_rate = params.modulation.mul_add(1.2, 0.3); // 0.3..1.5 Hz
         let mod_depth = params.modulation * 12.0; // 0..12 samples
         // Input diffusers
         self.input_diffuser_l
@@ -252,7 +269,7 @@ impl ReverbAlgorithm for Bloom {
             .chain(self.voices_r.iter_mut())
             .enumerate()
         {
-            let rate_offset = 1.0 + (i as f64) * 0.05;
+            let rate_offset = num::count_to_f64(i).mul_add(0.05, 1.0);
             voice
                 .diffuser
                 .set_modulation(mod_rate * rate_offset, mod_depth * 0.7, sr);
@@ -266,8 +283,8 @@ impl ReverbAlgorithm for Bloom {
 
         // -- Extra A: bloom rate (diffuser strength in feedback path) --
         // Controls how quickly density builds: more feedback diffuser stages + stronger feedback
-        let fb_stages = 2 + (params.extra_a * 6.0) as usize; // 2..8
-        let fb_diffuser_fb = 0.2 + params.extra_a * 0.5; // 0.2..0.7
+        let fb_stages = 2usize.saturating_add(num::f64_to_index(params.extra_a * 6.0)); // 2..8
+        let fb_diffuser_fb = params.extra_a.mul_add(0.5, 0.2); // 0.2..0.7
         for voice in self.voices_l.iter_mut().chain(self.voices_r.iter_mut()) {
             voice.diffuser.set_active_stages(fb_stages);
             voice.diffuser.set_feedback(fb_diffuser_fb);
@@ -308,8 +325,8 @@ impl ReverbAlgorithm for Bloom {
 
         // === Step 2: Read feedback from delay lines ===
         // Apply internal cross-coupling between voices for density
-        let fb_l_mixed = Self::rotate_mix(&self.fb_l, 0.3);
-        let fb_r_mixed = Self::rotate_mix(&self.fb_r, 0.3);
+        let mixed_l = Self::rotate_mix(&self.fb_l, 0.3);
+        let mixed_r = Self::rotate_mix(&self.fb_r, 0.3);
 
         // === Step 3: Stereo cross-coupling ===
         // Blend some of the opposite channel's feedback for width
@@ -322,12 +339,23 @@ impl ReverbAlgorithm for Bloom {
 
         // === Step 4: Process each delay voice ===
         let decay = self.decay_gain;
-        let inv_n = 1.0 / NUM_LINES as f64;
+        let inv_n = 1.0 / num::count_to_f64(NUM_LINES);
 
-        for i in 0..NUM_LINES {
+        for (((voice_l, voice_r), ((fb_l_in, fb_r_in), (new_l, new_r))), _) in self
+            .voices_l
+            .iter_mut()
+            .zip(self.voices_r.iter_mut())
+            .zip(
+                mixed_l
+                    .iter()
+                    .zip(mixed_r.iter())
+                    .zip(new_fb_l.iter_mut().zip(new_fb_r.iter_mut())),
+            )
+            .zip(0..NUM_LINES)
+        {
             // Left channel voice
             {
-                let voice = &mut self.voices_l[i];
+                let voice = voice_l;
                 let delay_samp = voice.current_delay;
 
                 // Read from delay with fractional interpolation
@@ -339,16 +367,17 @@ impl ReverbAlgorithm for Bloom {
                 let clean = voice.dc_block.tick(diffused);
 
                 // Mix: input + feedback (with stereo cross-feed)
-                let fb_in = fb_l_mixed[i] * direct + fb_r_mixed[i] * cross;
-                let write_val = diffused_l * inv_n + clean * decay + fb_in * decay * 0.15;
+                let fb_in = fb_l_in.mul_add(direct, fb_r_in * cross);
+                let write_val =
+                    (fb_in * decay).mul_add(0.15, diffused_l.mul_add(inv_n, clean * decay));
 
                 voice.delay.write(write_val);
-                new_fb_l[i] = clean * decay;
+                *new_l = clean * decay;
             }
 
             // Right channel voice
             {
-                let voice = &mut self.voices_r[i];
+                let voice = voice_r;
                 let delay_samp = voice.current_delay;
 
                 let delayed = voice.delay.read_linear(delay_samp);
@@ -357,11 +386,12 @@ impl ReverbAlgorithm for Bloom {
                 let diffused = voice.diffuser.tick(damped);
                 let clean = voice.dc_block.tick(diffused);
 
-                let fb_in = fb_r_mixed[i] * direct + fb_l_mixed[i] * cross;
-                let write_val = diffused_r * inv_n + clean * decay + fb_in * decay * 0.15;
+                let fb_in = fb_r_in.mul_add(direct, fb_l_in * cross);
+                let write_val =
+                    (fb_in * decay).mul_add(0.15, diffused_r.mul_add(inv_n, clean * decay));
 
                 voice.delay.write(write_val);
-                new_fb_r[i] = clean * decay;
+                *new_r = clean * decay;
             }
         }
 
@@ -374,10 +404,13 @@ impl ReverbAlgorithm for Bloom {
         let mut out_l = 0.0;
         let mut out_r = 0.0;
 
-        for i in 0..NUM_LINES {
-            let voice_l = &self.voices_l[i];
-            let voice_r = &self.voices_r[i];
-
+        for (i, (voice_l, voice_r)) in self
+            .voices_l
+            .iter()
+            .zip(self.voices_r.iter())
+            .take(NUM_LINES)
+            .enumerate()
+        {
             // Read at the main delay point (already processed through feedback path above)
             let tap_l = voice_l.delay.read_linear(voice_l.current_delay * 0.73);
             let tap_r = voice_r.delay.read_linear(voice_r.current_delay * 0.73);
@@ -395,7 +428,7 @@ impl ReverbAlgorithm for Bloom {
         // Apply stereo width to output (mid-side processing)
         let mid = (out_l + out_r) * 0.5;
         let side = (out_l - out_r) * 0.5;
-        let width_gain = 0.5 + self.stereo_width * 0.5; // 0.5..1.0
+        let width_gain = self.stereo_width.mul_add(0.5, 0.5); // 0.5..1.0
         out_l = mid + side * width_gain;
         out_r = mid - side * width_gain;
 

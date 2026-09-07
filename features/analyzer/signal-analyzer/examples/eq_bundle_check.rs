@@ -57,15 +57,12 @@ fn main() {
             std::env::var("HOME").unwrap_or_default()
         )
     });
-    let mut plugin = match HostedPlugin::load(&path) {
-        Ok(Some(mut p)) => {
-            p.prepare(SR, BLOCK as u32).expect("prepare");
-            p
-        }
-        _ => {
-            eprintln!("{path}: could not load");
-            std::process::exit(1);
-        }
+    let mut plugin = if let Ok(Some(mut p)) = HostedPlugin::load(&path) {
+        p.prepare(SR, BLOCK as u32).expect("prepare");
+        p
+    } else {
+        eprintln!("{path}: could not load");
+        std::process::exit(1);
     };
     plugin.load_state(&one_bell()).expect("load_state");
 
@@ -103,7 +100,7 @@ fn main() {
             q: 1.0,
             shape: 0,
             slope: 2.0,
-            placement: eq_dsp::band::Placement::Stereo,
+            placement: eq_dsp::runtime::band::Placement::Stereo,
             stream: 0,
         },
     );

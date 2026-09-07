@@ -11,4 +11,8 @@ workspace = true
 
 [dependencies]
 audiocore-dsp = { workspace = true }
+dsp-core = { workspace = true }
 pitch-dsp = { workspace = true }
+
+[dev-dependencies]
+dsp-golden = { workspace = true }

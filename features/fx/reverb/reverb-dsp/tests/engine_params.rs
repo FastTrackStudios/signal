@@ -3,27 +3,12 @@
 //! late stage. All defaults must be bit-transparent against a chain
 //! that never touched the new param structs.
 
-// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
-// A test/example target is its own crate, so the crate-root allow there does
-// not reach this file and it needs its own copy.
-#![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::default_trait_access,
-    clippy::indexing_slicing,
-    clippy::many_single_char_names,
-    reason = "pending the DSP algorithm rewrite"
-)]
-
 use reverb_dsp::AlgorithmType;
-use reverb_dsp::algorithm::{ShimmerFeedbackMode, ShimmerParams};
+use reverb_dsp::algorithm::{MagnetoParams, NonLinearParams, ShimmerFeedbackMode, ShimmerParams};
 use reverb_dsp::chain::ReverbChain;
 
 use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::num;
 
 const SR: f64 = 48000.0;
 
@@ -56,17 +41,17 @@ fn goertzel(buf: &[f64], freq: f64) -> f64 {
         s2 = s1;
         s1 = s0;
     }
-    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / (buf.len() as f64).powi(2)
+    (coeff * s1).mul_add(-s2, s1.mul_add(s1, s2 * s2)) / num::count_to_f64(buf.len()).powi(2)
 }
 
 /// Render `secs` of a 440 Hz sine burst (first 0.5 s) through the chain.
 fn render_sine(chain: &mut ReverbChain, secs: f64) -> (Vec<f64>, Vec<f64>) {
-    let n = (SR * secs) as usize;
-    let burst = (SR * 0.5) as usize;
+    let n = num::f64_to_index(SR * secs);
+    let burst = num::f64_to_index(SR * 0.5);
     let mut l: Vec<f64> = (0..n)
         .map(|i| {
             if i < burst {
-                (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5
+                (std::f64::consts::TAU * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5
             } else {
                 0.0
             }
@@ -80,8 +65,10 @@ fn render_sine(chain: &mut ReverbChain, secs: f64) -> (Vec<f64>, Vec<f64>) {
 fn render_impulse(chain: &mut ReverbChain, n: usize) -> (Vec<f64>, Vec<f64>) {
     let mut l = vec![0.0; n];
     let mut r = vec![0.0; n];
-    l[0] = 1.0;
-    r[0] = 1.0;
+    if let (Some(first_l), Some(first_r)) = (l.first_mut(), r.first_mut()) {
+        *first_l = 1.0;
+        *first_r = 1.0;
+    }
     chain.process(&mut l, &mut r);
     (l, r)
 }
@@ -98,9 +85,9 @@ fn defaults_are_transparent() {
         let mut plain = make_chain(algo);
         let mut touched = make_chain(algo);
         // Explicitly re-push the default structs through the setters.
-        touched.shimmer = Default::default();
-        touched.magneto = Default::default();
-        touched.nonlinear = Default::default();
+        touched.shimmer = ShimmerParams::default();
+        touched.magneto = MagnetoParams::default();
+        touched.nonlinear = NonLinearParams::default();
         touched.update_params();
 
         let (pl, _) = render_sine(&mut plain, 2.0);
@@ -133,7 +120,7 @@ fn shimmer_dual_shift_two_goertzel_peaks() {
         c.update_params();
         let (l, _) = render_sine(&mut c, 3.0);
         // Analyze the sustained tail (input still ringing the tank).
-        l[(SR * 0.6) as usize..(SR * 2.5) as usize].to_vec()
+        l[num::f64_to_index(SR * 0.6)..num::f64_to_index(SR * 2.5)].to_vec()
     };
 
     let single = tail(false);
@@ -173,7 +160,7 @@ fn shimmer_regen_ladders_input_does_not() {
         };
         c.update_params();
         let (l, _) = render_sine(&mut c, 4.0);
-        l[(SR * 1.0) as usize..(SR * 3.8) as usize].to_vec()
+        l[num::f64_to_index(SR * 1.0)..num::f64_to_index(SR * 3.8)].to_vec()
     };
 
     let regen = tail(ShimmerFeedbackMode::Regenerative);
@@ -208,21 +195,21 @@ fn magneto_ping_pong_alternates_heads() {
         c
     };
 
-    let head = (0.5f64.mul_add(1.4, 0.1) / 4.0 * SR) as usize;
+    let head = num::f64_to_index(0.5f64.mul_add(1.4, 0.1) / 4.0 * SR);
     let n = head * 5;
 
-    let (l, r) = render_impulse(&mut make(true), n);
+    let (out_l, out_r) = render_impulse(&mut make(true), n);
     // Window around each tap.
     let win = |buf: &[f64], center: usize| {
-        let a = center.saturating_sub(400);
-        let b = (center + 2400).min(buf.len());
-        energy(&buf[a..b])
+        let from = center.saturating_sub(400);
+        let to = center.saturating_add(2400).min(buf.len());
+        energy(buf.get(from..to).unwrap_or_default())
     };
     // Head 0 (even) → left, head 1 (odd) → right.
-    let h0_l = win(&l, head);
-    let h0_r = win(&r, head);
-    let h1_l = win(&l, head * 2);
-    let h1_r = win(&r, head * 2);
+    let h0_l = win(&out_l, head);
+    let h0_r = win(&out_r, head);
+    let h1_l = win(&out_l, head.saturating_mul(2));
+    let h1_r = win(&out_r, head.saturating_mul(2));
     assert!(
         h0_l > h0_r * 20.0,
         "head 1 must be hard left: L={h0_l:e} R={h0_r:e}"
@@ -260,7 +247,7 @@ fn nonlinear_chop_modulates_decay() {
             chop_depth: depth,
             ..Default::default()
         });
-        let n = (SR * 1.5) as usize;
+        let n = num::f64_to_index(SR * 1.5);
         let mut out = Vec::with_capacity(n);
         for i in 0..n {
             let x = if i < 64 { 1.0 } else { 0.0 };
@@ -275,7 +262,10 @@ fn nonlinear_chop_modulates_decay() {
     let chopped = render(1.0);
     let mut checked = 0usize;
     for i in 0..flat.len() {
-        let trem = 0.5f64.mul_add((std::f64::consts::TAU * rate * i as f64 / SR).cos(), 0.5);
+        let trem = 0.5f64.mul_add(
+            (std::f64::consts::TAU * rate * num::count_to_f64(i) / SR).cos(),
+            0.5,
+        );
         let expect = flat[i] * trem;
         if flat[i].abs() > 1e-9 {
             assert!(
@@ -291,7 +281,7 @@ fn nonlinear_chop_modulates_decay() {
         "too little signal to verify chop ({checked})"
     );
     // And the troughs actually silence the decay.
-    let trough = (SR / 16.0) as usize; // half period at 8 Hz
+    let trough = num::f64_to_index(SR / 16.0); // half period at 8 Hz
     assert!(chopped[trough].abs() < flat[trough].abs().mul_add(1e-3, 1e-12));
 }
 
@@ -311,8 +301,8 @@ fn nonlinear_gate_speed_shortens_hold() {
     // Window between the fast hold point (0.5) and the slow one (0.9):
     // slow (speed 1) is still at full level there, fast (speed 0) has
     // released.
-    let w0 = (env_len * 0.62) as usize;
-    let w1 = (env_len * 0.85) as usize;
+    let w0 = num::f64_to_index(env_len * 0.62);
+    let w1 = num::f64_to_index(env_len * 0.85);
 
     let fast = energy(&render(0.0)[w0..w1]);
     let slow = energy(&render(1.0)[w0..w1]);
@@ -341,7 +331,7 @@ fn nonlinear_late_stage_adds_tail() {
         assert!(v.is_finite(), "late stage produced non-finite output");
     }
     // Well after the nonlinear burst window, the late tail dominates.
-    let late = (SR * 1.8) as usize;
+    let late = num::f64_to_index(SR * 1.8);
     let e_off = energy(&off[late..]);
     let e_on = energy(&on[late..]);
     assert!(

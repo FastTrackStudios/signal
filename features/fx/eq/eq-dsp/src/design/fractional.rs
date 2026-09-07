@@ -25,7 +25,7 @@
 //! So the integer part of the order is built the way it always was, and this
 //! supplies the remainder.
 
-use crate::biquad::Coeffs;
+use crate::design::biquad::Coeffs;
 
 /// Octaves per ladder cell.
 ///
@@ -125,7 +125,7 @@ pub fn first_order_cut(freq_hz: f64, sample_rate: f64, high_pass: bool) -> Coeff
 pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) -> Vec<Coeffs> {
     let f = fraction.clamp(0.0, 1.0);
     if f <= 1.0e-6 {
-        return vec![crate::biquad::PASSTHROUGH; SECTION_COUNT];
+        return vec![crate::design::biquad::PASSTHROUGH; SECTION_COUNT];
     }
 
     // Each cell spans CELL_OCTAVES, with its pole and zero `f * CELL_OCTAVES`
@@ -169,7 +169,7 @@ pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) 
         first_orders.push(first_order(zero, pole, sample_rate, !high_pass));
     }
     if first_orders.is_empty() {
-        return vec![crate::biquad::PASSTHROUGH; SECTION_COUNT];
+        return vec![crate::design::biquad::PASSTHROUGH; SECTION_COUNT];
     }
 
     let mut out: Vec<Coeffs> = first_orders
@@ -177,12 +177,12 @@ pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) 
         .map(|pair| match pair {
             [a, b] => combine(*a, *b),
             [a] => combine(*a, [1.0, 0.0, 0.0]),
-            _ => crate::biquad::PASSTHROUGH,
+            _ => crate::design::biquad::PASSTHROUGH,
         })
         .collect();
     // A fixed section count keeps the caller's budget predictable.
     while out.len() < SECTION_COUNT {
-        out.push(crate::biquad::PASSTHROUGH);
+        out.push(crate::design::biquad::PASSTHROUGH);
     }
     out
 }
@@ -190,7 +190,7 @@ pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::response::compute_magnitude_response;
+    use crate::runtime::response::compute_magnitude_response;
 
     const SR: f64 = 48_000.0;
 

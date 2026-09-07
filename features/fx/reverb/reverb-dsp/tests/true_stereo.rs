@@ -1,17 +1,6 @@
 //! True-stereo (4-leg) convolution behavior.
 
-// TEMPORARY: DSP rewrite pending — see the note in this crate's src/lib.rs.
-// A test/example target is its own crate, so the crate-root allow there does
-// not reach this file and it needs its own copy.
-#![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::as_conversions,
-    clippy::cast_precision_loss,
-    clippy::indexing_slicing,
-    reason = "pending the DSP algorithm rewrite"
-)]
-
+use dsp_core::num;
 use reverb_dsp::algorithm::ReverbAlgorithm;
 use reverb_dsp::algorithms::convolution::Convolution;
 
@@ -20,7 +9,9 @@ const SR: f64 = 48000.0;
 /// A one-tap IR: unit spike at `at` samples.
 fn spike(at: usize, len: usize) -> Vec<f64> {
     let mut v = vec![0.0; len];
-    v[at] = 1.0;
+    if let Some(slot) = v.get_mut(at) {
+        *slot = 1.0;
+    }
     v
 }
 
@@ -103,7 +94,7 @@ fn reprepare_keeps_cross_in_sync() {
                 s = s
                     .wrapping_mul(6_364_136_223_846_793_005)
                     .wrapping_add(1_442_695_040_888_963_407);
-                let r = ((s >> 33) as f64 / (1u64 << 31) as f64) - 1.0;
+                let r = (num::u64_to_f64(s >> 33) / num::u64_to_f64(1u64 << 31)) - 1.0;
                 r * (-3.0 * f64::from(i) / 4800.0).exp()
             })
             .collect()

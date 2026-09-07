@@ -277,42 +277,42 @@ impl Detector {
     #[must_use]
     pub fn effective_threshold(&self) -> (f64, f64) {
         if self.params.auto {
-            if self.params.adaptive {
-                if let Some((thr, _)) = self.hist.learned() {
-                    // The knob re-centres as an offset around the learned
-                    // value. The knee stays tied to the range, as it is
-                    // everywhere else.
-                    let tracking = thr - (self.params.span_db - AUTO_HEADROOM_DB).max(0.0);
-                    let absolute = AUTO_FULL_RANGE_AT_DB - self.params.span_db;
-                    // A weighted blend of the two, not a maximum.
-                    //
-                    // A maximum is the tidier story — above the anchor the
-                    // band holds its engagement, below it gives range up — and
-                    // it fits two isolated probes better: the nine recorded
-                    // trajectories go from 0.62 dB worst to 0.37, and a 20 Hz
-                    // high shelf on noise stops climbing with level the way
-                    // the plugin's does. It measures WORSE across the library,
-                    // which is the only test that counts here: 35 presets
-                    // improved, 69 got worse, and the median went 0.52 dB to
-                    // 0.72. The maximum collapses the engagement to nothing
-                    // once the programme drops under the anchor, where the
-                    // plugin only gives up a decibel or so, and most of the
-                    // library's dynamic bands are band-limited enough to sit
-                    // near that edge.
-                    let learned = AUTO_TRACKING.mul_add(tracking, (1.0 - AUTO_TRACKING) * absolute);
-                    // A cold band sits a little SHY of where it will end up —
-                    // the plugin walks up into its engagement, it does not
-                    // fall back into it. So the handover is a threshold that
-                    // starts high and decays onto the learned one, not a
-                    // crossfade from the absolute fallback: that fallback is
-                    // the more engaged of the two and ramping from it moves
-                    // the band the wrong way.
-                    let blended = (1.0 - self.auto_conf).mul_add(AUTO_COLD_OFFSET_DB, learned);
-                    return (
-                        self.params.threshold_db.mul_add(0.25, blended),
-                        self.params.knee_db,
-                    );
-                }
+            if self.params.adaptive
+                && let Some((thr, _)) = self.hist.learned()
+            {
+                // The knob re-centres as an offset around the learned
+                // value. The knee stays tied to the range, as it is
+                // everywhere else.
+                let tracking = thr - (self.params.span_db - AUTO_HEADROOM_DB).max(0.0);
+                let absolute = AUTO_FULL_RANGE_AT_DB - self.params.span_db;
+                // A weighted blend of the two, not a maximum.
+                //
+                // A maximum is the tidier story — above the anchor the
+                // band holds its engagement, below it gives range up — and
+                // it fits two isolated probes better: the nine recorded
+                // trajectories go from 0.62 dB worst to 0.37, and a 20 Hz
+                // high shelf on noise stops climbing with level the way
+                // the plugin's does. It measures WORSE across the library,
+                // which is the only test that counts here: 35 presets
+                // improved, 69 got worse, and the median went 0.52 dB to
+                // 0.72. The maximum collapses the engagement to nothing
+                // once the programme drops under the anchor, where the
+                // plugin only gives up a decibel or so, and most of the
+                // library's dynamic bands are band-limited enough to sit
+                // near that edge.
+                let learned = AUTO_TRACKING.mul_add(tracking, (1.0 - AUTO_TRACKING) * absolute);
+                // A cold band sits a little SHY of where it will end up —
+                // the plugin walks up into its engagement, it does not
+                // fall back into it. So the handover is a threshold that
+                // starts high and decays onto the learned one, not a
+                // crossfade from the absolute fallback: that fallback is
+                // the more engaged of the two and ramping from it moves
+                // the band the wrong way.
+                let blended = (1.0 - self.auto_conf).mul_add(AUTO_COLD_OFFSET_DB, learned);
+                return (
+                    self.params.threshold_db.mul_add(0.25, blended),
+                    self.params.knee_db,
+                );
             }
             // Measured, not learned. Pro-Q's Auto behaves as a **fixed
             // absolute threshold**: swept in level with a steady tone it
@@ -425,7 +425,7 @@ impl Detector {
             .clamp(0.0, 1.0)
     }
 
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.ms_state = 0.0;
         self.prog_ms_state = 0.0;
         self.ar_state = 0.0;
@@ -439,6 +439,7 @@ impl Detector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dsp_core::num;
 
     const SR: f64 = 48000.0;
 
@@ -503,7 +504,7 @@ mod tests {
         // Ten seconds — the plugin's own Auto takes about seven to settle, and
         // the histogram here needs comparable time to fill.
         for i in 0..480_000 {
-            let x = 0.125 * (core::f64::consts::TAU * 300.0 * i as f64 / SR).sin();
+            let x = 0.125 * (core::f64::consts::TAU * 300.0 * f64::from(i) / SR).sin();
             d.tick(x, x);
         }
         // The programme here is a sine at about -18 dBFS, and the threshold
@@ -520,7 +521,7 @@ mod tests {
         quiet.params.span_db = d.params.span_db;
         quiet.update(SR);
         for i in 0..480_000 {
-            let x = 0.004 * (core::f64::consts::TAU * 300.0 * i as f64 / SR).sin();
+            let x = 0.004 * (core::f64::consts::TAU * 300.0 * f64::from(i) / SR).sin();
             quiet.tick(x, x);
         }
         let (quiet_thr, _) = quiet.effective_threshold();
@@ -541,7 +542,7 @@ mod tests {
         d.params.threshold_db = 0.0;
         d.update(SR);
         for i in 0..96_000 {
-            let x = 0.125 * (core::f64::consts::TAU * 300.0 * i as f64 / SR).sin();
+            let x = 0.125 * (core::f64::consts::TAU * 300.0 * f64::from(i) / SR).sin();
             d.tick(x, x);
         }
         let (thr, _) = d.effective_threshold();
@@ -611,8 +612,8 @@ mod tests {
         d.update(SR);
 
         // Drive it to the top, then let go.
-        for i in 0..(SR as usize) {
-            let x = 0.5 * (core::f64::consts::TAU * 1000.0 * i as f64 / SR).sin();
+        for i in 0..num::f64_to_index(SR) {
+            let x = 0.5 * (core::f64::consts::TAU * 1000.0 * num::count_to_f64(i) / SR).sin();
             d.tick(x, x);
         }
         let peak = d.tick(0.0, 0.0);
@@ -620,9 +621,9 @@ mod tests {
 
         // Time to fall to 1/e of that.
         let mut fell_at = None;
-        for i in 0..(SR as usize) {
+        for i in 0..num::f64_to_index(SR) {
             if d.tick(0.0, 0.0) < peak * std::f64::consts::E.recip() {
-                fell_at = Some(i as f64 * 1000.0 / SR);
+                fell_at = Some(num::count_to_f64(i) * 1000.0 / SR);
                 break;
             }
         }

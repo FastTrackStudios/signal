@@ -52,7 +52,7 @@ impl DelayStyle {
     pub const COUNT: usize = 14;
 
     #[must_use]
-    pub fn from_index(i: usize) -> Self {
+    pub const fn from_index(i: usize) -> Self {
         match i {
             1 => Self::Clean,
             2 => Self::Bbd,
@@ -73,7 +73,7 @@ impl DelayStyle {
     }
 
     #[must_use]
-    pub fn to_index(self) -> usize {
+    pub const fn to_index(self) -> usize {
         match self {
             Self::Tape => 0,
             Self::Clean => 1,
@@ -93,7 +93,7 @@ impl DelayStyle {
     }
 
     #[must_use]
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Tape => "Tape",
             Self::Clean => "Digital",
@@ -114,7 +114,7 @@ impl DelayStyle {
 
     /// Valid delay-time range in ms (`TimeLine` MX per-machine ranges).
     #[must_use]
-    pub fn time_range_ms(self) -> (f64, f64) {
+    pub const fn time_range_ms(self) -> (f64, f64) {
         match self {
             Self::Bbd => (80.0, 800.0),
             Self::Drum => (200.0, 2000.0),
@@ -125,7 +125,10 @@ impl DelayStyle {
     }
 }
 
-#[allow(clippy::large_enum_variant)] // one live engine at a time; boxing would ripple through the hot path
+#[expect(
+    clippy::large_enum_variant,
+    reason = "one live engine at a time; boxing would ripple through the hot path"
+)]
 enum EngineInner {
     Tape(TapeDelay),
     Clean(CleanDelay),
@@ -147,6 +150,10 @@ enum EngineInner {
 ///
 /// Shared parameters are stored here and synced to the active inner engine
 /// on `update()`. Style-specific parameters are set via dedicated methods.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "tape head enables and per-style switches, each an independent plugin parameter; grouping them would break every call site"
+)]
 pub struct DelayEngine {
     inner: EngineInner,
     style: DelayStyle,
@@ -446,7 +453,7 @@ impl DelayEngine {
             drum_heads: GOLDEN_HEADS.map(|position| DrumHead {
                 playback: HeadPlayback::Full,
                 position,
-                feedback: position == 1.0,
+                feedback: position.to_bits() == 1.0_f64.to_bits(),
                 pan: 0.0,
             }),
             drum_lo_cut: 0.2,
@@ -483,7 +490,7 @@ impl DelayEngine {
     }
 
     #[must_use]
-    pub fn style(&self) -> DelayStyle {
+    pub const fn style(&self) -> DelayStyle {
         self.style
     }
 
@@ -491,7 +498,7 @@ impl DelayEngine {
     /// call every sample; the trimmed value reaches the inner engine on
     /// the next `tick`/`tick_at`.
     #[inline]
-    pub fn set_feedback_trim(&mut self, trim: f64) {
+    pub const fn set_feedback_trim(&mut self, trim: f64) {
         self.feedback_trim = trim.clamp(0.0, 1.0);
     }
 
@@ -552,6 +559,10 @@ impl DelayEngine {
     }
 
     /// Sync parameters to the active engine and update coefficients.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "a flat parameter sync across fourteen style variants — long because there are fourteen, and clearer as one table than as fourteen helpers"
+    )]
     pub fn update(&mut self, sample_rate: f64) {
         // Freeze pins feedback at 1.0 and bypasses the in-loop filters
         // and tilt so held repeats do not decay.
@@ -600,7 +611,7 @@ impl DelayEngine {
                 d.feedback = self_feedback;
                 d.hicut_freq = self_hicut;
                 d.locut_freq = self_locut;
-                d.voice = DigitalVoice::from_index(self.voice as usize);
+                d.voice = DigitalVoice::from_index(usize::from(self.voice));
                 d.filter_morph = self.digital_morph;
                 d.mod_rate_hz = self.digital_mod_rate;
                 d.mod_depth = self.digital_mod_depth;
@@ -917,7 +928,7 @@ impl DelayEngine {
     /// from per-element pans. The chain routes these through ONE
     /// stereo engine (mono-summed input) instead of two mono engines.
     #[must_use]
-    pub fn is_stereo_field_style(&self) -> bool {
+    pub const fn is_stereo_field_style(&self) -> bool {
         matches!(
             self.style,
             DelayStyle::Drum | DelayStyle::MultiTap | DelayStyle::Spectral
@@ -954,7 +965,7 @@ impl DelayEngine {
 
     /// Get the last feedback sample for ping-pong cross-feeding.
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         match &self.inner {
             EngineInner::Tape(d) => d.last_feedback(),
             EngineInner::Clean(d) => d.last_feedback(),
@@ -1033,7 +1044,7 @@ mod tests {
             e.update(SR);
 
             for s in 0..96000 {
-                let input = (std::f64::consts::TAU * 440.0 * s as f64 / SR).sin() * 0.5;
+                let input = (std::f64::consts::TAU * 440.0 * f64::from(s) / SR).sin() * 0.5;
                 let out = e.tick(input, 0);
                 assert!(out.is_finite(), "{style:?} produced NaN/Inf at sample {s}");
             }
@@ -1082,7 +1093,7 @@ mod tests {
         match &e.inner {
             EngineInner::Drum(d) => {
                 for (head, want) in d.heads.iter().zip(expected) {
-                    assert_eq!(head.position, want);
+                    assert_eq!(head.position.to_bits(), want.to_bits());
                 }
             }
             _ => panic!("expected drum engine"),
@@ -1105,8 +1116,8 @@ mod tests {
                 assert_eq!(d.grid, TapGrid::Sixteenth);
                 assert_eq!(d.feedback_mode, FeedbackMode::Input);
                 let want = TapPreset::classic(1);
-                assert_eq!(d.taps[0].position, want[0].position);
-                assert_eq!(d.taps[1].pan, want[1].pan);
+                assert_eq!(d.taps[0].position.to_bits(), want[0].position.to_bits());
+                assert_eq!(d.taps[1].pan.to_bits(), want[1].pan.to_bits());
             }
             _ => panic!("expected multitap engine"),
         }

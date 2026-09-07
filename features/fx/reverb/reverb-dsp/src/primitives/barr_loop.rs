@@ -12,18 +12,38 @@
 //! This is the *Classic voice* late core: sparser and ringier than an
 //! FDN, with the early-'80s single-loop character.
 
+use dsp_core::num;
+
 use super::one_pole::Lp1;
 use audiocore_dsp::delay_line::DelayLine;
 
-/// Section delay lengths in samples at 32768 Hz (the FV-1-era base
-/// rate), rescaled to the host rate. Mutually prime-ish.
-const SECTION_LEN_32K: [f64; 4] = [1187.0, 1583.0, 2089.0, 2557.0];
-/// Allpass lengths per section (two per section), 32768 Hz base.
-const AP_LEN_32K: [[f64; 2]; 4] = [
-    [239.0, 331.0],
-    [283.0, 397.0],
-    [353.0, 431.0],
-    [409.0, 467.0],
+/// One section's lengths at 32768 Hz (the FV-1-era base rate),
+/// rescaled to the host rate. `SECTION_LEN_32K` and `AP_LEN_32K`, two
+/// parallel tables walked by the same index, before.
+struct SectionLengths {
+    /// Section delay length. Mutually prime-ish across the four.
+    delay: f64,
+    /// The section's two allpass lengths.
+    ap: [f64; 2],
+}
+
+const SECTION_LENGTHS_32K: [SectionLengths; 4] = [
+    SectionLengths {
+        delay: 1187.0,
+        ap: [239.0, 331.0],
+    },
+    SectionLengths {
+        delay: 1583.0,
+        ap: [283.0, 397.0],
+    },
+    SectionLengths {
+        delay: 2089.0,
+        ap: [353.0, 431.0],
+    },
+    SectionLengths {
+        delay: 2557.0,
+        ap: [409.0, 467.0],
+    },
 ];
 /// Input allpass chain lengths (32768 Hz base).
 const INPUT_AP_32K: [f64; 4] = [113.0, 157.0, 197.0, 251.0];
@@ -39,7 +59,7 @@ struct Ap {
 impl Ap {
     fn new(len: f64) -> Self {
         Self {
-            line: DelayLine::new(len as usize + 8),
+            line: DelayLine::new(num::f64_to_index(len).saturating_add(8)),
             len,
         }
     }
@@ -48,10 +68,10 @@ impl Ap {
     fn tick(&mut self, x: f64, len: f64) -> f64 {
         let delayed = self
             .line
-            .read_linear(len.clamp(1.0, self.line.len() as f64 - 4.0));
-        let v = x - AP_COEFF * delayed;
+            .read_linear(len.clamp(1.0, num::count_to_f64(self.line.len()) - 4.0));
+        let v = AP_COEFF.mul_add(-delayed, x);
         self.line.write(v);
-        delayed + AP_COEFF * v
+        AP_COEFF.mul_add(v, delayed)
     }
 }
 
@@ -80,15 +100,18 @@ impl BarrLoop {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let k = sample_rate / 32_768.0;
-        let sections = core::array::from_fn(|i| Section {
-            delay: DelayLine::new((SECTION_LEN_32K[i] * k) as usize + 8),
-            len: (SECTION_LEN_32K[i] * k) as usize,
-            ap: [Ap::new(AP_LEN_32K[i][0] * k), Ap::new(AP_LEN_32K[i][1] * k)],
-            damp: Lp1::new(),
+        let sections = SECTION_LENGTHS_32K.map(|lengths| {
+            let [ap0_len, ap1_len] = lengths.ap;
+            Section {
+                delay: DelayLine::new(num::f64_to_index(lengths.delay * k).saturating_add(8)),
+                len: num::f64_to_index(lengths.delay * k),
+                ap: [Ap::new(ap0_len * k), Ap::new(ap1_len * k)],
+                damp: Lp1::new(),
+            }
         });
         let mut this = Self {
             sections,
-            input_aps: core::array::from_fn(|i| Ap::new(INPUT_AP_32K[i] * k)),
+            input_aps: INPUT_AP_32K.map(|len| Ap::new(len * k)),
             gain: 0.6,
             mod_phase: 0.0,
             mod_inc: 0.5 / sample_rate,
@@ -104,7 +127,7 @@ impl BarrLoop {
     /// per trip, total trip length Σ section delays.
     pub fn set_t60(&mut self, t60_s: f64) {
         let trip: usize = self.sections.iter().map(|s| s.len).sum();
-        let trip_s = trip as f64 / self.sample_rate;
+        let trip_s = num::count_to_f64(trip) / self.sample_rate;
         // Per-SECTION gain g with 4 applications per trip:
         // g^4 = 10^(−3·trip_s/t60) → uniform dB/s decay.
         let g4 = 10.0f64.powf(-3.0 * trip_s / t60_s.max(0.05));
@@ -139,18 +162,19 @@ impl BarrLoop {
         let mut sig = self.ring + x;
         let mut out_l = 0.0;
         let mut out_r = 0.0;
-        // Index-based: `i` walks sections, tap gains, and the modulated
-        // AP selector together (enumerate can't span the self borrows).
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..4 {
-            let len = self.sections[i].len;
-            self.sections[i].delay.write(sig);
-            let read = self.sections[i].delay.read(len);
+        // `i` still selects the modulated allpass (section 1) and the
+        // L/R tap alternation, but the sections and their gains ride the
+        // zip rather than a shared index.
+        let gain = self.gain;
+        for (i, (section, tap_gain)) in self.sections.iter_mut().zip(&TAP_GAINS).enumerate() {
+            let len = section.len;
+            section.delay.write(sig);
+            let read = section.delay.read(len);
 
             // Two output taps per section at staggered offsets.
-            let t1 = self.sections[i].delay.read(len / 3);
-            let t2 = self.sections[i].delay.read(2 * len / 3);
-            let g = TAP_GAINS[i] * 0.22;
+            let t1 = section.delay.read(len / 3);
+            let t2 = section.delay.read(len.saturating_mul(2) / 3);
+            let g = tap_gain * 0.22;
             if i % 2 == 0 {
                 out_l += t1 * g;
                 out_r += t2 * g * 0.9;
@@ -159,15 +183,15 @@ impl BarrLoop {
                 out_l += t2 * g * 0.9;
             }
 
-            let mut v = read * self.gain;
+            let mut v = read * gain;
             // Section 1 carries the modulated allpass (FV-1 style: one
             // moving allpass keeps the whole ring alive).
-            let base0 = self.sections[i].ap[0].len;
-            let l0 = if i == 1 { base0 + mod_off } else { base0 };
-            v = self.sections[i].ap[0].tick(v, l0);
-            let l1 = self.sections[i].ap[1].len;
-            v = self.sections[i].ap[1].tick(v, l1);
-            sig = self.sections[i].damp.tick(v);
+            let [ap0, ap1] = &mut section.ap;
+            let l0 = if i == 1 { ap0.len + mod_off } else { ap0.len };
+            v = ap0.tick(v, l0);
+            let l1 = ap1.len;
+            v = ap1.tick(v, l1);
+            sig = section.damp.tick(v);
         }
         self.ring = sig;
 
@@ -177,8 +201,9 @@ impl BarrLoop {
     pub fn reset(&mut self) {
         for s in &mut self.sections {
             s.delay.clear();
-            s.ap[0].line.clear();
-            s.ap[1].line.clear();
+            for ap in &mut s.ap {
+                ap.line.clear();
+            }
             s.damp.reset();
         }
         for ap in &mut self.input_aps {
@@ -205,10 +230,10 @@ mod tests {
             let (l, r) = b.tick(x);
             assert!(l.is_finite() && r.is_finite());
             if (24_000..48_000).contains(&n) {
-                e_early += l * l + r * r;
+                e_early += l.mul_add(l, r * r);
             }
             if (72_000..96_000).contains(&n) {
-                e_late += l * l + r * r;
+                e_late += l.mul_add(l, r * r);
             }
         }
         // 1 s apart at T60 = 1.5 s → −40 dB = 1e-4 (generous band:

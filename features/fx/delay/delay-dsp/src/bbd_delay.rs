@@ -23,6 +23,7 @@ use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::denormal::flush;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::num;
 
 /// dBucket voice (`TimeLine` MX).
 ///
@@ -37,7 +38,7 @@ pub enum BbdVoice {
 }
 
 impl BbdVoice {
-    fn stages(self) -> f64 {
+    const fn stages(self) -> f64 {
         match self {
             Self::Mx => 8192.0,
             Self::Classic => 4096.0,
@@ -64,7 +65,7 @@ impl BucketLoss {
         }
     }
 
-    fn reset(&mut self) {
+    const fn reset(&mut self) {
         self.lp = 0.0;
     }
 }
@@ -76,11 +77,11 @@ impl StageShaper for BucketLoss {
             return v;
         }
         // HF droop: blend toward a one-pole of the written charge.
-        self.lp = flush(self.lp + (v - self.lp) * (1.0 - self.sev * 0.6));
-        let drooped = v + (self.lp - v) * self.sev * 0.7;
+        self.lp = flush((v - self.lp).mul_add(self.sev.mul_add(-0.6, 1.0), self.lp));
+        let drooped = ((self.lp - v) * self.sev).mul_add(0.7, v);
         // Charge-transfer nonlinearity + noise floor.
-        let nl = drooped - self.sev * 0.35 * drooped * drooped * drooped;
-        nl + self.rng.next_bipolar() * self.sev * 0.002
+        let nl = (self.sev * 0.35 * drooped * drooped).mul_add(-drooped, drooped);
+        (self.rng.next_bipolar() * self.sev).mul_add(0.002, nl)
     }
 }
 
@@ -207,13 +208,13 @@ impl BbdDelay {
         let clock_hz = 2.0 * n_stages / delay_sec;
         let cutoff_scale = (clock_hz / 100_000.0).clamp(0.22, 1.15);
         self.core
-            .configure(sample_rate, n_stages as usize, cutoff_scale);
+            .configure(sample_rate, num::f64_to_index(n_stages), cutoff_scale);
 
         // Analog-voiced tone: Q rises as the cutoff drops, so maximum
         // filtering has a resonant bump before the rolloff.
         let tone_freq = self.tone.clamp(200.0, sample_rate * 0.45);
         let norm = ((tone_freq - 200.0) / 11_800.0).clamp(0.0, 1.0);
-        let q = 0.707 + (1.0 - norm).powi(2) * 1.8;
+        let q = (1.0 - norm).powi(2).mul_add(1.8, 0.707);
         self.tone_filter
             .set(FilterType::Lowpass, tone_freq, q, sample_rate);
 
@@ -244,7 +245,7 @@ impl BbdDelay {
         let jitter = self.jitter_state * self.clock_jitter * 0.01;
 
         let n_stages = self.voice.stages();
-        let clock_factor = (1.0 + lfo * self.mod_depth * 0.04 + jitter).clamp(0.25, 4.0);
+        let clock_factor = ((lfo * self.mod_depth).mul_add(0.04, 1.0) + jitter).clamp(0.25, 4.0);
         self.core.set_clock_samples(smooth_delay / clock_factor);
 
         // Bucket-loss severity: slower clock (fewer stage writes per
@@ -253,7 +254,7 @@ impl BbdDelay {
         self.loss.sev = if self.bucket_loss <= 0.001 {
             0.0
         } else {
-            self.bucket_loss * (0.35 + 0.65 * (1.0 - ratio))
+            self.bucket_loss * 0.65f64.mul_add(1.0 - ratio, 0.35)
         };
 
         // Loop front half: compander compress + the BBD's
@@ -264,8 +265,11 @@ impl BbdDelay {
         // (per-write bucket loss via the shaper), and reconstruction.
         let compressed = self.comp_env.compress(input + self.fb_prev);
         let x = compressed.clamp(-1.5, 1.5);
-        let shaped = x - self.thd_a * x * x - self.thd_b * x * x * x;
-        let write_in = self.thd_dc.tick(shaped) + self.rng.next_bipolar() * 1.0e-3;
+        let shaped = (self.thd_b * x * x).mul_add(-x, (self.thd_a * x).mul_add(-x, x));
+        let write_in = self
+            .thd_dc
+            .tick(shaped)
+            .mul_add(1.0, self.rng.next_bipolar() * 1.0e-3);
 
         let raw = self.core.process(write_in, &mut self.loss);
         let output = self.exp_env.expand(raw);
@@ -283,7 +287,7 @@ impl BbdDelay {
     }
 
     #[must_use]
-    pub fn last_feedback(&self) -> f64 {
+    pub const fn last_feedback(&self) -> f64 {
         self.feedback_sample
     }
 
@@ -339,20 +343,20 @@ mod tests {
         // legitimately crushed by an expander) must come back at the
         // delay time at significant level.
         let mut d = make(150.0);
-        let burst = (0.003 * SR) as usize;
-        let expected = (150.0 * SR / 1000.0) as i64;
+        let burst = num::f64_to_index(0.003 * SR);
+        let expected = num::trunc_to_i64(150.0 * SR / 1000.0);
         let mut peak = 0.0f64;
         let mut peak_idx = 0i64;
         for i in 0..24000 {
             let input = if i < burst {
-                (core::f64::consts::TAU * 1000.0 * i as f64 / SR).sin() * 0.8
+                (core::f64::consts::TAU * 1000.0 * num::count_to_f64(i) / SR).sin() * 0.8
             } else {
                 0.0
             };
             let out = d.tick(input, 0).abs();
-            if i as i64 > burst as i64 + 100 && out > peak {
+            if i > burst + 100 && out > peak {
                 peak = out;
-                peak_idx = i as i64;
+                peak_idx = num::trunc_to_i64(num::count_to_f64(i));
             }
         }
         assert!(
@@ -372,7 +376,7 @@ mod tests {
 
         let mut diff = 0.0;
         for i in 0..19200 {
-            let s = (std::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+            let s = (std::f64::consts::PI * 2.0 * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
             let a = d_clean.tick(s, 0);
             let b = d_mod.tick(s, 0);
             diff += (a - b).abs();
@@ -392,7 +396,8 @@ mod tests {
         d.update(SR);
 
         for i in 0..96000 {
-            let input = (std::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+            let input =
+                (std::f64::consts::PI * 2.0 * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at sample {i}");
             assert!(out.abs() < 10.0, "Runaway at {i}: {out}");
@@ -401,10 +406,10 @@ mod tests {
 
     /// Count rising zero crossings in a window — cheap pitch estimate.
     fn zero_crossings(buf: &[f64]) -> usize {
-        let mut n = 0;
+        let mut n = 0_usize;
         for w in buf.windows(2) {
             if w[0] <= 0.0 && w[1] > 0.0 {
-                n += 1;
+                n = n.saturating_add(1);
             }
         }
         n
@@ -422,9 +427,9 @@ mod tests {
         let f_in = 500.0;
 
         // Write a 60 ms 500 Hz burst.
-        let burst_len = (SR * 0.06) as usize;
+        let burst_len = num::f64_to_index(SR * 0.06);
         for i in 0..burst_len {
-            let s = (std::f64::consts::TAU * f_in * i as f64 / SR).sin() * 0.8;
+            let s = (std::f64::consts::TAU * f_in * num::count_to_f64(i) / SR).sin() * 0.8;
             d.tick(s, 0);
         }
         // Immediately halve the delay time: clock doubles.
@@ -433,8 +438,8 @@ mod tests {
 
         // Collect output long enough to catch the burst. With the clock
         // at 2x, the remaining transit is compressed and pitch doubles.
-        let mut out = Vec::with_capacity((SR * 0.5) as usize);
-        for _ in 0..(SR * 0.5) as usize {
+        let mut out = Vec::with_capacity(num::f64_to_index(SR * 0.5));
+        for _ in 0..num::f64_to_index(SR * 0.5) {
             out.push(d.tick(0.0, 0));
         }
 
@@ -452,8 +457,8 @@ mod tests {
         );
 
         // Measured frequency of the emitted burst.
-        let secs = window.len() as f64 / SR;
-        let f_out = zero_crossings(window) as f64 / secs;
+        let secs = num::count_to_f64(window.len()) / SR;
+        let f_out = num::count_to_f64(zero_crossings(window)) / secs;
         let ratio = f_out / f_in;
         assert!(
             ratio > 1.5,
@@ -469,23 +474,23 @@ mod tests {
     fn time_sweep_away_and_back_preserves_audio() {
         let mut d = make(600.0);
         let f_in = 500.0;
-        let burst_len = (SR * 0.06) as usize;
+        let burst_len = num::f64_to_index(SR * 0.06);
         for i in 0..burst_len {
-            let s = (std::f64::consts::TAU * f_in * i as f64 / SR).sin() * 0.8;
+            let s = (std::f64::consts::TAU * f_in * num::count_to_f64(i) / SR).sin() * 0.8;
             d.tick(s, 0);
         }
         // Excursion: 600 -> 300 -> 600 ms, 50 ms in each leg, well before
         // the burst's ~600 ms transit completes.
         d.time_ms = 300.0;
         d.update(SR);
-        for _ in 0..(SR * 0.05) as usize {
+        for _ in 0..num::f64_to_index(SR * 0.05) {
             d.tick(0.0, 0);
         }
         d.time_ms = 600.0;
         d.update(SR);
 
-        let mut out = Vec::with_capacity((SR * 1.2) as usize);
-        for _ in 0..(SR * 1.2) as usize {
+        let mut out = Vec::with_capacity(num::f64_to_index(SR * 1.2));
+        for _ in 0..num::f64_to_index(SR * 1.2) {
             out.push(d.tick(0.0, 0));
         }
         let peak = out.iter().fold(0.0f64, |m, s| m.max(s.abs()));
@@ -495,8 +500,8 @@ mod tests {
         let start = out.iter().position(|s| s.abs() > thresh).unwrap();
         let end = out.len() - out.iter().rev().position(|s| s.abs() > thresh).unwrap();
         let window = &out[start..end];
-        let secs = window.len() as f64 / SR;
-        let f_out = zero_crossings(window) as f64 / secs;
+        let secs = num::count_to_f64(window.len()) / SR;
+        let f_out = num::count_to_f64(zero_crossings(window)) / secs;
         let ratio = f_out / f_in;
         assert!(
             (0.8..1.25).contains(&ratio),
@@ -515,9 +520,9 @@ mod tests {
             lossy.update(SR);
             let mut diff = 0.0;
             let mut energy = 0.0;
-            let n = (SR * (time_ms / 1000.0 + 0.4)) as usize;
+            let n = num::f64_to_index(SR * (time_ms / 1000.0 + 0.4));
             for i in 0..n {
-                let s = (std::f64::consts::TAU * 880.0 * i as f64 / SR).sin() * 0.5;
+                let s = (std::f64::consts::TAU * 880.0 * num::count_to_f64(i) / SR).sin() * 0.5;
                 let a = clean.tick(s, 0);
                 let b = lossy.tick(s, 0);
                 diff += (a - b) * (a - b);
@@ -550,7 +555,7 @@ mod tests {
             d.update(SR);
             let mut energy = 0.0;
             for i in 0..96000 {
-                let s = (std::f64::consts::TAU * freq * i as f64 / SR).sin() * 0.3;
+                let s = (std::f64::consts::TAU * freq * num::count_to_f64(i) / SR).sin() * 0.3;
                 let out = d.tick(s, 0);
                 if i > 24000 {
                     energy += out * out;
@@ -583,7 +588,7 @@ mod tests {
             let (mut re, mut im) = (0.0f64, 0.0f64);
             let mut n = 0.0;
             for i in 0..48000 {
-                let ph = std::f64::consts::TAU * f * i as f64 / SR;
+                let ph = std::f64::consts::TAU * f * num::count_to_f64(i) / SR;
                 let out = d.tick(ph.sin() * 0.5, 0);
                 if i > 26000 {
                     re += out * ph.cos();
@@ -591,7 +596,7 @@ mod tests {
                     n += 1.0;
                 }
             }
-            ((re * re + im * im).sqrt()) / n
+            re.hypot(im) / n
         };
         let mx = on_freq(BbdVoice::Mx);
         let classic = on_freq(BbdVoice::Classic);
@@ -613,7 +618,7 @@ mod tests {
             d.update(SR);
             (0..24000)
                 .map(|i| {
-                    let s = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+                    let s = (std::f64::consts::TAU * 440.0 * num::count_to_f64(i) / SR).sin() * 0.5;
                     d.tick(s, 0)
                 })
                 .collect()

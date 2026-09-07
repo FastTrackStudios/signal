@@ -1,7 +1,7 @@
 //! Bell / Peak cascade dispatcher — routes to `cascade::compute_cascade_peak_with_slope`.
 
-use crate::biquad::Coeffs;
-use crate::cascade;
+use crate::design::biquad::Coeffs;
+use crate::design::cascade;
 
 fn get_ftseq_bell_slope() -> Option<usize> {
     use std::sync::OnceLock;

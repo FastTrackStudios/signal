@@ -5,6 +5,8 @@
 //! the reverb level. Creates pad-like textures that swell up
 //! during sustained notes and fade during silence.
 
+use dsp_core::num;
+
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -19,9 +21,9 @@ pub struct Swell {
     // Envelope follower for swell control
     env_follower: EnvelopeFollower,
     // Swell state
-    swell_level: f64,
-    swell_rate: f64, // How fast the reverb builds
-    swell_target: f64,
+    level: f64,
+    rate: f64, // How fast the reverb builds
+    target: f64,
     sample_rate: f64,
 }
 
@@ -37,21 +39,24 @@ impl Swell {
             diffuser_l: AllpassDiffuser::with_defaults(sample_rate, 0.8),
             diffuser_r: AllpassDiffuser::with_defaults(sample_rate, 0.8),
             env_follower: env,
-            swell_level: 0.0,
-            swell_rate: 0.0001,
-            swell_target: 0.0,
+            level: 0.0,
+            rate: 0.0001,
+            target: 0.0,
             sample_rate,
         }
     }
 
     fn make_fdn(sample_rate: f64, offset: bool) -> Fdn {
-        let base = if !offset {
-            [1201, 1499, 1801, 2099, 2399, 2699, 2999, 3301]
-        } else {
+        let base = if offset {
             [1279, 1567, 1873, 2179, 2473, 2777, 3079, 3389]
+        } else {
+            [1201, 1499, 1801, 2099, 2399, 2699, 2999, 3301]
         };
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| (d as f64 * scale) as usize).collect();
+        let delays: Vec<usize> = base
+            .iter()
+            .map(|&d| num::f64_to_index(f64::from(d) * scale))
+            .collect();
         Fdn::new(&delays, MixMatrix::Householder)
     }
 }
@@ -63,7 +68,7 @@ impl ReverbAlgorithm for Swell {
         self.diffuser_l.reset();
         self.diffuser_r.reset();
         self.env_follower.reset(0.0);
-        self.swell_level = 0.0;
+        self.level = 0.0;
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
@@ -73,7 +78,7 @@ impl ReverbAlgorithm for Swell {
 
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Decay
-        let decay = 0.5 + params.decay * 0.48;
+        let decay = params.decay.mul_add(0.48, 0.5);
         self.fdn_l.set_decay(decay);
         self.fdn_r.set_decay(decay);
 
@@ -83,20 +88,22 @@ impl ReverbAlgorithm for Swell {
         self.fdn_r.set_damping_coeff(damp_coeff);
 
         // Swell rate (extra_a: slow → fast build)
-        self.swell_rate = 0.00001 + params.extra_a * 0.0005;
+        self.rate = params.extra_a.mul_add(0.0005, 0.00001);
 
         // Envelope follower timing
-        let attack_ms = 20.0 + (1.0 - params.extra_a) * 200.0;
-        let release_ms = 100.0 + params.extra_b * 2000.0;
+        let attack_ms = (1.0 - params.extra_a).mul_add(200.0, 20.0);
+        let release_ms = params.extra_b.mul_add(2000.0, 100.0);
         self.env_follower
             .set_times_ms(attack_ms, release_ms, self.sample_rate);
 
         // Diffusion
-        let stages = (params.diffusion * 10.0) as usize;
+        let stages = num::f64_to_index(params.diffusion * 10.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(0.5 + params.diffusion * 0.25);
-        self.diffuser_r.set_feedback(0.5 + params.diffusion * 0.25);
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
 
         // Modulation
         self.diffuser_l
@@ -112,16 +119,16 @@ impl ReverbAlgorithm for Swell {
         let env = self.env_follower.tick(input_level);
 
         // Swell: build up reverb level when signal is present
-        self.swell_target = env.min(1.0);
-        if self.swell_level < self.swell_target {
-            self.swell_level += self.swell_rate;
-            if self.swell_level > self.swell_target {
-                self.swell_level = self.swell_target;
+        self.target = env.min(1.0);
+        if self.level < self.target {
+            self.level += self.rate;
+            if self.level > self.target {
+                self.level = self.target;
             }
         } else {
-            self.swell_level -= self.swell_rate * 0.5; // Slower release
-            if self.swell_level < 0.0 {
-                self.swell_level = 0.0;
+            self.level -= self.rate * 0.5; // Slower release
+            if self.level < 0.0 {
+                self.level = 0.0;
             }
         }
 
@@ -133,6 +140,6 @@ impl ReverbAlgorithm for Swell {
         let wet_r = self.fdn_r.tick(diff_r);
 
         // Apply swell envelope to output
-        (wet_l * self.swell_level, wet_r * self.swell_level)
+        (wet_l * self.level, wet_r * self.level)
     }
 }

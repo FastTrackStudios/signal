@@ -15,6 +15,8 @@
 //!
 //! Bands are summed at the output for final reconstruction.
 
+use dsp_core::Channel;
+
 use crate::biquad::Biquad;
 use crate::biquad::{design_highpass_biquad, design_lowpass_biquad};
 use crate::detector::Detector;
@@ -136,6 +138,12 @@ impl CompressionBand {
     /// `band2_output` = `sqrt(level_abs²` + 1.0) * `freq_scaled` + (`level_abs` * 0.5)
     /// Where `freq_scaled` = `crossover_freq` * 0.5 (`DAT_180213064`)
     fn apply_band2_special_processing(&mut self, level_db: f64, crossover_freq: f64) -> f64 {
+        // Band 2 scaling constant from the reference model.
+        const BAND2_SCALE: f64 = 0.5;
+        // Hysteresis band, from the same model.
+        const HYSTERESIS_WIDTH: f64 = 4.0;
+        const DETECTION_THRESHOLD: f64 = 40.0;
+
         if self.band_index != 2 {
             return level_db;
         }
@@ -143,15 +151,12 @@ impl CompressionBand {
         // Compute level difference for hysteresis (Band 2 adaptive detection)
         let level_diff = (level_db - self.previous_level_db).abs();
 
-        // Band 2 scaling constant from the reference model.
-        const BAND2_SCALE: f64 = 0.5;
-
         // Crossover frequency scaling for Band 2
         let freq_scaled = crossover_freq * BAND2_SCALE;
 
         // Apply sqrt-based formula:
         // sqrt(level_diff² + 1.0) provides smooth rounding near zero
-        let sqrt_component = (level_diff * level_diff + 1.0).sqrt() * freq_scaled;
+        let sqrt_component = level_diff.mul_add(level_diff, 1.0).sqrt() * freq_scaled;
 
         // Add linear component: level_diff * 0.5
         let linear_component = level_diff.abs() * BAND2_SCALE;
@@ -160,16 +165,13 @@ impl CompressionBand {
         let band2_output = sqrt_component + linear_component;
 
         // Apply hysteresis with a reference-informed threshold.
-        const HYSTERESIS_WIDTH: f64 = 4.0;
-        const DETECTION_THRESHOLD: f64 = 40.0;
-
         let hysteresis_zone = (DETECTION_THRESHOLD - HYSTERESIS_WIDTH)..=DETECTION_THRESHOLD;
-        let output_with_hysteresis = if !hysteresis_zone.contains(&band2_output) {
-            band2_output
-        } else {
-            // Within hysteresis zone - use smoothed interpolation
+        let output_with_hysteresis = if hysteresis_zone.contains(&band2_output) {
+            // Within the hysteresis zone: smoothed interpolation.
             DETECTION_THRESHOLD - HYSTERESIS_WIDTH
                 + (band2_output - (DETECTION_THRESHOLD - HYSTERESIS_WIDTH))
+        } else {
+            band2_output
         };
 
         // Update previous level for next sample
@@ -180,6 +182,11 @@ impl CompressionBand {
 
     /// Process one sample through this band's compression
     pub fn process(&mut self, input: f64, channel: usize) -> f64 {
+        // atan coloration bounds from the reference model
+        // (DAT_180213300 / DAT_1802134f8).
+        const ATAN_MIN: f64 = 0.1;
+        const ATAN_MAX: f64 = 0.971_948;
+
         // Step 1: Detect level from original input
         let level_db = self.detector.detect_level(input.abs());
 
@@ -210,11 +217,6 @@ impl CompressionBand {
         if self.gain_curve.style() == crate::styles::CompressionStyle::Fet {
             let atan_input = -self.gain_curve.attack_coeff;
             let atan_result = crate::styles::atan_approx(atan_input);
-
-            // Constants from the reference model.
-            const ATAN_MIN: f64 = 0.1; // DAT_180213300
-            const ATAN_MAX: f64 = 0.971_948; // DAT_1802134f8
-
             let clamped_atan = atan_result.clamp(ATAN_MIN, ATAN_MAX);
 
             // Apply atan coloration as multiplicative scaling to GR
@@ -222,20 +224,13 @@ impl CompressionBand {
         }
 
         // Step 8: Smooth with Hermite cubic
-        let log_rel = self.gain_curve.release_coeff.ln();
-        let log_atk = self.gain_curve.attack_coeff.ln();
-        let sqrt_h0 = gr_instant.sqrt();
-        let sqrt_h1 = (gr_instant * 0.9).sqrt();
-
         let gr_smoothed = self.smoother.process(
             gr_instant,
             self.gain_curve.attack_coeff,
             self.gain_curve.release_coeff,
-            log_rel,
-            log_atk,
-            sqrt_h0,
-            sqrt_h1,
-            channel,
+            // `audiocore_dsp::Biquad::tick` still takes a raw index, so the
+            // usize stays the boundary here and only our own state is typed.
+            Channel::new(channel.min(crate::CHANNELS - 1)),
         );
 
         // Track for metering
@@ -246,15 +241,15 @@ impl CompressionBand {
     }
 
     /// Update parameters for this band
-    pub fn set_threshold(&mut self, threshold_db: f64) {
+    pub const fn set_threshold(&mut self, threshold_db: f64) {
         self.gain_curve.set_threshold(threshold_db);
     }
 
-    pub fn set_ratio(&mut self, ratio: f64) {
+    pub const fn set_ratio(&mut self, ratio: f64) {
         self.gain_curve.set_ratio(ratio);
     }
 
-    pub fn set_knee(&mut self, knee_db: f64) {
+    pub const fn set_knee(&mut self, knee_db: f64) {
         self.gain_curve.set_knee(knee_db);
     }
 
@@ -280,7 +275,7 @@ impl CompressionBand {
 
     /// Get gain reduction in dB
     #[must_use]
-    pub fn gain_reduction_db(&self) -> f64 {
+    pub const fn gain_reduction_db(&self) -> f64 {
         self.last_gr_db
     }
 }
@@ -318,9 +313,10 @@ impl MultiBandCompressor {
     /// Bands are summed for final output reconstruction
     pub fn process(&mut self, input: f64, channel: usize) -> f64 {
         // Process through all 3 bands and collect compressed band outputs
-        let band0_output = self.bands[0].process(input, channel);
-        let band1_output = self.bands[1].process(input, channel);
-        let band2_output = self.bands[2].process(input, channel);
+        let [low, mid, high] = &mut self.bands;
+        let band0_output = low.process(input, channel);
+        let band1_output = mid.process(input, channel);
+        let band2_output = high.process(input, channel);
 
         // Combine bands by summing the compressed band-specific audio
         // This proper multiband architecture:

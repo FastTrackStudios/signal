@@ -116,7 +116,10 @@ impl IrEngine {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "SendError contains the full job type; simplifying the error type would break the API"
+    )]
     pub fn submit(&self, job: IrJob) -> Result<(), crossbeam_channel::SendError<IrJob>> {
         self.tx_jobs.send(job)
     }
@@ -134,7 +137,10 @@ impl IrEngine {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "SendError contains the full job type; simplifying the error type would break the API"
+    )]
     pub fn submit_path<P: AsRef<Path>>(
         &self,
         id: u64,
@@ -151,7 +157,10 @@ impl IrEngine {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "SendError contains the full job type; simplifying the error type would break the API"
+    )]
     pub fn submit_path_slot<P: AsRef<Path>>(
         &self,
         id: u64,
@@ -192,10 +201,10 @@ impl IrEngine {
             .name("reverb-ir-relay".into())
             .spawn(move || {
                 while let Ok(result) = src.recv() {
-                    if let Ok(ir) = result.outcome {
-                        if tx.send(ir).is_err() {
-                            break;
-                        }
+                    if let Ok(ir) = result.outcome
+                        && tx.send(ir).is_err()
+                    {
+                        break;
                     }
                 }
             })
@@ -293,7 +302,10 @@ pub struct ReshapeJob {
     pub transforms: IrTransforms,
     pub sample_rate: f64,
     /// True-stereo cross originals (LR, RL) to shape alongside.
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "cross-leg IR pair; Arc avoids clones on every submission"
+    )]
     pub cross: Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)>,
 }
 
@@ -417,7 +429,10 @@ impl ImpulseReshaper {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "SendError contains the full job type; simplifying the error type would break the API"
+    )]
     pub fn submit(&self, job: ReshapeJob) -> Result<(), crossbeam_channel::SendError<ReshapeJob>> {
         self.tx_jobs.send(job)
     }
@@ -456,13 +471,8 @@ fn process_job(job: &IrJob) -> Result<ProcessedIr, IrLoadError> {
     // True-stereo detection: a 4-channel file is [LL, LR, RL, RR]; a
     // stereo file named `*_L` with a `*_R` sibling (or vice versa) is
     // the two-file convention (L file = source-L → LL/LR).
-    let quad: Option<[Vec<f64>; 4]> = if asset.num_channels() >= 4 {
-        Some([
-            asset.channels[0].clone(),
-            asset.channels[1].clone(),
-            asset.channels[2].clone(),
-            asset.channels[3].clone(),
-        ])
+    let quad: Option<[Vec<f64>; 4]> = if let [ll, lr, rl, rr, ..] = asset.channels.as_slice() {
+        Some([ll.clone(), lr.clone(), rl.clone(), rr.clone()])
     } else if asset.num_channels() == 2 {
         true_stereo_sibling(&job.path).and_then(|(l_path, r_path)| {
             let l = if l_path == job.path {
@@ -475,14 +485,11 @@ fn process_job(job: &IrJob) -> Result<ProcessedIr, IrLoadError> {
             } else {
                 IrAsset::load(&r_path, job.target_sample_rate).ok()?
             };
-            (l.num_channels() >= 2 && r.num_channels() >= 2).then(|| {
-                [
-                    l.channels[0].clone(),
-                    l.channels[1].clone(),
-                    r.channels[0].clone(),
-                    r.channels[1].clone(),
-                ]
-            })
+            let ([ll, lr, ..], [rl, rr, ..]) = (l.channels.as_slice(), r.channels.as_slice())
+            else {
+                return None;
+            };
+            Some([ll.clone(), lr.clone(), rl.clone(), rr.clone()])
         })
     } else {
         None
@@ -527,6 +534,11 @@ fn true_stereo_sibling(path: &Path) -> Option<(PathBuf, PathBuf)> {
         } else {
             continue;
         };
+        #[expect(
+            clippy::string_slice,
+            clippy::arithmetic_side_effects,
+            reason = "stem.len() >= this.len() guaranteed by ends_with() check; all suffixes are ASCII"
+        )]
         let base = &stem[..stem.len() - this.len()];
         let sibling = path.with_file_name(format!("{base}{other}.{ext}"));
         if sibling.is_file() {
