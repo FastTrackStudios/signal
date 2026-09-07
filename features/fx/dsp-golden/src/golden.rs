@@ -99,7 +99,9 @@ fn digest<S: Sample>(samples: &[S]) -> u64 {
             .to_le_bytes()
             .iter()
             .take(S::BYTES)
-            .fold(acc, |h, byte| (h ^ u64::from(*byte)).wrapping_mul(FNV_PRIME))
+            .fold(acc, |h, byte| {
+                (h ^ u64::from(*byte)).wrapping_mul(FNV_PRIME)
+            })
     })
 }
 
@@ -134,7 +136,9 @@ impl Record {
         let mut out = String::new();
         out.push_str("# dsp-golden v1 — bit-exact reference vector.\n");
         out.push_str("# Regenerate: UPDATE_GOLDEN=1 cargo nextest run -p <crate>\n");
-        out.push_str("# A change here in a refactor commit means the audio changed. Investigate.\n");
+        out.push_str(
+            "# A change here in a refactor commit means the audio changed. Investigate.\n",
+        );
         let _ = writeln!(out, "name {name}");
         let _ = writeln!(out, "len {}", self.len);
         let _ = writeln!(out, "hash {:016x}", self.hash);
@@ -164,7 +168,12 @@ impl Record {
                 _ => {}
             }
         }
-        Some(Self { len: len?, hash: hash?, probes, hex_width })
+        Some(Self {
+            len: len?,
+            hash: hash?,
+            probes,
+            hex_width,
+        })
     }
 }
 
@@ -175,18 +184,22 @@ pub enum Mismatch {
     /// nothing, so it fails until someone records it deliberately.
     Missing { name: String, path: PathBuf },
     /// The file exists but could not be read or written.
-    Io { path: PathBuf, error: std::io::Error },
+    Io {
+        path: PathBuf,
+        error: std::io::Error,
+    },
     /// The file is present but malformed — treated as a hard failure rather
     /// than re-recorded, because overwriting a corrupt reference destroys the
     /// only evidence of what the output used to be.
     Corrupt { path: PathBuf },
     /// The output changed.
-    Drift {
-        name: String,
-        report: String,
-    },
+    Drift { name: String, report: String },
     /// The output is not a finite signal, which no reference should ever pin.
-    NotFinite { name: String, index: usize, value: f64 },
+    NotFinite {
+        name: String,
+        index: usize,
+        value: f64,
+    },
 }
 
 impl fmt::Display for Mismatch {
@@ -207,9 +220,15 @@ impl fmt::Display for Mismatch {
                  re-recording would destroy the reference you are trying to compare against.",
                 path.display()
             ),
-            Self::Drift { name, report } => write!(f, "`{name}` no longer produces the reference output.\n{report}"),
+            Self::Drift { name, report } => write!(
+                f,
+                "`{name}` no longer produces the reference output.\n{report}"
+            ),
             Self::NotFinite { name, index, value } => {
-                write!(f, "`{name}` produced a non-finite sample at index {index}: {value}")
+                write!(
+                    f,
+                    "`{name}` produced a non-finite sample at index {index}: {value}"
+                )
             }
         }
     }
@@ -260,8 +279,10 @@ impl Golden {
 
         if self.update {
             if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|error| Mismatch::Io { path: path.clone(), error })?;
+                fs::create_dir_all(parent).map_err(|error| Mismatch::Io {
+                    path: path.clone(),
+                    error,
+                })?;
             }
             return fs::write(&path, measured.render::<S>(name))
                 .map_err(|error| Mismatch::Io { path, error });
@@ -270,7 +291,10 @@ impl Golden {
         let text = match fs::read_to_string(&path) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Mismatch::Missing { name: name.to_owned(), path });
+                return Err(Mismatch::Missing {
+                    name: name.to_owned(),
+                    path,
+                });
             }
             Err(error) => return Err(Mismatch::Io { path, error }),
         };
@@ -279,7 +303,10 @@ impl Golden {
         if stored == measured {
             return Ok(());
         }
-        Err(Mismatch::Drift { name: name.to_owned(), report: report(&stored, &measured, samples) })
+        Err(Mismatch::Drift {
+            name: name.to_owned(),
+            report: report(&stored, &measured, samples),
+        })
     }
 }
 
@@ -293,7 +320,11 @@ fn report<S: Sample>(stored: &Record, measured: &Record, samples: &[S]) -> Strin
         );
         return out;
     }
-    let _ = writeln!(out, "  hash: {:016x} -> {:016x}", stored.hash, measured.hash);
+    let _ = writeln!(
+        out,
+        "  hash: {:016x} -> {:016x}",
+        stored.hash, measured.hash
+    );
 
     let drifted: Vec<_> = stored
         .probes
@@ -313,10 +344,19 @@ fn report<S: Sample>(stored: &Record, measured: &Record, samples: &[S]) -> Strin
         return out;
     }
 
-    let _ = writeln!(out, "  {} of {} probes drifted:", drifted.len(), stored.probes.len());
+    let _ = writeln!(
+        out,
+        "  {} of {} probes drifted:",
+        drifted.len(),
+        stored.probes.len()
+    );
     for (index, was, now) in drifted.iter().take(REPORTED) {
         let delta = now - was;
-        let relative = if was.abs() > f64::MIN_POSITIVE { delta / was } else { f64::NAN };
+        let relative = if was.abs() > f64::MIN_POSITIVE {
+            delta / was
+        } else {
+            f64::NAN
+        };
         let _ = writeln!(
             out,
             "    [{index}] {was:+.9e} -> {now:+.9e}  (delta {delta:+.3e}, {:.3} ppm)",
@@ -324,7 +364,11 @@ fn report<S: Sample>(stored: &Record, measured: &Record, samples: &[S]) -> Strin
         );
     }
     if drifted.len() > REPORTED {
-        let _ = writeln!(out, "    ... and {} more", drifted.len().saturating_sub(REPORTED));
+        let _ = writeln!(
+            out,
+            "    ... and {} more",
+            drifted.len().saturating_sub(REPORTED)
+        );
     }
     out.push_str(
         "  A drift of a few ULP still fails: a refactor that reorders float math is not \

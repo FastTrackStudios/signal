@@ -12,8 +12,8 @@
 
 use dsp_core::num;
 
-use realfft::num_complex::Complex;
 use realfft::RealFftPlanner;
+use realfft::num_complex::Complex;
 
 /// Partition size in samples. Sets latency (BLOCK / `sample_rate`) and
 /// per-block FFT size (2 × BLOCK). 512 → ~10.7 ms @ 48 kHz.
@@ -128,17 +128,23 @@ pub struct PreparedIrPair {
     /// The un-shaped time-domain IR, carried along so the Impulse
     /// engine can re-shape later without re-decoding from disk.
     /// `Arc` so audio-thread clones are allocation-free.
-    #[expect(clippy::type_complexity, reason = "IR payload tuple is load-bearing: \
+    #[expect(
+        clippy::type_complexity,
+        reason = "IR payload tuple is load-bearing: \
                                                  Arc-wrapped vecs for audio-thread \
-                                                 allocation-free sharing")]
+                                                 allocation-free sharing"
+    )]
     pub raw: Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)>,
     /// True-stereo cross legs (L→R, R→L), prepared. `None` = plain
     /// stereo. Boxed so the common case stays small.
     pub cross: Option<Box<(PreparedIr, PreparedIr)>>,
     /// Un-shaped cross originals, mirroring `raw`.
-    #[expect(clippy::type_complexity, reason = "IR payload tuple is load-bearing: \
+    #[expect(
+        clippy::type_complexity,
+        reason = "IR payload tuple is load-bearing: \
                                                  Arc-wrapped vecs for audio-thread \
-                                                 allocation-free sharing")]
+                                                 allocation-free sharing"
+    )]
     pub cross_raw: Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)>,
 }
 

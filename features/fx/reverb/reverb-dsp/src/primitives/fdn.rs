@@ -94,7 +94,7 @@ pub struct Fdn {
     /// matrix operates on it as a contiguous slice — that is the one piece of
     /// per-line state the network treats as a vector rather than per line.
     feedback: Vec<f64>,
-    decay_gain: f64,    // Overall decay multiplier
+    decay_gain: f64, // Overall decay multiplier
     mix_matrix: MixMatrix,
     num_lines: usize,
     // 2-band decay control: split feedback into low/high via one-pole
@@ -386,11 +386,7 @@ impl Fdn {
                 if !band.is_active() {
                     continue;
                 }
-                let gain_db = if gain > &0.0 {
-                    gain * scale
-                } else {
-                    *gain
-                };
+                let gain_db = if gain > &0.0 { gain * scale } else { *gain };
                 let q = band.q.clamp(0.1, 18.0);
                 let f = band.freq_hz.clamp(20.0, sample_rate * 0.45);
                 let ftype = match band.shape {
@@ -611,7 +607,9 @@ impl Fdn {
                 self.rot_phase = self.rot_inc.mul_add(16.0, self.rot_phase).fract();
                 for (k, cs) in self.rot_cs.iter_mut().enumerate() {
                     let theta = self.rot_depth
-                        * (core::f64::consts::TAU * num::count_to_f64(k).mul_add(0.31, self.rot_phase)).sin();
+                        * (core::f64::consts::TAU
+                            * num::count_to_f64(k).mul_add(0.31, self.rot_phase))
+                        .sin();
                     *cs = (theta.cos(), theta.sin());
                 }
             }

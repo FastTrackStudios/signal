@@ -105,7 +105,8 @@ impl Default for ModParams {
             )
             .with_value_to_string(Arc::new(|v| {
                 modulation_profiles::PROFILES
-                    .get(v.max(0) as usize).map_or_else(|| "—".to_string(), |p| p.name.to_string())
+                    .get(v.max(0) as usize)
+                    .map_or_else(|| "—".to_string(), |p| p.name.to_string())
             })),
 
             // Shown in Hz, stored normalised: the taper belongs to the

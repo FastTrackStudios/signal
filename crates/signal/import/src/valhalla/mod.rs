@@ -21,8 +21,8 @@
 //!
 //! See `spec/project-state-formats.md`.
 
-use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD as B64;
 
 /// Which Valhalla plugin a chunk came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -760,14 +760,18 @@ mod tests {
         // Room's own decay curve has not been measured, so emitting a
         // seconds value for it would be a guess.
         let vv = parse_xml(KICK_ROOM).unwrap();
-        assert!(to_native_reverb_params(&vv)
-            .iter()
-            .any(|(n, _)| n == "decay_time"));
+        assert!(
+            to_native_reverb_params(&vv)
+                .iter()
+                .any(|(n, _)| n == "decay_time")
+        );
 
         let room = parse_xml(SNARE_ROOM).unwrap();
-        assert!(!to_native_reverb_params(&room)
-            .iter()
-            .any(|(n, _)| n == "decay_time"));
+        assert!(
+            !to_native_reverb_params(&room)
+                .iter()
+                .any(|(n, _)| n == "decay_time")
+        );
     }
 
     #[test]

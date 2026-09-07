@@ -37,7 +37,7 @@ fn config_fingerprint(config: &PatternConfig) -> u64 {
 }
 
 impl PatternState {
-    #[must_use] 
+    #[must_use]
     pub fn from_config(config: &PatternConfig) -> Self {
         Self {
             phase: (f64::from(config.phase_offset) / 360.0).fract().abs(),
@@ -46,7 +46,7 @@ impl PatternState {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn phase(&self) -> f64 {
         self.phase
     }

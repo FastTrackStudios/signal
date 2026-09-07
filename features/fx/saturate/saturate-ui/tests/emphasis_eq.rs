@@ -11,7 +11,7 @@ use dioxus_test::by_testid;
 #[path = "support/mod.rs"]
 mod support;
 
-use support::{mount, Fixture};
+use support::{Fixture, mount};
 
 /// Click the emphasis toggle on the rail.
 async fn open_eq(fx: &mut Fixture) {
@@ -35,11 +35,12 @@ async fn open_eq(fx: &mut Fixture) {
 async fn the_eq_strip_opens_below_the_panel() -> dioxus_test::Result<()> {
     let mut fx = mount();
     // Closed by default; the panel is up.
-    assert!(fx
-        .tester
-        .query(by_testid("emphasis-view"))
-        .immediately()
-        .is_err());
+    assert!(
+        fx.tester
+            .query(by_testid("emphasis-view"))
+            .immediately()
+            .is_err()
+    );
     let panel = fx.tester.query(by_testid("hardware-panel")).immediately()?;
     let (_, panel_h_before) = panel.size();
 
@@ -93,7 +94,8 @@ async fn dragging_a_band_writes_the_emphasis_params() -> dioxus_test::Result<()>
     fx.tester.pointer_down(x, y);
     let _ = fx.tester.pump().await;
     for step in 1..=4 {
-        fx.tester.pointer_move(x, 10.0f64.mul_add(-f64::from(step), y), true);
+        fx.tester
+            .pointer_move(x, 10.0f64.mul_add(-f64::from(step), y), true);
         let _ = fx.tester.pump().await;
     }
     fx.tester.pointer_up(x, y - 40.0);

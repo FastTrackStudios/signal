@@ -25,8 +25,8 @@ use std::fmt::Write;
 use facet::Facet;
 use signal_proto::block::BlockType;
 
-use crate::rig::RigBlock;
 use crate::SamplerError;
+use crate::rig::RigBlock;
 
 /// A node in the composition tree: a leaf processor or a container.
 ///
@@ -202,20 +202,12 @@ impl Zone {
 fn ramp(x: u8, lo: u8, hi: u8, xfade: u8) -> f32 {
     let (x, lo, hi, xf) = (x as f32, lo as f32, hi as f32, xfade as f32);
     let rising = if xf == 0.0 {
-        if x >= lo {
-            1.0
-        } else {
-            0.0
-        }
+        if x >= lo { 1.0 } else { 0.0 }
     } else {
         (x - lo) / xf
     };
     let falling = if xf == 0.0 {
-        if x <= hi {
-            1.0
-        } else {
-            0.0
-        }
+        if x <= hi { 1.0 } else { 0.0 }
     } else {
         (hi - x) / xf
     };
@@ -607,7 +599,9 @@ impl Container {
         };
         out.push_str(prefix);
         out.push_str(branch);
-        let _ = write!(out, "{} \"{}\" [{}]",
+        let _ = write!(
+            out,
+            "{} \"{}\" [{}]",
             self.role.tag(),
             self.name,
             self.combine.tag()
@@ -619,15 +613,15 @@ impl Container {
             }
             // Modules show in/out trim only when set.
             Role::Module if self.input_db != 0.0 || self.output_db != 0.0 => {
-                let _ = write!(out, "  trim {:+.0}/{:+.0}dB",
-                    self.input_db, self.output_db
-                );
+                let _ = write!(out, "  trim {:+.0}/{:+.0}dB", self.input_db, self.output_db);
             }
             Role::Module => {}
         }
         if !self.zone.is_full() {
             let z = &self.zone;
-            let _ = write!(out, "  ⌨ keys {}-{}{}  vel {}-{}{}",
+            let _ = write!(
+                out,
+                "  ⌨ keys {}-{}{}  vel {}-{}{}",
                 z.key_lo,
                 z.key_hi,
                 if z.key_xfade > 0 {
@@ -671,7 +665,9 @@ impl Container {
                     let bb = if is_last { "└─ " } else { "├─ " };
                     out.push_str(&child_prefix);
                     out.push_str(bb);
-                    let _ = write!(out, "Block {} \"{}\"{}\n",
+                    let _ = write!(
+                        out,
+                        "Block {} \"{}\"{}\n",
                         b.block_type_tag(),
                         b.display_name(),
                         if b.has_backend() {
@@ -713,8 +709,8 @@ mod tests {
         assert_eq!(preset.blocks().len(), 3);
         assert!(preset.find("Voices").is_some());
         assert!(preset.find("Rotary").is_none()); // Rotary is a Block, not a container
-                                                  // Filters have real Native DSP and the Rotary is registered as a
-                                                  // transparent passthrough placeholder — all three blocks have backends.
+        // Filters have real Native DSP and the Rotary is registered as a
+        // transparent passthrough placeholder — all three blocks have backends.
         assert!(preset.blocks().iter().all(|b| b.has_backend()));
     }
 

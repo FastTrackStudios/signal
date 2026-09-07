@@ -9,16 +9,29 @@ use signal_keys_proto::keys::KeysRigClient;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    let url = std::env::args().nth(1).unwrap_or_else(|| "ws://127.0.0.1:4040/vox".into());
-    let link = vox_websocket::WsLink::connect(&url).await.map_err(|e| eyre::eyre!("{e:?}"))?;
-    let rig: KeysRigClient = vox_core::initiator_on(link).establish().await.map_err(|e| eyre::eyre!("{e:?}"))?;
+    let url = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "ws://127.0.0.1:4040/vox".into());
+    let link = vox_websocket::WsLink::connect(&url)
+        .await
+        .map_err(|e| eyre::eyre!("{e:?}"))?;
+    let rig: KeysRigClient = vox_core::initiator_on(link)
+        .establish()
+        .await
+        .map_err(|e| eyre::eyre!("{e:?}"))?;
 
     let ports = rig.midi_ports().await.unwrap_or_default();
-    let Some(main) = ports.iter().find(|p| p.contains("S88") && p.contains("Main")).cloned() else {
+    let Some(main) = ports
+        .iter()
+        .find(|p| p.contains("S88") && p.contains("Main"))
+        .cloned()
+    else {
         eyre::bail!("no S88 Main port in: {ports:#?}");
     };
     println!("pinning keys rig to: {main}");
-    rig.set_midi_port(main).await.map_err(|e| eyre::eyre!("set_midi_port: {e:?}"))?;
+    rig.set_midi_port(main)
+        .await
+        .map_err(|e| eyre::eyre!("set_midi_port: {e:?}"))?;
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     let base = rig.midi_recent().await.unwrap_or_default().len();
@@ -34,6 +47,9 @@ async fn main() -> eyre::Result<()> {
             seen = r.len();
         }
     }
-    println!("\n=> new events while pinned: {}", seen.saturating_sub(base));
+    println!(
+        "\n=> new events while pinned: {}",
+        seen.saturating_sub(base)
+    );
     Ok(())
 }

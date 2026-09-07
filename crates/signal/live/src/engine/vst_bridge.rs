@@ -69,7 +69,7 @@ impl Default for ParameterSyncManager {
 }
 
 impl ParameterSyncManager {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             known_values: HashMap::new(),
@@ -134,7 +134,7 @@ impl ParameterSyncManager {
     }
 
     /// Get the last known value for a parameter.
-    #[must_use] 
+    #[must_use]
     pub fn known_value(&self, fx_id: &str, param_index: u32) -> Option<f64> {
         self.known_values
             .get(&(fx_id.to_string(), param_index))
@@ -161,7 +161,7 @@ impl Default for MockVstBridge {
 }
 
 impl MockVstBridge {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             params: std::sync::Mutex::new(HashMap::new()),

@@ -73,7 +73,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let after_late_pedal = settle(&rig, &mut buf, 120);
     rig.midi_message(0, 0xB0, 64, 0);
 
-    println!("3. key up, then pedal down    struck {struck:.4} → releasing {releasing:.4} → {after_late_pedal:.4}");
+    println!(
+        "3. key up, then pedal down    struck {struck:.4} → releasing {releasing:.4} → {after_late_pedal:.4}"
+    );
     if after_late_pedal > releasing * 0.6 {
         fail.push("a late pedal resurrected a note that was already released".to_string());
     }

@@ -19,7 +19,7 @@ use audiocore_core::prelude::*;
 use fts_audio_ui::prelude::*;
 
 use crate::param_adapter::param_handle;
-use crate::params::{CompUiState, CHARACTER_LABELS, STYLE_LABELS};
+use crate::params::{CHARACTER_LABELS, CompUiState, STYLE_LABELS};
 use crate::profile_view::profile_skin;
 use crate::sections::{ParamKnob, Section};
 

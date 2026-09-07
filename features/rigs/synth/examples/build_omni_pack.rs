@@ -20,8 +20,8 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::PathBuf;
 
-use signal_sampler::engine::cache::create_signal_pack;
 use signal_sampler::LibrarySpec;
+use signal_sampler::engine::cache::create_signal_pack;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
@@ -85,14 +85,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .flatten()
         .map(|e| e.path())
         .filter(|p| {
-            p.extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| {
-                    matches!(
-                        e.to_ascii_lowercase().as_str(),
-                        "flac" | "wav" | "aif" | "aiff"
-                    )
-                })
+            p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                matches!(
+                    e.to_ascii_lowercase().as_str(),
+                    "flac" | "wav" | "aif" | "aiff"
+                )
+            })
         })
         .collect();
     paths.sort();

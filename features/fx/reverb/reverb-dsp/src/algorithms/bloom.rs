@@ -120,14 +120,30 @@ impl Bloom {
         input_diffuser_r.set_modulation(0.6, 6.0, sample_rate);
 
         // Create delay voices with unique diffuser seeds
-        let voices_l: Vec<BloomVoice> = BASE_DELAYS_L.iter()
+        let voices_l: Vec<BloomVoice> = BASE_DELAYS_L
+            .iter()
             .enumerate()
-            .map(|(i, &delay)| BloomVoice::new(delay, sample_rate, 45678u64.saturating_add(u64::try_from(i).unwrap_or(u64::MAX).saturating_mul(111))))
+            .map(|(i, &delay)| {
+                BloomVoice::new(
+                    delay,
+                    sample_rate,
+                    45678u64
+                        .saturating_add(u64::try_from(i).unwrap_or(u64::MAX).saturating_mul(111)),
+                )
+            })
             .collect();
 
-        let voices_r: Vec<BloomVoice> = BASE_DELAYS_R.iter()
+        let voices_r: Vec<BloomVoice> = BASE_DELAYS_R
+            .iter()
             .enumerate()
-            .map(|(i, &delay)| BloomVoice::new(delay, sample_rate, 56789u64.saturating_add(u64::try_from(i).unwrap_or(u64::MAX).saturating_mul(111))))
+            .map(|(i, &delay)| {
+                BloomVoice::new(
+                    delay,
+                    sample_rate,
+                    56789u64
+                        .saturating_add(u64::try_from(i).unwrap_or(u64::MAX).saturating_mul(111)),
+                )
+            })
             .collect();
 
         let mut tone_lp_l = Lp1::new();
@@ -213,11 +229,13 @@ impl ReverbAlgorithm for Bloom {
         // Map 0..1 to 0.3..2.5 for small-to-massive space
         self.size_scale = params.size.mul_add(2.2, 0.3);
         for (voice, &base_delay) in self.voices_l.iter_mut().zip(&BASE_DELAYS_L) {
-            let scaled = num::f64_to_index(num::count_to_f64(base_delay) * (sr / 48000.0) * self.size_scale);
+            let scaled =
+                num::f64_to_index(num::count_to_f64(base_delay) * (sr / 48000.0) * self.size_scale);
             voice.current_delay = num::count_to_f64(scaled);
         }
         for (voice, &base_delay) in self.voices_r.iter_mut().zip(&BASE_DELAYS_R) {
-            let scaled = num::f64_to_index(num::count_to_f64(base_delay) * (sr / 48000.0) * self.size_scale);
+            let scaled =
+                num::f64_to_index(num::count_to_f64(base_delay) * (sr / 48000.0) * self.size_scale);
             voice.current_delay = num::count_to_f64(scaled);
         }
 
@@ -239,7 +257,7 @@ impl ReverbAlgorithm for Bloom {
         // -- Modulation: delay modulation depth (chorus in bloom tail) --
         let mod_rate = params.modulation.mul_add(1.2, 0.3); // 0.3..1.5 Hz
         let mod_depth = params.modulation * 12.0; // 0..12 samples
-                                                  // Input diffusers
+        // Input diffusers
         self.input_diffuser_l
             .set_modulation(mod_rate, mod_depth * 0.5, sr);
         self.input_diffuser_r
@@ -350,7 +368,8 @@ impl ReverbAlgorithm for Bloom {
 
                 // Mix: input + feedback (with stereo cross-feed)
                 let fb_in = fb_l_in.mul_add(direct, fb_r_in * cross);
-                let write_val = (fb_in * decay).mul_add(0.15, diffused_l.mul_add(inv_n, clean * decay));
+                let write_val =
+                    (fb_in * decay).mul_add(0.15, diffused_l.mul_add(inv_n, clean * decay));
 
                 voice.delay.write(write_val);
                 *new_l = clean * decay;
@@ -368,7 +387,8 @@ impl ReverbAlgorithm for Bloom {
                 let clean = voice.dc_block.tick(diffused);
 
                 let fb_in = fb_r_in.mul_add(direct, fb_l_in * cross);
-                let write_val = (fb_in * decay).mul_add(0.15, diffused_r.mul_add(inv_n, clean * decay));
+                let write_val =
+                    (fb_in * decay).mul_add(0.15, diffused_r.mul_add(inv_n, clean * decay));
 
                 voice.delay.write(write_val);
                 *new_r = clean * decay;
@@ -391,7 +411,6 @@ impl ReverbAlgorithm for Bloom {
             .take(NUM_LINES)
             .enumerate()
         {
-
             // Read at the main delay point (already processed through feedback path above)
             let tap_l = voice_l.delay.read_linear(voice_l.current_delay * 0.73);
             let tap_r = voice_r.delay.read_linear(voice_r.current_delay * 0.73);

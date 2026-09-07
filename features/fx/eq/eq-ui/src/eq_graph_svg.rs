@@ -23,7 +23,7 @@ pub struct AllEqCurves {
 }
 
 #[expect(clippy::too_many_arguments)]
-#[must_use] 
+#[must_use]
 pub fn generate_all_eq_curves(
     bands: &[EqBand],
     sample_rate: f64,
@@ -131,7 +131,7 @@ where
 ///
 /// Returns (`stroke_path`, `fill_path`)
 #[expect(clippy::too_many_arguments)]
-#[must_use] 
+#[must_use]
 pub fn generate_eq_curve_path(
     bands: &[EqBand],
     sample_rate: f64,
@@ -173,7 +173,7 @@ pub fn generate_eq_curve_path(
     build_curve_paths(&frequencies, &response_db, freq_to_x, db_to_y, zero_y)
 }
 
-#[must_use] 
+#[must_use]
 pub fn generate_grid_elements(
     padding: f64,
     graph_width: f64,
@@ -229,7 +229,7 @@ pub fn generate_grid_elements(
     lines
 }
 
-#[must_use] 
+#[must_use]
 pub fn generate_freq_labels(
     padding: f64,
     graph_width: f64,
@@ -269,7 +269,7 @@ pub fn generate_freq_labels(
     labels
 }
 
-#[must_use] 
+#[must_use]
 pub fn generate_db_labels(
     padding: f64,
     graph_height: f64,

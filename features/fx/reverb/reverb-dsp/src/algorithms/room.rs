@@ -16,7 +16,9 @@
 
 use dsp_core::num;
 
-use crate::algorithm::{AlgorithmParams, ROOM_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets};
+use crate::algorithm::{
+    AlgorithmParams, ROOM_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets,
+};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::barr_loop::BarrLoop;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -34,7 +36,7 @@ const FDN_MOD_AP_COUNT: usize = 8;
 ///
 /// `(delay in samples at 48 kHz, gain)`, scaled by rate and size.
 const ER_TAPS_L: [(f64, f64); 10] = [
-    (67.0, 0.90), // near wall
+    (67.0, 0.90),  // near wall
     (131.0, 0.82), // side wall
     (197.0, 0.74), // far wall
     (281.0, 0.62), // wall-wall
@@ -190,7 +192,7 @@ impl Room {
             ap_l.sample_delay = delay.max(4);
             ap_l.feedback = 0.35; // Slightly less than Hall
             ap_l.set_modulation(
-                num::count_to_f64(i).mul_add(0.1, 0.2),                   // Slower rates than Hall
+                num::count_to_f64(i).mul_add(0.1, 0.2), // Slower rates than Hall
                 modulation * self.sample_rate * 0.0003, // Less depth than Hall
                 self.sample_rate,
             );
@@ -339,8 +341,10 @@ impl ReverbAlgorithm for Room {
         let stages = num::f64_to_index(params.diffusion * 8.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(params.diffusion.mul_add(0.2, 0.5));
-        self.diffuser_r.set_feedback(params.diffusion.mul_add(0.2, 0.5));
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.2, 0.5));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.2, 0.5));
 
         // Modulation → modulated AP in feedback path (subtle for rooms)
         self.setup_mod_allpass(params.modulation);

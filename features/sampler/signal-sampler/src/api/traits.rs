@@ -11,7 +11,7 @@
 //! the deep impls are Phase-B TODOs.
 
 use super::model::SampleSlice;
-use super::prim::{ArticulationId, Cc, Frames, MicId, Note, Velocity, U14, U7};
+use super::prim::{ArticulationId, Cc, Frames, MicId, Note, U7, U14, Velocity};
 
 // ── Render buffers — mics are first-class ────────────────────────────────
 

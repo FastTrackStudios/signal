@@ -27,7 +27,9 @@ impl GainReductionSmoother {
             sample_rate,
             attack_s: 0.01,
             release_s: 0.05,
-            env: PerChannel::new([(); dsp_core::channel::MAX_CHANNELS].map(|()| EnvelopeFollower::new(1.0))),
+            env: PerChannel::new(
+                [(); dsp_core::channel::MAX_CHANNELS].map(|()| EnvelopeFollower::new(1.0)),
+            ),
         };
         s.update_coeffs();
         s

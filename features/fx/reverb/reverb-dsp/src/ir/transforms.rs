@@ -231,7 +231,10 @@ fn stretch(buf: &[f64], factor: f64) -> Vec<f64> {
         // fallback is unreachable.
         let last = buf.len().saturating_sub(1);
         let a = buf.get(idx.min(last)).copied().unwrap_or(0.0);
-        let b = buf.get(idx.saturating_add(1).min(last)).copied().unwrap_or(0.0);
+        let b = buf
+            .get(idx.saturating_add(1).min(last))
+            .copied()
+            .unwrap_or(0.0);
         out.push((b - a).mul_add(frac, a));
     }
     out
@@ -265,7 +268,8 @@ fn apply_decay_window(buf: &mut Vec<f64>, frac: f64, gate: bool) {
         let ramp_start = keep / 2;
         let ramp_len = keep.saturating_sub(ramp_start).max(1);
         for (i, sample) in buf.iter_mut().enumerate().skip(ramp_start).take(ramp_len) {
-            let g = 1.0 - num::count_to_f64(i.saturating_sub(ramp_start)) / num::count_to_f64(ramp_len);
+            let g =
+                1.0 - num::count_to_f64(i.saturating_sub(ramp_start)) / num::count_to_f64(ramp_len);
             *sample *= g;
         }
     }

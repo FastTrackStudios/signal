@@ -9,7 +9,10 @@
 
 use dsp_core::num;
 
-use crate::algorithm::{AlgorithmParams, ChamberColor, ChamberParams, ROOM_CHAMBER_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets};
+use crate::algorithm::{
+    AlgorithmParams, ChamberColor, ChamberParams, ROOM_CHAMBER_T60, ReverbAlgorithm, decay_to_t60,
+    t60_shelf_targets,
+};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
@@ -330,8 +333,10 @@ impl ReverbAlgorithm for RoomChamber {
         let stages = num::f64_to_index(params.diffusion * 8.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(params.diffusion.mul_add(0.25, 0.5));
-        self.diffuser_r.set_feedback(params.diffusion.mul_add(0.25, 0.5));
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
 
         // Modulation (subtle in chamber)
         self.setup_mod_allpass(params.modulation);

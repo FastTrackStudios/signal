@@ -18,7 +18,7 @@ use crate::{BlockType, ModuleType};
 ///
 /// All block preset slots are `Assignment::Unassigned` — this is a structural
 /// blueprint awaiting plugin assignments from the user or a preset browser.
-#[must_use] 
+#[must_use]
 pub fn guitar_rig_template() -> RigTemplate {
     let layer = LayerTemplate::new("Main")
         .with_module(source())

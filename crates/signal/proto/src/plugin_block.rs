@@ -135,7 +135,7 @@ impl VirtualBlock {
     }
 
     /// Whether this block spans more than one FX.
-    #[must_use] 
+    #[must_use]
     pub const fn is_multi_fx(&self) -> bool {
         self.linked_fx_indices.len() > 1
     }
@@ -144,7 +144,7 @@ impl VirtualBlock {
     ///
     /// Returns `None` if `linked_fx_indices` is empty (single-FX block —
     /// the caller should use the block's default FX index).
-    #[must_use] 
+    #[must_use]
     pub fn resolve_fx_index(&self, fx_slot: u32) -> Option<u32> {
         self.linked_fx_indices.get(fx_slot as usize).copied()
     }
@@ -234,7 +234,7 @@ impl PluginBlockDef {
     }
 
     /// All virtual blocks across all modules, in order.
-    #[must_use] 
+    #[must_use]
     pub fn all_blocks(&self) -> Vec<&VirtualBlock> {
         self.modules.iter().flat_map(|m| &m.blocks).collect()
     }
@@ -280,7 +280,7 @@ impl PluginBlockDef {
     /// Each `VirtualModule` becomes a tuple. Each `VirtualBlock` becomes a
     /// `SignalNode::Block(Box<ModuleBlock>)` with `ModuleBlockSource::Inline`,
     /// carrying the virtual block's parameters as `BlockParameter`s.
-    #[must_use] 
+    #[must_use]
     pub fn to_module_chains(&self) -> Vec<(String, ModuleType, SignalChain)> {
         self.modules
             .iter()
@@ -404,7 +404,7 @@ impl Default for FxDisplayOptions {
 
 impl FxDisplayOptions {
     /// Show everything: `DRIVE Module: Simple Drive - Low`.
-    #[must_use] 
+    #[must_use]
     pub const fn full() -> Self {
         Self {
             show_type: true,
@@ -415,7 +415,7 @@ impl FxDisplayOptions {
     }
 
     /// Show only preset and variation: `Simple Drive - Low`.
-    #[must_use] 
+    #[must_use]
     pub const fn name_only() -> Self {
         Self {
             show_type: false,
@@ -441,7 +441,7 @@ pub struct FxNameParts {
 
 impl FxNameParts {
     /// Split a combined name like `"Simple Drive - Low"` into preset + variation.
-    #[must_use] 
+    #[must_use]
     pub fn split(combined: &str) -> Self {
         // Split on the last ` - ` to handle presets containing hyphens
         // e.g., "Spring-Box - Boing" → preset="Spring-Box", variation="Boing"
@@ -488,7 +488,7 @@ impl FxRole {
     /// - `"<Type> Block: <name>"` → `Block { block_type, name }`
     /// - `"Module: <name>"` → `GenericModule { name }`
     /// - Anything else → `Unknown { name }`
-    #[must_use] 
+    #[must_use]
     pub fn parse(display_name: &str) -> Self {
         // Strip optional [M] / [B] prefix
         let display_name = display_name
@@ -590,7 +590,7 @@ impl FxRole {
     /// // Name only (type + collection_type off):
     /// "Simple Drive - Low"
     /// ```
-    #[must_use] 
+    #[must_use]
     pub fn format(&self, opts: &FxDisplayOptions) -> String {
         match self {
             Self::Module { module_type, name } => {
@@ -614,7 +614,7 @@ impl FxRole {
     }
 
     /// Format with the default display options.
-    #[must_use] 
+    #[must_use]
     pub fn display_name(&self) -> String {
         self.format(&FxDisplayOptions::default())
     }
@@ -730,7 +730,7 @@ pub enum TrackRole {
 
 impl TrackRole {
     /// Format this track role as a display name using the given options.
-    #[must_use] 
+    #[must_use]
     pub fn format(&self, opts: &TrackDisplayOptions) -> String {
         let (prefix, role, name) = match self {
             Self::Rig { name } => ("[R]", "Rig", name.as_str()),
@@ -758,7 +758,7 @@ impl TrackRole {
     }
 
     /// Format with the default display options (`[X] <name>`).
-    #[must_use] 
+    #[must_use]
     pub fn display_name(&self) -> String {
         self.format(&TrackDisplayOptions::default())
     }
@@ -767,7 +767,7 @@ impl TrackRole {
     ///
     /// Recognizes `[R] ...`, `[E] ...`, `[L] ...` prefixes.
     /// Returns `None` if the name doesn't match any known prefix.
-    #[must_use] 
+    #[must_use]
     pub fn parse(display_name: &str) -> Option<Self> {
         if let Some(rest) = display_name.strip_prefix("[R] ") {
             Some(Self::Rig {

@@ -52,6 +52,8 @@ default = ["signal"]
 signal-guitar = [
     "dep:signal-guitar-proto",
     "dep:signal-guitar-ui",
+    "dep:signal-tone3000-proto",
+    "dep:signal-tone3000-ui",
     # Pack downloads (pack_client.rs) — list + fetch .signalpacks from a
     # pack host (the studio engine / a hosted mirror) over ws or iroh.
     "dep:signal-packs-proto",
@@ -118,6 +120,12 @@ signal = [
     "dep:signal-space-proto",
     "dep:signal-ekit",
     "dep:signal-ekit-proto",
+    # TONE3000: the engine holds the session and serves the OAuth redirect
+    # (engine_tone3000.rs); signal-nam resolves where downloads land.
+    "dep:signal-tone3000",
+    "dep:signal-account",
+    "dep:signal-nam",
+    "dep:url",
     "dep:axum",
     "dep:tower-http",
 ]
@@ -191,6 +199,10 @@ tracing.workspace = true
 
 # Signal domain (the rig)
 signal-guitar-proto = { workspace = true, optional = true }
+# TONE3000: the wire contract and the tone browser. Both wasm-clean, so
+# the browser remote gets the same page the desktop app does.
+signal-tone3000-proto = { workspace = true, optional = true }
+signal-tone3000-ui = { workspace = true, optional = true }
 fts-chrome.workspace = true
 signal-guitar-ui = { workspace = true, optional = true }
 signal-bass-proto = { workspace = true, optional = true }
@@ -288,6 +300,10 @@ signal-sampler = { workspace = true, optional = true }
 signal-pack-library = { workspace = true, optional = true }
 signal-space = { workspace = true, optional = true }
 signal-ekit = { workspace = true, optional = true }
+signal-tone3000 = { workspace = true, optional = true }
+signal-account = { workspace = true, optional = true }
+signal-nam = { workspace = true, optional = true }
+url = { version = "2", optional = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 # Watch bridge (engine_watch.rs): facet-json for the WatchState wire form,

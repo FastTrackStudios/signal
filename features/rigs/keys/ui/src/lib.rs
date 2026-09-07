@@ -34,20 +34,20 @@ mod time_fx;
 mod zoom;
 
 pub use browser::Browser;
-pub use control::{engine_color, ControlView};
+pub use control::{ControlView, engine_color};
 pub use engine_view::EngineView;
-pub use fader::{fmt_db, Fader};
+pub use fader::{Fader, fmt_db};
 pub use graphs::{Adsr, EnvelopeGraph, FilterCurve};
 pub use knob::Knob;
 pub use layer_view::LayerView;
 pub use macro_panel::{MacroPanel, Shape, ShapeCard};
-pub use meter::{fmt_dbfs, EdgeMeter};
+pub use meter::{EdgeMeter, fmt_dbfs};
 pub use midi_light::MidiPanel;
 pub use module_edit::ModuleEdit;
-pub use perform::{stack_color, PerformStrip};
+pub use perform::{PerformStrip, stack_color};
 pub use routing::RoutingView;
-pub use selection::{use_selection, Selection};
-pub use state::{held_notes, use_keys_state, KeysViewState};
+pub use selection::{Selection, use_selection};
+pub use state::{KeysViewState, held_notes, use_keys_state};
 pub use zoom::{OpenButton, Zoom};
 
 // The wire contract, re-exported for convenience.

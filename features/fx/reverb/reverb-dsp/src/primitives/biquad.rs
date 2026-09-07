@@ -120,7 +120,14 @@ impl Biquad {
     #[inline]
     pub fn tick(&mut self, x: f64) -> f64 {
         self.y = audiocore_dsp::denormal::flush(
-            self.a2.mul_add(-self.y2, self.a1.mul_add(-self.y1, self.b2.mul_add(self.x2, self.b0.mul_add(x, self.b1 * self.x1)))),
+            self.a2.mul_add(
+                -self.y2,
+                self.a1.mul_add(
+                    -self.y1,
+                    self.b2
+                        .mul_add(self.x2, self.b0.mul_add(x, self.b1 * self.x1)),
+                ),
+            ),
         );
         self.x2 = self.x1;
         self.y2 = self.y1;
@@ -156,13 +163,25 @@ impl Coeffs {
     /// convention used by `tick`.
     fn one_pole_low(w: f64) -> Self {
         let alpha = (-w).exp();
-        Self { b0: 1.0 + alpha, b1: 0.0, b2: 0.0, a1: -alpha, a2: 0.0 }
+        Self {
+            b0: 1.0 + alpha,
+            b1: 0.0,
+            b2: 0.0,
+            a1: -alpha,
+            a2: 0.0,
+        }
     }
 
     /// 6 dB/oct highpass.
     fn one_pole_high(w: f64) -> Self {
         let alpha = (-w).exp();
-        Self { b0: alpha, b1: -alpha, b2: 0.0, a1: -alpha, a2: 0.0 }
+        Self {
+            b0: alpha,
+            b1: -alpha,
+            b2: 0.0,
+            a1: -alpha,
+            a2: 0.0,
+        }
     }
 
     /// The denominator shared by the four second-order RBJ forms.
@@ -209,13 +228,23 @@ impl Coeffs {
         let norm = Self::rbj_norm(k, q);
         let b0 = k.mul_add(k, 1.0) * norm;
         let b1 = 2.0 * k.mul_add(k, -1.0) * norm;
-        Self { b0, b1, b2: b0, a1: b1, a2: k.mul_add(k, 1.0 - k / q) * norm }
+        Self {
+            b0,
+            b1,
+            b2: b0,
+            a1: b1,
+            a2: k.mul_add(k, 1.0 - k / q) * norm,
+        }
     }
 
     /// Peaking bell. A cut is the boost form with `v` moved from the
     /// numerator to the denominator.
     fn peak(k: f64, q: f64, v: f64, boost: bool) -> Self {
-        let (num_gain, den_gain) = if boost { (v / q, 1.0 / q) } else { (1.0 / q, v / q) };
+        let (num_gain, den_gain) = if boost {
+            (v / q, 1.0 / q)
+        } else {
+            (1.0 / q, v / q)
+        };
         let norm = 1.0 / k.mul_add(k, den_gain.mul_add(k, 1.0));
         let b1 = 2.0 * k.mul_add(k, -1.0) * norm;
         Self {

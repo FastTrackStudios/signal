@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
-use architect::{layers, HasDispatcher, Layer, PubSub, Services};
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
@@ -22,10 +22,10 @@ use signal_keys_proto::{
     KeysMeter, KeysMixer, KeysNode, KeysPackRef, KeysPerform, KeysPreset, KeysStack, KeysStatus,
 };
 
-use crate::profile::{worship_profile, KeysProfile};
+use crate::profile::{KeysProfile, worship_profile};
 use signal_rig_host::mixer::{self as rig_mixer, db_to_linear};
+use signal_sampler::Container;
 use signal_sampler::rig_node::{RigNode, Role};
-use signal_sampler::{Container};
 
 use crate::KeysRig;
 
@@ -1399,8 +1399,7 @@ impl State {
                     // worked on — a pad under everything hides exactly the
                     // attack detail you need to hear. Unmute them in the
                     // mixer; this only decides where the faders START.
-                    muted: is_drone(&engine.name)
-                        || matches!(engine.name.as_str(), "Aux" | "Pad"),
+                    muted: is_drone(&engine.name) || matches!(engine.name.as_str(), "Aux" | "Pad"),
                     ..EngineState::default()
                 },
             );
@@ -1818,8 +1817,23 @@ impl KeysRigBackend {
         let Some(vals) = self.module_dsp_values(layer, module_idx) else {
             return false;
         };
-        let [cutoff_hz, reso, env_amt, a1, d1, s1, r1, a2, d2, s2, r2, unison, detune, vib_rate, vib_depth] =
-            vals;
+        let [
+            cutoff_hz,
+            reso,
+            env_amt,
+            a1,
+            d1,
+            s1,
+            r1,
+            a2,
+            d2,
+            s2,
+            r2,
+            unison,
+            detune,
+            vib_rate,
+            vib_depth,
+        ] = vals;
         let module = format!("{layer} {}", signal_synth::engine::module_slot(module_idx));
         let Ok(rig) = self.inner.rig.lock() else {
             return false;
@@ -1831,8 +1845,9 @@ impl KeysRigBackend {
         rig.edit_lane(layer, |inst| {
             let render = inst.render_mut();
             // Filter block params (normalized on the block's own scale).
-            let cutoff_norm =
-                f64::from(signal_sampler::native::NativeFilter::norm_from_cutoff(cutoff_hz));
+            let cutoff_norm = f64::from(signal_sampler::native::NativeFilter::norm_from_cutoff(
+                cutoff_hz,
+            ));
             let mut applied = render.set_leaf_param(&module, "Filter 1", "cutoff", cutoff_norm);
             applied |= render.set_leaf_param(
                 &module,
@@ -1939,13 +1954,13 @@ impl KeysRigBackend {
     /// generation and only the last one standing does the work.
     fn rebuild_soon(&self) {
         use std::sync::atomic::Ordering;
-        let gen = self.inner.rebuild_gen.fetch_add(1, Ordering::AcqRel) + 1;
+        let r#gen = self.inner.rebuild_gen.fetch_add(1, Ordering::AcqRel) + 1;
         let b = self.clone();
         let _ = std::thread::Builder::new()
             .name("keys-param-rebuild".into())
             .spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(180));
-                if b.inner.rebuild_gen.load(Ordering::Acquire) != gen {
+                if b.inner.rebuild_gen.load(Ordering::Acquire) != r#gen {
                     return; // a later edit owns the rebuild
                 }
                 let _rt = keys_runtime().enter();
@@ -2079,7 +2094,9 @@ impl KeysRigBackend {
                 if m.patch.is_empty() {
                     continue;
                 }
-                if let Some(name) = canonical(&m.patch) { m.patch = name } else {
+                if let Some(name) = canonical(&m.patch) {
+                    m.patch = name
+                } else {
                     tracing::info!(patch = %m.patch, "keys rig: profile patch not in library — module starts empty");
                     m.patch.clear();
                 }
@@ -2626,7 +2643,11 @@ impl KeysRigBackend {
         match opened {
             Ok(r) => {
                 {
-                    let mut rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let mut rig = self
+                        .inner
+                        .rig
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     *rig = Some(r);
                 }
                 // A freshly opened rig has no MIDI input yet, and every
@@ -2724,7 +2745,11 @@ impl KeysRigBackend {
         // lock before touching the hub, so a slow port open can never wedge
         // status() and with it the whole UI.
         let sink = {
-            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let rig = self
+                .inner
+                .rig
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             match rig.as_ref() {
                 Some(rig) => rig.midi_sink(),
                 None => return, // Not running — nothing to feed.
@@ -2862,7 +2887,11 @@ impl KeysRigSvc for KeysRigBackend {
     fn status(&self) -> KeysStatus {
         tracing::debug!("keys rpc: status →");
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-        let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let s = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let loaded_preset = s
             .loaded
             .and_then(|i| s.presets.get(i))
@@ -3242,10 +3271,9 @@ impl KeysRigSvc for KeysRigBackend {
             return KeysLayerDetail::default();
         };
         let slot = (module as usize).min(lane.modules.len().saturating_sub(1));
-        let (key_lo, key_hi) = s
-            .profile
-            .layer(&layer)
-            .map_or((0, 127), |(_, l)| (u32::from(l.key_lo), u32::from(l.key_hi)));
+        let (key_lo, key_hi) = s.profile.layer(&layer).map_or((0, 127), |(_, l)| {
+            (u32::from(l.key_lo), u32::from(l.key_hi))
+        });
         let modules = lane
             .modules
             .iter()

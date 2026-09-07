@@ -29,7 +29,7 @@ pub use binding::MacroBinding;
 pub use curation::ParamCuration;
 pub use curve::{CurvePoint, MultiPointCurve};
 pub use daw_target::DawParamTarget;
-pub use easing::{lerp_eased, EasingCurve};
+pub use easing::{EasingCurve, lerp_eased};
 pub use learn::{LearnState, PendingBinding};
 pub use macro_bank::{GroupSelector, MacroBank, MacroGroup, MacroKnob};
 pub use parameter::{BlockParameter, ParameterValue};
@@ -43,6 +43,6 @@ pub use target::{ModulationTarget, ParamTarget};
 
 // Runtime engine re-exports
 pub use runtime::{
-    evaluate_waveform, EnvelopeStage, EnvelopeState, FollowerState, LfoState, ModulationOutput,
-    ModulationProcessor, RandomState, TickContext,
+    EnvelopeStage, EnvelopeState, FollowerState, LfoState, ModulationOutput, ModulationProcessor,
+    RandomState, TickContext, evaluate_waveform,
 };

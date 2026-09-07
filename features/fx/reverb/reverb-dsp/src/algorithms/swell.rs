@@ -53,7 +53,10 @@ impl Swell {
             [1201, 1499, 1801, 2099, 2399, 2699, 2999, 3301]
         };
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index(f64::from(d) * scale)).collect();
+        let delays: Vec<usize> = base
+            .iter()
+            .map(|&d| num::f64_to_index(f64::from(d) * scale))
+            .collect();
         Fdn::new(&delays, MixMatrix::Householder)
     }
 }
@@ -97,8 +100,10 @@ impl ReverbAlgorithm for Swell {
         let stages = num::f64_to_index(params.diffusion * 10.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(params.diffusion.mul_add(0.25, 0.5));
-        self.diffuser_r.set_feedback(params.diffusion.mul_add(0.25, 0.5));
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
 
         // Modulation
         self.diffuser_l

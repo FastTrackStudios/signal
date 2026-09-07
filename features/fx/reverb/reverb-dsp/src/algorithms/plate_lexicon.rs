@@ -230,13 +230,17 @@ impl ReverbAlgorithm for PlateLexicon {
 
         // Modulation — Lexicon has more modulation points than Dattorro
         let mod_depth = params.modulation * 20.0 * self.s;
-        self.loop_a.ap1
+        self.loop_a
+            .ap1
             .set_modulation(0.8, mod_depth, self.sample_rate);
-        self.loop_a.ap2
+        self.loop_a
+            .ap2
             .set_modulation(1.2, mod_depth * 0.7, self.sample_rate);
-        self.loop_b.ap1
+        self.loop_b
+            .ap1
             .set_modulation(0.9, mod_depth, self.sample_rate);
-        self.loop_b.ap2
+        self.loop_b
+            .ap2
             .set_modulation(1.1, mod_depth * 0.7, self.sample_rate);
     }
 

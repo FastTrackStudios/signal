@@ -40,7 +40,7 @@ pub enum AttachTrigger {
 }
 
 impl AttachTrigger {
-    #[must_use] 
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::RigOpen => "rig_open",
@@ -211,7 +211,11 @@ pub fn rescan_stream_instrumented(
         midi.selector = "omni",
         midi.ports_seen = known_ports.len(),
         midi.ports_before = before.len(),
-        midi.outcome = if stream.is_some() { "attached" } else { "no_ports" },
+        midi.outcome = if stream.is_some() {
+            "attached"
+        } else {
+            "no_ports"
+        },
         midi.reordered_only = reordered_only,
         midi.had_stream = had_stream,
         midi.attach_seq = seq,

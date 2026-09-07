@@ -22,7 +22,7 @@ pub struct CurvePoint {
 }
 
 impl CurvePoint {
-    #[must_use] 
+    #[must_use]
     pub const fn new(macro_value: f64, param_value: f64) -> Self {
         Self {
             macro_value: macro_value.clamp(0.0, 1.0),
@@ -52,7 +52,7 @@ impl Default for MultiPointCurve {
 
 impl MultiPointCurve {
     /// Create a curve from min/max values (equivalent to the classic binding).
-    #[must_use] 
+    #[must_use]
     pub fn min_max(min: f64, max: f64) -> Self {
         Self {
             points: vec![CurvePoint::new(0.0, min), CurvePoint::new(1.0, max)],
@@ -107,7 +107,7 @@ impl MultiPointCurve {
     }
 
     /// Evaluate the curve at a given macro knob position using piecewise-linear interpolation.
-    #[must_use] 
+    #[must_use]
     pub fn evaluate(&self, macro_value: f64) -> f64 {
         let macro_value = macro_value.clamp(0.0, 1.0);
 
@@ -147,13 +147,13 @@ impl MultiPointCurve {
     }
 
     /// Number of control points.
-    #[must_use] 
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.points.len()
     }
 
     /// Whether the curve has no points.
-    #[must_use] 
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.points.is_empty()
     }

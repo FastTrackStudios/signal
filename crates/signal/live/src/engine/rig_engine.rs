@@ -4,8 +4,8 @@
 //! resolves what each slot needs, computes diffs, and executes transitions
 //! across all slots. It also manages preloading and periodic maintenance.
 
-use signal_proto::module_type::ModuleType;
 use signal_proto::ModuleSnapshot;
+use signal_proto::module_type::ModuleType;
 
 use super::error::EngineError;
 
@@ -63,7 +63,7 @@ pub struct TransitionResult {
 }
 
 impl TransitionResult {
-    #[must_use] 
+    #[must_use]
     pub const fn completed() -> Self {
         Self {
             outcome: SwitchOutcome::Completed,
@@ -80,12 +80,12 @@ impl TransitionResult {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn is_completed(&self) -> bool {
         matches!(self.outcome, SwitchOutcome::Completed)
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn has_errors(&self) -> bool {
         !self.slot_errors.is_empty()
     }
@@ -146,7 +146,7 @@ pub enum TweenState {
 }
 
 impl SnapshotTween {
-    #[must_use] 
+    #[must_use]
     pub const fn new(duration_ms: f64, curve: signal_proto::easing::EasingCurve) -> Self {
         Self {
             duration_ms,
@@ -188,17 +188,17 @@ impl SnapshotTween {
         self.curve.apply(t)
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn state(&self) -> TweenState {
         self.state
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_running(&self) -> bool {
         self.state == TweenState::Running
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_complete(&self) -> bool {
         self.state == TweenState::Complete
     }

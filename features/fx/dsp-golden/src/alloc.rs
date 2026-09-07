@@ -57,7 +57,11 @@ impl<A> CountingAlloc<A> {
 fn record(size: usize) {
     if ARMED.get() {
         COUNT.set(COUNT.get().saturating_add(1));
-        BYTES.set(BYTES.get().saturating_add(u64::try_from(size).unwrap_or(u64::MAX)));
+        BYTES.set(
+            BYTES
+                .get()
+                .saturating_add(u64::try_from(size).unwrap_or(u64::MAX)),
+        );
     }
 }
 
@@ -105,7 +109,11 @@ impl AllocReport {
 
 impl core::fmt::Display for AllocReport {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{} allocation(s), {} bytes", self.allocations, self.bytes)
+        write!(
+            f,
+            "{} allocation(s), {} bytes",
+            self.allocations, self.bytes
+        )
     }
 }
 
@@ -119,7 +127,13 @@ pub fn measure_alloc<T>(body: impl FnOnce() -> T) -> (T, AllocReport) {
     ARMED.set(true);
     let value = body();
     ARMED.set(false);
-    (value, AllocReport { allocations: COUNT.get(), bytes: BYTES.get() })
+    (
+        value,
+        AllocReport {
+            allocations: COUNT.get(),
+            bytes: BYTES.get(),
+        },
+    )
 }
 
 /// Run `body` and panic if it allocated.
@@ -190,6 +204,9 @@ mod tests {
         escapee.extend((0..64).map(dsp_core::num::count_to_f32));
         assert!(escapee.iter().sum::<f32>() > 0.0);
         let ((), second) = measure_alloc(|| ());
-        assert!(second.is_clean(), "work outside the guard must not be counted: {second}");
+        assert!(
+            second.is_clean(),
+            "work outside the guard must not be counted: {second}"
+        );
     }
 }

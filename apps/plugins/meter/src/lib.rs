@@ -9,7 +9,7 @@
 //! The audio path is a bit-exact passthrough: analysis taps only.
 
 use nice_plug::prelude::*;
-use nice_plug_dioxus::{create_dioxus_editor_with_state, DioxusState};
+use nice_plug_dioxus::{DioxusState, create_dioxus_editor_with_state};
 use std::num::NonZeroU32;
 use std::sync::Arc;
 

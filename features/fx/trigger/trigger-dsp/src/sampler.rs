@@ -28,7 +28,7 @@ pub struct Sample {
 }
 
 impl Sample {
-    #[must_use] 
+    #[must_use]
     pub const fn new(data: Vec<[f64; 2]>, sample_rate: f64) -> Self {
         Self {
             data,
@@ -39,7 +39,7 @@ impl Sample {
     }
 
     /// Create a mono sample from a single channel.
-    #[must_use] 
+    #[must_use]
     pub fn from_mono(data: &[f64], sample_rate: f64) -> Self {
         Self {
             data: data.iter().map(|&s| [s, s]).collect(),
@@ -49,12 +49,12 @@ impl Sample {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.data.len()
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
@@ -73,7 +73,7 @@ pub struct VelocityLayer {
 }
 
 impl VelocityLayer {
-    #[must_use] 
+    #[must_use]
     pub const fn new(min_velocity: f64, max_velocity: f64) -> Self {
         Self {
             min_velocity,
@@ -180,7 +180,7 @@ pub struct Sampler {
 }
 
 impl Sampler {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             layers: Vec::new(),
@@ -228,7 +228,9 @@ impl Sampler {
         // Find matching layer
         let layer = self.layers.iter_mut().find(|l| l.matches(velocity));
 
-        let layer = if let Some(l) = layer { l } else {
+        let layer = if let Some(l) = layer {
+            l
+        } else {
             // No matching layer — find nearest
             if self.layers.is_empty() {
                 return;
@@ -255,8 +257,9 @@ impl Sampler {
             &mut self.layers[idx]
         };
 
-        let Some(sample) = layer.next_sample() else { return };
-
+        let Some(sample) = layer.next_sample() else {
+            return;
+        };
 
         // Calculate playback rate for sample rate conversion + pitch
         let rate = (sample.sample_rate / self.sample_rate) * sample.playback_rate;
@@ -315,13 +318,13 @@ impl Sampler {
     }
 
     /// Check if any voices are currently playing.
-    #[must_use] 
+    #[must_use]
     pub fn is_playing(&self) -> bool {
         self.voices.iter().any(|v| v.active)
     }
 
     /// Get the number of active voices.
-    #[must_use] 
+    #[must_use]
     pub fn active_voice_count(&self) -> usize {
         self.voices.iter().filter(|v| v.active).count()
     }

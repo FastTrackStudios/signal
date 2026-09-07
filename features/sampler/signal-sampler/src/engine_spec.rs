@@ -37,8 +37,8 @@ use std::path::Path;
 
 use facet::Facet;
 
-use crate::block::ParamOverride;
 use crate::SamplerError;
+use crate::block::ParamOverride;
 
 /// Parsed `.signalengine` file.
 ///

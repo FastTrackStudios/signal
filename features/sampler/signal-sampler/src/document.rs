@@ -27,8 +27,8 @@
 //! corpus in `tests/annotation_parity.rs`.
 
 use keyflow_annotate::{
-    annotate_line, annotate_line_with, default_blocks_rebow, ks_is_marcato, CcTimeline, EdgeParams,
-    LineNote, EPS,
+    CcTimeline, EPS, EdgeParams, LineNote, annotate_line, annotate_line_with, default_blocks_rebow,
+    ks_is_marcato,
 };
 
 use crate::engine::{ArticClass, LineId};
@@ -635,7 +635,10 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
         .legato_engine
         .as_ref()
         .and_then(|le| le.expressive.clone());
-    let primary = spec.legato_engine.as_ref().and_then(crate::spec::LegatoEngineSpec::primary_mode);
+    let primary = spec
+        .legato_engine
+        .as_ref()
+        .and_then(crate::spec::LegatoEngineSpec::primary_mode);
     let ll_range = low_latency
         .as_ref()
         .and_then(|m| m.enabled_cc58_range.as_deref())
@@ -973,7 +976,12 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 if std::env::var_os("SIGNAL_ANNOTATE_DEBUG").is_some() {
                     eprintln!(
                         "ANNOTATE legato pitch={} vel={} expr={} marcato={} lead_ms={} prev={:?} lookup={:?}",
-                        n.src.pitch, vel, n.legato_expressive, n.is_marcato(), lead_ms, prev_pitch,
+                        n.src.pitch,
+                        vel,
+                        n.legato_expressive,
+                        n.is_marcato(),
+                        lead_ms,
+                        prev_pitch,
                         prev_pitch.and_then(|from| spec.legato_lead_ms(from, n.src.pitch))
                     );
                 }

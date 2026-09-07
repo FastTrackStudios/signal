@@ -347,7 +347,12 @@ fn apply_macros(state: &mut MacroState) {
             let source_val = macros[source_idx];
             let target_val = mapping.mode.apply(source_val);
 
-            daw.fx_param_set(&ts.track_guid, target_fx_idx, param_idx, f64::from(target_val));
+            daw.fx_param_set(
+                &ts.track_guid,
+                target_fx_idx,
+                param_idx,
+                f64::from(target_val),
+            );
         }
     }
 }
@@ -366,7 +371,9 @@ fn flush_console_log() {
         return;
     }
 
-    let mut last = LAST_CONSOLE_MSG.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut last = LAST_CONSOLE_MSG
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if msg == last.as_str() {
         return;
     }

@@ -9,7 +9,7 @@
 
 use dsp_core::num;
 
-use super::{bell_s2_proq4, lagrange_synth_alt_path, trace_bell_inputs, Coeffs, PASSTHROUGH, PI};
+use super::{Coeffs, PASSTHROUGH, PI, bell_s2_proq4, lagrange_synth_alt_path, trace_bell_inputs};
 
 #[expect(
     clippy::too_many_lines,
@@ -59,11 +59,11 @@ pub fn bell_brickwall_proq4(
     // For slopes 3, 4 (N_LP=2) and 5, 6 (N_LP=3) the structure is correct
     // but a small Q-correction is still undecoded (~10% residual).
     let n_lp = n_sections; // For s=7,8,9 this matches the validated table
-                           // {s=3,4: 2}, {s=5,6: 3}, {s=7: 4}, {s=8: 6}, {s=9: 8}.
-                           // Slope-5 uses the special exponent x = 1/slope = 1/5 with a
-                           // non-Butterworth LP pole at θ = π/5 (vs N=3's π/6).  Slope-3 uses the
-                           // unified BW formula but a non-Butterworth LP pole at θ = π/3
-                           // (asymptotically, with a small gain-dependent deviation at |g|<12).
+    // {s=3,4: 2}, {s=5,6: 3}, {s=7: 4}, {s=8: 6}, {s=9: 8}.
+    // Slope-5 uses the special exponent x = 1/slope = 1/5 with a
+    // non-Butterworth LP pole at θ = π/5 (vs N=3's π/6).  Slope-3 uses the
+    // unified BW formula but a non-Butterworth LP pole at θ = π/3
+    // (asymptotically, with a small gain-dependent deviation at |g|<12).
     let is_slope5 = slope_idx == Some(5);
     let is_slope3 = slope_idx == Some(3);
     let g_pow = if is_slope5 {
@@ -304,11 +304,7 @@ pub fn bell_brickwall_proq4(
             let sd = disc.sqrt();
             let u1 = (-bq + sd) / (2.0 * aq);
             let u2 = (-bq - sd) / (2.0 * aq);
-            if u1 < u2 {
-                (u1, u2)
-            } else {
-                (u2, u1)
-            }
+            if u1 < u2 { (u1, u2) } else { (u2, u1) }
         } else {
             (-1.0, -1.0)
         };
@@ -941,7 +937,7 @@ pub fn bell_three_point_synth(
     g_ref: f64,
 ) -> Coeffs {
     const W_ZERO_MAX: f64 = 2.827_433_388_230_814; // 0.9π — no captured cell hits it
-                                                   // bell_s2 has its own inline synth path, so this function only sees
+    // bell_s2 has its own inline synth path, so this function only sees
     const W_POLE_MAX: f64 = 3.135_309_468_282_613_5;
     const W_THIRD_MAX: f64 = 3.133_741_813_548_472_3;
     if trace_bell_inputs() {
@@ -1412,11 +1408,7 @@ pub fn bell_brickwall_cascade(
         let sqrt_im = r.sqrt() * (phi * 0.5).sin();
         let s1 = (scaled_re + sqrt_re, scaled_im + sqrt_im);
         let s2 = (scaled_re - sqrt_re, scaled_im - sqrt_im);
-        if s1.1 >= 0.0 {
-            s1
-        } else {
-            s2
-        }
+        if s1.1 >= 0.0 { s1 } else { s2 }
     };
 
     let mut sections = Vec::with_capacity(n);

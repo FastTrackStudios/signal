@@ -71,7 +71,8 @@ struct RigLayout {
 
 /// Convert a logical grid column to a pixel X position.
 fn col_to_px(col: usize) -> f64 {
-    (col as f64 * f64::from(COLS_PER_BLOCK)).mul_add(f64::from(CELL_SIZE + CELL_GAP), f64::from(CELL_GAP))
+    (col as f64 * f64::from(COLS_PER_BLOCK))
+        .mul_add(f64::from(CELL_SIZE + CELL_GAP), f64::from(CELL_GAP))
 }
 
 /// Convert a logical grid column count to a pixel width.

@@ -13,7 +13,7 @@ pub struct XmlNode {
 }
 
 impl XmlNode {
-    #[must_use] 
+    #[must_use]
     pub fn attr(&self, name: &str) -> Option<&str> {
         self.attrs
             .iter()
@@ -26,7 +26,7 @@ impl XmlNode {
         self.attr(name).map(omni_num)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn child(&self, tag: &str) -> Option<&Self> {
         self.children.iter().find(|c| c.tag == tag)
     }
@@ -36,7 +36,7 @@ impl XmlNode {
     }
 
     /// Depth-first search for the first element with `tag`.
-    #[must_use] 
+    #[must_use]
     pub fn find(&self, tag: &str) -> Option<&Self> {
         if self.tag == tag {
             return Some(self);
@@ -47,7 +47,7 @@ impl XmlNode {
 
 /// Decode an attribute value: 8 hex digits → `f32` from bits; otherwise a
 /// plain decimal number; otherwise 0.
-#[must_use] 
+#[must_use]
 pub fn omni_num(s: &str) -> f32 {
     let t = s.trim();
     if t.len() == 8 && t.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -151,7 +151,9 @@ pub fn parse_xml(input: &str) -> Result<XmlNode, String> {
                 .ok_or("unterminated close tag")?;
             i += end + 1;
             let done = stack.pop().ok_or("unbalanced close tag")?;
-            if let Some(parent) = stack.last_mut() { parent.children.push(done) } else {
+            if let Some(parent) = stack.last_mut() {
+                parent.children.push(done)
+            } else {
                 root = Some(done);
                 break;
             }

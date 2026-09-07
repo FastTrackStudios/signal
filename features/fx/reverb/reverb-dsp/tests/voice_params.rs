@@ -1,9 +1,9 @@
 //! `BigSky` MX pass-E: Voice pairs (MX/Classic), Hall Mid EQ + Swell,
 //! named-Size selection. Defaults must be bit-transparent.
 
+use reverb_dsp::AlgorithmType;
 use reverb_dsp::algorithm::{HallParams, ReverbVoice, SwellType};
 use reverb_dsp::chain::ReverbChain;
-use reverb_dsp::AlgorithmType;
 
 use audiocore_dsp::{AudioConfig, Processor};
 use dsp_core::num;

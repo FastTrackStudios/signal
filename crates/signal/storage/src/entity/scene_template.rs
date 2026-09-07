@@ -13,7 +13,7 @@ pub struct Model {
 }
 
 impl Model {
-    #[must_use] 
+    #[must_use]
     pub fn id_branded(&self) -> SceneTemplateId {
         SceneTemplateId::from(self.id.clone())
     }

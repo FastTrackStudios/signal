@@ -37,7 +37,7 @@ pub struct NdspPlugin {
 
 impl NdspPlugin {
     /// Full path to the preset library on macOS.
-    #[must_use] 
+    #[must_use]
     pub fn disk_library_path(&self) -> PathBuf {
         PathBuf::from("/Library/Audio/Presets/Neural DSP").join(self.preset_folder)
     }
@@ -164,7 +164,7 @@ impl PresetFingerprint {
     ///
     /// Returns 0.0 for identical fingerprints. Returns `f64::MAX` if no
     /// parameters overlap.
-    #[must_use] 
+    #[must_use]
     pub fn distance(&self, other: &Self) -> f64 {
         let mut total = 0.0;
         let mut count = 0;
@@ -248,7 +248,7 @@ pub struct BlockMetadata {
 /// The binary format uses null-terminated key names followed by a type byte,
 /// a length byte (includes the marker byte + null terminator), a `\x05` marker,
 /// then the UTF-8 string bytes.
-#[must_use] 
+#[must_use]
 pub fn ndsp_binary_string(data: &[u8], key: &[u8]) -> Option<String> {
     let needle = [key, b"\x00"].concat();
     let idx = data.windows(needle.len()).position(|w| w == needle)?;
@@ -303,7 +303,7 @@ fn ndsp_binary_string_at(data: &[u8], offset: usize) -> Option<String> {
 ///
 /// Tags are stored between the `tags\0` and `appModel\0` sections.
 /// Each tag is a `value\0` entry with a string payload.
-#[must_use] 
+#[must_use]
 pub fn ndsp_binary_tags(data: &[u8]) -> Vec<String> {
     let mut tags = Vec::new();
     let Some(tag_section) = data.windows(5).position(|w| w == b"tags\x00") else {
@@ -341,7 +341,7 @@ pub fn ndsp_binary_tags(data: &[u8]) -> Vec<String> {
 /// Extracts ALL key-value pairs from the `appModel` section of the binary
 /// file. This makes the fingerprint plugin-agnostic — no hardcoded parameter
 /// names needed.
-#[must_use] 
+#[must_use]
 pub fn fingerprint_from_disk(data: &[u8]) -> PresetFingerprint {
     let mut params = BTreeMap::new();
 
@@ -391,7 +391,7 @@ pub fn fingerprint_from_disk(data: &[u8]) -> PresetFingerprint {
 }
 
 /// Extract an XML attribute value: `key="value"` → `value`.
-#[must_use] 
+#[must_use]
 pub fn xml_attr(xml: &str, key: &str) -> Option<String> {
     let needle = format!("{key}=\"");
     let start = xml.find(&needle)? + needle.len();
@@ -404,7 +404,7 @@ pub fn xml_attr(xml: &str, key: &str) -> Option<String> {
 /// Extracts all attributes from the `<appModel ...>` element as fingerprint
 /// parameters. This mirrors `fingerprint_from_disk` but operates on the XML
 /// representation found in REAPER state chunks.
-#[must_use] 
+#[must_use]
 pub fn fingerprint_from_xml(xml: &str) -> PresetFingerprint {
     let mut params = BTreeMap::new();
 
@@ -429,7 +429,9 @@ pub fn fingerprint_from_xml(xml: &str) -> PresetFingerprint {
     let mut remaining = attrs_str;
     while !remaining.is_empty() {
         remaining = remaining.trim_start();
-        let Some(eq_pos) = remaining.find('=') else { break };
+        let Some(eq_pos) = remaining.find('=') else {
+            break;
+        };
 
         let key = remaining[..eq_pos].trim();
         let after_eq = &remaining[eq_pos + 1..];
@@ -459,7 +461,7 @@ pub fn fingerprint_from_xml(xml: &str) -> PresetFingerprint {
 ///
 /// The XML starts with `<?xml` and contains the `<appModel>` element
 /// with all preset parameter values.
-#[must_use] 
+#[must_use]
 pub fn extract_xml_from_chunk(data: &[u8]) -> Option<String> {
     let xml_start = data.windows(5).position(|w| w == b"<?xml")?;
     // Find the end: last '>' before the next non-printable section
@@ -481,7 +483,7 @@ pub fn extract_xml_from_chunk(data: &[u8]) -> Option<String> {
 /// Recursively walks the directory, reading `.xml` files (which are actually
 /// binary JUCE format despite the extension). Extracts name, category (folder
 /// hierarchy), tags, and parameter fingerprint from each file.
-#[must_use] 
+#[must_use]
 pub fn scan_preset_library(preset_dir: &Path) -> Vec<DiskPreset> {
     let mut presets = Vec::new();
 
@@ -527,7 +529,7 @@ pub fn scan_preset_library(preset_dir: &Path) -> Vec<DiskPreset> {
 ///
 /// Returns the closest match and its distance score. A distance of 0.0
 /// means an exact match. Returns `None` if the library is empty.
-#[must_use] 
+#[must_use]
 pub fn match_preset<'a>(
     library: &'a [DiskPreset],
     fp: &PresetFingerprint,
@@ -548,7 +550,7 @@ pub fn match_preset<'a>(
 /// assert_eq!(slugify("John Mayer's Tone!"), "john-mayers-tone");
 /// assert_eq!(slugify("  Multiple   Spaces  "), "multiple-spaces");
 /// ```
-#[must_use] 
+#[must_use]
 pub fn slugify(name: &str) -> String {
     name.to_lowercase()
         .chars()

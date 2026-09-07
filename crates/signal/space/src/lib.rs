@@ -157,7 +157,7 @@ pub fn space_roots() -> Vec<PathBuf> {
 /// walks DIRECTORIES ONLY and never descends past [`MAX_SPACE_DEPTH`] —
 /// sample trees hold millions of files, and a walker that reads even one
 /// level too deep stalls for minutes (learned the hard way).
-#[must_use] 
+#[must_use]
 pub fn discover_spaces() -> Vec<PathBuf> {
     let mut out = Vec::new();
     for root in space_roots() {
@@ -194,7 +194,7 @@ fn collect_spaces(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
 }
 
 /// Locate a built space by name and load it.
-#[must_use] 
+#[must_use]
 pub fn find_space(name: &str) -> Option<(PathBuf, Space, Vec<f32>)> {
     discover_spaces()
         .into_iter()

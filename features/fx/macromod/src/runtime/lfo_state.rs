@@ -20,7 +20,7 @@ pub struct LfoState {
 
 impl LfoState {
     /// Create a new LFO state with the given initial phase offset (degrees).
-    #[must_use] 
+    #[must_use]
     pub fn new(phase_offset_degrees: f32) -> Self {
         Self {
             phase: (f64::from(phase_offset_degrees) / 360.0).fract().abs(),
@@ -30,19 +30,19 @@ impl LfoState {
     }
 
     /// Create from an LFO config, using its `phase_offset`.
-    #[must_use] 
+    #[must_use]
     pub fn from_config(config: &LfoConfig) -> Self {
         Self::new(config.phase_offset)
     }
 
     /// Current phase position.
-    #[must_use] 
+    #[must_use]
     pub const fn phase(&self) -> f64 {
         self.phase
     }
 
     /// Current held value (for S&H / `StepSequence`).
-    #[must_use] 
+    #[must_use]
     pub const fn held_value(&self) -> f64 {
         self.held_value
     }

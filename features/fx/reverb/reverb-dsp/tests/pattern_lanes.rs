@@ -91,7 +91,8 @@ fn send_lane_gates_the_reverb_input() {
         let n = cyc * 3;
         let mut l = vec![0.0f64; n];
         for i in 0..2000 {
-            l[note_start + i] = (core::f64::consts::TAU * 400.0 * num::count_to_f64(i) / SR).sin() * 0.6;
+            l[note_start + i] =
+                (core::f64::consts::TAU * 400.0 * num::count_to_f64(i) / SR).sin() * 0.6;
         }
         let mut r = l.clone();
         c.process(&mut l, &mut r);
@@ -120,10 +121,11 @@ fn clear_tails_point_kills_the_wash() {
     let mut modulator = Box::new(Modulator::new());
     let mut clear_pt = hold_point(0.5, 1.0);
     clear_pt.clear_tails = true;
-    modulator
-        .patterns
-        .active_mut()
-        .set_points(vec![hold_point(0.0, 1.0), clear_pt, hold_point(1.0, 1.0)]);
+    modulator.patterns.active_mut().set_points(vec![
+        hold_point(0.0, 1.0),
+        clear_pt,
+        hold_point(1.0, 1.0),
+    ]);
     // One cycle = 2 beats = 48000 samples.
     modulator.trigger.sync_index = SYNC_2_BEATS;
     chain.set_wet_modulator(Some(modulator));
@@ -139,7 +141,12 @@ fn clear_tails_point_kills_the_wash() {
     chain.process(&mut buf_l, &mut buf_r);
 
     let window = |from: usize, to: usize| -> f64 {
-        buf_l.get(from..to).unwrap_or_default().iter().map(|x| x * x).sum()
+        buf_l
+            .get(from..to)
+            .unwrap_or_default()
+            .iter()
+            .map(|x| x * x)
+            .sum()
     };
     let before: f64 = window(18_000, 23_000);
     let after: f64 = window(25_000, 30_000);

@@ -70,7 +70,7 @@ impl NodeParameter {
     }
 
     /// Convert normalized value to UI text.
-    #[must_use] 
+    #[must_use]
     pub fn display_value(&self) -> String {
         if let Some(formatted) = &self.formatted_display {
             if !formatted.trim().is_empty() {
@@ -116,7 +116,7 @@ pub struct NodePosition {
 }
 
 impl NodePosition {
-    #[must_use] 
+    #[must_use]
     pub const fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
@@ -130,27 +130,27 @@ pub struct NodeSize {
 }
 
 impl NodeSize {
-    #[must_use] 
+    #[must_use]
     pub const fn new(width: f64, height: f64) -> Self {
         Self { width, height }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn small() -> Self {
         Self::new(160.0, 80.0)
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn medium() -> Self {
         Self::new(220.0, 120.0)
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn large() -> Self {
         Self::new(320.0, 180.0)
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn xlarge() -> Self {
         Self::new(400.0, 220.0)
     }
@@ -259,12 +259,12 @@ impl Node {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn with_size(mut self, size: NodeSize) -> Self {
         self.size = size;
         self
     }
-    #[must_use] 
+    #[must_use]
     pub const fn with_widget(mut self, widget: NodeWidget) -> Self {
         self.widget = widget;
         self
@@ -281,13 +281,13 @@ impl Node {
         self
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn with_parameters(mut self, parameters: Vec<NodeParameter>) -> Self {
         self.parameters = parameters;
         self
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn with_ports(mut self, inputs: Vec<NodePort>, outputs: Vec<NodePort>) -> Self {
         self.inputs = inputs;
         self.outputs = outputs;
@@ -295,7 +295,7 @@ impl Node {
     }
 
     /// Check if a point (in canvas coordinates) is inside this node.
-    #[must_use] 
+    #[must_use]
     pub fn contains_point(&self, x: f64, y: f64) -> bool {
         x >= self.position.x
             && x <= self.position.x + self.size.width
@@ -304,7 +304,7 @@ impl Node {
     }
 
     /// Get the center position of this node.
-    #[must_use] 
+    #[must_use]
     pub fn center(&self) -> NodePosition {
         NodePosition::new(
             self.position.x + self.size.width / 2.0,
@@ -313,7 +313,7 @@ impl Node {
     }
 
     /// Get the position of a port (for wire connection).
-    #[must_use] 
+    #[must_use]
     pub fn port_position(&self, port_id: &str, is_input: bool) -> Option<NodePosition> {
         let ports = if is_input {
             &self.inputs
@@ -408,18 +408,18 @@ impl GraphModule {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn with_size(mut self, size: NodeSize) -> Self {
         self.size = size;
         self
     }
-    #[must_use] 
+    #[must_use]
     pub const fn with_bypassed(mut self, bypassed: bool) -> Self {
         self.bypassed = bypassed;
         self
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn with_ports(mut self, inputs: Vec<NodePort>, outputs: Vec<NodePort>) -> Self {
         self.inputs = inputs;
         self.outputs = outputs;
@@ -436,7 +436,7 @@ impl GraphModule {
         self.internal_wires.push(wire);
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn contains_point(&self, x: f64, y: f64) -> bool {
         x >= self.position.x
             && x <= self.position.x + self.size.width
@@ -445,7 +445,7 @@ impl GraphModule {
     }
 
     /// Check if a point is in the title bar (for dragging).
-    #[must_use] 
+    #[must_use]
     pub fn title_bar_contains(&self, x: f64, y: f64) -> bool {
         x >= self.position.x
             && x <= self.position.x + self.size.width
@@ -453,7 +453,7 @@ impl GraphModule {
             && y <= self.position.y + 40.0
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn port_position(&self, port_id: &str, is_input: bool) -> Option<NodePosition> {
         let ports = if is_input {
             &self.inputs
@@ -472,7 +472,7 @@ impl GraphModule {
         Some(NodePosition::new(port_x, port_y))
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn find_node(&self, id: Uuid) -> Option<&Node> {
         self.nodes.iter().find(|n| n.id == id)
     }

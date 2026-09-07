@@ -479,14 +479,18 @@ impl NativeWaveguide {
                     .min_by_key(|r| (r.note as i32 - note as i32).abs())
                     .filter(|r| (r.note as i32 - note as i32).abs() <= 3)
                     .cloned()
-            }).map_or_else(|| fallback_row(note), |mut r| {
-                if r.note != note {
-                    // shift a neighbor's params to this pitch
-                    r.f0 *= 2f32.powf((note as f32 - r.note as f32) / 12.0);
-                    r.note = note;
-                }
-                r
             })
+            .map_or_else(
+                || fallback_row(note),
+                |mut r| {
+                    if r.note != note {
+                        // shift a neighbor's params to this pitch
+                        r.f0 *= 2f32.powf((note as f32 - r.note as f32) / 12.0);
+                        r.note = note;
+                    }
+                    r
+                },
+            )
     }
 
     fn note_on(&mut self, note: u8, vel: u8) {
@@ -698,7 +702,8 @@ mod tests {
     fn waveguide_note_is_audible_and_tuned() {
         // Force the analytic fallback — the dev machine has a real trained
         // table installed in ~/.config and tests must not depend on it.
-        std::env::set_var("CITY_GRAND_WG_TABLE", "/nonexistent-test-table");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("CITY_GRAND_WG_TABLE", "/nonexistent-test-table") };
         let mut m = NativeWaveguide::new(48_000);
         m.prepare(48_000.0, 512).unwrap();
         let (inl, inr) = (vec![0.0; 512], vec![0.0; 512]);
@@ -732,7 +737,8 @@ mod tests {
 
     #[test]
     fn note_off_releases() {
-        std::env::set_var("CITY_GRAND_WG_TABLE", "/nonexistent-test-table");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("CITY_GRAND_WG_TABLE", "/nonexistent-test-table") };
         let mut m = NativeWaveguide::new(48_000);
         m.prepare(48_000.0, 512).unwrap();
         let (inl, inr) = (vec![0.0; 512], vec![0.0; 512]);

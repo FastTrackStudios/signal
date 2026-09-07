@@ -45,7 +45,8 @@ fn diffusion_min_is_grainy_max_is_fog() {
         let out = render_impulse(&mut c, num::f64_to_index(0.25 * SR));
         let window = &out[num::f64_to_index(0.01 * SR)..];
         let peak = window.iter().fold(0.0f64, |a, &x| a.max(x.abs()));
-        let rms = (window.iter().map(|x| x * x).sum::<f64>() / num::count_to_f64(window.len())).sqrt();
+        let rms =
+            (window.iter().map(|x| x * x).sum::<f64>() / num::count_to_f64(window.len())).sqrt();
         peak / rms.max(1e-12)
     };
     let grainy = crest(0.0);

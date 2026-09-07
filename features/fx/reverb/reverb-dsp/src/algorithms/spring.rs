@@ -57,11 +57,14 @@ struct SpringUnit {
 }
 
 impl SpringUnit {
-    #[expect(clippy::too_many_arguments, reason = "spring parametrization requires: \
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "spring parametrization requires: \
                                                      sample_rate, physical delays (A/B/max), \
                                                      spectral filter (sections/stretch/coeff), \
                                                      damping and modulation parameters; \
-                                                     cannot collapse without losing clarity")]
+                                                     cannot collapse without losing clarity"
+    )]
     fn new(
         sample_rate: f64,
         delay_ms: f64,

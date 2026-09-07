@@ -46,7 +46,7 @@ pub enum BlockKind {
 
 impl BlockKind {
     /// Short identifier for the variant — used in UI tags and log lines.
-    #[must_use] 
+    #[must_use]
     pub const fn tag(&self) -> &'static str {
         match self {
             Self::Native => "native",
@@ -88,7 +88,7 @@ pub enum SoundsourceKind {
 
 impl SoundsourceKind {
     /// Short identifier — used in UI tags, styx files, and log lines.
-    #[must_use] 
+    #[must_use]
     pub const fn tag(self) -> &'static str {
         match self {
             Self::Oscillator => "oscillator",
@@ -99,7 +99,7 @@ impl SoundsourceKind {
     }
 
     /// Human-readable name for pickers.
-    #[must_use] 
+    #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Oscillator => "Oscillator",
@@ -110,7 +110,7 @@ impl SoundsourceKind {
     }
 
     /// Parse a [`tag`](Self::tag) back into the kind.
-    #[must_use] 
+    #[must_use]
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
             "oscillator" => Some(Self::Oscillator),
@@ -122,7 +122,7 @@ impl SoundsourceKind {
     }
 
     /// All kinds in display order (for source pickers).
-    #[must_use] 
+    #[must_use]
     pub const fn all() -> &'static [Self] {
         &[
             Self::Oscillator,
@@ -143,9 +143,8 @@ impl crate::block::BlockType {
     /// `Harmonic` (City Grand waveguide) / `Formant` (City Wurli) the
     /// physically-modeled ones, and `Input` is the layer's live-audio
     /// source (the guitar DI).
-    #[must_use] 
+    #[must_use]
     pub const fn soundsource_kind(self) -> Option<SoundsourceKind> {
-        
         match self {
             Self::Oscillator | Self::Wavetable => Some(SoundsourceKind::Oscillator),
             Self::Sampler => Some(SoundsourceKind::Sample),

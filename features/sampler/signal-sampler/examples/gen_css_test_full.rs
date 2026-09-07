@@ -95,7 +95,9 @@ impl Smf {
         let steps = 96;
         for i in 0..=steps {
             let f = f64::from(i) / f64::from(steps);
-            let v = (f64::from(b) - f64::from(a)).mul_add(f, f64::from(a)).round() as u8;
+            let v = (f64::from(b) - f64::from(a))
+                .mul_add(f, f64::from(a))
+                .round() as u8;
             self.cc(dur.mul_add(f, t0), ctrl, v);
         }
     }
@@ -173,9 +175,7 @@ fn main() -> std::io::Result<()> {
         m.cc(t, 58, *ks);
         m.cc(t, 59, 0); // RR reset → deterministic cycle from slot 0
         let start = t + 0.2;
-        println!(
-            "{start:7.2}  SHORT-VEL {name:<14} G4 @ vel 1,9,..127 (15 notes, 1.0s apart)"
-        );
+        println!("{start:7.2}  SHORT-VEL {name:<14} G4 @ vel 1,9,..127 (15 notes, 1.0s apart)");
         for (i, vel) in (1u8..=127).step_by(9).enumerate() {
             m.note((i as f64).mul_add(1.0, start), 0.35, NOTE, vel.max(1));
         }
@@ -188,9 +188,7 @@ fn main() -> std::io::Result<()> {
         m.cc(t, 58, *ks);
         m.cc(t, 59, 0);
         let start = t + 0.2;
-        println!(
-            "{start:7.2}  SHORT-RR  {name:<14} G4 vel100 ×12 @ 0.8s (RR0..11 in cycle order)"
-        );
+        println!("{start:7.2}  SHORT-RR  {name:<14} G4 vel100 ×12 @ 0.8s (RR0..11 in cycle order)");
         for i in 0..12 {
             m.note(f64::from(i).mul_add(0.8, start), 0.35, NOTE, 100);
         }
@@ -208,9 +206,7 @@ fn main() -> std::io::Result<()> {
             .map(|(_, n)| *n)
             .collect::<Vec<_>>()
             .join(",");
-        println!(
-            "{start:7.2}  SHORT-RANGE {name:<14} {keys} @ vel100 (0.9s apart)"
-        );
+        println!("{start:7.2}  SHORT-RANGE {name:<14} {keys} @ vel100 (0.9s apart)");
         for (i, (key, _)) in RECORDED_RANGE.iter().enumerate() {
             m.note((i as f64).mul_add(0.9, start), 0.4, *key, 100);
         }
@@ -222,9 +218,7 @@ fn main() -> std::io::Result<()> {
     m.cc(t, 58, SPICCATO);
     m.cc(t, 59, 0);
     let start = t + 0.2;
-    println!(
-        "{start:7.2}  SHORT-INTERP Spiccato G#4(68),A#4(70),F#4(66),D4(62) vel100"
-    );
+    println!("{start:7.2}  SHORT-INTERP Spiccato G#4(68),A#4(70),F#4(66),D4(62) vel100");
     for (i, key) in [68u8, 70, 66, 62].iter().enumerate() {
         m.note((i as f64).mul_add(0.9, start), 0.4, *key, 100);
     }
@@ -266,9 +260,7 @@ fn main() -> std::io::Result<()> {
         m.cc(t, 1, cc1);
         let s = t + 0.1;
         m.note(s, 3.0, NOTE, 90);
-        println!(
-            "{s:7.2}  SUS-ENV G4 CC1={cc1} hold 3s + 4s tail (attack+release)"
-        );
+        println!("{s:7.2}  SUS-ENV G4 CC1={cc1} hold 3s + 4s tail (attack+release)");
         t += 7.5;
     }
 
@@ -285,9 +277,7 @@ fn main() -> std::io::Result<()> {
         let s = t + 0.1;
         m.note(s, 8.0, NOTE, 90);
         m.cc_ramp(s, 8.0, 1, 0, 127);
-        println!(
-            "{s:7.2}  LONG {name:<10} G4 held 8s, CC1 0→127 (+3s tail)"
-        );
+        println!("{s:7.2}  LONG {name:<10} G4 held 8s, CC1 0→127 (+3s tail)");
         t += 12.0;
     }
     // Trills: two keys held together (halftone then wholetone).
@@ -317,9 +307,7 @@ fn main() -> std::io::Result<()> {
                 65..=100 => "med~250",
                 _ => "fast~100",
             };
-            println!(
-                "{s:7.2}  LEG-LAT {mode:<10} vel{vel:<3} G4→A4 (Expr zone {zone}ms)"
-            );
+            println!("{s:7.2}  LEG-LAT {mode:<10} vel{vel:<3} G4→A4 (Expr zone {zone}ms)");
             t += 4.5;
         }
     }

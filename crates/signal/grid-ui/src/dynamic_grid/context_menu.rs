@@ -9,8 +9,8 @@ use lumen_blocks::components::context_menu::{
     ContextMenuItem, ContextMenuLabel, ContextMenuSeparator,
 };
 
-use super::types::GridSlot;
 use super::GridSelection;
+use super::types::GridSlot;
 
 // ── Props ────────────────────────────────────────────────────────
 

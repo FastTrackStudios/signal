@@ -50,7 +50,7 @@ impl Rng {
 /// a level "loss" no ear can hear).
 ///
 /// Stereo: two decorrelated channels (different seeds). Assumes ~48 kHz.
-#[must_use] 
+#[must_use]
 pub fn pink_reference(len: usize) -> (Vec<f64>, Vec<f64>) {
     fn channel(len: usize, seed: u64) -> Vec<f64> {
         let mut rng = Rng(seed);
@@ -78,7 +78,9 @@ pub fn pink_reference(len: usize) -> (Vec<f64>, Vec<f64>) {
         let rms = rms(&v);
         let target = db_to_lin(REFERENCE_DBFS);
         let g = if rms > 0.0 { target / rms } else { 1.0 };
-        for x in &mut v { *x *= g; }
+        for x in &mut v {
+            *x *= g;
+        }
         v
     }
     (
@@ -88,7 +90,7 @@ pub fn pink_reference(len: usize) -> (Vec<f64>, Vec<f64>) {
 }
 
 /// Plain RMS of a buffer.
-#[must_use] 
+#[must_use]
 pub fn rms(buf: &[f64]) -> f64 {
     if buf.is_empty() {
         return 0.0;
@@ -98,17 +100,17 @@ pub fn rms(buf: &[f64]) -> f64 {
 }
 
 /// RMS in dBFS.
-#[must_use] 
+#[must_use]
 pub fn rms_db(buf: &[f64]) -> f64 {
     lin_to_db(rms(buf))
 }
 
-#[must_use] 
+#[must_use]
 pub fn db_to_lin(db: f64) -> f64 {
     libm::pow(10.0, db / 20.0)
 }
 
-#[must_use] 
+#[must_use]
 pub fn lin_to_db(lin: f64) -> f64 {
     20.0 * libm::log10(lin.max(1e-12))
 }
@@ -172,8 +174,12 @@ mod tests {
     struct Gain(f64);
     impl Stage for Gain {
         fn process(&mut self, l: &mut [f64], r: &mut [f64]) {
-            for x in l.iter_mut() { *x *= self.0; }
-            for x in r.iter_mut() { *x *= self.0; }
+            for x in l.iter_mut() {
+                *x *= self.0;
+            }
+            for x in r.iter_mut() {
+                *x *= self.0;
+            }
         }
     }
 
@@ -202,8 +208,11 @@ mod tests {
     fn a_sweep_reports_the_worst_case_and_the_typical_band() {
         // A stage whose gain error grows toward the extremes: ±0.8 dB at the
         // ends, ±0.3 dB inside — passes the spec bounds exactly as intended.
-        let (full, typical) =
-            sweep_deviation_db(|t| Gain(db_to_lin(0.8 * 2.0f64.mul_add(t, -1.0))), 11, 48_000.0);
+        let (full, typical) = sweep_deviation_db(
+            |t| Gain(db_to_lin(0.8 * 2.0f64.mul_add(t, -1.0))),
+            11,
+            48_000.0,
+        );
         assert!(full <= FULL_RANGE_BOUND_DB, "{full}");
         assert!(typical <= TYPICAL_RANGE_BOUND_DB + 0.15, "{typical}");
         assert!(full > typical);

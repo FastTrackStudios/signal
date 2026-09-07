@@ -21,8 +21,8 @@ use crate::components::block_color;
 /// that `tao::Window::set_cursor_grab` calls under the hood.
 #[cfg(target_os = "macos")]
 mod cg_cursor {
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     /// Guard to ensure exactly one hide is matched with one show,
     /// even if grab() is called multiple times (double-click, re-render).

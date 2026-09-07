@@ -1,7 +1,7 @@
 [package]
 name = "hit-detect-dsp"
 version.workspace = true
-edition = "2021"          # matches sibling fx DSP crates (trigger-dsp, comp-dsp)
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "hit-detect-dsp — offline musical hit detection: per-band onset strength and a 0-1 dynamics envelope over a whole recording, for charting a song rather than triggering a sample."

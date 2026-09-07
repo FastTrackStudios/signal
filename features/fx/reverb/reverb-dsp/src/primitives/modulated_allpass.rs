@@ -91,7 +91,10 @@ impl ModulatedAllpass {
 
     #[inline]
     fn tick_no_mod(&mut self, input: f64) -> f64 {
-        let delay = self.sample_delay.min(self.buffer.len().saturating_sub(2)).max(1);
+        let delay = self
+            .sample_delay
+            .min(self.buffer.len().saturating_sub(2))
+            .max(1);
         let buf_out = self.buffer.read(delay);
         self.allpass_step(input, buf_out)
     }
@@ -134,7 +137,9 @@ impl ModulatedAllpass {
         let modulation = (self.mod_phase * 2.0 * PI).sin();
 
         // Prevent modulation from taking delay negative
-        let effective_mod = self.mod_amount.min(num::count_to_f64(self.sample_delay) - 1.0);
+        let effective_mod = self
+            .mod_amount
+            .min(num::count_to_f64(self.sample_delay) - 1.0);
         let target = (num::count_to_f64(self.sample_delay) + effective_mod * modulation).max(1.0);
 
         // Spread the move over the next update window.
@@ -152,7 +157,9 @@ impl ModulatedAllpass {
 
     /// Convenience: set delay in samples.
     pub fn set_delay(&mut self, samples: f64) {
-        self.sample_delay = num::f64_to_index(samples).min(self.buffer.len().saturating_sub(2)).max(1);
+        self.sample_delay = num::f64_to_index(samples)
+            .min(self.buffer.len().saturating_sub(2))
+            .max(1);
     }
 
     /// Convenience: set delay in integer samples.

@@ -8,7 +8,7 @@
 //! Useful for checking a library loaded correctly, and for working on the
 //! browsing behaviour without opening a plugin.
 
-use preset_browser::{load_directory, PresetBrowser, SortMode};
+use preset_browser::{PresetBrowser, SortMode, load_directory};
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -33,7 +33,11 @@ fn main() {
     }
 
     let mut browser = PresetBrowser::new(report.presets);
-    println!("{} presets, {} categories", browser.all().len(), browser.categories().len());
+    println!(
+        "{} presets, {} categories",
+        browser.all().len(),
+        browser.categories().len()
+    );
 
     let verified = browser
         .all()
@@ -52,11 +56,17 @@ fn main() {
     for &i in browser.visible().iter().take(12) {
         let p = &browser.all()[i];
         let quality = p
-            .match_error.map_or_else(|| "—".into(), |e| format!("{e:.3}"));
+            .match_error
+            .map_or_else(|| "—".into(), |e| format!("{e:.3}"));
         println!(
             "  {:<34} {:<18} err {:<6} {} params",
             p.name.chars().take(34).collect::<String>(),
-            p.category.as_deref().unwrap_or("—").chars().take(18).collect::<String>(),
+            p.category
+                .as_deref()
+                .unwrap_or("—")
+                .chars()
+                .take(18)
+                .collect::<String>(),
             quality,
             p.parameters.len()
         );

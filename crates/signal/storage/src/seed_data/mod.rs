@@ -12,8 +12,8 @@ pub mod catalog_import;
 pub mod fxchains_scan;
 
 use signal_proto::{
-    engine::Engine, layer::Layer, profile::Profile, rig::Rig, setlist::Setlist, song::Song,
-    ModulePreset, Preset,
+    ModulePreset, Preset, engine::Engine, layer::Layer, profile::Profile, rig::Rig,
+    setlist::Setlist, song::Song,
 };
 
 #[derive(Debug, Clone)]
@@ -29,7 +29,7 @@ pub struct SeedBundle {
 }
 
 /// All block presets — loaded from signal-library and `FXChains` at runtime.
-#[must_use] 
+#[must_use]
 pub fn default_block_collections() -> Vec<Preset> {
     let library_path = utils::paths::library_dir();
     let mut out = Vec::new();
@@ -43,39 +43,39 @@ pub fn default_block_collections() -> Vec<Preset> {
 }
 
 /// Module presets — loaded from FXChains/FTS-Signal/02-Modules/ at runtime.
-#[must_use] 
+#[must_use]
 pub fn default_module_collections() -> Vec<ModulePreset> {
     let fxchains_root = fxchains_scan::fxchains_root();
     fxchains_scan::scan_modules(&fxchains_root)
 }
-#[must_use] 
+#[must_use]
 pub const fn default_seed_layers() -> Vec<Layer> {
     vec![]
 }
-#[must_use] 
+#[must_use]
 pub const fn default_seed_engines() -> Vec<Engine> {
     vec![]
 }
-#[must_use] 
+#[must_use]
 pub const fn default_seed_rigs() -> Vec<Rig> {
     vec![]
 }
-#[must_use] 
+#[must_use]
 pub const fn default_seed_profiles() -> Vec<Profile> {
     vec![]
 }
-#[must_use] 
+#[must_use]
 pub const fn default_seed_songs() -> Vec<Song> {
     vec![]
 }
-#[must_use] 
+#[must_use]
 pub const fn default_seed_setlists() -> Vec<Setlist> {
     vec![]
 }
 
 /// Runtime seed bundle — block collections from signal-library + `FXChains`,
 /// module collections from `FXChains`.
-#[must_use] 
+#[must_use]
 pub fn runtime_seed_bundle() -> SeedBundle {
     SeedBundle {
         block_collections: default_block_collections(),

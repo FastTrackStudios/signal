@@ -293,7 +293,11 @@ pub fn floor_f64(x: f64) -> f64 {
         return x;
     }
     let truncated = x as i64 as f64;
-    if x < truncated { truncated - 1.0 } else { truncated }
+    if x < truncated {
+        truncated - 1.0
+    } else {
+        truncated
+    }
 }
 
 #[cfg(test)]
@@ -320,7 +324,10 @@ mod tests {
             assert_eq!(f64_to_index(count_to_f64(n)), n);
         }
         for n in [0_u64, 1, 48_000, 1 << 40] {
-            assert!((u64_to_f64(n) - count_to_f64(usize::try_from(n).unwrap_or(0))).abs() < f64::EPSILON);
+            assert!(
+                (u64_to_f64(n) - count_to_f64(usize::try_from(n).unwrap_or(0))).abs()
+                    < f64::EPSILON
+            );
         }
         for n in [0_i64, 1, -1, 48_000, -48_000] {
             assert!((i64_to_f64(n) + i64_to_f64(-n)).abs() < f64::EPSILON);
@@ -360,7 +367,10 @@ mod tests {
     #[test]
     fn the_two_integer_conversions_agree() {
         for n in [0_u32, 1, 44_100, (1 << 24) - 1] {
-            assert_eq!(f32_to_index(u32_to_f32(n)), f32_to_index(count_to_f32(n.try_into().unwrap())));
+            assert_eq!(
+                f32_to_index(u32_to_f32(n)),
+                f32_to_index(count_to_f32(n.try_into().unwrap()))
+            );
         }
     }
 
@@ -396,15 +406,32 @@ mod tests {
 
     #[test]
     fn signed_conversion_round_trips_within_the_mantissa() {
-        for n in [0_i32, 1, -1, 48_000, -48_000, (1 << 24) - 1, -((1 << 24) - 1)] {
+        for n in [
+            0_i32,
+            1,
+            -1,
+            48_000,
+            -48_000,
+            (1 << 24) - 1,
+            -((1 << 24) - 1),
+        ] {
             assert_eq!(trunc_to_i32(i32_to_f32(n)), n);
         }
     }
 
     #[test]
     fn flooring_f64_matches_the_mathematical_definition() {
-        for (input, expected) in [(0.0_f64, 0.0), (2.9, 2.0), (3.0, 3.0), (-0.1, -1.0), (-2.9, -3.0)] {
-            assert!((floor_f64(input) - expected).abs() < f64::EPSILON, "floor({input})");
+        for (input, expected) in [
+            (0.0_f64, 0.0),
+            (2.9, 2.0),
+            (3.0, 3.0),
+            (-0.1, -1.0),
+            (-2.9, -3.0),
+        ] {
+            assert!(
+                (floor_f64(input) - expected).abs() < f64::EPSILON,
+                "floor({input})"
+            );
         }
     }
 

@@ -58,7 +58,7 @@ pub use star_rating::{PresetRatingBadge, StarRating, StarRatingInput};
 
 // Re-exports: block colors
 pub use block_colors::{
-    block_bypassed_style, block_color, block_instance_color, block_style, BlockColor,
+    BlockColor, block_bypassed_style, block_color, block_instance_color, block_style,
 };
 
 // Re-exports: scene tiles

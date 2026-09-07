@@ -75,7 +75,7 @@ pub struct PatchConfig {
 
 impl PatchConfig {
     /// Dev default: CSS 1st Violins, Mix mic, CSS-default envelope.
-    #[must_use] 
+    #[must_use]
     pub fn dev_default() -> Self {
         Self {
             config: Some(DEV_CSS_CONFIG.to_string()),
@@ -116,7 +116,7 @@ impl PatchConfig {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn cache_budget_bytes(&self) -> Option<usize> {
         Some((self.cache_budget_mb.unwrap_or(8192) as usize) * 1024 * 1024)
     }

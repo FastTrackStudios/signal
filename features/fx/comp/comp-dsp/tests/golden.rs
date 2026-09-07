@@ -35,12 +35,7 @@ const LEN: usize = 8192;
 ///
 /// `Optical` (3) is absent, and that is not an oversight — see
 /// [`the_optical_style_diverges`]. It has no output to pin.
-const STYLES: [(&str, i32); 4] = [
-    ("clean", 0),
-    ("fet", 1),
-    ("vca", 2),
-    ("reserved", 4),
-];
+const STYLES: [(&str, i32); 4] = [("clean", 0), ("fet", 1), ("vca", 2), ("reserved", 4)];
 
 /// Every style reachable through `set_style`, including the broken one.
 const ALL_STYLE_IDS: [i32; 5] = [0, 1, 2, 3, 4];

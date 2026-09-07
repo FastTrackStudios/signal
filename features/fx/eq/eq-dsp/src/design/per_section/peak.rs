@@ -2,7 +2,7 @@
 
 use dsp_core::num;
 
-use super::{Prototype, PI};
+use super::{PI, Prototype};
 
 /// Per-section helper for `proto[0x13] ∈ {0, 3}` (peak-style sections).
 ///
@@ -78,11 +78,7 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
                 let cand = fv2_b * PI;
                 // dVar9 = if (wp_clamped <= cand) { if (cand >= π) π else cand } else wp_clamped
                 let mut new_w_eval = if wp_clamped <= cand {
-                    if cand >= PI {
-                        PI
-                    } else {
-                        cand
-                    }
+                    if cand >= PI { PI } else { cand }
                 } else {
                     wp_clamped
                 };
@@ -102,11 +98,7 @@ pub fn compute_peak_type3_parameters(proto: &mut Prototype) {
             // dVar_alpha = (fv2 < 0) ? max(sqrt(-fv2/2), 0.5) : 0.5
             let dvar_alpha = if f64::from(fv2) < 0.0 {
                 let s = (f64::from(fv2) * -0.5).sqrt();
-                if s <= 0.5 {
-                    0.5
-                } else {
-                    s
-                }
+                if s <= 0.5 { 0.5 } else { s }
             } else {
                 0.5
             };

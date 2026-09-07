@@ -210,19 +210,19 @@ impl Band {
         // was never asked for. Those shapes take the nearest integer order
         // instead, which is what the caller hands over.
         let mut sos = sos;
-        if self.fractional_order > 1.0e-6 {
-            if let Some(high_pass) = match self.filter_type {
+        if self.fractional_order > 1.0e-6
+            && let Some(high_pass) = match self.filter_type {
                 FilterType::Highpass => Some(true),
                 FilterType::Lowpass => Some(false),
                 _ => None,
-            } {
-                sos.extend(design::fractional::sections(
-                    self.freq_hz,
-                    self.fractional_order,
-                    sample_rate,
-                    high_pass,
-                ));
             }
+        {
+            sos.extend(design::fractional::sections(
+                self.freq_hz,
+                self.fractional_order,
+                sample_rate,
+                high_pass,
+            ));
         }
 
         self.num_sections = sos.len().min(MAX_SECTIONS);

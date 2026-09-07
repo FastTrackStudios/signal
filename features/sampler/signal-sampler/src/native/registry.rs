@@ -189,10 +189,7 @@ pub fn build_native(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn Plugin
 /// [`SoundsourceLeaf`] adapter in between). `None` for block types whose
 /// native backend is a processor (or not a `Soundsource` yet); those keep
 /// going through [`build_native`].
-pub fn build_native_source(
-    block: &RigBlock,
-    sample_rate: u32,
-) -> Option<Box<dyn Soundsource>> {
+pub fn build_native_source(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn Soundsource>> {
     match block.block_type {
         BlockType::Oscillator => Some(Box::new(
             NativeOscillator::new(sample_rate).with_block_params(block),

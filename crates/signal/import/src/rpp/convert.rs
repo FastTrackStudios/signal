@@ -29,7 +29,7 @@
 //! in [`Report::automated_chains`] so a run cannot quietly leave one behind.
 
 use crate::fabfilter::{ffbs, proc3, proq4};
-use crate::rpp::{chunk, fts_comp, fts_eq, split_fields, unquote, Block, Document, Node};
+use crate::rpp::{Block, Document, Node, chunk, fts_comp, fts_eq, split_fields, unquote};
 
 /// Which `FabFilter` plugin an instance is, and therefore what it becomes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -465,7 +465,11 @@ mod tests {
             "{}",
             report.skipped[0].reason
         );
-        assert_eq!(doc.render(), text, "a refused block is left exactly as it was");
+        assert_eq!(
+            doc.render(),
+            text,
+            "a refused block is left exactly as it was"
+        );
     }
 
     #[test]
@@ -514,6 +518,9 @@ mod tests {
         let report = convert(&mut doc);
         assert_eq!(report.untouched_fx, 1);
         assert_eq!(report.skipped.len(), 1);
-        assert_eq!(report.skipped[0].slot, 2, "REAPER counts from the top of the chain");
+        assert_eq!(
+            report.skipped[0].slot, 2,
+            "REAPER counts from the top of the chain"
+        );
     }
 }

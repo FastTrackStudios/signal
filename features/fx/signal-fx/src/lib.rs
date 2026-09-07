@@ -165,7 +165,7 @@ fn eq_shape_to_filter(shape: u32) -> eq::FilterType {
 }
 
 /// Param name for `(band, field)` — `b{band+1}_{used|on|freq|gain|q|shape}`.
-#[must_use] 
+#[must_use]
 pub fn eq_param_name(band: usize, field: usize) -> String {
     let f = ["used", "on", "freq", "gain", "q", "shape"][field];
     format!("b{}_{}", band + 1, f)
@@ -227,7 +227,7 @@ fn eq_param_id_of(name: &str) -> Option<u32> {
 }
 
 /// Range/default metadata shared by `params()` and the rig tables.
-#[must_use] 
+#[must_use]
 pub fn eq_param_range(id: u32) -> (f64, f64, f64) {
     if id < (EQ_BANDS * EQ_FIELDS) as u32 {
         return match id as usize % EQ_FIELDS {
@@ -261,9 +261,7 @@ pub fn eq_param_range(id: u32) -> (f64, f64, f64) {
         }
         i if (EQ_SPECTRAL_TILT_BASE..EQ_SPECTRAL_TILT_BASE + 24).contains(&i) => (0.0, 1.0, 0.0),
         i if (EQ_DYN_SIDE_BASE..EQ_DYN_SIDE_BASE + 24).contains(&i) => (0.0, 1.0, 0.0),
-        i if (EQ_DYN_SIDE_LO_BASE..EQ_DYN_SIDE_LO_BASE + 24).contains(&i) => {
-            (20.0, 20_000.0, 20.0)
-        }
+        i if (EQ_DYN_SIDE_LO_BASE..EQ_DYN_SIDE_LO_BASE + 24).contains(&i) => (20.0, 20_000.0, 20.0),
         i if (EQ_DYN_SIDE_HI_BASE..EQ_DYN_SIDE_HI_BASE + 24).contains(&i) => {
             (20.0, 20_000.0, 20_000.0)
         }
@@ -272,7 +270,7 @@ pub fn eq_param_range(id: u32) -> (f64, f64, f64) {
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn eq_param_name_of(id: u32) -> Option<String> {
     if id < (EQ_BANDS * EQ_FIELDS) as u32 {
         let (band, field) = (id as usize / EQ_FIELDS, id as usize % EQ_FIELDS);
@@ -332,7 +330,7 @@ pub struct NativeEq {
 }
 
 impl NativeEq {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut values = vec![0.0; EQ_PARAM_COUNT as usize];
         for id in 0..EQ_PARAM_COUNT {
@@ -364,7 +362,7 @@ impl NativeEq {
         self.engine.set_band_dynamics(band, self.dynamics[band]);
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn spectral_engaged(&self) -> bool {
         self.engine.spectral_engaged()
     }
@@ -529,19 +527,19 @@ impl NativeEq {
     }
 
     /// The static chain's magnitude at `hz`, in dB — what Auto Gain reads.
-    #[must_use] 
+    #[must_use]
     pub fn static_magnitude_db(&self, hz: f64) -> f64 {
         self.engine.static_magnitude_db(hz)
     }
 
     /// The compensation Auto Gain is applying, in dB.
-    #[must_use] 
+    #[must_use]
     pub fn auto_gain_db(&self) -> f64 {
         self.engine.auto_gain_db()
     }
 
     /// Live dynamic gain of a band in dB (the yellow bar).
-    #[must_use] 
+    #[must_use]
     pub fn live_dyn_gain_db(&self, band: usize) -> Option<f64> {
         self.engine.live_dyn_gain_db(band)
     }
@@ -703,7 +701,7 @@ pub struct NativePreamp {
 }
 
 impl NativePreamp {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mk = || saturate_dsp::preamp::ClassAPreamp::new(sample_rate.max(1.0) as f32);
         let mut p = Self {
@@ -984,7 +982,7 @@ pub struct NativeSaturate {
 }
 
 impl NativeSaturate {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         use audiocore_dsp::oversampling::{OversampleQuality, OversampleRate};
         let sr = sample_rate.max(1.0);
@@ -1418,7 +1416,10 @@ impl PluginInstance for NativeSaturate {
                 yr += self.dry_r[i];
             }
             let (dl, dr) = (f64::from(in_l[i]), f64::from(in_r[i]));
-            let (mut fl, mut fr) = ((yl - dl).mul_add(self.mix, dl), (yr - dr).mul_add(self.mix, dr));
+            let (mut fl, mut fr) = (
+                (yl - dl).mul_add(self.mix, dl),
+                (yr - dr).mul_add(self.mix, dr),
+            );
             if self.listen_delta {
                 fl -= dl;
                 fr -= dr;
@@ -1554,7 +1555,7 @@ pub struct NativeTune {
 }
 
 impl NativeTune {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let sr = sample_rate.max(1.0);
         let detector = tune::detect::YinDetector::new(sr, tune::detect::YinConfig::default());
@@ -2012,7 +2013,7 @@ pub struct NativeComp {
 }
 
 impl NativeComp {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut comp = comp::ProC3Compressor::new(sample_rate.max(1.0));
         comp.set_threshold(-18.0);
@@ -2247,7 +2248,7 @@ pub struct NativeLevel {
 }
 
 impl NativeLevel {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let cfg = level_dsp::LevelerConfig::default();
         let sr = sample_rate.max(1.0);
@@ -2854,7 +2855,6 @@ const REVERB_PARAMS: &[ParamSpec] = &[
         max: 60.0,
         default: 2.0,
     },
-
     // Decay Rate EQ: eight bands of decay-TIME multipliers over frequency
     // (`fx.reverb.decay-eq`), one per measured octave. `rate` 1.0 is the
     // space's natural decay, 4.0 four times longer at that band, 0.1 a tenth.
@@ -3098,7 +3098,8 @@ const REVERB_PARAMS: &[ParamSpec] = &[
         min: -36.0,
         max: 36.0,
         default: 0.0,
-    },];
+    },
+];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
 /// `BigSky` MX dual routing; `Single` = chain A only, bit-compatible with
@@ -3123,7 +3124,7 @@ pub struct NativeReverb {
 }
 
 impl NativeReverb {
-    #[must_use] 
+    #[must_use]
     pub fn new(_sample_rate: f64) -> Self {
         let mut rev = reverb::DualReverb::new();
         rev.a.set_algorithm(reverb::AlgorithmType::Hall);
@@ -3409,10 +3410,12 @@ impl NativeReverb {
                 match field {
                     0 => band.shape = v.round().clamp(0.0, 2.0) as u32,
                     1 => band.freq_hz = v.clamp(20.0, 20_000.0),
-                    2 => band.rate = v.clamp(
-                        reverb::algorithm::DECAY_RATE_MIN,
-                        reverb::algorithm::DECAY_RATE_MAX,
-                    ),
+                    2 => {
+                        band.rate = v.clamp(
+                            reverb::algorithm::DECAY_RATE_MIN,
+                            reverb::algorithm::DECAY_RATE_MAX,
+                        )
+                    }
                     _ => band.q = v.clamp(0.1, 10.0),
                 }
                 c.update_params();
@@ -4062,7 +4065,7 @@ pub struct NativeDelay {
 }
 
 impl NativeDelay {
-    #[must_use] 
+    #[must_use]
     pub fn new(_sample_rate: f64) -> Self {
         let mut dly = delay::DualDelay::new();
         for chain in [&mut dly.a, &mut dly.b] {
@@ -4549,15 +4552,15 @@ pub struct NativeMod {
 }
 
 impl NativeMod {
-    #[must_use] 
+    #[must_use]
     pub fn chorus(sample_rate: f64) -> Self {
         Self::new(sample_rate, EffectType::Chorus, "Chorus", 1.0)
     }
-    #[must_use] 
+    #[must_use]
     pub fn flanger(sample_rate: f64) -> Self {
         Self::new(sample_rate, EffectType::Flanger, "Flanger", 0.3)
     }
-    #[must_use] 
+    #[must_use]
     pub fn vibrato(sample_rate: f64) -> Self {
         Self::new(sample_rate, EffectType::Vibrato, "Vibrato", 5.0)
     }
@@ -4716,7 +4719,7 @@ pub struct NativeTrem {
 }
 
 impl NativeTrem {
-    #[must_use] 
+    #[must_use]
     pub fn new(_sample_rate: f64) -> Self {
         let mut tr = TremChain::new();
         tr.set_mode(TremMode::Stereo);
@@ -4834,7 +4837,7 @@ pub struct NativePassthrough {
 }
 
 impl NativePassthrough {
-    #[must_use] 
+    #[must_use]
     pub const fn new(label: &'static str) -> Self {
         Self {
             label,
@@ -4920,7 +4923,7 @@ pub struct NativeGain {
 }
 
 impl NativeGain {
-    #[must_use] 
+    #[must_use]
     pub const fn new(_sample_rate: f64) -> Self {
         Self {
             target: 1.0,
@@ -5040,7 +5043,7 @@ pub struct NativeGate {
 }
 
 impl NativeGate {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut g = Self {
             threshold: 10f64.powf(-50.0 / 20.0),
@@ -5228,7 +5231,7 @@ pub struct NativeTransient {
 }
 
 impl NativeTransient {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mut t = Self {
             attack: 0.0,
@@ -5355,7 +5358,10 @@ impl PluginInstance for NativeTransient {
                 (self.env_fast / self.env_slow.max(1e-8)).ln() * (20.0 / core::f64::consts::LN_10);
             let sustain_amt =
                 (self.env_long / self.env_short.max(1e-8)).ln() * (20.0 / core::f64::consts::LN_10);
-            let gain_db = atk_db.mul_add(attack_amt.clamp(0.0, 12.0) / 12.0, sus_db * (sustain_amt.clamp(0.0, 24.0) / 24.0));
+            let gain_db = atk_db.mul_add(
+                attack_amt.clamp(0.0, 12.0) / 12.0,
+                sus_db * (sustain_amt.clamp(0.0, 24.0) / 24.0),
+            );
             let wet = 10f64.powf(gain_db / 20.0) * self.output_gain;
             let g = self.mix.mul_add(wet, 1.0 - self.mix);
             out_l[i] = l * g as f32;
@@ -5380,11 +5386,7 @@ mod transient_tests {
         let input: Vec<f32> = (0..n)
             .map(|i| {
                 let x = (i as f32 * 0.7).sin();
-                if i < sr * 5 / 1000 {
-                    x
-                } else {
-                    x * 0.15
-                }
+                if i < sr * 5 / 1000 { x } else { x * 0.15 }
             })
             .collect();
         let mut out_l = vec![0.0f32; n];
@@ -5401,8 +5403,12 @@ mod transient_tests {
             .iter()
             .fold(0.0f32, |a, &s| a.max(s.abs()));
         let tail = &out_l[sr / 10..];
-        let rms =
-            (tail.iter().map(|&s| f64::from(s) * f64::from(s)).sum::<f64>() / tail.len() as f64).sqrt();
+        let rms = (tail
+            .iter()
+            .map(|&s| f64::from(s) * f64::from(s))
+            .sum::<f64>()
+            / tail.len() as f64)
+            .sqrt();
         (head, rms)
     }
 

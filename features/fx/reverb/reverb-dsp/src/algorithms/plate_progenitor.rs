@@ -270,13 +270,17 @@ impl ReverbAlgorithm for PlateProgenitor {
 
         // Modulation — more modulation points than basic plate
         let mod_depth = params.modulation * 22.0 * self.s;
-        self.tank_a.ap1
+        self.tank_a
+            .ap1
             .set_modulation(0.7, mod_depth, self.sample_rate);
-        self.tank_a.ap3
+        self.tank_a
+            .ap3
             .set_modulation(1.1, mod_depth * 0.6, self.sample_rate);
-        self.tank_b.ap1
+        self.tank_b
+            .ap1
             .set_modulation(0.8, mod_depth, self.sample_rate);
-        self.tank_b.ap3
+        self.tank_b
+            .ap3
             .set_modulation(1.0, mod_depth * 0.6, self.sample_rate);
     }
 

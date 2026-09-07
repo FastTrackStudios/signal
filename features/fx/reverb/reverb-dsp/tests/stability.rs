@@ -24,8 +24,8 @@
 
 use audiocore_dsp::{AudioConfig, Processor};
 use dsp_core::num;
-use reverb_dsp::chain::ReverbChain;
 use reverb_dsp::AlgorithmType;
+use reverb_dsp::chain::ReverbChain;
 
 const SR: f64 = 48_000.0;
 
@@ -65,7 +65,10 @@ fn impulse_response(algo: AlgorithmType, decay: f64, predelay_ms: f64, seconds: 
         let n = block.min(frames.saturating_sub(pos));
         let mut l = vec![0.0f64; n];
         let mut r = vec![0.0f64; n];
-        #[expect(clippy::indexing_slicing, reason = "n > 0 guaranteed by loop invariant")]
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "n > 0 guaranteed by loop invariant"
+        )]
         if pos == 0 {
             l[0] = 1.0;
             r[0] = 1.0;
@@ -99,7 +102,10 @@ fn impulse_response_t60(algo: AlgorithmType, t60_s: f64, seconds: f64) -> Vec<f6
         let n = block.min(frames.saturating_sub(pos));
         let mut l = vec![0.0f64; n];
         let mut r = vec![0.0f64; n];
-        #[expect(clippy::indexing_slicing, reason = "n > 0 guaranteed by loop invariant")]
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "n > 0 guaranteed by loop invariant"
+        )]
         if pos == 0 {
             l[0] = 1.0;
             r[0] = 1.0;

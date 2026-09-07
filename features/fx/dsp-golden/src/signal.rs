@@ -46,7 +46,11 @@ pub fn log_sweep(len: usize, f0: f32, f1: f32, sample_rate: f32) -> Vec<f32> {
 /// White noise in `-1..1` from a fixed xorshift64* stream.
 #[must_use]
 pub fn noise(len: usize, seed: u64) -> Vec<f32> {
-    let mut state = if seed == 0 { 0x2545_F491_4F6C_DD1D } else { seed };
+    let mut state = if seed == 0 {
+        0x2545_F491_4F6C_DD1D
+    } else {
+        seed
+    };
     (0..len)
         .map(|_| {
             state ^= state >> 12;
@@ -105,7 +109,10 @@ mod tests {
     #[test]
     fn generators_are_reproducible() {
         assert_eq!(noise(256, 7), noise(256, 7));
-        assert_eq!(log_sweep(256, 20.0, 20_000.0, 48_000.0), log_sweep(256, 20.0, 20_000.0, 48_000.0));
+        assert_eq!(
+            log_sweep(256, 20.0, 20_000.0, 48_000.0),
+            log_sweep(256, 20.0, 20_000.0, 48_000.0)
+        );
     }
 
     #[test]

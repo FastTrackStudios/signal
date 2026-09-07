@@ -32,35 +32,115 @@ struct Formant {
 const VOWELS: [[Formant; 5]; 4] = [
     // "ah"
     [
-        Formant { f: 650.0, a_db: 0.0, bw: 80.0 },
-        Formant { f: 1080.0, a_db: -6.0, bw: 90.0 },
-        Formant { f: 2650.0, a_db: -7.0, bw: 120.0 },
-        Formant { f: 2900.0, a_db: -8.0, bw: 130.0 },
-        Formant { f: 3250.0, a_db: -22.0, bw: 140.0 },
+        Formant {
+            f: 650.0,
+            a_db: 0.0,
+            bw: 80.0,
+        },
+        Formant {
+            f: 1080.0,
+            a_db: -6.0,
+            bw: 90.0,
+        },
+        Formant {
+            f: 2650.0,
+            a_db: -7.0,
+            bw: 120.0,
+        },
+        Formant {
+            f: 2900.0,
+            a_db: -8.0,
+            bw: 130.0,
+        },
+        Formant {
+            f: 3250.0,
+            a_db: -22.0,
+            bw: 140.0,
+        },
     ],
     // "e"
     [
-        Formant { f: 400.0, a_db: 0.0, bw: 70.0 },
-        Formant { f: 1700.0, a_db: -14.0, bw: 80.0 },
-        Formant { f: 2600.0, a_db: -12.0, bw: 100.0 },
-        Formant { f: 3200.0, a_db: -14.0, bw: 120.0 },
-        Formant { f: 3580.0, a_db: -20.0, bw: 120.0 },
+        Formant {
+            f: 400.0,
+            a_db: 0.0,
+            bw: 70.0,
+        },
+        Formant {
+            f: 1700.0,
+            a_db: -14.0,
+            bw: 80.0,
+        },
+        Formant {
+            f: 2600.0,
+            a_db: -12.0,
+            bw: 100.0,
+        },
+        Formant {
+            f: 3200.0,
+            a_db: -14.0,
+            bw: 120.0,
+        },
+        Formant {
+            f: 3580.0,
+            a_db: -20.0,
+            bw: 120.0,
+        },
     ],
     // "oh"
     [
-        Formant { f: 400.0, a_db: 0.0, bw: 70.0 },
-        Formant { f: 800.0, a_db: -10.0, bw: 80.0 },
-        Formant { f: 2600.0, a_db: -12.0, bw: 100.0 },
-        Formant { f: 2800.0, a_db: -12.0, bw: 130.0 },
-        Formant { f: 3000.0, a_db: -26.0, bw: 135.0 },
+        Formant {
+            f: 400.0,
+            a_db: 0.0,
+            bw: 70.0,
+        },
+        Formant {
+            f: 800.0,
+            a_db: -10.0,
+            bw: 80.0,
+        },
+        Formant {
+            f: 2600.0,
+            a_db: -12.0,
+            bw: 100.0,
+        },
+        Formant {
+            f: 2800.0,
+            a_db: -12.0,
+            bw: 130.0,
+        },
+        Formant {
+            f: 3000.0,
+            a_db: -26.0,
+            bw: 135.0,
+        },
     ],
     // "oo"
     [
-        Formant { f: 350.0, a_db: 0.0, bw: 40.0 },
-        Formant { f: 600.0, a_db: -20.0, bw: 60.0 },
-        Formant { f: 2700.0, a_db: -17.0, bw: 100.0 },
-        Formant { f: 2900.0, a_db: -14.0, bw: 120.0 },
-        Formant { f: 3300.0, a_db: -26.0, bw: 120.0 },
+        Formant {
+            f: 350.0,
+            a_db: 0.0,
+            bw: 40.0,
+        },
+        Formant {
+            f: 600.0,
+            a_db: -20.0,
+            bw: 60.0,
+        },
+        Formant {
+            f: 2700.0,
+            a_db: -17.0,
+            bw: 100.0,
+        },
+        Formant {
+            f: 2900.0,
+            a_db: -14.0,
+            bw: 120.0,
+        },
+        Formant {
+            f: 3300.0,
+            a_db: -26.0,
+            bw: 120.0,
+        },
     ],
 ];
 
@@ -182,7 +262,10 @@ impl Chorale {
             [1049, 1327, 1559, 1801, 2069, 2297, 2557, 2803]
         };
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index(f64::from(d) * scale)).collect();
+        let delays: Vec<usize> = base
+            .iter()
+            .map(|&d| num::f64_to_index(f64::from(d) * scale))
+            .collect();
         Fdn::new(&delays, MixMatrix::Householder)
     }
 
@@ -206,7 +289,11 @@ impl Chorale {
         for ((lo_fmt, hi_fmt), (filter_l, filter_r)) in morph.zip(filters) {
             // Morph F / amplitude / bandwidth in log-frequency space
             // between the measured vowel columns.
-            let f = lo_fmt.f.ln().mul_add(1.0 - frac, hi_fmt.f.ln() * frac).exp();
+            let f = lo_fmt
+                .f
+                .ln()
+                .mul_add(1.0 - frac, hi_fmt.f.ln() * frac)
+                .exp();
             let amp = lo_fmt.a_db.mul_add(1.0 - frac, hi_fmt.a_db * frac);
             let bw = lo_fmt.bw.mul_add(1.0 - frac, hi_fmt.bw * frac);
             // Per-channel formant drift from the mod randomization.

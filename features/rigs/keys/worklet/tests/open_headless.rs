@@ -5,16 +5,16 @@
 //! anywhere.
 
 use daw_standalone::audio_engine::render::ProjectRenderer;
+use signal_sampler::KeysRig;
 use signal_sampler::keys_rig::{LaneEngine, LaneLayer, LaneProgram};
 use signal_sampler::rig_node::Container;
-use signal_sampler::KeysRig;
 
 const SR: u32 = 48_000;
 
 /// Write a 1-second stereo tone as a wav, pack it (PCM-16) with an embedded
 /// zone spec spanning the whole keyboard, and return the pack's BYTES.
 fn build_tone_pack_bytes(dir: &std::path::Path) -> Vec<u8> {
-    use fts_sample::cache::{create_signal_pack_with, PackCodec, PackSpecSource};
+    use fts_sample::cache::{PackCodec, PackSpecSource, create_signal_pack_with};
 
     std::fs::create_dir_all(dir).expect("tmp dir");
     let wav = dir.join("tone.wav");

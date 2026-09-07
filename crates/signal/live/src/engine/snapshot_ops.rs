@@ -8,7 +8,7 @@
 //! - [`capture_and_save_preset`] — capture params + state chunks → `SQLite`
 //! - [`recall_preset`] — load full preset → apply chunks + params to DAW
 
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use signal_storage::daw_snapshot_repo::{
     DawSnapshotRepo, StoredChunkSnapshot, StoredParamSnapshot,
 };
@@ -234,8 +234,8 @@ mod tests {
     use super::*;
     use crate::engine::daw_bridge::MockDawBridge;
     use crate::engine::morph::DawParamValue;
-    use signal_storage::daw_snapshot_repo::DawSnapshotRepoLive;
     use signal_storage::Database;
+    use signal_storage::daw_snapshot_repo::DawSnapshotRepoLive;
 
     async fn test_repo() -> DawSnapshotRepoLive {
         let db = Database::connect("sqlite::memory:").await.unwrap();

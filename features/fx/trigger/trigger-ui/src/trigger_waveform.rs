@@ -31,8 +31,8 @@ use audiocore_core::prelude::*;
 
 use crate::params::{TriggerUiState, WAVE_HISTORY_LEN};
 use crate::trigger_waveform_svg::{
-    bars_path, db_to_y, marker_columns, scale_peaks, threshold_line_y, y_to_db, DB_MARKERS,
-    RANGE_DB,
+    DB_MARKERS, RANGE_DB, bars_path, db_to_y, marker_columns, scale_peaks, threshold_line_y,
+    y_to_db,
 };
 
 /// viewBox width. Stretched to the container width (visual only).
@@ -63,9 +63,11 @@ pub fn TriggerWaveform() -> Element {
     let frame_tick: Signal<u64> = use_signal(|| 0);
     use_hook(|| {
         let updater = dioxus_core::schedule_update();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_millis(33));
-            updater();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(33));
+                updater();
+            }
         });
     });
     let _ = *frame_tick.read();

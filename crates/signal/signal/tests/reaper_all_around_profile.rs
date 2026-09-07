@@ -161,9 +161,7 @@ async fn all_around_profile(ctx: &ReaperTestContext) -> eyre::Result<()> {
                 "all-around".to_string(),
                 variant_name.to_lowercase(),
             ],
-            Some(&format!(
-                "{variant_name} — {loaded} modules, {fx_count} FX"
-            )),
+            Some(&format!("{variant_name} — {loaded} modules, {fx_count} FX")),
         )?;
 
         ctx.log(&format!(

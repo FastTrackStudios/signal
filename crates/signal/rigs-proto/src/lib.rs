@@ -102,7 +102,7 @@ impl Rig {
     /// scope on the wire, its key in prefs, its `--rig` argument, and its URL
     /// hash segment. One string for all of them, on purpose — a rig that is
     /// "keys" in a link and "Keys" on the wire is a bug waiting for a typo.
-    #[must_use] 
+    #[must_use]
     pub const fn slug(self) -> &'static str {
         match self {
             Self::Guitar => "guitar",
@@ -117,7 +117,7 @@ impl Rig {
     }
 
     /// Display name.
-    #[must_use] 
+    #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
             Self::Guitar => "Guitar",
@@ -132,7 +132,7 @@ impl Rig {
     }
 
     /// One line, in the player's terms — what you get when you open it.
-    #[must_use] 
+    #[must_use]
     pub const fn blurb(self) -> &'static str {
         match self {
             Self::Guitar => "amp, cab, FX — footswitch scenes",
@@ -150,12 +150,12 @@ impl Rig {
     /// whether `scope_client!(client, rig.slug())` resolves. `Space` is a
     /// browser over the sample libraries, not an instrument with a transport,
     /// so it has no core; `Vocals` has no backend at all yet.
-    #[must_use] 
+    #[must_use]
     pub const fn has_rig_core(self) -> bool {
         !matches!(self, Self::Space | Self::Vocals)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn from_slug(s: &str) -> Option<Self> {
         Self::ALL
             .iter()
@@ -176,7 +176,14 @@ mod catalogue_tests {
             // Exhaustive match: adding a variant without adding it to ALL
             // fails to compile here rather than disappearing at runtime.
             let covered = match rig {
-                Rig::Guitar | Rig::Keys | Rig::Drums | Rig::Bass | Rig::Vocals | Rig::Synth | Rig::Ekit | Rig::Space => true,
+                Rig::Guitar
+                | Rig::Keys
+                | Rig::Drums
+                | Rig::Bass
+                | Rig::Vocals
+                | Rig::Synth
+                | Rig::Ekit
+                | Rig::Space => true,
             };
             assert!(covered);
         }

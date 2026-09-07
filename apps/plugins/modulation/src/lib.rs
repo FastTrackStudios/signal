@@ -19,8 +19,8 @@
 //! movement rather than a drawing of one.
 
 use audiocore_core::prelude::*;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use audiocore_dsp::{AudioConfig, Processor};
 use modulation::chorus::chain::ChorusChain;

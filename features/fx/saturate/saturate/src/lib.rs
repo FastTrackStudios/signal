@@ -5,7 +5,7 @@
 
 pub use saturate_dsp::emphasis;
 pub use saturate_dsp::preamp;
-pub use saturate_dsp::{digital, SaturationCurve, Saturator};
+pub use saturate_dsp::{SaturationCurve, Saturator, digital};
 
 /// Stereo (or N-channel) saturator: one memoryless [`Saturator`] per channel
 /// sharing one settings set.
@@ -15,7 +15,7 @@ pub struct StereoSaturator {
 }
 
 impl StereoSaturator {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -50,7 +50,7 @@ impl StereoSaturator {
     }
 
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn process_sample(&self, input: f32) -> f32 {
         self.stage.process(input)
     }

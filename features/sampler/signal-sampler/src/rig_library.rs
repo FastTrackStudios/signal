@@ -37,9 +37,9 @@ use std::path::{Path, PathBuf};
 
 use facet::Facet;
 
+use crate::SamplerError;
 use crate::rig::RigBlock;
 use crate::rig_profile::{RigPatch, RigProfile, RigStack};
-use crate::SamplerError;
 
 /// A **Scene** — one named variant (snapshot) of a [`RigPreset`]: an ordered FX
 /// chain plus scene-level trims.
@@ -685,7 +685,10 @@ mod tests {
         // Every section's patch resolved to a playable amp NAM (first block).
         for patch in &prof.patches {
             assert!(
-                patch.chain.first().is_some_and(super::super::rig::RigBlock::is_nam),
+                patch
+                    .chain
+                    .first()
+                    .is_some_and(super::super::rig::RigBlock::is_nam),
                 "section {:?} did not resolve to an amp",
                 patch.name
             );

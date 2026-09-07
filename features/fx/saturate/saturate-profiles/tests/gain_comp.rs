@@ -7,11 +7,11 @@
 //! ceiling is fixed and its drive is genuinely a level control
 //! (`fx.gain-comp.exempt`, `Makeup::None` in the profile table).
 
-use fx_stack::verify::{self, FULL_RANGE_BOUND_DB};
 use fx_stack::Stage;
+use fx_stack::verify::{self, FULL_RANGE_BOUND_DB};
 use saturate_dsp::digital::DigitalStage;
 use saturate_dsp::preamp::ClassAPreamp;
-use saturate_profiles::{apply, profile_by_id, Controls};
+use saturate_profiles::{Controls, apply, profile_by_id};
 
 /// One saturate voicing as a harness [`Stage`].
 struct SatStage {

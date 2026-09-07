@@ -17,12 +17,12 @@ use crate::accumulator::SpectrumAccumulator;
 use crate::collision::SpectrumCollision;
 use crate::decayer::SpectrumDecayer;
 use crate::fft::RealFft;
-use crate::ring::{ring, RingConsumer, RingProducer};
+use crate::ring::{RingConsumer, RingProducer, ring};
 use crate::settings::{AnalyzerSettings, Resolution};
 use crate::sharing::{self, InstanceId, SharedSpectrum};
 use crate::smoother::SpectrumSmoother;
 use crate::tilter::SpectrumTilter;
-use crate::window::{build_scaled, WindowKind};
+use crate::window::{WindowKind, build_scaled};
 
 use std::sync::Arc;
 

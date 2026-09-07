@@ -17,7 +17,7 @@ pub struct BlockModulationProps {
 pub fn BlockModulation(props: BlockModulationProps) -> Element {
     let modulation = &props.block.modulation;
 
-    let Some(ref mod_set) = modulation else {
+    let Some(mod_set) = modulation else {
         return rsx! {
             div { class: "flex flex-col items-center justify-center h-32 text-center px-4",
                 div { class: "text-zinc-600 text-xs", "No Modulation" }

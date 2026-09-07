@@ -100,10 +100,10 @@ fn highpass_slope4_section(
 }
 fn highpass_slope4_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
     let mut qs: Vec<f64> = cascade_qs(2, q_user).into_iter().rev().collect();
-    if (q_user - 1.0).abs() < 1.0e-12 {
-        if let Some(q) = qs.get_mut(0) {
-            *q = highpass_slope4_sec0_q1(freq_hz, sample_rate);
-        }
+    if (q_user - 1.0).abs() < 1.0e-12
+        && let Some(q) = qs.get_mut(0)
+    {
+        *q = highpass_slope4_sec0_q1(freq_hz, sample_rate);
     }
     qs
 }

@@ -12,12 +12,12 @@
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
+use crate::BlockType;
 use crate::ids::{ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId};
 use crate::metadata;
 use crate::module_type::ModuleType;
 use crate::signal_chain::SignalChain;
 use crate::traits;
-use crate::BlockType;
 use signal_macromod::ParameterValue;
 
 // ─── EngineType ────────────────────────────────────────────────
@@ -36,7 +36,7 @@ pub enum EngineType {
 }
 
 impl EngineType {
-    #[must_use] 
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Guitar => "guitar",
@@ -50,7 +50,7 @@ impl EngineType {
     }
 
     #[expect(clippy::should_implement_trait)]
-    #[must_use] 
+    #[must_use]
     pub fn from_str(value: &str) -> Option<Self> {
         match value {
             "guitar" => Some(Self::Guitar),
@@ -89,7 +89,7 @@ pub struct Block {
 }
 
 impl Block {
-    #[must_use] 
+    #[must_use]
     pub fn new(param_1: f32, param_2: f32, param_3: f32) -> Self {
         Self::from_parameters(vec![
             signal_macromod::BlockParameter::new("param_1", "Parameter 1", param_1),
@@ -98,7 +98,7 @@ impl Block {
         ])
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn from_parameters(parameters: Vec<signal_macromod::BlockParameter>) -> Self {
         let parameters = if parameters.is_empty() {
             vec![signal_macromod::BlockParameter::new("value", "Value", 0.5)]
@@ -115,7 +115,7 @@ impl Block {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn parameters(&self) -> &[signal_macromod::BlockParameter] {
         &self.parameters
     }
@@ -126,7 +126,7 @@ impl Block {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn first_value(&self) -> Option<f32> {
         self.parameters.first().map(|p| p.value().get())
     }
@@ -213,27 +213,27 @@ impl Snapshot {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn id(&self) -> &SnapshotId {
         &self.id
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn block(&self) -> Block {
         self.block.clone()
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn version(&self) -> u32 {
         self.version
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn metadata(&self) -> &metadata::Metadata {
         &self.metadata
     }
@@ -252,7 +252,7 @@ impl Snapshot {
     }
 
     /// Binary plugin state data, if available.
-    #[must_use] 
+    #[must_use]
     pub fn state_data(&self) -> Option<&[u8]> {
         self.state_data.as_deref()
     }
@@ -370,32 +370,32 @@ impl Preset {
         Self::new(id, name, block_type, default_snapshot, Vec::new())
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn id(&self) -> &PresetId {
         &self.id
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn block_type(&self) -> BlockType {
         self.block_type
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_snapshot(&self) -> Snapshot {
         self.default_snapshot.clone()
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn snapshots(&self) -> &[Snapshot] {
         &self.snapshots
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn snapshot(&self, snapshot_id: &SnapshotId) -> Option<Snapshot> {
         self.snapshots
             .iter()
@@ -410,7 +410,7 @@ impl Preset {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn metadata(&self) -> &metadata::Metadata {
         &self.metadata
     }
@@ -519,12 +519,12 @@ impl BlockParameterOverride {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn parameter_id(&self) -> &str {
         &self.parameter_id
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn value(&self) -> ParameterValue {
         self.value
     }
@@ -569,7 +569,7 @@ impl ModuleBlockSource {
     }
 
     /// Return a new source with the saved version stamped.
-    #[must_use] 
+    #[must_use]
     pub fn with_saved_version(self, version: u32) -> Self {
         match self {
             Self::PresetDefault { preset_id, .. } => Self::PresetDefault {
@@ -617,33 +617,33 @@ impl ModuleBlock {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn with_overrides(mut self, overrides: Vec<BlockParameterOverride>) -> Self {
         self.overrides = overrides;
         self
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn id(&self) -> &str {
         &self.id
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn label(&self) -> &str {
         &self.label
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn block_type(&self) -> BlockType {
         self.block_type
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn source(&self) -> &ModuleBlockSource {
         &self.source
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn overrides(&self) -> &[BlockParameterOverride] {
         &self.overrides
     }
@@ -658,7 +658,7 @@ pub struct Module {
 
 impl Module {
     /// Create a module from a signal chain (supports parallel routing).
-    #[must_use] 
+    #[must_use]
     pub const fn from_chain(chain: SignalChain) -> Self {
         Self { chain }
     }
@@ -666,7 +666,7 @@ impl Module {
     /// Create a module from a flat list of blocks (pure series chain).
     ///
     /// Backward-compatible constructor — wraps blocks in [`SignalChain::serial`].
-    #[must_use] 
+    #[must_use]
     pub fn from_blocks(blocks: Vec<ModuleBlock>) -> Self {
         Self {
             chain: SignalChain::serial(blocks),
@@ -674,7 +674,7 @@ impl Module {
     }
 
     /// The full signal chain topology.
-    #[must_use] 
+    #[must_use]
     pub const fn chain(&self) -> &SignalChain {
         &self.chain
     }
@@ -683,7 +683,7 @@ impl Module {
     ///
     /// Use this when you need a flat view regardless of topology — e.g.,
     /// counting blocks, iterating parameters, or building a template.
-    #[must_use] 
+    #[must_use]
     pub fn blocks(&self) -> Vec<&ModuleBlock> {
         self.chain.blocks()
     }
@@ -746,27 +746,27 @@ impl ModuleSnapshot {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn id(&self) -> &ModuleSnapshotId {
         &self.id
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn module(&self) -> &Module {
         &self.module
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn version(&self) -> u32 {
         self.version
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn metadata(&self) -> &metadata::Metadata {
         &self.metadata
     }
@@ -869,32 +869,32 @@ impl ModulePreset {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn id(&self) -> &ModulePresetId {
         &self.id
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn module_type(&self) -> ModuleType {
         self.module_type
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn snapshots(&self) -> &[ModuleSnapshot] {
         &self.snapshots
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn default_snapshot(&self) -> &ModuleSnapshot {
         &self.default_snapshot
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn snapshot(&self, snapshot_id: &ModuleSnapshotId) -> Option<ModuleSnapshot> {
         self.snapshots
             .iter()
@@ -909,7 +909,7 @@ impl ModulePreset {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn metadata(&self) -> &metadata::Metadata {
         &self.metadata
     }

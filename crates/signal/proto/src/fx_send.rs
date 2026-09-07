@@ -59,7 +59,7 @@ impl core::str::FromStr for FxSendCategory {
 }
 
 impl FxSendCategory {
-    #[must_use] 
+    #[must_use]
     pub const fn as_str(&self) -> &str {
         match self {
             Self::Reverb => "reverb",
@@ -72,7 +72,7 @@ impl FxSendCategory {
     }
 
     /// Infer category from a track/FX name by looking for keywords.
-    #[must_use] 
+    #[must_use]
     pub fn infer_from_name(name: &str) -> Self {
         let lower = name.to_lowercase();
         if lower.contains("reverb") || lower.contains("verb") {

@@ -12,8 +12,7 @@ pub const OMNISPHERE_PACKS_ROOT: &str =
 /// Root of the built Keyscape packs. Indexed alongside the Omnisphere ones
 /// because Keyscape is an Omnisphere library — its soundsources are nameable
 /// from an ordinary Omnisphere patch. Override with `FTS_KEYSCAPE_PACKS`.
-pub const KEYSCAPE_PACKS_ROOT: &str =
-    "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs";
+pub const KEYSCAPE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs";
 
 /// Root of the built NI Essential Piano packs. Not an Omnisphere library, but
 /// indexed here because this is the rig's one name→source lookup and a keys
@@ -41,7 +40,7 @@ pub struct SoundsourceIndex {
 impl SoundsourceIndex {
     /// Walk `root` (e.g. `…/Omnisphere`) up to a few levels, collecting every
     /// soundsource spec keyed by lower-cased name.
-    #[must_use] 
+    #[must_use]
     pub fn scan(root: &Path) -> Self {
         let mut idx = Self::default();
         idx.scan_dir(root, 0);
@@ -51,7 +50,7 @@ impl SoundsourceIndex {
     /// Scan the default extraction root (`FTS_OMNISPHERE_ROOT` override), then
     /// overlay the built `.signalpack` library (`FTS_OMNISPHERE_PACKS`) so a
     /// pack always wins over the raw styx for the same name.
-    #[must_use] 
+    #[must_use]
     pub fn scan_default() -> Self {
         let root = std::env::var("FTS_OMNISPHERE_ROOT")
             .unwrap_or_else(|_| crate::omni::OMNISPHERE_ROOT.into());
@@ -138,12 +137,12 @@ impl SoundsourceIndex {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.by_name.len()
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.by_name.is_empty()
     }
@@ -225,7 +224,7 @@ pub fn resolve_name<'a>(
 /// Public because the keys backend does its own library scan and needs to
 /// match names the same way — two lookups disagreeing is how a lane ends up
 /// silently empty.
-#[must_use] 
+#[must_use]
 pub fn normalize_soundsource_name(name: &str) -> String {
     let mut s = name.to_lowercase();
     // Everything from the `^` marker onward describes *which capture* of the

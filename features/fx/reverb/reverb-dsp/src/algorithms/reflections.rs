@@ -111,7 +111,8 @@ impl Reflections {
             let d = num::f64_to_index(delay * scale * room_scale);
             // Alternate polarity here too — 32 same-sign taps summed to
             // ~3x net DC area (the bulk of the subsonic energy).
-            let gain = 0.15 * (0.97_f64).powi(num::count_to_i32(i)) * if i % 2 == 0 { 1.0 } else { -1.0 };
+            let gain =
+                0.15 * (0.97_f64).powi(num::count_to_i32(i)) * if i % 2 == 0 { 1.0 } else { -1.0 };
             #[expect(
                 clippy::as_conversions,
                 clippy::cast_possible_truncation,

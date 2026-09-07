@@ -234,7 +234,12 @@ fn welch_spectrum(x: &[f64], start: usize, end: usize) -> Vec<f64> {
     let mut planner = RealFftPlanner::<f64>::new();
     let fft = planner.plan_fft_forward(NFFT);
     let hann: Vec<f64> = (0..NFFT)
-        .map(|i| 0.5f64.mul_add(-(2.0 * PI * num::count_to_f64(i) / num::count_to_f64(NFFT)).cos(), 0.5))
+        .map(|i| {
+            0.5f64.mul_add(
+                -(2.0 * PI * num::count_to_f64(i) / num::count_to_f64(NFFT)).cos(),
+                0.5,
+            )
+        })
         .collect();
 
     let mut acc = vec![0.0f64; NFFT / 2 + 1];
@@ -286,19 +291,22 @@ fn worst_mode_db(spectrum: &[f64]) -> (f64, f64) {
         let a = i.saturating_sub(50).max(1);
         let b = i.saturating_add(50).min(spectrum.len().saturating_sub(1));
         let mut local: Vec<f64> = spectrum.get(a..=b).unwrap_or(&[]).to_vec();
-        #[expect(clippy::unwrap_used, reason = "partial_cmp on f64 only returns None for NaN, which should not occur in spectrum values")]
+        #[expect(
+            clippy::unwrap_used,
+            reason = "partial_cmp on f64 only returns None for NaN, which should not occur in spectrum values"
+        )]
         {
             local.sort_by(|x, y| x.partial_cmp(y).unwrap());
         }
-        if let Some(&median) = local.get(local.len() / 2) {
-            if median > 0.0 && spectrum.get(i).is_some_and(|&v| v > 0.0) {
-                if let Some(&spec_i) = spectrum.get(i) {
-                    let db = 10.0 * (spec_i / median).log10();
-                    if db > worst {
-                        worst = db;
-                        worst_hz = num::count_to_f64(i) * bin_hz;
-                    }
-                }
+        if let Some(&median) = local.get(local.len() / 2)
+            && median > 0.0
+            && spectrum.get(i).is_some_and(|&v| v > 0.0)
+            && let Some(&spec_i) = spectrum.get(i)
+        {
+            let db = 10.0 * (spec_i / median).log10();
+            if db > worst {
+                worst = db;
+                worst_hz = num::count_to_f64(i) * bin_hz;
             }
         }
     }
@@ -326,13 +334,17 @@ fn subsonic_ratio(left: &[f64], right: &[f64]) -> f64 {
     }
     let bin_hz = SR / num::count_to_f64(nfft);
     let cutoff_bin = num::f64_to_index((20.0 / bin_hz).ceil()).min(spec.len());
-    let low: f64 = spec.get(..cutoff_bin).unwrap_or(&[]).iter().map(realfft::num_complex::Complex::norm_sqr).sum();
-    let total: f64 = spec.iter().map(realfft::num_complex::Complex::norm_sqr).sum();
-    if total > 0.0 {
-        low / total
-    } else {
-        0.0
-    }
+    let low: f64 = spec
+        .get(..cutoff_bin)
+        .unwrap_or(&[])
+        .iter()
+        .map(realfft::num_complex::Complex::norm_sqr)
+        .sum();
+    let total: f64 = spec
+        .iter()
+        .map(realfft::num_complex::Complex::norm_sqr)
+        .sum();
+    if total > 0.0 { low / total } else { 0.0 }
 }
 
 // ---------------------------------------------------------------------------
@@ -561,7 +573,11 @@ fn probe_chamber() {
         let band = |lo: f64, hi: f64| -> f64 {
             let a = num::f64_to_index(lo / bin_hz);
             let b = num::f64_to_index(hi / bin_hz).min(spec.len().saturating_sub(1));
-            spec.get(a..=b).unwrap_or(&[]).iter().map(realfft::num_complex::Complex::norm_sqr).sum::<f64>()
+            spec.get(a..=b)
+                .unwrap_or(&[])
+                .iter()
+                .map(realfft::num_complex::Complex::norm_sqr)
+                .sum::<f64>()
         };
         let total = band(0.0, SR / 2.0);
         for (lo, hi) in [

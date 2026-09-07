@@ -60,12 +60,12 @@ impl std::error::Error for NodePathError {}
 pub struct NodePath(pub Vec<NodePathSegment>);
 
 impl NodePath {
-    #[must_use] 
+    #[must_use]
     pub const fn new(segments: Vec<NodePathSegment>) -> Self {
         Self(segments)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn segments(&self) -> &[NodePathSegment] {
         &self.0
     }
@@ -130,7 +130,7 @@ impl NodePath {
     }
 
     /// Best-effort parser for legacy dot-paths.
-    #[must_use] 
+    #[must_use]
     pub fn parse_legacy(path: &str) -> Self {
         let tokens: Vec<&str> = path.split('.').collect();
         let mut out = Vec::new();
@@ -220,7 +220,7 @@ impl NodePath {
     }
 
     /// Structural validation: must target at least one concrete segment.
-    #[must_use] 
+    #[must_use]
     pub fn is_structurally_valid(&self) -> bool {
         self.0.iter().any(|seg| {
             matches!(

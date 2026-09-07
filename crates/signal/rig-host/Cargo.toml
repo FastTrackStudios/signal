@@ -1,7 +1,7 @@
 [package]
 name = "signal-rig-host"
 version.workspace = true
-edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+edition.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Shared daw-backed host for signal live rigs — one project/track/engine bootstrap for every rig"

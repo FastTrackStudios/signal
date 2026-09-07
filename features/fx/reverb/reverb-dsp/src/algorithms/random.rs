@@ -24,7 +24,7 @@
 use dsp_core::num;
 
 use crate::algorithm::{
-    decay_to_t60, t60_shelf_targets, AlgorithmParams, ReverbAlgorithm, RANDOM_T60,
+    AlgorithmParams, RANDOM_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets,
 };
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
@@ -126,7 +126,9 @@ impl ReverbAlgorithm for Random {
 
         // The engine's defining feature: independent random-walk drift per
         // line, never fully off.
-        let jitter = params.modulation.mul_add(MAX_JITTER_MS - MIN_JITTER_MS, MIN_JITTER_MS);
+        let jitter = params
+            .modulation
+            .mul_add(MAX_JITTER_MS - MIN_JITTER_MS, MIN_JITTER_MS);
         self.fdn_l.set_jitter(jitter, self.sample_rate);
         self.fdn_r.set_jitter(jitter * 1.17, self.sample_rate);
 

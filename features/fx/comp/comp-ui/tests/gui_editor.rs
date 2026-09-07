@@ -41,7 +41,7 @@ use audiocore_core::prelude::Param;
 #[path = "support/mod.rs"]
 mod support;
 
-use support::{mount, mount_sized, ptr_key, Fixture, Gesture};
+use support::{Fixture, Gesture, mount, mount_sized, ptr_key};
 
 /// Select a profile by id through the shell rail.
 ///
@@ -428,8 +428,8 @@ async fn dragging_above_knee_on_graph_raises_ratio() -> dioxus_test::Result<()> 
 
     let (gx, gy) = fx.graph_origin();
     let ty = db_to_y(-20.0, fx.graph_h()); // the threshold line
-                                           // 60 px above the line — outside the ±16 px threshold grab zone, inside
-                                           // the compressed region.
+    // 60 px above the line — outside the ±16 px threshold grab zone, inside
+    // the compressed region.
     let (sx, sy) = (gx + 180.0, gy + ty - 60.0);
 
     fx.tester.pointer_down(sx, sy);
@@ -1430,11 +1430,12 @@ async fn stacked_stages_are_all_visible_as_rows() -> dioxus_test::Result<()> {
 #[tokio::test]
 async fn the_sidechain_eq_sidecar_opens_and_edits_its_stage() -> dioxus_test::Result<()> {
     let mut fx = mount();
-    assert!(fx
-        .tester
-        .query(by_testid("sc-eq-view-1"))
-        .immediately()
-        .is_err());
+    assert!(
+        fx.tester
+            .query(by_testid("sc-eq-view-1"))
+            .immediately()
+            .is_err()
+    );
 
     tap_testid(&mut fx, "sc-eq-rail-toggle").await;
 
@@ -1538,7 +1539,9 @@ async fn the_top_rail_carries_the_preset_strip() -> dioxus_test::Result<()> {
     let mut fx = mount();
     let _ = fx.tester.pump().await;
 
-    fx.tester.query(by_testid("preset-bar-name")).immediately()?;
+    fx.tester
+        .query(by_testid("preset-bar-name"))
+        .immediately()?;
     assert!(
         fx.tester
             .query(by_testid("comp-presets"))

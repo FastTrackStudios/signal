@@ -41,7 +41,9 @@ fn rhodes() -> Option<SamplerRig> {
 
 fn render(rig: &SamplerRig, buf: &mut [f32], blocks: usize) {
     for _ in 0..blocks {
-        for s in buf.iter_mut() { *s = 0.0; }
+        for s in buf.iter_mut() {
+            *s = 0.0;
+        }
         let _ = rig.render_offline(buf);
     }
 }

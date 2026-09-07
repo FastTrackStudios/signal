@@ -74,7 +74,7 @@ pub struct DriveSlotDef {
 }
 
 /// The drive block preset library.
-#[must_use] 
+#[must_use]
 pub fn drive_presets() -> Vec<DrivePresetDef> {
     let opt = |name: &str, nam: &str| DriveOptionDef {
         name: name.to_string(),
@@ -151,7 +151,7 @@ pub struct OverrideDef {
 }
 
 impl OverrideDef {
-    #[must_use] 
+    #[must_use]
     pub fn set(module: &str, block: &str, param: &str, value: f32) -> Self {
         Self {
             module: module.to_string(),
@@ -163,7 +163,7 @@ impl OverrideDef {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn set_text(module: &str, block: &str, param: &str, text: &str) -> Self {
         Self {
             module: module.to_string(),
@@ -175,7 +175,7 @@ impl OverrideDef {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn bypass(module: &str, block: &str, bypassed: bool) -> Self {
         Self {
             module: module.to_string(),
@@ -191,7 +191,7 @@ impl OverrideDef {
 impl PatchDef {
     /// The unique module names this patch overrides (for the UI's
     /// override badges).
-    #[must_use] 
+    #[must_use]
     pub fn override_modules(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for ov in &self.overrides {
@@ -225,7 +225,7 @@ pub struct StackDef {
 /// The Worship profile definition: a small preset pool, twelve patches
 /// pointing into it (several share a preset — the override system will
 /// carry their differences), five footswitch stacks.
-#[must_use] 
+#[must_use]
 pub fn worship_def() -> ProfileDef {
     let preset = |name: &str, nam: String| PresetDef {
         name: name.to_string(),
@@ -233,7 +233,10 @@ pub fn worship_def() -> ProfileDef {
     };
     let stack = |name: &str, patches: &[&str]| StackDef {
         name: name.to_string(),
-        patches: patches.iter().map(std::string::ToString::to_string).collect(),
+        patches: patches
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect(),
     };
     let patch = |name: &str, preset: &str| PatchDef {
         name: name.to_string(),
@@ -389,7 +392,7 @@ fn drive_block(def: &ProfileDef, dps: &[DrivePresetDef], block: &str) -> RigBloc
     b
 }
 
-#[must_use] 
+#[must_use]
 pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
     // The standard full chain around one NAM capture — see the block-name
     // comments in the module docs (names match the guitar-rig-template slots).
@@ -545,7 +548,7 @@ fn apply_overrides(patch: &mut RigPatch, overrides: &[OverrideDef]) {
 }
 
 /// The Worship runtime profile (kept for existing callers).
-#[must_use] 
+#[must_use]
 pub fn worship_profile() -> RigProfile {
     build_profile(&worship_def(), &drive_presets())
 }
@@ -596,7 +599,7 @@ pub struct SetlistDef {
 }
 
 /// The song library — defaults live here; sets override per entry.
-#[must_use] 
+#[must_use]
 pub fn song_library() -> Vec<SongDef> {
     fn song(name: &str, key: &str, bpm: u32) -> SongDef {
         SongDef {
@@ -619,7 +622,7 @@ pub fn song_library() -> Vec<SongDef> {
 }
 
 /// The default setlists — XR + CYA, dated.
-#[must_use] 
+#[must_use]
 pub fn default_setlists() -> Vec<SetlistDef> {
     fn entry(song: &str) -> SetlistEntryDef {
         SetlistEntryDef {
@@ -665,7 +668,7 @@ pub struct DirectCcDef {
     pub slot: u32,
 }
 
-#[must_use] 
+#[must_use]
 pub fn default_midi_map() -> MidiMapDef {
     MidiMapDef {
         tap_ccs: vec![101, 102, 103, 104, 105],
@@ -690,7 +693,7 @@ pub struct KeyBindingDef {
     pub action: String,
 }
 
-#[must_use] 
+#[must_use]
 pub fn default_keymap() -> Vec<KeyBindingDef> {
     let b = |keys: &str, action: &str| KeyBindingDef {
         keys: keys.to_string(),

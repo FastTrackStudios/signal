@@ -118,7 +118,7 @@ fn processing_allocates_nothing() {
 // pin the whole tail.
 
 use saturate_dsp::digital::DigitalStage;
-use saturate_dsp::emphasis::{EmphBand, EmphShape, EmphasisEq, BANDS};
+use saturate_dsp::emphasis::{BANDS, EmphBand, EmphShape, EmphasisEq};
 use saturate_dsp::preamp::{ClassAPreamp, Makeup, SideShaper};
 
 const SHAPERS: [(&str, SideShaper); 6] = [
@@ -205,7 +205,10 @@ fn the_emphasis_pair_holds_its_reference_and_stays_invertible() {
         .zip(&input)
         .skip(64) // filter startup
         .fold(0.0_f32, |m, (out, want)| m.max((out - want).abs()));
-    assert!(worst < 1e-2, "emphasis/de-emphasis is not transparent: {worst}");
+    assert!(
+        worst < 1e-2,
+        "emphasis/de-emphasis is not transparent: {worst}"
+    );
 }
 
 #[test]

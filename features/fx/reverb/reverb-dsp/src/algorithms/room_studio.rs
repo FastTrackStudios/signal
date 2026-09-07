@@ -10,7 +10,9 @@
 
 use dsp_core::num;
 
-use crate::algorithm::{AlgorithmParams, ROOM_STUDIO_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets};
+use crate::algorithm::{
+    AlgorithmParams, ROOM_STUDIO_T60, ReverbAlgorithm, decay_to_t60, t60_shelf_targets,
+};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
@@ -157,7 +159,8 @@ impl RoomStudio {
         let base_delays = [59, 79, 101, 127, 157, 191, 229, 269];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.1);
 
-        for (i, ((ap_l, ap_r), &d)) in self.mod_ap_l
+        for (i, ((ap_l, ap_r), &d)) in self
+            .mod_ap_l
             .iter_mut()
             .zip(self.mod_ap_r.iter_mut())
             .zip(base_delays.iter())
@@ -302,8 +305,10 @@ impl ReverbAlgorithm for RoomStudio {
         let stages = num::f64_to_index(params.diffusion * 10.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(params.diffusion.mul_add(0.2, 0.55));
-        self.diffuser_r.set_feedback(params.diffusion.mul_add(0.2, 0.55));
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.2, 0.55));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.2, 0.55));
 
         // Modulation (very subtle in studio)
         self.setup_mod_allpass(params.modulation);

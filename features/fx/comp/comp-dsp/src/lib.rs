@@ -24,7 +24,7 @@ pub mod multiband;
 pub mod smoother;
 pub mod styles;
 
-pub use biquad::{design_highpass_biquad, design_lowpass_biquad, Biquad};
+pub use biquad::{Biquad, design_highpass_biquad, design_lowpass_biquad};
 pub use chain::CompChain;
 pub use detector::Detector;
 pub use gain_curve::GainCurve;
@@ -255,7 +255,10 @@ impl ProC3Compressor {
         self.channels[channel].auto_makeup_db = if self.auto_makeup {
             // Use half of the current reduction for conservative gain matching.
             // Full compensation tends to over-brighten and overload transients.
-            0.995f64.mul_add(self.channels[channel].auto_makeup_db, 0.005 * (gr_db * 0.5).min(24.0))
+            0.995f64.mul_add(
+                self.channels[channel].auto_makeup_db,
+                0.005 * (gr_db * 0.5).min(24.0),
+            )
         } else {
             0.995 * self.channels[channel].auto_makeup_db
         };
@@ -309,7 +312,9 @@ impl ProC3Compressor {
     /// Get current gain reduction in dB
     #[must_use]
     pub fn gain_reduction_db(&self) -> f64 {
-        self.channels[Channel::LEFT].last_gr_db.max(self.channels[Channel::RIGHT].last_gr_db)
+        self.channels[Channel::LEFT]
+            .last_gr_db
+            .max(self.channels[Channel::RIGHT].last_gr_db)
     }
 
     /// Set threshold in dB
@@ -402,7 +407,8 @@ impl ProC3Compressor {
         };
         let samples = (self.sample_rate * time_ms / 1000.0).max(1.0);
         let coeff = 1.0 - (-1.0 / samples).exp();
-        self.channels[channel].expander_gain_db += (target_db - self.channels[channel].expander_gain_db) * coeff;
+        self.channels[channel].expander_gain_db +=
+            (target_db - self.channels[channel].expander_gain_db) * coeff;
         self.channels[channel].expander_gain_db
     }
 
@@ -423,7 +429,8 @@ impl ProC3Compressor {
         };
         let samples = (self.sample_rate * time_ms / 1000.0).max(1.0);
         let coeff = 1.0 - (-1.0 / samples).exp();
-        self.channels[channel].upward_gain_db += (target_db - self.channels[channel].upward_gain_db) * coeff;
+        self.channels[channel].upward_gain_db +=
+            (target_db - self.channels[channel].upward_gain_db) * coeff;
         self.channels[channel].upward_gain_db
     }
 
@@ -459,7 +466,8 @@ impl ProC3Compressor {
     fn apply_bright_drive(&mut self, sample: f64, pre_gain: f64, channel: Channel) -> f64 {
         let cutoff_hz = 8_000.0;
         let coeff = 1.0 - (-2.0 * std::f64::consts::PI * cutoff_hz / self.sample_rate).exp();
-        self.channels[channel].bright_lowpass += (sample - self.channels[channel].bright_lowpass) * coeff;
+        self.channels[channel].bright_lowpass +=
+            (sample - self.channels[channel].bright_lowpass) * coeff;
 
         let low = self.channels[channel].bright_lowpass;
         let high = sample - low;
@@ -523,7 +531,8 @@ impl ProC3Compressor {
         let crest = (self.crest_peak_power / self.crest_rms_power.max(1e-12)).clamp(1.0, 64.0);
         let transient = ((crest.sqrt() - 1.0) / 7.0).clamp(0.0, 1.0);
 
-        let target_attack = self.attack_ms * (amount * 0.85).mul_add(-transient, 1.0).clamp(0.05, 2.0);
+        let target_attack =
+            self.attack_ms * (amount * 0.85).mul_add(-transient, 1.0).clamp(0.05, 2.0);
         let release_shape = (1.0 + amount * 1.5f64.mul_add(transient, -0.4)).clamp(0.25, 4.0);
         let style_shape =
             Self::style_auto_release_multiplier(CompressionStyle::from_id(self.style), transient);

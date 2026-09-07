@@ -7,7 +7,7 @@
 use crate::design::biquad::Coeffs;
 use crate::design::{self, FilterType};
 use crate::hardware::calibration::{
-    fit_response, CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget,
+    CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget, fit_response,
 };
 use crate::hardware::neve_1073::apply_gain_compensated_arctan;
 use crate::runtime::response::compute_magnitude_response;

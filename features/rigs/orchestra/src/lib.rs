@@ -13,11 +13,11 @@ pub mod timing;
 
 use std::path::Path;
 
-use keyflow_orchestra::{process_part, score, Config, PartOutput, ProfileKind};
+use keyflow_orchestra::{Config, PartOutput, ProfileKind, process_part, score};
+use signal_sampler::SamplerRig;
 use signal_sampler::document::{
     DocCc, DocNote, DocumentRenderOptions, DocumentRenderResult, TempoPoint, TrackDocument,
 };
-use signal_sampler::SamplerRig;
 
 /// Default install root for Cinematic Studio Strings (per-machine; override in
 /// the caller). The A/B examples use this unless a path is passed.

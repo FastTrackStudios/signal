@@ -133,7 +133,13 @@ fn spectral_band_toggle_suppresses_resonance_in_range_only() {
                 .wrapping_mul(6_364_136_223_846_793_005)
                 .wrapping_add(1_442_695_040_888_963_407);
             let noise = ((seed >> 33) as f64 / (1u64 << 31) as f64) - 1.0;
-            0.1f64.mul_add((core::f64::consts::TAU * 6000.0 * i as f64 / SR).sin(), 0.02f64.mul_add(noise, 0.5 * (core::f64::consts::TAU * 2000.0 * i as f64 / SR).sin())) as f32
+            0.1f64.mul_add(
+                (core::f64::consts::TAU * 6000.0 * i as f64 / SR).sin(),
+                0.02f64.mul_add(
+                    noise,
+                    0.5 * (core::f64::consts::TAU * 2000.0 * i as f64 / SR).sin(),
+                ),
+            ) as f32
         })
         .collect();
     let out = run(&mut eq, &input);
@@ -512,7 +518,10 @@ fn listen_delta_reveals_spectral_action() {
                 .wrapping_mul(6_364_136_223_846_793_005)
                 .wrapping_add(1_442_695_040_888_963_407);
             let noise = ((seed >> 33) as f64 / (1u64 << 31) as f64) - 1.0;
-            0.05f64.mul_add(noise, 0.5 * (core::f64::consts::TAU * 2000.0 * i as f64 / SR).sin()) as f32
+            0.05f64.mul_add(
+                noise,
+                0.5 * (core::f64::consts::TAU * 2000.0 * i as f64 / SR).sin(),
+            ) as f32
         })
         .collect();
     let out = run(&mut eq, &input);

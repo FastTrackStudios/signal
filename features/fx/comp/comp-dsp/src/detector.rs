@@ -4,7 +4,7 @@
 //! intentionally simple and testable; deeper Pro-C reference notes live under
 //! `docs/reports/proc3`.
 
-use audiocore_dsp::db::{linear_to_db, DB_FLOOR};
+use audiocore_dsp::db::{DB_FLOOR, linear_to_db};
 
 /// Level detector using peak detection.
 #[derive(Clone)]

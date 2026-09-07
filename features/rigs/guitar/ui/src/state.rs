@@ -177,7 +177,8 @@ pub fn use_rig_state() -> RigViewState {
                             let n = v.len();
                             (0..n)
                                 .map(|k| {
-                                    (2.0f32.mul_add(v[k], v[k.saturating_sub(1)]) + v[(k + 1).min(n - 1)])
+                                    (2.0f32.mul_add(v[k], v[k.saturating_sub(1)])
+                                        + v[(k + 1).min(n - 1)])
                                         / 4.0
                                 })
                                 .collect()

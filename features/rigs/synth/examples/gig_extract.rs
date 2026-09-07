@@ -13,7 +13,7 @@
 //! Multi dialect, so `omni_state wrap` turns it straight back into loadable
 //! plugin state.
 
-use signal_synth::gig::{read_gig, GigProcessor};
+use signal_synth::gig::{GigProcessor, read_gig};
 
 /// The eight source-select toggles on the global rackspace: the four NI pianos
 /// and the four Keyscape layers. A preset turning one on is the *only* record

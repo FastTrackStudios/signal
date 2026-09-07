@@ -3,7 +3,11 @@
 //! Implements [`ProfileService`] on [`SignalLive`], delegating persistence
 //! to the underlying [`ProfileRepo`].
 
-use super::{ProfileService, SignalLive, BlockRepo, ModuleRepo, LayerRepo, EngineRepo, RigRepo, ProfileRepo, SongRepo, SetlistRepo, SceneTemplateRepo, RackRepo, Profile, SignalServiceError, ProfileId, PatchId, Patch};
+use super::{
+    BlockRepo, EngineRepo, LayerRepo, ModuleRepo, Patch, PatchId, Profile, ProfileId, ProfileRepo,
+    ProfileService, RackRepo, RigRepo, SceneTemplateRepo, SetlistRepo, SignalLive,
+    SignalServiceError, SongRepo,
+};
 
 impl<B, M, L, E, R, P, So, Se, St, Ra> ProfileService
     for SignalLive<B, M, L, E, R, P, So, Se, St, Ra>

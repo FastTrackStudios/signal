@@ -183,11 +183,11 @@ ONE binary at `~/.local/lib/fts/signal-desktop` behind the
 
 Signal is the signal-chain / plugin-management domain: `crates/signal/*`
 (facade `signal` + proto/ui/live/storage/controller/import/browser/grid/
-grid-ui/daw-bridge), `features/{fx,rigs,sampler,nam,plugin-host}`,
-`features/reaper/signal-*`, the engine mode of `apps/desktop`. The `signal`
+grid-ui/daw-bridge/tone3000{,-proto,-ui}), `features/{fx,rigs,sampler,nam,
+plugin-host}`, `features/reaper/signal-*`, the engine mode of `apps/desktop`. The `signal`
 facade is the only public API surface: apps depend on `signal`,
 `signal-ui`, or `signal-sampler`, never on the internal domain crates.
-Docs: `crates/signal/docs/` (DESIGN.md, DOMAIN.md).
+Docs: `crates/signal/docs/` (DESIGN.md, DOMAIN.md, tone3000.md).
 
 **Detachable GUI (STRICT)**: the rig core is 100% headless; every GUI is
 a vox remote via architect (`signal-guitar-proto` is the wire contract;

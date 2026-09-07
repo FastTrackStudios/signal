@@ -274,8 +274,9 @@ impl ReverbAlgorithm for HallCathedral {
 
         let t60 = decay_to_t60(params.decay, HALL_CATHEDRAL_T60.0, HALL_CATHEDRAL_T60.1);
         let t60_dc = (t60 * params.low_decay_mult.max(0.05)).max(0.05);
-        let hf_ratio = (0.85f64.mul_add(1.0 - params.damping, 0.15) * params.high_decay_mult.max(0.05))
-            .clamp(0.02, 1.5);
+        let hf_ratio = (0.85f64.mul_add(1.0 - params.damping, 0.15)
+            * params.high_decay_mult.max(0.05))
+        .clamp(0.02, 1.5);
         let t60_ny = (t60 * hf_ratio).max(0.02);
         self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
         self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
@@ -302,8 +303,10 @@ impl ReverbAlgorithm for HallCathedral {
         let stages = num::f64_to_index(params.diffusion * 12.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(params.diffusion.mul_add(0.25, 0.55));
-        self.diffuser_r.set_feedback(params.diffusion.mul_add(0.25, 0.55));
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.25, 0.55));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.25, 0.55));
 
         // Modulation
         self.setup_mod_allpass(params.modulation);

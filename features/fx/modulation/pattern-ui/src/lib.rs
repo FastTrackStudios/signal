@@ -26,7 +26,7 @@ pub struct PatternMapper {
 }
 
 impl PatternMapper {
-    #[must_use] 
+    #[must_use]
     pub const fn new(width: f64, height: f64) -> Self {
         Self {
             width,
@@ -36,25 +36,26 @@ impl PatternMapper {
     }
 
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn x_to_px(&self, x: f64) -> f64 {
-        x.clamp(0.0, 1.0).mul_add(2.0f64.mul_add(-self.pad, self.width), self.pad)
+        x.clamp(0.0, 1.0)
+            .mul_add(2.0f64.mul_add(-self.pad, self.width), self.pad)
     }
 
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn y_to_px(&self, y: f64) -> f64 {
         (1.0 - y.clamp(0.0, 1.0)).mul_add(2.0f64.mul_add(-self.pad, self.height), self.pad)
     }
 
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn px_to_x(&self, px: f64) -> f64 {
         ((px - self.pad) / 2.0f64.mul_add(-self.pad, self.width)).clamp(0.0, 1.0)
     }
 
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn px_to_y(&self, py: f64) -> f64 {
         (1.0 - (py - self.pad) / 2.0f64.mul_add(-self.pad, self.height)).clamp(0.0, 1.0)
     }
@@ -63,7 +64,7 @@ impl PatternMapper {
 /// Index of the point nearest to pixel `(px, py)` within `radius_px`,
 /// or `None`. Points are the editable handles, so hit-testing runs in
 /// pixel space (a fixed grab radius regardless of zoom).
-#[must_use] 
+#[must_use]
 pub fn nearest_point(
     points: &[Point],
     mapper: &PatternMapper,
@@ -86,7 +87,7 @@ pub fn nearest_point(
 /// Sample the pattern into an SVG stroke path (`M … L …`) and a closed
 /// fill path (down to the bottom edge). `samples` ≥ 2; 128–256 renders
 /// smoothly at typical widths.
-#[must_use] 
+#[must_use]
 pub fn pattern_paths(
     pattern: &Pattern,
     mapper: &PatternMapper,
@@ -114,7 +115,7 @@ pub fn pattern_paths(
 /// Drag update: clamp a moved point into range and keep it between its
 /// x-neighbors (matching how MSEG editors constrain reorder). First and
 /// last points are pinned to x = 0 / x = 1.
-#[must_use] 
+#[must_use]
 pub fn constrained_move(points: &[Point], index: usize, x: f64, y: f64) -> (f64, f64) {
     let n = points.len();
     let eps = 1.0e-4;
@@ -132,20 +133,20 @@ pub fn constrained_move(points: &[Point], index: usize, x: f64, y: f64) -> (f64,
 
 /// Cycle a point's curve type through the 9 variants (right-click /
 /// modifier-click gesture in the editor).
-#[must_use] 
+#[must_use]
 pub fn next_curve_type(current: CurveType) -> CurveType {
     CurveType::from_u8((current as u8 + 1) % 9)
 }
 
 /// Scroll-wheel tension adjust: accumulate wheel delta into −1..1.
-#[must_use] 
+#[must_use]
 pub const fn adjust_tension(current: f64, wheel_delta: f64) -> f64 {
     wheel_delta.mul_add(0.05, current).clamp(-1.0, 1.0)
 }
 
 /// Build a `Pattern` evaluator from any point slice (the component
 /// keeps its working copy as plain points).
-#[must_use] 
+#[must_use]
 pub fn build_pattern(points: &[Point], tension_mult: f64) -> Pattern {
     let mut pat = Pattern::new();
     pat.set_points(points.to_vec());

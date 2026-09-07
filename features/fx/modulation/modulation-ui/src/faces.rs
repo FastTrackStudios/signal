@@ -14,12 +14,12 @@
 //! wow is not locked to its rate; an envelope wah draws a flat line because
 //! nothing periodic drives it at all.
 
-use std::fmt::Write;
 use dioxus::prelude::*;
+use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
-use fts_audio_ui::ParamHandle;
 use modulation_profiles::Character;
+use std::fmt::Write;
 
 /// Panel drawing size — 2U, like the saturator's faces.
 pub const W: f64 = 960.0;
@@ -125,7 +125,7 @@ pub static WAH: ModDesign = ModDesign {
     knob: KnobStyle::Daka,
 };
 
-#[must_use] 
+#[must_use]
 pub fn design_for(profile_id: &str) -> &'static ModDesign {
     match modulation_profiles::category_of(profile_id)
         .map(|(c, _)| modulation_profiles::CATEGORIES[c].id)
@@ -142,7 +142,7 @@ pub fn design_for(profile_id: &str) -> &'static ModDesign {
 ///
 /// The *roles* live in `modulation-profiles`; these are only the words. A
 /// slot the profile leaves unwired gets no name because it gets no knob.
-#[must_use] 
+#[must_use]
 pub fn knob_legends(profile_id: &str) -> [&'static str; 4] {
     match profile_id {
         "juno" => ["Voices", "Brightness", "Feedback", "Width"],
@@ -178,7 +178,7 @@ pub struct Placed {
 /// per-profile fact: a Clean chorus has three and a Juno has four, and a
 /// static table would eventually place a knob the profile does not wire.
 /// [`modulation_profiles::Voicing::knobs`] is the single source for that.
-#[must_use] 
+#[must_use]
 pub fn placed_controls(profile_id: &str) -> Vec<Placed> {
     let profile =
         modulation_profiles::profile_by_id(profile_id).unwrap_or(&modulation_profiles::PROFILES[0]);
@@ -473,7 +473,7 @@ fn ShapeView(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use modulation_profiles::{profile_by_id, Character, CATEGORIES, PROFILES};
+    use modulation_profiles::{CATEGORIES, Character, PROFILES, profile_by_id};
 
     const ALL: [&ModDesign; 5] = [&CHORUS, &FLANGER, &VIBRATO, &TREMOLO, &WAH];
 

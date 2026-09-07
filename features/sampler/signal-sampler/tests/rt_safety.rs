@@ -78,7 +78,9 @@ fn piano() -> signal_sampler::SampleEngine {
                 (t * 440.0 * std::f32::consts::TAU).sin() * 0.25
             })
             .collect();
-        let data = Arc::new(signal_sampler::engine::cache::SampleData::from_f32(pcm, 2, 48_000, frames));
+        let data = Arc::new(signal_sampler::engine::cache::SampleData::from_f32(
+            pcm, 2, 48_000, frames,
+        ));
         engine.insert_decoded_sample(&PathBuf::from(name), data, true);
     }
     engine

@@ -280,7 +280,7 @@ impl ResidualGen {
         if user_gain <= 0.0 {
             return None;
         }
-        let mut gen = Self {
+        let mut r#gen = Self {
             filters,
             scale: 1.0,
             env: 1.0,
@@ -293,16 +293,16 @@ impl ResidualGen {
         let warm = 2048usize;
         let mut acc = 0.0f32;
         for _ in 0..warm {
-            let v = gen.raw();
+            let v = r#gen.raw();
             acc += v * v;
         }
         let raw_rms = (acc / warm as f32).sqrt();
-        gen.scale = if raw_rms > 1e-9 {
+        r#gen.scale = if raw_rms > 1e-9 {
             user_gain * res.level / raw_rms
         } else {
             0.0
         };
-        Some(gen)
+        Some(r#gen)
     }
 
     #[inline]

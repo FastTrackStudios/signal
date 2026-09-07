@@ -1,6 +1,10 @@
 //! Song repository — data access for Song collections and Section variants.
 
-use sea_orm::{ConnectionTrait, Schema, ActiveModelBehavior, StatementBuilder, QueryTrait, ActiveEnum, QueryOrder, QueryFilter, EntityTrait, ColumnTrait, Iden, ColIdx, IdenStatic, ActiveModelTrait, Set, Iterable};
+use sea_orm::{
+    ActiveEnum, ActiveModelBehavior, ActiveModelTrait, ColIdx, ColumnTrait, ConnectionTrait,
+    EntityTrait, Iden, IdenStatic, Iterable, QueryFilter, QueryOrder, QueryTrait, Schema, Set,
+    StatementBuilder,
+};
 use signal_proto::metadata::Metadata;
 use signal_proto::overrides::Override;
 use signal_proto::song::{Section, SectionId, SectionSource, Song, SongId};
@@ -33,7 +37,7 @@ pub struct SongRepoLive {
 }
 
 impl SongRepoLive {
-    #[must_use] 
+    #[must_use]
     pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }

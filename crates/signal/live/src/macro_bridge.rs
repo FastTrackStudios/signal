@@ -28,7 +28,7 @@ const FTS_MACROS_NAME: &str = "FTS Macros";
 /// if no macros are present.
 ///
 /// This is a pure function — no DAW calls needed.
-#[must_use] 
+#[must_use]
 pub fn build_mapping_bank_json(
     track_index: u32,
     fx_indices: &[(usize, u32)], // (loaded_fx index, actual FX index in chain)

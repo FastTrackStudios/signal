@@ -1,0 +1,22 @@
+[package]
+name = "signal-tone3000-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "The TONE3000 tone browser — one component tree for the browser remote, the desktop app and the plugin editor"
+
+[lints]
+workspace = true
+
+[dependencies]
+dioxus.workspace = true
+# The wire contract and nothing else from the domain: this crate renders
+# from the generated vox clients, so it mounts unchanged wherever one can be
+# established. Wasm-clean by construction.
+signal-tone3000-proto.workspace = true
+# use_stream — the download progress subscription.
+architect = { workspace = true, features = ["atom", "vox", "platform"] }
+# Artwork arrives as bytes over the vox link (the engine fetches it; see the
+# proto's ImageData). A `data:` URI is how it reaches an <img>.
+base64 = "0.22"

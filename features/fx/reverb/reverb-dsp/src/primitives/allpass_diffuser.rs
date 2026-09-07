@@ -46,7 +46,11 @@ impl AllpassDiffuser {
     pub fn new(delay_lengths: &[usize]) -> Self {
         let mut d = Self::new_default();
         // Set individual stage delays directly (non-seed mode)
-        for (&len, f) in delay_lengths.iter().zip(d.filters.iter_mut()).take(MAX_STAGES) {
+        for (&len, f) in delay_lengths
+            .iter()
+            .zip(d.filters.iter_mut())
+            .take(MAX_STAGES)
+        {
             f.sample_delay = len.max(1);
         }
         d.stages = delay_lengths.len().min(MAX_STAGES);

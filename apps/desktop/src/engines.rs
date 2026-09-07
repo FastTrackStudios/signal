@@ -44,8 +44,8 @@ use std::process::Child;
 use std::sync::Mutex;
 
 use engine_launcher::{
-    Engine, KillSignal, LaunchSource, kill_group, probe, spawn, systemd_active,
-    systemd_available, systemd_start, systemd_stop,
+    Engine, KillSignal, LaunchSource, kill_group, probe, spawn, systemd_active, systemd_available,
+    systemd_start, systemd_stop,
 };
 
 /// The signal engine child we own, if we started one.
@@ -60,13 +60,19 @@ pub fn signal_running() -> bool {
 /// unit we can stop)?
 pub fn signal_owned() -> bool {
     let child_owned = {
-        let mut owned = OWNED.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut owned = OWNED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match owned.as_mut() {
             // `try_wait` reaps a crashed child and clears ownership.
-            Some(child) => if matches!(child.try_wait(), Ok(None)) { true } else {
-                *owned = None;
-                false
-            },
+            Some(child) => {
+                if matches!(child.try_wait(), Ok(None)) {
+                    true
+                } else {
+                    *owned = None;
+                    false
+                }
+            }
             None => false,
         }
     };
@@ -112,7 +118,9 @@ pub fn start_signal() -> Result<String, String> {
     };
     tracing::info!("signal engine started (pid {}) via {how}", spawned.pid());
     let url = spawned.ws_url.clone();
-    *OWNED.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(spawned.child);
+    *OWNED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(spawned.child);
     Ok(url)
 }
 
@@ -124,7 +132,9 @@ pub fn stop_signal() -> Result<(), String> {
         tracing::info!("signal engine stopped (systemd user unit)");
         return Ok(());
     }
-    let mut owned = OWNED.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut owned = OWNED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     match owned.take() {
         Some(mut child) => {
             // Kill the whole group (engine + any grandchildren), not just the
@@ -145,7 +155,11 @@ pub fn stop_signal() -> Result<(), String> {
 pub fn shutdown() {
     // systemd-managed engines are intentionally left running (a stop is final
     // and user-driven); only reap the child we spawned.
-    if let Some(child) = OWNED.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take() {
+    if let Some(child) = OWNED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
+    {
         tracing::info!("app shutting down — stopping owned signal engine");
         kill_group(child.id(), KillSignal::Term);
     }

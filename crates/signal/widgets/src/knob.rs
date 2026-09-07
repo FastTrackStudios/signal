@@ -8,7 +8,7 @@
 
 use dioxus::prelude::*;
 
-use crate::arc::{angle_for_value, arc_path, arc_point, SENSITIVITY, START_ANGLE, SWEEP};
+use crate::arc::{SENSITIVITY, START_ANGLE, SWEEP, angle_for_value, arc_path, arc_point};
 
 /// Knob display size — audio-gui's diameters.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]

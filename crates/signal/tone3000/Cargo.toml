@@ -1,7 +1,7 @@
 [package]
 name = "signal-tone3000"
 version.workspace = true
-edition = "2021"          # matches the sibling signal crates
+edition.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "TONE3000 tone library: OAuth session, model download into the NAM library"
@@ -13,7 +13,16 @@ workspace = true
 # The wire client (OAuth2+PKCE, search, models, downloads). Upstream MIT.
 tone3000.workspace = true
 signal-nam.workspace = true
-architect.workspace = true
+signal-tone3000-proto.workspace = true
+# The FastTrackStudio account, whose linked token is preferred over a
+# local TONE3000 session when the engine has one.
+signal-account.workspace = true
+architect = { workspace = true, features = ["platform"] }
+# The model/image transfers: the wire client streams to an AsyncWrite but
+# reports no progress, and artwork is not its concern at all.
+reqwest = { workspace = true, features = ["stream"] }
+futures-util = { workspace = true }
+url = "2"
 tokio = { workspace = true }
 thiserror.workspace = true
 tracing.workspace = true
@@ -23,3 +32,15 @@ sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
+# `examples/live_check.rs` — the one thing the mock cannot prove is that
+# TONE3000 agrees with us, so that example talks to the real API.
+tracing-subscriber = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+# A stubbed catalog on a loopback port: the conversation is the thing under
+# test, and it cannot be tested without one.
+wiremock = "0.6"
+# The brokered-token test stands up a stub issuer beside the stub catalog.
+auth-client.workspace = true
+url = "2"
+signal-nam.workspace = true
+serde_json.workspace = true

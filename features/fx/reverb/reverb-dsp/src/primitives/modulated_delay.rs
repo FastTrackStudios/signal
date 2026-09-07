@@ -105,7 +105,10 @@ impl ModulatedDelay {
         }
 
         let modulation = (self.mod_phase * 2.0 * PI).sin();
-        let target = self.mod_amount.mul_add(modulation, num::count_to_f64(self.sample_delay)).max(1.0);
+        let target = self
+            .mod_amount
+            .mul_add(modulation, num::count_to_f64(self.sample_delay))
+            .max(1.0);
 
         // Spread the move over the next update window.
         self.delay_step = (target - self.current_delay) / num::u64_to_f64(MOD_UPDATE_RATE);

@@ -34,7 +34,7 @@ pub struct SceneSwitchResult {
 
 impl SceneSwitchResult {
     /// Returns `true` if any module state or parameter changed.
-    #[must_use] 
+    #[must_use]
     pub const fn has_changes(&self) -> bool {
         !self.enabled.is_empty() || !self.disabled.is_empty() || self.params_applied
     }

@@ -14,7 +14,7 @@ pub struct Model {
 }
 
 impl Model {
-    #[must_use] 
+    #[must_use]
     pub fn variant_id_branded(&self) -> PatchId {
         PatchId::from(self.id.clone())
     }

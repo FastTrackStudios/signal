@@ -29,7 +29,7 @@ use signal_macromod::{MacroBank, MacroBinding, MacroKnob};
 /// - `low`: 20 Hz to 500 Hz, ±12 dB
 /// - `mid`: 500 Hz to 5 kHz, ±12 dB
 /// - `high`: 5 kHz to 20 kHz, ±12 dB
-#[must_use] 
+#[must_use]
 pub fn eq_3band() -> MacroBank {
     let mut bank = MacroBank::new();
 
@@ -85,7 +85,7 @@ pub fn eq_3band() -> MacroBank {
 /// - `threshold`: -60 dB to 0 dB
 /// - `ratio`: 1:1 to 20:1
 /// - `makeup`: 0 dB to 24 dB
-#[must_use] 
+#[must_use]
 pub fn compressor() -> MacroBank {
     let mut bank = MacroBank::new();
 
@@ -130,7 +130,7 @@ pub fn compressor() -> MacroBank {
 /// - `room`: Room size (small to large)
 /// - `decay`: Decay time (short to long)
 /// - `mix`: Wet/Dry mix (dry to wet)
-#[must_use] 
+#[must_use]
 pub fn reverb() -> MacroBank {
     let mut bank = MacroBank::new();
 
@@ -172,7 +172,7 @@ pub fn reverb() -> MacroBank {
 ///
 /// # Knobs
 /// - `level`: Output level (-∞ to 0 dB)
-#[must_use] 
+#[must_use]
 pub fn master_level() -> MacroBank {
     let mut bank = MacroBank::new();
 

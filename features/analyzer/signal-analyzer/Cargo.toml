@@ -1,7 +1,7 @@
 [package]
 name = "signal-analyzer"
 version.workspace = true
-edition = "2021"          # matches the rest of the signal domain crates
+edition.workspace = true
 license.workspace = true
 description = "Measure FTS FX against reference plugins — signal generation, metrics, and A/B comparison"
 

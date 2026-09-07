@@ -31,7 +31,9 @@ const STRIDE: usize = 23;
 
 fn arg(name: &str) -> Option<String> {
     let a: Vec<String> = std::env::args().collect();
-    a.iter().position(|x| x == name).and_then(|i| a.get(i + 1).cloned())
+    a.iter()
+        .position(|x| x == name)
+        .and_then(|i| a.get(i + 1).cloned())
 }
 fn num(name: &str, d: f64) -> f64 {
     arg(name).and_then(|v| v.parse().ok()).unwrap_or(d)
@@ -66,7 +68,9 @@ fn power_at(buf: &[f32], freq: f64) -> f64 {
 
 fn tone(freq: f64, amplitude: f64, frames: usize) -> Vec<f32> {
     let inc = std::f64::consts::TAU * freq / SR;
-    (0..frames).map(|i| (amplitude * (inc * i as f64).sin()) as f32).collect()
+    (0..frames)
+        .map(|i| (amplitude * (inc * i as f64).sin()) as f32)
+        .collect()
 }
 
 fn noise(rms: f64, frames: usize) -> Vec<f32> {
@@ -107,7 +111,8 @@ fn render_native(eq: &mut NativeEq, input: &[f32]) -> Vec<f32> {
         let n = BLOCK.min(input.len() - pos);
         let l = &input[pos..pos + n];
         let (mut ol, mut or) = (vec![0.0f32; n], vec![0.0f32; n]);
-        eq.process_block(l, l, &mut ol, &mut or, &ev).expect("process");
+        eq.process_block(l, l, &mut ol, &mut or, &ev)
+            .expect("process");
         out.extend_from_slice(&ol);
         pos += n;
     }
@@ -195,12 +200,17 @@ fn main() {
     let ours_only = std::env::args().any(|a| a == "--ours-only");
     let mut plugin = if ours_only {
         None
-    } else if let Ok(Some(mut p)) = HostedPlugin::load(&path) {
-        p.prepare(SR, BLOCK as u32).expect("prepare");
-        Some(p)
     } else {
-        eprintln!("{path}: could not load");
-        std::process::exit(1);
+        match HostedPlugin::load(&path) {
+            Ok(Some(mut p)) => {
+                p.prepare(SR, BLOCK as u32).expect("prepare");
+                Some(p)
+            }
+            _ => {
+                eprintln!("{path}: could not load");
+                std::process::exit(1);
+            }
+        }
     };
 
     /// Pro-Q's effective noise bandwidth, in dB, at the Q values swept below.
@@ -228,7 +238,9 @@ fn main() {
         "Q", "tone", "noise", "Pro-Q BW", "tone", "noise", "ours BW", "diff"
     );
 
-    let levels: Vec<f64> = (0..=20).map(|i| 3.0f64.mul_add(f64::from(i), -60.0)).collect();
+    let levels: Vec<f64> = (0..=20)
+        .map(|i| 3.0f64.mul_add(f64::from(i), -60.0))
+        .collect();
     let frames = (SR * SECONDS) as usize;
     let mut worst = 0.0f64;
 
@@ -266,11 +278,9 @@ fn main() {
                     if a.len() < input.len() {
                         break;
                     }
-                    curves[0][s]
-                        .push((level_db, 10.0 * (power_at(&a[cut..], freq) / dry).log10()));
+                    curves[0][s].push((level_db, 10.0 * (power_at(&a[cut..], freq) / dry).log10()));
                 }
-                curves[1][s]
-                    .push((level_db, 10.0 * (power_at(&b[cut..], freq) / dry).log10()));
+                curves[1][s].push((level_db, 10.0 * (power_at(&b[cut..], freq) / dry).log10()));
             }
         }
 
@@ -281,7 +291,11 @@ fn main() {
             _ => None,
         };
         let (rb, ob) = (
-            if ours_only { Some(reference) } else { bw(&curves[0]) },
+            if ours_only {
+                Some(reference)
+            } else {
+                bw(&curves[0])
+            },
             bw(&curves[1]),
         );
         let diff = match (rb, ob) {

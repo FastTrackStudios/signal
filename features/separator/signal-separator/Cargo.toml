@@ -1,7 +1,7 @@
 [package]
 name = "signal-separator"
 version.workspace = true
-edition = "2021"          # matches the other signal domain crates
+edition.workspace = true
 license.workspace = true
 description = "Split a finished mix into stems for reference analysis — model registry and cascade"
 

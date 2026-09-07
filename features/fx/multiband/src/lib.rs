@@ -23,7 +23,6 @@
 // clippy.toml's disallowed-methods list (locks, env, sleep) are real bugs here
 // even though they are allowed workspace-wide off the audio thread.
 #![deny(clippy::disallowed_methods)]
-
 // ── TEMPORARY: DSP rewrite pending ───────────────────────────────────────
 // 33 findings in this crate, held under `expect` rather than fixed one by one.
 //
@@ -174,7 +173,7 @@ pub struct BandSplitter {
 }
 
 impl BandSplitter {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         Self {
             crossovers: Vec::with_capacity(MAX_BANDS - 1),
@@ -209,7 +208,7 @@ impl BandSplitter {
         self.set_crossovers(&freqs);
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn num_bands(&self) -> usize {
         self.crossovers.len() + 1
     }
@@ -293,7 +292,7 @@ pub struct Multiband {
 }
 
 impl Multiband {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         Self {
             splitter: BandSplitter::new(sample_rate),
@@ -312,7 +311,7 @@ impl Multiband {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn num_bands(&self) -> usize {
         self.splitter.num_bands()
     }

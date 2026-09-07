@@ -40,7 +40,10 @@ struct VintageSpringUnit {
 }
 
 impl VintageSpringUnit {
-    #[expect(clippy::too_many_arguments, reason = "constructor needs all spring parameters for initialization")]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "constructor needs all spring parameters for initialization"
+    )]
     fn new(
         sample_rate: f64,
         delay_ms: f64,
@@ -100,7 +103,9 @@ impl VintageSpringUnit {
             self.mod_phase -= 1.0;
         }
         // Use a more complex modulation shape (sum of two sines for irregular flutter)
-        let mod_sig = (self.mod_phase * 2.0 * PI).sin().mul_add(0.7, (self.mod_phase * 2.0 * PI * 1.47).sin() * 0.3); // Irrational ratio
+        let mod_sig = (self.mod_phase * 2.0 * PI)
+            .sin()
+            .mul_add(0.7, (self.mod_phase * 2.0 * PI * 1.47).sin() * 0.3); // Irrational ratio
         let mod_offset = mod_sig * self.mod_depth;
         let read_pos = num::count_to_f64(self.delay_samples) + mod_offset;
         let read_pos = read_pos.max(1.0);

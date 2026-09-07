@@ -3,7 +3,7 @@ name = "trigger-ui"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-edition = "2021"          # kept on 2021 — matches the nice-plug plugin stack (comp-ui)
+edition.workspace = true
 description = "Trigger GUI — analysis waveform (scrolling peaks + draggable threshold + hit markers), params, and control view"
 
 [lints]

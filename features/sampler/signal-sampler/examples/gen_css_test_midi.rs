@@ -68,7 +68,9 @@ impl Smf {
         let steps = 64;
         for i in 0..=steps {
             let f = f64::from(i) / f64::from(steps);
-            let v = (f64::from(b) - f64::from(a)).mul_add(f, f64::from(a)).round() as u8;
+            let v = (f64::from(b) - f64::from(a))
+                .mul_add(f, f64::from(a))
+                .round() as u8;
             self.cc(dur.mul_add(f, t0), ctrl, v);
         }
     }
@@ -141,9 +143,7 @@ fn main() -> std::io::Result<()> {
         let start = t + 0.1;
         m.note(start, 8.0, 67, 90);
         m.cc_ramp(start, 8.0, 1, 0, 127); // CC1 0→127 over the held note
-        println!(
-            "{start:6.1}  LONG {name:<22} note67 held 8s, CC1 0→127 sweep, CC2=0 (nonvib)"
-        );
+        println!("{start:6.1}  LONG {name:<22} note67 held 8s, CC1 0→127 sweep, CC2=0 (nonvib)");
         t += 9.0;
         // vibrato (CC2=full)
         m.cc(t, 58, *ks);
@@ -152,9 +152,7 @@ fn main() -> std::io::Result<()> {
         let start = t + 0.1;
         m.note(start, 8.0, 67, 90);
         m.cc_ramp(start, 8.0, 1, 0, 127);
-        println!(
-            "{start:6.1}  LONG {name:<22} note67 held 8s, CC1 0→127 sweep, CC2=127 (vib)"
-        );
+        println!("{start:6.1}  LONG {name:<22} note67 held 8s, CC1 0→127 sweep, CC2=127 (vib)");
         t += 9.5;
     }
 
@@ -166,9 +164,7 @@ fn main() -> std::io::Result<()> {
         let start = t + 0.1;
         m.note(start, 6.0, 67, 90);
         m.cc_ramp(start, 6.0, 2, 0, 127); // CC2 0→127
-        println!(
-            "{start:6.1}  VIB sweep  note67 held 6s, CC1={cc1} fixed, CC2 0→127"
-        );
+        println!("{start:6.1}  VIB sweep  note67 held 6s, CC1={cc1} fixed, CC2 0→127");
         t += 7.0;
     }
 
@@ -227,9 +223,7 @@ fn main() -> std::io::Result<()> {
     m.cc_ramp(start, 4.0, 1, 10, 120); // swell up
     m.cc_ramp(start, 8.0, 2, 0, 127); // vibrato in over the whole note
     m.cc_ramp(start + 4.0, 4.0, 1, 120, 30); // swell back down
-    println!(
-        "{start:6.1}  COMBO note67 8s: CC1 swell up+down, CC2 0→127 simultaneously"
-    );
+    println!("{start:6.1}  COMBO note67 8s: CC1 swell up+down, CC2 0→127 simultaneously");
     t += 9.0;
 
     m.write(&path)?;

@@ -2,7 +2,7 @@
 
 use super::eq_graph_model::{EqBand, EqBandShape};
 
-#[must_use] 
+#[must_use]
 pub fn calculate_combined_response(bands: &[EqBand], freq: f64, sample_rate: f64) -> f64 {
     let mut total_db = 0.0;
 
@@ -151,7 +151,7 @@ fn cascaded_magnitude_db(freq: f64, f0: f64, order: usize, filter_type: &EqBandS
     10.0 * total_mag_sq.max(1e-30).log10()
 }
 
-#[must_use] 
+#[must_use]
 pub fn calculate_band_response(band: &EqBand, freq: f64, _sample_rate: f64) -> f64 {
     let f0 = f64::from(band.frequency);
     let gain = f64::from(band.gain);

@@ -6,7 +6,7 @@
 //! is what decides whether a translated preset drops into a mix at the level
 //! the engineer expected.
 
-use crate::filters::{k_weight, octave_bands, OCTAVE_CENTRES_HZ};
+use crate::filters::{OCTAVE_CENTRES_HZ, k_weight, octave_bands};
 use crate::null::rms;
 
 /// Offset from the BS.1770 mean-square sum to LUFS.

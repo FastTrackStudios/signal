@@ -3,9 +3,9 @@
 //! bit-transparent; the generators must be audible, pitch-relevant,
 //! and numerically stable when engaged.
 
+use reverb_dsp::AlgorithmType;
 use reverb_dsp::algorithm::{ChoirVoice, ChoraleParams};
 use reverb_dsp::chain::ReverbChain;
-use reverb_dsp::AlgorithmType;
 
 use audiocore_dsp::{AudioConfig, Processor};
 use dsp_core::num;

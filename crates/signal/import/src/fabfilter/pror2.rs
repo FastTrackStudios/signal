@@ -467,9 +467,11 @@ mod tests {
         assert!((r.predelay_normalized - 0.233).abs() < 1e-6);
         // ...but no millisecond value is invented, and none is emitted.
         assert_eq!(r.predelay_ms(), None);
-        assert!(!to_native_reverb_params(&r)
-            .iter()
-            .any(|(n, _)| n == "predelay"));
+        assert!(
+            !to_native_reverb_params(&r)
+                .iter()
+                .any(|(n, _)| n == "predelay")
+        );
     }
 
     #[test]

@@ -15,9 +15,9 @@
 
 use std::path::PathBuf;
 
-use keyflow_orchestra::{process_part, score, Config, ProfileKind};
-use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
+use keyflow_orchestra::{Config, ProfileKind, process_part, score};
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
 
 const DEFAULT_MXL: &str = "/run/media/Development/FastTrackStudio/keyflow/examples/mxl/GOING HOME - Dvorak New World Symphony 1.6 mxml.mxl";
 const CSS_ROOT: &str =

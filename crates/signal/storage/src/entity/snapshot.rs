@@ -20,12 +20,12 @@ pub struct Model {
 }
 
 impl Model {
-    #[must_use] 
+    #[must_use]
     pub fn snapshot_id_branded(&self) -> SnapshotId {
         SnapshotId::from(self.id.clone())
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn preset_id_branded(&self) -> PresetId {
         PresetId::from(self.preset_id.clone())
     }

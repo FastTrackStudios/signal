@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::fx_send::FxSend;
 use crate::metadata::Metadata;
-use crate::override_policy::{validate_overrides, OverridePolicyError, SnapshotPolicy};
+use crate::override_policy::{OverridePolicyError, SnapshotPolicy, validate_overrides};
 use crate::overrides::Override;
 use crate::{EngineType, ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId};
 
@@ -119,7 +119,7 @@ pub struct PluginRef {
 }
 
 impl PluginRef {
-    #[must_use] 
+    #[must_use]
     pub const fn new(def: crate::plugin_block::PluginBlockDef) -> Self {
         Self { def }
     }
@@ -270,14 +270,14 @@ impl Layer {
         Some(self.variants.remove(pos))
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_variant(&self) -> Option<&LayerSnapshot> {
         self.variants
             .iter()
             .find(|v| v.id == self.default_variant_id)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn variant(&self, id: &LayerSnapshotId) -> Option<&LayerSnapshot> {
         self.variants.iter().find(|v| &v.id == id)
     }

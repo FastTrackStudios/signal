@@ -60,7 +60,10 @@ struct Lcg(u64);
 
 impl Lcg {
     fn next(&mut self) -> f64 {
-        self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1);
         ((self.0 >> 33) as f64 / (1u64 << 31) as f64) - 1.0
     }
 }
@@ -78,7 +81,12 @@ pub fn frames_needed() -> usize {
 
 /// Build the test signal: `(left, right)`.
 #[must_use]
-pub fn stimulus(frames: usize, amplitude: f64, kind: Stimulus, sample_rate: f64) -> (Vec<f32>, Vec<f32>) {
+pub fn stimulus(
+    frames: usize,
+    amplitude: f64,
+    kind: Stimulus,
+    sample_rate: f64,
+) -> (Vec<f32>, Vec<f32>) {
     let tonal = kind == Stimulus::Tonal;
     let mono = kind == Stimulus::Mono;
     let mut rng = Lcg(0xC0FF_EE01);
@@ -110,7 +118,11 @@ pub fn stimulus(frames: usize, amplitude: f64, kind: Stimulus, sample_rate: f64)
                 phase[k] += std::f64::consts::TAU * f / sample_rate;
             }
         }
-        let mut side = if mono { 0.0 } else { amplitude * side_rng.next() };
+        let mut side = if mono {
+            0.0
+        } else {
+            amplitude * side_rng.next()
+        };
         if tonal && !mono {
             for (k, f) in PARTIALS.iter().enumerate() {
                 side += amplitude * PARTIAL_GAIN * side_phase[k].sin();

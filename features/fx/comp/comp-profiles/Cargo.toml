@@ -3,7 +3,7 @@ name = "comp-profiles"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+edition.workspace = true
 description = "Compressor hardware profiles — UREI 1176, LA-2A, SSL bus parameter mappings"
 
 [lints]

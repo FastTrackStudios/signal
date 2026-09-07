@@ -2,7 +2,6 @@
 //! the suite draws, and the drag feel constants that go with it. One copy;
 //! the guitar and keys knobs each had their own.
 
-
 /// Arc start: 135° = 7 o'clock.
 pub const START_ANGLE: f64 = 135.0;
 /// Arc sweep: 270°, ending at 5 o'clock.
@@ -11,14 +10,14 @@ pub const SWEEP: f64 = 270.0;
 pub const SENSITIVITY: f64 = 150.0;
 
 /// The point at `deg` degrees on the circle around `(cx, cy)` with radius `r`.
-#[must_use] 
+#[must_use]
 pub fn arc_point(cx: f64, cy: f64, r: f64, deg: f64) -> (f64, f64) {
     let rad = deg.to_radians();
     (r.mul_add(rad.cos(), cx), r.mul_add(rad.sin(), cy))
 }
 
 /// An SVG path drawing the arc from `from` to `to` degrees.
-#[must_use] 
+#[must_use]
 pub fn arc_path(cx: f64, cy: f64, r: f64, from: f64, to: f64) -> String {
     let (x1, y1) = arc_point(cx, cy, r, from);
     let (x2, y2) = arc_point(cx, cy, r, to);
@@ -27,7 +26,7 @@ pub fn arc_path(cx: f64, cy: f64, r: f64, from: f64, to: f64) -> String {
 }
 
 /// The arc end-angle for a normalized value 0..1.
-#[must_use] 
+#[must_use]
 pub const fn angle_for_value(v: f64) -> f64 {
     v.clamp(0.0, 1.0).mul_add(SWEEP, START_ANGLE)
 }

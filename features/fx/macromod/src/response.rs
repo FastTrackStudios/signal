@@ -31,7 +31,7 @@ impl Default for ResponseCurve {
 
 impl ResponseCurve {
     /// Human-readable display name.
-    #[must_use] 
+    #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Easing(curve) => curve.display_name(),
@@ -40,7 +40,7 @@ impl ResponseCurve {
     }
 
     /// Apply the response curve to a normalized `t` in `[0.0, 1.0]`.
-    #[must_use] 
+    #[must_use]
     pub fn apply(self, t: f64) -> f64 {
         let t = t.clamp(0.0, 1.0);
         match self {

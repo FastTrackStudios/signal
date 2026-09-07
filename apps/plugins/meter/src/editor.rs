@@ -14,7 +14,7 @@ use meter_ui::lufs_painter::{LufsConfig, LufsPainter};
 use meter_ui::phase_painter::{PhaseConfig, PhasePainter};
 use meter_ui::spectrum_painter::{SpectrumConfig, SpectrumPainter};
 
-use crate::{MeterShared, EDITOR_H, EDITOR_W};
+use crate::{EDITOR_H, EDITOR_W, MeterShared};
 
 // Panel rects (CSS px in the fixed window).
 const PAD: f64 = 12.0;
@@ -70,9 +70,11 @@ pub fn App() -> Element {
     let mut app_tick: Signal<u64> = use_signal(|| 0);
     use_hook(|| {
         let updater = dioxus_core::schedule_update();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            updater();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                updater();
+            }
         });
     });
     app_tick += 1;

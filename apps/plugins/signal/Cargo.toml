@@ -1,7 +1,7 @@
 [package]
 name = "signal-plugin"
 version.workspace = true
-edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap, level-plugin)
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "FTS Signal — all-in-one rig-platform CLAP/VST3 plugin (v0: .signalpack sampler rigs over signal-sampler; FX-chain rig hosting arrives when the signal facade grows a headless rig-host API)"

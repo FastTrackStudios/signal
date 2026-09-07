@@ -13,7 +13,10 @@ const SR: f64 = 48000.0;
 /// pre-change baseline capture exactly).
 fn probe_input(i: usize) -> f64 {
     let t = num::count_to_f64(i) / SR;
-    0.1f64.mul_add((2.0 * PI * 1337.0 * t).sin(), 0.25f64.mul_add((2.0 * PI * 440.0 * t).sin(), if i == 0 { 1.0 } else { 0.0 }))
+    0.1f64.mul_add(
+        (2.0 * PI * 1337.0 * t).sin(),
+        0.25f64.mul_add((2.0 * PI * 440.0 * t).sin(), if i == 0 { 1.0 } else { 0.0 }),
+    )
 }
 
 /// All mod params at defaults must reproduce the pre-modulation
@@ -193,7 +196,8 @@ fn predelay_shifts_arrival() {
 
     let base = arrival(0.0);
     let delayed = arrival(50.0);
-    let shift = i64::try_from(delayed).unwrap_or(i64::MAX) - i64::try_from(base).unwrap_or(i64::MAX);
+    let shift =
+        i64::try_from(delayed).unwrap_or(i64::MAX) - i64::try_from(base).unwrap_or(i64::MAX);
     let expect = num::trunc_to_i64(0.050 * SR);
     assert!(
         (shift - expect).abs() < 256,

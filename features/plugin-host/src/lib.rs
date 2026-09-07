@@ -88,7 +88,7 @@ impl HostedPlugin {
     /// `signal-fx` `NativeEq`/`NativeComp`/`NativeReverb` — so the host's
     /// FX-chain machinery can run it exactly like a loaded CLAP/VST3. Prepare it
     /// before processing (the drum mixer's `install_plugin` does this).
-    #[must_use] 
+    #[must_use]
     pub fn from_instance(mut inner: Box<dyn PluginInstance>) -> Self {
         let descriptor = inner.descriptor();
         Self {

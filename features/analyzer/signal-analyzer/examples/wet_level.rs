@@ -34,8 +34,14 @@ fn render(alg: f64, decay_time: f64, frames: usize, extra: &[(&str, f64)]) -> Ve
     while pos < frames {
         let n = BLOCK.min(frames - pos);
         let (mut l, mut r) = (vec![0.0f32; n], vec![0.0f32; n]);
-        rev.process_block(&stim[pos..pos + n], &stim[pos..pos + n], &mut l, &mut r, &ev)
-            .expect("process");
+        rev.process_block(
+            &stim[pos..pos + n],
+            &stim[pos..pos + n],
+            &mut l,
+            &mut r,
+            &ev,
+        )
+        .expect("process");
         out.extend_from_slice(&l);
         pos += n;
     }
@@ -115,8 +121,14 @@ fn render_t60(alg: f64, t60: f64, frames: usize) -> Option<Vec<f32>> {
     while pos < frames {
         let n = BLOCK.min(frames - pos);
         let (mut l, mut r) = (vec![0.0f32; n], vec![0.0f32; n]);
-        rev.process_block(&stim[pos..pos + n], &stim[pos..pos + n], &mut l, &mut r, &ev)
-            .expect("process");
+        rev.process_block(
+            &stim[pos..pos + n],
+            &stim[pos..pos + n],
+            &mut l,
+            &mut r,
+            &ev,
+        )
+        .expect("process");
         out.extend_from_slice(&l);
         pos += n;
     }
@@ -160,10 +172,14 @@ fn main() {
     println!("\n== does the correction hold across T60? ==");
     for (i, a) in reverb_dsp::AlgorithmType::ALL.iter().enumerate() {
         let mut line = format!("{i:>2} {a:?}");
-        while line.len() < 20 { line.push(' '); }
+        while line.len() < 20 {
+            line.push(' ');
+        }
         for t in [0.5f64, 1.0, 2.0, 4.0, 8.0] {
             let n = (SR * (t * 3.0).max(1.0)) as usize;
-            let Some(ir) = render_t60(i as f64, t, n) else { continue };
+            let Some(ir) = render_t60(i as f64, t, n) else {
+                continue;
+            };
             let e: f64 = ir.iter().map(|s| f64::from(*s) * f64::from(*s)).sum();
             let ideal = t / 13.8155;
             if e <= 1e-12 {
@@ -201,7 +217,9 @@ fn main() {
     println!("\n== predelay sweep, every algorithm (decay 2.0 s) ==");
     for (i, a) in reverb_dsp::AlgorithmType::ALL.iter().enumerate() {
         let mut line = format!("{i:>2} {a:?}");
-        while line.len() < 20 { line.push(' '); }
+        while line.len() < 20 {
+            line.push(' ');
+        }
         for pd in [0.0, 1.0, 10.0, 50.0, 125.0, 250.0] {
             let ir = render(i as f64, 2.0, frames, &[("predelay", pd)]);
             let peak = ir.iter().fold(0.0f32, |a, s| a.max(s.abs()));

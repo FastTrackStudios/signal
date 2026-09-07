@@ -291,11 +291,7 @@ pub fn proq4_s2_from_prototype_with_subfreq(
         let w4 = w2 * w2;
         let num = cap_a.mul_add(w4, cap_b * w2) + cap_c;
         let den = cap_d.mul_add(w4, cap_e * w2) + cap_f;
-        if den.abs() > 1e-300 {
-            num / den
-        } else {
-            0.0
-        }
+        if den.abs() > 1e-300 { num / den } else { 0.0 }
     };
     let u_pole = h_sq(w_pole);
     let u_zero = h_sq(w_zero);

@@ -103,7 +103,9 @@ pub async fn setup_macros_for_block(
     block: &Block,
 ) -> Result<Option<MacroSetupResult>, String> {
     // 1. Early return if no macro bank.
-    let Some(macro_bank) = &block.macro_bank else { return Ok(None) };
+    let Some(macro_bank) = &block.macro_bank else {
+        return Ok(None);
+    };
 
     // 2. Collect all bindings from the knob tree.
     let collected = collect_all_bindings(macro_bank);

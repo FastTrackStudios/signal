@@ -28,10 +28,22 @@ struct SectionLengths {
 }
 
 const SECTION_LENGTHS_32K: [SectionLengths; 4] = [
-    SectionLengths { delay: 1187.0, ap: [239.0, 331.0] },
-    SectionLengths { delay: 1583.0, ap: [283.0, 397.0] },
-    SectionLengths { delay: 2089.0, ap: [353.0, 431.0] },
-    SectionLengths { delay: 2557.0, ap: [409.0, 467.0] },
+    SectionLengths {
+        delay: 1187.0,
+        ap: [239.0, 331.0],
+    },
+    SectionLengths {
+        delay: 1583.0,
+        ap: [283.0, 397.0],
+    },
+    SectionLengths {
+        delay: 2089.0,
+        ap: [353.0, 431.0],
+    },
+    SectionLengths {
+        delay: 2557.0,
+        ap: [409.0, 467.0],
+    },
 ];
 /// Input allpass chain lengths (32768 Hz base).
 const INPUT_AP_32K: [f64; 4] = [113.0, 157.0, 197.0, 251.0];

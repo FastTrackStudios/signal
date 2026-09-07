@@ -317,9 +317,12 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
             let display_name = name.rsplit('/').next().unwrap_or(name);
             let mt_display = module_slots
                 .first()
-                .and_then(|s| s.module_type).map_or_else(|| "Custom".to_string(), |mt| format!("{mt:?}"));
-            let color = module_slots
-                .first().map_or_else(|| signal_proto::BlockType::Custom.color(), |s| s.block_type.color());
+                .and_then(|s| s.module_type)
+                .map_or_else(|| "Custom".to_string(), |mt| format!("{mt:?}"));
+            let color = module_slots.first().map_or_else(
+                || signal_proto::BlockType::Custom.color(),
+                |s| s.block_type.color(),
+            );
             let block_count = module_slots.len();
             let total_params: usize = module_slots.iter().map(|s| s.parameters.len()).sum();
 

@@ -37,12 +37,12 @@ pub struct DawSceneSnapshot {
 }
 
 impl DawSceneSnapshot {
-    #[must_use] 
+    #[must_use]
     pub const fn new(params: DawParameterSnapshot, chunks: Vec<DawStateChunk>) -> Self {
         Self { params, chunks }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn params_only(params: DawParameterSnapshot) -> Self {
         Self {
             params,
@@ -86,7 +86,7 @@ pub struct ParamDiff {
 }
 
 /// Diff two parameter snapshots to find which parameters differ.
-#[must_use] 
+#[must_use]
 pub fn diff_parameter_snapshots(
     a: &DawParameterSnapshot,
     b: &DawParameterSnapshot,
@@ -210,7 +210,7 @@ impl Default for MockDawBridge {
 }
 
 impl MockDawBridge {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             snapshots: std::sync::Mutex::new(HashMap::new()),

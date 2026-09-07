@@ -41,7 +41,7 @@ pub enum Source {
 
 impl Source {
     /// A sample source from an optional spec path.
-    #[must_use] 
+    #[must_use]
     pub fn sample(spec: Option<String>) -> Self {
         match spec {
             Some(s) => Self::Sample(s),
@@ -59,7 +59,7 @@ pub const MODULES_PER_LAYER: usize = 4;
 
 /// Slot label for module `index`: A..Z, then A1, B1, … so a layer can grow
 /// past the alphabet without ambiguity.
-#[must_use] 
+#[must_use]
 pub fn module_slot(index: usize) -> String {
     const LETTERS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     let letter = LETTERS[index % LETTERS.len()] as char;
@@ -133,7 +133,7 @@ impl Default for ModuleSettings {
 
 impl ModuleSettings {
     /// Settings for a bare source, everything else at its default.
-    #[must_use] 
+    #[must_use]
     pub fn from_source(source: Source) -> Self {
         Self {
             source,
@@ -153,13 +153,13 @@ fn envelope(name: &str, (a, d, s, r): (f32, f32, f32, f32)) -> RigBlock {
         .with_param("release", format!("{:.4}", r.max(0.0) / 1000.0))
 }
 
-#[must_use] 
+#[must_use]
 pub fn signal_module(name: &str, source: Source) -> Container {
     signal_module_with(name, &ModuleSettings::from_source(source))
 }
 
 /// Build one module from its settings — the version that carries sound.
-#[must_use] 
+#[must_use]
 pub fn signal_module_with(name: &str, set: &ModuleSettings) -> Container {
     with_module_envelopes(module_shell(name, set), set)
 }
@@ -309,7 +309,7 @@ pub fn signal_layer(name: &str, sources: &[Source]) -> Container {
 
 /// A layer whose modules carry their settings — the version the rig builds
 /// when its macros have been moved.
-#[must_use] 
+#[must_use]
 pub fn signal_layer_with(name: &str, settings: &[ModuleSettings]) -> Container {
     let mut modules = Container::parallel(format!("{name} Modules"));
     for (i, set) in settings.iter().enumerate() {
@@ -323,14 +323,14 @@ pub fn signal_layer_with(name: &str, settings: &[ModuleSettings]) -> Container {
 
 /// A layer holding a single module — the common "one patch in this lane"
 /// case. More modules are added by handing `signal_layer` more sources.
-#[must_use] 
+#[must_use]
 pub fn signal_layer_single(name: &str, source: Source) -> Container {
     signal_layer(name, &[source])
 }
 
 /// A 4-slot FX rack — every rack in the engine (Layer / Common / Aux /
 /// Master) is exactly four slots.
-#[must_use] 
+#[must_use]
 pub fn fx_rack(name: &str) -> Container {
     let mut rack = Container::module(name);
     for slot in 1..=4 {

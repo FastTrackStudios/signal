@@ -19,7 +19,9 @@ use crate::primitives::lcg_random::random_buffer_cross_seed;
 use crate::primitives::modulated_delay::ModulatedDelay;
 use crate::primitives::multitap_delay::MultitapDelay;
 use crate::primitives::one_pole::{Hp1, Lp1};
-use crate::primitives::response_curves::{resp4oct, resp1dec, resp2dec, resp3dec, resp3oct, db2gain};
+use crate::primitives::response_curves::{
+    db2gain, resp1dec, resp2dec, resp3dec, resp3oct, resp4oct,
+};
 use crate::primitives::reverb_line::ReverbLine;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 
@@ -99,14 +101,15 @@ fn scale_param(val: f64, index: usize) -> f64 {
         // EARLY_DIFFUSE_FEEDBACK, TAP_DECAY, LATE_DIFFUSE_FEEDBACK,
         // EQ_CROSS_SEED. Listed here because "which params are unscaled" is
         // not otherwise readable from this table.
-
         param::SEED_TAP
         | param::SEED_DIFFUSION
         | param::SEED_DELAY
         | param::SEED_POST_DIFFUSION => (val * 999.999).floor(),
 
         param::LOW_CUT => resp4oct(val).mul_add(980.0, 20.0),
-        param::HIGH_CUT | param::EQ_HIGH_FREQ | param::EQ_CUTOFF => resp4oct(val).mul_add(19600.0, 400.0),
+        param::HIGH_CUT | param::EQ_HIGH_FREQ | param::EQ_CUTOFF => {
+            resp4oct(val).mul_add(19600.0, 400.0)
+        }
 
         param::DRY_OUT | param::EARLY_OUT | param::LATE_OUT => val.mul_add(30.0, -30.0),
 
@@ -116,8 +119,12 @@ fn scale_param(val: f64, index: usize) -> f64 {
 
         param::EARLY_DIFFUSE_COUNT | param::LATE_LINE_COUNT => val.mul_add(11.999, 1.0).floor(),
         param::EARLY_DIFFUSE_DELAY | param::LATE_DIFFUSE_DELAY => val.mul_add(90.0, 10.0),
-        param::EARLY_DIFFUSE_MOD_AMOUNT | param::LATE_LINE_MOD_AMOUNT | param::LATE_DIFFUSE_MOD_AMOUNT => val * 2.5,
-        param::EARLY_DIFFUSE_MOD_RATE | param::LATE_LINE_MOD_RATE | param::LATE_DIFFUSE_MOD_RATE => resp2dec(val) * 5.0,
+        param::EARLY_DIFFUSE_MOD_AMOUNT
+        | param::LATE_LINE_MOD_AMOUNT
+        | param::LATE_DIFFUSE_MOD_AMOUNT => val * 2.5,
+        param::EARLY_DIFFUSE_MOD_RATE
+        | param::LATE_LINE_MOD_RATE
+        | param::LATE_DIFFUSE_MOD_RATE => resp2dec(val) * 5.0,
 
         param::LATE_DIFFUSE_COUNT => val.mul_add(7.999, 1.0).floor(),
         param::LATE_LINE_SIZE => resp2dec(val).mul_add(980.0, 20.0),
@@ -321,7 +328,8 @@ impl CloudChannel {
             }
             param::EARLY_DIFFUSE_COUNT => self.diffuser.stages = num::f64_to_index(scaled),
             param::EARLY_DIFFUSE_DELAY => {
-                self.diffuser.set_delay(num::f64_to_index(self.ms2samples(scaled)));
+                self.diffuser
+                    .set_delay(num::f64_to_index(self.ms2samples(scaled)));
             }
             param::EARLY_DIFFUSE_MOD_AMOUNT => {
                 self.diffuser.set_modulation_enabled(scaled > 0.5);
@@ -468,16 +476,43 @@ impl CloudChannel {
 
     /// Exact port of `ReverbChannel::UpdateLines`.
     fn update_lines(&mut self) {
-        let base_delay_samples = self.ms2samples(self.params_scaled.get(param::LATE_LINE_SIZE).copied().unwrap_or(0.0));
-        let decay_ms = self.params_scaled.get(param::LATE_LINE_DECAY).copied().unwrap_or(0.0) * 1000.0;
+        let base_delay_samples = self.ms2samples(
+            self.params_scaled
+                .get(param::LATE_LINE_SIZE)
+                .copied()
+                .unwrap_or(0.0),
+        );
+        let decay_ms = self
+            .params_scaled
+            .get(param::LATE_LINE_DECAY)
+            .copied()
+            .unwrap_or(0.0)
+            * 1000.0;
         let t60_samples = self.ms2samples(decay_ms);
 
-        let line_mod_amount = self.ms2samples(self.params_scaled.get(param::LATE_LINE_MOD_AMOUNT).copied().unwrap_or(0.0));
-        let line_mod_rate = self.params_scaled.get(param::LATE_LINE_MOD_RATE).copied().unwrap_or(0.0);
+        let line_mod_amount = self.ms2samples(
+            self.params_scaled
+                .get(param::LATE_LINE_MOD_AMOUNT)
+                .copied()
+                .unwrap_or(0.0),
+        );
+        let line_mod_rate = self
+            .params_scaled
+            .get(param::LATE_LINE_MOD_RATE)
+            .copied()
+            .unwrap_or(0.0);
 
-        let late_diff_mod_amount =
-            self.ms2samples(self.params_scaled.get(param::LATE_DIFFUSE_MOD_AMOUNT).copied().unwrap_or(0.0));
-        let late_diff_mod_rate = self.params_scaled.get(param::LATE_DIFFUSE_MOD_RATE).copied().unwrap_or(0.0);
+        let late_diff_mod_amount = self.ms2samples(
+            self.params_scaled
+                .get(param::LATE_DIFFUSE_MOD_AMOUNT)
+                .copied()
+                .unwrap_or(0.0),
+        );
+        let late_diff_mod_rate = self
+            .params_scaled
+            .get(param::LATE_DIFFUSE_MOD_RATE)
+            .copied()
+            .unwrap_or(0.0);
 
         let seeds =
             random_buffer_cross_seed(self.delay_line_seed, TOTAL_LINE_COUNT * 3, self.cross_seed);
@@ -492,11 +527,9 @@ impl CloudChannel {
         };
         for (i, line) in self.lines.iter_mut().enumerate().take(TOTAL_LINE_COUNT) {
             let mod_amount = line_mod_amount * 0.3f64.mul_add(seed_at(0, i), 0.7);
-            let mod_rate =
-                line_mod_rate * 0.3f64.mul_add(seed_at(1, i), 0.7) / self.sample_rate;
+            let mod_rate = line_mod_rate * 0.3f64.mul_add(seed_at(1, i), 0.7) / self.sample_rate;
 
-            let mut delay_samples =
-                1.0f64.mul_add(seed_at(2, i), 0.5) * base_delay_samples;
+            let mut delay_samples = 1.0f64.mul_add(seed_at(2, i), 0.5) * base_delay_samples;
             // When delay is really short and modulation is high,
             // mod could take delay time negative — prevent that
             if delay_samples < mod_amount + 2.0 {
@@ -561,7 +594,11 @@ impl CloudChannel {
 
         // Late reverb: parallel delay lines
         let mut line_sum = 0.0;
-        for line in self.lines.iter_mut().take(self.line_count.min(TOTAL_LINE_COUNT)) {
+        for line in self
+            .lines
+            .iter_mut()
+            .take(self.line_count.min(TOTAL_LINE_COUNT))
+        {
             line_sum += line.tick(x);
         }
         line_sum *= self.per_line_gain();

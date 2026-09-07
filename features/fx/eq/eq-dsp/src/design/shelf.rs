@@ -144,7 +144,7 @@ fn shelf_normal_section(
     high_shelf: bool,
     omega_scale: f64,
 ) -> Coeffs {
-    use crate::design::per_section::{proq4_universal_section_synth, Prototype};
+    use crate::design::per_section::{Prototype, proq4_universal_section_synth};
 
     let (_theta_k, damping, _qk, helper_alpha) = compute_shelf_params(
         sec_idx,

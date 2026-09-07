@@ -110,7 +110,8 @@ impl Default for DelayParams {
             )
             .with_value_to_string(Arc::new(|v| {
                 delay_profiles::PROFILES
-                    .get(v.max(0) as usize).map_or_else(|| "—".to_string(), |p| p.name.to_string())
+                    .get(v.max(0) as usize)
+                    .map_or_else(|| "—".to_string(), |p| p.name.to_string())
             })),
 
             time_l: FloatParam::new(

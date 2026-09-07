@@ -50,7 +50,7 @@ macro_rules! impl_collection {
             id: $var_id_ty:ty
             $(, base_ref: $BaseRef:ty => $base_ref_field:ident)?
             $(, overrides: $Override:ty)?
-            , default_named: |$dn_name:ident| $dn_body:expr
+            , default_named: |$dn_name:ident| $dn_body:expr_2021
             $(,)?
         }
 

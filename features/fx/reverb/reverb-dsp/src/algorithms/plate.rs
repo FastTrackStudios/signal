@@ -16,7 +16,10 @@
 
 use dsp_core::num;
 
-use crate::algorithm::{AlgorithmParams, PLATE_DECAY_APPLICATIONS, PLATE_LOOP_SECONDS, PLATE_T60, ReverbAlgorithm, dattorro_gain_for_t60, decay_to_t60};
+use crate::algorithm::{
+    AlgorithmParams, PLATE_DECAY_APPLICATIONS, PLATE_LOOP_SECONDS, PLATE_T60, ReverbAlgorithm,
+    dattorro_gain_for_t60, decay_to_t60,
+};
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::one_pole::Lp1;
@@ -253,8 +256,7 @@ impl ReverbAlgorithm for Plate {
         // Previously this was a bare gain ramp (0.3..0.99) with no relation
         // to time, so `decay_time` did nothing on a plate at all.
         let t60 = decay_to_t60(params.decay, PLATE_T60.0, PLATE_T60.1);
-        self.decay =
-            dattorro_gain_for_t60(t60, PLATE_LOOP_SECONDS, PLATE_DECAY_APPLICATIONS);
+        self.decay = dattorro_gain_for_t60(t60, PLATE_LOOP_SECONDS, PLATE_DECAY_APPLICATIONS);
 
         // Damping → tank LP cutoff (2k–16k Hz)
         let freq = (1.0 - params.damping).mul_add(14000.0, 2000.0);
@@ -292,9 +294,11 @@ impl ReverbAlgorithm for Plate {
 
         // Modulation depth
         let mod_depth = params.modulation * 24.0 * self.s;
-        self.tank_a.ap1
+        self.tank_a
+            .ap1
             .set_modulation(1.0, mod_depth, self.sample_rate);
-        self.tank_b.ap1
+        self.tank_b
+            .ap1
             .set_modulation(1.0, mod_depth, self.sample_rate);
     }
 

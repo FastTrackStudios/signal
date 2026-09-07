@@ -277,42 +277,42 @@ impl Detector {
     #[must_use]
     pub fn effective_threshold(&self) -> (f64, f64) {
         if self.params.auto {
-            if self.params.adaptive {
-                if let Some((thr, _)) = self.hist.learned() {
-                    // The knob re-centres as an offset around the learned
-                    // value. The knee stays tied to the range, as it is
-                    // everywhere else.
-                    let tracking = thr - (self.params.span_db - AUTO_HEADROOM_DB).max(0.0);
-                    let absolute = AUTO_FULL_RANGE_AT_DB - self.params.span_db;
-                    // A weighted blend of the two, not a maximum.
-                    //
-                    // A maximum is the tidier story — above the anchor the
-                    // band holds its engagement, below it gives range up — and
-                    // it fits two isolated probes better: the nine recorded
-                    // trajectories go from 0.62 dB worst to 0.37, and a 20 Hz
-                    // high shelf on noise stops climbing with level the way
-                    // the plugin's does. It measures WORSE across the library,
-                    // which is the only test that counts here: 35 presets
-                    // improved, 69 got worse, and the median went 0.52 dB to
-                    // 0.72. The maximum collapses the engagement to nothing
-                    // once the programme drops under the anchor, where the
-                    // plugin only gives up a decibel or so, and most of the
-                    // library's dynamic bands are band-limited enough to sit
-                    // near that edge.
-                    let learned = AUTO_TRACKING.mul_add(tracking, (1.0 - AUTO_TRACKING) * absolute);
-                    // A cold band sits a little SHY of where it will end up —
-                    // the plugin walks up into its engagement, it does not
-                    // fall back into it. So the handover is a threshold that
-                    // starts high and decays onto the learned one, not a
-                    // crossfade from the absolute fallback: that fallback is
-                    // the more engaged of the two and ramping from it moves
-                    // the band the wrong way.
-                    let blended = (1.0 - self.auto_conf).mul_add(AUTO_COLD_OFFSET_DB, learned);
-                    return (
-                        self.params.threshold_db.mul_add(0.25, blended),
-                        self.params.knee_db,
-                    );
-                }
+            if self.params.adaptive
+                && let Some((thr, _)) = self.hist.learned()
+            {
+                // The knob re-centres as an offset around the learned
+                // value. The knee stays tied to the range, as it is
+                // everywhere else.
+                let tracking = thr - (self.params.span_db - AUTO_HEADROOM_DB).max(0.0);
+                let absolute = AUTO_FULL_RANGE_AT_DB - self.params.span_db;
+                // A weighted blend of the two, not a maximum.
+                //
+                // A maximum is the tidier story — above the anchor the
+                // band holds its engagement, below it gives range up — and
+                // it fits two isolated probes better: the nine recorded
+                // trajectories go from 0.62 dB worst to 0.37, and a 20 Hz
+                // high shelf on noise stops climbing with level the way
+                // the plugin's does. It measures WORSE across the library,
+                // which is the only test that counts here: 35 presets
+                // improved, 69 got worse, and the median went 0.52 dB to
+                // 0.72. The maximum collapses the engagement to nothing
+                // once the programme drops under the anchor, where the
+                // plugin only gives up a decibel or so, and most of the
+                // library's dynamic bands are band-limited enough to sit
+                // near that edge.
+                let learned = AUTO_TRACKING.mul_add(tracking, (1.0 - AUTO_TRACKING) * absolute);
+                // A cold band sits a little SHY of where it will end up —
+                // the plugin walks up into its engagement, it does not
+                // fall back into it. So the handover is a threshold that
+                // starts high and decays onto the learned one, not a
+                // crossfade from the absolute fallback: that fallback is
+                // the more engaged of the two and ramping from it moves
+                // the band the wrong way.
+                let blended = (1.0 - self.auto_conf).mul_add(AUTO_COLD_OFFSET_DB, learned);
+                return (
+                    self.params.threshold_db.mul_add(0.25, blended),
+                    self.params.knee_db,
+                );
             }
             // Measured, not learned. Pro-Q's Auto behaves as a **fixed
             // absolute threshold**: swept in level with a steady tone it

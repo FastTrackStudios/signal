@@ -55,7 +55,7 @@ impl Default for DigitalStage {
 }
 
 impl DigitalStage {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             bits: BITS_OFF,
@@ -70,7 +70,7 @@ impl DigitalStage {
     /// True when the stage would pass audio through untouched — the caller
     /// can skip it entirely rather than paying for a bypass per sample.
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn is_transparent(&self) -> bool {
         self.bits >= BITS_OFF && self.rate <= 1.0
     }
@@ -208,7 +208,10 @@ mod tests {
         // One new value every four samples, held in between — and the
         // first sample is a real one.
         let held: [u32; 8] = taken.map(f32::to_bits);
-        assert_eq!(held, [0.0f32, 0.0, 0.0, 0.0, 4.0, 4.0, 4.0, 4.0].map(f32::to_bits));
+        assert_eq!(
+            held,
+            [0.0f32, 0.0, 0.0, 0.0, 4.0, 4.0, 4.0, 4.0].map(f32::to_bits)
+        );
     }
 
     #[test]

@@ -16,7 +16,7 @@
 //! hit — kick drums have energy concentrated below 200Hz, snares have
 //! a mid-frequency peak plus high-frequency wire rattle, etc.
 
-use rustfft::{num_complex::Complex, FftPlanner};
+use rustfft::{FftPlanner, num_complex::Complex};
 
 /// Spectral fingerprint for a drum sound.
 #[derive(Clone)]
@@ -55,7 +55,7 @@ pub struct FingerprintMatcher {
 }
 
 impl FingerprintMatcher {
-    #[must_use] 
+    #[must_use]
     pub fn new(fft_size: usize, sample_rate: f64) -> Self {
         let window: Vec<f64> = (0..fft_size)
             .map(|i| 0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / fft_size as f64).cos()))
@@ -137,7 +137,7 @@ impl FingerprintMatcher {
     }
 
     /// Check if a template has been learned.
-    #[must_use] 
+    #[must_use]
     pub const fn has_template(&self) -> bool {
         self.template.is_some()
     }
@@ -146,7 +146,7 @@ impl FingerprintMatcher {
     ///
     /// Returns `Some(similarity)` where similarity is 0.0-1.0
     /// (normalized cross-correlation). Returns `None` if no template.
-    #[must_use] 
+    #[must_use]
     pub fn match_hit(&self, audio: &[f64]) -> Option<f64> {
         let template = self.template.as_ref()?;
 
@@ -168,7 +168,7 @@ impl FingerprintMatcher {
     }
 
     /// Check if a hit matches the template above the threshold.
-    #[must_use] 
+    #[must_use]
     pub fn is_match(&self, audio: &[f64]) -> bool {
         match self.match_hit(audio) {
             Some(sim) => sim >= self.threshold,
@@ -244,10 +244,7 @@ mod tests {
 
         // Match against same tone
         let sim = matcher.match_hit(&kick).unwrap();
-        assert!(
-            sim > 0.95,
-            "Same sound should have high similarity: {sim}"
-        );
+        assert!(sim > 0.95, "Same sound should have high similarity: {sim}");
         assert!(matcher.is_match(&kick));
     }
 

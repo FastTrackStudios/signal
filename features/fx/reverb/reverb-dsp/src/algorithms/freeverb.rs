@@ -121,13 +121,19 @@ impl FreeVerb {
     pub fn new(sample_rate: f64) -> Self {
         let _ = sample_rate;
         let scale = sample_rate / 44100.0;
-        let comb_l = COMB_TUNINGS.map(|t| LpComb::new(num::f64_to_index(num::count_to_f64(t) * scale)));
+        let comb_l =
+            COMB_TUNINGS.map(|t| LpComb::new(num::f64_to_index(num::count_to_f64(t) * scale)));
         let comb_r = COMB_TUNINGS.map(|t| {
-            LpComb::new(num::f64_to_index(num::count_to_f64(t.saturating_add(STEREO_SPREAD)) * scale))
+            LpComb::new(num::f64_to_index(
+                num::count_to_f64(t.saturating_add(STEREO_SPREAD)) * scale,
+            ))
         });
-        let ap_l = ALLPASS_TUNINGS.map(|t| AllpassF::new(num::f64_to_index(num::count_to_f64(t) * scale)));
+        let ap_l =
+            ALLPASS_TUNINGS.map(|t| AllpassF::new(num::f64_to_index(num::count_to_f64(t) * scale)));
         let ap_r = ALLPASS_TUNINGS.map(|t| {
-            AllpassF::new(num::f64_to_index(num::count_to_f64(t.saturating_add(STEREO_SPREAD)) * scale))
+            AllpassF::new(num::f64_to_index(
+                num::count_to_f64(t.saturating_add(STEREO_SPREAD)) * scale,
+            ))
         });
         Self {
             dc_in: DcBlocker::new(),

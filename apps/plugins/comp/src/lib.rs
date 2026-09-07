@@ -18,8 +18,8 @@
 //! without a circular dep.
 
 use audiocore_core::prelude::*;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use comp::CompChain;
 use comp_ui::params::{CompParams, CompStageParams, CompUiState, MAX_STAGES};

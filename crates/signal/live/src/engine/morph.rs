@@ -53,7 +53,7 @@ pub struct DawParameterSnapshot {
 }
 
 impl DawParameterSnapshot {
-    #[must_use] 
+    #[must_use]
     pub const fn new(params: Vec<DawParamValue>) -> Self {
         Self { params }
     }
@@ -84,7 +84,7 @@ impl Default for MorphEngine {
 }
 
 impl MorphEngine {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             snapshot_a: None,
@@ -106,19 +106,19 @@ impl MorphEngine {
     }
 
     /// Whether both endpoints are set and ready to morph.
-    #[must_use] 
+    #[must_use]
     pub const fn is_ready(&self) -> bool {
         self.snapshot_a.is_some() && self.snapshot_b.is_some()
     }
 
     /// Number of parameters that differ between A and B.
-    #[must_use] 
+    #[must_use]
     pub const fn diff_count(&self) -> usize {
         self.diffs.len()
     }
 
     /// The pre-computed diffs (for UI display of which params will change).
-    #[must_use] 
+    #[must_use]
     pub fn diffs(&self) -> &[MorphDiffEntry] {
         &self.diffs
     }
@@ -127,7 +127,7 @@ impl MorphEngine {
     ///
     /// Returns only the parameters that differ, with their interpolated values.
     /// Runs in `O(diff_count)`, not `O(total_params)`.
-    #[must_use] 
+    #[must_use]
     pub fn morph(&self, t: f64, easing: EasingCurve) -> Vec<MorphParamChange> {
         let eased_t = easing.apply(t);
 

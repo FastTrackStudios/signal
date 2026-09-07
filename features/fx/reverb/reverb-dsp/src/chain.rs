@@ -136,7 +136,8 @@ impl PostEqBand {
                 self.gain_db * t
             }
             2 => {
-                let t = (1.0 - 1.0 / (w * (q * 1.414)).mul_add(w * (q * 1.414), 1.0)).clamp(0.0, 1.0);
+                let t =
+                    (1.0 - 1.0 / (w * (q * 1.414)).mul_add(w * (q * 1.414), 1.0)).clamp(0.0, 1.0);
                 self.gain_db * t
             }
             // 2nd-order cuts: −12 dB/oct past the corner, clamped for the
@@ -896,9 +897,7 @@ impl ReverbChain {
         let variant = match (self.voice, self.algorithm_type) {
             // Plate: MX rebuild = Dattorro, Classic = the Lexicon 224
             // port. (Progenitor stays reachable via set_variant.)
-            (ReverbVoice::Mx, AlgorithmType::Plate | AlgorithmType::Spring) => {
-                Some(0)
-            }
+            (ReverbVoice::Mx, AlgorithmType::Plate | AlgorithmType::Spring) => Some(0),
             (ReverbVoice::Classic, AlgorithmType::Plate | AlgorithmType::Spring) => Some(1),
             _ => None,
         };
@@ -965,10 +964,11 @@ impl ReverbChain {
         }
         self.post_eq_applied = self.post_eq;
         self.post_eq_any = false;
-        for (band, (on, filter)) in self.post_eq
-            .iter()
-            .zip(self.post_eq_on.iter_mut().zip(self.post_eq_filters.iter_mut()))
-        {
+        for (band, (on, filter)) in self.post_eq.iter().zip(
+            self.post_eq_on
+                .iter_mut()
+                .zip(self.post_eq_filters.iter_mut()),
+        ) {
             *on = band.is_active();
             if !band.is_active() {
                 continue;
@@ -994,7 +994,8 @@ impl ReverbChain {
             const POINTS: usize = 24;
             let mean_db: f64 = (0..POINTS)
                 .map(|k| {
-                    let f = 20.0 * 10.0f64.powf(3.0 * num::count_to_f64(k) / num::count_to_f64(POINTS - 1));
+                    let f = 20.0
+                        * 10.0f64.powf(3.0 * num::count_to_f64(k) / num::count_to_f64(POINTS - 1));
                     self.post_eq
                         .iter()
                         .filter(|b| b.is_active())
@@ -1203,7 +1204,6 @@ impl Processor for ReverbChain {
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
         let n = left.len().min(right.len());
 
-
         self.drain_ir_queues();
         let block = self.begin_block();
 
@@ -1349,7 +1349,9 @@ impl ReverbChain {
         let target_duck = over.min(1.0).mul_add(-self.duck_amount, 1.0);
         // 1-pole smooth toward target_duck (independent of attack/release
         // — env already shapes the rate).
-        self.duck_gain = self.duck_smooth.mul_add(self.duck_gain - target_duck, target_duck);
+        self.duck_gain = self
+            .duck_smooth
+            .mul_add(self.duck_gain - target_duck, target_duck);
 
         // Hall Swell: gain builds behind each note (envelope
         // logic borrowed from the Swell algorithm).
@@ -1518,78 +1520,77 @@ impl ReverbChain {
             swell_rate,
             ..
         } = block;
-            for (out_l, out_r) in block_l.iter_mut().zip(block_r.iter_mut()) {
-                // Advance the coefficient ramps per-sample so their rate is
-                // independent of buffer/sub-block size.
-                self.decay_smoother.tick();
-                self.damping_smoother.tick();
-                self.tilt_smoother.tick();
-                self.sat_smoother.tick();
-                let dry_l = *out_l;
-                let dry_r = *out_r;
-                let mix = self.mix_smoother.tick();
-                let width = self.width_smoother.tick();
+        for (out_l, out_r) in block_l.iter_mut().zip(block_r.iter_mut()) {
+            // Advance the coefficient ramps per-sample so their rate is
+            // independent of buffer/sub-block size.
+            self.decay_smoother.tick();
+            self.damping_smoother.tick();
+            self.tilt_smoother.tick();
+            self.sat_smoother.tick();
+            let dry_l = *out_l;
+            let dry_r = *out_r;
+            let mix = self.mix_smoother.tick();
+            let width = self.width_smoother.tick();
 
-                let (alg_in_l, alg_in_r) =
-                    self.drive_algorithm_input(dry_l, dry_r, duck_thresh, swell_on, swell_rate);
+            let (alg_in_l, alg_in_r) =
+                self.drive_algorithm_input(dry_l, dry_r, duck_thresh, swell_on, swell_rate);
 
-                // Algorithm
-                let (mut wet_l, mut wet_r) = self.algorithm.tick(alg_in_l, alg_in_r);
+            // Algorithm
+            let (mut wet_l, mut wet_r) = self.algorithm.tick(alg_in_l, alg_in_r);
 
-                // Wet saturation (gate on the ramped drive, not the raw param,
-                // so a saturation fade-out stays engaged until it lands on 0)
-                if self.sat_l.drive() > 0.0 {
-                    wet_l = self.sat_l.tick(wet_l);
-                    wet_r = self.sat_r.tick(wet_r);
-                }
-
-                // Output band-shaping
-                wet_l = self.output_hp.tick(wet_l, 0);
-                wet_l = self.output_lp.tick(wet_l, 0);
-                wet_r = self.output_hp.tick(wet_r, 1);
-                wet_r = self.output_lp.tick(wet_r, 1);
-
-                // Tilt EQ (gate on the ramped tilt for the same reason)
-                if self.tilt_smoother.value().abs() > 0.01 {
-                    wet_l = self.tilt_l.tick(wet_l);
-                    wet_r = self.tilt_r.tick(wet_r);
-                }
-
-                // Hall Mid EQ (~1 kHz peak on the wet bus; negative =
-                // the mid-scooped "space for the dry" curve).
-                if mid_on {
-                    wet_l = self.mid_eq.tick(wet_l, 0);
-                    wet_r = self.mid_eq.tick(wet_r, 1);
-                }
-
-                // Post EQ (`fx.reverb.post-eq`): the 6-band curve on the
-                // final reverb sound, wet path only, with the wet gain
-                // compensated for the curve so shaping never rides the mix.
-                if self.post_eq_any {
-                    for (on, filter) in self.post_eq_on.iter().zip(self.post_eq_filters.iter_mut()) {
-                        if *on {
-                            wet_l = filter.tick(wet_l, 0);
-                            wet_r = filter.tick(wet_r, 1);
-                        }
-                    }
-                    wet_l *= self.post_eq_comp;
-                    wet_r *= self.post_eq_comp;
-                }
-
-                let (final_l, final_r) =
-                    self.stage_wet(wet_l, wet_r, dry_l, dry_r, width, block);
-
-                // Mix
-                *out_l = dry_l.mul_add(1.0 - mix, final_l * mix);
-                *out_r = dry_r.mul_add(1.0 - mix, final_r * mix);
-
-                // Hall Swell, Wet+Dry type: volume-pedal feel on the
-                // whole output.
-                if swell_on && self.hall.swell_type == SwellType::WetPlusDry {
-                    *out_l *= self.swell_level;
-                    *out_r *= self.swell_level;
-                }
+            // Wet saturation (gate on the ramped drive, not the raw param,
+            // so a saturation fade-out stays engaged until it lands on 0)
+            if self.sat_l.drive() > 0.0 {
+                wet_l = self.sat_l.tick(wet_l);
+                wet_r = self.sat_r.tick(wet_r);
             }
+
+            // Output band-shaping
+            wet_l = self.output_hp.tick(wet_l, 0);
+            wet_l = self.output_lp.tick(wet_l, 0);
+            wet_r = self.output_hp.tick(wet_r, 1);
+            wet_r = self.output_lp.tick(wet_r, 1);
+
+            // Tilt EQ (gate on the ramped tilt for the same reason)
+            if self.tilt_smoother.value().abs() > 0.01 {
+                wet_l = self.tilt_l.tick(wet_l);
+                wet_r = self.tilt_r.tick(wet_r);
+            }
+
+            // Hall Mid EQ (~1 kHz peak on the wet bus; negative =
+            // the mid-scooped "space for the dry" curve).
+            if mid_on {
+                wet_l = self.mid_eq.tick(wet_l, 0);
+                wet_r = self.mid_eq.tick(wet_r, 1);
+            }
+
+            // Post EQ (`fx.reverb.post-eq`): the 6-band curve on the
+            // final reverb sound, wet path only, with the wet gain
+            // compensated for the curve so shaping never rides the mix.
+            if self.post_eq_any {
+                for (on, filter) in self.post_eq_on.iter().zip(self.post_eq_filters.iter_mut()) {
+                    if *on {
+                        wet_l = filter.tick(wet_l, 0);
+                        wet_r = filter.tick(wet_r, 1);
+                    }
+                }
+                wet_l *= self.post_eq_comp;
+                wet_r *= self.post_eq_comp;
+            }
+
+            let (final_l, final_r) = self.stage_wet(wet_l, wet_r, dry_l, dry_r, width, block);
+
+            // Mix
+            *out_l = dry_l.mul_add(1.0 - mix, final_l * mix);
+            *out_r = dry_r.mul_add(1.0 - mix, final_r * mix);
+
+            // Hall Swell, Wet+Dry type: volume-pedal feel on the
+            // whole output.
+            if swell_on && self.hall.swell_type == SwellType::WetPlusDry {
+                *out_l *= self.swell_level;
+                *out_r *= self.swell_level;
+            }
+        }
     }
 
     /// Push this block's parameter targets into the engines and smoothers,
@@ -1638,8 +1639,8 @@ impl ReverbChain {
         let mid_on = hall_active && self.hall.mid_db.abs() > 0.01;
         let swell_on = hall_active && self.hall.swell_rise > 1e-9;
         // Rise 0..1 → 50 ms .. ~2 s swell.
-        let swell_rate =
-            1.0 / (self.hall.swell_rise.clamp(0.0, 1.0).mul_add(2.0, 0.05) * self.sample_rate.max(1.0));
+        let swell_rate = 1.0
+            / (self.hall.swell_rise.clamp(0.0, 1.0).mul_add(2.0, 0.05) * self.sample_rate.max(1.0));
         self.mix_smoother.set_target(self.mix);
         self.width_smoother.set_target(self.width);
         self.pan_smoother.set_target(self.pan);
@@ -1995,7 +1996,9 @@ mod tests {
         let n = 9600;
         let sine = |off: usize| -> Vec<f64> {
             (0..n)
-                .map(|i| (2.0 * PI * freq * num::count_to_f64(off.saturating_add(i)) / SR).sin() * 0.5)
+                .map(|i| {
+                    (2.0 * PI * freq * num::count_to_f64(off.saturating_add(i)) / SR).sin() * 0.5
+                })
                 .collect()
         };
 
@@ -2158,7 +2161,7 @@ mod tests {
 
     #[test]
     fn a_decay_shelf_localizes_through_the_whole_chain() {
-        use crate::algorithm::{DecayBand, DECAY_BANDS};
+        use crate::algorithm::{DECAY_BANDS, DecayBand};
         let flat = [DecayBand::default(); DECAY_BANDS];
         let mut cut = flat;
         cut[0] = DecayBand {
@@ -2220,7 +2223,10 @@ mod tests {
             let mut r = l.clone();
             c.process(&mut l, &mut r);
             // Energy in the last second — pure tail, well after the input.
-            l[(n - num::f64_to_index(SR))..].iter().map(|x| x * x).sum::<f64>()
+            l[(n - num::f64_to_index(SR))..]
+                .iter()
+                .map(|x| x * x)
+                .sum::<f64>()
         };
         let low_kept = make(1.0);
         let low_cut = make(0.3);
@@ -2316,7 +2322,9 @@ mod tests {
             c.update(config());
             let n = num::f64_to_index(SR) * 2;
             let mut l: Vec<f64> = (0..n)
-                .map(|i| (2.0 * PI * 100.0 * num::count_to_f64(i) / SR).sin() * 0.4 * f64::from(i < 4800))
+                .map(|i| {
+                    (2.0 * PI * 100.0 * num::count_to_f64(i) / SR).sin() * 0.4 * f64::from(i < 4800)
+                })
                 .collect();
             let mut r = l.clone();
             c.process(&mut l, &mut r);
@@ -2450,7 +2458,9 @@ mod tests {
         let win = 1000;
         let rms: Vec<f64> = (24000..n - win)
             .step_by(win)
-            .map(|s| (l[s..s + win].iter().map(|x| x * x).sum::<f64>() / num::count_to_f64(win)).sqrt())
+            .map(|s| {
+                (l[s..s + win].iter().map(|x| x * x).sum::<f64>() / num::count_to_f64(win)).sqrt()
+            })
             .collect();
         let max = rms.iter().copied().fold(0.0f64, f64::max);
         let min = rms.iter().copied().fold(f64::MAX, f64::min);

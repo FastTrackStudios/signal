@@ -1,6 +1,6 @@
 //! Notch section parameters (Pro-Q band types 4 and 6).
 
-use super::{Prototype, PI};
+use super::{PI, Prototype};
 use dsp_core::num;
 
 /// Per-section helper for `proto[0x13] ∈ {4, 6}` (notch-style sections).
@@ -23,8 +23,8 @@ use dsp_core::num;
 pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
     // mode == 2 (complex-roots path)
     const TWO_NINE_EIGHT_FOUR_FIVE: f64 = 2.984_513_020_910_303_5; // ≈ 0.95·π
-                                                                   // Composite scratch (binary keeps everything in f32 SS instructions
-                                                                   // until the final write to the f64 wp/wz/wt slots).
+    // Composite scratch (binary keeps everything in f32 SS instructions
+    // until the final write to the f64 wp/wz/wt slots).
     let s8c = proto.alpha_scratch_8c;
     let s94 = proto.alpha_scratch_94;
     let fv7 = (s8c * s8c).mul_add(0.25f32, s94);
@@ -99,11 +99,7 @@ pub fn compute_notch_type46_parameters(proto: &mut Prototype) {
         let quad_floor = (dvar4_floor * dvar4_floor).mul_add(QUAD_COEF, QUAD_OFFSET);
         // dVar2 = if (smooth_blend ≤ quad_floor) min(quad_floor, π) else smooth_blend
         let new_w_eval = if smooth_blend <= quad_floor {
-            if quad_floor >= PI {
-                PI
-            } else {
-                quad_floor
-            }
+            if quad_floor >= PI { PI } else { quad_floor }
         } else {
             smooth_blend
         };

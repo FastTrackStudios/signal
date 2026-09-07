@@ -413,7 +413,7 @@ pub const SWITCH_TO_VARIATION_BY_INDEX: [&ActionMeta; 24] = [
 /// Resolve a 1-based variation index to its action.
 ///
 /// Returns `None` if `n` is outside the range 1–24.
-#[must_use] 
+#[must_use]
 pub const fn switch_to_variation_action(n: usize) -> Option<&'static ActionMeta> {
     if n >= 1 && n <= 24 {
         Some(SWITCH_TO_VARIATION_BY_INDEX[n - 1])

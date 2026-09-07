@@ -49,7 +49,7 @@ pub struct FootswitchEngine {
 impl FootswitchEngine {
     /// `switches` gesture switches + up to `directs` direct slots, firing
     /// holds at `hold` (the pedalboard convention is 500 ms).
-    #[must_use] 
+    #[must_use]
     pub fn new(switches: usize, directs: usize, hold: Duration) -> Self {
         Self {
             hold,

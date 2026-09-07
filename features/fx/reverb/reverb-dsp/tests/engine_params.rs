@@ -3,9 +3,9 @@
 //! late stage. All defaults must be bit-transparent against a chain
 //! that never touched the new param structs.
 
+use reverb_dsp::AlgorithmType;
 use reverb_dsp::algorithm::{MagnetoParams, NonLinearParams, ShimmerFeedbackMode, ShimmerParams};
 use reverb_dsp::chain::ReverbChain;
-use reverb_dsp::AlgorithmType;
 
 use audiocore_dsp::{AudioConfig, Processor};
 use dsp_core::num;
@@ -262,7 +262,10 @@ fn nonlinear_chop_modulates_decay() {
     let chopped = render(1.0);
     let mut checked = 0usize;
     for i in 0..flat.len() {
-        let trem = 0.5f64.mul_add((std::f64::consts::TAU * rate * num::count_to_f64(i) / SR).cos(), 0.5);
+        let trem = 0.5f64.mul_add(
+            (std::f64::consts::TAU * rate * num::count_to_f64(i) / SR).cos(),
+            0.5,
+        );
         let expect = flat[i] * trem;
         if flat[i].abs() > 1e-9 {
             assert!(
@@ -295,9 +298,9 @@ fn nonlinear_gate_speed_shortens_hold() {
     };
 
     let env_len = 0.5f64.mul_add(1.9, 0.1) * SR; // matches size mapping
-                                          // Window between the fast hold point (0.5) and the slow one (0.9):
-                                          // slow (speed 1) is still at full level there, fast (speed 0) has
-                                          // released.
+    // Window between the fast hold point (0.5) and the slow one (0.9):
+    // slow (speed 1) is still at full level there, fast (speed 0) has
+    // released.
     let w0 = num::f64_to_index(env_len * 0.62);
     let w1 = num::f64_to_index(env_len * 0.85);
 

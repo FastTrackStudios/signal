@@ -34,7 +34,7 @@ pub enum BlockCategory {
 
 impl BlockCategory {
     /// All categories in display order.
-    #[must_use] 
+    #[must_use]
     pub const fn all() -> &'static [Self] {
         &[
             Self::Utility,
@@ -53,7 +53,7 @@ impl BlockCategory {
         ]
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Utility => "utility",
@@ -72,7 +72,7 @@ impl BlockCategory {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Utility => "Utility",
@@ -325,7 +325,7 @@ impl BlockType {
     /// Parse with legacy/alias support on top of the macro-generated `from_str`.
     ///
     /// Use this when accepting user or external input that may use older names.
-    #[must_use] 
+    #[must_use]
     pub fn from_str_lenient(value: &str) -> Option<Self> {
         Self::from_str(value).or_else(|| {
             Some(match value {
@@ -450,10 +450,7 @@ mod tests {
         let all = BlockCategory::all();
         assert_eq!(all.len(), 13);
         for &bt in ALL_BLOCK_TYPES {
-            assert!(
-                all.contains(&bt.category()),
-                "{bt:?} category not in all()"
-            );
+            assert!(all.contains(&bt.category()), "{bt:?} category not in all()");
         }
     }
 }

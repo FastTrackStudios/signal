@@ -24,7 +24,10 @@ async fn main() -> eyre::Result<()> {
         .await
         .map_err(|e| eyre::eyre!("KeysRig handshake: {e:?}"))?;
 
-    let status = rig.status().await.map_err(|e| eyre::eyre!("status: {e:?}"))?;
+    let status = rig
+        .status()
+        .await
+        .map_err(|e| eyre::eyre!("status: {e:?}"))?;
     println!("status: {status:#?}");
 
     let ports = rig.midi_ports().await.unwrap_or_default();

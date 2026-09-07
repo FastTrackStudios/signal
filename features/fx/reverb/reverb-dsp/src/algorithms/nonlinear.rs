@@ -101,7 +101,10 @@ impl NonLinear {
     fn make_fdn(sample_rate: f64) -> Fdn {
         let base = [743, 941, 1163, 1399, 1627, 1861, 2083, 2311];
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index(f64::from(d) * scale)).collect();
+        let delays: Vec<usize> = base
+            .iter()
+            .map(|&d| num::f64_to_index(f64::from(d) * scale))
+            .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.95); // Long decay — envelope does the shaping
         fdn
@@ -112,7 +115,10 @@ impl NonLinear {
     fn make_late_fdn(sample_rate: f64) -> Fdn {
         let base = [809, 1021, 1249, 1481, 1693, 1931, 2143, 2399];
         let scale = sample_rate / 48000.0;
-        let delays: Vec<usize> = base.iter().map(|&d| num::f64_to_index(f64::from(d) * scale)).collect();
+        let delays: Vec<usize> = base
+            .iter()
+            .map(|&d| num::f64_to_index(f64::from(d) * scale))
+            .collect();
         let mut fdn = Fdn::new(&delays, MixMatrix::Householder);
         fdn.set_decay(0.9);
         fdn
@@ -245,8 +251,10 @@ impl ReverbAlgorithm for NonLinear {
         let stages = num::f64_to_index(params.diffusion * 8.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(params.diffusion.mul_add(0.2, 0.5));
-        self.diffuser_r.set_feedback(params.diffusion.mul_add(0.2, 0.5));
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.2, 0.5));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.2, 0.5));
 
         // Damping on FDN
         let damp_coeff = params.damping * 0.5;
@@ -283,7 +291,8 @@ impl ReverbAlgorithm for NonLinear {
 
         // Read back with envelope shaping
         let env_len = self.env_length.max(1);
-        let position = num::count_to_f64(self.env_write_count.checked_rem(env_len).unwrap_or(0)) / num::count_to_f64(env_len);
+        let position = num::count_to_f64(self.env_write_count.checked_rem(env_len).unwrap_or(0))
+            / num::count_to_f64(env_len);
         let gain = self.envelope_gain(position);
 
         let mut out_l = self.env_buffer_l.read(1) * gain;
@@ -305,8 +314,9 @@ impl ReverbAlgorithm for NonLinear {
         // Raised-cosine tremolo; depth 0 is bit-transparent.
         let chop_depth = self.mx.chop_depth.clamp(0.0, 1.0);
         if chop_depth > 1e-9 {
-            let trem =
-                1.0 - chop_depth * 0.5f64.mul_add(-(self.chop_phase * std::f64::consts::TAU).cos(), 0.5);
+            let trem = 1.0
+                - chop_depth
+                    * 0.5f64.mul_add(-(self.chop_phase * std::f64::consts::TAU).cos(), 0.5);
             out_l *= trem;
             out_r *= trem;
             self.chop_phase += self.mx.chop_rate_hz.clamp(0.05, 20.0) / self.sample_rate;

@@ -324,15 +324,15 @@ fn highpass_slope7_section_freq_range(
             if let Some(coeffs) = highpass_slope7_section_freq_range_sec0_q100(fc_48k) {
                 return coeffs;
             }
-        } else if (q_user - 10.0).abs() < 1.0e-12 {
-            if let Some(coeffs) = highpass_slope7_section_freq_range_sec0_q10(fc_48k) {
-                return coeffs;
-            }
-        }
-    } else if sec == 1 {
-        if let Some(coeffs) = highpass_slope7_section_freq_range_sec1(fc_48k) {
+        } else if (q_user - 10.0).abs() < 1.0e-12
+            && let Some(coeffs) = highpass_slope7_section_freq_range_sec0_q10(fc_48k)
+        {
             return coeffs;
         }
+    } else if sec == 1
+        && let Some(coeffs) = highpass_slope7_section_freq_range_sec1(fc_48k)
+    {
+        return coeffs;
     }
     cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
 }
@@ -668,10 +668,10 @@ fn highpass_slope7_section(
 /// See `docs/reports/proq4/re/hp_s8_all_sections_analysis.md`.
 fn highpass_slope7_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
     let mut qs: Vec<f64> = cascade_qs(4, q_user).into_iter().rev().collect();
-    if (q_user - 0.5).abs() < 1.0e-12 {
-        if let Some(elem) = qs.get_mut(0) {
-            *elem = highpass_slope7_sec0_q05(freq_hz, sample_rate);
-        }
+    if (q_user - 0.5).abs() < 1.0e-12
+        && let Some(elem) = qs.get_mut(0)
+    {
+        *elem = highpass_slope7_sec0_q05(freq_hz, sample_rate);
     }
     if qs.len() > 1 {
         // Safety: bounds checked above

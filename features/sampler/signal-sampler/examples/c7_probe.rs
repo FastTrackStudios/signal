@@ -12,8 +12,8 @@
 
 use std::path::Path;
 
-use signal_sampler::engine::budget;
 use signal_sampler::SamplerRig;
+use signal_sampler::engine::budget;
 
 const PACK: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/\
 Packs/LA Custom C7 Grand.signalpack";

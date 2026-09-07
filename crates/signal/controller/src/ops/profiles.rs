@@ -197,7 +197,12 @@ impl<S: SignalApi> ProfileOps<S> {
             .find(|p| p.id == patch_id)
             .map(|p| p.name.as_str());
         // Clone out of the lock in its own statement (guard-across-await).
-        let applier = self.0.daw_applier.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+        let applier = self
+            .0
+            .daw_applier
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
         let applied_to_daw = if let Some(applier) = applier {
             match applier.apply_graph(&graph, patch_name).await {
                 Ok(_) => true,

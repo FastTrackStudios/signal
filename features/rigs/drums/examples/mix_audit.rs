@@ -16,12 +16,14 @@ fn norm(s: &str) -> String {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let lib = std::env::args()
-        .nth(1).map_or_else(|| {
+    let lib = std::env::args().nth(1).map_or_else(
+        || {
             PathBuf::from(
                 "/run/media/AudioHaven/Signal/Libraries/Drum Kits/GGD Modern and Massive 2",
             )
-        }, PathBuf::from);
+        },
+        PathBuf::from,
+    );
     let kits: Vec<String> = std::fs::read_dir(lib.join("Presets"))?
         .flatten()
         .filter_map(|e| {

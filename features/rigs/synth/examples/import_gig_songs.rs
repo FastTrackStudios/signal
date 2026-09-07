@@ -27,7 +27,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use signal_synth::gig::{read_presets, read_songs, GigSong};
+use signal_synth::gig::{GigSong, read_presets, read_songs};
 use song::{Arrangement, Part, PartsManifest, Song, TimeSignature};
 use uuid::Uuid;
 
@@ -112,16 +112,18 @@ fn to_song(g: &GigSong, patches: &PatchIndex) -> (Song, Option<String>) {
     // C Major there would discard real information.
     let key = match g.key_from_name().map(str::parse) {
         Some(Ok(k)) => k,
-        _ => if let Ok(k) = g.stored_key().parse() {
-            warning = Some(format!(
-                "no key in the title; used rootNote {}",
-                g.stored_key()
-            ));
-            k
-        } else {
-            warning = Some("no usable key — defaulting to C Major".to_string());
-            song::Key::c_major()
-        },
+        _ => {
+            if let Ok(k) = g.stored_key().parse() {
+                warning = Some(format!(
+                    "no key in the title; used rootNote {}",
+                    g.stored_key()
+                ));
+                k
+            } else {
+                warning = Some("no usable key — defaulting to C Major".to_string());
+                song::Key::c_major()
+            }
+        }
     };
 
     let parts: Vec<Part> = g

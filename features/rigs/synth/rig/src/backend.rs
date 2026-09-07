@@ -14,13 +14,13 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
-use architect::{layers, HasDispatcher, Layer, PubSub, Services};
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys::KeysRig;
 use signal_sampler::rig_node::{Container, RigNode, Role};
 use signal_synth::omni_import::{
-    load_patch_file, parse_patch, patch_to_container, OmniPatch, SoundsourceIndex,
+    OmniPatch, SoundsourceIndex, load_patch_file, parse_patch, patch_to_container,
 };
 use signal_synth_proto::synth::{SynthEvent, SynthRig as SynthRigSvc, SynthRigStreamSource};
 use signal_synth_proto::{
@@ -31,8 +31,7 @@ use signal_synth_proto::{
 /// Root of the Omnisphere patch library to browse. Defaults to the factory
 /// **Live Keyboardist** bundle (where the default patch lives); override with
 /// `FTS_OMNISPHERE_PATCHES`.
-const PATCHES_ROOT: &str =
-    "/run/media/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches/Factory/Live Keyboardist";
+const PATCHES_ROOT: &str = "/run/media/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches/Factory/Live Keyboardist";
 
 /// Root of the built `.signalpack` soundsource library the BROWSE view scans —
 /// the same root [`SoundsourceIndex::scan_default`] overlays. Override with
@@ -191,7 +190,11 @@ impl SynthRigBackend {
             Ok(r) => {
                 r.set_output_gain(volume); // pad the hot summed output
                 {
-                    let mut rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let mut rig = self
+                        .inner
+                        .rig
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     *rig = Some(r);
                 }
                 // A freshly opened rig has no MIDI input yet, and every
@@ -251,7 +254,11 @@ impl SynthRigBackend {
         // graph reconfiguration must not pin the rig mutex (it wedges
         // status() and the UI).
         let sink = {
-            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let rig = self
+                .inner
+                .rig
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             match rig.as_ref() {
                 Some(rig) => rig.midi_sink(),
                 None => return,
@@ -350,7 +357,11 @@ impl SynthRigSvc for SynthRigBackend {
 
     fn status(&self) -> SynthStatus {
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-        let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let s = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let loaded_preset = s
             .loaded
             .and_then(|i| s.presets.get(i))
@@ -471,7 +482,9 @@ impl SynthRigSvc for SynthRigBackend {
         // Resolve the soundsource → its spec path: prefer the exact pack the
         // loaded tree references; fall back to the library index by name.
         let path = {
-            let Ok(s) = self.inner.state.lock() else { return SynthMapping::default() };
+            let Ok(s) = self.inner.state.lock() else {
+                return SynthMapping::default();
+            };
             let mut blocks = Vec::new();
             if let Some(tree) = s.tree.as_ref() {
                 sample_blocks(tree, &mut blocks);
@@ -483,7 +496,12 @@ impl SynthRigSvc for SynthRigBackend {
                     .into_iter()
                     .find(|(n, _)| n == &soundsource)
                     .map(|(_, p)| p)
-                    .or_else(|| self.inner.index.find(&soundsource).map(std::path::Path::to_path_buf))
+                    .or_else(|| {
+                        self.inner
+                            .index
+                            .find(&soundsource)
+                            .map(std::path::Path::to_path_buf)
+                    })
             }
         };
         let Some(path) = path else {
@@ -519,7 +537,8 @@ impl SynthRigSvc for SynthRigBackend {
     fn globals(&self) -> SynthGlobals {
         self.inner
             .state
-            .lock().map_or_else(|_| SynthGlobals::neutral(), |s| s.globals.clone())
+            .lock()
+            .map_or_else(|_| SynthGlobals::neutral(), |s| s.globals.clone())
     }
 
     fn set_globals(&self, globals: SynthGlobals) {
@@ -560,7 +579,9 @@ fn apply_globals_to_patch(patch: &mut OmniPatch, g: &SynthGlobals) {
     let envscale = |x: f32| ((x - 0.5) * 3.0).exp2();
     for l in &mut patch.layers {
         // Filter cutoff / resonance offsets (Omnisphere-normalized 0..1).
-        l.filter_freq = (g.filter_cutoff - 0.5).mul_add(0.8, l.filter_freq).clamp(0.0, 1.0);
+        l.filter_freq = (g.filter_cutoff - 0.5)
+            .mul_add(0.8, l.filter_freq)
+            .clamp(0.0, 1.0);
         l.filter_res = (l.filter_res + (g.filter_reso - 0.5)).clamp(0.0, 1.0);
         // Filter-envelope amount (0.5 neutral → 1×).
         l.filter_env_depth *= (g.filter_env * 2.0).clamp(0.0, 2.0);
@@ -705,7 +726,11 @@ fn project_browse_item(e: &signal_browser::pack_registry::PackEntry) -> BrowseIt
         instrument: e.instrument.clone(),
         category: e.category.clone(),
         vendor: e.vendor.clone(),
-        tags: e.tags.values().map(signal_browser::StructuredTag::encode).collect(),
+        tags: e
+            .tags
+            .values()
+            .map(signal_browser::StructuredTag::encode)
+            .collect(),
         style: e.style.clone(),
         folder: e.folder.clone(),
         sample_count: e.sample_count as u32,
@@ -844,10 +869,7 @@ fn sample_blocks(c: &Container, out: &mut Vec<(String, PathBuf)>) {
     for n in &c.children {
         match n {
             RigNode::Block { block } if !block.sample.is_empty() => {
-                out.push((
-                    block.display_name().clone(),
-                    PathBuf::from(&block.sample),
-                ));
+                out.push((block.display_name().clone(), PathBuf::from(&block.sample)));
             }
             RigNode::Container { container } => sample_blocks(container, out),
             _ => {}
@@ -1138,8 +1160,15 @@ mod tests {
             .expect("Layer A");
         eprintln!(
             "Layer A: src={:?} level={:.2} filter[0]={} {:.0}Hz res={:.2} envd={:.2} | amp {:?} filt {:?} | {} routes",
-            a.source, a.level, a.filters[0].name, a.filters[0].cutoff_hz, a.filters[0].resonance,
-            a.filters[0].env_depth, a.amp_env, a.filter_env, a.routes.len()
+            a.source,
+            a.level,
+            a.filters[0].name,
+            a.filters[0].cutoff_hz,
+            a.filters[0].resonance,
+            a.filters[0].env_depth,
+            a.amp_env,
+            a.filter_env,
+            a.routes.len()
         );
         assert!(a.active, "Layer A active");
         assert!(!a.filters.is_empty(), "Layer A has a filter");
@@ -1186,7 +1215,7 @@ mod tests {
         for n in &c.children {
             match n {
                 RigNode::Block { block } if block.display_name() == name => {
-                    return Some(block.clone())
+                    return Some(block.clone());
                 }
                 RigNode::Container { container } => {
                     if let Some(b) = find_block(container, name) {

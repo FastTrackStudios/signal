@@ -21,7 +21,7 @@
 //! ones that break in a rewrite are never the ones anybody thought to spot
 //! check.
 
-use dsp_golden::{golden, signal, Golden};
+use dsp_golden::{Golden, golden, signal};
 use eq_dsp::engine::{BandConfig, BandDynamics, FtsEq};
 use eq_dsp::runtime::band::Placement;
 

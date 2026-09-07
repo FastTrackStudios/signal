@@ -12,8 +12,8 @@
 
 use dioxus::prelude::*;
 
-use eq_ui::eq_graph_interaction::{filter_type_for_position, nearest_band, GraphMapper};
-use eq_ui::eq_graph_model::{get_band_color, EqBand, EqBandShape};
+use eq_ui::eq_graph_interaction::{GraphMapper, filter_type_for_position, nearest_band};
+use eq_ui::eq_graph_model::{EqBand, EqBandShape, get_band_color};
 use eq_ui::eq_graph_svg::{generate_all_eq_curves, generate_freq_labels, generate_grid_elements};
 
 const W: f64 = 480.0;
@@ -183,14 +183,16 @@ fn graph_interaction_hit_test_and_shape_inference() {
         Some(1)
     );
     // Click far from any node → no hit.
-    assert!(nearest_band(
-        &bands,
-        mapper,
-        mapper.freq_to_x(500.0),
-        mapper.db_to_y(-10.0),
-        16.0
-    )
-    .is_none());
+    assert!(
+        nearest_band(
+            &bands,
+            mapper,
+            mapper.freq_to_x(500.0),
+            mapper.db_to_y(-10.0),
+            16.0
+        )
+        .is_none()
+    );
 
     // Double-click near the low edge at 0 dB → a low cut, mid at a boost → a bell.
     assert_eq!(

@@ -35,7 +35,7 @@ impl BlockDetailTab {
         Self::Modulation,
     ];
 
-    #[must_use] 
+    #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
             Self::CustomGui => "Custom",

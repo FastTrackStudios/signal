@@ -141,7 +141,8 @@ impl MultitapDelay {
     #[inline]
     pub fn tick(&mut self, input: f64) -> f64 {
         let length_scaler = self.length_samples / num::count_to_f64(self.count.max(1));
-        let total_gain = 3.0 / (1.0 + num::count_to_f64(self.count)).sqrt() * self.decay.mul_add(2.0, 1.0);
+        let total_gain =
+            3.0 / (1.0 + num::count_to_f64(self.count)).sqrt() * self.decay.mul_add(2.0, 1.0);
 
         self.buffer.write(input);
         let max_offset = self.buffer.len().saturating_sub(2);
@@ -149,8 +150,9 @@ impl MultitapDelay {
 
         for tap in self.taps.iter().take(self.count) {
             let offset = tap.position * length_scaler;
-            let decay_effective =
-                (-offset / self.length_samples * 3.3).exp().mul_add(self.decay, 1.0 - self.decay);
+            let decay_effective = (-offset / self.length_samples * 3.3)
+                .exp()
+                .mul_add(self.decay, 1.0 - self.decay);
             // +1 because the read is relative to the write that just happened:
             // read(1) is the sample written this tick (offset 0 in the old code).
             let read_offset = num::f64_to_index(offset).min(max_offset).saturating_add(1);

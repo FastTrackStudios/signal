@@ -55,7 +55,9 @@ static BINDINGS: LazyLock<RwLock<HashMap<String, Vec<MacroParamTarget>>>> =
 /// Merges new bindings into existing ones (if a knob already has targets,
 /// new targets are added). This allows multiple blocks to share the same macro knob.
 pub fn register(result: &MacroSetupResult) {
-    let mut map = BINDINGS.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut map = BINDINGS
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     for binding in &result.bindings {
         let targets = map.entry(binding.knob_id.clone()).or_default();
         targets.push(MacroParamTarget {
@@ -96,7 +98,10 @@ pub fn get_targets(knob_id: &str) -> Vec<MacroParamTarget> {
 /// setup_and_register_new_patch().await?;
 /// ```
 pub fn clear() {
-    BINDINGS.write().unwrap_or_else(std::sync::PoisonError::into_inner).clear();
+    BINDINGS
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clear();
 }
 
 /// Get statistics about the current registry state.
@@ -107,7 +112,9 @@ pub fn clear() {
 ///
 /// Tuple of (`total_knobs`, `total_targets`, `avg_targets_per_knob`)
 pub fn stats() -> (usize, usize, f32) {
-    let map = BINDINGS.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let map = BINDINGS
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let knob_count = map.len();
     let target_count: usize = map.values().map(std::vec::Vec::len).sum();
     let avg = if knob_count > 0 {
@@ -120,12 +127,18 @@ pub fn stats() -> (usize, usize, f32) {
 
 /// Check if any bindings are registered.
 pub fn is_empty() -> bool {
-    BINDINGS.read().unwrap_or_else(std::sync::PoisonError::into_inner).is_empty()
+    BINDINGS
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .is_empty()
 }
 
 /// Get the number of registered knobs.
 pub fn knob_count() -> usize {
-    BINDINGS.read().unwrap_or_else(std::sync::PoisonError::into_inner).len()
+    BINDINGS
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .len()
 }
 
 #[cfg(test)]

@@ -64,7 +64,11 @@ pub fn sweep(start_hz: f64, end_hz: f64, sample_rate: f64, length: usize) -> Vec
 /// stimulus is bit-identical between the reference and the candidate.
 #[must_use]
 pub fn white_noise(length: usize, seed: u64) -> Vec<f32> {
-    let mut state = if seed == 0 { 0x9E37_79B9_7F4A_7C15 } else { seed };
+    let mut state = if seed == 0 {
+        0x9E37_79B9_7F4A_7C15
+    } else {
+        seed
+    };
     (0..length)
         .map(|_| {
             state ^= state << 13;
@@ -134,7 +138,11 @@ mod tests {
         let n = 48_000;
         let x = sweep(20.0, 20_000.0, SR, n);
         // Count zero crossings in the first and last tenth — frequency rises.
-        let crossings = |s: &[f32]| s.windows(2).filter(|w| w[0].signum() != w[1].signum()).count();
+        let crossings = |s: &[f32]| {
+            s.windows(2)
+                .filter(|w| w[0].signum() != w[1].signum())
+                .count()
+        };
         let head = crossings(&x[..n / 10]);
         let tail = crossings(&x[n - n / 10..]);
         assert!(tail > head * 10, "sweep should rise: {head} → {tail}");

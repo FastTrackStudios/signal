@@ -21,8 +21,8 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
 use daw::rpc::{Project, TrackHandle};
-use signal_live::engine::rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
 use signal_live::SignalLive;
+use signal_live::engine::rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
 use signal_proto::rig::{Rig, RigSceneId};
 
 /// How long to wait before muting a demoted scene's rig folder, allowing
@@ -67,7 +67,7 @@ pub struct RigSceneManager {
 }
 
 impl RigSceneManager {
-    #[must_use] 
+    #[must_use]
     pub fn new(signal_live: Arc<SignalLive>) -> Self {
         Self {
             state: RwLock::new(None),
@@ -94,14 +94,17 @@ impl RigSceneManager {
         let tracks = project.tracks();
 
         // Find or create the input track
-        let input_track = if let Ok(Some(t)) = tracks.by_name(&input_track_name).await { t } else {
-            let t = tracks.add(&input_track_name, None).await.map_err(|e| {
-                RigSceneApplyError::DawError(format!("create input track: {e}"))
-            })?;
-            t.set_parent_send(false).await.map_err(|e| {
-                RigSceneApplyError::DawError(format!("disable parent send: {e}"))
-            })?;
-            t
+        let input_track = match tracks.by_name(&input_track_name).await {
+            Ok(Some(t)) => t,
+            _ => {
+                let t = tracks.add(&input_track_name, None).await.map_err(|e| {
+                    RigSceneApplyError::DawError(format!("create input track: {e}"))
+                })?;
+                t.set_parent_send(false).await.map_err(|e| {
+                    RigSceneApplyError::DawError(format!("disable parent send: {e}"))
+                })?;
+                t
+            }
         };
 
         // Record-arm + input monitoring
@@ -135,7 +138,9 @@ impl RigSceneManager {
                     .find(|s| s.dest_track_guid.as_deref() == Some(&track_info.guid))
                     .is_none_or(|s| s.muted);
 
-                let Ok(Some(handle)) = tracks.by_guid(&track_info.guid).await else { continue };
+                let Ok(Some(handle)) = tracks.by_guid(&track_info.guid).await else {
+                    continue;
+                };
 
                 if send_muted {
                     eprintln!(
@@ -164,8 +169,7 @@ impl RigSceneManager {
             }
         }
 
-        let recovered_count =
-            recovered_preloaded.len() + usize::from(recovered_current.is_some());
+        let recovered_count = recovered_preloaded.len() + usize::from(recovered_current.is_some());
         if recovered_count > 0 {
             eprintln!("[INFO] Recovered {recovered_count} existing rig scene track(s) from REAPER");
         }

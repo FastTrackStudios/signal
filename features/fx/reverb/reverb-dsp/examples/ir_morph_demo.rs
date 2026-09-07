@@ -66,7 +66,9 @@ fn pluck_pattern(n: usize) -> Vec<f64> {
 fn write_wav_stereo_16(path: &str, left: &[f64], right: &[f64]) -> Result<(), String> {
     let n = u32::try_from(left.len()).unwrap_or(u32::MAX);
     let data_len = n.saturating_mul(4);
-    let mut bytes = Vec::with_capacity(44_usize.saturating_add(usize::try_from(data_len).unwrap_or(usize::MAX)));
+    let mut bytes = Vec::with_capacity(
+        44_usize.saturating_add(usize::try_from(data_len).unwrap_or(usize::MAX)),
+    );
     bytes.extend_from_slice(b"RIFF");
     bytes.extend_from_slice(&(36_u32.saturating_add(data_len)).to_le_bytes());
     bytes.extend_from_slice(b"WAVEfmt ");
@@ -161,8 +163,12 @@ fn run() -> Result<(), String> {
     // Normalize to -1 dBFS so the wet sum never clips the 16-bit output.
     if peak > 0.0 {
         let g = 0.89 / peak;
-        for s in &mut left { *s *= g; }
-        for s in &mut right { *s *= g; }
+        for s in &mut left {
+            *s *= g;
+        }
+        for s in &mut right {
+            *s *= g;
+        }
     }
 
     write_wav_stereo_16(out_path, &left, &right)?;

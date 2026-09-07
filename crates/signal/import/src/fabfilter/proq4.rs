@@ -429,9 +429,7 @@ pub fn decode(state: &FfbsState) -> Result<ProQ4, ProQ4Error> {
                 spectral_density: b[field::SPECTRAL_DENSITY],
                 // Appended after the globals by newer builds; absent (and so
                 // off) in states written before it existed.
-                spectral_tilt: p
-                    .get(SPECTRAL_TILT_OFFSET + i)
-                    .is_some_and(|v| *v > 0.5),
+                spectral_tilt: p.get(SPECTRAL_TILT_OFFSET + i).is_some_and(|v| *v > 0.5),
             }
         })
         .collect();
@@ -795,7 +793,11 @@ mod tests {
 
         let params = to_native_eq_params(&eq);
         let get = |k: &str| params.iter().find(|(n, _)| n == k).map(|(_, v)| *v);
-        assert_eq!(get("b1_dyn_auto"), Some(1.0), "the band must arrive on auto");
+        assert_eq!(
+            get("b1_dyn_auto"),
+            Some(1.0),
+            "the band must arrive on auto"
+        );
         assert_eq!(get("b1_dyn_thr"), None, "and carry no fixed threshold");
     }
 
@@ -816,7 +818,10 @@ mod tests {
 
         // Reach both stereo channels.
         for reaches in [0.0f32, 1.0, 4.0] {
-            assert!(with_speakers(reaches), "speakers {reaches} addresses stereo");
+            assert!(
+                with_speakers(reaches),
+                "speakers {reaches} addresses stereo"
+            );
         }
         // Do not exist on a stereo bus.
         for inert in [2.0f32, 3.0, 5.0, 6.0] {
@@ -863,7 +868,10 @@ mod tests {
         let mut b = band_record(1.0, 1.0, 8.0, 3.0, 0.5, 0.0, 2.0, 2.0);
         b[field::SHAPE] = 3.0; // Pro-Q High Shelf
         let params = to_native_eq_params(&decode(&state(&[b])).unwrap());
-        let shape = params.iter().find(|(n, _)| n == "b1_shape").map(|(_, v)| *v);
+        let shape = params
+            .iter()
+            .find(|(n, _)| n == "b1_shape")
+            .map(|(_, v)| *v);
         assert_eq!(shape, Some(2.0));
         assert_eq!(
             reverb_shape_name(shape.unwrap()),
@@ -914,7 +922,11 @@ mod tests {
         b[field::Q] = 0.5;
         let params = to_native_eq_params(&decode(&state(&[b])).unwrap());
         let q = params.iter().find(|(n, _)| n == "b1_q").map(|(_, v)| *v);
-        assert_eq!(q, Some(1.0), "the stored 0.5 that most bands carry is Q = 1.0");
+        assert_eq!(
+            q,
+            Some(1.0),
+            "the stored 0.5 that most bands carry is Q = 1.0"
+        );
     }
 
     /// A spectral band crosses as a flag on top of its dynamics.

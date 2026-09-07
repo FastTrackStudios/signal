@@ -22,7 +22,7 @@
 
 use crate::engine::SampleEngine;
 
-use super::prim::{ArticulationId, Cc, Frames, MicId, Note, Velocity, U14, U7};
+use super::prim::{ArticulationId, Cc, Frames, MicId, Note, U7, U14, Velocity};
 use super::traits::{Instrument, MicBlock};
 
 /// [`SampleEngine`] presented as an [`Instrument`].

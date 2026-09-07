@@ -50,3 +50,8 @@ css_ab*.tsv
 # Alternate target dir used by the old gate.sh helper
 /target-local
 apps/web/.fts-theme-canonical.css
+
+# Local credentials, loaded into the dev shell by .envrc. `.env.example`
+# documents the variables and IS committed; `.env` holds real values and
+# never is.
+.env

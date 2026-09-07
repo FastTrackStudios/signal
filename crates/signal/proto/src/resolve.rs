@@ -162,7 +162,7 @@ impl ResolvedGraph {
     /// the value of the parameter whose id matches `param_id`.
     ///
     /// Walks engines → layers → modules → blocks and standalone blocks.
-    #[must_use] 
+    #[must_use]
     pub fn find_param(&self, block_id_fragment: &str, param_id: &str) -> Option<f32> {
         for engine in &self.engines {
             for layer in &engine.layers {

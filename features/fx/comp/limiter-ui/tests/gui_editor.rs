@@ -24,10 +24,10 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-use dioxus_test::{by_testid, render, DocumentTester};
+use dioxus_test::{DocumentTester, by_testid, render};
 
 use limiter_ui::control_view::App;
-use limiter_ui::gr_trace_svg::{gr_area_path, gr_to_y, GR_RANGE_DB, TRACE_H, TRACE_W};
+use limiter_ui::gr_trace_svg::{GR_RANGE_DB, TRACE_H, TRACE_W, gr_area_path, gr_to_y};
 use limiter_ui::params::{LimiterParams, LimiterUiState};
 
 use audiocore_core::prelude::Param;
@@ -170,7 +170,7 @@ mod support {
     }
 }
 
-use support::{mount, mount_sized, ptr_key, Gesture};
+use support::{Gesture, mount, mount_sized, ptr_key};
 
 /// The editor mounts headless with every section, knob and meter laid out.
 #[tokio::test]
@@ -293,12 +293,14 @@ async fn dragging_ceiling_lowers_the_parameter() -> dioxus_test::Result<()> {
     );
 
     let log = fx.log.lock().unwrap();
-    assert!(log
-        .iter()
-        .any(|g| matches!(g, Gesture::Begin(k) if *k == key)));
-    assert!(log
-        .iter()
-        .any(|g| matches!(g, Gesture::End(k) if *k == key)));
+    assert!(
+        log.iter()
+            .any(|g| matches!(g, Gesture::Begin(k) if *k == key))
+    );
+    assert!(
+        log.iter()
+            .any(|g| matches!(g, Gesture::End(k) if *k == key))
+    );
     Ok(())
 }
 

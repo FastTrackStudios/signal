@@ -16,7 +16,8 @@ fn render(eq: &mut NativeEq, input: &[f32]) -> Vec<f32> {
         let n = BLOCK.min(input.len() - pos);
         let l = &input[pos..pos + n];
         let (mut ol, mut or) = (vec![0.0f32; n], vec![0.0f32; n]);
-        eq.process_block(l, l, &mut ol, &mut or, &events).expect("process");
+        eq.process_block(l, l, &mut ol, &mut or, &events)
+            .expect("process");
         out.extend_from_slice(&ol);
         pos += n;
     }
@@ -44,7 +45,10 @@ fn a_default_eq_passes_audio_through() {
     let input = noise(48_000);
     let out = render(&mut eq, &input);
     let db = 20.0 * (rms(&out) / rms(&input)).log10();
-    assert!(db.abs() < 0.1, "a default EQ changed the level by {db:+.2} dB");
+    assert!(
+        db.abs() < 0.1,
+        "a default EQ changed the level by {db:+.2} dB"
+    );
 }
 
 /// A band switched on at 0 dB must still be transparent.
@@ -70,7 +74,10 @@ fn a_flat_band_is_transparent() {
     let input = noise(48_000);
     let out = render(&mut eq, &input);
     let db = 20.0 * (rms(&out) / rms(&input)).log10();
-    assert!(db.abs() < 0.1, "a flat band changed the level by {db:+.2} dB");
+    assert!(
+        db.abs() < 0.1,
+        "a flat band changed the level by {db:+.2} dB"
+    );
 }
 
 /// The order parameters arrive in must not matter.

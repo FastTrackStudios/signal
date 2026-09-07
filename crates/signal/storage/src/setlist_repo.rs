@@ -1,6 +1,10 @@
 //! Setlist repository — data access for Setlist collections and `SetlistEntry` variants.
 
-use sea_orm::{ConnectionTrait, Schema, ActiveModelBehavior, StatementBuilder, QueryTrait, ColIdx, IdenStatic, ActiveEnum, QueryOrder, QueryFilter, EntityTrait, ColumnTrait, Iden, ActiveModelTrait, Set, Iterable};
+use sea_orm::{
+    ActiveEnum, ActiveModelBehavior, ActiveModelTrait, ColIdx, ColumnTrait, ConnectionTrait,
+    EntityTrait, Iden, IdenStatic, Iterable, QueryFilter, QueryOrder, QueryTrait, Schema, Set,
+    StatementBuilder,
+};
 use signal_proto::metadata::Metadata;
 use signal_proto::setlist::{Setlist, SetlistEntry, SetlistEntryId, SetlistId};
 use signal_proto::song::SongId;
@@ -27,7 +31,7 @@ pub struct SetlistRepoLive {
 }
 
 impl SetlistRepoLive {
-    #[must_use] 
+    #[must_use]
     pub const fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }

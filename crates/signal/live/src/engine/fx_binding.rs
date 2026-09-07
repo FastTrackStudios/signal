@@ -60,13 +60,13 @@ impl FxRigBinding {
     }
 
     /// The track this binding is attached to.
-    #[must_use] 
+    #[must_use]
     pub fn track_id(&self) -> &str {
         &self.track_id
     }
 
     /// Whether the FX chain has been scanned.
-    #[must_use] 
+    #[must_use]
     pub const fn is_bound(&self) -> bool {
         self.discovered.is_some()
     }
@@ -88,13 +88,13 @@ impl FxRigBinding {
     }
 
     /// Get the discovered rig structure.
-    #[must_use] 
+    #[must_use]
     pub const fn discovered_rig(&self) -> Option<&DiscoveredRig> {
         self.discovered.as_ref()
     }
 
     /// Get FX IDs for a module type.
-    #[must_use] 
+    #[must_use]
     pub fn fx_ids_for_module(&self, module_type: ModuleType) -> &[String] {
         self.fx_map
             .get(&module_type)
@@ -102,13 +102,13 @@ impl FxRigBinding {
     }
 
     /// All module types that are bound.
-    #[must_use] 
+    #[must_use]
     pub fn bound_module_types(&self) -> Vec<ModuleType> {
         self.fx_map.keys().copied().collect()
     }
 
     /// Number of bound modules.
-    #[must_use] 
+    #[must_use]
     pub fn module_count(&self) -> usize {
         self.fx_map.len()
     }

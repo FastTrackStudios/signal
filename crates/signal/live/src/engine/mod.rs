@@ -38,7 +38,7 @@ pub use commands::{MockRigControlService, RigControlCommand, RigControlEvent, Ri
 pub use daw_bridge::{
     DawBridge, DawFullPreset, DawModulePreset, DawSceneSnapshot, DawStateChunk, MockDawBridge,
 };
-pub use diff::{compute_diff, SlotDiff};
+pub use diff::{SlotDiff, compute_diff};
 pub use error::EngineError;
 pub use fx_binding::{DiscoveredFx, DiscoveredModule, DiscoveredRig, FxRigBinding};
 pub use gapless::{GaplessSwapEngine, SwapConfig, SwapResult};
@@ -48,8 +48,8 @@ pub use morph::{
     DawParamValue, DawParameterSnapshot, MorphDiffEntry, MorphEngine, MorphParamChange,
 };
 pub use param_bridge::{
-    block_to_snapshot, find_param_index, graph_state_chunks, graph_to_snapshot,
-    live_params_into_block, param_name_matches, LiveParam,
+    LiveParam, block_to_snapshot, find_param_index, graph_state_chunks, graph_to_snapshot,
+    live_params_into_block, param_name_matches,
 };
 pub use patch_applier::{DawPatchApplier, PatchApplyError};
 pub use rig_engine::{
@@ -57,11 +57,11 @@ pub use rig_engine::{
     TransitionResult, TweenState,
 };
 pub use rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
-pub use scene_applier::{apply_scene_switch, SceneSwitchResult};
+pub use scene_applier::{SceneSwitchResult, apply_scene_switch};
 pub use slot::{ActivateResult, InstanceHandle, InstanceState, LoadResult, ModuleSlot};
 pub use snapshot_ops::{
-    capture_and_save_preset, capture_and_save_snapshot, recall_preset, recall_snapshot,
-    SnapshotError,
+    SnapshotError, capture_and_save_preset, capture_and_save_snapshot, recall_preset,
+    recall_snapshot,
 };
 pub use target::{ModuleTarget, ResolvedSlot, SlotState};
 pub use vst_bridge::{MockVstBridge, ParameterSyncManager, VstParameterBridge};

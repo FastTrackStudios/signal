@@ -13,7 +13,7 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-use signal_sampler::document::{annotate, DocEvent, DocNote, DocumentRenderOptions, TrackDocument};
+use signal_sampler::document::{DocEvent, DocNote, DocumentRenderOptions, TrackDocument, annotate};
 use signal_sampler::{ArticClass, SamplerRig};
 
 const SR: u32 = 48_000;
@@ -52,8 +52,16 @@ fn build_fixture(dir: &Path) -> PathBuf {
         for dirn in ["up", "down"] {
             let f = format!("leg_{dirn}_{rr}.wav");
             // Distinct frequency per RR slot so slot choice is audible.
-            write_sine_wav(&dir.join(&f), SR as usize, 40.0f64.mul_add(f64::from(rr), 300.0), 0.4);
-            let _ = writeln!(zones, "    {{ file {f}, key_min 0, key_max 127, root_key 64, articulation Leg, direction {dirn}, rr_index {rr} }}");
+            write_sine_wav(
+                &dir.join(&f),
+                SR as usize,
+                40.0f64.mul_add(f64::from(rr), 300.0),
+                0.4,
+            );
+            let _ = writeln!(
+                zones,
+                "    {{ file {f}, key_min 0, key_max 127, root_key 64, articulation Leg, direction {dirn}, rr_index {rr} }}"
+            );
         }
         let f = format!("stac_{rr}.wav");
         write_sine_wav(
@@ -62,7 +70,10 @@ fn build_fixture(dir: &Path) -> PathBuf {
             60.0f64.mul_add(f64::from(rr), 500.0),
             0.4,
         );
-        let _ = writeln!(zones, "    {{ file {f}, key_min 0, key_max 127, root_key 60, articulation Stac, rr_index {rr} }}");
+        let _ = writeln!(
+            zones,
+            "    {{ file {f}, key_min 0, key_max 127, root_key 60, articulation Stac, rr_index {rr} }}"
+        );
     }
     let styx = format!(
         r#"

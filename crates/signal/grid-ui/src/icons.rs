@@ -4,7 +4,7 @@
 use signal_proto::block::BlockType;
 
 /// A compact glyph for a module (by template module name).
-#[must_use] 
+#[must_use]
 pub fn module_icon(module: &str) -> &'static str {
     match module.to_ascii_lowercase().as_str() {
         "source" => "⌁",
@@ -24,7 +24,7 @@ pub fn module_icon(module: &str) -> &'static str {
 }
 
 /// A compact glyph for a block type.
-#[must_use] 
+#[must_use]
 pub const fn block_icon(bt: BlockType) -> &'static str {
     match bt {
         BlockType::Gate => "⎍",

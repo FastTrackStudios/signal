@@ -33,8 +33,9 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::{Arc, Mutex};
 
-use daw::service::handle::DawHandle as _;
 use daw::service::ProjectInfo;
+use daw::service::handle::DawHandle as _;
+use daw::standalone::Standalone;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::audio_engine::AudioEngine;
 #[cfg(all(not(target_arch = "wasm32"), target_os = "linux"))]
@@ -43,11 +44,10 @@ use daw::standalone::audio_engine::DuplexAudioEngine;
 use daw::standalone::metering::Meters;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::transport_engine::{PlayStateRepr, TransportShared};
-use daw::standalone::Standalone;
-#[cfg(not(target_arch = "wasm32"))]
-use daw_audio_io::duplex::EngineStats;
 #[cfg(not(target_arch = "wasm32"))]
 use daw_audio_io::AudioIoPrefs;
+#[cfg(not(target_arch = "wasm32"))]
+use daw_audio_io::duplex::EngineStats;
 
 pub mod gestures;
 pub mod lock;
@@ -152,7 +152,7 @@ pub struct RigProject {
 impl RigProject {
     /// Seed a fresh one-off project named `project_name` and make it current
     /// (so the track/FX services target it).
-    #[must_use] 
+    #[must_use]
     pub fn new(project_name: &str) -> Self {
         let daw = Standalone::new();
         let project_guid = uuid_string();
@@ -170,7 +170,7 @@ impl RigProject {
     /// [`new`](Self::new): the caller owns the backend (e.g. the browser
     /// worklet's `WebRenderer` daw) and drives rendering itself — no engine
     /// is ever started on this project.
-    #[must_use] 
+    #[must_use]
     pub fn on(daw: &Standalone, project_name: &str) -> Self {
         let daw = daw.clone();
         let project_guid = uuid_string();
@@ -184,13 +184,13 @@ impl RigProject {
     }
 
     /// The underlying daw service handle (cheap to clone).
-    #[must_use] 
+    #[must_use]
     pub const fn daw(&self) -> &Standalone {
         &self.daw
     }
 
     /// The seeded project's guid.
-    #[must_use] 
+    #[must_use]
     pub fn project_guid(&self) -> &str {
         &self.project_guid
     }
@@ -453,7 +453,7 @@ pub const fn request_low_latency_quantum(prefs: &AudioIoPrefs) {
 
 /// Process-unique guid string for rig project guids — shared by every rig
 /// host so ids never collide within one engine process.
-#[must_use] 
+#[must_use]
 pub fn uuid_string() -> String {
     uuid::new_v4_string()
 }

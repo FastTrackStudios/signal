@@ -18,12 +18,12 @@ pub enum ModuleCategory {
 }
 
 impl ModuleCategory {
-    #[must_use] 
+    #[must_use]
     pub const fn all() -> &'static [Self] {
         &[Self::Vocal, Self::Instrument, Self::Other]
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Vocal => "vocal",
@@ -32,7 +32,7 @@ impl ModuleCategory {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Vocal => "Vocal",
@@ -197,7 +197,7 @@ module_types! {
 
 impl ModuleType {
     /// Parse with legacy/alias support on top of the macro-generated `from_str`.
-    #[must_use] 
+    #[must_use]
     pub fn from_str_lenient(value: &str) -> Option<Self> {
         Self::from_str(value).or_else(|| {
             Some(match value {
@@ -343,10 +343,7 @@ mod tests {
         let all = ModuleCategory::all();
         assert_eq!(all.len(), 3);
         for &mt in ALL_MODULE_TYPES {
-            assert!(
-                all.contains(&mt.category()),
-                "{mt:?} category not in all()"
-            );
+            assert!(all.contains(&mt.category()), "{mt:?} category not in all()");
         }
     }
 }

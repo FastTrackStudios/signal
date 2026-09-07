@@ -62,7 +62,7 @@ pub fn decode_wav_mono(path: &std::path::Path) -> Result<(Vec<f32>, f32), String
 }
 
 /// Analyze a mono buffer at [`ANALYSIS_SR`].
-#[must_use] 
+#[must_use]
 pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
     if mono.len() < 256 {
         return None;
@@ -154,7 +154,11 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
         }
         z as f32 / mono.len() as f32
     };
-    let rms = (mono.iter().map(|&s| f64::from(s) * f64::from(s)).sum::<f64>() / mono.len() as f64)
+    let rms = (mono
+        .iter()
+        .map(|&s| f64::from(s) * f64::from(s))
+        .sum::<f64>()
+        / mono.len() as f64)
         .sqrt() as f32;
     let rms_db = 20.0 * rms.max(1e-6).log10();
 
@@ -163,7 +167,8 @@ pub fn analyze(mono: &[f32], full_duration_s: f32) -> Option<Analysis> {
     let env: Vec<f32> = mono
         .chunks(frame)
         .map(|c| {
-            (c.iter().map(|&s| f64::from(s) * f64::from(s)).sum::<f64>() / c.len() as f64).sqrt() as f32
+            (c.iter().map(|&s| f64::from(s) * f64::from(s)).sum::<f64>() / c.len() as f64).sqrt()
+                as f32
         })
         .collect();
     let peak_i = env

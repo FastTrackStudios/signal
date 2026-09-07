@@ -41,8 +41,8 @@ mod shelf;
 // unchanged, so every existing `per_section::foo` call site still resolves
 // and the split stays a pure move.
 pub use analog::{
-    compute_zpk_transfer_coeffs_generic, eval_squared_mag_scalar, omega_scale_for_band_type,
-    solve_biquad_denominator_quadratic_generic, AnalogBiquad, MagSqCoeffs, PoleRoots, Prototype,
+    AnalogBiquad, MagSqCoeffs, PoleRoots, Prototype, compute_zpk_transfer_coeffs_generic,
+    eval_squared_mag_scalar, omega_scale_for_band_type, solve_biquad_denominator_quadratic_generic,
 };
 pub use limits::{check_frequency_within_band_limits, update_tracked_band_frequencies};
 pub use notch::compute_notch_type46_parameters;

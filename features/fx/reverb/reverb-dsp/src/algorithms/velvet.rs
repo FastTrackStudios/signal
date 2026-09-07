@@ -93,7 +93,11 @@ impl VelvetFir {
 
         let mut acc = 0.0;
         for &(delay, gain) in &self.taps {
-            let idx = (self.write_idx.wrapping_add(self.buffer_size).wrapping_sub(delay)) & mask;
+            let idx = (self
+                .write_idx
+                .wrapping_add(self.buffer_size)
+                .wrapping_sub(delay))
+                & mask;
             if let Some(&sample) = self.buffer.get(idx) {
                 acc += sample * gain;
             }
@@ -147,7 +151,10 @@ impl Velvet {
 
     fn rebuild_firs(&mut self) {
         // Length: 0.2s..MAX_TAIL_SECONDS, scaled jointly by size & decay.
-        let length_s = self.size.mul_add(0.5, self.decay * 0.5).mul_add(MAX_TAIL_SECONDS - 0.2, 0.2);
+        let length_s = self
+            .size
+            .mul_add(0.5, self.decay * 0.5)
+            .mul_add(MAX_TAIL_SECONDS - 0.2, 0.2);
         let length_samples = num::f64_to_index(length_s * self.sample_rate);
         let t60_samples = num::count_to_f64(length_samples);
         let density = DENSITY_HZ * self.diffusion.mul_add(1.5, 0.5);

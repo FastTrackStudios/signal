@@ -42,7 +42,7 @@ pub struct TremDynamics {
 }
 
 impl TremDynamics {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             threshold_db: -30.0,
@@ -115,7 +115,7 @@ impl TremDynamics {
 
     /// Get the current smoothed mod amount (0..1).
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub const fn mod_amount(&self) -> f64 {
         self.mod_amount
     }
@@ -123,7 +123,7 @@ impl TremDynamics {
     /// Returns true if dynamics processing is effectively bypassed
     /// (both `rate_mod` and `depth_mod` are zero).
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn is_bypassed(&self) -> bool {
         self.rate_mod.abs() < 1e-10 && self.depth_mod.abs() < 1e-10
     }

@@ -76,7 +76,7 @@ impl Default for EkitBackend {
 }
 
 impl EkitBackend {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         let pads = (0..DEFAULT_ROWS * DEFAULT_COLS)
             .map(|i| Pad {
@@ -118,7 +118,11 @@ impl EkitBackend {
     #[must_use]
     pub fn new_offline(sample_rate: u32) -> Self {
         let b = Self::new();
-        *b.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(SamplerRig::new_offline(sample_rate));
+        *b.inner
+            .rig
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some(SamplerRig::new_offline(sample_rate));
         b
     }
 
@@ -127,7 +131,11 @@ impl EkitBackend {
     pub fn render_hit(&self, pad: u32, velocity: u32) -> f32 {
         // Note-on/off inline: `trigger` takes the same (non-reentrant) rig
         // lock this function holds across the render.
-        let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let rig = self
+            .inner
+            .rig
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(rig) = rig.as_ref() else { return 0.0 };
         let note = crate::BASE_NOTE + pad as u8;
         let mut buf = vec![0.0f32; 512 * 2];
@@ -154,7 +162,7 @@ impl EkitBackend {
         peak
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn router(&self) -> architect::LayerRouter {
         self.clone().into_router()
     }
@@ -163,7 +171,11 @@ impl EkitBackend {
         // running first (rig lock), THEN state — never both at once.
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
         let (pads, status) = {
-            let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             (s.pads.clone(), Self::status_locked(&s, running))
         };
         self.inner.events.publish(EkitEvent::Status(status));
@@ -185,7 +197,11 @@ impl EkitBackend {
     fn open_blocking(&self) {
         let mut open_error: Option<String> = None;
         {
-            let mut rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut rig = self
+                .inner
+                .rig
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if rig.is_some() {
                 return;
             }
@@ -201,19 +217,33 @@ impl EkitBackend {
             }
         }
         if let Some(e) = open_error {
-            self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).last_error = e;
+            self.inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .last_error = e;
         }
     }
 
     /// Locate + load a built space by name (shared, depth-bounded discovery).
     fn load_space(&self, name: &str) -> Option<Arc<LoadedSpace>> {
-        if let Some(cur) = self.inner.space.lock().unwrap_or_else(std::sync::PoisonError::into_inner).as_ref()
-            && cur.space.name == name {
-                return Some(cur.clone());
-            }
+        if let Some(cur) = self
+            .inner
+            .space
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            && cur.space.name == name
+        {
+            return Some(cur.clone());
+        }
         let (_, space, features) = signal_space::find_space(name)?;
         let loaded = Arc::new(LoadedSpace { space, features });
-        *self.inner.space.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(loaded.clone());
+        *self
+            .inner
+            .space
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(loaded.clone());
         Some(loaded)
     }
 
@@ -232,7 +262,13 @@ impl EkitBackend {
     /// Install `item_idx` on `pad`, building a one-zone percussion engine
     /// for the resolved audio file.
     fn install(&self, pad_index: u32, item_idx: usize) {
-        let Some(loaded) = self.inner.space.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone() else {
+        let Some(loaded) = self
+            .inner
+            .space
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+        else {
             return;
         };
         let Some(item) = loaded.space.items.get(item_idx) else {
@@ -256,7 +292,11 @@ impl EkitBackend {
             .unwrap_or_default();
         let mut err: Option<String> = None;
         let installed = {
-            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let rig = self
+                .inner
+                .rig
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let Some(rig) = rig.as_ref() else { return };
             let id = format!("pad{pad_index}");
             if let Err(e) = install_pad_engine(rig, &id, &path, &pad_state) {
@@ -268,13 +308,21 @@ impl EkitBackend {
             }
         };
         if let Some(e) = err {
-            self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).last_error = e;
+            self.inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .last_error = e;
             return;
         }
         if installed.is_none() {
             return;
         }
-        let mut s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut s = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(p) = s.pads.get_mut(pad_index as usize) {
             p.item_idx = item_idx as u32;
             p.path = display;
@@ -356,9 +404,11 @@ fn velocity_rank(name: &str) -> i64 {
     for tok in name.split(|c: char| !c.is_ascii_alphanumeric()) {
         for prefix in ["vl", "v"] {
             if let Some(rest) = tok.strip_prefix(prefix)
-                && !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
-                    best = best.max(rest.parse().unwrap_or(0));
-                }
+                && !rest.is_empty()
+                && rest.chars().all(|c| c.is_ascii_digit())
+            {
+                best = best.max(rest.parse().unwrap_or(0));
+            }
         }
     }
     best
@@ -431,28 +481,49 @@ impl EkitRig for EkitBackend {
     }
 
     fn stop(&self) {
-        *self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        *self
+            .inner
+            .rig
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         self.publish();
     }
 
     fn status(&self) -> EkitStatus {
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-        let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let s = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         Self::status_locked(&s, running)
     }
 
     fn pads(&self) -> Vec<Pad> {
-        self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).pads.clone()
+        self.inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .pads
+            .clone()
     }
 
     fn set_space(&self, space: String) {
         if self.load_space(&space).is_none() {
-            let mut s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             s.last_error = format!("no space {space:?}");
             return;
         }
         {
-            let mut s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             s.space_name = space;
             s.last_error.clear();
         }
@@ -460,7 +531,11 @@ impl EkitRig for EkitBackend {
     }
 
     fn trigger(&self, pad: u32, velocity: u32) {
-        let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let rig = self
+            .inner
+            .rig
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(rig) = rig.as_ref() else { return };
         let note = crate::BASE_NOTE + pad as u8;
         let id = format!("pad{pad}");
@@ -480,11 +555,21 @@ impl EkitRig for EkitBackend {
     }
 
     fn randomize_pad(&self, pad: u32) {
-        let Some(space) = self.inner.space.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone() else {
+        let Some(space) = self
+            .inner
+            .space
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+        else {
             return;
         };
         let category = {
-            let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             s.pads
                 .get(pad as usize)
                 .map(|p| p.category.clone())
@@ -498,11 +583,21 @@ impl EkitRig for EkitBackend {
     }
 
     fn step_similar(&self, pad: u32, delta: i32) {
-        let Some(space) = self.inner.space.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone() else {
+        let Some(space) = self
+            .inner
+            .space
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+        else {
             return;
         };
         let (current, category, cursor) = {
-            let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let p = s.pads.get(pad as usize);
             (
                 p.map_or(0, |p| p.item_idx as usize),
@@ -518,7 +613,11 @@ impl EkitRig for EkitBackend {
         }
         let next = (cursor + delta).rem_euclid(hits.len() as i32);
         {
-            let mut s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Some(c) = s.cursors.get_mut(pad as usize) {
                 *c = next;
             }
@@ -528,10 +627,22 @@ impl EkitRig for EkitBackend {
     }
 
     fn new_kit(&self) {
-        let Some(space) = self.inner.space.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone() else {
+        let Some(space) = self
+            .inner
+            .space
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+        else {
             return;
         };
-        let pads = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).pads.clone();
+        let pads = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .pads
+            .clone();
         for p in pads {
             if p.locked {
                 continue;
@@ -545,7 +656,13 @@ impl EkitRig for EkitBackend {
     }
 
     fn morph_kit(&self, delta: i32) {
-        let pads = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).pads.clone();
+        let pads = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .pads
+            .clone();
         for p in pads {
             if !p.locked && !p.path.is_empty() {
                 self.step_similar(p.index, delta);
@@ -556,7 +673,11 @@ impl EkitRig for EkitBackend {
 
     fn set_category(&self, pad: u32, category: String) {
         {
-            let mut s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Some(p) = s.pads.get_mut(pad as usize) {
                 p.category = category;
             }
@@ -566,7 +687,11 @@ impl EkitRig for EkitBackend {
 
     fn set_locked(&self, pad: u32, locked: bool) {
         {
-            let mut s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Some(p) = s.pads.get_mut(pad as usize) {
                 p.locked = locked;
             }
@@ -576,7 +701,11 @@ impl EkitRig for EkitBackend {
 
     fn set_params_locked(&self, pad: u32, locked: bool) {
         {
-            let mut s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Some(p) = s.pads.get_mut(pad as usize) {
                 p.params_locked = locked;
             }
@@ -586,7 +715,11 @@ impl EkitRig for EkitBackend {
 
     fn set_pad_param(&self, pad: u32, param: String, value: f32) {
         {
-            let mut s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let Some(p) = s.pads.get_mut(pad as usize) else {
                 return;
             };
@@ -607,7 +740,11 @@ impl EkitRig for EkitBackend {
 
     fn set_muted(&self, pad: u32, muted: bool) {
         {
-            let mut s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Some(p) = s.pads.get_mut(pad as usize) {
                 p.muted = muted;
             }
@@ -618,12 +755,23 @@ impl EkitRig for EkitBackend {
 
     fn set_soloed(&self, pad: u32, soloed: bool) {
         {
-            let mut s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if let Some(p) = s.pads.get_mut(pad as usize) {
                 p.soloed = soloed;
             }
         }
-        for i in 0..self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).pads.len() as u32 {
+        for i in 0..self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .pads
+            .len() as u32
+        {
             self.apply_pad_mix(i, false);
         }
         self.publish();
@@ -634,7 +782,11 @@ impl EkitRig for EkitBackend {
     }
 
     fn set_midi_port(&self, name: String) {
-        let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let rig = self
+            .inner
+            .rig
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(rig) = rig.as_ref() {
             let _ = rig.attach_midi(midicore::selector_for(Some(&name)));
         }
@@ -647,7 +799,11 @@ impl EkitBackend {
     /// (cheap — one file, already in the sample cache).
     fn apply_pad_mix(&self, pad: u32, reinstall: bool) {
         let (p, any_solo) = {
-            let s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             (
                 s.pads.get(pad as usize).cloned(),
                 s.pads.iter().any(|p| p.soloed),
@@ -655,16 +811,27 @@ impl EkitBackend {
         };
         let Some(p) = p else { return };
         let id = format!("pad{pad}");
-        let space = self.inner.space.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
-        let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let space = self
+            .inner
+            .space
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let rig = self
+            .inner
+            .rig
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(rig) = rig.as_ref() else { return };
         rig.set_muted(&id, p.muted || (any_solo && !p.soloed));
-        if reinstall && !p.path.is_empty()
+        if reinstall
+            && !p.path.is_empty()
             && let Some(space) = space
-                && let Some(path) = resolve_audio(&space.space, p.item_idx as usize)
-                    && let Err(e) = install_pad_engine(rig, &id, &path, &p) {
-                        tracing::warn!("ekit: pad {pad} param re-install failed: {e}");
-                    }
+            && let Some(path) = resolve_audio(&space.space, p.item_idx as usize)
+            && let Err(e) = install_pad_engine(rig, &id, &path, &p)
+        {
+            tracing::warn!("ekit: pad {pad} param re-install failed: {e}");
+        }
     }
 }
 
@@ -696,11 +863,19 @@ impl RigBackend for EkitBackend {
     fn on_running_tick(&self) {
         // Meter pump: pull the per-pad peaks off the rig and publish.
         let meters = {
-            let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let rig = self
+                .inner
+                .rig
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             rig.as_ref().map(signal_sampler::SamplerRig::meters_bank)
         }; // rig lock dropped before touching state
         let pads = {
-            let mut s = self.inner.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut s = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             for (i, p) in s.pads.iter_mut().enumerate() {
                 p.peak = meters
                     .as_ref()

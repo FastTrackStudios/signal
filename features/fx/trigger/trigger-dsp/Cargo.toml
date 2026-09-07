@@ -1,7 +1,7 @@
 [package]
 name = "trigger-dsp"
 version.workspace = true
-edition = "2021"          # matches sibling fx DSP crates (comp-dsp, eq-dsp)
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "trigger-dsp — drum trigger engine: transient/onset detection (envelope state machine + spectral flux family), velocity extraction, sidechain filtering, and sample playback. Imported from the legacy FTS-Trigger."

@@ -192,7 +192,12 @@ mod tests {
         for channel in Channel::all() {
             state.fill(0);
             state[channel] = 1;
-            assert_eq!(state.iter().sum::<usize>(), 1, "channel {} wrote more than one slot", channel.index());
+            assert_eq!(
+                state.iter().sum::<usize>(),
+                1,
+                "channel {} wrote more than one slot",
+                channel.index()
+            );
             assert_eq!(state[channel], 1);
         }
     }

@@ -79,7 +79,8 @@ fn run_one(
     target_error: Option<&str>,
 ) -> Outcome {
     let name = preset
-        .file_stem().map_or_else(|| "<unnamed>".into(), |s| s.to_string_lossy().into_owned());
+        .file_stem()
+        .map_or_else(|| "<unnamed>".into(), |s| s.to_string_lossy().into_owned());
     let started = std::time::Instant::now();
 
     let mut cmd = Command::new(binary);
@@ -153,17 +154,22 @@ fn main() {
     // why it parallelizes to core count where a live sweep does not.
     let plugin = arg("--plugin");
     if plugin.is_none() && arg("--reference-cache").is_none() {
-        eprintln!("need either --plugin (to render references) or --reference-cache (to reuse them)");
+        eprintln!(
+            "need either --plugin (to render references) or --reference-cache (to reuse them)"
+        );
         std::process::exit(2);
     }
 
-    let binary = arg("--binary").map_or_else(|| {
+    let binary = arg("--binary").map_or_else(
+        || {
             // Sibling of this example in the same target directory.
             std::env::current_exe()
                 .ok()
                 .and_then(|p| p.parent().map(|d| d.join("reverb_match")))
                 .unwrap_or_else(|| PathBuf::from("reverb_match"))
-        }, PathBuf::from);
+        },
+        PathBuf::from,
+    );
     if !binary.exists() {
         eprintln!("reverb_match not found at {}", binary.display());
         eprintln!("build it first: cargo build -p signal-analyzer --example reverb_match");
@@ -172,7 +178,10 @@ fn main() {
 
     let mut all = Vec::new();
     collect_presets(Path::new(&presets), &mut all);
-    let stride: usize = arg("--stride").and_then(|v| v.parse().ok()).unwrap_or(1).max(1);
+    let stride: usize = arg("--stride")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1)
+        .max(1);
     let mut selected: Vec<PathBuf> = all.into_iter().step_by(stride).collect();
     if let Some(limit) = arg("--limit").and_then(|v| v.parse::<usize>().ok()) {
         selected.truncate(limit);
@@ -184,7 +193,11 @@ fn main() {
 
     let jobs: usize = arg("--jobs")
         .and_then(|v| v.parse().ok())
-        .unwrap_or_else(|| std::thread::available_parallelism().map(std::num::NonZero::get).unwrap_or(4))
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(std::num::NonZero::get)
+                .unwrap_or(4)
+        })
         .clamp(1, 64);
     let tsv = flag("--tsv");
     // Passed through to every run: the tuned parameters are the deliverable,
@@ -214,39 +227,45 @@ fn main() {
             let save_dir = save_dir.clone();
             let reference_cache = reference_cache.clone();
             let target_error = target_error.clone();
-            scope.spawn(move || loop {
-                let next = { queue.lock().unwrap().next() };
-                let Some(preset) = next else { break };
-                let outcome = run_one(
-                    &binary,
-                    plugin.as_deref(),
-                    &preset,
-                    save_dir.as_deref(),
-                    reference_cache.as_deref(),
-                    target_error.as_deref(),
-                );
-                done.fetch_add(1, Ordering::Relaxed);
-                // Print as they land so a long sweep shows progress.
-                if tsv {
-                    println!(
-                        "{}\t{}\t{}\t{:.1}",
-                        outcome.name,
-                        if outcome.passed { "pass" } else { "fail" },
-                        outcome
-                            .error.map_or_else(|| outcome.note.clone().unwrap_or_default(), |e| format!("{e:.4}")),
-                        outcome.seconds
+            scope.spawn(move || {
+                loop {
+                    let next = { queue.lock().unwrap().next() };
+                    let Some(preset) = next else { break };
+                    let outcome = run_one(
+                        &binary,
+                        plugin.as_deref(),
+                        &preset,
+                        save_dir.as_deref(),
+                        reference_cache.as_deref(),
+                        target_error.as_deref(),
                     );
-                } else {
-                    println!(
-                        "  {:<44} {:<5} {:<9} {:>5.1}s",
-                        outcome.name.chars().take(44).collect::<String>(),
-                        if outcome.passed { "pass" } else { "FAIL" },
-                        outcome
-                            .error.map_or_else(|| outcome.note.clone().unwrap_or_default(), |e| format!("{e:.3}")),
-                        outcome.seconds
-                    );
+                    done.fetch_add(1, Ordering::Relaxed);
+                    // Print as they land so a long sweep shows progress.
+                    if tsv {
+                        println!(
+                            "{}\t{}\t{}\t{:.1}",
+                            outcome.name,
+                            if outcome.passed { "pass" } else { "fail" },
+                            outcome.error.map_or_else(
+                                || outcome.note.clone().unwrap_or_default(),
+                                |e| format!("{e:.4}")
+                            ),
+                            outcome.seconds
+                        );
+                    } else {
+                        println!(
+                            "  {:<44} {:<5} {:<9} {:>5.1}s",
+                            outcome.name.chars().take(44).collect::<String>(),
+                            if outcome.passed { "pass" } else { "FAIL" },
+                            outcome.error.map_or_else(
+                                || outcome.note.clone().unwrap_or_default(),
+                                |e| format!("{e:.3}")
+                            ),
+                            outcome.seconds
+                        );
+                    }
+                    results.lock().unwrap().push(outcome);
                 }
-                results.lock().unwrap().push(outcome);
             });
         }
     });
@@ -276,7 +295,8 @@ fn main() {
             println!(
                 "  {:<44} {}",
                 r.name.chars().take(44).collect::<String>(),
-                r.error.map_or_else(|| r.note.clone().unwrap_or_default(), |e| format!("{e:.3}"))
+                r.error
+                    .map_or_else(|| r.note.clone().unwrap_or_default(), |e| format!("{e:.3}"))
             );
         }
     }

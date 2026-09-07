@@ -105,7 +105,9 @@ impl Magneto {
             .max(1.0);
         for (i, head) in self.heads.iter_mut().enumerate() {
             let frac = match self.spacing {
-                MagnetoSpacing::Even => num::count_to_f64(i.saturating_add(1)) / num::count_to_f64(n),
+                MagnetoSpacing::Even => {
+                    num::count_to_f64(i.saturating_add(1)) / num::count_to_f64(n)
+                }
                 MagnetoSpacing::Uneven => {
                     // Take the last n entries of the irregular grid so
                     // the final head stays at the full delay time.
@@ -159,7 +161,8 @@ impl ReverbAlgorithm for Magneto {
         // Diffusion -> how much each head is diffused
         for (i, head) in self.heads.iter_mut().enumerate() {
             let diff = &mut head.diffuser;
-            let stages = num::f64_to_index(params.diffusion * num::count_to_f64(i).mul_add(2.0, 2.0)).min(8);
+            let stages =
+                num::f64_to_index(params.diffusion * num::count_to_f64(i).mul_add(2.0, 2.0)).min(8);
             diff.set_active_stages(stages);
             diff.set_feedback(params.diffusion.mul_add(0.3, 0.4));
         }
@@ -194,8 +197,14 @@ impl ReverbAlgorithm for Magneto {
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         // Write input + feedback to tape
-        let in_l = Self::saturate(self.fb_state_l.mul_add(self.feedback, left), self.saturation);
-        let in_r = Self::saturate(self.fb_state_r.mul_add(self.feedback, right), self.saturation);
+        let in_l = Self::saturate(
+            self.fb_state_l.mul_add(self.feedback, left),
+            self.saturation,
+        );
+        let in_r = Self::saturate(
+            self.fb_state_r.mul_add(self.feedback, right),
+            self.saturation,
+        );
         self.tape_l.write(in_l);
         self.tape_r.write(in_r);
 
@@ -231,8 +240,8 @@ impl ReverbAlgorithm for Magneto {
 
             // Feedback tap: last head with Even spacing, last TWO
             // heads with Uneven (the manual's spacing side-effect).
-            let takes_fb =
-                i.saturating_add(1) == n || (self.spacing == MagnetoSpacing::Uneven && n >= 2 && i.saturating_add(2) == n);
+            let takes_fb = i.saturating_add(1) == n
+                || (self.spacing == MagnetoSpacing::Uneven && n >= 2 && i.saturating_add(2) == n);
             if takes_fb {
                 fb_l += diff_l;
                 fb_r += diff_r;

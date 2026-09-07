@@ -487,7 +487,7 @@ fn without_a_piano_voice_nothing_changes() {
 fn piano_color_leaves_keyswitches_alone() {
     use crate::piano_voice::{PianoOffsets, PianoVoice};
     let mut eng = engine_from_styx(
-            "name \"p\"\n\
+        "name \"p\"\n\
              keyswitch {\n\
                notes (\n\
                  {\n\
@@ -501,7 +501,7 @@ fn piano_color_leaves_keyswitches_alone() {
                {file \"a.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"A\"}\n\
                {file \"b.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"B\"}\n\
              )\n",
-        );
+    );
     let mut pv = PianoVoice::new(PianoOffsets::GRANDEUR);
     pv.color = -50;
     eng.set_piano_voice(Some(pv));
@@ -553,7 +553,7 @@ fn keyswitch_note_selects_articulation_velocity_sensitive() {
     // Melodic patch (no drum category) with two-articulation zones + a
     // velocity-sensitive keyswitch note (CSS-style).
     let mut eng = engine_from_styx(
-            "name \"s\"\n\
+        "name \"s\"\n\
              keyswitch {\n\
                notes (\n\
                  {\n\
@@ -576,7 +576,7 @@ fn keyswitch_note_selects_articulation_velocity_sensitive() {
                {file \"spic.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"Spiccato\"}\n\
                {file \"stac.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"Staccato\"}\n\
              )\n",
-        );
+    );
     let leg = eng.patch().spec.zones[0].clone();
     let spic = eng.patch().spec.zones[1].clone();
     let stac = eng.patch().spec.zones[2].clone();
@@ -611,7 +611,10 @@ fn mono_legato_engine(notes: &[u8]) -> SampleEngine {
     );
     for &n in notes {
         for dir in ["up", "down"] {
-            let _ = write!(styx, "{{file \"{n}_{dir}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"NVLeg\", direction \"{dir}\"}}\n");
+            let _ = write!(
+                styx,
+                "{{file \"{n}_{dir}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"NVLeg\", direction \"{dir}\"}}\n"
+            );
         }
     }
     styx.push_str(")\n");
@@ -681,12 +684,18 @@ fn pacific_legato_engine(notes: &[u8]) -> SampleEngine {
     );
     for &n in notes {
         for artic in ["sus", "atk", "rel"] {
-            let _ = write!(styx, "{{file \"{artic}_{n}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"{artic}\"}}\n");
+            let _ = write!(
+                styx,
+                "{{file \"{artic}_{n}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"{artic}\"}}\n"
+            );
         }
         // Destination-rooted transitions: every interval 1..=12, both dirs.
         for dir in ["up", "down"] {
             for iv in 1..=12u8 {
-                let _ = write!(styx, "{{file \"leg_{dir}{iv}_{n}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"leg\", direction \"{dir}\", interval {iv}}}\n");
+                let _ = write!(
+                    styx,
+                    "{{file \"leg_{dir}{iv}_{n}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"leg\", direction \"{dir}\", interval {iv}}}\n"
+                );
             }
         }
     }
@@ -935,7 +944,7 @@ fn decoded_short_velocity_layers_and_velvol() {
     // `apply_short_velvol` gates the $arhiq trim (off for CSS; on here to test
     // the curve).
     let eng = engine_from_styx(
-            "name \"s\"\n\
+        "name \"s\"\n\
              dynamics { enable_velocity_layers true\n apply_short_velvol true }\n\
              articulations (\n\
                {id Spiccato, label Spicc, kind @Short, dynamics (pp p mf ff),\n\
@@ -944,7 +953,7 @@ fn decoded_short_velocity_layers_and_velvol() {
              zones (\n\
                {file \"a.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"Spiccato\"}\n\
              )\n",
-        );
+    );
     let cases = [
         (10u8, "pp", -5.87f32), // band0: (25-10)*-9/23
         (40, "p", -5.17),       // band1: (55-40)*-10/29
@@ -961,7 +970,7 @@ fn decoded_short_velocity_layers_and_velvol() {
     }
     // Gate off → falls back to the even split with no velvol trim.
     let plain = engine_from_styx(
-            "name \"s\"\n\
+        "name \"s\"\n\
              articulations (\n\
                {id Spiccato, label Spicc, kind @Short, dynamics (pp p mf ff),\n\
                 vel_thresholds (25 55 108), vel_layer_db (-9 -10 -12 -6)}\n\
@@ -969,7 +978,7 @@ fn decoded_short_velocity_layers_and_velvol() {
              zones (\n\
                {file \"a.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"Spiccato\"}\n\
              )\n",
-        );
+    );
     let (_, db) = plain.short_layer_and_velvol("Spiccato", 40);
     assert_eq!(db, 0.0, "gated off → no velocity-volume trim");
 }
@@ -1013,7 +1022,7 @@ fn short_velocity_selects_layer_and_cc1_selects_type() {
     // Sfz (mf f fff) thresholds (45 65 127) → 3 bands [1,44]mf [45,64]f
     // [65,127]fff, counts match → 1:1.
     let sfz = engine_from_styx(
-            "name \"s\"\n\
+        "name \"s\"\n\
              dynamics { enable_velocity_layers true }\n\
              articulations (\n\
                {id Sfz, label Sfz, kind @Short, dyn_ctrl velocity, dynamics (mf f fff),\n\
@@ -1022,7 +1031,7 @@ fn short_velocity_selects_layer_and_cc1_selects_type() {
              zones (\n\
                {file \"a.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"Sfz\"}\n\
              )\n",
-        );
+    );
     for (vel, want) in [(40u8, "mf"), (60, "f"), (80, "fff"), (120, "fff")] {
         let (dynamic, _) = sfz.short_layer_and_velvol("Sfz", vel);
         assert_eq!(dynamic, want, "Sfz vel {vel} → layer");
@@ -1104,7 +1113,7 @@ fn legato_pairs_nonvib_and_vibrato_for_cc2() {
     // CC2 vibrato crossfades a non-vib / vib pair. CSS has them for legato
     // (Leg ↔ NVLeg) as well as sustains — the pair lookup must find both.
     let eng = engine_from_styx(
-            "name \"s\"\n\
+        "name \"s\"\n\
              dynamics { vibrato_controller CC2 }\n\
              articulations (\n\
                {id NVLeg, label NVLeg, kind @Legato}\n\
@@ -1113,7 +1122,7 @@ fn legato_pairs_nonvib_and_vibrato_for_cc2() {
              zones (\n\
                {file \"a.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"NVLeg\"}\n\
              )\n",
-        );
+    );
     assert_eq!(eng.find_vibrato_pair_id("NVLeg").as_deref(), Some("Leg"));
     assert_eq!(eng.find_vibrato_pair_id("Leg").as_deref(), Some("NVLeg"));
 }

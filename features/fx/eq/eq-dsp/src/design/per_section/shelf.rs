@@ -3,7 +3,7 @@
 //! Three related routines rather than one, matching three code paths in the
 //! binary; the difference between them is documented at each function.
 
-use super::{eval_squared_mag_scalar, update_tracked_band_frequencies, Prototype, PI};
+use super::{PI, Prototype, eval_squared_mag_scalar, update_tracked_band_frequencies};
 use dsp_core::num;
 
 #[expect(
@@ -58,11 +58,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
             1.0
         };
         let s = ratio.max(0.0).sqrt();
-        if s <= CONST_0_1 {
-            CONST_0_1
-        } else {
-            s
-        }
+        if s <= CONST_0_1 { CONST_0_1 } else { s }
     } else {
         CONST_0_1 // overwritten later when (section_type != 2) → uses α
     };
@@ -166,11 +162,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
                     .powf(local_res8 * CONST_3_3)
                     .mul_add(PI_OVER_5, FOUR_PI_OVER_5);
                 proto.w_eval = if dvar10_v <= cand {
-                    if cand >= PI {
-                        PI
-                    } else {
-                        cand
-                    }
+                    if cand >= PI { PI } else { cand }
                 } else {
                     dvar10_v
                 };
@@ -202,11 +194,7 @@ pub fn compute_shelf_band_parameters(proto: &mut Prototype) {
                 .powf(local_res8 * CONST_3_3)
                 .mul_add(PI_OVER_5, FOUR_PI_OVER_5);
             proto.w_eval = if dvar4 <= cand {
-                if cand >= PI {
-                    PI
-                } else {
-                    cand
-                }
+                if cand >= PI { PI } else { cand }
             } else {
                 dvar4
             };
@@ -339,21 +327,21 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
     }
 
     // vt10 small-difference test (only when iv3 == 1).
-    if iv3 == 1 {
-        if let Some(analog) = proto.analog {
-            let coeffs = analog.squared_mag_coeffs(proto.omega_band);
-            let mp = eval_squared_mag_scalar(&coeffs, proto.wp);
-            let mpi = eval_squared_mag_scalar(&coeffs, PI);
-            // |Δ| (f32 lane, fabs via mask): when difference small (≤0.01),
-            // step mode back and snap wp to band_omega_ref.
-            let diff = f64::from(num::narrow(mpi - mp).abs());
-            if diff <= 0.01 {
-                proto.mode = proto.mode.saturating_sub(1);
-                proto.wp = proto.band_omega_ref;
-            }
+    if iv3 == 1
+        && let Some(analog) = proto.analog
+    {
+        let coeffs = analog.squared_mag_coeffs(proto.omega_band);
+        let mp = eval_squared_mag_scalar(&coeffs, proto.wp);
+        let mpi = eval_squared_mag_scalar(&coeffs, PI);
+        // |Δ| (f32 lane, fabs via mask): when difference small (≤0.01),
+        // step mode back and snap wp to band_omega_ref.
+        let diff = f64::from(num::narrow(mpi - mp).abs());
+        if diff <= 0.01 {
+            proto.mode = proto.mode.saturating_sub(1);
+            proto.wp = proto.band_omega_ref;
         }
-        // (No `analog` provided: skip the test rather than fabricating data.)
     }
+    // (No `analog` provided: skip the test rather than fabricating data.)
 
     // w_eval branch on proto[0x12] sign.
     let nine_pi_10 = 0.9 * PI;
@@ -363,11 +351,7 @@ pub fn compute_band_shelf_parameters_v2(proto: &mut Prototype) {
     let new_w_eval = if proto.proto_0x12_sign == -1 {
         let cand = wp_now * 1.25;
         if zero_eight_five_pi <= cand {
-            if PI <= cand {
-                PI
-            } else {
-                cand
-            }
+            if PI <= cand { PI } else { cand }
         } else {
             zero_eight_five_pi
         }
@@ -550,11 +534,7 @@ fn label_d7f9(proto: &mut Prototype, fv11: f64, fv12_f32: f32) {
 
     let cand = proto.wp * 1.80;
     let new_w_eval = if ZERO_EIGHT_THREE_PI <= cand {
-        if PI <= cand {
-            PI
-        } else {
-            cand
-        }
+        if PI <= cand { PI } else { cand }
     } else {
         ZERO_EIGHT_THREE_PI
     };

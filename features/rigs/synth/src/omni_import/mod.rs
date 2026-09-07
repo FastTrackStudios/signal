@@ -18,18 +18,18 @@
 
 mod xml;
 
-pub use xml::{omni_num, parse_xml, XmlNode};
+pub use xml::{XmlNode, omni_num, parse_xml};
 mod index;
 mod model;
 mod multi;
 pub mod state;
 mod tree;
 
-pub use index::{normalize_soundsource_name, resolve_name, SoundsourceIndex};
+pub use index::{SoundsourceIndex, normalize_soundsource_name, resolve_name};
 pub use model::{
-    classify_filter_full, omni_cutoff_hz, parse_patch, OmniLayer, OmniModRoute, OmniPatch,
+    OmniLayer, OmniModRoute, OmniPatch, classify_filter_full, omni_cutoff_hz, parse_patch,
 };
-pub use multi::{load_multi_file, multi_to_container, parse_multi, OmniMulti};
+pub use multi::{OmniMulti, load_multi_file, multi_to_container, parse_multi};
 pub use tree::{load_patch_file, patch_to_container};
 
 #[cfg(test)]

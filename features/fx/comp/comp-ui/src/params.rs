@@ -6,8 +6,8 @@
 
 use atomic_float::AtomicF32;
 use audiocore_core::prelude::*;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Samples kept in each waveform history ring (one per processed block —
 /// ~2.7 s at 512-sample blocks / 48 kHz).
@@ -33,7 +33,7 @@ impl Default for WaveRing {
 }
 
 impl WaveRing {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             buf: std::array::from_fn(|_| AtomicF32::new(0.0)),
@@ -577,7 +577,7 @@ impl Default for CompStageParams {
 impl CompStageParams {
     /// A stage's params. `first` = stage 1, which starts in the stack (the
     /// plain plugin); the rest start unused until added.
-    #[must_use] 
+    #[must_use]
     pub fn new(first: bool) -> Self {
         Self {
             sc_eq: std::array::from_fn(|i| ScBandParams::new(SC_DEFAULT_FREQS[i])),
@@ -846,7 +846,8 @@ fn macro_slot_param(name: &str) -> FloatParam {
 fn label_formatter(labels: &'static [&'static str]) -> Arc<dyn Fn(i32) -> String + Send + Sync> {
     Arc::new(move |v| {
         labels
-            .get(v.max(0) as usize).map_or_else(|| v.to_string(), std::string::ToString::to_string)
+            .get(v.max(0) as usize)
+            .map_or_else(|| v.to_string(), std::string::ToString::to_string)
     })
 }
 

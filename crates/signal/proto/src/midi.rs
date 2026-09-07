@@ -20,7 +20,7 @@ pub enum CcCurve {
 
 impl CcCurve {
     /// Apply the curve to a normalized CC value (0.0–1.0).
-    #[must_use] 
+    #[must_use]
     pub fn apply(self, value: f64) -> f64 {
         let v = value.clamp(0.0, 1.0);
         match self {
@@ -52,7 +52,7 @@ impl CcCurve {
         Self::Toggle,
     ];
 
-    #[must_use] 
+    #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Linear => "Linear",
@@ -100,7 +100,7 @@ pub struct MidiCcMapping {
 }
 
 impl MidiCcMapping {
-    #[must_use] 
+    #[must_use]
     pub fn new(cc_number: u8, target: MidiTarget) -> Self {
         Self {
             channel: None,
@@ -114,7 +114,7 @@ impl MidiCcMapping {
     }
 
     /// Apply curve and range to a raw CC value (0–127).
-    #[must_use] 
+    #[must_use]
     pub fn map_value(&self, cc_value: u8) -> f32 {
         let normalized = f64::from(cc_value) / 127.0;
         let curved = self.curve.apply(normalized);
@@ -147,7 +147,7 @@ pub struct MidiMappingSet {
 }
 
 impl MidiMappingSet {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             mappings: Vec::new(),
@@ -155,7 +155,7 @@ impl MidiMappingSet {
     }
 
     /// Find mappings that match a given CC message.
-    #[must_use] 
+    #[must_use]
     pub fn find_mappings(&self, channel: u8, cc_number: u8) -> Vec<&MidiCcMapping> {
         self.mappings
             .iter()

@@ -47,10 +47,7 @@ fn lanes(peaks: &[(String, f32)], names: &[String]) -> String {
     let mut rows: Vec<String> = names
         .iter()
         .map(|n| {
-            let peak = peaks
-                .iter()
-                .find(|(m, _)| m == n)
-                .map_or(0.0, |(_, p)| *p);
+            let peak = peaks.iter().find(|(m, _)| m == n).map_or(0.0, |(_, p)| *p);
             if peak <= 1e-5 {
                 format!("{n}: —")
             } else {

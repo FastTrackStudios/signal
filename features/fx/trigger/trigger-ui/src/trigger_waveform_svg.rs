@@ -28,20 +28,20 @@ pub const DB_MARKERS: &[(f32, &str)] = &[
 
 /// dB (0 at the top … −[`RANGE_DB`] at the bottom) → y within a graph of
 /// height `h`.
-#[must_use] 
+#[must_use]
 pub fn db_to_y(db: f64, h: f64) -> f64 {
     ((-db) / f64::from(RANGE_DB)).clamp(0.0, 1.0) * h
 }
 
 /// Inverse of [`db_to_y`]: y within a graph of height `h` → dB (clamped to
 /// the display range, 0 … −[`RANGE_DB`]).
-#[must_use] 
+#[must_use]
 pub fn y_to_db(y: f64, h: f64) -> f64 {
     -(y / h).clamp(0.0, 1.0) * f64::from(RANGE_DB)
 }
 
 /// y of the threshold line for a threshold in dB.
-#[must_use] 
+#[must_use]
 pub fn threshold_line_y(threshold_db: f32, h: f64) -> f64 {
     db_to_y(f64::from(threshold_db), h)
 }
@@ -51,7 +51,7 @@ pub fn threshold_line_y(threshold_db: f32, h: f64) -> f64 {
 /// Converted through dB, so the bar heights are log-scaled onto the same
 /// axis as the threshold line (a bar exactly reaches the line when its peak
 /// equals the threshold).
-#[must_use] 
+#[must_use]
 pub fn scale_peak(peak: f32) -> f32 {
     if peak <= 0.0 {
         0.0
@@ -62,7 +62,7 @@ pub fn scale_peak(peak: f32) -> f32 {
 }
 
 /// Map a slice of linear input peaks through [`scale_peak`].
-#[must_use] 
+#[must_use]
 pub fn scale_peaks(peaks: &[f32]) -> Vec<f32> {
     peaks.iter().map(|&p| scale_peak(p)).collect()
 }
@@ -73,7 +73,7 @@ pub fn scale_peaks(peaks: &[f32]) -> Vec<f32> {
 /// display amplitude. Columns get a 1-px-ish gap (20 % of the column) like
 /// the legacy bar rendering; near-silent columns are skipped so an idle
 /// display is an empty path.
-#[must_use] 
+#[must_use]
 pub fn bars_path(samples: &[f32], w: f64, h: f64) -> String {
     let n = samples.len();
     if n == 0 {
@@ -109,7 +109,7 @@ pub fn bars_path(samples: &[f32], w: f64, h: f64) -> String {
 /// (column `len − 1`), exactly aligned with the wave ring's oldest→newest
 /// snapshot; hits that scrolled out (or from the future — a torn read) are
 /// dropped.
-#[must_use] 
+#[must_use]
 pub fn marker_columns(hits: &[(u64, f32)], head: u64, len: usize, w: f64) -> Vec<(f64, f32)> {
     if len == 0 {
         return Vec::new();

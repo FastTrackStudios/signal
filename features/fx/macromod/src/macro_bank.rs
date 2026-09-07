@@ -53,13 +53,13 @@ impl MacroKnob {
     }
 
     /// Whether this knob has sub-macros.
-    #[must_use] 
+    #[must_use]
     pub const fn has_children(&self) -> bool {
         !self.children.is_empty()
     }
 
     /// Find a child sub-macro by ID.
-    #[must_use] 
+    #[must_use]
     pub fn get_child(&self, id: &str) -> Option<&Self> {
         self.children.iter().find(|c| c.id == id)
     }
@@ -71,7 +71,7 @@ impl MacroKnob {
 
     /// Format the current value as a display string.
     /// Bipolar knobs show -100% to +100% (0.5 = 0%). Normal knobs show 0–100%.
-    #[must_use] 
+    #[must_use]
     pub fn format_value(&self) -> String {
         if self.bipolar {
             let pct = ((self.value - 0.5) * 200.0).round() as i32;
@@ -91,7 +91,7 @@ impl MacroKnob {
     }
 
     /// Compute the output value for a specific binding given the current knob position.
-    #[must_use] 
+    #[must_use]
     pub fn compute_binding_value(&self, binding: &MacroBinding) -> f32 {
         let t = f64::from(self.value);
         let eased = binding.curve.apply(t) as f32;
@@ -146,7 +146,7 @@ pub struct MacroBank {
 impl MacroBank {
     pub const MAX_KNOBS: usize = 8;
 
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             knobs: Vec::new(),
@@ -170,7 +170,7 @@ impl MacroBank {
     }
 
     /// Find a knob by ID in the shared knobs only.
-    #[must_use] 
+    #[must_use]
     pub fn get(&self, id: &str) -> Option<&MacroKnob> {
         self.knobs.iter().find(|k| k.id == id)
     }
@@ -181,7 +181,7 @@ impl MacroBank {
     }
 
     /// Whether this bank has any groups configured.
-    #[must_use] 
+    #[must_use]
     pub const fn has_groups(&self) -> bool {
         !self.groups.is_empty()
     }
@@ -197,7 +197,7 @@ impl MacroBank {
     }
 
     /// Read the current selector knob value (0.0 if no selector configured or knob not found).
-    #[must_use] 
+    #[must_use]
     pub fn selector_value(&self) -> f32 {
         self.group_selector
             .as_ref()
@@ -206,7 +206,7 @@ impl MacroBank {
     }
 
     /// Get the selector knob (if configured).
-    #[must_use] 
+    #[must_use]
     pub fn selector_knob(&self) -> Option<&MacroKnob> {
         self.group_selector
             .as_ref()
@@ -217,7 +217,7 @@ impl MacroBank {
     ///
     /// Returns the group whose `selector_value` is closest to the given value.
     /// Returns `None` if no groups are configured.
-    #[must_use] 
+    #[must_use]
     pub fn active_group_for(&self, selector_value: f32) -> Option<&MacroGroup> {
         self.groups.iter().min_by(|a, b| {
             let da = (a.selector_value - selector_value).abs();
@@ -227,7 +227,7 @@ impl MacroBank {
     }
 
     /// Find the active group using the selector knob's current value.
-    #[must_use] 
+    #[must_use]
     pub fn active_group(&self) -> Option<&MacroGroup> {
         if self.groups.is_empty() {
             return None;
@@ -237,7 +237,7 @@ impl MacroBank {
 
     /// Get all visible knobs for a given selector value: shared knobs +
     /// the active group's knobs (if any).
-    #[must_use] 
+    #[must_use]
     pub fn visible_knobs_for(&self, selector_value: f32) -> Vec<&MacroKnob> {
         let mut result: Vec<&MacroKnob> = self.knobs.iter().collect();
         if let Some(group) = self.active_group_for(selector_value) {
@@ -247,13 +247,13 @@ impl MacroBank {
     }
 
     /// Get all visible knobs using the selector knob's current value.
-    #[must_use] 
+    #[must_use]
     pub fn visible_knobs(&self) -> Vec<&MacroKnob> {
         self.visible_knobs_for(self.selector_value())
     }
 
     /// Find a knob by ID, searching shared knobs (+ their children) first, then all groups.
-    #[must_use] 
+    #[must_use]
     pub fn get_knob(&self, id: &str) -> Option<&MacroKnob> {
         if let Some(k) = find_knob_recursive(&self.knobs, id) {
             return Some(k);

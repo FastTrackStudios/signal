@@ -14,8 +14,8 @@ use std::time::Duration;
 use dioxus::dioxus_core::Task;
 use dioxus::prelude::*;
 
-use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::LiveBlock;
+use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{PerfStack, PerformanceModel, TunerReading};
 
 /// How long a press must last to count as a hold (footswitch convention).

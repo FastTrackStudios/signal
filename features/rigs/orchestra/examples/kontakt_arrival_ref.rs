@@ -235,8 +235,8 @@ fn main() -> eyre::Result<()> {
         // True in-sample arrival per the causal mapping (using e50 as the
         // primary perceptual estimate; the table shows all three).
         let k_true50 = k_e50.map(|a| lt_off + a);
-        let (zone, our_marker) = marker_of(from, to)
-            .map_or(("?".into(), 0.0), |(f, m)| (f, f64::from(m)));
+        let (zone, our_marker) =
+            marker_of(from, to).map_or(("?".into(), 0.0), |(f, m)| (f, f64::from(m)));
         let delta = k_true50.map(|t| our_marker - t);
         let arr_ours = pitch_arrival(&ours, sr, noteon + 0.225, from, to, 0.375)
             .map(|t| (t - noteon) * 1000.0);

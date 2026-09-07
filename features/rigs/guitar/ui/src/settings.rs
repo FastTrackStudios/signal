@@ -75,7 +75,8 @@ pub fn AudioSettingsModal(bridge: AudioSettingsBridge, on_close: EventHandler<()
 
     let sample_rate_label = SAMPLE_RATES
         .iter()
-        .find(|(hz, _)| *hz == sample_rate()).map_or_else(|| format!("{} Hz", sample_rate()), |(_, l)| l.to_string());
+        .find(|(hz, _)| *hz == sample_rate())
+        .map_or_else(|| format!("{} Hz", sample_rate()), |(_, l)| l.to_string());
 
     rsx! {
         // Backdrop

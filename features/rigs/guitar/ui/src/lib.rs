@@ -28,13 +28,13 @@ pub use control::{ControlView, MidiMonitorButton, ZoomPanel};
 pub use eq_surface::EqProSurface;
 pub use grid::RigGraph;
 pub use icons::module_icon;
-pub use meters::{meter_level, MeterBar, MeterPair};
+pub use meters::{MeterBar, MeterPair, meter_level};
 pub use perform::PerformGrid;
 pub use remote::GuitarRigRemote;
 pub use settings::{AudioSettingsBridge, AudioSettingsModal};
 pub use sidebars::{LeftSidebar, RightSidebar};
 pub use signal_widgets::{Knob, KnobSize};
-pub use state::{use_rig_state, RigViewState};
+pub use state::{RigViewState, use_rig_state};
 
 // The wire contract, re-exported for convenience.
 pub use signal_guitar_proto as proto;

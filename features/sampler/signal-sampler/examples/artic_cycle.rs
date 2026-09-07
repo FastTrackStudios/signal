@@ -153,7 +153,9 @@ fn main() -> eyre::Result<()> {
             ((base + 0.15) * f64::from(SR)) as usize,
             ((base + 2.1) * f64::from(SR)) as usize,
         );
-        let (spawned, status) = if let Some((art, g)) = hit { (format!("{art} g={g:.2}"), "✓ ok") } else {
+        let (spawned, status) = if let Some((art, g)) = hit {
+            (format!("{art} g={g:.2}"), "✓ ok")
+        } else {
             broken.push(*label);
             ("(none)".to_string(), "✗ BROKEN")
         };

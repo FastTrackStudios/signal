@@ -15,12 +15,12 @@ pub struct Model {
 }
 
 impl Model {
-    #[must_use] 
+    #[must_use]
     pub fn rig_id_branded(&self) -> RigId {
         RigId::from(self.id.clone())
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_variant_id_branded(&self) -> RigSceneId {
         RigSceneId::from(self.default_variant_id.clone())
     }

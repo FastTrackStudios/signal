@@ -74,7 +74,7 @@ pub struct WahChain {
 }
 
 impl WahChain {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         let mut modulator = Modulator::new();
         modulator.trigger.mode = TriggerMode::Sync;
@@ -154,7 +154,7 @@ impl WahChain {
     }
 
     /// Current detected envelope level (for metering).
-    #[must_use] 
+    #[must_use]
     pub const fn envelope_level(&self) -> f64 {
         self.env_value
     }
@@ -232,7 +232,10 @@ impl Processor for WahChain {
             self.env_value = self.env_smoother.tick(limited);
 
             // Pattern modulation
-            let pos = (i as f64).mul_add(self.transport.beats_per_sample(self.sample_rate), self.transport.position_qn);
+            let pos = (i as f64).mul_add(
+                self.transport.beats_per_sample(self.sample_rate),
+                self.transport.position_qn,
+            );
             let t = TransportInfo {
                 position_qn: pos,
                 ..self.transport

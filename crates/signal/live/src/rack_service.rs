@@ -3,7 +3,10 @@
 //! Implements [`RackService`] on [`SignalLive`], with an in-memory cache
 //! for fast repeated reads.
 
-use super::{RackService, SignalLive, BlockRepo, ModuleRepo, LayerRepo, EngineRepo, RigRepo, ProfileRepo, SongRepo, SetlistRepo, SceneTemplateRepo, RackRepo, Rack, SignalServiceError, RackId};
+use super::{
+    BlockRepo, EngineRepo, LayerRepo, ModuleRepo, ProfileRepo, Rack, RackId, RackRepo, RackService,
+    RigRepo, SceneTemplateRepo, SetlistRepo, SignalLive, SignalServiceError, SongRepo,
+};
 
 impl<B, M, L, E, R, P, So, Se, St, Ra> RackService for SignalLive<B, M, L, E, R, P, So, Se, St, Ra>
 where

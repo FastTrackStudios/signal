@@ -14,12 +14,12 @@ pub struct Model {
 }
 
 impl Model {
-    #[must_use] 
+    #[must_use]
     pub fn preset_id_branded(&self) -> PresetId {
         PresetId::from(self.id.clone())
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn default_snapshot_id_branded(&self) -> SnapshotId {
         SnapshotId::from(self.default_snapshot_id.clone())
     }

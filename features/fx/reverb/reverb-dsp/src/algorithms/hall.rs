@@ -185,7 +185,11 @@ impl Hall {
         let base_delays = [137, 173, 211, 257, 307, 359, 419, 479];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.2);
 
-        for ((i, &d), (ap_l, ap_r)) in base_delays.iter().enumerate().zip(self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut())) {
+        for ((i, &d), (ap_l, ap_r)) in base_delays
+            .iter()
+            .enumerate()
+            .zip(self.mod_ap_l.iter_mut().zip(self.mod_ap_r.iter_mut()))
+        {
             let delay = num::f64_to_index(f64::from(d) * scale);
             ap_l.sample_delay = delay.max(4);
             ap_l.feedback = 0.4;
@@ -264,8 +268,9 @@ impl ReverbAlgorithm for Hall {
 
         let t60 = decay_to_t60(params.decay, HALL_T60.0, HALL_T60.1);
         let t60_dc = (t60 * params.low_decay_mult.max(0.05)).max(0.05);
-        let hf_ratio = (0.85f64.mul_add(1.0 - params.damping, 0.15) * params.high_decay_mult.max(0.05))
-            .clamp(0.02, 1.5);
+        let hf_ratio = (0.85f64.mul_add(1.0 - params.damping, 0.15)
+            * params.high_decay_mult.max(0.05))
+        .clamp(0.02, 1.5);
         let t60_ny = (t60 * hf_ratio).max(0.02);
         self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
         self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
@@ -294,8 +299,10 @@ impl ReverbAlgorithm for Hall {
         let stages = num::f64_to_index(params.diffusion * 10.0);
         self.diffuser_l.set_active_stages(stages);
         self.diffuser_r.set_active_stages(stages);
-        self.diffuser_l.set_feedback(params.diffusion.mul_add(0.25, 0.5));
-        self.diffuser_r.set_feedback(params.diffusion.mul_add(0.25, 0.5));
+        self.diffuser_l
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
+        self.diffuser_r
+            .set_feedback(params.diffusion.mul_add(0.25, 0.5));
 
         // Modulation → modulated AP in feedback path
         self.setup_mod_allpass(params.modulation);

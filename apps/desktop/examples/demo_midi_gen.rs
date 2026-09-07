@@ -48,7 +48,7 @@ const fn triad(minor: bool) -> [u8; 3] {
 
 /// Sustained pad: whole-bar close-voiced triads + an octave root, slightly
 /// overlapped so the swap never gaps. 4-bar loop × 4 ≈ 52 s at 74 BPM.
-#[must_use] 
+#[must_use]
 pub fn pads() -> MidiTakeContent {
     let mut c = MidiTakeContent::default();
     for cycle in 0..4 {
@@ -66,7 +66,7 @@ pub fn pads() -> MidiTakeContent {
 
 /// Simple piano figure: a broken chord per bar (root, fifth, tenth, octave
 /// on the beats) with a held low root. 4-bar loop × 4 ≈ 52 s.
-#[must_use] 
+#[must_use]
 pub fn piano() -> MidiTakeContent {
     let mut c = MidiTakeContent::default();
     for cycle in 0..4 {
@@ -77,8 +77,12 @@ pub fn piano() -> MidiTakeContent {
             let beats = [0u8, 7, third + 12, 12];
             for (i, off) in beats.iter().enumerate() {
                 let vel = if i == 0 { 84 } else { 72 };
-                c.notes
-                    .push(note(root + off, vel, (i as f64).mul_add(BEAT, start), BEAT * 1.6));
+                c.notes.push(note(
+                    root + off,
+                    vel,
+                    (i as f64).mul_add(BEAT, start),
+                    BEAT * 1.6,
+                ));
             }
             c.notes.push(note(root - 12, 76, start, BAR));
         }
@@ -88,7 +92,7 @@ pub fn piano() -> MidiTakeContent {
 
 /// 16th-note arp line over two octaves, accents on the beats.
 /// 4-bar loop × 4 ≈ 52 s.
-#[must_use] 
+#[must_use]
 pub fn arp() -> MidiTakeContent {
     let mut c = MidiTakeContent::default();
     let sixteenth = BEAT / 4.0;
@@ -123,7 +127,7 @@ pub fn arp() -> MidiTakeContent {
 }
 
 /// Every preset: (file stem, display name, content).
-#[must_use] 
+#[must_use]
 pub fn presets() -> Vec<(&'static str, &'static str, MidiTakeContent)> {
     vec![
         ("pads", "Pad progression (I–V–vi–IV)", pads()),

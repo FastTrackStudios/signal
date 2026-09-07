@@ -68,7 +68,7 @@ pub enum PackCategory {
 }
 
 impl PackCategory {
-    #[must_use] 
+    #[must_use]
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Amp => "amp",
@@ -79,7 +79,7 @@ impl PackCategory {
     }
 
     /// The subdirectory in signal-library/nam/ for this category.
-    #[must_use] 
+    #[must_use]
     pub const fn directory(&self) -> &'static str {
         match self {
             Self::Amp => "amps",
@@ -139,7 +139,7 @@ pub fn load_packs(packs_dir: &Path) -> Result<Vec<PackDefinition>, NamError> {
 }
 
 /// Build a `TagSet` from a pack definition for a specific file.
-#[must_use] 
+#[must_use]
 pub fn tags_for_file(pack: &PackDefinition, filename: &str) -> TagSet {
     let mut tags = TagSet::default();
 
@@ -226,7 +226,7 @@ pub fn tags_for_file(pack: &PackDefinition, filename: &str) -> TagSet {
 
 /// Given a filename, find the pack that owns it.
 /// Matches against both the pack's `files` map and the pack's directory.
-#[must_use] 
+#[must_use]
 pub fn find_pack_for_file<'a>(
     packs: &'a [PackDefinition],
     relative_path: &str,

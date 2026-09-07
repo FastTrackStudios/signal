@@ -1,7 +1,7 @@
 [package]
 name = "preset-browser"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
 license.workspace = true
 description = "Headless preset library and browsing model shared by the FTS plugin UIs"
 

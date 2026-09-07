@@ -14,7 +14,7 @@ pub struct GraphMapper {
 }
 
 impl GraphMapper {
-    #[must_use] 
+    #[must_use]
     pub const fn new(
         min_freq: f64,
         max_freq: f64,
@@ -33,7 +33,7 @@ impl GraphMapper {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn freq_to_x(&self, freq: f64) -> f64 {
         FreqAxis::new(self.min_freq, self.max_freq).freq_to_x(
             freq,
@@ -42,7 +42,7 @@ impl GraphMapper {
         )
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn x_to_freq(&self, x: f64) -> f64 {
         FreqAxis::new(self.min_freq, self.max_freq).x_to_freq(
             x,
@@ -51,17 +51,17 @@ impl GraphMapper {
         )
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn db_to_y(&self, db: f64) -> f64 {
         DbAxis::symmetric(self.db_range).db_to_y(db, self.padding, self.padding + self.height)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn y_to_db(&self, y: f64) -> f64 {
         DbAxis::symmetric(self.db_range).y_to_db(y, self.padding, self.padding + self.height)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_inside(&self, x: f64, y: f64) -> bool {
         x >= self.padding
             && x <= self.padding + self.width
@@ -70,7 +70,7 @@ impl GraphMapper {
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn filter_type_for_position(freq: f64, gain: f64, db_range: f64) -> EqBandShape {
     let gain_near_zero = gain.abs() < db_range * 0.2;
     let near_bottom = gain < -db_range * 0.82;
@@ -90,7 +90,7 @@ pub fn filter_type_for_position(freq: f64, gain: f64, db_range: f64) -> EqBandSh
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn drag_gain_for_shape(shape: EqBandShape, current_gain: f32, pointer_gain: f64) -> f32 {
     if shape.uses_gain() {
         let max_gain = if matches!(
@@ -115,7 +115,7 @@ pub fn drag_gain_for_shape(shape: EqBandShape, current_gain: f32, pointer_gain: 
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn wheel_q_for_shape(shape: EqBandShape, q: f32, delta_y: f64, slope_mode: bool) -> f32 {
     if shape.uses_slope() || slope_mode {
         let current = super::eq_graph_model::q_to_slope_db(q);
@@ -127,7 +127,7 @@ pub fn wheel_q_for_shape(shape: EqBandShape, q: f32, delta_y: f64, slope_mode: b
     }
 }
 
-#[must_use] 
+#[must_use]
 pub fn nearest_band(
     bands: &[EqBand],
     mapper: GraphMapper,
@@ -150,7 +150,7 @@ pub fn nearest_band(
     best
 }
 
-#[must_use] 
+#[must_use]
 pub fn bands_in_rect(
     bands: &[EqBand],
     mapper: GraphMapper,

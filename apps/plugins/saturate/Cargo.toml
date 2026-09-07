@@ -1,7 +1,7 @@
 [package]
 name = "saturate-plugin"
 version.workspace = true
-edition = "2021"          # matches the nice-plug plugin stack (level-plugin, tune-plugin)
+edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "FTS Saturate — CLAP/VST3 saturation plugin: five circuits over the Class-A preamp engine"

@@ -33,7 +33,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::fabfilter::proq4::{to_native_eq_params, ProQ4};
+use crate::fabfilter::proq4::{ProQ4, to_native_eq_params};
 
 /// The plugin's CLAP id. REAPER resolves the plugin by this string, which is
 /// why writing a CLAP block needs no id hash or class UID.

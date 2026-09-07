@@ -1,6 +1,5 @@
 //! Reverb algorithm trait and type enum.
 
-
 /// All available reverb algorithm types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlgorithmType {
@@ -300,7 +299,8 @@ impl DecayBand {
             // Low shelf: full below f0, none far above.
             1 => 1.0 / (w * q * 1.414).mul_add(w * q * 1.414, 1.0),
             // High shelf: full above f0.
-            2 => (1.0 - 1.0 / (w / (q * 1.414).recip()).mul_add(w / (q * 1.414).recip(), 1.0)).clamp(0.0, 1.0),
+            2 => (1.0 - 1.0 / (w / (q * 1.414).recip()).mul_add(w / (q * 1.414).recip(), 1.0))
+                .clamp(0.0, 1.0),
             // Bell.
             _ => {
                 let bw = w - 1.0 / w.max(1e-9);
@@ -308,7 +308,6 @@ impl DecayBand {
             }
         }
     }
-
 }
 
 /// The whole curve's decay-rate multiplier at `freq` (bands sum in rate-dB,
@@ -1013,7 +1012,10 @@ pub trait ReverbAlgorithm: Send {
 
     /// Cross-leg reshape originals (LR, RL) for a true-stereo slot A
     /// impulse, if loaded.
-    #[expect(clippy::type_complexity, reason = "tuple shape represents stereo IR pair")]
+    #[expect(
+        clippy::type_complexity,
+        reason = "tuple shape represents stereo IR pair"
+    )]
     fn impulse_reshape_cross_source(
         &self,
     ) -> Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)> {
@@ -1126,7 +1128,10 @@ pub trait ReverbAlgorithm: Send {
     /// the slot as cheap `Arc` clones (RT-safe — no allocation) and
     /// clears the dirty flag for that slot. `None` = nothing to do or
     /// original unavailable.
-    #[expect(clippy::type_complexity, reason = "tuple shape represents stereo IR pair")]
+    #[expect(
+        clippy::type_complexity,
+        reason = "tuple shape represents stereo IR pair"
+    )]
     fn impulse_reshape_source(
         &mut self,
         slot: IrSlot,
@@ -1199,7 +1204,8 @@ pub fn t60_shelf_targets(
     damping: f64,
 ) -> (f64, f64) {
     let t60_dc = (t60 * low_decay_mult.max(0.05)).max(0.05);
-    let hf_ratio = (0.85f64.mul_add(1.0 - damping, 0.15) * high_decay_mult.max(0.05)).clamp(0.02, 1.5);
+    let hf_ratio =
+        (0.85f64.mul_add(1.0 - damping, 0.15) * high_decay_mult.max(0.05)).clamp(0.02, 1.5);
     let t60_ny = (t60 * hf_ratio).max(0.02);
     (t60_dc, t60_ny)
 }
@@ -1344,7 +1350,7 @@ impl AlgorithmType {
 /// nearest end rather than producing an out-of-range control value. Callers
 /// that need to know they were clamped should compare against
 /// [`AlgorithmType::t60_range`] first.
-#[must_use] 
+#[must_use]
 pub fn t60_to_decay(t60_s: f64, min_s: f64, max_s: f64) -> f64 {
     let min_s = min_s.max(0.01);
     let max_s = max_s.max(min_s * 1.001);
@@ -1378,8 +1384,14 @@ mod decay_time_tests {
 
     #[test]
     fn freezes_at_the_top() {
-        assert_eq!(decay_to_t60(0.999, 0.2, 8.0).to_bits(), INFINITE_T60.to_bits());
-        assert_eq!(decay_to_t60(1.5, 0.2, 8.0).to_bits(), INFINITE_T60.to_bits());
+        assert_eq!(
+            decay_to_t60(0.999, 0.2, 8.0).to_bits(),
+            INFINITE_T60.to_bits()
+        );
+        assert_eq!(
+            decay_to_t60(1.5, 0.2, 8.0).to_bits(),
+            INFINITE_T60.to_bits()
+        );
     }
 
     #[test]
@@ -1469,7 +1481,12 @@ mod decay_time_tests {
         assert!(midband < 2.5);
 
         let factor = tilt_midband_factor(0.5, 1.0);
-        assert!((2.5 * factor).mul_add(-(0.15f64 + 0.85).sqrt(), midband).abs() < 1e-9);
+        assert!(
+            (2.5 * factor)
+                .mul_add(-(0.15f64 + 0.85).sqrt(), midband)
+                .abs()
+                < 1e-9
+        );
 
         // Pre-compensating restores the requested midband.
         let (dc2, ny2) = t60_shelf_targets(2.5 / factor, 0.5, 1.0, 0.0);
@@ -1531,9 +1548,9 @@ mod decay_eq_filter_probe {
 
 #[cfg(test)]
 mod decay_eq_localization {
-    use dsp_core::num;
-    use crate::algorithm::{DecayBand, DECAY_BANDS};
+    use crate::algorithm::{DECAY_BANDS, DecayBand};
     use crate::primitives::fdn::{Fdn, MixMatrix};
+    use dsp_core::num;
 
     const SR: f64 = 48_000.0;
 
@@ -1562,7 +1579,8 @@ mod decay_eq_localization {
         let mut out = Vec::with_capacity(total);
         for i in 0..total {
             let x = if i < drive {
-                let env = (std::f64::consts::PI * num::count_to_f64(i) / num::count_to_f64(drive)).sin();
+                let env =
+                    (std::f64::consts::PI * num::count_to_f64(i) / num::count_to_f64(drive)).sin();
                 (std::f64::consts::TAU * probe_hz * num::count_to_f64(i) / SR).sin() * env
             } else {
                 0.0

@@ -94,7 +94,11 @@ fn fill(events: &mut Vec<(f64, u8, u8)>, base_qn: f64, jitter: &mut u64) {
     // 16th-note tom roll across beats 3-4
     let toms = [SNARE, SNARE, RTOM_HI, RTOM_HI, RTOM_LO, RTOM_LO, FTOM, FTOM];
     for (i, &n) in toms.iter().enumerate() {
-        events.push(((i as f64).mul_add(0.25, base_qn + 2.0), n, vel(112 + (i as i32))));
+        events.push((
+            (i as f64).mul_add(0.25, base_qn + 2.0),
+            n,
+            vel(112 + (i as i32)),
+        ));
     }
 }
 

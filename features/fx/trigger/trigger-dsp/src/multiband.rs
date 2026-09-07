@@ -14,8 +14,8 @@
 //! response at crossover frequencies.
 
 use audiocore_dsp::AudioConfig;
-use eq_dsp::runtime::band::Band;
 use eq_dsp::FilterType;
+use eq_dsp::runtime::band::Band;
 
 use crate::spectral_flux::{FluxMode, SpectralFluxDetector};
 
@@ -108,15 +108,14 @@ pub struct MultibandDetector {
 }
 
 impl MultibandDetector {
-    #[must_use] 
+    #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let config = AudioConfig {
             sample_rate,
             max_buffer_size: 512,
         };
 
-        let splits = DEFAULT_CROSSOVERS
-            .map(|freq| Box::new(Split::new(freq, config.sample_rate)));
+        let splits = DEFAULT_CROSSOVERS.map(|freq| Box::new(Split::new(freq, config.sample_rate)));
 
         // Use smaller FFT for lower latency in multiband mode
         let fft_size = 1024;
@@ -191,10 +190,10 @@ impl MultibandDetector {
                 continue;
             }
 
-            if let Some(odf) = self.detectors[b].tick(sig) {
-                if self.detectors[b].is_peak(odf, self.thresholds[b]) {
-                    triggers[b] = Some(BandTrigger { band: b, odf });
-                }
+            if let Some(odf) = self.detectors[b].tick(sig)
+                && self.detectors[b].is_peak(odf, self.thresholds[b])
+            {
+                triggers[b] = Some(BandTrigger { band: b, odf });
             }
         }
 
@@ -203,7 +202,7 @@ impl MultibandDetector {
 
     /// Get the dominant band from a set of simultaneous triggers.
     /// Returns the band with the highest ODF value.
-    #[must_use] 
+    #[must_use]
     pub fn dominant_band(triggers: &[BandTrigger]) -> Option<usize> {
         triggers
             .iter()
@@ -216,7 +215,7 @@ impl MultibandDetector {
     }
 
     /// Classify a trigger based on which band fired.
-    #[must_use] 
+    #[must_use]
     pub const fn classify(band: usize) -> &'static str {
         match band {
             0 => "kick",

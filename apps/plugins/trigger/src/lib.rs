@@ -31,8 +31,8 @@
 
 use nice_plug::prelude::*;
 use nice_plug_dioxus::prelude::*;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use trigger::detector::DetectAlgorithm;
 use trigger::velocity::{VelocityCurve, VelocityMapper};

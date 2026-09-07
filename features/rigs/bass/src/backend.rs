@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
-use architect::{layers, HasDispatcher, Layer, PubSub, Services};
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use midicore::{MidiEvent, MidiMonitor};
 use signal_bass_proto::bass::{BassEvent, BassRig as BassRigSvc, BassRigStreamSource};
 use signal_bass_proto::{BassBlock, BassPreset, BassStatus, PresetKind};

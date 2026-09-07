@@ -25,7 +25,7 @@ pub enum StereoMode {
 
 impl StereoMode {
     /// Get display label for the stereo mode.
-    #[must_use] 
+    #[must_use]
     pub const fn label(&self) -> &'static str {
         match self {
             Self::Stereo => "Stereo",
@@ -37,7 +37,7 @@ impl StereoMode {
     }
 
     /// Get short label for the stereo mode.
-    #[must_use] 
+    #[must_use]
     pub const fn short_label(&self) -> &'static str {
         match self {
             Self::Stereo => "ST",
@@ -96,7 +96,7 @@ pub enum EqBandShape {
 
 impl EqBandShape {
     /// Get display label for the filter shape.
-    #[must_use] 
+    #[must_use]
     pub const fn label(&self) -> &'static str {
         match self {
             Self::Bell => "Bell",
@@ -113,13 +113,13 @@ impl EqBandShape {
     }
 
     /// Whether this filter type uses slope (dB/oct) instead of Q.
-    #[must_use] 
+    #[must_use]
     pub const fn uses_slope(&self) -> bool {
         matches!(self, Self::LowCut | Self::HighCut)
     }
 
     /// Whether this filter type uses gain.
-    #[must_use] 
+    #[must_use]
     pub const fn uses_gain(&self) -> bool {
         !matches!(
             self,
@@ -128,7 +128,7 @@ impl EqBandShape {
     }
 
     /// All available filter shapes.
-    #[must_use] 
+    #[must_use]
     pub const fn all() -> &'static [Self] {
         &[
             Self::Bell,
@@ -146,14 +146,14 @@ impl EqBandShape {
 }
 
 /// Convert Q value to slope in dB/octave for cut filters.
-#[must_use] 
+#[must_use]
 pub fn q_to_slope_db(q: f32) -> f32 {
     // Q represents filter order: 0.5 = 6dB/oct, 1.0 = 12dB/oct, etc.
     (q * 2.0).round().max(1.0) * 6.0
 }
 
 /// Convert slope in dB/octave to Q value for cut filters.
-#[must_use] 
+#[must_use]
 pub fn slope_db_to_q(slope_db: f32) -> f32 {
     // 6dB/oct = 0.5, 12dB/oct = 1.0, etc.
     (slope_db / 6.0).round().max(1.0) / 2.0
@@ -189,7 +189,7 @@ pub const BAND_COLORS: &[&str] = &[
 ];
 
 /// Get the color for a band by index.
-#[must_use] 
+#[must_use]
 pub fn get_band_color(index: usize) -> &'static str {
     BAND_COLORS[index % BAND_COLORS.len()]
 }
@@ -201,7 +201,7 @@ pub fn get_band_color(index: usize) -> &'static str {
 /// Used to color band nodes by their center frequency (ReJJ-style) so
 /// the graph is readable at a glance: bass nodes warm, treble nodes cool.
 /// Returns a `#rrggbb` hex string.
-#[must_use] 
+#[must_use]
 pub fn freq_to_color(hz: f64) -> String {
     let lo = 20.0_f64.log10();
     let hi = 20_000.0_f64.log10();
@@ -211,7 +211,7 @@ pub fn freq_to_color(hz: f64) -> String {
 }
 
 /// HSL (h in degrees 0–360, s/l in 0–1) → `#rrggbb` hex.
-#[must_use] 
+#[must_use]
 pub fn hsl_to_hex(h: f64, s: f64, l: f64) -> String {
     let c = (1.0 - 2.0f64.mul_add(l, -1.0).abs()) * s;
     let hp = (h.rem_euclid(360.0)) / 60.0;
@@ -230,7 +230,7 @@ pub fn hsl_to_hex(h: f64, s: f64, l: f64) -> String {
 }
 
 /// Get the fill color (semi-transparent) for a band by index.
-#[must_use] 
+#[must_use]
 pub fn get_band_fill_color(index: usize) -> String {
     let hex = get_band_color(index);
     if let (Ok(r), Ok(g), Ok(b)) = (
@@ -261,7 +261,7 @@ pub struct EqGraphRenderState {
 }
 
 impl EqGraphRenderState {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             bands: RwLock::new(Vec::new()),
@@ -290,7 +290,7 @@ pub const DB_RANGE_STEPS: [f64; 6] = [3.0, 6.0, 12.0, 18.0, 24.0, 30.0];
 pub const DEFAULT_DB_RANGE: f64 = DB_RANGE_STEPS[0];
 
 /// The dB range a `db_range` param index selects.
-#[must_use] 
+#[must_use]
 pub fn db_range_for_index(index: i32) -> f64 {
     DB_RANGE_STEPS
         .get(index.max(0) as usize)
@@ -302,7 +302,7 @@ pub fn db_range_for_index(index: i32) -> f64 {
 /// larger than `from` — the auto-range expansion step
 /// (`fx.eq.display.auto-range`).
 // r[impl fx.eq.display.auto-range]
-#[must_use] 
+#[must_use]
 pub fn db_range_index_containing(db: f64, from: i32) -> Option<i32> {
     DB_RANGE_STEPS
         .iter()

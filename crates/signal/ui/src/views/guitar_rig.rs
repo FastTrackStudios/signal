@@ -23,9 +23,9 @@ use signal_proto::defaults::guitar::guitar_rig_template;
 
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::{RigClient, RigEvent, RigStreamClient};
-use signal_guitar_ui::{meter_level, MeterPair, PerformGrid};
+use signal_guitar_ui::{MeterPair, PerformGrid, meter_level};
 
-use crate::components::{block_color, BlockColor, GridSelection, GridSlot};
+use crate::components::{BlockColor, GridSelection, GridSlot, block_color};
 use crate::views::{
     AudioPrefs, AudioSettingsBridge, AudioSettingsModal, LiveBlock, PerformanceModel, RigGridPanel,
 };
@@ -176,17 +176,16 @@ pub fn GuitarRigView() -> Element {
     // A per-render bridge carrying the *current* shared prefs + device lists,
     // handed to the modal + quick picker so their edits round-trip through
     // `apply`.
-    let live_bridge =
-        devices
-            .read()
-            .as_ref()
-            .and_then(std::clone::Clone::clone)
-            .map(|d| AudioSettingsBridge {
-                inputs: d.inputs,
-                outputs: d.outputs,
-                prefs: prefs(),
-                on_save: apply,
-            });
+    let live_bridge = devices
+        .read()
+        .as_ref()
+        .and_then(std::clone::Clone::clone)
+        .map(|d| AudioSettingsBridge {
+            inputs: d.inputs,
+            outputs: d.outputs,
+            prefs: prefs(),
+            on_save: apply,
+        });
 
     let mut running = use_signal(|| false);
     let mut in_level = use_signal(|| 0.0f64);

@@ -26,7 +26,7 @@ pub mod omni;
 pub mod omni_import;
 pub mod pack;
 
-pub use engine::{signal_layer, Source};
+pub use engine::{Source, signal_layer};
 pub use omni::{omnisphere_preset, omnisphere_soundsource_preset};
 
 /// Register the Omnisphere built-in presets into `r`.

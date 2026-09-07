@@ -88,9 +88,11 @@ fn is_variant_component(c: &str) -> bool {
 fn regex_like_rr_vl(s: &str) -> bool {
     for prefix in ["rr", "vl", "v"] {
         if let Some(rest) = s.strip_prefix(prefix)
-            && !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
-                return true;
-            }
+            && !rest.is_empty()
+            && rest.chars().all(|c| c.is_ascii_digit())
+        {
+            return true;
+        }
     }
     false
 }

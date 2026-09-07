@@ -34,4 +34,4 @@
 
 pub mod models;
 
-pub use models::{Arch, Asset, Model, Resolved, DRUMSEP, MANAGED};
+pub use models::{Arch, Asset, DRUMSEP, MANAGED, Model, Resolved};

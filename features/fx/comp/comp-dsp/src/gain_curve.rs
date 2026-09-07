@@ -100,7 +100,9 @@ impl GainCurve {
         let (attack_mult, release_mult) = match self.style {
             CompressionStyle::Fet => (0.9, 0.95),
             CompressionStyle::Optical => (1.15, 0.93),
-            CompressionStyle::Clean | CompressionStyle::Vca | CompressionStyle::Reserved => (1.0, 1.0),
+            CompressionStyle::Clean | CompressionStyle::Vca | CompressionStyle::Reserved => {
+                (1.0, 1.0)
+            }
         };
 
         self.attack_coeff = base_attack * attack_mult;

@@ -68,7 +68,9 @@ const WARMUP_FRAMES: usize = 95;
 
 fn arg(name: &str) -> Option<String> {
     let a: Vec<String> = std::env::args().collect();
-    a.iter().position(|x| x == name).and_then(|i| a.get(i + 1).cloned())
+    a.iter()
+        .position(|x| x == name)
+        .and_then(|i| a.get(i + 1).cloned())
 }
 
 /// Deterministic white noise — a fixed spectrum across runs keeps the
@@ -76,7 +78,10 @@ fn arg(name: &str) -> Option<String> {
 struct Lcg(u64);
 impl Lcg {
     fn next(&mut self) -> f64 {
-        self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1);
         ((self.0 >> 33) as f64 / (1u64 << 31) as f64) - 1.0
     }
 }
@@ -135,7 +140,11 @@ fn stimulus(frames: usize, amplitude: f64) -> (Vec<f32>, Vec<f32>) {
                 phase[k] += std::f64::consts::TAU * f / SR;
             }
         }
-        let mut side = if mono { 0.0 } else { amplitude * side_rng.next() };
+        let mut side = if mono {
+            0.0
+        } else {
+            amplitude * side_rng.next()
+        };
         if tonal && !mono {
             for (k, f) in partials.iter().enumerate() {
                 side += amplitude * 1.6 * side_phase[k].sin();
@@ -190,8 +199,15 @@ fn spectrum(buf: &[f32]) -> Vec<f64> {
 }
 
 /// Render through the hosted plugin.
-fn render_reference(plugin: &mut HostedPlugin, left: &[f32], right: &[f32]) -> (Vec<f32>, Vec<f32>) {
-    let (mut ol, mut or) = (Vec::with_capacity(left.len()), Vec::with_capacity(left.len()));
+fn render_reference(
+    plugin: &mut HostedPlugin,
+    left: &[f32],
+    right: &[f32],
+) -> (Vec<f32>, Vec<f32>) {
+    let (mut ol, mut or) = (
+        Vec::with_capacity(left.len()),
+        Vec::with_capacity(left.len()),
+    );
     let mut pos = 0;
     while pos < left.len() {
         let n = BLOCK.min(left.len() - pos);
@@ -229,13 +245,22 @@ fn render_native(params: &[(String, f64)], left: &[f32], right: &[f32]) -> (Vec<
         println!();
     }
     let events = PluginEvents::default();
-    let (mut outl, mut outr) = (Vec::with_capacity(left.len()), Vec::with_capacity(left.len()));
+    let (mut outl, mut outr) = (
+        Vec::with_capacity(left.len()),
+        Vec::with_capacity(left.len()),
+    );
     let mut pos = 0;
     while pos < left.len() {
         let n = BLOCK.min(left.len() - pos);
         let (mut ol, mut or) = (vec![0.0f32; n], vec![0.0f32; n]);
-        eq.process_block(&left[pos..pos + n], &right[pos..pos + n], &mut ol, &mut or, &events)
-            .expect("process");
+        eq.process_block(
+            &left[pos..pos + n],
+            &right[pos..pos + n],
+            &mut ol,
+            &mut or,
+            &events,
+        )
+        .expect("process");
         outl.extend_from_slice(&ol);
         outr.extend_from_slice(&or);
         pos += n;
@@ -327,7 +352,9 @@ fn main() {
             .map(|(_, v)| *v as f32)
             .collect()
     } else {
-        signal_import::fabfilter::ffbs::parse(&bytes).expect("parse").params
+        signal_import::fabfilter::ffbs::parse(&bytes)
+            .expect("parse")
+            .params
     };
     let state = signal_import::fabfilter::ffbs::FfbsState {
         version: 1,
@@ -344,7 +371,9 @@ fn main() {
     // A comma-separated list, so a suspected interaction between two bands
     // can be reproduced with just those two.
     let only: Option<Vec<usize>> = arg("--only-band").map(|v| {
-        v.split(',').filter_map(|t| t.trim().parse::<usize>().ok()).collect()
+        v.split(',')
+            .filter_map(|t| t.trim().parse::<usize>().ok())
+            .collect()
     });
     let mut floats = floats;
     if let Some(ns) = only.filter(|v| !v.is_empty()) {
@@ -378,9 +407,7 @@ fn main() {
         for (name, value) in &mut params {
             if let Some(rest) = name.strip_prefix('b') {
                 if let Some((idx, field)) = rest.split_once('_') {
-                    if field == "used"
-                        && !idx.parse::<usize>().is_ok_and(|i| ns.contains(&i))
-                    {
+                    if field == "used" && !idx.parse::<usize>().is_ok_and(|i| ns.contains(&i)) {
                         *value = 0.0;
                     }
                 }
@@ -428,8 +455,12 @@ fn main() {
             if a != "--global" {
                 continue;
             }
-            let Some(spec) = argv.get(i + 1) else { continue };
-            let Some((idx, v)) = spec.split_once('=') else { continue };
+            let Some(spec) = argv.get(i + 1) else {
+                continue;
+            };
+            let Some((idx, v)) = spec.split_once('=') else {
+                continue;
+            };
             if let (Ok(idx), Ok(v)) = (idx.trim().parse::<usize>(), v.trim().parse::<f32>()) {
                 if idx < count {
                     let at = 20 + idx * 4;
@@ -455,7 +486,9 @@ fn main() {
     // `--level` in dBFS RMS of each of mid and side. The default is what the
     // library has always been measured at; a second level is the cheapest way
     // to find a preset whose agreement is an accident of one loudness.
-    let level_db = arg("--level").and_then(|v| v.parse::<f64>().ok()).unwrap_or(-18.8);
+    let level_db = arg("--level")
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(-18.8);
     let (in_l, in_r) = stimulus(frames, 10.0f64.powf(level_db / 20.0) * 3.0f64.sqrt());
     let (ref_l, ref_r) = render_reference(&mut plugin, &in_l, &in_r);
     let (our_l, our_r) = render_native(&params, &in_l, &in_r);
@@ -469,8 +502,14 @@ fn main() {
         rms(&ref_l),
         rms(&our_l)
     );
-    let identical = ref_l.iter().zip(in_l.iter()).all(|(a, b)| (a - b).abs() < 1e-9)
-        && ref_r.iter().zip(in_r.iter()).all(|(a, b)| (a - b).abs() < 1e-9);
+    let identical = ref_l
+        .iter()
+        .zip(in_l.iter())
+        .all(|(a, b)| (a - b).abs() < 1e-9)
+        && ref_r
+            .iter()
+            .zip(in_r.iter())
+            .all(|(a, b)| (a - b).abs() < 1e-9);
     if identical {
         println!(
             "WARNING: the reference is bit-identical to the input — the plugin is not processing"

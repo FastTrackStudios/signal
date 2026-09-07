@@ -37,7 +37,7 @@ pub enum AudioSource {
 }
 
 impl AudioSource {
-    #[must_use] 
+    #[must_use]
     pub const fn display_name(&self) -> &str {
         match self {
             Self::HardwareInput { label, .. } => label.as_str(),

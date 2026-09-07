@@ -9,11 +9,11 @@
 //! caller (plugin, CLI, test) can drive it.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 
-use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
+use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
 
 use realfft::RealFftPlanner;
 
@@ -116,7 +116,10 @@ impl IrEngine {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[expect(clippy::result_large_err, reason = "SendError contains the full job type; simplifying the error type would break the API")]
+    #[expect(
+        clippy::result_large_err,
+        reason = "SendError contains the full job type; simplifying the error type would break the API"
+    )]
     pub fn submit(&self, job: IrJob) -> Result<(), crossbeam_channel::SendError<IrJob>> {
         self.tx_jobs.send(job)
     }
@@ -134,7 +137,10 @@ impl IrEngine {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[expect(clippy::result_large_err, reason = "SendError contains the full job type; simplifying the error type would break the API")]
+    #[expect(
+        clippy::result_large_err,
+        reason = "SendError contains the full job type; simplifying the error type would break the API"
+    )]
     pub fn submit_path<P: AsRef<Path>>(
         &self,
         id: u64,
@@ -151,7 +157,10 @@ impl IrEngine {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[expect(clippy::result_large_err, reason = "SendError contains the full job type; simplifying the error type would break the API")]
+    #[expect(
+        clippy::result_large_err,
+        reason = "SendError contains the full job type; simplifying the error type would break the API"
+    )]
     pub fn submit_path_slot<P: AsRef<Path>>(
         &self,
         id: u64,
@@ -192,10 +201,10 @@ impl IrEngine {
             .name("reverb-ir-relay".into())
             .spawn(move || {
                 while let Ok(result) = src.recv() {
-                    if let Ok(ir) = result.outcome {
-                        if tx.send(ir).is_err() {
-                            break;
-                        }
+                    if let Ok(ir) = result.outcome
+                        && tx.send(ir).is_err()
+                    {
+                        break;
                     }
                 }
             })
@@ -293,7 +302,10 @@ pub struct ReshapeJob {
     pub transforms: IrTransforms,
     pub sample_rate: f64,
     /// True-stereo cross originals (LR, RL) to shape alongside.
-    #[expect(clippy::type_complexity, reason = "cross-leg IR pair; Arc avoids clones on every submission")]
+    #[expect(
+        clippy::type_complexity,
+        reason = "cross-leg IR pair; Arc avoids clones on every submission"
+    )]
     pub cross: Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)>,
 }
 
@@ -417,7 +429,10 @@ impl ImpulseReshaper {
     /// # Errors
     ///
     /// Returns an error if the worker thread has shut down.
-    #[expect(clippy::result_large_err, reason = "SendError contains the full job type; simplifying the error type would break the API")]
+    #[expect(
+        clippy::result_large_err,
+        reason = "SendError contains the full job type; simplifying the error type would break the API"
+    )]
     pub fn submit(&self, job: ReshapeJob) -> Result<(), crossbeam_channel::SendError<ReshapeJob>> {
         self.tx_jobs.send(job)
     }
@@ -519,7 +534,11 @@ fn true_stereo_sibling(path: &Path) -> Option<(PathBuf, PathBuf)> {
         } else {
             continue;
         };
-        #[expect(clippy::string_slice, clippy::arithmetic_side_effects, reason = "stem.len() >= this.len() guaranteed by ends_with() check; all suffixes are ASCII")]
+        #[expect(
+            clippy::string_slice,
+            clippy::arithmetic_side_effects,
+            reason = "stem.len() >= this.len() guaranteed by ends_with() check; all suffixes are ASCII"
+        )]
         let base = &stem[..stem.len() - this.len()];
         let sibling = path.with_file_name(format!("{base}{other}.{ext}"));
         if sibling.is_file() {

@@ -261,11 +261,7 @@ pub fn proq4_s2_from_AF_with_subfreq(
         let w4 = w2 * w2;
         let num = A.mul_add(w4, B.mul_add(w2, C));
         let den = D.mul_add(w4, E.mul_add(w2, F));
-        if den.abs() > 1e-300 {
-            num / den
-        } else {
-            0.0
-        }
+        if den.abs() > 1e-300 { num / den } else { 0.0 }
     };
     let u_pole = h_sq(w_pole);
     let u_zero = h_sq(w_zero);

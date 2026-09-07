@@ -154,7 +154,7 @@ pub fn parse_nam_metadata(contents: &str) -> Result<NamMetadata, serde_json::Err
 }
 
 /// Infer tags from NAM metadata fields.
-#[must_use] 
+#[must_use]
 pub fn infer_tags_from_metadata(meta: &NamMetadata, filename: &str) -> TagSet {
     let mut tags = TagSet::default();
 
@@ -223,7 +223,7 @@ pub fn infer_tags_from_metadata(meta: &NamMetadata, filename: &str) -> TagSet {
 }
 
 /// Determine file kind from extension.
-#[must_use] 
+#[must_use]
 pub fn kind_from_path(path: &Path) -> Option<NamFileKind> {
     match path.extension().and_then(|e| e.to_str()) {
         Some("nam") => Some(NamFileKind::AmpModel),

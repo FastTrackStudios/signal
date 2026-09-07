@@ -19,9 +19,9 @@
 
 use std::path::Path;
 
+use signal_sampler::SamplerRig;
 use signal_sampler::engine::budget;
 use signal_sampler::loudness::integrated_lufs;
-use signal_sampler::SamplerRig;
 
 /// A mid-register chord, held — what a keys player leans on, and what any
 /// pack can be asked to play.

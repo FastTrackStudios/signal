@@ -20,7 +20,6 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-
 use audiocore_dsp::{AudioConfig, Processor};
 use trigger_dsp::chain::TriggerChain;
 use trigger_dsp::detector::TriggerDetector;

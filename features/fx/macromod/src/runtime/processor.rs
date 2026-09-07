@@ -8,9 +8,9 @@
 use std::collections::HashMap;
 
 use crate::routing::ModulationRoute;
+use crate::sources::ModulationSource;
 use crate::sources::follower::FollowerConfig;
 use crate::sources::random::RandomConfig;
-use crate::sources::ModulationSource;
 use crate::target::ParamTarget;
 
 use super::envelope_state::EnvelopeState;
@@ -46,7 +46,7 @@ pub struct FollowerState {
 }
 
 impl FollowerState {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             level: 0.0,
@@ -87,7 +87,7 @@ pub struct RandomState {
 }
 
 impl RandomState {
-    #[must_use] 
+    #[must_use]
     pub fn new(seed: Option<u64>) -> Self {
         let rng_state = seed.unwrap_or(0x1234_5678_9ABC_DEF0);
         let mut s = Self {
@@ -113,9 +113,7 @@ impl RandomState {
     pub fn tick(&mut self, dt: f64, config: &RandomConfig, bpm: f64) -> f64 {
         let rate = if config.tempo_sync {
             let beats_per_sec = bpm / 60.0;
-            let div_beats = config
-                .sync_division
-                .map_or(1.0, |d| f64::from(d.beats()));
+            let div_beats = config.sync_division.map_or(1.0, |d| f64::from(d.beats()));
             beats_per_sec / div_beats
         } else {
             f64::from(config.rate_hz)
@@ -182,7 +180,7 @@ pub struct ModulationProcessor {
 
 impl ModulationProcessor {
     /// Create a new processor from a set of modulation routes.
-    #[must_use] 
+    #[must_use]
     pub fn new(routes: Vec<ModulationRoute>) -> Self {
         let states = routes
             .iter()
@@ -213,7 +211,7 @@ impl ModulationProcessor {
     }
 
     /// Number of routes.
-    #[must_use] 
+    #[must_use]
     pub const fn route_count(&self) -> usize {
         self.routes.len()
     }
@@ -227,7 +225,7 @@ impl ModulationProcessor {
 
         // Update follower input levels before processing
         for (&route_idx, &level) in &self.follower_inputs {
-            if let Some(SourceState::Follower(ref mut state)) = self.states.get_mut(route_idx) {
+            if let Some(SourceState::Follower(state)) = self.states.get_mut(route_idx) {
                 state.input_level = level;
             }
         }
@@ -238,31 +236,31 @@ impl ModulationProcessor {
             }
 
             let raw_value = match (&route.source, &mut self.states[i]) {
-                (ModulationSource::Lfo(config), SourceState::Lfo(ref mut state)) => {
+                (ModulationSource::Lfo(config), SourceState::Lfo(state)) => {
                     // LFO tick returns bipolar [-1, 1]
                     let waveform_val = state.tick(ctx.dt, config, ctx.bpm);
                     waveform_val * f64::from(config.depth)
                 }
 
-                (ModulationSource::Pattern(config), SourceState::Pattern(ref mut state)) => {
+                (ModulationSource::Pattern(config), SourceState::Pattern(state)) => {
                     // Pattern tick returns unipolar [0, 1], map to bipolar
                     let v = state.tick(ctx.dt, config, ctx.bpm);
                     v.mul_add(2.0, -1.0) * f64::from(config.depth)
                 }
 
-                (ModulationSource::Envelope(config), SourceState::Envelope(ref mut state)) => {
+                (ModulationSource::Envelope(config), SourceState::Envelope(state)) => {
                     // Envelope tick returns unipolar [0, 1]
                     let env_val = state.tick(ctx.dt, config);
                     env_val * f64::from(config.depth)
                 }
 
-                (ModulationSource::Follower(config), SourceState::Follower(ref mut state)) => {
+                (ModulationSource::Follower(config), SourceState::Follower(state)) => {
                     // Follower tick returns unipolar [0, 1], map to bipolar
                     let follower_val = state.tick(ctx.dt, config);
                     follower_val.mul_add(2.0, -1.0) * f64::from(config.depth)
                 }
 
-                (ModulationSource::Random(config), SourceState::Random(ref mut state)) => {
+                (ModulationSource::Random(config), SourceState::Random(state)) => {
                     // Random tick returns unipolar [0, 1], map to bipolar
                     let random_val = state.tick(ctx.dt, config, ctx.bpm);
                     random_val.mul_add(2.0, -1.0) * f64::from(config.depth)
@@ -330,7 +328,7 @@ impl ModulationProcessor {
     /// Trigger gate-on for all envelope sources.
     pub fn gate_on_all_envelopes(&mut self) {
         for state in &mut self.states {
-            if let SourceState::Envelope(ref mut env) = state {
+            if let SourceState::Envelope(env) = state {
                 env.gate_on();
             }
         }
@@ -339,7 +337,7 @@ impl ModulationProcessor {
     /// Trigger gate-off for all envelope sources.
     pub fn gate_off_all_envelopes(&mut self) {
         for state in &mut self.states {
-            if let SourceState::Envelope(ref mut env) = state {
+            if let SourceState::Envelope(env) = state {
                 env.gate_off();
             }
         }
@@ -349,12 +347,12 @@ impl ModulationProcessor {
     pub fn retrigger_lfos(&mut self) {
         for (i, state) in self.states.iter_mut().enumerate() {
             match state {
-                SourceState::Lfo(ref mut lfo) => {
+                SourceState::Lfo(lfo) => {
                     if let ModulationSource::Lfo(config) = &self.routes[i].source {
                         lfo.retrigger(config);
                     }
                 }
-                SourceState::Pattern(ref mut pat) => {
+                SourceState::Pattern(pat) => {
                     if let ModulationSource::Pattern(config) = &self.routes[i].source {
                         pat.retrigger(config);
                     }
@@ -368,23 +366,23 @@ impl ModulationProcessor {
     pub fn reset(&mut self) {
         for (i, state) in self.states.iter_mut().enumerate() {
             match state {
-                SourceState::Lfo(ref mut lfo) => {
+                SourceState::Lfo(lfo) => {
                     if let ModulationSource::Lfo(config) = &self.routes[i].source {
                         lfo.reset(config.phase_offset);
                     }
                 }
-                SourceState::Pattern(ref mut pat) => {
+                SourceState::Pattern(pat) => {
                     if let ModulationSource::Pattern(config) = &self.routes[i].source {
                         pat.reset(config.phase_offset);
                     }
                 }
-                SourceState::Envelope(ref mut env) => {
+                SourceState::Envelope(env) => {
                     *env = EnvelopeState::new();
                 }
-                SourceState::Follower(ref mut follower) => {
+                SourceState::Follower(follower) => {
                     *follower = FollowerState::new();
                 }
-                SourceState::Random(ref mut random) => {
+                SourceState::Random(random) => {
                     if let ModulationSource::Random(config) = &self.routes[i].source {
                         *random = RandomState::new(config.seed);
                     }

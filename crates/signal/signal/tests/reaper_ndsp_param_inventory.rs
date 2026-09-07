@@ -4,8 +4,8 @@
 //! Run with:
 //!   cargo xtask reaper-test `reaper_ndsp_param_inventory`
 
-use std::fs;
 use std::fmt::Write;
+use std::fs;
 use std::path::PathBuf;
 
 use daw::test::reaper_test;
@@ -95,7 +95,11 @@ async fn capture_ndsp_full_parameter_lists(ctx: &ReaperTestContext) -> eyre::Res
 
         let _ = writeln!(combined_report, "## {plugin_name}");
         let _ = writeln!(combined_report, "- parameter_count: {}", params.len());
-        let _ = write!(combined_report, "- report: {}\n\n", plugin_path.to_string_lossy());
+        let _ = write!(
+            combined_report,
+            "- report: {}\n\n",
+            plugin_path.to_string_lossy()
+        );
     }
 
     let combined_path = report_dir.join("ndsp-full-parameter-list.md");

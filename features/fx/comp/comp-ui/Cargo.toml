@@ -3,7 +3,7 @@ name = "comp-ui"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+edition.workspace = true
 description = "Compressor GUI — control view (knobs + GR meter), params, and profile theme rendering"
 
 [lints]

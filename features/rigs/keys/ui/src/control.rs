@@ -27,8 +27,8 @@ use crate::graphs::{Adsr, ModuleCurve};
 use crate::selection::Selection;
 use signal_ui::components::Piano;
 
-use crate::fader::{fmt_db, EdgeFader, Fader};
-use crate::meter::{peak_of, EdgeMeter};
+use crate::fader::{EdgeFader, Fader, fmt_db};
+use crate::meter::{EdgeMeter, peak_of};
 use crate::zoom::{OpenButton, Zoom};
 
 /// Accent per engine — the same color language the Perform strip uses.

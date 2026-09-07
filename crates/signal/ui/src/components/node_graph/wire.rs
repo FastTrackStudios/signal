@@ -23,7 +23,7 @@ pub struct ResolvedWire {
 }
 
 /// Generate an SVG path `d` attribute for a cubic bezier wire.
-#[must_use] 
+#[must_use]
 pub fn wire_path_d(from: &NodePosition, to: &NodePosition) -> String {
     let dx = to.x - from.x;
     let abs_dx = dx.abs();
@@ -60,7 +60,7 @@ fn resolve_node_port_in_module(
 }
 
 /// Resolve all wires in a `NodeGraph` to absolute canvas coordinates.
-#[must_use] 
+#[must_use]
 pub fn resolve_all_wires(graph: &NodeGraph, compact: bool) -> Vec<ResolvedWire> {
     let title_bar_h = if compact {
         MODULE_TITLE_BAR_HEIGHT_COMPACT
@@ -195,7 +195,7 @@ pub fn WirePath(props: WirePathProps) -> Element {
                 style: "pointer-events: stroke; cursor: pointer;",
                 onclick: move |evt| {
                     evt.stop_propagation();
-                    if let (Some(id), Some(ref cb)) = (wire_id, &on_click) {
+                    if let (Some(id), Some(cb)) = (wire_id, &on_click) {
                         cb.call(id);
                     }
                 },

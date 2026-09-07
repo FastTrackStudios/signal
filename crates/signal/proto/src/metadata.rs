@@ -13,12 +13,12 @@ use serde::{Deserialize, Serialize};
 pub struct Tags(Vec<String>);
 
 impl Tags {
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self(Vec::new())
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn from_vec(tags: Vec<String>) -> Self {
         Self(tags)
     }
@@ -34,22 +34,22 @@ impl Tags {
         self.0.retain(|t| t != tag);
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn contains(&self, tag: &str) -> bool {
         self.0.iter().any(|t| t == tag)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn as_slice(&self) -> &[String] {
         &self.0
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    #[must_use] 
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.0.len()
     }
@@ -78,7 +78,7 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }

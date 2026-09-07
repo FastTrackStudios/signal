@@ -24,12 +24,12 @@ fn highpass_slope9_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
         *max_q = max_q.min(40.0);
     }
     let mut qs: Vec<f64> = qs.into_iter().rev().collect();
-    if qs.len() > 3 {
-        if let [_, q1, q2, q3, ..] = &mut qs[..] {
-            *q1 = highpass_slope9_sec_q(freq_hz, sample_rate, 1);
-            *q2 = highpass_slope9_sec_q(freq_hz, sample_rate, 2);
-            *q3 = highpass_slope9_sec_q(freq_hz, sample_rate, 3);
-        }
+    if qs.len() > 3
+        && let [_, q1, q2, q3, ..] = &mut qs[..]
+    {
+        *q1 = highpass_slope9_sec_q(freq_hz, sample_rate, 1);
+        *q2 = highpass_slope9_sec_q(freq_hz, sample_rate, 2);
+        *q3 = highpass_slope9_sec_q(freq_hz, sample_rate, 3);
     }
     qs
 }

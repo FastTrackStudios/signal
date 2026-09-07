@@ -79,7 +79,7 @@ impl Default for EventBus {
 }
 
 impl EventBus {
-    #[must_use] 
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         let (sender, _) = tokio::sync::broadcast::channel(capacity);
         Self { sender }
@@ -92,13 +92,13 @@ impl EventBus {
     }
 
     /// Subscribe to events. Returns a receiver that gets all future events.
-    #[must_use] 
+    #[must_use]
     pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<SignalEvent> {
         self.sender.subscribe()
     }
 
     /// Number of active subscribers.
-    #[must_use] 
+    #[must_use]
     pub fn subscriber_count(&self) -> usize {
         self.sender.receiver_count()
     }

@@ -59,7 +59,10 @@ const ALGORITHMS: [(&str, AlgorithmType); 16] = [
 ];
 
 const fn config() -> AudioConfig {
-    AudioConfig { sample_rate: SR, max_buffer_size: BLOCK }
+    AudioConfig {
+        sample_rate: SR,
+        max_buffer_size: BLOCK,
+    }
 }
 
 /// A chain at a stated decay, fully wet.
@@ -88,7 +91,10 @@ fn render(c: &mut ReverbChain, left_in: &[f64], right_in: &[f64]) -> Vec<f64> {
     for (l, r) in left.chunks_mut(BLOCK).zip(right.chunks_mut(BLOCK)) {
         c.process(l, r);
     }
-    left.into_iter().zip(right).flat_map(<[f64; 2]>::from).collect()
+    left.into_iter()
+        .zip(right)
+        .flat_map(<[f64; 2]>::from)
+        .collect()
 }
 
 /// A stereo impulse, offset by one sample between channels so a fixture
@@ -193,20 +199,23 @@ fn every_chain_control_renders_differently() {
         let mut c = chain(AlgorithmType::Hall, 0.6);
         setup(&mut c);
         c.update(config());
-        let digest = render(&mut c, &left, &right)
-            .iter()
-            .fold(0xcbf2_9ce4_8422_2325_u64, |h, v| {
-                v.to_bits()
-                    .to_le_bytes()
-                    .iter()
-                    .fold(h, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3))
-            });
+        let digest =
+            render(&mut c, &left, &right)
+                .iter()
+                .fold(0xcbf2_9ce4_8422_2325_u64, |h, v| {
+                    v.to_bits().to_le_bytes().iter().fold(h, |h, b| {
+                        (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3)
+                    })
+                });
         if let Some((other, _)) = seen.iter().find(|(_, d)| *d == digest) {
             collisions.push(format!("`{name}` == `{other}`"));
         }
         seen.push((name.to_owned(), digest));
     }
-    assert!(collisions.is_empty(), "inert chain controls: {collisions:?}");
+    assert!(
+        collisions.is_empty(),
+        "inert chain controls: {collisions:?}"
+    );
 }
 
 #[test]
@@ -265,8 +274,7 @@ fn block_size_does_not_change_the_output() {
 #[test]
 fn processing_allocates_nothing() {
     let input = signal::widen(&signal::noise(BLOCK, 5));
-    let mut chains: Vec<ReverbChain> =
-        ALGORITHMS.into_iter().map(|(_, a)| chain(a, 0.6)).collect();
+    let mut chains: Vec<ReverbChain> = ALGORITHMS.into_iter().map(|(_, a)| chain(a, 0.6)).collect();
     let mut left = input.clone();
     let mut right = input;
 

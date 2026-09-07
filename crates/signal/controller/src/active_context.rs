@@ -46,7 +46,7 @@ pub enum ActiveContext {
 
 impl ActiveContext {
     /// Get the 0-based active variation index, if any context is set.
-    #[must_use] 
+    #[must_use]
     pub const fn active_index(&self) -> Option<usize> {
         match self {
             Self::None => None,
@@ -71,7 +71,7 @@ impl ActiveContext {
     }
 
     /// Returns `true` if no context is set.
-    #[must_use] 
+    #[must_use]
     pub const fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
@@ -89,12 +89,18 @@ impl ActiveContextState {
     /// Read the current context.
     #[must_use]
     pub fn get(&self) -> ActiveContext {
-        self.inner.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+        self.inner
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Replace the current context.
     pub fn set(&self, ctx: ActiveContext) {
-        *self.inner.write().unwrap_or_else(std::sync::PoisonError::into_inner) = ctx;
+        *self
+            .inner
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = ctx;
     }
 
     /// Update the active index within the current context.

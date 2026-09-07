@@ -3,11 +3,11 @@
 //! the async worker path is covered by `chain_reshape_worker_applies`),
 //! feedback recirculates at runtime.
 
+use reverb_dsp::AlgorithmType;
 use reverb_dsp::algorithm::{ImpulseDirection, ImpulseParams, ImpulseTail, ReverbAlgorithm};
 use reverb_dsp::algorithms::convolution::Convolution;
 use reverb_dsp::chain::ReverbChain;
 use reverb_dsp::ir::ImpulseReshaper;
-use reverb_dsp::AlgorithmType;
 
 use audiocore_dsp::{AudioConfig, Processor};
 use dsp_core::num;
@@ -169,9 +169,11 @@ fn stretch_lengthens_and_darkens() {
     );
     // Zero-crossing rate down = darker (resampled to half rate).
     let zcr = |buf: &[f64]| {
-        num::count_to_f64(buf.windows(2)
-            .filter(|w| (w[0] <= 0.0) != (w[1] <= 0.0))
-            .count())
+        num::count_to_f64(
+            buf.windows(2)
+                .filter(|w| (w[0] <= 0.0) != (w[1] <= 0.0))
+                .count(),
+        )
     };
     let body = LATENCY..LATENCY + ir_len / 2;
     let z_norm = zcr(&normal[body.clone()]);

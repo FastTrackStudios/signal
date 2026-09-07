@@ -19,7 +19,7 @@
 
 use delay_dsp::chain::{DelayChain, StereoMode};
 use delay_dsp::engine::{DelayEngine, DelayStyle};
-use dsp_golden::{golden, signal, Golden};
+use dsp_golden::{Golden, golden, signal};
 
 use audiocore_dsp::{AudioConfig, Processor};
 
