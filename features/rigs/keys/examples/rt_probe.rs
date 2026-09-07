@@ -312,6 +312,25 @@ fn main() {
     // What the OUTPUT looked like, as opposed to whether the callback was on
     // time. A starved stream reads silence for a chunk that has not arrived,
     // so it shows up here and NOWHERE in the deadline numbers.
+    {
+        use fts_sample::stream as st;
+        use std::sync::atomic::Ordering::Relaxed;
+        let (hit, miss) = (st::STREAM_HITS.load(Relaxed), st::STREAM_MISSES.load(Relaxed));
+        let dec = st::CHUNKS_DECODED.load(Relaxed);
+        let re = st::REDECODES.load(Relaxed);
+        println!(
+            "stream reads: hit={hit} miss={miss} ({:.1}% missed) | decoded={dec} \
+             redecoded={re} ({:.0}% thrash) | shed: sweep={} budget={} | fills={} \
+             | miss cause: never-requested={} pending={}",
+            100.0 * miss as f64 / (hit + miss).max(1) as f64,
+            100.0 * re as f64 / dec.max(1) as f64,
+            st::SHED_BY_SWEEP.load(Relaxed),
+            st::SHED_BY_BUDGET.load(Relaxed),
+            st::FILLS.load(Relaxed),
+            st::MISS_UNREQUESTED.load(Relaxed),
+            st::MISS_PENDING.load(Relaxed),
+        );
+    }
     let g = signal_sampler::engine::output_glitches();
     let played_frames = (played * 48_000.0) as usize;
     println!(
