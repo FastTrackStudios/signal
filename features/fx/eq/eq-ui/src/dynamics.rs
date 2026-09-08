@@ -24,7 +24,7 @@
 //!   Spectral, and the persistent marker that a control is modulated at all.
 
 use dioxus::prelude::*;
-use fts_audio_ui::prelude::{Knob, KnobSize, ParamHandle, RawKnob};
+use fts_audio_ui::prelude::{Knob, KnobSize, ParamHandle};
 use std::f64::consts::PI;
 
 // Mirrors of the `fts_audio_ui::theme` tokens. Held locally because the
@@ -536,23 +536,24 @@ pub struct BandHandles {
     pub q: ParamHandle,
 }
 
-/// One dial in the band panel, in Pro-Q's reading order: the value on top,
-/// the dial, then the control's name underneath.
+/// One dial in the band panel.
 ///
-/// This is [`ModKnob`]'s sibling rather than a variant of it because the two
-/// orderings say different things. An inspector row is a list of named
-/// settings, so the name leads. A band panel is three dials you are *reading*
-/// while you drag, so the number leads and the name is the quiet label.
+/// A thin wrapper over [`Knob`] rather than a hand-built dial. The first
+/// version used `RawKnob`, which looked right and could not be dragged: it
+/// fakes interaction with an invisible `<input type="range">`, a HORIZONTAL
+/// slider, so a vertical drag on FREQ/GAIN/Q did nothing at all.
 ///
-/// Built on [`RawKnob`] rather than `Knob`: `Knob` draws its own parameter
-/// name and value under the dial, which is the right call for an inspector
-/// row and exactly wrong here — it duplicated the two labels this component
-/// places itself. `RawKnob` is the bare dial, and it carries a native
-/// `mod_min`/`mod_max` arc, so a band's dynamic range is drawn by the widget
-/// instead of by an overlay that has to guess the dial's geometry.
+/// `Knob` is the one with real gestures — vertical drag with fine-tune, wheel,
+/// double-click to reset, click-the-value to type, keyboard — and it fills the
+/// dial from the centre for a bipolar parameter, which `RawKnob` cannot (it
+/// hardcodes `bipolar: false`, so Gain read as a 0..1 sweep). It also takes the
+/// `mod_min`/`mod_max` arc this panel needs for the dynamic range.
+///
+/// It renders the value under the dial rather than above it, which is not
+/// Pro-Q's order. That is a deliberate trade: a dial you can actually drag and
+/// type into beats one with the number in the right place.
 #[component]
 pub fn PanelKnob(
-    value: String,
     label: String,
     handle: ParamHandle,
     #[props(default = "#8aa4ff".to_string())] accent: String,
@@ -561,53 +562,36 @@ pub fn PanelKnob(
     let mode = dynamics.as_ref().map_or(DynMode::Static, DynState::mode);
     let base = f64::from(handle.normalized());
 
-    // The dynamic range as an arc on the dial. Drawn from where the control
-    // sits to where dynamics may carry it, so the arc answers "how far can
-    // this move" in the dial's own geometry.
-    let (mod_min, mod_max) = dynamics.as_ref().and_then(|d| {
-        if mode == DynMode::Static {
-            return None;
-        }
-        let span = f64::from(d.range_max_db).max(1.0);
-        let end = (base + f64::from(d.range_db()) / (2.0 * span)).clamp(0.0, 1.0);
-        Some((base.min(end), base.max(end)))
-    }).map_or((None, None), |(a, b)| (Some(a), Some(b)));
+    // The dynamic range as an arc on the dial: from where the control sits to
+    // where dynamics may carry it, in the dial's own geometry.
+    let (mod_min, mod_max) = dynamics
+        .as_ref()
+        .and_then(|d| {
+            if mode == DynMode::Static {
+                return None;
+            }
+            let span = f64::from(d.range_max_db).max(1.0);
+            let end = (base + f64::from(d.range_db()) / (2.0 * span)).clamp(0.0, 1.0);
+            Some((base.min(end), base.max(end)))
+        })
+        .map_or((None, None), |(a, b)| (Some(a), Some(b)));
 
     // A modulated dial takes the mode's colour so the panel reads at a glance;
     // an ordinary one keeps the band's.
-    let dial_colour = if mode == DynMode::Static {
-        accent.clone()
+    let colour = if mode == DynMode::Static {
+        accent
     } else {
         mode.live_colour().to_string()
     };
 
-    let set = handle.clone();
-
     rsx! {
-        div {
-            style: "display:flex; flex-direction:column; align-items:center; gap:1px; min-width:46px;",
-
-            div {
-                style: format!(
-                    "font-size:10px; font-weight:600; color:{accent}; \
-                     font-variant-numeric:tabular-nums; line-height:12px;"
-                ),
-                "{value}"
-            }
-
-            RawKnob {
-                value: base,
-                size: KnobSize::Small,
-                color: dial_colour,
-                mod_min,
-                mod_max,
-                on_change: move |v: f64| set.set_as_gesture(v as f32),
-            }
-
-            div {
-                style: "font-size:8px; letter-spacing:0.08em; color:#737380; line-height:10px;",
-                "{label}"
-            }
+        Knob {
+            handle,
+            size: KnobSize::Small,
+            label,
+            color: colour,
+            mod_min,
+            mod_max,
         }
     }
 }

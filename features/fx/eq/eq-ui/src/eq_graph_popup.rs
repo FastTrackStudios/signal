@@ -175,21 +175,27 @@ pub fn band_popup_rect(
     graph_h: f64,
     is_dragging: bool,
 ) -> (f64, f64, f64, f64) {
-    // A Pro-Q-style band strip: three dials across the middle with a value
-    // above and a name below, flanked by the shape/routing clusters, with the
-    // dynamics row beneath. The dynamics row is present whatever mode the band
-    // is in — its badge is how a band BECOMES dynamic, and a panel that
-    // changed height with the mode would move its own controls out from under
-    // the cursor.
+    // A Pro-Q-style band strip: three dials across the middle, flanked by the
+    // shape/routing clusters, with the dynamics row beneath.
     let w = if is_dragging { 178.0 } else { 300.0 };
-    let h = if is_dragging { 34.0 } else { 134.0 };
+    let h = if is_dragging { 34.0 } else { 150.0 };
+
+    // DOCKED to the bottom of the graph, and only tracking the band
+    // horizontally.
+    //
+    // It used to sit above the node and flip below when the node was near the
+    // top, which meant the panel moved — often jumping the full height of
+    // itself — while you were dragging the very band it describes. Pinning the
+    // vertical edge keeps it still: the readouts stay where your eye already
+    // is, and the panel cannot land under the cursor mid-drag or shove itself
+    // off the top of the display.
+    // `by` is deliberately unused now: the panel's vertical position no longer
+    // depends on the band's. It stays in the signature because
+    // `point_in_popup_region` needs it to union the node into the keep-alive
+    // region, and callers pass both together.
+    let _ = by;
     let x = (bx - w / 2.0).clamp(0.0, (graph_w - w).max(0.0));
-    let y = if by - h - POPUP_GAP >= 0.0 {
-        by - h - POPUP_GAP
-    } else {
-        by + POPUP_GAP
-    }
-    .clamp(0.0, (graph_h - h).max(0.0));
+    let y = (graph_h - h - POPUP_GAP).max(0.0);
     (x, y, w, h)
 }
 
@@ -428,20 +434,17 @@ pub fn BandPopup(
                             div {
                                 style: "display:flex; align-items:flex-start; gap:6px; flex:1 1 auto; justify-content:center;",
                                 PanelKnob {
-                                    value: format!("{freq_str}"),
                                     label: "FREQ".to_string(),
                                     handle: h.freq.clone(),
                                     accent: band_color.clone(),
                                 }
                                 PanelKnob {
-                                    value: format!("{band_gain:+.1}"),
                                     label: "GAIN".to_string(),
                                     handle: h.gain.clone(),
                                     accent: band_color.clone(),
                                     dynamics: dyn_state.clone(),
                                 }
                                 PanelKnob {
-                                    value: format!("{:.2}", band.q),
                                     label: "Q".to_string(),
                                     handle: h.q.clone(),
                                     accent: band_color.clone(),
