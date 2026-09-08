@@ -305,6 +305,22 @@ pub fn EchoFace(
     let value = |name: &str| handles.get(name).map_or(0.5, |h| f64::from(h.normalized()));
     let (feedback, time, tone) = (value("feedback"), value("time_l"), value("tone"));
 
+    // One baseline for every value readout, taken from the knob that needs
+    // the most clearance. Per-knob placement tracked each dial's own radius,
+    // which put the small knobs' numbers ~20 px lower than the large ones — a
+    // ragged row that, on the saturator, dropped SAG/HEAT/TILT straight onto
+    // the rule under the curve display.
+    let category_label = delay_profiles::CATEGORIES
+        .iter()
+        .find(|c| c.profiles.contains(&profile.id))
+        .map_or("Delay", |c| c.label);
+
+    let value_row_y = design
+        .knobs
+        .iter()
+        .map(|k| k.d.mul_add(-0.92, k.y) - 4.0)
+        .fold(f64::INFINITY, f64::min);
+
     rsx! {
         Panel {
             design_w: W,
@@ -332,14 +348,16 @@ pub fn EchoFace(
                 text: profile.name.to_string(), size: 15.0,
                 color: design.ink.to_string(), weight: 800,
             }
-            Silkscreen {
-                scale, x: 150.0, y: 60.0, width: 280.0,
-                text: delay_profiles::CATEGORIES
-                    .iter()
-                    .find(|c| c.profiles.contains(&profile.id))
-                    .map_or("Delay", |c| c.label)
-                    .to_string(),
-                size: 8.0, color: design.dim_ink.to_string(),
+            // The family, under the profile name — but only when it adds
+            // something. Several profiles are the only member of a family of
+            // the same name, and printing both gave the default face a title
+            // that read "DIGITAL / DIGITAL".
+            if category_label != profile.name {
+                Silkscreen {
+                    scale, x: 150.0, y: 60.0, width: 280.0,
+                    text: category_label.to_string(),
+                    size: 8.0, color: design.dim_ink.to_string(),
+                }
             }
 
             for (index , spec) in design.knobs.iter().copied().enumerate() {
@@ -357,6 +375,28 @@ pub fn EchoFace(
                             }
                         }
                     }
+                    // The knob's current value, above the dial. Same gap the
+                    // saturator had, and worse here: a delay whose TIME L and
+                    // TIME R print no milliseconds cannot be dialled to a
+                    // tempo at all, only nudged by ear.
+                    if let Some(handle) = handles.get(spec.param) {
+                        {
+                        let value_id = format!("knob-value-{}", spec.param.replace('_', "-"));
+                        rsx! {
+                        div {
+                            "data-testid": "{value_id}",
+                            Silkscreen {
+                                scale, x: spec.x, y: value_row_y, width: 120.0,
+                                text: handle.display_value(),
+                                size: 9.0,
+                                weight: 600,
+                                color: design.ink.to_string(),
+                            }
+                        }
+                        }
+                        }
+                    }
+
                     Silkscreen {
                         scale, x: spec.x, y: spec.d.mul_add(0.92, spec.y) + 10.0, width: 120.0,
                         text: match spec.param {

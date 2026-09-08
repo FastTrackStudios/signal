@@ -279,6 +279,17 @@ pub fn SatFace(
         mix: value("mix", defaults.mix),
     };
 
+    // One baseline for every value readout, taken from the knob that needs
+    // the most clearance. Per-knob placement tracked each dial's own radius,
+    // which put the small knobs' numbers ~20 px lower than the large ones — a
+    // ragged row that, on the saturator, dropped SAG/HEAT/TILT straight onto
+    // the rule under the curve display.
+    let value_row_y = design
+        .knobs
+        .iter()
+        .map(|k| k.d.mul_add(-0.92, k.y) - 4.0)
+        .fold(f64::INFINITY, f64::min);
+
     rsx! {
         Panel {
             design_w: W,
@@ -330,6 +341,32 @@ pub fn SatFace(
                             }
                         }
                     }
+                    // The knob's current value, above the dial.
+                    //
+                    // The face used to print only the control's NAME, so every
+                    // knob on this panel was unreadable: you could see that a
+                    // control was called Drive and not what it was set to. The
+                    // hardware EQ faces already print a value here, and the
+                    // panel is the only place these parameters surface, so
+                    // there was nowhere else to look it up.
+                    if let Some(handle) = handles.get(spec.param) {
+                        {
+                        let value_id = format!("knob-value-{}", spec.param.replace('_', "-"));
+                        rsx! {
+                        div {
+                            "data-testid": "{value_id}",
+                            Silkscreen {
+                                scale, x: spec.x, y: value_row_y, width: 120.0,
+                                text: handle.display_value(),
+                                size: 9.0,
+                                weight: 600,
+                                color: design.ink.to_string(),
+                            }
+                        }
+                        }
+                        }
+                    }
+
                     Silkscreen {
                         scale, x: spec.x, y: spec.d.mul_add(0.92, spec.y) + 10.0, width: 120.0,
                         text: match spec.param {
