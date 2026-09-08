@@ -75,9 +75,21 @@ impl SideShaper {
                 soft * (1.0 - t) + tanh_approx(x) * t
             }
             Self::Diode => {
-                // Faster knee than tanh: rational fold with 1.5x onset.
-                let v = x * 1.5;
-                (v / (1.0 + v * v).max(1.0)) + x * 0.2 / (1.0 + x * x)
+                // `x / sqrt(1 + x²)` — unity slope at the origin, monotonic,
+                // asymptotic to ±1, and bending earlier than tanh (0.707 vs
+                // 0.778 at x = 1) while staying later than Tube's 0.5. That
+                // gap is the curve's whole reason to exist.
+                //
+                // What was here before was `1.5x/(1 + (1.5x)²) + 0.2x/(1 + x²)`,
+                // which is not a saturator at all: both terms peak and then
+                // decay, so the curve folded back toward zero — by x = 8 it
+                // returned 0.107, meaning a louder input produced a *quieter,
+                // thinner* output. It also had a small-signal slope of 1.7
+                // (+4.6 dB), breaking the unity-slope contract this enum
+                // documents and making the Pentode and Fuzz profiles, which
+                // use Diode as their negative side, lopsided by an amount
+                // nothing asked for. `shaper_contract` pins both properties.
+                x / crate::sqrt_approx(1.0 + x * x)
             }
             Self::Hard => x.clamp(-1.0, 1.0),
         }

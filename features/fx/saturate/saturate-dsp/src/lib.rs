@@ -160,10 +160,10 @@ pub(crate) fn tanh_approx(x: f32) -> f32 {
     x * (27.0 + x2) / (27.0 + 9.0 * x2)
 }
 
-/// Newton's-method sqrt (two iterations) — enough for gain compensation and
-/// keeps the crate free of `std`/`libm`.
+/// Newton's-method sqrt — enough for gain compensation and the shaper curves,
+/// and keeps the crate free of `std`/`libm`.
 #[inline]
-fn sqrt_approx(x: f32) -> f32 {
+pub(crate) fn sqrt_approx(x: f32) -> f32 {
     if x <= 0.0 {
         return 0.0;
     }
