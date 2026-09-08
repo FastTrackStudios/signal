@@ -115,6 +115,10 @@ fn standalone_shell() -> dioxus_core::Element {
 struct StandaloneGuiContext;
 
 impl GuiContextInner for StandaloneGuiContext {
+
+    /// Upstream nice-plug added this to `GuiContextInner`. Nothing in a test
+    /// harness or the standalone shell has a host to restart, so it is a no-op.
+    fn request_restart(&self) {}
     fn plugin_api(&self) -> PluginApi {
         PluginApi::Clap
     }

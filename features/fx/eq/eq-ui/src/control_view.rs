@@ -16,7 +16,6 @@ use architect_ui::prelude::{
     TabTrigger, Tabs, ThemeMode, ThemeProvider, ThemeState, default_theme_preset,
 };
 use fts_audio_ui::prelude::*;
-use nice_plug::context::gui::GuiContext;
 use nice_plug::editor::ResizeHint;
 use nice_plug::editor::dpi::LogicalSize;
 
@@ -75,18 +74,21 @@ use spectrum_analyzer::dsp::AnalyzerSettings;
 use spectrum_analyzer::ui::AnalyzerSettingsPanel;
 
 /// A cheat-sheet [`TrackInfoProvider`](crate::cheatsheet::TrackInfoProvider)
-/// backed by the host `GuiContext`. In the plugin this surfaces the track name
-/// the CLAP `track-info` extension reported (cached in the wrapper), driving the
-/// EQ overlay's "Auto" mode. In the standalone the host `GuiContext` has no
-/// track, so the standalone injects a `StaticTrackProvider` instead and this is
-/// never reached.
-struct GuiContextTrackProvider {
-    gui: GuiContext,
+/// backed by the editor's shared state. In the plugin this surfaces the track
+/// name the CLAP `track-info` extension reported, driving the EQ overlay's
+/// "Auto" mode. In the standalone nothing reports a track, so the standalone
+/// injects a `StaticTrackProvider` instead and this is never reached.
+///
+/// Reads `DioxusState` rather than `GuiContext`: upstream nice-plug pushes
+/// track info to the editor through `Editor::track_info_updated` instead of
+/// exposing it as a pull on the GUI context, so the editor is what holds it.
+struct EditorTrackProvider {
+    state: std::sync::Arc<DioxusState>,
 }
 
-impl crate::cheatsheet::TrackInfoProvider for GuiContextTrackProvider {
+impl crate::cheatsheet::TrackInfoProvider for EditorTrackProvider {
     fn track_name(&self) -> Option<String> {
-        self.gui.track_info().and_then(|info| info.name)
+        self.state.track_name()
     }
 }
 
@@ -176,11 +178,11 @@ fn AppShell() -> Element {
     // provider (the standalone injects a `StaticTrackProvider` for env-based
     // testing), leave it; otherwise back it with the host `GuiContext` so the
     // plugin's CLAP track-info drives the EQ overlay's Auto mode.
-    if try_consume_context::<std::sync::Arc<dyn crate::cheatsheet::TrackInfoProvider>>().is_none() {
+    if try_consume_context::<std::sync::Arc<dyn crate::cheatsheet::TrackInfoProvider>>().is_none()
+        && let Some(state) = try_consume_context::<std::sync::Arc<DioxusState>>()
+    {
         let provider: std::sync::Arc<dyn crate::cheatsheet::TrackInfoProvider> =
-            std::sync::Arc::new(GuiContextTrackProvider {
-                gui: ctx.gui_context().clone(),
-            });
+            std::sync::Arc::new(EditorTrackProvider { state });
         provide_context(provider);
     }
 
