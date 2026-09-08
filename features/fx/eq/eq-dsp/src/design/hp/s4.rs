@@ -1,5 +1,7 @@
 //! High-pass slope 4 (Db24, N=4 poles, 2 sections).
 
+use crate::inline::InlineVec;
+
 use crate::design::biquad::Coeffs;
 use crate::design::cascade;
 
@@ -7,7 +9,7 @@ use super::super::common::cascade_qs;
 
 use super::{highpass_s2_with_w_eval_scale, interp_48k_table};
 
-pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> Vec<Coeffs> {
+pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> InlineVec<Coeffs> {
     highpass_slope4_qs(freq_hz, sample_rate, q)
         .into_iter()
         .enumerate()
@@ -98,8 +100,8 @@ fn highpass_slope4_section(
         cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
     }
 }
-fn highpass_slope4_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
-    let mut qs: Vec<f64> = cascade_qs(2, q_user).into_iter().rev().collect();
+fn highpass_slope4_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> InlineVec<f64> {
+    let mut qs: InlineVec<f64> = cascade_qs(2, q_user).into_iter().rev().collect();
     if (q_user - 1.0).abs() < 1.0e-12
         && let Some(q) = qs.get_mut(0)
     {

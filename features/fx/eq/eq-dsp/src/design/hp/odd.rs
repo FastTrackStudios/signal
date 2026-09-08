@@ -4,6 +4,8 @@
 //! (the per-(slope, sec, q, fc) cell dispatcher). The dispatcher in `super`
 //! calls [`cascade`] with the user order.
 
+use crate::inline::{InlineVec, inline_vec};
+
 use crate::design::biquad::Coeffs;
 use crate::design::cascade;
 use dsp_core::num;
@@ -13,15 +15,15 @@ use super::{
     highpass_s2_with_subfreq_scales, highpass_s2_with_w_eval_scale, interp_48k_table,
 };
 
-pub(super) fn cascade(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Vec<Coeffs> {
+pub(super) fn cascade(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> InlineVec<Coeffs> {
     let section_qs = match order {
         3 if (q - 1.0).abs() < 1.0e-12 => {
-            vec![highpass_slope3_q1_section_q(freq_hz, sample_rate)]
+            inline_vec![highpass_slope3_q1_section_q(freq_hz, sample_rate)]
         }
         5 => highpass_slope5_qs(freq_hz, sample_rate, q),
         _ => cut_odd_qs(order, q),
     };
-    let mut sections: Vec<Coeffs> = section_qs
+    let mut sections: InlineVec<Coeffs> = section_qs
         .into_iter()
         .enumerate()
         .map(|(sec, sq)| highpass_odd_section(order, freq_hz, sample_rate, q, sec, sq))
@@ -384,7 +386,7 @@ pub(super) fn highpass_odd_section(
         cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
     }
 }
-fn highpass_slope5_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
+fn highpass_slope5_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> InlineVec<f64> {
     let mut qs = cut_odd_qs(5, q_user);
     // `cut_odd_qs(5, _)` returns five elements, so `first_mut` always
     // matches; skipping is the right answer if that ever stops being true,

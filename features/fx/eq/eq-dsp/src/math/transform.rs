@@ -7,6 +7,8 @@
 //!   3 = LP→BP + bilinear — Band Shelf
 //!   4 = Negate zeros — Allpass
 
+use crate::inline::InlineVec;
+
 use crate::math::zpk::{Complex, Zpk};
 
 #[expect(
@@ -24,7 +26,7 @@ pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
     let fs2 = 2.0 * sample_rate;
     let _fs2_complex = Complex::new(fs2, 0.0);
 
-    let mut z_zeros: Vec<Complex> = zpk
+    let mut z_zeros: InlineVec<Complex> = zpk
         .zeros
         .iter()
         .map(|&z| {
@@ -35,7 +37,7 @@ pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
         })
         .collect();
 
-    let z_poles: Vec<Complex> = zpk
+    let z_poles: InlineVec<Complex> = zpk
         .poles
         .iter()
         .map(|&p| {
@@ -84,7 +86,7 @@ pub fn bilinear(zpk: &Zpk, sample_rate: f64) -> Zpk {
 /// |H(e^jw)| = 1 for all frequencies.
 #[must_use]
 pub fn make_allpass(zpk: &Zpk) -> Zpk {
-    let zeros: Vec<Complex> = zpk
+    let zeros: InlineVec<Complex> = zpk
         .poles
         .iter()
         .map(|&p| {

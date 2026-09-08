@@ -664,7 +664,7 @@ async fn dragging_an_advanced_knob_drives_its_param() -> dioxus_test::Result<()>
 
 /// Selecting a hardware profile swaps the whole UI for that unit's front
 /// panel: the FTS surface (graph + sections) is gone, and the LA-2A's meter,
-/// knobs and mode switch are in the DOM with real layout.
+/// native knobs are in the DOM with real layout.
 #[tokio::test]
 async fn choosing_a_profile_swaps_in_its_faceplate() -> dioxus_test::Result<()> {
     let mut fx = mount();
@@ -696,7 +696,6 @@ async fn choosing_a_profile_swaps_in_its_faceplate() -> dioxus_test::Result<()> 
         "vu-meter",
         "hw-knob-gain",
         "hw-knob-peak-reduction",
-        "hw-switch-mode",
     ] {
         let el = fx
             .tester
@@ -759,92 +758,49 @@ async fn every_profile_renders_its_own_face() -> dioxus_test::Result<()> {
     Ok(())
 }
 
-/// The LA-2A's PEAK REDUCTION is a *macro*: one knob writing five engine
-/// params on linked curves. Dragging it has to move all of them — that is the
-/// difference between a faceplate that drives the engine and one that
-/// decorates it — and to store its own position, since it cannot be recovered
-/// from any single param it wrote.
+/// Native Peak Reduction automation reaches its model parameter directly,
+/// with a bracketed host gesture and no writes to generic compressor controls.
 #[tokio::test]
-async fn dragging_peak_reduction_drives_every_param_behind_it() -> dioxus_test::Result<()> {
+async fn dragging_peak_reduction_automates_the_native_model_control() -> dioxus_test::Result<()> {
     let mut fx = mount();
     select_profile(&mut fx, "la2a").await?;
-
-    // Park the knob first. Until the macro has been turned once, the engine
-    // still holds the plugin's own defaults, which are not what any macro
-    // position maps to — so a first touch necessarily jumps. Compare two
-    // positions of the macro, not the macro against the defaults.
-    let (kx, ky) = fx.knob_center("hw-knob-peak-reduction");
-    fx.tester.pointer_down(kx, ky);
-    let _ = fx.tester.pump().await;
-    fx.tester.pointer_move(kx, ky - 40.0, true);
-    let _ = fx.tester.pump().await;
-    fx.tester.pointer_up(kx, ky - 40.0);
-    fx.settle().await;
-
-    let before = (
+    let before = fx.params.stage1.la2a_peak_reduction.value();
+    let generic = (
         fx.params.stage1.threshold_db.value(),
         fx.params.stage1.ratio.value(),
-        fx.params.stage1.knee_db.value(),
-        fx.params.stage1.range_db.value(),
-        fx.params.stage1.drive.value(),
         fx.params.stage1.macro1.value(),
+        fx.params.stage1.la2a_gain.value(),
     );
-
     let (sx, sy) = fx.knob_center("hw-knob-peak-reduction");
-    // Down = less peak reduction; a big move so every curve clears its
-    // rounding.
-    let dy = 60.0;
     fx.tester.pointer_down(sx, sy);
     let _ = fx.tester.pump().await;
     for step in 1..=3 {
         fx.tester
-            .pointer_move(sx, sy + dy * step as f64 / 3.0, true);
+            .pointer_move(sx, sy - 20.0 * f64::from(step), true);
         let _ = fx.tester.pump().await;
     }
-    fx.tester.pointer_up(sx, sy + dy);
+    fx.tester.pointer_up(sx, sy - 60.0);
     fx.settle().await;
-
-    let after = (
-        fx.params.stage1.threshold_db.value(),
-        fx.params.stage1.ratio.value(),
-        fx.params.stage1.knee_db.value(),
-        fx.params.stage1.range_db.value(),
-        fx.params.stage1.drive.value(),
-        fx.params.stage1.macro1.value(),
+    assert!(fx.params.stage1.la2a_peak_reduction.value() > before);
+    assert_eq!(
+        generic,
+        (
+            fx.params.stage1.threshold_db.value(),
+            fx.params.stage1.ratio.value(),
+            fx.params.stage1.macro1.value(),
+            fx.params.stage1.la2a_gain.value(),
+        )
     );
-
-    assert!(
-        after.5 < before.5,
-        "the macro slot did not store the new position"
-    );
-    // Every curve in the LA-2A's compound mapping rises with peak reduction,
-    // so turning it down has to raise the threshold and lower the rest.
-    assert!(after.0 > before.0, "threshold: {} → {}", before.0, after.0);
-    assert!(after.1 < before.1, "ratio: {} → {}", before.1, after.1);
-    assert!(after.2 < before.2, "knee: {} → {}", before.2, after.2);
-    assert!(after.3 < before.3, "range: {} → {}", before.3, after.3);
-    assert!(after.4 < before.4, "drive: {} → {}", before.4, after.4);
-
-    // The host saw one bracketed gesture per param it moved, not one for the
-    // knob — automation records the engine, not the macro alone.
+    let key = ptr_key(fx.params.stage1.la2a_peak_reduction.as_ptr());
     let log = fx.log.lock().unwrap();
-    for (name, key) in [
-        ("threshold", ptr_key(fx.params.stage1.threshold_db.as_ptr())),
-        ("ratio", ptr_key(fx.params.stage1.ratio.as_ptr())),
-        ("knee", ptr_key(fx.params.stage1.knee_db.as_ptr())),
-        ("macro1", ptr_key(fx.params.stage1.macro1.as_ptr())),
-    ] {
-        assert!(
-            log.iter()
-                .any(|g| matches!(g, Gesture::Begin(k) if *k == key)),
-            "no begin gesture for {name}"
-        );
-        assert!(
-            log.iter()
-                .any(|g| matches!(g, Gesture::End(k) if *k == key)),
-            "no end gesture for {name}"
-        );
-    }
+    assert!(
+        log.iter()
+            .any(|g| matches!(g, Gesture::Begin(k) if *k == key))
+    );
+    assert!(
+        log.iter()
+            .any(|g| matches!(g, Gesture::End(k) if *k == key))
+    );
     Ok(())
 }
 

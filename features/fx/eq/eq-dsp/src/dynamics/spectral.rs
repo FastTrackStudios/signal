@@ -395,6 +395,8 @@ pub struct SpectralEngine {
     region_reduction_db: Vec<f64>,
     fft: Arc<dyn RealToComplex<f64>>,
     ifft: Arc<dyn ComplexToReal<f64>>,
+    fft_scratch: Vec<Complex<f64>>,
+    ifft_scratch: Vec<Complex<f64>>,
     block: usize,
     hop: usize,
     window: Vec<f64>,
@@ -424,6 +426,10 @@ impl SpectralEngine {
     /// `block` must be a power of two (512 / 1024 / 2048).
     #[must_use]
     pub fn new(sample_rate: f64, block: usize) -> Self {
+        Self::with_capacity(sample_rate, block, 24)
+    }
+
+    pub(crate) fn with_capacity(sample_rate: f64, block: usize, capacity: usize) -> Self {
         let mut planner = RealFftPlanner::<f64>::new();
         let fft = planner.plan_fft_forward(block);
         let ifft = planner.plan_fft_inverse(block);
@@ -437,10 +443,12 @@ impl SpectralEngine {
         let bins = block.saturating_div(2).saturating_add(1);
         let mut e = Self {
             params: SpectralParams::default(),
-            regions: Vec::with_capacity(24),
-            region_env: Vec::new(),
+            regions: Vec::with_capacity(capacity),
+            region_env: (0..capacity).map(|_| vec![0.0; bins]).collect(),
             learned_coeff: 1.0,
-            region_reduction_db: Vec::new(),
+            region_reduction_db: Vec::with_capacity(capacity),
+            fft_scratch: fft.make_scratch_vec(),
+            ifft_scratch: ifft.make_scratch_vec(),
             fft,
             ifft,
             block,
@@ -494,11 +502,10 @@ impl SpectralEngine {
         // a parameter moves.
         let bins = self.bins.len();
         let bin_hz = self.sample_rate / num::count_to_f64(self.block);
-        self.region_env.clear();
-        for r in &self.regions {
-            let mut env = Vec::with_capacity(bins);
-            env.extend((0..bins).map(|i| region_envelope(r, num::count_to_f64(i) * bin_hz)));
-            self.region_env.push(env);
+        for (r, env) in self.regions.iter().zip(&mut self.region_env) {
+            for (i, value) in env.iter_mut().enumerate().take(bins) {
+                *value = region_envelope(r, num::count_to_f64(i) * bin_hz);
+            }
         }
         self.region_reduction_db.clear();
         self.region_reduction_db.resize(self.regions.len(), 0.0);
@@ -639,7 +646,9 @@ impl SpectralEngine {
             for (slot, (x, w)) in self.frame.iter_mut().zip(input.iter().zip(&self.window)) {
                 *slot = x * w;
             }
-            let _ = self.fft.process(&mut self.frame, spec);
+            let _ = self
+                .fft
+                .process_with_scratch(&mut self.frame, spec, &mut self.fft_scratch);
         }
 
         if !self.params.freeze {
@@ -856,8 +865,9 @@ impl SpectralEngine {
             for (slot, bin) in spec_ch.iter_mut().zip(&self.bins) {
                 *slot *= bin.gain.mul_add(1.0 - delta, (1.0 - bin.gain) * delta);
             }
-            let mut spec = spec_ch.clone();
-            let _ = self.ifft.process(&mut spec, &mut self.frame);
+            let _ =
+                self.ifft
+                    .process_with_scratch(spec_ch, &mut self.frame, &mut self.ifft_scratch);
             // Overlap-add with synthesis window; Hann² at 75% overlap
             // sums to 1.5·block, folded into the normalization.
             for (slot, (x, w)) in ola.iter_mut().zip(self.frame.iter().zip(&self.window)) {
@@ -886,9 +896,13 @@ impl SpectralEngine {
         }
         self.fill = 0;
         for bin in &mut self.bins {
-            bin.gr_db = 0.0;
-            bin.gain = 1.0;
+            *bin = Bin {
+                log2_hz: bin.log2_hz,
+                ..Bin::SILENT
+            };
         }
+        self.region_reduction_db.fill(0.0);
+        self.scratch_db.fill(0.0);
         self.primed = false;
     }
 }

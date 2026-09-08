@@ -15,6 +15,8 @@
 //! ```
 //! (normalized by a0).
 
+use crate::inline::InlineVec;
+
 use std::f64::consts::PI;
 
 use crate::design::biquad::Coeffs;
@@ -42,7 +44,7 @@ pub(super) fn mzt_notch_simple_cascade(
     freq_hz: f64,
     q: f64,
     sample_rate: f64,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     // `n = ceil(order/2)` from the dispatcher — use directly as the section
     // count so Pro-Q's slope ladder still scales the notch's rejection
     // steepness.

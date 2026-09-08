@@ -220,6 +220,13 @@ pub struct CompStageParams {
     /// Soft output ceiling (tanh saturation); 0 = off.
     #[id = "ceiling"]
     pub ceiling: FloatParam,
+    /// Native normalized dial position for the measured LA-2A Gray model.
+    #[id = "la2a_peak_reduction"]
+    pub la2a_peak_reduction: FloatParam,
+    /// Native Gain dial; the model owns its measured makeup curve.
+    #[id = "la2a_gain"]
+    pub la2a_gain: FloatParam,
+
     /// Hardware profile selection — see [`PROFILE_LABELS`]. Purely a UI
     /// concern (which face is drawn); the DSP reads the params above.
     ///
@@ -816,6 +823,18 @@ impl CompStageParams {
             ceiling: FloatParam::new("Ceiling", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_unit("%")
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            la2a_peak_reduction: FloatParam::new(
+                "Peak Reduction",
+                0.232,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            la2a_gain: FloatParam::new(
+                "LA-2A Gain",
+                0.286,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
             profile: IntParam::new(
                 "Profile",
                 0,

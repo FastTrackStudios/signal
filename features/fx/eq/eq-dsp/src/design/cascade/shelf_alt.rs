@@ -1,5 +1,7 @@
 //! Shelf-alt and flat-tilt cascade builders for Pro-Q 4.
 
+use crate::inline::{InlineVec, inline_vec};
+
 use crate::design::biquad::Coeffs;
 
 use super::PASSTHROUGH;
@@ -25,7 +27,7 @@ pub fn compute_cascade_shelf_alt(
     gain_db: f64,
     _sample_rate: f64,
     _order: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     // Hardcoded constants from binary
     const BASE_1: f64 = -0.013_139_006_488_339_29; // DAT_180232030
     const BASE_2: f64 = -0.074_325_444_687_670_08; // DAT_180232038
@@ -33,7 +35,7 @@ pub fn compute_cascade_shelf_alt(
     const INTER_GAIN: f64 = 5.656_854_249_492_381; // DAT_180231bd8 = 4*sqrt(2)
 
     if gain_db.abs() < 0.001 {
-        return vec![PASSTHROUGH; 3];
+        return inline_vec![PASSTHROUGH; 3];
     }
 
     // Convert dB to linear gain
@@ -47,7 +49,7 @@ pub fn compute_cascade_shelf_alt(
 
     // Build 3 sections, each with 2 real poles and 2 real zeros
     // Section k uses frequencies: base * SECTION_SPACING^k
-    let mut sections = Vec::with_capacity(3);
+    let mut sections = InlineVec::with_capacity(3);
     let mut freq_1 = BASE_1;
     let mut freq_2 = BASE_2;
     let mut section_gain = gain_sqrt; // Binary: param_1[0x11] = param_4 (= sqrt(gain))
@@ -113,7 +115,7 @@ pub fn compute_cascade_flat_tilt(
     gain_db: f64,
     _sample_rate: f64,
     _order: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     const fn poly6(g: f64, c: [f64; 7]) -> f64 {
         let [c0, c1, c2, c3, c4, c5, c6] = c;
         let mut s = c6;
@@ -150,7 +152,7 @@ pub fn compute_cascade_flat_tilt(
     }
 
     if gain_db.abs() < 0.001 {
-        return vec![PASSTHROUGH; 3];
+        return inline_vec![PASSTHROUGH; 3];
     }
 
     let g = gain_db;
@@ -392,7 +394,7 @@ pub fn compute_cascade_flat_tilt(
     );
     let b0_s2 = (g * ((g * g).mul_add(g_coef_s2, f_s2))).exp();
 
-    vec![
+    inline_vec![
         [1.0, a1_s0, a2_s0, b0_s0, b1b0_s0 * b0_s0, b2b0_s0 * b0_s0],
         [1.0, a1_s1, a2_s1, b0_s1, b1b0_s1 * b0_s1, b2b0_s1 * b0_s1],
         [1.0, a1_s2, a2_s2, b0_s2, b1b0_s2 * b0_s2, b2b0_s2 * b0_s2],

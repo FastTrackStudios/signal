@@ -44,6 +44,8 @@
 //! rather than a Q-dependent design: Pro-Q's Q control does nothing at all on
 //! Brickwall.
 
+use crate::inline::InlineVec;
+
 use std::f64::consts::PI;
 
 use crate::design::biquad::{self, Coeffs};
@@ -113,8 +115,8 @@ fn prototype() -> Zpk {
         num / den
     };
 
-    let mut zeros = Vec::with_capacity(ORDER);
-    let mut poles = Vec::with_capacity(ORDER);
+    let mut zeros = InlineVec::with_capacity(ORDER);
+    let mut poles = InlineVec::with_capacity(ORDER);
     for i in 1..=ORDER / 2 {
         let u = 2.0f64.mul_add(num::count_to_f64(i), -1.0) / num::count_to_f64(ORDER);
         let x = u * big_k;
@@ -140,7 +142,11 @@ fn prototype() -> Zpk {
 ///
 /// Q is deliberately absent: swept from 0.3 to 1 the plugin's Brickwall
 /// response does not move, so a Q term here would be inventing behaviour.
-pub(super) fn brickwall_cascade(freq_hz: f64, sample_rate: f64, highpass: bool) -> Vec<Coeffs> {
+pub(super) fn brickwall_cascade(
+    freq_hz: f64,
+    sample_rate: f64,
+    highpass: bool,
+) -> InlineVec<Coeffs> {
     // The transition needs room above the corner or it folds at Nyquist and
     // the stopband ripple lands back in the passband. Leave the whole
     // transition inside the band.
@@ -160,7 +166,7 @@ pub(super) fn brickwall_cascade(freq_hz: f64, sample_rate: f64, highpass: bool) 
             clippy::arithmetic_side_effects,
             reason = "Essential complex division for bilinear analog-to-digital transform"
         )]
-        let zeros = proto
+        let zeros: InlineVec<Complex> = proto
             .zeros
             .iter()
             .map(|&z| Complex::new(wa, 0.0) / z)
@@ -169,7 +175,7 @@ pub(super) fn brickwall_cascade(freq_hz: f64, sample_rate: f64, highpass: bool) 
             clippy::arithmetic_side_effects,
             reason = "Essential complex division for bilinear analog-to-digital transform"
         )]
-        let poles = proto
+        let poles: InlineVec<Complex> = proto
             .poles
             .iter()
             .map(|&p| Complex::new(wa, 0.0) / p)
@@ -180,12 +186,12 @@ pub(super) fn brickwall_cascade(freq_hz: f64, sample_rate: f64, highpass: bool) 
             clippy::arithmetic_side_effects,
             reason = "Essential complex multiplication for bilinear analog-to-digital transform"
         )]
-        let zeros = proto.zeros.iter().map(|&z| z * wa).collect();
+        let zeros: InlineVec<Complex> = proto.zeros.iter().map(|&z| z * wa).collect();
         #[expect(
             clippy::arithmetic_side_effects,
             reason = "Essential complex multiplication for bilinear analog-to-digital transform"
         )]
-        let poles = proto.poles.iter().map(|&p| p * wa).collect();
+        let poles: InlineVec<Complex> = proto.poles.iter().map(|&p| p * wa).collect();
         Zpk::new(zeros, poles, 1.0)
     };
 

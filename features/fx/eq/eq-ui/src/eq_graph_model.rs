@@ -65,8 +65,10 @@ pub struct EqBand {
     pub frequency: f32,
     /// Gain in dB (-30 to +30).
     pub gain: f32,
-    /// Q factor (0.025 to 40). For cut filters, this represents slope order.
+    /// Physical Q factor (0.025 to 40), independent of slope.
     pub q: f32,
+    /// Editable canonical slope control; absent fixes the slope at second order.
+    pub slope: Option<f32>,
     /// Filter shape (bell, shelf, cut, etc.).
     pub shape: EqBandShape,
     /// Whether this band is soloed (only this band audible).
@@ -145,18 +147,20 @@ impl EqBandShape {
     }
 }
 
-/// Convert Q value to slope in dB/octave for cut filters.
+/// Canonical slope control expressed in dB/octave.
 #[must_use]
-pub fn q_to_slope_db(q: f32) -> f32 {
-    // Q represents filter order: 0.5 = 6dB/oct, 1.0 = 12dB/oct, etc.
-    (q * 2.0).round().max(1.0) * 6.0
-}
-
-/// Convert slope in dB/octave to Q value for cut filters.
-#[must_use]
-pub fn slope_db_to_q(slope_db: f32) -> f32 {
-    // 6dB/oct = 0.5, 12dB/oct = 1.0, etc.
-    (slope_db / 6.0).round().max(1.0) / 2.0
+pub fn slope_db(slope: f32) -> f32 {
+    if slope < 6.0 {
+        slope.max(0.0) * 6.0
+    } else {
+        match slope.round() as u32 {
+            6 => 36.0,
+            7 => 48.0,
+            8 => 72.0,
+            9 => 96.0,
+            _ => f32::INFINITY,
+        }
+    }
 }
 
 /// Band colors matching Pro-Q / ZL Equalizer style.

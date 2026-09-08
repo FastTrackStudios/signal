@@ -26,7 +26,7 @@ struct FtsEqPlugin {
     /// The one FTS EQ engine — the same one the rig plays through. It used to
     /// be a bare `EqChain` here, which is why this plugin could not sound a
     /// dynamic or spectral band at all.
-    engine: eq_dsp::engine::FtsEq,
+    engine: eq_dsp::host::CanonicalEq,
     neve_1073: Neve1073Model,
     hardware_eq: HardwareEqModel,
     sample_rate: f64,
@@ -43,7 +43,7 @@ impl Default for FtsEqPlugin {
     fn default() -> Self {
         let params = Arc::new(FtsEqParams::default());
         let ui_state = Arc::new(EqUiState::new(params.clone()));
-        let engine = eq_dsp::engine::FtsEq::new(48000.0);
+        let engine = eq_dsp::host::CanonicalEq::new(48000.0);
         Self {
             params,
             ui_state,
@@ -98,9 +98,9 @@ impl FtsEqPlugin {
                 band_enabled
             };
 
-            self.engine.set_band(
+            self.engine.set_canonical_band(
                 i,
-                eq_dsp::engine::BandConfig {
+                eq_dsp::host::CanonicalBandConfig {
                     // The plugin has no separate "used" flag — a band it
                     // carries is a band that exists, and `enabled` says
                     // whether it sounds.
@@ -112,15 +112,10 @@ impl FtsEqPlugin {
                     q: f64::from(bp.q.value()) * std::f64::consts::FRAC_1_SQRT_2,
                     shape: bp.filter_type.value().max(0) as u32,
                     slope: f64::from(bp.slope.value().max(0.0)),
-                    placement: eq_dsp::runtime::band::Placement::from_index(
-                        bp.placement.value().max(0) as u32,
-                    ),
+                    placement: eq_dsp::Placement::from_index(bp.placement.value().max(0) as u32),
                     stream: 0,
                 },
-            );
-            self.engine.set_band_dynamics(
-                i,
-                eq_dsp::engine::BandDynamics {
+                eq_dsp::host::CanonicalBandDynamics {
                     range_db: f64::from(bp.dyn_range_db.value()),
                     threshold_db: f64::from(bp.dyn_threshold_db.value()),
                     attack_pct: f64::from(bp.dyn_attack.value()),
@@ -190,7 +185,9 @@ impl FtsEqPlugin {
         };
 
         if self.neve_1073.settings() != settings {
-            self.neve_1073.set_settings(settings);
+            if self.neve_1073.settings() != settings {
+                self.neve_1073.set_settings(settings);
+            }
         }
     }
 
@@ -247,18 +244,9 @@ impl FtsEqPlugin {
     }
 
     fn publish_model_response(&self, model: i32) {
-        let log_min = 20.0_f64.log10();
-        let log_max = 20_000.0_f64.log10();
-        let freqs: Vec<f64> = (0..SPECTRUM_BINS)
-            .map(|i| {
-                let t = i as f64 / (SPECTRUM_BINS - 1) as f64;
-                10.0_f64.powf(log_min + t * (log_max - log_min))
-            })
-            .collect();
-
-        let response = match model {
-            2 => self.neve_1073.magnitude_response_db(&freqs),
-            1 | 3..=5 => self.hardware_eq.magnitude_response_db(&freqs),
+        let filter = match model {
+            2 => self.neve_1073.prepared_filter(),
+            1 | 3..=5 => self.hardware_eq.prepared_filter(),
             _ => {
                 for bin in self.ui_state.model_response_bins.iter() {
                     bin.store(0.0, Ordering::Relaxed);
@@ -266,8 +254,14 @@ impl FtsEqPlugin {
                 return;
             }
         };
-
-        for (bin, db) in self.ui_state.model_response_bins.iter().zip(response) {
+        let log_min = 20.0_f64.log10();
+        let log_max = 20_000.0_f64.log10();
+        for (i, bin) in self.ui_state.model_response_bins.iter().enumerate() {
+            let t = i as f64 / (SPECTRUM_BINS - 1) as f64;
+            let hz = 10.0_f64.powf(log_min + t * (log_max - log_min));
+            let db = filter
+                .as_ref()
+                .map_or(f64::NAN, |f| f.magnitude_db(hz).unwrap_or(f64::NAN));
             bin.store(db as f32, Ordering::Relaxed);
         }
     }
@@ -369,12 +363,17 @@ impl Plugin for FtsEqPlugin {
         let max_samples = buffer_config.max_buffer_size as usize;
         self.left_buf.resize(max_samples, 0.0);
         self.right_buf.resize(max_samples, 0.0);
+        self.pre_mono.resize(max_samples, 0.0);
+        self.post_mono.resize(max_samples, 0.0);
+        if self.audio_feed.is_none() {
+            self.audio_feed = self.ui_state.take_audio_feed();
+        }
 
         true
     }
 
     fn reset(&mut self) {
-        self.engine.deactivate();
+        self.engine.reset();
         self.neve_1073.reset();
         self.hardware_eq.reset();
     }
@@ -406,11 +405,6 @@ impl Plugin for FtsEqPlugin {
         self.right_buf.resize(n, 0.0);
         self.pre_mono.resize(n, 0.0);
         self.post_mono.resize(n, 0.0);
-
-        // Take the analyzer feed out of the shared state on first process.
-        if self.audio_feed.is_none() {
-            self.audio_feed = self.ui_state.take_audio_feed();
-        }
 
         // Convert f32 buffer → f64 scratch, track input peak, capture pre-EQ mono
         let mut input_peak: f32 = 0.0;

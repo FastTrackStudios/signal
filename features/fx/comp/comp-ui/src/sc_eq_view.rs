@@ -54,6 +54,7 @@ pub fn SidechainEqView(stage: usize, frame: u64, accent: String) -> Element {
                 gain: bp.gain_db.value(),
                 q: bp.q.value(),
                 shape: index_to_shape(bp.shape.value()),
+                slope: None,
                 solo: false,
                 stereo_mode: Default::default(),
                 name: format!("SC{}", i + 1),

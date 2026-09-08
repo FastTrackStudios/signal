@@ -78,7 +78,7 @@ impl HermiteCubicSmoother {
     /// Active smoothing algorithm:
     /// 1. Read GR history (4 most recent smoothed results)
     /// 2. Detect change: threshold = `gr_inst` * 0.001, compare with history
-    /// 3. Route: Hermite cubic if change detected, `sqrt(gr_inst)` if steady state
+    /// 3. Route: Hermite cubic if change detected, the requested gain if steady state
     /// 4. Update history for next sample
     ///
     /// The log/sqrt arguments the caller used to pass are gone: all four were
@@ -105,8 +105,7 @@ impl HermiteCubicSmoother {
 
         // Step 4: Route to algorithm
         // Smooth in dB domain for better frequency response matching
-        let gr_instant_sqrt = gr_inst.sqrt();
-        let gr_instant_db = audiocore_dsp::db::linear_to_db(gr_instant_sqrt.max(1e-10));
+        let gr_instant_db = audiocore_dsp::db::linear_to_db(gr_inst.max(1e-10));
         let hist0_db = audiocore_dsp::db::linear_to_db(hist0.max(1e-10));
 
         let result = if has_change {
@@ -123,8 +122,8 @@ impl HermiteCubicSmoother {
             let smoothed_db = coeff * hist0_db + (1.0 - coeff) * gr_instant_db;
             audiocore_dsp::db::db_to_linear(smoothed_db)
         } else {
-            // Steady state: just return sqrt
-            gr_instant_sqrt
+            // Steady state: retain the requested amplitude gain.
+            gr_inst
         };
 
         // Step 5: shift the history and add the new result

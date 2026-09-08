@@ -26,6 +26,8 @@
 //! (0.7x moves -9 to -0.72 at 500 Hz) without a reason to prefer either, so it
 //! is left alone until there is one.
 
+use crate::inline::InlineVec;
+
 use crate::design::biquad::Coeffs;
 
 use super::shelf::shelf_universal_synth_cascade;
@@ -37,9 +39,9 @@ pub(super) fn mzt_tilt_shelf_cascade(
     gain_db: f64,
     sample_rate: f64,
     pole_count: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     if gain_db.abs() < 1e-9 {
-        return Vec::new();
+        return InlineVec::new();
     }
     // Low-shelf takes the OPPOSITE sign — positive tilt = boost highs / cut lows.
     let mut sections =

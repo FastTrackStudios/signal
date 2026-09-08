@@ -3,6 +3,8 @@
 //! Centralizes the recurring DSP idioms with explicit RE provenance so each
 //! call site doesn't repeat the magic constants.
 
+use crate::inline::InlineVec;
+
 use std::f64::consts::PI;
 
 use crate::design::constants::LN10_OVER_20;
@@ -58,10 +60,10 @@ pub fn ui_q_to_bandwidth_q(q: f64) -> f64 {
 /// giving a proper Butterworth cascade. For `user_q` != 1, the highest-Q section
 /// is scaled by `user_q^(1/N)` so that the cumulative effect of N sections matches
 /// Pro-Q 4's resonance amount (matches LP/HP cascade at fc=1k Q=10 to ~0.5 dB).
-pub fn cascade_qs(n: usize, user_q: f64) -> Vec<f64> {
+pub fn cascade_qs(n: usize, user_q: f64) -> InlineVec<f64> {
     let order = (2_usize).saturating_mul(n);
     let sqrt2 = std::f64::consts::SQRT_2;
-    let natural_qs: Vec<f64> = (0..n)
+    let natural_qs: InlineVec<f64> = (0..n)
         .map(|k| {
             let theta =
                 PI * 2.0_f64.mul_add(num::count_to_f64(k), 1.0) / (2.0 * num::count_to_f64(order));

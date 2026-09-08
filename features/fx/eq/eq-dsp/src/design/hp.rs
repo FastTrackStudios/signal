@@ -7,6 +7,8 @@
 //! Helpers re-exported `pub(super)` for use by [`super::lp`]:
 //! [`cut_odd_qs`], [`cut_odd_tail_lowpass`].
 
+use crate::inline::{InlineVec, inline_vec};
+
 use std::f64::consts::PI;
 
 use crate::design::biquad::Coeffs;
@@ -27,10 +29,10 @@ pub(super) fn mzt_highpass_simple_cascade(
     q: f64,
     sample_rate: f64,
     order: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n.max(1);
     if n == 1 {
-        return vec![cascade::highpass_s2_proq4(freq_hz, q, sample_rate)];
+        return inline_vec![cascade::highpass_s2_proq4(freq_hz, q, sample_rate)];
     }
     match order {
         3 | 5 => odd::cascade(order, freq_hz, q, sample_rate),
@@ -201,15 +203,15 @@ pub(super) fn cut_odd_tail_poles_48k(freq_hz: f64) -> (f64, f64) {
     (p, n)
 }
 
-pub(super) fn cut_odd_qs(order: usize, user_q: f64) -> Vec<f64> {
+pub(super) fn cut_odd_qs(order: usize, user_q: f64) -> InlineVec<f64> {
     use std::f64::consts::SQRT_2;
     let mut qs = match order {
-        3 => vec![SQRT_2],
-        5 => vec![
+        3 => inline_vec![SQRT_2],
+        5 => inline_vec![
             SQRT_2 / (2.0 * (PI / 10.0).sin()),
             SQRT_2 / (2.0 * (3.0 * PI / 10.0).sin()),
         ],
-        _ => Vec::new(),
+        _ => InlineVec::new(),
     };
     if let Some(first) = qs.first_mut() {
         *first *= user_q;

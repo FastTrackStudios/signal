@@ -9,6 +9,8 @@
 //! through that helper, giving 3744/3744 pure-algorithmic conformance on
 //! both `high_shelf` and `low_shelf`.
 
+use crate::inline::InlineVec;
+
 use std::f64::consts::PI;
 
 use crate::design::biquad::Coeffs;
@@ -248,7 +250,7 @@ pub(super) fn shelf_universal_synth_cascade(
     sample_rate: f64,
     order: usize,
     high_shelf: bool,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     // The helper dispatcher uses Pro-Q's internal audio filter type:
     // LowShelf=2, HighShelf=5.
     let proq_internal_filter_type: u8 = if high_shelf { 5 } else { 2 };

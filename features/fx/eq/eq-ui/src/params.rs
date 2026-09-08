@@ -206,7 +206,7 @@ impl BandParams {
                 default_type,
                 IntRange::Linear { min: 0, max: 12 },
             )
-            // The engine's canonical order (`eq_dsp::design::slope::FilterShape`),
+            // The engine's canonical order (`eq_dsp::host::FilterShape`),
             // which is NOT Pro-Q's: 2 and 3 are the other way round there.
             // These strings used to carry Pro-Q's order, so picking "High
             // Shelf" in this plugin built a low cut.

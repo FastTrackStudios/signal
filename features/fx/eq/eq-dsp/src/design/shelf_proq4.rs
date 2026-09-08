@@ -12,6 +12,8 @@
 //!   - Type 9 (Tilt Shelf): similar to high shelf
 //!   - Type 10 (Band Shelf): LP→BP prototype + bilinear + shelf gain
 
+use crate::inline::{InlineVec, inline_vec};
+
 use std::f64::consts::PI;
 
 use crate::design::biquad::{Coeffs, PASSTHROUGH};
@@ -38,11 +40,11 @@ pub fn design_low_shelf(
     q: f64,
     gain_db: f64,
     sample_rate: f64,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n_sections.max(1);
 
     if gain_db.abs() < 0.001 {
-        return vec![PASSTHROUGH; n];
+        return inline_vec![PASSTHROUGH; n];
     }
 
     let w0 = 2.0 * PI * freq_hz / sample_rate;
@@ -76,11 +78,11 @@ pub fn design_high_shelf(
     q: f64,
     gain_db: f64,
     sample_rate: f64,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n_sections.max(1);
 
     if gain_db.abs() < 0.001 {
-        return vec![PASSTHROUGH; n];
+        return inline_vec![PASSTHROUGH; n];
     }
 
     let w0 = 2.0 * PI * freq_hz / sample_rate;
@@ -108,11 +110,11 @@ pub fn design_tilt_shelf(
     q: f64,
     gain_db: f64,
     sample_rate: f64,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n_sections.max(1);
 
     if gain_db.abs() < 0.001 {
-        return vec![PASSTHROUGH; n];
+        return inline_vec![PASSTHROUGH; n];
     }
 
     let w0 = 2.0 * PI * freq_hz / sample_rate;
@@ -140,11 +142,11 @@ pub fn design_band_shelf(
     q: f64,
     gain_db: f64,
     sample_rate: f64,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n_sections.max(1);
 
     if gain_db.abs() < 0.001 {
-        return vec![PASSTHROUGH; n];
+        return inline_vec![PASSTHROUGH; n];
     }
 
     // Compute bandwidth edges from center frequency and Q.
@@ -158,7 +160,7 @@ pub fn design_band_shelf(
     let gain_per = gain_db / num::count_to_f64(n);
     let shelf_q = std::f64::consts::FRAC_1_SQRT_2;
 
-    let mut sections = Vec::with_capacity(n.saturating_mul(2));
+    let mut sections = InlineVec::with_capacity(n.saturating_mul(2));
     for _ in 0..n {
         sections.push(rbj_low_shelf(w_hi, shelf_q, gain_per));
         sections.push(rbj_high_shelf(w_lo, shelf_q, gain_per));

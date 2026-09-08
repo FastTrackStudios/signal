@@ -12,6 +12,8 @@
 //! Key insight: Pro-Q 4 does NOT simply stack identical biquads. Each section gets
 //! a different `gain_db/section` to create the proper cascade response.
 
+use crate::inline::{InlineVec, inline_vec};
+
 use std::f64::consts::PI;
 
 use crate::design::biquad::{Coeffs, PASSTHROUGH};
@@ -58,7 +60,7 @@ pub fn compute_cascade_peak(
     gain_db: f64,
     sample_rate: f64,
     order: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     compute_cascade_peak_with_slope(freq_hz, q, gain_db, sample_rate, order, None)
 }
 
@@ -70,16 +72,16 @@ pub fn compute_cascade_peak_with_slope(
     sample_rate: f64,
     order: usize,
     slope_idx: Option<usize>,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = (order / 2).max(1);
 
     if gain_db.abs() < 0.001 {
-        return vec![PASSTHROUGH; n];
+        return inline_vec![PASSTHROUGH; n];
     }
 
     let _ = slope_idx;
     if n == 1 {
-        return vec![bell_s2_proq4(freq_hz, q, gain_db, sample_rate)];
+        return inline_vec![bell_s2_proq4(freq_hz, q, gain_db, sample_rate)];
     }
 
     // n ≥ 2: legacy LP→BP→BLT cascade — 68/416 baseline on s=5 / s=8.

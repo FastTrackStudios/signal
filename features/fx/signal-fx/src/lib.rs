@@ -158,10 +158,10 @@ pub const EQ_DYN_SIDE_LO_BASE: u32 = 496;
 pub const EQ_DYN_SIDE_HI_BASE: u32 = 520;
 pub const EQ_PARAM_COUNT: u32 = 544;
 
-/// Canonical shape conversion — [`eq::design::slope::FilterShape`] owns the
+/// Canonical shape conversion — [`eq::host::FilterShape`] owns the
 /// one true ordering (append-only, documented there).
 fn eq_shape_to_filter(shape: u32) -> eq::FilterType {
-    eq::design::slope::FilterShape::from_canonical_index(shape).to_filter_type()
+    eq::host::FilterShape::from_canonical_index(shape).to_filter_type()
 }
 
 /// Param name for `(band, field)` — `b{band+1}_{used|on|freq|gain|q|shape}`.
@@ -301,7 +301,7 @@ pub fn eq_param_name_of(id: u32) -> Option<String> {
     None
 }
 
-/// Native EQ block — the full FTS-EQ engine: 24 dynamic bands over [`eq::EqChain`]'s
+/// Native EQ block — the full FTS-EQ engine: 24 dynamic bands over [`eq::runtime::chain::EqChain`]'s
 /// Pro-Q ZPK pipeline.
 ///
 /// Each band has used/on/freq/gain/q/shape (all thirteen canonical shapes) + slope, plus
@@ -310,20 +310,20 @@ pub fn eq_param_name_of(id: u32) -> Option<String> {
 /// The rig's front end for the one EQ engine.
 ///
 /// Everything that makes an EQ — the filter bank, per-band dynamics, the spectral engine,
-/// transient splitting, listening — lives in [`eq::engine::FtsEq`]. This is the parameter
+/// transient splitting, listening — lives in [`eq::host::CanonicalEq`]. This is the parameter
 /// surface the rig drives it through: an id-indexed value table, the automation-event pump,
 /// and the f32 buffers a host hands over.
 ///
 /// It used to be the engine itself, which is why the FTS-EQ plugin could not
 /// play a dynamic band: the capability was reachable only through these ids.
 pub struct NativeEq {
-    engine: eq::engine::FtsEq,
+    engine: eq::host::CanonicalEq,
     /// Every param value by id, for host readback.
     values: Vec<f64>,
     /// Mirrors of the fields the id table writes, so a `sync` can rebuild a
     /// whole band from partial updates.
-    bands: [eq::engine::BandConfig; EQ_BANDS],
-    dynamics: [eq::engine::BandDynamics; EQ_BANDS],
+    bands: [eq::host::CanonicalBandConfig; EQ_BANDS],
+    dynamics: [eq::host::CanonicalBandDynamics; EQ_BANDS],
     prepared: bool,
     scratch_l: Vec<f64>,
     scratch_r: Vec<f64>,
@@ -337,10 +337,10 @@ impl NativeEq {
             values[id as usize] = eq_param_range(id).2;
         }
         let mut me = Self {
-            engine: eq::engine::FtsEq::new(sample_rate),
+            engine: eq::host::CanonicalEq::new(sample_rate),
             values,
-            bands: [eq::engine::BandConfig::default(); EQ_BANDS],
-            dynamics: [eq::engine::BandDynamics::default(); EQ_BANDS],
+            bands: [eq::host::CanonicalBandConfig::default(); EQ_BANDS],
+            dynamics: [eq::host::CanonicalBandDynamics::default(); EQ_BANDS],
             prepared: false,
             scratch_l: Vec::new(),
             scratch_r: Vec::new(),
@@ -358,8 +358,8 @@ impl NativeEq {
 
     /// Send one band's mirrored config and dynamics to the engine.
     fn push_band(&mut self, band: usize) {
-        self.engine.set_band(band, self.bands[band]);
-        self.engine.set_band_dynamics(band, self.dynamics[band]);
+        self.engine
+            .set_canonical_band(band, self.bands[band], self.dynamics[band]);
     }
 
     #[must_use]
@@ -488,7 +488,7 @@ impl NativeEq {
             match field {
                 0 => self.bands[band].slope = v,
                 7 => {
-                    self.bands[band].placement = eq::runtime::band::Placement::from_index(v as u32);
+                    self.bands[band].placement = eq::Placement::from_index(v as u32);
                 }
                 8 => self.bands[band].stream = v as u32,
                 9 => self.dynamics[band].spectral = v >= 0.5,
@@ -578,9 +578,9 @@ impl PluginInstance for NativeEq {
         } else if name.ends_with("_gain") || name.ends_with("dyn_range") || name == "output_gain" {
             Some(format!("{value:+.1} dB"))
         } else if name.ends_with("_slope") {
-            let s = eq::design::slope::Slope::from_param_index(value as usize);
+            let s = eq::host::Slope::from_param_index(value as usize);
             Some(match s {
-                eq::design::slope::Slope::Brickwall => "Brickwall".into(),
+                eq::host::Slope::Brickwall => "Brickwall".into(),
                 s => format!("{:.0} dB/oct", s.db_per_octave()),
             })
         } else {
@@ -951,8 +951,8 @@ pub struct NativeSaturate {
     deemph_lo: SatBiquad,
     deemph_hi: SatBiquad,
     /// The emphasis EQ (full FTS-EQ band engine) + its inverse mirror.
-    emph_eq: eq::EqChain,
-    deemph_eq: eq::EqChain,
+    emph_eq: eq::runtime::chain::EqChain,
+    deemph_eq: eq::runtime::chain::EqChain,
     eq_state: [(bool, bool); EQ_BANDS],
     lf_split: SatBiquad,
     lf_low: SatBiquad,
@@ -998,10 +998,12 @@ impl NativeSaturate {
             deemph_lo: SatBiquad::new(),
             deemph_hi: SatBiquad::new(),
             emph_eq: {
-                let mut c = eq::EqChain::new();
+                let mut c = eq::runtime::chain::EqChain::new();
                 c.set_sample_rate(sr);
                 for _ in 0..EQ_BANDS {
-                    let i = c.add_band();
+                    let i = c
+                        .add_band()
+                        .expect("chain capacity reserved at construction");
                     if let Some(b) = c.band_mut(i) {
                         b.enabled = false;
                     }
@@ -1010,10 +1012,12 @@ impl NativeSaturate {
                 c
             },
             deemph_eq: {
-                let mut c = eq::EqChain::new();
+                let mut c = eq::runtime::chain::EqChain::new();
                 c.set_sample_rate(sr);
                 for _ in 0..EQ_BANDS {
-                    let i = c.add_band();
+                    let i = c
+                        .add_band()
+                        .expect("chain capacity reserved at construction");
                     if let Some(b) = c.band_mut(i) {
                         b.enabled = false;
                     }

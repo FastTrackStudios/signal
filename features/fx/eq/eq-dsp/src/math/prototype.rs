@@ -9,6 +9,8 @@
 //! For Notch (type 4): poles transformed via LP→BS
 //! For Shelves (types 7,8,9): poles transformed via bilinear (transform type 2)
 
+use crate::inline::{InlineVec, inline_vec};
+
 use std::f64::consts::PI;
 
 use crate::math::elliptic;
@@ -23,14 +25,14 @@ use dsp_core::num;
 /// All poles have |`s_k`| = 1 (unit circle), and the prototype has cutoff w = 1.
 #[must_use]
 pub fn butterworth_lp(order: usize) -> Zpk {
-    let mut poles = Vec::with_capacity(order);
+    let mut poles = InlineVec::with_capacity(order);
     let order_f64 = num::count_to_f64(order);
     for k in 0..order {
         let k_f64 = num::count_to_f64(k);
         let angle = PI * (2.0f64.mul_add(k_f64, order_f64) + 1.0) / (2.0 * order_f64);
         poles.push(Complex::from_polar(1.0, angle));
     }
-    Zpk::new(vec![], poles, 1.0)
+    Zpk::new(inline_vec![], poles, 1.0)
 }
 
 #[expect(
@@ -74,8 +76,8 @@ pub fn butterworth_bp(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Z
 
     let lp = butterworth_lp(order);
 
-    let mut bp_poles = Vec::with_capacity(order.saturating_mul(2));
-    let mut bp_zeros = Vec::with_capacity(order);
+    let mut bp_poles = InlineVec::with_capacity(order.saturating_mul(2));
+    let mut bp_zeros = InlineVec::with_capacity(order);
 
     for &s_k in &lp.poles {
         let b = s_k * bw_a;
@@ -121,8 +123,8 @@ pub fn butterworth_bp_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
     // Complete elliptic integral K(k) for normalization
     let kk = elliptic::elliptic_k_complete(k);
 
-    let mut bp_poles = Vec::with_capacity(order.saturating_mul(2));
-    let mut bp_zeros = Vec::with_capacity(order);
+    let mut bp_poles = InlineVec::with_capacity(order.saturating_mul(2));
+    let mut bp_zeros = InlineVec::with_capacity(order);
 
     // CRITICAL FIX: Section-indexed elliptic parametrization.
     // Pro-Q 4 generates DISTINCT poles for each section using u_i = (2*i+1)*K(k)/order,
@@ -176,8 +178,8 @@ pub fn butterworth_bs(order: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Z
 
     let lp = butterworth_lp(order);
 
-    let mut bs_poles = Vec::with_capacity(order.saturating_mul(2));
-    let mut bs_zeros = Vec::with_capacity(order.saturating_mul(2));
+    let mut bs_poles = InlineVec::with_capacity(order.saturating_mul(2));
+    let mut bs_zeros = InlineVec::with_capacity(order.saturating_mul(2));
 
     for &s_k in &lp.poles {
         // BS pole equation: s^2 - s*(bw_a/s_k) + w0_a^2 = 0
@@ -222,8 +224,8 @@ pub fn butterworth_bs_elliptic(order: usize, freq_hz: f64, q: f64, sample_rate: 
     // Complete elliptic integral K(k) for normalization
     let kk = elliptic::elliptic_k_complete(k);
 
-    let mut bs_poles = Vec::with_capacity(order.saturating_mul(2));
-    let mut bs_zeros = Vec::with_capacity(order.saturating_mul(2));
+    let mut bs_poles = InlineVec::with_capacity(order.saturating_mul(2));
+    let mut bs_zeros = InlineVec::with_capacity(order.saturating_mul(2));
 
     // CRITICAL FIX: Section-indexed elliptic parametrization (same as bandpass).
     // Pro-Q 4 generates DISTINCT poles for each section using u_i = (2*i+1)*K(k)/order,

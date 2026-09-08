@@ -333,13 +333,13 @@ pub static LA2A: RackDesign = RackDesign {
             size: 8.5,
             strong: false,
         },
-        // ── Mode, far left, as the unit has it ───────────────────────────
-        RackItem::Switch {
-            id: "mode",
-            legend: "",
+        // The calibrated model currently represents Compress mode.
+        RackItem::Text {
             x: 104.0,
             y: 150.0,
-            labels: ["Limit", "Compress"],
+            text: "Compress",
+            size: 9.0,
+            strong: false,
         },
         // ── Gain ─────────────────────────────────────────────────────────
         RackItem::Knob {

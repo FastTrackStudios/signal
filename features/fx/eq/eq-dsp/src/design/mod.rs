@@ -11,6 +11,8 @@
 //!   - Allpass: Butterworth -> bilinear -> reflect zeros
 //!   - `ShelfAlt`: `cascade::compute_cascade_shelf_alt`
 
+use crate::inline::{InlineVec, inline_vec};
+
 use dsp_core::num;
 use std::f64::consts::PI;
 
@@ -94,7 +96,7 @@ pub fn design_filter(
     gain_db: f64,
     sample_rate: f64,
     order: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let order = order.max(1);
     let n = order.div_ceil(2);
 
@@ -110,7 +112,7 @@ pub fn design_filter(
             // a pass-through for order 1 meant the shallowest cut Pro-Q offers
             // did nothing at all.
             if order == 1 {
-                return vec![fractional::first_order_cut(freq_hz, sample_rate, false)];
+                return inline_vec![fractional::first_order_cut(freq_hz, sample_rate, false)];
             }
             mzt_lowpass_simple_cascade(n, freq_hz, q, sample_rate, order)
         }
@@ -119,13 +121,13 @@ pub fn design_filter(
                 return brickwall::brickwall_cascade(freq_hz, sample_rate, true);
             }
             if order == 1 {
-                return vec![fractional::first_order_cut(freq_hz, sample_rate, true)];
+                return inline_vec![fractional::first_order_cut(freq_hz, sample_rate, true)];
             }
             mzt_highpass_simple_cascade(n, freq_hz, q, sample_rate, order)
         }
         FilterType::Bandpass => {
             if order == 1 {
-                return vec![biquad::PASSTHROUGH];
+                return inline_vec![biquad::PASSTHROUGH];
             }
             mzt_bandpass_simple_cascade(n, freq_hz, q, sample_rate, order)
         }
@@ -166,9 +168,9 @@ fn mzt_low_shelf_cascade(
     gain_db: f64,
     sample_rate: f64,
     pole_count: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     if gain_db.abs() < 1e-9 {
-        return vec![biquad::PASSTHROUGH; n.max(1)];
+        return inline_vec![biquad::PASSTHROUGH; n.max(1)];
     }
     // Universal-synth folds in the per-section anti-cramping clamps
     // (W_POLE_MAX ≈ 2.99, W_THIRD_MAX ≈ 2.36, W_ZERO_MAX ≈ 1.88) decoded from
@@ -192,9 +194,9 @@ fn mzt_high_shelf_cascade(
     gain_db: f64,
     sample_rate: f64,
     pole_count: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     if gain_db.abs() < 1e-9 {
-        return vec![biquad::PASSTHROUGH; n.max(1)];
+        return inline_vec![biquad::PASSTHROUGH; n.max(1)];
     }
     shelf_universal_synth_cascade(
         n,
@@ -251,7 +253,7 @@ pub fn apply_gain_q_interaction(q: f64, gain_db: f64, interaction: f64) -> f64 {
 /// Implementation: evaluate the combined EQ response at key frequency points
 /// and compute the RMS level change, then invert it.
 #[must_use]
-pub fn compute_auto_gain(band_sections: &[Vec<Coeffs>], sample_rate: f64) -> f64 {
+pub fn compute_auto_gain(band_sections: &[InlineVec<Coeffs>], sample_rate: f64) -> f64 {
     use crate::math::zpk::Complex;
 
     // Evaluate combined response at logarithmically-spaced frequencies
@@ -453,7 +455,7 @@ mod tests {
 
     #[test]
     fn auto_gain_flat_is_zero() {
-        let flat_sections = vec![biquad::PASSTHROUGH];
+        let flat_sections = inline_vec![biquad::PASSTHROUGH];
         let compensation = compute_auto_gain(&[flat_sections], 48000.0);
         assert!(
             compensation.abs() < 0.5,

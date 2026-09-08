@@ -20,18 +20,12 @@ pub struct FactoryPreset {
 }
 
 const VOCAL_OPTO: &[PresetParam] = &[
-    p("profile", 1.0),
-    p("threshold_db", -28.0),
-    p("ratio", 4.0),
-    p("attack_ms", 12.0),
-    p("release_ms", 420.0),
-    p("knee_db", 18.0),
-    p("detector_rms_mix", 0.72),
-    p("auto_makeup", 1.0),
-    p("drive", 0.18),
-    p("character_mode", 1.0),
+    p("profile", 2.0),
+    p("la2a_peak_reduction", 0.4),
+    p("la2a_gain", 0.286),
+    p("channel_link", 1.0),
+    p("fold", 1.0),
     p("sidechain_freq", 95.0),
-    p("range_db", 12.0),
 ];
 
 const DRUM_FET: &[PresetParam] = &[
@@ -131,7 +125,7 @@ pub static FACTORY_PRESETS: &[FactoryPreset] = &[
         "vocal-opto-leveler",
         "Vocal Opto Leveler",
         "la2a",
-        "Smooth vocal leveling with program-dependent RMS detection.",
+        "Vocal leveling using the measured LA-2A Gray optical model.",
         VOCAL_OPTO,
     ),
     preset(

@@ -3,6 +3,8 @@
 //! Pro-Q 4 stores ZPK internally (20 doubles per section at output+0x48).
 //! Infinity sentinel (0x7FF0000000000000) marks unused poles/zeros.
 
+use crate::inline::{InlineVec, inline_vec};
+
 use dsp_core::num;
 use std::ops::{Add, Div, DivAssign, Mul, MulAssign, Neg, Sub};
 
@@ -205,15 +207,23 @@ impl Sub<f64> for Complex {
 /// Zero-Pole-Gain representation of a filter.
 #[derive(Debug, Clone)]
 pub struct Zpk {
-    pub zeros: Vec<Complex>,
-    pub poles: Vec<Complex>,
+    pub zeros: InlineVec<Complex>,
+    pub poles: InlineVec<Complex>,
     pub gain: f64,
 }
 
 impl Zpk {
     #[must_use]
-    pub const fn new(zeros: Vec<Complex>, poles: Vec<Complex>, gain: f64) -> Self {
-        Self { zeros, poles, gain }
+    pub fn new(
+        zeros: impl IntoIterator<Item = Complex>,
+        poles: impl IntoIterator<Item = Complex>,
+        gain: f64,
+    ) -> Self {
+        Self {
+            zeros: zeros.into_iter().collect(),
+            poles: poles.into_iter().collect(),
+            gain,
+        }
     }
 
     #[must_use]
@@ -267,7 +277,7 @@ impl Zpk {
 
 /// Pair complex conjugate poles/zeros for second-order sections.
 #[must_use]
-pub fn pair_conjugates(zpk: &Zpk) -> Vec<(Vec<Complex>, Vec<Complex>, f64)> {
+pub fn pair_conjugates(zpk: &Zpk) -> InlineVec<(InlineVec<Complex>, InlineVec<Complex>, f64)> {
     let mut poles = zpk.poles.clone();
     let mut zeros = zpk.zeros.clone();
 
@@ -311,7 +321,7 @@ pub fn pair_conjugates(zpk: &Zpk) -> Vec<(Vec<Complex>, Vec<Complex>, f64)> {
         zpk.gain
     };
 
-    let mut sections = Vec::with_capacity(n);
+    let mut sections = InlineVec::with_capacity(n);
     for i in 0..n {
         let pp = pole_pairs.get(i).cloned().unwrap_or_default();
         let zp = zero_pairs.get(i).cloned().unwrap_or_default();
@@ -346,9 +356,9 @@ pub fn pair_conjugates(zpk: &Zpk) -> Vec<(Vec<Complex>, Vec<Complex>, f64)> {
     clippy::arithmetic_side_effects,
     reason = "i + 1 is safe within iteration bounds"
 )]
-fn group_conjugate_pairs(roots: &[Complex]) -> Vec<Vec<Complex>> {
-    let mut used = vec![false; roots.len()];
-    let mut pairs = Vec::new();
+fn group_conjugate_pairs(roots: &[Complex]) -> InlineVec<InlineVec<Complex>> {
+    let mut used = inline_vec![false; roots.len()];
+    let mut pairs = InlineVec::new();
 
     for i in 0..roots.len() {
         if used[i] {
@@ -360,14 +370,14 @@ fn group_conjugate_pairs(roots: &[Complex]) -> Vec<Vec<Complex>> {
             let mut found = false;
             for j in (i + 1)..roots.len() {
                 if !used[j] && roots[j].im.abs() < 1e-12 {
-                    pairs.push(vec![roots[i], roots[j]]);
+                    pairs.push(inline_vec![roots[i], roots[j]]);
                     used[j] = true;
                     found = true;
                     break;
                 }
             }
             if !found {
-                pairs.push(vec![roots[i]]);
+                pairs.push(inline_vec![roots[i]]);
             }
         } else {
             let conj = roots[i].conj();
@@ -380,7 +390,7 @@ fn group_conjugate_pairs(roots: &[Complex]) -> Vec<Vec<Complex>> {
                     break;
                 }
             }
-            pairs.push(vec![roots[i], roots[i].conj()]);
+            pairs.push(inline_vec![roots[i], roots[i].conj()]);
         }
     }
     pairs

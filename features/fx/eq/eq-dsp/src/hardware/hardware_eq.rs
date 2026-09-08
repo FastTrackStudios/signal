@@ -10,8 +10,9 @@ use crate::hardware::calibration::{
     CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget, fit_response,
 };
 use crate::hardware::neve_1073::apply_gain_compensated_arctan;
+use crate::model::{Coloration, ColorationPlacement, ModelProcessor, PreparedModel};
+use crate::pultec_color::PultecColoration;
 use crate::runtime::response::compute_magnitude_response;
-use crate::runtime::section::Tdf2Section;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HardwareEqCalibration {
@@ -265,115 +266,160 @@ pub enum HardwareEqSettings {
     Ssl(SslChannelSettings),
 }
 
+/// Host adapter using the same prepared cascade and coloration as the public API.
 pub struct HardwareEqModel {
     settings: HardwareEqSettings,
     sample_rate: f64,
-    sections: Vec<Tdf2Section>,
-    coeffs: Vec<Coeffs>,
-    drive_percent: f64,
-    trim_db: f64,
+    coeffs: crate::inline::InlineVec<Coeffs>,
+    processor: Option<ModelProcessor<HardwareColoration>>,
+    last_error: Option<crate::Error>,
 }
 
+#[derive(Clone)]
+enum HardwareColoration {
+    Pultec(PultecColoration),
+    Approximation { drive: f64 },
+}
+impl Coloration for HardwareColoration {
+    fn process(&mut self, sample: f64) -> f64 {
+        match self {
+            Self::Pultec(stage) => stage.process(sample),
+            Self::Approximation { drive } => apply_gain_compensated_arctan(sample, *drive, 0.0),
+        }
+    }
+    fn reset(&mut self) {
+        if let Self::Pultec(stage) = self {
+            stage.reset();
+        }
+    }
+    fn update(&mut self, prepared: &Self) {
+        match (self, prepared) {
+            (Self::Pultec(stage), Self::Pultec(next)) => stage.update(next),
+            (stage, next) => *stage = next.clone(),
+        }
+    }
+}
 impl HardwareEqModel {
     #[must_use]
     pub fn new(sample_rate: f64, settings: HardwareEqSettings) -> Self {
         let mut model = Self {
             settings,
             sample_rate,
-            sections: Vec::new(),
-            coeffs: Vec::new(),
-            drive_percent: 0.0,
-            trim_db: 0.0,
+            coeffs: crate::inline::InlineVec::new(),
+            processor: None,
+            last_error: None,
         };
         model.rebuild();
         model
     }
-
     #[must_use]
     pub const fn settings(&self) -> HardwareEqSettings {
         self.settings
     }
-
+    #[must_use]
+    pub const fn last_design_error(&self) -> Option<crate::Error> {
+        self.last_error
+    }
     pub fn set_settings(&mut self, settings: HardwareEqSettings) {
         if self.settings != settings {
+            let previous = self.settings;
             self.settings = settings;
             self.rebuild();
+            if self.last_error.is_some() {
+                self.settings = previous;
+            }
         }
     }
-
     pub fn set_sample_rate(&mut self, sample_rate: f64) {
-        self.sample_rate = sample_rate;
-        self.rebuild();
+        if self.sample_rate.to_bits() != sample_rate.to_bits() {
+            let previous = self.sample_rate;
+            self.sample_rate = sample_rate;
+            self.rebuild();
+            if self.last_error.is_some() {
+                self.sample_rate = previous;
+            }
+        }
     }
-
     #[must_use]
     pub fn coeffs(&self) -> &[Coeffs] {
         &self.coeffs
     }
-
+    /// # Errors
+    /// Returns a design error for an invalid cascade.
+    pub fn prepared_filter(&self) -> Result<crate::PreparedFilter, crate::Error> {
+        crate::PreparedFilter::from_sections(self.sample_rate, self.coeffs())
+    }
     #[must_use]
     pub fn magnitude_response_db(&self, frequencies: &[f64]) -> Vec<f64> {
         compute_magnitude_response(&self.coeffs, frequencies, self.sample_rate)
     }
-
     pub fn reset(&mut self) {
-        for section in &mut self.sections {
-            section.reset();
+        if let Some(processor) = &mut self.processor {
+            processor.reset();
         }
     }
-
-    #[inline]
-    pub fn process_sample(&mut self, sample: f64, ch: usize) -> f64 {
-        let mut out = apply_gain_compensated_arctan(sample, self.drive_percent, self.trim_db);
-        for section in &mut self.sections {
-            out = section.tick(out, ch);
-        }
-        out
-    }
-
     pub fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
-        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
-            *l = self.process_sample(*l, 0);
-            *r = self.process_sample(*r, 1);
+        if let Some(processor) = &mut self.processor {
+            for (l, r) in left.iter_mut().zip(right) {
+                [*l, *r] = processor.process_frame([*l, *r]);
+            }
         }
     }
-
     fn rebuild(&mut self) {
-        let (coeffs, drive_percent, trim_db) = match self.settings {
-            HardwareEqSettings::Pultec(settings) => (
-                build_pultec_eqp1a_sections(settings, self.sample_rate),
-                settings.drive_percent,
-                settings.trim_db,
-            ),
+        if let Err(error) = self.try_rebuild() {
+            self.last_error = Some(error);
+        }
+    }
+    fn try_rebuild(&mut self) -> Result<(), crate::Error> {
+        let spec = crate::ProcessSpec::new(self.sample_rate, 1)?;
+        let (coeffs, coloration, placement, trim) = match self.settings {
+            HardwareEqSettings::Pultec(settings) => {
+                // Validate native controls through the public preparation boundary.
+                settings.prepare(spec)?;
+                (
+                    build_pultec_eqp1a_sections(settings, self.sample_rate),
+                    HardwareColoration::Pultec(PultecColoration::new(
+                        settings.drive_percent,
+                        self.sample_rate,
+                    )?),
+                    ColorationPlacement::AfterFilters,
+                    settings.trim_db,
+                )
+            }
             HardwareEqSettings::Api(settings) => (
                 build_api_550a_sections(settings, self.sample_rate),
-                settings.drive_percent,
+                HardwareColoration::Approximation {
+                    drive: settings.drive_percent,
+                },
+                ColorationPlacement::BeforeFilters,
                 settings.trim_db,
             ),
             HardwareEqSettings::Ssl(settings) => (
                 build_ssl_channel_sections(settings, self.sample_rate),
-                settings.drive_percent,
+                HardwareColoration::Approximation {
+                    drive: settings.drive_percent,
+                },
+                ColorationPlacement::BeforeFilters,
                 settings.trim_db,
             ),
         };
-
+        let filter = crate::PreparedFilter::from_sections(self.sample_rate, &coeffs)?;
+        let prepared = PreparedModel::new(filter, coloration, placement, trim, spec)?;
+        let applied = self
+            .processor
+            .as_mut()
+            .is_some_and(|processor| processor.apply(&prepared).is_ok());
+        if !applied {
+            self.processor = Some(prepared.processor());
+        }
         self.coeffs = coeffs;
-        self.drive_percent = drive_percent;
-        self.trim_db = trim_db;
-        self.sections = self
-            .coeffs
-            .iter()
-            .map(|&coeffs| {
-                let mut section = Tdf2Section::new();
-                section.set_coeffs(coeffs);
-                section
-            })
-            .collect();
+        self.last_error = None;
+        Ok(())
     }
 }
 
 fn add_pultec_low_sections(
-    sections: &mut Vec<Coeffs>,
+    sections: &mut crate::inline::InlineVec<Coeffs>,
     settings: &PultecEqp1aSettings,
     calibration: &HardwareEqCalibration,
     sample_rate: f64,
@@ -426,7 +472,7 @@ fn add_pultec_low_sections(
 }
 
 fn add_pultec_high_sections(
-    sections: &mut Vec<Coeffs>,
+    sections: &mut crate::inline::InlineVec<Coeffs>,
     settings: &PultecEqp1aSettings,
     calibration: &HardwareEqCalibration,
     sample_rate: f64,
@@ -471,7 +517,10 @@ fn add_pultec_high_sections(
 }
 
 #[must_use]
-pub fn build_pultec_eqp1a_sections(settings: PultecEqp1aSettings, sample_rate: f64) -> Vec<Coeffs> {
+pub fn build_pultec_eqp1a_sections(
+    settings: PultecEqp1aSettings,
+    sample_rate: f64,
+) -> crate::inline::InlineVec<Coeffs> {
     build_pultec_eqp1a_sections_with_calibration(
         settings,
         sample_rate,
@@ -484,8 +533,8 @@ pub fn build_pultec_eqp1a_sections_with_calibration(
     settings: PultecEqp1aSettings,
     sample_rate: f64,
     calibration: &HardwareEqCalibration,
-) -> Vec<Coeffs> {
-    let mut sections = Vec::new();
+) -> crate::inline::InlineVec<Coeffs> {
+    let mut sections = crate::inline::InlineVec::new();
     push(
         &mut sections,
         FilterType::Highpass,
@@ -537,7 +586,10 @@ pub fn fit_pultec_eqp1a_response(
 }
 
 #[must_use]
-pub fn build_api_550a_sections(settings: Api550aSettings, sample_rate: f64) -> Vec<Coeffs> {
+pub fn build_api_550a_sections(
+    settings: Api550aSettings,
+    sample_rate: f64,
+) -> crate::inline::InlineVec<Coeffs> {
     build_api_550a_sections_with_calibration(
         settings,
         sample_rate,
@@ -550,8 +602,8 @@ pub fn build_api_550a_sections_with_calibration(
     settings: Api550aSettings,
     sample_rate: f64,
     calibration: &HardwareEqCalibration,
-) -> Vec<Coeffs> {
-    let mut sections = Vec::new();
+) -> crate::inline::InlineVec<Coeffs> {
+    let mut sections = crate::inline::InlineVec::new();
     push(
         &mut sections,
         FilterType::Highpass,
@@ -669,7 +721,10 @@ pub fn fit_api_550a_response(
 }
 
 #[must_use]
-pub fn build_ssl_channel_sections(settings: SslChannelSettings, sample_rate: f64) -> Vec<Coeffs> {
+pub fn build_ssl_channel_sections(
+    settings: SslChannelSettings,
+    sample_rate: f64,
+) -> crate::inline::InlineVec<Coeffs> {
     build_ssl_channel_sections_with_calibration(
         settings,
         sample_rate,
@@ -682,8 +737,8 @@ pub fn build_ssl_channel_sections_with_calibration(
     settings: SslChannelSettings,
     sample_rate: f64,
     calibration: &HardwareEqCalibration,
-) -> Vec<Coeffs> {
-    let mut sections = Vec::new();
+) -> crate::inline::InlineVec<Coeffs> {
+    let mut sections = crate::inline::InlineVec::new();
     push(
         &mut sections,
         FilterType::Highpass,
@@ -797,7 +852,7 @@ pub fn fit_ssl_channel_response(
 }
 
 fn push_gain(
-    sections: &mut Vec<Coeffs>,
+    sections: &mut crate::inline::InlineVec<Coeffs>,
     filter_type: FilterType,
     freq_hz: f64,
     q: f64,
@@ -811,7 +866,7 @@ fn push_gain(
 }
 
 fn push_cut_if_active(
-    sections: &mut Vec<Coeffs>,
+    sections: &mut crate::inline::InlineVec<Coeffs>,
     filter_type: FilterType,
     freq_hz: f64,
     off_edge: f64,
@@ -830,7 +885,7 @@ fn proportional_q(gain_db: f64, base: f64, max: f64) -> f64 {
 }
 
 fn push(
-    sections: &mut Vec<Coeffs>,
+    sections: &mut crate::inline::InlineVec<Coeffs>,
     filter_type: FilterType,
     freq_hz: f64,
     q: f64,

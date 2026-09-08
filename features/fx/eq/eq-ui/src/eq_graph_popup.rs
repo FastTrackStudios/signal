@@ -3,7 +3,7 @@
 use architect_ui::prelude::{Button, ButtonSize, ButtonVariant, Select, SelectContent, SelectItem};
 use nice_plug_dioxus::prelude::*;
 
-use super::eq_graph_model::{EqBand, EqBandShape, MAX_BANDS, StereoMode, q_to_slope_db};
+use super::eq_graph_model::{EqBand, EqBandShape, MAX_BANDS, StereoMode, slope_db};
 
 const fn shape_to_int(s: EqBandShape) -> i32 {
     match s {
@@ -92,6 +92,7 @@ pub fn EmptyGraphContextMenu(
                                     frequency,
                                     gain,
                                     q: 1.0,
+                                    slope: None,
                                     shape,
                                     solo: false,
                                     stereo_mode: StereoMode::default(),
@@ -234,8 +235,12 @@ pub fn BandPopup(
     } else {
         format!("{:.0}", band.frequency)
     };
-    let q_str = if band.shape.uses_slope() {
-        format!("{:.0} dB/oct", q_to_slope_db(band.q))
+    let q_str = if band.shape.uses_slope() && band.slope.is_some() {
+        if band.slope.unwrap_or(2.0) >= 10.0 {
+            "Brickwall".to_string()
+        } else {
+            format!("{:.0} dB/oct", slope_db(band.slope.unwrap_or(2.0)))
+        }
     } else {
         format!("Q {:.2}", band.q)
     };
@@ -375,7 +380,7 @@ pub fn BandPopup(
                                             if band_idx < bv.len() {
                                                 bv[band_idx].shape = new_shape;
                                                 if new_shape.uses_slope() {
-                                                    bv[band_idx].q = 1.0;
+                                                    bv[band_idx].q = 0.707;
                                                 }
                                                 Some(bv[band_idx].clone())
                                             } else {
@@ -584,7 +589,7 @@ pub fn BandContextMenu(
                                         let mut bv = bands.write();
                                         if band_idx < bv.len() {
                                             bv[band_idx].shape = sc;
-                                            if sc.uses_slope() { bv[band_idx].q = 1.0; }
+                                            if sc.uses_slope() { bv[band_idx].q = 0.707; }
                                             Some(bv[band_idx].clone())
                                         } else { None }
                                     };

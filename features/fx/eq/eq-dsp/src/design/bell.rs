@@ -1,5 +1,7 @@
 //! Bell / Peak cascade dispatcher — routes to `cascade::compute_cascade_peak_with_slope`.
 
+use crate::inline::InlineVec;
+
 use crate::design::biquad::Coeffs;
 use crate::design::cascade;
 
@@ -39,7 +41,7 @@ pub(super) fn mzt_peak_cascade(
     gain_db: f64,
     sample_rate: f64,
     pole_count: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n.max(1);
     // Pro-Q slope index. Pole_count alone is ambiguous for slope=5 (3 sec) vs
     // slope=6 (3 sec) since both yield order=6. The optional env var

@@ -21,11 +21,11 @@ use nice_plug_dioxus::widget::CustomWidgetAttr;
 
 use super::eq_graph_interaction::{
     GraphMapper, bands_in_rect, drag_gain_for_shape, filter_type_for_position, nearest_band,
-    wheel_q_for_shape,
+    wheel_band,
 };
 pub use super::eq_graph_model::{
     BAND_COLORS, EqBand, EqBandShape, EqGraphRenderState, GraphConfig, InteractionState, MAX_BANDS,
-    StereoMode, get_band_color, get_band_fill_color, q_to_slope_db, slope_db_to_q,
+    StereoMode, get_band_color, get_band_fill_color, slope_db,
 };
 use super::eq_graph_painter::EqGraphWidget;
 use super::eq_graph_popup::{BandContextMenu, BandPopup, EmptyGraphContextMenu};
@@ -484,7 +484,7 @@ pub fn EqGraph(
                         let mut bv = bands.write();
                         if band_idx < bv.len() {
                             let band = &mut bv[band_idx];
-                            band.q = wheel_q_for_shape(band.shape, band.q, delta, slope_mode);
+                            wheel_band(band, delta, slope_mode);
                             Some(bv[band_idx].clone())
                         } else { None }
                     };
@@ -841,7 +841,7 @@ pub fn EqGraph(
                     let shape = filter_type_for_position(f64::from(freq), f64::from(gain), db_range);
                     let final_gain = if shape.uses_gain() { gain } else { 0.0 };
                     let new_band = EqBand { index: new_idx, used: true, enabled: true, frequency: freq,
-                        gain: final_gain, q: 1.0, shape, solo: false, stereo_mode: StereoMode::default(),
+                        gain: final_gain, q: 1.0, slope: None, shape, solo: false, stereo_mode: StereoMode::default(),
                         name: String::new() };
                     if let Some(cb) = &on_band_add { cb.call(new_band); }
                     dragging_band.set(Some(new_idx));

@@ -1,5 +1,7 @@
 //! High-pass slope 9 (Db96, N=16 poles, 8 sections).
 
+use crate::inline::InlineVec;
+
 use crate::design::biquad::Coeffs;
 use crate::design::cascade;
 use dsp_core::num;
@@ -10,7 +12,7 @@ use super::{
     highpass_s2_with_w_eval_scale, interp_48k_table,
 };
 
-pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> Vec<Coeffs> {
+pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> InlineVec<Coeffs> {
     highpass_slope9_qs(freq_hz, sample_rate, q)
         .into_iter()
         .enumerate()
@@ -18,12 +20,12 @@ pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> Vec<Coeffs> {
         .collect()
 }
 
-fn highpass_slope9_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
+fn highpass_slope9_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> InlineVec<f64> {
     let mut qs = cascade_qs(8, q_user);
     if let Some(max_q) = qs.last_mut() {
         *max_q = max_q.min(40.0);
     }
-    let mut qs: Vec<f64> = qs.into_iter().rev().collect();
+    let mut qs: InlineVec<f64> = qs.into_iter().rev().collect();
     if qs.len() > 3
         && let [_, q1, q2, q3, ..] = &mut qs[..]
     {

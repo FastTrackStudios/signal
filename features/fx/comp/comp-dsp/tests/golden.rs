@@ -29,13 +29,14 @@ const SAMPLE_RATE: f64 = 48_000.0;
 const GENERATOR_RATE: f32 = 48_000.0;
 const LEN: usize = 8192;
 
-/// The styles that are stable enough to have a reference at all. `Reserved` is
-/// included deliberately: it is reachable through `set_style`, so it is
-/// behaviour whether or not it was meant to be.
-///
-/// `Optical` (3) is absent, and that is not an oversight — see
-/// [`the_optical_style_diverges`]. It has no output to pin.
-const STYLES: [(&str, i32); 4] = [("clean", 0), ("fet", 1), ("vca", 2), ("reserved", 4)];
+/// All host styles must produce finite output.
+const STYLES: [(&str, i32); 5] = [
+    ("clean", 0),
+    ("fet", 1),
+    ("vca", 2),
+    ("optical", 3),
+    ("reserved", 4),
+];
 
 /// Every style reachable through `set_style`, including the broken one.
 const ALL_STYLE_IDS: [i32; 5] = [0, 1, 2, 3, 4];
@@ -179,49 +180,9 @@ fn the_full_chain_holds_its_reference_in_stereo() {
     dsp_golden::assert_golden!(g, "chain_stereo_lookahead", &out);
 }
 
-/// The Optical style is unstable, and this test exists so that stays visible.
-///
-/// `GainCurve::update_coefficients` scales the smoothing *coefficient* by 1.15
-/// for Optical, intending (per its own comment) a 1.15x slower attack. But the
-/// coefficient is a one-pole feedback term: `base_attack` is already
-/// `exp(-2 / (sample_rate * attack_s))`, which approaches 1 as the attack time
-/// grows. Multiplying it by 1.15 pushes it *above* 1, putting the pole outside
-/// the unit circle, and the smoother then multiplies by >1 every sample.
-///
-/// Break-even is an attack of 0.298 ms at 48 kHz. Above that — which is every
-/// realistic setting — the gain reduction diverges to infinity within a few
-/// hundred samples, and the output is `inf` and then `NaN`.
-///
-/// A slower attack means a coefficient *closer to* 1, never past it. The
-/// intent as documented is a time-constant scale (`attack_ms * 1.15`), which is
-/// stable by construction; applying the factor to the coefficient is the bug.
-/// Fixing it is a tonal change to the other styles too if the same reading is
-/// applied uniformly, so it is left for a deliberate decision rather than
-/// folded into a refactor.
-///
-/// When Optical is fixed, this test fails. That is the point: move it into
-/// [`STYLES`] and record its reference.
 #[test]
-fn the_optical_style_diverges() {
-    let input = program(2048);
-    let mut comp = compressor(3);
-    let diverged = input
-        .iter()
-        .enumerate()
-        .map(|(n, x)| comp.process(*x, n % 2))
-        .any(|y| !y.is_finite());
-    assert!(
-        diverged,
-        "the Optical style is now stable — good. Move it into STYLES, record \
-         its reference vector, and delete this test."
-    );
-}
-
-#[test]
-fn no_other_style_diverges() {
-    // The counterpart to the test above: the instability must stay confined to
-    // the one style whose coefficient exceeds 1, rather than being something
-    // the whole smoother does under this input.
+fn no_style_diverges() {
+    // Every exposed style must keep its envelope bounded.
     let input = program(4096);
     for (name, style) in STYLES {
         let mut comp = compressor(style);

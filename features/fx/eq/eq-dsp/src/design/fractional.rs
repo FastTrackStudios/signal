@@ -25,6 +25,8 @@
 //! So the integer part of the order is built the way it always was, and this
 //! supplies the remainder.
 
+use crate::inline::{InlineVec, inline_vec};
+
 use crate::design::biquad::Coeffs;
 
 /// Octaves per ladder cell.
@@ -122,10 +124,15 @@ pub fn first_order_cut(freq_hz: f64, sample_rate: f64, high_pass: bool) -> Coeff
 /// The gain is normalised to unity in the pass band, so adding this to an
 /// integer-order design changes its slope and not its level.
 #[must_use]
-pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) -> Vec<Coeffs> {
+pub fn sections(
+    freq_hz: f64,
+    fraction: f64,
+    sample_rate: f64,
+    high_pass: bool,
+) -> InlineVec<Coeffs> {
     let f = fraction.clamp(0.0, 1.0);
     if f <= 1.0e-6 {
-        return vec![crate::design::biquad::PASSTHROUGH; SECTION_COUNT];
+        return inline_vec![crate::design::biquad::PASSTHROUGH; SECTION_COUNT];
     }
 
     // Each cell spans CELL_OCTAVES, with its pole and zero `f * CELL_OCTAVES`
@@ -139,7 +146,7 @@ pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) 
     // And below the band there is nothing left to attenuate; a cell under this
     // is pinned by `first_order`'s own clamp into a degenerate pass-through.
     let floor_hz: f64 = 5.0;
-    let mut first_orders = Vec::with_capacity(CELLS);
+    let mut first_orders = InlineVec::with_capacity(CELLS);
     for cell in 0..CELLS {
         let (zero, pole) = if high_pass {
             // March down from the corner. Attenuate below, unity above: the
@@ -169,10 +176,10 @@ pub fn sections(freq_hz: f64, fraction: f64, sample_rate: f64, high_pass: bool) 
         first_orders.push(first_order(zero, pole, sample_rate, !high_pass));
     }
     if first_orders.is_empty() {
-        return vec![crate::design::biquad::PASSTHROUGH; SECTION_COUNT];
+        return inline_vec![crate::design::biquad::PASSTHROUGH; SECTION_COUNT];
     }
 
-    let mut out: Vec<Coeffs> = first_orders
+    let mut out: InlineVec<Coeffs> = first_orders
         .chunks(2)
         .map(|pair| match pair {
             [a, b] => combine(*a, *b),

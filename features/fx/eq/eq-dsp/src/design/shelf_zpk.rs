@@ -13,6 +13,8 @@
 //!   UI "Tilt Shelf" → binary type 9     (prototype=LP,   transform=2 bilinear)
 //!   UI "Band Shelf" → binary type 10    (prototype=LP,   transform=3 LP→BP+bilinear)
 
+use crate::inline::{InlineVec, inline_vec};
+
 use crate::design::biquad::{self, Coeffs};
 use crate::design::constants::{
     INV_SQRT2, LN10_OVER_20, Q_BW_BASE, Q_BW_MULT, Q_BW_OFFSET, Q_BW_SCALE,
@@ -60,10 +62,10 @@ pub fn design_low_shelf_zpk(
     user_q: f64,
     user_gain_db: f64,
     sample_rate: f64,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n_sections.max(1);
     if user_gain_db.abs() < 0.001 {
-        return vec![biquad::PASSTHROUGH; n];
+        return inline_vec![biquad::PASSTHROUGH; n];
     }
 
     let total_linear = (user_gain_db * LN10_OVER_20).exp();
@@ -115,10 +117,10 @@ pub fn design_high_shelf_zpk(
     user_q: f64,
     user_gain_db: f64,
     sample_rate: f64,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n_sections.max(1);
     if user_gain_db.abs() < 0.001 {
-        return vec![biquad::PASSTHROUGH; n];
+        return inline_vec![biquad::PASSTHROUGH; n];
     }
     let total_linear = (user_gain_db * LN10_OVER_20).exp();
     let section_gain = total_linear.powf(1.0 / num::count_to_f64(n));
@@ -155,17 +157,17 @@ pub fn design_tilt_shelf_zpk(
     user_q: f64,
     user_gain_db: f64,
     sample_rate: f64,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n_sections.max(1);
     if user_gain_db.abs() < 0.001 {
-        return vec![biquad::PASSTHROUGH; n];
+        return inline_vec![biquad::PASSTHROUGH; n];
     }
 
     let section_gain_db = user_gain_db / num::count_to_f64(n);
     let linear_gain = (section_gain_db * LN10_OVER_20).exp();
     let gain_param = linear_gain.sqrt();
 
-    let mut sections = Vec::new();
+    let mut sections = InlineVec::new();
     for _k in 0..n {
         let mut zpk = prototype::butterworth_lp_prewarped(2, freq_hz, sample_rate);
         apply_shelf_gain(&mut zpk, gain_param, false);
@@ -189,10 +191,10 @@ pub fn design_band_shelf_zpk(
     user_q: f64,
     user_gain_db: f64,
     sample_rate: f64,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n_sections.max(1);
     if user_gain_db.abs() < 0.001 {
-        return vec![biquad::PASSTHROUGH; n];
+        return inline_vec![biquad::PASSTHROUGH; n];
     }
 
     let linear_gain = (user_gain_db * LN10_OVER_20).exp();

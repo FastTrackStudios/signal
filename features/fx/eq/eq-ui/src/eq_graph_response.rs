@@ -1,211 +1,147 @@
-//! Approximate EQ graph response math used for UI rendering.
+//! Static EQ response evaluated from the DSP's prepared coefficients.
+//! Prepare once per graph update, then evaluate the complete frequency grid.
 
-use super::eq_graph_model::{EqBand, EqBandShape};
+use super::eq_graph_model::{EqBand, EqBandShape, StereoMode};
+use eq_dsp::{
+    BandConfig, CutSlope, EqConfig, Filter, Placement, PreparedEq, PreparedFilter, ProcessSpec,
+    Steepness,
+};
 
+fn config(band: &EqBand) -> BandConfig {
+    let frequency_hz = f64::from(band.frequency);
+    let gain_db = f64::from(band.gain);
+    let q = f64::from(band.q);
+    let steepness = match band.slope.map(|v| v.round()) {
+        Some(0.0 | 1.0) => {
+            if matches!(band.shape, EqBandShape::Bell | EqBandShape::Notch) {
+                Steepness::Order2
+            } else {
+                Steepness::Order1
+            }
+        }
+        Some(3.0) => Steepness::Order3,
+        Some(4.0) => Steepness::Order4,
+        Some(5.0) => Steepness::Order5,
+        Some(6.0) => Steepness::Order6,
+        Some(7.0) => Steepness::Order8,
+        Some(8.0) => Steepness::Order12,
+        Some(9.0 | 10.0) => Steepness::Order16,
+        _ => Steepness::Order2,
+    };
+    let cut_slope = match band.slope.map(f64::from) {
+        Some(raw) if (0.0..6.0).contains(&raw) => CutSlope::DbPerOctave(raw * 6.0),
+        Some(raw) => match raw.round() {
+            6.0 => CutSlope::DbPerOctave(36.0),
+            7.0 => CutSlope::DbPerOctave(48.0),
+            8.0 => CutSlope::DbPerOctave(72.0),
+            9.0 => CutSlope::DbPerOctave(96.0),
+            10.0 => CutSlope::Brickwall,
+            _ => CutSlope::DbPerOctave(12.0),
+        },
+        None => CutSlope::DbPerOctave(12.0),
+    };
+    let filter = match band.shape {
+        EqBandShape::Bell => Filter::Bell {
+            frequency_hz,
+            gain_db,
+            q,
+            steepness,
+        },
+        EqBandShape::LowShelf => Filter::LowShelf {
+            frequency_hz,
+            gain_db,
+            q,
+            steepness,
+        },
+        EqBandShape::HighShelf => Filter::HighShelf {
+            frequency_hz,
+            gain_db,
+            q,
+            steepness,
+        },
+        EqBandShape::LowCut => Filter::HighPass {
+            frequency_hz,
+            q,
+            slope: cut_slope,
+        },
+        EqBandShape::HighCut => Filter::LowPass {
+            frequency_hz,
+            q,
+            slope: cut_slope,
+        },
+        EqBandShape::Notch => Filter::Notch {
+            frequency_hz,
+            q,
+            steepness,
+        },
+        EqBandShape::BandPass => Filter::BandPass {
+            frequency_hz,
+            q,
+            steepness,
+        },
+        EqBandShape::TiltShelf => Filter::Tilt {
+            frequency_hz,
+            gain_db,
+            q,
+            steepness,
+        },
+        EqBandShape::FlatTilt => Filter::FlatTilt {
+            frequency_hz,
+            gain_db,
+            q,
+            steepness,
+        },
+        EqBandShape::AllPass => Filter::AllPass {
+            frequency_hz,
+            q,
+            steepness,
+        },
+    };
+    BandConfig::new(filter)
+        .enabled(band.used && band.enabled)
+        .placement(match band.stereo_mode {
+            StereoMode::Stereo => Placement::Stereo,
+            StereoMode::Left => Placement::Left,
+            StereoMode::Right => Placement::Right,
+            StereoMode::Mid => Placement::Mid,
+            StereoMode::Side => Placement::Side,
+        })
+}
+
+pub fn prepare_band(band: &EqBand, sample_rate: f64) -> Result<PreparedFilter, eq_dsp::Error> {
+    config(band).filter.prepare(sample_rate)
+}
+
+pub fn prepare_graph(bands: &[EqBand], sample_rate: f64) -> Result<PreparedEq, eq_dsp::Error> {
+    let mut eq = EqConfig::with_capacity(bands.len());
+    for band in bands.iter().filter(|b| b.used && b.enabled) {
+        eq.add_band(config(band))?;
+    }
+    eq.prepare(ProcessSpec::new(sample_rate, 1)?)
+}
+
+/// Power response for equal-power uncorrelated stereo input. This keeps one
+/// graph line meaningful even when bands mix left/right and mid/side placement.
+#[must_use]
+pub fn graph_magnitude(prepared: &PreparedEq, hz: f64) -> f64 {
+    prepared.base_response(hz).map_or(f64::NAN, |h| {
+        10.0 * ((h.ll.mag_sq() + h.lr.mag_sq() + h.rl.mag_sq() + h.rr.mag_sq()) * 0.5)
+            .max(1e-30)
+            .log10()
+    })
+}
+
+/// Convenience evaluation for a single point; renderers should prepare once.
 #[must_use]
 pub fn calculate_combined_response(bands: &[EqBand], freq: f64, sample_rate: f64) -> f64 {
-    let mut total_db = 0.0;
-
-    for band in bands {
-        if !band.used || !band.enabled {
-            continue;
-        }
-        total_db += calculate_band_response(band, freq, sample_rate);
-    }
-
-    total_db
-}
-
-fn biquad_magnitude_squared(coeff: &[f64; 6], w: f64) -> f64 {
-    let w2 = w * w;
-    let denom_real = coeff[2].mul_add(-w2, coeff[0]);
-    let denom_imag = coeff[1] * w;
-    let denominator = denom_real.mul_add(denom_real, denom_imag * denom_imag);
-
-    let numer_real = coeff[5].mul_add(-w2, coeff[3]);
-    let numer_imag = coeff[4] * w;
-    let numerator = numer_real.mul_add(numer_real, numer_imag * numer_imag);
-
-    if denominator > 1e-30 {
-        numerator / denominator
-    } else {
-        1.0
-    }
-}
-
-fn lowpass_coeffs(w0: f64, q: f64) -> [f64; 6] {
-    let w02 = w0 * w0;
-    [1.0, w0 / q, w02, w02, 0.0, 0.0]
-}
-
-fn highpass_coeffs(w0: f64, q: f64) -> [f64; 6] {
-    let w02 = w0 * w0;
-    [1.0, w0 / q, w02, 0.0, 0.0, 1.0]
-}
-
-fn lowshelf_coeffs(w0: f64, gain_linear: f64, q: f64) -> [f64; 6] {
-    let w02 = w0 * w0;
-    let sqrt_g = gain_linear.sqrt();
-    let g4 = gain_linear.sqrt().sqrt();
-
-    [
-        w02,
-        w0 * g4 / q,
-        1.0,
-        gain_linear * w02,
-        w0 * sqrt_g * g4 / q,
-        1.0,
-    ]
-}
-
-fn highshelf_coeffs(w0: f64, gain_linear: f64, q: f64) -> [f64; 6] {
-    let w02 = w0 * w0;
-    let sqrt_g = gain_linear.sqrt();
-    let g4 = gain_linear.sqrt().sqrt();
-
-    [
-        w02,
-        w0 * g4 / q,
-        1.0,
-        w02,
-        w0 * sqrt_g * g4 / q,
-        gain_linear,
-    ]
-}
-
-fn peak_coeffs(w0: f64, gain_linear: f64, q: f64) -> [f64; 6] {
-    let w02 = w0 * w0;
-    let a = gain_linear.sqrt();
-    [w02, w0 / (a * q), 1.0, w02, w0 * a / q, 1.0]
-}
-
-fn notch_coeffs(w0: f64, q: f64) -> [f64; 6] {
-    let w02 = w0 * w0;
-    [1.0, w0 / q, w02, w02, 0.0, 1.0]
-}
-
-fn bandpass_coeffs(w0: f64, q: f64) -> [f64; 6] {
-    let w02 = w0 * w0;
-    [1.0, w0 / q, w02, 0.0, w0 / q, 0.0]
-}
-
-fn cascaded_magnitude_db(freq: f64, f0: f64, order: usize, filter_type: &EqBandShape) -> f64 {
-    if order == 0 {
-        return 0.0;
-    }
-
-    let w = 2.0 * std::f64::consts::PI * freq;
-    let w0 = 2.0 * std::f64::consts::PI * f0;
-
-    if order == 1 {
-        let mag_sq = match filter_type {
-            EqBandShape::LowCut => {
-                let w2 = w * w;
-                let w02 = w0 * w0;
-                w2 / (w2 + w02)
-            }
-            EqBandShape::HighCut => {
-                let w2 = w * w;
-                let w02 = w0 * w0;
-                w02 / (w2 + w02)
-            }
-            _ => 1.0,
-        };
-        return 10.0 * mag_sq.max(1e-30).log10();
-    }
-
-    let num_sections = order / 2;
-    let has_first_order = order % 2 == 1;
-    let mut total_mag_sq = 1.0;
-
-    if has_first_order {
-        let first_order_mag = match filter_type {
-            EqBandShape::LowCut => {
-                let w2 = w * w;
-                let w02 = w0 * w0;
-                w2 / (w2 + w02)
-            }
-            EqBandShape::HighCut => {
-                let w2 = w * w;
-                let w02 = w0 * w0;
-                w02 / (w2 + w02)
-            }
-            _ => 1.0,
-        };
-        total_mag_sq *= first_order_mag;
-    }
-
-    for i in 0..num_sections {
-        let theta = std::f64::consts::PI * (2 * i + 1) as f64 / (2 * order) as f64;
-        let section_q = 1.0 / (2.0 * theta.cos());
-
-        let coeffs = match filter_type {
-            EqBandShape::LowCut => highpass_coeffs(w0, section_q),
-            EqBandShape::HighCut => lowpass_coeffs(w0, section_q),
-            _ => [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-        };
-
-        total_mag_sq *= biquad_magnitude_squared(&coeffs, w);
-    }
-
-    10.0 * total_mag_sq.max(1e-30).log10()
+    prepare_graph(bands, sample_rate).map_or(f64::NAN, |eq| graph_magnitude(&eq, freq))
 }
 
 #[must_use]
-pub fn calculate_band_response(band: &EqBand, freq: f64, _sample_rate: f64) -> f64 {
-    let f0 = f64::from(band.frequency);
-    let gain = f64::from(band.gain);
-    let q = f64::from(band.q);
-
-    let w = 2.0 * std::f64::consts::PI * freq;
-    let w0 = 2.0 * std::f64::consts::PI * f0;
-
-    match band.shape {
-        EqBandShape::Bell => {
-            let gain_linear = 10.0_f64.powf(gain / 20.0);
-            let coeffs = peak_coeffs(w0, gain_linear, q);
-            let mag_sq = biquad_magnitude_squared(&coeffs, w);
-            10.0 * mag_sq.max(1e-30).log10()
-        }
-        EqBandShape::LowShelf => {
-            let gain_linear = 10.0_f64.powf(gain / 20.0);
-            let coeffs = lowshelf_coeffs(w0, gain_linear, q.max(0.5));
-            let mag_sq = biquad_magnitude_squared(&coeffs, w);
-            10.0 * mag_sq.max(1e-30).log10()
-        }
-        EqBandShape::HighShelf => {
-            let gain_linear = 10.0_f64.powf(gain / 20.0);
-            let coeffs = highshelf_coeffs(w0, gain_linear, q.max(0.5));
-            let mag_sq = biquad_magnitude_squared(&coeffs, w);
-            10.0 * mag_sq.max(1e-30).log10()
-        }
-        EqBandShape::LowCut => {
-            let order = (q * 2.0).round().max(1.0) as usize;
-            cascaded_magnitude_db(freq, f0, order, &EqBandShape::LowCut)
-        }
-        EqBandShape::HighCut => {
-            let order = (q * 2.0).round().max(1.0) as usize;
-            cascaded_magnitude_db(freq, f0, order, &EqBandShape::HighCut)
-        }
-        EqBandShape::Notch => {
-            let coeffs = notch_coeffs(w0, q.max(0.5));
-            let mag_sq = biquad_magnitude_squared(&coeffs, w);
-            10.0 * mag_sq.max(1e-30).log10()
-        }
-        EqBandShape::BandPass => {
-            let coeffs = bandpass_coeffs(w0, q.max(0.5));
-            let mag_sq = biquad_magnitude_squared(&coeffs, w);
-            let peak_mag_sq = biquad_magnitude_squared(&coeffs, w0);
-            let normalized = mag_sq / peak_mag_sq.max(1e-30);
-            10.0f64.mul_add(normalized.max(1e-30).log10(), gain)
-        }
-        EqBandShape::TiltShelf | EqBandShape::FlatTilt => {
-            let octaves = (freq / f0).log2();
-            let slope_db_per_oct = gain / 3.0;
-            octaves * slope_db_per_oct
-        }
-        EqBandShape::AllPass => 0.0,
-    }
+pub fn calculate_band_response(band: &EqBand, freq: f64, sample_rate: f64) -> f64 {
+    prepare_band(band, sample_rate)
+        .and_then(|filter| filter.magnitude_db(freq))
+        .unwrap_or(f64::NAN)
 }
 
 #[cfg(test)]
@@ -336,6 +272,88 @@ mod tests {
         assert!(
             response_low.abs() < 2.0,
             "Expected ~0 dB below cutoff for high shelf, got {response_low}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod parity_tests {
+    use super::*;
+
+    #[test]
+    fn slope_and_sample_rate_reach_the_shared_design() {
+        let band = EqBand {
+            used: true,
+            enabled: true,
+            frequency: 8_000.0,
+            q: 0.707,
+            slope: Some(4.0),
+            shape: EqBandShape::HighCut,
+            ..EqBand::default()
+        };
+        let expected = Filter::LowPass {
+            frequency_hz: 8_000.0,
+            q: f64::from(band.q),
+            slope: CutSlope::DbPerOctave(24.0),
+        }
+        .prepare(48_000.0)
+        .unwrap();
+        assert!(
+            (calculate_band_response(&band, 12_000.0, 48_000.0)
+                - expected.magnitude_db(12_000.0).unwrap())
+            .abs()
+                < 1e-10
+        );
+        assert!(
+            (calculate_band_response(&band, 20_000.0, 48_000.0)
+                - calculate_band_response(&band, 20_000.0, 96_000.0))
+            .abs()
+                > 0.1
+        );
+    }
+
+    #[test]
+    fn one_sided_band_has_a_stereo_power_response() {
+        let band = EqBand {
+            used: true,
+            enabled: true,
+            frequency: 1_000.0,
+            gain: 6.0,
+            q: 1.0,
+            shape: EqBandShape::Bell,
+            stereo_mode: StereoMode::Left,
+            ..EqBand::default()
+        };
+        let response = calculate_combined_response(&[band], 1_000.0, 48_000.0);
+        assert!((response - 3.962_927_980_447_141).abs() < 0.05);
+    }
+    #[test]
+    fn absent_slope_uses_second_order_without_reinterpreting_q() {
+        let band = EqBand {
+            used: true,
+            enabled: true,
+            frequency: 1000.0,
+            q: 4.0,
+            shape: EqBandShape::LowCut,
+            ..Default::default()
+        };
+        let explicit = EqBand {
+            slope: Some(2.0),
+            ..band.clone()
+        };
+        assert_eq!(
+            calculate_combined_response(&[band.clone()], 700.0, 48000.0),
+            calculate_combined_response(&[explicit], 700.0, 48000.0)
+        );
+        let different_q = EqBand {
+            q: 0.707,
+            ..band.clone()
+        };
+        assert!(
+            (calculate_combined_response(&[band], 1000.0, 48000.0)
+                - calculate_combined_response(&[different_q], 1000.0, 48000.0))
+            .abs()
+                > 1.0
         );
     }
 }

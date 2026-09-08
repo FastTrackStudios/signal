@@ -14,8 +14,7 @@
 //! response at crossover frequencies.
 
 use audiocore_dsp::AudioConfig;
-use eq_dsp::FilterType;
-use eq_dsp::runtime::band::Band;
+use eq_dsp::{CutSlope, Filter, FilterProcessor};
 
 use crate::spectral_flux::{FluxMode, SpectralFluxDetector};
 
@@ -45,33 +44,39 @@ pub struct BandTrigger {
 /// A `Band` carries two full section cascades, so three of them do not
 /// belong in a stack local — hence the `Box` at the use site.
 struct Split {
-    lo: Band,
-    hi: Band,
+    lo: FilterProcessor,
+    hi: FilterProcessor,
 }
 
 impl Split {
     fn new(freq_hz: f64, sample_rate: f64) -> Self {
-        let band = |filter_type: FilterType| {
-            let mut b = Band::new();
-            b.filter_type = filter_type;
-            b.freq_hz = freq_hz;
-            b.q = 0.707; // Butterworth
-            b.order = 2;
-            b.enabled = true;
-            b.update(sample_rate);
-            b
+        let mut split = Self {
+            lo: FilterProcessor::default(),
+            hi: FilterProcessor::default(),
         };
-        Self {
-            lo: band(FilterType::Lowpass),
-            hi: band(FilterType::Highpass),
-        }
+        split.set_freq(freq_hz, sample_rate);
+        split
     }
 
-    fn set_freq(&mut self, freq_hz: f64, sample_rate: f64) {
-        self.lo.freq_hz = freq_hz;
-        self.lo.update(sample_rate);
-        self.hi.freq_hz = freq_hz;
-        self.hi.update(sample_rate);
+    fn set_freq(&mut self, frequency_hz: f64, sample_rate: f64) {
+        let slope = CutSlope::DbPerOctave(12.0);
+        // Invalid host settings retain the last valid filter.
+        let _ = self.lo.configure(
+            Filter::LowPass {
+                frequency_hz,
+                q: 0.707,
+                slope,
+            },
+            sample_rate,
+        );
+        let _ = self.hi.configure(
+            Filter::HighPass {
+                frequency_hz,
+                q: 0.707,
+                slope,
+            },
+            sample_rate,
+        );
     }
 
     fn reset(&mut self) {
@@ -170,18 +175,18 @@ impl MultibandDetector {
 
         // Split into bands using crossover filters
         // Band 0: LPF(crossover[0])
-        let band0 = self.splits[0].lo.tick(sample, 0);
+        let band0 = self.splits[0].lo.process_sample(sample);
 
         // Band 1: HPF(crossover[0]) → LPF(crossover[1])
-        let hp0 = self.splits[0].hi.tick(sample, 0);
-        let band1 = self.splits[1].lo.tick(hp0, 0);
+        let hp0 = self.splits[0].hi.process_sample(sample);
+        let band1 = self.splits[1].lo.process_sample(hp0);
 
         // Band 2: HPF(crossover[1]) → LPF(crossover[2])
-        let hp1 = self.splits[1].hi.tick(sample, 0);
-        let band2 = self.splits[2].lo.tick(hp1, 0);
+        let hp1 = self.splits[1].hi.process_sample(sample);
+        let band2 = self.splits[2].lo.process_sample(hp1);
 
         // Band 3: HPF(crossover[2])
-        let band3 = self.splits[2].hi.tick(sample, 0);
+        let band3 = self.splits[2].hi.process_sample(sample);
 
         let band_signals = [band0, band1, band2, band3];
 
