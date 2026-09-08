@@ -36,6 +36,13 @@ pub struct SamplerInstrument {
     engine: SampleEngine,
     /// Interleaved stereo render scratch (`2 * block_size`), reused.
     scratch: Vec<f32>,
+    /// Last frame handed to the host, so the artefact scan (see `process`)
+    /// can see a discontinuity that falls ACROSS a block boundary — which is
+    /// where a per-block bug puts one.
+    prev: (f32, f32),
+    /// Hole detection carries across blocks: a dropout does not politely
+    /// begin and end inside one callback.
+    holes: crate::engine::HoleDetector,
 }
 
 impl SamplerInstrument {
@@ -47,7 +54,71 @@ impl SamplerInstrument {
         Self {
             engine,
             scratch: Vec::new(),
+            prev: (0.0, 0.0),
+            holes: crate::engine::HoleDetector::default(),
         }
+    }
+
+    /// Look at what we just produced, and count the artefacts a deadline
+    /// counter cannot see.
+    ///
+    /// `xruns` and `over_budget` answer "was the callback late". They are
+    /// both silent about audio that arrived exactly on time and was WRONG,
+    /// which is the failure this catches:
+    ///
+    /// - **gaps** — digital silence while voices are sounding. `fts_sample`
+    ///   returns 0.0 for a chunk that has not streamed in yet (it asks for
+    ///   the chunk and moves on, rather than blocking the audio thread), so
+    ///   a starved stream scatters micro-gaps through otherwise correct
+    ///   audio. That is heard as vinyl crackle, not as a dropout.
+    /// - **clicks** — a step no audio signal can make, e.g. the edge where
+    ///   such a gap begins or ends.
+    /// - **non-finite** — a NaN reaching the device.
+    ///
+    /// Cheap enough to leave on: two compares and a subtract per frame, on
+    /// data already in cache because we just wrote it.
+    fn scan_output(&mut self, out_l: &[f32], out_r: &[f32], frames: usize) {
+        // Silence with nothing playing is not a gap, it is silence.
+        // With nothing playing there is no stream to have a hole in, and the
+        // silence that follows the last note must not be held open as a
+        // candidate: drop the run instead of letting the next note close it.
+        if self.engine.active_voices() == 0 {
+            self.holes.reset();
+        }
+        let mut g = crate::engine::OutputGlitches::default();
+        let (mut pl, mut pr) = self.prev;
+        for f in 0..frames {
+            let (l, r) = (out_l[f], out_r[f]);
+            if !l.is_finite() || !r.is_finite() {
+                g.nonfinite_frames += 1;
+                pl = 0.0;
+                pr = 0.0;
+                continue;
+            }
+            // A hole is silence that signal RESUMES after — not silence
+            // before a note has started, which every voice legitimately has
+            // (`start_hold`, `attack_delay`) and which the first version of
+            // this counted by the thousand.
+            let magnitude = l.abs().max(r.abs());
+            if let Some(run) = self.holes.feed(magnitude) {
+                g.gap_frames += run;
+                g.gap_runs += 1;
+                g.longest_gap = g.longest_gap.max(run);
+            }
+            let slew = (l - pl).abs().max((r - pr).abs());
+            if slew > crate::engine::CLICK_SLEW {
+                g.click_frames += 1;
+            }
+            // Millionths, so the worst case survives in an integer atomic.
+            let ppm = (slew * 1.0e6) as usize;
+            if ppm > g.peak_slew_ppm {
+                g.peak_slew_ppm = ppm;
+            }
+            pl = l;
+            pr = r;
+        }
+        self.prev = (pl, pr);
+        crate::engine::record_output_glitches(g);
     }
 
     /// Immutable access to the wrapped engine (e.g. for metering / stats).
@@ -167,6 +238,8 @@ impl Soundsource for SamplerInstrument {
             out_l[f] = self.scratch[f * 2];
             out_r[f] = self.scratch[f * 2 + 1];
         }
+
+        self.scan_output(out_l, out_r, frames);
     }
 }
 

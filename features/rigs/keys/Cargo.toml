@@ -53,6 +53,11 @@ architect-telemetry.workspace = true
 eyre.workspace = true
 
 [dev-dependencies]
+vox-core = { workspace = true }
+vox-websocket = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+eyre = { workspace = true }
+fts-sample = { workspace = true }
 ratatui = "0.30"
 libc = "0.2"
 tracing-subscriber.workspace = true

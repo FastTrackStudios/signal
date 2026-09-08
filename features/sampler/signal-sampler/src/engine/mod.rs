@@ -43,6 +43,167 @@ pub fn note_dropped() {
     NOTES_DROPPED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Output frames that came out digitally silent while voices were sounding.
+///
+/// The streaming signature. A voice whose chunk has not arrived reads 0.0
+/// and asks for it (`fts_sample`'s stream path returns silence for a
+/// non-resident chunk rather than blocking the audio thread), so a starved
+/// stream is not a dropout — it is a scatter of micro-gaps through otherwise
+/// correct audio, and it sounds like vinyl crackle rather than a click.
+/// Nothing measured this: `xruns` and `over_budget` both read zero while it
+/// happens, because the callback is perfectly on time and rendering silence.
+static GAP_FRAMES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Output frames whose sample jumped further in one step than audio can.
+///
+/// The discontinuity signature: a gap ENDING (the stream snapping back to
+/// signal), a voice retired mid-waveform, or a gain applied per block instead
+/// of ramped. Distinct from a gap, and a different fix.
+static CLICK_FRAMES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Separate holes (not frames) — see [`OutputGlitches::gap_runs`].
+static GAP_RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Longest single hole, frames.
+static LONGEST_GAP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Non-finite output samples (NaN / inf). Always a bug, and audible as a
+/// burst of noise, so it is counted separately rather than folded into clicks.
+static NONFINITE_FRAMES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Largest one-sample jump seen, in millionths (an integer so it can live in
+/// an atomic). Says how bad the worst discontinuity was, not just that one
+/// happened.
+static PEAK_SLEW_PPM: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Detects HOLES in an audio stream: runs of digital silence with real
+/// signal on both sides.
+///
+/// The naive version of this — "silent while voices exist" — counted a note
+/// that had not started yet. Every voice begins with `start_hold` /
+/// `attack_delay` frames of legitimate silence, and a chord's worth of those
+/// read as thousands of "gaps" that no listener could hear. It reported the
+/// same 2116 on every run of the rig while the streamer's behaviour changed
+/// underneath it, which is how it was caught: a real streaming artefact is
+/// not bit-reproducible.
+///
+/// So silence only counts once signal RESUMES after it. Silence before the
+/// first sample of a note is not a hole (nothing preceded it); silence after
+/// the last is not a hole either (it may simply be the end). What is left is
+/// audio that stopped and came back — which is what a starved stream, a
+/// stranded voice or a mid-note retire actually does, and what a listener
+/// hears as a click or a crackle.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct HoleDetector {
+    /// Signal has been seen, so a silence from here on is a candidate hole.
+    armed: bool,
+    /// Length of the silence currently being accumulated.
+    run: usize,
+}
+
+impl HoleDetector {
+    /// Feed one frame. Returns the length of a hole if this frame CLOSED one
+    /// (i.e. signal resumed after silence), else `None`.
+    ///
+    /// Takes the frame's peak magnitude rather than a sample so the caller
+    /// decides how to combine channels.
+    #[inline]
+    pub fn feed(&mut self, magnitude: f32) -> Option<usize> {
+        if magnitude > 0.0 {
+            let closed = (self.armed && self.run > 0).then_some(self.run);
+            self.armed = true;
+            self.run = 0;
+            return closed;
+        }
+        if self.armed {
+            self.run += 1;
+        }
+        None
+    }
+
+    /// Forget the run in progress without counting it — for a stream that has
+    /// genuinely stopped (no voices), where trailing silence is not a hole.
+    #[inline]
+    pub fn reset(&mut self) {
+        self.armed = false;
+        self.run = 0;
+    }
+}
+
+/// A one-sample jump larger than this is not audio.
+///
+/// A full-scale 1 kHz sine moves ~0.13 per sample at 48 kHz, and even a hard
+/// piano attack stays well under this; a gap edge is a jump straight to or
+/// from zero. Set high enough that ordinary transients do not register.
+pub const CLICK_SLEW: f32 = 0.5;
+
+/// What the audio output actually looked like — the artefacts a deadline
+/// counter cannot see. See [`GAP_FRAMES`] and [`CLICK_FRAMES`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct OutputGlitches {
+    /// Frames of silence inside a confirmed hole (see [`HoleDetector`]).
+    pub gap_frames: usize,
+    /// How many separate holes — the number a listener maps to "crackles",
+    /// where `gap_frames` alone cannot distinguish one long dropout from a
+    /// thousand tiny ones.
+    pub gap_runs: usize,
+    /// Longest single hole, frames.
+    pub longest_gap: usize,
+    pub click_frames: usize,
+    pub nonfinite_frames: usize,
+    /// Worst one-sample jump, in millionths of full scale.
+    pub peak_slew_ppm: usize,
+}
+
+/// Record one block's worth of output analysis (see [`OutputGlitches`]).
+pub fn record_output_glitches(g: OutputGlitches) {
+    use std::sync::atomic::Ordering::Relaxed;
+    if g.gap_frames > 0 {
+        GAP_FRAMES.fetch_add(g.gap_frames, Relaxed);
+    }
+    if g.gap_runs > 0 {
+        GAP_RUNS.fetch_add(g.gap_runs, Relaxed);
+    }
+    if g.longest_gap > 0 {
+        LONGEST_GAP.fetch_max(g.longest_gap, Relaxed);
+    }
+    if g.click_frames > 0 {
+        CLICK_FRAMES.fetch_add(g.click_frames, Relaxed);
+    }
+    if g.nonfinite_frames > 0 {
+        NONFINITE_FRAMES.fetch_add(g.nonfinite_frames, Relaxed);
+    }
+    if g.peak_slew_ppm > 0 {
+        PEAK_SLEW_PPM.fetch_max(g.peak_slew_ppm, Relaxed);
+    }
+}
+
+/// Output artefacts since process start (or the last [`reset_output_glitches`]).
+#[must_use]
+pub fn output_glitches() -> OutputGlitches {
+    use std::sync::atomic::Ordering::Relaxed;
+    OutputGlitches {
+        gap_frames: GAP_FRAMES.load(Relaxed),
+        gap_runs: GAP_RUNS.load(Relaxed),
+        longest_gap: LONGEST_GAP.load(Relaxed),
+        click_frames: CLICK_FRAMES.load(Relaxed),
+        nonfinite_frames: NONFINITE_FRAMES.load(Relaxed),
+        peak_slew_ppm: PEAK_SLEW_PPM.load(Relaxed),
+    }
+}
+
+/// Zero the artefact counters — so a measurement can cover a chosen window
+/// rather than everything since the process started.
+pub fn reset_output_glitches() {
+    use std::sync::atomic::Ordering::Relaxed;
+    GAP_FRAMES.store(0, Relaxed);
+    GAP_RUNS.store(0, Relaxed);
+    LONGEST_GAP.store(0, Relaxed);
+    CLICK_FRAMES.store(0, Relaxed);
+    NONFINITE_FRAMES.store(0, Relaxed);
+    PEAK_SLEW_PPM.store(0, Relaxed);
+}
+
 /// Notes dropped for want of a resident sample since process start.
 pub fn notes_dropped() -> usize {
     NOTES_DROPPED.load(std::sync::atomic::Ordering::Relaxed)
@@ -2389,4 +2550,75 @@ pub fn default_articulation(spec: &crate::spec::LibrarySpec) -> Option<String> {
         // caller still has an id to work with.
         .or_else(|| spec.articulations.first())
         .map(|a| a.id.clone())
+}
+
+#[cfg(test)]
+mod hole_detector_tests {
+    use super::HoleDetector;
+
+    /// Feed a pattern of magnitudes, return (holes, total silent frames).
+    fn run(pattern: &[f32]) -> (usize, usize) {
+        let mut d = HoleDetector::default();
+        let (mut holes, mut frames) = (0, 0);
+        for &m in pattern {
+            if let Some(run) = d.feed(m) {
+                holes += 1;
+                frames += run;
+            }
+        }
+        (holes, frames)
+    }
+
+    /// **The bug this detector replaced.** A note begins with legitimate
+    /// silence — `start_hold`, `attack_delay`, a velocity crossfade at zero —
+    /// and the previous metric counted every frame of it. A chord's worth
+    /// made thousands of phantom "gaps" and sent us chasing the streamer.
+    #[test]
+    fn silence_before_the_first_signal_is_not_a_hole() {
+        assert_eq!(run(&[0.0, 0.0, 0.0, 0.0, 0.5, 0.5]), (0, 0));
+    }
+
+    /// Silence after the last signal is not a hole either: the note may
+    /// simply have ended, and nothing has resumed to prove otherwise.
+    #[test]
+    fn trailing_silence_is_not_a_hole() {
+        assert_eq!(run(&[0.5, 0.5, 0.0, 0.0, 0.0]), (0, 0));
+    }
+
+    /// Signal, silence, signal — audio that stopped and came back. That is a
+    /// hole, and it is what a listener hears as a click.
+    #[test]
+    fn silence_between_signal_is_a_hole() {
+        assert_eq!(run(&[0.5, 0.0, 0.0, 0.0, 0.5]), (1, 3));
+    }
+
+    /// Several separate dropouts are several holes, not one long one — the
+    /// distinction between a single glitch and continuous crackle.
+    #[test]
+    fn each_dropout_counts_once() {
+        assert_eq!(run(&[0.5, 0.0, 0.5, 0.0, 0.0, 0.5]), (2, 3));
+    }
+
+    /// Continuous signal has no holes at all, however quiet, as long as it
+    /// is not exactly zero.
+    #[test]
+    fn quiet_but_present_signal_is_not_a_hole() {
+        assert_eq!(run(&[1.0e-7, 1.0e-7, 1.0e-7]), (0, 0));
+    }
+
+    /// `reset` drops the run in progress — used when every voice has gone,
+    /// so the next note cannot close a "hole" spanning the silence between
+    /// two phrases.
+    #[test]
+    fn reset_forgets_the_run_in_progress() {
+        let mut d = HoleDetector::default();
+        assert_eq!(d.feed(0.5), None);
+        assert_eq!(d.feed(0.0), None);
+        d.reset();
+        assert_eq!(
+            d.feed(0.5),
+            None,
+            "the silence across a reset is not a hole"
+        );
+    }
 }

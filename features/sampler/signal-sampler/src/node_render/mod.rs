@@ -205,6 +205,79 @@ pub enum RenderNode {
     },
 }
 
+// ── Audio-thread scratch ──────────────────────────────────────────────────
+//
+// Every one of these buffers used to be a `vec![]` inside `process_inner`,
+// i.e. a heap allocation per node per block on the audio thread — a Serial
+// node alone took four, and they are taken while the tree is being walked,
+// so a deep patch allocated dozens of times per callback. Allocation is not
+// realtime-safe (the allocator can take a lock and, worse, can block), which
+// is the rule stated in CLAUDE.md for exactly this code.
+//
+// Pooled per thread rather than stored per node so the enum keeps its shape:
+// `Serial`/`Parallel` stay tuple variants and the dozen walker arms that
+// match them are untouched. Only the audio thread renders, and a buffer is
+// never held across a recursive call — taken, filled, handed back — so the
+// pool is a plain free-list with no borrow held during the walk.
+//
+// Steady state allocates nothing: capacity is reached within the first
+// blocks and `clear` + `resize` on a big-enough buffer only writes zeros.
+// The same reasoning as `PRIME_SCRATCH` in `engine::voice`.
+thread_local! {
+    static AUDIO_SCRATCH: std::cell::RefCell<Vec<Vec<f32>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static EVENT_SCRATCH: std::cell::RefCell<Vec<Vec<PluginMidiEvent>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static PARAM_SCRATCH: std::cell::RefCell<Vec<Vec<(u32, f64)>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A zeroed scratch buffer of `frames` samples.
+fn scratch(frames: usize) -> Vec<f32> {
+    let mut b = AUDIO_SCRATCH
+        .with(|s| s.borrow_mut().pop())
+        .unwrap_or_default();
+    b.clear();
+    b.resize(frames, 0.0);
+    b
+}
+
+/// A scratch buffer holding the first `frames` of `src` (zero-padded).
+fn scratch_from(src: &[f32], frames: usize) -> Vec<f32> {
+    let mut b = scratch(frames);
+    let n = frames.min(src.len());
+    b[..n].copy_from_slice(&src[..n]);
+    b
+}
+
+fn recycle(b: Vec<f32>) {
+    AUDIO_SCRATCH.with(|s| s.borrow_mut().push(b));
+}
+
+fn event_scratch() -> Vec<PluginMidiEvent> {
+    let mut b = EVENT_SCRATCH
+        .with(|s| s.borrow_mut().pop())
+        .unwrap_or_default();
+    b.clear();
+    b
+}
+
+fn recycle_events(b: Vec<PluginMidiEvent>) {
+    EVENT_SCRATCH.with(|s| s.borrow_mut().push(b));
+}
+
+fn param_scratch() -> Vec<(u32, f64)> {
+    let mut b = PARAM_SCRATCH
+        .with(|s| s.borrow_mut().pop())
+        .unwrap_or_default();
+    b.clear();
+    b
+}
+
+fn recycle_params(b: Vec<(u32, f64)>) {
+    PARAM_SCRATCH.with(|s| s.borrow_mut().push(b));
+}
+
 /// Per-block render context threaded down the tree: mod-engine parameter
 /// writes (per leaf) + send-bus buffers.
 #[derive(Default)]
@@ -1046,8 +1119,7 @@ impl RenderNode {
                     inst.process(in_l, in_r, out_l, out_r, events);
                 } else {
                     // Merge external param writes with this leaf's mod writes.
-                    let mut params: Vec<(u32, f64)> =
-                        Vec::with_capacity(events.params.len() + mods.len());
+                    let mut params = param_scratch();
                     params.extend_from_slice(events.params);
                     params.extend_from_slice(mods);
                     let ev = PluginEvents {
@@ -1056,6 +1128,7 @@ impl RenderNode {
                         note_expressions: events.note_expressions,
                     };
                     inst.process(in_l, in_r, out_l, out_r, &ev);
+                    recycle_params(params);
                 }
             }
             Self::Leaf { inst: None, .. } => copy_in(in_l, in_r, out_l, out_r, frames),
@@ -1064,10 +1137,10 @@ impl RenderNode {
                     return copy_in(in_l, in_r, out_l, out_r, frames);
                 }
                 // Ping-pong the signal through each child.
-                let mut cur_l = in_l[..frames].to_vec();
-                let mut cur_r = in_r[..frames].to_vec();
-                let mut nxt_l = vec![0.0f32; frames];
-                let mut nxt_r = vec![0.0f32; frames];
+                let mut cur_l = scratch_from(in_l, frames);
+                let mut cur_r = scratch_from(in_r, frames);
+                let mut nxt_l = scratch(frames);
+                let mut nxt_r = scratch(frames);
                 for node in nodes.iter_mut() {
                     nxt_l.fill(0.0);
                     nxt_r.fill(0.0);
@@ -1077,12 +1150,16 @@ impl RenderNode {
                 }
                 out_l[..frames].copy_from_slice(&cur_l[..frames]);
                 out_r[..frames].copy_from_slice(&cur_r[..frames]);
+                recycle(cur_l);
+                recycle(cur_r);
+                recycle(nxt_l);
+                recycle(nxt_r);
             }
             Self::Parallel(nodes) => {
                 out_l[..frames].fill(0.0);
                 out_r[..frames].fill(0.0);
-                let mut tl = vec![0.0f32; frames];
-                let mut tr = vec![0.0f32; frames];
+                let mut tl = scratch(frames);
+                let mut tr = scratch(frames);
                 for node in nodes.iter_mut() {
                     tl.fill(0.0);
                     tr.fill(0.0);
@@ -1092,18 +1169,22 @@ impl RenderNode {
                         out_r[f] += tr[f];
                     }
                 }
+                recycle(tl);
+                recycle(tr);
             }
             Self::Zoned { zone, inner } => {
                 // Central-MIDI-input routing: keep only notes in this zone's
                 // window, scaling each NoteOn's velocity by the crossfade gain.
                 // Note-offs and CC pass through (so held notes always release).
-                let filtered = filter_events_by_zone(*zone, events);
+                let mut filtered = event_scratch();
+                filter_events_by_zone(*zone, events, &mut filtered);
                 let fe = PluginEvents {
                     params: events.params,
                     midi: &filtered,
                     note_expressions: events.note_expressions,
                 };
                 inner.process_inner(in_l, in_r, out_l, out_r, &fe, ctx);
+                recycle_events(filtered);
             }
             Self::Gain {
                 input,
@@ -1170,14 +1251,15 @@ impl RenderNode {
                         .iter()
                         .any(|e| matches!(e.message, midicore::MidiEvent::NoteOn { .. }))
                 {
-                    Some(
+                    let mut kept = event_scratch();
+                    kept.extend(
                         events
                             .midi
                             .iter()
                             .filter(|e| !matches!(e.message, midicore::MidiEvent::NoteOn { .. }))
-                            .cloned()
-                            .collect(),
-                    )
+                            .cloned(),
+                    );
+                    Some(kept)
                 } else {
                     None
                 };
@@ -1197,15 +1279,15 @@ impl RenderNode {
                 if *input == 1.0 {
                     inner.process_inner(in_l, in_r, out_l, out_r, events, ctx);
                 } else {
-                    let gl: Vec<f32> = in_l[..frames.min(in_l.len())]
-                        .iter()
-                        .map(|s| s * *input)
-                        .collect();
-                    let gr: Vec<f32> = in_r[..frames.min(in_r.len())]
-                        .iter()
-                        .map(|s| s * *input)
-                        .collect();
+                    let mut gl = scratch_from(in_l, frames);
+                    let mut gr = scratch_from(in_r, frames);
+                    for f in 0..frames {
+                        gl[f] *= *input;
+                        gr[f] *= *input;
+                    }
                     inner.process_inner(&gl, &gr, out_l, out_r, events, ctx);
+                    recycle(gl);
+                    recycle(gr);
                 }
                 // A muted branch that has now decayed to nothing can sleep
                 // from the next block on. Measured pre-gain, because the
@@ -1237,6 +1319,9 @@ impl RenderNode {
                         held * (-(frames as f32) / (METER_RELEASE_S * METER_RATE_HZ)).exp();
                     m.store(peak.max(decayed).to_bits(), Ordering::Relaxed);
                 }
+                if let Some(kept) = drained {
+                    recycle_events(kept);
+                }
             }
             Self::SendTap { buses, inner } => {
                 inner.process_inner(in_l, in_r, out_l, out_r, events, ctx);
@@ -1257,21 +1342,25 @@ impl RenderNode {
             Self::BusInject { bus, inner } => {
                 // Send/return: `inner` processes the BUS content only; its
                 // output sums onto the pass-through main signal.
-                let bl: Vec<f32> = ctx
+                let bl = ctx
                     .bus_l
                     .get(*bus)
-                    .map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
-                let br: Vec<f32> = ctx
+                    .map_or_else(|| scratch(frames), |b| scratch_from(b, frames));
+                let br = ctx
                     .bus_r
                     .get(*bus)
-                    .map_or_else(|| vec![0.0; frames], |b| b[..frames.min(b.len())].to_vec());
-                let mut tl = vec![0.0f32; frames];
-                let mut tr = vec![0.0f32; frames];
+                    .map_or_else(|| scratch(frames), |b| scratch_from(b, frames));
+                let mut tl = scratch(frames);
+                let mut tr = scratch(frames);
                 inner.process_inner(&bl, &br, &mut tl, &mut tr, events, ctx);
                 for f in 0..frames {
                     out_l[f] = in_l.get(f).copied().unwrap_or(0.0) + tl[f];
                     out_r[f] = in_r.get(f).copied().unwrap_or(0.0) + tr[f];
                 }
+                recycle(bl);
+                recycle(br);
+                recycle(tl);
+                recycle(tr);
             }
             Self::Modulated { .. } => {
                 // Only ever the root; handled in `process`.
@@ -1283,17 +1372,18 @@ impl RenderNode {
     /// Convenience: render `frames` of output from silence + the given MIDI.
     pub fn render(&mut self, out_l: &mut [f32], out_r: &mut [f32], midi: &PluginEvents<'_>) {
         let frames = out_l.len().min(out_r.len());
-        let silence = vec![0.0f32; frames];
+        let silence = scratch(frames);
         self.process(&silence, &silence, out_l, out_r, midi);
+        recycle(silence);
     }
 }
 
 /// Apply a [`Zone`] to a MIDI stream: drop `NoteOns` outside the window, scale
 /// the rest by the crossfade gain (velocity × gain), and pass everything else
 /// (`NoteOff` / CC / …) through unchanged so releases always land.
-fn filter_events_by_zone(zone: Zone, events: &PluginEvents<'_>) -> Vec<PluginMidiEvent> {
+fn filter_events_by_zone(zone: Zone, events: &PluginEvents<'_>, out: &mut Vec<PluginMidiEvent>) {
     use midicore::{MidiEvent, Velocity};
-    let mut out = Vec::with_capacity(events.midi.len());
+    out.clear();
     for ev in events.midi {
         match &ev.message {
             MidiEvent::NoteOn {
@@ -1318,7 +1408,6 @@ fn filter_events_by_zone(zone: Zone, events: &PluginEvents<'_>) -> Vec<PluginMid
             _ => out.push(ev.clone()),
         }
     }
-    out
 }
 
 fn copy_in(in_l: &[f32], in_r: &[f32], out_l: &mut [f32], out_r: &mut [f32], frames: usize) {

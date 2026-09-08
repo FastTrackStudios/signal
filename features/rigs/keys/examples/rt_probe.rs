@@ -144,12 +144,39 @@ fn main() {
         let r = KeysRigSvc::status(&backend).rt;
         (r.blocks, f64::from(r.mean_render_ms) * r.blocks as f64)
     };
+    signal_sampler::engine::reset_output_glitches();
     let faults0 = major_faults();
     let minor0 = minor_faults();
     // Measure the PLAY window, not the open: installing a preset and filling
     // the first buffers legitimately takes far longer than a block.
     KeysRigSvc::reset_rt_peak(&backend);
     let open_peak = KeysRigSvc::status(&backend).rt.peak_render_ms;
+
+    // What is actually live. Voice count is the cost of this engine, so which
+    // modules are switched on IS the performance story — print it before any
+    // numbers, so a run can never be read out of context.
+    {
+        let m = KeysRigSvc::mixer(&backend);
+        let mut on = Vec::new();
+        let mut off = Vec::new();
+        for e in &m.engines {
+            for l in &e.layers {
+                for md in &l.modules {
+                    if md.patch.is_empty() {
+                        continue;
+                    }
+                    let label = format!("{}/{}", l.name, md.slot);
+                    if md.enabled {
+                        on.push(label);
+                    } else {
+                        off.push(label);
+                    }
+                }
+            }
+        }
+        println!("modules live ({}): {on:?}", on.len());
+        println!("modules off  ({}): {off:?}", off.len());
+    }
 
     // `FTS_RT_OFF="Pad,Shimmer"` mutes those lanes before the run. A muted
     // lane's voices are skipped entirely rather than rendered and multiplied
@@ -282,6 +309,41 @@ fn main() {
         0.0
     };
     println!("page faults while playing: major={faults} minor={minor}");
+    // What the OUTPUT looked like, as opposed to whether the callback was on
+    // time. A starved stream reads silence for a chunk that has not arrived,
+    // so it shows up here and NOWHERE in the deadline numbers.
+    {
+        use fts_sample::stream as st;
+        use std::sync::atomic::Ordering::Relaxed;
+        let (hit, miss) = (st::STREAM_HITS.load(Relaxed), st::STREAM_MISSES.load(Relaxed));
+        let dec = st::CHUNKS_DECODED.load(Relaxed);
+        let re = st::REDECODES.load(Relaxed);
+        println!(
+            "stream reads: hit={hit} miss={miss} ({:.1}% missed) | decoded={dec} \
+             redecoded={re} ({:.0}% thrash) | shed: sweep={} budget={} | fills={} \
+             | miss cause: never-requested={} pending={}",
+            100.0 * miss as f64 / (hit + miss).max(1) as f64,
+            100.0 * re as f64 / dec.max(1) as f64,
+            st::SHED_BY_SWEEP.load(Relaxed),
+            st::SHED_BY_BUDGET.load(Relaxed),
+            st::FILLS.load(Relaxed),
+            st::MISS_UNREQUESTED.load(Relaxed),
+            st::MISS_PENDING.load(Relaxed),
+        );
+    }
+    let g = signal_sampler::engine::output_glitches();
+    let played_frames = (played * 48_000.0) as usize;
+    println!(
+        "output artefacts: holes={} ({} frames, {:.3}% of output, longest {} frames) \
+         clicks={} nonfinite={} peak_slew={:.3}",
+        g.gap_runs,
+        g.gap_frames,
+        100.0 * g.gap_frames as f64 / played_frames.max(1) as f64,
+        g.longest_gap,
+        g.click_frames,
+        g.nonfinite_frames,
+        g.peak_slew_ppm as f64 / 1.0e6,
+    );
     println!(
         "per-chord voices: {}",
         per_chord_voices

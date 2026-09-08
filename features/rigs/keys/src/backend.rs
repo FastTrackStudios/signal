@@ -133,6 +133,31 @@ impl Default for ModuleState {
     }
 }
 
+/// **TEMPORARY (2026-09-05): lanes that start switched OFF.**
+///
+/// The rig does not currently fit its deadline with the whole Worship stack
+/// live. Render cost is linear in voice count, and 20 notes across all the
+/// layers is ~233 voices: 7.2ms of work in a 5.33ms block, which the player
+/// hears as crackling roughly once a second. With these three off it is
+/// ~136 voices and 4.2ms, i.e. inside the budget with headroom.
+///
+/// This is a starting position, not a limitation — exactly like the engine
+/// mutes above, these are ordinary module switches and turning any of them
+/// back on in the mixer works normally (and will crackle again until the
+/// voice-render loop is block-processed, which is the actual fix).
+///
+/// `FTS_KEYS_ALL_ON=1` starts everything live, for measuring the real thing.
+///
+/// DELETE THIS once `Voice::render_block` hoists its per-frame branch work:
+/// the whole stack is supposed to play.
+fn starts_switched_off(lane: &str) -> bool {
+    const HEAVY: [&str; 3] = ["Pad", "Shimmer", "Synth 2"];
+    if std::env::var_os("FTS_KEYS_ALL_ON").is_some() {
+        return false;
+    }
+    HEAVY.contains(&lane)
+}
+
 impl LaneState {
     /// What the mixer shows for the lane: the module preset it was opened
     /// from, else module A's soundsource.
@@ -1417,6 +1442,7 @@ impl State {
                             .map(|patch| ModuleState {
                                 patch,
                                 macros: default_macros(),
+                                enabled: !starts_switched_off(&layer.name),
                                 ..ModuleState::default()
                             })
                             .collect(),
@@ -1450,6 +1476,22 @@ impl State {
             live: lane.any_live(),
         };
         rig_mixer::lane_gain(&mix, engine_muted, self.any_solo())
+    }
+
+    /// Can anything this lane renders reach the output right now?
+    ///
+    /// Mute, solo-exclusion and the engine's own mute — the same three the
+    /// daw track ops fold in, asked here so the render tree can skip work the
+    /// track would only throw away.
+    fn lane_is_audible(&self, lane: &LaneState) -> bool {
+        if lane.muted {
+            return false;
+        }
+        if self.engines.get(&lane.engine).is_some_and(|e| e.muted) {
+            return false;
+        }
+        // Solo silences every un-soloed lane.
+        !self.any_solo() || lane.soloed
     }
 
     fn engine_gain(&self, name: &str) -> f32 {
@@ -1498,6 +1540,24 @@ fn keys_runtime() -> &'static tokio::runtime::Runtime {
             .build()
             .expect("keys runtime")
     })
+}
+
+/// The output-artefact half of [`signal_keys_proto::KeysRealtime`], read from
+/// the sampler's process-wide counters (`engine::output_glitches`).
+///
+/// Split out so `status` can spread it into the struct. These are global to
+/// the process rather than per-rig, because the audio thread bumps them from
+/// wherever it happens to be rendering.
+fn artefacts() -> signal_keys_proto::KeysRealtime {
+    let g = signal_sampler::engine::output_glitches();
+    signal_keys_proto::KeysRealtime {
+        holes: g.gap_runs as u64,
+        hole_frames: g.gap_frames as u64,
+        longest_hole: g.longest_gap as u64,
+        clicks: g.click_frames as u64,
+        nonfinite: g.nonfinite_frames as u64,
+        ..Default::default()
+    }
 }
 
 impl KeysRigBackend {
@@ -2246,11 +2306,29 @@ impl KeysRigBackend {
                 rig.set_lane_mute(Role::Layer, name, lane.muted);
                 rig.set_lane_solo(Role::Layer, name, lane.soloed);
                 if let Some(cells) = rig.lane_cells(name) {
+                    // Fold the lane's own audibility into its module cells.
+                    //
+                    // A lane/engine mute above is a daw TRACK op, applied
+                    // after the lane's instrument has already rendered. The
+                    // render tree never learns about it, so a muted lane goes
+                    // on spawning voices and rendering them at full price for
+                    // an output that is then multiplied by zero — and, when
+                    // its pack cannot resolve a body, goes on logging a
+                    // dead-key warning per note for an instrument nobody can
+                    // hear. (Found via the Aux engine, which starts muted and
+                    // holds Dolceola.)
+                    //
+                    // Zeroing the module cells puts that mute where the tree
+                    // can act on it: `node_render`'s gain node then drops
+                    // note-ons and stops rendering the subtree entirely. The
+                    // track mute still applies underneath; zero times zero is
+                    // the same silence, arrived at without the work.
+                    let audible = if s.lane_is_audible(lane) { 1.0 } else { 0.0 };
                     // Modules are named "<layer> <slot>" in the lane's tree.
                     for i in 0..lane.modules.len() {
                         let module_name =
                             format!("{name} {}", signal_synth::engine::module_slot(i));
-                        cells.set(Role::Module, &module_name, lane.module_gain(i));
+                        cells.set(Role::Module, &module_name, lane.module_gain(i) * audible);
                     }
                 }
             }
@@ -2936,6 +3014,11 @@ impl KeysRigSvc for KeysRigBackend {
                         block_frames: st.block_frames.load(Relaxed),
                         peak_render_ms: peak_ms as f32,
                         render_ms: last_ms as f32,
+                        // The artefact counters ride along with the deadline
+                        // ones so a UI can show both. They answer different
+                        // questions and the rig has been failing the second
+                        // while passing the first.
+                        ..artefacts()
                     }
                 })
                 .unwrap_or_default()
@@ -2955,6 +3038,41 @@ impl KeysRigSvc for KeysRigBackend {
         } else {
             0
         };
+        // Enrich THIS span rather than logging: `status` is polled by every
+        // attached UI, so the vox span architect already opens per call is a
+        // free, regular carrier for the rig's realtime health — one wide
+        // event per poll instead of a log line per metric.
+        //
+        // The audio thread contributes nothing here but relaxed atomic loads;
+        // all of these are counters it bumped, read from this (ordinary)
+        // thread. `wide::set` is a no-op when no OTel layer is installed, so
+        // this costs nothing when nobody is collecting.
+        //
+        // `audio.gap_frames` is the field worth watching: it counts output
+        // frames that were digitally silent while voices were sounding, which
+        // is what a starved sample stream produces. Deadline counters
+        // (`audio.over_budget`, `audio.xruns`) stay at zero through it,
+        // because the callback IS on time — it is just rendering silence.
+        {
+            use architect_telemetry::wide;
+            let g = signal_sampler::engine::output_glitches();
+            wide::set("rig", "keys");
+            wide::set("audio.running", running);
+            wide::set("audio.voices", i64::from(voices));
+            wide::set("audio.block_frames", i64::from(rt.block_frames));
+            wide::set("audio.render_mean_ms", f64::from(rt.mean_render_ms));
+            wide::set("audio.render_peak_ms", f64::from(rt.peak_render_ms));
+            wide::set("audio.xruns", rt.xruns.cast_signed());
+            wide::set("audio.over_budget", rt.over_budget.cast_signed());
+            wide::set("audio.blocks", rt.blocks.cast_signed());
+            wide::set("audio.gap_frames", g.gap_frames as i64);
+            wide::set("audio.click_frames", g.click_frames as i64);
+            wide::set("audio.nonfinite_frames", g.nonfinite_frames as i64);
+            wide::set(
+                "audio.notes_dropped",
+                signal_sampler::engine::notes_dropped() as i64,
+            );
+        }
         KeysStatus {
             running,
             loaded_preset,
