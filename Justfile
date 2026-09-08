@@ -468,6 +468,67 @@ plugins-bundle plugins=fts_plugins:
 plugins-install: plugins-bundle
     cargo run -q -p fts-installer -- plugins install --from target/bundled
 
+# Symlink the built bundles into this machine's user plugin dirs, so a rebuild
+# is live in REAPER (and anything else that scans them) without reinstalling.
+#
+# `plugins-install` copies; this points at `target/bundled` instead. The
+# bundler rewrites each bundle in place at a stable path, so the link stays
+# valid across rebuilds — `just plugins-bundle eq` and the next plugin scan
+# sees the new binary.
+#
+#   just plugins-link              # every bundle currently in target/bundled
+#   just plugins-bundle eq && ...  # rebuild one; the link already points at it
+#
+# Idempotent, and deliberately conservative: it replaces its own symlinks but
+# refuses to delete a REAL directory of the same name, which would be a copy
+# installed by `plugins-install` or a release. Remove those yourself first —
+# a plugin folder is not somewhere to be clever with rm -rf.
+plugins-link:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src="$(pwd)/target/bundled"
+    [ -d "$src" ] || { echo "no target/bundled — run 'just plugins-bundle' first" >&2; exit 1; }
+    case "$(uname)" in
+        Darwin) clap_dir="$HOME/Library/Audio/Plug-Ins/CLAP"; vst3_dir="$HOME/Library/Audio/Plug-Ins/VST3";;
+        *)      clap_dir="$HOME/.clap"; vst3_dir="$HOME/.vst3";;
+    esac
+    mkdir -p "$clap_dir" "$vst3_dir"
+    linked=0; skipped=0
+    for bundle in "$src"/*.clap "$src"/*.vst3; do
+        [ -e "$bundle" ] || continue
+        name="$(basename "$bundle")"
+        case "$name" in *.clap) dest_dir="$clap_dir";; *) dest_dir="$vst3_dir";; esac
+        dest="$dest_dir/$name"
+        if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+            printf "  SKIP  %-22s (a real copy is installed at %s)\n" "$name" "$dest_dir"
+            skipped=$((skipped+1))
+            continue
+        fi
+        rm -f "$dest"
+        ln -s "$bundle" "$dest"
+        printf "  link  %-22s -> %s\n" "$name" "$dest_dir"
+        linked=$((linked+1))
+    done
+    echo "linked $linked bundle(s), skipped $skipped"
+
+# Remove the symlinks `plugins-link` made, leaving any real installs alone.
+plugins-unlink:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src="$(pwd)/target/bundled"
+    case "$(uname)" in
+        Darwin) dirs=("$HOME/Library/Audio/Plug-Ins/CLAP" "$HOME/Library/Audio/Plug-Ins/VST3");;
+        *)      dirs=("$HOME/.clap" "$HOME/.vst3");;
+    esac
+    for dir in "${dirs[@]}"; do
+        [ -d "$dir" ] || continue
+        for link in "$dir"/*.clap "$dir"/*.vst3; do
+            [ -L "$link" ] || continue
+            target="$(readlink "$link")"
+            case "$target" in "$src"/*) rm -f "$link"; echo "  unlink $(basename "$link")";; esac
+        done
+    done
+
 # Prove every bundle in target/bundled actually LOADS — dlopen it, run its
 # entry point, and walk its factory (apps/plugins/verify/). A plugin that
 # compiles, links, and exports the right symbol can still fail in a host: a
