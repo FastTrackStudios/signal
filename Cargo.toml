@@ -866,16 +866,18 @@ vox-codegen = "0.10.0-rc.5"
 # the same process". 1.1.0 is the newest release, so there is nothing to bump
 # to. See vendor/raw-window-metal/FTS-PATCH.md.
 raw-window-metal = { path = "vendor/raw-window-metal" }
-# baseview from the FTS fork (upstream v0.3 + one fix): the macOS frame timer
-# is registered in kCFRunLoopCommonModes rather than kCFRunLoopDefaultMode.
+# baseview 0.3.3, vendored with ONE line changed: the macOS frame timer is
+# registered in kCFRunLoopCommonModes rather than kCFRunLoopDefaultMode.
 # AppKit runs the run loop modally for the whole of a live window resize, so a
 # default-mode timer stops firing mid-drag — the editor's on_frame is frozen,
 # nothing relayouts, and AppKit stretches the stale surface until the mouse
-# comes up. Still present upstream at 0.3.1.
+# comes up. Still kCFRunLoopDefaultMode upstream at 0.3.3.
 #
-# Pinned by rev: this is a plugin-editor dependency, and a moving branch would
-# let a window-system change land in a released plugin without a bump.
-baseview = { git = "https://github.com/FastTrackStudios/baseview.git", rev = "fa0c2c870927ec27138f914c0841f305e9b4972f" }
+# Replaces the FastTrackStudios/baseview fork pinned at fa0c2c87 (0.3.0 + this
+# fix); upstream had moved three patch releases and 23 commits past it.
+# Vendored rather than re-forked so the delta is one reviewable file here
+# instead of a rev pin in another repo. See vendor/baseview/FTS-PATCH.md.
+baseview = { path = "vendor/baseview" }
 # pipewire-rs one commit past its v0.10.0 release. PipeWire 1.6 rewrote
 # constants like SPA_ID_INVALID from a bare `0xffffffff` into a cast form,
 # `((uint32_t)0xffffffff)`, which bindgen's own macro evaluator cannot fold —
