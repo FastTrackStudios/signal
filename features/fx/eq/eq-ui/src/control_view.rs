@@ -646,6 +646,17 @@ fn AppShell() -> Element {
                                     // every route to mid/side EQ — the panel's
                                     // ST button included — moved the UI model
                                     // and left the parameter where it was.
+                                    // The band's user-given name. Persisted as a
+                                    // plain `RwLock<String>` rather than a
+                                    // parameter, so it is written directly
+                                    // rather than through the param context —
+                                    // and it was the one field of `EqBand` the
+                                    // writeback never carried, so a rename had
+                                    // nowhere to land.
+                                    if *bp.name.read() != band.name {
+                                        *bp.name.write() = band.name.clone();
+                                    }
+
                                     let place_val = stereo_mode_to_int(band.stereo_mode);
                                     ctx.begin_set_raw(bp.placement.as_ptr());
                                     ctx.set_normalized_raw(

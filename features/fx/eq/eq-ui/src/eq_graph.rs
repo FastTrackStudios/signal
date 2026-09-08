@@ -30,7 +30,7 @@ pub use super::eq_graph_model::{
     StereoMode, get_band_color, get_band_fill_color, slope_db,
 };
 use super::eq_graph_painter::EqGraphWidget;
-use super::eq_graph_popup::{BandContextMenu, BandPopup, EmptyGraphContextMenu};
+use super::eq_graph_popup::{BandContextMenu, BandPopup, BandReadoutChip, EmptyGraphContextMenu};
 pub use super::eq_graph_response::{calculate_band_response, calculate_combined_response};
 use spectrum_analyzer::dsp::AnalyzerSnapshot;
 
@@ -1456,6 +1456,18 @@ pub fn EqGraph(
                                 dyn_state: band_dynamics.as_ref().and_then(|v| v.get(band_idx).cloned()),
                                 handles: band_handles.as_ref().and_then(|v| v.get(band_idx).cloned()),
                                 on_dismiss: move |()| { set_focused(None); },
+                            }
+                            // The three changing numbers, under the cursor.
+                            // The docked panel has everything else, but it is
+                            // at the bottom of the display and the band is
+                            // wherever you are dragging it.
+                            BandReadoutChip {
+                                band_idx,
+                                bx,
+                                by,
+                                graph_w: graph_width,
+                                graph_h: graph_height,
+                                bands,
                             }
                         }
                     } else { rsx! {} }

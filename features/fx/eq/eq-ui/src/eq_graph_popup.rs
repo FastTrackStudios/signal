@@ -177,8 +177,10 @@ pub fn band_popup_rect(
 ) -> (f64, f64, f64, f64) {
     // A Pro-Q-style band strip: three dials across the middle, flanked by the
     // shape/routing clusters, with the dynamics row beneath.
-    let w = if is_dragging { 178.0 } else { 300.0 };
-    let h = if is_dragging { 34.0 } else { 150.0 };
+    // Full size always: the panel no longer shrinks mid-drag.
+    let _ = is_dragging;
+    let w = 300.0;
+    let h = 150.0;
 
     // DOCKED to the bottom of the graph, and only tracking the band
     // horizontally.
@@ -350,237 +352,231 @@ pub fn BandPopup(
                 ),
                 onmousedown: move |evt| { evt.stop_propagation(); },
 
-                if is_dragging {
-                    // Mid-drag the panel shrinks to the numbers — anything
-                    // clickable would be unreachable anyway while the pointer
-                    // owns the node.
+                // Always the full panel, including mid-drag. It used to
+                // collapse to a strip of numbers while dragging, which hid
+                // exactly what you want while moving a band — its dynamics,
+                // shape and routing. The small readout that follows the node
+                // covers the "what am I holding" job now, so this one stays
+                // whole and still.
+                div {
+                    style: "display:flex; align-items:flex-start; gap:8px;",
+
+                    // ── Left: bypass, shape, slope ──
                     div {
-                        style: "display:flex; align-items:baseline; justify-content:space-between; gap:8px;",
-                        span { class: "text-xs font-semibold tabular-nums", "{freq_str} Hz" }
-                        span { class: "text-xs font-semibold tabular-nums", "{band_gain:+.1} dB" }
-                        span { class: "text-[10px] tabular-nums text-muted-foreground", "{q_str}" }
-                    }
-                } else {
-                    div {
-                        style: "display:flex; align-items:flex-start; gap:8px;",
-
-                        // ── Left: bypass, shape, slope ──
-                        div {
-                            style: "display:flex; flex-direction:column; gap:4px; width:82px; flex:0 0 auto;",
-                            Button {
-                                size: ButtonSize::Small,
-                                variant: if band_enabled { ButtonVariant::Outline } else { ButtonVariant::Secondary },
-                                class: "px-0 h-6".to_string(),
-                                on_click: {
-                                    let cb = on_band_change;
-                                    move |_| {
-                                        let updated = {
-                                            let mut bv = bands.write();
-                                            if band_idx < bv.len() {
-                                                bv[band_idx].enabled = !bv[band_idx].enabled;
-                                                Some(bv[band_idx].clone())
-                                            } else { None }
-                                        };
-                                        if let (Some(b), Some(c)) = (updated, &cb) { c.call((band_idx, b)); }
-                                    }
-                                },
-                                if band_enabled { "On" } else { "Byp" }
-                            }
-                            // Pro-Q shows the shape as a labelled button
-                            // ("∧ Bell"), not a dropdown — and a button can
-                            // actually display which shape the band is, which
-                            // the Select could not: it resolves its label by
-                            // index, and the canonical shape ids are not the
-                            // positions in `EqBandShape::all()`, so it fell
-                            // back to the placeholder for every band. Clicking
-                            // steps to the next shape; the full list is one
-                            // right-click away.
-                            button {
-                                style: format!(
-                                    "display:flex; align-items:center; gap:5px; width:100%; height:22px; \
-                                     padding:0 6px; border:1px solid #2a2a30; border-radius:4px; \
-                                     background:transparent; color:{band_color}; font-size:10px; \
-                                     cursor:pointer; box-sizing:border-box;"
-                                ),
-                                title: "{band.shape.label()} — click for the next shape, right-click the band for the full list",
-                                onclick: {
-                                    let cb = on_band_change;
-                                    move |evt: MouseEvent| {
-                                        evt.stop_propagation();
-                                        let updated = {
-                                            let mut bv = bands.write();
-                                            if band_idx < bv.len() {
-                                                let all = EqBandShape::all();
-                                                let cur = all.iter().position(|s| *s == bv[band_idx].shape).unwrap_or(0);
-                                                let next = all[(cur + 1) % all.len()];
-                                                bv[band_idx].shape = next;
-                                                if next.uses_slope() { bv[band_idx].q = 0.707; }
-                                                Some(bv[band_idx].clone())
-                                            } else { None }
-                                        };
-                                        if let (Some(b), Some(c)) = (updated, &cb) { c.call((band_idx, b)); }
-                                    }
-                                },
-                                span { style: "flex:1; text-align:left;", "{band.shape.label()}" }
-                            }
-                            div {
-                                style: "font-size:9px; color:#737380; text-align:center; letter-spacing:0.04em;",
-                                "{q_str}"
-                            }
+                        style: "display:flex; flex-direction:column; gap:4px; width:82px; flex:0 0 auto;",
+                        Button {
+                            size: ButtonSize::Small,
+                            variant: if band_enabled { ButtonVariant::Outline } else { ButtonVariant::Secondary },
+                            class: "px-0 h-6".to_string(),
+                            on_click: {
+                                let cb = on_band_change;
+                                move |_| {
+                                    let updated = {
+                                        let mut bv = bands.write();
+                                        if band_idx < bv.len() {
+                                            bv[band_idx].enabled = !bv[band_idx].enabled;
+                                            Some(bv[band_idx].clone())
+                                        } else { None }
+                                    };
+                                    if let (Some(b), Some(c)) = (updated, &cb) { c.call((band_idx, b)); }
+                                }
+                            },
+                            if band_enabled { "On" } else { "Byp" }
                         }
-
-                        // ── Centre: the three dials ──
-                        if let Some(h) = handles.clone() {
-                            div {
-                                style: "display:flex; align-items:flex-start; gap:6px; flex:1 1 auto; justify-content:center;",
-                                PanelKnob {
-                                    label: "FREQ".to_string(),
-                                    handle: h.freq.clone(),
-                                    accent: band_color.clone(),
+                        // Pro-Q shows the shape as a labelled button
+                        // ("∧ Bell"), not a dropdown — and a button can
+                        // actually display which shape the band is, which
+                        // the Select could not: it resolves its label by
+                        // index, and the canonical shape ids are not the
+                        // positions in `EqBandShape::all()`, so it fell
+                        // back to the placeholder for every band. Clicking
+                        // steps to the next shape; the full list is one
+                        // right-click away.
+                        button {
+                            style: format!(
+                                "display:flex; align-items:center; gap:5px; width:100%; height:22px; \
+                                 padding:0 6px; border:1px solid #2a2a30; border-radius:4px; \
+                                 background:transparent; color:{band_color}; font-size:10px; \
+                                 cursor:pointer; box-sizing:border-box;"
+                            ),
+                            title: "{band.shape.label()} — click for the next shape, right-click the band for the full list",
+                            onclick: {
+                                let cb = on_band_change;
+                                move |evt: MouseEvent| {
+                                    evt.stop_propagation();
+                                    let updated = {
+                                        let mut bv = bands.write();
+                                        if band_idx < bv.len() {
+                                            let all = EqBandShape::all();
+                                            let cur = all.iter().position(|s| *s == bv[band_idx].shape).unwrap_or(0);
+                                            let next = all[(cur + 1) % all.len()];
+                                            bv[band_idx].shape = next;
+                                            if next.uses_slope() { bv[band_idx].q = 0.707; }
+                                            Some(bv[band_idx].clone())
+                                        } else { None }
+                                    };
+                                    if let (Some(b), Some(c)) = (updated, &cb) { c.call((band_idx, b)); }
                                 }
-                                PanelKnob {
-                                    label: "GAIN".to_string(),
-                                    handle: h.gain.clone(),
-                                    accent: band_color.clone(),
-                                    dynamics: dyn_state.clone(),
-                                }
-                                PanelKnob {
-                                    label: "Q".to_string(),
-                                    handle: h.q.clone(),
-                                    accent: band_color.clone(),
-                                }
-                            }
-                        } else {
-                            // No handles supplied (embedded surfaces): keep the
-                            // readout rather than dropping the information.
-                            div {
-                                style: "display:flex; flex-direction:column; gap:2px; flex:1 1 auto; align-items:center; justify-content:center;",
-                                span { class: "text-xs font-semibold tabular-nums", "{freq_str} Hz" }
-                                span { class: "text-xs font-semibold tabular-nums", "{band_gain:+.1} dB" }
-                            }
+                            },
+                            span { style: "flex:1; text-align:left;", "{band.shape.label()}" }
                         }
-
-                        // ── Right: per-band actions ──
                         div {
-                            style: "display:flex; flex-direction:column; gap:3px; width:30px; flex:0 0 auto;",
-                            Button {
-                                size: ButtonSize::Small,
-                                variant: ButtonVariant::Outline,
-                                class: "px-0 h-5".to_string(),
-                                on_click: {
-                                    let cb = on_band_change;
-                                    move |_| {
-                                        let updated = {
-                                            let mut bv = bands.write();
-                                            if band_idx < bv.len() {
-                                                bv[band_idx].stereo_mode = next_stereo_mode(bv[band_idx].stereo_mode);
-                                                Some(bv[band_idx].clone())
-                                            } else { None }
-                                        };
-                                        if let (Some(b), Some(c)) = (updated, &cb) { c.call((band_idx, b)); }
-                                    }
-                                },
-                                "{stereo_mode.short_label()}"
-                            }
-                            Button {
-                                size: ButtonSize::Small,
-                                variant: if band_solo { ButtonVariant::Secondary } else { ButtonVariant::Outline },
-                                class: "px-0 h-5".to_string(),
-                                on_click: {
-                                    let cb = on_band_change;
-                                    move |_| {
-                                        let updated = {
-                                            let mut bv = bands.write();
-                                            if band_idx < bv.len() {
-                                                bv[band_idx].solo = !bv[band_idx].solo;
-                                                Some(bv[band_idx].clone())
-                                            } else { None }
-                                        };
-                                        if let (Some(b), Some(c)) = (updated, &cb) { c.call((band_idx, b)); }
-                                    }
-                                },
-                                "S"
-                            }
-                            Button {
-                                size: ButtonSize::Small,
-                                variant: ButtonVariant::Destructive,
-                                class: "px-0 h-5".to_string(),
-                                on_click: {
-                                    let cb = on_band_remove;
-                                    move |_| {
-                                        if let Some(c) = &cb { c.call(band_idx); }
-                                        on_dismiss.call(());
-                                    }
-                                },
-                                "X"
-                            }
+                            style: "font-size:9px; color:#737380; text-align:center; letter-spacing:0.04em;",
+                            "{q_str}"
                         }
                     }
 
-                    // ── Dynamics ────────────────────────────────────────
-                    //
-                    // Pro-Q hangs dynamics off the GAIN dial, which is what the
-                    // ring above does; this row is its expanded form — the mode
-                    // it is in, the range it may travel, and what it is doing
-                    // right now.
-                    if let Some(ds) = dyn_state.clone() {
-                        {
-                            let mode = ds.mode();
-                            let range_db = ds.range_db();
-                            let colour = mode.live_colour();
-                            let live = ds.live_db;
-                            let step = 1.0_f32 / 60.0;
-                            let ds_dn = ds.clone();
-                            let ds_up = ds.clone();
-                            let ds_cycle = ds.clone();
-                            rsx! {
-                                div {
-                                    style: "display:flex; align-items:center; gap:4px; border-top:1px solid #23232a; padding-top:4px;",
+                    // ── Centre: the three dials ──
+                    if let Some(h) = handles.clone() {
+                        div {
+                            style: "display:flex; align-items:flex-start; gap:6px; flex:1 1 auto; justify-content:center;",
+                            PanelKnob {
+                                label: "FREQ".to_string(),
+                                handle: h.freq.clone(),
+                                accent: band_color.clone(),
+                            }
+                            PanelKnob {
+                                label: "GAIN".to_string(),
+                                handle: h.gain.clone(),
+                                accent: band_color.clone(),
+                                dynamics: dyn_state.clone(),
+                            }
+                            PanelKnob {
+                                label: "Q".to_string(),
+                                handle: h.q.clone(),
+                                accent: band_color.clone(),
+                            }
+                        }
+                    } else {
+                        // No handles supplied (embedded surfaces): keep the
+                        // readout rather than dropping the information.
+                        div {
+                            style: "display:flex; flex-direction:column; gap:2px; flex:1 1 auto; align-items:center; justify-content:center;",
+                            span { class: "text-xs font-semibold tabular-nums", "{freq_str} Hz" }
+                            span { class: "text-xs font-semibold tabular-nums", "{band_gain:+.1} dB" }
+                        }
+                    }
+
+                    // ── Right: per-band actions ──
+                    div {
+                        style: "display:flex; flex-direction:column; gap:3px; width:30px; flex:0 0 auto;",
+                        Button {
+                            size: ButtonSize::Small,
+                            variant: ButtonVariant::Outline,
+                            class: "px-0 h-5".to_string(),
+                            on_click: {
+                                let cb = on_band_change;
+                                move |_| {
+                                    let updated = {
+                                        let mut bv = bands.write();
+                                        if band_idx < bv.len() {
+                                            bv[band_idx].stereo_mode = next_stereo_mode(bv[band_idx].stereo_mode);
+                                            Some(bv[band_idx].clone())
+                                        } else { None }
+                                    };
+                                    if let (Some(b), Some(c)) = (updated, &cb) { c.call((band_idx, b)); }
+                                }
+                            },
+                            "{stereo_mode.short_label()}"
+                        }
+                        Button {
+                            size: ButtonSize::Small,
+                            variant: if band_solo { ButtonVariant::Secondary } else { ButtonVariant::Outline },
+                            class: "px-0 h-5".to_string(),
+                            on_click: {
+                                let cb = on_band_change;
+                                move |_| {
+                                    let updated = {
+                                        let mut bv = bands.write();
+                                        if band_idx < bv.len() {
+                                            bv[band_idx].solo = !bv[band_idx].solo;
+                                            Some(bv[band_idx].clone())
+                                        } else { None }
+                                    };
+                                    if let (Some(b), Some(c)) = (updated, &cb) { c.call((band_idx, b)); }
+                                }
+                            },
+                            "S"
+                        }
+                        Button {
+                            size: ButtonSize::Small,
+                            variant: ButtonVariant::Destructive,
+                            class: "px-0 h-5".to_string(),
+                            on_click: {
+                                let cb = on_band_remove;
+                                move |_| {
+                                    if let Some(c) = &cb { c.call(band_idx); }
+                                    on_dismiss.call(());
+                                }
+                            },
+                            "X"
+                        }
+                    }
+                }
+
+                // ── Dynamics ────────────────────────────────────────
+                //
+                // Pro-Q hangs dynamics off the GAIN dial, which is what the
+                // ring above does; this row is its expanded form — the mode
+                // it is in, the range it may travel, and what it is doing
+                // right now.
+                if let Some(ds) = dyn_state.clone() {
+                    {
+                        let mode = ds.mode();
+                        let range_db = ds.range_db();
+                        let colour = mode.live_colour();
+                        let live = ds.live_db;
+                        let step = 1.0_f32 / 60.0;
+                        let ds_dn = ds.clone();
+                        let ds_up = ds.clone();
+                        let ds_cycle = ds.clone();
+                        rsx! {
+                            div {
+                                style: "display:flex; align-items:center; gap:4px; border-top:1px solid #23232a; padding-top:4px;",
+                                button {
+                                    style: format!(
+                                        "font-size:9px; text-transform:uppercase; letter-spacing:0.06em; \
+                                         border:1px solid {colour}; border-radius:3px; padding:0 5px; height:15px; \
+                                         color:{}; background:{}; cursor:pointer;",
+                                        if mode == crate::dynamics::DynMode::Static { colour } else { "#14141a" },
+                                        if mode == crate::dynamics::DynMode::Static { "transparent" } else { colour },
+                                    ),
+                                    title: "Dynamics mode — click to cycle",
+                                    onclick: move |e: MouseEvent| {
+                                        e.stop_propagation();
+                                        ds_cycle.set_mode(ds_cycle.mode().next());
+                                    },
+                                    "{mode.label()}"
+                                }
+
+                                if mode != crate::dynamics::DynMode::Static {
                                     button {
-                                        style: format!(
-                                            "font-size:9px; text-transform:uppercase; letter-spacing:0.06em; \
-                                             border:1px solid {colour}; border-radius:3px; padding:0 5px; height:15px; \
-                                             color:{}; background:{}; cursor:pointer;",
-                                            if mode == crate::dynamics::DynMode::Static { colour } else { "#14141a" },
-                                            if mode == crate::dynamics::DynMode::Static { "transparent" } else { colour },
-                                        ),
-                                        title: "Dynamics mode — click to cycle",
+                                        style: "font-size:10px; border:1px solid #2a2a30; border-radius:3px; width:16px; height:15px; color:#d4d4d8; background:transparent; cursor:pointer;",
+                                        title: "Range −1 dB",
                                         onclick: move |e: MouseEvent| {
                                             e.stop_propagation();
-                                            ds_cycle.set_mode(ds_cycle.mode().next());
+                                            let n = (ds_dn.range.normalized() - step).clamp(0.0, 1.0);
+                                            ds_dn.range.set_as_gesture(n);
                                         },
-                                        "{mode.label()}"
+                                        "−"
                                     }
-
-                                    if mode != crate::dynamics::DynMode::Static {
-                                        button {
-                                            style: "font-size:10px; border:1px solid #2a2a30; border-radius:3px; width:16px; height:15px; color:#d4d4d8; background:transparent; cursor:pointer;",
-                                            title: "Range −1 dB",
-                                            onclick: move |e: MouseEvent| {
-                                                e.stop_propagation();
-                                                let n = (ds_dn.range.normalized() - step).clamp(0.0, 1.0);
-                                                ds_dn.range.set_as_gesture(n);
-                                            },
-                                            "−"
-                                        }
-                                        span {
-                                            style: format!("font-size:9px; color:{colour}; min-width:36px; text-align:center;"),
-                                            "{range_db:+.0} dB"
-                                        }
-                                        button {
-                                            style: "font-size:10px; border:1px solid #2a2a30; border-radius:3px; width:16px; height:15px; color:#d4d4d8; background:transparent; cursor:pointer;",
-                                            title: "Range +1 dB",
-                                            onclick: move |e: MouseEvent| {
-                                                e.stop_propagation();
-                                                let n = (ds_up.range.normalized() + step).clamp(0.0, 1.0);
-                                                ds_up.range.set_as_gesture(n);
-                                            },
-                                            "+"
-                                        }
-                                        span {
-                                            style: format!("font-size:9px; color:{colour}; margin-left:auto; font-variant-numeric:tabular-nums;"),
-                                            "{live:+.1} dB"
-                                        }
+                                    span {
+                                        style: format!("font-size:9px; color:{colour}; min-width:36px; text-align:center;"),
+                                        "{range_db:+.0} dB"
+                                    }
+                                    button {
+                                        style: "font-size:10px; border:1px solid #2a2a30; border-radius:3px; width:16px; height:15px; color:#d4d4d8; background:transparent; cursor:pointer;",
+                                        title: "Range +1 dB",
+                                        onclick: move |e: MouseEvent| {
+                                            e.stop_propagation();
+                                            let n = (ds_up.range.normalized() + step).clamp(0.0, 1.0);
+                                            ds_up.range.set_as_gesture(n);
+                                        },
+                                        "+"
+                                    }
+                                    span {
+                                        style: format!("font-size:9px; color:{colour}; margin-left:auto; font-variant-numeric:tabular-nums;"),
+                                        "{live:+.1} dB"
                                     }
                                 }
                             }
@@ -684,6 +680,9 @@ pub fn BandContextMenu(
     // flyout, which is what makes a diagonal trip into it survivable.
     let mut hover: Signal<Option<usize>> = use_signal(|| None);
     let mut open_sub: Signal<Option<usize>> = use_signal(|| None);
+    // The rename field, when it is open. `None` means the menu is showing its
+    // ordinary rows.
+    let mut renaming: Signal<Option<String>> = use_signal(|| None);
 
     let shapes = EqBandShape::all();
     let menu_w: f64 = 172.0;
@@ -779,6 +778,62 @@ pub fn BandContextMenu(
                     onclick: move |_| { apply(&|b: &mut EqBand| b.gain = -b.gain); on_dismiss.call(()); },
                     span { style: "width:12px;" }
                     span { "Invert Gain" }
+                }
+
+                // ── Rename ──────────────────────────────────────────────
+                //
+                // The name is drawn above the band node, so this is how a band
+                // gets to say what it is FOR — "boxiness", "de-ess", "rumble" —
+                // rather than only what it is doing. The field replaces the
+                // menu's rows while it is open so there is one obvious thing to
+                // type into.
+                if let Some(draft) = renaming() {
+                    div {
+                        style: "padding:5px 8px; display:flex; flex-direction:column; gap:4px;",
+                        div {
+                            style: format!("font-size:9px; color:{MENU_DIM}; text-transform:uppercase; letter-spacing:0.06em;"),
+                            "Rename band"
+                        }
+                        input {
+                            r#type: "text",
+                            value: "{draft}",
+                            autofocus: true,
+                            style: format!(
+                                "width:100%; box-sizing:border-box; font-size:11px; \
+                                 padding:3px 5px; border-radius:3px; \
+                                 border:1px solid {band_color}; background:#0c0c0f; \
+                                 color:{MENU_TEXT}; outline:none;"
+                            ),
+                            oninput: move |evt| renaming.set(Some(evt.value())),
+                            onkeydown: {
+                                move |evt: KeyboardEvent| match evt.key() {
+                                    Key::Enter => {
+                                        let name = renaming().unwrap_or_default();
+                                        apply(&|b: &mut EqBand| b.name = name.trim().to_string());
+                                        on_dismiss.call(());
+                                    }
+                                    Key::Escape => { renaming.set(None); }
+                                    _ => {}
+                                }
+                            },
+                        }
+                        div {
+                            style: format!("font-size:8px; color:{MENU_DIM};"),
+                            "Enter to save · Esc to cancel · empty clears the label"
+                        }
+                    }
+                } else {
+                    div {
+                        style: menu_row(hover() == Some(10), false),
+                        onmouseenter: move |_| { hover.set(Some(10)); open_sub.set(None); },
+                        onclick: move |_| { renaming.set(Some(band.name.clone())); },
+                        span { style: "width:12px;" }
+                        span { style: "flex:1;", "Rename…" }
+                        span {
+                            style: format!("color:{MENU_DIM}; max-width:78px; overflow:hidden; white-space:nowrap;"),
+                            "{band.name}"
+                        }
+                    }
                 }
 
                 if let Some(ds) = dyn_state.clone() {
@@ -1043,5 +1098,81 @@ mod shape_id_tests {
             "all() and shape_to_int now agree — if that was deliberate, delete \
              this test and simplify the callers that work around the difference"
         );
+    }
+}
+
+/// Size of the small readout that rides the band node.
+const CHIP_W: f64 = 118.0;
+const CHIP_H: f64 = 30.0;
+
+/// Where the readout chip sits for a band node at `(bx, by)`.
+///
+/// Above the node when there is room, below it when there is not, and clamped
+/// to the graph either way — the same rule the whole panel used before it was
+/// docked. It is small enough that flipping it does not disturb anything.
+#[must_use]
+pub fn band_chip_rect(bx: f64, by: f64, graph_w: f64, graph_h: f64) -> (f64, f64, f64, f64) {
+    let x = (bx - CHIP_W / 2.0).clamp(0.0, (graph_w - CHIP_W).max(0.0));
+    let y = if by - CHIP_H - POPUP_GAP >= 0.0 {
+        by - CHIP_H - POPUP_GAP
+    } else {
+        by + POPUP_GAP
+    }
+    .clamp(0.0, (graph_h - CHIP_H).max(0.0));
+    (x, y, CHIP_W, CHIP_H)
+}
+
+/// The frequency / gain / Q readout that follows the band node.
+///
+/// The docked panel below carries everything a band can be, but it is at the
+/// bottom of the display and the band is wherever you are dragging it. This is
+/// the number you actually need under the cursor while you move: the three
+/// values that change as you drag, right where you are looking.
+///
+/// Deliberately inert — `pointer-events:none` — so it can sit over the curve
+/// while a drag is in flight without ever swallowing the drag.
+#[component]
+pub fn BandReadoutChip(band_idx: usize, bx: f64, by: f64, graph_w: f64, graph_h: f64, bands: Signal<Vec<EqBand>>) -> Element {
+    let Some(band) = bands.read().get(band_idx).cloned() else {
+        return rsx! {};
+    };
+    let (x, y, w, h) = band_chip_rect(bx, by, graph_w, graph_h);
+    let colour = crate::eq_graph_model::freq_to_color(f64::from(band.frequency));
+
+    let freq = if band.frequency >= 1000.0 {
+        format!("{:.2} kHz", band.frequency / 1000.0)
+    } else {
+        format!("{:.0} Hz", band.frequency)
+    };
+    let width = if band.shape.uses_slope() && band.slope.is_some() {
+        format!("{:.0} dB/oct", slope_db(band.slope.unwrap_or(2.0)))
+    } else {
+        format!("Q {:.2}", band.q)
+    };
+
+    rsx! {
+        div {
+            "data-testid": "eq-band-chip",
+            style: format!(
+                "position:absolute; left:{x}px; top:{y}px; width:{w}px; height:{h}px; \
+                 box-sizing:border-box; pointer-events:none; z-index:27; \
+                 display:flex; flex-direction:column; align-items:center; \
+                 justify-content:center; gap:0px; \
+                 border:1px solid #2a2a30; border-top:2px solid {colour}; \
+                 border-radius:6px; background:rgba(18,18,22,0.94); \
+                 box-shadow:0 3px 10px rgba(0,0,0,0.5);"
+            ),
+            div {
+                style: format!(
+                    "font-size:10px; font-weight:600; color:{colour}; \
+                     font-variant-numeric:tabular-nums; line-height:12px;"
+                ),
+                "{freq}  {band.gain:+.1} dB"
+            }
+            div {
+                style: "font-size:9px; color:#8a8a96; font-variant-numeric:tabular-nums; line-height:11px;",
+                "{width}"
+            }
+        }
     }
 }
