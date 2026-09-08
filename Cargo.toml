@@ -853,6 +853,19 @@ vox-codegen = "0.10.0-rc.5"
 # architect-ui. Nothing resolves a crate named `fts-ui` any more.
 
 [patch.crates-io]
+# raw-window-metal, vendored with ONE line removed: the hard-coded
+# `#[name = "RawWindowMetalLayer"]` on its `ObserverLayer` class.
+#
+# An explicit objc2 class name must be unique across the whole PROCESS, and
+# every plugin bundle links its own copy of this crate — so the second FTS
+# plugin to create a Metal surface panicked with `class_not_unique` and took
+# the host down ("terminating due to uncaught foreign exception"). FTS EQ plus
+# FTS Comp in one REAPER was enough. Removing the attribute lets objc2
+# auto-generate a per-copy name, which its own docs say is what libraries
+# should do precisely so they work "across multiple shared dynamic libraries in
+# the same process". 1.1.0 is the newest release, so there is nothing to bump
+# to. See vendor/raw-window-metal/FTS-PATCH.md.
+raw-window-metal = { path = "vendor/raw-window-metal" }
 # baseview from the FTS fork (upstream v0.3 + one fix): the macOS frame timer
 # is registered in kCFRunLoopCommonModes rather than kCFRunLoopDefaultMode.
 # AppKit runs the run loop modally for the whole of a live window resize, so a
