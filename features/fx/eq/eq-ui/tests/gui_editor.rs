@@ -1661,3 +1661,235 @@ async fn the_gain_scale_relabels_when_the_range_expands() -> dioxus_test::Result
     );
     Ok(())
 }
+
+// ── Naming a band ───────────────────────────────────────────────────────
+//
+// Double-clicking a band node turns its name label into a text field, in
+// place, above the node. The label itself is display-only: it renders on top
+// of the node it names, so giving it pointer events would shadow the node and
+// break dragging.
+
+use dioxus_test::keyboard_types::Key;
+
+const LABEL_INPUT: &str = "eq-band-label-input";
+
+impl support::Fixture {
+    async fn click_at(&self, x: f64, y: f64) {
+        self.tester.pointer_down(x, y);
+        self.settle().await;
+        self.tester.pointer_up(x, y);
+        self.settle().await;
+    }
+
+    async fn double_click_at(&self, x: f64, y: f64) {
+        self.click_at(x, y).await;
+        self.click_at(x, y).await;
+    }
+
+    fn label_editor_is_open(&self) -> bool {
+        self.tester.root().inner_html().contains(LABEL_INPUT)
+    }
+
+}
+
+/// A single click selects the band. Only the second one opens the field —
+/// otherwise every band you touched would drop you into text entry.
+#[tokio::test]
+async fn one_click_on_a_band_does_not_open_the_name_field() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let (x, y) = fx.band_point(1);
+    fx.click_at(x, y).await;
+
+    assert!(
+        !fx.label_editor_is_open(),
+        "a single click on a band must not open the name field"
+    );
+    Ok(())
+}
+
+/// Double-clicking the node opens the field, and typing into it renames the
+/// band — as a real parameter write, not just local UI state.
+#[tokio::test]
+async fn double_clicking_a_band_node_names_it() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let (x, y) = fx.band_point(1);
+    fx.double_click_at(x, y).await;
+
+    assert!(
+        fx.label_editor_is_open(),
+        "double-clicking a band node should open its name field"
+    );
+
+    fx.tester.type_text("Boxiness");
+    fx.settle().await;
+
+    assert!(
+        fx.tester.root().inner_html().contains("Boxiness"),
+        "typing into the name field should reach the band's name"
+    );
+    Ok(())
+}
+
+/// The field is autofocused, so the user can type the moment it appears —
+/// that is the point of editing in place instead of through a menu.
+#[tokio::test]
+async fn the_name_field_takes_focus_when_it_opens() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let (x, y) = fx.band_point(1);
+    fx.double_click_at(x, y).await;
+
+    assert!(fx.label_editor_is_open(), "the field should be open");
+    assert!(
+        fx.tester.blitz_focus().is_some(),
+        "the name field should be focused as soon as it opens"
+    );
+    Ok(())
+}
+
+/// Enter closes the field. Whatever was typed is already committed —
+/// `oninput` writes through on every keystroke — so this is about dismissing
+/// the editor, not saving.
+#[tokio::test]
+async fn enter_closes_the_name_field() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let (x, y) = fx.band_point(1);
+    fx.double_click_at(x, y).await;
+    assert!(fx.label_editor_is_open());
+
+    fx.tester.press_key(Key::Enter, Modifiers::empty());
+    fx.settle().await;
+
+    assert!(!fx.label_editor_is_open(), "Enter should close the name field");
+    Ok(())
+}
+
+/// Double-clicking a node used to flatten it to 0 dB. It must not any more:
+/// naming a band is not a reason to undo the move that made it worth naming.
+#[tokio::test]
+async fn double_clicking_a_band_no_longer_resets_its_gain() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[1];
+
+    // Give the band a gain worth preserving.
+    let (bx, by) = fx.band_point(1);
+    fx.tester.pointer_down(bx, by);
+    fx.settle().await;
+    fx.tester.pointer_move(bx, by - 40.0, true);
+    fx.settle().await;
+    fx.tester.pointer_up(bx, by - 40.0);
+    fx.settle().await;
+
+    let gain_before = bp.gain_db.value();
+    assert!(
+        gain_before.abs() > 0.5,
+        "the drag should have moved the band off 0 dB: {gain_before}"
+    );
+
+    let (x, y) = fx.band_point(1);
+    fx.double_click_at(x, y).await;
+
+    assert!(fx.label_editor_is_open(), "the name field should be open");
+    assert!(
+        (bp.gain_db.value() - gain_before).abs() < 0.01,
+        "double-click must not reset the gain: {gain_before} -> {}",
+        bp.gain_db.value()
+    );
+    Ok(())
+}
+
+/// The field opens with the existing name SELECTED, so the first keystroke
+/// replaces it — the behaviour every other text field has. Blitz has no
+/// reachable selection API from the DOM side, so this is modelled: what
+/// matters is that typing over an open field replaces rather than prepends.
+#[tokio::test]
+async fn typing_over_an_open_name_replaces_it() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let (x, y) = fx.band_point(1);
+
+    fx.double_click_at(x, y).await;
+    fx.tester.type_text("Boxiness");
+    fx.settle().await;
+    fx.tester.press_key(Key::Enter, Modifiers::empty());
+    fx.settle().await;
+    assert_eq!(*fx.params.bands[1].name.read(), "Boxiness");
+
+    // Reopen and type a different name over it.
+    let (x, y) = fx.band_point(1);
+    fx.double_click_at(x, y).await;
+    assert!(fx.label_editor_is_open(), "the field should be open");
+    fx.tester.type_text("Air");
+    fx.settle().await;
+
+    assert_eq!(
+        *fx.params.bands[1].name.read(),
+        "Air",
+        "typing over the selected name should replace it, not prepend to it"
+    );
+    Ok(())
+}
+
+/// Opening the field does not, by itself, change the name. A double-click
+/// that goes nowhere must leave the band exactly as it was.
+#[tokio::test]
+async fn opening_the_field_alone_does_not_change_the_name() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let (x, y) = fx.band_point(1);
+
+    fx.double_click_at(x, y).await;
+    fx.tester.type_text("Boxiness");
+    fx.settle().await;
+    fx.tester.press_key(Key::Enter, Modifiers::empty());
+    fx.settle().await;
+
+    let (x, y) = fx.band_point(1);
+    fx.double_click_at(x, y).await;
+    assert!(fx.label_editor_is_open());
+    fx.tester.press_key(Key::Escape, Modifiers::empty());
+    fx.settle().await;
+
+    assert!(!fx.label_editor_is_open(), "Escape should close the field");
+    assert_eq!(
+        *fx.params.bands[1].name.read(),
+        "Boxiness",
+        "opening and leaving the field must not touch the name"
+    );
+    Ok(())
+}
+
+/// Clicking into the empty field puts the old name back, so a rename can be
+/// an edit rather than a retype. This is the other half of open-empty: the
+/// name is offered, not thrown away.
+#[tokio::test]
+async fn clicking_into_the_empty_field_restores_the_old_name() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let (x, y) = fx.band_point(1);
+
+    fx.double_click_at(x, y).await;
+    fx.tester.type_text("Boxiness");
+    fx.settle().await;
+    fx.tester.press_key(Key::Enter, Modifiers::empty());
+    fx.settle().await;
+    assert_eq!(*fx.params.bands[1].name.read(), "Boxiness");
+
+    // Reopen — the field is empty and the name is held aside.
+    let (x, y) = fx.band_point(1);
+    fx.double_click_at(x, y).await;
+    assert!(fx.label_editor_is_open());
+    assert_eq!(*fx.params.bands[1].name.read(), "");
+
+    // Click into the field.
+    let el = fx
+        .tester
+        .query(dioxus_test::by_testid("eq-band-label-input"))
+        .immediately()?;
+    let (ex, ey) = el.document_origin();
+    let (ew, eh) = el.size();
+    fx.click_at(ex + f64::from(ew) / 2.0, ey + f64::from(eh) / 2.0).await;
+
+    assert_eq!(
+        *fx.params.bands[1].name.read(),
+        "Boxiness",
+        "clicking into the empty field should bring the old name back to edit"
+    );
+    Ok(())
+}

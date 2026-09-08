@@ -102,6 +102,113 @@ fn make_window_resizable(handle: &raw_window_handle::RawWindowHandle) {
     window.setStyleMask(mask);
 }
 
+/// Hand keyboard focus to the plugin's own view.
+///
+/// Key events go to the window's first responder. baseview's NSView is that by
+/// default, so every keystroke landed on the HOST and the embedded editor never
+/// saw one — which is why a text field in a plugin editor could not be typed
+/// into here, only in a real DAW. That made this host useless for testing
+/// anything with text entry: renaming a band, typing a frequency, naming a
+/// preset.
+///
+/// The plugin parents its own NSView into ours during `gui.set_parent`, so
+/// after embedding it is our first subview. Making it the first responder puts
+/// it in the responder chain where AppKit already wanted to send the keys.
+///
+/// Returns whether focus was actually handed over, so the caller can keep
+/// trying: the subview does not necessarily exist on the first frame.
+#[cfg(target_os = "macos")]
+fn focus_plugin_view(handle: &raw_window_handle::RawWindowHandle) -> bool {
+    use objc2::runtime::NSObjectProtocol;
+    use objc2_app_kit::NSView;
+
+    let raw_window_handle::RawWindowHandle::AppKit(appkit) = handle else {
+        return false;
+    };
+    // SAFETY: baseview handed us this NSView for the window it created and
+    // keeps it alive for the window's lifetime; we are on the main thread,
+    // which is where AppKit requires responder changes.
+    // Diagnostic escape hatch: with this set the host keeps first responder
+    // on its own view, so `[parent] key:` lines say whether key events are
+    // reaching the process at all — separating "the app gets no keys" from
+    // "the plugin gets them and drops them".
+    if std::env::var_os("FTS_HOST_NO_FOCUS").is_some() {
+        return true;
+    }
+    let view: &NSView = unsafe { appkit.ns_view.cast().as_ref() };
+    let Some(window) = view.window() else {
+        return false;
+    };
+    // A window that is not KEY receives no keyboard events at all, whatever
+    // its first responder is. baseview's window is not key until it is
+    // activated, so handing focus over before then succeeds and achieves
+    // nothing — which is exactly what happened: `makeFirstResponder=true`
+    // while `window_key=false`, the flag latched, and the retry stopped.
+    // Reporting failure here keeps `on_frame` trying until the window is
+    // actually focused.
+    if !window.isKeyWindow() {
+        return false;
+    }
+
+    let subviews = view.subviews();
+    let trace = std::env::var_os("FTS_HOST_TRACE").is_some();
+    let Some(child) = subviews.iter().next() else {
+        if trace {
+            eprintln!("[host] focus: parent has no subviews yet");
+        }
+        return false;
+    };
+    // Already ours: nothing to do, and no log line. Re-sending
+    // `makeFirstResponder:` every frame would fire resign/become churn
+    // through the plugin on each one.
+    if let Some(current) = window.firstResponder()
+        && current.isEqual(Some(&*child))
+    {
+        return true;
+    }
+
+    let ok = window.makeFirstResponder(Some(&child));
+    if trace {
+        // Which view actually took it. The plugin parents a whole subtree
+        // into ours, and only ONE view in it is baseview's — the one with a
+        // `keyDown:`. Handing first responder to a plain container instead
+        // looks identical from here (it accepts, the call returns true) but
+        // silently drops every keystroke.
+        let name = |v: &NSView| v.class().name().to_string_lossy().to_string();
+        eprintln!(
+            "[host] view tree: parent={} child={} grandchildren=[{}]",
+            name(view),
+            name(&child),
+            child
+                .subviews()
+                .iter()
+                .map(|v| name(&v))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+    }
+    if trace {
+        eprintln!(
+            "[host] focus: subviews={} makeFirstResponder={ok} \
+             child_accepts={} window_key={}",
+            subviews.len(),
+            child.acceptsFirstResponder(),
+            window.isKeyWindow(),
+        );
+    }
+    if !ok {
+        eprintln!("[host] plugin view refused first responder — keys stay with the host");
+    }
+    ok
+}
+
+#[cfg(not(target_os = "macos"))]
+const fn focus_plugin_view(_handle: &raw_window_handle::RawWindowHandle) -> bool {
+    // X11 focus follows the pointer into the child window; Windows routes to
+    // the focused HWND. Neither needs this.
+    true
+}
+
 #[cfg(not(target_os = "macos"))]
 const fn make_window_resizable(_handle: &raw_window_handle::RawWindowHandle) {
     // X11 windows are resizable unless the client sets size hints forbidding
@@ -147,6 +254,10 @@ fn resolve_bundle(arg: &str) -> PathBuf {
 }
 
 struct HostHandler {
+    /// Whether the plugin's view has been given keyboard focus yet. It is not
+    /// a subview until the plugin has parented itself, which is not guaranteed
+    /// on the first frame, so `on_frame` retries until this sticks.
+    focused: std::cell::Cell<bool>,
     /// `WindowHandler` methods take `&self` in baseview 0.2 — the plugin
     /// lives behind a `RefCell`. Everything runs on the one GUI thread.
     plugin: RefCell<Option<LoadedClapPlugin>>,
@@ -158,6 +269,18 @@ struct HostHandler {
 
 impl WindowHandler for HostHandler {
     fn on_frame(&self) {
+        // Keep keyboard focus on the plugin's view. This cannot be a
+        // one-shot: AppKit hands first responder back to the host's own view
+        // whenever the window is re-keyed (app switch, window drag, the
+        // plugin's own view being re-parented on a resize), and from then on
+        // every keystroke goes to a view that drops it. `focus_plugin_view`
+        // returns early when the plugin is already first responder, so this
+        // costs a pointer compare on the frames where nothing changed.
+        if let Ok(handle) = self.window.window_handle() {
+            let ok = focus_plugin_view(&handle.as_raw());
+            self.focused.set(ok);
+        }
+
         // The DAW-timer equivalent: run the plugin's deferred main-thread
         // work every frame (~60 Hz) so param/GUI tasks keep flowing, and drain
         // any resize the plugin asked for. FTS Comp changes its own editor size
@@ -235,6 +358,60 @@ impl WindowHandler for HostHandler {
         EventStatus::Ignored
     }
 }
+
+/// Logs every key event the *application* receives, before the responder
+/// chain gets a say.
+///
+/// This is the only way to tell "macOS is not sending this process keys at
+/// all" apart from "keys arrive and something in the responder chain drops
+/// them" — the two failures look identical from inside a window handler.
+/// Enabled by `FTS_HOST_KEY_TRACE`.
+#[cfg(target_os = "macos")]
+fn install_key_monitor() {
+    use objc2_app_kit::{NSEvent, NSEventMask};
+    use objc2_foundation::MainThreadMarker;
+
+    if std::env::var_os("FTS_HOST_KEY_TRACE").is_none() {
+        return;
+    }
+    let Some(_mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let block = block2::RcBlock::new(|event: core::ptr::NonNull<NSEvent>| {
+        // SAFETY: AppKit hands the monitor a live event for the call's
+        // duration; we only read from it and hand the same pointer back so
+        // the event continues down the responder chain untouched.
+        let ev = unsafe { event.as_ref() };
+        // Who the event is about to be delivered to. If this is not the
+        // plugin's BaseviewNSView, the responder chain is the problem; if it
+        // is, the key reached the plugin and was dropped inside it.
+        // SAFETY: AppKit delivers local event monitors on the main thread.
+        let mtm = unsafe { objc2_foundation::MainThreadMarker::new_unchecked() };
+        let responder = ev.window(mtm)
+            .and_then(|w| w.firstResponder())
+            .map(|r| r.class().name().to_string_lossy().to_string())
+            .unwrap_or_else(|| "<none>".to_string());
+        eprintln!(
+            "[host] KEY monitor: keyCode={} chars={:?} window={} firstResponder={responder}",
+            ev.keyCode(),
+            ev.charactersIgnoringModifiers().map(|s| s.to_string()),
+            ev.window(mtm).is_some(),
+        );
+        event.as_ptr()
+    });
+    // SAFETY: main thread, and the block outlives the monitor because
+    // `RcBlock` is retained by AppKit for the monitor's lifetime.
+    unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(
+            NSEventMask::KeyDown | NSEventMask::KeyUp | NSEventMask::FlagsChanged,
+            &block,
+        );
+    }
+    std::mem::forget(block);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn install_key_monitor() {}
 
 fn main() -> eyre::Result<()> {
     let mut args = std::env::args().skip(1);
@@ -353,6 +530,7 @@ fn main() -> eyre::Result<()> {
         Some(scale) if scale > 0.0 => baseview::WindowScalePolicy::ScaleFactor(scale),
         _ => baseview::WindowScalePolicy::SystemScaleFactor,
     };
+    install_key_monitor();
     Window::open_blocking(options, move |ctx| {
         let mut plugin = ClapHost::default()
             .load(&bundle, plugin_index)
@@ -402,6 +580,7 @@ fn main() -> eyre::Result<()> {
         }
 
         HostHandler {
+            focused: std::cell::Cell::new(false),
             plugin: RefCell::new(Some(plugin)),
             window: ctx.clone(),
         }

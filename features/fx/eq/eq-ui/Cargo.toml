@@ -38,6 +38,16 @@ native = [
 gpu-tests = []
 
 [dependencies]
+
+# Not used in code — this is here to turn ON blitz-dom's `autofocus` feature,
+# which is off by default. Without it the `autofocus` attribute is inert, and
+# a text field that appears in response to a click can never take focus:
+# `MountedData::set_focus` is the only alternative, and calling it from an
+# event handler panics ("RefCell already borrowed") because the document is
+# still borrowed by the dispatch that created the node. Cargo features are
+# additive across the graph, so declaring it once here enables it for every
+# plugin that embeds this UI.
+blitz-dom = { workspace = true, features = ["autofocus"] }
 eq-dsp = { workspace = true }
 audiocore-core = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
@@ -85,6 +95,10 @@ required-features = ["native"]
 dioxus = { workspace = true }
 dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false }
 dioxus-test = { workspace = true }
+# Right-button pointer events: `dioxus-test` only ships primary-button
+# helpers, and the band-label rename is a RIGHT double-click, so the
+# tests build those `UiEvent`s directly. Same pin as dioxus-test's own.
+blitz-traits = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 test-that = { version = "0.5.2", default-features = false, features = ["regex", "num-traits"] }
 pollster = "0.4"

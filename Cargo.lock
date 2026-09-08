@@ -5001,6 +5001,8 @@ dependencies = [
  "architect-ui",
  "atomic_float",
  "audiocore-core",
+ "blitz-dom",
+ "blitz-traits",
  "dioxus",
  "dioxus-ssr",
  "dioxus-test",
@@ -5727,10 +5729,12 @@ name = "fts-clap-host"
 version = "0.1.0"
 dependencies = [
  "baseview 0.2.2",
+ "block2 0.6.2",
  "daw-standalone",
  "eyre",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
  "raw-window-handle 0.6.2",
 ]
 

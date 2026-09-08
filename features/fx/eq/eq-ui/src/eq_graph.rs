@@ -245,6 +245,72 @@ pub fn EqGraph(
     // Track last click for double-click detection on mousedown
     // (timestamp_ms, x, y) - allows creating node on second mousedown so user can drag immediately
     let mut last_click: Signal<Option<(f64, f64, f64)>> = use_signal(|| None);
+    // The band whose name label is currently an open text field, if any, and
+    // whether that field has been armed to take focus.
+    //
+    // The two-step is what makes focus actually land, and both halves are
+    // load-bearing:
+    //
+    //  * `autofocus` is applied by blitz as an ATTRIBUTE MUTATION, and it is
+    //    ignored unless the node is already in the document. Dioxus builds an
+    //    element and sets its attributes BEFORE inserting it, so a field that
+    //    is born with `autofocus` never gets focus. Setting the attribute on
+    //    the following render — when the field is mounted — does work.
+    //  * That second render has to happen after the pointer-UP, because blitz
+    //    focuses the graph widget on pointer-up as well as pointer-down and
+    //    would otherwise take focus straight back off the field.
+    //
+    // So: the double-click's mousedown opens the field, and its mouseup arms
+    // the focus. `MountedData::set_focus` is not an option here — calling it
+    // from an event handler panics, since the document is still borrowed by
+    // the dispatch that created the node.
+    let mut editing_label: Signal<Option<usize>> = use_signal(|| None);
+    let mut label_autofocus: Signal<bool> = use_signal(|| false);
+    // The name the band had when its field was opened, held aside while the
+    // field is empty.
+    //
+    // This stands in for select-all-on-open, which is not reachable: blitz's
+    // editor selects all only on Cmd+A, the plugin's key path drops modifiers
+    // before blitz sees them (the same reason `latched_mods` exists for the
+    // graph), and no DOM-side API touches the editor's selection. Worse, the
+    // editor's buffer is authoritative once the field is focused — writing
+    // the `value` prop does not replace what the user is typing into. A field
+    // that opened pre-filled would therefore not just fail to clear, it would
+    // visibly APPEND: type "Boxiness" over "Low Shelf" and the field reads
+    // "BoxinessLow Shelf".
+    //
+    // So the field opens empty, with the old name offered as the placeholder:
+    // typing replaces it, which is what a selection would have done. Clicking
+    // into the field puts the old name back to edit, and closing without
+    // typing restores it — nothing is lost by opening the editor.
+    let mut label_original: Signal<String> = use_signal(String::new);
+    // Closes the open name field, putting the old name back if the user did
+    // not type one. Reached from Enter, Escape, and any press elsewhere on
+    // the graph — a double-click that opens a field and goes nowhere must not
+    // silently wipe the band's name.
+    // Puts the old name back if the field is empty. Reached from Enter,
+    // Escape, and any press elsewhere on the graph — opening an editor and
+    // walking away must not wipe a band's name.
+    let mut restore_label_if_empty = move |idx: usize| {
+        let restored = {
+            let mut bw = bands.write();
+            match bw.get_mut(idx) {
+                Some(b) if b.name.trim().is_empty() && !label_original.read().is_empty() => {
+                    b.name = label_original.take();
+                    Some(b.clone())
+                }
+                _ => None,
+            }
+        };
+        if let (Some(b), Some(cb)) = (restored, &on_band_change) {
+            cb.call((idx, b));
+        }
+    };
+    let mut close_label_editor = move || {
+        if let Some(idx) = editing_label.take() {
+            restore_label_if_empty(idx);
+        }
+    };
     // Track drag start position for multi-selection movement
     let mut drag_start: Signal<Option<(f64, f64)>> = use_signal(|| None);
     // Track original band positions for proportional scaling during multi-drag
@@ -838,6 +904,14 @@ pub fn EqGraph(
 
             // Mouse up: complete selection rect or end drag
             onmouseup: move |evt: MouseEvent| {
+                // The release that completes the double-click opening a name
+                // field arrives AFTER the field has mounted and focused
+                // itself, and blitz focuses the graph widget on pointer-up as
+                // well as pointer-down — so without this the field loses focus
+                // in the very gesture that opened it.
+                if editing_label.read().is_some() && !label_autofocus() {
+                    label_autofocus.set(true);
+                }
                 let coords = evt.element_coordinates();
                 let (x, y) = transform_coords(coords.x, coords.y);
 
@@ -943,6 +1017,13 @@ pub fn EqGraph(
                 };
 
                 context_menu.set(None);
+                // Any press on the graph outside the name field closes it —
+                // the field stops propagation, so reaching here means the
+                // press was somewhere else. Deliberately not `onblur`: blitz
+                // moves focus to the graph widget on every pointer-up, so a
+                // blur handler would shut the field during its own opening
+                // gesture.
+                close_label_editor();
 
                 // Right-click: show context menu
                 if evt.trigger_button() == Some(MouseButton::Secondary) {
@@ -966,12 +1047,32 @@ pub fn EqGraph(
                         (x - lx).hypot(y - ly) < double_click_distance
                     });
                     if is_double {
+                        // Double-click a node to NAME it. Resetting a control
+                        // to its default by double-clicking belongs on knobs
+                        // and the panel below — on the graph the node is the
+                        // band itself, and the useful thing to do to a band
+                        // you have just double-clicked is say what it is for.
                         last_click.set(None);
-                        let updated = {
-                            let mut bv = bands.write();
-                            if idx < bv.len() { bv[idx].gain = 0.0; Some(bv[idx].clone()) } else { None }
+                        set_focused(Some(idx));
+                        // Clear through `on_band_change`, not just in the
+                        // local vector: `bands` is re-derived from the
+                        // plugin's parameters every render, so a name only
+                        // cleared here is back by the next frame.
+                        let cleared = {
+                            let mut bw = bands.write();
+                            bw.get_mut(idx).map(|b| {
+                                let previous = std::mem::take(&mut b.name);
+                                (previous, b.clone())
+                            })
                         };
-                        if let (Some(b), Some(cb)) = (updated, &on_band_change) { cb.call((idx, b)); }
+                        if let Some((previous, band)) = cleared {
+                            label_original.set(previous);
+                            if let Some(cb) = &on_band_change {
+                                cb.call((idx, band));
+                            }
+                        }
+                        editing_label.set(Some(idx));
+                        label_autofocus.set(false);
                         evt.stop_propagation();
                         return;
                     }
@@ -1384,27 +1485,130 @@ pub fn EqGraph(
                 } } else { rsx! {} }
             }
 
-            // Band name labels — show the user's annotation above each named
-            // node so EQ moves are self-documenting at a glance.
+            // Band name labels — the user's annotation above each node, so
+            // EQ moves are self-documenting at a glance. Double-clicking the
+            // NODE swaps its label for a text field in the same spot, which is
+            // why the editing form is rendered here alongside the label it
+            // replaces.
             {
                 let bv = bands.read();
+                let editing = *editing_label.read();
                 rsx! {
-                    for band in bv.iter().filter(|b| b.used && !b.name.trim().is_empty()).cloned() {
+                    for band in bv.iter().filter(|b| b.used
+                        && (!b.name.trim().is_empty() || editing == Some(b.index))).cloned()
+                    {
                         {
-                            let lx = mapper.freq_to_x(f64::from(band.frequency));
-                            let ly = mapper.db_to_y(f64::from(band.gain));
+                            let nx = mapper.freq_to_x(f64::from(band.frequency));
+                            let ny = mapper.db_to_y(f64::from(band.gain));
+                            let (lx, ly) = crate::eq_graph_popup::band_label_anchor(
+                                nx, ny, graph_width, graph_height,
+                            );
                             let color = crate::eq_graph_model::freq_to_color(f64::from(band.frequency));
-                            rsx! {
-                                div {
-                                    key: "name-{band.index}",
-                                    style: format!(
-                                        "position:absolute; left:{lx}px; top:{ly}px; \
-                                         transform:translate(-50%, -150%); z-index:24; \
-                                         font-size:10px; font-weight:600; \
-                                         color:{color}; text-shadow:0 1px 2px #000; \
-                                         pointer-events:none; white-space:nowrap;",
-                                    ),
-                                    "{band.name}"
+                            let idx = band.index;
+                            // Anchor both forms identically so the label does
+                            // not jump when it turns into a field. z-index is
+                            // above the readout chip's so the open field is
+                            // never buried under it.
+                            let anchor = format!(
+                                "position:absolute; left:{lx}px; top:{ly}px; \
+                                 transform:translate(-50%, -100%); z-index:28; \
+                                 font-size:10px; font-weight:600; white-space:nowrap;"
+                            );
+                            if editing == Some(idx) {
+                                // Write through on every keystroke rather than
+                                // on commit: the label is the same string, so
+                                // the band gets its name as the user types it.
+                                let mut commit = move |value: String| {
+                                    let name = value.trim().to_string();
+                                    let updated = {
+                                        let mut bw = bands.write();
+                                        bw.get_mut(idx).map(|b| {
+                                            b.name = name;
+                                            b.clone()
+                                        })
+                                    };
+                                    if let (Some(b), Some(cb)) = (updated, &on_band_change) {
+                                        cb.call((idx, b));
+                                    }
+                                };
+                                let held = label_original.read().clone();
+                                let show_held = band.name.is_empty() && !held.is_empty();
+                                rsx! {
+                                    if show_held {
+                                        div {
+                                            "data-testid": "eq-band-label-held",
+                                            // Stands in for `placeholder`,
+                                            // which blitz does not implement.
+                                            // Inert, and drawn over the empty
+                                            // field, so the name the field is
+                                            // holding is visible and the click
+                                            // that brings it back is aimed at
+                                            // the field itself.
+                                            style: "{anchor} width:110px; text-align:center; \
+                                                    color:#6a6a76; padding:2px 4px; \
+                                                    border:1px solid transparent; \
+                                                    pointer-events:none; z-index:29;",
+                                            "{held}"
+                                        }
+                                    }
+                                    input {
+                                        "data-testid": "eq-band-label-input",
+                                        r#type: "text",
+                                        value: "{band.name}",
+                                        // Flipped to true one render later —
+                                        // see `label_autofocus`. Needs
+                                        // blitz-dom's `autofocus` feature,
+                                        // which eq-ui turns on; see Cargo.toml.
+                                        autofocus: "{label_autofocus}",
+                                        style: "{anchor} width:110px; text-align:center; \
+                                                color:{color}; background:rgba(12,12,16,0.96); \
+                                                border:1px solid {color}; border-radius:4px; \
+                                                padding:2px 4px; outline:none;",
+                                        // Keep the graph's gestures out of the
+                                        // field: a click here places a caret,
+                                        // it does not grab the band underneath.
+                                        // It also drops the modelled
+                                        // selection — clicking into
+                                        // highlighted text is how you say
+                                        // "keep this, I want to edit it".
+                                        onmousedown: move |evt: MouseEvent| {
+                                            evt.stop_propagation();
+                                            // Clicking into an empty field is
+                                            // how you say "keep what was
+                                            // there, I only want to edit it".
+                                            restore_label_if_empty(idx);
+                                        },
+                                        oninput: move |evt| commit(evt.value()),
+                                        onkeydown: move |evt: KeyboardEvent| {
+                                            match evt.key() {
+                                                Key::Enter | Key::Escape => {
+                                                    close_label_editor();
+                                                }
+                                                // Everything else is text and
+                                                // must not reach the graph's
+                                                // keyboard shortcuts.
+                                                _ => {}
+                                            }
+                                            evt.stop_propagation();
+                                        },
+                                    }
+                                }
+                            } else {
+                                rsx! {
+                                    div {
+                                        key: "name-{idx}",
+                                        "data-testid": "eq-band-label",
+                                        // Display only. The gesture that edits
+                                        // it lives on the node: a label that
+                                        // takes pointer events sits right on
+                                        // top of the node it names and shadows
+                                        // it, because the transform that lifts
+                                        // it clear is not applied to hit-tests.
+                                        style: "{anchor} color:{color}; \
+                                                text-shadow:0 1px 2px #000; \
+                                                pointer-events:none;",
+                                        "{band.name}"
+                                    }
                                 }
                             }
                         }

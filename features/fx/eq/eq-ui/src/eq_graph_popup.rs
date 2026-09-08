@@ -27,6 +27,11 @@ const fn shape_to_int(s: EqBandShape) -> i32 {
     }
 }
 
+/// How far a context menu sits down-right of the pointer that opened it.
+/// Wide enough to clear a band node's hit radius, small enough that the menu
+/// still reads as belonging to the click.
+const MENU_POINTER_OFFSET: f64 = 10.0;
+
 #[component]
 pub fn EmptyGraphContextMenu(
     x: f64,
@@ -42,8 +47,13 @@ pub fn EmptyGraphContextMenu(
 ) -> Element {
     let menu_w: f64 = 150.0;
     let menu_h: f64 = 76.0;
-    let menu_x = x.min((graph_w - menu_w).max(0.0));
-    let menu_y = y.min((graph_h - menu_h).max(0.0));
+    // Offset from the pointer rather than starting under it. Two reasons:
+    // a menu whose corner sits on the cursor looks like it grew out of the
+    // wrong place, and — the functional one — the band node the user just
+    // right-clicked has to stay hittable, because a second right-click on it
+    // opens the inline label editor.
+    let menu_x = (x + MENU_POINTER_OFFSET).min((graph_w - menu_w).max(0.0));
+    let menu_y = (y + MENU_POINTER_OFFSET).min((graph_h - menu_h).max(0.0));
     let can_add = next_index < MAX_BANDS;
     let freq_str = if frequency >= 1000.0 {
         format!("{:.1}k", frequency / 1000.0)
@@ -680,15 +690,17 @@ pub fn BandContextMenu(
     // flyout, which is what makes a diagonal trip into it survivable.
     let mut hover: Signal<Option<usize>> = use_signal(|| None);
     let mut open_sub: Signal<Option<usize>> = use_signal(|| None);
-    // The rename field, when it is open. `None` means the menu is showing its
-    // ordinary rows.
-    let mut renaming: Signal<Option<String>> = use_signal(|| None);
 
     let shapes = EqBandShape::all();
     let menu_w: f64 = 172.0;
-    let menu_h: f64 = 246.0;
-    let menu_x = x.min((graph_w - menu_w).max(0.0));
-    let menu_y = y.min((graph_h - menu_h).max(0.0));
+    let menu_h: f64 = 226.0;
+    // Offset from the pointer rather than starting under it. Two reasons:
+    // a menu whose corner sits on the cursor looks like it grew out of the
+    // wrong place, and — the functional one — the band node the user just
+    // right-clicked has to stay hittable, because a second right-click on it
+    // opens the inline label editor.
+    let menu_x = (x + MENU_POINTER_OFFSET).min((graph_w - menu_w).max(0.0));
+    let menu_y = (y + MENU_POINTER_OFFSET).min((graph_h - menu_h).max(0.0));
 
     let band_color = crate::eq_graph_model::freq_to_color(f64::from(band.frequency));
     let cur_shape = band.shape;
@@ -780,61 +792,10 @@ pub fn BandContextMenu(
                     span { "Invert Gain" }
                 }
 
-                // ── Rename ──────────────────────────────────────────────
-                //
-                // The name is drawn above the band node, so this is how a band
-                // gets to say what it is FOR — "boxiness", "de-ess", "rumble" —
-                // rather than only what it is doing. The field replaces the
-                // menu's rows while it is open so there is one obvious thing to
-                // type into.
-                if let Some(draft) = renaming() {
-                    div {
-                        style: "padding:5px 8px; display:flex; flex-direction:column; gap:4px;",
-                        div {
-                            style: format!("font-size:9px; color:{MENU_DIM}; text-transform:uppercase; letter-spacing:0.06em;"),
-                            "Rename band"
-                        }
-                        input {
-                            r#type: "text",
-                            value: "{draft}",
-                            autofocus: true,
-                            style: format!(
-                                "width:100%; box-sizing:border-box; font-size:11px; \
-                                 padding:3px 5px; border-radius:3px; \
-                                 border:1px solid {band_color}; background:#0c0c0f; \
-                                 color:{MENU_TEXT}; outline:none;"
-                            ),
-                            oninput: move |evt| renaming.set(Some(evt.value())),
-                            onkeydown: {
-                                move |evt: KeyboardEvent| match evt.key() {
-                                    Key::Enter => {
-                                        let name = renaming().unwrap_or_default();
-                                        apply(&|b: &mut EqBand| b.name = name.trim().to_string());
-                                        on_dismiss.call(());
-                                    }
-                                    Key::Escape => { renaming.set(None); }
-                                    _ => {}
-                                }
-                            },
-                        }
-                        div {
-                            style: format!("font-size:8px; color:{MENU_DIM};"),
-                            "Enter to save · Esc to cancel · empty clears the label"
-                        }
-                    }
-                } else {
-                    div {
-                        style: menu_row(hover() == Some(10), false),
-                        onmouseenter: move |_| { hover.set(Some(10)); open_sub.set(None); },
-                        onclick: move |_| { renaming.set(Some(band.name.clone())); },
-                        span { style: "width:12px;" }
-                        span { style: "flex:1;", "Rename…" }
-                        span {
-                            style: format!("color:{MENU_DIM}; max-width:78px; overflow:hidden; white-space:nowrap;"),
-                            "{band.name}"
-                        }
-                    }
-                }
+                // Renaming happens on the band's own label — double
+                // right-click it on the graph. A menu row for it would be a
+                // second way to reach the same field, one click further from
+                // the thing being named.
 
                 if let Some(ds) = dyn_state.clone() {
                     {
@@ -1121,6 +1082,25 @@ pub fn band_chip_rect(bx: f64, by: f64, graph_w: f64, graph_h: f64) -> (f64, f64
     .clamp(0.0, (graph_h - CHIP_H).max(0.0));
     (x, y, CHIP_W, CHIP_H)
 }
+
+/// Where a band's name label — and the text field it becomes — is anchored.
+///
+/// Directly clear of the readout chip. The chip is drawn above everything
+/// else on the graph, so a label sharing its space is simply invisible, which
+/// is exactly what happened when both were anchored on the node: the name
+/// field opened, took focus and accepted typing, with nothing visible on
+/// screen. Returns the point the label's bottom centre should sit on.
+pub fn band_label_anchor(bx: f64, by: f64, graph_w: f64, graph_h: f64) -> (f64, f64) {
+    let (_, chip_y, _, _) = band_chip_rect(bx, by, graph_w, graph_h);
+    // The chip normally sits above the node and flips below it near the top
+    // of the graph. Stay above the chip in the first case, above the node in
+    // the second.
+    let y = if chip_y < by { chip_y } else { by - POPUP_GAP };
+    (bx, (y - LABEL_GAP).max(0.0))
+}
+
+/// Breathing room between a band's name label and the readout chip below it.
+const LABEL_GAP: f64 = 4.0;
 
 /// The frequency / gain / Q readout that follows the band node.
 ///

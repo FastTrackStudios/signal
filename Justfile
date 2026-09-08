@@ -973,3 +973,58 @@ ee-shots *ARGS:
 alias c := check
 alias t := test
 alias g := guitar
+
+# ── The standalone plugin host ──────────────────────────────────────────────
+#
+# `fts-clap-host` opens one plugin in a plain window, with no DAW around it —
+# the quickest way to look at an editor, and the only way to drive one from a
+# test harness.
+#
+# It is staged onto the INTERNAL disk, and so are the bundles it opens. That
+# is not a preference, it is the fix for a real problem: macOS asks for
+# consent before an app touches a removable volume and pins that consent to
+# the app's code identity, which for an ad-hoc-signed binary changes on every
+# rebuild. Run the host in place on the external volume and you get the
+# "would like to access files on a removable volume" prompt on every single
+# launch, forever. Staged internally it touches nothing under /Volumes and
+# there is nothing to ask about.
+#
+# The repo, `target/`, and the whole incremental cache stay external. What
+# crosses over is a ~800 KB binary and a copy of the bundles being tested.
+#
+#   just host-install          # stage the host and every built bundle
+#   just host-install eq       # ...just this one
+#   just host eq               # stage and run
+host-install *NAMES:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p fts-clap-host
+    names=""
+    for n in {{NAMES}}; do
+        # Accept `eq`, `EQ`, `comp`, … and map to the bundle's display name.
+        case "$(echo "$n" | tr '[:upper:]' '[:lower:]')" in
+            eq) names="$names EQ" ;;
+            comp) names="$names Comp" ;;
+            saturate) names="$names Saturate" ;;
+            delay) names="$names Delay" ;;
+            reverb) names="$names Reverb" ;;
+            *) names="$names $n" ;;
+        esac
+    done
+    ./scripts/install-host-app.sh $names
+
+# Stage and open one plugin in the host. Its stdout/stderr land in
+# ~/Library/Logs/fts-clap-host.log.
+host NAME="eq":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just host-install {{NAME}}
+    case "$(echo "{{NAME}}" | tr '[:upper:]' '[:lower:]')" in
+        eq) display=EQ ;;
+        comp) display=Comp ;;
+        saturate) display=Saturate ;;
+        delay) display=Delay ;;
+        reverb) display=Reverb ;;
+        *) display="{{NAME}}" ;;
+    esac
+    ./scripts/run-host.sh "$display"
