@@ -315,7 +315,10 @@ fn main() {
     {
         use fts_sample::stream as st;
         use std::sync::atomic::Ordering::Relaxed;
-        let (hit, miss) = (st::STREAM_HITS.load(Relaxed), st::STREAM_MISSES.load(Relaxed));
+        let (hit, miss) = (
+            st::STREAM_HITS.load(Relaxed),
+            st::STREAM_MISSES.load(Relaxed),
+        );
         let dec = st::CHUNKS_DECODED.load(Relaxed);
         let re = st::REDECODES.load(Relaxed);
         println!(

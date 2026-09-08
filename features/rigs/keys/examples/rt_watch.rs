@@ -52,7 +52,12 @@ async fn main() -> eyre::Result<()> {
             // Twenty notes at a time: ten fingers with an octave doubler is
             // an ordinary way to play this rig, and it is where the reported
             // glitching lives.
-            const CHORDS: [[u32; 4]; 4] = [[60, 64, 67, 72], [57, 60, 64, 69], [53, 57, 60, 65], [55, 59, 62, 67]];
+            const CHORDS: [[u32; 4]; 4] = [
+                [60, 64, 67, 72],
+                [57, 60, 64, 69],
+                [53, 57, 60, 65],
+                [55, 59, 62, 67],
+            ];
             let mut i = 0usize;
             loop {
                 let chord = CHORDS[i % CHORDS.len()];
@@ -79,7 +84,10 @@ async fn main() -> eyre::Result<()> {
     let (mut last_blocks, mut last_holes, mut last_clicks, mut last_over) =
         (0u64, 0u64, 0u64, 0u64);
     loop {
-        let s = rig.status().await.map_err(|e| eyre::eyre!("status: {e:?}"))?;
+        let s = rig
+            .status()
+            .await
+            .map_err(|e| eyre::eyre!("status: {e:?}"))?;
         let rt = &s.rt;
         let budget_ms = if rt.block_frames > 0 {
             f64::from(rt.block_frames) / 48_000.0 * 1000.0
