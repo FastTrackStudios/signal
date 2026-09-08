@@ -28,6 +28,10 @@ pub struct EqUiState {
     pub sample_rate: AtomicF32,
     pub spectrum_bins: Box<[AtomicF32; SPECTRUM_BINS]>,
     pub model_response_bins: Box<[AtomicF32; SPECTRUM_BINS]>,
+    /// Per-band live dynamic gain in dB, published every block from
+    /// `FtsEq::live_dyn_gain_db`. This is what fills the yellow arc on a
+    /// dynamic band's ring; a static or idle band publishes 0.0.
+    pub band_dyn_gain_db: Box<[AtomicF32; NUM_BANDS]>,
     /// Full Pro-Q 4-style analyzer engine. The UI ticks it and reads snapshots;
     /// the audio thread feeds it through [`Self::take_audio_feed`].
     pub analyzer: Arc<Analyzer>,
@@ -47,6 +51,7 @@ impl EqUiState {
             sample_rate: AtomicF32::new(48000.0),
             spectrum_bins: Box::new(std::array::from_fn(|_| AtomicF32::new(-100.0))),
             model_response_bins: Box::new(std::array::from_fn(|_| AtomicF32::new(0.0))),
+            band_dyn_gain_db: Box::new(std::array::from_fn(|_| AtomicF32::new(0.0))),
             analyzer,
             audio_feed: Mutex::new(Some(feed)),
         }
@@ -705,7 +710,9 @@ impl Default for FtsEqParams {
 
             // 3 dB (index 0) is the default — a tight range suits the subtle,
             // shelf-first baseline moves. Ascending: 3/6/12/18/24/30.
-            db_range: IntParam::new("dB Range", 0, IntRange::Linear { min: 0, max: 5 })
+            // Index 1 = ±6 dB. See `DEFAULT_DB_RANGE` — the two must agree, or
+            // the graph opens at a different range than the param reports.
+            db_range: IntParam::new("dB Range", 1, IntRange::Linear { min: 0, max: 5 })
                 .with_value_to_string(Arc::new(|v| match v {
                     0 => "3 dB".to_string(),
                     1 => "6 dB".to_string(),

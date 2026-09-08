@@ -20,6 +20,7 @@ use nice_plug::context::gui::GuiContext;
 use nice_plug::editor::ResizeHint;
 use nice_plug::editor::dpi::LogicalSize;
 
+use crate::dynamics::{BandDynamicsPanel, BandHandles, DynState, ModKnob};
 use crate::eq_graph::{EqBand, EqBandShape, EqGraph, OverlayChoice};
 
 /// Editor size the plugin shell requests from the host on open.
@@ -279,6 +280,33 @@ fn AppShell() -> Element {
     let mut profile_tab: Signal<String> = use_signal(|| "default".to_string());
 
     let gain_scale = params.gain_scale.value() / 100.0;
+
+    // Per-band dynamics handles for the graph popup. Built here because this
+    // is where the param tree is in scope; the graph forwards only the entry
+    // for the band whose popup is open.
+    let band_dynamics: Vec<DynState> = (0..NUM_BANDS)
+        .map(|i| {
+            let bp = &params.bands[i];
+            DynState {
+                range: param_handle(bp.dyn_range_db.as_ptr(), ctx.clone()),
+                spectral: param_handle(bp.spectral.as_ptr(), ctx.clone()),
+                tilt: param_handle(bp.spectral_tilt.as_ptr(), ctx.clone()),
+                live_db: ui.band_dyn_gain_db[i].load(Ordering::Relaxed),
+                range_max_db: 30.0,
+            }
+        })
+        .collect();
+
+    let band_handles: Vec<BandHandles> = (0..NUM_BANDS)
+        .map(|i| {
+            let bp = &params.bands[i];
+            BandHandles {
+                freq: param_handle(bp.freq_hz.as_ptr(), ctx.clone()),
+                gain: param_handle(bp.gain_db.as_ptr(), ctx.clone()),
+                q: param_handle(bp.q.as_ptr(), ctx.clone()),
+            }
+        })
+        .collect();
 
     let mut bands_vec: Vec<EqBand> = Vec::with_capacity(NUM_BANDS);
     for i in 0..NUM_BANDS {
@@ -546,6 +574,8 @@ fn AppShell() -> Element {
                         spectrum_db: spectrum,
                         analyzer_snapshot: analyzer_snapshot,
                         model_response_db: model_response,
+                        band_dynamics: Some(band_dynamics.clone()),
+                        band_handles: Some(band_handles.clone()),
                         focused_band_out: focused_band,
                         overlay_sel: overlay_sel,
                         disabled: hardware_mode_active,
@@ -607,6 +637,20 @@ fn AppShell() -> Element {
                                         bp.solo.preview_normalized(solo_val),
                                     );
                                     ctx.end_set_raw(bp.solo.as_ptr());
+
+                                    // Stereo placement. This was missing: the
+                                    // model READ `placement` when building the
+                                    // band list but never wrote it back, so
+                                    // every route to mid/side EQ — the panel's
+                                    // ST button included — moved the UI model
+                                    // and left the parameter where it was.
+                                    let place_val = stereo_mode_to_int(band.stereo_mode);
+                                    ctx.begin_set_raw(bp.placement.as_ptr());
+                                    ctx.set_normalized_raw(
+                                        bp.placement.as_ptr(),
+                                        bp.placement.preview_normalized(place_val),
+                                    );
+                                    ctx.end_set_raw(bp.placement.as_ptr());
                                 }
                             }
                         },
@@ -735,6 +779,15 @@ fn AppShell() -> Element {
                                     let focus_idx = *focused_band.read();
                                     if let Some(idx) = focus_idx {
                                         let bp = &params.bands[idx];
+                                        // The band's dynamics, shared by the Gain knob's ring and the
+                                        // panel below it so the two can never disagree about the mode.
+                                        let band_dyn_state = DynState {
+                                            range: param_handle(bp.dyn_range_db.as_ptr(), ctx.clone()),
+                                            spectral: param_handle(bp.spectral.as_ptr(), ctx.clone()),
+                                            tilt: param_handle(bp.spectral_tilt.as_ptr(), ctx.clone()),
+                                            live_db: ui.band_dyn_gain_db[idx].load(Ordering::Relaxed),
+                                            range_max_db: 30.0,
+                                        };
                                         let freq = bp.freq_hz.value();
                                         let gain = bp.gain_db.value();
                                         let q = bp.q.value();
@@ -929,9 +982,23 @@ fn AppShell() -> Element {
                                                     }
 
                                                     div { class: "grid grid-cols-3 gap-2",
-                                                        InspectorKnob { label: "Freq".to_string(), value: freq_str, handle: param_handle(bp.freq_hz.as_ptr(), ctx.clone()) }
-                                                        InspectorKnob { label: "Gain".to_string(), value: format!("{gain:+.1}"), handle: param_handle(bp.gain_db.as_ptr(), ctx.clone()) }
-                                                        InspectorKnob { label: "Q".to_string(), value: format!("{q:.2}"), handle: param_handle(bp.q.as_ptr(), ctx.clone()) }
+                                                        ModKnob { label: "Freq".to_string(), value: freq_str, handle: param_handle(bp.freq_hz.as_ptr(), ctx.clone()) }
+                                                        ModKnob {
+                                                            label: "Gain".to_string(),
+                                                            value: format!("{gain:+.1}"),
+                                                            handle: param_handle(bp.gain_db.as_ptr(), ctx.clone()),
+                                                            dynamics: Some(band_dyn_state.clone()),
+                                                        }
+                                                        ModKnob { label: "Q".to_string(), value: format!("{q:.2}"), handle: param_handle(bp.q.as_ptr(), ctx.clone()) }
+                                                    }
+                                                    
+                                                    BandDynamicsPanel {
+                                                        state: band_dyn_state.clone(),
+                                                        threshold: param_handle(bp.dyn_threshold_db.as_ptr(), ctx.clone()),
+                                                        attack: param_handle(bp.dyn_attack.as_ptr(), ctx.clone()),
+                                                        release: param_handle(bp.dyn_release.as_ptr(), ctx.clone()),
+                                                        auto: param_handle(bp.dyn_auto.as_ptr(), ctx.clone()),
+                                                        density: param_handle(bp.spectral_density.as_ptr(), ctx.clone()),
                                                     }
 
                                                     div { class: "rounded-md border border-border bg-muted/20 p-2",
@@ -1595,6 +1662,20 @@ fn AnalyzerStat(label: String, value: String) -> Element {
     }
 }
 
+/// `StereoMode` -> the `placement` parameter's index. The inverse of the
+/// match in the band-list builder; kept beside nothing in particular because
+/// there is exactly one writer.
+const fn stereo_mode_to_int(mode: crate::eq_graph_model::StereoMode) -> i32 {
+    use crate::eq_graph_model::StereoMode as M;
+    match mode {
+        M::Stereo => 0,
+        M::Left => 1,
+        M::Right => 2,
+        M::Mid => 3,
+        M::Side => 4,
+    }
+}
+
 fn format_freq(freq: f32) -> String {
     if freq >= 1000.0 {
         format!("{:.1}k", freq / 1000.0)
@@ -1704,4 +1785,66 @@ fn fps_status(fps: f32) -> (String, &'static str) {
         "text-red-400"
     };
     (label, color)
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::stereo_mode_to_int;
+    use crate::eq_graph_model::StereoMode;
+
+    /// The band list decodes `placement` into a `StereoMode` with an inline
+    /// match; the writeback encodes it back with `stereo_mode_to_int`. They
+    /// have to agree, and for a while they did not agree at all — the encoder
+    /// did not exist, so placement was a read-only parameter and mid/side EQ
+    /// could be displayed but never selected.
+    ///
+    /// This mirrors the decoder so a change to either side fails here rather
+    /// than silently in the editor.
+    const fn decode(value: i32) -> StereoMode {
+        match value {
+            1 => StereoMode::Left,
+            2 => StereoMode::Right,
+            3 => StereoMode::Mid,
+            4 => StereoMode::Side,
+            _ => StereoMode::Stereo,
+        }
+    }
+
+    #[test]
+    fn placement_round_trips_through_the_parameter() {
+        for mode in [
+            StereoMode::Stereo,
+            StereoMode::Left,
+            StereoMode::Right,
+            StereoMode::Mid,
+            StereoMode::Side,
+        ] {
+            let encoded = stereo_mode_to_int(mode);
+            assert_eq!(
+                decode(encoded),
+                mode,
+                "{mode:?} encoded to {encoded}, which decodes to something else"
+            );
+        }
+    }
+
+    #[test]
+    fn every_placement_index_is_reachable() {
+        // Five modes must occupy five distinct indices inside the parameter's
+        // 0..=4 range; a collision would make one of them unselectable.
+        let mut seen = [false; 5];
+        for mode in [
+            StereoMode::Stereo,
+            StereoMode::Left,
+            StereoMode::Right,
+            StereoMode::Mid,
+            StereoMode::Side,
+        ] {
+            let i = stereo_mode_to_int(mode);
+            assert!((0..=4).contains(&i), "{mode:?} encodes out of range: {i}");
+            assert!(!seen[i as usize], "{mode:?} collides on index {i}");
+            seen[i as usize] = true;
+        }
+        assert!(seen.iter().all(|s| *s), "not every placement index is used");
+    }
 }

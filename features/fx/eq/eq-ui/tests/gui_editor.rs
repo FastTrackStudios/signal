@@ -176,10 +176,22 @@ mod support {
         /// The `GraphMapper` matching what `EqGraph` uses headless: fixed
         /// 800×350 viewBox fallback (the custom-widget painter that would
         /// publish the live canvas size never runs without a renderer),
-        /// default 20 Hz–20 kHz range, and the default ±3 dB display range
-        /// (`db_range` param index 0).
+        /// default 20 Hz–20 kHz range, and whatever the default display range
+        /// currently is.
+        ///
+        /// Reads `DEFAULT_DB_RANGE` rather than repeating its value: this was
+        /// hardcoded to 3.0, and changing the default to ±6 dB made every
+        /// pointer test miss its band node by half the graph — the fixture was
+        /// computing where nodes *used* to be.
         pub fn mapper(&self) -> GraphMapper {
-            GraphMapper::new(20.0, 20_000.0, 3.0, 800.0, 350.0, 0.0)
+            GraphMapper::new(
+                20.0,
+                20_000.0,
+                eq_ui::eq_graph_model::DEFAULT_DB_RANGE,
+                800.0,
+                350.0,
+                0.0,
+            )
         }
 
         /// Document-space origin of the EQ graph interaction surface. The
@@ -984,7 +996,15 @@ async fn the_1073s_collar_and_cap_are_separate_controls() -> dioxus_test::Result
 #[tokio::test]
 async fn dragging_a_band_past_the_top_expands_the_range() -> dioxus_test::Result<()> {
     let fx = mount();
-    assert_eq!(fx.params.db_range.value(), 0, "default range is ±3 dB");
+    // Whatever the default is, auto-range has to take it one step further.
+    // Pinned against the constant rather than a literal: the default moved
+    // from ±3 dB to ±6 dB and a hardcoded 0 here would have failed for a
+    // reason that had nothing to do with auto-range.
+    let start_index = fx.params.db_range.value();
+    assert!(
+        start_index < 5,
+        "the default range must leave somewhere to expand to (index {start_index})"
+    );
 
     let (ox, oy) = fx.graph_origin();
     let (sx, sy) = fx.band_point(0);
@@ -1003,10 +1023,10 @@ async fn dragging_a_band_past_the_top_expands_the_range() -> dioxus_test::Result
     fx.tester.pointer_up(sx, target_y);
     fx.settle().await;
 
-    // The ±3 dB view expands to ±6 dB (index 1) — one step, no contraction.
+    // One step wider, never narrower.
     assert!(
-        fx.params.db_range.value() >= 1,
-        "range did not expand past ±3 dB (still index {})",
+        fx.params.db_range.value() > start_index,
+        "range did not expand past index {start_index} (still index {})",
         fx.params.db_range.value()
     );
     let _ = ox;
@@ -1066,5 +1086,574 @@ async fn the_top_rail_carries_the_preset_strip() -> dioxus_test::Result<()> {
     fx.tester
         .query(dioxus_test::by_testid("eq-presets"))
         .immediately()?;
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Modifier gestures
+// ─────────────────────────────────────────────────────────────────────────
+//
+// The Pro-Q modifier chords, driven through the real editor rather than
+// reasoned about. `eq_graph_interaction::gesture_tests` pins what a chord
+// *means*; these prove the meaning survives the trip through Blitz's event
+// system and lands on the parameter — which is a different question, and one
+// that OS-level synthetic input cannot answer: the automation API applies
+// modifiers to clicks and scrolls but not to the pointer moves between them,
+// so a real Alt+drag or Alt+scroll is unreproducible from outside the process.
+// `pointer_*_mods` and `wheel_mods` go straight into the document with the
+// modifiers attached, so the whole set is testable here.
+
+use dioxus_test::keyboard_types::Modifiers;
+
+/// Nudge the pointer onto a band so the graph considers it hovered — the
+/// precondition for a scroll to have a target at all.
+async fn hover_band(fx: &support::Fixture, idx: usize) -> (f64, f64) {
+    let (x, y) = fx.band_point(idx);
+    fx.tester.pointer_move(x, y, false);
+    fx.settle().await;
+    (x, y)
+}
+
+#[tokio::test]
+async fn plain_scroll_over_a_band_moves_q() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[0];
+    let (x, y) = hover_band(&fx, 0).await;
+
+    let q_before = bp.q.value();
+    let range_before = bp.dyn_range_db.value();
+    let gain_before = bp.gain_db.value();
+
+    // Negative delta is wheel-up, the direction that increases a control.
+    fx.tester.wheel_mods(x, y, -3.0, Modifiers::empty());
+    fx.settle().await;
+
+    assert!(
+        bp.q.value() > q_before,
+        "unmodified scroll up should raise Q: {q_before} -> {}",
+        bp.q.value()
+    );
+    assert!(
+        (bp.dyn_range_db.value() - range_before).abs() < 1e-6,
+        "unmodified scroll must not touch the dynamic range"
+    );
+    assert!(
+        (bp.gain_db.value() - gain_before).abs() < 1e-6,
+        "unmodified scroll must not touch gain"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn alt_scroll_moves_the_dynamic_range_and_leaves_q_alone() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[0];
+    let (x, y) = hover_band(&fx, 0).await;
+
+    let q_before = bp.q.value();
+    let range_before = bp.dyn_range_db.value();
+
+    fx.tester.wheel_mods(x, y, -3.0, Modifiers::ALT);
+    fx.settle().await;
+
+    assert!(
+        bp.dyn_range_db.value() > range_before,
+        "Alt+scroll up should widen the dynamic range: {range_before} -> {}",
+        bp.dyn_range_db.value()
+    );
+    assert!(
+        (bp.q.value() - q_before).abs() < 1e-6,
+        "Alt+scroll must not fall through to Q: {q_before} -> {}",
+        bp.q.value()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn cmd_scroll_moves_gain() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[0];
+    let (x, y) = hover_band(&fx, 0).await;
+
+    let gain_before = bp.gain_db.value();
+    let q_before = bp.q.value();
+
+    // Ctrl and Command are the same gesture; the handler ORs them.
+    fx.tester.wheel_mods(x, y, -2.0, Modifiers::META);
+    fx.settle().await;
+
+    assert!(
+        bp.gain_db.value() > gain_before,
+        "Cmd+scroll up should raise gain: {gain_before} -> {}",
+        bp.gain_db.value()
+    );
+    assert!(
+        (bp.q.value() - q_before).abs() < 1e-6,
+        "Cmd+scroll must not also move Q"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn alt_cmd_scroll_moves_gain_and_range_together() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[0];
+    let (x, y) = hover_band(&fx, 0).await;
+
+    let gain_before = bp.gain_db.value();
+    let range_before = bp.dyn_range_db.value();
+
+    fx.tester
+        .wheel_mods(x, y, -2.0, Modifiers::ALT | Modifiers::META);
+    fx.settle().await;
+
+    assert!(
+        bp.gain_db.value() > gain_before,
+        "Alt+Cmd scroll should move gain"
+    );
+    assert!(
+        bp.dyn_range_db.value() > range_before,
+        "Alt+Cmd scroll should move the range in the same gesture"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn alt_click_on_a_band_toggles_its_bypass() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[0];
+    let (x, y) = fx.band_point(0);
+
+    let enabled_before = bp.enabled.value() > 0.5;
+    let freq_before = bp.freq_hz.value();
+
+    fx.tester.pointer_down_mods(x, y, Modifiers::ALT);
+    fx.settle().await;
+    fx.tester.pointer_up_mods(x, y, Modifiers::ALT);
+    fx.settle().await;
+
+    assert_ne!(
+        bp.enabled.value() > 0.5,
+        enabled_before,
+        "Alt+click should flip the band's bypass"
+    );
+    // Not bit-exact: every `on_band_change` rewrites the whole band, and the
+    // normalize/denormalize round-trip lands 400 Hz on 400.00006. What matters
+    // is that the band did not *move* — a drag of the same span would be tens
+    // of hertz.
+    assert!(
+        (bp.freq_hz.value() - freq_before).abs() < 0.5,
+        "Alt+click is a button press, not the start of a drag — frequency must \
+         not move: {freq_before} -> {}",
+        bp.freq_hz.value()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn cmd_alt_click_cycles_the_band_shape() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[0];
+    let (x, y) = fx.band_point(0);
+
+    let shape_before = bp.filter_type.value();
+    let enabled_before = bp.enabled.value() > 0.5;
+
+    let mods = Modifiers::ALT | Modifiers::META;
+    fx.tester.pointer_down_mods(x, y, mods);
+    fx.settle().await;
+    fx.tester.pointer_up_mods(x, y, mods);
+    fx.settle().await;
+
+    assert_ne!(
+        bp.filter_type.value(),
+        shape_before,
+        "Cmd+Alt+click should step the shape"
+    );
+    // The regression the ordering test guards, seen from the other end: if
+    // the two-modifier chord fell through to the bare-Alt arm this would have
+    // toggled bypass instead.
+    assert_eq!(
+        bp.enabled.value() > 0.5,
+        enabled_before,
+        "Cmd+Alt+click must not fall through to the bypass toggle"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn alt_shift_click_cycles_the_slope() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[0];
+    let (x, y) = fx.band_point(0);
+
+    let slope_before = bp.slope.value();
+    let enabled_before = bp.enabled.value() > 0.5;
+
+    let mods = Modifiers::ALT | Modifiers::SHIFT;
+    fx.tester.pointer_down_mods(x, y, mods);
+    fx.settle().await;
+    fx.tester.pointer_up_mods(x, y, mods);
+    fx.settle().await;
+
+    assert_ne!(
+        bp.slope.value(),
+        slope_before,
+        "Alt+Shift+click should step the slope"
+    );
+    assert_eq!(
+        bp.enabled.value() > 0.5,
+        enabled_before,
+        "Alt+Shift+click must not fall through to the bypass toggle"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn alt_drag_locks_the_band_to_one_axis() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[0];
+    let (sx, sy) = fx.band_point(0);
+
+    let freq_before = bp.freq_hz.value();
+    let gain_before = bp.gain_db.value();
+
+    // Mostly horizontal travel, with enough vertical that an unconstrained
+    // drag would visibly move the gain too.
+    let (dx, dy) = (60.0, -24.0);
+    fx.tester.pointer_down_mods(sx, sy, Modifiers::ALT);
+    fx.settle().await;
+    for step in 1..=4 {
+        let t = f64::from(step) / 4.0;
+        fx.tester
+            .pointer_move_mods(sx + dx * t, sy + dy * t, true, Modifiers::ALT);
+        fx.settle().await;
+    }
+    fx.tester
+        .pointer_up_mods(sx + dx, sy + dy, Modifiers::ALT);
+    fx.settle().await;
+
+    assert!(
+        (bp.freq_hz.value() - freq_before).abs() > 1.0,
+        "the committed axis should move: {freq_before} -> {}",
+        bp.freq_hz.value()
+    );
+    assert!(
+        (bp.gain_db.value() - gain_before).abs() < 0.01,
+        "the other axis must stay put under Alt: {gain_before} -> {}",
+        bp.gain_db.value()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn cmd_drag_adjusts_resonance_instead_of_gain() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[0];
+    let (sx, sy) = fx.band_point(0);
+
+    let q_before = bp.q.value();
+    let gain_before = bp.gain_db.value();
+
+    // Straight up: gain would rise a lot if this were an ordinary drag.
+    let dy = -50.0;
+    fx.tester.pointer_down_mods(sx, sy, Modifiers::META);
+    fx.settle().await;
+    for step in 1..=4 {
+        let t = f64::from(step) / 4.0;
+        fx.tester
+            .pointer_move_mods(sx, sy + dy * t, true, Modifiers::META);
+        fx.settle().await;
+    }
+    fx.tester.pointer_up_mods(sx, sy + dy, Modifiers::META);
+    fx.settle().await;
+
+    assert!(
+        bp.q.value() > q_before,
+        "Cmd+drag up should raise Q: {q_before} -> {}",
+        bp.q.value()
+    );
+    assert!(
+        (bp.gain_db.value() - gain_before).abs() < 0.01,
+        "Cmd+drag must not move gain: {gain_before} -> {}",
+        bp.gain_db.value()
+    );
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Multi-band selection and group drag
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Drag a band by `(dx, dy)` in document pixels, no modifiers.
+async fn drag_band(fx: &support::Fixture, idx: usize, dx: f64, dy: f64) {
+    let (sx, sy) = fx.band_point(idx);
+    fx.tester.pointer_down(sx, sy);
+    fx.settle().await;
+    for step in 1..=4 {
+        let t = f64::from(step) / 4.0;
+        fx.tester.pointer_move(sx + dx * t, sy + dy * t, true);
+        fx.settle().await;
+    }
+    fx.tester.pointer_up(sx + dx, sy + dy);
+    fx.settle().await;
+}
+
+/// Rubber-band across the whole graph, which encloses every used band.
+///
+/// Starts in the top-left corner rather than on a node: a press that lands on
+/// a band starts a drag instead of a selection.
+async fn select_all_by_rectangle(fx: &support::Fixture) {
+    let (ox, oy) = fx.graph_origin();
+    let (x0, y0) = (ox + 4.0, oy + 4.0);
+    let (x1, y1) = (ox + 780.0, oy + 340.0);
+    fx.tester.pointer_down(x0, y0);
+    fx.settle().await;
+    for step in 1..=4 {
+        let t = f64::from(step) / 4.0;
+        fx.tester
+            .pointer_move(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, true);
+        fx.settle().await;
+    }
+    fx.tester.pointer_up(x1, y1);
+    fx.settle().await;
+}
+
+#[tokio::test]
+async fn a_rectangle_selects_bands_and_a_later_drag_moves_all_of_them(
+) -> dioxus_test::Result<()> {
+    let fx = mount();
+    // Give the two default bands opposite gains so the group drag has both a
+    // boost and a cut to act on.
+    drag_band(&fx, 0, 0.0, -70.0).await;
+    drag_band(&fx, 1, 0.0, 70.0).await;
+
+    let b0 = &fx.params.bands[0];
+    let b1 = &fx.params.bands[1];
+    assert!(b0.gain_db.value() > 0.2, "band 0 should be boosting");
+    assert!(b1.gain_db.value() < -0.2, "band 1 should be cutting");
+
+    let f0_before = b0.freq_hz.value();
+    let f1_before = b1.freq_hz.value();
+
+    select_all_by_rectangle(&fx).await;
+
+    // Drag one selected band sideways; the whole selection should follow.
+    drag_band(&fx, 0, 60.0, 0.0).await;
+
+    assert!(
+        (b0.freq_hz.value() - f0_before).abs() > 1.0,
+        "the dragged band should move: {f0_before} -> {}",
+        b0.freq_hz.value()
+    );
+    assert!(
+        (b1.freq_hz.value() - f1_before).abs() > 1.0,
+        "the OTHER selected band should move too, but it stayed at {f1_before}"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_group_drag_moves_frequency_in_parallel() -> dioxus_test::Result<()> {
+    let fx = mount();
+    drag_band(&fx, 0, 0.0, -70.0).await;
+    drag_band(&fx, 1, 0.0, 70.0).await;
+
+    let b0 = &fx.params.bands[0];
+    let b1 = &fx.params.bands[1];
+    let f0_before = f64::from(b0.freq_hz.value());
+    let f1_before = f64::from(b1.freq_hz.value());
+
+    select_all_by_rectangle(&fx).await;
+    drag_band(&fx, 0, 60.0, 0.0).await;
+
+    let r0 = f64::from(b0.freq_hz.value()) / f0_before;
+    let r1 = f64::from(b1.freq_hz.value()) / f1_before;
+
+    // The axis is logarithmic, so "parallel on screen" means "same frequency
+    // RATIO" — every selected band shifts by the same number of octaves and
+    // therefore the same number of pixels, holding the shape of the selection.
+    assert!(
+        (r0 - r1).abs() / r0 < 0.02,
+        "bands should shift by the same ratio (parallel on a log axis): \
+         {r0:.4} vs {r1:.4}"
+    );
+    assert!(r0 > 1.0, "a rightward drag should raise frequency: {r0:.4}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_group_drag_deepens_cuts_while_it_lifts_boosts() -> dioxus_test::Result<()> {
+    let fx = mount();
+    drag_band(&fx, 0, 0.0, -70.0).await;
+    drag_band(&fx, 1, 0.0, 70.0).await;
+
+    let b0 = &fx.params.bands[0];
+    let b1 = &fx.params.bands[1];
+    let g0_before = b0.gain_db.value();
+    let g1_before = b1.gain_db.value();
+    assert!(g0_before > 0.2 && g1_before < -0.2, "need a boost and a cut");
+
+    select_all_by_rectangle(&fx).await;
+    // Drag the BOOSTING band further up; the cut should go further down.
+    drag_band(&fx, 0, 0.0, -40.0).await;
+
+    let g0_after = b0.gain_db.value();
+    let g1_after = b1.gain_db.value();
+
+    assert!(
+        g0_after > g0_before,
+        "the boost should grow: {g0_before} -> {g0_after}"
+    );
+    assert!(
+        g1_after < g1_before,
+        "the cut should DEEPEN as the boost grows — gain scales about zero, so \
+         a negative band moves opposite to a positive one: {g1_before} -> {g1_after}"
+    );
+    Ok(())
+}
+
+/// A dynamic band's envelope counts toward auto-range.
+///
+/// The node can sit comfortably inside the display while the range extreme is
+/// already off the bottom — and the extreme is the part that carries the
+/// information. Before this, dragging a dynamic band expanded the view only
+/// when the *node* reached the edge, so the envelope silently ran off.
+// r[verify fx.eq.display.auto-range]
+#[tokio::test]
+async fn a_dynamic_bands_envelope_expands_the_range_before_its_node_does()
+-> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[0];
+    let (x, y) = hover_band(&fx, 0).await;
+
+    // Give the band a wide dynamic range without moving its node: Alt+scroll
+    // is the range gesture, and it leaves gain alone.
+    for _ in 0..8 {
+        fx.tester.wheel_mods(x, y, -3.0, Modifiers::ALT);
+        fx.settle().await;
+    }
+    let range_db = bp.dyn_range_db.value();
+    assert!(
+        range_db.abs() > 3.0,
+        "needed a range wide enough to leave a ±6 dB view: {range_db}"
+    );
+
+    let start_index = fx.params.db_range.value();
+    let gain_before = bp.gain_db.value();
+
+    // A small drag — nowhere near the top of the display for the node itself.
+    drag_band(&fx, 0, 0.0, -20.0).await;
+
+    assert!(
+        bp.gain_db.value().abs() < 3.0,
+        "the node itself should still be well inside a ±6 dB view: {}",
+        bp.gain_db.value()
+    );
+    assert!(
+        fx.params.db_range.value() > start_index,
+        "the envelope reaches {:.1} dB, past the ±{} dB view, so the range \
+         should have expanded (still index {})",
+        gain_before + range_db,
+        eq_ui::eq_graph_model::db_range_for_index(start_index),
+        fx.params.db_range.value()
+    );
+    Ok(())
+}
+
+/// The graph carries a readable frequency and gain scale.
+///
+/// It had neither — bare gridlines and nothing to read them against. These
+/// assert presence and count rather than pixel positions, which is the part
+/// that regresses: a refactor that drops the overlay leaves the curves looking
+/// fine and the graph unreadable.
+#[tokio::test]
+async fn the_graph_labels_both_of_its_axes() -> dioxus_test::Result<()> {
+    let fx = mount();
+
+    let freq_labels = fx
+        .tester
+        .query_all(dioxus_test::by_testid("eq-freq-label"))
+        .immediately();
+    assert!(
+        freq_labels.len() >= 8,
+        "expected a frequency scale along the bottom, found {} labels",
+        freq_labels.len()
+    );
+
+    let db_labels = fx
+        .tester
+        .query_all(dioxus_test::by_testid("eq-db-label"))
+        .immediately();
+    assert!(
+        db_labels.len() >= 5,
+        "expected a gain scale up the side, found {} labels",
+        db_labels.len()
+    );
+    Ok(())
+}
+
+/// The gain scale follows the display range.
+///
+/// The labels are computed from `db_range`, so an auto-range expansion has to
+/// relabel — a scale that still reads ±6 after the view opened to ±12 is worse
+/// than no scale at all.
+#[tokio::test]
+async fn the_gain_scale_relabels_when_the_range_expands() -> dioxus_test::Result<()> {
+    /// The gain scale as currently rendered, top to bottom.
+    fn scale(fx: &support::Fixture) -> Vec<String> {
+        fx.tester
+            .query_all(dioxus_test::by_testid("eq-db-label"))
+            .immediately()
+            .iter()
+            .map(dioxus_test::ResolvedElement::inner_html)
+            .collect()
+    }
+
+    let fx = mount();
+    let before = scale(&fx);
+    assert_eq!(
+        before,
+        vec!["+6", "+3", "0", "-3", "-6"],
+        "the default ±6 dB view should be labelled in 3 dB steps"
+    );
+
+    // Push a band into the top edge, which expands the range one step.
+    let (_ox, oy) = fx.graph_origin();
+    let (sx, sy) = fx.band_point(0);
+    fx.tester.pointer_down(sx, sy);
+    fx.settle().await;
+    for step in 1..=4 {
+        let t = f64::from(step) / 4.0;
+        fx.tester.pointer_move(sx, sy + (oy + 1.0 - sy) * t, true);
+        fx.settle().await;
+    }
+    fx.tester.pointer_up(sx, oy + 1.0);
+    fx.settle().await;
+
+    assert!(
+        fx.params.db_range.value() > 1,
+        "precondition: the drag should have expanded the range (index {})",
+        fx.params.db_range.value()
+    );
+
+    // Wait for the relabel rather than snapshotting once. The param changes on
+    // the drag, but the re-render that carries the new range into the overlay
+    // lands a frame or more later — reading immediately made this pass alone
+    // and fail two runs in three under the parallel suite.
+    let mut after = before.clone();
+    for _ in 0..20 {
+        fx.settle().await;
+        after = scale(&fx);
+        if after != before {
+            break;
+        }
+    }
+
+    assert_ne!(
+        before, after,
+        "the gain scale still reads {before:?} after the range expanded to ±{} dB",
+        eq_ui::eq_graph_model::db_range_for_index(fx.params.db_range.value())
+    );
     Ok(())
 }

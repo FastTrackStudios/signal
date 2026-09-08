@@ -21,6 +21,7 @@ fn make_state(bands: Vec<EqBand>, spectrum: Vec<f32>) -> EqGraphRenderState {
     // EqGraphRenderState::new() returns Arc<Self>; we want owned for tests.
     EqGraphRenderState {
         bands: parking_lot::RwLock::new(bands),
+        band_dynamics: parking_lot::RwLock::new(Vec::new()),
         spectrum_db: parking_lot::RwLock::new(spectrum),
         model_response_db: parking_lot::RwLock::new(Vec::new()),
         analyzer: parking_lot::RwLock::new(Default::default()),
@@ -38,6 +39,7 @@ fn make_state(bands: Vec<EqBand>, spectrum: Vec<f32>) -> EqGraphRenderState {
 fn model_response_curve_adds_paths_without_bands() {
     let state = EqGraphRenderState {
         bands: parking_lot::RwLock::new(Vec::new()),
+        band_dynamics: parking_lot::RwLock::new(Vec::new()),
         spectrum_db: parking_lot::RwLock::new(Vec::new()),
         model_response_db: parking_lot::RwLock::new(
             (0..256)

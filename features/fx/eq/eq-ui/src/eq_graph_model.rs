@@ -248,9 +248,29 @@ pub fn get_band_fill_color(index: usize) -> String {
     }
 }
 
+/// What a band's dynamics look like to the painter.
+///
+/// The graph needs three numbers per band to draw the envelope Pro-Q draws:
+/// how far dynamics may move the band, where they have moved it right now,
+/// and which of the two modes is doing it. Kept separate from [`EqBand`] for
+/// the same reason the popup's handles are — `EqBand` describes the static
+/// curve, and the painter is the only other thing that needs the rest.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BandDyn {
+    /// Signed dynamic range in dB. Zero means the band is static and nothing
+    /// is drawn for it.
+    pub range_db: f32,
+    /// Live dynamic gain in dB, published by the audio thread.
+    pub live_db: f32,
+    /// Spectral rather than band-wide, which only changes the colour.
+    pub spectral: bool,
+}
+
 /// Shared state between the Dioxus component and paint backends.
 pub struct EqGraphRenderState {
     pub bands: RwLock<Vec<EqBand>>,
+    /// Per-band dynamics, indexed alongside `bands`.
+    pub band_dynamics: RwLock<Vec<BandDyn>>,
     pub spectrum_db: RwLock<Vec<f32>>,
     pub model_response_db: RwLock<Vec<f32>>,
     /// Full analyzer snapshot (pre/post/external/collision). When it carries
@@ -269,6 +289,7 @@ impl EqGraphRenderState {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             bands: RwLock::new(Vec::new()),
+            band_dynamics: RwLock::new(Vec::new()),
             spectrum_db: RwLock::new(Vec::new()),
             model_response_db: RwLock::new(Vec::new()),
             analyzer: RwLock::new(AnalyzerSnapshot::default()),
@@ -289,9 +310,16 @@ impl EqGraphRenderState {
 // r[impl fx.eq.display.defaults-agree]
 pub const DB_RANGE_STEPS: [f64; 6] = [3.0, 6.0, 12.0, 18.0, 24.0, 30.0];
 
-/// Default display range: the `db_range` param default (index 0 = ±3 dB —
-/// a tight range suits the subtle, shelf-first baseline moves).
-pub const DEFAULT_DB_RANGE: f64 = DB_RANGE_STEPS[0];
+/// Default display range: the `db_range` param default (index 1 = ±6 dB).
+///
+/// ±3 dB was too tight to work in. It is a fine range for reading a finished
+/// curve, but every ordinary move — a 4 dB cut, a shelf with any authority —
+/// started at the edge of the display and immediately triggered auto-range, so
+/// the graph rescaled while you were still dragging. ±6 dB leaves room for the
+/// moves people actually make and lets auto-range stay what it is meant to be:
+/// the thing that catches you when you go further, not the thing that fires on
+/// your first gesture.
+pub const DEFAULT_DB_RANGE: f64 = DB_RANGE_STEPS[1];
 
 /// The dB range a `db_range` param index selects.
 #[must_use]

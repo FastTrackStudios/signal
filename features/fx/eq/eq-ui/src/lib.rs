@@ -24,6 +24,9 @@ pub mod eq_graph_svg;
 // ── The Blitz/vello plugin editor ──
 #[cfg(feature = "native")]
 pub mod control_view;
+/// Dynamic + spectral EQ: the ring, the badge, and the band panel.
+#[cfg(feature = "native")]
+pub mod dynamics;
 #[cfg(feature = "native")]
 pub mod eq_graph;
 #[cfg(feature = "native")]

@@ -15,6 +15,8 @@ use nice_plug_dioxus::widget::{
     ComputedStyles, PaintScene as _, RenderContext, Scene, UiEvent, Widget,
 };
 
+use eq_dsp::PreparedFilter;
+
 use super::eq_graph_model::{EqBand, EqGraphRenderState, GraphConfig, freq_to_color};
 use super::eq_graph_response::{
     calculate_band_response, graph_magnitude, prepare_band, prepare_graph,
@@ -175,6 +177,7 @@ pub fn paint_eq_graph_scene(
     }
 
     let num_points = 400;
+    let band_dynamics = state.band_dynamics.read().clone();
     let frequencies = generate_frequencies(&cfg, num_points);
 
     for band in &bands {
@@ -182,6 +185,17 @@ pub fn paint_eq_graph_scene(
             continue;
         }
         paint_band_curve(scene, &cm, &cfg, band, &frequencies, transform);
+    }
+
+    // The dynamics envelope sits under the combined curve but over the
+    // individual band curves: it is context for a band, not a curve of its own.
+    for band in &bands {
+        if !band.used || !band.enabled {
+            continue;
+        }
+        if let Some(dynamics) = band_dynamics.get(band.index) {
+            paint_dynamic_range(scene, &cm, &cfg, band, *dynamics, &frequencies, transform);
+        }
     }
 
     paint_connecting_lines(scene, &cm, &cfg, &bands, transform);
@@ -204,6 +218,7 @@ pub fn paint_eq_graph_scene(
             is_hovered,
             is_dragging,
             is_focused,
+            interaction.selected_bands.contains(&band.index),
             transform,
         );
     }
@@ -541,6 +556,129 @@ fn paint_band_curve(
     );
 }
 
+/// Draw the range a dynamic band may travel, the way Pro-Q 4 draws it.
+///
+/// Checked against the real thing rather than invented: make a band dynamic in
+/// Pro-Q and it becomes a **filled ribbon in the band's own colour**, spanning
+/// from the static curve to the curve at full dynamic range — the static curve
+/// forms one edge and the range stretches away from it, down for a negative
+/// range and up for a positive one. There is no dashed extent line, and a
+/// spectral band renders *identically* to a dynamic one; the only thing that
+/// distinguishes them is the lit icon on the control, not the curve.
+///
+/// So this deliberately does not colour the ribbon by mode. An earlier pass
+/// drew it amber for dynamic and violet for spectral with a dashed edge, which
+/// looked informative and was wrong twice over: it broke the band-colour
+/// association the rest of the graph relies on, and it invented a visual
+/// distinction the processing does not have at the curve level.
+///
+/// The live curve is drawn only when dynamics have actually moved the band —
+/// at rest it lies exactly on the static edge, and stroking it there just
+/// thickens that edge for no information.
+fn paint_dynamic_range(
+    scene: &mut Scene,
+    cm: &CoordMapper,
+    cfg: &GraphConfig,
+    band: &EqBand,
+    dynamics: crate::eq_graph_model::BandDyn,
+    frequencies: &[f64],
+    transform: Affine,
+) {
+    if dynamics.range_db.abs() < 0.05 {
+        return;
+    }
+
+    let band_hex = freq_to_color(f64::from(band.frequency));
+    let edge = hex_to_color(&band_hex);
+    let ribbon = hex_to_color_alpha(&band_hex, 0.32);
+
+    // The band at full travel is a different filter, not the static curve
+    // offset by a constant: a bell of another gain has another shape.
+    let mut extreme = band.clone();
+    extreme.gain = band.gain + dynamics.range_db;
+    let mut live = band.clone();
+    live.gain = band.gain + dynamics.live_db;
+
+    let base_filter = prepare_band(band, cfg.sample_rate);
+    let extreme_filter = prepare_band(&extreme, cfg.sample_rate);
+    let live_filter = prepare_band(&live, cfg.sample_rate);
+
+    // Same accessor `paint_band_curve` uses: a filter that failed to design
+    // reads NaN, and NaN points are skipped rather than drawn at zero.
+    let db_at = |f: &Result<PreparedFilter, eq_dsp::Error>, hz: f64| -> f64 {
+        f.as_ref()
+            .map_or(f64::NAN, |filter| filter.magnitude_db(hz).unwrap_or(f64::NAN))
+    };
+
+    let mut ribbon_path = BezPath::new();
+    let mut extreme_edge = BezPath::new();
+    let mut live_line = BezPath::new();
+    let mut started = false;
+    let mut back: Vec<(f64, f64)> = Vec::with_capacity(frequencies.len());
+    // Only worth stroking the live curve once it has left the static edge.
+    let mut live_moved = false;
+
+    for &freq in frequencies {
+        let hi = db_at(&extreme_filter, freq);
+        let lo = db_at(&base_filter, freq);
+        if !hi.is_finite() || !lo.is_finite() {
+            continue;
+        }
+        let x = cm.freq_to_x(freq);
+        let (y_hi, y_lo) = (cm.db_to_y(hi), cm.db_to_y(lo));
+        if started {
+            ribbon_path.line_to((x, y_hi));
+            extreme_edge.line_to((x, y_hi));
+        } else {
+            ribbon_path.move_to((x, y_hi));
+            extreme_edge.move_to((x, y_hi));
+            started = true;
+        }
+        back.push((x, y_lo));
+
+        let lv = db_at(&live_filter, freq);
+        if lv.is_finite() {
+            if (lv - lo).abs() > 0.05 {
+                live_moved = true;
+            }
+            let y_lv = cm.db_to_y(lv);
+            if live_line.elements().is_empty() {
+                live_line.move_to((x, y_lv));
+            } else {
+                live_line.line_to((x, y_lv));
+            }
+        }
+    }
+
+    if !started {
+        return;
+    }
+    for (x, y) in back.into_iter().rev() {
+        ribbon_path.line_to((x, y));
+    }
+    ribbon_path.close_path();
+
+    scene.fill(Fill::NonZero, transform, ribbon, None, &ribbon_path);
+    // A quiet edge on the far side so the ribbon reads as bounded rather than
+    // as a fill that fades out.
+    scene.stroke(
+        &Stroke::new(1.0),
+        transform,
+        edge.with_alpha(0.45),
+        None,
+        &extreme_edge,
+    );
+    if live_moved {
+        scene.stroke(
+            &Stroke::new(1.75),
+            transform,
+            edge.with_alpha(0.95),
+            None,
+            &live_line,
+        );
+    }
+}
+
 fn paint_connecting_lines(
     scene: &mut Scene,
     cm: &CoordMapper,
@@ -663,6 +801,10 @@ fn paint_band_node(
     is_hovered: bool,
     is_dragging: bool,
     is_focused: bool,
+    // Part of a multi-band selection. Selection already drove the group drag
+    // — it was simply never drawn, so the one gesture that acts on several
+    // bands at once gave no sign of which bands it would act on.
+    is_selected: bool,
     transform: Affine,
 ) {
     let x = cm.freq_to_x(f64::from(band.frequency));
@@ -713,4 +855,19 @@ fn paint_band_node(
     let node = Circle::new((x, y), radius);
     scene.fill(Fill::NonZero, transform, fill, None, &node);
     scene.stroke(&Stroke::new(1.5), transform, outline_color, None, &node);
+
+    // Selection marker: a detached ring outside the node, in the band's own
+    // colour. Drawn last so it survives whatever the node did, and kept clear
+    // of the node's edge so it reads as "this one is picked" rather than as a
+    // thicker outline — which is what hover and drag already use.
+    if is_selected && band.enabled {
+        let ring = Circle::new((x, y), radius + 5.0);
+        scene.stroke(
+            &Stroke::new(1.5),
+            transform,
+            band_color.with_alpha(0.9),
+            None,
+            &ring,
+        );
+    }
 }

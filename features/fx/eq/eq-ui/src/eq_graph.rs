@@ -22,6 +22,8 @@ use nice_plug_dioxus::widget::CustomWidgetAttr;
 use super::eq_graph_interaction::{
     GraphMapper, bands_in_rect, drag_gain_for_shape, filter_type_for_position, nearest_band,
     wheel_band,
+    CreateMode, DotAction, DragMode, Mods, WheelTarget, create_mode, dot_action, drag_mode, dyn_range_step, fine_scale, gain_step,
+    wheel_target,
 };
 pub use super::eq_graph_model::{
     BAND_COLORS, EqBand, EqBandShape, EqGraphRenderState, GraphConfig, InteractionState, MAX_BANDS,
@@ -180,6 +182,18 @@ pub fn EqGraph(
     /// Optional model response data (dB values for logarithmically-spaced bins).
     #[props(default)]
     model_response_db: Option<Vec<f32>>,
+    /// Per-band dynamics handles, indexed by band. Supplied by the editor
+    /// (which owns the param tree); the graph only forwards the entry for
+    /// whichever band has its popup open. Dynamics are deliberately NOT part
+    /// of `EqBand` — that model describes the static curve, and routing a
+    /// threshold through it would make every one of its twenty construction
+    /// sites carry dynamics state it has no opinion about.
+    #[props(default)]
+    band_dynamics: Option<Vec<crate::dynamics::DynState>>,
+    /// Per-band frequency/gain/Q handles, so the band panel can host real
+    /// dials rather than readouts. Same rationale as `band_dynamics`.
+    #[props(default)]
+    band_handles: Option<Vec<crate::dynamics::BandHandles>>,
     /// Actual rendered width of the SVG container in pixels.
     /// Required for accurate mouse coordinate mapping.
     #[props(default = 0.0)]
@@ -198,6 +212,12 @@ pub fn EqGraph(
     #[props(default = false)]
     disabled: bool,
 ) -> Element {
+    // Own copy for the scroll handler; the prop itself is consumed by the
+    // popup and the context menu.
+    let dyn_for_wheel = band_dynamics.clone();
+    let dyn_for_create = band_dynamics.clone();
+    let dyn_for_drag = band_dynamics.clone();
+
     // Fixed viewBox dimensions for the painter (always 800x350).
     let vb_width: f64 = 800.0;
     let vb_height: f64 = 350.0;
@@ -230,6 +250,30 @@ pub fn EqGraph(
     // Track original band positions for proportional scaling during multi-drag
     // Stored as (idx, freq, gain).
     let mut drag_start_bands: Signal<Vec<(usize, f32, f32)>> = use_signal(Vec::new);
+    // The band's Q when a drag began — the anchor a Cmd-drag scales from, so
+    // the gesture is absolute against the press rather than accumulating
+    // rounding from frame to frame.
+    let mut drag_start_q: Signal<f32> = use_signal(|| 1.0);
+    // Modifiers latched from the last pointer event.
+    //
+    // Blitz delivers `WheelEvent` with every modifier flag false — verified
+    // with FTS_EQ_TRACE: an Alt+scroll and a Cmd+scroll both arrive as
+    // `alt=false shift=false ctrl=false meta=false`, while the same modifiers
+    // on a `MouseEvent` are reported correctly (Alt+click toggles bypass).
+    // Until that is fixed upstream, the scroll gestures read the modifier
+    // state the pointer last reported instead. Reaching a band to scroll it
+    // means moving onto it, so in practice the latch is current; pressing Alt
+    // without moving the mouse is the case it misses.
+    let mut latched_mods: Signal<Mods> = use_signal(Mods::default);
+    // A modifier chord on a band dot that has not yet been decided.
+    //
+    // Alt+click toggles bypass and Alt+drag constrains the axis, and both open
+    // with the same Alt+mousedown — so the press cannot act. It arms the drag
+    // AND remembers the chord; the first real movement cancels the chord
+    // (this is a drag), and a release with no movement fires it (this was a
+    // click). Acting on press instead made every Alt+drag impossible, which is
+    // what `alt_drag_locks_the_band_to_one_axis` caught.
+    let mut pending_chord: Signal<Option<(usize, DotAction)>> = use_signal(|| None);
     // Dropdown states for the popup
     // Right-click context menu state: (band_idx, viewBox_x, viewBox_y)
     let mut context_menu: Signal<Option<(Option<usize>, f64, f64)>> = use_signal(|| None);
@@ -401,6 +445,21 @@ pub fn EqGraph(
     // stale.
     {
         *render_state.bands.write() = bands.read().clone();
+        // Feed the painter the dynamics envelope alongside the curve, so a
+        // dynamic band shows how far it may travel rather than only where it
+        // currently sits.
+        *render_state.band_dynamics.write() = band_dynamics.as_ref().map_or_else(
+            Vec::new,
+            |v| {
+                v.iter()
+                    .map(|d| crate::eq_graph_model::BandDyn {
+                        range_db: d.range_db(),
+                        live_db: d.live_db,
+                        spectral: d.spectral.normalized() > 0.5,
+                    })
+                    .collect()
+            },
+        );
         let mut cfg = render_state.config.write();
         cfg.db_range = db_range;
         cfg.min_freq = min_freq;
@@ -477,14 +536,53 @@ pub fn EqGraph(
                 evt.prevent_default();
                 if disabled { return; }
                 let target_band = dragging_band.read().or(*focused_band.read()).or(*hovered_band.read());
-                if let Some(band_idx) = target_band {
-                    let delta = evt.delta().strip_units().y;
-                    let slope_mode = evt.modifiers().ctrl() || evt.modifiers().meta();
+                let Some(band_idx) = target_band else { return };
+                let delta = evt.delta().strip_units().y;
+                let m = evt.modifiers();
+                let from_event = Mods::new(m.alt(), m.shift(), m.ctrl() || m.meta());
+                // Prefer what the event says; fall back to the latch when it
+                // says "nothing held", which on Blitz is always.
+                let mods = if from_event == Mods::default() { latched_mods() } else { from_event };
+                if std::env::var_os("FTS_EQ_TRACE").is_some() {
+                    eprintln!(
+                        "[EQ-TRACE] wheel delta={delta:.2} event={from_event:?} latched={:?} used={mods:?}",
+                        latched_mods(),
+                    );
+                }
+
+                // Unmodified scroll means "width", and which control that is
+                // depends on the band — slope for a cut, Q for everything else.
+                let uses_slope = bands.read().get(band_idx).is_some_and(|b| b.shape.uses_slope());
+                let target = wheel_target(mods, uses_slope);
+
+                // Dynamic range lives on the param tree, not the band model,
+                // so it is written straight through its handle.
+                if matches!(target, WheelTarget::DynRange | WheelTarget::GainAndRange)
+                    && let Some(ds) = dyn_for_wheel.as_ref().and_then(|v: &Vec<crate::dynamics::DynState>| v.get(band_idx))
+                {
+                    let step = dyn_range_step(delta, mods) as f32;
+                    ds.range.set_as_gesture((ds.range.normalized() + step).clamp(0.0, 1.0));
+                }
+
+                if matches!(target, WheelTarget::Gain | WheelTarget::GainAndRange) {
+                    let step = gain_step(delta, mods) as f32;
                     let updated = {
                         let mut bv = bands.write();
                         if band_idx < bv.len() {
-                            let band = &mut bv[band_idx];
-                            wheel_band(band, delta, slope_mode);
+                            bv[band_idx].gain = (bv[band_idx].gain + step).clamp(-30.0, 30.0);
+                            Some(bv[band_idx].clone())
+                        } else { None }
+                    };
+                    if let (Some(b), Some(cb)) = (updated, &on_band_change) { cb.call((band_idx, b)); }
+                }
+
+                if matches!(target, WheelTarget::Q | WheelTarget::Slope) {
+                    let slope_mode = target == WheelTarget::Slope;
+                    let fine = fine_scale(mods);
+                    let updated = {
+                        let mut bv = bands.write();
+                        if band_idx < bv.len() {
+                            wheel_band(&mut bv[band_idx], delta, slope_mode, fine);
                             Some(bv[band_idx].clone())
                         } else { None }
                     };
@@ -505,6 +603,11 @@ pub fn EqGraph(
             // Mouse move: drag, hover hit-test, focus detection
             onmousemove: move |evt: MouseEvent| {
                 if disabled { return; }
+                {
+                    let m = evt.modifiers();
+                    let now = Mods::new(m.alt(), m.shift(), m.ctrl() || m.meta());
+                    if *latched_mods.peek() != now { latched_mods.set(now); }
+                }
                 let coords = evt.element_coordinates();
                 {
                     let (mx, my) = *observed_max.peek();
@@ -586,6 +689,31 @@ pub fn EqGraph(
                             }
                         }
                     } else {
+                        let m = evt.modifiers();
+                        let mods = Mods::new(m.alt(), m.shift(), m.ctrl() || m.meta());
+                        let (sx, sy) = drag_start.read().unwrap_or((x, y));
+                        // Past the slop radius this is a drag, so whatever
+                        // chord the press armed is no longer a click.
+                        if pending_chord.peek().is_some() && (x - sx).hypot(y - sy) > 3.0 {
+                            pending_chord.set(None);
+                        }
+                        let mode = drag_mode(mods, x - sx, y - sy);
+
+                        // Cmd-drag: vertical travel is resonance, not gain.
+                        // Scaled from the Q at press so the gesture is
+                        // absolute — 60 px is one octave of Q, quartered
+                        // under Shift.
+                        if mode == DragMode::Resonance {
+                            let travel = (sy - y) * fine_scale(mods) / 60.0;
+                            let q = (f64::from(drag_start_q()) * travel.exp2()).clamp(0.1, 18.0) as f32;
+                            let updated = {
+                                let mut bv = bands.write();
+                                if band_idx < bv.len() { bv[band_idx].q = q; Some(bv[band_idx].clone()) } else { None }
+                            };
+                            if let (Some(b), Some(cb)) = (updated, &on_band_change) { cb.call((band_idx, b)); }
+                            return;
+                        }
+
                         let nf = mapper.x_to_freq(x).clamp(10.0, 30000.0) as f32;
                         let pointer_gain = mapper.y_to_db(y).clamp(-30.0, 30.0);
                         // Auto-range: dragging the band into the display's
@@ -595,8 +723,21 @@ pub fn EqGraph(
                         // trigger is the edge (≥95 % of the range), because
                         // the mouse handlers are element-scoped — a move
                         // beyond the box never arrives.
+                        // A dynamic band reaches further than its node does:
+                        // the envelope runs from the static gain to the range
+                        // extreme, and it is the extreme that leaves the
+                        // display first. Auto-range follows whichever of the
+                        // two is further out, so dragging a dynamic band never
+                        // pushes its own envelope off the graph.
                         // r[impl fx.eq.display.auto-range]
-                        if auto_range && pointer_gain.abs() >= db_range * 0.95 {
+                        let reach = dyn_for_drag
+                            .as_ref()
+                            .and_then(|v: &Vec<crate::dynamics::DynState>| v.get(band_idx))
+                            .map_or(pointer_gain, |d| {
+                                let extreme = pointer_gain + f64::from(d.range_db());
+                                if extreme.abs() > pointer_gain.abs() { extreme } else { pointer_gain }
+                            });
+                        if auto_range && reach.abs() >= db_range * 0.95 {
                             if let (Some(cb), Some(next)) = (
                                 &on_db_range_change,
                                 super::eq_graph_model::DB_RANGE_STEPS
@@ -610,12 +751,19 @@ pub fn EqGraph(
                         let updated = {
                             let mut bv = bands.write();
                             if band_idx < bv.len() {
-                                bv[band_idx].frequency = nf;
-                                bv[band_idx].gain = drag_gain_for_shape(
-                                    bv[band_idx].shape,
-                                    bv[band_idx].gain,
-                                    pointer_gain,
-                                );
+                                // Alt locks the drag to whichever axis the
+                                // pointer committed to; the other one keeps
+                                // the value it had at press.
+                                if mode != DragMode::GainOnly {
+                                    bv[band_idx].frequency = nf;
+                                }
+                                if mode != DragMode::FreqOnly {
+                                    bv[band_idx].gain = drag_gain_for_shape(
+                                        bv[band_idx].shape,
+                                        bv[band_idx].gain,
+                                        pointer_gain,
+                                    );
+                                }
                                 Some((band_idx, bv[band_idx].clone()))
                             } else { None }
                         };
@@ -704,6 +852,36 @@ pub fn EqGraph(
                     return;
                 }
 
+                // A chord that survived the press-to-release trip without the
+                // pointer moving was a click, not a drag.
+                if let Some((idx, action)) = pending_chord.take() {
+                    let updated = {
+                        let mut bv = bands.write();
+                        if idx < bv.len() {
+                            match action {
+                                DotAction::ToggleBypass => bv[idx].enabled = !bv[idx].enabled,
+                                DotAction::CycleShape => {
+                                    let all = EqBandShape::all();
+                                    let cur = all.iter().position(|s| *s == bv[idx].shape).unwrap_or(0);
+                                    let next = all[(cur + 1) % all.len()];
+                                    bv[idx].shape = next;
+                                    if next.uses_slope() { bv[idx].q = 0.707; }
+                                }
+                                DotAction::CycleSlope => {
+                                    // Wraps rather than clamps: a cycling
+                                    // gesture that sticks at the top can only
+                                    // be undone with a different gesture.
+                                    let cur = bv[idx].slope.unwrap_or(2.0);
+                                    bv[idx].slope = Some(if cur >= 10.0 { 1.0 } else { cur + 1.0 });
+                                }
+                                _ => {}
+                            }
+                            Some(bv[idx].clone())
+                        } else { None }
+                    };
+                    if let (Some(b), Some(cb)) = (updated, &on_band_change) { cb.call((idx, b)); }
+                }
+
                 let band_idx_opt = { *dragging_band.read() };
                 if let Some(band_idx) = band_idx_opt {
                     if !mapper.is_inside(x, y) {
@@ -719,6 +897,11 @@ pub fn EqGraph(
             // Mouse down: click/drag bands, double-click to add, right-click menu
             onmousedown: move |evt: MouseEvent| {
                 if disabled { return; }
+                {
+                    let m = evt.modifiers();
+                    let now = Mods::new(m.alt(), m.shift(), m.ctrl() || m.meta());
+                    if *latched_mods.peek() != now { latched_mods.set(now); }
+                }
                 let coords = evt.element_coordinates();
                 // Interaction trace (FTS_EQ_TRACE=1): one line per press with
                 // every input the hit-test depends on — the tool for
@@ -794,20 +977,47 @@ pub fn EqGraph(
                     }
                     last_click.set(Some((now, x, y)));
 
-                    let is_shift = evt.modifiers().shift();
+                    let m = evt.modifiers();
+                    let mods = Mods::new(m.alt(), m.shift(), m.ctrl() || m.meta());
+
+                    // Arm the chords that act on the band rather than
+                    // selecting it. They fire on release, and only if the
+                    // pointer never moved — see `pending_chord`.
+                    let action = dot_action(mods);
+                    pending_chord.set(
+                        matches!(
+                            action,
+                            DotAction::ToggleBypass | DotAction::CycleShape | DotAction::CycleSlope
+                        )
+                        .then_some((idx, action)),
+                    );
+
                     let cur_sel = { selected_bands.read().clone() };
-                    let new_sel = if is_shift {
-                        let mut s = cur_sel;
-                        if s.contains(&idx) { s.retain(|&i| i != idx); } else { s.push(idx); }
-                        s
-                    } else if !cur_sel.contains(&idx) {
-                        vec![idx]
-                    } else {
-                        cur_sel
+                    let new_sel = match dot_action(mods) {
+                        DotAction::AddToSelection => {
+                            let mut s = cur_sel;
+                            if s.contains(&idx) { s.retain(|&i| i != idx); } else { s.push(idx); }
+                            s
+                        }
+                        DotAction::RangeSelect => {
+                            // Consecutive by band index, anchored on whatever
+                            // was focused. With no anchor there is nothing to
+                            // span, so it degrades to a plain select.
+                            focused_band.read().map_or_else(
+                                || vec![idx],
+                                |anchor| {
+                                    let (lo, hi) = (anchor.min(idx), anchor.max(idx));
+                                    (lo..=hi).collect()
+                                },
+                            )
+                        }
+                        _ if !cur_sel.contains(&idx) => vec![idx],
+                        _ => cur_sel,
                     };
                     selected_bands.set(new_sel.clone());
 
                     drag_start.set(Some((x, y)));
+                    drag_start_q.set(bands.read().get(idx).map_or(1.0, |b| b.q));
                     let start_bands: Vec<_> = {
                         let bv = bands.read();
                         new_sel.iter().filter_map(|&i| bv.get(i).map(|b| (i, b.frequency, b.gain))).collect()
@@ -844,6 +1054,25 @@ pub fn EqGraph(
                         gain: final_gain, q: 1.0, slope: None, shape, solo: false, stereo_mode: StereoMode::default(),
                         name: String::new() };
                     if let Some(cb) = &on_band_add { cb.call(new_band); }
+
+                    // Alt creates a dynamic band, Alt+Shift a spectral one.
+                    // Applied after `on_band_add` so the editor has already
+                    // marked the slot used — `set_mode` writes the range and
+                    // spectral params for a band that now exists.
+                    let mode = create_mode(Mods::new(
+                        evt.modifiers().alt(),
+                        evt.modifiers().shift(),
+                        evt.modifiers().ctrl() || evt.modifiers().meta(),
+                    ));
+                    if mode != CreateMode::Static
+                        && let Some(ds) = dyn_for_create.as_ref().and_then(|v: &Vec<crate::dynamics::DynState>| v.get(new_idx))
+                    {
+                        ds.set_mode(match mode {
+                            CreateMode::Spectral => crate::dynamics::DynMode::Spectral,
+                            _ => crate::dynamics::DynMode::Dynamic,
+                        });
+                    }
+
                     dragging_band.set(Some(new_idx));
                     if let Some(cb) = &on_begin { cb.call(new_idx); }
                     evt.stop_propagation();
@@ -954,6 +1183,107 @@ pub fn EqGraph(
                     }
                 }
             }
+            }
+
+            // ── Axis labels ──────────────────────────────────────────────
+            //
+            // The graph had neither: no frequency along the bottom, no dB up
+            // the side. The hover panel reports a band's own numbers, but with
+            // bare gridlines there was no way to read the curve itself — to
+            // see that a dip sits at 300 Hz rather than 500, or how many dB a
+            // shelf is worth — which is most of what an EQ display is for.
+            //
+            // Drawn in the DOM like every other label here (the vello painter
+            // does shapes; text is the component's job), positioned through
+            // the same mapper the curves use so they cannot disagree.
+            {
+                // The decade anchors every EQ marks, and the ones that survive
+                // being squeezed: at 800 px the full 1-2-5 series collides
+                // below 100 Hz, so the sub-100 end keeps only 20 and 50.
+                const FREQ_TICKS: [(f64, &str); 10] = [
+                    (20.0, "20"),
+                    (50.0, "50"),
+                    (100.0, "100"),
+                    (200.0, "200"),
+                    (500.0, "500"),
+                    (1_000.0, "1k"),
+                    (2_000.0, "2k"),
+                    (5_000.0, "5k"),
+                    (10_000.0, "10k"),
+                    (20_000.0, "20k"),
+                ];
+                rsx! {
+                    for (fi , (hz , label)) in FREQ_TICKS.iter().enumerate() {
+                        {
+                            let x = mapper.freq_to_x(*hz);
+                            // Clamp the end labels inward so they are not half
+                            // outside the graph.
+                            let shift = if fi == 0 {
+                                "translateX(0)"
+                            } else if fi == FREQ_TICKS.len() - 1 {
+                                "translateX(-100%)"
+                            } else {
+                                "translateX(-50%)"
+                            };
+                            rsx! {
+                                div {
+                                    key: "hz{fi}",
+                                    "data-testid": "eq-freq-label",
+                                    style: format!(
+                                        "position:absolute; left:{x}px; bottom:2px; \
+                                         transform:{shift}; z-index:24; font-size:9px; \
+                                         color:rgba(160,160,172,0.85); \
+                                         text-shadow:0 1px 2px #000; \
+                                         pointer-events:none; white-space:nowrap;",
+                                    ),
+                                    "{label}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            {
+                // Four gain gridlines plus zero, at fractions of whatever the
+                // display range currently is — so the scale stays correct
+                // through an auto-range expansion instead of going stale.
+                let steps: [f64; 5] = [1.0, 0.5, 0.0, -0.5, -1.0];
+                rsx! {
+                    for (di , frac) in steps.iter().enumerate() {
+                        {
+                            let db = frac * db_range;
+                            // Keep the scale clear of the two rows that share
+                            // its edges: the frequency labels along the bottom
+                            // (which swallowed −6 entirely) and the top rim.
+                            // The ±range labels sit at the very edge of the
+                            // plot, so without this the outermost one of the
+                            // five is always the one you cannot read.
+                            let y = mapper
+                                .db_to_y(db)
+                                .clamp(20.0, (graph_height - 16.0).max(20.0));
+                            let text = if db.abs() < 0.05 {
+                                "0".to_string()
+                            } else {
+                                format!("{db:+.0}")
+                            };
+                            rsx! {
+                                div {
+                                    key: "db{di}",
+                                    "data-testid": "eq-db-label",
+                                    style: format!(
+                                        "position:absolute; right:3px; top:{y}px; \
+                                         transform:translateY(-50%); z-index:26; \
+                                         font-size:9px; color:rgba(170,170,182,0.95); \
+                                         background:rgba(10,10,14,0.78); \
+                                         padding:0 3px; border-radius:2px; \
+                                         pointer-events:none; white-space:nowrap;",
+                                    ),
+                                    "{text}"
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Cheat-sheet zone labels (DOM, positioned via the mapper). One per
@@ -1123,6 +1453,8 @@ pub fn EqGraph(
                                 popup_activity,
                                 on_band_change: on_band_change,
                                 on_band_remove: on_band_remove,
+                                dyn_state: band_dynamics.as_ref().and_then(|v| v.get(band_idx).cloned()),
+                                handles: band_handles.as_ref().and_then(|v| v.get(band_idx).cloned()),
                                 on_dismiss: move |()| { set_focused(None); },
                             }
                         }
@@ -1145,6 +1477,7 @@ pub fn EqGraph(
                                 bands,
                                 on_band_change: on_band_change,
                                 on_band_remove: on_band_remove,
+                                dyn_state: band_dynamics.as_ref().and_then(|v| v.get(ctx_idx).cloned()),
                                 on_dismiss: move |()| { context_menu.set(None); },
                             }
                         }

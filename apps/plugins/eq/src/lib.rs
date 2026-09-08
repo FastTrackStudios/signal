@@ -444,6 +444,17 @@ impl Plugin for FtsEqPlugin {
             self.post_mono[i] = ((l + r) * 0.5) as f32;
         }
 
+        // Publish each band's live dynamic gain so the inspector's ring can
+        // show what the band is actually doing. `live_dyn_gain_db` returns
+        // `None` for a band that is not dynamic, which reads as 0.0 — the
+        // ring draws no live arc at that value.
+        if !use_neve_1073 && !use_hardware_eq {
+            for i in 0..NUM_BANDS {
+                let g = self.engine.live_dyn_gain_db(i).unwrap_or(0.0);
+                self.ui_state.band_dyn_gain_db[i].store(g as f32, Ordering::Relaxed);
+            }
+        }
+
         // Feed the analyzer (audio-thread side: just lock-free ring pushes).
         if let Some(feed) = self.audio_feed.as_mut() {
             feed.push_pre(&self.pre_mono[..n]);

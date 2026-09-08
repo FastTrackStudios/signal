@@ -116,7 +116,12 @@ pub fn drag_gain_for_shape(shape: EqBandShape, current_gain: f32, pointer_gain: 
 }
 
 /// Scroll resonance, or the separate slope control when the model exposes one.
-pub fn wheel_band(band: &mut EqBand, delta_y: f64, slope_mode: bool) {
+///
+/// `fine` scales the resonance step (Shift fine-tune). It is applied as an
+/// exponent rather than a factor because Q moves multiplicatively — a quarter
+/// of a 1.15x step is 1.15^0.25, not 1.15/4, which would be a *reduction*.
+/// Slope is a discrete step and ignores it.
+pub fn wheel_band(band: &mut EqBand, delta_y: f64, slope_mode: bool, fine: f64) {
     if let Some(slope) = band.slope.as_mut()
         && (band.shape.uses_slope() || slope_mode)
     {
@@ -128,8 +133,8 @@ pub fn wheel_band(band: &mut EqBand, delta_y: f64, slope_mode: bool) {
         };
         *slope = (*slope + step).clamp(minimum, 10.0);
     } else {
-        let multiplier = if delta_y < 0.0 { 1.15 } else { 0.87 };
-        band.q = (band.q * multiplier).clamp(0.1, 18.0);
+        let multiplier = if delta_y < 0.0 { 1.15_f64 } else { 0.87 }.powf(fine.max(0.01));
+        band.q = (f64::from(band.q) * multiplier).clamp(0.1, 18.0) as f32;
     }
 }
 
@@ -180,6 +185,180 @@ pub fn bands_in_rect(
         })
         .map(|(i, _)| i)
         .collect()
+}
+
+// ── Gesture resolution ──────────────────────────────────────────────────────
+//
+// Pro-Q 4's modifier set, resolved as pure functions so the meaning of a
+// chord is testable without a pointer. The event handlers below stay
+// dispatch-only: they read modifiers, ask here what the gesture means, and
+// apply it. That split is what makes "Alt+Ctrl scroll adjusts gain and range
+// together" a unit test rather than something you verify by hand in a DAW.
+//
+// `cmd` is Ctrl on Windows/Linux and Command on macOS — FabFilter's docs
+// write it as "Ctrl (Command on macOS)", and the handlers OR the two so a
+// single field carries it here.
+
+/// The modifier keys held during a gesture.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Mods {
+    pub alt: bool,
+    pub shift: bool,
+    /// Ctrl, or Command on macOS.
+    pub cmd: bool,
+}
+
+impl Mods {
+    #[must_use]
+    pub const fn new(alt: bool, shift: bool, cmd: bool) -> Self {
+        Self { alt, shift, cmd }
+    }
+}
+
+/// What the scroll wheel drives over a band.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WheelTarget {
+    /// Resonance — the unmodified default on a band with a bell shape.
+    Q,
+    /// Slope, for shapes where that is the meaningful width control.
+    Slope,
+    Gain,
+    /// The dynamic range the band may travel.
+    DynRange,
+    /// Gain and range together, so the band's floor stays put while its
+    /// ceiling moves.
+    GainAndRange,
+}
+
+/// Resolve a scroll gesture.
+///
+/// Unmodified scroll follows the band: a cut filter's meaningful width is its
+/// slope, everything else's is Q. The modifier layers on top of that.
+#[must_use]
+pub const fn wheel_target(mods: Mods, shape_uses_slope: bool) -> WheelTarget {
+    match (mods.alt, mods.cmd) {
+        (true, true) => WheelTarget::GainAndRange,
+        (true, false) => WheelTarget::DynRange,
+        (false, true) => WheelTarget::Gain,
+        (false, false) => {
+            if shape_uses_slope {
+                WheelTarget::Slope
+            } else {
+                WheelTarget::Q
+            }
+        }
+    }
+}
+
+/// What a click on a band's dot does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DotAction {
+    /// Select this band alone and begin dragging it.
+    Select,
+    /// Add to (or remove from) the current selection.
+    AddToSelection,
+    /// Extend the selection to cover everything between the anchor and here.
+    RangeSelect,
+    ToggleBypass,
+    CycleShape,
+    CycleSlope,
+}
+
+/// Resolve a click on a band dot.
+///
+/// Order matters, and the two-modifier chords have to be tested before their
+/// single-modifier prefixes — otherwise Ctrl+Alt would be swallowed by the
+/// bare-Alt arm and shape cycling would be unreachable.
+#[must_use]
+pub const fn dot_action(mods: Mods) -> DotAction {
+    match (mods.alt, mods.shift, mods.cmd) {
+        (true, false, true) => DotAction::CycleShape,
+        (true, true, false) => DotAction::CycleSlope,
+        (true, false, false) => DotAction::ToggleBypass,
+        (false, _, true) => DotAction::AddToSelection,
+        (false, true, false) => DotAction::RangeSelect,
+        _ => DotAction::Select,
+    }
+}
+
+/// The kind of band a create gesture produces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CreateMode {
+    Static,
+    Dynamic,
+    Spectral,
+}
+
+/// Resolve a create gesture on empty graph.
+#[must_use]
+pub const fn create_mode(mods: Mods) -> CreateMode {
+    match (mods.alt, mods.shift) {
+        (true, true) => CreateMode::Spectral,
+        (true, false) => CreateMode::Dynamic,
+        _ => CreateMode::Static,
+    }
+}
+
+/// How a drag on a band is interpreted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DragMode {
+    /// Frequency and gain together.
+    Free,
+    /// Frequency only.
+    FreqOnly,
+    /// Gain only.
+    GainOnly,
+    /// Vertical movement drives resonance instead of gain.
+    Resonance,
+}
+
+/// Resolve a drag.
+///
+/// Alt constrains to whichever axis the pointer has committed to — decided
+/// once from the travel so far, rather than re-decided every frame, which is
+/// what stops a constrained drag flipping axis mid-gesture. Below the
+/// threshold the drag is still free, so a constrained drag that has not moved
+/// yet does not lock to an arbitrary axis.
+#[must_use]
+pub fn drag_mode(mods: Mods, dx: f64, dy: f64) -> DragMode {
+    if mods.cmd {
+        return DragMode::Resonance;
+    }
+    if mods.alt {
+        const COMMIT: f64 = 3.0;
+        if dx.abs().max(dy.abs()) < COMMIT {
+            return DragMode::Free;
+        }
+        return if dx.abs() >= dy.abs() {
+            DragMode::FreqOnly
+        } else {
+            DragMode::GainOnly
+        };
+    }
+    DragMode::Free
+}
+
+/// Shift is the fine-tune modifier everywhere: scroll steps and drag travel
+/// are scaled by this.
+#[must_use]
+pub const fn fine_scale(mods: Mods) -> f64 {
+    if mods.shift { 0.25 } else { 1.0 }
+}
+
+/// One scroll notch of dynamic range, as a fraction of the range parameter's
+/// full 0..1 travel. The parameter spans −30..30 dB, so this is 1 dB a notch
+/// before fine-tuning.
+#[must_use]
+pub fn dyn_range_step(delta_y: f64, mods: Mods) -> f64 {
+    let dir = if delta_y < 0.0 { 1.0 } else { -1.0 };
+    dir * (1.0 / 60.0) * fine_scale(mods)
+}
+
+/// One scroll notch of gain, in dB.
+#[must_use]
+pub fn gain_step(delta_y: f64, mods: Mods) -> f64 {
+    let dir = if delta_y < 0.0 { 1.0 } else { -1.0 };
+    dir * fine_scale(mods)
 }
 
 #[cfg(test)]
@@ -240,16 +419,16 @@ mod tests {
             q: 1.0,
             ..Default::default()
         };
-        wheel_band(&mut band, -1.0, false);
+        wheel_band(&mut band, -1.0, false, 1.0);
         assert!(band.q > 1.0);
         band.shape = EqBandShape::LowCut;
         band.slope = Some(2.0);
         let q = band.q;
-        wheel_band(&mut band, -1.0, false);
+        wheel_band(&mut band, -1.0, false, 1.0);
         assert_eq!(band.slope, Some(3.0));
         assert_eq!(band.q, q);
         band.shape = EqBandShape::Bell;
-        wheel_band(&mut band, -1.0, true);
+        wheel_band(&mut band, -1.0, true, 1.0);
         assert_eq!(band.slope, Some(4.0));
         assert_eq!(band.q, q);
     }
@@ -280,5 +459,112 @@ mod tests {
             bands_in_rect(&bands, m, x - 5.0, y - 5.0, x + 5.0, y + 5.0),
             vec![0]
         );
+    }
+}
+
+/// The Pro-Q 4 modifier contract, pinned chord by chord.
+///
+/// Every case here is a line from FabFilter's own "Display and workflow" help
+/// page. They are worth testing exactly because they are conventions rather
+/// than derivations — nothing about the code says Alt+Ctrl scroll should move
+/// gain and range together, so only a test keeps it that way.
+#[cfg(test)]
+mod gesture_tests {
+    use super::{
+        CreateMode, DotAction, DragMode, Mods, WheelTarget, create_mode, dot_action, drag_mode,
+        dyn_range_step, fine_scale, gain_step, wheel_target,
+    };
+
+    const NONE: Mods = Mods::new(false, false, false);
+    const ALT: Mods = Mods::new(true, false, false);
+    const SHIFT: Mods = Mods::new(false, true, false);
+    const CMD: Mods = Mods::new(false, false, true);
+    const ALT_CMD: Mods = Mods::new(true, false, true);
+    const ALT_SHIFT: Mods = Mods::new(true, true, false);
+
+    #[test]
+    fn scroll_follows_the_band_when_unmodified() {
+        assert_eq!(wheel_target(NONE, false), WheelTarget::Q);
+        assert_eq!(wheel_target(NONE, true), WheelTarget::Slope);
+    }
+
+    #[test]
+    fn scroll_modifiers_match_the_manual() {
+        assert_eq!(wheel_target(CMD, false), WheelTarget::Gain);
+        assert_eq!(wheel_target(ALT, false), WheelTarget::DynRange);
+        assert_eq!(wheel_target(ALT_CMD, false), WheelTarget::GainAndRange);
+        // The modified meanings do not change with the band's shape — a cut
+        // filter's gain is still gain.
+        assert_eq!(wheel_target(CMD, true), WheelTarget::Gain);
+        assert_eq!(wheel_target(ALT, true), WheelTarget::DynRange);
+    }
+
+    #[test]
+    fn two_modifier_dot_chords_beat_their_prefixes() {
+        // The regression this guards: matching bare Alt first makes Ctrl+Alt
+        // and Alt+Shift unreachable, so shape and slope cycling silently
+        // become "toggle bypass".
+        assert_eq!(dot_action(ALT), DotAction::ToggleBypass);
+        assert_eq!(dot_action(ALT_CMD), DotAction::CycleShape);
+        assert_eq!(dot_action(ALT_SHIFT), DotAction::CycleSlope);
+    }
+
+    #[test]
+    fn plain_and_selection_dot_clicks() {
+        assert_eq!(dot_action(NONE), DotAction::Select);
+        assert_eq!(dot_action(CMD), DotAction::AddToSelection);
+        assert_eq!(dot_action(SHIFT), DotAction::RangeSelect);
+    }
+
+    #[test]
+    fn creating_a_band_carries_its_mode() {
+        assert_eq!(create_mode(NONE), CreateMode::Static);
+        assert_eq!(create_mode(ALT), CreateMode::Dynamic);
+        assert_eq!(create_mode(ALT_SHIFT), CreateMode::Spectral);
+        // Shift alone is fine-tune, not a create mode.
+        assert_eq!(create_mode(SHIFT), CreateMode::Static);
+    }
+
+    #[test]
+    fn alt_drag_commits_to_the_dominant_axis() {
+        // Below the commit threshold the drag stays free, so a constrained
+        // drag that has barely moved does not lock to a coin-flip axis.
+        assert_eq!(drag_mode(ALT, 1.0, 1.0), DragMode::Free);
+        assert_eq!(drag_mode(ALT, 20.0, 2.0), DragMode::FreqOnly);
+        assert_eq!(drag_mode(ALT, 2.0, 20.0), DragMode::GainOnly);
+        // And it stays committed as the drag continues along that axis.
+        assert_eq!(drag_mode(ALT, 40.0, 6.0), DragMode::FreqOnly);
+    }
+
+    #[test]
+    fn cmd_drag_is_resonance_and_outranks_constraint() {
+        assert_eq!(drag_mode(CMD, 0.0, 30.0), DragMode::Resonance);
+        assert_eq!(drag_mode(ALT_CMD, 30.0, 0.0), DragMode::Resonance);
+        assert_eq!(drag_mode(NONE, 30.0, 30.0), DragMode::Free);
+    }
+
+    #[test]
+    fn shift_is_fine_tune_everywhere() {
+        assert!((fine_scale(NONE) - 1.0).abs() < 1e-9);
+        assert!((fine_scale(SHIFT) - 0.25).abs() < 1e-9);
+        assert!((fine_scale(ALT_SHIFT) - 0.25).abs() < 1e-9);
+    }
+
+    #[test]
+    fn scroll_steps_go_up_when_the_wheel_goes_up() {
+        // Negative delta is "wheel away from the user" in the DOM, which must
+        // increase the value — getting this backwards is the classic inverted
+        // -scroll bug.
+        assert!(gain_step(-1.0, NONE) > 0.0);
+        assert!(gain_step(1.0, NONE) < 0.0);
+        assert!(dyn_range_step(-1.0, NONE) > 0.0);
+        assert!(dyn_range_step(1.0, NONE) < 0.0);
+
+        // One notch is 1 dB of gain, and 1 dB of a -30..30 range.
+        assert!((gain_step(-1.0, NONE) - 1.0).abs() < 1e-9);
+        assert!((dyn_range_step(-1.0, NONE) - 1.0 / 60.0).abs() < 1e-9);
+
+        // Fine-tune quarters both.
+        assert!((gain_step(-1.0, SHIFT) - 0.25).abs() < 1e-9);
     }
 }
