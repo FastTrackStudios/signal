@@ -1,5 +1,7 @@
 //! High-pass slope 7 (Db36, N=6 poles, 3 biquad sections).
 
+use crate::inline::InlineVec;
+
 use crate::design::biquad::Coeffs;
 use crate::design::cascade;
 use dsp_core::num;
@@ -8,7 +10,7 @@ use super::super::common::cascade_qs;
 
 use super::{highpass_s2_with_subfreq_scales, highpass_s2_with_w_eval_scale, interp_48k_table};
 
-pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> Vec<Coeffs> {
+pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> InlineVec<Coeffs> {
     highpass_slope7_qs(freq_hz, sample_rate, q)
         .into_iter()
         .enumerate()
@@ -666,8 +668,8 @@ fn highpass_slope7_section(
 /// meantime keep the Lagrange-per-section fallback that gets 60/108.
 ///
 /// See `docs/reports/proq4/re/hp_s8_all_sections_analysis.md`.
-fn highpass_slope7_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
-    let mut qs: Vec<f64> = cascade_qs(4, q_user).into_iter().rev().collect();
+fn highpass_slope7_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> InlineVec<f64> {
+    let mut qs: InlineVec<f64> = cascade_qs(4, q_user).into_iter().rev().collect();
     if (q_user - 0.5).abs() < 1.0e-12
         && let Some(elem) = qs.get_mut(0)
     {

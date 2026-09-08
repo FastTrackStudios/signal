@@ -1,5 +1,7 @@
 //! Bandpass cascade builders for Pro-Q 4 (s=2 through s=8).
 
+use crate::inline::InlineVec;
+
 use std::f64::consts::PI;
 
 use crate::design::biquad::Coeffs;
@@ -11,7 +13,7 @@ use super::{
 };
 
 /// Bandpass slope-2 helper: BLT-based cascade.
-fn bandpass_cascade_slope2(freq_hz: f64, q_user: f64, sample_rate: f64) -> Vec<Coeffs> {
+fn bandpass_cascade_slope2(freq_hz: f64, q_user: f64, sample_rate: f64) -> InlineVec<Coeffs> {
     use std::f64::consts::SQRT_2;
     let alpha = SQRT_2 / q_user;
     let t = (PI * freq_hz / sample_rate).tan();
@@ -55,7 +57,12 @@ fn bandpass_cascade_slope2(freq_hz: f64, q_user: f64, sample_rate: f64) -> Vec<C
 /// Section counts: 1, 1, 2, 6 for slopes 2, 4, 6, 8 (slope-8 reuses
 /// `notch_analog_sections`'s Butterworth N=6 LP→BS expansion).
 #[must_use]
-pub fn bandpass_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usize) -> Vec<Coeffs> {
+pub fn bandpass_cascade_proq4(
+    freq_hz: f64,
+    q: f64,
+    sample_rate: f64,
+    slope: usize,
+) -> InlineVec<Coeffs> {
     let q_user = q.max(1e-6);
     if slope == 2 {
         return bandpass_cascade_slope2(freq_hz, q_user, sample_rate);

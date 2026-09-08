@@ -289,10 +289,17 @@ fn AppShell() -> Element {
             enabled: bp.enabled.value() > 0.5,
             frequency: bp.freq_hz.value(),
             gain: bp.gain_db.value() * gain_scale,
-            q: bp.q.value(),
+            q: bp.q.value() * std::f32::consts::FRAC_1_SQRT_2,
+            slope: Some(bp.slope.value()),
             shape: int_to_shape(bp.filter_type.value()),
             solo: bp.solo.value() > 0.5,
-            stereo_mode: Default::default(),
+            stereo_mode: match bp.placement.value() {
+                1 => crate::eq_graph_model::StereoMode::Left,
+                2 => crate::eq_graph_model::StereoMode::Right,
+                3 => crate::eq_graph_model::StereoMode::Mid,
+                4 => crate::eq_graph_model::StereoMode::Side,
+                _ => crate::eq_graph_model::StereoMode::Stereo,
+            },
             name: bp.name.read().clone(),
         });
     }
@@ -567,9 +574,15 @@ fn AppShell() -> Element {
                                     ctx.begin_set_raw(bp.q.as_ptr());
                                     ctx.set_normalized_raw(
                                         bp.q.as_ptr(),
-                                        bp.q.preview_normalized(band.q),
+                                        bp.q.preview_normalized(band.q / std::f32::consts::FRAC_1_SQRT_2),
                                     );
                                     ctx.end_set_raw(bp.q.as_ptr());
+
+                                    if let Some(slope) = band.slope {
+                                        ctx.begin_set_raw(bp.slope.as_ptr());
+                                        ctx.set_normalized_raw(bp.slope.as_ptr(), bp.slope.preview_normalized(slope));
+                                        ctx.end_set_raw(bp.slope.as_ptr());
+                                    }
 
                                     let shape_int = shape_to_int(band.shape);
                                     ctx.begin_set_raw(bp.filter_type.as_ptr());

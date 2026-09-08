@@ -89,10 +89,10 @@ fn main() {
         pos += n;
     }
 
-    let mut engine = eq_dsp::engine::FtsEq::new(SR);
+    let mut engine = eq_dsp::host::CanonicalEq::new(SR);
     engine.set_band(
         0,
-        eq_dsp::engine::BandConfig {
+        eq_dsp::host::CanonicalBandConfig {
             used: true,
             enabled: true,
             freq_hz: 1000.0,
@@ -100,7 +100,7 @@ fn main() {
             q: 1.0,
             shape: 0,
             slope: 2.0,
-            placement: eq_dsp::runtime::band::Placement::Stereo,
+            placement: eq_dsp::Placement::Stereo,
             stream: 0,
         },
     );

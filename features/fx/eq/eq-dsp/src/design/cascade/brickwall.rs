@@ -9,6 +9,8 @@
 //! and `cargo run -p eq-dsp --example conformance_scan -- <dir>` is what
 //! reads them.
 
+use crate::inline::InlineVec;
+
 use dsp_core::num;
 
 use super::{Coeffs, PASSTHROUGH, PI, bell_s2_proq4, lagrange_synth_alt_path, trace_bell_inputs};
@@ -28,7 +30,7 @@ pub fn bell_brickwall_proq4(
     sample_rate: f64,
     n_sections: usize,
     slope_idx: Option<usize>,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     const W_POLE_BUCKETB_MAX: f64 = 3.135_309_468_282_613_5;
     use crate::math::zpk::Complex;
     use dsp_core::num;
@@ -197,7 +199,7 @@ pub fn bell_brickwall_proq4(
             None
         };
 
-    let mut sections = Vec::with_capacity(n_sections);
+    let mut sections = InlineVec::with_capacity(n_sections);
 
     for sec in 0..n_sections {
         let pair_idx = sec / 2;
@@ -1076,7 +1078,7 @@ pub fn bell_brickwall_proq4_n(
     gain_db: f64,
     sample_rate: f64,
     bp_order: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let q_user = q.max(1e-6);
     let secs = brickwall_per_section_table(bp_order, q_user, gain_db);
     secs.iter()
@@ -1093,7 +1095,11 @@ pub fn bell_brickwall_proq4_n(
 ///
 /// Recovered at fc=500 Hz (low-fc) by inverting `bell_s2_proq4` against
 /// captured per-section biquads in `lagrange_brickwall_full.csv`.
-pub fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -> Vec<(f64, f64)> {
+pub fn brickwall_per_section_table(
+    bp_order: usize,
+    q_user: f64,
+    gain_db: f64,
+) -> InlineVec<(f64, f64)> {
     // Q_user grid the recovery sweep covers.
     const QS: [f64; 4] = [0.5, 1.0, 4.0, 10.0];
 
@@ -1252,7 +1258,7 @@ pub fn brickwall_per_section_table(bp_order: usize, q_user: f64, gain_db: f64) -
         4 => 2,
         6 => 3,
         8 | 12 => 6,
-        _ => return Vec::new(),
+        _ => return InlineVec::new(),
     };
 
     let g_pos = gain_db >= 0.0;
@@ -1346,7 +1352,7 @@ pub fn bell_brickwall_cascade(
     gain_db: f64,
     sample_rate: f64,
     n: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     // ── Pro-Q 4 Bell brick-wall cascade (slope ≥ 4) ────────────────────────
     // LP prototype generation per runtime-decoded formulas (lp_prototype_formulas.md):
     //   Each LP section has:
@@ -1413,7 +1419,7 @@ pub fn bell_brickwall_cascade(
         if s1.1 >= 0.0 { s1 } else { s2 }
     };
 
-    let mut sections = Vec::with_capacity(n);
+    let mut sections = InlineVec::with_capacity(n);
     for k in 0..n {
         let theta = PI * num::count_to_f64(2 * k + 1) / num::count_to_f64(2 * n_bp);
         let bp_pole_a = lp_to_bp_local(pole_mag, theta);

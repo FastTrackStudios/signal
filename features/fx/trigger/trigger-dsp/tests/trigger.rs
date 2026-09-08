@@ -445,7 +445,7 @@ fn chain_sidechain_hpf_blocks_bass_trigger() {
     // With HPF at 500Hz: bass should be filtered from sidechain
     let mut chain_hpf = make_chain();
     chain_hpf.sampler.set_single_sample(tone_sample());
-    chain_hpf.set_sc_hpf(500.0);
+    chain_hpf.set_sc_hpf(500.0).unwrap();
     chain_hpf.update(config());
 
     // Fade the tone in over 20 ms. Starting a full-amplitude sine at
@@ -493,7 +493,7 @@ fn chain_sidechain_hpf_blocks_bass_trigger() {
 #[test]
 fn chain_sidechain_listen_outputs_filtered() {
     let mut chain = make_chain();
-    chain.set_sc_hpf(1000.0);
+    chain.set_sc_hpf(1000.0).unwrap();
     chain.sc_listen = true;
     chain.update(config());
 

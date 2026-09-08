@@ -2,6 +2,8 @@
 //!
 //! See `docs/reports/proq4/re/bandpass_formula.md`.
 
+use crate::inline::{InlineVec, inline_vec};
+
 use crate::design::biquad::Coeffs;
 use crate::design::cascade;
 
@@ -20,10 +22,10 @@ pub(super) fn mzt_bandpass_simple_cascade(
     q: f64,
     sample_rate: f64,
     order: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n.max(1);
     if n == 1 {
-        return vec![cascade::bandpass_s2_proq4(freq_hz, q, sample_rate)];
+        return inline_vec![cascade::bandpass_s2_proq4(freq_hz, q, sample_rate)];
     }
     // Slope ≥ 4: analog-form path-A pipeline from
     // `docs/reports/proq4/re/bandpass_formula.md`.  BP shares the Notch

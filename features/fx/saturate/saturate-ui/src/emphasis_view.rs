@@ -110,6 +110,7 @@ pub fn EmphasisView(
                 gain: bp.gain_db.value(),
                 q: bp.q.value(),
                 shape: index_to_shape(bp.shape.value()),
+                slope: None,
                 solo: false,
                 stereo_mode: Default::default(),
                 name: format!("E{}", i + 1),

@@ -238,6 +238,8 @@ mod tests {
         "lookahead_ms",
         "style",
         "profile",
+        "la2a_peak_reduction",
+        "la2a_gain",
     ];
 
     #[test]
@@ -302,10 +304,11 @@ mod tests {
         );
 
         let la2a = map_control_value(&LA2A, "peak_reduction", 1.0).unwrap();
-        assert_eq!(la2a.len(), 5);
-        assert!(la2a.contains(&("threshold_db", -48.0)));
-        assert!(la2a.contains(&("ratio", 6.0)));
-        assert!(la2a.contains(&("drive", 0.25)));
+        assert_eq!(la2a, vec![("la2a_peak_reduction", 1.0)]);
+        assert_eq!(
+            map_control_value(&LA2A, "gain", 0.4),
+            Some(vec![("la2a_gain", 0.4)])
+        );
 
         let input = map_control_value(&UREI_1176, "input", 1.0).unwrap();
         assert_eq!(
@@ -352,8 +355,8 @@ mod tests {
                 preset.profile_id
             );
             assert!(
-                preset.params.len() >= 8,
-                "{} should be a useful parameter snapshot",
+                !preset.params.is_empty(),
+                "{} must contain model parameters",
                 preset.id
             );
 

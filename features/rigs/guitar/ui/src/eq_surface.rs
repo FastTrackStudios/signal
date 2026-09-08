@@ -16,7 +16,7 @@ use std::fmt::Write;
 
 use eq_ui::cheatsheet::GUITAR_ELECTRIC;
 use eq_ui::eq_graph_interaction::{
-    GraphMapper, drag_gain_for_shape, filter_type_for_position, nearest_band, wheel_q_for_shape,
+    GraphMapper, drag_gain_for_shape, filter_type_for_position, nearest_band, wheel_band,
 };
 use eq_ui::eq_graph_model::{EqBand, EqBandShape, freq_to_color};
 use eq_ui::eq_graph_svg::{generate_all_eq_curves, generate_freq_labels, generate_grid_elements};
@@ -72,6 +72,7 @@ fn bands_of(block: &LiveBlock) -> Vec<EqBand> {
                 gain: get(&format!("b{b}_gain"), 0.0),
                 q: get(&format!("b{b}_q"), 0.707),
                 shape: shape_from_index(get(&format!("b{b}_shape"), 0.0) as usize),
+                slope: Some(get(&format!("b{b}_slope"), 2.0)),
                 solo: false,
                 stereo_mode: Default::default(),
                 name: String::new(),
@@ -270,13 +271,13 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                         if !b.used {
                             return;
                         }
-                        let q = wheel_q_for_shape(
-                            b.shape,
-                            b.q,
-                            e.delta().strip_units().y,
-                            false,
-                        );
-                        send(&rig, &block_id, i, "q", q);
+                        let mut updated = b.clone();
+                        wheel_band(&mut updated, e.delta().strip_units().y, false);
+                        if b.shape.uses_slope() {
+                            send(&rig, &block_id, i, "slope", updated.slope.unwrap_or(2.0));
+                        } else {
+                            send(&rig, &block_id, i, "q", updated.q);
+                        }
                     }
                 },
 

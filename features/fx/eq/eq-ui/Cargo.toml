@@ -38,6 +38,7 @@ native = [
 gpu-tests = []
 
 [dependencies]
+eq-dsp = { workspace = true }
 audiocore-core = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 fts-audio-ui = { workspace = true }

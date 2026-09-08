@@ -16,7 +16,9 @@ use nice_plug_dioxus::widget::{
 };
 
 use super::eq_graph_model::{EqBand, EqGraphRenderState, GraphConfig, freq_to_color};
-use super::eq_graph_response::{calculate_band_response, calculate_combined_response};
+use super::eq_graph_response::{
+    calculate_band_response, graph_magnitude, prepare_band, prepare_graph,
+};
 use spectrum_analyzer::ui::{paint_collisions, paint_spectrum_fill, paint_spectrum_line};
 
 // ── Color helpers ───────────────────────────────────────────────────
@@ -501,8 +503,14 @@ fn paint_band_curve(
     // Start fill at zero line
     fill_path.move_to((cm.freq_to_x(frequencies[0]), zero_y));
 
+    let filter = prepare_band(band, cfg.sample_rate);
     for (i, &freq) in frequencies.iter().enumerate() {
-        let db = calculate_band_response(band, freq, cfg.sample_rate);
+        let db = filter
+            .as_ref()
+            .map_or(f64::NAN, |f| f.magnitude_db(freq).unwrap_or(f64::NAN));
+        if !db.is_finite() {
+            continue;
+        }
         let x = cm.freq_to_x(freq);
         let y = cm.db_to_y(db);
 
@@ -581,8 +589,14 @@ fn paint_combined_curve(
     let mut fill_path = BezPath::new();
     fill_path.move_to((cm.freq_to_x(frequencies[0]), zero_y));
 
+    let prepared = prepare_graph(bands, cfg.sample_rate);
     for (i, &freq) in frequencies.iter().enumerate() {
-        let db = calculate_combined_response(bands, freq, cfg.sample_rate);
+        let db = prepared
+            .as_ref()
+            .map_or(f64::NAN, |eq| graph_magnitude(eq, freq));
+        if !db.is_finite() {
+            continue;
+        }
         let x = cm.freq_to_x(freq);
         let y = cm.db_to_y(db);
         if i == 0 {

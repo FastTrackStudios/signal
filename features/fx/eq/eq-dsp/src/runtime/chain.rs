@@ -12,6 +12,7 @@ pub const MAX_BANDS: usize = 24;
 pub struct EqChain {
     bands: Vec<Band>,
     sample_rate: f64,
+    capacity: usize,
 }
 
 impl EqChain {
@@ -20,21 +21,31 @@ impl EqChain {
         Self {
             bands: Vec::new(),
             sample_rate: 48000.0,
+            capacity: MAX_BANDS,
         }
     }
 
-    /// Add a new band and return its index.
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
+        Self {
+            bands: Vec::with_capacity(capacity),
+            capacity,
+            sample_rate: 48000.0,
+        }
+    }
+
+    /// Add a band, returning an error without mutation when capacity is full.
     ///
-    /// Returns the last valid index if the chain is already at `MAX_BANDS`.
-    pub fn add_band(&mut self) -> usize {
-        if self.bands.len() >= MAX_BANDS {
-            return self.bands.len().saturating_sub(1);
+    /// # Errors
+    /// Returns an error if configuration or buffer dimensions are invalid.
+    pub fn add_band(&mut self) -> Result<usize, crate::Error> {
+        if self.bands.len() >= self.capacity {
+            return Err(crate::Error::CapacityExceeded);
         }
         let idx = self.bands.len();
         let mut band = Band::new();
         band.update(self.sample_rate);
         self.bands.push(band);
-        idx
+        Ok(idx)
     }
 
     /// Get a mutable reference to a band by index.
@@ -105,31 +116,25 @@ impl EqChain {
                 if band.is_idle() {
                     continue;
                 }
+                band.advance_frame();
                 match band.placement {
                     Placement::Stereo => {
-                        *li = band.tick(*li, 0);
-                        *ri = band.tick(*ri, 1);
+                        *li = band.process_channel(*li, 0);
+                        *ri = band.process_channel(*ri, 1);
                     }
-                    Placement::Left => *li = band.tick(*li, 0),
-                    // Channel slot 0, not 1. A Right band only ever sees one
-                    // channel, and `Band::tick` advances its enable ramp on
-                    // slot 0 alone — driven on slot 1 the ramp never left
-                    // zero, so **every static Right-placement band in the
-                    // library was silently inert**. Its own filter state has
-                    // nowhere else to live either, so slot 0 is where it
-                    // belongs.
-                    Placement::Right => *ri = band.tick(*ri, 0),
+                    Placement::Left => *li = band.process_channel(*li, 0),
+                    Placement::Right => *ri = band.process_channel(*ri, 1),
                     Placement::Mid => {
                         let m = 0.5 * (*li + *ri);
                         let s = 0.5 * (*li - *ri);
-                        let m = band.tick(m, 0);
+                        let m = band.process_channel(m, 0);
                         *li = m + s;
                         *ri = m - s;
                     }
                     Placement::Side => {
                         let m = 0.5 * (*li + *ri);
                         let s = 0.5 * (*li - *ri);
-                        let s = band.tick(s, 0);
+                        let s = band.process_channel(s, 0);
                         *li = m + s;
                         *ri = m - s;
                     }
@@ -164,7 +169,9 @@ mod placement_tests {
         let sr = 48_000.0;
         let mut chain = EqChain::new();
         chain.set_sample_rate(sr);
-        let idx = chain.add_band();
+        let idx = chain
+            .add_band()
+            .expect("chain capacity reserved at construction");
         if let Some(b) = chain.band_mut(idx) {
             b.filter_type = FilterType::Highpass;
             b.freq_hz = 1000.0;
@@ -202,7 +209,9 @@ mod placement_tests {
     fn side_band_leaves_mono_untouched() {
         let mut c = EqChain::new();
         c.set_sample_rate(48000.0);
-        let idx = c.add_band();
+        let idx = c
+            .add_band()
+            .expect("chain capacity reserved at construction");
         if let Some(b) = c.band_mut(idx) {
             b.filter_type = FilterType::Peak;
             b.freq_hz = 1000.0;
@@ -233,7 +242,9 @@ mod placement_tests {
     fn mid_band_boosts_mono() {
         let mut chain = EqChain::new();
         chain.set_sample_rate(48000.0);
-        let idx = chain.add_band();
+        let idx = chain
+            .add_band()
+            .expect("chain capacity reserved at construction");
         if let Some(b) = chain.band_mut(idx) {
             b.filter_type = FilterType::Peak;
             b.freq_hz = 1000.0;
@@ -278,8 +289,18 @@ mod tests {
     #[test]
     fn add_band_returns_index() {
         let mut chain = EqChain::new();
-        assert_eq!(chain.add_band(), 0);
-        assert_eq!(chain.add_band(), 1);
+        assert_eq!(
+            chain
+                .add_band()
+                .expect("chain capacity reserved at construction"),
+            0
+        );
+        assert_eq!(
+            chain
+                .add_band()
+                .expect("chain capacity reserved at construction"),
+            1
+        );
         assert_eq!(chain.num_bands(), 2);
     }
 
@@ -287,19 +308,21 @@ mod tests {
     fn max_bands_limit() {
         let mut chain = EqChain::new();
         for _ in 0..MAX_BANDS {
-            chain.add_band();
+            chain
+                .add_band()
+                .expect("chain capacity reserved at construction");
         }
         assert_eq!(chain.num_bands(), MAX_BANDS);
-        // Adding one more should return last valid index
-        let idx = chain.add_band();
-        assert_eq!(idx, MAX_BANDS - 1);
+        assert_eq!(chain.add_band(), Err(crate::Error::CapacityExceeded));
         assert_eq!(chain.num_bands(), MAX_BANDS);
     }
 
     #[test]
     fn band_mut_configures_band() {
         let mut chain = EqChain::new();
-        let idx = chain.add_band();
+        let idx = chain
+            .add_band()
+            .expect("chain capacity reserved at construction");
         if let Some(band) = chain.band_mut(idx) {
             band.filter_type = FilterType::Lowpass;
             band.freq_hz = 2000.0;
@@ -315,8 +338,12 @@ mod tests {
     #[test]
     fn set_sample_rate_updates_all() {
         let mut chain = EqChain::new();
-        chain.add_band();
-        chain.add_band();
+        chain
+            .add_band()
+            .expect("chain capacity reserved at construction");
+        chain
+            .add_band()
+            .expect("chain capacity reserved at construction");
         // Should not panic
         chain.set_sample_rate(96000.0);
     }
@@ -324,7 +351,9 @@ mod tests {
     #[test]
     fn reset_does_not_panic() {
         let mut chain = EqChain::new();
-        chain.add_band();
+        chain
+            .add_band()
+            .expect("chain capacity reserved at construction");
         chain.reset();
     }
 }

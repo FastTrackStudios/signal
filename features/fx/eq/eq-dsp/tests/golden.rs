@@ -36,9 +36,9 @@ const LEN: usize = 8192;
 /// The shapes that produce finite output and can therefore have a reference.
 ///
 /// `shelf_alt` (11) is absent because it is unstable at every Q tested — see
-/// [`shelf_alt_is_unstable_at_every_q`]. `band_shelf` (10) is present but is
-/// only pinned at Q >= 0.707; see [`band_shelf_is_unstable_below_q_0_707`].
-const SHAPES: [(&str, u32); 12] = [
+/// [`unstable_designs_retain_the_previous_stable_cascade`]. `band_shelf` (10) is present but is
+/// only pinned at Q >= 0.707; see [`unstable_designs_retain_the_previous_stable_cascade`].
+const SHAPES: [(&str, u32); 11] = [
     ("bell", 0),
     ("low_shelf", 1),
     ("high_shelf", 2),
@@ -50,7 +50,6 @@ const SHAPES: [(&str, u32); 12] = [
     ("flat_tilt", 8),
     ("all_pass", 9),
     ("band_shelf", 10),
-    ("band_pass_variant", 12),
 ];
 
 /// Shapes whose filter design goes unstable. Both are marked "previously
@@ -287,157 +286,55 @@ fn block_size_does_not_change_the_output() {
     }
 }
 
-/// `shelf_alt` (Pro-Q shape 12) never produces finite output.
-///
-/// Measured across Q from 0.025 to 40 and gains from -30 to +30 dB: every
-/// combination diverges, most to `inf` and the rest to ~1.4e31. The shape is
-/// reachable from a preset — `BandConfig::shape` is a plain `u32` that the
-/// parameter layer passes through — so a factory patch using Pro-Q type 12
-/// renders as silence or a full-scale burst.
-///
-/// Not fixed here: this pass is a refactor, and repairing a filter design is a
-/// change to what the EQ sounds like. Pinned so it stays visible.
-///
-/// When it is fixed this test fails. Move `shelf_alt` into [`SHAPES`] and
-/// record its vectors.
+/// Unsupported designs must never install unstable poles in the audio path.
 #[test]
-fn shelf_alt_is_unstable_at_every_q() {
+fn unstable_designs_retain_the_previous_stable_cascade() {
     let input = signal::widen(&signal::transients(LEN, GENERATOR_RATE));
-    let mut finite = Vec::new();
-    for q in [0.025_f64, 0.1, 0.5, 0.707, 1.2, 8.0, 40.0] {
-        let mut eq = prepared();
-        let mut cfg = band(SHELF_ALT, 6.0, 2.0);
-        cfg.q = q;
-        eq.set_band(0, cfg);
-        let out = render(&mut eq, &input, &input);
-        let peak = out.iter().fold(0.0_f64, |m, s| m.max(s.abs()));
-        if peak.is_finite() && peak < 1e4 {
-            finite.push(q);
+    for (shape, qs) in [
+        (SHELF_ALT, &[0.025, 0.1, 0.5, 0.707, 1.2, 8.0, 40.0][..]),
+        (BAND_SHELF, &[0.025, 0.1, 0.3, 0.5][..]),
+    ] {
+        for &q in qs {
+            let mut eq = prepared();
+            let mut cfg = band(shape, 6.0, 2.0);
+            cfg.q = q;
+            eq.set_band(0, cfg);
+            assert_eq!(
+                eq.last_design_error(0),
+                Some(if shape == SHELF_ALT {
+                    eq_dsp::Error::UnsupportedFilter
+                } else {
+                    eq_dsp::Error::UnstableFilter
+                })
+            );
+            let out = render(&mut eq, &input, &input);
+            assert!(out.iter().all(|x| x.is_finite() && x.abs() < 10.0));
         }
     }
-    assert!(
-        finite.is_empty(),
-        "shelf_alt is now stable at Q {finite:?} — the design was fixed. Move it \
-         into SHAPES, record its reference vectors, and delete this test."
-    );
 }
 
-/// `band_shelf` (Pro-Q shape 10) diverges at low Q.
-///
-/// Mapped across Q 0.1 .. 40 and 20 Hz .. 20 kHz at +12 dB:
-///
-/// ```text
-///   Q\Hz      20      50     120     300    1000    4000   12000   20000
-///     0.1       X       X       X       X       X       X       X       X
-///     0.3       X       X       X       X       X       X       X       X
-///     0.5       X       X       X       X       X       X       X       X
-///   0.707       X       .       .       .       .       .       .       .
-///       1       .       .       .       .       .       .       .       .
-/// ```
-///
-/// So: unstable at Q <= 0.5 at every frequency, and marginally at the default
-/// Q of 0.707 at the very bottom of the range. Broad settings are exactly
-/// where a shelf is most useful, and the parameter accepts them.
-///
-/// Same disposition as `shelf_alt`: pinned, not fixed.
+/// Host slope indices beyond the supported range saturate at the steepest
+/// choice. They never wrap around to a shallow cut.
 #[test]
-fn band_shelf_is_unstable_below_q_0_707() {
-    let input = signal::widen(&signal::transients(LEN, GENERATOR_RATE));
-    let peak_at = |q: f64| {
-        let mut eq = prepared();
-        let mut cfg = band(BAND_SHELF, 6.0, 2.0);
-        cfg.q = q;
-        eq.set_band(0, cfg);
-        let out = render(&mut eq, &input, &input);
-        out.iter().fold(0.0_f64, |m, s| m.max(s.abs()))
-    };
-    for q in [0.025_f64, 0.1, 0.3, 0.5] {
-        let peak = peak_at(q);
-        assert!(
-            !(peak.is_finite() && peak < 1e4),
-            "band_shelf is now stable at Q {q} (peak {peak}) — widen the pinned \
-             range and re-record."
-        );
-    }
-    for q in [1.0_f64, 1.2, 8.0] {
-        let peak = peak_at(q);
-        assert!(
-            peak.is_finite() && peak < 1e4,
-            "band_shelf broke at Q {q}: {peak}"
-        );
-    }
-}
-
-/// Slope stops increasing above 8 and wraps back to the slope-2 response.
-///
-/// `BandConfig::slope` is documented as continuous — "`slope * 6` dB/oct up to
-/// 36, then the 48 / 72 / 96 / Brickwall steps ... a band can genuinely sit at
-/// 7.5 or 15.25 dB/oct — 137 bands in the factory library do". Measured
-/// attenuation an octave below a 1 kHz low cut says otherwise:
-///
-/// ```text
-///   slope  1    ->  -12.3 dB
-///   slope  2    ->  -23.9
-///   slope  2.5  ->  -30.8
-///   slope  4    ->  -48.1
-///   slope  6    ->  -72.2
-///   slope  7.5  -> -144.5
-///   slope  8    -> -144.5
-///   slope 12    ->  -23.9   <-- back to the slope-2 curve
-///   slope 15.25 ->  -23.9
-///   slope 16    ->  -23.9
-/// ```
-///
-/// Two separate problems. The fractional ladder is not continuous — 7.5 gives
-/// exactly what 8 gives, so the remainder is being rounded rather than
-/// realized as poles and zeros. And anything from 12 upward silently produces
-/// the *shallowest* useful slope instead of the steepest, which means a
-/// factory preset asking for 72 dB/oct gets 12.
-///
-/// Not fixed here — this is a filter-design change, not a refactor. Pinned so
-/// a rewrite cannot quietly alter it and so it stays visible.
-#[test]
-fn slope_is_not_continuous_and_wraps_above_eight() {
+fn excessive_host_slopes_saturate_at_brickwall() {
     let mut eq = prepared();
-    let att = |eq: &mut FtsEq, slope: f64| {
+    eq.set_band(0, band(3, 0.0, 10.0));
+    let steepest = eq.static_magnitude_db(250.0);
+    for slope in [12.0, 15.25, 16.0] {
         eq.set_band(0, band(3, 0.0, slope));
-        eq.static_magnitude_db(250.0)
-    };
-    let shallow = att(&mut eq, 2.0);
-    // The fractional step does nothing: 7.5 lands exactly on 8.
-    assert_eq!(att(&mut eq, 7.5).to_bits(), att(&mut eq, 8.0).to_bits());
-    // And the steep settings collapse back onto the slope-2 curve.
-    for slope in [12.0_f64, 15.25, 16.0] {
-        assert_eq!(
-            att(&mut eq, slope).to_bits(),
-            shallow.to_bits(),
-            "slope {slope} no longer wraps to the slope-2 response — the design \
-             was fixed. Re-record the slope vectors and delete this test."
-        );
+        assert_eq!(eq.static_magnitude_db(250.0).to_bits(), steepest.to_bits());
     }
 }
 
-/// `band_pass_variant` (Pro-Q shape 5) is flat — it does not filter.
-///
-/// Its magnitude is 0 dB at every frequency and its impulse response is
-/// byte-identical to `all_pass`. Flat is correct for an allpass; for a
-/// bandpass it means the shape falls through to the allpass path and never
-/// applies its own design. Like the two unstable shapes, it is marked
-/// "previously design-only" in `FilterShape`.
+/// An unidentified shape is rejected rather than substituted with an allpass.
 #[test]
-fn band_pass_variant_does_not_filter() {
-    let mut variant = prepared();
-    variant.set_band(0, band(12, 0.0, 2.0));
-    let mut allpass = prepared();
-    allpass.set_band(0, band(9, 0.0, 2.0));
-    for hz in [100.0_f64, 1_000.0, 5_000.0, 15_000.0] {
-        assert_eq!(
-            variant.static_magnitude_db(hz).to_bits(),
-            allpass.static_magnitude_db(hz).to_bits(),
-            "band_pass_variant now differs from all_pass at {hz} Hz — it was \
-             given a real design. Re-record its vectors and delete this test."
-        );
-    }
+fn unsupported_bandpass_variant_is_rejected() {
+    let mut eq = prepared();
+    eq.set_band(0, band(12, 0.0, 2.0));
+    assert_eq!(
+        eq.last_design_error(0),
+        Some(eq_dsp::Error::UnsupportedFilter)
+    );
 }
 
 #[test]

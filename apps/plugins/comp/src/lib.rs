@@ -42,12 +42,14 @@ const _: () = assert!(comp_ui::params::SC_EQ_BANDS == comp::chain::SC_EQ_BANDS);
 struct CompStage {
     chain: CompChain,
     sample_rate: f64,
+    model_controls: Option<comp::CompressorConfig>,
 }
 
 impl CompStage {
     fn new() -> Self {
         Self {
             chain: CompChain::new(),
+            model_controls: None,
             sample_rate: 48_000.0,
         }
     }
@@ -55,6 +57,28 @@ impl CompStage {
     /// Push one stage's params into its chain (no allocation; every setter
     /// early-outs on an unchanged value).
     fn sync(&mut self, p: &CompStageParams) {
+        // The LA-2A face selects a DSP model and writes native dial positions.
+        // Other profiles still use the extended host processor.
+        if p.profile.value() == 2 {
+            let mut controls =
+                comp::CompressorConfig::new(comp::Model::La2aGray(comp::La2aControls {
+                    peak_reduction: f64::from(p.la2a_peak_reduction.value()),
+                    gain: f64::from(p.la2a_gain.value()),
+                }));
+            controls.mix = f64::from(p.mix.value());
+            controls.stereo_link = f64::from(p.stereo_link.value());
+            if self.model_controls != Some(controls) {
+                if let Ok(spec) = comp::ProcessSpec::new(self.sample_rate, 1)
+                    && let Ok(prepared) = controls.prepare(spec)
+                {
+                    self.chain.set_model(&prepared);
+                    self.model_controls = Some(controls);
+                }
+            }
+        } else {
+            self.chain.clear_model();
+            self.model_controls = None;
+        }
         let c = &mut self.chain.comp;
         c.set_threshold(f64::from(p.threshold_db.value()));
         c.set_ratio(f64::from(p.ratio.value()));
@@ -98,8 +122,8 @@ impl CompStage {
         }));
 
         // Chain-level params: the sidechain setters early-out on an unchanged
-        // frequency; `set_lookahead` only reallocates when the sample count
-        // moves, so the buffer alloc happens on an actual edit.
+        // frequency. The maximum lookahead storage was reserved at activation,
+        // so delay edits reuse it without allocating in the callback.
         self.chain
             .set_sidechain_freq(f64::from(p.sidechain_freq.value()));
         self.chain
@@ -254,7 +278,9 @@ impl Plugin for FtsComp {
         for i in 0..MAX_STAGES {
             if let Some(stage) = self.pool.stage_mut(i) {
                 stage.sample_rate = self.sample_rate;
+                stage.model_controls = None;
                 stage.chain.update_sample_rate(self.sample_rate);
+                stage.chain.reserve_lookahead(MAX_LOOKAHEAD_MS);
             }
         }
         // Worst case each lane could compensate: every stage on one lane at
@@ -335,7 +361,7 @@ impl Plugin for FtsComp {
         let gr_db = self
             .pool
             .stage(focused)
-            .map_or(0.0, |s| s.chain.comp.gain_reduction_db() as f32);
+            .map_or(0.0, |s| s.chain.gain_reduction_db() as f32);
         self.ui_state
             .gain_reduction_db
             .store(gr_db, Ordering::Relaxed);

@@ -9,7 +9,7 @@
 use std::fmt::Write;
 
 use super::eq_graph_model::EqBand;
-use super::eq_graph_response::{calculate_band_response, calculate_combined_response};
+use super::eq_graph_response::{graph_magnitude, prepare_band, prepare_graph};
 
 /// All EQ curve paths (combined and per-band).
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -58,9 +58,14 @@ pub fn generate_all_eq_curves(
 
     let zero_y = db_to_y(0.0);
 
+    let prepared = prepare_graph(bands, sample_rate);
     let combined_response: Vec<f64> = frequencies
         .iter()
-        .map(|&freq| calculate_combined_response(bands, freq, sample_rate))
+        .map(|&freq| {
+            prepared
+                .as_ref()
+                .map_or(f64::NAN, |eq| graph_magnitude(eq, freq))
+        })
         .collect();
 
     let (combined_stroke, combined_fill) =
@@ -72,9 +77,14 @@ pub fn generate_all_eq_curves(
             continue;
         }
 
+        let filter = prepare_band(band, sample_rate);
         let band_response: Vec<f64> = frequencies
             .iter()
-            .map(|&freq| calculate_band_response(band, freq, sample_rate))
+            .map(|&freq| {
+                filter
+                    .as_ref()
+                    .map_or(f64::NAN, |f| f.magnitude_db(freq).unwrap_or(f64::NAN))
+            })
             .collect();
 
         let (stroke, fill) =
@@ -101,10 +111,13 @@ where
     G: Fn(f64) -> f64,
 {
     let mut stroke_path = String::new();
-    for (i, (&freq, &db)) in frequencies.iter().zip(response_db.iter()).enumerate() {
+    for (&freq, &db) in frequencies.iter().zip(response_db.iter()) {
+        if !db.is_finite() {
+            continue;
+        }
         let x = freq_to_x(freq);
         let y = db_to_y(db);
-        if i == 0 {
+        if stroke_path.is_empty() {
             let _ = write!(stroke_path, "M{x:.2} {y:.2}");
         } else {
             let _ = write!(stroke_path, "L{x:.2} {y:.2}");
@@ -116,6 +129,9 @@ where
     let _ = write!(fill_path, "M{first_x:.2} {zero_y:.2}");
 
     for (&freq, &db) in frequencies.iter().zip(response_db.iter()) {
+        if !db.is_finite() {
+            continue;
+        }
         let x = freq_to_x(freq);
         let y = db_to_y(db);
         let _ = write!(fill_path, "L{x:.2} {y:.2}");
@@ -153,9 +169,14 @@ pub fn generate_eq_curve_path(
         })
         .collect();
 
+    let prepared = prepare_graph(bands, sample_rate);
     let response_db: Vec<f64> = frequencies
         .iter()
-        .map(|&freq| calculate_combined_response(bands, freq, sample_rate))
+        .map(|&freq| {
+            prepared
+                .as_ref()
+                .map_or(f64::NAN, |eq| graph_magnitude(eq, freq))
+        })
         .collect();
 
     let freq_to_x = |freq: f64| -> f64 {

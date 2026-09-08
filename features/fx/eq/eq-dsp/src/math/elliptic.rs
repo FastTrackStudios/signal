@@ -73,8 +73,8 @@ pub fn elliptic_sn(u_input: f64, modulus: f64) -> f64 {
     let m_param = modulus * modulus;
 
     // Build AGM sequences.
-    let mut a_seq = Vec::with_capacity(MAX_ITER);
-    let mut c_seq = Vec::with_capacity(MAX_ITER);
+    let mut a_seq = smallvec::SmallVec::<[f64; MAX_ITER]>::new();
+    let mut c_seq = smallvec::SmallVec::<[f64; MAX_ITER]>::new();
 
     let mut agm_a = 1.0;
     let mut agm_b = (1.0 - m_param).sqrt();
@@ -174,8 +174,8 @@ pub fn elliptic_sncndn(u_input: f64, modulus: f64) -> (f64, f64, f64) {
     }
 
     let m_param = modulus * modulus;
-    let mut a_seq = Vec::with_capacity(MAX_ITER);
-    let mut c_seq = Vec::with_capacity(MAX_ITER);
+    let mut a_seq = smallvec::SmallVec::<[f64; MAX_ITER]>::new();
+    let mut c_seq = smallvec::SmallVec::<[f64; MAX_ITER]>::new();
     let mut agm_a = 1.0;
     let mut agm_b = (1.0 - m_param).sqrt();
     a_seq.push(agm_a);

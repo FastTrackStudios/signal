@@ -163,7 +163,7 @@ pub struct FitReport<P> {
     pub iterations: usize,
 }
 
-pub fn fit_response<P, F>(
+pub fn fit_response<P, F, S>(
     initial: P,
     target: &ResponseTarget,
     options: FitOptions,
@@ -171,10 +171,11 @@ pub fn fit_response<P, F>(
 ) -> FitReport<P>
 where
     P: CalibrationParameters,
-    F: Fn(&P) -> Vec<Coeffs>,
+    F: Fn(&P) -> S,
+    S: AsRef<[Coeffs]>,
 {
     let mut current = initial;
-    let mut current_error = target.evaluate_sections(&build_sections(&current));
+    let mut current_error = target.evaluate_sections(build_sections(&current).as_ref());
     let mut iterations_run = 0;
 
     for iteration in 0..options.iterations {
@@ -199,7 +200,7 @@ where
 
                 let mut candidate = current.clone();
                 candidate.set_scalar(index, candidate_value);
-                let candidate_error = target.evaluate_sections(&build_sections(&candidate));
+                let candidate_error = target.evaluate_sections(build_sections(&candidate).as_ref());
                 if candidate_error.rms_db < best_error.rms_db {
                     best_value = candidate_value;
                     best_error = candidate_error;
@@ -323,6 +324,7 @@ mod tests {
         ));
         let report = fit_response(initial, &target, FitOptions::default(), |params| {
             design::design_filter(FilterType::Peak, 1000.0, 1.0, params.gain, 48_000.0, 2)
+                .into_vec()
         });
 
         assert!(report.error.rms_db < before.rms_db);

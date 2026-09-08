@@ -90,11 +90,9 @@ impl GainCurve {
     pub fn update_coefficients(&mut self) {
         // Simplified coefficient computation from attack/release times
         // rather than the original plugin's full coefficient resolver.
-        let base_attack = (-2.0 / (self.sample_rate * self.attack_ms / 1000.0)).exp();
-        let base_release = (-2.0 / (self.sample_rate * self.release_ms / 1000.0)).exp();
 
         // Apply style-specific multipliers from the current model:
-        // FET: 0.9x attack (faster), 0.95x release (slower) = more aggressive
+        // FET: 0.9x attack (faster), 0.95x release (faster) = more aggressive
         // VCA: 1.0x both (baseline, clean)
         // Optical: 1.15x attack (slower), 0.93x release (faster) = vintage character
         let (attack_mult, release_mult) = match self.style {
@@ -105,8 +103,10 @@ impl GainCurve {
             }
         };
 
-        self.attack_coeff = base_attack * attack_mult;
-        self.release_coeff = base_release * release_mult;
+        self.attack_coeff =
+            (-2.0 / (self.sample_rate * self.attack_ms * attack_mult / 1000.0)).exp();
+        self.release_coeff =
+            (-2.0 / (self.sample_rate * self.release_ms * release_mult / 1000.0)).exp();
         self.other_coeff = self.release_coeff; // Placeholder
     }
 
@@ -159,24 +159,18 @@ impl GainCurve {
         let thresh = self.threshold_db;
         let half_knee = self.knee_db / 2.0;
 
-        if level_db < thresh - half_knee {
-            1.0 // No compression
-        } else if level_db > thresh + half_knee {
-            // Full compression above knee
-            // GR is computed as: excess * (1 - 1/ratio)
-            // This gives positive dB reduction amount
-            let excess = level_db - thresh;
-            let gr_db_amount = excess * (1.0 - 1.0 / self.ratio);
-            // Convert to linear gain (negative dB = linear < 1.0)
-            db_to_linear(-gr_db_amount.min(self.range_db))
+        let over = level_db - thresh;
+        let reduction = if over <= -half_knee {
+            0.0
+        } else if self.knee_db == 0.0 || over >= half_knee {
+            over.max(0.0) * (1.0 - self.ratio.recip())
         } else {
-            // Soft knee transition
-            let x = (level_db - (thresh - half_knee)) / self.knee_db;
-            let knee_factor = x * x;
-            let excess = level_db - thresh;
-            let gr_db_amount = excess * (1.0 - 1.0 / self.ratio) * knee_factor;
-            db_to_linear(-gr_db_amount)
-        }
+            // Standard quadratic soft knee, continuous in value and derivative
+            // at both joins. The old formula boosted below threshold and
+            // divided by zero exactly at a zero-width knee's threshold.
+            (over + half_knee).powi(2) * (1.0 - self.ratio.recip()) / (2.0 * self.knee_db)
+        };
+        db_to_linear(-reduction.min(self.range_db))
     }
 
     /// Apply style-specific coefficient scaling to attack/release.
@@ -193,8 +187,8 @@ impl GainCurve {
                 if frequency_hz < constants.freq_limit_style2 {
                     // Frequency scaling for FET mode
                     let scaled_freq = frequency_hz * constants.freq_scaling;
-                    let attack_scaled = self.attack_coeff * (1.0 + scaled_freq);
-                    let release_scaled = self.release_coeff * (1.0 + scaled_freq);
+                    let attack_scaled = self.attack_coeff.powf((1.0 + scaled_freq).recip());
+                    let release_scaled = self.release_coeff.powf((1.0 + scaled_freq).recip());
                     (attack_scaled, release_scaled)
                 } else {
                     (self.attack_coeff, self.release_coeff)
@@ -206,8 +200,8 @@ impl GainCurve {
                 // Scale inversely with frequency for vintage character
                 let freq_factor =
                     (constants.freq_threshold / frequency_hz.max(0.001)).clamp(0.8, 1.2);
-                let attack_scaled = self.attack_coeff * freq_factor;
-                let release_scaled = self.release_coeff * freq_factor;
+                let attack_scaled = self.attack_coeff.powf(freq_factor.recip());
+                let release_scaled = self.release_coeff.powf(freq_factor.recip());
                 (attack_scaled, release_scaled)
             }
             CompressionStyle::Vca => {

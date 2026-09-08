@@ -5,8 +5,7 @@
 //! - Sidechain path: Input → HPF/LPF → detector → velocity → sampler trigger
 
 use audiocore_dsp::{AudioConfig, Processor};
-use eq_dsp::FilterType;
-use eq_dsp::runtime::band::Band;
+use eq_dsp::{CutSlope, Filter, FilterProcessor};
 
 use crate::detector::{DetectMode, TriggerDetector};
 use crate::sampler::{MixMode, Sampler};
@@ -28,8 +27,8 @@ pub struct TriggerChain {
     pub sampler: Sampler,
 
     // Sidechain filters
-    sc_hpf: Band,
-    sc_lpf: Band,
+    sc_hpf: FilterProcessor,
+    sc_lpf: FilterProcessor,
 
     // Parameters (public for direct access)
     /// Detection threshold in dB.
@@ -72,26 +71,12 @@ pub struct TriggerChain {
 impl TriggerChain {
     #[must_use]
     pub fn new() -> Self {
-        let mut sc_hpf = Band::new();
-        sc_hpf.filter_type = FilterType::Highpass;
-        sc_hpf.freq_hz = 100.0;
-        sc_hpf.q = 0.707;
-        sc_hpf.order = 2;
-        sc_hpf.enabled = false;
-
-        let mut sc_lpf = Band::new();
-        sc_lpf.filter_type = FilterType::Lowpass;
-        sc_lpf.freq_hz = 10000.0;
-        sc_lpf.q = 0.707;
-        sc_lpf.order = 2;
-        sc_lpf.enabled = false;
-
         Self {
             detector: TriggerDetector::new(),
             velocity: VelocityMapper::new(),
             sampler: Sampler::new(),
-            sc_hpf,
-            sc_lpf,
+            sc_hpf: FilterProcessor::default(),
+            sc_lpf: FilterProcessor::default(),
             threshold_db: -30.0,
             release_ratio: 0.5,
             detect_time_ms: 1.0,
@@ -116,27 +101,35 @@ impl TriggerChain {
     }
 
     /// Set sidechain HPF frequency (0 = off).
-    pub fn set_sc_hpf(&mut self, freq: f64) {
-        self.sc_hpf_freq = freq;
-        if freq > 0.0 {
-            self.sc_hpf.enabled = true;
-            self.sc_hpf.freq_hz = freq;
-            self.sc_hpf.update(self.config.sample_rate);
-        } else {
-            self.sc_hpf.enabled = false;
+    pub fn set_sc_hpf(&mut self, freq: f64) -> Result<(), eq_dsp::Error> {
+        if freq != 0.0 {
+            self.sc_hpf.configure(
+                Filter::HighPass {
+                    frequency_hz: freq,
+                    q: 0.707,
+                    slope: CutSlope::DbPerOctave(12.0),
+                },
+                self.config.sample_rate,
+            )?;
         }
+        self.sc_hpf_freq = freq;
+        Ok(())
     }
 
-    /// Set sidechain LPF frequency (0 = off).
-    pub fn set_sc_lpf(&mut self, freq: f64) {
-        self.sc_lpf_freq = freq;
-        if freq > 0.0 {
-            self.sc_lpf.enabled = true;
-            self.sc_lpf.freq_hz = freq;
-            self.sc_lpf.update(self.config.sample_rate);
-        } else {
-            self.sc_lpf.enabled = false;
+    /// Set sidechain LPF frequency (0 = off), retaining valid state on error.
+    pub fn set_sc_lpf(&mut self, freq: f64) -> Result<(), eq_dsp::Error> {
+        if freq != 0.0 {
+            self.sc_lpf.configure(
+                Filter::LowPass {
+                    frequency_hz: freq,
+                    q: 0.707,
+                    slope: CutSlope::DbPerOctave(12.0),
+                },
+                self.config.sample_rate,
+            )?;
         }
+        self.sc_lpf_freq = freq;
+        Ok(())
     }
 
     /// Get the number of trigger events in the last `process()` call.
@@ -158,13 +151,11 @@ impl TriggerChain {
     pub fn detect_tick(&mut self, left: f64, right: f64) -> Option<f64> {
         let mut sc_l = left;
         let mut sc_r = right;
-        if self.sc_hpf.enabled {
-            sc_l = self.sc_hpf.tick(sc_l, 0);
-            sc_r = self.sc_hpf.tick(sc_r, 1);
+        if self.sc_hpf_freq > 0.0 {
+            [sc_l, sc_r] = self.sc_hpf.process_frame([sc_l, sc_r]);
         }
-        if self.sc_lpf.enabled {
-            sc_l = self.sc_lpf.tick(sc_l, 0);
-            sc_r = self.sc_lpf.tick(sc_r, 1);
+        if self.sc_lpf_freq > 0.0 {
+            [sc_l, sc_r] = self.sc_lpf.process_frame([sc_l, sc_r]);
         }
 
         let sc_mono = (sc_l + sc_r) * 0.5;
@@ -221,11 +212,11 @@ impl Processor for TriggerChain {
         self.sampler.mix_amount = self.mix_amount;
 
         // Update sidechain filters
-        if self.sc_hpf.enabled {
-            self.sc_hpf.update(config.sample_rate);
+        if self.sc_hpf_freq > 0.0 {
+            let _ = self.set_sc_hpf(self.sc_hpf_freq);
         }
-        if self.sc_lpf.enabled {
-            self.sc_lpf.update(config.sample_rate);
+        if self.sc_lpf_freq > 0.0 {
+            let _ = self.set_sc_lpf(self.sc_lpf_freq);
         }
     }
 
@@ -238,13 +229,11 @@ impl Processor for TriggerChain {
             let mut sc_l = left[i];
             let mut sc_r = right[i];
 
-            if self.sc_hpf.enabled {
-                sc_l = self.sc_hpf.tick(sc_l, 0);
-                sc_r = self.sc_hpf.tick(sc_r, 1);
+            if self.sc_hpf_freq > 0.0 {
+                [sc_l, sc_r] = self.sc_hpf.process_frame([sc_l, sc_r]);
             }
-            if self.sc_lpf.enabled {
-                sc_l = self.sc_lpf.tick(sc_l, 0);
-                sc_r = self.sc_lpf.tick(sc_r, 1);
+            if self.sc_lpf_freq > 0.0 {
+                [sc_l, sc_r] = self.sc_lpf.process_frame([sc_l, sc_r]);
             }
 
             // Sidechain listen mode

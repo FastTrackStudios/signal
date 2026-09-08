@@ -1,5 +1,7 @@
 //! Notch cascade builders for Pro-Q 4 (s=2 through s=8).
 
+use crate::inline::{InlineVec, inline_vec};
+
 use dsp_core::num;
 
 use std::f64::consts::PI;
@@ -44,7 +46,7 @@ pub fn notch_inner_pair(b_quartic: f64, c_quartic: f64) -> (f64, f64) {
     (-2.0 * s_re, mag2)
 }
 #[must_use]
-pub fn notch_analog_sections(slope: usize, q: f64) -> Vec<(f64, f64)> {
+pub fn notch_analog_sections(slope: usize, q: f64) -> InlineVec<(f64, f64)> {
     use std::f64::consts::SQRT_2;
     let q_user = q.max(1e-6);
     // C = 2 + 2/Q² is θ-independent for the LP→BS-derived quartic
@@ -53,12 +55,12 @@ pub fn notch_analog_sections(slope: usize, q: f64) -> Vec<(f64, f64)> {
     match slope {
         4 => {
             let b = 2.0 / q_user;
-            vec![notch_inner_pair(b, c_quartic)]
+            inline_vec![notch_inner_pair(b, c_quartic)]
         }
         6 => {
             let b = 2.0 / q_user;
             let (a1i, a2i) = notch_inner_pair(b, c_quartic);
-            vec![(a1i, a2i), (a1i / a2i, 1.0 / a2i)]
+            inline_vec![(a1i, a2i), (a1i / a2i, 1.0 / a2i)]
         }
         8 => {
             // slope=8 LP prototype = Butterworth N=6 (per
@@ -71,7 +73,7 @@ pub fn notch_analog_sections(slope: usize, q: f64) -> Vec<(f64, f64)> {
             // LP→BS cascade matches Pro-Q 4 better at low fc — likely
             // the path-A captures are reduced to inner-only forms while
             // the audio-path uses both inner and outer.
-            let mut sections = Vec::with_capacity(6);
+            let mut sections = InlineVec::with_capacity(6);
             for theta_deg in [105.0_f64, 135.0, 165.0] {
                 let theta = theta_deg.to_radians();
                 let b = -2.0 * SQRT_2 * theta.cos() / q_user;
@@ -81,7 +83,7 @@ pub fn notch_analog_sections(slope: usize, q: f64) -> Vec<(f64, f64)> {
             }
             sections
         }
-        _ => vec![(SQRT_2 / q_user, 1.0)],
+        _ => inline_vec![(SQRT_2 / q_user, 1.0)],
     }
 }
 /// Pro-Q 4 Notch cascade for slope ∈ {2, 4, 6, 8}.
@@ -92,7 +94,12 @@ pub fn notch_analog_sections(slope: usize, q: f64) -> Vec<(f64, f64)> {
 /// multiplies the numerator by `a2` so each section has unity DC and
 /// Nyquist gain (cancels across reciprocal pairs).
 #[must_use]
-pub fn notch_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usize) -> Vec<Coeffs> {
+pub fn notch_cascade_proq4(
+    freq_hz: f64,
+    q: f64,
+    sample_rate: f64,
+    slope: usize,
+) -> InlineVec<Coeffs> {
     let q_user = q.max(1e-6);
     let _omega0 = (2.0 * PI * freq_hz / sample_rate).min(PI - 0.01);
 
@@ -103,7 +110,7 @@ pub fn notch_cascade_proq4(freq_hz: f64, q: f64, sample_rate: f64, slope: usize)
     // near Nyquist (the binary applies a small fc-prewarp correction
     // that is not yet captured); BLT/Lagrange variants do worse there.
     if slope == 2 {
-        return vec![notch_s2_alt_path_synth(freq_hz, q_user, sample_rate)];
+        return inline_vec![notch_s2_alt_path_synth(freq_hz, q_user, sample_rate)];
     }
 
     // Higher-slope cascade. Per `notch_formula.md`, notch numerator

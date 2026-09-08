@@ -95,6 +95,9 @@ impl Lookahead {
 }
 
 pub struct CompChain {
+    model: Option<crate::CompressorProcessor>,
+    model_enabled: bool,
+    model_mix: f64,
     pub comp: super::ProC3Compressor,
     pub sidechain_freq: f64,
     pub sidechain_lowpass_freq: f64,
@@ -121,6 +124,9 @@ impl CompChain {
     #[must_use]
     pub fn new() -> Self {
         Self {
+            model: None,
+            model_enabled: false,
+            model_mix: 0.0,
             comp: super::ProC3Compressor::new(48000.0),
             sidechain_freq: 0.0,
             sidechain_lowpass_freq: 0.0,
@@ -140,6 +146,38 @@ impl CompChain {
             detector_l: Detector::new(),
             detector_r: Detector::new(),
             sample_rate: 48000.0,
+        }
+    }
+
+    /// Select a prepared model while retaining the chain's sidechain and delay.
+    /// Same-model controls preserve history; switching to/from the host core
+    /// crossfades over 5 ms. Built-in model installation allocates nothing.
+    pub fn set_model(&mut self, prepared: &crate::PreparedCompressor) {
+        if let Some(model) = &mut self.model {
+            if model.apply(prepared).is_err() {
+                self.model = Some(prepared.processor());
+            }
+        } else {
+            self.model = Some(prepared.processor());
+        }
+        self.model_enabled = true;
+    }
+
+    /// Return to the extended host processor with a short transition.
+    pub const fn clear_model(&mut self) {
+        self.model_enabled = false;
+    }
+
+    /// Positive reduction from the processor currently selected for this chain.
+    #[must_use]
+    pub fn gain_reduction_db(&self) -> f64 {
+        if self.model_enabled {
+            self.model.as_ref().map_or(0.0, |model| {
+                let [left, right] = model.gain_reduction_db();
+                left.max(right)
+            })
+        } else {
+            self.comp.gain_reduction_db()
         }
     }
 
@@ -181,8 +219,28 @@ impl CompChain {
             .detector_r
             .detect_level_with_rms_mix(detect_r.max(1e-12), rms_mix);
 
-        let out_l = self.comp.process_with_level(audio_l, level_l, 0);
-        let out_r = self.comp.process_with_level(audio_r, level_r, 1);
+        let step = 1.0 / (self.sample_rate * 0.005).max(1.0);
+        self.model_mix = if self.model_enabled {
+            (self.model_mix + step).min(1.0)
+        } else {
+            (self.model_mix - step).max(0.0)
+        };
+        let (mut out_l, mut out_r) = if self.model_mix < 1.0 {
+            (
+                self.comp.process_with_level(audio_l, level_l, 0),
+                self.comp.process_with_level(audio_r, level_r, 1),
+            )
+        } else {
+            (0.0, 0.0)
+        };
+        if self.model_mix > 0.0
+            && let Some(model) = &mut self.model
+        {
+            let [ml, mr] =
+                model.process_frame_with_sidechain([audio_l, audio_r], [ff_key_l, ff_key_r]);
+            out_l = self.model_mix.mul_add(ml - out_l, out_l);
+            out_r = self.model_mix.mul_add(mr - out_r, out_r);
+        }
 
         *left = out_l;
         *right = out_r;
@@ -235,6 +293,15 @@ impl CompChain {
         }
     }
 
+    /// Reserve the host's maximum delay before entering the audio callback.
+    /// Subsequent changes up to this limit reuse this allocation.
+    pub fn reserve_lookahead(&mut self, maximum_ms: f64) {
+        let samples = num::f64_to_index((maximum_ms.max(0.0) * self.sample_rate / 1000.0).ceil());
+        self.lookahead
+            .ring
+            .reserve(samples.saturating_sub(self.lookahead.ring.len()));
+    }
+
     /// Set the lookahead time in ms.
     pub fn set_lookahead(&mut self, lookahead_ms: f64) {
         self.lookahead_ms = lookahead_ms;
@@ -269,6 +336,10 @@ impl CompChain {
 
     /// Reset internal state.
     pub fn reset(&mut self) {
+        if let Some(model) = &mut self.model {
+            model.reset();
+        }
+        self.model_mix = if self.model_enabled { 1.0 } else { 0.0 };
         self.comp.reset();
         self.lookahead.clear();
         self.feedback_l = 0.0;
@@ -342,17 +413,20 @@ impl CompChain {
 
         let (mut key_l, mut key_r) = if self.sidechain_freq > 20.0 {
             (
-                self.sidechain_hpf_l.tick(left, 0).abs(),
-                self.sidechain_hpf_r.tick(right, 0).abs(),
+                self.sidechain_hpf_l.tick(left, 0),
+                self.sidechain_hpf_r.tick(right, 0),
             )
         } else {
-            (left.abs(), right.abs())
+            (left, right)
         };
 
+        // Both filters act on signed audio. Rectification before the low-pass
+        // creates DC from every carrier, which a low-pass cannot reject.
         if self.sidechain_lowpass_freq > 20.0 {
-            key_l = self.sidechain_lpf_l.tick(key_l, 0).abs();
-            key_r = self.sidechain_lpf_r.tick(key_r, 0).abs();
+            key_l = self.sidechain_lpf_l.tick(key_l, 0);
+            key_r = self.sidechain_lpf_r.tick(key_r, 0);
         }
+        let (key_l, key_r) = (key_l.abs(), key_r.abs());
 
         (key_l, key_r)
     }
@@ -369,6 +443,21 @@ mod tests {
     use dsp_core::Channel;
 
     use super::*;
+
+    #[test]
+    fn sidechain_lowpass_rejects_a_high_carrier_before_rectification() {
+        let mut chain = CompChain::new();
+        chain.set_sidechain_lowpass_freq(200.0);
+        let mut peak = 0.0f64;
+        for n in 0..4800 {
+            let input = (std::f64::consts::TAU * 8000.0 * f64::from(n) / 48000.0).sin();
+            let (left, right) = chain.sidechain_key(input, input);
+            if n > 2400 {
+                peak = peak.max(left).max(right);
+            }
+        }
+        assert!(peak < 0.01, "low-pass leaked rectified carrier: {peak}");
+    }
 
     #[test]
     fn sidechain_hpf_reduces_low_frequency_detection() {

@@ -54,6 +54,8 @@ pub fn core_param_ptr(params: &CompStageParams, core_name: &str) -> Option<Param
         "lookahead_ms" => params.lookahead_ms.as_ptr(),
         "style" => params.style.as_ptr(),
         "profile" => params.profile.as_ptr(),
+        "la2a_peak_reduction" => params.la2a_peak_reduction.as_ptr(),
+        "la2a_gain" => params.la2a_gain.as_ptr(),
         // Not exposed by this plugin (no crossover UI yet).
         _ => return None,
     })
@@ -95,6 +97,8 @@ pub const CORE_PARAM_NAMES: &[&str] = &[
     "lookahead_ms",
     "style",
     "profile",
+    "la2a_peak_reduction",
+    "la2a_gain",
 ];
 
 #[cfg(test)]

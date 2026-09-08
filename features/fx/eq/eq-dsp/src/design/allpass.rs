@@ -5,6 +5,8 @@
 //! See `docs/reports/proq4/re/allpass_formula.md` +
 //! `allpass_q_dependence_decoded.md`.
 
+use crate::inline::InlineVec;
+
 use std::f64::consts::PI;
 
 use crate::design::biquad::Coeffs;
@@ -15,7 +17,7 @@ pub(super) fn design_allpass_with_lookup(
     q: f64,
     sample_rate: f64,
     pole_count: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let _ = pole_count;
     design_allpass(n, freq_hz, q, sample_rate)
 }
@@ -42,7 +44,12 @@ pub(super) fn design_allpass_with_lookup(
 /// Each section maps to digital via standard prewarped bilinear with
 /// `t = tan(π·fc/sr)`.  Verified bit-exact (≤4 dec) against probe
 /// captures across (fc, Q, slope) grid.
-pub(super) fn design_allpass(n: usize, freq_hz: f64, q: f64, sample_rate: f64) -> Vec<Coeffs> {
+pub(super) fn design_allpass(
+    n: usize,
+    freq_hz: f64,
+    q: f64,
+    sample_rate: f64,
+) -> InlineVec<Coeffs> {
     // The caller passes n = ceil(order/2) where order tracks user slope.
     // Map back to filter order N:
     //   slope=2 → n=1 → N=2
@@ -60,7 +67,7 @@ pub(super) fn design_allpass(n: usize, freq_hz: f64, q: f64, sample_rate: f64) -
     let t = (PI * freq_hz / sample_rate).tan();
     let t2 = t * t;
 
-    let mut sections = Vec::with_capacity(n_sec);
+    let mut sections = InlineVec::with_capacity(n_sec);
     for k in 0..n_sec {
         let k_int = u32::try_from(k).unwrap_or(0);
         let n_int = u32::try_from(n_filter).unwrap_or(1);
@@ -106,6 +113,6 @@ pub(super) fn design_bandpass_variant(
     freq_hz: f64,
     q: f64,
     sample_rate: f64,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     design_allpass(n, freq_hz, q, sample_rate)
 }

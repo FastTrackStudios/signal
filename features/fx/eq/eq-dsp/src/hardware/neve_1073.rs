@@ -10,7 +10,6 @@ use crate::hardware::calibration::{
     CalibratedScalar, CalibrationParameters, FitOptions, FitReport, ResponseTarget, fit_response,
 };
 use crate::runtime::response::compute_magnitude_response;
-use crate::runtime::section::Tdf2Section;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Neve1073Hpf {
@@ -313,8 +312,9 @@ pub fn fit_neve_1073_response(
 pub struct Neve1073Model {
     settings: Neve1073Settings,
     sample_rate: f64,
-    sections: Vec<Tdf2Section>,
-    coeffs: Vec<Coeffs>,
+    processor: Option<crate::FilterProcessor>,
+    last_error: Option<crate::Error>,
+    coeffs: crate::inline::InlineVec<Coeffs>,
 }
 
 impl Neve1073Model {
@@ -323,8 +323,9 @@ impl Neve1073Model {
         let mut model = Self {
             settings,
             sample_rate,
-            sections: Vec::new(),
-            coeffs: Vec::new(),
+            processor: None,
+            last_error: None,
+            coeffs: crate::inline::InlineVec::new(),
         };
         model.rebuild();
         model
@@ -336,13 +337,25 @@ impl Neve1073Model {
     }
 
     pub fn set_settings(&mut self, settings: Neve1073Settings) {
-        self.settings = settings;
-        self.rebuild();
+        if self.settings != settings {
+            let previous = self.settings;
+            self.settings = settings;
+            self.rebuild();
+            if self.last_error.is_some() {
+                self.settings = previous;
+            }
+        }
     }
 
     pub fn set_sample_rate(&mut self, sample_rate: f64) {
-        self.sample_rate = sample_rate;
-        self.rebuild();
+        if self.sample_rate.to_bits() != sample_rate.to_bits() {
+            let previous = self.sample_rate;
+            self.sample_rate = sample_rate;
+            self.rebuild();
+            if self.last_error.is_some() {
+                self.sample_rate = previous;
+            }
+        }
     }
 
     #[must_use]
@@ -350,54 +363,65 @@ impl Neve1073Model {
         &self.coeffs
     }
 
+    /// Validated linear cascade for shared processing or response evaluation.
+    ///
+    /// # Errors
+    /// Returns a design error if the model contains invalid or unstable sections.
+    pub fn prepared_filter(&self) -> Result<crate::PreparedFilter, crate::Error> {
+        crate::PreparedFilter::from_sections(self.sample_rate, self.coeffs())
+    }
+
     #[must_use]
     pub fn magnitude_response_db(&self, frequencies: &[f64]) -> Vec<f64> {
         compute_magnitude_response(&self.coeffs, frequencies, self.sample_rate)
     }
 
-    pub fn reset(&mut self) {
-        for section in &mut self.sections {
-            section.reset();
-        }
+    #[must_use]
+    pub const fn last_design_error(&self) -> Option<crate::Error> {
+        self.last_error
     }
 
-    #[inline]
-    pub fn process_sample(&mut self, sample: f64, ch: usize) -> f64 {
-        let mut out = apply_gain_compensated_arctan(
-            sample,
-            self.settings.drive_percent,
-            self.settings.trim_db,
-        );
-
-        if self.settings.phase_invert {
-            out = -out;
+    pub fn reset(&mut self) {
+        if let Some(processor) = &mut self.processor {
+            processor.reset();
         }
-
-        for section in &mut self.sections {
-            out = section.tick(out, ch);
-        }
-
-        out
     }
 
     pub fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
-        for (left_sample, right_sample) in left.iter_mut().zip(right.iter_mut()) {
-            *left_sample = self.process_sample(*left_sample, 0);
-            *right_sample = self.process_sample(*right_sample, 1);
+        if let Some(processor) = &mut self.processor {
+            let polarity = if self.settings.phase_invert {
+                -1.0
+            } else {
+                1.0
+            };
+            for (l, r) in left.iter_mut().zip(right) {
+                let frame = [*l, *r].map(|sample| {
+                    polarity
+                        * apply_gain_compensated_arctan(
+                            sample,
+                            self.settings.drive_percent,
+                            self.settings.trim_db,
+                        )
+                });
+                [*l, *r] = processor.process_frame(frame);
+            }
         }
     }
 
     fn rebuild(&mut self) {
-        self.coeffs = build_neve_1073_sections(self.settings, self.sample_rate);
-        self.sections = self
-            .coeffs
-            .iter()
-            .map(|&coeffs| {
-                let mut section = Tdf2Section::new();
-                section.set_coeffs(coeffs);
-                section
-            })
-            .collect();
+        let coeffs = build_neve_1073_sections(self.settings, self.sample_rate);
+        match crate::PreparedFilter::from_sections(self.sample_rate, &coeffs) {
+            Ok(prepared) => {
+                if let Some(processor) = &mut self.processor {
+                    processor.install(&prepared);
+                } else {
+                    self.processor = Some(crate::FilterProcessor::new(&prepared));
+                }
+                self.coeffs = coeffs;
+                self.last_error = None;
+            }
+            Err(error) => self.last_error = Some(error),
+        }
     }
 }
 
@@ -415,7 +439,10 @@ pub fn apply_gain_compensated_arctan(sample: f64, drive_percent: f64, trim_db: f
 }
 
 #[must_use]
-pub fn build_neve_1073_sections(settings: Neve1073Settings, sample_rate: f64) -> Vec<Coeffs> {
+pub fn build_neve_1073_sections(
+    settings: Neve1073Settings,
+    sample_rate: f64,
+) -> crate::inline::InlineVec<Coeffs> {
     build_neve_1073_sections_with_calibration(
         settings,
         sample_rate,
@@ -432,8 +459,8 @@ pub fn build_neve_1073_sections_with_calibration(
     settings: Neve1073Settings,
     sample_rate: f64,
     calibration: &Neve1073Calibration,
-) -> Vec<Coeffs> {
-    let mut sections = Vec::new();
+) -> crate::inline::InlineVec<Coeffs> {
+    let mut sections = crate::inline::InlineVec::new();
 
     // Always-on input/output transformer tone approximation. These gentle
     // sections supply the small LF/HF contours and midrange movement expected
@@ -594,7 +621,7 @@ pub fn build_neve_1073_sections_with_calibration(
 }
 
 fn push_filter(
-    sections: &mut Vec<Coeffs>,
+    sections: &mut crate::inline::InlineVec<Coeffs>,
     filter_type: FilterType,
     freq_hz: f64,
     q: f64,

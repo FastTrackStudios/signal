@@ -1,6 +1,8 @@
 //! ZPK to biquad coefficient conversion matching Pro-Q 4's
 //! `zpk_to_biquad_coefficients` (0x1800fe040).
 
+use crate::inline::InlineVec;
+
 use crate::math::zpk::{Complex, Zpk, pair_conjugates};
 
 /// Biquad coefficients: [a0, a1, a2, b0, b1, b2].
@@ -63,9 +65,9 @@ impl Mode0Params {
 /// Each section is a `Coeffs` array [a0, a1, a2, b0, b1, b2] where the
 /// transfer function is H(z) = (b0 + b1*z^-1 + b2*z^-2) / (a0 + a1*z^-1 + a2*z^-2).
 #[must_use]
-pub fn zpk_to_sos(zpk: &Zpk) -> Vec<Coeffs> {
+pub fn zpk_to_sos(zpk: &Zpk) -> InlineVec<Coeffs> {
     let sections = pair_conjugates(zpk);
-    let mut sos = Vec::with_capacity(sections.len());
+    let mut sos = InlineVec::with_capacity(sections.len());
 
     for (poles, zeros, gain) in sections {
         let den = poles_to_den(&poles);

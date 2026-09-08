@@ -1,22 +1,29 @@
 //! Decoded coefficient tables, and the pre-warp they feed.
 
+use crate::inline::{InlineVec, inline_vec};
+
 use super::{notch_analog_sections, notch_inner_pair};
 
 /// Q-table configuration: (`lower_q`, `lower_table`, `upper_q`, `upper_table`)
-type QTableConfig<'a> = (f64, &'a Vec<(f64, f64)>, f64, &'a Vec<(f64, f64)>);
+type QTableConfig<'a> = (
+    f64,
+    &'a InlineVec<(f64, f64)>,
+    f64,
+    &'a InlineVec<(f64, f64)>,
+);
 
 /// Pro-Q 4 Bandpass-specific cascade values (`a1_sec`, `a2_sec`) per Q per
 /// section. Extracted from probe `LAG_PROTO_DETAIL` at fc=10 (matched-Z
 /// near-bit-exact). Pro-Q's actual BP analog cascade differs from
 /// `notch_inner_pair` at Q≠1 due to floating-point arithmetic order.
-pub fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
+pub fn bp_cascade_for_q(slope: usize, q: f64) -> InlineVec<(f64, f64)> {
     if matches!(slope, 3 | 5 | 7 | 9) {
         use std::f64::consts::SQRT_2;
         let q_user = q.max(1e-6);
         let c_quartic = 2.0 + 2.0 / (q_user * q_user);
         let (angles, real_count) = lp_atoms_for_slope(slope);
         let mut sections =
-            Vec::with_capacity(angles.len().saturating_mul(2).saturating_add(real_count));
+            InlineVec::with_capacity(angles.len().saturating_mul(2).saturating_add(real_count));
         for &theta in angles {
             let b = -2.0 * SQRT_2 * theta.cos() / q_user;
             let (a1i, a2i) = notch_inner_pair(b, c_quartic);
@@ -38,12 +45,12 @@ pub fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
         let theta = 120.0_f64.to_radians();
         let b = -2.0 * SQRT_2 * theta.cos() / q_user;
         let (a1i, a2i) = notch_inner_pair(b, c_quartic);
-        return vec![(a1i, a2i), (a1i / a2i, 1.0 / a2i), (SQRT_2 / q_user, 1.0)];
+        return inline_vec![(a1i, a2i), (a1i / a2i, 1.0 / a2i), (SQRT_2 / q_user, 1.0)];
     }
     if slope != 8 {
         return notch_analog_sections(slope, q);
     }
-    let q05: Vec<(f64, f64)> = vec![
+    let q05: InlineVec<(f64, f64)> = inline_vec![
         (0.136_632_085_431_080_4, 0.102_927_775_183_326_71),
         (1.327_455_929_050_467_3, 9.715_550_522_867_913),
         (0.427_699_803_334_397_3, 0.119_727_970_383_810_43),
@@ -51,7 +58,7 @@ pub fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
         (0.746_428_135_875_452_8, 0.158_221_244_052_665_94),
         (4.717_622_720_922_321, 6.320_263_792_560_857),
     ];
-    let q10: Vec<(f64, f64)> = vec![
+    let q10: InlineVec<(f64, f64)> = inline_vec![
         (0.157_968_903_048_767_57, 0.275_167_890_247_755_6),
         (0.574_081_891_991_593_9, 3.634_144_954_557_088),
         (0.514_131_726_881_778_2, 0.346_014_345_973_210_24),
@@ -59,7 +66,7 @@ pub fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
         (1.041_465_571_915_082_5, 0.616_038_504_746_829_3),
         (1.690_585_188_896_737_4, 1.623_275_156_170_579_6),
     ];
-    let q40: Vec<(f64, f64)> = vec![
+    let q40: InlineVec<(f64, f64)> = inline_vec![
         (0.076_090_173_887_941_88, 0.711_615_600_837_688_5),
         (0.106_925_949_625_576_74, 1.405_253_059_127_478),
         (0.218_757_319_001_314_68, 0.777_798_189_568_640_3),
@@ -67,7 +74,7 @@ pub fn bp_cascade_for_q(slope: usize, q: f64) -> Vec<(f64, f64)> {
         (0.325_671_823_251_275_2, 0.911_343_216_434_378_7),
         (0.357_353_648_305_477_44, 1.097_281_443_441_791_5),
     ];
-    let q100: Vec<(f64, f64)> = vec![
+    let q100: InlineVec<(f64, f64)> = inline_vec![
         (0.034_108_918_559_306_506, 0.872_385_813_635_398_5),
         (0.039_098_433_314_909_74, 1.146_281_822_067_703_3),
         (0.095_002_807_786_505_8, 0.904_759_374_280_998_1),

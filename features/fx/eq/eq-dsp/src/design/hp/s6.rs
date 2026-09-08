@@ -1,5 +1,7 @@
 //! High-pass slope 6 (Db30, N=6 poles, 3 sections).
 
+use crate::inline::{InlineVec, inline_vec};
+
 use crate::design::biquad::Coeffs;
 use crate::design::cascade;
 use dsp_core::num;
@@ -10,7 +12,7 @@ use super::{
     exact_48k_q, highpass_s2_with_subfreq_scales, highpass_s2_with_w_eval_scale, interp_48k_table,
 };
 
-pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> Vec<Coeffs> {
+pub(super) fn cascade(freq_hz: f64, q: f64, sample_rate: f64) -> InlineVec<Coeffs> {
     highpass_slope6_qs(freq_hz, sample_rate, q)
         .into_iter()
         .enumerate()
@@ -248,10 +250,10 @@ fn highpass_slope6_section(
         cascade::highpass_s2_proq4(freq_hz, q_section, sample_rate)
     }
 }
-fn highpass_slope6_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
-    let reversed: Vec<f64> = cascade_qs(3, q_user).into_iter().rev().collect();
+fn highpass_slope6_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> InlineVec<f64> {
+    let reversed: InlineVec<f64> = cascade_qs(3, q_user).into_iter().rev().collect();
     // `cascade_qs(3)` returns exactly three; the fallback keeps this total.
-    let [mut q0, q1, q2] = <[f64; 3]>::try_from(reversed).unwrap_or([q_user; 3]);
+    let [mut q0, q1, q2] = <[f64; 3]>::try_from(reversed.as_slice()).unwrap_or([q_user; 3]);
 
     if (q_user - 0.5).abs() < 1.0e-12 {
         q0 = highpass_slope6_sec0_q05(freq_hz, sample_rate);
@@ -261,7 +263,7 @@ fn highpass_slope6_qs(freq_hz: f64, sample_rate: f64, q_user: f64) -> Vec<f64> {
         q0 = highpass_slope6_sec0_q10(freq_hz, sample_rate, q0);
     }
 
-    vec![q0, q1, q2]
+    inline_vec![q0, q1, q2]
 }
 fn highpass_slope6_sec0_q05(freq_hz: f64, sample_rate: f64) -> f64 {
     const QS_48K: &[(f64, f64)] = &[

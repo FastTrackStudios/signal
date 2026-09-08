@@ -4954,6 +4954,7 @@ dependencies = [
  "dsp-core",
  "dsp-golden",
  "realfft",
+ "smallvec 1.15.2",
 ]
 
 [[package]]
@@ -5004,6 +5005,7 @@ dependencies = [
  "dioxus",
  "dioxus-ssr",
  "dioxus-test",
+ "eq-dsp",
  "eq-profiles",
  "fts-audio-ui",
  "fts-plug-ui",

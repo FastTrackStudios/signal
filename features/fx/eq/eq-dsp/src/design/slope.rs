@@ -120,12 +120,13 @@ impl Slope {
     }
 
     /// Canonical inverse of [`Self::param_index`]. Out-of-range clamps
-    /// to Db12 (the historical default order).
+    /// to Brickwall, the steepest choice.
     #[must_use]
     pub const fn from_param_index(idx: usize) -> Self {
         match idx {
             0 => Self::Db0,
             1 => Self::Db6,
+            2 => Self::Db12,
             3 => Self::Db18,
             4 => Self::Db24,
             5 => Self::Db30,
@@ -133,8 +134,7 @@ impl Slope {
             7 => Self::Db48,
             8 => Self::Db72,
             9 => Self::Db96,
-            10 => Self::Brickwall,
-            _ => Self::Db12,
+            _ => Self::Brickwall,
         }
     }
 

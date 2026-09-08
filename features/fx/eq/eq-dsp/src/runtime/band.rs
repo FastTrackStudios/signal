@@ -4,7 +4,6 @@
 //! analog prototype -> transform -> ZPK -> biquad sections, with
 //! support for all 13 filter types and variable order up to 16.
 
-use crate::design::biquad::PASSTHROUGH;
 use crate::design::{self, FilterType};
 use crate::runtime::section::{Df1Section, Tdf2Section};
 
@@ -19,7 +18,7 @@ pub const MAX_ORDER: usize = 16;
 /// budget has to cover both — otherwise the steepest bands silently drop
 /// sections at the `min(MAX_SECTIONS)` clamp below and come out shallower than
 /// they were asked to be.
-const MAX_SECTIONS: usize = MAX_ORDER / 2 + 1 + design::fractional::SECTION_COUNT;
+pub(crate) const MAX_SECTIONS: usize = MAX_ORDER / 2 + 1 + design::fractional::SECTION_COUNT;
 
 /// A single EQ band with variable order, using the pro ZPK design pipeline.
 /// Which part of the stereo image a band processes.
@@ -62,6 +61,7 @@ impl Placement {
     }
 }
 
+#[derive(Clone)]
 pub struct Band {
     pub filter_type: FilterType,
     pub freq_hz: f64,
@@ -85,7 +85,11 @@ pub struct Band {
     /// Enable/bypass crossfade position (0 = dry, 1 = wet) — ~5 ms
     /// ramp so toggling a band never clicks.
     bypass_ramp: f64,
+    ramp_coeff: f64,
 
+    transition: Option<Transition>,
+    processed: bool,
+    pub(crate) last_design_error: Option<crate::Error>,
     sections: [Tdf2Section; MAX_SECTIONS],
     df1_sections: [Df1Section; MAX_SECTIONS],
     use_df1: bool,
@@ -94,7 +98,63 @@ pub struct Band {
     sample_rate: f64,
 }
 
+#[derive(Clone)]
+struct Transition {
+    sections: [Tdf2Section; MAX_SECTIONS],
+    df1_sections: [Df1Section; MAX_SECTIONS],
+    use_df1: bool,
+    count: usize,
+    gain: f64,
+    remaining: usize,
+    total: usize,
+}
+
 impl Band {
+    pub(crate) fn install(&mut self, filter: &crate::filter::PreparedFilter) {
+        self.last_design_error = None;
+        if self.processed {
+            let total = dsp_core::num::f64_to_index(filter.sample_rate() * 0.005).max(1);
+            self.transition = Some(Transition {
+                sections: self.sections.clone(),
+                df1_sections: self.df1_sections.clone(),
+                use_df1: self.use_df1,
+                count: self.num_sections,
+                gain: self.output_gain,
+                remaining: total,
+                total,
+            });
+        }
+        if self.num_sections != filter.raw().len() || self.use_df1 != filter.direct_form_one() {
+            for s in &mut self.sections {
+                s.reset();
+            }
+            for s in &mut self.df1_sections {
+                s.reset();
+            }
+        }
+        self.sample_rate = filter.sample_rate();
+        self.ramp_coeff = if self.sample_rate.to_bits() == 48_000.0_f64.to_bits() {
+            0.004
+        } else {
+            1.0 - 0.996_f64.powf(48_000.0 / self.sample_rate)
+        };
+        self.num_sections = filter.raw().len();
+        self.use_df1 = filter.direct_form_one();
+        self.output_gain = 1.0;
+        self.enabled = true;
+        for ((tdf2, df1), &coeffs) in self
+            .sections
+            .iter_mut()
+            .zip(&mut self.df1_sections)
+            .zip(filter.raw())
+        {
+            if self.use_df1 {
+                df1.set_coeffs(coeffs);
+            } else {
+                tdf2.set_coeffs(coeffs);
+            }
+        }
+    }
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -108,6 +168,10 @@ impl Band {
             gain_q_interaction: 0.0,
             placement: Placement::default(),
             bypass_ramp: 0.0,
+            ramp_coeff: 0.004,
+            transition: None,
+            processed: false,
+            last_design_error: None,
             sections: std::array::from_fn(|_| Tdf2Section::new()),
             df1_sections: std::array::from_fn(|_| Df1Section::new()),
             use_df1: false,
@@ -117,9 +181,27 @@ impl Band {
         }
     }
 
+    /// Last rejected redesign; successful installation clears it.
+    #[must_use]
+    pub const fn last_design_error(&self) -> Option<crate::Error> {
+        self.last_design_error
+    }
+
     /// Recalculate coefficients using the pro ZPK design pipeline.
     pub fn update(&mut self, sample_rate: f64) {
+        if matches!(
+            self.filter_type,
+            FilterType::BandPassVariant | FilterType::ShelfAlt
+        ) {
+            self.last_design_error = Some(crate::Error::UnsupportedFilter);
+            return;
+        }
         self.sample_rate = sample_rate;
+        self.ramp_coeff = if sample_rate.to_bits() == 48_000.0_f64.to_bits() {
+            0.004
+        } else {
+            1.0 - 0.996_f64.powf(48_000.0 / sample_rate)
+        };
 
         if !self.enabled {
             return;
@@ -186,7 +268,7 @@ impl Band {
 
         // Use pro design pipeline: analog prototype -> ZPK -> biquad sections
         let sos = if fractional_only {
-            Vec::new()
+            crate::inline::InlineVec::new()
         } else {
             design::design_filter(
                 self.filter_type,
@@ -225,14 +307,24 @@ impl Band {
             ));
         }
 
-        self.num_sections = sos.len().min(MAX_SECTIONS);
+        let error = if sos.len() > MAX_SECTIONS {
+            Some(crate::Error::TooManySections)
+        } else {
+            sos.iter()
+                .copied()
+                .find_map(|c| crate::BiquadCoefficients::from_raw(c).err())
+        };
+        self.last_design_error = error;
+        if error.is_some() {
+            return;
+        }
+
+        self.num_sections = sos.len();
         // Use DF1 for Peak filters (binary-exact processing form)
         self.use_df1 = self.filter_type == FilterType::Peak;
 
         for (i, coeffs) in sos.iter().enumerate().take(self.num_sections) {
-            // Stability check
-            let stable = coeffs.iter().all(|c| c.is_finite() && c.abs() < 1e12);
-            let coeffs = if stable { *coeffs } else { PASSTHROUGH };
+            let coeffs = *coeffs;
             if self.use_df1 {
                 if let Some(section) = self.df1_sections.get_mut(i) {
                     section.set_coeffs(coeffs);
@@ -297,16 +389,26 @@ impl Band {
             return sample;
         }
         if ch == 0 {
-            // 5 ms at 48 kHz ≈ coefficient 0.004; sample-rate scaling
-            // here would need plumbing — the click protection is what
-            // matters, not the exact ms.
-            const RAMP_COEFF: f64 = 0.004;
-            let target = if self.enabled { 1.0 } else { 0.0 };
-            self.bypass_ramp += (target - self.bypass_ramp) * RAMP_COEFF;
-            if !self.enabled && self.bypass_ramp < 1.0e-4 {
-                self.bypass_ramp = 0.0;
+            self.advance_frame();
+        }
+        self.process_channel(sample, ch)
+    }
+
+    pub(crate) fn advance_frame(&mut self) {
+        if let Some(transition) = &mut self.transition {
+            transition.remaining = transition.remaining.saturating_sub(1);
+            if transition.remaining == 0 {
+                self.transition = None;
             }
         }
+        let target = if self.enabled { 1.0 } else { 0.0 };
+        self.bypass_ramp += (target - self.bypass_ramp) * self.ramp_coeff;
+        if !self.enabled && self.bypass_ramp < 1.0e-4 {
+            self.bypass_ramp = 0.0;
+        }
+    }
+
+    pub(crate) fn process_channel(&mut self, sample: f64, ch: usize) -> f64 {
         if self.bypass_ramp <= 0.0 {
             return sample;
         }
@@ -318,6 +420,7 @@ impl Band {
     /// The raw cascade (no bypass crossfade).
     #[inline]
     fn tick_inner(&mut self, sample: f64, ch: usize) -> f64 {
+        self.processed = true;
         let mut out = sample;
         if self.use_df1 {
             for section in self.df1_sections.iter_mut().take(self.num_sections) {
@@ -328,7 +431,24 @@ impl Band {
                 out = section.tick(out, ch);
             }
         }
-        out * self.output_gain
+        out *= self.output_gain;
+        if let Some(old) = &mut self.transition {
+            let mut previous = sample;
+            if old.use_df1 {
+                for section in old.df1_sections.iter_mut().take(old.count) {
+                    previous = section.tick(previous, ch);
+                }
+            } else {
+                for section in old.sections.iter_mut().take(old.count) {
+                    previous = section.tick(previous, ch);
+                }
+            }
+            previous *= old.gain;
+            let mix =
+                dsp_core::num::count_to_f64(old.remaining) / dsp_core::num::count_to_f64(old.total);
+            out += mix * (previous - out);
+        }
+        out
     }
 
     /// Force the bypass ramp fully open/closed (preset loads — no fade).
@@ -346,6 +466,8 @@ impl Band {
 
     /// Reset all section state to zero (ramp too — matches a fresh band).
     pub fn reset(&mut self) {
+        self.transition = None;
+        self.processed = false;
         for s in &mut self.sections {
             s.reset();
         }

@@ -406,7 +406,7 @@ mod tests {
         let la2a = ProfileView::from_profile(&LA2A);
         assert!(matches!(
             la2a.control("peak_reduction").unwrap().kind,
-            ProfileControlKind::Macro { .. }
+            ProfileControlKind::Knob { .. }
         ));
     }
 

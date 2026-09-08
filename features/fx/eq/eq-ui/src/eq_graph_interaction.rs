@@ -115,15 +115,21 @@ pub fn drag_gain_for_shape(shape: EqBandShape, current_gain: f32, pointer_gain: 
     }
 }
 
-#[must_use]
-pub fn wheel_q_for_shape(shape: EqBandShape, q: f32, delta_y: f64, slope_mode: bool) -> f32 {
-    if shape.uses_slope() || slope_mode {
-        let current = super::eq_graph_model::q_to_slope_db(q);
-        let step = if delta_y < 0.0 { 6.0 } else { -6.0 };
-        super::eq_graph_model::slope_db_to_q((current + step).clamp(6.0, 96.0))
+/// Scroll resonance, or the separate slope control when the model exposes one.
+pub fn wheel_band(band: &mut EqBand, delta_y: f64, slope_mode: bool) {
+    if let Some(slope) = band.slope.as_mut()
+        && (band.shape.uses_slope() || slope_mode)
+    {
+        let step = if delta_y < 0.0 { 1.0 } else { -1.0 };
+        let minimum = if matches!(band.shape, EqBandShape::Bell | EqBandShape::Notch) {
+            2.0
+        } else {
+            1.0
+        };
+        *slope = (*slope + step).clamp(minimum, 10.0);
     } else {
-        let q_mul = if delta_y < 0.0 { 1.15 } else { 0.87 };
-        (q * q_mul).clamp(0.1, 18.0)
+        let multiplier = if delta_y < 0.0 { 1.15 } else { 0.87 };
+        band.q = (band.q * multiplier).clamp(0.1, 18.0);
     }
 }
 
@@ -229,13 +235,23 @@ mod tests {
     }
 
     #[test]
-    fn wheel_q_supports_q_and_slope_modes() {
-        assert!(wheel_q_for_shape(EqBandShape::Bell, 1.0, -1.0, false) > 1.0);
-        assert_eq!(
-            wheel_q_for_shape(EqBandShape::LowCut, 1.0, -1.0, false),
-            1.5
-        );
-        assert_eq!(wheel_q_for_shape(EqBandShape::Bell, 1.0, -1.0, true), 1.5);
+    fn wheel_controls_keep_q_and_slope_independent() {
+        let mut band = EqBand {
+            q: 1.0,
+            ..Default::default()
+        };
+        wheel_band(&mut band, -1.0, false);
+        assert!(band.q > 1.0);
+        band.shape = EqBandShape::LowCut;
+        band.slope = Some(2.0);
+        let q = band.q;
+        wheel_band(&mut band, -1.0, false);
+        assert_eq!(band.slope, Some(3.0));
+        assert_eq!(band.q, q);
+        band.shape = EqBandShape::Bell;
+        wheel_band(&mut band, -1.0, true);
+        assert_eq!(band.slope, Some(4.0));
+        assert_eq!(band.q, q);
     }
 
     #[test]

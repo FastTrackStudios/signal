@@ -5,6 +5,8 @@
 //! bit-exact at fc≤2 kHz). Odd slopes (3/5) append the real-pole tail
 //! from [`super::hp`].
 
+use crate::inline::{InlineVec, inline_vec};
+
 use crate::design::biquad::Coeffs;
 use crate::design::cascade;
 
@@ -17,13 +19,13 @@ pub(super) fn mzt_lowpass_simple_cascade(
     q: f64,
     sample_rate: f64,
     order: usize,
-) -> Vec<Coeffs> {
+) -> InlineVec<Coeffs> {
     let n = n.max(1);
     if n == 1 {
-        return vec![cascade::lowpass_s2_proq4(freq_hz, q, sample_rate)];
+        return inline_vec![cascade::lowpass_s2_proq4(freq_hz, q, sample_rate)];
     }
     if matches!(order, 3 | 5) {
-        let mut sections: Vec<Coeffs> = cut_odd_qs(order, q)
+        let mut sections: InlineVec<Coeffs> = cut_odd_qs(order, q)
             .into_iter()
             .map(|sq| cascade::lowpass_s2_proq4(freq_hz, sq, sample_rate))
             .collect();
@@ -71,7 +73,7 @@ pub(super) fn mzt_lowpass_simple_cascade(
 /// LP slope=8 cascade: closed-form per-section path matching the binary's
 /// `compute_audio_biquad_lagrange_mzt`. See
 /// `proq4_mzt::lp_slope8_section_biquad` for the decoded formula.
-fn lp_slope8_cascade(freq_hz: f64, q_user: f64, sample_rate: f64) -> Vec<Coeffs> {
+fn lp_slope8_cascade(freq_hz: f64, q_user: f64, sample_rate: f64) -> InlineVec<Coeffs> {
     (0..6)
         .map(|sec| crate::design::mzt::lp_slope8_section_biquad(sec, freq_hz, q_user, sample_rate))
         .collect()

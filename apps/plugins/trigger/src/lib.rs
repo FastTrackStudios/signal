@@ -179,8 +179,8 @@ impl FtsTrigger {
         self.chain.velocity.min_velocity = now.vel_min as f64;
         self.chain.velocity.max_velocity = now.vel_max.max(now.vel_min) as f64;
         self.chain.detector.algorithm = algorithm_from_index(now.algorithm);
-        self.chain.set_sc_hpf(now.sc_hpf_hz as f64);
-        self.chain.set_sc_lpf(now.sc_lpf_hz as f64);
+        let _ = self.chain.set_sc_hpf(now.sc_hpf_hz as f64);
+        let _ = self.chain.set_sc_lpf(now.sc_lpf_hz as f64);
         self.chain.update(self.audio_config());
 
         if algorithm_changed {

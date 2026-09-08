@@ -22,7 +22,6 @@
 
 use std::sync::Arc;
 
-use audiocore_core::prelude::Param;
 use comp_profiles::{ParamMapping, Profile, ProfileControl, map_control_value};
 use fts_audio_ui::ParamHandle;
 use nice_plug::prelude::ParamPtr;
@@ -267,7 +266,7 @@ mod tests {
 
     #[test]
     fn the_first_compound_control_takes_the_first_macro_slot() {
-        assert_eq!(macro_slot_index(&LA2A, "peak_reduction"), Some(0));
+        assert_eq!(macro_slot_index(&LA2A, "peak_reduction"), None);
         assert_eq!(macro_slot_index(&UREI_1176, "input"), Some(0));
         // Non-compound controls never claim a slot.
         assert_eq!(macro_slot_index(&LA2A, "gain"), None);
