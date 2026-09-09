@@ -8,7 +8,7 @@ the daw/session/keyflow domains all live elsewhere now.
 | repo | holds | consumed as |
 |---|---|---|
 | **signal** (here) | the signal domain (`crates/signal/*`), fx, sampler, nam, rigs, plugin-host, the reaper signal extension, and `apps/desktop` (the Signal app + its headless engine) | — |
-| [processor](https://github.com/FastTrackStudios/processor) | the DSP, the effects and the CLAP/VST3 plugins — `features/fx/*`, the plugin faces, the standalone host | git dep, tag `v0.1.0` |
+| [processor](https://github.com/FastTrackStudios/processor) | the DSP, the effects and the CLAP/VST3 plugins — `features/fx/*`, the plugin faces, the standalone host | git dep, tag `v0.1.1` |
 | [daw](https://github.com/FastTrackStudios/daw) | the daw domain, `fts-chrome`, `engine-launcher`, `daw-proto` | git dep, tag `v0.0.2` |
 | [session](https://github.com/FastTrackStudios/session) | setlists, songs, the guide | git dep, tag `v0.0.2` |
 | [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui`, `architect-story-*`, `architect-telemetry` | git dep, tag `v0.1.1` |
