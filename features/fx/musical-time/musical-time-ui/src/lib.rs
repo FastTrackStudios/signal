@@ -55,15 +55,25 @@ pub fn NotePicker(
     /// The colour a flavour button takes when it is the active one.
     #[props(default = "#43d17a".to_string())]
     accent: String,
+    /// Off draws the picker dimmed and ignores clicks — for a side that is
+    /// following another (a linked delay's right channel), where the control
+    /// still has to SHOW what it is set to but changing it would do nothing.
+    #[props(default = true)]
+    enabled: bool,
     #[props(default = 1.0)] scale: f64,
 ) -> Element {
     let now = current(&handle);
+    // A slaved side still shows its note; it just cannot be changed.
+    let dim = if enabled { "1" } else { "0.45" };
 
     // Stepping the note value keeps the flavour: someone on 1/8T who wants
     // 1/16T is asking for the next note, not for straight sixteenths.
     let step = {
         let handle = handle.clone();
         move |delta: i32| {
+            if !enabled {
+                return;
+            }
             let i = NoteValue::ALL
                 .iter()
                 .position(|v| *v == now.value)
@@ -81,6 +91,9 @@ pub fn NotePicker(
     let flavour = {
         let handle = handle.clone();
         move |f: Flavour| {
+            if !enabled {
+                return;
+            }
             let next = if now.flavour == f {
                 Flavour::Straight
             } else {
@@ -125,7 +138,8 @@ pub fn NotePicker(
 
     rsx! {
         div {
-            style: "display:flex; align-items:center; gap:{px(4.0)};",
+            style: "display:flex; align-items:center; gap:{px(4.0)}; \
+                    opacity:{dim};",
 
             button {
                 "data-testid": "{testid}-prev",
@@ -175,26 +189,26 @@ pub fn NotePicker(
     }
 }
 
-/// The whole time control: the Free/Sync switch, the picker, and what the
-/// current setting works out to.
+/// The unit switch: milliseconds, or a note.
 ///
-/// The resolved time is shown in both modes on purpose. Synced, it is the
-/// only way to know what "1/8D" means at this tempo; free, it is the number
-/// you dialled. Either way the face answers "how long is this delay" without
-/// the user doing arithmetic.
+/// It reads MS / NOTE rather than the FREE / SYNC most plugins use. Partly
+/// because it says what the two modes actually are — one is a number of
+/// milliseconds, the other is a note — and partly because it has to share a
+/// panel with the delay's own macro controls, one of which the digital
+/// profile legends "SYNC". Two things called Sync on one face is worse than a
+/// slightly unusual name.
+///
+/// The switch is separate from [`NotePicker`] because the picker REPLACES the
+/// knob it belongs to: while a time is locked to the tempo there is no
+/// milliseconds value to enter, so offering a dial for one is offering a
+/// control that does nothing.
 #[component]
-pub fn MusicalTimeField(
-    /// The Free/Sync switch — [`musical_time::params::sync_param`].
+pub fn TimeModeSwitch(
+    /// The mode parameter — [`musical_time::params::sync_param`].
     sync: ParamHandle,
-    /// The note picker — [`musical_time::params::division_param`].
-    division: ParamHandle,
-    /// What the control currently resolves to, in milliseconds. The face
-    /// computes this (it is the same call the audio thread makes), rather
-    /// than this component guessing at a tempo it cannot see.
-    resolved_ms: f64,
-    /// The host's tempo, if it has one. `None` greys the Sync side out: a
-    /// note value is not a duration without a tempo behind it, and a switch
-    /// that silently does nothing is worse than one that says it cannot.
+    /// The host's tempo, if it has one. `None` greys NOTE out: a note value
+    /// is not a duration without a tempo behind it, and a switch that flips
+    /// and then silently does nothing is worse than one that will not flip.
     #[props(default)]
     tempo: Option<f64>,
     testid: String,
@@ -216,9 +230,6 @@ pub fn MusicalTimeField(
         }
     };
 
-    // Built up front rather than from a closure: the note picker below takes
-    // `accent` by value, and a closure still holding a borrow of it would
-    // keep that move from happening.
     let half = |on: bool, enabled: bool, accent: &str, ink: &str| {
         format!(
             "border:none; cursor:{}; padding:{} {}; font-size:{}; \
@@ -233,55 +244,39 @@ pub fn MusicalTimeField(
             if enabled { "1" } else { "0.4" },
         )
     };
-    let free_style = half(!synced, true, &accent, &ink);
-    let sync_style = half(synced, has_tempo, &accent, &ink);
+    let ms_style = half(!synced, true, &accent, &ink);
+    let note_style = half(synced, has_tempo, &accent, &ink);
 
     rsx! {
         div {
             "data-testid": "{testid}",
-            style: "display:flex; flex-direction:column; align-items:center; \
-                    gap:{px(3.0)};",
-
-            div {
-                style: "display:flex; border-radius:{px(3.0)}; overflow:hidden; \
-                        border:1px solid #00000033;",
-                button {
-                    "data-testid": "{testid}-free",
-                    style: "{free_style}",
-                    onclick: {
-                        let toggle = toggle.clone();
-                        move |_| toggle(false)
-                    },
-                    "FREE"
-                }
-                button {
-                    "data-testid": "{testid}-sync",
-                    style: "{sync_style}",
-                    onclick: {
-                        let toggle = toggle.clone();
-                        move |_| {
-                            // Refusing rather than switching to something that
-                            // cannot work: with no tempo, Sync would leave the
-                            // control reading a note and sounding like the
-                            // free time, which looks like a bug.
-                            if has_tempo {
-                                toggle(true);
-                            }
+            style: "display:flex; border-radius:{px(3.0)}; overflow:hidden; \
+                    border:1px solid #00000033; width:fit-content;",
+            button {
+                "data-testid": "{testid}-ms",
+                style: "{ms_style}",
+                onclick: {
+                    let toggle = toggle.clone();
+                    move |_| toggle(false)
+                },
+                "MS"
+            }
+            button {
+                "data-testid": "{testid}-note",
+                style: "{note_style}",
+                onclick: {
+                    let toggle = toggle.clone();
+                    move |_| {
+                        // Refusing rather than switching into something that
+                        // cannot work: with no tempo, NOTE would leave the
+                        // control reading a note and sounding like the
+                        // milliseconds, which looks like a bug.
+                        if has_tempo {
+                            toggle(true);
                         }
-                    },
-                    "SYNC"
-                }
-            }
-
-            if synced {
-                NotePicker { handle: division, testid: "{testid}-picker", ink: ink.clone(), accent, scale }
-            }
-
-            div {
-                "data-testid": "{testid}-resolved",
-                style: "font-size:{px(9.0)}; color:{ink}; opacity:0.7; \
-                        font-variant-numeric:tabular-nums;",
-                "{format_ms(resolved_ms)}"
+                    }
+                },
+                "NOTE"
             }
         }
     }

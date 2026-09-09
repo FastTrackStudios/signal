@@ -16,7 +16,7 @@ use std::fmt::Write;
 use dioxus::prelude::*;
 use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
-use musical_time_ui::MusicalTimeField;
+use musical_time_ui::{NotePicker, TimeModeSwitch};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
 
 /// Panel drawing size — 2U, like the compressor's faces.
@@ -458,6 +458,12 @@ pub fn SpaceFace(
     // most clearance — the same rule the saturator and delay faces use, so a
     // row of numbers reads as a row and not a ragged line. The extras are
     // folded in because a profile's extra knobs sit on this row too.
+    // Whether the pre-delay is locked to the tempo — its knob and readout
+    // both change meaning when it is.
+    let synced = handles
+        .get("predelay_sync")
+        .is_some_and(|h| h.normalized() >= 0.5);
+
     let value_row_y = design
         .knobs
         .iter()
@@ -515,26 +521,15 @@ pub fn SpaceFace(
                 size: 8.0, color: design.dim_ink.to_string(),
             }
 
-            // The pre-delay's time control sits under the Pre-Delay knob it
-            // governs, rather than in a corner of the panel. Anywhere fixed
-            // collides with something on some design — the IR family puts a
-            // file browser across the right of the face — and a mode switch
-            // for a control belongs beside that control anyway.
-            if let (Some(sync), Some(div), Some(knob)) = (
-                handles.get("predelay_sync"),
-                handles.get("predelay_div"),
-                design.knobs.iter().find(|k| k.param == "predelay"),
-            ) {
-                PanelSlot {
-                    scale,
-                    x: knob.x,
-                    y: knob.d.mul_add(0.92, knob.y) + 46.0,
-                    w: 150.0,
-                    h: 58.0,
-                    MusicalTimeField {
+            // The unit switch lives in the left column, the only space free
+            // on every design: the centrepiece spans x 140..790 depending on
+            // the family, the IR family puts a file browser across x 582..902,
+            // the badge owns the top from x 150, and the knob row sits at
+            // y 206 with its legends running to the panel's bottom edge.
+            if let Some(sync) = handles.get("predelay_sync") {
+                PanelSlot { scale, x: 88.0, y: 120.0, w: 124.0, h: 30.0,
+                    TimeModeSwitch {
                         sync: sync.clone(),
-                        division: div.clone(),
-                        resolved_ms,
                         tempo,
                         testid: "reverb-predelay".to_string(),
                         ink: design.ink.to_string(),
@@ -556,7 +551,24 @@ pub fn SpaceFace(
                     // between two designs is what walks blitz's mutator off
                     // the end of a template path.
                     key: "{design.family}-{index}",
-                    if let Some(handle) = handles.get(spec.param) {
+                    // While the pre-delay is locked to the tempo, the note
+                    // picker REPLACES the dial. There is no milliseconds
+                    // value to enter then, and a knob that turns without
+                    // changing anything is worse than no knob.
+                    if let Some(div) = (synced && spec.param == "predelay")
+                        .then(|| handles.get("predelay_div").cloned())
+                        .flatten()
+                    {
+                        PanelSlot { scale, x: spec.x, y: spec.y, w: spec.d * 2.0, h: spec.d * 2.0,
+                            NotePicker {
+                                handle: div,
+                                testid: "reverb-predelay-note".to_string(),
+                                ink: design.ink.to_string(),
+                                accent: design.accent.to_string(),
+                                scale,
+                            }
+                        }
+                    } else if let Some(handle) = handles.get(spec.param) {
                         PanelSlot { scale, x: spec.x, y: spec.y, w: spec.d * 2.0, h: spec.d * 2.0,
                             HardwareKnob {
                                 handle: handle.clone(),
@@ -583,7 +595,15 @@ pub fn SpaceFace(
                             "data-testid": "{value_id}",
                             Silkscreen {
                                 scale, x: spec.x, y: value_row_y, width: 130.0,
-                                text: handle.display_value(),
+                                // Locked to the tempo the knob is not what is
+                                // setting the pre-delay, and printing the
+                                // number it still holds would state a time
+                                // the reverb is not using.
+                                text: if synced && spec.param == "predelay" {
+                                    musical_time_ui::format_ms(resolved_ms)
+                                } else {
+                                    handle.display_value()
+                                },
                                 size: 9.0,
                                 weight: 600,
                                 color: design.ink.to_string(),

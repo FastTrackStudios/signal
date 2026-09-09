@@ -14,7 +14,7 @@
 use dioxus::prelude::*;
 use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
-use musical_time_ui::MusicalTimeField;
+use musical_time_ui::{NotePicker, TimeModeSwitch};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
 
 /// Panel drawing size — 2U, like the compressor's faces.
@@ -288,6 +288,66 @@ pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
     }
 }
 
+/// A small latching chip, styled to match the unit switch beside it.
+///
+/// `PanelButton` would be the hardware idiom, but at 46 px tall it does not
+/// fit the strip between the switch above and the knob row below, and this
+/// control belongs with the switch rather than with the dials.
+#[component]
+fn LinkChip(
+    handle: ParamHandle,
+    testid: String,
+    ink: String,
+    accent: String,
+    scale: f64,
+) -> Element {
+    let on = handle.normalized() >= 0.5;
+    let px = |v: f64| format!("{:.1}px", v * scale);
+    let style = format!(
+        "border:1px solid #00000033; border-radius:{}; cursor:pointer; \
+         padding:{} {}; font-size:{}; line-height:1; font-weight:700; \
+         letter-spacing:0.04em; background:{}; color:{};",
+        px(3.0),
+        px(2.0),
+        px(6.0),
+        px(9.0),
+        if on { accent } else { "#00000022".to_string() },
+        if on { "#101216".to_string() } else { ink },
+    );
+    rsx! {
+        button {
+            "data-testid": "{testid}",
+            style: "{style}",
+            onclick: move |_| {
+                handle.set_as_gesture(if on { 0.0 } else { 1.0 });
+            },
+            "LINK"
+        }
+    }
+}
+
+/// The division handle that stands in for a knob, if this one is a time and
+/// the times are locked to the tempo.
+///
+/// Left and right have their own notes: a delay with a dotted eighth on one
+/// side and a quarter on the other is a whole family of sounds, and the two
+/// parameters were always separate — this is just where the user reaches
+/// them. (Link still mirrors L onto R; that is what Link is for.)
+fn note_div_for(
+    param: &str,
+    synced: bool,
+    handles: &std::collections::HashMap<String, ParamHandle>,
+) -> Option<ParamHandle> {
+    if !synced {
+        return None;
+    }
+    match param {
+        "time_l" => handles.get("div_l").cloned(),
+        "time_r" => handles.get("div_r").cloned(),
+        _ => None,
+    }
+}
+
 /// A drawn delay: the panel, its centrepiece, and its row of controls.
 #[component]
 pub fn EchoFace(
@@ -297,10 +357,11 @@ pub fn EchoFace(
     /// and the Sync switch says so rather than pretending.
     #[props(default)]
     tempo: Option<f64>,
-    /// What the left time currently works out to, in milliseconds — computed
+    /// What the two times currently work out to, in milliseconds — computed
     /// by the same call the audio thread makes.
     #[props(default = 0.0)]
     resolved_ms: f64,
+    #[props(default = 0.0)] resolved_r_ms: f64,
     /// The shell's redraw tick. Not read; its job is to change, so the panel
     /// re-renders against fresh parameter values instead of being memoized.
     frame: u64,
@@ -323,6 +384,15 @@ pub fn EchoFace(
         .iter()
         .find(|c| c.profiles.contains(&profile.id))
         .map_or("Delay", |c| c.label);
+
+    // Whether the times are locked to the tempo — the knobs' readouts change
+    // meaning when they are.
+    let synced = handles
+        .get("time_sync")
+        .is_some_and(|h| h.normalized() >= 0.5);
+    let linked = handles
+        .get("link")
+        .is_some_and(|h| h.normalized() >= 0.5);
 
     let value_row_y = design
         .knobs
@@ -369,28 +439,36 @@ pub fn EchoFace(
                 }
             }
 
-            // The time control sits under the Time knob it governs, rather
-            // than in a corner of the panel. Anywhere fixed collides with
-            // something on some design — the centre display spans the middle
-            // of every face — and a mode switch for a control belongs beside
-            // that control anyway.
-            if let (Some(sync), Some(div_l), Some(time_knob)) = (
-                handles.get("time_sync"),
-                handles.get("div_l"),
-                design.knobs.iter().find(|k| k.param == "time_l"),
-            ) {
-                PanelSlot {
-                    scale,
-                    x: time_knob.x,
-                    y: time_knob.d.mul_add(0.92, time_knob.y) + 46.0,
-                    w: 150.0,
-                    h: 58.0,
-                    MusicalTimeField {
+            // The unit switch lives in the left column, the only space free
+            // on every design: the centre display spans x 170..790 on all of
+            // them, the badge owns the top from x 150, and the knob row sits
+            // at y 206 with its legends running to the panel's bottom edge.
+            // It governs both times, so it sits above them rather than beside
+            // either one.
+            if let Some(sync) = handles.get("time_sync") {
+                PanelSlot { scale, x: 78.0, y: 106.0, w: 140.0, h: 26.0,
+                    TimeModeSwitch {
                         sync: sync.clone(),
-                        division: div_l.clone(),
-                        resolved_ms,
                         tempo,
                         testid: "delay-time".to_string(),
+                        ink: design.ink.to_string(),
+                        accent: design.accent.to_string(),
+                        scale,
+                    }
+                }
+            }
+
+            // Link was a parameter with nowhere to press it: it defaults ON,
+            // so the right time has always followed the left, and the right
+            // control has always been inert without saying so. It matters
+            // more now that the note pickers make each side's setting
+            // visible — a picker you can move that changes nothing is the
+            // thing this whole mode was meant to avoid.
+            if let Some(link) = handles.get("link") {
+                PanelSlot { scale, x: 78.0, y: 136.0, w: 140.0, h: 24.0,
+                    LinkChip {
+                        handle: link.clone(),
+                        testid: "delay-link".to_string(),
                         ink: design.ink.to_string(),
                         accent: design.accent.to_string(),
                         scale,
@@ -401,7 +479,25 @@ pub fn EchoFace(
             for (index , spec) in design.knobs.iter().copied().enumerate() {
                 div {
                     key: "{design.family}-{index}",
-                    if let Some(handle) = handles.get(spec.param) {
+                    // While the times are locked to the tempo, the note
+                    // picker REPLACES the dial. There is no milliseconds
+                    // value to enter then, and a knob that turns without
+                    // changing anything is worse than no knob.
+                    if let Some(div) = note_div_for(spec.param, synced, &handles) {
+                        PanelSlot { scale, x: spec.x, y: spec.y, w: spec.d * 2.0, h: spec.d * 2.0,
+                            NotePicker {
+                                handle: div,
+                                testid: format!("delay-{}-note", spec.param.replace('_', "-")),
+                                ink: design.ink.to_string(),
+                                accent: design.accent.to_string(),
+                                // Linked, the right side is the left side's
+                                // note. Shown, so you can see what it is;
+                                // not editable, because it is not its own.
+                                enabled: !(linked && spec.param == "time_r"),
+                                scale,
+                            }
+                        }
+                    } else if let Some(handle) = handles.get(spec.param) {
                         PanelSlot { scale, x: spec.x, y: spec.y, w: spec.d * 2.0, h: spec.d * 2.0,
                             HardwareKnob {
                                 handle: handle.clone(),
@@ -425,7 +521,16 @@ pub fn EchoFace(
                             "data-testid": "{value_id}",
                             Silkscreen {
                                 scale, x: spec.x, y: value_row_y, width: 120.0,
-                                text: handle.display_value(),
+                                // While the times are locked to the tempo the
+                                // knob is not what is setting them, and
+                                // printing the number it still holds means
+                                // the face states a delay time the delay is
+                                // not using. Show what it IS using.
+                                text: match spec.param {
+                                    "time_l" if synced => musical_time_ui::format_ms(resolved_ms),
+                                    "time_r" if synced => musical_time_ui::format_ms(resolved_r_ms),
+                                    _ => handle.display_value(),
+                                },
                                 size: 9.0,
                                 weight: 600,
                                 color: design.ink.to_string(),

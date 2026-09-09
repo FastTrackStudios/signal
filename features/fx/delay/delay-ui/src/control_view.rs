@@ -148,6 +148,7 @@ pub fn App() -> Element {
         ("character_a", params.character_a.as_ptr()),
         ("character_b", params.character_b.as_ptr()),
         ("time_sync", params.time_sync.as_ptr()),
+        ("link", params.link.as_ptr()),
         ("div_l", params.div_l.as_ptr()),
         ("div_r", params.div_r.as_ptr()),
     ]
@@ -240,6 +241,7 @@ pub fn App() -> Element {
                         // delay is actually running at.
                         tempo,
                         resolved_ms: params.time_l_ms(tempo),
+                        resolved_r_ms: params.time_r_ms(tempo),
                         frame,
                     }
                 }
