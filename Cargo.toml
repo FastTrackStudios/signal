@@ -11,24 +11,9 @@ members = [
     "apps/desktop",
     "apps/web",
     "apps/fts-convert",
-    "apps/plugins/comp",
-    "apps/plugins/delay",
-    "apps/plugins/eq",
-    "apps/plugins/gate",
     "apps/plugins/guide",
-    "apps/plugins/host",
-    "apps/plugins/level",
-    "apps/plugins/limiter",
-    "apps/plugins/meter",
-    "apps/plugins/modulation",
     "apps/plugins/nam",
-    "apps/plugins/pitch",
-    "apps/plugins/reverb",
-    "apps/plugins/saturate",
     "apps/plugins/signal",
-    "apps/plugins/trigger",
-    "apps/plugins/tune",
-    "apps/plugins/unison",
     "apps/plugins/xtask",
     "crates/signal/browser",
     "crates/signal/controller",
@@ -52,55 +37,7 @@ members = [
     "crates/signal/widgets",
     "features/analyzer/signal-analyzer",
     "features/separator/signal-separator",
-    "features/preset-browser/preset-browser",
-    "features/preset-browser/preset-browser-ui",
-    "features/fx/comp/comp",
-    "features/fx/comp/comp-dsp",
-    "features/fx/comp/comp-profiles",
-    "features/fx/comp/comp-ui",
-    "features/fx/comp/limiter-ui",
-    "features/fx/delay/delay",
-    "features/fx/delay/delay-dsp",
-    "features/fx/dsp-golden",
-    "features/fx/dsp-core",
-    "features/fx/delay/delay-profiles",
-    "features/fx/delay/delay-ui",
-    "features/fx/eq/apps/eq-standalone",
-    "features/fx/eq/eq",
-    "features/fx/eq/eq-dsp",
-    "features/fx/eq/eq-profiles",
-    "features/fx/eq/eq-ui",
-    "features/fx/eq/spectrum-analyzer/spectrum-analyzer",
-    "features/fx/eq/spectrum-analyzer/spectrum-analyzer-dsp",
-    "features/fx/eq/spectrum-analyzer/spectrum-analyzer-ui",
-    "features/fx/hit-detect/hit-detect-dsp",
-    "features/fx/level/level",
     "features/fx/macromod",
-    "features/fx/modulation/chorus-dsp",
-    "features/fx/modulation/modulation",
-    "features/fx/modulation/modulation-profiles",
-    "features/fx/modulation/modulation-ui",
-    "features/fx/modulation/pattern-ui",
-    "features/fx/modulation/trem-dsp",
-    "features/fx/modulation/wah-dsp",
-    "features/fx/multiband",
-    "features/fx/musical-time/musical-time",
-    "features/fx/musical-time/musical-time-ui",
-    "features/fx/pitch/pitch",
-    "features/fx/reverb/reverb",
-    "features/fx/reverb/reverb-dsp",
-    "features/fx/reverb/reverb-profiles",
-    "features/fx/reverb/reverb-ui",
-    "features/fx/saturate/saturate",
-    "features/fx/saturate/saturate-dsp",
-    "features/fx/saturate/saturate-profiles",
-    "features/fx/saturate/saturate-ui",
-    "features/fx/signal-fx",
-    "features/fx/stack",
-    "features/fx/trigger/trigger",
-    "features/fx/trigger/trigger-dsp",
-    "features/fx/trigger/trigger-ui",
-    "features/fx/tune/tune",
     "features/nam",
     "features/plugin-host",
     "features/reaper/signal-extension",
@@ -360,36 +297,14 @@ signal-synth-rig = { path = "features/rigs/synth/rig" }
 
 # ── features/fx — built-in FX (wave 4) ────────────────────────────────
 # Facade crates — the public FX deps (downstream uses these, not `*-dsp`).
-saturate = { path = "features/fx/saturate/saturate" }
-saturate-dsp = { path = "features/fx/saturate/saturate-dsp" }
-dsp-golden = { path = "features/fx/dsp-golden" }
-dsp-core = { path = "features/fx/dsp-core" }
-saturate-profiles = { path = "features/fx/saturate/saturate-profiles" }
-saturate-ui = { path = "features/fx/saturate/saturate-ui" }
-trigger = { path = "features/fx/trigger/trigger" }
-trigger-dsp = { path = "features/fx/trigger/trigger-dsp" }
-hit-detect-dsp = { path = "features/fx/hit-detect/hit-detect-dsp" }
 # The trigger plugin editor. Core (waveform/threshold SVG math) is portable;
 # the nice-plug/Blitz editor is behind its `native` feature.
-trigger-ui = { path = "features/fx/trigger/trigger-ui", default-features = false }
-eq = { path = "features/fx/eq/eq" }
 # The full Pro-Q EQ editor. Core (graph model / response / SVG / interaction)
 # is wasm-portable; the vello/nice-plug editor is behind its `native` feature.
-eq-ui = { path = "features/fx/eq/eq-ui", default-features = false }
-eq-profiles = { path = "features/fx/eq/eq-profiles" }
-spectrum-analyzer = { path = "features/fx/eq/spectrum-analyzer/spectrum-analyzer" }
-spectrum-analyzer-dsp = { path = "features/fx/eq/spectrum-analyzer/spectrum-analyzer-dsp" }
-spectrum-analyzer-ui = { path = "features/fx/eq/spectrum-analyzer/spectrum-analyzer-ui" }
-comp = { path = "features/fx/comp/comp" }
+eq-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.1.0" }
 # The comp plugin editor. Core (profile view data model) is portable; the
 # nice-plug/Blitz editor is behind its `native` feature.
-comp-ui = { path = "features/fx/comp/comp-ui", default-features = false }
-limiter-ui = { path = "features/fx/comp/limiter-ui" }
-reverb = { path = "features/fx/reverb/reverb" }
-delay = { path = "features/fx/delay/delay" }
-pitch = { path = "features/fx/pitch/pitch" }
 pitch-dsp = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
-tune = { path = "features/fx/tune/tune" }
 world-sys = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
 tune-dsp = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
 align-dsp = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
@@ -403,33 +318,14 @@ expression-editor-reaper = { git = "https://github.com/FastTrackStudios/daw", ta
 expression-editor-standalone = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
 expression-editor-tools = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
 expression-editor-ui = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
-level = { path = "features/fx/level/level" }
 level-dsp = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
-modulation = { path = "features/fx/modulation/modulation" }
 # Internal DSP cores (behind the facades).
-eq-dsp = { path = "features/fx/eq/eq-dsp" }
-comp-dsp = { path = "features/fx/comp/comp-dsp" }
-reverb-dsp = { path = "features/fx/reverb/reverb-dsp" }
-reverb-profiles = { path = "features/fx/reverb/reverb-profiles" }
-reverb-ui = { path = "features/fx/reverb/reverb-ui" }
-delay-dsp = { path = "features/fx/delay/delay-dsp" }
-delay-profiles = { path = "features/fx/delay/delay-profiles" }
-delay-ui = { path = "features/fx/delay/delay-ui" }
-chorus-dsp = { path = "features/fx/modulation/chorus-dsp" }
-modulation-profiles = { path = "features/fx/modulation/modulation-profiles" }
-modulation-ui = { path = "features/fx/modulation/modulation-ui" }
-multiband-dsp = { path = "features/fx/multiband" }
-fx-stack = { path = "features/fx/stack" }
-musical-time = { path = "features/fx/musical-time/musical-time" }
-musical-time-ui = { path = "features/fx/musical-time/musical-time-ui" }
-pattern-ui = { path = "features/fx/modulation/pattern-ui" }
-trem-dsp = { path = "features/fx/modulation/trem-dsp" }
-wah-dsp = { path = "features/fx/modulation/wah-dsp" }
-preset-browser = { path = "features/preset-browser/preset-browser" }
-preset-browser-ui = { path = "features/preset-browser/preset-browser-ui" }
+eq-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.1.0" }
+reverb-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.1.0" }
+pattern-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.1.0" }
 signal-analyzer = { path = "features/analyzer/signal-analyzer" }
 signal-separator = { path = "features/separator/signal-separator" }
-signal-fx = { path = "features/fx/signal-fx" }
+fx-blocks = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.1.0" }
 
 # ── Facet reflection + vox RPC — the rc.5 fleet pins ──────────────────
 facet = { version = "0.50.0-rc.5", features = ["reflect", "chrono", "uuid"] }
@@ -1146,7 +1042,7 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.signal-guitar]
 opt-level = 3
-[profile.dev.package.signal-fx]
+[profile.dev.package.fx-blocks]
 opt-level = 3
 [profile.dev.package.eq-dsp]
 opt-level = 3

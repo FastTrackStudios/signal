@@ -1335,7 +1335,7 @@ impl SamplerRig {
         Ok(Some(slot))
     }
 
-    /// Install an already-built `HostedPlugin` (e.g. a built-in signal-fx
+    /// Install an already-built `HostedPlugin` (e.g. a built-in fx-blocks
     /// processor) into a drum-mixer channel/bus/master FX chain.
     ///
     /// # Errors

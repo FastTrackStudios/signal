@@ -1,4 +1,4 @@
-//! Map a parsed MM2 (Cradle) FX slot onto one of our built-in `signal-fx`
+//! Map a parsed MM2 (Cradle) FX slot onto one of our built-in `fx-blocks`
 //! processors, wrapped as a [`HostedPlugin`] the drum mixer can host.
 //!
 //! This is the bridge that turns MM2's per-piece mix recipe into real processing
@@ -8,7 +8,7 @@
 //! with a brick-wall ratio), Reverb, Transient (`NativeTransient` dual-envelope
 //! designer), Drive (→ `NativeSaturate` voiced by MM2's Soft/Tape/Hard mode).
 
-use signal_fx::{NativeComp, NativeEq, NativeReverb, NativeSaturate, NativeTransient};
+use fx_blocks::{NativeComp, NativeEq, NativeReverb, NativeSaturate, NativeTransient};
 use signal_plugin_host::{HostedPlugin, PluginInstance};
 
 use crate::cradle::{FxSlot, Mixer, Strip};
@@ -79,7 +79,7 @@ fn build_eq(slot: &FxSlot, sr: f64) -> NativeEq {
         .take(24)
         .enumerate()
     {
-        let n = i + 1; // signal-fx bands are 1-indexed
+        let n = i + 1; // fx-blocks bands are 1-indexed
         eq.set_named(&format!("b{n}_used"), 1.0);
         eq.set_named(&format!("b{n}_on"), 1.0);
         eq.set_named(&format!("b{n}_freq"), f64::from(band.freq));
@@ -173,7 +173,7 @@ fn build_drive(slot: &FxSlot, sr: f64) -> NativeSaturate {
 
 // ── param conversions ───────────────────────────────────────────────────────
 
-/// MM2 EQ filter `mode` → signal-fx shape code (see `eq_shape_to_filter`).
+/// MM2 EQ filter `mode` → fx-blocks shape code (see `eq_shape_to_filter`).
 fn eq_shape_code(mode: &str) -> f64 {
     match mode {
         "lowShelf" => 1.0,
@@ -186,7 +186,7 @@ fn eq_shape_code(mode: &str) -> f64 {
 }
 
 /// MM2 stores compression ratio as its reciprocal (0.5 = 2:1, 0.25 = 4:1,
-/// 0.17 ≈ 6:1). Invert to a real ratio, clamped to signal-fx's 1..20.
+/// 0.17 ≈ 6:1). Invert to a real ratio, clamped to fx-blocks's 1..20.
 fn mm2_ratio(slot: &FxSlot) -> f64 {
     match slot.num("ratio") {
         Some(n) if n > 0.0 => (1.0 / n).clamp(1.0, 20.0),

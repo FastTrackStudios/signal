@@ -33,7 +33,7 @@ const REGISTRY: &[(BlockType, Ctor)] = &[
     (BlockType::Amp, build_amp),
     (BlockType::Waveshaper, build_waveshaper),
     (BlockType::Dfs, build_dfs),
-    // Built-in FX (features/fx/, wrapped in signal-fx).
+    // Built-in FX (the processor repo, wrapped in fx-blocks).
     (BlockType::Eq, build_eq),
     (BlockType::Compressor, build_comp),
     (BlockType::Reverb, build_reverb),
@@ -53,21 +53,21 @@ const REGISTRY: &[(BlockType, Ctor)] = &[
 ];
 
 fn build_chorus(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = signal_fx::NativeMod::chorus(sample_rate as f64);
+    let mut fx = fx_blocks::NativeMod::chorus(sample_rate as f64);
     apply_mod_params(block, &mut fx);
     Box::new(fx)
 }
 fn build_flanger(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = signal_fx::NativeMod::flanger(sample_rate as f64);
+    let mut fx = fx_blocks::NativeMod::flanger(sample_rate as f64);
     apply_mod_params(block, &mut fx);
     Box::new(fx)
 }
 fn build_vibrato(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = signal_fx::NativeMod::vibrato(sample_rate as f64);
+    let mut fx = fx_blocks::NativeMod::vibrato(sample_rate as f64);
     apply_mod_params(block, &mut fx);
     Box::new(fx)
 }
-fn apply_mod_params(block: &RigBlock, fx: &mut signal_fx::NativeMod) {
+fn apply_mod_params(block: &RigBlock, fx: &mut fx_blocks::NativeMod) {
     for name in ["mix", "depth", "rate", "engine"] {
         if let Some(v) = block.param_f32(name) {
             fx.set_named(name, v as f64);
@@ -75,7 +75,7 @@ fn apply_mod_params(block: &RigBlock, fx: &mut signal_fx::NativeMod) {
     }
 }
 fn build_trem(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = signal_fx::NativeTrem::new(sample_rate as f64);
+    let mut fx = fx_blocks::NativeTrem::new(sample_rate as f64);
     for name in ["depth", "mix", "rate", "mode"] {
         if let Some(v) = block.param_f32(name) {
             fx.set_named(name, v as f64);
@@ -84,7 +84,7 @@ fn build_trem(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     Box::new(fx)
 }
 fn build_gate(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = signal_fx::NativeGate::new(sample_rate as f64);
+    let mut fx = fx_blocks::NativeGate::new(sample_rate as f64);
     for name in ["threshold", "attack", "release"] {
         if let Some(v) = block.param_f32(name) {
             fx.set_named(name, v as f64);
@@ -93,31 +93,31 @@ fn build_gate(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     Box::new(fx)
 }
 fn build_volume(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = signal_fx::NativeGain::new(sample_rate as f64);
+    let mut fx = fx_blocks::NativeGain::new(sample_rate as f64);
     if let Some(v) = block.param_f32("gain_db") {
         fx.set_named("gain_db", v as f64);
     }
     Box::new(fx)
 }
 fn build_phaser(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(signal_fx::NativePassthrough::new("Phaser"))
+    Box::new(fx_blocks::NativePassthrough::new("Phaser"))
 }
 fn build_rotary(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(signal_fx::NativePassthrough::new("Rotary"))
+    Box::new(fx_blocks::NativePassthrough::new("Rotary"))
 }
 fn build_boost_pedal(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(signal_fx::NativePassthrough::new("Boost"))
+    Box::new(fx_blocks::NativePassthrough::new("Boost"))
 }
 fn build_drive(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(signal_fx::NativePassthrough::new("Drive"))
+    Box::new(fx_blocks::NativePassthrough::new("Drive"))
 }
 
 fn build_eq(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = signal_fx::NativeEq::new(sample_rate as f64);
+    let mut fx = fx_blocks::NativeEq::new(sample_rate as f64);
     // Full band set: b{1..24}_{used,on,freq,gain,q,shape}.
-    for b in 0..signal_fx::EQ_BANDS {
-        for f in 0..signal_fx::EQ_FIELDS {
-            let name = signal_fx::eq_param_name(b, f);
+    for b in 0..fx_blocks::EQ_BANDS {
+        for f in 0..fx_blocks::EQ_FIELDS {
+            let name = fx_blocks::eq_param_name(b, f);
             if let Some(v) = block.param_f32(&name) {
                 fx.set_named(&name, v as f64);
             }
@@ -127,7 +127,7 @@ fn build_eq(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
 }
 
 fn build_comp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = signal_fx::NativeComp::new(sample_rate as f64);
+    let mut fx = fx_blocks::NativeComp::new(sample_rate as f64);
     for name in [
         "threshold",
         "ratio",
@@ -146,7 +146,7 @@ fn build_comp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
 }
 
 fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = signal_fx::NativeReverb::new(sample_rate as f64);
+    let mut fx = fx_blocks::NativeReverb::new(sample_rate as f64);
     for name in ["mix", "decay", "size"] {
         if let Some(v) = block.param_f32(name) {
             fx.set_named(name, v as f64);
@@ -161,7 +161,7 @@ fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
 }
 
 fn build_delay(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = signal_fx::NativeDelay::new(sample_rate as f64);
+    let mut fx = fx_blocks::NativeDelay::new(sample_rate as f64);
     for name in ["mix", "time", "feedback", "pan", "tap_div_l", "tap_div_r"] {
         if let Some(v) = block.param_f32(name) {
             fx.set_named(name, v as f64);

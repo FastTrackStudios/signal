@@ -9,7 +9,7 @@
 //! ```
 //!
 //! So there is no binary decode here — find the element, read the attributes,
-//! de-normalize into real units, and map onto `signal_fx::NativeReverb`.
+//! de-normalize into real units, and map onto `fx_blocks::NativeReverb`.
 //!
 //! Two wrinkles the format hides:
 //!
@@ -776,7 +776,7 @@ mod tests {
 
     #[test]
     fn algorithm_and_variant_are_emitted_before_any_value_params() {
-        // Both rebuild the reverb chain in signal-fx, so a value written
+        // Both rebuild the reverb chain in fx-blocks, so a value written
         // before them is thrown away. This ordering is load-bearing.
         let v = parse_xml(KICK_ROOM).unwrap();
         let p = to_native_reverb_params(&v);

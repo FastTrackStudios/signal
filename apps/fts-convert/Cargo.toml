@@ -24,4 +24,4 @@ signal-analyzer.workspace = true
 # directly, beside the plugin. When the two columns disagree the fault is in
 # this converter's parameter mapping; when they agree it is in the engine,
 # which is measured elsewhere.
-signal-fx.workspace = true
+fx-blocks.workspace = true

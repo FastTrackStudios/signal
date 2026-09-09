@@ -35,7 +35,7 @@ midicore = { workspace = true, features = ["vox", "midir"] }
 kontrol.workspace = true
 # Built-in FX (NativeEq/NativeComp/NativeReverb) + the plugin-host wrapper, so
 # an imported MM2 (Cradle) mix can be reproduced with our own DSP per piece.
-signal-fx.workspace = true
+fx-blocks.workspace = true
 signal-plugin-host.workspace = true
 tracing.workspace = true
 

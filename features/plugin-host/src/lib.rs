@@ -85,7 +85,7 @@ impl HostedPlugin {
     }
 
     /// Wrap an already-constructed [`PluginInstance`] — e.g. a built-in
-    /// `signal-fx` `NativeEq`/`NativeComp`/`NativeReverb` — so the host's
+    /// `fx-blocks` `NativeEq`/`NativeComp`/`NativeReverb` — so the host's
     /// FX-chain machinery can run it exactly like a loaded CLAP/VST3. Prepare it
     /// before processing (the drum mixer's `install_plugin` does this).
     #[must_use]

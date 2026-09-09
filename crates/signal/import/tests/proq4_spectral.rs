@@ -15,7 +15,7 @@
 //! So the stimulus is a loud tone buried in broadband noise, and the test
 //! measures the tone and its neighbours separately.
 
-use signal_fx::NativeEq;
+use fx_blocks::NativeEq;
 use signal_plugin_host::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;

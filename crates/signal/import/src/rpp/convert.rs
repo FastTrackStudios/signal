@@ -96,7 +96,7 @@ pub struct Converted {
     pub unmapped: Vec<String>,
     /// The engine-facing parameter list, where one exists.
     ///
-    /// Only the equalizer has it: `signal-fx` exposes the whole EQ engine and
+    /// Only the equalizer has it: `fx-blocks` exposes the whole EQ engine and
     /// eight of the compressor's twenty-nine controls, so a compressor
     /// comparison against the engine would measure the facade rather than the
     /// DSP. Callers use it to render an engine column beside the plugin's,

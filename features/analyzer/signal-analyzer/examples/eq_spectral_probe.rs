@@ -19,7 +19,7 @@
 //! ```
 
 use realfft::RealFftPlanner;
-use signal_fx::NativeEq;
+use fx_blocks::NativeEq;
 use signal_plugin_host::{HostedPlugin, PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;

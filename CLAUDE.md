@@ -8,6 +8,7 @@ the daw/session/keyflow domains all live elsewhere now.
 | repo | holds | consumed as |
 |---|---|---|
 | **signal** (here) | the signal domain (`crates/signal/*`), fx, sampler, nam, rigs, plugin-host, the reaper signal extension, and `apps/desktop` (the Signal app + its headless engine) | — |
+| [processor](https://github.com/FastTrackStudios/processor) | the DSP, the effects and the CLAP/VST3 plugins — `features/fx/*`, the plugin faces, the standalone host | git dep, tag `v0.1.0` |
 | [daw](https://github.com/FastTrackStudios/daw) | the daw domain, `fts-chrome`, `engine-launcher`, `daw-proto` | git dep, tag `v0.0.2` |
 | [session](https://github.com/FastTrackStudios/session) | setlists, songs, the guide | git dep, tag `v0.0.2` |
 | [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui`, `architect-story-*`, `architect-telemetry` | git dep, tag `v0.1.1` |
@@ -46,7 +47,7 @@ crates/    domain cores — daw, session, keyflow, signal (facade+proto+
            patchbay (PipeWire studio routing: facade+proto+ui)
 features/  capabilities — audio, sync, dawfile, reaper, standalone,
            surfaces, daw-ui, guide, engraver, dynamic-template,
-           fx (built-in FX), rigs, sampler, nam, plugin-host,
+           rigs, sampler, nam, plugin-host,
            expression-editor, chord-tool, song,
            launcher/ (fts-launcher — the REAPER DawModule glue; the
            launcher engine itself is architect-launcher-*)
@@ -68,6 +69,24 @@ apps/      desktop (signal-desktop — THE app: the Signal desktop GUI;
            cargo member; `just docs-build` / `just docs-serve`)
 docs/      cross-domain guides (facet, styx, tracey, spec/)
 ```
+
+**The FX left in September 2026.** `features/fx/*`, the plugin faces and
+the CLAP/VST3 bundles now live in
+[processor](https://github.com/FastTrackStudios/processor), so that signal
+and session can both use the effects without depending on each other.
+Signal takes back what it needs as a tagged git dep: `fx-blocks` (the FX
+as native `PluginInstance` blocks — it was `signal-fx`), `eq-dsp`,
+`reverb-dsp`, `eq-ui` and `pattern-ui`.
+
+Two things deliberately did NOT go. **NAM** reads as an effect and is not
+one — it needs `signal-proto`, `signal-space`, `signal-sampler` and the
+Tone3000 model browser — so `features/nam` and `apps/plugins/nam` stay.
+**macromod** sits under `features/fx/` and is not an effect either: it is
+the macro/modulation data model, and its types are embedded in
+signal-proto's wire format.
+
+Signal still ships three plugins of its own: `signal`, `guide` and `nam`.
+The bundler (`apps/plugins/xtask`) is in both repos for that reason.
 
 **architect is a separate repo** as of the August 2026 split. Framework
 changes are made there, tagged, and pulled in by bumping the tag here —

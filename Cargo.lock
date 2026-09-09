@@ -394,25 +394,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anyrender_vello"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93f297de95eb39e5e6b38e4f4d0b28a880f9fb56ee095e49d8a365a7eb4d6af8"
-dependencies = [
- "anyrender",
- "debug_timer 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures-channel",
- "kurbo 0.13.1",
- "peniko 0.6.1",
- "pollster",
- "rustc-hash 2.1.3",
- "vello",
- "wasm-bindgen-futures",
- "wgpu",
- "wgpu_context 0.7.0",
-]
-
-[[package]]
 name = "anyrender_vello_cpu"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -793,7 +774,7 @@ dependencies = [
  "futures-lite",
  "parking",
  "polling",
- "rustix 1.1.4",
+ "rustix",
  "slab",
  "windows-sys 0.61.2",
 ]
@@ -824,7 +805,7 @@ dependencies = [
  "cfg-if",
  "event-listener 5.4.1",
  "futures-lite",
- "rustix 1.1.4",
+ "rustix",
 ]
 
 [[package]]
@@ -839,7 +820,7 @@ dependencies = [
  "cfg-if",
  "futures-core",
  "futures-io",
- "rustix 1.1.4",
+ "rustix",
  "signal-hook-registry",
  "slab",
  "windows-sys 0.61.2",
@@ -1268,37 +1249,11 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "baseview"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fee31c5ff593b43ef62afbaea18a6b3fa62e84171d00aaf014b9d4ea128776e"
-dependencies = [
- "block2 0.6.2",
- "bytemuck",
- "dispatch2",
- "dpi",
- "keyboard-types 0.8.3",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-core-foundation",
- "objc2-foundation 0.3.2",
- "percent-encoding",
- "polling",
- "raw-window-handle 0.6.2",
- "windows 0.62.2",
- "windows-core 0.62.2",
- "windows-sys 0.61.2",
- "x11-dl",
- "x11rb",
- "xkbcommon-dl",
-]
-
-[[package]]
-name = "baseview"
 version = "0.3.3"
 dependencies = [
  "block2 0.6.2",
  "bytemuck",
- "calloop 0.14.4",
+ "calloop",
  "dispatch2",
  "dpi",
  "keyboard-types 0.8.3",
@@ -1569,14 +1524,13 @@ dependencies = [
  "blitz-dom",
  "blitz-paint",
  "blitz-traits",
- "data-url",
  "futures-util",
  "keyboard-types 0.7.0",
  "rfd",
  "wasm-bindgen",
  "web-sys",
  "web-time",
- "winit 0.31.0-beta.2",
+ "winit",
 ]
 
 [[package]]
@@ -1591,7 +1545,7 @@ dependencies = [
  "http",
  "keyboard-types 0.7.0",
  "serde",
- "smol_str 0.3.2",
+ "smol_str",
  "url",
 ]
 
@@ -1817,41 +1771,15 @@ dependencies = [
 
 [[package]]
 name = "calloop"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b99da2f8558ca23c71f4fd15dc57c906239752dd27ff3c00a1d56b685b7cbfec"
-dependencies = [
- "bitflags 2.13.0",
- "log",
- "polling",
- "rustix 0.38.44",
- "slab",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "calloop"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4dbf9978365bac10f54d1d4b04f7ce4427e51f71d61f2fe15e3fed5166474df7"
 dependencies = [
  "bitflags 2.13.0",
  "polling",
- "rustix 1.1.4",
+ "rustix",
  "slab",
  "tracing",
-]
-
-[[package]]
-name = "calloop-wayland-source"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95a66a987056935f7efce4ab5668920b5d0dac4a7c99991a67395f13702ddd20"
-dependencies = [
- "calloop 0.13.0",
- "rustix 0.38.44",
- "wayland-backend",
- "wayland-client",
 ]
 
 [[package]]
@@ -1860,8 +1788,8 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "138efcf0940a02ebf0cc8d1eff41a1682a46b431630f4c52450d6265876021fa"
 dependencies = [
- "calloop 0.14.4",
- "rustix 1.1.4",
+ "calloop",
+ "rustix",
  "wayland-backend",
  "wayland-client",
 ]
@@ -2012,6 +1940,7 @@ dependencies = [
 [[package]]
 name = "chorus-dsp"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "audiocore-dsp",
 ]
@@ -2286,7 +2215,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2308,6 +2237,7 @@ dependencies = [
 [[package]]
 name = "comp"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "audiocore-dsp",
  "comp-dsp",
@@ -2316,50 +2246,10 @@ dependencies = [
 [[package]]
 name = "comp-dsp"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "audiocore-dsp",
  "dsp-core",
- "dsp-golden",
-]
-
-[[package]]
-name = "comp-plugin"
-version = "0.1.0"
-dependencies = [
- "audiocore-core",
- "comp",
- "comp-ui",
- "fx-stack",
- "nice-plug",
-]
-
-[[package]]
-name = "comp-profiles"
-version = "0.1.0"
-dependencies = [
- "comp-dsp",
- "eq-profiles",
-]
-
-[[package]]
-name = "comp-ui"
-version = "0.1.0"
-dependencies = [
- "architect-ui",
- "atomic_float",
- "audiocore-core",
- "comp-profiles",
- "dioxus",
- "dioxus-test",
- "eq-ui",
- "fts-audio-ui",
- "fts-plug-ui",
- "nice-plug",
- "nice-plug-dioxus",
- "parking_lot",
- "preset-browser",
- "preset-browser-ui",
- "tokio",
 ]
 
 [[package]]
@@ -2415,53 +2305,11 @@ checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "const-serialize"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad7154afa56de2f290e3c82c2c6dc4f5b282b6870903f56ef3509aba95866edc"
-dependencies = [
- "const-serialize-macro 0.7.2",
-]
-
-[[package]]
-name = "const-serialize"
-version = "0.8.0-alpha.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e42cd5aabba86f128b3763da1fec1491c0f728ce99245062cd49b6f9e6d235b"
-dependencies = [
- "const-serialize 0.7.2",
- "const-serialize-macro 0.8.0-alpha.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde",
-]
-
-[[package]]
-name = "const-serialize"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
- "const-serialize-macro 0.8.0-alpha.0 (git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc)",
+ "const-serialize-macro",
  "serde",
-]
-
-[[package]]
-name = "const-serialize-macro"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f160aad86b4343e8d4e261fee9965c3005b2fd6bc117d172ab65948779e4acf"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "const-serialize-macro"
-version = "0.8.0-alpha.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42571ed01eb46d2e1adcf99c8ca576f081e46f2623d13500eba70d1d99a4c439"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
 ]
 
 [[package]]
@@ -2776,8 +2624,8 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -2896,7 +2744,7 @@ dependencies = [
  "document-features",
  "mio",
  "parking_lot",
- "rustix 1.1.4",
+ "rustix",
  "signal-hook",
  "signal-hook-mio",
  "winapi",
@@ -3528,6 +3376,7 @@ dependencies = [
 [[package]]
 name = "delay"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "delay-dsp",
 ]
@@ -3535,51 +3384,11 @@ dependencies = [
 [[package]]
 name = "delay-dsp"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "audiocore-dsp",
  "dsp-core",
- "dsp-golden",
  "pitch-dsp",
-]
-
-[[package]]
-name = "delay-plugin"
-version = "0.1.0"
-dependencies = [
- "audiocore-core",
- "audiocore-dsp",
- "delay",
- "delay-profiles",
- "delay-ui",
- "nice-plug",
-]
-
-[[package]]
-name = "delay-profiles"
-version = "0.1.0"
-dependencies = [
- "delay-dsp",
-]
-
-[[package]]
-name = "delay-ui"
-version = "0.1.0"
-dependencies = [
- "architect-ui",
- "atomic_float",
- "crossbeam-channel",
- "delay-dsp",
- "delay-profiles",
- "dioxus",
- "dioxus-test",
- "fts-audio-ui",
- "fts-plug-ui",
- "musical-time",
- "musical-time-ui",
- "nice-plug",
- "nice-plug-dioxus",
- "parking_lot",
- "tokio",
 ]
 
 [[package]]
@@ -3767,7 +3576,7 @@ dependencies = [
  "dioxus-cli-config",
  "dioxus-config-macro",
  "dioxus-config-macros",
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-core-macro",
  "dioxus-desktop",
  "dioxus-devtools",
@@ -3781,13 +3590,13 @@ dependencies = [
  "dioxus-logger",
  "dioxus-router",
  "dioxus-server",
- "dioxus-signals 0.8.0-alpha.0",
+ "dioxus-signals",
  "dioxus-ssr",
  "dioxus-stores",
  "dioxus-web",
- "manganis 0.8.0-alpha.0",
+ "manganis",
  "serde",
- "subsecond 0.8.0-alpha.0",
+ "subsecond",
  "warnings",
 ]
 
@@ -3846,43 +3655,22 @@ source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b
 
 [[package]]
 name = "dioxus-core"
-version = "0.7.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45887100ff0cf89abeb8b659808294fda48cd53f3b424e36407dedffcfea830b"
-dependencies = [
- "anyhow",
- "const_format",
- "dioxus-core-types 0.7.9",
- "futures-channel",
- "futures-util",
- "generational-box 0.7.9",
- "longest-increasing-subsequence",
- "rustc-hash 2.1.3",
- "rustversion",
- "slab",
- "slotmap",
- "subsecond 0.7.9",
- "tracing",
-]
-
-[[package]]
-name = "dioxus-core"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
  "anyhow",
  "const_format",
- "dioxus-core-types 0.8.0-alpha.0",
+ "dioxus-core-types",
  "futures-channel",
  "futures-util",
- "generational-box 0.8.0-alpha.0",
+ "generational-box",
  "longest-increasing-subsequence",
  "rustc-hash 2.1.3",
  "rustversion",
  "serde",
  "slab",
  "slotmap",
- "subsecond 0.8.0-alpha.0",
+ "subsecond",
  "tracing",
  "xxhash-rust",
 ]
@@ -3901,12 +3689,6 @@ dependencies = [
 
 [[package]]
 name = "dioxus-core-types"
-version = "0.7.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36963eab106b169737762f9cd5ee5fd97f585989dcb2d8e30a596e97a6999009"
-
-[[package]]
-name = "dioxus-core-types"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 
@@ -3921,18 +3703,18 @@ dependencies = [
  "bytes",
  "dioxus-asset-resolver",
  "dioxus-cli-config",
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-devtools",
  "dioxus-document",
  "dioxus-history",
  "dioxus-hooks",
  "dioxus-html",
  "dioxus-interpreter-js",
- "dioxus-signals 0.8.0-alpha.0",
+ "dioxus-signals",
  "dunce",
  "futures-channel",
  "futures-util",
- "generational-box 0.8.0-alpha.0",
+ "generational-box",
  "global-hotkey",
  "image",
  "infer",
@@ -3946,7 +3728,7 @@ dependencies = [
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
- "objc2-ui-kit 0.3.2",
+ "objc2-ui-kit",
  "percent-encoding",
  "rand 0.9.4",
  "rfd",
@@ -3972,14 +3754,14 @@ version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
  "dioxus-cli-config",
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-devtools-types",
- "dioxus-signals 0.8.0-alpha.0",
+ "dioxus-signals",
  "futures-channel",
  "futures-util",
  "serde",
  "serde_json",
- "subsecond 0.8.0-alpha.0",
+ "subsecond",
  "thiserror 2.0.18",
  "tracing",
  "tungstenite 0.28.0",
@@ -3990,9 +3772,9 @@ name = "dioxus-devtools-types"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "serde",
- "subsecond-types 0.8.0-alpha.0",
+ "subsecond-types",
 ]
 
 [[package]]
@@ -4000,13 +3782,13 @@ name = "dioxus-document"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-core-macro",
- "dioxus-core-types 0.8.0-alpha.0",
+ "dioxus-core-types",
  "dioxus-html",
  "futures-channel",
  "futures-util",
- "generational-box 0.8.0-alpha.0",
+ "generational-box",
  "lazy-js-bundle 0.8.0-alpha.0",
  "serde",
  "serde_json",
@@ -4033,12 +3815,12 @@ dependencies = [
  "derive_more 2.1.1",
  "dioxus-asset-resolver",
  "dioxus-cli-config",
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-fullstack-core",
  "dioxus-fullstack-macro",
  "dioxus-hooks",
  "dioxus-html",
- "dioxus-signals 0.8.0-alpha.0",
+ "dioxus-signals",
  "form_urlencoded",
  "futures",
  "futures-channel",
@@ -4086,14 +3868,14 @@ dependencies = [
  "axum-core",
  "base64 0.22.1",
  "ciborium",
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-document",
  "dioxus-history",
  "dioxus-hooks",
- "dioxus-signals 0.8.0-alpha.0",
+ "dioxus-signals",
  "futures-channel",
  "futures-util",
- "generational-box 0.8.0-alpha.0",
+ "generational-box",
  "http",
  "inventory",
  "parking_lot",
@@ -4122,7 +3904,7 @@ name = "dioxus-history"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "tracing",
 ]
 
@@ -4131,11 +3913,11 @@ name = "dioxus-hooks"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
- "dioxus-core 0.8.0-alpha.0",
- "dioxus-signals 0.8.0-alpha.0",
+ "dioxus-core",
+ "dioxus-signals",
  "futures-channel",
  "futures-util",
- "generational-box 0.8.0-alpha.0",
+ "generational-box",
  "rustversion",
  "slab",
  "tracing",
@@ -4148,16 +3930,16 @@ source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b
 dependencies = [
  "async-trait",
  "bytes",
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-core-macro",
- "dioxus-core-types 0.8.0-alpha.0",
+ "dioxus-core-types",
  "dioxus-hooks",
  "dioxus-html-internal-macro",
  "enumset",
  "euclid",
  "futures-channel",
  "futures-util",
- "generational-box 0.8.0-alpha.0",
+ "generational-box",
  "keyboard-types 0.7.0",
  "lazy-js-bundle 0.8.0-alpha.0",
  "rustversion",
@@ -4183,8 +3965,8 @@ name = "dioxus-interpreter-js"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
- "dioxus-core 0.8.0-alpha.0",
- "dioxus-core-types 0.8.0-alpha.0",
+ "dioxus-core",
+ "dioxus-core-types",
  "dioxus-html",
  "js-sys",
  "lazy-js-bundle 0.8.0-alpha.0",
@@ -4204,7 +3986,7 @@ source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b
 dependencies = [
  "axum",
  "dioxus-cli-config",
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-devtools",
  "dioxus-document",
  "dioxus-history",
@@ -4212,7 +3994,7 @@ dependencies = [
  "dioxus-interpreter-js",
  "futures-channel",
  "futures-util",
- "generational-box 0.8.0-alpha.0",
+ "generational-box",
  "rustc-hash 2.1.3",
  "serde",
  "serde_json",
@@ -4242,7 +4024,6 @@ source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b
 dependencies = [
  "android-activity",
  "anyrender",
- "anyrender_vello 0.12.0",
  "anyrender_vello_cpu",
  "anyrender_vello_hybrid",
  "blitz-dom",
@@ -4254,7 +4035,7 @@ dependencies = [
  "cfg-if",
  "dioxus-asset-resolver",
  "dioxus-cli-config",
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-core-macro",
  "dioxus-devtools",
  "dioxus-document",
@@ -4262,17 +4043,17 @@ dependencies = [
  "dioxus-hooks",
  "dioxus-html",
  "dioxus-native-dom",
- "dioxus-signals 0.8.0-alpha.0",
+ "dioxus-signals",
  "dioxus-stores",
  "futures-util",
  "keyboard-types 0.7.0",
- "manganis 0.8.0-alpha.0",
+ "manganis",
  "rustc-hash 2.1.3",
  "slotmap",
  "tokio",
  "webbrowser",
  "wgpu_context 0.7.0",
- "winit 0.31.0-beta.2",
+ "winit",
 ]
 
 [[package]]
@@ -4282,7 +4063,7 @@ source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b
 dependencies = [
  "blitz-dom",
  "blitz-traits",
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-html",
  "futures-util",
  "keyboard-types 0.7.0",
@@ -4311,14 +4092,14 @@ version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
  "dioxus-cli-config",
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-core-macro",
  "dioxus-fullstack-core",
  "dioxus-history",
  "dioxus-hooks",
  "dioxus-html",
  "dioxus-router-macro",
- "dioxus-signals 0.8.0-alpha.0",
+ "dioxus-signals",
  "percent-encoding",
  "rustversion",
  "tracing",
@@ -4376,7 +4157,7 @@ dependencies = [
  "ciborium",
  "dashmap",
  "dioxus-cli-config",
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "dioxus-core-macro",
  "dioxus-devtools",
  "dioxus-document",
@@ -4387,13 +4168,13 @@ dependencies = [
  "dioxus-interpreter-js",
  "dioxus-logger",
  "dioxus-router",
- "dioxus-signals 0.8.0-alpha.0",
+ "dioxus-signals",
  "dioxus-ssr",
  "enumset",
  "futures",
  "futures-channel",
  "futures-util",
- "generational-box 0.8.0-alpha.0",
+ "generational-box",
  "http",
  "http-body-util",
  "hyper",
@@ -4406,7 +4187,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_qs",
- "subsecond 0.8.0-alpha.0",
+ "subsecond",
  "thiserror 2.0.18",
  "tokio",
  "tokio-tungstenite 0.28.0",
@@ -4421,29 +4202,13 @@ dependencies = [
 
 [[package]]
 name = "dioxus-signals"
-version = "0.7.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3705754f5e043deec9fc7af0d159f18e5b21c02c47d255c7e477f31368f0b6d2"
-dependencies = [
- "dioxus-core 0.7.9",
- "futures-channel",
- "futures-util",
- "generational-box 0.7.9",
- "parking_lot",
- "rustc-hash 2.1.3",
- "tracing",
- "warnings",
-]
-
-[[package]]
-name = "dioxus-signals"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
- "dioxus-core 0.8.0-alpha.0",
+ "dioxus-core",
  "futures-channel",
  "futures-util",
- "generational-box 0.8.0-alpha.0",
+ "generational-box",
  "parking_lot",
  "rustc-hash 2.1.3",
  "tracing",
@@ -4456,8 +4221,8 @@ version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
  "askama_escape",
- "dioxus-core 0.8.0-alpha.0",
- "dioxus-core-types 0.8.0-alpha.0",
+ "dioxus-core",
+ "dioxus-core-types",
  "rustc-hash 2.1.3",
 ]
 
@@ -4466,10 +4231,10 @@ name = "dioxus-stores"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
- "dioxus-core 0.8.0-alpha.0",
- "dioxus-signals 0.8.0-alpha.0",
+ "dioxus-core",
+ "dioxus-signals",
  "dioxus-stores-macro",
- "generational-box 0.8.0-alpha.0",
+ "generational-box",
 ]
 
 [[package]]
@@ -4484,46 +4249,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "dioxus-test"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.6.3#db690d63aaae8c6dcf9d308754299a144c111b4e"
-dependencies = [
- "anyrender",
- "anyrender_vello_cpu",
- "blitz-dom",
- "blitz-html",
- "blitz-paint",
- "blitz-traits",
- "dioxus-core 0.8.0-alpha.0",
- "dioxus-html",
- "dioxus-native-dom",
- "keyboard-types 0.7.0",
- "peniko 0.6.1",
- "png 0.17.16",
- "smol_str 0.3.2",
- "test-that",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "dioxus-web"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
  "dioxus-cli-config",
- "dioxus-core 0.8.0-alpha.0",
- "dioxus-core-types 0.8.0-alpha.0",
+ "dioxus-core",
+ "dioxus-core-types",
  "dioxus-devtools",
  "dioxus-document",
  "dioxus-fullstack-core",
  "dioxus-history",
  "dioxus-html",
  "dioxus-interpreter-js",
- "dioxus-signals 0.8.0-alpha.0",
+ "dioxus-signals",
  "futures-channel",
  "futures-util",
- "generational-box 0.8.0-alpha.0",
+ "generational-box",
  "gloo-timers",
  "js-sys",
  "lazy-js-bundle 0.8.0-alpha.0",
@@ -4561,12 +4303,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dispatch"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b"
-
-[[package]]
 name = "dispatch2"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4592,7 +4328,7 @@ dependencies = [
  "objc2-core-graphics",
  "objc2-foundation 0.3.2",
  "scopeguard",
- "smithay-client-toolkit 0.20.0",
+ "smithay-client-toolkit",
  "thiserror 2.0.18",
  "widestring",
  "windows 0.62.2",
@@ -4717,13 +4453,7 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 [[package]]
 name = "dsp-core"
 version = "0.1.0"
-
-[[package]]
-name = "dsp-golden"
-version = "0.1.0"
-dependencies = [
- "dsp-core",
-]
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 
 [[package]]
 name = "dtoa"
@@ -4943,6 +4673,7 @@ dependencies = [
 [[package]]
 name = "eq"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "eq-dsp",
 ]
@@ -4950,79 +4681,25 @@ dependencies = [
 [[package]]
 name = "eq-dsp"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "audiocore-dsp",
  "dsp-core",
- "dsp-golden",
  "realfft",
  "smallvec 1.15.2",
 ]
 
 [[package]]
-name = "eq-plugin"
-version = "0.1.0"
-dependencies = [
- "audiocore-core",
- "audiocore-dsp",
- "eq-dsp",
- "eq-profiles",
- "eq-ui",
- "nice-plug",
- "spectrum-analyzer",
-]
-
-[[package]]
-name = "eq-profiles"
-version = "0.1.0"
-
-[[package]]
-name = "eq-standalone"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "atomic_float",
- "audiocore-core",
- "blitz-shell",
- "cpal",
- "dioxus-core 0.8.0-alpha.0",
- "dioxus-native",
- "dioxus-signals 0.7.9",
- "eq-ui",
- "manganis 0.7.9",
- "nice-plug",
- "nice-plug-dioxus",
- "pipewire",
- "spectrum-analyzer",
- "winit 0.30.13",
-]
-
-[[package]]
 name = "eq-ui"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
- "architect-ui",
- "atomic_float",
- "audiocore-core",
  "blitz-dom",
- "blitz-traits",
  "dioxus",
- "dioxus-ssr",
- "dioxus-test",
  "eq-dsp",
- "eq-profiles",
  "fts-audio-ui",
- "fts-plug-ui",
- "futures-timer",
- "nice-plug",
- "nice-plug-dioxus",
  "parking_lot",
- "pollster",
- "preset-browser",
- "preset-browser-ui",
  "spectrum-analyzer",
- "test-that",
- "tokio",
- "wgpu",
 ]
 
 [[package]]
@@ -5727,25 +5404,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "fts-clap-host"
-version = "0.1.0"
-dependencies = [
- "baseview 0.2.2",
- "block2 0.6.2",
- "daw-standalone",
- "eyre",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-foundation 0.3.2",
- "raw-window-handle 0.6.2",
-]
-
-[[package]]
 name = "fts-convert"
 version = "0.1.0"
 dependencies = [
+ "fx-blocks",
  "signal-analyzer",
- "signal-fx",
  "signal-import",
  "signal-plugin-host",
 ]
@@ -5756,20 +5419,6 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.6.3#db690d63aaae8c6dcf9d308754299a144c111b4e"
 dependencies = [
  "audiocore-dsp",
-]
-
-[[package]]
-name = "fts-plug-ui"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.6.3#db690d63aaae8c6dcf9d308754299a144c111b4e"
-dependencies = [
- "architect-ui",
- "atomic_float",
- "audiocore-core",
- "dioxus",
- "fts-audio-ui",
- "nice-plug",
- "nice-plug-dioxus",
 ]
 
 [[package]]
@@ -5917,12 +5566,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "037711b3d59c33004d3856fbdc83b99d4ff37a24768fa1be9ce3538a1cde4393"
 
 [[package]]
-name = "futures-timer"
-version = "3.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af43fadb8a98512d547e37b4e92e0ced13e205c061b87b4623eff01d918d6968"
-
-[[package]]
 name = "futures-util"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5940,10 +5583,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "fx-stack"
+name = "fx-blocks"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
- "libm",
+ "audiocore-dsp",
+ "comp",
+ "daw",
+ "daw-proto",
+ "delay",
+ "eq",
+ "fts-sample",
+ "level-dsp",
+ "modulation",
+ "pitch-dsp",
+ "reverb",
+ "saturate-dsp",
+ "tune",
 ]
 
 [[package]]
@@ -5953,14 +5609,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
 dependencies = [
  "byteorder",
-]
-
-[[package]]
-name = "gate-plugin"
-version = "0.1.0"
-dependencies = [
- "level",
- "nice-plug",
 ]
 
 [[package]]
@@ -6050,16 +5698,6 @@ dependencies = [
 
 [[package]]
 name = "generational-box"
-version = "0.7.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cd0d825b8d339701ad330dbcd6399519ced4d143484954daf6e3185dace4f77"
-dependencies = [
- "parking_lot",
- "tracing",
-]
-
-[[package]]
-name = "generational-box"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
@@ -6078,8 +5716,8 @@ dependencies = [
  "libc",
  "log",
  "rustversion",
- "windows-link 0.2.1",
- "windows-result 0.4.1",
+ "windows-link 0.1.3",
+ "windows-result 0.3.4",
 ]
 
 [[package]]
@@ -6098,7 +5736,7 @@ version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8"
 dependencies = [
- "rustix 1.1.4",
+ "rustix",
  "windows-link 0.2.1",
 ]
 
@@ -6398,7 +6036,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.18",
- "windows 0.62.2",
+ "windows 0.58.0",
 ]
 
 [[package]]
@@ -6777,17 +6415,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hit-detect-dsp"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "approx",
- "eq-dsp",
- "fts-sample",
- "trigger-dsp",
-]
-
-[[package]]
 name = "hkdf"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6989,7 +6616,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "system-configuration",
  "tokio",
  "tower-layer",
@@ -7010,7 +6637,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.58.0",
 ]
 
 [[package]]
@@ -8065,26 +7692,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
 
 [[package]]
-name = "level"
-version = "0.1.0"
-dependencies = [
- "level-dsp",
-]
-
-[[package]]
 name = "level-dsp"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.6.3#db690d63aaae8c6dcf9d308754299a144c111b4e"
 dependencies = [
  "audiocore-dsp",
-]
-
-[[package]]
-name = "level-plugin"
-version = "0.1.0"
-dependencies = [
- "level",
- "nice-plug",
 ]
 
 [[package]]
@@ -8196,7 +7808,7 @@ dependencies = [
  "libc",
  "libspa-sys",
  "nom 8.0.0",
- "rustix 1.1.4",
+ "rustix",
  "system-deps 7.0.8",
 ]
 
@@ -8253,30 +7865,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "limiter-plugin"
-version = "0.1.0"
-dependencies = [
- "comp",
- "limiter-ui",
- "nice-plug",
- "nice-plug-dioxus",
-]
-
-[[package]]
-name = "limiter-ui"
-version = "0.1.0"
-dependencies = [
- "atomic_float",
- "audiocore-core",
- "dioxus",
- "dioxus-test",
- "fts-plug-ui",
- "nice-plug",
- "nice-plug-dioxus",
- "tokio",
-]
-
-[[package]]
 name = "line-clipping"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8310,12 +7898,6 @@ dependencies = [
  "quote",
  "syn 2.0.118",
 ]
-
-[[package]]
-name = "linux-raw-sys"
-version = "0.4.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d26c52dbd32dccf2d10cac7725f8eae5296885fb5703b261f7d0a0739ec807ab"
 
 [[package]]
 name = "linux-raw-sys"
@@ -8547,29 +8129,13 @@ dependencies = [
 
 [[package]]
 name = "manganis"
-version = "0.7.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bfcf56309de35b48b8780ea097ace5c3b773a617b52edc49dfc9a63a7d9dc43"
-dependencies = [
- "const-serialize 0.7.2",
- "const-serialize 0.8.0-alpha.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "jni 0.21.1",
- "manganis-core 0.7.9",
- "manganis-macro 0.7.9",
- "ndk-context",
- "objc2 0.6.4",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "manganis"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
- "const-serialize 0.8.0-alpha.0 (git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc)",
+ "const-serialize",
  "jni 0.21.1",
- "manganis-core 0.8.0-alpha.0",
- "manganis-macro 0.8.0-alpha.0",
+ "manganis-core",
+ "manganis-macro",
  "ndk-context",
  "objc2 0.6.4",
  "thiserror 2.0.18",
@@ -8577,40 +8143,14 @@ dependencies = [
 
 [[package]]
 name = "manganis-core"
-version = "0.7.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a24d6be68f594495aea60850a284029d585d7b7839b26096c1b6d758f8518648"
-dependencies = [
- "const-serialize 0.7.2",
- "const-serialize 0.8.0-alpha.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde",
- "winnow 0.7.15",
-]
-
-[[package]]
-name = "manganis-core"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
- "const-serialize 0.8.0-alpha.0 (git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc)",
+ "const-serialize",
  "dioxus-cli-config",
- "dioxus-core-types 0.8.0-alpha.0",
+ "dioxus-core-types",
  "serde",
  "winnow 0.7.15",
-]
-
-[[package]]
-name = "manganis-macro"
-version = "0.7.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e782a10318d707c0833e31876ded8acf91287eee0010af8392559af614c7226"
-dependencies = [
- "dunce",
- "macro-string",
- "manganis-core 0.7.9",
- "proc-macro2",
- "quote",
- "syn 2.0.118",
 ]
 
 [[package]]
@@ -8620,7 +8160,7 @@ source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b
 dependencies = [
  "dunce",
  "macro-string",
- "manganis-core 0.8.0-alpha.0",
+ "manganis-core",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
@@ -8716,7 +8256,7 @@ version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad38eb12aea514a0466ea40a80fd8cc83637065948eb4a426e4aa46261175227"
 dependencies = [
- "rustix 1.1.4",
+ "rustix",
 ]
 
 [[package]]
@@ -8741,39 +8281,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "meter-dsp"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.6.3#db690d63aaae8c6dcf9d308754299a144c111b4e"
-dependencies = [
- "atomic_float",
- "parking_lot",
- "realfft",
-]
-
-[[package]]
-name = "meter-plugin"
-version = "0.1.0"
-dependencies = [
- "dioxus",
- "meter-dsp",
- "meter-ui",
- "nice-plug",
- "nice-plug-dioxus",
- "parking_lot",
-]
-
-[[package]]
-name = "meter-ui"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.6.3#db690d63aaae8c6dcf9d308754299a144c111b4e"
-dependencies = [
- "meter-dsp",
- "nice-plug",
- "nice-plug-dioxus",
- "parking_lot",
 ]
 
 [[package]]
@@ -8857,7 +8364,7 @@ dependencies = [
  "parking_lot",
  "wasm-bindgen",
  "web-sys",
- "windows 0.62.2",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -8925,47 +8432,11 @@ dependencies = [
 [[package]]
 name = "modulation"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "chorus-dsp",
  "trem-dsp",
  "wah-dsp",
-]
-
-[[package]]
-name = "modulation-plugin"
-version = "0.1.0"
-dependencies = [
- "atomic_float",
- "audiocore-core",
- "audiocore-dsp",
- "modulation",
- "modulation-profiles",
- "modulation-ui",
- "nice-plug",
-]
-
-[[package]]
-name = "modulation-profiles"
-version = "0.1.0"
-dependencies = [
- "modulation",
-]
-
-[[package]]
-name = "modulation-ui"
-version = "0.1.0"
-dependencies = [
- "architect-ui",
- "atomic_float",
- "dioxus",
- "dioxus-test",
- "fts-audio-ui",
- "fts-plug-ui",
- "modulation-profiles",
- "nice-plug",
- "nice-plug-dioxus",
- "parking_lot",
- "tokio",
 ]
 
 [[package]]
@@ -9048,31 +8519,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "multiband-dsp"
-version = "0.1.0"
-
-[[package]]
 name = "music-catalog"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/music-convention?tag=v0.1.0#e77c65ed13fd3b130d5778b74b332b655bc1aaf8"
 dependencies = [
  "color-palette",
-]
-
-[[package]]
-name = "musical-time"
-version = "0.1.0"
-dependencies = [
- "nice-plug",
-]
-
-[[package]]
-name = "musical-time-ui"
-version = "0.1.0"
-dependencies = [
- "dioxus",
- "fts-audio-ui",
- "musical-time",
 ]
 
 [[package]]
@@ -9387,7 +8838,7 @@ version = "0.3.1"
 source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#5c3913430b9ee59fbd7fe1770cbe31860f4be12e"
 dependencies = [
  "tracing-appender",
- "windows 0.62.2",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -9418,7 +8869,7 @@ dependencies = [
  "try-lock",
  "vst3",
  "widestring",
- "windows 0.62.2",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -9456,8 +8907,8 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#5c3913430b9ee59fbd7fe1770cbe31860f4be12e"
 dependencies = [
  "anyrender",
- "anyrender_vello 0.11.0",
- "baseview 0.3.3",
+ "anyrender_vello",
+ "baseview",
  "blitz-dom",
  "blitz-paint",
  "blitz-traits",
@@ -9476,7 +8927,7 @@ dependencies = [
  "pollster",
  "raw-window-handle 0.6.2",
  "serde",
- "smol_str 0.3.2",
+ "smol_str",
  "vello",
  "wgpu",
  "wgpu_context 0.6.0",
@@ -9560,7 +9011,7 @@ dependencies = [
  "pin-project-lite",
  "rustc-hash 2.1.3",
  "rustls",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
@@ -9603,7 +9054,7 @@ checksum = "3137a52df66c20090a889828d1c655f21f52294cba64e5c4fbb04fc83eee7c8e"
 dependencies = [
  "cfg_aliases",
  "libc",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -9767,7 +9218,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 2.0.2",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
@@ -9872,7 +9323,7 @@ dependencies = [
  "block2 0.6.2",
  "libc",
  "objc2 0.6.4",
- "objc2-cloud-kit 0.3.2",
+ "objc2-cloud-kit",
  "objc2-core-data 0.3.2",
  "objc2-core-foundation",
  "objc2-core-graphics",
@@ -9911,19 +9362,6 @@ dependencies = [
 
 [[package]]
 name = "objc2-cloud-kit"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74dd3b56391c7a0596a295029734d3c1c5e7e510a4cb30245f8221ccea96b009"
-dependencies = [
- "bitflags 2.13.0",
- "block2 0.5.1",
- "objc2 0.5.2",
- "objc2-core-location 0.2.2",
- "objc2-foundation 0.2.2",
-]
-
-[[package]]
-name = "objc2-cloud-kit"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73ad74d880bb43877038da939b7427bba67e9dd42004a18b809ba7d87cee241c"
@@ -9931,17 +9369,6 @@ dependencies = [
  "bitflags 2.13.0",
  "objc2 0.6.4",
  "objc2-foundation 0.3.2",
-]
-
-[[package]]
-name = "objc2-contacts"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5ff520e9c33812fd374d8deecef01d4a840e7b41862d849513de77e44aa4889"
-dependencies = [
- "block2 0.5.1",
- "objc2 0.5.2",
- "objc2-foundation 0.2.2",
 ]
 
 [[package]]
@@ -10043,18 +9470,6 @@ dependencies = [
 
 [[package]]
 name = "objc2-core-location"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "000cfee34e683244f284252ee206a27953279d370e309649dc3ee317b37e5781"
-dependencies = [
- "block2 0.5.1",
- "objc2 0.5.2",
- "objc2-contacts",
- "objc2-foundation 0.2.2",
-]
-
-[[package]]
-name = "objc2-core-location"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca347214e24bc973fc025fd0d36ebb179ff30536ed1f80252706db19ee452009"
@@ -10134,7 +9549,6 @@ checksum = "0ee638a5da3799329310ad4cfa62fbf045d5f56e3ef5ba4149e7452dcf89d5a8"
 dependencies = [
  "bitflags 2.13.0",
  "block2 0.5.1",
- "dispatch",
  "libc",
  "objc2 0.5.2",
 ]
@@ -10161,18 +9575,6 @@ dependencies = [
  "bitflags 2.13.0",
  "objc2 0.6.4",
  "objc2-core-foundation",
-]
-
-[[package]]
-name = "objc2-link-presentation"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1a1ae721c5e35be65f01a03b6d2ac13a54cb4fa70d8a5da293d7b0020261398"
-dependencies = [
- "block2 0.5.1",
- "objc2 0.5.2",
- "objc2-app-kit 0.2.2",
- "objc2-foundation 0.2.2",
 ]
 
 [[package]]
@@ -10247,16 +9649,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "objc2-symbols"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a684efe3dec1b305badae1a28f6555f6ddd3bb2c2267896782858d5a78404dc"
-dependencies = [
- "objc2 0.5.2",
- "objc2-foundation 0.2.2",
-]
-
-[[package]]
 name = "objc2-system-configuration"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10272,27 +9664,6 @@ dependencies = [
 
 [[package]]
 name = "objc2-ui-kit"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8bb46798b20cd6b91cbd113524c490f1686f4c4e8f49502431415f3512e2b6f"
-dependencies = [
- "bitflags 2.13.0",
- "block2 0.5.1",
- "objc2 0.5.2",
- "objc2-cloud-kit 0.2.2",
- "objc2-core-data 0.2.2",
- "objc2-core-image 0.2.2",
- "objc2-core-location 0.2.2",
- "objc2-foundation 0.2.2",
- "objc2-link-presentation",
- "objc2-quartz-core 0.2.2",
- "objc2-symbols",
- "objc2-uniform-type-identifiers",
- "objc2-user-notifications 0.2.2",
-]
-
-[[package]]
-name = "objc2-ui-kit"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d87d638e33c06f577498cbcc50491496a3ed4246998a7fbba7ccb98b1e7eab22"
@@ -10300,40 +9671,16 @@ dependencies = [
  "bitflags 2.13.0",
  "block2 0.6.2",
  "objc2 0.6.4",
- "objc2-cloud-kit 0.3.2",
+ "objc2-cloud-kit",
  "objc2-core-data 0.3.2",
  "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-core-image 0.3.2",
- "objc2-core-location 0.3.2",
+ "objc2-core-location",
  "objc2-core-text",
  "objc2-foundation 0.3.2",
  "objc2-quartz-core 0.3.2",
- "objc2-user-notifications 0.3.2",
-]
-
-[[package]]
-name = "objc2-uniform-type-identifiers"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44fa5f9748dbfe1ca6c0b79ad20725a11eca7c2218bceb4b005cb1be26273bfe"
-dependencies = [
- "block2 0.5.1",
- "objc2 0.5.2",
- "objc2-foundation 0.2.2",
-]
-
-[[package]]
-name = "objc2-user-notifications"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76cfcbf642358e8689af64cee815d139339f3ed8ad05103ed5eaf73db8d84cb3"
-dependencies = [
- "bitflags 2.13.0",
- "block2 0.5.1",
- "objc2 0.5.2",
- "objc2-core-location 0.2.2",
- "objc2-foundation 0.2.2",
+ "objc2-user-notifications",
 ]
 
 [[package]]
@@ -10593,7 +9940,7 @@ dependencies = [
  "nix 0.31.3",
  "objc2 0.6.4",
  "objc2-foundation 0.3.2",
- "objc2-ui-kit 0.3.2",
+ "objc2-ui-kit",
  "serde",
  "windows-sys 0.61.2",
 ]
@@ -10798,6 +10145,7 @@ checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
 [[package]]
 name = "pattern-ui"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "fts-modulation",
 ]
@@ -11131,7 +10479,7 @@ dependencies = [
  "libspa",
  "libspa-sys",
  "pipewire-sys",
- "rustix 1.1.4",
+ "rustix",
 ]
 
 [[package]]
@@ -11145,28 +10493,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "pitch"
-version = "0.1.0"
-dependencies = [
- "pitch-dsp",
-]
-
-[[package]]
 name = "pitch-dsp"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.6.3#db690d63aaae8c6dcf9d308754299a144c111b4e"
 dependencies = [
  "audiocore-dsp",
  "serde",
-]
-
-[[package]]
-name = "pitch-plugin"
-version = "0.1.0"
-dependencies = [
- "audiocore-dsp",
- "nice-plug",
- "pitch-dsp",
 ]
 
 [[package]]
@@ -11298,7 +10630,7 @@ dependencies = [
  "concurrent-queue",
  "hermit-abi",
  "pin-project-lite",
- "rustix 1.1.4",
+ "rustix",
  "windows-sys 0.61.2",
 ]
 
@@ -11441,25 +10773,6 @@ dependencies = [
  "either",
  "ipnet",
  "num-traits",
-]
-
-[[package]]
-name = "preset-browser"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "preset-browser-ui"
-version = "0.1.0"
-dependencies = [
- "dioxus",
- "dioxus-test",
- "fts-audio-ui",
- "preset-browser",
- "tokio",
 ]
 
 [[package]]
@@ -11757,7 +11070,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.3",
  "rustls",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -11796,7 +11109,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -12267,15 +11580,6 @@ checksum = "03251193000f4bd3b042892be858ee50e8b3719f2b08e5833ac4353724632430"
 
 [[package]]
 name = "redox_syscall"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4722d768eff46b75989dd134e5c353f0d6296e5aaa3132e776cbdb56be7731aa"
-dependencies = [
- "bitflags 1.3.2",
-]
-
-[[package]]
-name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
@@ -12331,8 +11635,8 @@ checksum = "d9dd7ab4af0363d5ccfd2838d782a28196cf32a5cc2e4fe3c5dc83f2be588b8b"
 dependencies = [
  "cfg-if",
  "libc",
- "rustix 1.1.4",
- "windows 0.62.2",
+ "rustix",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -12480,6 +11784,7 @@ checksum = "1e061d1b48cb8d38042de4ae0a7a6401009d6143dc80d2e2d6f31f0bdd6470c7"
 [[package]]
 name = "reverb"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "reverb-dsp",
 ]
@@ -12487,60 +11792,16 @@ dependencies = [
 [[package]]
 name = "reverb-dsp"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "audiocore-dsp",
  "crossbeam-channel",
  "dsp-core",
- "dsp-golden",
  "fts-modulation",
  "pitch-dsp",
  "realfft",
  "symphonium",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "reverb-plugin"
-version = "0.1.0"
-dependencies = [
- "audiocore-core",
- "audiocore-dsp",
- "crossbeam-channel",
- "nice-plug",
- "reverb",
- "reverb-profiles",
- "reverb-ui",
-]
-
-[[package]]
-name = "reverb-profiles"
-version = "0.1.0"
-dependencies = [
- "reverb-dsp",
-]
-
-[[package]]
-name = "reverb-ui"
-version = "0.1.0"
-dependencies = [
- "architect-ui",
- "atomic_float",
- "crossbeam-channel",
- "dioxus",
- "dioxus-test",
- "eq-ui",
- "fts-audio-ui",
- "fts-plug-ui",
- "musical-time",
- "musical-time-ui",
- "nice-plug",
- "nice-plug-dioxus",
- "parking_lot",
- "preset-browser",
- "preset-browser-ui",
- "reverb-dsp",
- "reverb-profiles",
- "tokio",
 ]
 
 [[package]]
@@ -12757,19 +12018,6 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.44"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
-dependencies = [
- "bitflags 2.13.0",
- "errno",
- "libc",
- "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "rustix"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190"
@@ -12777,7 +12025,7 @@ dependencies = [
  "bitflags 2.13.0",
  "errno",
  "libc",
- "linux-raw-sys 0.12.1",
+ "linux-raw-sys",
  "windows-sys 0.61.2",
 ]
 
@@ -12926,59 +12174,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "saturate"
-version = "0.1.0"
-dependencies = [
- "saturate-dsp",
-]
-
-[[package]]
 name = "saturate-dsp"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
- "approx",
  "dsp-core",
- "dsp-golden",
-]
-
-[[package]]
-name = "saturate-plugin"
-version = "0.1.0"
-dependencies = [
- "atomic_float",
- "audiocore-core",
- "nice-plug",
- "saturate",
- "saturate-profiles",
- "saturate-ui",
-]
-
-[[package]]
-name = "saturate-profiles"
-version = "0.1.0"
-dependencies = [
- "fx-stack",
- "saturate-dsp",
-]
-
-[[package]]
-name = "saturate-ui"
-version = "0.1.0"
-dependencies = [
- "architect-ui",
- "atomic_float",
- "crossbeam-channel",
- "dioxus",
- "dioxus-test",
- "eq-ui",
- "fts-audio-ui",
- "fts-plug-ui",
- "nice-plug",
- "nice-plug-dioxus",
- "parking_lot",
- "saturate-dsp",
- "saturate-profiles",
- "tokio",
 ]
 
 [[package]]
@@ -13013,26 +12213,13 @@ dependencies = [
 
 [[package]]
 name = "scroll_derive"
-version = "0.13.1"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed76efe62313ab6610570951494bdaa81568026e0318eaa55f167de70eeea67d"
+checksum = "e1a36a382ed65dbcc0ab47fd5e9a94112417ccd34560a392ef3b7b0f0ec39148"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "sctk-adwaita"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6277f0217056f77f1d8f49f2950ac6c278c0d607c45f5ee99328d792ede24ec"
-dependencies = [
- "ab_glyph",
- "log",
- "memmap2",
- "smithay-client-toolkit 0.19.2",
- "tiny-skia",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -13044,7 +12231,7 @@ dependencies = [
  "ab_glyph",
  "log",
  "memmap2",
- "smithay-client-toolkit 0.20.0",
+ "smithay-client-toolkit",
  "tiny-skia",
 ]
 
@@ -13653,12 +12840,12 @@ version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
  "eq-dsp",
+ "fx-blocks",
  "hound",
  "realfft",
  "reverb-dsp",
  "serde",
  "serde_json",
- "signal-fx",
  "signal-import",
  "signal-plugin-host",
 ]
@@ -13756,6 +12943,7 @@ dependencies = [
  "fts-chrome",
  "futures-channel",
  "futures-util",
+ "fx-blocks",
  "getrandom 0.3.4",
  "include_dir",
  "js-sys",
@@ -13774,7 +12962,6 @@ dependencies = [
  "signal-drums-ui",
  "signal-ekit",
  "signal-ekit-proto",
- "signal-fx",
  "signal-guitar",
  "signal-guitar-proto",
  "signal-guitar-ui",
@@ -13814,10 +13001,10 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "daw",
+ "fx-blocks",
  "kontrol",
  "midicore",
  "signal-drums-proto",
- "signal-fx",
  "signal-plugin-host",
  "signal-rig-host",
  "signal-rigs-proto",
@@ -13901,27 +13088,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-fx"
-version = "0.1.0"
-dependencies = [
- "audiocore-dsp",
- "comp",
- "daw",
- "daw-proto",
- "delay",
- "eq",
- "fts-sample",
- "level-dsp",
- "midicore-proto",
- "modulation",
- "pitch-dsp",
- "reverb",
- "saturate-dsp",
- "signal-plugin-host",
- "tune",
-]
-
-[[package]]
 name = "signal-grid"
 version = "0.1.0"
 dependencies = [
@@ -13951,8 +13117,8 @@ dependencies = [
  "architect",
  "facet",
  "facet-styx",
+ "fx-blocks",
  "midicore",
- "signal-fx",
  "signal-guitar-proto",
  "signal-proto",
  "signal-rig-host",
@@ -14030,11 +13196,11 @@ dependencies = [
  "base64 0.22.1",
  "eq-dsp",
  "eyre",
+ "fx-blocks",
  "reverb-dsp",
  "serde",
  "serde_json",
  "signal-controller",
- "signal-fx",
  "signal-plugin-host",
  "signal-proto",
  "thiserror 2.0.18",
@@ -14296,6 +13462,7 @@ dependencies = [
  "facet-styx",
  "facet-toml",
  "fts-sample",
+ "fx-blocks",
  "hound",
  "keyflow-annotate",
  "keyflow-orchestra",
@@ -14310,7 +13477,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "signal-fx",
  "signal-plugin-host",
  "signal-proto",
  "signal-rig-host",
@@ -14722,43 +13888,18 @@ checksum = "51d44cfb396c3caf6fbfd0ab422af02631b69ddd96d2eff0b0f0724f9024051b"
 
 [[package]]
 name = "smithay-client-toolkit"
-version = "0.19.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3457dea1f0eb631b4034d61d4d8c32074caa6cd1ab2d59f2327bd8461e2c0016"
-dependencies = [
- "bitflags 2.13.0",
- "calloop 0.13.0",
- "calloop-wayland-source 0.3.0",
- "cursor-icon",
- "libc",
- "log",
- "memmap2",
- "rustix 0.38.44",
- "thiserror 1.0.69",
- "wayland-backend",
- "wayland-client",
- "wayland-csd-frame",
- "wayland-cursor",
- "wayland-protocols",
- "wayland-protocols-wlr",
- "wayland-scanner",
- "xkeysym",
-]
-
-[[package]]
-name = "smithay-client-toolkit"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0512da38f5e2b31201a93524adb8d3136276fa4fe4aafab4e1f727a82b534cc0"
 dependencies = [
  "bitflags 2.13.0",
- "calloop 0.14.4",
- "calloop-wayland-source 0.4.1",
+ "calloop",
+ "calloop-wayland-source",
  "cursor-icon",
  "libc",
  "log",
  "memmap2",
- "rustix 1.1.4",
+ "rustix",
  "thiserror 2.0.18",
  "wayland-backend",
  "wayland-client",
@@ -14770,15 +13911,6 @@ dependencies = [
  "wayland-protocols-wlr",
  "wayland-scanner",
  "xkeysym",
-]
-
-[[package]]
-name = "smol_str"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd538fb6910ac1099850255cf94a94df6551fbdd602454387d0adb2d1ca6dead"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -14869,31 +14001,20 @@ dependencies = [
 [[package]]
 name = "spectrum-analyzer"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "spectrum-analyzer-dsp",
- "spectrum-analyzer-ui",
 ]
 
 [[package]]
 name = "spectrum-analyzer-dsp"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "once_cell",
  "parking_lot",
  "realfft",
  "rtrb",
-]
-
-[[package]]
-name = "spectrum-analyzer-ui"
-version = "0.1.0"
-dependencies = [
- "architect-ui",
- "audiocore-core",
- "dioxus",
- "fts-audio-ui",
- "nice-plug-dioxus",
- "spectrum-analyzer-dsp",
 ]
 
 [[package]]
@@ -15529,25 +14650,6 @@ dependencies = [
 
 [[package]]
 name = "subsecond"
-version = "0.7.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cc79674bd55726e6b123204403389400229a95fe4a3b2c5453dada70b06ca95"
-dependencies = [
- "js-sys",
- "libc",
- "libloading 0.8.9",
- "memfd",
- "memmap2",
- "serde",
- "subsecond-types 0.7.9",
- "thiserror 2.0.18",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
-name = "subsecond"
 version = "0.8.0-alpha.0"
 source = "git+https://github.com/DioxusLabs/dioxus?rev=f717a8e184a522d078b70bb4b4d62a5f9a99ddfc#f717a8e184a522d078b70bb4b4d62a5f9a99ddfc"
 dependencies = [
@@ -15557,20 +14659,11 @@ dependencies = [
  "memfd",
  "memmap2",
  "serde",
- "subsecond-types 0.8.0-alpha.0",
+ "subsecond-types",
  "thiserror 2.0.18",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
-]
-
-[[package]]
-name = "subsecond-types"
-version = "0.7.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9798bfed58797aed51c672aa99810aac30a50d3120ecfdcf28c13784e9a8f1c"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -15667,11 +14760,9 @@ dependencies = [
  "symphonia-bundle-flac",
  "symphonia-bundle-mp3",
  "symphonia-codec-aac",
- "symphonia-codec-adpcm",
  "symphonia-codec-pcm",
  "symphonia-codec-vorbis",
  "symphonia-core",
- "symphonia-format-mkv",
  "symphonia-format-ogg",
  "symphonia-format-riff",
  "symphonia-metadata",
@@ -15713,16 +14804,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "symphonia-codec-adpcm"
-version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dddc50e2bbea4cfe027441eece77c46b9f319748605ab8f3443350129ddd07f"
-dependencies = [
- "log",
- "symphonia-core",
-]
-
-[[package]]
 name = "symphonia-codec-pcm"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15754,19 +14835,6 @@ dependencies = [
  "bytemuck",
  "lazy_static",
  "log",
-]
-
-[[package]]
-name = "symphonia-format-mkv"
-version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "122d786d2c43a49beb6f397551b4a050d8229eaa54c7ddf9ee4b98899b8742d0"
-dependencies = [
- "lazy_static",
- "log",
- "symphonia-core",
- "symphonia-metadata",
- "symphonia-utils-xiph",
 ]
 
 [[package]]
@@ -15843,6 +14911,17 @@ name = "syn"
 version = "2.0.118"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b9ae57f904213ebb649ce6895b8a66c66f0203b9319718f69a5612a065b1422"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
+name = "syn"
+version = "3.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12df2e0110f65b775f769bb17ef989067a1d931b2eb822bd4346631eeada89f9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -15960,7 +15039,7 @@ dependencies = [
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
- "objc2-ui-kit 0.3.2",
+ "objc2-ui-kit",
  "once_cell",
  "parking_lot",
  "percent-encoding",
@@ -16013,7 +15092,7 @@ dependencies = [
  "fastrand",
  "getrandom 0.4.3",
  "once_cell",
- "rustix 1.1.4",
+ "rustix",
  "windows-sys 0.61.2",
 ]
 
@@ -16108,16 +15187,6 @@ dependencies = [
  "wezterm-dynamic",
  "wezterm-input-types",
  "winapi",
-]
-
-[[package]]
-name = "test-that"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "291f228058142bae421e0b4b014a7b18edd6137629550cc15da37feed66a7db6"
-dependencies = [
- "num-traits",
- "regex",
 ]
 
 [[package]]
@@ -16784,53 +15853,10 @@ dependencies = [
 [[package]]
 name = "trem-dsp"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "audiocore-dsp",
  "fts-modulation",
-]
-
-[[package]]
-name = "trigger"
-version = "0.1.0"
-dependencies = [
- "trigger-dsp",
-]
-
-[[package]]
-name = "trigger-dsp"
-version = "0.1.0"
-dependencies = [
- "approx",
- "audiocore-dsp",
- "eq-dsp",
- "rustfft",
- "symphonia",
-]
-
-[[package]]
-name = "trigger-plugin"
-version = "0.1.0"
-dependencies = [
- "nice-plug",
- "nice-plug-dioxus",
- "trigger",
- "trigger-ui",
-]
-
-[[package]]
-name = "trigger-ui"
-version = "0.1.0"
-dependencies = [
- "architect-ui",
- "atomic_float",
- "audiocore-core",
- "dioxus",
- "dioxus-test",
- "fts-audio-ui",
- "fts-plug-ui",
- "nice-plug",
- "nice-plug-dioxus",
- "tokio",
 ]
 
 [[package]]
@@ -16851,6 +15877,7 @@ dependencies = [
 [[package]]
 name = "tune"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "tune-dsp",
 ]
@@ -16862,15 +15889,6 @@ source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.6.3#db690d63aaae8
 dependencies = [
  "pitch-dsp",
  "realfft",
-]
-
-[[package]]
-name = "tune-plugin"
-version = "0.1.0"
-dependencies = [
- "audiocore-dsp",
- "nice-plug",
- "tune",
 ]
 
 [[package]]
@@ -17064,15 +16082,6 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
-
-[[package]]
-name = "unison-plugin"
-version = "0.1.0"
-dependencies = [
- "audiocore-dsp",
- "nice-plug",
- "pitch-dsp",
-]
 
 [[package]]
 name = "universal-hash"
@@ -17651,6 +16660,7 @@ dependencies = [
 [[package]]
 name = "wah-dsp"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/processor?tag=v0.1.0#a14bc2f3d5fc8bf19586c5d40ec0c145c34b9253"
 dependencies = [
  "audiocore-dsp",
  "fts-modulation",
@@ -17818,7 +16828,7 @@ checksum = "2857dd20b54e916ec7253b3d6b4d5c4d7d4ca2c33c2e11c6c76a99bd8744755d"
 dependencies = [
  "cc",
  "downcast-rs",
- "rustix 1.1.4",
+ "rustix",
  "scoped-tls",
  "smallvec 1.15.2",
  "wayland-sys",
@@ -17831,7 +16841,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "645c7c96bb74690c3189b5c9cb4ca1627062bb23693a4fad9d8c3de958260144"
 dependencies = [
  "bitflags 2.13.0",
- "rustix 1.1.4",
+ "rustix",
  "wayland-backend",
  "wayland-scanner",
 ]
@@ -17853,7 +16863,7 @@ version = "0.31.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a52d18780be9b1314328a3de5f930b73d2200112e3849ca6cb11822793fb34d"
 dependencies = [
- "rustix 1.1.4",
+ "rustix",
  "wayland-client",
  "xcursor",
 ]
@@ -18433,7 +17443,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -19024,58 +18034,6 @@ checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
 
 [[package]]
 name = "winit"
-version = "0.30.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6755fa58a9f8350bd1e472d4c3fcc25f824ec358933bba33306d0b63df5978d"
-dependencies = [
- "ahash 0.8.12",
- "android-activity",
- "atomic-waker",
- "bitflags 2.13.0",
- "block2 0.5.1",
- "bytemuck",
- "calloop 0.13.0",
- "cfg_aliases",
- "concurrent-queue",
- "core-foundation 0.9.4",
- "core-graphics 0.23.2",
- "cursor-icon",
- "dpi",
- "js-sys",
- "libc",
- "memmap2",
- "ndk",
- "objc2 0.5.2",
- "objc2-app-kit 0.2.2",
- "objc2-foundation 0.2.2",
- "objc2-ui-kit 0.2.2",
- "orbclient",
- "percent-encoding",
- "pin-project",
- "raw-window-handle 0.6.2",
- "redox_syscall 0.4.1",
- "rustix 0.38.44",
- "sctk-adwaita 0.10.1",
- "smithay-client-toolkit 0.19.2",
- "smol_str 0.2.2",
- "tracing",
- "unicode-segmentation",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-protocols-plasma",
- "web-sys",
- "web-time",
- "windows-sys 0.52.0",
- "x11-dl",
- "x11rb",
- "xkbcommon-dl",
-]
-
-[[package]]
-name = "winit"
 version = "0.31.0-beta.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2879d2854d1a43e48f67322d4bd097afcb6eb8f8f775c8de0260a71aea1df1aa"
@@ -19086,8 +18044,8 @@ dependencies = [
  "dpi",
  "libc",
  "raw-window-handle 0.6.2",
- "rustix 1.1.4",
- "smol_str 0.3.2",
+ "rustix",
+ "smol_str",
  "tracing",
  "winit-android",
  "winit-appkit",
@@ -19112,7 +18070,7 @@ dependencies = [
  "dpi",
  "ndk",
  "raw-window-handle 0.6.2",
- "smol_str 0.3.2",
+ "smol_str",
  "tracing",
  "winit-core",
 ]
@@ -19134,7 +18092,7 @@ dependencies = [
  "objc2-core-video",
  "objc2-foundation 0.3.2",
  "raw-window-handle 0.6.2",
- "smol_str 0.3.2",
+ "smol_str",
  "tracing",
  "winit-common",
  "winit-core",
@@ -19149,7 +18107,7 @@ dependencies = [
  "memmap2",
  "objc2 0.6.4",
  "objc2-core-foundation",
- "smol_str 0.3.2",
+ "smol_str",
  "tracing",
  "winit-core",
  "x11-dl",
@@ -19167,7 +18125,7 @@ dependencies = [
  "dpi",
  "keyboard-types 0.8.3",
  "raw-window-handle 0.6.2",
- "smol_str 0.3.2",
+ "smol_str",
  "web-time",
 ]
 
@@ -19182,7 +18140,7 @@ dependencies = [
  "orbclient",
  "raw-window-handle 0.6.2",
  "redox_syscall 0.5.18",
- "smol_str 0.3.2",
+ "smol_str",
  "tracing",
  "winit-core",
 ]
@@ -19200,9 +18158,9 @@ dependencies = [
  "objc2 0.6.4",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
- "objc2-ui-kit 0.3.2",
+ "objc2-ui-kit",
  "raw-window-handle 0.6.2",
- "smol_str 0.3.2",
+ "smol_str",
  "tracing",
  "winit-common",
  "winit-core",
@@ -19216,16 +18174,16 @@ checksum = "8ce5afb2ba07da603f84b722c95f9f9396d2cedae3944fb6c0cda4a6f88de545"
 dependencies = [
  "ahash 0.8.12",
  "bitflags 2.13.0",
- "calloop 0.14.4",
+ "calloop",
  "cursor-icon",
  "dpi",
  "libc",
  "memmap2",
  "raw-window-handle 0.6.2",
- "rustix 1.1.4",
- "sctk-adwaita 0.11.0",
- "smithay-client-toolkit 0.20.0",
- "smol_str 0.3.2",
+ "rustix",
+ "sctk-adwaita",
+ "smithay-client-toolkit",
+ "smol_str",
  "tracing",
  "wayland-backend",
  "wayland-client",
@@ -19249,7 +18207,7 @@ dependencies = [
  "js-sys",
  "pin-project",
  "raw-window-handle 0.6.2",
- "smol_str 0.3.2",
+ "smol_str",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -19268,7 +18226,7 @@ dependencies = [
  "cursor-icon",
  "dpi",
  "raw-window-handle 0.6.2",
- "smol_str 0.3.2",
+ "smol_str",
  "tracing",
  "unicode-segmentation",
  "windows-sys 0.59.0",
@@ -19283,14 +18241,14 @@ checksum = "aa5b600756534c7041aa93cd0d244d44b09fca1b89e202bd1cd80dd9f3636c46"
 dependencies = [
  "bitflags 2.13.0",
  "bytemuck",
- "calloop 0.14.4",
+ "calloop",
  "cursor-icon",
  "dpi",
  "libc",
  "percent-encoding",
  "raw-window-handle 0.6.2",
- "rustix 1.1.4",
- "smol_str 0.3.2",
+ "rustix",
+ "smol_str",
  "tracing",
  "winit-common",
  "winit-core",
@@ -19366,8 +18324,8 @@ dependencies = [
  "log",
  "serde",
  "thiserror 2.0.18",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -19406,7 +18364,7 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
- "objc2-ui-kit 0.3.2",
+ "objc2-ui-kit",
  "objc2-web-kit",
  "once_cell",
  "percent-encoding",
@@ -19496,7 +18454,7 @@ dependencies = [
  "libc",
  "libloading 0.8.9",
  "once_cell",
- "rustix 1.1.4",
+ "rustix",
  "x11rb-protocol",
  "xcursor",
 ]

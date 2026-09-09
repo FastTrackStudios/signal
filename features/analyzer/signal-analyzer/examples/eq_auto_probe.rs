@@ -19,7 +19,7 @@
 //! This runs both, one at a time, and reports the gain the band under test
 //! applies at its own frequency in each case.
 
-use signal_fx::NativeEq;
+use fx_blocks::NativeEq;
 use signal_plugin_host::{HostedPlugin, PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;

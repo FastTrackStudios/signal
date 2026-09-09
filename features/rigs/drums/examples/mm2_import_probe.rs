@@ -1,4 +1,4 @@
-//! End-to-end proof of the MM2 → signal-fx import: load our kit, parse an MM2
+//! End-to-end proof of the MM2 → fx-blocks import: load our kit, parse an MM2
 //! Cradle preset, build the kick strip's FX chain (comp + EQ) with our DSP,
 //! install it on the kick channel, and confirm the rendered kick changes.
 //!   cargo run -p signal-drums --example `mm2_import_probe` -- <MM2.preset>

@@ -1,6 +1,6 @@
 //! Build the FTS-EQ preset library from a bank of `FabFilter` Pro-Q 4 presets.
 //!
-//! Walks a directory of `.ffp` files, translates each to `signal_fx::NativeEq`
+//! Walks a directory of `.ffp` files, translates each to `fx_blocks::NativeEq`
 //! parameters, and writes one JSON per preset in the same shape the reverb
 //! library uses — so `preset-browser` loads both with the same reader and the
 //! EQ editor's browser needs nothing EQ-specific to show them.
@@ -153,7 +153,7 @@ fn main() {
                 "tags": tags,
             },
             "target": {
-                "engine": "signal_fx::NativeEq",
+                "engine": "fx_blocks::NativeEq",
                 "parameters": params
                     .iter()
                     .map(|(n, v)| serde_json::json!({ "name": n, "value": v }))

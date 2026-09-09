@@ -147,8 +147,8 @@ embed-web = ["dep:include_dir"]
 # independently.
 # Built-in FX DSP (EQ/comp/reverb/…) linked into the in-process standalone
 # render path, so `Effects::add("Reverb")` on a session track instantiates
-# real signal-fx. Deliberately NOT part of `session`: Session coordinates
-# Signal over the wire rather than linking the engine, and signal-fx sits a
+# real fx-blocks. Deliberately NOT part of `session`: Session coordinates
+# Signal over the wire rather than linking the engine, and fx-blocks sits a
 # layer above the session domain. The Signal-side build turns this on; a
 # Session-only build renders without built-in FX and gets them from the
 # Signal engine instead.
@@ -287,7 +287,7 @@ libc = { workspace = true }
 # workaround session's dev-deps carry) and drives real cpal output.
 # Built-in FX (EQ/comp/reverb/…) for session mixer tracks — installed as
 # the standalone backend's FxFactory in session_engine.rs.
-signal-fx = { workspace = true, optional = true }
+fx-blocks = { workspace = true, optional = true }
 
 # ── Engine mode (`--engine`, feature `signal`) — the former
 #    apps/signal-engine, native only ─────────────────────────────────────

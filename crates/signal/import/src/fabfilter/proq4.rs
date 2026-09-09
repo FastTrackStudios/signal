@@ -1,7 +1,7 @@
 //! Pro-Q 4 → FTS-EQ translation.
 //!
 //! Decodes the 600-float [`FFBS`](super::ffbs) parameter vector a Pro-Q 4
-//! instance writes into a project, and emits the equivalent `signal_fx::NativeEq`
+//! instance writes into a project, and emits the equivalent `fx_blocks::NativeEq`
 //! parameters by name.
 //!
 //! The translation is close to exact rather than approximate: `eq-dsp` carries
@@ -18,8 +18,8 @@
 //! globals following at float 552. Verified index-by-index against a real
 //! project instance.
 //!
-//! Names are emitted as strings rather than `signal-fx` types on purpose:
-//! `signal-import` sits below `signal-fx`, and `NativeEq::set_named` is the
+//! Names are emitted as strings rather than `fx-blocks` types on purpose:
+//! `signal-import` sits below `fx-blocks`, and `NativeEq::set_named` is the
 //! by-name entry point the native-block registry already uses.
 //!
 //! See `spec/project-state-formats.md` for the byte-level layout.

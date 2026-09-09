@@ -9,7 +9,7 @@
 //!
 //! ```text
 //!   signal-plugin-host  (hosts the reference: CLAP + VST3, incl. yabridge)
-//!   signal-fx           (the candidate: NativeEq / NativeReverb / ...)
+//!   fx-blocks           (the candidate: NativeEq / NativeReverb / ...)
 //!   signal-import       (translates vendor state -> our parameters)
 //!            |
 //!            v

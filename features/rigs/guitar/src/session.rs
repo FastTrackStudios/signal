@@ -324,7 +324,7 @@ impl GuitarRigBackend {
             .iter()
             .any(|b| b.block_type == BlockType::Compressor && !b.bypassed);
         if has_comp {
-            signal_fx::comp_meter::gr_db().max(0.0)
+            fx_blocks::comp_meter::gr_db().max(0.0)
         } else {
             0.0
         }
@@ -1017,7 +1017,7 @@ impl GuitarRigBackend {
 }
 
 /// Every controllable param for a block type: `(name, min, max, default)` —
-/// mirrors the native DSP's param specs (signal-fx). The Control view's
+/// mirrors the native DSP's param specs (fx-blocks). The Control view's
 /// panels render from this; values come from the patch's build-time params
 /// (incl. overrides) and live edits.
 fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
@@ -1029,10 +1029,10 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
     match bt {
         // The full FTS-EQ param surface — one source of truth with the
         // DSP (bands + slope + dynamics + masters, from eq_param_range).
-        BlockType::Eq => (0..signal_fx::EQ_PARAM_COUNT)
+        BlockType::Eq => (0..fx_blocks::EQ_PARAM_COUNT)
             .filter_map(|id| {
-                let name = signal_fx::eq_param_name_of(id)?;
-                let (min, max, default) = signal_fx::eq_param_range(id);
+                let name = fx_blocks::eq_param_name_of(id)?;
+                let (min, max, default) = fx_blocks::eq_param_range(id);
                 Some((name, min as f32, max as f32, default as f32))
             })
             .collect(),
@@ -1060,7 +1060,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("input_trim", -12.0, 12.0, 0.0),
             ("output_trim", -12.0, 12.0, 0.0),
         ]),
-        // The TimeLine-MX delay surface (signal-fx DELAY_PARAMS subset the
+        // The TimeLine-MX delay surface (fx-blocks DELAY_PARAMS subset the
         // panel drives): style, per-side tempo divisions, high-pass,
         // repeat dynamics (ducking), mix, feedback.
         BlockType::Delay => owned(&[
@@ -1303,7 +1303,7 @@ impl RigBackend for GuitarRigBackend {
         if let Some(bins) = self.input_spectrum() {
             self.events.publish(RigEvent::Spectrum(bins));
         }
-        let (wave_in, wave_gr) = signal_fx::comp_meter::wave_snapshot(3);
+        let (wave_in, wave_gr) = fx_blocks::comp_meter::wave_snapshot(3);
         self.events.publish(RigEvent::CompWave(wave_in, wave_gr));
     }
 }

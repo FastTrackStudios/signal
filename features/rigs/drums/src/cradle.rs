@@ -71,7 +71,7 @@ pub struct Strip {
     /// Polarity/phase rotation (0..1 in MM2; 1.0 ≈ inverted).
     pub phase: f32,
     /// FX chain as raw Cradle values (EQ / comp / verb) — mapped to our
-    /// signal-fx by the importer once a populated example is available.
+    /// fx-blocks by the importer once a populated example is available.
     pub fx: Vec<Value>,
     /// Sends as raw Cradle values.
     pub sends: Vec<Value>,
@@ -81,7 +81,7 @@ pub struct Strip {
 /// preset name it came from.
 ///
 /// Contains the raw `fxData` params (typed access via the helpers — MM2's param
-/// scaling is mapped onto our signal-fx at import time).
+/// scaling is mapped onto our fx-blocks at import time).
 #[derive(Debug, Clone, PartialEq)]
 pub struct FxSlot {
     /// "EQ", "Modern Compressor", "Vintage Compressor", "Transient", "Drive",

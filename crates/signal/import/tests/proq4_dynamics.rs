@@ -13,7 +13,7 @@
 //! pull the loud one down by something like its dynamic range while leaving
 //! the quiet one alone.
 
-use signal_fx::NativeEq;
+use fx_blocks::NativeEq;
 use signal_plugin_host::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;

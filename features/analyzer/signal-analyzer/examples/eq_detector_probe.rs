@@ -20,7 +20,7 @@
 //!     --plugin ~/.vst3/yabridge/"FabFilter Pro-Q 4.vst3" [--freq 1000]
 //! ```
 
-use signal_fx::NativeEq;
+use fx_blocks::NativeEq;
 use signal_plugin_host::{HostedPlugin, PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;

@@ -2,7 +2,7 @@
 //!
 //! Decodes the 136-float [`FFBS`](super::ffbs) parameter vector a Pro-R 2
 //! instance writes into a project, and emits the equivalent
-//! `signal_fx::NativeReverb` parameters by name.
+//! `fx_blocks::NativeReverb` parameters by name.
 //!
 //! # Where the field map comes from
 //!

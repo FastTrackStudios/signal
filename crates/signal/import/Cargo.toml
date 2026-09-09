@@ -26,5 +26,5 @@ thiserror.workspace = true
 [dev-dependencies]
 # The translation is only worth anything if the engine on the other side acts
 # on it, so `tests/proq4_dynamics.rs` drives real audio through `NativeEq`.
-signal-fx.workspace = true
+fx-blocks.workspace = true
 signal-plugin-host.workspace = true

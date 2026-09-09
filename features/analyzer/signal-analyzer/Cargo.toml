@@ -14,7 +14,7 @@ serde.workspace = true
 # dev-only: `cargo test -p signal-analyzer` still runs with nothing installed.
 [dev-dependencies]
 signal-plugin-host = { workspace = true, features = ["clap-host", "vst3-host"] }
-signal-fx.workspace = true
+fx-blocks.workspace = true
 reverb-dsp.workspace = true
 audiocore-dsp.workspace = true
 signal-import.workspace = true
