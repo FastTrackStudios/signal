@@ -336,7 +336,21 @@ impl DecayBandParams {
                     max: 12.0,
                 },
             )
-            .with_value_to_string(Arc::new(|v| format!("{:.2}×", 10.0f32.powf(v / 20.0)))),
+            // Stored in dB so it shares the EQ display's gain axis, shown as
+            // the multiplier it means. The parser is the same conversion
+            // backwards — without it the field is read-only in every host,
+            // and this is the one control on the decay EQ you would want to
+            // type an exact value into.
+            .with_value_to_string(Arc::new(|v| format!("{:.2}×", 10.0f32.powf(v / 20.0))))
+            .with_string_to_value(Arc::new(|s| {
+                s.trim()
+                    .trim_end_matches(['×', 'x', 'X'])
+                    .trim()
+                    .parse::<f32>()
+                    .ok()
+                    .filter(|m| *m > 0.0)
+                    .map(|m| 20.0 * m.log10())
+            })),
             q: band_q_param("Decay Q"),
         }
     }
@@ -362,7 +376,9 @@ fn band_freq_param(name: &'static str, default_freq: f32) -> FloatParam {
             factor: FloatRange::skew_factor(-2.0),
         },
     )
-    .with_unit(" Hz")
+    // No `.with_unit(" Hz")` here: `v2s_f32_hz_then_khz` writes the
+    // unit itself, and switches it to kHz above 1000. Adding one on
+    // top printed "1.3 kHz Hz".
     .with_value_to_string(formatters::v2s_f32_hz_then_khz(1))
     .with_string_to_value(formatters::s2v_f32_hz_then_khz())
 }
@@ -419,10 +435,14 @@ impl Default for ReverbParams {
             })),
 
             decay: FloatParam::new("Decay", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
 
             size: FloatParam::new("Size", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
 
             predelay: FloatParam::new(
                 "Pre-Delay",
@@ -437,26 +457,38 @@ impl Default for ReverbParams {
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
 
             damping: FloatParam::new("Damping", 0.3, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
 
             tone: FloatParam::new("Tone", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
 
             width: FloatParam::new("Width", 1.0, FloatRange::Linear { min: 0.0, max: 2.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
 
             mix: FloatParam::new("Mix", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
 
             diffusion: FloatParam::new("Diffusion", 0.7, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
 
             modulation: FloatParam::new(
                 "Modulation",
                 0.2,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            .with_unit("%")
+            .with_value_to_string(formatters::v2s_f32_percentage(0))
+            .with_string_to_value(formatters::s2v_f32_percentage()),
 
             bass: FloatParam::new("Bass", 1.0, FloatRange::Linear { min: 0.0, max: 2.0 })
                 .with_value_to_string(formatters::v2s_f32_rounded(2)),
@@ -466,14 +498,18 @@ impl Default for ReverbParams {
                 0.5,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            .with_unit("%")
+            .with_value_to_string(formatters::v2s_f32_percentage(0))
+            .with_string_to_value(formatters::s2v_f32_percentage()),
 
             character_b: FloatParam::new(
                 "Character B",
                 0.5,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            .with_unit("%")
+            .with_value_to_string(formatters::v2s_f32_percentage(0))
+            .with_string_to_value(formatters::s2v_f32_percentage()),
 
             shimmer_interval: FloatParam::new(
                 "Interval",
@@ -489,16 +525,24 @@ impl Default for ReverbParams {
             springs: IntParam::new("Springs", 2, IntRange::Linear { min: 1, max: 3 }),
 
             harmonics: FloatParam::new("Harmonics", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
 
             singers: FloatParam::new("Singers", 0.3, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
 
             regen: FloatParam::new("Regen", 0.35, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
 
             chop: FloatParam::new("Chop", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
 
             ir_path: parking_lot::RwLock::new(String::new()),
             profile_id: parking_lot::RwLock::new(String::new()),

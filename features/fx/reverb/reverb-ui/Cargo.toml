@@ -56,7 +56,15 @@ required-features = ["native"]
 name = "presets"
 required-features = ["native"]
 
+[[test]]
+name = "knob_readouts"
+required-features = ["native"]
+
 [dev-dependencies]
 dioxus = { workspace = true }
 dioxus-test = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
+
+[[test]]
+name = "param_round_trip"
+required-features = ["native"]

@@ -105,3 +105,7 @@ pollster = "0.4"
 # Only the render_smoke GPU test uses wgpu directly; keep it in lockstep with
 # nice-plug-dioxus's wgpu (29) so vello's render_to_texture types line up.
 wgpu = "29"
+
+[[test]]
+name = "param_round_trip"
+required-features = ["native"]

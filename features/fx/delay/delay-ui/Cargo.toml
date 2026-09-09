@@ -41,3 +41,7 @@ required-features = ["native"]
 dioxus = { workspace = true }
 dioxus-test = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
+
+[[test]]
+name = "param_round_trip"
+required-features = ["native"]

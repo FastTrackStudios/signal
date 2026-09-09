@@ -445,6 +445,17 @@ pub fn SpaceFace(
     let value = |name: &str| handles.get(name).map_or(0.5, |h| f64::from(h.normalized()));
     let (decay, size, damping) = (value("decay"), value("size"), value("damping"));
 
+    // One baseline for every value readout, taken from the knob needing the
+    // most clearance — the same rule the saturator and delay faces use, so a
+    // row of numbers reads as a row and not a ragged line. The extras are
+    // folded in because a profile's extra knobs sit on this row too.
+    let value_row_y = design
+        .knobs
+        .iter()
+        .chain(extras_for(&profile_id).iter())
+        .map(|k| k.d.mul_add(-0.92, k.y) - 4.0)
+        .fold(f64::INFINITY, f64::min);
+
     rsx! {
         Panel {
             design_w: W,
@@ -519,6 +530,31 @@ pub fn SpaceFace(
                             }
                         }
                     }
+                    // The knob's current value, above the dial.
+                    //
+                    // Without it the panel prints only what a control is
+                    // CALLED: you could see that a knob was Decay and not
+                    // that it was set to 2.4 s. This face is the only place
+                    // these parameters surface, so there is nowhere else to
+                    // look the number up.
+                    if let Some(handle) = handles.get(spec.param) {
+                        {
+                        let value_id = format!("knob-value-{}", spec.param.replace('_', "-"));
+                        rsx! {
+                        div {
+                            "data-testid": "{value_id}",
+                            Silkscreen {
+                                scale, x: spec.x, y: value_row_y, width: 130.0,
+                                text: handle.display_value(),
+                                size: 9.0,
+                                weight: 600,
+                                color: design.ink.to_string(),
+                            }
+                        }
+                        }
+                        }
+                    }
+
                     Silkscreen {
                         scale, x: spec.x, y: spec.d.mul_add(0.92, spec.y) + 10.0, width: 130.0,
                         text: match spec.param {

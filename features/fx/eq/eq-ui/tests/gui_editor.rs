@@ -346,7 +346,7 @@ async fn editor_mounts_headless_graph_only() -> dioxus_test::Result<()> {
 
 /// A hit-tested click on band 2's node (High Shelf @ 2.5 kHz) focuses it:
 /// the graph's band info popup appears with the band's frequency label
-/// ("2.5k"). A pure selection click must NOT touch any parameter.
+/// ("2.5 kHz"). A pure selection click must NOT touch any parameter.
 #[tokio::test]
 async fn clicking_a_band_node_focuses_it_and_shows_its_popup() -> dioxus_test::Result<()> {
     let fx = mount();
@@ -359,7 +359,7 @@ async fn clicking_a_band_node_focuses_it_and_shows_its_popup() -> dioxus_test::R
 
     fx.tester
         .query(":root")
-        .expect(inner_html(contains_substring("2.5k")))
+        .expect(inner_html(contains_substring("2.5 kHz")))
         .await?;
 
     // Selection alone is not an automation gesture.

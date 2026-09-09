@@ -363,7 +363,9 @@ impl ScBandParams {
                     factor: FloatRange::skew_factor(-2.0),
                 },
             )
-            .with_unit(" Hz")
+            // No `.with_unit(" Hz")` here: `v2s_f32_hz_then_khz` writes the
+            // unit itself, and switches it to kHz above 1000. Adding one on
+            // top printed "1.3 kHz Hz".
             .with_value_to_string(formatters::v2s_f32_hz_then_khz(1))
             .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
             gain_db: FloatParam::new(
@@ -670,14 +672,16 @@ impl CompStageParams {
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
             stereo_link: FloatParam::new(
                 "Stereo Link",
                 1.0,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
             .with_unit("%")
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            .with_value_to_string(formatters::v2s_f32_percentage(0))
+            .with_string_to_value(formatters::s2v_f32_percentage()),
 
             // ── Extended surface ────────────────────────────────────────
             style: IntParam::new("Style", 0, IntRange::Linear { min: 0, max: 3 })
@@ -686,7 +690,8 @@ impl CompStageParams {
                 .with_value_to_string(label_formatter(CHARACTER_LABELS)),
             drive: FloatParam::new("Drive", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
             input_gain_db: FloatParam::new(
                 "Input",
                 0.0,
@@ -705,10 +710,12 @@ impl CompStageParams {
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
             .with_unit("%")
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            .with_value_to_string(formatters::v2s_f32_percentage(0))
+            .with_string_to_value(formatters::s2v_f32_percentage()),
             feedback: FloatParam::new("Feedback", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
             hold_ms: FloatParam::new(
                 "Hold",
                 0.0,
@@ -733,7 +740,8 @@ impl CompStageParams {
             .with_value_to_string(formatters::v2s_f32_rounded(2)),
             inertia: FloatParam::new("Inertia", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
             inertia_decay: FloatParam::new(
                 "Inertia Decay",
                 0.0,
@@ -743,7 +751,8 @@ impl CompStageParams {
                 },
             )
             .with_unit("%")
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            .with_value_to_string(formatters::v2s_f32_percentage(0))
+            .with_string_to_value(formatters::s2v_f32_percentage()),
             // 20 Hz is the engine's bypass floor for both sidechain filters,
             // so the defaults sit exactly on "off".
             sidechain_freq: FloatParam::new(
@@ -822,19 +831,24 @@ impl CompStageParams {
             .with_value_to_string(formatters::v2s_f32_rounded(2)),
             ceiling: FloatParam::new("Ceiling", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
             la2a_peak_reduction: FloatParam::new(
                 "Peak Reduction",
                 0.232,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            .with_unit("%")
+            .with_value_to_string(formatters::v2s_f32_percentage(0))
+            .with_string_to_value(formatters::s2v_f32_percentage()),
             la2a_gain: FloatParam::new(
                 "LA-2A Gain",
                 0.286,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            .with_unit("%")
+            .with_value_to_string(formatters::v2s_f32_percentage(0))
+            .with_string_to_value(formatters::s2v_f32_percentage()),
             profile: IntParam::new(
                 "Profile",
                 0,
@@ -858,6 +872,7 @@ fn macro_slot_param(name: &str) -> FloatParam {
     FloatParam::new(name, 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
         .with_unit("%")
         .with_value_to_string(formatters::v2s_f32_percentage(0))
+        .with_string_to_value(formatters::s2v_f32_percentage())
 }
 
 /// `with_value_to_string` helper for the discrete params: render the label at

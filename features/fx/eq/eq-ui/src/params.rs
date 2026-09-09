@@ -237,14 +237,13 @@ impl BandParams {
                     factor: FloatRange::skew_factor(-2.0),
                 },
             )
-            .with_unit(" Hz")
-            .with_value_to_string(Arc::new(|v| {
-                if v >= 1000.0 {
-                    format!("{:.1}k", v / 1000.0)
-                } else {
-                    format!("{v:.0}")
-                }
-            })),
+            // The hand-rolled "1.9k" formatter plus `.with_unit(" Hz")`
+            // printed "1.9k Hz", and there was no parser at all — the one
+            // control on an EQ you most want to type an exact number into
+            // was read-only in every host. The stock pair prints "1.9 kHz"
+            // and reads back "1900", "1900 Hz" and "1.9 kHz" alike.
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(1))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
 
             gain_db: FloatParam::new(
                 format!("B{} Gain", idx + 1),
@@ -296,6 +295,27 @@ impl BandParams {
                         _ => "Brickwall".to_string(),
                     }
                 }
+            }))
+            // The inverse of the mapping above. The stored value is Pro-Q's
+            // step index, not dB/oct, so "12 dB/oct" has to come back as 2 —
+            // and the four steps past 36 dB/oct are not on the ×6 line at
+            // all, so they are matched by name.
+            .with_string_to_value(Arc::new(|s| {
+                let s = s.trim();
+                if s.eq_ignore_ascii_case("brickwall") {
+                    return Some(10.0);
+                }
+                let db: f32 = s
+                    .trim_end_matches(|c: char| !c.is_ascii_digit() && c != '.')
+                    .trim()
+                    .parse()
+                    .ok()?;
+                Some(match db as i32 {
+                    48 => 7.0,
+                    72 => 8.0,
+                    96 => 9.0,
+                    _ => (db / 6.0).clamp(0.0, 6.0),
+                })
             })),
 
             solo: FloatParam::new(
@@ -765,26 +785,16 @@ impl Default for FtsEqParams {
                 1.0,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
-            .with_value_to_string(Arc::new(|v| {
-                if v > 0.5 {
-                    "In".to_string()
-                } else {
-                    "Out".to_string()
-                }
-            })),
+            .with_value_to_string(on_off_string("In", "Out"))
+            .with_string_to_value(on_off_value("In", "Out")),
 
             neve_phase: FloatParam::new(
                 "Neve Phase",
                 0.0,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
-            .with_value_to_string(Arc::new(|v| {
-                if v > 0.5 {
-                    "Invert".to_string()
-                } else {
-                    "Normal".to_string()
-                }
-            })),
+            .with_value_to_string(on_off_string("Invert", "Normal"))
+            .with_string_to_value(on_off_value("Invert", "Normal")),
 
             neve_trim_db: FloatParam::new(
                 "Neve Trim",
@@ -875,7 +885,8 @@ impl Default for FtsEqParams {
                 1.0,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
-            .with_value_to_string(on_off_string("In", "Out")),
+            .with_value_to_string(on_off_string("In", "Out"))
+            .with_string_to_value(on_off_value("In", "Out")),
             pultec_low_freq: IntParam::new(
                 "Pultec Low Freq",
                 1,
@@ -913,7 +924,8 @@ impl Default for FtsEqParams {
             pultec_trim_db: db_param("Pultec Trim", 0.0, -24.0, 24.0),
 
             api_eq_in: FloatParam::new("API EQ In", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(on_off_string("In", "Out")),
+                .with_value_to_string(on_off_string("In", "Out"))
+                .with_string_to_value(on_off_value("In", "Out")),
             api_low_freq: IntParam::new("API Low Freq", 1, IntRange::Linear { min: 0, max: 3 })
                 .with_value_to_string(index_string(&["50 Hz", "100 Hz", "200 Hz", "400 Hz"])),
             api_low_gain_db: db_param("API Low Gain", 0.0, -12.0, 12.0),
@@ -931,7 +943,8 @@ impl Default for FtsEqParams {
             api_trim_db: db_param("API Trim", 0.0, -24.0, 24.0),
 
             ssl_eq_in: FloatParam::new("SSL EQ In", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(on_off_string("In", "Out")),
+                .with_value_to_string(on_off_string("In", "Out"))
+                .with_string_to_value(on_off_value("In", "Out")),
             ssl_hpf_hz: freq_param("SSL HPF", 20.0, 16.0, 350.0),
             ssl_lpf_hz: freq_param("SSL LPF", 22_000.0, 3000.0, 22_000.0),
             ssl_lf_freq_hz: freq_param("SSL LF Freq", 100.0, 30.0, 450.0),
@@ -952,7 +965,8 @@ impl Default for FtsEqParams {
                 1.0,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
-            .with_value_to_string(on_off_string("On", "Off")),
+            .with_value_to_string(on_off_string("On", "Off"))
+            .with_string_to_value(on_off_value("On", "Off")),
         }
     }
 }
@@ -988,6 +1002,28 @@ fn on_off_string(on: &'static str, off: &'static str) -> Arc<dyn Fn(f32) -> Stri
             on.to_string()
         } else {
             off.to_string()
+        }
+    })
+}
+
+/// Reads back what [`on_off_string`] prints.
+///
+/// A switch shown as "In"/"Out" is still a parameter a host will offer as a
+/// text field, and without this it is one the user can look at and not set.
+/// The generic "on"/"off"/"1"/"0" spellings are accepted too, because that is
+/// what a host's own automation entry tends to send.
+fn on_off_value(
+    on: &'static str,
+    off: &'static str,
+) -> Arc<dyn Fn(&str) -> Option<f32> + Send + Sync> {
+    Arc::new(move |s| {
+        let s = s.trim();
+        if s.eq_ignore_ascii_case(on) || s.eq_ignore_ascii_case("on") || s == "1" {
+            Some(1.0)
+        } else if s.eq_ignore_ascii_case(off) || s.eq_ignore_ascii_case("off") || s == "0" {
+            Some(0.0)
+        } else {
+            None
         }
     })
 }
