@@ -204,10 +204,19 @@ pub fn App() -> Element {
     let face_w = (win_w - sidecar_w - preset_w).max(240.0);
 
     // Every control the faces can bind, by name.
+    // Zero is how the audio thread says "this host has no transport"; a note
+    // value means nothing then, so it becomes `None` rather than 0 BPM.
+    let tempo = {
+        let bpm = ui.state.tempo_bpm.load(std::sync::atomic::Ordering::Relaxed);
+        (bpm > 0.0).then(|| f64::from(bpm))
+    };
+
     let handles: HashMap<String, ParamHandle> = [
         ("decay", params.decay.as_ptr()),
         ("size", params.size.as_ptr()),
         ("predelay", params.predelay.as_ptr()),
+        ("predelay_sync", params.predelay_sync.as_ptr()),
+        ("predelay_div", params.predelay_div.as_ptr()),
         ("damping", params.damping.as_ptr()),
         ("tone", params.tone.as_ptr()),
         ("width", params.width.as_ptr()),
@@ -362,6 +371,14 @@ pub fn App() -> Element {
                                 key: "{id}",
                                 profile_id: id.to_string(),
                                 handles: handles.clone(),
+                                // The tempo comes from the audio thread —
+                                // the only one the host tells — and the
+                                // resolved time is the same call
+                                // `sync_params` makes, so the face cannot
+                                // show a different number than the reverb
+                                // is running at.
+                                tempo,
+                                resolved_ms: params.predelay_ms(tempo),
                                 frame,
                                 box_w: face_w,
                                 box_h: win_h,
@@ -418,13 +435,15 @@ pub fn App() -> Element {
 fn FaceInBox(
     profile_id: String,
     handles: HashMap<String, ParamHandle>,
+    #[props(default)] tempo: Option<f64>,
+    #[props(default = 0.0)] resolved_ms: f64,
     frame: u64,
     box_w: f64,
     box_h: f64,
 ) -> Element {
     use_context_provider(|| fts_audio_ui::hardware::panel::PanelBox(box_w, box_h));
     rsx! {
-        SpaceFace { profile_id, handles, frame }
+        SpaceFace { profile_id, handles, tempo, resolved_ms, frame }
     }
 }
 

@@ -84,6 +84,8 @@ members = [
     "features/fx/modulation/trem-dsp",
     "features/fx/modulation/wah-dsp",
     "features/fx/multiband",
+    "features/fx/musical-time/musical-time",
+    "features/fx/musical-time/musical-time-ui",
     "features/fx/pitch/pitch",
     "features/fx/reverb/reverb",
     "features/fx/reverb/reverb-dsp",
@@ -418,6 +420,8 @@ modulation-profiles = { path = "features/fx/modulation/modulation-profiles" }
 modulation-ui = { path = "features/fx/modulation/modulation-ui" }
 multiband-dsp = { path = "features/fx/multiband" }
 fx-stack = { path = "features/fx/stack" }
+musical-time = { path = "features/fx/musical-time/musical-time" }
+musical-time-ui = { path = "features/fx/musical-time/musical-time-ui" }
 pattern-ui = { path = "features/fx/modulation/pattern-ui" }
 trem-dsp = { path = "features/fx/modulation/trem-dsp" }
 wah-dsp = { path = "features/fx/modulation/wah-dsp" }

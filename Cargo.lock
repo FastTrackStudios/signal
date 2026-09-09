@@ -3574,6 +3574,8 @@ dependencies = [
  "dioxus-test",
  "fts-audio-ui",
  "fts-plug-ui",
+ "musical-time",
+ "musical-time-ui",
  "nice-plug",
  "nice-plug-dioxus",
  "parking_lot",
@@ -9058,6 +9060,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "musical-time"
+version = "0.1.0"
+dependencies = [
+ "nice-plug",
+]
+
+[[package]]
+name = "musical-time-ui"
+version = "0.1.0"
+dependencies = [
+ "dioxus",
+ "fts-audio-ui",
+ "musical-time",
+]
+
+[[package]]
 name = "musicxml"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12513,6 +12531,8 @@ dependencies = [
  "eq-ui",
  "fts-audio-ui",
  "fts-plug-ui",
+ "musical-time",
+ "musical-time-ui",
  "nice-plug",
  "nice-plug-dioxus",
  "parking_lot",

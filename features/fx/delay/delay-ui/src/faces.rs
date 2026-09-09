@@ -14,6 +14,7 @@
 use dioxus::prelude::*;
 use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
+use musical_time_ui::MusicalTimeField;
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
 
 /// Panel drawing size — 2U, like the compressor's faces.
@@ -292,6 +293,14 @@ pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
 pub fn EchoFace(
     profile_id: String,
     handles: std::collections::HashMap<String, ParamHandle>,
+    /// The host's tempo, if it has one. `None` is a host with no transport,
+    /// and the Sync switch says so rather than pretending.
+    #[props(default)]
+    tempo: Option<f64>,
+    /// What the left time currently works out to, in milliseconds — computed
+    /// by the same call the audio thread makes.
+    #[props(default = 0.0)]
+    resolved_ms: f64,
     /// The shell's redraw tick. Not read; its job is to change, so the panel
     /// re-renders against fresh parameter values instead of being memoized.
     frame: u64,
@@ -357,6 +366,35 @@ pub fn EchoFace(
                     scale, x: 150.0, y: 60.0, width: 280.0,
                     text: category_label.to_string(),
                     size: 8.0, color: design.dim_ink.to_string(),
+                }
+            }
+
+            // The time control sits under the Time knob it governs, rather
+            // than in a corner of the panel. Anywhere fixed collides with
+            // something on some design — the centre display spans the middle
+            // of every face — and a mode switch for a control belongs beside
+            // that control anyway.
+            if let (Some(sync), Some(div_l), Some(time_knob)) = (
+                handles.get("time_sync"),
+                handles.get("div_l"),
+                design.knobs.iter().find(|k| k.param == "time_l"),
+            ) {
+                PanelSlot {
+                    scale,
+                    x: time_knob.x,
+                    y: time_knob.d.mul_add(0.92, time_knob.y) + 46.0,
+                    w: 150.0,
+                    h: 58.0,
+                    MusicalTimeField {
+                        sync: sync.clone(),
+                        division: div_l.clone(),
+                        resolved_ms,
+                        tempo,
+                        testid: "delay-time".to_string(),
+                        ink: design.ink.to_string(),
+                        accent: design.accent.to_string(),
+                        scale,
+                    }
                 }
             }
 

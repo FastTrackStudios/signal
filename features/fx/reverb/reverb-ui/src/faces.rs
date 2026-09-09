@@ -16,6 +16,7 @@ use std::fmt::Write;
 use dioxus::prelude::*;
 use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
+use musical_time_ui::MusicalTimeField;
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
 
 /// Panel drawing size — 2U, like the compressor's faces.
@@ -431,6 +432,14 @@ pub fn SpaceFace(
     profile_id: String,
     /// Bound controls, by parameter name — see [`KnobSpec::param`].
     handles: std::collections::HashMap<String, ParamHandle>,
+    /// The host's tempo, if it has one. `None` is a host with no transport,
+    /// and the Sync switch says so rather than pretending.
+    #[props(default)]
+    tempo: Option<f64>,
+    /// What the pre-delay currently works out to, in milliseconds — computed
+    /// by the same call the audio thread makes.
+    #[props(default = 0.0)]
+    resolved_ms: f64,
     /// The shell's redraw tick. Not read: its job is to change, so the panel
     /// re-renders against fresh parameter values instead of being memoized.
     frame: u64,
@@ -504,6 +513,35 @@ pub fn SpaceFace(
                     .map_or("Reverb", |c| c.label)
                     .to_string(),
                 size: 8.0, color: design.dim_ink.to_string(),
+            }
+
+            // The pre-delay's time control sits under the Pre-Delay knob it
+            // governs, rather than in a corner of the panel. Anywhere fixed
+            // collides with something on some design — the IR family puts a
+            // file browser across the right of the face — and a mode switch
+            // for a control belongs beside that control anyway.
+            if let (Some(sync), Some(div), Some(knob)) = (
+                handles.get("predelay_sync"),
+                handles.get("predelay_div"),
+                design.knobs.iter().find(|k| k.param == "predelay"),
+            ) {
+                PanelSlot {
+                    scale,
+                    x: knob.x,
+                    y: knob.d.mul_add(0.92, knob.y) + 46.0,
+                    w: 150.0,
+                    h: 58.0,
+                    MusicalTimeField {
+                        sync: sync.clone(),
+                        division: div.clone(),
+                        resolved_ms,
+                        tempo,
+                        testid: "reverb-predelay".to_string(),
+                        ink: design.ink.to_string(),
+                        accent: design.accent.to_string(),
+                        scale,
+                    }
+                }
             }
 
             for (index , spec) in design

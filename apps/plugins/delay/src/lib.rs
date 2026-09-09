@@ -59,7 +59,7 @@ impl FtsDelay {
     /// `DelayChain::update` only reallocates when the sample rate grows
     /// beyond what `initialize()` already provisioned, so calling it per
     /// block is allocation-free on the audio thread.
-    fn sync_params(&mut self) {
+    fn sync_params(&mut self, tempo: Option<f64>) {
         let p = &self.params;
         let c = &mut self.chain;
 
@@ -68,14 +68,12 @@ impl FtsDelay {
         // what a session reopens with.
         c.set_style(p.resolved_profile().style);
 
-        // Time — free-running ms; Link mirrors L onto R.
-        let time_l = f64::from(p.time_l.value());
-        c.delay_l.time_ms = time_l;
-        c.delay_r.time_ms = if p.link.value() {
-            time_l
-        } else {
-            f64::from(p.time_r.value())
-        };
+        // Time — either the dialled milliseconds or the note value against
+        // the host's tempo; Link mirrors L onto R either way. The params
+        // own that decision so the editor and the audio thread cannot
+        // disagree about what the control currently means.
+        c.delay_l.time_ms = p.time_l_ms(tempo);
+        c.delay_r.time_ms = p.time_r_ms(tempo);
 
         let fb = f64::from(p.feedback.value());
         c.delay_l.feedback = fb;
@@ -158,7 +156,10 @@ impl Plugin for FtsDelay {
         // First update at the real sample rate provisions every delay line
         // (the engines size for their 5 s maximum) so process() never
         // allocates.
-        self.sync_params();
+        //
+        // No transport at activation time — the first `process` call brings
+        // the tempo, and until then a synced delay runs at its free time.
+        self.sync_params(None);
         true
     }
 
@@ -170,9 +171,17 @@ impl Plugin for FtsDelay {
         &mut self,
         buffer: &mut Buffer,
         _aux: &mut AuxiliaryBuffers,
-        _context: &mut impl ProcessContext<Self>,
+        context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        self.sync_params();
+        // The host's tempo, published for the editor as well as used here:
+        // the face has to show what a note value currently works out to, and
+        // this is the only thread that is told.
+        let tempo = context.transport().tempo;
+        self.ui_state.tempo_bpm.store(
+            tempo.map_or(0.0, |t| t as f32),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        self.sync_params(tempo);
 
         // The chain processes f64 stereo slices; bridge from the host's f32
         // buffers in fixed stack chunks (no heap allocation).

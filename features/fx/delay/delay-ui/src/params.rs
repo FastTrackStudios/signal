@@ -23,6 +23,10 @@ pub struct DelayUiState {
     pub wet_db: AtomicF32,
     /// Input level in dB, so a face can show what is feeding it.
     pub input_db: AtomicF32,
+    /// The host's tempo, as the audio thread last saw it. Zero means the
+    /// host has no transport — the editor shows the free-running time then,
+    /// because a note value with no tempo behind it is not a duration.
+    pub tempo_bpm: AtomicF32,
 }
 
 #[derive(Params)]
@@ -39,6 +43,19 @@ pub struct DelayParams {
 
     #[id = "time_r"]
     pub time_r: FloatParam,
+
+    /// Read the times as note values against the host's tempo instead of as
+    /// milliseconds. The free-running times are kept either way, so turning
+    /// this off returns you to the number you dialled.
+    #[id = "time_sync"]
+    pub time_sync: BoolParam,
+
+    /// Which note the left time locks to while `time_sync` is on.
+    #[id = "div_l"]
+    pub div_l: IntParam,
+
+    #[id = "div_r"]
+    pub div_r: IntParam,
 
     /// Right time follows left. Off is where ping-pong and stereo spread
     /// come from.
@@ -138,6 +155,16 @@ impl Default for DelayParams {
             .with_unit(" ms")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
 
+            // Off by default: a delay that silently re-times itself the
+            // moment it is dropped on a track is a surprise, and the
+            // free-running default below is already musical.
+            time_sync: musical_time::params::sync_param("Time Sync", false),
+            // 1/8D — which at 120 BPM is exactly the 375 ms default above,
+            // so switching to Sync on a 120 BPM session changes nothing and
+            // the control reads as the same delay in the other language.
+            div_l: musical_time::params::division_param("Time L Div", DEFAULT_DIV),
+            div_r: musical_time::params::division_param("Time R Div", DEFAULT_DIV),
+
             link: BoolParam::new("Link", true),
 
             feedback: FloatParam::new("Feedback", 0.35, FloatRange::Linear { min: 0.0, max: 1.1 })
@@ -199,7 +226,61 @@ impl Default for DelayParams {
     }
 }
 
+/// What the time controls can reach, in milliseconds.
+///
+/// Named because the sync clamp has to agree with the parameter range: a 1/1
+/// at 60 BPM is four seconds, exactly the top of this range, and a slower
+/// session asks for more than the delay line has.
+pub const MIN_TIME_MS: f64 = 1.0;
+pub const MAX_TIME_MS: f64 = 4000.0;
+
+/// The note the times lock to until someone picks another.
+///
+/// A dotted eighth: the delay behind most of the guitar parts anyone has
+/// wanted to copy, and at 120 BPM it is 375 ms — the same as the free-running
+/// default, so the two modes agree out of the box.
+pub const DEFAULT_DIV: musical_time::MusicalTime = musical_time::MusicalTime::new(
+    musical_time::NoteValue::Eighth,
+    musical_time::Flavour::Dotted,
+);
+
 impl DelayParams {
+    /// The left time as the audio thread should read it: milliseconds, with
+    /// the note value already resolved against `tempo` if Sync is on.
+    ///
+    /// `tempo` is an `Option` because that is how a host reports it. With no
+    /// transport there is no tempo, and the honest answer is the number the
+    /// user dialled — a synced delay in a host that has no tempo should keep
+    /// making its sound rather than collapse to zero.
+    #[must_use]
+    pub fn time_l_ms(&self, tempo: Option<f64>) -> f64 {
+        self.synced_time(self.time_l.value(), self.div_l.value())
+            .resolve_ms_clamped(tempo, MIN_TIME_MS, MAX_TIME_MS)
+    }
+
+    /// The right time, which follows the left while `link` is on — including
+    /// the note value, so a linked pair stays linked in Sync.
+    #[must_use]
+    pub fn time_r_ms(&self, tempo: Option<f64>) -> f64 {
+        if self.link.value() {
+            return self.time_l_ms(tempo);
+        }
+        self.synced_time(self.time_r.value(), self.div_r.value())
+            .resolve_ms_clamped(tempo, MIN_TIME_MS, MAX_TIME_MS)
+    }
+
+    fn synced_time(&self, free_ms: f32, div: i32) -> musical_time::SyncedTime {
+        musical_time::SyncedTime {
+            mode: if self.time_sync.value() {
+                musical_time::TimeMode::Synced
+            } else {
+                musical_time::TimeMode::Free
+            },
+            free_ms: f64::from(free_ms),
+            division: musical_time::MusicalTime::from_param(div),
+        }
+    }
+
     /// The profile index the editor should be showing.
     ///
     /// The persisted id wins when this build still has it; otherwise the

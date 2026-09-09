@@ -128,6 +128,13 @@ pub fn App() -> Element {
     }
 
     // Every control the faces can bind, by name.
+    // Zero is how the audio thread says "this host has no transport"; a note
+    // value means nothing then, so it becomes `None` rather than 0 BPM.
+    let tempo = {
+        let bpm = ui.state.tempo_bpm.load(std::sync::atomic::Ordering::Relaxed);
+        (bpm > 0.0).then(|| f64::from(bpm))
+    };
+
     let handles: HashMap<String, ParamHandle> = [
         ("time_l", params.time_l.as_ptr()),
         ("time_r", params.time_r.as_ptr()),
@@ -140,6 +147,9 @@ pub fn App() -> Element {
         ("mix", params.mix.as_ptr()),
         ("character_a", params.character_a.as_ptr()),
         ("character_b", params.character_b.as_ptr()),
+        ("time_sync", params.time_sync.as_ptr()),
+        ("div_l", params.div_l.as_ptr()),
+        ("div_r", params.div_r.as_ptr()),
     ]
     .into_iter()
     .map(|(name, ptr)| (name.to_string(), param_handle(ptr, ctx.clone())))
@@ -223,6 +233,13 @@ pub fn App() -> Element {
                         key: "{id}",
                         profile_id: id.to_string(),
                         handles: handles.clone(),
+                        // The tempo comes from the audio thread — it is the
+                        // only one the host tells — and the resolved time is
+                        // computed by the same call `sync_params` makes, so
+                        // the face cannot show a different number than the
+                        // delay is actually running at.
+                        tempo,
+                        resolved_ms: params.time_l_ms(tempo),
                         frame,
                     }
                 }

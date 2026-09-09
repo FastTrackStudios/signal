@@ -131,7 +131,21 @@ pub fn mount_sized(width: u32, height: u32) -> Fixture {
 /// profile id, a chosen editor form — so a test can open the editor the way a
 /// host restoring a session would.
 pub fn mount_with(params: Arc<DelayParams>, width: u32, height: u32) -> Fixture {
-    let ui_state = Arc::new(DelayUiState::default());
+    mount_with_state(params, Arc::new(DelayUiState::default()), width, height)
+}
+
+/// Mount against a UI state the caller has already set up — a tempo the host
+/// is reporting, a meter reading.
+///
+/// Needed because the editor's root renders once in the harness: a value
+/// written into the shared state *after* mounting is never picked up, so
+/// anything the face reads from state has to be in place first.
+pub fn mount_with_state(
+    params: Arc<DelayParams>,
+    ui_state: Arc<DelayUiState>,
+    width: u32,
+    height: u32,
+) -> Fixture {
     let log = Arc::new(Mutex::new(Vec::new()));
 
     let gui = GuiContext::new(Arc::new(RecordingGuiContext { log: log.clone() }));

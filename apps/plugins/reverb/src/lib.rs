@@ -75,7 +75,7 @@ impl FtsReverb {
     /// Push the current params into the chain (no allocation on the steady
     /// path; `set_algorithm` rebuilds engine state only when the selector
     /// actually changes). Decay/damping ramp inside the chain's smoothers.
-    fn sync_params(&mut self) {
+    fn sync_params(&mut self, tempo: Option<f64>) {
         // The engine comes from the profile, not from a raw algorithm index:
         // a profile names both the algorithm and which variant of it, and the
         // variant is half of what makes a Cathedral not an Arena. Resolved
@@ -113,7 +113,10 @@ impl FtsReverb {
         self.chain.magneto.feedback = f64::from(self.params.regen.value());
         self.chain.nonlinear.chop_depth = f64::from(self.params.chop.value());
 
-        self.chain.predelay_ms = f64::from(self.params.predelay.value());
+        // Either the dialled milliseconds or the note value against the
+        // host's tempo; the params own that decision so the face and the
+        // audio thread cannot disagree about what the control means.
+        self.chain.predelay_ms = self.params.predelay_ms(tempo);
         self.chain.width = f64::from(self.params.width.value());
         self.chain.mix = f64::from(self.params.mix.value());
 
@@ -182,7 +185,10 @@ impl Plugin for FtsReverb {
         self.scratch_r = vec![0.0; max];
         // Land the params before the reconfigure so `update()` snaps the
         // chain's smoothers onto the real values (no ramp from defaults).
-        self.sync_params();
+        //
+        // No transport at initialize time — the first `process` call brings
+        // the tempo, and until then a synced pre-delay runs at its free time.
+        self.sync_params(None);
         self.chain.update(AudioConfig {
             sample_rate: self.sample_rate,
             max_buffer_size: max,
@@ -198,12 +204,20 @@ impl Plugin for FtsReverb {
         &mut self,
         buffer: &mut Buffer,
         _aux: &mut AuxiliaryBuffers,
-        _context: &mut impl ProcessContext<Self>,
+        context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         if buffer.channels() < 2 || self.scratch_l.is_empty() {
             return ProcessStatus::Normal;
         }
-        self.sync_params();
+        // The host's tempo, published for the face as well as used here: it
+        // has to show what a note value currently works out to, and this is
+        // the only thread that is told.
+        let tempo = context.transport().tempo;
+        self.ui_state.tempo_bpm.store(
+            tempo.map_or(0.0, |t| t as f32),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        self.sync_params(tempo);
 
         // Process in scratch-sized chunks: f32 interleave → f64 planar →
         // chain → back. No allocation — scratch was sized in `initialize`.

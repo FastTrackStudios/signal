@@ -40,6 +40,8 @@ eq-ui = { workspace = true, optional = true }
 preset-browser = { workspace = true, optional = true }
 preset-browser-ui = { workspace = true, optional = true }
 reverb-profiles = { workspace = true }
+musical-time = { workspace = true, features = ["params"] }
+musical-time-ui = { workspace = true }
 reverb-dsp = { workspace = true }
 crossbeam-channel = { workspace = true }
 dioxus = { workspace = true }
@@ -67,4 +69,8 @@ tokio = { workspace = true, features = ["macros", "rt"] }
 
 [[test]]
 name = "param_round_trip"
+required-features = ["native"]
+
+[[test]]
+name = "tempo_sync"
 required-features = ["native"]

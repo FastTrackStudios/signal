@@ -24,6 +24,10 @@ use reverb_dsp::ir::PreparedIrPair;
 /// when it draws, and a frame that misses an update simply draws the next one.
 #[derive(Default)]
 pub struct ReverbUiState {
+    /// The host's tempo, as the audio thread last saw it. Zero means the host
+    /// has no transport — the face shows the free-running pre-delay then,
+    /// because a note value with no tempo behind it is not a duration.
+    pub tempo_bpm: AtomicF32,
     /// Wet output level in dB, for the tail display.
     pub tail_db: AtomicF32,
     /// Input level in dB, so a face can show what is feeding it.
@@ -137,6 +141,15 @@ pub struct ReverbParams {
 
     #[id = "size"]
     pub size: FloatParam,
+
+    /// Read the pre-delay as a note value against the host's tempo instead
+    /// of as milliseconds. The free-running value is kept either way.
+    #[id = "pre_sync"]
+    pub predelay_sync: BoolParam,
+
+    /// Which note the pre-delay locks to while `predelay_sync` is on.
+    #[id = "pre_div"]
+    pub predelay_div: IntParam,
 
     #[id = "predelay"]
     pub predelay: FloatParam,
@@ -444,6 +457,17 @@ impl Default for ReverbParams {
                 .with_value_to_string(formatters::v2s_f32_percentage(0))
                 .with_string_to_value(formatters::s2v_f32_percentage()),
 
+            // Off by default. A pre-delay is usually set by ear against the
+            // source, not against the grid — but when it IS set to the grid
+            // it wants to be exact, which is what this is for.
+            predelay_sync: musical_time::params::sync_param("Pre-Delay Sync", false),
+            // A sixteenth: the pre-delay that puts the reverb's onset on the
+            // next subdivision rather than smearing across it.
+            predelay_div: musical_time::params::division_param(
+                "Pre-Delay Div",
+                PREDELAY_DEFAULT_DIV,
+            ),
+
             predelay: FloatParam::new(
                 "Pre-Delay",
                 20.0,
@@ -557,7 +581,41 @@ impl Default for ReverbParams {
     }
 }
 
+/// What the pre-delay control can reach, in milliseconds — the same bounds
+/// its parameter declares. Named so the sync clamp cannot drift from them: a
+/// half note at 60 BPM is two seconds and this control stops at 250 ms.
+pub const MIN_PREDELAY_MS: f64 = 0.0;
+pub const MAX_PREDELAY_MS: f64 = 250.0;
+
+/// The note the pre-delay locks to until someone picks another.
+///
+/// A sixteenth: the pre-delay that puts the reverb's onset on the next
+/// subdivision instead of smearing across it.
+pub const PREDELAY_DEFAULT_DIV: musical_time::MusicalTime = musical_time::MusicalTime::new(
+    musical_time::NoteValue::Sixteenth,
+    musical_time::Flavour::Straight,
+);
+
 impl ReverbParams {
+    /// The pre-delay as the audio thread should read it: milliseconds, with
+    /// the note value already resolved against `tempo` if Sync is on.
+    ///
+    /// `tempo` is an `Option` because that is how a host reports it. With no
+    /// transport there is no tempo, and the honest answer is the number the
+    /// user dialled rather than silence.
+    #[must_use]
+    pub fn predelay_ms(&self, tempo: Option<f64>) -> f64 {
+        musical_time::SyncedTime {
+            mode: if self.predelay_sync.value() {
+                musical_time::TimeMode::Synced
+            } else {
+                musical_time::TimeMode::Free
+            },
+            free_ms: f64::from(self.predelay.value()),
+            division: musical_time::MusicalTime::from_param(self.predelay_div.value()),
+        }
+        .resolve_ms_clamped(tempo, MIN_PREDELAY_MS, MAX_PREDELAY_MS)
+    }
     /// The profile index the editor should be showing.
     ///
     /// The persisted id wins when this build still has it; otherwise the
