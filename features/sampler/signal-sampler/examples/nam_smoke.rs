@@ -1,7 +1,8 @@
 //! Smoke-test loading + running an arbitrary `.nam` model through the engine.
 //!
 //! ```text
-//! cargo run --release -p signal-sampler --example nam_smoke -- "/home/cody/Downloads/1965 VOX AC30 Top Boost/'65 AC30_6 - The Iconic Cleanish.nam"
+//! cargo run --release -p signal-sampler --example nam_smoke -- \
+//!   "features/rigs/guitar/default-config/models/VX TB30 BR Edge0 BAL2 CAB FREE.nam"
 //! ```
 //! Proves: the file loads, declares its sample rate/loudness, and turns a
 //! test guitar-ish signal into non-silent, distorted output.

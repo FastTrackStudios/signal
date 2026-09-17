@@ -115,8 +115,8 @@ const DEFAULT_KEYMAP: &str = include_str!("../default-config/keymap.styx");
 /// `models/<name>`), embedded for first-run seeding.
 const DEFAULT_MODELS: &[(&str, &[u8])] = &[
     (
-        "'65 AC30_6 - The Iconic Cleanish.nam",
-        include_bytes!("../default-config/models/'65 AC30_6 - The Iconic Cleanish.nam"),
+        "VX TB30 BR Edge0 BAL2 CAB FREE.nam",
+        include_bytes!("../default-config/models/VX TB30 BR Edge0 BAL2 CAB FREE.nam"),
     ),
     (
         "Fender DRRI _ Clean _ DI Capture (No Cab).nam",
@@ -298,6 +298,35 @@ mod tests {
         store.resolve(&mut abs);
         store.relativize(&mut abs);
         assert_eq!(abs, "/elsewhere/y.nam");
+    }
+
+    /// The shipped config and the structs that read it must agree — a
+    /// mismatch does not fail a build, it fails a first run, on whatever
+    /// machine the binary was installed on.
+    #[test]
+    fn the_shipped_profile_parses_and_carries_its_provenance() {
+        let profile: super::ProfileDef =
+            facet_styx::from_str(super::DEFAULT_PROFILE).expect("default profile.styx parses");
+
+        let ac30 = profile
+            .presets
+            .iter()
+            .find(|p| p.name == "AC30 Clean")
+            .expect("the worship rig has an AC30");
+
+        // The hash is what lets the preset find its own creator, licence and
+        // cover art in the NAM catalog. Without it the preset still plays and
+        // simply shows nothing — which is exactly why a silent typo here
+        // would go unnoticed.
+        assert_eq!(
+            ac30.hash, "af01655f210266635156342a12382d94e5099159a645874db0abf848d790ec6b",
+            "AC30 preset lost the content hash of its capture"
+        );
+        assert!(
+            ac30.nam.starts_with("models/"),
+            "shipped captures are rig-dir-relative so the config is portable, got {}",
+            ac30.nam
+        );
     }
 
     #[test]
