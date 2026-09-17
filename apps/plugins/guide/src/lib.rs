@@ -42,6 +42,7 @@
 //! GUI is deliberately absent (headless, host-generic params), matching the
 //! other apps/plugins shells; the nice-plug-dioxus editor is a follow-up.
 
+use nice_plug::midi::NoteName;
 use nice_plug::prelude::*;
 use std::sync::Arc;
 

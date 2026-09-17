@@ -73,7 +73,7 @@ fn bands_of(block: &LiveBlock) -> Vec<EqBand> {
                 q: get(&format!("b{b}_q"), 0.707),
                 shape: shape_from_index(get(&format!("b{b}_shape"), 0.0) as usize),
                 slope: Some(get(&format!("b{b}_slope"), 2.0)),
-                solo: false,
+                focus: false,
                 stereo_mode: Default::default(),
                 name: String::new(),
             }
@@ -272,7 +272,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                             return;
                         }
                         let mut updated = b.clone();
-                        wheel_band(&mut updated, e.delta().strip_units().y, false);
+                        wheel_band(&mut updated, e.delta().strip_units().y, false, 1.0);
                         if b.shape.uses_slope() {
                             send(&rig, &block_id, i, "slope", updated.slope.unwrap_or(2.0));
                         } else {
