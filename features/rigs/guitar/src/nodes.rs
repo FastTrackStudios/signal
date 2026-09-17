@@ -205,7 +205,9 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
                 path: NodePath::new(vec![NodePathSegment::Block {
                     id: default_id.as_str().to_string(),
                 }]),
-                op: NodeOverrideOp::ReplaceRef { id: leaf.id.as_str().to_string() },
+                op: NodeOverrideOp::ReplaceRef {
+                    id: leaf.id.as_str().to_string(),
+                },
             });
             library.insert(leaf);
             node.variants.push(variant);
@@ -434,10 +436,7 @@ mod tests {
             next: u32,
         }
         impl Bank for Counting {
-            fn install(
-                &mut self,
-                _blocks: &[signal_sampler::RigBlock],
-            ) -> Result<u32, String> {
+            fn install(&mut self, _blocks: &[signal_sampler::RigBlock]) -> Result<u32, String> {
                 self.installs += 1;
                 self.next += 1;
                 Ok(self.next)

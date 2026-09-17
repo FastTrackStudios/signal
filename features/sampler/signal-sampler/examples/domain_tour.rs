@@ -177,7 +177,11 @@ fn worship_keys() -> Container {
                 lane("Pad", -7.1, &["OB-8 PWM Big Strings", "Prophet 5 Classic"]),
                 // Not a synth sparkle at all: a men's + women's choir, which
                 // is why the wash sounds vocal rather than bright.
-                lane("Shimmer", -10.5, &["Choir Men Ohs - mf", "Choir Women Oos - mf"]),
+                lane(
+                    "Shimmer",
+                    -10.5,
+                    &["Choir Men Ohs - mf", "Choir Women Oos - mf"],
+                ),
             ],
         ))
         .add(engine(
@@ -187,11 +191,18 @@ fn worship_keys() -> Container {
         // Bass is its own Engine, not an Aux lane: it occupies a register
         // nothing else touches and must not be ducked by a pad swell, so it
         // wants its own fader, FX tail and place in a scene.
-        .add(engine("Bass", vec![lane("Bass", 0.0, &["Worship PHAT Bass"])]))
+        .add(engine(
+            "Bass",
+            vec![lane("Bass", 0.0, &["Worship PHAT Bass"])],
+        ))
         .add(engine(
             "Aux",
             vec![
-                lane("Synth 1", -9.9, &["Dolceola ^ RR Lite", "Clavichord a ^ RR"]),
+                lane(
+                    "Synth 1",
+                    -9.9,
+                    &["Dolceola ^ RR Lite", "Clavichord a ^ RR"],
+                ),
                 lane("Synth 2", -9.4, &["Big Berthas Lead"]),
             ],
         ))

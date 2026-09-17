@@ -27,13 +27,18 @@ pub struct ScenePolicy;
 pub struct FreePolicy;
 
 fn is_parameter_target(path: &NodePath) -> bool {
-    matches!(path.segments().last(), Some(NodePathSegment::Parameter { id: _ }))
+    matches!(
+        path.segments().last(),
+        Some(NodePathSegment::Parameter { id: _ })
+    )
 }
 
 const fn is_flow_mutation(op: &NodeOverrideOp) -> bool {
     matches!(
         op,
-        NodeOverrideOp::InsertBefore { id: _ } | NodeOverrideOp::InsertAfter { id: _ } | NodeOverrideOp::Remove
+        NodeOverrideOp::InsertBefore { id: _ }
+            | NodeOverrideOp::InsertAfter { id: _ }
+            | NodeOverrideOp::Remove
     )
 }
 
@@ -134,7 +139,9 @@ mod tests {
     fn scene_disallows_flow_mutation_but_allows_replace_ref() {
         let replace = Override {
             path: NodePath::engine("e").with_layer("l"),
-            op: NodeOverrideOp::ReplaceRef { id: "alt-layer".into() },
+            op: NodeOverrideOp::ReplaceRef {
+                id: "alt-layer".into(),
+            },
         };
         assert!(validate_overrides::<ScenePolicy>(&[replace]).is_ok());
 
@@ -152,13 +159,17 @@ mod tests {
     fn free_policy_allows_topology_ops() {
         let ov = Override {
             path: NodePath::engine("e").with_layer("l"),
-            op: NodeOverrideOp::InsertAfter { id: "new-layer".into() },
+            op: NodeOverrideOp::InsertAfter {
+                id: "new-layer".into(),
+            },
         };
         assert!(validate_overrides::<FreePolicy>(&[ov]).is_ok());
 
         let set = Override {
             path: NodePath::engine("e").with_layer("l").with_parameter("x"),
-            op: NodeOverrideOp::Set { value: ParameterValue::new(0.4) },
+            op: NodeOverrideOp::Set {
+                value: ParameterValue::new(0.4),
+            },
         };
         assert!(validate_overrides::<FreePolicy>(&[set]).is_ok());
     }

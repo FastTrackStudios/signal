@@ -1320,18 +1320,12 @@ async fn create_song_with_mixed_sections() {
         .expect("song");
 
     assert_eq!(loaded.scenes.len(), 3);
-    assert!(matches!(
-        loaded.scenes[0].source,
-        SceneSource::Patch { .. }
-    ));
+    assert!(matches!(loaded.scenes[0].source, SceneSource::Patch { .. }));
     assert!(matches!(
         loaded.scenes[1].source,
         SceneSource::RigScene { .. }
     ));
-    assert!(matches!(
-        loaded.scenes[2].source,
-        SceneSource::Patch { .. }
-    ));
+    assert!(matches!(loaded.scenes[2].source, SceneSource::Patch { .. }));
 }
 
 /// Switch a section's source from patch to rig scene.
@@ -1360,10 +1354,7 @@ async fn switch_section_source() {
         .await
         .unwrap()
         .expect("song");
-    assert!(matches!(
-        before.scenes[0].source,
-        SceneSource::Patch { .. }
-    ));
+    assert!(matches!(before.scenes[0].source, SceneSource::Patch { .. }));
 
     // Switch to rig scene
     signal

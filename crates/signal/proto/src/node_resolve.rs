@@ -201,14 +201,15 @@ fn replacement_for<'a>(
             return None;
         };
         let wanted = segment_id(segment)?;
-        let names_child = child.as_str() == wanted
-            || library.get(child).is_some_and(|n| &n.name == wanted);
+        let names_child =
+            child.as_str() == wanted || library.get(child).is_some_and(|n| &n.name == wanted);
         if !names_child {
             return None;
         }
-        library.nodes.iter().find_map(|n| {
-            (n.id.as_str() == with || &n.name == with).then_some(&n.id)
-        })
+        library
+            .nodes
+            .iter()
+            .find_map(|n| (n.id.as_str() == with || &n.name == with).then_some(&n.id))
     })
 }
 
@@ -376,8 +377,16 @@ mod tests {
     #[test]
     fn a_tree_resolves_to_its_leaves_in_order() {
         let mut lib = NodeLibrary::new();
-        let comp = Node::leaf("Comp", crate::block::BlockType::Compressor, block_with("threshold", -40.0));
-        let amp = Node::leaf("AC30", crate::block::BlockType::Amp, block_with("gain", 0.5));
+        let comp = Node::leaf(
+            "Comp",
+            crate::block::BlockType::Compressor,
+            block_with("threshold", -40.0),
+        );
+        let amp = Node::leaf(
+            "AC30",
+            crate::block::BlockType::Amp,
+            block_with("gain", 0.5),
+        );
         let chain = Node::container("Worship", Role::Preset, Combine::Serial)
             .with_child(&comp)
             .with_child(&amp);
@@ -395,7 +404,11 @@ mod tests {
     #[test]
     fn an_override_reaches_one_parameter_of_one_block() {
         let mut lib = NodeLibrary::new();
-        let verb = Node::leaf("VERB 1", crate::block::BlockType::Reverb, block_with("mix", 0.08));
+        let verb = Node::leaf(
+            "VERB 1",
+            crate::block::BlockType::Reverb,
+            block_with("mix", 0.08),
+        );
         let verb_id = verb.id.clone();
 
         // "Ambient": the same reverb, wetter. The block itself is untouched.
@@ -404,7 +417,9 @@ mod tests {
         let mut ambient = ambient;
         ambient.overrides.push(Override::set(
             NodePath::new(vec![
-                NodePathSegment::Block { id: "VERB 1".into() },
+                NodePathSegment::Block {
+                    id: "VERB 1".into(),
+                },
                 NodePathSegment::Parameter { id: "mix".into() },
             ]),
             0.35,
@@ -426,7 +441,8 @@ mod tests {
 
         // And the stored node is unchanged — one thing on disk, many voicings.
         assert_eq!(
-            lib.get(&verb_id).map(|n| matches!(n.content, Content::Leaf { .. })),
+            lib.get(&verb_id)
+                .map(|n| matches!(n.content, Content::Leaf { .. })),
             Some(true)
         );
         let (again, _) = resolve(&lib, &root, None).expect("resolves");
@@ -438,7 +454,11 @@ mod tests {
         let mut lib = NodeLibrary::new();
 
         // A pedal with two captures. Its "High" variant pushes the drive.
-        let pedal = Node::leaf("Drive", crate::block::BlockType::Drive, block_with("drive", 0.2));
+        let pedal = Node::leaf(
+            "Drive",
+            crate::block::BlockType::Drive,
+            block_with("drive", 0.2),
+        );
         let pedal_id = pedal.id.clone();
         let mut high = Variant::new("High");
         high.overrides.push(Override::set(
@@ -474,8 +494,12 @@ mod tests {
         let mut a = Node::container("A", Role::Module, Combine::Serial);
         let mut b = Node::container("B", Role::Module, Combine::Serial);
         // A -> B -> A. Reachable from a hand-edited styx file.
-        a.content = Content::Children { nodes: vec![b.id.clone()] };
-        b.content = Content::Children { nodes: vec![a.id.clone()] };
+        a.content = Content::Children {
+            nodes: vec![b.id.clone()],
+        };
+        b.content = Content::Children {
+            nodes: vec![a.id.clone()],
+        };
         let root = a.id.clone();
         lib.insert(a);
         lib.insert(b);
@@ -500,7 +524,11 @@ mod tests {
         lib.insert(chain); // `absent` is deliberately never inserted.
 
         let (resolved, report) = resolve(&lib, &root, None).expect("still resolves");
-        assert_eq!(resolved.leaves().len(), 1, "the rest of the rig still plays");
+        assert_eq!(
+            resolved.leaves().len(),
+            1,
+            "the rest of the rig still plays"
+        );
         assert_eq!(report.missing, vec![absent_id]);
     }
 
@@ -509,15 +537,25 @@ mod tests {
     #[test]
     fn replace_ref_swaps_which_node_sits_at_a_position() {
         let mut lib = NodeLibrary::new();
-        let fender = Node::leaf("Fender Clean", crate::block::BlockType::Amp, block_with("gain", 0.3));
-        let ac30 = Node::leaf("AC30", crate::block::BlockType::Amp, block_with("gain", 0.7));
+        let fender = Node::leaf(
+            "Fender Clean",
+            crate::block::BlockType::Amp,
+            block_with("gain", 0.3),
+        );
+        let ac30 = Node::leaf(
+            "AC30",
+            crate::block::BlockType::Amp,
+            block_with("gain", 0.7),
+        );
         let fender_id = fender.id.clone();
         let ac30_id = ac30.id.clone();
 
         // The chain holds the Fender by default.
         let mut ambient = Variant::new("Ambient");
         ambient.overrides.push(Override {
-            path: NodePath::new(vec![NodePathSegment::Block { id: "Fender Clean".into() }]),
+            path: NodePath::new(vec![NodePathSegment::Block {
+                id: "Fender Clean".into(),
+            }]),
             op: NodeOverrideOp::ReplaceRef { id: "AC30".into() },
         });
         let ambient_id = ambient.id.clone();
@@ -546,7 +584,9 @@ mod tests {
         let mut broken = Variant::new("Broken");
         broken.overrides.push(Override {
             path: NodePath::new(vec![NodePathSegment::Block { id: "Amp".into() }]),
-            op: NodeOverrideOp::ReplaceRef { id: "a-node-that-was-deleted".into() },
+            op: NodeOverrideOp::ReplaceRef {
+                id: "a-node-that-was-deleted".into(),
+            },
         });
         let broken_id = broken.id.clone();
         let chain = Node::container("P", Role::Preset, Combine::Serial)
@@ -570,7 +610,11 @@ mod tests {
     #[test]
     fn a_library_round_trips_through_styx() {
         let mut lib = NodeLibrary::new();
-        let amp = Node::leaf("AC30", crate::block::BlockType::Amp, block_with("gain", 0.7));
+        let amp = Node::leaf(
+            "AC30",
+            crate::block::BlockType::Amp,
+            block_with("gain", 0.7),
+        );
         let mut lead = Variant::new("Lead");
         lead.overrides.push(Override::set(
             NodePath::new(vec![
@@ -609,7 +653,9 @@ mod tests {
         // surfaced instead of swallowed.
         stale.overrides.push(Override::set(
             NodePath::new(vec![
-                NodePathSegment::Block { id: "Shimmer".into() },
+                NodePathSegment::Block {
+                    id: "Shimmer".into(),
+                },
                 NodePathSegment::Parameter { id: "mix".into() },
             ]),
             0.5,

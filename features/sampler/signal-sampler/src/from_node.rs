@@ -96,13 +96,13 @@ pub fn to_block(leaf: &Resolved) -> RigBlock {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use signal_proto::{BlockParameter, ParameterRange, Unit};
     use signal_proto::block::BlockType;
     use signal_proto::block_kind::NamRef;
     use signal_proto::model::Block;
     use signal_proto::node::{Combine, Node, NodeLibrary, Role, Variant};
     use signal_proto::node_resolve::resolve;
     use signal_proto::overrides::{NodePath, NodePathSegment, Override};
+    use signal_proto::{BlockParameter, ParameterRange, Unit};
 
     /// The worship Amp EQ's magic frequencies, in Hz, on a logarithmic range
     /// — which is how a frequency control has to behave to be playable.
@@ -206,7 +206,11 @@ mod tests {
     #[test]
     fn the_chain_comes_out_in_the_order_it_is_played() {
         let mut lib = NodeLibrary::new();
-        let comp = Node::leaf("Comp", BlockType::Compressor, Block::from_parameters(vec![]));
+        let comp = Node::leaf(
+            "Comp",
+            BlockType::Compressor,
+            Block::from_parameters(vec![]),
+        );
         let amp = Node::leaf("Amp", BlockType::Amp, Block::from_parameters(vec![]));
         let verb = Node::leaf("Verb", BlockType::Reverb, Block::from_parameters(vec![]));
         // A nested module, to prove depth-first is signal order.

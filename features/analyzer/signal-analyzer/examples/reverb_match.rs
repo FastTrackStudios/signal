@@ -29,8 +29,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use signal_analyzer::{DecayFit, Thresholds, compare, decay, generators};
 use fx_blocks::NativeReverb;
+use signal_analyzer::{DecayFit, Thresholds, compare, decay, generators};
 use signal_import::valhalla;
 use signal_plugin_host::{HostedPlugin, PluginInstance};
 

@@ -41,8 +41,8 @@
 //!     --preset "/path/to/Vocals/Bright Vocal.ffp"
 //! ```
 
-use realfft::RealFftPlanner;
 use fx_blocks::NativeEq;
+use realfft::RealFftPlanner;
 use signal_plugin_host::{HostedPlugin, PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;

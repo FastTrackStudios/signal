@@ -158,9 +158,7 @@ impl Song {
 
     #[must_use]
     pub fn default_scene(&self) -> Option<&Scene> {
-        self.scenes
-            .iter()
-            .find(|s| s.id == self.default_scene_id)
+        self.scenes.iter().find(|s| s.id == self.default_scene_id)
     }
 
     #[must_use]

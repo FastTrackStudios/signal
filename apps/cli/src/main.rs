@@ -25,7 +25,10 @@ mod tone3000;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "signal", about = "The FastTrackStudio signal rig, from a terminal")]
+#[command(
+    name = "signal",
+    about = "The FastTrackStudio signal rig, from a terminal"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,

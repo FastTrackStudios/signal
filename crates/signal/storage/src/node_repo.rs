@@ -72,10 +72,10 @@ impl NodeRepoLive {
 
 /// A node as its row.
 fn to_row(node: &Node) -> StorageResult<entity::node::ActiveModel> {
-    let content = serde_json::to_string(&node.content)
-        .map_err(|e| StorageError::Data(e.to_string()))?;
-    let variants = serde_json::to_string(&node.variants)
-        .map_err(|e| StorageError::Data(e.to_string()))?;
+    let content =
+        serde_json::to_string(&node.content).map_err(|e| StorageError::Data(e.to_string()))?;
+    let variants =
+        serde_json::to_string(&node.variants).map_err(|e| StorageError::Data(e.to_string()))?;
     Ok(entity::node::ActiveModel {
         id: Set(node.id.as_str().to_string()),
         name: Set(node.name.clone()),
@@ -89,10 +89,10 @@ fn to_row(node: &Node) -> StorageResult<entity::node::ActiveModel> {
 
 /// A row as its node.
 fn from_row(row: &entity::node::Model) -> StorageResult<Node> {
-    let content: Content = serde_json::from_str(&row.content_json)
-        .map_err(|e| StorageError::Data(e.to_string()))?;
-    let variants: Vec<Variant> = serde_json::from_str(&row.variants_json)
-        .map_err(|e| StorageError::Data(e.to_string()))?;
+    let content: Content =
+        serde_json::from_str(&row.content_json).map_err(|e| StorageError::Data(e.to_string()))?;
+    let variants: Vec<Variant> =
+        serde_json::from_str(&row.variants_json).map_err(|e| StorageError::Data(e.to_string()))?;
     Ok(Node {
         id: row.node_id(),
         name: row.name.clone(),
@@ -257,7 +257,10 @@ mod tests {
         // plays: resolve the same variant and get the same tree.
         let (before, _) = resolve(&lib, &chain, Some(&lead)).expect("resolves");
         let (after, report) = resolve(&back, &chain, Some(&lead)).expect("resolves");
-        assert!(report.is_clean(), "no dangling references after a round trip");
+        assert!(
+            report.is_clean(),
+            "no dangling references after a round trip"
+        );
         assert_eq!(before.leaves().len(), after.leaves().len());
         assert_eq!(
             after.leaves()[0].bypassed,
@@ -320,9 +323,18 @@ mod tests {
         let (lib, chain, _) = a_rig();
         repo.save_library(&lib).await.expect("saves");
 
-        let one = repo.load_node(&chain).await.expect("loads").expect("present");
+        let one = repo
+            .load_node(&chain)
+            .await
+            .expect("loads")
+            .expect("present");
         assert_eq!(one.name, "Worship");
         assert_eq!(one.role, Role::Preset);
-        assert!(repo.load_node(&NodeId::new()).await.expect("query").is_none());
+        assert!(
+            repo.load_node(&NodeId::new())
+                .await
+                .expect("query")
+                .is_none()
+        );
     }
 }

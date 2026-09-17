@@ -908,7 +908,9 @@ async fn replace_ref_override_in_rig_scene() {
     let scene =
         RigScene::new(seed_id("replace-ref-scene"), "Replace Ref Test").with_override(Override {
             path: NodePath::engine("synth-engine").with_layer("synth-layer-osc"),
-            op: NodeOverrideOp::ReplaceRef { id: "synth-layer-osc-alt".to_string() },
+            op: NodeOverrideOp::ReplaceRef {
+                id: "synth-layer-osc-alt".to_string(),
+            },
         });
 
     let rig = Rig::new(seed_id("replace-ref-rig"), "Replace Ref Rig", vec![], scene);
@@ -975,7 +977,9 @@ async fn mixed_override_types_in_scene() {
         ))
         .with_override(Override {
             path: NodePath::engine("synth-engine").with_layer("synth-layer-osc"),
-            op: NodeOverrideOp::ReplaceRef { id: "synth-layer-osc-alt".to_string() },
+            op: NodeOverrideOp::ReplaceRef {
+                id: "synth-layer-osc-alt".to_string(),
+            },
         });
 
     let rig = Rig::new(

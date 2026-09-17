@@ -443,7 +443,11 @@ impl Tone3000Backend {
             }
         };
         let filename = format!("cover.{}", extension_for_mime(&image.mime));
-        let outcome = match self.inner.session.place_model(tone_id, &filename, &image.bytes) {
+        let outcome = match self
+            .inner
+            .session
+            .place_model(tone_id, &filename, &image.bytes)
+        {
             Ok(outcome) => outcome,
             Err(e) => {
                 tracing::debug!(tone = tone_id, %e, "tone3000: cover could not be written");

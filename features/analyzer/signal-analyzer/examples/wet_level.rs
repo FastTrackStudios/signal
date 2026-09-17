@@ -6,8 +6,8 @@
 
 use std::fmt::Write;
 
-use signal_analyzer::generators;
 use fx_blocks::NativeReverb;
+use signal_analyzer::generators;
 use signal_plugin_host::PluginInstance;
 
 const SR: f64 = 48_000.0;

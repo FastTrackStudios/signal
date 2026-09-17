@@ -943,7 +943,10 @@ mod tests {
         let wanted = deep.id.clone();
         let tree = Container::preset("P").add(Container::engine("Pad").add(deep));
 
-        assert_eq!(tree.find_by_id(&wanted).map(|c| c.name.as_str()), Some("Shimmer"));
+        assert_eq!(
+            tree.find_by_id(&wanted).map(|c| c.name.as_str()),
+            Some("Shimmer")
+        );
         assert!(tree.find_by_id("no-such-id").is_none());
     }
 

@@ -870,7 +870,8 @@ mod import_tests {
 
         // A second capture of the SAME tone is another option of it, not a
         // second pedal, and does not claim a second slot.
-        let second = import_drive_capture(&mut def, &mut dps, "Klon", "High", "/n/high.nam", "h-high");
+        let second =
+            import_drive_capture(&mut def, &mut dps, "Klon", "High", "/n/high.nam", "h-high");
         assert_eq!(
             second,
             DriveImport::Option {
@@ -883,7 +884,14 @@ mod import_tests {
         assert_eq!(def.drives[0].block, "Drive 1");
 
         // A different tone takes the next free slot.
-        let other = import_drive_capture(&mut def, &mut dps, "Timmy", "Stock", "/n/timmy.nam", "h-timmy");
+        let other = import_drive_capture(
+            &mut def,
+            &mut dps,
+            "Timmy",
+            "Stock",
+            "/n/timmy.nam",
+            "h-timmy",
+        );
         assert_eq!(
             other,
             DriveImport::Slot {
@@ -898,7 +906,14 @@ mod import_tests {
         let mut def = empty_profile();
         let mut dps: Vec<DrivePresetDef> = Vec::new();
         import_drive_capture(&mut def, &mut dps, "Klon", "Low", "/n/low.nam", "h-low");
-        let again = import_drive_capture(&mut def, &mut dps, "Klon", "Low again", "/n/low.nam", "h-low");
+        let again = import_drive_capture(
+            &mut def,
+            &mut dps,
+            "Klon",
+            "Low again",
+            "/n/low.nam",
+            "h-low",
+        );
         assert_eq!(again, DriveImport::AlreadyPresent);
         assert_eq!(dps[0].options.len(), 1);
     }
@@ -908,7 +923,14 @@ mod import_tests {
         let mut def = empty_profile();
         let mut dps: Vec<DrivePresetDef> = Vec::new();
         for (i, name) in ["A", "B", "C"].iter().enumerate() {
-            let r = import_drive_capture(&mut def, &mut dps, name, "Stock", &format!("/n/{i}.nam"), &format!("h-{i}"));
+            let r = import_drive_capture(
+                &mut def,
+                &mut dps,
+                name,
+                "Stock",
+                &format!("/n/{i}.nam"),
+                &format!("h-{i}"),
+            );
             assert!(matches!(r, DriveImport::Slot { .. }), "{name} took a slot");
         }
         // Every slot is taken, so the fourth pedal lands in the library

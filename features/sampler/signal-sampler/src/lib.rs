@@ -105,6 +105,8 @@ pub mod document_rt;
 #[deny(clippy::disallowed_methods)]
 pub mod engine;
 pub mod engine_spec;
+pub mod from_node;
+pub mod gapless;
 pub mod instrument;
 pub mod keys_rig;
 #[cfg(not(target_arch = "wasm32"))]
@@ -142,8 +144,6 @@ pub mod rig;
 pub mod rig_library;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod rig_manager;
-pub mod from_node;
-pub mod gapless;
 pub mod rig_node;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod rig_prefs;

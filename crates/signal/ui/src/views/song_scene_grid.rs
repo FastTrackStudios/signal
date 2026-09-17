@@ -48,8 +48,7 @@ pub fn SongSceneGrid(
         },
         Some(s) => {
             let sid = s.id.to_string();
-            let section_ids: Vec<String> =
-                s.scenes.iter().map(|sec| sec.id.to_string()).collect();
+            let section_ids: Vec<String> = s.scenes.iter().map(|sec| sec.id.to_string()).collect();
 
             let tiles: Vec<TileData> = s
                 .scenes

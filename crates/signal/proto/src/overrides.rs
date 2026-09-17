@@ -167,7 +167,9 @@ impl NodePath {
                     i += 2;
                 }
                 _ => {
-                    out.push(NodePathSegment::Raw { text: tok.to_string() });
+                    out.push(NodePathSegment::Raw {
+                        text: tok.to_string(),
+                    });
                     i += 1;
                 }
             }
@@ -189,26 +191,41 @@ impl NodePath {
             let kind = tokens[i];
             let id = tokens.get(i + 1).copied();
             match kind {
-                "engine" => out.push(NodePathSegment::Engine { id: id.ok_or(NodePathError::MissingSegmentId {
-                        kind: kind.to_string(),
-                    })?
-                    .to_string(), }),
-                "layer" => out.push(NodePathSegment::Layer { id: id.ok_or(NodePathError::MissingSegmentId {
-                        kind: kind.to_string(),
-                    })?
-                    .to_string(), }),
-                "module" => out.push(NodePathSegment::Module { id: id.ok_or(NodePathError::MissingSegmentId {
-                        kind: kind.to_string(),
-                    })?
-                    .to_string(), }),
-                "block" => out.push(NodePathSegment::Block { id: id.ok_or(NodePathError::MissingSegmentId {
-                        kind: kind.to_string(),
-                    })?
-                    .to_string(), }),
-                "param" | "parameter" => out.push(NodePathSegment::Parameter { id: id.ok_or(NodePathError::MissingSegmentId {
-                        kind: kind.to_string(),
-                    })?
-                    .to_string(), }),
+                "engine" => out.push(NodePathSegment::Engine {
+                    id: id
+                        .ok_or(NodePathError::MissingSegmentId {
+                            kind: kind.to_string(),
+                        })?
+                        .to_string(),
+                }),
+                "layer" => out.push(NodePathSegment::Layer {
+                    id: id
+                        .ok_or(NodePathError::MissingSegmentId {
+                            kind: kind.to_string(),
+                        })?
+                        .to_string(),
+                }),
+                "module" => out.push(NodePathSegment::Module {
+                    id: id
+                        .ok_or(NodePathError::MissingSegmentId {
+                            kind: kind.to_string(),
+                        })?
+                        .to_string(),
+                }),
+                "block" => out.push(NodePathSegment::Block {
+                    id: id
+                        .ok_or(NodePathError::MissingSegmentId {
+                            kind: kind.to_string(),
+                        })?
+                        .to_string(),
+                }),
+                "param" | "parameter" => out.push(NodePathSegment::Parameter {
+                    id: id
+                        .ok_or(NodePathError::MissingSegmentId {
+                            kind: kind.to_string(),
+                        })?
+                        .to_string(),
+                }),
                 other => return Err(NodePathError::UnknownKind(other.to_string())),
             }
             i += 2;
@@ -292,7 +309,9 @@ impl Override {
     pub fn set(path: impl Into<NodePath>, value: f32) -> Self {
         Self {
             path: path.into(),
-            op: NodeOverrideOp::Set { value: ParameterValue::new(value) },
+            op: NodeOverrideOp::Set {
+                value: ParameterValue::new(value),
+            },
         }
     }
 

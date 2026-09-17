@@ -518,18 +518,14 @@ async fn resolve_song_section_via_patch_matches_direct_patch() {
     if worship_song.is_none() {
         println!("No worship song seeded — creating one for this test");
         // Create a minimal test song with a section from a known patch
-        let section =
-            Scene::from_patch(SceneId::new(), "Intro", seed_id("guitar-worship-clean"));
+        let section = Scene::from_patch(SceneId::new(), "Intro", seed_id("guitar-worship-clean"));
         let song_id = SongId::new();
         let scene_id = section.id.clone();
         let song = Song::new(song_id.clone(), "Test Worship Song", section);
         signal.songs().save(song).await.unwrap();
 
         let graph = signal
-            .resolve_target(ResolveTarget::SongScene {
-                song_id,
-                scene_id,
-            })
+            .resolve_target(ResolveTarget::SongScene { song_id, scene_id })
             .await
             .expect("resolve song section failed");
 
@@ -585,10 +581,7 @@ async fn resolve_rig_scene_section_equals_direct_rig_scene() {
     signal.songs().save(song).await.unwrap();
 
     let via_section = signal
-        .resolve_target(ResolveTarget::SongScene {
-            song_id,
-            scene_id,
-        })
+        .resolve_target(ResolveTarget::SongScene { song_id, scene_id })
         .await
         .expect("resolve via section failed");
 
@@ -823,10 +816,7 @@ async fn resolve_song_section_with_cyclic_patch_detects_cycle() {
     signal.songs().save(song).await.unwrap();
 
     let result = signal
-        .resolve_target(ResolveTarget::SongScene {
-            song_id,
-            scene_id,
-        })
+        .resolve_target(ResolveTarget::SongScene { song_id, scene_id })
         .await;
 
     assert!(

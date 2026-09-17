@@ -4,9 +4,9 @@
 //! to the underlying [`SongRepo`].
 
 use super::{
-    BlockRepo, EngineRepo, LayerRepo, ModuleRepo, ProfileRepo, RackRepo, RigRepo,
-    SceneTemplateRepo, Scene, SceneId, SetlistRepo, SignalLive, SignalServiceError, Song,
-    SongId, SongRepo, SongService,
+    BlockRepo, EngineRepo, LayerRepo, ModuleRepo, ProfileRepo, RackRepo, RigRepo, Scene, SceneId,
+    SceneTemplateRepo, SetlistRepo, SignalLive, SignalServiceError, Song, SongId, SongRepo,
+    SongService,
 };
 
 impl<B, M, L, E, R, P, So, Se, St, Ra> SongService for SignalLive<B, M, L, E, R, P, So, Se, St, Ra>

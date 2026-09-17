@@ -703,10 +703,7 @@ where
                 self.resolve_patch_target(&patch.target, patch.overrides)
                     .await
             }
-            ResolveTarget::SongScene {
-                song_id,
-                scene_id,
-            } => {
+            ResolveTarget::SongScene { song_id, scene_id } => {
                 let song = self
                     .song_repo
                     .load_song(song_id)
@@ -785,10 +782,7 @@ where
                     .ok_or_else(|| ResolveError::NotFound(format!("patch: {patch_id}")))?;
                 Ok(Some(self.follow_patch_refs(patch.target).await?))
             }
-            ResolveTarget::SongScene {
-                song_id,
-                scene_id,
-            } => {
+            ResolveTarget::SongScene { song_id, scene_id } => {
                 let song = self
                     .song_repo
                     .load_song(song_id)
@@ -1013,7 +1007,8 @@ where
                             selected_engine_scene_id = EngineSceneId::from(normalize_ref_id(next));
                             engine_replace_path = Some(ov.path.as_str());
                         }
-                        NodeOverrideOp::Enable { enabled: false } | NodeOverrideOp::Bypass { bypassed: true } => {
+                        NodeOverrideOp::Enable { enabled: false }
+                        | NodeOverrideOp::Bypass { bypassed: true } => {
                             engine_enabled = false;
                         }
                         _ => {}
@@ -1090,7 +1085,8 @@ where
                                     LayerSnapshotId::from(normalize_ref_id(next));
                                 layer_replace_path = Some(ov.path.as_str());
                             }
-                            NodeOverrideOp::Enable { enabled: false } | NodeOverrideOp::Bypass { bypassed: true } => {
+                            NodeOverrideOp::Enable { enabled: false }
+                            | NodeOverrideOp::Bypass { bypassed: true } => {
                                 layer_enabled = false;
                             }
                             _ => {}

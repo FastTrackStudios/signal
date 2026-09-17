@@ -12,8 +12,8 @@
 //! cargo run -p signal-analyzer --example decay_calibration -- --tsv
 //! ```
 
-use signal_analyzer::{DecayFit, decay, generators};
 use fx_blocks::NativeReverb;
+use signal_analyzer::{DecayFit, decay, generators};
 use signal_plugin_host::{PluginEvents, PluginInstance};
 
 const SAMPLE_RATE: f64 = 48_000.0;

@@ -70,7 +70,6 @@ pub mod daw_rig_builder;
 pub mod daw_rig_ops;
 pub mod engine;
 pub mod macro_bridge;
-pub mod node_service;
 pub mod macro_constants;
 pub mod macro_error;
 pub mod macro_recorder;
@@ -78,6 +77,7 @@ pub mod macro_registry;
 pub mod macro_setup;
 pub mod macro_system;
 pub mod macro_templates;
+pub mod node_service;
 
 // Re-export macromod types for unified macro system
 pub use signal_macromod::{

@@ -97,10 +97,7 @@ pub enum Content {
     /// model the type lived on the block-level `Preset` wrapping it, which a
     /// single node type has no room for. A leaf has to know whether it is an
     /// amp or a delay — the renderer asks, and so does every UI.
-    Leaf {
-        block_type: BlockType,
-        block: Block,
-    },
+    Leaf { block_type: BlockType, block: Block },
     /// References to other nodes, in order. Resolved through a
     /// [`NodeLibrary`] — see the module docs on why these are ids.
     Children { nodes: Vec<NodeId> },
@@ -366,7 +363,10 @@ mod tests {
 
         // Editing it once changes both — the whole point.
         lib.get_mut(&ac30_id).expect("present").name = "AC30 Top Boost".to_string();
-        assert_eq!(lib.get(&ac30_id).map(|n| n.name.as_str()), Some("AC30 Top Boost"));
+        assert_eq!(
+            lib.get(&ac30_id).map(|n| n.name.as_str()),
+            Some("AC30 Top Boost")
+        );
     }
 
     /// A variant selects which variant each child uses. This is "recall the
@@ -377,8 +377,7 @@ mod tests {
         let choir = Variant::new("Choir");
         let shimmer = shimmer.with_variant(choir.clone());
 
-        let bridge =
-            Variant::new("Bridge").selecting(shimmer.id.clone(), choir.id.clone());
+        let bridge = Variant::new("Bridge").selecting(shimmer.id.clone(), choir.id.clone());
 
         assert_eq!(bridge.selection_for(&shimmer.id), Some(&choir.id));
         // A child the variant does not name falls back to its own default.

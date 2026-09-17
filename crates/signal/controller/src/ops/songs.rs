@@ -428,13 +428,13 @@ impl<S: SignalApi> SongOps<S> {
                 entity_type: "song",
                 id: song_id.to_string(),
             })?;
-        let removed =
-            song.remove_scene(&scene_id)
-                .ok_or_else(|| OpsError::VariantNotFound {
-                    entity_type: "section",
-                    parent_id: song_id.to_string(),
-                    variant_id: scene_id.to_string(),
-                })?;
+        let removed = song
+            .remove_scene(&scene_id)
+            .ok_or_else(|| OpsError::VariantNotFound {
+                entity_type: "section",
+                parent_id: song_id.to_string(),
+                variant_id: scene_id.to_string(),
+            })?;
         self.save(song).await?;
         Ok(removed)
     }

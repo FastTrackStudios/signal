@@ -27,7 +27,7 @@
 //! Song entry.
 
 use signal_proto::node::{NodeId, VariantId};
-use signal_proto::node_resolve::{Report, Resolved, ResolveError, resolve};
+use signal_proto::node_resolve::{Report, ResolveError, Resolved, resolve};
 use signal_storage::node_repo::NodeRepo;
 
 /// Why a node target could not be played.
@@ -102,7 +102,7 @@ mod tests {
     use signal_proto::node::{Combine, Node, NodeLibrary, Role, Variant};
     use signal_proto::overrides::{NodePath, NodePathSegment, Override};
     use signal_proto::profile::PatchTarget;
-    use signal_storage::node_repo::{NodeRepoLive, NodeRepo as _};
+    use signal_storage::node_repo::{NodeRepo as _, NodeRepoLive};
 
     async fn stored(library: &NodeLibrary) -> NodeRepoLive {
         let db = signal_storage::Database::connect("sqlite::memory:")

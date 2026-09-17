@@ -479,7 +479,10 @@ mod tests {
             "82521"
         );
         // A trailing slash is what a browser's address bar often hands over.
-        assert_eq!(tone_id_from("https://www.tone3000.com/tones/plexi-51-51949/"), "51949");
+        assert_eq!(
+            tone_id_from("https://www.tone3000.com/tones/plexi-51-51949/"),
+            "51949"
+        );
         // A bare id passes through untouched.
         assert_eq!(tone_id_from("82521"), "82521");
     }
