@@ -50,6 +50,65 @@ pub struct RigNodes {
 }
 
 impl RigNodes {
+    /// The library as the [`RigProfile`] the live rig installs.
+    ///
+    /// This is the adoption seam. `ProfileRig::load_profile` takes a
+    /// `RigProfile` — a flat chain per patch — and installs each one into the
+    /// gapless bank. Producing that from the library instead of from
+    /// `build_profile` makes the node library the thing the rig plays, with
+    /// one call changed at each site rather than the live rig rebuilt.
+    ///
+    /// `def` supplies what is performance metadata rather than signal: the
+    /// profile's name, each patch's trim, and the stacks a footswitch
+    /// rotates through. Everything that makes sound comes from resolving the
+    /// library.
+    ///
+    /// A patch whose variant does not resolve is left out rather than
+    /// installed empty, and says so — a silent patch on a footswitch is
+    /// worse than one that is missing from the list.
+    #[must_use]
+    pub fn to_profile(&self, def: &ProfileDef) -> signal_sampler::rig_profile::RigProfile {
+        use signal_sampler::rig_profile::{RigPatch, RigProfile, RigStack};
+
+        let mut profile = RigProfile::new(&def.name);
+        for patch in &def.patches {
+            let Some(variant) = self.patch(&patch.name) else {
+                tracing::warn!(patch.name = %patch.name, "guitar: patch has no variant");
+                continue;
+            };
+            let resolved = match signal_proto::node_resolve::resolve(
+                &self.library,
+                &self.chain,
+                Some(variant),
+            ) {
+                Ok((resolved, report)) => {
+                    if !report.is_clean() {
+                        tracing::warn!(
+                            patch.name = %patch.name,
+                            missing = report.missing.len(),
+                            unmatched = report.unmatched_overrides.len(),
+                            "guitar: patch resolved with holes"
+                        );
+                    }
+                    resolved
+                }
+                Err(e) => {
+                    tracing::warn!(patch.name = %patch.name, error = %e, "guitar: patch did not resolve");
+                    continue;
+                }
+            };
+
+            let mut built = RigPatch::new(&patch.name);
+            built.chain = signal_sampler::from_node::to_chain(&resolved);
+            built.output_trim_db += patch.trim_db;
+            profile = profile.with_patch(built);
+        }
+        for stack in &def.stacks {
+            profile = profile.with_stack(RigStack::new(&stack.name, stack.patches.clone()));
+        }
+        profile
+    }
+
     /// The variant for a patch by name.
     #[must_use]
     pub fn patch(&self, name: &str) -> Option<&signal_proto::node::VariantId> {
@@ -561,6 +620,21 @@ mod tests {
     use crate::profiles::{drive_presets, worship_def};
     use signal_proto::node_resolve::{ResolvedContent, resolve};
 
+    /// The rig that actually plays: the shipped config, which is byte-identical
+    /// to the one in `~/.config/signal/rig`.
+    fn shipped() -> (ProfileDef, Vec<DrivePresetDef>) {
+        #[derive(facet::Facet)]
+        struct Presets {
+            presets: Vec<DrivePresetDef>,
+        }
+        let def: ProfileDef = facet_styx::from_str(crate::library::DEFAULT_PROFILE)
+            .expect("the shipped profile parses");
+        let drives = facet_styx::from_str::<Presets>(crate::library::DEFAULT_DRIVE_PRESETS)
+            .expect("the shipped drive presets parse")
+            .presets;
+        (def, drives)
+    }
+
     /// The amp capture in a resolved chain, by block type — the chain runs
     /// on past it, so position says nothing.
     fn amp_leaf<'a>(
@@ -1048,18 +1122,7 @@ mod tests {
     /// bar the placeholder pedals whose block types have no DSP.
     #[test]
     fn the_shipped_rigs_parameters_are_ranged() {
-        let def: ProfileDef =
-            facet_styx::from_str(crate::library::DEFAULT_PROFILE).expect("parses");
-        let drives: Vec<DrivePresetDef> = {
-            #[derive(facet::Facet)]
-            struct Presets {
-                presets: Vec<DrivePresetDef>,
-            }
-            let parsed: Presets =
-                facet_styx::from_str(crate::library::DEFAULT_DRIVE_PRESETS).expect("parses");
-            parsed.presets
-        };
-
+        let (def, drives) = shipped();
         let built = crate::profiles::build_profile(&def, &drives);
         let mut unranged = Vec::new();
         for patch in &built.patches {
@@ -1075,5 +1138,78 @@ mod tests {
             vec!["drive".to_string()],
             "only the placeholder pedals' `drive` should be unrangeable"
         );
+    }
+
+    /// The adoption seam: what the library installs is what `build_profile`
+    /// installs, for the rig that actually plays.
+    ///
+    /// `to_profile` is the one call a site swaps to make the node library the
+    /// source of what sounds. This compares the two `RigProfile`s the live rig
+    /// would receive — patch for patch, block for block, parameter for
+    /// parameter, plus the trims and stacks a footswitch depends on.
+    #[test]
+    fn to_profile_matches_the_builder_for_the_shipped_rig() {
+        let (def, drives) = shipped();
+        let rig = to_nodes(&def, &drives);
+
+        let from_nodes = rig.to_profile(&def);
+        let from_builder = crate::profiles::build_profile(&def, &drives);
+
+        assert_eq!(from_nodes.name, from_builder.name);
+        assert_eq!(
+            from_nodes.patches.len(),
+            from_builder.patches.len(),
+            "every patch installs"
+        );
+
+        for (nodes_patch, builder_patch) in from_nodes.patches.iter().zip(&from_builder.patches) {
+            assert_eq!(nodes_patch.name, builder_patch.name);
+            assert!(
+                (nodes_patch.output_trim_db - builder_patch.output_trim_db).abs() < f32::EPSILON,
+                "{}: output trim",
+                nodes_patch.name
+            );
+            assert_eq!(
+                nodes_patch.chain.len(),
+                builder_patch.chain.len(),
+                "{}: block count",
+                nodes_patch.name
+            );
+            for (a, b) in nodes_patch.chain.iter().zip(&builder_patch.chain) {
+                assert_eq!(a.block_type, b.block_type, "{}", nodes_patch.name);
+                assert_eq!(a.nam, b.nam, "{}: capture", nodes_patch.name);
+                assert_eq!(
+                    a.bypassed,
+                    b.bypassed,
+                    "{}: bypass of {}",
+                    nodes_patch.name,
+                    b.display_name()
+                );
+                for param in &b.params {
+                    let want: f32 = param.value.trim().parse().unwrap_or(0.0);
+                    let got = a.param_f32(&param.name).unwrap_or_else(|| {
+                        panic!(
+                            "{}: {} lost {}",
+                            nodes_patch.name,
+                            b.display_name(),
+                            param.name
+                        )
+                    });
+                    assert!(
+                        (got - want).abs() < want.abs().mul_add(0.01, 0.01),
+                        "{}: {}.{} {want} vs {got}",
+                        nodes_patch.name,
+                        b.display_name(),
+                        param.name
+                    );
+                }
+            }
+        }
+
+        // The stacks a footswitch rotates through come across untouched.
+        let names = |p: &signal_sampler::rig_profile::RigProfile| -> Vec<String> {
+            p.stacks.iter().map(|s| s.name.clone()).collect()
+        };
+        assert_eq!(names(&from_nodes), names(&from_builder));
     }
 }
