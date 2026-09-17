@@ -50,33 +50,19 @@ pub enum RigNode {
 /// domain/audio line, defined identically and kept in step by hand.
 pub use signal_proto::node::{Combine, Role};
 
-/// A cross-tree audio send (the routing axis) — this container's output also
-/// flows to the node named `target` (e.g. a layer routing "To Rotary").
-#[derive(Debug, Clone, Facet)]
-pub struct Send {
-    /// Name of the destination node (resolved against the tree).
-    pub target: String,
-    /// Human label for the route, e.g. "To Rotary".
-    pub label: String,
-}
-
-/// One **control-rate modulation route** (a `ModMatrix` row): a modulation
-/// source drives one parameter of one block, scaled by `depth`.
+/// The routing axis: sends, modulation routes, and how they name what they
+/// point at.
 ///
-/// - `source` — the name of a modulator block attached to this container or
-///   an ancestor (`"Filter Env"`, `"LFO 1"`), or a MIDI performance source
-///   (`"Wheel"`, `"Velocity"`, `"Aftertouch"`, `"Bender"`, `"CC74"`).
-/// - `target` — `"Block Name.param"`; the block is found by display name in
-///   this container's subtree, the param by the backend's parameter name
-///   (e.g. `"Filter.cutoff"`, `"Amp.gain"`).
-/// - `depth` — −1..+1 scale of the source into the param's normalized range,
-///   added to the param's base value each block.
-#[derive(Debug, Clone, Facet)]
-pub struct ModRoute {
-    pub source: String,
-    pub target: String,
-    pub depth: f32,
-}
+/// From [`signal_proto::node_routing`], because a route is domain — the
+/// player drew it. The change that came with the move is the addressing:
+/// a target used to be a display name, resolved afresh every time the tree
+/// rendered, so renaming a block silently stopped every route into it. Now a
+/// name is what *authoring* produces and an id is what is stored:
+/// [`Container::resolve_refs`] converts one to the other once the tree is
+/// complete, and after that a rename cannot miss.
+pub use signal_proto::node_routing::{
+    AudioSend as Send, ModRoute, ModSource as RouteSource, NodeRef,
+};
 
 /// A node-level setting that isn't a block, and the keyboard window a node
 /// occupies.
@@ -178,6 +164,18 @@ impl RigNode {
     }
 }
 
+/// Resolve one reference, reporting whether it changed.
+fn resolve_ref(
+    reference: &mut NodeRef,
+    lookup: &impl Fn(&str) -> Option<signal_proto::node::NodeId>,
+) -> bool {
+    if !reference.is_unresolved() {
+        return false;
+    }
+    reference.resolve(lookup);
+    !reference.is_unresolved()
+}
+
 /// A fresh node identity: UUIDv7, so ids from different machines never
 /// collide and ids from one machine sort by when they were made.
 #[must_use]
@@ -219,6 +217,73 @@ impl Container {
             };
         }
         minted
+    }
+
+    /// Make this tree canonical: mint every missing id, then resolve every
+    /// authored route onto those ids. Returns `(ids minted, refs resolved)`.
+    ///
+    /// The order matters — a reference cannot resolve to an id that does not
+    /// exist yet — which is the whole reason this exists rather than leaving
+    /// callers to run the two passes themselves.
+    ///
+    /// This is what a caller runs **before persisting** a tree. Both halves
+    /// warn about the same thing: an identity that is regenerated on each
+    /// load is not an identity, so a tree that was canonicalized and not
+    /// saved has gained nothing.
+    pub fn canonicalize(&mut self) -> (usize, usize) {
+        let minted = self.ensure_ids();
+        let resolved = self.resolve_refs();
+        (minted, resolved)
+    }
+
+    /// Turn every authored route in this tree into one that points by id,
+    /// returning how many references were resolved.
+    ///
+    /// A builder can only name what it points at — a lane routes "To Rotary"
+    /// before the Rotary exists, and a modulator's name is all
+    /// [`route`](Self::route) is given. This is the pass that makes those
+    /// names permanent, and it is the whole reason the routing axis is safe
+    /// from a rename: after it runs there is no name left to miss.
+    ///
+    /// Call it after the tree is complete and after
+    /// [`ensure_ids`](Self::ensure_ids) (a reference cannot resolve to an
+    /// id that has not been minted), and **persist the result** for the same
+    /// reason `ensure_ids` says to. A name matching nothing is left alone.
+    ///
+    /// Names are matched case-insensitively across the whole tree, not just
+    /// the subtree, because a send's target usually is not a descendant —
+    /// that is what makes it a *cross-tree* send.
+    pub fn resolve_refs(&mut self) -> usize {
+        let index = self.name_index();
+        let lookup = |name: &str| {
+            index
+                .iter()
+                .find(|(_, n)| n.to_lowercase() == name)
+                .map(|(id, _)| signal_proto::node::NodeId::from(id.clone()))
+        };
+        self.resolve_refs_with(&lookup)
+    }
+
+    fn resolve_refs_with(
+        &mut self,
+        lookup: &impl Fn(&str) -> Option<signal_proto::node::NodeId>,
+    ) -> usize {
+        let mut resolved = 0;
+        for send in &mut self.sends {
+            resolved += usize::from(resolve_ref(&mut send.target, lookup));
+        }
+        for route in &mut self.mod_routes {
+            resolved += usize::from(resolve_ref(&mut route.target, lookup));
+            if let RouteSource::Node { node } = &mut route.source {
+                resolved += usize::from(resolve_ref(node, lookup));
+            }
+        }
+        for child in &mut self.children {
+            if let RigNode::Container { container } = child {
+                resolved += container.resolve_refs_with(lookup);
+            }
+        }
+        resolved
     }
 
     /// Find a node anywhere in this subtree by **id** — how a selection or
@@ -334,9 +399,14 @@ impl Container {
 
     /// Add a cross-tree send from this node's output to `target`.
     #[must_use]
+    /// The target is taken by name because that is all a builder has: a lane
+    /// routes "To Rotary" before the Rotary exists. [`resolve_refs`] turns it
+    /// into an id once the tree is whole.
+    ///
+    /// [`resolve_refs`]: Self::resolve_refs
     pub fn send(mut self, target: impl Into<String>, label: impl Into<String>) -> Self {
         self.sends.push(Send {
-            target: target.into(),
+            target: NodeRef::name(target),
             label: label.into(),
         });
         self
@@ -345,15 +415,36 @@ impl Container {
     /// Add a control-rate modulation route (a `ModMatrix` row) scoped to this
     /// subtree. See [`ModRoute`].
     #[must_use]
+    /// `source` is a modulator's name or a performance gesture (`"Wheel"`,
+    /// `"Velocity"`, `"CC74"`); `target` is `"Block Name.param"`. Both are
+    /// names for the same reason [`send`](Self::send) takes one.
     pub fn route(
         mut self,
         source: impl Into<String>,
         target: impl Into<String>,
         depth: f32,
     ) -> Self {
+        let target = target.into();
+        // `"Filter.cutoff"` — the block on the left, the parameter on the
+        // right. A target with no parameter addresses nothing, and is kept
+        // whole so the warning names what was written.
+        let (block, parameter) = target
+            .rsplit_once('.')
+            .map_or((target.as_str(), ""), |(b, p)| (b, p));
+        let source = source.into();
+        // A source is either a modulator in the tree or a gesture the player
+        // makes, and only this crate knows the gesture vocabulary — so the
+        // choice is made here, at authoring time, rather than left ambiguous
+        // in the stored route.
+        let source = if crate::native::ModSource::midi_by_name(&source).is_some() {
+            RouteSource::performance(source)
+        } else {
+            RouteSource::node(NodeRef::name(source))
+        };
         self.mod_routes.push(ModRoute {
-            source: source.into(),
-            target: target.into(),
+            source,
+            target: NodeRef::name(block),
+            parameter: parameter.to_string(),
             depth,
         });
         self
@@ -538,11 +629,41 @@ impl Container {
     #[must_use]
     pub fn dump(&self) -> String {
         let mut s = String::new();
-        self.dump_into(&mut s, "", true, true);
+        // The diagram shows what a send *points at*, so a resolved send has
+        // to be looked up: its reference holds an id, and only the node it
+        // names knows what to call itself.
+        let names = self.name_index();
+        self.dump_into(&mut s, "", true, true, &names);
         s
     }
 
-    fn dump_into(&self, out: &mut String, prefix: &str, last: bool, root: bool) {
+    /// Every `(lower-cased id, name)` in this subtree, including modulators
+    /// — a mod route's source is one of those, and they hang off a node
+    /// rather than sitting among its children.
+    fn name_index(&self) -> Vec<(String, String)> {
+        let mut out = vec![(self.id.to_lowercase(), self.name.clone())];
+        for m in &self.modulators {
+            out.push((m.id.to_lowercase(), m.display_name().to_string()));
+        }
+        for child in &self.children {
+            match child {
+                RigNode::Container { container: c } => out.extend(c.name_index()),
+                RigNode::Block { block: b } => {
+                    out.push((b.id.to_lowercase(), b.display_name().to_string()));
+                }
+            }
+        }
+        out
+    }
+
+    fn dump_into(
+        &self,
+        out: &mut String,
+        prefix: &str,
+        last: bool,
+        root: bool,
+        names: &[(String, String)],
+    ) {
         let (branch, child_prefix) = if root {
             ("", String::new())
         } else if last {
@@ -603,7 +724,12 @@ impl Container {
             let _ = write!(out, "  ~{}:{}", m.block_type_tag(), m.display_name());
         }
         for snd in &self.sends {
-            let _ = write!(out, "  ⟿ {}→{}", snd.label, snd.target);
+            let key = snd.target.key();
+            let target = names
+                .iter()
+                .find(|(id, _)| *id == key)
+                .map_or_else(|| snd.target.to_string(), |(_, name)| name.clone());
+            let _ = write!(out, "  ⟿ {}→{}", snd.label, target);
         }
         out.push('\n');
 
@@ -612,7 +738,7 @@ impl Container {
             let is_last = i + 1 == n;
             match child {
                 RigNode::Container { container: c } => {
-                    c.dump_into(out, &child_prefix, is_last, false);
+                    c.dump_into(out, &child_prefix, is_last, false, names);
                 }
                 RigNode::Block { block: b } => {
                     let bb = if is_last { "└─ " } else { "├─ " };
@@ -833,5 +959,68 @@ mod tests {
                 RigNode::Block { block } => out.push(block.id.clone()),
             }
         }
+    }
+
+    /// The hazard the routing axis had, and the pass that closes it: a route
+    /// authored by name is resolved to an id, and the rename that used to
+    /// break it silently now cannot reach it.
+    #[test]
+    fn a_resolved_route_survives_the_rename_that_used_to_break_it() {
+        let mut tree = Container::preset("Organ")
+            .modulator(BlockType::Envelope, "Filter Env")
+            .add(Container::module("Tone").block(BlockType::Filter, "Filter"))
+            .add(Container::module("Rotary"))
+            .send("Rotary", "To Rotary")
+            .route("Filter Env", "Filter.cutoff", 0.5);
+
+        // As authored: everything points by name.
+        assert!(tree.sends[0].target.is_unresolved());
+        assert!(tree.mod_routes[0].target.is_unresolved());
+
+        let (minted, resolved) = tree.canonicalize();
+        // A builder mints as it goes, so there is nothing left to mint here;
+        // `ensure_ids` is for a tree loaded from styx written before ids.
+        assert_eq!(minted, 0);
+        assert_eq!(resolved, 3, "the send, the route's target and its source");
+
+        let rotary = tree.find("Rotary").expect("present").id.clone();
+        assert_eq!(
+            tree.sends[0].target.as_id().map(|i| i.as_str()),
+            Some(rotary.as_str())
+        );
+
+        // Rename the node the send used to name.
+        for child in &mut tree.children {
+            if let RigNode::Container { container } = child
+                && container.name == "Rotary"
+            {
+                container.name = "Leslie".into();
+            }
+        }
+        assert_eq!(
+            tree.sends[0].target.as_id().map(|i| i.as_str()),
+            Some(rotary.as_str()),
+            "the send still points at the same node under its new name"
+        );
+    }
+
+    /// A gesture is not a node, and the builder decides which is which — it
+    /// is the only place that knows the MIDI vocabulary.
+    #[test]
+    fn the_builder_tells_a_gesture_from_a_modulator() {
+        let tree = Container::preset("Pad")
+            .modulator(BlockType::Lfo, "LFO")
+            .route("Wheel", "Filter.cutoff", 0.3)
+            .route("LFO", "Filter.cutoff", 0.2);
+
+        assert_eq!(
+            tree.mod_routes[0].source,
+            RouteSource::performance("Wheel"),
+            "the wheel is a gesture"
+        );
+        assert!(
+            matches!(&tree.mod_routes[1].source, RouteSource::Node { .. }),
+            "the LFO is a node"
+        );
     }
 }

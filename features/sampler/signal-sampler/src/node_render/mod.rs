@@ -398,7 +398,11 @@ impl RenderNode {
         // book (leaf/source registries + parameter overlay), so even a
         // route-less tree keeps it — an empty tick is a few clears.
         let bus_count = mc.buses.len();
-        let (leaf_names, leaf_params): (Vec<_>, Vec<_>) = mc.leaves.into_iter().unzip();
+        let (leaf_names, leaf_params): (Vec<_>, Vec<_>) = mc
+            .leaves
+            .into_iter()
+            .map(|(_, name, params)| (name, params))
+            .unzip();
         Self::Modulated {
             engine: Box::new(ModEngine {
                 sources: mc.sources,
@@ -499,7 +503,7 @@ impl RenderNode {
             };
         }
         // This container is a send target → it becomes a bus return.
-        if let Some(bus) = mc.bus_id(&container.name) {
+        if let Some(bus) = mc.bus_for(container) {
             node = Self::BusInject {
                 bus,
                 inner: Box::new(node),
@@ -509,7 +513,7 @@ impl RenderNode {
         let taps: Vec<usize> = container
             .sends
             .iter()
-            .filter_map(|s| mc.bus_id(&s.target))
+            .filter_map(|s| mc.bus_by_key(&s.target.key()))
             .collect();
         if !taps.is_empty() {
             node = Self::SendTap {
@@ -536,11 +540,15 @@ impl RenderNode {
                     .map(LeafBackend::params_snapshot)
                     .unwrap_or_default();
                 let id = mc.leaves.len();
-                mc.leaves.push((b.display_name().to_lowercase(), params));
+                mc.leaves
+                    .push((b.id.clone(), b.display_name().to_lowercase(), params));
                 mc.leaf_paths.push(mc.path.clone());
                 let leaf = Self::Leaf { id, inst };
                 // A block can also be a send target (e.g. the global Rotary).
-                match mc.bus_id(&b.display_name()) {
+                match mc
+                    .bus_by_key(&b.id.to_lowercase())
+                    .or_else(|| mc.bus_by_key(&b.display_name().to_lowercase()))
+                {
                     Some(bus) => Self::BusInject {
                         bus,
                         inner: Box::new(leaf),
@@ -2371,5 +2379,39 @@ zones (
         );
         rn.prepare(48_000.0, 256);
         assert!(render_note(&mut rn, 60, 100) > 1e-3, "still renders");
+    }
+
+    /// The renderer resolves a route by id, not only by name — so a route
+    /// that has been canonicalized still finds its target, and a renamed
+    /// target still receives it.
+    #[test]
+    fn a_canonicalized_route_still_resolves_after_a_rename() {
+        let mut tree = Container::layer("L")
+            .block(BlockType::Oscillator, "Osc")
+            .block(BlockType::Filter, "Filter")
+            .route("Wheel", "Filter.cutoff", -1.0);
+        tree.canonicalize();
+        assert!(
+            !tree.mod_routes[0].target.is_unresolved(),
+            "the route now points by id"
+        );
+
+        // Rename the target. Under name addressing this silently unhooked
+        // the route; the compile below is what used to report zero.
+        for child in &mut tree.children {
+            if let RigNode::Block { block } = child
+                && block.display_name() == "Filter"
+            {
+                *block = block.clone().named("Low Pass");
+            }
+        }
+
+        let rn = RenderNode::compile(&tree, 48_000);
+        assert_eq!(
+            rn.mod_engine()
+                .map(super::modmatrix::ModEngine::route_count),
+            Some(1),
+            "the route survived the rename"
+        );
     }
 }

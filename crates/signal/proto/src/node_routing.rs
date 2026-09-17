@@ -14,19 +14,104 @@
 //! [`Node`](crate::node::Node) in the wire contract rather than in the crate
 //! that renders it.
 //!
-//! # Addressed by id
+//! # Names author, ids store
 //!
-//! A send and a mod route name their target by [`NodeId`], not by name. In
-//! the sampler's originals they were names — `Send.target` was resolved
-//! against the tree, `ModRoute.target` was the string `"Block Name.param"` —
-//! which meant renaming a block silently broke every route into it. That is
-//! the same hazard stable ids were introduced to close, and it was still open
-//! one layer down.
+//! A route's target is a [`NodeRef`]: an id, or a name. Both exist because
+//! they are for different moments.
+//!
+//! Writing a rig, a name is the only thing available — a lane sends "To
+//! Rotary" before the Rotary exists, so a builder cannot hold its id. Once
+//! the tree is complete the names are resolved to ids in one pass
+//! ([`NodeRef::Name`] → [`NodeRef::Id`]), and from then on renaming the
+//! Rotary cannot break the send. That was the hazard: in the sampler's
+//! originals a route target was a name *permanently*, resolved afresh at
+//! render time, so a rename silently stopped it applying — not at edit time,
+//! not at switch time, on stage.
+//!
+//! A name that resolves to nothing stays a name. It is still wrong, but it
+//! is wrong in a way a person can read.
 
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 use crate::node::NodeId;
+
+/// How a route names the node it points at.
+///
+/// See the module docs: a name is what authoring has, an id is what storage
+/// keeps. Struct variants because facet-styx cannot read back a newtype
+/// tuple variant.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
+#[repr(C)]
+pub enum NodeRef {
+    /// Resolved. Survives any rename.
+    Id { id: NodeId },
+    /// Authored, or unresolvable. Matched case-insensitively by display name.
+    Name { name: String },
+}
+
+impl NodeRef {
+    /// A reference to a node whose id is known.
+    #[must_use]
+    pub const fn id(id: NodeId) -> Self {
+        Self::Id { id }
+    }
+
+    /// A reference by display name, for authoring.
+    #[must_use]
+    pub fn name(name: impl Into<String>) -> Self {
+        Self::Name { name: name.into() }
+    }
+
+    /// The id, if this reference has been resolved.
+    #[must_use]
+    pub const fn as_id(&self) -> Option<&NodeId> {
+        match self {
+            Self::Id { id } => Some(id),
+            Self::Name { .. } => None,
+        }
+    }
+
+    /// The lower-cased string this matches on — an id, or a name.
+    ///
+    /// Ids are already unique and case-exact; lower-casing one is harmless
+    /// and lets both kinds share a lookup table.
+    #[must_use]
+    pub fn key(&self) -> String {
+        match self {
+            Self::Id { id } => id.as_str().to_lowercase(),
+            Self::Name { name } => name.to_lowercase(),
+        }
+    }
+
+    /// Whether this still points by name.
+    #[must_use]
+    pub const fn is_unresolved(&self) -> bool {
+        matches!(self, Self::Name { .. })
+    }
+
+    /// Resolve a name against `lookup`, which answers with the id for a
+    /// lower-cased name. An id is left alone; an unknown name is left alone.
+    pub fn resolve(&mut self, lookup: &impl Fn(&str) -> Option<NodeId>) {
+        if let Self::Name { name } = self
+            && let Some(id) = lookup(&name.to_lowercase())
+        {
+            *self = Self::Id { id };
+        }
+    }
+}
+
+impl std::fmt::Display for NodeRef {
+    /// The name, or the id. A resolved reference has no name of its own —
+    /// only the node it points at does — so anything wanting a readable
+    /// label should look the node up rather than format the reference.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Id { id } => f.write_str(id.as_str()),
+            Self::Name { name } => f.write_str(name),
+        }
+    }
+}
 
 /// A cross-tree audio send: this node's output also flows to `target`.
 ///
@@ -36,13 +121,13 @@ use crate::node::NodeId;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct AudioSend {
     /// The destination node.
-    pub target: NodeId,
+    pub target: NodeRef,
     /// Human label for the route, e.g. "To Rotary".
     pub label: String,
 }
 
 impl AudioSend {
-    pub fn new(target: NodeId, label: impl Into<String>) -> Self {
+    pub fn new(target: NodeRef, label: impl Into<String>) -> Self {
         Self {
             target,
             label: label.into(),
@@ -52,24 +137,58 @@ impl AudioSend {
 
 /// Where a modulation route gets its signal.
 ///
-/// Either a modulator attached to this node or an ancestor, or a performance
-/// gesture the player makes. The second kind has no node to point at, which is
-/// why this is an enum rather than a bare id.
+/// Either a modulator node — an envelope, an LFO — or a gesture the player
+/// makes. The second kind has no node to point at, which is why this is an
+/// enum rather than a bare [`NodeRef`].
+///
+/// The gesture's name is **not** a vocabulary this crate owns. "Wheel",
+/// "CC74", "MPE Timbre", "Key Track" are resolved by whatever renders the
+/// route, and that list grows with the renderer, not with the domain — the
+/// same reasoning as [`Setting`]. What the domain knows is that this route's
+/// signal comes from the player rather than from a node.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum ModSource {
-    /// A modulator block — an envelope, an LFO, an arpeggiator.
-    Node { node: NodeId },
-    /// The mod wheel.
-    Wheel,
-    /// Note velocity.
-    Velocity,
-    /// Channel or polyphonic aftertouch.
-    Aftertouch,
-    /// Pitch bend.
-    Bender,
-    /// A continuous controller, by number.
-    Cc { number: u8 },
+    /// A modulator node — an envelope, an LFO, an arpeggiator.
+    Node { node: NodeRef },
+    /// A performance gesture, named in the renderer's vocabulary.
+    Performance { name: String },
+}
+
+impl ModSource {
+    /// A gesture by name.
+    #[must_use]
+    pub fn performance(name: impl Into<String>) -> Self {
+        Self::Performance { name: name.into() }
+    }
+
+    /// A modulator, by whatever the author had — an id or a name.
+    #[must_use]
+    pub const fn node(node: NodeRef) -> Self {
+        Self::Node { node }
+    }
+
+    /// The string a renderer looks this up by: a node's id or name, or the
+    /// gesture's name. Lower-cased, like [`NodeRef::key`].
+    #[must_use]
+    pub fn key(&self) -> String {
+        match self {
+            Self::Node { node } => node.key(),
+            Self::Performance { name } => name.to_lowercase(),
+        }
+    }
+}
+
+impl std::fmt::Display for ModSource {
+    /// The node's id or name, or the gesture's name — see
+    /// [`NodeRef`]'s `Display` for why a resolved reference has no better
+    /// label to offer.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Node { node } => node.fmt(f),
+            Self::Performance { name } => f.write_str(name),
+        }
+    }
 }
 
 /// One row of the modulation matrix: a source drives one parameter of one
@@ -78,7 +197,7 @@ pub enum ModSource {
 pub struct ModRoute {
     pub source: ModSource,
     /// The block whose parameter moves.
-    pub target: NodeId,
+    pub target: NodeRef,
     /// The parameter's id on that block.
     pub parameter: String,
     /// −1..=1 scale of the source into the parameter's normalized range,
@@ -232,18 +351,30 @@ mod tests {
         assert_eq!(z.key_gain(48), 0.0, "and outside is silent");
     }
 
-    /// A route names its target, so renaming the target cannot break it.
+    /// Once resolved, a route holds an id, so renaming the target cannot
+    /// break it — there is no name left to miss.
     #[test]
-    fn a_route_survives_a_rename() {
+    fn a_resolved_route_survives_a_rename() {
         let filter = NodeId::new();
-        let route = ModRoute {
-            source: ModSource::Wheel,
-            target: filter.clone(),
-            parameter: "cutoff".into(),
-            depth: 0.5,
-        };
-        // Nothing here is a name. There is no rename that could miss.
-        assert_eq!(route.target, filter);
-        assert_eq!(route.parameter, "cutoff");
+        let mut target = NodeRef::name("Filter");
+        assert!(target.is_unresolved());
+
+        let id = filter.clone();
+        target.resolve(&|name| (name == "filter").then(|| id.clone()));
+        assert_eq!(target.as_id(), Some(&filter));
+
+        // The node is renamed. The reference does not care.
+        target.resolve(&|_| None);
+        assert_eq!(target.as_id(), Some(&filter));
+    }
+
+    /// A name that resolves to nothing stays a name: still wrong, but
+    /// readable. Silently becoming a dangling id would be worse.
+    #[test]
+    fn an_unresolvable_name_is_kept() {
+        let mut target = NodeRef::name("Rotary");
+        target.resolve(&|_| None);
+        assert_eq!(target, NodeRef::name("Rotary"));
+        assert!(target.is_unresolved());
     }
 }

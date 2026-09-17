@@ -152,7 +152,10 @@ mod tests {
         }
         // Every layer carries a To-Aux send targeting the Aux rack.
         let sends = p.sends_recursive();
-        let aux_sends = sends.iter().filter(|(_, s)| s.target == AUX_RACK).count();
+        let aux_sends = sends
+            .iter()
+            .filter(|(_, s)| s.target.key() == AUX_RACK.to_lowercase())
+            .count();
         assert_eq!(aux_sends, 4, "each of the 4 layers sends to the aux rack");
     }
 

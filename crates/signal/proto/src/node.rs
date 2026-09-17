@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::block::BlockType;
 use crate::model::{Block, EngineType};
-use crate::node_routing::{AudioSend, ModRoute, Setting, Zone};
+use crate::node_routing::{AudioSend, ModRoute, ModSource, Setting, Zone};
 use crate::overrides::Override;
 
 crate::typed_uuid_id!(
@@ -370,6 +370,18 @@ impl Node {
     }
 }
 
+/// Resolve one reference, reporting whether it changed.
+fn resolve_one(
+    reference: &mut crate::node_routing::NodeRef,
+    lookup: &impl Fn(&str) -> Option<NodeId>,
+) -> bool {
+    if !reference.is_unresolved() {
+        return false;
+    }
+    reference.resolve(lookup);
+    !reference.is_unresolved()
+}
+
 /// Every node, by id — what [`Content::Children`] references resolve against.
 ///
 /// Flat rather than nested on purpose: a node referenced by six parents is
@@ -401,6 +413,46 @@ impl NodeLibrary {
 
     pub fn get_mut(&mut self, id: &NodeId) -> Option<&mut Node> {
         self.nodes.iter_mut().find(|n| &n.id == id)
+    }
+
+    /// Turn every route that still points by name into one that points by
+    /// id, wherever the name matches a node in this library.
+    ///
+    /// Authoring produces names — a lane sends "To Rotary" before the Rotary
+    /// exists — and this is the pass that makes them permanent. Run it once
+    /// the library is complete. Returns how many references it resolved.
+    ///
+    /// A name matching nothing is left alone: see
+    /// [`NodeRef`](crate::node_routing::NodeRef). Two nodes sharing a name
+    /// resolve to the first, which is the cost of ever having allowed a name
+    /// — and the reason this pass exists rather than resolving at render
+    /// time, every time.
+    pub fn resolve_refs(&mut self) -> usize {
+        let by_name: Vec<(String, NodeId)> = self
+            .nodes
+            .iter()
+            .map(|n| (n.name.to_lowercase(), n.id.clone()))
+            .collect();
+        let lookup = |name: &str| {
+            by_name
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, id)| id.clone())
+        };
+
+        let mut resolved = 0;
+        for node in &mut self.nodes {
+            for send in &mut node.sends {
+                resolved += usize::from(resolve_one(&mut send.target, &lookup));
+            }
+            for route in &mut node.mod_routes {
+                resolved += usize::from(resolve_one(&mut route.target, &lookup));
+                if let ModSource::Node { node: source } = &mut route.source {
+                    resolved += usize::from(resolve_one(source, &lookup));
+                }
+            }
+        }
+        resolved
     }
 
     /// How many nodes reference `id` — what makes deleting a shared preset a

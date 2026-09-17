@@ -7,7 +7,7 @@ use signal_proto::block::BlockType;
 
 use crate::native::{ControlEnv, ControlLfo, LfoWave, ModSource};
 use crate::rig::RigBlock;
-use crate::rig_node::{Container, ModRoute, RigNode};
+use crate::rig_node::{Container, ModRoute, RigNode, RouteSource};
 
 /// Build the preset's arpeggiator from an active Arp modulator on the root
 /// container (`on` ≠ 0). Steps come from `step{i}_on/vel/gate` params.
@@ -247,7 +247,10 @@ pub(super) struct ModCompiler {
     midi: Vec<(crate::native::MidiMod, usize)>,
     pub(super) routes: Vec<CompiledRoute>,
     /// Per-leaf (lower-cased display name, params) for target resolution.
-    pub(super) leaves: Vec<(String, Vec<signal_plugin_host::PluginParamInfo>)>,
+    /// Per-leaf `(id, lower-cased display name, params)`. The id is what a
+    /// resolved route matches on; the name is the fallback for a route that
+    /// still points by name.
+    pub(super) leaves: Vec<(String, String, Vec<signal_plugin_host::PluginParamInfo>)>,
     /// Per-leaf lower-cased container path — mirrors `leaves`.
     pub(super) leaf_paths: Vec<Vec<String>>,
     /// Container-name stack during compile (lower-cased), for path capture.
@@ -274,9 +277,13 @@ impl ModCompiler {
     }
 
     /// Pre-pass: register every send target in the tree as a bus.
+    ///
+    /// A target is keyed by whatever it points with — an id once resolved,
+    /// a name until then — and a container claims the return if *either* of
+    /// its own keys matches. See [`bus_id`](Self::bus_id).
     pub(super) fn collect_buses(&mut self, container: &Container) {
         for s in &container.sends {
-            let key = s.target.to_lowercase();
+            let key = s.target.key();
             if !self.buses.contains(&key) {
                 self.buses.push(key);
             }
@@ -288,9 +295,18 @@ impl ModCompiler {
         }
     }
 
-    pub(super) fn bus_id(&self, name: &str) -> Option<usize> {
-        let key = name.to_lowercase();
-        self.buses.iter().position(|b| *b == key)
+    /// The bus a container is the return for, if any.
+    ///
+    /// Checked by id first: a send authored as a name becomes an id once the
+    /// tree is resolved, and a send that was never resolved still has to
+    /// find its return, so both keys are tried.
+    pub(super) fn bus_for(&self, container: &Container) -> Option<usize> {
+        self.bus_by_key(&container.id.to_lowercase())
+            .or_else(|| self.bus_by_key(&container.name.to_lowercase()))
+    }
+
+    pub(super) fn bus_by_key(&self, key: &str) -> Option<usize> {
+        self.buses.iter().position(|b| b == key)
     }
 
     /// Instantiate a modulator block as a control source, honoring its
@@ -341,19 +357,27 @@ impl ModCompiler {
         Some(self.sources.len() - 1)
     }
 
-    fn resolve_source(&mut self, name: &str) -> Option<usize> {
-        let key = name.to_lowercase();
+    /// The control source a route draws from.
+    ///
+    /// A modulator is looked up in scope by whatever the route points with;
+    /// a performance gesture is resolved against this crate's MIDI
+    /// vocabulary, which is the only place that vocabulary lives.
+    fn resolve_source(&mut self, source: &RouteSource) -> Option<usize> {
+        let key = source.key();
         // Innermost modulator scope wins.
         if let Some((_, idx)) = self.scope.iter().rev().find(|(n, _)| *n == key) {
             return Some(*idx);
         }
+        let RouteSource::Performance { name } = source else {
+            return None;
+        };
         // MIDI performance source (deduped).
         let m = ModSource::midi_by_name(name)?;
         if let Some((_, idx)) = self.midi.iter().find(|(mm, _)| *mm == m) {
             return Some(*idx);
         }
         self.sources.push(ModSource::midi(m));
-        self.source_paths.push((Vec::new(), name.to_lowercase()));
+        self.source_paths.push((Vec::new(), key));
         let idx = self.sources.len() - 1;
         self.midi.push((m, idx));
         Some(idx)
@@ -363,20 +387,23 @@ impl ModCompiler {
     /// (`subtree` = leaf indices compiled beneath it).
     pub(super) fn resolve_routes(&mut self, routes: &[ModRoute], subtree: &[usize]) {
         for route in routes {
-            let Some((block_name, param_name)) = route.target.rsplit_once('.') else {
-                tracing::warn!(target = %route.target, "mod route target missing .param");
+            if route.parameter.is_empty() {
+                tracing::warn!(target = %route.target.key(), "mod route names no parameter");
                 continue;
-            };
+            }
             let Some(source) = self.resolve_source(&route.source) else {
-                tracing::warn!(source = %route.source, "mod route source not found");
+                tracing::warn!(source = %route.source.key(), "mod route source not found");
                 continue;
             };
-            let bkey = block_name.to_lowercase();
-            let pkey = param_name.to_lowercase();
+            // An id matches one leaf and cannot be shadowed by a rename; a
+            // name matches every leaf that still carries it, which is what
+            // the name-addressed model always did.
+            let bkey = route.target.key();
+            let pkey = route.parameter.to_lowercase();
             let mut hit = false;
             for &leaf in subtree {
-                let (name, params) = &self.leaves[leaf];
-                if *name != bkey {
+                let (id, name, params) = &self.leaves[leaf];
+                if id.to_lowercase() != bkey && *name != bkey {
                     continue;
                 }
                 if let Some(p) = params.iter().find(|p| p.name.to_lowercase() == pkey) {
@@ -392,7 +419,8 @@ impl ModCompiler {
             }
             if !hit {
                 tracing::warn!(
-                    target = %route.target,
+                    target = %bkey,
+                    param = %route.parameter,
                     "mod route target not resolved (placeholder block or unknown param)"
                 );
             }

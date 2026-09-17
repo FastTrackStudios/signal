@@ -70,7 +70,9 @@ fn main() {
         for rt in &c.mod_routes {
             println!(
                 "  route: {} -> {}  depth={:.3}",
-                rt.source, rt.target, rt.depth
+                rt.source,
+                format_args!("{}.{}", rt.target, rt.parameter),
+                rt.depth
             );
         }
     }

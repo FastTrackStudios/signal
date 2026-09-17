@@ -250,8 +250,9 @@ mod tests {
         // plus the matrix row — both "Filter Env" → cutoff at 0.5.
         assert_eq!(layer.mod_routes.len(), 2);
         for r in &layer.mod_routes {
-            assert_eq!(r.source, "Filter Env");
-            assert_eq!(r.target, "LPF Test.cutoff");
+            assert_eq!(r.source.key(), "filter env");
+            assert_eq!(r.target.key(), "lpf test");
+            assert_eq!(r.parameter, "cutoff");
             assert!((r.depth - 0.5).abs() < 1e-6);
         }
         // The filter envelope modulator carries its imported ADSR.

@@ -411,7 +411,7 @@ mod tests {
         let to_rotary = p
             .sends_recursive()
             .into_iter()
-            .filter(|(_, s)| s.target == "Rotary")
+            .filter(|(_, s)| s.target.key() == "rotary")
             .count();
         assert!(
             to_rotary >= 6,

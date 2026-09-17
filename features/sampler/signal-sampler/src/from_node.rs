@@ -37,12 +37,10 @@
 //! so.
 
 use signal_proto::block_kind::BlockKind;
-use signal_proto::node::NodeId;
 use signal_proto::node_resolve::{Resolved, ResolvedContent};
-use signal_proto::node_routing::ModSource;
 
 use crate::rig::RigBlock;
-use crate::rig_node::{Container, ModRoute, RigNode, Send};
+use crate::rig_node::{Container, RigNode};
 
 /// Flatten a resolved tree into the ordered chain the rig renders.
 ///
@@ -105,25 +103,16 @@ pub fn to_block(leaf: &Resolved) -> RigBlock {
 /// routing axis. This keeps all of it, so a `Node` can say everything a
 /// hand-built `Container` says.
 ///
-/// # Sends and mod routes cross an addressing boundary
-///
-/// A [`Node`](signal_proto::node::Node) addresses a route's target by id;
-/// the sampler's renderer still resolves it by display name. So each id is
-/// translated to the name of the node it points at, looked up in the tree
-/// being rendered. A target outside the tree keeps its id as the name and
-/// will not match — which is what the name-addressed model already did to a
-/// renamed target, and is the reason the domain side does not work that way.
-/// When the renderer moves to ids this translation goes away.
+/// Sends and mod routes cross verbatim — both sides hold
+/// [`signal_proto::node_routing`] types now, addressed the same way. They
+/// used to be translated here, from the domain's ids to the renderer's
+/// display names, which is exactly the translation that made a rename able
+/// to break a route.
 #[must_use]
 pub fn to_container(resolved: &Resolved) -> Container {
-    let names = NameIndex::of(resolved);
-    build(resolved, &names)
-}
-
-fn build(node: &Resolved, names: &NameIndex) -> Container {
-    let children = match &node.content {
+    let children = match &resolved.content {
         ResolvedContent::Leaf { .. } => vec![RigNode::Block {
-            block: to_block(node),
+            block: to_block(resolved),
         }],
         ResolvedContent::Children(children) => children
             .iter()
@@ -132,82 +121,26 @@ fn build(node: &Resolved, names: &NameIndex) -> Container {
                     block: to_block(child),
                 },
                 ResolvedContent::Children(_) => RigNode::Container {
-                    container: build(child, names),
+                    container: to_container(child),
                 },
             })
             .collect(),
     };
 
     Container {
-        id: node.id.as_str().to_string(),
-        role: node.role,
-        name: node.name.clone(),
-        combine: node.combine,
-        input_db: node.input_db,
-        output_db: node.output_db,
+        id: resolved.id.as_str().to_string(),
+        role: resolved.role,
+        name: resolved.name.clone(),
+        combine: resolved.combine,
+        input_db: resolved.input_db,
+        output_db: resolved.output_db,
         children,
-        modulators: node.modulators.iter().map(to_block).collect(),
-        sends: node
-            .sends
-            .iter()
-            .map(|send| Send {
-                target: names.name_of(&send.target),
-                label: send.label.clone(),
-            })
-            .collect(),
-        mod_routes: node
-            .mod_routes
-            .iter()
-            .map(|route| ModRoute {
-                source: match &route.source {
-                    ModSource::Node { node } => names.name_of(node),
-                    ModSource::Wheel => "Wheel".to_string(),
-                    ModSource::Velocity => "Velocity".to_string(),
-                    ModSource::Aftertouch => "Aftertouch".to_string(),
-                    ModSource::Bender => "Bender".to_string(),
-                    ModSource::Cc { number } => format!("CC{number}"),
-                },
-                target: format!("{}.{}", names.name_of(&route.target), route.parameter),
-                depth: route.depth,
-            })
-            .collect(),
-        params: node.settings.clone(),
-        zone: node.zone,
-        bypassed: node.bypassed,
-    }
-}
-
-/// Every id in a resolved tree, with the name the renderer knows it by.
-///
-/// Modulators are indexed too: a mod route's source is one of them, and they
-/// hang off the node rather than sitting in its children.
-struct NameIndex(Vec<(NodeId, String)>);
-
-impl NameIndex {
-    fn of(root: &Resolved) -> Self {
-        let mut out = Vec::new();
-        Self::walk(root, &mut out);
-        Self(out)
-    }
-
-    fn walk(node: &Resolved, out: &mut Vec<(NodeId, String)>) {
-        out.push((node.id.clone(), node.name.clone()));
-        for modulator in &node.modulators {
-            Self::walk(modulator, out);
-        }
-        if let ResolvedContent::Children(children) = &node.content {
-            for child in children {
-                Self::walk(child, out);
-            }
-        }
-    }
-
-    /// The name for `id`, or the id itself when it points outside this tree.
-    fn name_of(&self, id: &NodeId) -> String {
-        self.0
-            .iter()
-            .find(|(node, _)| node == id)
-            .map_or_else(|| id.as_str().to_string(), |(_, name)| name.clone())
+        modulators: resolved.modulators.iter().map(to_block).collect(),
+        sends: resolved.sends.clone(),
+        mod_routes: resolved.mod_routes.clone(),
+        params: resolved.settings.clone(),
+        zone: resolved.zone,
+        bypassed: resolved.bypassed,
     }
 }
 
@@ -219,7 +152,7 @@ mod tests {
     use signal_proto::model::Block;
     use signal_proto::node::{Combine, Node, NodeLibrary, Role, Variant};
     use signal_proto::node_resolve::resolve;
-    use signal_proto::node_routing::{AudioSend, ModRoute, ModSource, Setting, Zone};
+    use signal_proto::node_routing::{AudioSend, ModRoute, ModSource, NodeRef, Setting, Zone};
     use signal_proto::overrides::{NodePath, NodePathSegment, Override};
     use signal_proto::{BlockParameter, ParameterRange, Unit};
 
@@ -417,21 +350,23 @@ mod tests {
         );
     }
 
-    /// An id-addressed route is rendered as the name the renderer resolves by
-    /// — the translation that exists only until the renderer takes ids.
+    /// A route reaches the renderer still holding the id it was authored
+    /// with. Nothing translates it back to a name on the way.
     #[test]
-    fn routes_are_translated_from_ids_to_names() {
+    fn routes_keep_their_ids_across_the_boundary() {
         let mut lib = NodeLibrary::new();
         let filter = Node::leaf("Filter", BlockType::Filter, Block::new(0.0, 0.0, 0.0));
         let rotary = Node::container("Rotary", Role::Module, Combine::Serial);
         let mut lane = Node::container("Organ", Role::Layer, Combine::Serial)
             .with_child(&filter)
             .with_child(&rotary);
+        let rotary_id = rotary.id.clone();
+        let filter_id = filter.id.clone();
         lane.sends
-            .push(AudioSend::new(rotary.id.clone(), "To Rotary"));
+            .push(AudioSend::new(NodeRef::id(rotary_id.clone()), "To Rotary"));
         lane.mod_routes.push(ModRoute {
-            source: ModSource::Wheel,
-            target: filter.id.clone(),
+            source: ModSource::performance("Wheel"),
+            target: NodeRef::id(filter_id.clone()),
             parameter: "cutoff".into(),
             depth: 0.5,
         });
@@ -444,8 +379,12 @@ mod tests {
         let (resolved, _) = resolve(&lib, &root, None).expect("resolves");
         let container = to_container(&resolved);
 
-        assert_eq!(container.sends[0].target, "Rotary");
-        assert_eq!(container.mod_routes[0].source, "Wheel");
-        assert_eq!(container.mod_routes[0].target, "Filter.cutoff");
+        assert_eq!(container.sends[0].target.as_id(), Some(&rotary_id));
+        assert_eq!(
+            container.mod_routes[0].source,
+            ModSource::performance("Wheel")
+        );
+        assert_eq!(container.mod_routes[0].target.as_id(), Some(&filter_id));
+        assert_eq!(container.mod_routes[0].parameter, "cutoff");
     }
 }
