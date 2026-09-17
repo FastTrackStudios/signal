@@ -232,7 +232,7 @@ impl<S: SignalApi> BlockPresetOps<S> {
             match applier.apply_graph(&graph, Some(&snapshot_name)).await {
                 Ok(_) => true,
                 Err(e) => {
-                    eprintln!("[signal] block preset activate DAW apply failed: {e}");
+                    tracing::warn!(error = %e, "signal: block preset not applied to the DAW");
                     false
                 }
             }

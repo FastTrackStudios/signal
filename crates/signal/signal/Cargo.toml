@@ -22,6 +22,7 @@ signal-storage.workspace = true
 signal-nam.workspace = true
 daw = { workspace = true, optional = true }
 tokio.workspace = true
+tracing.workspace = true
 utils.workspace = true
 
 [dev-dependencies]

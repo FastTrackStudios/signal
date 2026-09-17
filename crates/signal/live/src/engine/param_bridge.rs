@@ -150,6 +150,71 @@ pub fn graph_state_chunks(graph: &ResolvedGraph, fx_id: &str) -> Vec<DawStateChu
     chunks
 }
 
+/// Extract [`DawStateChunk`]s from a **resolved node tree** — the node-side
+/// counterpart of [`graph_state_chunks`].
+///
+/// Walks the tree's leaves and collects every block realized by
+/// [`BlockKind::HostChain`]: a chain the host itself saved, which is what an
+/// imported rig's patch is. Each chunk carries the document as bytes, tagged
+/// with `fx_id` and the chain's label.
+///
+/// `host` filters to the host that can actually realize the document —
+/// `"reaper"` for the REAPER applier. A chain saved by another host is
+/// skipped rather than handed over, because a foreign document is not a
+/// chain that host can load and pretending otherwise is how you get a patch
+/// that reports success and produces silence.
+///
+/// This is the whole of what a DAW applier needed from the domain. The rest
+/// of `reaper_applier::apply_graph` — the preload fast path, tail tracks,
+/// delayed mutes, track creation, chunk splicing — never looked at the
+/// resolved model at all.
+#[must_use]
+pub fn node_state_chunks(
+    resolved: &signal_proto::node_resolve::Resolved,
+    fx_id: &str,
+    host: &str,
+) -> Vec<DawStateChunk> {
+    use signal_proto::block_kind::BlockKind;
+    use signal_proto::node_resolve::ResolvedContent;
+
+    let mut chunks = Vec::new();
+    for leaf in resolved.leaves() {
+        let ResolvedContent::Leaf { block_type, block } = &leaf.content else {
+            continue;
+        };
+        let BlockKind::HostChain { chain } = &block.kind else {
+            continue;
+        };
+        if !chain.host.eq_ignore_ascii_case(host) {
+            tracing::warn!(
+                node.name = %leaf.name,
+                chain.host = %chain.host,
+                applier.host = %host,
+                "signal: host chain skipped — saved by a different host"
+            );
+            continue;
+        }
+        let Some(document) = chain.document() else {
+            tracing::warn!(
+                node.name = %leaf.name,
+                "signal: host chain skipped — document did not decode"
+            );
+            continue;
+        };
+        chunks.push(DawStateChunk {
+            fx_id: fx_id.to_string(),
+            plugin_name: if chain.label.is_empty() {
+                leaf.name.clone()
+            } else {
+                chain.label.clone()
+            },
+            block_type: *block_type,
+            chunk_data: document.into_bytes(),
+        });
+    }
+    chunks
+}
+
 /// Map live DAW parameter values back onto a domain [`Block`].
 ///
 /// Matches each block parameter by name against `live`, overwriting the
@@ -269,5 +334,125 @@ mod tests {
         assert_eq!(find_param_index(&live_params, "gain"), Some(0));
         assert_eq!(find_param_index(&live_params, "bass"), Some(1));
         assert_eq!(find_param_index(&live_params, "treble"), None);
+    }
+
+    /// The piece a DAW applier actually needed from the domain, and the
+    /// reason #11 read as untestable: it is a pure function.
+    ///
+    /// An imported patch is one leaf realized by the host's own saved chain,
+    /// and this hands the applier that document.
+    #[test]
+    fn a_host_chain_becomes_the_applier_chunk() {
+        use signal_proto::block::BlockType;
+        use signal_proto::block_kind::{BlockKind, HostChainRef};
+        use signal_proto::model::Block;
+        use signal_proto::node::{Node, NodeLibrary};
+        use signal_proto::node_resolve::resolve;
+
+        let document = "<FXCHAIN\n  WNDRECT 0 0 0 0\n>\n";
+        let mut block = Block::with_exact_parameters(Vec::new());
+        block.kind = BlockKind::HostChain {
+            chain: HostChainRef::new("reaper", document).labelled("Clean"),
+        };
+
+        let mut library = NodeLibrary::new();
+        let leaf = Node::leaf("Imported chain", BlockType::Amp, block);
+        let root = leaf.id.clone();
+        library.insert(leaf);
+
+        let (resolved, _) = resolve(&library, &root, None).expect("resolves");
+        let chunks = node_state_chunks(&resolved, "fx-1", "reaper");
+
+        assert_eq!(chunks.len(), 1);
+        let chunk = &chunks[0];
+        assert_eq!(chunk.fx_id, "fx-1");
+        assert_eq!(chunk.plugin_name, "Clean", "the chain's label names the FX");
+        assert_eq!(chunk.block_type, BlockType::Amp);
+        assert_eq!(
+            String::from_utf8(chunk.chunk_data.clone()).as_deref(),
+            Ok(document),
+            "the document reaches the applier byte for byte"
+        );
+    }
+
+    /// A chain another host saved is skipped, not handed over. Loading a
+    /// foreign document is how a patch reports success and produces silence.
+    #[test]
+    fn a_chain_from_another_host_is_skipped() {
+        use signal_proto::block::BlockType;
+        use signal_proto::block_kind::{BlockKind, HostChainRef};
+        use signal_proto::model::Block;
+        use signal_proto::node::{Node, NodeLibrary};
+        use signal_proto::node_resolve::resolve;
+
+        let mut block = Block::with_exact_parameters(Vec::new());
+        block.kind = BlockKind::HostChain {
+            chain: HostChainRef::new("ableton", "<something else>"),
+        };
+        let mut library = NodeLibrary::new();
+        let leaf = Node::leaf("Foreign", BlockType::Amp, block);
+        let root = leaf.id.clone();
+        library.insert(leaf);
+
+        let (resolved, _) = resolve(&library, &root, None).expect("resolves");
+        assert!(node_state_chunks(&resolved, "fx-1", "reaper").is_empty());
+    }
+
+    /// A rig built rather than imported carries no host chain, so there is
+    /// nothing to splice — the applier's cold path says so instead of
+    /// loading an empty one.
+    #[test]
+    fn a_native_rig_yields_no_chunks() {
+        use signal_proto::block::BlockType;
+        use signal_proto::model::Block;
+        use signal_proto::node::{Node, NodeLibrary};
+        use signal_proto::node_resolve::resolve;
+
+        let mut library = NodeLibrary::new();
+        let leaf = Node::leaf("Amp", BlockType::Amp, Block::new(0.5, 0.5, 0.5));
+        let root = leaf.id.clone();
+        library.insert(leaf);
+
+        let (resolved, _) = resolve(&library, &root, None).expect("resolves");
+        assert!(node_state_chunks(&resolved, "fx-1", "reaper").is_empty());
+    }
+
+    /// Chunks come out in chain order, because the applier takes the first
+    /// and a rig with two imported chains must not get whichever the walk
+    /// happened to reach.
+    #[test]
+    fn chunks_follow_chain_order() {
+        use signal_proto::block::BlockType;
+        use signal_proto::block_kind::{BlockKind, HostChainRef};
+        use signal_proto::model::Block;
+        use signal_proto::node::{Combine, Node, NodeLibrary, Role};
+        use signal_proto::node_resolve::resolve;
+
+        let chain_leaf = |name: &str| {
+            let mut block = Block::with_exact_parameters(Vec::new());
+            block.kind = BlockKind::HostChain {
+                chain: HostChainRef::new("reaper", "<FXCHAIN>").labelled(name),
+            };
+            Node::leaf(name, BlockType::Amp, block)
+        };
+
+        let first = chain_leaf("First");
+        let second = chain_leaf("Second");
+        let root_node = Node::container("Rig", Role::Preset, Combine::Serial)
+            .with_child(&first)
+            .with_child(&second);
+        let root = root_node.id.clone();
+
+        let mut library = NodeLibrary::new();
+        for node in [first, second, root_node] {
+            library.insert(node);
+        }
+
+        let (resolved, _) = resolve(&library, &root, None).expect("resolves");
+        let names: Vec<String> = node_state_chunks(&resolved, "fx-1", "reaper")
+            .into_iter()
+            .map(|c| c.plugin_name)
+            .collect();
+        assert_eq!(names, vec!["First".to_string(), "Second".to_string()]);
     }
 }

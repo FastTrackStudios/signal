@@ -47,6 +47,34 @@ pub enum BlockKind {
     Nam { model: NamRef },
     /// Third-party CLAP / VST3 plugin loaded from disk.
     HostedPlugin { plugin: HostedPluginRef },
+    /// A whole FX chain saved by a host, in that host's own format — a
+    /// REAPER `.rfxchain` document.
+    ///
+    /// The realization for a rig that was *imported* rather than built: the
+    /// chain already exists inside a DAW, its blocks are that DAW's plugins
+    /// with that DAW's state, and the faithful thing to store is the
+    /// document rather than a guess at what is in it. One leaf node stands
+    /// for the whole chain, which is what it is from the domain's side — one
+    /// opaque processing unit.
+    ///
+    /// This is where `Snapshot::state_data` went. That field was
+    /// `Option<Vec<u8>>` on a block-level snapshot: arbitrary bytes, on the
+    /// wrong level (a chain is not one block's state), and untyped (nothing
+    /// said which host could read them). A node had nowhere to put it, which
+    /// is what blocked the REAPER applier from speaking nodes.
+    ///
+    /// The document is stored base64-encoded, which is *not* what it wants
+    /// to be — REAPER's chunk format is UTF-8 text the applier round-trips
+    /// as a `String`, and storing it readable would be better. It cannot be:
+    /// facet-styx writes a multi-line string as a heredoc it then cannot
+    /// read back (`unexpected token: got unclosed object`), so a field
+    /// holding real newlines makes the whole library unloadable. The live
+    /// rig keeps its library as styx, so that is fatal rather than
+    /// inconvenient.
+    ///
+    /// Third limitation of that format to shape a type here, after newtype
+    /// tuple variants and optional unit-tagged enums.
+    HostChain { chain: HostChainRef },
     /// Convolution with a cabinet impulse response.
     ///
     /// Distinct from `Nam`: a `.nam` model is a learned nonlinearity, an IR
@@ -76,6 +104,7 @@ impl BlockKind {
             Self::Native => "native",
             Self::Nam { .. } => "nam",
             Self::HostedPlugin { .. } => "plugin",
+            Self::HostChain { .. } => "host-chain",
             Self::ImpulseResponse { .. } => "ir",
             Self::Sample { .. } => "sample",
             Self::Custom { .. } => "custom",
@@ -206,6 +235,73 @@ pub struct HostedPluginRef {
     pub state_b64: Option<String>,
 }
 
+/// A host's own saved FX chain.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Facet)]
+pub struct HostChainRef {
+    /// Which host wrote it — `"reaper"`. Stored because the document is only
+    /// meaningful to that host, and a rig that moves needs to be able to say
+    /// "this chain cannot be realized here" rather than hand a foreign
+    /// document to whatever is loaded.
+    pub host: String,
+    /// The document, base64-encoded — see [`BlockKind::HostChain`] for why
+    /// it is not stored as the text it is. Use
+    /// [`document`](Self::document) and [`with_document`](Self::with_document)
+    /// rather than touching this.
+    pub document_b64: String,
+    /// What to call the chain in the host's UI, and what kind of thing it is
+    /// — the applier renames the loaded FX with these.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+}
+
+impl HostChainRef {
+    /// A host's chain from the document itself.
+    #[must_use]
+    pub fn new(host: impl Into<String>, document: &str) -> Self {
+        Self {
+            host: host.into(),
+            document_b64: encode_document(document),
+            label: String::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn labelled(mut self, label: impl Into<String>) -> Self {
+        self.label = label.into();
+        self
+    }
+
+    /// Replace the document.
+    pub fn with_document(&mut self, document: &str) {
+        self.document_b64 = encode_document(document);
+    }
+
+    /// The document as the host wrote it.
+    ///
+    /// `None` when the stored text is not valid base64 or not UTF-8 — a
+    /// library edited by hand into something that cannot be decoded should
+    /// report an unrealizable chain, not panic on the load path.
+    #[must_use]
+    pub fn document(&self) -> Option<String> {
+        decode_document(&self.document_b64)
+    }
+}
+
+/// Standard base64, no padding games — the same alphabet
+/// `HostedPluginRef::state_b64` uses.
+fn encode_document(document: &str) -> String {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.encode(document.as_bytes())
+}
+
+fn decode_document(encoded: &str) -> Option<String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded.as_bytes())
+        .ok()?;
+    String::from_utf8(bytes).ok()
+}
+
 /// Reference to a cabinet impulse response.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct IrRef {
@@ -265,6 +361,32 @@ mod tests {
         let j = serde_json::to_string(&k).unwrap();
         let back: BlockKind = serde_json::from_str(&j).unwrap();
         assert_eq!(k, back);
+    }
+
+    /// The document survives encoding, newlines and all — which is the
+    /// point of encoding it.
+    #[test]
+    fn a_host_chain_document_round_trips() {
+        let document = "<FXCHAIN\n  WNDRECT 0 0 0 0\n  SHOW 0\n>\n";
+        let chain = HostChainRef::new("reaper", document);
+        assert_eq!(chain.document().as_deref(), Some(document));
+        assert!(
+            !chain.document_b64.contains('\n'),
+            "the stored form is one line, which is what styx can read back"
+        );
+    }
+
+    /// A document that cannot be decoded reports itself rather than
+    /// panicking: a hand-edited library should say "this chain cannot be
+    /// realized", not take the rig down on load.
+    #[test]
+    fn an_undecodable_document_is_none() {
+        let chain = HostChainRef {
+            host: "reaper".into(),
+            document_b64: "not base64 !!".into(),
+            label: String::new(),
+        };
+        assert_eq!(chain.document(), None);
     }
 
     #[test]
@@ -349,6 +471,10 @@ mod tests {
                 ir: IrRef {
                     path: "cabs/greenback.wav".into(),
                 },
+            },
+            BlockKind::HostChain {
+                chain: HostChainRef::new("reaper", "<FXCHAIN\n  WNDRECT 0 0 0 0\n>")
+                    .labelled("Clean"),
             },
             BlockKind::Sample {
                 sample: SampleRef {

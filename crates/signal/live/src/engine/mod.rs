@@ -49,7 +49,7 @@ pub use morph::{
 };
 pub use param_bridge::{
     LiveParam, block_to_snapshot, find_param_index, graph_state_chunks, graph_to_snapshot,
-    live_params_into_block, param_name_matches,
+    live_params_into_block, node_state_chunks, param_name_matches,
 };
 pub use patch_applier::{DawPatchApplier, PatchApplyError};
 pub use rig_engine::{

@@ -12804,6 +12804,7 @@ dependencies = [
  "signal-proto",
  "signal-storage",
  "tokio",
+ "tracing",
  "utils",
  "uuid",
 ]
@@ -13302,6 +13303,7 @@ dependencies = [
  "signal-proto",
  "signal-storage",
  "tokio",
+ "tracing",
  "uuid",
  "vox",
 ]
@@ -13402,6 +13404,7 @@ name = "signal-proto"
 version = "0.1.0"
 dependencies = [
  "architect",
+ "base64 0.22.1",
  "facet",
  "facet-styx",
  "getrandom 0.2.17",

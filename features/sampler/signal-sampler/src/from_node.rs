@@ -80,6 +80,21 @@ pub fn to_block(leaf: &Resolved) -> RigBlock {
             rb.block_type = *block_type;
         }
         BlockKind::ImpulseResponse { ir } => rb.ir = ir.path.clone(),
+        BlockKind::HostChain { chain } => {
+            // A chain saved by a DAW, in that DAW's format. This engine has
+            // no way to realize one — the plugins in it are that host's, and
+            // so is the document — so the block renders as a pass-through.
+            //
+            // Pass-through rather than silence on purpose: an imported patch
+            // reaching the standalone rig should let the guitar through
+            // unprocessed, not mute it. The warning is how you find out why
+            // the tone is missing rather than wondering.
+            tracing::warn!(
+                block.name = %leaf.name,
+                chain.host = %chain.host,
+                "signal: a host's saved chain cannot be realized here — passing audio through"
+            );
+        }
         BlockKind::Sample { sample } => {
             rb.sample = sample.spec_path.clone();
             rb.samples_root = sample.samples_root.clone();

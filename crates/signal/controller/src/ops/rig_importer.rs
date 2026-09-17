@@ -88,10 +88,9 @@ pub async fn import_rig_from_chain<S: SignalApi>(
 
     for module in &chain.modules {
         if module.has_parallel_routing {
-            eprintln!(
-                "[import] warning: module \"{}\" has parallel routing; \
-                 importing as flat serial block list",
-                module.name
+            tracing::warn!(
+                module.name = %module.name,
+                "signal: module has parallel routing — imported as a flat serial block list"
             );
         }
 

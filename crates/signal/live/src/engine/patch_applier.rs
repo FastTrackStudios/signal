@@ -42,4 +42,29 @@ pub trait DawPatchApplier: Send + Sync {
         graph: &'a ResolvedGraph,
         patch_name: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = Result<bool, PatchApplyError>> + Send + 'a>>;
+
+    /// Apply a resolved **node tree** — the domain form.
+    ///
+    /// The same job as [`apply_graph`](Self::apply_graph) from the model that
+    /// replaces `ResolvedGraph`. An implementation extracts its chunks with
+    /// [`node_state_chunks`](super::param_bridge::node_state_chunks) and is
+    /// otherwise identical: the graph was only ever read for its state
+    /// chunks, and everything a DAW applier does around that — preloaded
+    /// tracks, tails, mutes, splicing — never looked at the model.
+    ///
+    /// Defaults to refusing rather than silently doing nothing, so an
+    /// applier that has not been taught nodes says so instead of reporting
+    /// success for a rig the DAW never received.
+    fn apply_node<'a>(
+        &'a self,
+        resolved: &'a signal_proto::node_resolve::Resolved,
+        patch_name: Option<&'a str>,
+    ) -> Pin<Box<dyn Future<Output = Result<bool, PatchApplyError>> + Send + 'a>> {
+        let _ = (resolved, patch_name);
+        Box::pin(async {
+            Err(PatchApplyError::NoTarget(
+                "this applier does not speak nodes".into(),
+            ))
+        })
+    }
 }

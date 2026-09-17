@@ -22,7 +22,9 @@ use tokio::sync::{Mutex, RwLock};
 use crate::daw_compat::TrackHandleCompat;
 use daw::rpc::{Project, TrackHandle};
 use daw::service::TrackRef;
-use signal_live::engine::{DawPatchApplier, DawStateChunk, PatchApplyError, graph_state_chunks};
+use signal_live::engine::{
+    DawPatchApplier, DawStateChunk, PatchApplyError, graph_state_chunks, node_state_chunks,
+};
 use signal_proto::plugin_block::FxRole;
 use signal_proto::resolve::ResolvedGraph;
 
@@ -185,9 +187,10 @@ impl ReaperPatchApplier {
 
                 if send_muted {
                     // Muted send = preloaded patch (inactive, ready for fast-switch)
-                    eprintln!(
-                        "[INFO] Recovered preloaded patch '{}' from existing track",
-                        track_info.name
+                    tracing::info!(
+                        patch.name = %track_info.name,
+                        patch.state = "preloaded",
+                        "signal: recovered a patch track from REAPER"
                     );
                     recovered_preloaded.insert(
                         track_info.name.clone(),
@@ -198,9 +201,10 @@ impl ReaperPatchApplier {
                     );
                 } else {
                     // Unmuted send = currently active patch
-                    eprintln!(
-                        "[INFO] Recovered active patch '{}' from existing track",
-                        track_info.name
+                    tracing::info!(
+                        patch.name = %track_info.name,
+                        patch.state = "active",
+                        "signal: recovered a patch track from REAPER"
                     );
                     recovered_current = Some(PatchTrackState {
                         track: handle,
@@ -213,7 +217,10 @@ impl ReaperPatchApplier {
 
         let recovered_count = recovered_preloaded.len() + usize::from(recovered_current.is_some());
         if recovered_count > 0 {
-            eprintln!("[INFO] Recovered {recovered_count} existing patch track(s) from REAPER");
+            tracing::info!(
+                patch.recovered = recovered_count,
+                "signal: reattached to existing patch tracks"
+            );
         }
 
         *self.state.write().await = Some(FolderRigState {
@@ -398,7 +405,7 @@ impl ReaperPatchApplier {
         // Mute the track itself to save CPU — FX won't process until activated
         let _ = track.mute().await;
 
-        eprintln!("[INFO] Preloaded patch '{name}'");
+        tracing::info!(patch.name = %name, "signal: patch preloaded");
 
         state.preloaded_patches.insert(
             name.to_string(),
@@ -508,9 +515,12 @@ async fn schedule_delayed_track_mute(
         let should_mute = pending.lock().await.remove(&guid);
         if should_mute {
             let _ = track.mute().await;
-            eprintln!("[INFO] Delayed mute applied to track '{guid}'");
+            tracing::debug!(track.guid = %guid, "signal: delayed mute applied");
         } else {
-            eprintln!("[INFO] Delayed mute cancelled for track '{guid}' (re-activated)");
+            tracing::debug!(
+                track.guid = %guid,
+                "signal: delayed mute cancelled — the track was re-activated"
+            );
         }
     });
 }
@@ -568,7 +578,11 @@ async fn rename_fx_on_track(track: &TrackHandle, chunk: &DawStateChunk, patch_na
 
     if let Ok(Some(fx)) = track.fx_chain().by_index(0).await {
         if let Err(e) = fx.rename(&display_name).await {
-            eprintln!("[WARN] Failed to rename FX to '{display_name}': {e}");
+            tracing::warn!(
+                fx.name = %display_name,
+                error = %e,
+                "signal: could not rename the loaded FX"
+            );
         }
     }
 }
@@ -688,12 +702,56 @@ impl DawPatchApplier for ReaperPatchApplier {
         patch_name: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = Result<bool, PatchApplyError>> + Send + 'a>> {
         Box::pin(async move {
+            let label = patch_name.unwrap_or("Patch").to_string();
+            self.apply_chunks(
+                |fx_id| graph_state_chunks(graph, fx_id),
+                &label,
+                "resolved graph",
+            )
+            .await
+        })
+    }
+
+    fn apply_node<'a>(
+        &'a self,
+        resolved: &'a signal_proto::node_resolve::Resolved,
+        patch_name: Option<&'a str>,
+    ) -> Pin<Box<dyn Future<Output = Result<bool, PatchApplyError>> + Send + 'a>> {
+        Box::pin(async move {
+            let label = patch_name.map_or_else(|| resolved.name.clone(), ToString::to_string);
+            self.apply_chunks(
+                |fx_id| node_state_chunks(resolved, fx_id, REAPER_HOST),
+                &label,
+                "node tree",
+            )
+            .await
+        })
+    }
+}
+
+/// The host name a `BlockKind::HostChain` must carry for this applier to load
+/// it. A chain saved by anything else is not a chain REAPER can read.
+const REAPER_HOST: &str = "reaper";
+
+impl ReaperPatchApplier {
+    /// Everything a patch switch does around its state chunk.
+    ///
+    /// `chunks` is the only part that differs between a resolved graph and a
+    /// resolved node tree — and it is the only part that ever looked at
+    /// either. The preload fast path, the tail track, the delayed mutes,
+    /// creating the child track and splicing the chain into it are the same
+    /// work whichever model asked for it, which is why they are here once.
+    async fn apply_chunks(
+        &self,
+        chunks: impl FnOnce(&str) -> Vec<DawStateChunk>,
+        patch_label: &str,
+        source: &'static str,
+    ) -> Result<bool, PatchApplyError> {
+        {
             let mut guard = self.state.write().await;
             let state = guard
                 .as_mut()
                 .ok_or_else(|| PatchApplyError::NoTarget("no folder rig configured".into()))?;
-
-            let patch_label = patch_name.unwrap_or("Patch");
 
             // =================================================================
             // FAST PATH: switch to a preloaded track (mute/unmute only, <5ms)
@@ -735,7 +793,7 @@ impl DawPatchApplier for ReaperPatchApplier {
                     from_preload: true,
                 });
 
-                eprintln!("[INFO] Fast-switched to preloaded patch '{patch_label}'");
+                tracing::info!(patch.name = %patch_label, "signal: fast-switched to preloaded patch");
                 return Ok(true);
             }
 
@@ -745,8 +803,9 @@ impl DawPatchApplier for ReaperPatchApplier {
             // new track would cause an audible gap and duplicate tracks.
             // =================================================================
             if state.preloading_active {
-                eprintln!(
-                    "[INFO] Patch '{patch_label}' not yet preloaded, skipping (preload in progress)"
+                tracing::info!(
+                    patch.name = %patch_label,
+                    "signal: patch not yet preloaded, skipping while a preload is in progress"
                 );
                 return Ok(false);
             }
@@ -755,11 +814,11 @@ impl DawPatchApplier for ReaperPatchApplier {
             // COLD PATH: create a new track and load FX chain (existing behavior)
             // =================================================================
 
-            // Extract rfxchain data from the resolved graph
-            let chunks = graph_state_chunks(graph, &state.fx_id);
-            let chunk = chunks.first().ok_or_else(|| {
-                PatchApplyError::DawError("no state chunks in resolved graph".into())
-            })?;
+            // The one thing that depends on which model asked.
+            let extracted = chunks(&state.fx_id);
+            let chunk = extracted
+                .first()
+                .ok_or_else(|| PatchApplyError::DawError(format!("no state chunks in {source}")))?;
 
             let rfxchain_text = String::from_utf8(chunk.chunk_data.clone())
                 .map_err(|e| PatchApplyError::DawError(format!("rfxchain not UTF-8: {e}")))?
@@ -791,9 +850,9 @@ impl DawPatchApplier for ReaperPatchApplier {
             // --- 2. Demote current patch → tail (mute its send) ---
             if let Some(current) = state.current_patch.take() {
                 if !mute_send_to_track(&state.input_track, current.track.guid()).await {
-                    eprintln!(
-                        "[WARN] Failed to mute send to tail track '{}', send may not exist",
-                        current.name
+                    tracing::warn!(
+                        track.name = %current.name,
+                        "signal: could not mute the send to a tail track — it may not exist"
                     );
                 }
                 state.tail_patch = Some(current);
@@ -857,6 +916,6 @@ impl DawPatchApplier for ReaperPatchApplier {
             });
 
             Ok(true)
-        })
+        }
     }
 }

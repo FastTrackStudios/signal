@@ -156,7 +156,7 @@ impl<S: SignalApi> ProfileOps<S> {
                     {
                         Ok(applied) => applied,
                         Err(e) => {
-                            eprintln!("[signal] activate rig scene switch failed: {e}");
+                            tracing::warn!(error = %e, "signal: rig scene switch failed");
                             false
                         }
                     };
@@ -207,7 +207,7 @@ impl<S: SignalApi> ProfileOps<S> {
             match applier.apply_graph(&graph, patch_name).await {
                 Ok(_) => true,
                 Err(e) => {
-                    eprintln!("[signal] activate_patch DAW apply failed: {e}");
+                    tracing::warn!(error = %e, "signal: patch not applied to the DAW");
                     false
                 }
             }

@@ -15,16 +15,17 @@
 //! a database at all, so it cannot be a service the controller is constructed
 //! with. Passing the repository per call keeps both callers honest.
 //!
-//! # What this deliberately does not do
+//! # The DAW half
 //!
-//! It does not call the DAW applier. `apply_graph` takes a `&ResolvedGraph`,
-//! and giving it a fabricated one — a shell with the ids filled in and no
-//! engines, which is what the old rig-scene path returns — would report
-//! success for a rig REAPER never received.
+//! This used to stop before the applier, because `apply_graph` takes a
+//! `&ResolvedGraph` and handing it a fabricated one would report success for
+//! a rig REAPER never received.
 //!
-//! So a node target is resolved and announced, and the DAW half waits for an
-//! applier that speaks nodes. That is REAPER-integration work, and it wants
-//! verifying against a real project rather than a test.
+//! `DawPatchApplier::apply_node` exists now, so a node target is applied the
+//! same way a graph target is, and `applied_to_daw` means what it says. An
+//! applier that has not been taught nodes refuses rather than doing nothing
+//! quietly, and that refusal lands here as `applied_to_daw: false` — which is
+//! still the truth.
 
 use signal_live::node_service::{NodeResolveError, resolve_node};
 use signal_proto::node_resolve::{Report, Resolved};
@@ -90,12 +91,38 @@ impl<S: SignalApi> NodeOps<S> {
             .await
             .map_err(|e: NodeResolveError| OpsError::Node(e.to_string()))?;
 
-        // `applied_to_daw` is false and means it: no applier speaks nodes yet,
-        // and claiming otherwise would report a rig REAPER never received.
+        // Clone out of the lock in its own statement (guard-across-await).
+        let applier = self
+            .0
+            .daw_applier
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let applied_to_daw = if let Some(applier) = applier {
+            match applier
+                .apply_node(&resolved.0, Some(patch.name.as_str()))
+                .await
+            {
+                Ok(applied) => applied,
+                Err(e) => {
+                    // One warn line for a refusal, and the event carries the
+                    // outcome — the rig keeps playing whatever it has.
+                    tracing::warn!(
+                        patch.name = %patch.name,
+                        error = %e,
+                        "signal: node patch not applied to the DAW"
+                    );
+                    false
+                }
+            }
+        } else {
+            false
+        };
+
         self.0.event_bus.emit(events::SignalEvent::PatchActivated {
             profile_id: profile_id.to_string(),
             patch_id: patch_id.to_string(),
-            applied_to_daw: false,
+            applied_to_daw,
         });
 
         Ok(resolved)
