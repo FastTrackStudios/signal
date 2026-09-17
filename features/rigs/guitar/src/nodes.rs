@@ -157,10 +157,12 @@ impl PatchBank {
 /// what a capture *is* and what it *does* are the two orthogonal axes.
 fn nam_leaf(name: &str, path: &str, block_type: BlockType) -> Node {
     let mut block = Block::from_parameters(Vec::new());
-    block.kind = BlockKind::Nam(NamRef {
-        model_path: path.to_string(),
-        model_id: None,
-    });
+    block.kind = BlockKind::Nam {
+        model: NamRef {
+            model_path: path.to_string(),
+            model_id: None,
+        },
+    };
     Node::leaf(name, block_type, block)
 }
 
@@ -317,7 +319,7 @@ mod tests {
     fn nam_of(node: &signal_proto::node_resolve::Resolved) -> Option<&str> {
         match &node.content {
             ResolvedContent::Leaf { block, .. } => match &block.kind {
-                BlockKind::Nam(nam) => Some(nam.model_path.as_str()),
+                BlockKind::Nam { model } => Some(model.model_path.as_str()),
                 _ => None,
             },
             ResolvedContent::Children(_) => None,

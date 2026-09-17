@@ -72,14 +72,20 @@ pub fn to_block(leaf: &Resolved) -> RigBlock {
     // How the block is realized. `Native` needs nothing: its parameters are
     // its realization, and they are copied below.
     match &block.kind {
-        BlockKind::Nam(nam) => rb = rb.with_nam(nam.model_path.clone()),
-        BlockKind::HostedPlugin(plugin) => {
+        BlockKind::Nam { model } => rb = rb.with_nam(model.model_path.clone()),
+        BlockKind::HostedPlugin { plugin } => {
             rb = RigBlock::plugin_with_state(plugin.path.clone(), plugin.state_b64.clone())
                 .named(&leaf.name);
             rb.id = leaf.id.as_str().to_string();
             rb.block_type = *block_type;
         }
-        BlockKind::Native | BlockKind::Custom(_) => {}
+        BlockKind::Sample { sample } => {
+            rb.sample = sample.spec_path.clone();
+            rb.samples_root = sample.samples_root.clone();
+            rb.sample_section = sample.section.clone();
+            rb.sample_mic = sample.mic.clone();
+        }
+        BlockKind::Native | BlockKind::Custom { .. } => {}
     }
 
     // Every parameter, by the id the DSP knows it by, denormalized through
@@ -207,10 +213,12 @@ mod tests {
     fn a_nam_capture_keeps_its_model_path() {
         let mut lib = NodeLibrary::new();
         let mut block = Block::from_parameters(Vec::new());
-        block.kind = BlockKind::Nam(NamRef {
-            model_path: "models/AC30.nam".into(),
-            model_id: None,
-        });
+        block.kind = BlockKind::Nam {
+            model: NamRef {
+                model_path: "models/AC30.nam".into(),
+                model_id: None,
+            },
+        };
         let amp = Node::leaf("AC30", BlockType::Amp, block);
         let chain = Node::container("P", Role::Preset, Combine::Serial).with_child(&amp);
         let root = chain.id.clone();
@@ -386,5 +394,71 @@ mod tests {
         );
         assert_eq!(container.mod_routes[0].target.as_id(), Some(&filter_id));
         assert_eq!(container.mod_routes[0].parameter, "cutoff");
+    }
+
+    /// The realization the domain was missing. A keys lane is a sampler, and
+    /// before `BlockKind::Sample` a `Node` had no way to say which library,
+    /// section and mic — so a keys rig could not be expressed as nodes at
+    /// all, however many other fields were added.
+    #[test]
+    fn a_sample_realization_renders_as_a_sampler_block() {
+        use signal_proto::block_kind::{BlockKind, SampleRef};
+
+        let mut block = Block::new(0.0, 0.0, 0.0);
+        block.kind = BlockKind::Sample {
+            sample: SampleRef {
+                spec_path: "keyscape/library.styx".into(),
+                samples_root: "/packs/keyscape".into(),
+                section: "1v".into(),
+                mic: "Mix".into(),
+            },
+        };
+
+        let mut lib = NodeLibrary::new();
+        let lane = Node::leaf("Rhodes", BlockType::Sampler, block);
+        let root = lane.id.clone();
+        lib.insert(lane);
+
+        let (resolved, _) = resolve(&lib, &root, None).expect("resolves");
+        let rb = to_block(&resolved);
+
+        assert_eq!(rb.sample, "keyscape/library.styx");
+        assert_eq!(rb.samples_root, "/packs/keyscape");
+        assert_eq!(rb.sample_section, "1v", "which section of the library");
+        assert_eq!(rb.sample_mic, "Mix", "and which mic position");
+    }
+
+    /// Pins the one thing that stops a hand-built `Container` from being
+    /// lifted into a `NodeLibrary` wholesale.
+    ///
+    /// A `RigBlock` parameter is a real value in the DSP's units — the rig's
+    /// own param path takes dB, Hz and ms and normalizes against the
+    /// backend's declared min/max. A domain `BlockParameter` is a 0..=1 knob
+    /// position plus the range that gives it meaning, and that invariant is
+    /// right: it is what automation, modulation and MIDI learn all want.
+    ///
+    /// So lifting `("rate", "2.5")` — 2.5 Hz — into a parameter whose range
+    /// nobody declared clamps it to 1.0, silently. The range is not missing
+    /// by oversight: it lives in the backend, readable only once the block
+    /// is instantiated. A lift is therefore not a pure data transform, and
+    /// writing one that guesses would reintroduce exactly the bug ranges
+    /// were added to fix.
+    #[test]
+    fn an_unranged_parameter_cannot_hold_a_real_value() {
+        let unranged = BlockParameter::new("rate", "Rate", 2.5);
+        assert_eq!(
+            unranged.real(),
+            1.0,
+            "2.5 Hz clamped to the unit interval — the lift's blocker"
+        );
+
+        // With the range declared, the same value survives.
+        let ranged = BlockParameter::ranged(
+            "rate",
+            "Rate",
+            2.5,
+            ParameterRange::logarithmic(0.01, 40.0, Unit::Hz),
+        );
+        assert!((ranged.real() - 2.5).abs() < 0.01, "got {}", ranged.real());
     }
 }

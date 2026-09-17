@@ -241,8 +241,8 @@ impl RigProfile {
             let mut chain = Vec::new();
             for rb in resolved {
                 match rb.kind {
-                    BlockKind::Nam(nam) => chain.push(RigBlock::nam(nam.model_path)),
-                    BlockKind::HostedPlugin(href) => {
+                    BlockKind::Nam { model } => chain.push(RigBlock::nam(model.model_path)),
+                    BlockKind::HostedPlugin { plugin: href } => {
                         chain.push(RigBlock::plugin_with_state(href.path, href.state_b64));
                     }
                     BlockKind::Native => {
@@ -312,10 +312,12 @@ pub struct ResolvedRigBlock {
 impl ResolvedRigBlock {
     pub fn nam(model_path: impl Into<String>) -> Self {
         Self {
-            kind: signal_proto::block_kind::BlockKind::Nam(signal_proto::block_kind::NamRef {
-                model_path: model_path.into(),
-                model_id: None,
-            }),
+            kind: signal_proto::block_kind::BlockKind::Nam {
+                model: signal_proto::block_kind::NamRef {
+                    model_path: model_path.into(),
+                    model_id: None,
+                },
+            },
             cab_ir_path: None,
         }
     }
@@ -333,13 +335,13 @@ impl ResolvedRigBlock {
         state_b64: Option<String>,
     ) -> Self {
         Self {
-            kind: signal_proto::block_kind::BlockKind::HostedPlugin(
-                signal_proto::block_kind::HostedPluginRef {
+            kind: signal_proto::block_kind::BlockKind::HostedPlugin {
+                plugin: signal_proto::block_kind::HostedPluginRef {
                     format: format.into(),
                     path: path.into(),
                     state_b64,
                 },
-            ),
+            },
             cab_ir_path: None,
         }
     }

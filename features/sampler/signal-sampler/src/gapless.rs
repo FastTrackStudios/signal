@@ -258,10 +258,12 @@ mod tests {
 
     fn capture(name: &str, path: &str) -> Node {
         let mut block = Block::from_parameters(Vec::new());
-        block.kind = BlockKind::Nam(NamRef {
-            model_path: path.into(),
-            model_id: None,
-        });
+        block.kind = BlockKind::Nam {
+            model: NamRef {
+                model_path: path.into(),
+                model_id: None,
+            },
+        };
         Node::leaf(name, BlockType::Amp, block)
     }
 

@@ -13,8 +13,17 @@
 //! enum's variants — `BlockKind` is the persisted form, `FxBackend` is
 //! the audio-thread instance.
 //!
-//! Defaults to [`BlockKind::Native`] so older presets that predate this
-//! field deserialize unchanged.
+//! Defaults to [`BlockKind::Native`] so a block that does not say how it is
+//! realized reads as built-in DSP.
+//!
+//! # Struct variants, not tuple variants
+//!
+//! Every non-`Native` variant is a struct variant carrying one named field.
+//! That is not a style choice: facet-styx writes a newtype tuple variant in a
+//! form it cannot read back (`@Nam"…"`), so a `BlockKind::Nam(NamRef)` could
+//! not survive a round trip through the format the live rig stores its
+//! library in — a NAM amp was unwritable. The same limitation already forced
+//! `NodePathSegment` and `NodeOverrideOp` into struct variants.
 
 use facet::Facet;
 use serde::{Deserialize, Serialize};
@@ -35,13 +44,21 @@ pub enum BlockKind {
     /// Neural Amp Modeler — a `.nam` model file processed by
     /// `neural-amp-modeler` (FFI to `NeuralAmpModelerCore`). Works for any
     /// nonlinear/amplifier-shaped block (Amp, Drive, Cabinet, …).
-    Nam(NamRef),
+    Nam { model: NamRef },
     /// Third-party CLAP / VST3 plugin loaded from disk.
-    HostedPlugin(HostedPluginRef),
+    HostedPlugin { plugin: HostedPluginRef },
+    /// Sampled playback from a sample-library spec — a Keyscape piano, an
+    /// Omnisphere soundsource, a drum kit, an orchestral section.
+    ///
+    /// The kind the domain was missing, and the reason the keys rig could
+    /// not be expressed as nodes: its every lane is a sampler, and a `Node`
+    /// had no way to say so. A sample realization is not a plugin and not a
+    /// neural model; it is a spec file plus which part of it to play.
+    Sample { sample: SampleRef },
     /// Caller-defined backend identified by a string id; lookup happens
     /// in a host-supplied registry. Lets plugin authors add their own
     /// kinds without growing this enum.
-    Custom(CustomRef),
+    Custom { custom: CustomRef },
 }
 
 impl BlockKind {
@@ -50,9 +67,10 @@ impl BlockKind {
     pub const fn tag(&self) -> &'static str {
         match self {
             Self::Native => "native",
-            Self::Nam(_) => "nam",
-            Self::HostedPlugin(_) => "plugin",
-            Self::Custom(_) => "custom",
+            Self::Nam { .. } => "nam",
+            Self::HostedPlugin { .. } => "plugin",
+            Self::Sample { .. } => "sample",
+            Self::Custom { .. } => "custom",
         }
     }
 }
@@ -180,6 +198,29 @@ pub struct HostedPluginRef {
     pub state_b64: Option<String>,
 }
 
+/// Reference to a sample library and the part of it a block plays.
+///
+/// Everything but `spec_path` is optional in the sense that empty means "the
+/// obvious one" — the spec's first section, its first mic, the spec file's
+/// own directory. A single-instrument library therefore needs only the path,
+/// while an orchestral library that holds sixty sections and five mic
+/// positions can name exactly one.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Facet)]
+pub struct SampleRef {
+    /// Path to the library spec — a `library.styx` or a `.signalpack`.
+    pub spec_path: String,
+    /// Root the spec's WAV/zone paths resolve against. Empty ⇒ the spec
+    /// file's parent directory.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub samples_root: String,
+    /// Section id inside the library (e.g. `"1v"`). Empty ⇒ the first.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub section: String,
+    /// Mic position id (e.g. `"Mix"`). Empty ⇒ the first.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub mic: String,
+}
+
 /// Caller-defined backend reference.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct CustomRef {
@@ -200,10 +241,12 @@ mod tests {
 
     #[test]
     fn json_round_trips_through_nam() {
-        let k = BlockKind::Nam(NamRef {
-            model_path: "/models/dumble.nam".into(),
-            model_id: Some("sha256:abcd".into()),
-        });
+        let k = BlockKind::Nam {
+            model: NamRef {
+                model_path: "/models/dumble.nam".into(),
+                model_id: Some("sha256:abcd".into()),
+            },
+        };
         let j = serde_json::to_string(&k).unwrap();
         let back: BlockKind = serde_json::from_str(&j).unwrap();
         assert_eq!(k, back);
@@ -255,13 +298,68 @@ mod tests {
 
     #[test]
     fn json_round_trips_through_hosted() {
-        let k = BlockKind::HostedPlugin(HostedPluginRef {
-            format: "Clap".into(),
-            path: "/usr/lib/clap/NAMVoyager.clap".into(),
-            state_b64: None,
-        });
+        let k = BlockKind::HostedPlugin {
+            plugin: HostedPluginRef {
+                format: "Clap".into(),
+                path: "/usr/lib/clap/NAMVoyager.clap".into(),
+                state_b64: None,
+            },
+        };
         let j = serde_json::to_string(&k).unwrap();
         let back: BlockKind = serde_json::from_str(&j).unwrap();
         assert_eq!(k, back);
+    }
+
+    /// The round trip the tuple variants could not do, and the reason they
+    /// are gone: the live rig keeps its library as styx, so a NAM amp that
+    /// cannot be written in that format cannot be saved at all.
+    #[test]
+    fn styx_round_trips_every_realization() {
+        let kinds = [
+            BlockKind::Native,
+            BlockKind::Nam {
+                model: NamRef {
+                    model_path: "tone3000/1234/ac30.nam".into(),
+                    model_id: Some("5678".into()),
+                },
+            },
+            BlockKind::HostedPlugin {
+                plugin: HostedPluginRef {
+                    format: "Clap".into(),
+                    path: "/usr/lib/clap/x.clap".into(),
+                    state_b64: Some("AAAA".into()),
+                },
+            },
+            BlockKind::Sample {
+                sample: SampleRef {
+                    spec_path: "keyscape/library.styx".into(),
+                    section: "1v".into(),
+                    mic: "Mix".into(),
+                    ..SampleRef::default()
+                },
+            },
+            BlockKind::Custom {
+                custom: CustomRef {
+                    id: "granular".into(),
+                    config: None,
+                },
+            },
+        ];
+        // Wrapped in a struct because a styx document's root is a map — a
+        // bare enum has nowhere to go. That is also how a kind is really
+        // stored: as one field of a block.
+        #[derive(Debug, PartialEq, Facet)]
+        struct Holder {
+            kind: BlockKind,
+        }
+
+        for kind in kinds {
+            let tag = kind.tag();
+            let holder = Holder { kind };
+            let text = facet_styx::to_string(&holder).expect("write");
+            let back: Holder = facet_styx::from_str(&text)
+                .unwrap_or_else(|e| panic!("{tag} did not read back: {e}\n{text}"));
+            assert_eq!(holder, back, "{tag}");
+        }
     }
 }

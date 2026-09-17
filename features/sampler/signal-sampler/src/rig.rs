@@ -228,9 +228,24 @@ pub struct RigBlock {
     /// Mic position id (e.g. `"Mix"`). Empty ⇒ the spec's first mic.
     #[facet(default)]
     pub sample_mic: String,
-    /// Per-block parameter values applied at build time (`(name, value)`
-    /// matching the backend's parameter names; normalized values as decimal
-    /// strings — e.g. `("cutoff", "0.42")`). Imported presets set these.
+    /// Per-block parameter values applied at build time — `(name, value)`
+    /// matching the backend's parameter names, as decimal strings.
+    ///
+    /// **The value is in whatever units that backend's parameter uses**, and
+    /// which those are is known only to the backend: `amp_attack` is
+    /// milliseconds, `rate` is Hz, `cutoff` and `sustain` are already
+    /// normalized. There is no rule here, only a convention per parameter —
+    /// `native_osc::with_block_params` is the reference for the synth
+    /// layer's.
+    ///
+    /// (This said "normalized values" until 2026-09. It was wrong: the rig's
+    /// own param path takes plain dB/Hz/ms and normalizes against the
+    /// backend's declared min/max, and the envelope times above are read as
+    /// milliseconds. It matters because it is exactly what stops a
+    /// `Container` being lifted into a `NodeLibrary` — a domain
+    /// `BlockParameter` is a 0..=1 position plus its range, and without the
+    /// range these values cannot cross. See
+    /// `from_node::tests::an_unranged_parameter_cannot_hold_a_real_value`.)
     #[facet(default)]
     pub params: Vec<crate::rig_node::Param>,
     /// Display name (e.g. "Big Hall", "Dotted Delay"). Falls back to the asset
