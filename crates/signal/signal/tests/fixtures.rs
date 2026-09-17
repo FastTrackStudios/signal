@@ -128,10 +128,10 @@ pub async fn seed_jm_megarig(signal: &Signal) {
 /// Seed the full guitar library the higher-level tests expect.
 ///
 /// Sets up the JM megarig plus a "Worship" profile (Clean/Lead patches targeting
-/// the megarig), a song whose sections resolve, and a setlist referencing that song.
+/// the megarig), a song whose scenes resolve, and a setlist referencing that song.
 ///
 /// Everything targets the JM megarig (which fully resolves), so `resolve_target`
-/// succeeds for every patch/section. The old seed put the worship profile on a
+/// succeeds for every patch/scene. The old seed put the worship profile on a
 /// separate worship rig; here it targets the megarig so we only need one
 /// resolvable rig — the tests only assert the profile name, patch names/targets,
 /// and that the Clean patch drives amp gain low.
@@ -142,7 +142,7 @@ pub async fn seed_jm_megarig(signal: &Signal) {
 pub async fn seed_guitar_library(signal: &Signal) {
     use signal::profile::{Patch, Profile};
     use signal::setlist::{Setlist, SetlistEntry};
-    use signal::song::{Section, Song};
+    use signal::song::{Scene, Song};
 
     seed_jm_megarig(signal).await;
 
@@ -233,23 +233,23 @@ pub async fn seed_guitar_library(signal: &Signal) {
     );
     signal.profiles().save(worship).await.unwrap();
 
-    // ── A song with resolvable sections (rig-scene + patch sourced) ──
+    // ── A song with resolvable scenes (rig-scene + patch sourced) ──
     let mut song = Song::new(
         seed_id("guitar-worship-song"),
         "Worship Set Opener",
-        Section::from_rig_scene(
+        Scene::from_rig_scene(
             seed_id("gws-intro"),
             "Intro",
             guitar_megarig_id(),
             guitar_megarig_default_scene(),
         ),
     );
-    song.add_section(Section::from_patch(
+    song.add_scene(Scene::from_patch(
         seed_id("gws-verse"),
         "Verse",
         seed_id("guitar-worship-clean"),
     ));
-    song.add_section(Section::from_rig_scene(
+    song.add_scene(Scene::from_rig_scene(
         seed_id("gws-chorus"),
         "Chorus",
         guitar_megarig_id(),
@@ -499,7 +499,7 @@ fn keys_rig_scene(scene_seed: &str, scene_name: &str, keys_engine_scene: &str) -
 /// Panics if saving any preset, layer, engine, rig, profile, or song fails.
 pub async fn seed_keys_megarig(signal: &Signal) {
     use signal::profile::{Patch, Profile};
-    use signal::song::{Section, Song};
+    use signal::song::{Scene, Song};
 
     signal
         .block_presets()
@@ -640,30 +640,30 @@ pub async fn seed_keys_megarig(signal: &Signal) {
     profile.add_patch(keys_patch("keys-feature-air", "Air", "keys-megarig-air"));
     signal.profiles().save(profile).await.unwrap();
 
-    // "Feature-Demo Song" — 4 sections, one per scene.
+    // "Feature-Demo Song" — 4 scenes, one per scene.
     let mut song = Song::new(
         seed_id("keys-feature-song"),
         "Feature-Demo Song",
-        Section::from_rig_scene(
+        Scene::from_rig_scene(
             seed_id("kfs-intro"),
             "Intro",
             seed_id("keys-megarig"),
             seed_id("keys-megarig-default"),
         ),
     );
-    song.add_section(Section::from_rig_scene(
+    song.add_scene(Scene::from_rig_scene(
         seed_id("kfs-wide"),
         "Wide",
         seed_id("keys-megarig"),
         seed_id("keys-megarig-wide"),
     ));
-    song.add_section(Section::from_rig_scene(
+    song.add_scene(Scene::from_rig_scene(
         seed_id("kfs-focus"),
         "Focus",
         seed_id("keys-megarig"),
         seed_id("keys-megarig-focus"),
     ));
-    song.add_section(Section::from_rig_scene(
+    song.add_scene(Scene::from_rig_scene(
         seed_id("kfs-air"),
         "Air",
         seed_id("keys-megarig"),
