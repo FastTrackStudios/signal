@@ -7,15 +7,21 @@ use signal_proto::block::BlockType;
 
 use crate::native::{ControlEnv, ControlLfo, LfoWave, ModSource};
 use crate::rig::RigBlock;
-use crate::rig_node::{Container, ModRoute, RigNode, RouteSource};
+use signal_proto::node_resolve::{Resolved, ResolvedContent};
+
+use crate::rig_node::{ModRoute, RouteSource};
 
 /// Build the preset's arpeggiator from an active Arp modulator on the root
 /// container (`on` ≠ 0). Steps come from `step{i}_on/vel/gate` params.
-pub(super) fn build_arp(container: &Container) -> Option<crate::native::ArpEngine> {
+pub(super) fn build_arp(node: &Resolved) -> Option<crate::native::ArpEngine> {
     use crate::native::{ArpEngine, ArpStep};
-    let arp = container.modulators.iter().find(|m| {
-        m.block_type == BlockType::Arpeggiator && m.param_f32("on").unwrap_or(0.0) > 0.0
-    })?;
+    let arp = node
+        .modulators
+        .iter()
+        .map(crate::from_node::to_block)
+        .find(|m| {
+            m.block_type == BlockType::Arpeggiator && m.param_f32("on").unwrap_or(0.0) > 0.0
+        })?;
     let step_beats = arp.param_f32("step_beats").unwrap_or(0.25);
     let count = arp.param_f32("steps").unwrap_or(0.0).max(0.0) as usize;
     let mut steps = Vec::with_capacity(count);
@@ -281,16 +287,16 @@ impl ModCompiler {
     /// A target is keyed by whatever it points with — an id once resolved,
     /// a name until then — and a container claims the return if *either* of
     /// its own keys matches. See [`bus_id`](Self::bus_id).
-    pub(super) fn collect_buses(&mut self, container: &Container) {
-        for s in &container.sends {
+    pub(super) fn collect_buses(&mut self, node: &Resolved) {
+        for s in &node.sends {
             let key = s.target.key();
             if !self.buses.contains(&key) {
                 self.buses.push(key);
             }
         }
-        for child in &container.children {
-            if let RigNode::Container { container: c } = child {
-                self.collect_buses(c);
+        if let ResolvedContent::Children(children) = &node.content {
+            for child in children {
+                self.collect_buses(child);
             }
         }
     }
@@ -300,9 +306,9 @@ impl ModCompiler {
     /// Checked by id first: a send authored as a name becomes an id once the
     /// tree is resolved, and a send that was never resolved still has to
     /// find its return, so both keys are tried.
-    pub(super) fn bus_for(&self, container: &Container) -> Option<usize> {
-        self.bus_by_key(&container.id.to_lowercase())
-            .or_else(|| self.bus_by_key(&container.name.to_lowercase()))
+    pub(super) fn bus_for(&self, node: &Resolved) -> Option<usize> {
+        self.bus_by_key(&node.id.as_str().to_lowercase())
+            .or_else(|| self.bus_by_key(&node.name.to_lowercase()))
     }
 
     pub(super) fn bus_by_key(&self, key: &str) -> Option<usize> {

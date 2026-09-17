@@ -27,7 +27,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::rig::{RigBlock, build_block, build_sample_source};
-use crate::rig_node::{Combine, Container, RigNode, Role, Zone};
+use signal_proto::node_resolve::{Resolved, ResolvedContent};
+
+use crate::rig_node::{Combine, Container, Role, Zone};
 use crate::soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent, PluginParamInfo};
 
@@ -384,16 +386,44 @@ impl RenderNode {
 
     /// As [`compile`](Self::compile), also returning the [`GainCells`] for the
     /// tree's Engine/Layer containers — the mixer's live fader handles.
+    ///
+    /// Goes **through the domain**: the tree is lifted into a `NodeLibrary`,
+    /// resolved, and the resolved form is what compiles. There is one render
+    /// implementation and it reads
+    /// [`Resolved`](signal_proto::node_resolve::Resolved), so a container is
+    /// no longer a second model the audio path understands — it is an input
+    /// that gets converted, like anything else.
+    ///
+    /// That the conversion is faithful is not assumed: the lift is covered by
+    /// round-trip tests on both rigs, so a loss shows up as a failing test
+    /// rather than as a rig that sounds different.
     #[must_use]
     pub fn compile_with_cells(container: &Container, sample_rate: u32) -> (Self, GainCells) {
-        let mut mc = ModCompiler::new(sample_rate);
-        mc.collect_buses(container);
-        let mut cells = GainCells::default();
-        let root = Self::compile_container_cells(container, sample_rate, &mut mc, &mut cells);
-        (Self::finish(root, mc, container, sample_rate), cells)
+        let lifted = crate::to_node::lift(container);
+        match signal_proto::node_resolve::resolve(&lifted.library, &lifted.root, None) {
+            Ok((resolved, _)) => Self::compile_node(&resolved, sample_rate),
+            // A tree that was just lifted cannot fail to resolve — its root
+            // is in the library by construction and a lift cannot build a
+            // cycle. Silence beats a panic on the load path either way.
+            Err(e) => {
+                tracing::warn!(error = %e, "node_render: lifted tree did not resolve");
+                (Self::Serial(Vec::new()), GainCells::default())
+            }
+        }
     }
 
-    fn finish(root: Self, mc: ModCompiler, container: &Container, sample_rate: u32) -> Self {
+    /// Compile a resolved node tree — the domain form, and the only thing
+    /// this module actually renders.
+    #[must_use]
+    pub fn compile_node(resolved: &Resolved, sample_rate: u32) -> (Self, GainCells) {
+        let mut mc = ModCompiler::new(sample_rate);
+        mc.collect_buses(resolved);
+        let mut cells = GainCells::default();
+        let root = Self::compile_resolved(resolved, sample_rate, &mut mc, &mut cells);
+        (Self::finish(root, mc, resolved, sample_rate), cells)
+    }
+
+    fn finish(root: Self, mc: ModCompiler, resolved: &Resolved, sample_rate: u32) -> Self {
         // Always wrap: the ModEngine is also the tree's live-edit address
         // book (leaf/source registries + parameter overlay), so even a
         // route-less tree keeps it — an empty tick is a few clears.
@@ -417,52 +447,66 @@ impl RenderNode {
                 bus_r: vec![Vec::new(); bus_count],
                 tempo_bpm: 120.0,
                 sample_rate: sample_rate as f32,
-                arp: build_arp(container),
+                arp: build_arp(resolved),
             }),
             inner: Box::new(root),
         }
     }
 
-    /// Compile one container, returning its node; `mc` accumulates leaves,
-    /// modulator scope and resolved routes, `cells` the live fader handles.
-    fn compile_container_cells(
-        container: &Container,
+    /// Compile one resolved node; `mc` accumulates leaves, modulator scope
+    /// and resolved routes, `cells` the live fader handles.
+    fn compile_resolved(
+        node: &Resolved,
         sample_rate: u32,
         mc: &mut ModCompiler,
         cells: &mut GainCells,
     ) -> Self {
+        // A leaf is a processor, wherever it sits.
+        if let ResolvedContent::Leaf { .. } = &node.content {
+            return Self::compile_leaf(node, sample_rate, mc);
+        }
         // A bypassed subtree renders as a pass-through (no leaves, no routes).
-        if container.bypassed {
+        if node.bypassed {
             return Self::Serial(Vec::new());
         }
-        // Bring this container's modulators into scope (its name is on the
-        // path first, so their live address includes this container).
-        mc.path.push(container.name.to_lowercase());
+        // Bring this node's modulators into scope (its name is on the path
+        // first, so their live address includes this node).
+        mc.path.push(node.name.to_lowercase());
         let scope_mark = mc.scope.len();
-        for m in &container.modulators {
-            if let Some(idx) = mc.instantiate(m) {
-                mc.scope.push((m.display_name().to_lowercase(), idx));
+        for m in &node.modulators {
+            let block = crate::from_node::to_block(m);
+            if let Some(idx) = mc.instantiate(&block) {
+                // Under both keys, because a route may name its source
+                // either way: authored by name, stored by id once resolved.
+                // Registering only the name is what broke every envelope
+                // route the moment routes started resolving to ids.
+                mc.scope.push((m.name.to_lowercase(), idx));
+                mc.scope.push((m.id.as_str().to_lowercase(), idx));
             }
         }
 
         let subtree_start = mc.leaves.len();
-        let kids = container
-            .children
+        let children = match &node.content {
+            ResolvedContent::Children(children) => children.as_slice(),
+            ResolvedContent::Leaf { .. } => &[],
+        };
+        let kids = children
             .iter()
-            .map(|n| Self::compile_node_cells(n, sample_rate, mc, cells))
+            .map(|child| Self::compile_resolved(child, sample_rate, mc, cells))
             .collect();
         let subtree: Vec<usize> = (subtree_start..mc.leaves.len()).collect();
 
-        // Resolve this container's routes against its own subtree.
-        mc.resolve_routes(&container.mod_routes, &subtree);
+        // Resolve this node's routes against its own subtree.
+        mc.resolve_routes(&node.mod_routes, &subtree);
 
         mc.scope.truncate(scope_mark);
         mc.path.pop();
 
-        let base = match container.combine {
+        let base = match node.combine {
             Combine::Serial => Self::Serial(kids),
             Combine::Parallel => Self::Parallel(kids),
         };
+        let container = node;
         let mut node = if container.zone.is_full() {
             base
         } else {
@@ -478,7 +522,7 @@ impl RenderNode {
         // the engine marks with `module_level` (its modules), so a mixer can
         // ride and mute individual modules inside a layer.
         let live = matches!(container.role, Role::Engine | Role::Layer)
-            || container.params.iter().any(|p| p.name == "module_level");
+            || container.settings.iter().any(|p| p.name == "module_level");
         if container.input_db != 0.0 || container.output_db != 0.0 || live {
             let id: CellId = (container.role, container.name.clone());
             let cell = live.then(|| {
@@ -524,41 +568,35 @@ impl RenderNode {
         node
     }
 
-    fn compile_node_cells(
-        node: &RigNode,
-        sample_rate: u32,
-        mc: &mut ModCompiler,
-        cells: &mut GainCells,
-    ) -> Self {
-        match node {
-            RigNode::Block { block: b } => {
-                let mut inst = build_leaf_backend(b, sample_rate);
-                // Snapshot the params with their LIVE values (build-time
-                // block params applied) — routes modulate around these bases.
-                let params = inst
-                    .as_mut()
-                    .map(LeafBackend::params_snapshot)
-                    .unwrap_or_default();
-                let id = mc.leaves.len();
-                mc.leaves
-                    .push((b.id.clone(), b.display_name().to_lowercase(), params));
-                mc.leaf_paths.push(mc.path.clone());
-                let leaf = Self::Leaf { id, inst };
-                // A block can also be a send target (e.g. the global Rotary).
-                match mc
-                    .bus_by_key(&b.id.to_lowercase())
-                    .or_else(|| mc.bus_by_key(&b.display_name().to_lowercase()))
-                {
-                    Some(bus) => Self::BusInject {
-                        bus,
-                        inner: Box::new(leaf),
-                    },
-                    None => leaf,
-                }
-            }
-            RigNode::Container { container: c } => {
-                Self::compile_container_cells(c, sample_rate, mc, cells)
-            }
+    /// A resolved leaf as its backend, registered in the mod engine's
+    /// address book.
+    fn compile_leaf(leaf: &Resolved, sample_rate: u32, mc: &mut ModCompiler) -> Self {
+        let block = crate::from_node::to_block(leaf);
+        let mut inst = build_leaf_backend(&block, sample_rate);
+        // Snapshot the params with their LIVE values (build-time block
+        // params applied) — routes modulate around these bases.
+        let params = inst
+            .as_mut()
+            .map(LeafBackend::params_snapshot)
+            .unwrap_or_default();
+        let id = mc.leaves.len();
+        mc.leaves.push((
+            leaf.id.as_str().to_string(),
+            leaf.name.to_lowercase(),
+            params,
+        ));
+        mc.leaf_paths.push(mc.path.clone());
+        let node = Self::Leaf { id, inst };
+        // A block can also be a send target (e.g. the global Rotary).
+        match mc
+            .bus_by_key(&leaf.id.as_str().to_lowercase())
+            .or_else(|| mc.bus_by_key(&leaf.name.to_lowercase()))
+        {
+            Some(bus) => Self::BusInject {
+                bus,
+                inner: Box::new(node),
+            },
+            None => node,
         }
     }
 
@@ -1428,6 +1466,7 @@ fn copy_in(in_l: &[f32], in_r: &[f32], out_l: &mut [f32], out_r: &mut [f32], fra
 mod tests {
     use super::*;
     use crate::rig_node::Container;
+    use crate::rig_node::RigNode;
     use signal_plugin_host::PluginMidiEvent;
     use signal_proto::block::BlockType;
 

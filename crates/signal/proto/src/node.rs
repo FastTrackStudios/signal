@@ -416,43 +416,134 @@ impl NodeLibrary {
     }
 
     /// Turn every route that still points by name into one that points by
-    /// id, wherever the name matches a node in this library.
+    /// id.
     ///
     /// Authoring produces names — a lane sends "To Rotary" before the Rotary
     /// exists — and this is the pass that makes them permanent. Run it once
     /// the library is complete. Returns how many references it resolved.
     ///
-    /// A name matching nothing is left alone: see
+    /// # A name is resolved in the scope it was written in
+    ///
+    /// **A mod route's target** resolves against the subtree of the node
+    /// carrying the route, and **its source** against that node's own
+    /// modulators and its ancestors'. Not globally, and this is the whole
+    /// subtlety: a keys layer holds two identical modules, each with its own
+    /// "Filter Env" driving its own "Filter 1". Resolved globally, both
+    /// modules' routes point at the *first* module's envelope and filter —
+    /// so one module's envelope drives both filters and the other's drives
+    /// nothing. Silent, and the kind of thing you hear as "the second layer
+    /// sounds wrong" months later.
+    ///
+    /// **A send's target** does resolve globally, because a send is
+    /// cross-tree by definition — routing to a shared rotary that is
+    /// deliberately somewhere else is the reason it exists.
+    ///
+    /// A name matching nothing in its scope is left alone: see
     /// [`NodeRef`](crate::node_routing::NodeRef). Two nodes sharing a name
-    /// resolve to the first, which is the cost of ever having allowed a name
-    /// — and the reason this pass exists rather than resolving at render
-    /// time, every time.
+    /// *within one scope* resolve to the first, which is the cost of ever
+    /// having allowed a name — and the reason this pass exists rather than
+    /// resolving at render time, every time.
     pub fn resolve_refs(&mut self) -> usize {
-        let by_name: Vec<(String, NodeId)> = self
+        let names: Vec<(NodeId, String)> = self
             .nodes
             .iter()
-            .map(|n| (n.name.to_lowercase(), n.id.clone()))
+            .map(|n| (n.id.clone(), n.name.to_lowercase()))
             .collect();
-        let lookup = |name: &str| {
-            by_name
+        let lookup_in = |scope: &[NodeId], name: &str| {
+            scope.iter().find_map(|id| {
+                names
+                    .iter()
+                    .find(|(candidate, candidate_name)| candidate == id && candidate_name == name)
+                    .map(|(id, _)| id.clone())
+            })
+        };
+        let global = |name: &str| {
+            names
                 .iter()
-                .find(|(n, _)| n == name)
-                .map(|(_, id)| id.clone())
+                .find(|(_, candidate)| candidate == name)
+                .map(|(id, _)| id.clone())
         };
 
         let mut resolved = 0;
-        for node in &mut self.nodes {
+        let scopes: Vec<(NodeId, Vec<NodeId>, Vec<NodeId>)> = self
+            .nodes
+            .iter()
+            .map(|n| {
+                (
+                    n.id.clone(),
+                    self.subtree_of(&n.id),
+                    self.modulator_scope_of(&n.id),
+                )
+            })
+            .collect();
+
+        for (id, subtree, modulators) in scopes {
+            let Some(index) = self.nodes.iter().position(|n| n.id == id) else {
+                continue;
+            };
+            let node = &mut self.nodes[index];
             for send in &mut node.sends {
-                resolved += usize::from(resolve_one(&mut send.target, &lookup));
+                resolved += usize::from(resolve_one(&mut send.target, &global));
             }
             for route in &mut node.mod_routes {
-                resolved += usize::from(resolve_one(&mut route.target, &lookup));
+                resolved += usize::from(resolve_one(&mut route.target, &|name| {
+                    lookup_in(&subtree, name)
+                }));
                 if let ModSource::Node { node: source } = &mut route.source {
-                    resolved += usize::from(resolve_one(source, &lookup));
+                    resolved +=
+                        usize::from(resolve_one(source, &|name| lookup_in(&modulators, name)));
                 }
             }
         }
         resolved
+    }
+
+    /// Every node at or below `root`, including the modulators hanging off
+    /// each of them — a mod route's target is a block in this subtree.
+    #[must_use]
+    pub fn subtree_of(&self, root: &NodeId) -> Vec<NodeId> {
+        let mut out = Vec::new();
+        let mut stack = vec![root.clone()];
+        while let Some(id) = stack.pop() {
+            if out.contains(&id) {
+                continue;
+            }
+            out.push(id.clone());
+            if let Some(node) = self.get(&id) {
+                stack.extend(node.children().iter().cloned());
+                stack.extend(node.modulators.iter().cloned());
+            }
+        }
+        out
+    }
+
+    /// The modulators a node may draw on: its own, then its ancestors' —
+    /// nearest first, so an inner "Filter Env" wins over an outer one.
+    #[must_use]
+    pub fn modulator_scope_of(&self, node: &NodeId) -> Vec<NodeId> {
+        let mut out = self
+            .get(node)
+            .map(|n| n.modulators.clone())
+            .unwrap_or_default();
+        let mut current = node.clone();
+        // Walk up by looking for whoever references this node. A node with
+        // two parents takes the first, which is the same ambiguity sharing a
+        // node always carries.
+        while let Some(parent) = self
+            .nodes
+            .iter()
+            .find(|n| n.children().contains(&current))
+            .map(|n| n.id.clone())
+        {
+            if parent == current {
+                break;
+            }
+            if let Some(node) = self.get(&parent) {
+                out.extend(node.modulators.iter().cloned());
+            }
+            current = parent;
+        }
+        out
     }
 
     /// How many nodes reference `id` — what makes deleting a shared preset a

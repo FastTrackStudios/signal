@@ -755,4 +755,59 @@ mod tests {
         assert_eq!(hot.input_db, -6.0);
         assert_eq!(hot.output_db, 3.0);
     }
+
+    /// Two identical modules, each with its own envelope driving its own
+    /// filter — the case that makes name resolution scoped rather than
+    /// global.
+    ///
+    /// Resolved globally, both modules' routes point at the *first* module's
+    /// envelope and filter: one envelope drives both filters and the other
+    /// drives nothing. Nothing reports it. You hear it months later as "the
+    /// second layer sounds wrong".
+    #[test]
+    fn identical_siblings_keep_their_own_routes() {
+        use signal_proto::block::BlockType;
+
+        let module = |name: &str| {
+            Container::module(name)
+                .block(BlockType::Filter, "Filter 1")
+                .modulator(BlockType::Envelope, "Filter Env")
+                .route("Filter Env", "Filter 1.cutoff", 0.5)
+        };
+        let mut tree = Container::layer("L").add(module("L A")).add(module("L B"));
+        tree.canonicalize();
+
+        let lifted = lift(&tree);
+
+        // Each module's route points inside that module, not at its
+        // sibling's namesakes.
+        let modules: Vec<_> = lifted
+            .library
+            .nodes
+            .iter()
+            .filter(|n| n.name == "L A" || n.name == "L B")
+            .collect();
+        assert_eq!(modules.len(), 2);
+
+        for module in modules {
+            let route = module.mod_routes.first().expect("its route");
+            let target = route.target.as_id().expect("resolved to an id");
+            let source = match &route.source {
+                signal_proto::node_routing::ModSource::Node { node } => {
+                    node.as_id().expect("resolved to an id")
+                }
+                other => panic!("the source should be a node, got {other:?}"),
+            };
+            assert!(
+                module.children().contains(target),
+                "{}'s route targets its own filter",
+                module.name
+            );
+            assert!(
+                module.modulators.contains(source),
+                "{}'s route is driven by its own envelope",
+                module.name
+            );
+        }
+    }
 }

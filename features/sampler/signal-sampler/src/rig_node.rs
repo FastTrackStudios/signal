@@ -250,37 +250,63 @@ impl Container {
     /// id that has not been minted), and **persist the result** for the same
     /// reason `ensure_ids` says to. A name matching nothing is left alone.
     ///
-    /// Names are matched case-insensitively across the whole tree, not just
-    /// the subtree, because a send's target usually is not a descendant —
-    /// that is what makes it a *cross-tree* send.
+    /// **A name is resolved in the scope it was written in.** A mod route's
+    /// target is looked up in the node's own subtree and its source among
+    /// the modulators that node can reach — its own, then its ancestors'. A
+    /// send's target is looked up across the whole tree, because a send is
+    /// cross-tree by definition.
+    ///
+    /// Resolving globally instead is wrong in a way nothing reports: a keys
+    /// layer holds two identical modules, each with its own "Filter Env"
+    /// driving its own "Filter 1", and a global lookup points both modules'
+    /// routes at the first module's pair — one envelope driving both
+    /// filters, the other driving nothing.
     pub fn resolve_refs(&mut self) -> usize {
-        let index = self.name_index();
-        let lookup = |name: &str| {
+        let everything = self.name_index();
+        self.resolve_refs_in(&everything, &[])
+    }
+
+    /// `everything` is the whole tree, for sends; `modulators` is this
+    /// node's inherited modulator scope, nearest last.
+    fn resolve_refs_in(
+        &mut self,
+        everything: &[(String, String)],
+        modulators: &[(String, String)],
+    ) -> usize {
+        // This node's modulators, then its ancestors'. A route's source is
+        // looked up nearest-first so an inner "Filter Env" wins.
+        let mut scope: Vec<(String, String)> = self
+            .modulators
+            .iter()
+            .map(|m| (m.id.to_lowercase(), m.display_name().to_string()))
+            .collect();
+        scope.extend(modulators.iter().cloned());
+
+        // A mod route's target is a block in this node's own subtree.
+        let subtree = self.name_index();
+
+        let find = |index: &[(String, String)], name: &str| {
             index
                 .iter()
                 .find(|(_, n)| n.to_lowercase() == name)
                 .map(|(id, _)| signal_proto::node::NodeId::from(id.clone()))
         };
-        self.resolve_refs_with(&lookup)
-    }
 
-    fn resolve_refs_with(
-        &mut self,
-        lookup: &impl Fn(&str) -> Option<signal_proto::node::NodeId>,
-    ) -> usize {
         let mut resolved = 0;
         for send in &mut self.sends {
-            resolved += usize::from(resolve_ref(&mut send.target, lookup));
+            resolved += usize::from(resolve_ref(&mut send.target, &|name| {
+                find(everything, name)
+            }));
         }
         for route in &mut self.mod_routes {
-            resolved += usize::from(resolve_ref(&mut route.target, lookup));
+            resolved += usize::from(resolve_ref(&mut route.target, &|name| find(&subtree, name)));
             if let RouteSource::Node { node } = &mut route.source {
-                resolved += usize::from(resolve_ref(node, lookup));
+                resolved += usize::from(resolve_ref(node, &|name| find(&scope, name)));
             }
         }
         for child in &mut self.children {
             if let RigNode::Container { container } = child {
-                resolved += container.resolve_refs_with(lookup);
+                resolved += container.resolve_refs_in(everything, &scope);
             }
         }
         resolved
