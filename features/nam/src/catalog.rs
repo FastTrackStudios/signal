@@ -339,6 +339,12 @@ mod tests {
             creator: Some("someone".into()),
             creator_url: Some("https://www.tone3000.com/users/someone".into()),
             license: Some("cc-by".into()),
+            tone_name: Some("A Tone".into()),
+            description: Some("what was captured".into()),
+            gear: Some("amp-cab".into()),
+            makes: vec!["VOX AC30".into()],
+            tags: vec!["vox".into()],
+            artwork_path: Some("tone3000/1234/cover.jpg".into()),
         });
         catalog.entries.insert("h".into(), entry);
 

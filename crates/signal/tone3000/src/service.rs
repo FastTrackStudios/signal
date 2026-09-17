@@ -417,8 +417,44 @@ impl Tone3000Backend {
             Some(tone) => tone,
             None => self.tone_detail(tone_id).await,
         };
-        self.record(&outcome.path, &outcome.hash, &tone, model_id);
+        // The cover travels with the model. A downloaded capture has to stay
+        // presentable with no network and no session, so the picture is a file
+        // in the tone's own folder rather than a URL to re-fetch or an entry in
+        // a cache that does not move with the library.
+        let artwork = self.place_artwork(tone_id, &tone).await;
+        self.record(&outcome.path, &outcome.hash, &tone, model_id, artwork);
         Ok(())
+    }
+
+    /// Fetch the tone's first photograph into its library folder, returning the
+    /// path relative to the library root.
+    ///
+    /// Best-effort by design: a tone with no photographs is ordinary, and a
+    /// cover that will not download is not a reason to fail a model that
+    /// already landed. Either way the capture is usable; it just draws plainer.
+    async fn place_artwork(&self, tone_id: &str, tone: &PickedTone) -> Option<String> {
+        let url = tone.images.iter().find(|u| !u.trim().is_empty())?;
+        let image = match self.cached_image(url).await {
+            Ok(image) if !image.bytes.is_empty() => image,
+            Ok(_) => return None,
+            Err(e) => {
+                tracing::debug!(tone = tone_id, %e, "tone3000: no cover placed");
+                return None;
+            }
+        };
+        let filename = format!("cover.{}", extension_for_mime(&image.mime));
+        let outcome = match self.inner.session.place_model(tone_id, &filename, &image.bytes) {
+            Ok(outcome) => outcome,
+            Err(e) => {
+                tracing::debug!(tone = tone_id, %e, "tone3000: cover could not be written");
+                return None;
+            }
+        };
+        outcome
+            .path
+            .strip_prefix(&self.inner.cfg.library_root)
+            .ok()
+            .map(|rel| rel.to_string_lossy().to_string())
     }
 
     /// The name a downloaded model should take in the library.
@@ -455,7 +491,14 @@ impl Tone3000Backend {
     }
 
     /// Index the placed file in the NAM catalog, provenance and all.
-    fn record(&self, path: &std::path::Path, hash: &str, tone: &PickedTone, model_id: &str) {
+    fn record(
+        &self,
+        path: &std::path::Path,
+        hash: &str,
+        tone: &PickedTone,
+        model_id: &str,
+        artwork_path: Option<String>,
+    ) {
         let root = &self.inner.cfg.library_root;
         let entry = match signal_nam::scan_one(path, root) {
             Ok(Some(mut entry)) => {
@@ -467,6 +510,12 @@ impl Tone3000Backend {
                     creator: non_empty(&tone.creator),
                     creator_url: non_empty(&tone.creator_url),
                     license: non_empty(&tone.license),
+                    tone_name: non_empty(&tone.name),
+                    description: non_empty(&tone.description),
+                    gear: non_empty(&tone.gear),
+                    makes: tone.makes.clone(),
+                    tags: tone.tags.clone(),
+                    artwork_path,
                 });
                 entry
             }
@@ -1035,6 +1084,20 @@ fn extension_of(model_url: &str) -> String {
 /// Sniffed rather than taken from the `Content-Type` header (or a sidecar
 /// file) so the cache is a directory of plain image files with nothing to keep
 /// in sync, and a cache entry written by an older build still types correctly.
+/// File extension for a media type, so a placed cover is openable by anything
+/// that opens pictures — a file manager, a backup, a person in five years.
+/// Paired with [`mime_of`], which is what produced the type.
+const fn extension_for_mime(mime: &str) -> &'static str {
+    match mime.as_bytes() {
+        b"image/png" => "png",
+        b"image/gif" => "gif",
+        b"image/webp" => "webp",
+        // JPEG for anything unrecognised: the catalog serves it overwhelmingly,
+        // and a wrong extension on a readable file beats no file.
+        _ => "jpg",
+    }
+}
+
 fn mime_of(bytes: &[u8]) -> &'static str {
     match bytes {
         [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",

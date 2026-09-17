@@ -41,6 +41,31 @@ pub struct Provenance {
     /// Kept verbatim rather than parsed into an enum — an unknown licence must
     /// survive a round trip intact, not be dropped for not matching.
     pub license: Option<String>,
+
+    // ── What the tone *is*, so a preset can describe itself offline ──────
+    //
+    // Everything below is copied from the source at download time rather than
+    // resolved on demand. A capture that has been downloaded must stay
+    // presentable with no network, no session, and no account — on a stage
+    // with no signal, in a plugin inside a DAW, on a machine that has never
+    // signed in. Re-fetching to draw a preset tile is the one thing that
+    // cannot be allowed to fail.
+    /// The tone's title — the Block Preset's name.
+    pub tone_name: Option<String>,
+    /// The creator's write-up: rig, capture chain, intended use.
+    pub description: Option<String>,
+    /// What was captured: `amp`, `amp-cab`, `pedal`, `cab`, …
+    pub gear: Option<String>,
+    /// The real gear named by the creator. Free text, and often the whole
+    /// capture chain rather than one instrument — display it, never key on it.
+    pub makes: Vec<String>,
+    /// Creator-applied labels.
+    pub tags: Vec<String>,
+    /// Cover artwork, as a path relative to the library root — the same frame
+    /// of reference as [`NamFileEntry::relative_path`], so the tone's folder
+    /// stays self-contained and survives being moved or copied to another
+    /// machine. `None` when the tone published no photographs.
+    pub artwork_path: Option<String>,
 }
 
 /// One entry per file in the library. Content-addressable by SHA-256 hash.
@@ -294,5 +319,32 @@ mod tests {
             Some(NamFileKind::ImpulseResponse)
         );
         assert_eq!(kind_from_path(Path::new("baz.txt")), None);
+    }
+
+    #[test]
+    fn the_cover_path_is_relative_to_the_library_root() {
+        // Relative, so the tone's folder survives being moved or copied to
+        // another machine — the same contract as `NamFileEntry::relative_path`.
+        // An absolute path here would make a distributed preset undrawable on
+        // every machine but the one that fetched it.
+        let json = r#"{
+            "source": "tone3000",
+            "tone_id": null, "model_id": null, "tone_url": null,
+            "creator": null, "creator_url": null, "license": null,
+            "tone_name": "1964 VOX AC30 Top Boost Super Twin",
+            "description": null,
+            "gear": "amp-cab",
+            "makes": ["1964 VOX AC30 Top Boost Super Twin"],
+            "tags": ["vox", "ac30"],
+            "artwork_path": "tone3000/82521/cover.jpg"
+        }"#;
+        let p: Provenance = serde_json::from_str(json).expect("parses");
+        let path = p.artwork_path.expect("cover recorded");
+        assert!(
+            !Path::new(&path).is_absolute(),
+            "a machine-specific path would not travel with the library"
+        );
+        assert_eq!(p.gear.as_deref(), Some("amp-cab"));
+        assert_eq!(p.makes.len(), 1);
     }
 }
