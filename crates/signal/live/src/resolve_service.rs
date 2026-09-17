@@ -113,7 +113,7 @@ fn segment_param(path: &signal_proto::overrides::NodePath) -> Option<&str> {
 
 fn apply_effective_set_overrides(graph: &mut ResolvedGraph) {
     for ov in &graph.effective_overrides {
-        let NodeOverrideOp::Set(value) = &ov.op else {
+        let NodeOverrideOp::Set { value } = &ov.op else {
             continue;
         };
 
@@ -494,7 +494,7 @@ where
                                 .find(|mr| id_matches(mr.collection_id.as_str(), seg_module))
                             {
                                 match &ov.op {
-                                    NodeOverrideOp::ReplaceRef(next) => {
+                                    NodeOverrideOp::ReplaceRef { id: next } => {
                                         let next_variant =
                                             ModuleSnapshotId::from(normalize_ref_id(next));
                                         let exists = self
@@ -517,8 +517,8 @@ where
                                         }
                                         mr.variant_id = Some(next_variant);
                                     }
-                                    NodeOverrideOp::Enable(false)
-                                    | NodeOverrideOp::Bypass(true) => {
+                                    NodeOverrideOp::Enable { enabled: false }
+                                    | NodeOverrideOp::Bypass { bypassed: true } => {
                                         disabled_module_ids.insert(mr.collection_id.to_string());
                                     }
                                     _ => {}
@@ -533,7 +533,7 @@ where
                                 .find(|br| id_matches(br.collection_id.as_str(), seg_block))
                             {
                                 match &ov.op {
-                                    NodeOverrideOp::ReplaceRef(next) => {
+                                    NodeOverrideOp::ReplaceRef { id: next } => {
                                         let next_variant = SnapshotId::from(normalize_ref_id(next));
                                         // Validate that the replacement exists for this block collection.
                                         self.resolve_standalone_block_ref(
@@ -545,8 +545,8 @@ where
                                         .await?;
                                         br.variant_id = Some(next_variant);
                                     }
-                                    NodeOverrideOp::Enable(false)
-                                    | NodeOverrideOp::Bypass(true) => {
+                                    NodeOverrideOp::Enable { enabled: false }
+                                    | NodeOverrideOp::Bypass { bypassed: true } => {
                                         disabled_block_ids.insert(br.collection_id.to_string());
                                     }
                                     _ => {}
@@ -993,11 +993,11 @@ where
                     && segment_param(&ov.path).is_none()
                 {
                     match &ov.op {
-                        NodeOverrideOp::ReplaceRef(next) => {
+                        NodeOverrideOp::ReplaceRef { id: next } => {
                             selected_engine_scene_id = EngineSceneId::from(normalize_ref_id(next));
                             engine_replace_path = Some(ov.path.as_str());
                         }
-                        NodeOverrideOp::Enable(false) | NodeOverrideOp::Bypass(true) => {
+                        NodeOverrideOp::Enable { enabled: false } | NodeOverrideOp::Bypass { bypassed: true } => {
                             engine_enabled = false;
                         }
                         _ => {}
@@ -1069,12 +1069,12 @@ where
                         && segment_param(&ov.path).is_none()
                     {
                         match &ov.op {
-                            NodeOverrideOp::ReplaceRef(next) => {
+                            NodeOverrideOp::ReplaceRef { id: next } => {
                                 selected_layer_variant_id =
                                     LayerSnapshotId::from(normalize_ref_id(next));
                                 layer_replace_path = Some(ov.path.as_str());
                             }
-                            NodeOverrideOp::Enable(false) | NodeOverrideOp::Bypass(true) => {
+                            NodeOverrideOp::Enable { enabled: false } | NodeOverrideOp::Bypass { bypassed: true } => {
                                 layer_enabled = false;
                             }
                             _ => {}

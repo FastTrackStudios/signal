@@ -908,7 +908,7 @@ async fn replace_ref_override_in_rig_scene() {
     let scene =
         RigScene::new(seed_id("replace-ref-scene"), "Replace Ref Test").with_override(Override {
             path: NodePath::engine("synth-engine").with_layer("synth-layer-osc"),
-            op: NodeOverrideOp::ReplaceRef("synth-layer-osc-alt".to_string()),
+            op: NodeOverrideOp::ReplaceRef { id: "synth-layer-osc-alt".to_string() },
         });
 
     let rig = Rig::new(seed_id("replace-ref-rig"), "Replace Ref Rig", vec![], scene);
@@ -923,7 +923,7 @@ async fn replace_ref_override_in_rig_scene() {
 
     let ovr = &loaded.variants[0].overrides[0];
     assert!(
-        matches!(&ovr.op, NodeOverrideOp::ReplaceRef(ref_id) if ref_id == "synth-layer-osc-alt")
+        matches!(&ovr.op, NodeOverrideOp::ReplaceRef { id: ref_id } if ref_id == "synth-layer-osc-alt")
     );
 }
 
@@ -951,7 +951,7 @@ async fn bypass_override_in_rig_scene() {
         .expect("rig");
 
     let ovr = &loaded.variants[0].overrides[0];
-    assert!(matches!(&ovr.op, NodeOverrideOp::Bypass(true)));
+    assert!(matches!(&ovr.op, NodeOverrideOp::Bypass { bypassed: true }));
 }
 
 /// Mixed override types in a single scene.
@@ -975,7 +975,7 @@ async fn mixed_override_types_in_scene() {
         ))
         .with_override(Override {
             path: NodePath::engine("synth-engine").with_layer("synth-layer-osc"),
-            op: NodeOverrideOp::ReplaceRef("synth-layer-osc-alt".to_string()),
+            op: NodeOverrideOp::ReplaceRef { id: "synth-layer-osc-alt".to_string() },
         });
 
     let rig = Rig::new(
@@ -998,13 +998,13 @@ async fn mixed_override_types_in_scene() {
 
     let has_set = overrides
         .iter()
-        .any(|o| matches!(&o.op, NodeOverrideOp::Set(_)));
+        .any(|o| matches!(&o.op, NodeOverrideOp::Set { value: _ }));
     let has_bypass = overrides
         .iter()
-        .any(|o| matches!(&o.op, NodeOverrideOp::Bypass(_)));
+        .any(|o| matches!(&o.op, NodeOverrideOp::Bypass { bypassed: _ }));
     let has_replace = overrides
         .iter()
-        .any(|o| matches!(&o.op, NodeOverrideOp::ReplaceRef(_)));
+        .any(|o| matches!(&o.op, NodeOverrideOp::ReplaceRef { id: _ }));
     assert!(has_set, "should have Set override");
     assert!(has_bypass, "should have Bypass override");
     assert!(has_replace, "should have ReplaceRef override");

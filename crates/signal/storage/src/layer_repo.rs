@@ -484,7 +484,7 @@ mod tests {
         );
         // Second override is a bypass
         match &ambient.overrides[1].op {
-            signal_proto::overrides::OverrideOp::Bypass(b) => assert!(b),
+            signal_proto::overrides::OverrideOp::Bypass { bypassed } => assert!(bypassed),
             other => panic!("expected Bypass, got {other:?}"),
         }
 

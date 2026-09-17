@@ -257,21 +257,26 @@ impl From<&str> for NodePath {
 /// What to do at the override target.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 #[repr(C)]
+/// What to do at an override's target.
+///
+/// Struct variants for the same reason as [`NodePathSegment`]: a newtype
+/// tuple variant does not survive styx, and an override that cannot be saved
+/// is an override that works until someone writes the rig to disk.
 pub enum NodeOverrideOp {
     /// Set parameter to an absolute value.
-    Set(ParameterValue),
+    Set { value: ParameterValue },
     /// Bypass a block or module.
-    Bypass(bool),
+    Bypass { bypassed: bool },
     /// Replace a referenced variant/preset id at a path.
-    ReplaceRef(String),
+    ReplaceRef { id: String },
     /// Insert a node/reference before the targeted path.
-    InsertBefore(String),
+    InsertBefore { id: String },
     /// Insert a node/reference after the targeted path.
-    InsertAfter(String),
+    InsertAfter { id: String },
     /// Remove the targeted node/reference.
     Remove,
     /// Toggle enable/disable semantics.
-    Enable(bool),
+    Enable { enabled: bool },
 }
 
 // ─── Override entry ─────────────────────────────────────────────
@@ -287,14 +292,14 @@ impl Override {
     pub fn set(path: impl Into<NodePath>, value: f32) -> Self {
         Self {
             path: path.into(),
-            op: NodeOverrideOp::Set(ParameterValue::new(value)),
+            op: NodeOverrideOp::Set { value: ParameterValue::new(value) },
         }
     }
 
     pub fn bypass(path: impl Into<NodePath>, bypassed: bool) -> Self {
         Self {
             path: path.into(),
-            op: NodeOverrideOp::Bypass(bypassed),
+            op: NodeOverrideOp::Bypass { bypassed },
         }
     }
 }
@@ -320,7 +325,7 @@ mod tests {
         let ov = Override::set("module.eq.param.freq", 0.75);
         assert_eq!(ov.path.as_str(), "module.eq.param.freq");
         match &ov.op {
-            OverrideOp::Set(v) => assert!((v.get() - 0.75).abs() < f32::EPSILON),
+            OverrideOp::Set { value } => assert!((value.get() - 0.75).abs() < f32::EPSILON),
             _ => panic!("expected Set"),
         }
     }

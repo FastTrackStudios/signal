@@ -33,7 +33,7 @@ fn is_parameter_target(path: &NodePath) -> bool {
 const fn is_flow_mutation(op: &NodeOverrideOp) -> bool {
     matches!(
         op,
-        NodeOverrideOp::InsertBefore(_) | NodeOverrideOp::InsertAfter(_) | NodeOverrideOp::Remove
+        NodeOverrideOp::InsertBefore { id: _ } | NodeOverrideOp::InsertAfter { id: _ } | NodeOverrideOp::Remove
     )
 }
 
@@ -46,7 +46,7 @@ impl OverridePolicy for SnapshotPolicy {
         if !is_path_valid(&ov.path) {
             return Err(OverridePolicyError::InvalidPath { index });
         }
-        if !matches!(ov.op, NodeOverrideOp::Set(_)) {
+        if !matches!(ov.op, NodeOverrideOp::Set { value: _ }) {
             return Err(OverridePolicyError::OperationNotAllowed { index });
         }
         if !is_parameter_target(&ov.path) {
@@ -66,19 +66,19 @@ impl OverridePolicy for ScenePolicy {
         }
 
         match ov.op {
-            NodeOverrideOp::Set(_) => {
+            NodeOverrideOp::Set { value: _ } => {
                 if !is_parameter_target(&ov.path) {
                     return Err(OverridePolicyError::ParameterTargetRequired { index });
                 }
             }
-            NodeOverrideOp::ReplaceRef(_) => {
+            NodeOverrideOp::ReplaceRef { id: _ } => {
                 if is_parameter_target(&ov.path) {
                     return Err(OverridePolicyError::NonParameterTargetRequired { index });
                 }
             }
-            NodeOverrideOp::Bypass(_) | NodeOverrideOp::Enable(_) => {}
-            NodeOverrideOp::InsertBefore(_)
-            | NodeOverrideOp::InsertAfter(_)
+            NodeOverrideOp::Bypass { bypassed: _ } | NodeOverrideOp::Enable { enabled: _ } => {}
+            NodeOverrideOp::InsertBefore { id: _ }
+            | NodeOverrideOp::InsertAfter { id: _ }
             | NodeOverrideOp::Remove => {
                 return Err(OverridePolicyError::OperationNotAllowed { index });
             }
@@ -134,13 +134,13 @@ mod tests {
     fn scene_disallows_flow_mutation_but_allows_replace_ref() {
         let replace = Override {
             path: NodePath::engine("e").with_layer("l"),
-            op: NodeOverrideOp::ReplaceRef("alt-layer".into()),
+            op: NodeOverrideOp::ReplaceRef { id: "alt-layer".into() },
         };
         assert!(validate_overrides::<ScenePolicy>(&[replace]).is_ok());
 
         let mutate = Override {
             path: NodePath::engine("e").with_layer("l"),
-            op: NodeOverrideOp::InsertBefore("x".into()),
+            op: NodeOverrideOp::InsertBefore { id: "x".into() },
         };
         assert!(matches!(
             validate_overrides::<ScenePolicy>(&[mutate]),
@@ -152,13 +152,13 @@ mod tests {
     fn free_policy_allows_topology_ops() {
         let ov = Override {
             path: NodePath::engine("e").with_layer("l"),
-            op: NodeOverrideOp::InsertAfter("new-layer".into()),
+            op: NodeOverrideOp::InsertAfter { id: "new-layer".into() },
         };
         assert!(validate_overrides::<FreePolicy>(&[ov]).is_ok());
 
         let set = Override {
             path: NodePath::engine("e").with_layer("l").with_parameter("x"),
-            op: NodeOverrideOp::Set(ParameterValue::new(0.4)),
+            op: NodeOverrideOp::Set { value: ParameterValue::new(0.4) },
         };
         assert!(validate_overrides::<FreePolicy>(&[set]).is_ok());
     }

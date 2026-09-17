@@ -178,7 +178,7 @@ async fn worship_rig_scene_overrides(ctx: &ReaperTestContext) -> eyre::Result<()
         .overrides
         .iter()
         .filter_map(|ov| match &ov.op {
-            NodeOverrideOp::Bypass(true) => Some(ov.path.as_str()),
+            NodeOverrideOp::Bypass { bypassed: true } => Some(ov.path.as_str()),
             _ => None,
         })
         .collect();
@@ -209,7 +209,7 @@ async fn worship_rig_scene_overrides(ctx: &ReaperTestContext) -> eyre::Result<()
     let ambient_bypasses: Vec<_> = ambient
         .overrides
         .iter()
-        .filter(|ov| matches!(&ov.op, NodeOverrideOp::Bypass(true)))
+        .filter(|ov| matches!(&ov.op, NodeOverrideOp::Bypass { bypassed: true }))
         .collect();
     assert!(
         ambient_bypasses.is_empty(),
@@ -221,7 +221,7 @@ async fn worship_rig_scene_overrides(ctx: &ReaperTestContext) -> eyre::Result<()
         .overrides
         .iter()
         .filter_map(|ov| match &ov.op {
-            NodeOverrideOp::Set(_) => Some(ov.path.as_str()),
+            NodeOverrideOp::Set { value: _ } => Some(ov.path.as_str()),
             _ => None,
         })
         .collect();

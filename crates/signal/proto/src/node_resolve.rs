@@ -189,7 +189,7 @@ fn replacement_for<'a>(
 ) -> Option<&'a NodeId> {
     let variant = variant?;
     variant.overrides.iter().find_map(|ov| {
-        let NodeOverrideOp::ReplaceRef(with) = &ov.op else {
+        let NodeOverrideOp::ReplaceRef { id: with } = &ov.op else {
             return None;
         };
         // One segment, naming this child by id or by name.
@@ -212,7 +212,7 @@ fn replacement_for<'a>(
 fn apply_override(root: &mut Resolved, ov: &Override) -> bool {
     // Already acted on, during child resolution — and it cannot be checked
     // here, because the node its path names is precisely the one it replaced.
-    if matches!(ov.op, NodeOverrideOp::ReplaceRef(_)) {
+    if matches!(ov.op, NodeOverrideOp::ReplaceRef { id: _ }) {
         return true;
     }
     let segments = ov.path.segments();
@@ -232,18 +232,18 @@ fn apply_override(root: &mut Resolved, ov: &Override) -> bool {
     };
 
     match (&ov.op, param) {
-        (NodeOverrideOp::Set(value), Some(param)) => set_parameter(node, param, value.get()),
-        (NodeOverrideOp::Bypass(on), None) => {
+        (NodeOverrideOp::Set { value }, Some(param)) => set_parameter(node, param, value.get()),
+        (NodeOverrideOp::Bypass { bypassed: on }, None) => {
             node.bypassed = *on;
             true
         }
-        (NodeOverrideOp::Enable(on), None) => {
+        (NodeOverrideOp::Enable { enabled: on }, None) => {
             node.bypassed = !*on;
             true
         }
         // Handled during child resolution, not here — it changes which node
         // sits at a position, so it must act before that node is resolved.
-        (NodeOverrideOp::ReplaceRef(_), _) => true,
+        (NodeOverrideOp::ReplaceRef { id: _ }, _) => true,
         // `Set` with no parameter, and the flow mutations, are refused by
         // `override_policy` before they ever reach here.
         _ => false,
@@ -514,7 +514,7 @@ mod tests {
         let mut ambient = Variant::new("Ambient");
         ambient.overrides.push(Override {
             path: NodePath::new(vec![NodePathSegment::Block { id: "Fender Clean".into() }]),
-            op: NodeOverrideOp::ReplaceRef("AC30".into()),
+            op: NodeOverrideOp::ReplaceRef { id: "AC30".into() },
         });
         let ambient_id = ambient.id.clone();
         let chain = Node::container("Worship", Role::Preset, Combine::Serial)
@@ -542,7 +542,7 @@ mod tests {
         let mut broken = Variant::new("Broken");
         broken.overrides.push(Override {
             path: NodePath::new(vec![NodePathSegment::Block { id: "Amp".into() }]),
-            op: NodeOverrideOp::ReplaceRef("a-node-that-was-deleted".into()),
+            op: NodeOverrideOp::ReplaceRef { id: "a-node-that-was-deleted".into() },
         });
         let broken_id = broken.id.clone();
         let chain = Node::container("P", Role::Preset, Combine::Serial)
