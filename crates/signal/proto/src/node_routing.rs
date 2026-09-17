@@ -330,7 +330,10 @@ mod tests {
         // The worship keys rig's Rhodes lane: below middle C only.
         let under = Zone::keys(0, 59);
         assert!(under.note_gain(48, 100) > 0.99);
-        assert_eq!(under.note_gain(72, 100), 0.0);
+        assert!(
+            under.note_gain(72, 100) < f32::EPSILON,
+            "silent above the split"
+        );
     }
 
     /// The point of a crossfade: a note in the overlap plays both neighbours
@@ -348,7 +351,7 @@ mod tests {
             edge > 0.0 && edge < 1.0,
             "a note inside the fade is partial, got {edge}"
         );
-        assert_eq!(z.key_gain(48), 0.0, "and outside is silent");
+        assert!(z.key_gain(48) < f32::EPSILON, "and outside is silent");
     }
 
     /// Once resolved, a route holds an id, so renaming the target cannot

@@ -74,7 +74,7 @@ fn spans(block_type: BlockType) -> Spans {
         .map(|mut inst| {
             inst.params()
                 .into_iter()
-                .map(|p| (p.name, p.min as f32, p.max as f32, p.default as f32))
+                .map(|p| (p.name, narrow(p.min), narrow(p.max), narrow(p.default)))
                 .collect()
         })
         .unwrap_or_default();
@@ -82,6 +82,25 @@ fn spans(block_type: BlockType) -> Spans {
         c.insert(block_type, spans.clone());
     }
     spans
+}
+
+/// A parameter bound from the DSP's `f64` to the domain's `f32`.
+///
+/// The narrowing is inherent, not incidental: `PluginInstance::params()`
+/// reports `f64` and a [`ParameterRange`] is `f32`, because a normalized
+/// position does not need more than 24 bits of mantissa and a rig holds
+/// hundreds of thousands of them. In one function so it is one decision
+/// rather than three casts, and so the loss is stated where it happens.
+///
+/// A bound beyond `f32`'s range saturates rather than becoming an infinity
+/// that would poison every `normalize` through it.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::as_conversions,
+    reason = "the whole purpose of this function, documented above"
+)]
+fn narrow(bound: f64) -> f32 {
+    bound.clamp(f64::from(f32::MIN), f64::from(f32::MAX)) as f32
 }
 
 /// Ranges for the control-rate blocks, which have no `PluginInstance` to ask.
@@ -311,7 +330,7 @@ mod tests {
     fn the_same_name_means_different_things_on_different_blocks() {
         let env = range_of(BlockType::Envelope, "attack").expect("declared");
         assert_eq!(env.unit, Unit::Seconds);
-        assert_eq!(env.max, 10.0);
+        assert!((env.max - 10.0).abs() < f32::EPSILON);
 
         let comp = range_of(BlockType::Compressor, "attack").expect("declared");
         assert_eq!(comp.unit, Unit::Milliseconds);
@@ -325,7 +344,10 @@ mod tests {
     fn an_envelope_time_holds_zero_exactly() {
         let attack = range_of(BlockType::Envelope, "attack").expect("declared");
         assert_eq!(attack.taper, Taper::Linear);
-        assert_eq!(attack.denormalize(attack.normalize(0.0)), 0.0);
+        assert!(
+            attack.denormalize(attack.normalize(0.0)) < f32::EPSILON,
+            "an instant attack stays instant"
+        );
         for seconds in [0.0, 0.005, 0.5, 4.0, 10.0] {
             let back = attack.denormalize(attack.normalize(seconds));
             assert!((back - seconds).abs() < 0.001, "{seconds} s → {back} s");
@@ -343,8 +365,11 @@ mod tests {
             );
             let vel = range_of(BlockType::Arpeggiator, &format!("step{step}_vel"))
                 .expect("velocity is declared");
-            assert_eq!(vel.min, 1.0, "MIDI velocity 0 is a note-off");
-            assert_eq!(vel.max, 127.0);
+            assert!(
+                (vel.min - 1.0).abs() < f32::EPSILON,
+                "MIDI velocity 0 is a note-off"
+            );
+            assert!((vel.max - 127.0).abs() < f32::EPSILON);
         }
         assert!(range_of(BlockType::Arpeggiator, "step_nonsense").is_none());
         assert!(range_of(BlockType::Arpeggiator, "stepx_on").is_none());

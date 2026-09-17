@@ -202,7 +202,7 @@ pub fn lift_preset(preset: &crate::rig_library::RigPreset) -> ScenePreset {
     for (index, (name, id)) in scenes.iter().enumerate() {
         if index == default_index {
             if let Some(default) = node.variants.first_mut() {
-                default.name = name.clone();
+                default.name.clone_from(name);
                 variants.push((name.clone(), default.id.clone()));
             }
             continue;
@@ -287,24 +287,21 @@ fn lift_block(block: &RigBlock, library: &mut NodeLibrary, report: &mut LiftRepo
             });
             continue;
         };
-        match range_for(block, &param.name) {
-            Some(range) => {
-                parameters.push(BlockParameter::ranged(
-                    &param.name,
-                    &param.name,
-                    real,
-                    range,
-                ));
-            }
-            None => {
-                report
-                    .unranged
-                    .push((block.display_name().to_string(), param.name.clone()));
-                settings.push(Setting {
-                    name: format!("{RAW_PARAM}{}", param.name),
-                    value: param.value.clone(),
-                });
-            }
+        if let Some(range) = range_for(block, &param.name) {
+            parameters.push(BlockParameter::ranged(
+                &param.name,
+                &param.name,
+                real,
+                range,
+            ));
+        } else {
+            report
+                .unranged
+                .push((block.display_name(), param.name.clone()));
+            settings.push(Setting {
+                name: format!("{RAW_PARAM}{}", param.name),
+                value: param.value.clone(),
+            });
         }
     }
 
@@ -321,7 +318,7 @@ fn lift_block(block: &RigBlock, library: &mut NodeLibrary, report: &mut LiftRepo
     let default = Variant::new("Default");
     let node = Node {
         id: id_of(&block.id),
-        name: block.display_name().to_string(),
+        name: block.display_name(),
         role: signal_proto::node::Role::Module,
         combine: signal_proto::node::Combine::Serial,
         content: Content::Leaf {
@@ -478,7 +475,7 @@ mod tests {
                 .param_f32(name)
                 .unwrap_or_else(|| panic!("{name} kept"));
             assert!(
-                (got - want).abs() < want.abs() * 0.01 + 0.01,
+                (got - want).abs() < want.abs().mul_add(0.01, 0.01),
                 "{name}: {want} came back as {got}"
             );
         }
@@ -752,8 +749,8 @@ mod tests {
         let (resolved, _) = resolve(&lifted.library, &lifted.root, None).expect("resolves");
         let container = to_container(&resolved);
         let hot = container.find("Hot").expect("the scene is a node");
-        assert_eq!(hot.input_db, -6.0);
-        assert_eq!(hot.output_db, 3.0);
+        assert!((hot.input_db - -6.0).abs() < f32::EPSILON);
+        assert!((hot.output_db - 3.0).abs() < f32::EPSILON);
     }
 
     /// Two identical modules, each with its own envelope driving its own
@@ -796,7 +793,9 @@ mod tests {
                 signal_proto::node_routing::ModSource::Node { node } => {
                     node.as_id().expect("resolved to an id")
                 }
-                other => panic!("the source should be a node, got {other:?}"),
+                performance @ signal_proto::node_routing::ModSource::Performance { .. } => {
+                    panic!("the source should be a node, got {performance:?}")
+                }
             };
             assert!(
                 module.children().contains(target),
