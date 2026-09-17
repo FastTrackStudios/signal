@@ -90,6 +90,35 @@ sit after the sum, but the Layers inside it hang off a `Parallel` bag so
 they *stack* — a serial Engine would let the last lane overwrite the ones
 before it. Same Role, different Combine, completely different instrument.
 
+### One definition of each idea
+
+`Role`, `Combine`, `Zone` and a node's settings each used to exist twice —
+once in `signal-proto` for the domain, once in `signal-sampler` for the
+audio — defined identically and kept in step by hand. They are now defined
+once, in `signal-proto`, and re-exported by the sampler:
+
+| the idea | where it lives |
+|---|---|
+| `Role`, `Combine` | `signal_proto::node` |
+| `Zone`, `Setting`, `AudioSend`, `ModRoute` | `signal_proto::node_routing` |
+
+The rule that decides this: **if a player sets it, it is domain.** A Layer's
+key split and its fader are things someone dials in and expects to still be
+there tomorrow, so they belong in the wire contract beside `Node`, not in the
+crate that renders them.
+
+So a `Node` carries the whole node, not just its shape — `input_db` /
+`output_db` (the fader), `zone` (which notes reach it), `settings`, `sends`,
+`mod_routes`, `modulators`, `bypassed`, and `engine_type` (which kind of
+playable thing it is, when its Role is Engine). `signal_sampler::from_node`
+turns a resolved tree into a `Container` tree carrying all of it; `to_chain`
+remains as the flat-list shortcut, exact only for a serial chain.
+
+One thing crosses that boundary unconverted: the domain addresses a send or
+a mod route by **id**, the renderer still by **display name**, so the
+conversion translates. Until the renderer takes ids, renaming a block can
+still miss a route on the audio side.
+
 ### The one pattern: a Collection of Variants
 
 This is the part worth internalising, because it repeats at every level.

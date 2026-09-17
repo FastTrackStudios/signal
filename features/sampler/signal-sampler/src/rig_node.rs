@@ -42,53 +42,13 @@ pub enum RigNode {
     Container { container: Container },
 }
 
-/// Semantic role of a container — a label describing intent. The audio behaviour
-/// is set by [`Combine`], not by this; roles drive display + where shared-vs-
-/// per-child processing is understood to sit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Facet)]
-#[repr(C)]
-pub enum Role {
-    /// The whole program (top of the tree).
-    Preset,
-    /// An instrument part (Organ / Keys / Synth).
-    Engine,
-    /// A processing lane; its parallel siblings sum.
-    Layer,
-    /// A serial folder / signal-chain segment (infinitely nestable).
-    Module,
-}
-
-impl Role {
-    #[must_use]
-    pub const fn tag(self) -> &'static str {
-        match self {
-            Self::Preset => "Preset",
-            Self::Engine => "Engine",
-            Self::Layer => "Layer",
-            Self::Module => "Module",
-        }
-    }
-}
-
-/// How a container combines its children into its output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Facet)]
-#[repr(C)]
-pub enum Combine {
-    /// Children chained in order: `child[0] → child[1] → … → out`.
-    Serial,
-    /// Children fed the same input; their outputs summed (parallel lanes).
-    Parallel,
-}
-
-impl Combine {
-    #[must_use]
-    pub const fn tag(self) -> &'static str {
-        match self {
-            Self::Serial => "serial",
-            Self::Parallel => "parallel",
-        }
-    }
-}
+/// What a container means, and what its audio does.
+///
+/// Both come from [`signal_proto::node`] — the same two axes
+/// [`Node`](signal_proto::node::Node) uses, because they are the same two
+/// axes. There were two `Role`s and two `Combine`s, one on each side of the
+/// domain/audio line, defined identically and kept in step by hand.
+pub use signal_proto::node::{Combine, Role};
 
 /// A cross-tree audio send (the routing axis) — this container's output also
 /// flows to the node named `target` (e.g. a layer routing "To Rotary").
@@ -118,101 +78,16 @@ pub struct ModRoute {
     pub depth: f32,
 }
 
-/// A container-level setting that isn't a block (a `(name, value)` pair) —
-/// e.g. a Layer's `voice_mode` / `unison` / `octave`, an Engine's menu options.
-#[derive(Debug, Clone, Facet)]
-pub struct Param {
-    pub name: String,
-    pub value: String,
-}
-
-/// The **keyboard-routing zone** a container occupies — the central MIDI input
-/// router's per-container rule.
+/// A node-level setting that isn't a block, and the keyboard window a node
+/// occupies.
 ///
-/// A note must fall in both the key window and the velocity window to reach this
-/// subtree; crossfade edges blend it in/out (Nord-style key splits +
-/// Omnisphere-style velocity crossfades).
-///
-/// The combined gain (`key_gain × vel_gain`, 0..1) scales the note's velocity
-/// into the subtree, so a note in a crossfade region plays adjacent layers at
-/// partial level — a true blend. Nested zones multiply (a key-split Layer
-/// holding velocity-split Modules). The default [`Zone::full`] passes everything.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Facet)]
-pub struct Zone {
-    /// Lowest playable key (MIDI note).
-    pub key_lo: u8,
-    /// Highest playable key.
-    pub key_hi: u8,
-    /// Crossfade width in semitones at each key edge. 0 = hard split.
-    pub key_xfade: u8,
-    /// Lowest velocity that sounds.
-    pub vel_lo: u8,
-    /// Highest velocity that sounds.
-    pub vel_hi: u8,
-    /// Crossfade width in velocity units at each edge. 0 = hard. (Omnisphere-style.)
-    pub vel_xfade: u8,
-}
-
-impl Default for Zone {
-    fn default() -> Self {
-        Self::full()
-    }
-}
-
-impl Zone {
-    /// The everything-passes zone (full key + velocity range, no crossfade).
-    #[must_use]
-    pub const fn full() -> Self {
-        Self {
-            key_lo: 0,
-            key_hi: 127,
-            key_xfade: 0,
-            vel_lo: 1,
-            vel_hi: 127,
-            vel_xfade: 0,
-        }
-    }
-
-    #[must_use]
-    pub fn is_full(&self) -> bool {
-        *self == Self::full()
-    }
-
-    /// Key-axis gain for `key` (0 outside the window, ramped across the xfade).
-    #[must_use]
-    pub fn key_gain(&self, key: u8) -> f32 {
-        ramp(key, self.key_lo, self.key_hi, self.key_xfade)
-    }
-
-    /// Velocity-axis gain for `vel`.
-    #[must_use]
-    pub fn vel_gain(&self, vel: u8) -> f32 {
-        ramp(vel, self.vel_lo, self.vel_hi, self.vel_xfade)
-    }
-
-    /// Combined routing gain for a note — `key_gain × vel_gain`, in `0..=1`.
-    #[must_use]
-    pub fn note_gain(&self, key: u8, vel: u8) -> f32 {
-        self.key_gain(key) * self.vel_gain(vel)
-    }
-}
-
-/// Trapezoidal window gain: 0 outside `[lo, hi]`, linearly ramped 0→1 over the
-/// `xfade` at each edge, 1 in the middle. `xfade == 0` ⇒ a hard 0/1 window.
-fn ramp(x: u8, lo: u8, hi: u8, xfade: u8) -> f32 {
-    let (x, lo, hi, xf) = (x as f32, lo as f32, hi as f32, xfade as f32);
-    let rising = if xf == 0.0 {
-        if x >= lo { 1.0 } else { 0.0 }
-    } else {
-        (x - lo) / xf
-    };
-    let falling = if xf == 0.0 {
-        if x <= hi { 1.0 } else { 0.0 }
-    } else {
-        (hi - x) / xf
-    };
-    rising.min(falling).clamp(0.0, 1.0)
-}
+/// Both now live in [`signal_proto::node_routing`] and are re-exported here:
+/// they are domain, not audio. A Layer's key split is something a *player*
+/// sets, so it belongs in the wire contract beside
+/// [`Node`](signal_proto::node::Node) rather than in the crate that renders
+/// it — there was one definition of a key split on each side of that line,
+/// and they had to agree by hand.
+pub use signal_proto::node_routing::{Setting as Param, Zone};
 
 /// A container node: a named folder of children with a combine rule, plus the
 /// routing-axis attachments (modulators + sends).

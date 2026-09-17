@@ -33,6 +33,15 @@ pub struct Model {
     /// Every variant: its selections and overrides.
     pub variants_json: String,
     pub default_variant: String,
+    /// Everything else the node carries: its fader, its zone, its sends and
+    /// mod routes, its settings, its engine type, its bypass.
+    ///
+    /// One column rather than nine because none of them is ever queried on —
+    /// they are read when the node is resolved and written when it is saved,
+    /// as a unit, exactly like `content_json`. A `zone_key_lo` column would
+    /// be schema surface with no reader.
+    #[sea_orm(default_value = "")]
+    pub attrs_json: String,
 }
 
 impl Model {

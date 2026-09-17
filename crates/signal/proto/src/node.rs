@@ -41,7 +41,8 @@ use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 use crate::block::BlockType;
-use crate::model::Block;
+use crate::model::{Block, EngineType};
+use crate::node_routing::{AudioSend, ModRoute, Setting, Zone};
 use crate::overrides::Override;
 
 crate::typed_uuid_id!(
@@ -77,6 +78,19 @@ pub enum Role {
     Module,
 }
 
+impl Role {
+    /// The word a UI shows for this role.
+    #[must_use]
+    pub const fn tag(self) -> &'static str {
+        match self {
+            Self::Preset => "Preset",
+            Self::Engine => "Engine",
+            Self::Layer => "Layer",
+            Self::Module => "Module",
+        }
+    }
+}
+
 /// How a container combines its children into its output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Facet)]
 #[repr(C)]
@@ -85,6 +99,17 @@ pub enum Combine {
     Serial,
     /// Children fed the same input; their outputs summed.
     Parallel,
+}
+
+impl Combine {
+    /// The word this serializes and displays as.
+    #[must_use]
+    pub const fn tag(self) -> &'static str {
+        match self {
+            Self::Serial => "serial",
+            Self::Parallel => "parallel",
+        }
+    }
 }
 
 /// What a node holds: DSP, or other nodes.
@@ -172,6 +197,61 @@ pub struct Node {
     /// This node's named alternatives. Always at least one: the default.
     pub variants: Vec<Variant>,
     pub default_variant: VariantId,
+
+    // ─── The rest of what a node is ──────────────────────────────
+    //
+    // Role, combine and content say what the node *is*. These say how it
+    // sounds and what reaches it — the fields the sampler's `Container`
+    // carried and this type did not, which is why the keys rig could not be
+    // expressed as nodes at all.
+    /// Which kind of playable thing, when [`role`](Self::role) is
+    /// [`Role::Engine`].
+    ///
+    /// `Role::Engine` says it *is* an Engine; this says it is the Organ.
+    /// Meaningless on any other role, where it keeps its default and nothing
+    /// reads it — an `Option` would say that better, but a styx document
+    /// cannot read back an optional unit-tagged enum, and a field that
+    /// cannot be persisted is worse than one that is occasionally ignored.
+    #[serde(default)]
+    #[facet(default)]
+    pub engine_type: EngineType,
+    /// Input trim (dB), applied before the children.
+    #[serde(default)]
+    #[facet(default)]
+    pub input_db: f32,
+    /// Output volume (dB) — the fader. A Layer's and an Engine's native
+    /// volume; a Module's output trim.
+    #[serde(default)]
+    #[facet(default)]
+    pub output_db: f32,
+    /// Control-rate modulators attached here — envelopes, LFOs. Leaf nodes
+    /// like any other, but off the audio path: they reach parameters through
+    /// [`mod_routes`](Self::mod_routes), never through the chain.
+    #[serde(default)]
+    #[facet(default)]
+    pub modulators: Vec<NodeId>,
+    /// Cross-tree audio sends from this node's output.
+    #[serde(default)]
+    #[facet(default)]
+    pub sends: Vec<AudioSend>,
+    /// Modulation matrix rows scoped to this subtree.
+    #[serde(default)]
+    #[facet(default)]
+    pub mod_routes: Vec<ModRoute>,
+    /// Node-level settings that are not blocks — a Layer's `voice_mode`,
+    /// `unison`, `octave`.
+    #[serde(default)]
+    #[facet(default)]
+    pub settings: Vec<Setting>,
+    /// The keyboard window that reaches this subtree. Default passes
+    /// everything; a narrower one is a key split.
+    #[serde(default)]
+    #[facet(default)]
+    pub zone: Zone,
+    /// Whether this whole subtree is bypassed.
+    #[serde(default)]
+    #[facet(default)]
+    pub bypassed: bool,
 }
 
 impl Node {
@@ -186,6 +266,15 @@ impl Node {
             content: Content::Children { nodes: Vec::new() },
             default_variant: default.id.clone(),
             variants: vec![default],
+            engine_type: EngineType::default(),
+            input_db: 0.0,
+            output_db: 0.0,
+            modulators: Vec::new(),
+            sends: Vec::new(),
+            mod_routes: Vec::new(),
+            settings: Vec::new(),
+            zone: Zone::full(),
+            bypassed: false,
         }
     }
 
@@ -200,7 +289,37 @@ impl Node {
             content: Content::Leaf { block_type, block },
             default_variant: default.id.clone(),
             variants: vec![default],
+            engine_type: EngineType::default(),
+            input_db: 0.0,
+            output_db: 0.0,
+            modulators: Vec::new(),
+            sends: Vec::new(),
+            mod_routes: Vec::new(),
+            settings: Vec::new(),
+            zone: Zone::full(),
+            bypassed: false,
         }
+    }
+
+    /// Name which kind of playable thing this Engine is.
+    #[must_use]
+    pub const fn of_type(mut self, engine_type: EngineType) -> Self {
+        self.engine_type = engine_type;
+        self
+    }
+
+    /// Restrict which notes reach this subtree.
+    #[must_use]
+    pub const fn in_zone(mut self, zone: Zone) -> Self {
+        self.zone = zone;
+        self
+    }
+
+    /// Set the fader.
+    #[must_use]
+    pub const fn at_db(mut self, output_db: f32) -> Self {
+        self.output_db = output_db;
+        self
     }
 
     /// Append a child reference. No-op on a leaf.

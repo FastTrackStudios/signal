@@ -22,7 +22,10 @@
 
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
 use sea_orm::{ConnectionTrait, Schema};
+use serde::{Deserialize, Serialize};
+use signal_proto::model::EngineType;
 use signal_proto::node::{Content, Node, NodeId, NodeLibrary, Role, Variant, VariantId};
+use signal_proto::node_routing::{AudioSend, ModRoute, Setting, Zone};
 
 use crate::entity;
 use crate::{DatabaseConnection, StorageError, StorageResult};
@@ -70,12 +73,51 @@ impl NodeRepoLive {
     }
 }
 
+/// The node fields that are stored together as JSON.
+///
+/// Every field defaults, so a row written before this column existed — or by
+/// an older build that did not know about one of them — loads as a node with
+/// the neutral value rather than failing the whole library.
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct Attrs {
+    #[serde(default)]
+    engine_type: EngineType,
+    #[serde(default)]
+    input_db: f32,
+    #[serde(default)]
+    output_db: f32,
+    #[serde(default)]
+    modulators: Vec<NodeId>,
+    #[serde(default)]
+    sends: Vec<AudioSend>,
+    #[serde(default)]
+    mod_routes: Vec<ModRoute>,
+    #[serde(default)]
+    settings: Vec<Setting>,
+    #[serde(default)]
+    zone: Option<Zone>,
+    #[serde(default)]
+    bypassed: bool,
+}
+
 /// A node as its row.
 fn to_row(node: &Node) -> StorageResult<entity::node::ActiveModel> {
     let content =
         serde_json::to_string(&node.content).map_err(|e| StorageError::Data(e.to_string()))?;
     let variants =
         serde_json::to_string(&node.variants).map_err(|e| StorageError::Data(e.to_string()))?;
+    let attrs = serde_json::to_string(&Attrs {
+        engine_type: node.engine_type,
+        input_db: node.input_db,
+        output_db: node.output_db,
+        modulators: node.modulators.clone(),
+        sends: node.sends.clone(),
+        mod_routes: node.mod_routes.clone(),
+        settings: node.settings.clone(),
+        zone: Some(node.zone),
+        bypassed: node.bypassed,
+    })
+    .map_err(|e| StorageError::Data(e.to_string()))?;
     Ok(entity::node::ActiveModel {
         id: Set(node.id.as_str().to_string()),
         name: Set(node.name.clone()),
@@ -84,6 +126,7 @@ fn to_row(node: &Node) -> StorageResult<entity::node::ActiveModel> {
         content_json: Set(content),
         variants_json: Set(variants),
         default_variant: Set(node.default_variant.as_str().to_string()),
+        attrs_json: Set(attrs),
     })
 }
 
@@ -93,6 +136,10 @@ fn from_row(row: &entity::node::Model) -> StorageResult<Node> {
         serde_json::from_str(&row.content_json).map_err(|e| StorageError::Data(e.to_string()))?;
     let variants: Vec<Variant> =
         serde_json::from_str(&row.variants_json).map_err(|e| StorageError::Data(e.to_string()))?;
+    // An unreadable attrs blob costs the fader and the zone, not the node.
+    // The blocks are in `content_json`; refusing to load the node at all
+    // would silence a rig over a field that has a neutral value.
+    let attrs: Attrs = serde_json::from_str(&row.attrs_json).unwrap_or_default();
     Ok(Node {
         id: row.node_id(),
         name: row.name.clone(),
@@ -101,6 +148,15 @@ fn from_row(row: &entity::node::Model) -> StorageResult<Node> {
         content,
         variants,
         default_variant: VariantId::from(row.default_variant.clone()),
+        engine_type: attrs.engine_type,
+        input_db: attrs.input_db,
+        output_db: attrs.output_db,
+        modulators: attrs.modulators,
+        sends: attrs.sends,
+        mod_routes: attrs.mod_routes,
+        settings: attrs.settings,
+        zone: attrs.zone.unwrap_or_else(Zone::full),
+        bypassed: attrs.bypassed,
     })
 }
 

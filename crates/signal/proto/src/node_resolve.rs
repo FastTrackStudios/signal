@@ -24,6 +24,7 @@
 
 use crate::model::Block;
 use crate::node::{Combine, Content, NodeId, NodeLibrary, Role, VariantId};
+use crate::node_routing::{AudioSend, ModRoute, Setting, Zone};
 use crate::overrides::{NodeOverrideOp, NodePath, NodePathSegment, Override};
 
 /// A node with every choice made: one variant picked, references followed,
@@ -34,9 +35,30 @@ pub struct Resolved {
     pub name: String,
     pub role: Role,
     pub combine: Combine,
-    /// Bypassed by an override from somewhere above.
+    /// Bypassed — on the node itself, or by an override from above.
     pub bypassed: bool,
     pub content: ResolvedContent,
+
+    // ─── Carried through verbatim ────────────────────────────────
+    //
+    // A renderer gets the whole node, not just its shape: the fader, the
+    // zone and the routing axis are as much a part of "what this sounds
+    // like" as the blocks are. Dropping them here is what made `to_chain`
+    // lossy for the keys rig.
+    /// Which kind of playable thing, when [`role`](Self::role) is an Engine.
+    pub engine_type: crate::model::EngineType,
+    pub input_db: f32,
+    pub output_db: f32,
+    /// Control-rate modulators, resolved like any other node. Off the audio
+    /// path — they reach parameters through [`mod_routes`](Self::mod_routes).
+    pub modulators: Vec<Resolved>,
+    pub sends: Vec<AudioSend>,
+    pub mod_routes: Vec<ModRoute>,
+    pub settings: Vec<Setting>,
+    /// The keyboard window that reaches this subtree, as the node declares
+    /// it. Nested zones multiply — that is the router's job, not the
+    /// resolver's.
+    pub zone: Zone,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -156,13 +178,38 @@ fn resolve_node(
         }
     };
 
+    // Modulators resolve like children, but off the audio path, so they are
+    // resolved beside the content rather than inside it. A missing one is a
+    // hole in the mod matrix, reported the same way.
+    let mut modulators = Vec::with_capacity(node.modulators.len());
+    path.push(id.clone());
+    for modulator in &node.modulators {
+        match resolve_node(library, modulator, None, path, report) {
+            Ok(resolved) => modulators.push(resolved),
+            Err(ResolveError::NoSuchNode(missing)) => report.missing.push(missing),
+            Err(cycle) => {
+                path.pop();
+                return Err(cycle);
+            }
+        }
+    }
+    path.pop();
+
     let mut resolved = Resolved {
         id: node.id.clone(),
         name: node.name.clone(),
         role: node.role,
         combine: node.combine,
-        bypassed: false,
+        bypassed: node.bypassed,
         content,
+        engine_type: node.engine_type,
+        input_db: node.input_db,
+        output_db: node.output_db,
+        modulators,
+        sends: node.sends.clone(),
+        mod_routes: node.mod_routes.clone(),
+        settings: node.settings.clone(),
+        zone: node.zone,
     };
 
     // Overrides are applied after the subtree exists, because they reach
