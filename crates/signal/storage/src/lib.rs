@@ -39,6 +39,7 @@ pub mod entity;
 pub mod import_export;
 pub mod layer_repo;
 pub mod module_repo;
+pub mod node_repo;
 pub mod profile_repo;
 pub mod rack_repo;
 pub mod rig_repo;
