@@ -12916,6 +12916,7 @@ version = "0.1.0"
 dependencies = [
  "signal-live",
  "signal-proto",
+ "signal-storage",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

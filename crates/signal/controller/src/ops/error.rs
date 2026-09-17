@@ -24,4 +24,13 @@ pub enum OpsError {
     /// A service/storage operation failed.
     #[error(transparent)]
     Storage(#[from] SignalServiceError),
+    /// A node target could not be resolved, or a patch was activated through
+    /// the wrong path.
+    ///
+    /// Its own variant rather than folded into [`Storage`](Self::Storage):
+    /// the node library is a different store — styx for the live rig, a
+    /// database for the editor — so a failure here is not a service failure
+    /// and should not read as one.
+    #[error("{0}")]
+    Node(String),
 }

@@ -253,6 +253,14 @@ where
         ops::ProfileOps(self.clone())
     }
 
+    /// Node operations — the path that replaces resolving through the
+    /// five-level hierarchy. Each call takes the node library, because it is
+    /// a different store from the nine services (see [`ops::nodes`]).
+    #[must_use]
+    pub fn nodes(&self) -> ops::NodeOps<S> {
+        ops::NodeOps(self.clone())
+    }
+
     /// Song operations.
     #[must_use]
     pub fn songs(&self) -> ops::SongOps<S> {

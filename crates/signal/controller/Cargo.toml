@@ -11,6 +11,10 @@ workspace = true
 [dependencies]
 signal-proto.workspace = true
 signal-live.workspace = true
+# The node library the new activation path resolves against. A different
+# store from the nine services: the live rig keeps its own as styx and never
+# opens a database, so this is passed per call rather than constructed in.
+signal-storage.workspace = true
 vox.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
