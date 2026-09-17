@@ -233,6 +233,16 @@ where
 
         // Resolve the section's source to a concrete activation target
         match &section.source {
+            // A node target is played by the rig's own node path — resolve,
+            // install, activate — not by this DAW-facing applier. Reported
+            // rather than silently doing nothing, which is what an unhandled
+            // arm would have looked like from the stage.
+            signal_proto::song::SectionSource::Node { node, .. } => {
+                SwitchResult::ActivateError(format!(
+                    "section targets node {}; play it through the rig's node path",
+                    node.as_str()
+                ))
+            }
             signal_proto::song::SectionSource::Patch { patch_id } => {
                 let target = signal_proto::resolve::ResolveTarget::SongSection {
                     song_id: song_id.clone(),

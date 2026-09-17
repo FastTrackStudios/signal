@@ -722,6 +722,17 @@ where
                     signal_proto::song::SectionSource::RigScene { rig_id, scene_id } => {
                         Ok((rig_id, scene_id, section.overrides))
                     }
+                    // This resolver speaks the old five-level hierarchy. A
+                    // node target resolves through `node_resolve` instead,
+                    // which needs no repo — say so rather than failing
+                    // vaguely.
+                    signal_proto::song::SectionSource::Node { node, .. } => {
+                        Err(ResolveError::InvalidReference(format!(
+                            "section targets node {}; resolve it with \
+                             signal_proto::node_resolve, not this stack",
+                            node.as_str()
+                        )))
+                    }
                     signal_proto::song::SectionSource::Patch { patch_id } => {
                         let profiles = self.profile_repo.list_profiles().await.map_err(|e| {
                             ResolveError::NotFound(format!("profiles load failed: {e}"))
@@ -791,6 +802,11 @@ where
                 match section.source {
                     signal_proto::song::SectionSource::RigScene { rig_id, scene_id } => {
                         Ok(Some(PatchTarget::RigScene { rig_id, scene_id }))
+                    }
+                    // Carried through unchanged: a node target is already the
+                    // shape a patch target wants, so there is nothing to map.
+                    signal_proto::song::SectionSource::Node { node, variant } => {
+                        Ok(Some(PatchTarget::Node { node, variant }))
                     }
                     signal_proto::song::SectionSource::Patch { patch_id } => {
                         let profiles =

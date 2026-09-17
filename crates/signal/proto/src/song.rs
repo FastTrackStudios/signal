@@ -31,7 +31,16 @@ crate::typed_uuid_id!(
 pub enum SectionSource {
     /// Reference a Patch from a Profile.
     Patch { patch_id: PatchId },
-    /// Reference a Rig scene directly.
+    /// A node and one of its variants — what a section points at once the
+    /// composition hierarchy is one type. Supersedes
+    /// [`RigScene`](Self::RigScene), which named the top level specifically
+    /// because there used to be five levels to choose between.
+    Node {
+        node: crate::node::NodeId,
+        variant: crate::node::VariantId,
+    },
+    /// Reference a Rig scene directly. Kept while storage and `signal-live`
+    /// still speak it; new sections should target a node.
     RigScene { rig_id: RigId, scene_id: RigSceneId },
 }
 

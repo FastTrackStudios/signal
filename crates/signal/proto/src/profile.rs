@@ -30,10 +30,43 @@ crate::typed_uuid_id!(
 
 // ─── PatchTarget ────────────────────────────────────────────────
 
-/// What a patch references — any collection+variant level in the hierarchy.
+/// What a patch references.
+///
+/// # The five that are becoming one
+///
+/// Every variant below except [`Node`](Self::Node) and [`Patch`](Self::Patch)
+/// is the same shape — a collection id and a variant id — repeated once per
+/// level of the old hierarchy:
+///
+/// ```text
+/// RigScene       { rig_id,    scene_id    }
+/// EngineScene    { engine_id, scene_id    }
+/// LayerSnapshot  { layer_id,  snapshot_id }
+/// ModuleSnapshot { preset_id, snapshot_id }
+/// BlockSnapshot  { preset_id, snapshot_id }
+/// ```
+///
+/// They exist because the composition hierarchy used to be five distinct
+/// types. It is one now — [`crate::node::Node`] — so all five collapse into
+/// [`Node`](Self::Node), which says the same thing without asking the caller
+/// which level they meant.
+///
+/// The five are kept while storage, `signal-live` and the controller still
+/// speak them. New code should target a node; nothing new should add a
+/// level-specific variant.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum PatchTarget {
+    /// A node and one of its variants — the target that replaces the five
+    /// level-specific ones below.
+    ///
+    /// A node knows its own [`Role`](crate::node::Role), so "which level is
+    /// this?" is a property of the thing pointed at rather than a choice the
+    /// pointer has to make.
+    Node {
+        node: crate::node::NodeId,
+        variant: crate::node::VariantId,
+    },
     /// A Rig scene (full rig preset + scene variant).
     RigScene { rig_id: RigId, scene_id: RigSceneId },
     /// An Engine scene variant.
@@ -322,5 +355,40 @@ mod tests {
 
         let ref_patch = Patch::from_patch_ref(PatchId::new(), "Copy of Clean", block_patch.id);
         assert!(matches!(ref_patch.target, PatchTarget::Patch { .. }));
+    }
+
+    /// The five level-specific targets say the same thing five ways. A node
+    /// target says it once — and because a node knows its own `Role`, the
+    /// level is a property of what is pointed at rather than a decision the
+    /// pointer has to make.
+    #[test]
+    fn a_node_target_replaces_the_five_level_specific_ones() {
+        use crate::node::{Combine, Node, Role};
+
+        let chain = Node::container("Worship", Role::Preset, Combine::Serial);
+        let ambient = chain.default_variant().expect("has a default").id.clone();
+
+        let patch = Patch::new(
+            PatchId::new(),
+            "Ambient",
+            PatchTarget::Node {
+                node: chain.id.clone(),
+                variant: ambient.clone(),
+            },
+        );
+
+        let PatchTarget::Node { node, variant } = &patch.target else {
+            panic!("expected a node target");
+        };
+        assert_eq!(node, &chain.id);
+        assert_eq!(variant, &ambient);
+
+        // The same pointer works at any level, because every level is a node.
+        let module = Node::container("Time", Role::Module, Combine::Serial);
+        let at_module = PatchTarget::Node {
+            node: module.id.clone(),
+            variant: module.default_variant().expect("default").id.clone(),
+        };
+        assert!(matches!(at_module, PatchTarget::Node { .. }));
     }
 }
