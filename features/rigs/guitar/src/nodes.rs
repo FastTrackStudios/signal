@@ -59,6 +59,39 @@ impl RigNodes {
             .map(|(_, v)| v)
     }
 
+    /// Add a variant of the chain that recalls it with one block on a
+    /// different capture — "this patch, but the Klon on its high-gain side".
+    ///
+    /// This is how a Block Preset's variants become *performable* rather than
+    /// editable. `set_block_option` changes profile state, which is an edit
+    /// and costs a reload; a chain variant selecting a child's variant is a
+    /// performance action, and it is installed with every other patch, so
+    /// reaching it is a pointer swap.
+    ///
+    /// Returns the variant to press.
+    pub fn with_selection(
+        &mut self,
+        name: &str,
+        node: &NodeId,
+        variant: &signal_proto::node::VariantId,
+    ) -> Option<signal_proto::node::VariantId> {
+        let chain = self.library.get_mut(&self.chain)?;
+        let selecting = Variant::new(name).selecting(node.clone(), variant.clone());
+        let id = selecting.id.clone();
+        chain.variants.push(selecting);
+        self.patches.push((name.to_string(), id.clone()));
+        Some(id)
+    }
+
+    /// A node in the library by name — a pedal, an amp capture.
+    #[must_use]
+    pub fn node_named(&self, name: &str) -> Option<&Node> {
+        self.library
+            .nodes
+            .iter()
+            .find(|n| n.name.eq_ignore_ascii_case(name))
+    }
+
     /// Install every patch, so switching between them cannot cause a gap.
     ///
     /// The whole profile becomes resident at once — twelve chains for twelve
@@ -436,6 +469,72 @@ mod tests {
             "sixty patch changes and not one load — the gap cannot happen"
         );
         assert!(patches.resident("Not A Patch").is_none());
+    }
+
+    /// The requirement that started this: switching between a Block Preset's
+    /// captures — every gain setting of a pedal, every version of an AC30 —
+    /// with no gap, inside the Snapshot system.
+    ///
+    /// It needs no new machinery. A chain variant selects which variant each
+    /// child uses, and chain variants are what the bank installs, so a
+    /// capture swap is reached by the same pointer swap as a patch change.
+    #[test]
+    fn switching_a_blocks_captures_is_as_gapless_as_switching_patches() {
+        #[derive(Default)]
+        struct Counting {
+            installs: usize,
+            next: u32,
+        }
+        impl Bank for Counting {
+            fn install(&mut self, _b: &[signal_sampler::RigBlock]) -> Result<u32, String> {
+                self.installs += 1;
+                self.next += 1;
+                Ok(self.next)
+            }
+            fn activate(&self, _model: u32) {}
+            fn uninstall(&mut self, _model: u32) {}
+        }
+
+        let mut rig = to_nodes(&worship_def(), &drive_presets());
+
+        // King of Tone ships two captures: both-sides, and red-as-boost.
+        let kot = rig.node_named("King of Tone").expect("the pedal is a node");
+        let kot_id = kot.id.clone();
+        let captures: Vec<_> = kot
+            .variants
+            .iter()
+            .map(|v| (v.name.clone(), v.id.clone()))
+            .collect();
+        assert!(captures.len() >= 2, "two settings of one pedal");
+
+        // One chain variant per capture — the performable form.
+        let pressable: Vec<_> = captures
+            .iter()
+            .map(|(name, variant)| {
+                rig.with_selection(&format!("Clean · KoT {name}"), &kot_id, variant)
+                    .expect("chain exists")
+            })
+            .collect();
+
+        let mut bank = Counting::default();
+        let patches = rig.install(&mut bank).expect("installs");
+        let loaded_once = bank.installs;
+
+        // Toggle between the pedal's captures, as a footswitch would.
+        for _ in 0..10 {
+            for (name, _) in &captures {
+                let token = patches
+                    .resident(&format!("Clean · KoT {name}"))
+                    .expect("every capture is resident");
+                PatchBank::press(&bank, token);
+            }
+        }
+
+        assert_eq!(
+            bank.installs, loaded_once,
+            "twenty capture swaps and not one load"
+        );
+        assert_eq!(pressable.len(), captures.len());
     }
 
     /// The whole rig survives the format it is stored in.

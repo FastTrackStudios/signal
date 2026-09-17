@@ -234,12 +234,19 @@ a prepared chain and hands back a `ModelId` **without activating it**, and
 `set_active` swaps atomically between the resident chains. That is what
 makes footswitching gapless.
 
-It does **not** have it at *block* granularity yet. `set_block_option` —
-the drive pedal's gain-capture switch — flips the option in the profile,
-rebuilds and reloads; the code calls that an "edit-time gap". Making NAM
-variants a true Snapshot means pre-installing a resident chain per
-variant, or banking the models inside the block itself, so the switch
-becomes a `set_active` and never a rebuild.
+Block granularity needs no extra machinery, which is worth stating
+because it looks like it should. A variant selects **which variant each
+child uses**, so a chain variant can say "this patch, with the Klon on
+its high-gain capture". Chain variants are what the bank installs — so a
+capture swap is reached by the same pointer swap as a patch change, and
+`signal_sampler::gapless` covers both.
+
+What *is* slow is `set_block_option`, and the reason is that it is a
+different kind of act. It rewrites profile state — which capture the
+slot holds, for every patch — and that is an **edit**, so it rebuilds
+and the code says so ("a full reload (brief gap)"). Performing is
+selecting a variant; editing is changing what the variants are. Only the
+second needs to cost anything.
 
 #### Where a capture becomes a Preset, and where it becomes a variant
 
