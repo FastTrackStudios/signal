@@ -40,6 +40,8 @@ serde_json  = { workspace = true }
 
 # Tagging schema reuse (TagSet / TagCategory / StructuredTag)
 signal-proto.workspace = true
+# Node identity: UUIDv7, so a rig stays addressable when it is distributed.
+uuid.workspace = true
 
 # Shared articulation/legato/re-bow annotation model — the ONE source of
 # truth for document mode's stage-1 inference (also consumed by

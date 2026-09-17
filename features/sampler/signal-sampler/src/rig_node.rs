@@ -218,6 +218,24 @@ fn ramp(x: u8, lo: u8, hi: u8, xfade: u8) -> f32 {
 /// routing-axis attachments (modulators + sends).
 #[derive(Debug, Clone, Facet)]
 pub struct Container {
+    /// Stable identity — a UUIDv7, minted once and persisted.
+    ///
+    /// What everything *else* points at: a variant selecting this node, an
+    /// override reaching into it, a scene recalling it. Addressing by `name`
+    /// cannot do that job. Two siblings may share a name, and renaming one
+    /// silently breaks every reference to it — an override that misses does
+    /// not error at edit time or at switch time, it just stops applying, on
+    /// stage.
+    ///
+    /// v7 rather than a hash or a counter because a rig is distributable:
+    /// two people building a "Pad" on two machines must not mint the same
+    /// id. (`seed_id`'s deterministic v5 is the opposite tool, for content
+    /// that *must* agree everywhere — the shipped defaults.)
+    ///
+    /// Empty only between loading a tree written before ids and
+    /// [`ensure_ids`](Self::ensure_ids) running over it.
+    #[facet(default)]
+    pub id: String,
     pub role: Role,
     pub name: String,
     pub combine: Combine,
@@ -285,9 +303,69 @@ impl RigNode {
     }
 }
 
+/// A fresh node identity: UUIDv7, so ids from different machines never
+/// collide and ids from one machine sort by when they were made.
+#[must_use]
+pub fn new_node_id() -> String {
+    uuid::Uuid::now_v7().to_string()
+}
+
 impl Container {
+    /// Mint an id for this node and everything under it that lacks one,
+    /// returning how many were minted.
+    ///
+    /// Call after loading a tree, and **persist the result**. An id that is
+    /// regenerated on each load is not an identity: every reference to it
+    /// would break on the next start, which is worse than having none. The
+    /// non-zero return is the caller's signal that the tree must be saved.
+    pub fn ensure_ids(&mut self) -> usize {
+        let mut minted = 0;
+        if self.id.is_empty() {
+            self.id = new_node_id();
+            minted += 1;
+        }
+        for block in &mut self.modulators {
+            if block.id.is_empty() {
+                block.id = new_node_id();
+                minted += 1;
+            }
+        }
+        for child in &mut self.children {
+            minted += match child {
+                RigNode::Container { container } => container.ensure_ids(),
+                RigNode::Block { block } => {
+                    if block.id.is_empty() {
+                        block.id = new_node_id();
+                        1
+                    } else {
+                        0
+                    }
+                }
+            };
+        }
+        minted
+    }
+
+    /// Find a node anywhere in this subtree by **id** — how a selection or
+    /// an override resolves its target.
+    ///
+    /// Distinct from [`find`](Self::find), which matches on `name`. That one
+    /// is the older, fragile lookup: names are not unique among siblings and
+    /// do not survive a rename. New references should use this.
+    #[must_use]
+    pub fn find_by_id(&self, id: &str) -> Option<&Self> {
+        if self.id == id {
+            return Some(self);
+        }
+        self.children.iter().find_map(|child| match child {
+            RigNode::Container { container } => container.find_by_id(id),
+            RigNode::Block { .. } => None,
+        })
+    }
+
     fn new(role: Role, name: impl Into<String>, combine: Combine) -> Self {
         Self {
+            id: new_node_id(),
             role,
             name: name.into(),
             combine,
@@ -825,5 +903,57 @@ mod tests {
         let sends = layer.sends_recursive();
         assert_eq!(sends.len(), 1);
         assert_eq!(sends[0].1.label, "To Rotary");
+    }
+
+    #[test]
+    fn a_built_tree_is_born_with_ids() {
+        let tree = Container::preset("P")
+            .add(Container::engine("Keys").add(Container::layer("Keys 1")))
+            .block(BlockType::Reverb, "Verb");
+
+        let mut ids = Vec::new();
+        collect_ids(&tree, &mut ids);
+        assert!(ids.iter().all(|id| !id.is_empty()), "every node has an id");
+
+        let unique: std::collections::HashSet<_> = ids.iter().collect();
+        assert_eq!(unique.len(), ids.len(), "ids are unique across the tree");
+    }
+
+    #[test]
+    fn ensure_ids_mints_once_and_only_where_missing() {
+        // A tree as it arrives from styx written before ids existed.
+        let mut tree = Container::preset("P").add(Container::layer("L"));
+        tree.id.clear();
+        if let Some(RigNode::Container { container }) = tree.children.first_mut() {
+            container.id.clear();
+        }
+
+        assert_eq!(tree.ensure_ids(), 2, "both empty ids were minted");
+
+        let before = tree.id.clone();
+        // The point of the whole exercise: an id that changes on reload is
+        // not an identity — every reference to it would break on next start.
+        assert_eq!(tree.ensure_ids(), 0, "a second pass mints nothing");
+        assert_eq!(tree.id, before, "an existing id is never regenerated");
+    }
+
+    #[test]
+    fn a_node_is_reachable_by_id_wherever_it_sits() {
+        let deep = Container::layer("Shimmer");
+        let wanted = deep.id.clone();
+        let tree = Container::preset("P").add(Container::engine("Pad").add(deep));
+
+        assert_eq!(tree.find_by_id(&wanted).map(|c| c.name.as_str()), Some("Shimmer"));
+        assert!(tree.find_by_id("no-such-id").is_none());
+    }
+
+    fn collect_ids(c: &Container, out: &mut Vec<String>) {
+        out.push(c.id.clone());
+        for child in &c.children {
+            match child {
+                RigNode::Container { container } => collect_ids(container, out),
+                RigNode::Block { block } => out.push(block.id.clone()),
+            }
+        }
     }
 }

@@ -190,6 +190,12 @@ impl BlockImpl {
 /// [`BlockCategory::Time`] (`Delay` / `Reverb` / `Freeze`).
 #[derive(Clone, Debug, Facet)]
 pub struct RigBlock {
+    /// Stable identity — a UUIDv7, minted once and persisted. The leaf half
+    /// of the same contract as [`Container::id`](crate::rig_node::Container::id):
+    /// an override reaching a single parameter addresses the block it lives
+    /// on, and must keep working when the block is renamed.
+    #[facet(default)]
+    pub id: String,
     /// What the block is — its semantic type (Amp, Cabinet, Reverb, Delay, …).
     pub block_type: BlockType,
     /// Realization: path to a `.nam` model. Set ⇒ realized by Neural Amp
@@ -286,6 +292,7 @@ impl RigBlock {
     #[must_use]
     pub fn of_type(block_type: BlockType) -> Self {
         Self {
+            id: crate::rig_node::new_node_id(),
             block_type,
             nam: String::new(),
             ir: String::new(),
