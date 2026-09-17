@@ -35,6 +35,8 @@ use signal_proto::model::Block;
 use signal_proto::node::{Combine, Content, Node, NodeId, NodeLibrary, Role, Variant};
 use signal_proto::overrides::{NodeOverrideOp, NodePath, NodePathSegment, Override};
 
+use signal_sampler::gapless::{Bank, InstallError, Resident, VariantBank};
+
 use crate::profiles::{DrivePresetDef, OverrideDef, ProfileDef};
 
 /// The worship rig as nodes: every capture, every pedal, and the chain whose
@@ -55,6 +57,63 @@ impl RigNodes {
             .iter()
             .find(|(n, _)| n.eq_ignore_ascii_case(name))
             .map(|(_, v)| v)
+    }
+
+    /// Install every patch, so switching between them cannot cause a gap.
+    ///
+    /// The whole profile becomes resident at once — twelve chains for twelve
+    /// patches — which is what `ProfileRig` already does by hand for gapless
+    /// footswitching. The difference is that afterwards the switch is a
+    /// [`Resident`] token rather than an integer, so it *cannot* be asked to
+    /// load. See [`signal_sampler::gapless`].
+    ///
+    /// # Errors
+    ///
+    /// Propagates the first patch whose chain will not load, named — at
+    /// install time, which is before the set rather than during it.
+    pub fn install<B: Bank>(&self, bank: &mut B) -> Result<PatchBank, InstallError> {
+        let variants = VariantBank::install_all(bank, &self.library, &self.chain)?;
+        Ok(PatchBank {
+            variants,
+            by_name: self.patches.clone(),
+        })
+    }
+}
+
+/// Every patch of a profile, resident and switchable.
+pub struct PatchBank {
+    variants: VariantBank,
+    by_name: Vec<(String, signal_proto::node::VariantId)>,
+}
+
+impl PatchBank {
+    /// The token for a patch by name — what a footswitch presses.
+    ///
+    /// `None` only if the name is not a patch. A patch that exists is always
+    /// resident, because [`RigNodes::install`] installs all of them.
+    #[must_use]
+    pub fn resident(&self, patch: &str) -> Option<Resident> {
+        let variant = self
+            .by_name
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(patch))
+            .map(|(_, v)| v)?;
+        self.variants.resident(variant)
+    }
+
+    /// Switch to a patch. Infallible and load-free — see [`VariantBank::activate`].
+    pub fn press<B: Bank>(bank: &B, patch: Resident) {
+        VariantBank::activate(bank, patch);
+    }
+
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.variants.len()
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.variants.is_empty()
     }
 }
 
@@ -328,6 +387,55 @@ mod tests {
         // Names and identity survive, which the old bridge dropped outright.
         assert!(chain.iter().all(|b| !b.name.is_empty()));
         assert!(chain.iter().all(|b| !b.id.is_empty()));
+    }
+
+    /// The whole stack, end to end: the shipped profile becomes nodes,
+    /// every patch is installed, and then a set's worth of footswitch
+    /// presses loads nothing at all.
+    #[test]
+    fn a_whole_set_of_footswitch_presses_loads_nothing() {
+        /// Counts installs so the test can assert switching does none.
+        #[derive(Default)]
+        struct Counting {
+            installs: usize,
+            next: u32,
+        }
+        impl Bank for Counting {
+            fn install(
+                &mut self,
+                _blocks: &[signal_sampler::RigBlock],
+            ) -> Result<u32, String> {
+                self.installs += 1;
+                self.next += 1;
+                Ok(self.next)
+            }
+            fn activate(&self, _model: u32) {}
+            fn uninstall(&mut self, _model: u32) {}
+        }
+
+        let rig = to_nodes(&worship_def(), &drive_presets());
+        let mut bank = Counting::default();
+        let patches = rig.install(&mut bank).expect("every patch installs");
+
+        let loaded_once = bank.installs;
+        assert!(loaded_once >= rig.patches.len(), "all of them are resident");
+
+        // Play the set: every patch, several times over, as a footswitch
+        // would during a service.
+        for _ in 0..5 {
+            for (name, _) in &rig.patches {
+                let token = patches
+                    .resident(name)
+                    .unwrap_or_else(|| panic!("{name} is resident"));
+                PatchBank::press(&bank, token);
+            }
+        }
+
+        assert_eq!(
+            bank.installs, loaded_once,
+            "sixty patch changes and not one load — the gap cannot happen"
+        );
+        assert!(patches.resident("Not A Patch").is_none());
     }
 
     /// The whole rig survives the format it is stored in.
