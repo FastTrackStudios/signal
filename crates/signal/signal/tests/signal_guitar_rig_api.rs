@@ -25,7 +25,7 @@ use signal::{
     rig::{EngineSelection, Rig, RigId, RigScene, RigSceneId},
     seed_id,
     setlist::{Setlist, SetlistEntry},
-    song::{Section, SectionSource, Song},
+    song::{Scene, SceneSource, Song},
     traits::Collection,
 };
 use signal_live::engine::{
@@ -963,26 +963,26 @@ async fn reorder_song_sections() {
     let mut song = Song::new(
         seed_id("reorder-song"),
         "Reorder Song",
-        Section::from_rig_scene(
+        Scene::from_rig_scene(
             seed_id("rs-verse"),
             "Verse",
             rig_id.clone(),
             scene_id.clone(),
         ),
     );
-    song.add_section(Section::from_rig_scene(
+    song.add_scene(Scene::from_rig_scene(
         seed_id("rs-chorus"),
         "Chorus",
         rig_id.clone(),
         scene_id.clone(),
     ));
-    song.add_section(Section::from_rig_scene(
+    song.add_scene(Scene::from_rig_scene(
         seed_id("rs-bridge"),
         "Bridge",
         rig_id.clone(),
         scene_id.clone(),
     ));
-    song.add_section(Section::from_rig_scene(
+    song.add_scene(Scene::from_rig_scene(
         seed_id("rs-outro"),
         "Outro",
         rig_id.clone(),
@@ -1011,7 +1011,7 @@ async fn reorder_song_sections() {
         .unwrap()
         .expect("song");
 
-    let names: Vec<&str> = loaded.sections.iter().map(|s| s.name.as_str()).collect();
+    let names: Vec<&str> = loaded.scenes.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, vec!["Bridge", "Verse", "Outro", "Chorus"]);
 }
 
@@ -1270,7 +1270,7 @@ async fn patch_overrides_affect_resolved_values() {
 }
 
 // ═════════════════════════════════════════════════════════════
-//  Group G: Song + Section CRUD
+//  Group G: Song + Scene CRUD
 // ═════════════════════════════════════════════════════════════
 
 /// Create a song with sections from both patches and rig scenes.
@@ -1297,15 +1297,15 @@ async fn create_song_with_mixed_sections() {
     let mut song = Song::new(
         seed_id("mixed-song"),
         "Mixed Song",
-        Section::from_patch(seed_id("ms-verse"), "Verse", seed_id("song-patch")),
+        Scene::from_patch(seed_id("ms-verse"), "Verse", seed_id("song-patch")),
     );
-    song.add_section(Section::from_rig_scene(
+    song.add_scene(Scene::from_rig_scene(
         seed_id("ms-chorus"),
         "Chorus",
         rig_id.clone(),
         guitar_megarig_lead_scene(),
     ));
-    song.add_section(Section::from_patch(
+    song.add_scene(Scene::from_patch(
         seed_id("ms-bridge"),
         "Bridge",
         seed_id("song-patch"),
@@ -1319,18 +1319,18 @@ async fn create_song_with_mixed_sections() {
         .unwrap()
         .expect("song");
 
-    assert_eq!(loaded.sections.len(), 3);
+    assert_eq!(loaded.scenes.len(), 3);
     assert!(matches!(
-        loaded.sections[0].source,
-        SectionSource::Patch { .. }
+        loaded.scenes[0].source,
+        SceneSource::Patch { .. }
     ));
     assert!(matches!(
-        loaded.sections[1].source,
-        SectionSource::RigScene { .. }
+        loaded.scenes[1].source,
+        SceneSource::RigScene { .. }
     ));
     assert!(matches!(
-        loaded.sections[2].source,
-        SectionSource::Patch { .. }
+        loaded.scenes[2].source,
+        SceneSource::Patch { .. }
     ));
 }
 
@@ -1345,7 +1345,7 @@ async fn switch_section_source() {
     let song = Song::new(
         seed_id("switch-song"),
         "Switch Song",
-        Section::from_patch(
+        Scene::from_patch(
             seed_id("switch-section"),
             "Switchable",
             seed_id("song-patch"),
@@ -1361,8 +1361,8 @@ async fn switch_section_source() {
         .unwrap()
         .expect("song");
     assert!(matches!(
-        before.sections[0].source,
-        SectionSource::Patch { .. }
+        before.scenes[0].source,
+        SceneSource::Patch { .. }
     ));
 
     // Switch to rig scene
@@ -1371,7 +1371,7 @@ async fn switch_section_source() {
         .set_section_source(
             seed_id("switch-song"),
             seed_id("switch-section"),
-            SectionSource::RigScene {
+            SceneSource::RigScene {
                 rig_id: rig_id.clone(),
                 scene_id: scene_id.clone(),
             },
@@ -1386,8 +1386,8 @@ async fn switch_section_source() {
         .unwrap()
         .expect("song");
     assert!(matches!(
-        after.sections[0].source,
-        SectionSource::RigScene { .. }
+        after.scenes[0].source,
+        SceneSource::RigScene { .. }
     ));
 }
 
@@ -1401,11 +1401,11 @@ async fn resolve_all_song_sections() {
     assert!(!songs.is_empty(), "need seeded songs");
 
     for song in &songs {
-        for section in &song.sections {
+        for section in &song.scenes {
             let result = signal
-                .resolve_target(ResolveTarget::SongSection {
+                .resolve_target(ResolveTarget::SongScene {
                     song_id: song.id.clone(),
-                    section_id: section.id.clone(),
+                    scene_id: section.id.clone(),
                 })
                 .await;
             assert!(
@@ -1475,11 +1475,11 @@ async fn full_hierarchy_resolve_sweep() {
         for entry in &setlist.entries {
             let song = signal.songs().load(entry.song_id.clone()).await.unwrap();
             if let Some(song) = song {
-                for section in &song.sections {
+                for section in &song.scenes {
                     let result = signal
-                        .resolve_target(ResolveTarget::SongSection {
+                        .resolve_target(ResolveTarget::SongScene {
                             song_id: song.id.clone(),
-                            section_id: section.id.clone(),
+                            scene_id: section.id.clone(),
                         })
                         .await;
                     assert!(

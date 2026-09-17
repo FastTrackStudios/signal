@@ -8,7 +8,7 @@ use crate::{SignalApi, SignalController};
 use signal_proto::{
     metadata::Metadata,
     profile::ProfileId,
-    song::{Section, SectionId, SectionSource, Song, SongId},
+    song::{Scene, SceneId, SceneSource, Song, SongId},
 };
 
 /// Handle for song operations.
@@ -40,13 +40,13 @@ impl<S: SignalApi> SongOps<S> {
         &self,
         name: impl Into<String>,
         default_section_name: impl Into<String>,
-        source: SectionSource,
+        source: SceneSource,
     ) -> Result<Song, OpsError> {
         let song = Song::new(
             SongId::new(),
             name,
-            Section {
-                id: SectionId::new(),
+            Scene {
+                id: SceneId::new(),
                 name: default_section_name.into(),
                 source,
                 overrides: Vec::new(),
@@ -60,7 +60,7 @@ impl<S: SignalApi> SongOps<S> {
     /// Create a song from a profile, generating one section per patch.
     ///
     /// Each section is named after its source patch and linked via
-    /// `SectionSource::Patch`. The profile's ID is stored in the song's
+    /// `SceneSource::Patch`. The profile's ID is stored in the song's
     /// `metadata.base_profile_id`.
     ///
     /// # Errors
@@ -177,11 +177,11 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn load_section(
         &self,
         song_id: impl Into<SongId>,
-        section_id: impl Into<SectionId>,
-    ) -> Result<Option<Section>, OpsError> {
+        scene_id: impl Into<SceneId>,
+    ) -> Result<Option<Scene>, OpsError> {
         self.0
             .service
-            .load_song_variant(song_id.into(), section_id.into())
+            .load_song_variant(song_id.into(), scene_id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -192,14 +192,14 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn save_section(
         &self,
         song_id: impl Into<SongId>,
-        section: Section,
+        section: Scene,
     ) -> Result<(), OpsError> {
         let song_id = song_id.into();
         if let Some(mut song) = self.load(song_id).await? {
-            if let Some(pos) = song.sections.iter().position(|s| s.id == section.id) {
-                song.sections[pos] = section;
+            if let Some(pos) = song.scenes.iter().position(|s| s.id == section.id) {
+                song.scenes[pos] = section;
             } else {
-                song.sections.push(section);
+                song.scenes.push(section);
             }
             self.save(song).await?;
         }
@@ -212,13 +212,13 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn set_section_source(
         &self,
         song_id: impl Into<SongId>,
-        section_id: impl Into<SectionId>,
-        source: SectionSource,
+        scene_id: impl Into<SceneId>,
+        source: SceneSource,
     ) -> Result<(), OpsError> {
         let song_id = song_id.into();
-        let section_id = section_id.into();
+        let scene_id = scene_id.into();
         if let Some(mut song) = self.load(song_id).await? {
-            if let Some(section) = song.sections.iter_mut().find(|s| s.id == section_id) {
+            if let Some(section) = song.scenes.iter_mut().find(|s| s.id == scene_id) {
                 section.source = source;
             }
             self.save(song).await?;
@@ -232,11 +232,11 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn reorder_sections(
         &self,
         song_id: impl Into<SongId>,
-        ordered_section_ids: &[SectionId],
+        ordered_section_ids: &[SceneId],
     ) -> Result<(), OpsError> {
         let song_id = song_id.into();
         if let Some(mut song) = self.load(song_id.clone()).await? {
-            super::reorder_by_id(&mut song.sections, ordered_section_ids, |s| &s.id);
+            super::reorder_by_id(&mut song.scenes, ordered_section_ids, |s| &s.id);
             self.save(song).await?;
         }
         Ok(())
@@ -283,13 +283,13 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn update_section(
         &self,
         song_id: impl Into<SongId>,
-        section_id: impl Into<SectionId>,
-        f: impl FnOnce(&mut Section),
+        scene_id: impl Into<SceneId>,
+        f: impl FnOnce(&mut Scene),
     ) -> Result<(), OpsError> {
         let song_id = song_id.into();
-        let section_id = section_id.into();
+        let scene_id = scene_id.into();
         if let Some(mut song) = self.load(song_id).await? {
-            if let Some(v) = song.sections.iter_mut().find(|s| s.id == section_id) {
+            if let Some(v) = song.scenes.iter_mut().find(|s| s.id == scene_id) {
                 f(v);
             }
             self.save(song).await?;
@@ -302,14 +302,14 @@ impl<S: SignalApi> SongOps<S> {
     /// # Errors
     ///
     /// Returns an error if the storage backend fails.
-    pub async fn add_section(
+    pub async fn add_scene(
         &self,
         song_id: impl Into<SongId>,
-        section: Section,
+        section: Scene,
     ) -> Result<Option<Song>, OpsError> {
         let song_id = song_id.into();
         if let Some(mut song) = self.load(song_id).await? {
-            song.add_section(section);
+            song.add_scene(section);
             Ok(Some(self.save(song).await?))
         } else {
             Ok(None)
@@ -321,15 +321,15 @@ impl<S: SignalApi> SongOps<S> {
     /// # Errors
     ///
     /// Returns an error if the storage backend fails.
-    pub async fn remove_section(
+    pub async fn remove_scene(
         &self,
         song_id: impl Into<SongId>,
-        section_id: impl Into<SectionId>,
-    ) -> Result<Option<Section>, OpsError> {
+        scene_id: impl Into<SceneId>,
+    ) -> Result<Option<Scene>, OpsError> {
         let song_id = song_id.into();
-        let section_id = section_id.into();
+        let scene_id = scene_id.into();
         if let Some(mut song) = self.load(song_id).await? {
-            let removed = song.remove_section(&section_id);
+            let removed = song.remove_scene(&scene_id);
             if removed.is_some() {
                 self.save(song).await?;
             }
@@ -347,16 +347,16 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn duplicate_section(
         &self,
         song_id: impl Into<SongId>,
-        section_id: impl Into<SectionId>,
+        scene_id: impl Into<SceneId>,
         new_name: impl Into<String>,
-    ) -> Result<Option<Section>, OpsError> {
+    ) -> Result<Option<Scene>, OpsError> {
         let song_id = song_id.into();
-        let section_id = section_id.into();
+        let scene_id = scene_id.into();
         if let Some(mut song) = self.load(song_id).await? {
-            if let Some(original) = song.section(&section_id) {
-                let dup = original.duplicate(SectionId::new(), new_name);
+            if let Some(original) = song.scene(&scene_id) {
+                let dup = original.duplicate(SceneId::new(), new_name);
                 let dup_clone = dup.clone();
-                song.add_section(dup);
+                song.add_scene(dup);
                 self.save(song).await?;
                 Ok(Some(dup_clone))
             } else {
@@ -395,7 +395,7 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn try_add_section(
         &self,
         song_id: impl Into<SongId>,
-        section: Section,
+        section: Scene,
     ) -> Result<Song, OpsError> {
         let song_id = song_id.into();
         let mut song = self
@@ -405,7 +405,7 @@ impl<S: SignalApi> SongOps<S> {
                 entity_type: "song",
                 id: song_id.to_string(),
             })?;
-        song.add_section(section);
+        song.add_scene(section);
         self.save(song).await
     }
 
@@ -417,10 +417,10 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn try_remove_section(
         &self,
         song_id: impl Into<SongId>,
-        section_id: impl Into<SectionId>,
-    ) -> Result<Section, OpsError> {
+        scene_id: impl Into<SceneId>,
+    ) -> Result<Scene, OpsError> {
         let song_id = song_id.into();
-        let section_id = section_id.into();
+        let scene_id = scene_id.into();
         let mut song = self
             .load(song_id.clone())
             .await?
@@ -429,11 +429,11 @@ impl<S: SignalApi> SongOps<S> {
                 id: song_id.to_string(),
             })?;
         let removed =
-            song.remove_section(&section_id)
+            song.remove_scene(&scene_id)
                 .ok_or_else(|| OpsError::VariantNotFound {
                     entity_type: "section",
                     parent_id: song_id.to_string(),
-                    variant_id: section_id.to_string(),
+                    variant_id: scene_id.to_string(),
                 })?;
         self.save(song).await?;
         Ok(removed)
@@ -447,11 +447,11 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn try_duplicate_section(
         &self,
         song_id: impl Into<SongId>,
-        section_id: impl Into<SectionId>,
+        scene_id: impl Into<SceneId>,
         new_name: impl Into<String>,
-    ) -> Result<Section, OpsError> {
+    ) -> Result<Scene, OpsError> {
         let song_id = song_id.into();
-        let section_id = section_id.into();
+        let scene_id = scene_id.into();
         let mut song = self
             .load(song_id.clone())
             .await?
@@ -460,15 +460,15 @@ impl<S: SignalApi> SongOps<S> {
                 id: song_id.to_string(),
             })?;
         let original = song
-            .section(&section_id)
+            .scene(&scene_id)
             .ok_or_else(|| OpsError::VariantNotFound {
                 entity_type: "section",
                 parent_id: song_id.to_string(),
-                variant_id: section_id.to_string(),
+                variant_id: scene_id.to_string(),
             })?;
-        let dup = original.duplicate(SectionId::new(), new_name);
+        let dup = original.duplicate(SceneId::new(), new_name);
         let dup_clone = dup.clone();
-        song.add_section(dup);
+        song.add_scene(dup);
         self.save(song).await?;
         Ok(dup_clone)
     }
@@ -481,7 +481,7 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn try_save_section(
         &self,
         song_id: impl Into<SongId>,
-        section: Section,
+        section: Scene,
     ) -> Result<(), OpsError> {
         let song_id = song_id.into();
         let mut song = self
@@ -491,10 +491,10 @@ impl<S: SignalApi> SongOps<S> {
                 entity_type: "song",
                 id: song_id.to_string(),
             })?;
-        if let Some(pos) = song.sections.iter().position(|s| s.id == section.id) {
-            song.sections[pos] = section;
+        if let Some(pos) = song.scenes.iter().position(|s| s.id == section.id) {
+            song.scenes[pos] = section;
         } else {
-            song.sections.push(section);
+            song.scenes.push(section);
         }
         self.save(song).await?;
         Ok(())
@@ -508,11 +508,11 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn try_update_section(
         &self,
         song_id: impl Into<SongId>,
-        section_id: impl Into<SectionId>,
-        f: impl FnOnce(&mut Section),
+        scene_id: impl Into<SceneId>,
+        f: impl FnOnce(&mut Scene),
     ) -> Result<(), OpsError> {
         let song_id = song_id.into();
-        let section_id = section_id.into();
+        let scene_id = scene_id.into();
         let mut song = self
             .load(song_id.clone())
             .await?
@@ -521,13 +521,13 @@ impl<S: SignalApi> SongOps<S> {
                 id: song_id.to_string(),
             })?;
         let section = song
-            .sections
+            .scenes
             .iter_mut()
-            .find(|s| s.id == section_id)
+            .find(|s| s.id == scene_id)
             .ok_or_else(|| OpsError::VariantNotFound {
                 entity_type: "section",
                 parent_id: song_id.to_string(),
-                variant_id: section_id.to_string(),
+                variant_id: scene_id.to_string(),
             })?;
         f(section);
         self.save(song).await?;
@@ -542,11 +542,11 @@ impl<S: SignalApi> SongOps<S> {
     pub async fn try_set_section_source(
         &self,
         song_id: impl Into<SongId>,
-        section_id: impl Into<SectionId>,
-        source: SectionSource,
+        scene_id: impl Into<SceneId>,
+        source: SceneSource,
     ) -> Result<(), OpsError> {
         let song_id = song_id.into();
-        let section_id = section_id.into();
+        let scene_id = scene_id.into();
         let mut song = self
             .load(song_id.clone())
             .await?
@@ -555,13 +555,13 @@ impl<S: SignalApi> SongOps<S> {
                 id: song_id.to_string(),
             })?;
         let section = song
-            .sections
+            .scenes
             .iter_mut()
-            .find(|s| s.id == section_id)
+            .find(|s| s.id == scene_id)
             .ok_or_else(|| OpsError::VariantNotFound {
                 entity_type: "section",
                 parent_id: song_id.to_string(),
-                variant_id: section_id.to_string(),
+                variant_id: scene_id.to_string(),
             })?;
         section.source = source;
         self.save(song).await?;

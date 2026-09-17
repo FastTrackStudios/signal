@@ -14,7 +14,7 @@ use signal::{
     scene_template::SceneTemplate,
     seed_id,
     setlist::{Setlist, SetlistEntry, SetlistEntryId, SetlistId},
-    song::{Section, SectionId, SectionSource, Song, SongId},
+    song::{Scene, SceneId, SceneSource, Song, SongId},
     tagging::BrowserQuery,
 };
 
@@ -206,28 +206,28 @@ async fn reorder_profile_patches() {
 async fn reorder_song_sections() {
     let signal = controller().await;
 
-    let s1 = SectionId::new();
-    let s2 = SectionId::new();
-    let s3 = SectionId::new();
+    let s1 = SceneId::new();
+    let s2 = SceneId::new();
+    let s3 = SceneId::new();
     let song_id = SongId::new();
 
     let mut song = Song::new(
         song_id.clone(),
         "Reorder Song",
-        Section::from_rig_scene(
+        Scene::from_rig_scene(
             s1.clone(),
             "Verse",
             guitar_megarig_id(),
             guitar_megarig_default_scene(),
         ),
     );
-    song.add_section(Section::from_rig_scene(
+    song.add_scene(Scene::from_rig_scene(
         s2.clone(),
         "Chorus",
         guitar_megarig_id(),
         guitar_megarig_default_scene(),
     ));
-    song.add_section(Section::from_rig_scene(
+    song.add_scene(Scene::from_rig_scene(
         s3.clone(),
         "Bridge",
         guitar_megarig_id(),
@@ -248,7 +248,7 @@ async fn reorder_song_sections() {
         .await
         .unwrap()
         .expect("song not found");
-    let names: Vec<&str> = song.sections.iter().map(|s| s.name.as_str()).collect();
+    let names: Vec<&str> = song.scenes.iter().map(|s| s.name.as_str()).collect();
     println!("Sections after reorder: {names:?}");
     assert_eq!(names, ["Bridge", "Verse", "Chorus"]);
 }
@@ -261,19 +261,19 @@ async fn reorder_song_sections() {
 async fn set_section_source_switches_from_patch_to_rig_scene() {
     let signal = controller().await;
 
-    let section_id = SectionId::new();
+    let scene_id = SceneId::new();
     let song_id = SongId::new();
 
     // Start with a Patch source
-    let section = Section::from_patch(section_id.clone(), "Intro", seed_id("guitar-worship-clean"));
+    let section = Scene::from_patch(scene_id.clone(), "Intro", seed_id("guitar-worship-clean"));
     let song = Song::new(song_id.clone(), "Mutation Test Song", section);
     signal.songs().save(song).await.unwrap();
 
     {
         let loaded = signal.songs().load(song_id.clone()).await.unwrap().unwrap();
-        let s = loaded.section(&section_id).unwrap();
+        let s = loaded.scene(&scene_id).unwrap();
         assert!(
-            matches!(s.source, SectionSource::Patch { .. }),
+            matches!(s.source, SceneSource::Patch { .. }),
             "should start as Patch"
         );
         println!("Before: {:?}", s.source);
@@ -284,8 +284,8 @@ async fn set_section_source_switches_from_patch_to_rig_scene() {
         .songs()
         .set_section_source(
             song_id.clone(),
-            section_id.clone(),
-            SectionSource::RigScene {
+            scene_id.clone(),
+            SceneSource::RigScene {
                 rig_id: guitar_megarig_id(),
                 scene_id: guitar_megarig_lead_scene(),
             },
@@ -294,10 +294,10 @@ async fn set_section_source_switches_from_patch_to_rig_scene() {
         .unwrap();
 
     let reloaded = signal.songs().load(song_id).await.unwrap().unwrap();
-    let updated = reloaded.section(&section_id).unwrap();
+    let updated = reloaded.scene(&scene_id).unwrap();
     println!("After: {:?}", updated.source);
     assert!(
-        matches!(updated.source, SectionSource::RigScene { .. }),
+        matches!(updated.source, SceneSource::RigScene { .. }),
         "should now be RigScene"
     );
 }
@@ -392,8 +392,8 @@ async fn delete_song_and_verify_gone() {
     let signal = controller().await;
 
     let id = SongId::new();
-    let section = Section::from_rig_scene(
-        SectionId::new(),
+    let section = Scene::from_rig_scene(
+        SceneId::new(),
         "S",
         guitar_megarig_id(),
         guitar_megarig_default_scene(),
@@ -753,11 +753,11 @@ async fn resolve_all_seeded_song_sections() {
     let mut errors = vec![];
 
     for song in &songs {
-        for section in &song.sections {
+        for section in &song.scenes {
             let result = signal
-                .resolve_target(ResolveTarget::SongSection {
+                .resolve_target(ResolveTarget::SongScene {
                     song_id: song.id.clone(),
-                    section_id: section.id.clone(),
+                    scene_id: section.id.clone(),
                 })
                 .await;
 

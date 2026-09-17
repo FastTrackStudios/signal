@@ -40,7 +40,7 @@ use signal::{
     scene_template::SceneTemplate,
     seed_id,
     setlist::{Setlist, SetlistEntry},
-    song::{Section, Song},
+    song::{Scene, Song},
 };
 use signal_controller::events::SignalEvent;
 use signal_live::engine::{
@@ -150,7 +150,7 @@ async fn command_load_song_section_records_history() {
     let svc = MockRigControlService::new();
     svc.execute(RigControlCommand::LoadSongSection {
         song_id: "song-1".into(),
-        section_id: "section-1".into(),
+        scene_id: "section-1".into(),
     })
     .await;
 
@@ -933,7 +933,7 @@ async fn empty_song_save_load() {
     let song = Song::new(
         seed_id("minimal-song"),
         "Minimal Song",
-        Section::from_rig_scene(
+        Scene::from_rig_scene(
             seed_id("minimal-section"),
             "Intro",
             guitar_rig_id(),
@@ -948,7 +948,7 @@ async fn empty_song_save_load() {
         .await
         .unwrap()
         .expect("song");
-    assert_eq!(loaded.sections.len(), 1);
+    assert_eq!(loaded.scenes.len(), 1);
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -1053,7 +1053,7 @@ async fn delete_song() {
     let song = Song::new(
         seed_id("del-song"),
         "Deletable Song",
-        Section::from_rig_scene(
+        Scene::from_rig_scene(
             seed_id("del-section"),
             "Intro",
             guitar_rig_id(),
@@ -1584,9 +1584,9 @@ async fn load_song_variant_by_id() {
     let songs = signal.songs().list().await.unwrap();
     let song = songs
         .iter()
-        .find(|s| !s.sections.is_empty())
+        .find(|s| !s.scenes.is_empty())
         .expect("need a song with sections");
-    let first_section = &song.sections[0];
+    let first_section = &song.scenes[0];
 
     let loaded = signal
         .songs()

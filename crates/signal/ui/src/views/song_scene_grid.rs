@@ -1,6 +1,6 @@
 //! Song section grid -- domain-aware grid wrapping `SceneTileGrid`.
 //!
-//! Fetches a song from the controller and maps its [`Section`] entries
+//! Fetches a song from the controller and maps its [`Scene`] entries
 //! to [`TileData`] for the dumb [`SceneTileGrid`] component.
 
 use dioxus::prelude::*;
@@ -11,15 +11,15 @@ use crate::components::{SceneTileGrid, TileData};
 /// A domain-aware section grid for a Song.
 ///
 /// Loads the song, maps its sections to colored tiles, and emits
-/// `(song_id, section_id)` when a tile is clicked.
+/// `(song_id, scene_id)` when a tile is clicked.
 #[component]
-pub fn SongSectionGrid(
+pub fn SongSceneGrid(
     /// Song collection ID to display sections for.
     song_id: String,
     /// Currently active section ID, if any.
     #[props(default)]
     active_section_id: Option<String>,
-    /// Callback when a section tile is selected. Receives `(song_id, section_id)`.
+    /// Callback when a section tile is selected. Receives `(song_id, scene_id)`.
     on_section_select: EventHandler<(String, String)>,
 ) -> Element {
     let signal = crate::use_signal_service();
@@ -49,10 +49,10 @@ pub fn SongSectionGrid(
         Some(s) => {
             let sid = s.id.to_string();
             let section_ids: Vec<String> =
-                s.sections.iter().map(|sec| sec.id.to_string()).collect();
+                s.scenes.iter().map(|sec| sec.id.to_string()).collect();
 
             let tiles: Vec<TileData> = s
-                .sections
+                .scenes
                 .iter()
                 .map(|sec| TileData {
                     name: sec.name.clone(),
@@ -74,8 +74,8 @@ pub fn SongSectionGrid(
                     tiles,
                     slot_count,
                     on_tile_click: move |idx: usize| {
-                        if let Some(section_id) = section_ids.get(idx) {
-                            on_section_select.call((sid.clone(), section_id.clone()));
+                        if let Some(scene_id) = section_ids.get(idx) {
+                            on_section_select.call((sid.clone(), scene_id.clone()));
                         }
                     },
                 }

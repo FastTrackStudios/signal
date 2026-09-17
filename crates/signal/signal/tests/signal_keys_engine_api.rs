@@ -1151,13 +1151,13 @@ async fn feature_demo_song_resolves() {
         .find(|s| s.name == "Feature-Demo Song")
         .expect("Feature-Demo Song should be seeded");
 
-    assert_eq!(demo.sections.len(), 4);
+    assert_eq!(demo.scenes.len(), 4);
 
-    for section in &demo.sections {
+    for section in &demo.scenes {
         let result = signal
-            .resolve_target(ResolveTarget::SongSection {
+            .resolve_target(ResolveTarget::SongScene {
                 song_id: demo.id.clone(),
-                section_id: section.id.clone(),
+                scene_id: section.id.clone(),
             })
             .await;
         assert!(
@@ -1439,11 +1439,11 @@ async fn full_setlist_sweep_includes_keys() {
                 if song.name == "Feature-Demo Song" {
                     keys_song_found = true;
                 }
-                for section in &song.sections {
+                for section in &song.scenes {
                     let result = signal
-                        .resolve_target(ResolveTarget::SongSection {
+                        .resolve_target(ResolveTarget::SongScene {
                             song_id: song.id.clone(),
-                            section_id: section.id.clone(),
+                            scene_id: section.id.clone(),
                         })
                         .await;
                     assert!(

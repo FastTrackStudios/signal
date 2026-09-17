@@ -186,8 +186,8 @@ pub trait SongService {
     async fn load_song_variant(
         &self,
         song_id: song::SongId,
-        variant_id: song::SectionId,
-    ) -> Result<Option<song::Section>, SignalServiceError>;
+        variant_id: song::SceneId,
+    ) -> Result<Option<song::Scene>, SignalServiceError>;
 }
 
 #[vox::service]

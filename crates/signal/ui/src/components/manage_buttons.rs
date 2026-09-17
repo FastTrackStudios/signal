@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use signal_proto::profile::{Patch, PatchId, Profile, ProfileId};
 use signal_proto::rig::{Rig, RigId, RigScene, RigSceneId, RigType};
 use signal_proto::setlist::{Setlist, SetlistEntry, SetlistEntryId, SetlistId};
-use signal_proto::song::{Section, SectionId, Song, SongId};
+use signal_proto::song::{Scene, SceneId, Song, SongId};
 
 /// Create Profile button - handles profile creation
 #[component]
@@ -52,7 +52,7 @@ pub fn CreateSongButton(on_created: Option<EventHandler<()>>) -> Element {
                     let profiles = signal.profiles().list().await.unwrap_or_default();
                     if let Some(prof) = profiles.first() {
                         if let Some(patch) = prof.patches.first() {
-                            let section = Section::from_patch(SectionId::new(), "Intro", patch.id.clone());
+                            let section = Scene::from_patch(SceneId::new(), "Intro", patch.id.clone());
                             let song = Song::new(SongId::new(), "New Song", section);
                             let _ = signal.songs().save(song).await;
                             tracing::info!("Created new song");

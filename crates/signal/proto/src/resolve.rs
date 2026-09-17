@@ -11,7 +11,7 @@ use crate::layer::{LayerId, LayerSnapshotId};
 use crate::overrides::Override;
 use crate::profile::{PatchId, ProfileId};
 use crate::rig::{RigId, RigSceneId};
-use crate::song::{SectionId, SongId};
+use crate::song::{SceneId, SongId};
 use crate::{Block, BlockType, ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet, thiserror::Error)]
@@ -36,9 +36,9 @@ pub enum ResolveTarget {
         profile_id: ProfileId,
         patch_id: PatchId,
     },
-    SongSection {
+    SongScene {
         song_id: SongId,
-        section_id: SectionId,
+        scene_id: SceneId,
     },
 }
 

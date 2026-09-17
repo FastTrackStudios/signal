@@ -703,9 +703,9 @@ where
                 self.resolve_patch_target(&patch.target, patch.overrides)
                     .await
             }
-            ResolveTarget::SongSection {
+            ResolveTarget::SongScene {
                 song_id,
-                section_id,
+                scene_id,
             } => {
                 let song = self
                     .song_repo
@@ -713,27 +713,27 @@ where
                     .await
                     .map_err(|e| ResolveError::NotFound(format!("song load failed: {e}")))?
                     .ok_or_else(|| ResolveError::NotFound(format!("song not found: {song_id}")))?;
-                let section = song.section(section_id).cloned().ok_or_else(|| {
-                    ResolveError::NotFound(format!("section not found: {section_id}"))
+                let section = song.scene(scene_id).cloned().ok_or_else(|| {
+                    ResolveError::NotFound(format!("section not found: {scene_id}"))
                 })?;
                 validate_overrides::<FreePolicy>(&section.overrides)
                     .map_err(|e| map_policy_err("song section", e))?;
                 match section.source {
-                    signal_proto::song::SectionSource::RigScene { rig_id, scene_id } => {
+                    signal_proto::song::SceneSource::RigScene { rig_id, scene_id } => {
                         Ok((rig_id, scene_id, section.overrides))
                     }
                     // This resolver speaks the old five-level hierarchy. A
                     // node target resolves through `node_resolve` instead,
                     // which needs no repo — say so rather than failing
                     // vaguely.
-                    signal_proto::song::SectionSource::Node { node, .. } => {
+                    signal_proto::song::SceneSource::Node { node, .. } => {
                         Err(ResolveError::InvalidReference(format!(
                             "section targets node {}; resolve it with \
                              signal_proto::node_resolve, not this stack",
                             node.as_str()
                         )))
                     }
-                    signal_proto::song::SectionSource::Patch { patch_id } => {
+                    signal_proto::song::SceneSource::Patch { patch_id } => {
                         let profiles = self.profile_repo.list_profiles().await.map_err(|e| {
                             ResolveError::NotFound(format!("profiles load failed: {e}"))
                         })?;
@@ -785,9 +785,9 @@ where
                     .ok_or_else(|| ResolveError::NotFound(format!("patch: {patch_id}")))?;
                 Ok(Some(self.follow_patch_refs(patch.target).await?))
             }
-            ResolveTarget::SongSection {
+            ResolveTarget::SongScene {
                 song_id,
-                section_id,
+                scene_id,
             } => {
                 let song = self
                     .song_repo
@@ -796,19 +796,19 @@ where
                     .map_err(|e| ResolveError::NotFound(format!("song load: {e}")))?
                     .ok_or_else(|| ResolveError::NotFound(format!("song: {song_id}")))?;
                 let section = song
-                    .section(section_id)
+                    .scene(scene_id)
                     .cloned()
-                    .ok_or_else(|| ResolveError::NotFound(format!("section: {section_id}")))?;
+                    .ok_or_else(|| ResolveError::NotFound(format!("section: {scene_id}")))?;
                 match section.source {
-                    signal_proto::song::SectionSource::RigScene { rig_id, scene_id } => {
+                    signal_proto::song::SceneSource::RigScene { rig_id, scene_id } => {
                         Ok(Some(PatchTarget::RigScene { rig_id, scene_id }))
                     }
                     // Carried through unchanged: a node target is already the
                     // shape a patch target wants, so there is nothing to map.
-                    signal_proto::song::SectionSource::Node { node, variant } => {
+                    signal_proto::song::SceneSource::Node { node, variant } => {
                         Ok(Some(PatchTarget::Node { node, variant }))
                     }
-                    signal_proto::song::SectionSource::Patch { patch_id } => {
+                    signal_proto::song::SceneSource::Patch { patch_id } => {
                         let profiles =
                             self.profile_repo.list_profiles().await.map_err(|e| {
                                 ResolveError::NotFound(format!("profiles load: {e}"))

@@ -289,7 +289,7 @@ where
                 song.artist.clone().into_iter().collect(),
             ));
 
-            for variant in &song.sections {
+            for variant in &song.scenes {
                 let mut vtags = tags_from_name(&variant.name);
                 vtags.merge(&ctags);
                 vtags.merge(&TagSet::from_tags(&variant.metadata.tags));

@@ -1,8 +1,8 @@
 use sea_orm::entity::prelude::*;
-use signal_proto::song::SectionId;
+use signal_proto::song::SceneId;
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "sections")]
+#[sea_orm(table_name = "scenes")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
@@ -15,8 +15,8 @@ pub struct Model {
 
 impl Model {
     #[must_use]
-    pub fn variant_id_branded(&self) -> SectionId {
-        SectionId::from(self.id.clone())
+    pub fn variant_id_branded(&self) -> SceneId {
+        SceneId::from(self.id.clone())
     }
 }
 

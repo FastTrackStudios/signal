@@ -1,6 +1,6 @@
-//! Song domain — performance songs with section variants.
+//! Song domain — performance songs with scene variants.
 //!
-//! A [`Song`] is a collection of [`Section`] variants. Each Section
+//! A [`Song`] is a collection of [`Scene`] variants. Each Scene
 //! references either a Patch or a Rig variant, with optional overrides.
 
 use facet::Facet;
@@ -19,19 +19,19 @@ crate::typed_uuid_id!(
     SongId
 );
 crate::typed_uuid_id!(
-    /// Identifies a specific Section variant within a Song.
-    SectionId
+    /// Identifies a specific Scene variant within a Song.
+    SceneId
 );
 
-// ─── Section source ─────────────────────────────────────────────
+// ─── Scene source ─────────────────────────────────────────────
 
-/// What a song section references — either a Patch or a direct Rig variant.
+/// What a song scene references — either a Patch or a direct Rig variant.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
-pub enum SectionSource {
+pub enum SceneSource {
     /// Reference a Patch from a Profile.
     Patch { patch_id: PatchId },
-    /// A node and one of its variants — what a section points at once the
+    /// A node and one of its variants — what a scene points at once the
     /// composition hierarchy is one type. Supersedes
     /// [`RigScene`](Self::RigScene), which named the top level specifically
     /// because there used to be five levels to choose between.
@@ -40,32 +40,32 @@ pub enum SectionSource {
         variant: crate::node::VariantId,
     },
     /// Reference a Rig scene directly. Kept while storage and `signal-live`
-    /// still speak it; new sections should target a node.
+    /// still speak it; new scenes should target a node.
     RigScene { rig_id: RigId, scene_id: RigSceneId },
 }
 
-// ─── Section ────────────────────────────────────────────────────
+// ─── Scene ────────────────────────────────────────────────────
 
-/// A Section variant — one part of a song's performance.
+/// A Scene variant — one part of a song's performance.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
-pub struct Section {
-    pub id: SectionId,
+pub struct Scene {
+    pub id: SceneId,
     pub name: String,
-    pub source: SectionSource,
+    pub source: SceneSource,
     pub overrides: Vec<Override>,
     pub metadata: Metadata,
 }
 
-impl Section {
+impl Scene {
     pub fn from_patch(
-        id: impl Into<SectionId>,
+        id: impl Into<SceneId>,
         name: impl Into<String>,
         patch_id: impl Into<PatchId>,
     ) -> Self {
         Self {
             id: id.into(),
             name: name.into(),
-            source: SectionSource::Patch {
+            source: SceneSource::Patch {
                 patch_id: patch_id.into(),
             },
             overrides: Vec::new(),
@@ -74,7 +74,7 @@ impl Section {
     }
 
     pub fn from_rig_scene(
-        id: impl Into<SectionId>,
+        id: impl Into<SceneId>,
         name: impl Into<String>,
         rig_id: impl Into<RigId>,
         scene_id: impl Into<RigSceneId>,
@@ -82,7 +82,7 @@ impl Section {
         Self {
             id: id.into(),
             name: name.into(),
-            source: SectionSource::RigScene {
+            source: SceneSource::RigScene {
                 rig_id: rig_id.into(),
                 scene_id: scene_id.into(),
             },
@@ -110,9 +110,9 @@ impl Section {
         validate_overrides::<FreePolicy>(&self.overrides)
     }
 
-    /// Clone this section with a new ID and name.
+    /// Clone this scene with a new ID and name.
     #[must_use]
-    pub fn duplicate(&self, new_id: impl Into<SectionId>, new_name: impl Into<String>) -> Self {
+    pub fn duplicate(&self, new_id: impl Into<SceneId>, new_name: impl Into<String>) -> Self {
         let mut dup = self.clone();
         dup.id = new_id.into();
         dup.name = new_name.into();
@@ -122,78 +122,78 @@ impl Section {
 
 // ─── Song ───────────────────────────────────────────────────────
 
-/// A Song collection — performance structure with named sections.
+/// A Song collection — performance structure with named scenes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct Song {
     pub id: SongId,
     pub name: String,
     pub artist: Option<String>,
-    pub default_section_id: SectionId,
-    pub sections: Vec<Section>,
+    pub default_scene_id: SceneId,
+    pub scenes: Vec<Scene>,
     pub metadata: Metadata,
 }
 
 impl Song {
-    pub fn new(id: impl Into<SongId>, name: impl Into<String>, default_section: Section) -> Self {
-        let default_section_id = default_section.id.clone();
+    pub fn new(id: impl Into<SongId>, name: impl Into<String>, default_scene: Scene) -> Self {
+        let default_scene_id = default_scene.id.clone();
         Self {
             id: id.into(),
             name: name.into(),
             artist: None,
-            default_section_id,
-            sections: vec![default_section],
+            default_scene_id,
+            scenes: vec![default_scene],
             metadata: Metadata::new(),
         }
     }
 
-    pub fn add_section(&mut self, section: Section) {
-        self.sections.push(section);
+    pub fn add_scene(&mut self, scene: Scene) {
+        self.scenes.push(scene);
     }
 
-    /// Semantic alias for `variants()` — returns all sections in this song.
+    /// Semantic alias for `variants()` — returns all scenes in this song.
     #[must_use]
-    pub fn sections(&self) -> &[Section] {
-        &self.sections
+    pub fn scenes(&self) -> &[Scene] {
+        &self.scenes
     }
 
     #[must_use]
-    pub fn default_section(&self) -> Option<&Section> {
-        self.sections
+    pub fn default_scene(&self) -> Option<&Scene> {
+        self.scenes
             .iter()
-            .find(|s| s.id == self.default_section_id)
+            .find(|s| s.id == self.default_scene_id)
     }
 
     #[must_use]
-    pub fn section(&self, id: &SectionId) -> Option<&Section> {
-        self.sections.iter().find(|s| &s.id == id)
+    pub fn scene(&self, id: &SceneId) -> Option<&Scene> {
+        self.scenes.iter().find(|s| &s.id == id)
     }
 
-    pub fn section_mut(&mut self, id: &SectionId) -> Option<&mut Section> {
-        self.sections.iter_mut().find(|s| &s.id == id)
+    pub fn scene_mut(&mut self, id: &SceneId) -> Option<&mut Scene> {
+        self.scenes.iter_mut().find(|s| &s.id == id)
     }
 
-    pub fn remove_section(&mut self, id: &SectionId) -> Option<Section> {
-        let pos = self.sections.iter().position(|s| &s.id == id)?;
-        Some(self.sections.remove(pos))
+    pub fn remove_scene(&mut self, id: &SceneId) -> Option<Scene> {
+        let pos = self.scenes.iter().position(|s| &s.id == id)?;
+        Some(self.scenes.remove(pos))
     }
 
-    /// Create a Song from a Profile, generating one Section per Patch.
+    /// Create a Song from a Profile, generating one Scene per Patch.
     ///
-    /// Each section is named after its source patch and linked via
-    /// `SectionSource::Patch { patch_id }`. The first patch becomes the
-    /// default section. The profile's ID is stored in `metadata.base_profile_id`.
+    /// Each scene is named after its source patch and linked via
+    /// `SceneSource::Patch { patch_id }`. The first patch becomes the
+    /// default scene. The profile's ID is stored in `metadata.base_profile_id`.
     pub fn from_profile(
         id: impl Into<SongId>,
         name: impl Into<String>,
         profile: &crate::profile::Profile,
     ) -> Self {
-        let sections: Vec<Section> = profile
+        let scenes: Vec<Scene> = profile
             .patches
             .iter()
-            .map(|patch| Section::from_patch(SectionId::new(), &patch.name, patch.id.clone()))
+            .map(|patch| Scene::from_patch(SceneId::new(), &patch.name, patch.id.clone()))
             .collect();
 
-        let default_section_id = sections.first().map(|s| s.id.clone()).unwrap_or_default();
+        let default_scene_id = scenes.first().map(|s| s.id.clone()).unwrap_or_default();
 
         let metadata = Metadata::new().with_base_profile_id(profile.id.to_string());
 
@@ -201,21 +201,21 @@ impl Song {
             id: id.into(),
             name: name.into(),
             artist: None,
-            default_section_id,
-            sections,
+            default_scene_id,
+            scenes,
             metadata,
         }
     }
 
-    /// Change the base profile, remapping sections that still follow the old profile.
+    /// Change the base profile, remapping scenes that still follow the old profile.
     ///
-    /// For each section whose `patch_id` belongs to the `old_profile`, finds its
+    /// For each scene whose `patch_id` belongs to the `old_profile`, finds its
     /// slot index and remaps it to the same slot in `new_profile`. Sections that
     /// were manually relinked (their `patch_id` is NOT in the old profile) are
-    /// left untouched. Section names are updated to match the new patch name.
+    /// left untouched. Scene names are updated to match the new patch name.
     ///
-    /// If the new profile has more patches than the old one, extra sections are
-    /// appended. If fewer, orphaned sections keep their old reference.
+    /// If the new profile has more patches than the old one, extra scenes are
+    /// appended. If fewer, orphaned scenes keep their old reference.
     pub fn change_base_profile(
         &mut self,
         old_profile: &crate::profile::Profile,
@@ -229,30 +229,30 @@ impl Song {
             .map(|(i, p)| (p.id.to_string(), i))
             .collect();
 
-        // Remap existing sections
-        for section in &mut self.sections {
-            if let SectionSource::Patch { patch_id } = &section.source {
+        // Remap existing scenes
+        for scene in &mut self.scenes {
+            if let SceneSource::Patch { patch_id } = &scene.source {
                 let pid_str = patch_id.to_string();
                 if let Some(&slot) = old_slots.get(&pid_str) {
-                    // This section followed the old profile at this slot
+                    // This scene followed the old profile at this slot
                     if let Some(new_patch) = new_profile.patches.get(slot) {
-                        section.source = SectionSource::Patch {
+                        scene.source = SceneSource::Patch {
                             patch_id: new_patch.id.clone(),
                         };
-                        section.name = new_patch.name.clone();
+                        scene.name = new_patch.name.clone();
                     }
-                    // If new profile doesn't have this slot, leave section as-is
+                    // If new profile doesn't have this slot, leave scene as-is
                 }
                 // If patch_id wasn't in old profile, it was manually relinked — skip
             }
-            // RigScene sections are always manual — skip
+            // RigScene scenes are always manual — skip
         }
 
-        // If new profile has more patches, append new sections for extra slots
+        // If new profile has more patches, append new scenes for extra slots
         let existing_slot_count = old_profile.patches.len();
         for patch in new_profile.patches.iter().skip(existing_slot_count) {
-            self.sections.push(Section::from_patch(
-                SectionId::new(),
+            self.scenes.push(Scene::from_patch(
+                SceneId::new(),
                 &patch.name,
                 patch.id.clone(),
             ));
@@ -276,11 +276,11 @@ impl Song {
 
 // ─── Trait impls ────────────────────────────────────────────────
 
-impl crate::traits::Variant for Section {
-    type Id = SectionId;
-    type BaseRef = SectionSource;
+impl crate::traits::Variant for Scene {
+    type Id = SceneId;
+    type BaseRef = SceneSource;
     type Override = Override;
-    fn id(&self) -> &SectionId {
+    fn id(&self) -> &SceneId {
         &self.id
     }
     fn name(&self) -> &str {
@@ -300,30 +300,30 @@ impl crate::traits::Variant for Section {
     }
 }
 
-impl crate::traits::DefaultVariant for Section {
+impl crate::traits::DefaultVariant for Scene {
     fn default_named(name: impl Into<String>) -> Self {
-        Self::from_patch(SectionId::new(), name, PatchId::new())
+        Self::from_patch(SceneId::new(), name, PatchId::new())
     }
 }
 
 impl crate::traits::Collection for Song {
-    type Variant = Section;
+    type Variant = Scene;
 
-    fn variants(&self) -> &[Section] {
-        &self.sections
+    fn variants(&self) -> &[Scene] {
+        &self.scenes
     }
-    fn variants_mut(&mut self) -> &mut Vec<Section> {
-        &mut self.sections
+    fn variants_mut(&mut self) -> &mut Vec<Scene> {
+        &mut self.scenes
     }
-    fn default_variant_id(&self) -> &SectionId {
-        &self.default_section_id
+    fn default_variant_id(&self) -> &SceneId {
+        &self.default_scene_id
     }
-    fn set_default_variant_id(&mut self, id: SectionId) {
-        self.default_section_id = id;
+    fn set_default_variant_id(&mut self, id: SceneId) {
+        self.default_scene_id = id;
     }
 }
 
-impl crate::traits::HasMetadata for Section {
+impl crate::traits::HasMetadata for Scene {
     fn metadata(&self) -> &Metadata {
         &self.metadata
     }
@@ -347,26 +347,26 @@ mod tests {
 
     #[test]
     fn test_song_with_patch_sections() {
-        let verse = Section::from_patch(SectionId::new(), "Verse", PatchId::new());
-        let chorus = Section::from_patch(SectionId::new(), "Chorus", PatchId::new());
+        let verse = Scene::from_patch(SceneId::new(), "Verse", PatchId::new());
+        let chorus = Scene::from_patch(SceneId::new(), "Chorus", PatchId::new());
 
         let mut song = Song::new(SongId::new(), "Amazing Grace", verse).with_artist("Traditional");
-        song.add_section(chorus);
+        song.add_scene(chorus);
 
         assert_eq!(song.name, "Amazing Grace");
         assert_eq!(song.artist.as_deref(), Some("Traditional"));
-        assert_eq!(song.sections.len(), 2);
-        assert_eq!(song.default_section().unwrap().name, "Verse");
+        assert_eq!(song.scenes.len(), 2);
+        assert_eq!(song.default_scene().unwrap().name, "Verse");
     }
 
     #[test]
     fn test_section_from_rig_scene() {
         let rig_id = RigId::new();
         let scene_id = RigSceneId::new();
-        let section =
-            Section::from_rig_scene(SectionId::new(), "Intro", rig_id.clone(), scene_id.clone());
-        match &section.source {
-            SectionSource::RigScene {
+        let scene =
+            Scene::from_rig_scene(SceneId::new(), "Intro", rig_id.clone(), scene_id.clone());
+        match &scene.source {
+            SceneSource::RigScene {
                 rig_id: r,
                 scene_id: s,
             } => {
@@ -400,27 +400,27 @@ mod tests {
 
         let song = Song::from_profile(SongId::new(), "Girl Goodbye", &profile);
 
-        // Correct number of sections
-        assert_eq!(song.sections.len(), 3);
+        // Correct number of scenes
+        assert_eq!(song.scenes.len(), 3);
 
-        // Each section is Patch-sourced with correct patch_id
+        // Each scene is Patch-sourced with correct patch_id
         let expected_ids = [&clean_pid, &crunch_pid, &lead_pid];
-        for (i, section) in song.sections.iter().enumerate() {
-            match &section.source {
-                SectionSource::Patch { patch_id } => {
+        for (i, scene) in song.scenes.iter().enumerate() {
+            match &scene.source {
+                SceneSource::Patch { patch_id } => {
                     assert_eq!(patch_id, expected_ids[i]);
                 }
-                _ => panic!("expected Patch source for section {i}"),
+                _ => panic!("expected Patch source for scene {i}"),
             }
         }
 
-        // Section names match patch names
-        assert_eq!(song.sections[0].name, "Clean");
-        assert_eq!(song.sections[1].name, "Crunch");
-        assert_eq!(song.sections[2].name, "Lead");
+        // Scene names match patch names
+        assert_eq!(song.scenes[0].name, "Clean");
+        assert_eq!(song.scenes[1].name, "Crunch");
+        assert_eq!(song.scenes[2].name, "Lead");
 
-        // Default section is the first one
-        assert_eq!(song.default_section_id, song.sections[0].id);
+        // Default scene is the first one
+        assert_eq!(song.default_scene_id, song.scenes[0].id);
 
         // base_profile_id is set
         assert_eq!(
@@ -466,46 +466,46 @@ mod tests {
 
         // Create song from old profile
         let mut song = Song::from_profile(SongId::new(), "Test Song", &old_profile);
-        assert_eq!(song.sections.len(), 3);
+        assert_eq!(song.scenes.len(), 3);
 
-        // Manually relink section 1 (Crunch) to a foreign patch
+        // Manually relink scene 1 (Crunch) to a foreign patch
         let foreign_patch_id = PatchId::new();
-        song.sections[1].source = SectionSource::Patch {
+        song.scenes[1].source = SceneSource::Patch {
             patch_id: foreign_patch_id.clone(),
         };
-        song.sections[1].name = "My Custom Patch".to_string();
+        song.scenes[1].name = "My Custom Patch".to_string();
 
         // Change base profile
         song.change_base_profile(&old_profile, &new_profile);
 
-        // Should now have 4 sections (3 original + 1 new from extra slot)
-        assert_eq!(song.sections.len(), 4);
+        // Should now have 4 scenes (3 original + 1 new from extra slot)
+        assert_eq!(song.scenes.len(), 4);
 
         // Slot 0: was Clean → now Shimmer (remapped)
-        assert_eq!(song.sections[0].name, "Shimmer");
-        match &song.sections[0].source {
-            SectionSource::Patch { patch_id } => assert_eq!(patch_id, &new_shimmer_pid),
+        assert_eq!(song.scenes[0].name, "Shimmer");
+        match &song.scenes[0].source {
+            SceneSource::Patch { patch_id } => assert_eq!(patch_id, &new_shimmer_pid),
             _ => panic!("expected Patch source"),
         }
 
         // Slot 1: was manually relinked → untouched
-        assert_eq!(song.sections[1].name, "My Custom Patch");
-        match &song.sections[1].source {
-            SectionSource::Patch { patch_id } => assert_eq!(patch_id, &foreign_patch_id),
+        assert_eq!(song.scenes[1].name, "My Custom Patch");
+        match &song.scenes[1].source {
+            SceneSource::Patch { patch_id } => assert_eq!(patch_id, &foreign_patch_id),
             _ => panic!("expected Patch source"),
         }
 
         // Slot 2: was Lead → now Solo (remapped)
-        assert_eq!(song.sections[2].name, "Solo");
-        match &song.sections[2].source {
-            SectionSource::Patch { patch_id } => assert_eq!(patch_id, &new_solo_pid),
+        assert_eq!(song.scenes[2].name, "Solo");
+        match &song.scenes[2].source {
+            SceneSource::Patch { patch_id } => assert_eq!(patch_id, &new_solo_pid),
             _ => panic!("expected Patch source"),
         }
 
-        // Slot 3: new section from extra patch (Ambient)
-        assert_eq!(song.sections[3].name, "Ambient");
-        match &song.sections[3].source {
-            SectionSource::Patch { patch_id } => assert_eq!(patch_id, &new_ambient_pid),
+        // Slot 3: new scene from extra patch (Ambient)
+        assert_eq!(song.scenes[3].name, "Ambient");
+        match &song.scenes[3].source {
+            SceneSource::Patch { patch_id } => assert_eq!(patch_id, &new_ambient_pid),
             _ => panic!("expected Patch source"),
         }
 

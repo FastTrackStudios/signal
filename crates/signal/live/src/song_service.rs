@@ -5,7 +5,7 @@
 
 use super::{
     BlockRepo, EngineRepo, LayerRepo, ModuleRepo, ProfileRepo, RackRepo, RigRepo,
-    SceneTemplateRepo, Section, SectionId, SetlistRepo, SignalLive, SignalServiceError, Song,
+    SceneTemplateRepo, Scene, SceneId, SetlistRepo, SignalLive, SignalServiceError, Song,
     SongId, SongRepo, SongService,
 };
 
@@ -37,7 +37,7 @@ where
     }
 
     async fn save_song(&self, song: Song) -> Result<(), SignalServiceError> {
-        for variant in &song.sections {
+        for variant in &song.scenes {
             variant
                 .validate_overrides()
                 .map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
@@ -58,8 +58,8 @@ where
     async fn load_song_variant(
         &self,
         song_id: SongId,
-        variant_id: SectionId,
-    ) -> Result<Option<Section>, SignalServiceError> {
+        variant_id: SceneId,
+    ) -> Result<Option<Scene>, SignalServiceError> {
         self.song_repo
             .load_variant(&song_id, &variant_id)
             .await

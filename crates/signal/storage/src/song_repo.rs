@@ -1,4 +1,4 @@
-//! Song repository — data access for Song collections and Section variants.
+//! Song repository — data access for Song collections and Scene variants.
 
 use sea_orm::{
     ActiveEnum, ActiveModelBehavior, ActiveModelTrait, ColIdx, ColumnTrait, ConnectionTrait,
@@ -7,7 +7,7 @@ use sea_orm::{
 };
 use signal_proto::metadata::Metadata;
 use signal_proto::overrides::Override;
-use signal_proto::song::{Section, SectionId, SectionSource, Song, SongId};
+use signal_proto::song::{Scene, SceneId, SceneSource, Song, SongId};
 
 use crate::entity;
 use crate::{DatabaseConnection, StorageError, StorageResult};
@@ -23,8 +23,8 @@ pub trait SongRepo: Send + Sync + 'static {
     async fn load_variant(
         &self,
         song_id: &SongId,
-        variant_id: &SectionId,
-    ) -> StorageResult<Option<Section>>;
+        variant_id: &SceneId,
+    ) -> StorageResult<Option<Scene>>;
 }
 
 // endregion: --- Trait
@@ -55,14 +55,14 @@ impl SongRepoLive {
         songs.if_not_exists();
         self.db.execute(backend.build(&songs)).await?;
 
-        let mut sections = schema.create_table_from_entity(entity::section::Entity);
+        let mut sections = schema.create_table_from_entity(entity::scene::Entity);
         sections.if_not_exists();
         self.db.execute(backend.build(&sections)).await?;
 
         Ok(())
     }
 
-    fn variant_state_to_json(section: &Section) -> StorageResult<String> {
+    fn variant_state_to_json(section: &Scene) -> StorageResult<String> {
         let state = SectionState {
             source: &section.source,
             overrides: &section.overrides,
@@ -86,10 +86,10 @@ impl SongRepoLive {
             .map_err(|e| StorageError::Data(format!("failed to parse metadata json: {e}")))
     }
 
-    fn variant_from_model(model: &entity::section::Model) -> StorageResult<Section> {
+    fn variant_from_model(model: &entity::scene::Model) -> StorageResult<Scene> {
         let state = Self::variant_state_from_json(&model.state_json)?;
         let metadata = Self::metadata_from_json(&model.metadata_json)?;
-        Ok(Section {
+        Ok(Scene {
             id: model.variant_id_branded(),
             name: model.name.clone(),
             source: state.source,
@@ -99,9 +99,9 @@ impl SongRepoLive {
     }
 
     async fn assemble_song(&self, model: &entity::song::Model) -> StorageResult<Song> {
-        let variant_models = entity::section::Entity::find()
-            .filter(entity::section::Column::SongId.eq(model.id.clone()))
-            .order_by_asc(entity::section::Column::Position)
+        let variant_models = entity::scene::Entity::find()
+            .filter(entity::scene::Column::SongId.eq(model.id.clone()))
+            .order_by_asc(entity::scene::Column::Position)
             .all(&self.db)
             .await?;
 
@@ -116,8 +116,8 @@ impl SongRepoLive {
             id: model.song_id_branded(),
             name: model.name.clone(),
             artist: model.artist.clone(),
-            default_section_id: model.default_variant_id_branded(),
-            sections,
+            default_scene_id: model.default_variant_id_branded(),
+            scenes: sections,
             metadata,
         })
     }
@@ -129,13 +129,13 @@ impl SongRepoLive {
 
 #[derive(serde::Serialize)]
 struct SectionState<'a> {
-    source: &'a SectionSource,
+    source: &'a SceneSource,
     overrides: &'a [Override],
 }
 
 #[derive(serde::Deserialize)]
 struct SectionStateOwned {
-    source: SectionSource,
+    source: SceneSource,
     overrides: Vec<Override>,
 }
 
@@ -178,14 +178,14 @@ impl SongRepo for SongRepoLive {
             id: Set(song.id.as_str().to_string()),
             name: Set(song.name.clone()),
             artist: Set(song.artist.clone()),
-            default_variant_id: Set(song.default_section_id.as_str().to_string()),
+            default_variant_id: Set(song.default_scene_id.as_str().to_string()),
             metadata_json: Set(Self::metadata_to_json(&song.metadata)?),
         })
         .exec(&self.db)
         .await?;
 
-        for (position, section) in song.sections.iter().enumerate() {
-            entity::section::Entity::insert(entity::section::ActiveModel {
+        for (position, section) in song.scenes.iter().enumerate() {
+            entity::scene::Entity::insert(entity::scene::ActiveModel {
                 id: Set(section.id.as_str().to_string()),
                 song_id: Set(song.id.as_str().to_string()),
                 position: Set(position as i32),
@@ -210,10 +210,10 @@ impl SongRepo for SongRepoLive {
     async fn load_variant(
         &self,
         song_id: &SongId,
-        variant_id: &SectionId,
-    ) -> StorageResult<Option<Section>> {
-        let model = entity::section::Entity::find_by_id(variant_id.as_str().to_string())
-            .filter(entity::section::Column::SongId.eq(song_id.as_str().to_string()))
+        variant_id: &SceneId,
+    ) -> StorageResult<Option<Scene>> {
+        let model = entity::scene::Entity::find_by_id(variant_id.as_str().to_string())
+            .filter(entity::scene::Column::SongId.eq(song_id.as_str().to_string()))
             .one(&self.db)
             .await?;
 
@@ -239,8 +239,8 @@ mod tests {
     fn soid(name: &str) -> SongId {
         SongId::from_uuid(seed_id(name))
     }
-    fn secid(name: &str) -> SectionId {
-        SectionId::from_uuid(seed_id(name))
+    fn secid(name: &str) -> SceneId {
+        SceneId::from_uuid(seed_id(name))
     }
 
     async fn test_repo() -> Result<SongRepoLive> {
@@ -251,12 +251,12 @@ mod tests {
     }
 
     fn sample_song() -> Song {
-        let verse = Section::from_patch(seed_id("sec-verse"), "Verse", seed_id("patch-clean"));
-        let chorus = Section::from_patch(seed_id("sec-chorus"), "Chorus", seed_id("patch-lead"));
+        let verse = Scene::from_patch(seed_id("sec-verse"), "Verse", seed_id("patch-clean"));
+        let chorus = Scene::from_patch(seed_id("sec-chorus"), "Chorus", seed_id("patch-lead"));
 
         let mut song =
             Song::new(seed_id("song-1"), "Amazing Grace", verse).with_artist("Traditional");
-        song.add_section(chorus);
+        song.add_scene(chorus);
         song
     }
 
@@ -269,8 +269,8 @@ mod tests {
         let loaded = loaded.expect("should find song");
         assert_eq!(loaded.name, "Amazing Grace");
         assert_eq!(loaded.artist.as_deref(), Some("Traditional"));
-        assert_eq!(loaded.sections.len(), 2);
-        assert_eq!(loaded.default_section_id, secid("sec-verse"));
+        assert_eq!(loaded.scenes.len(), 2);
+        assert_eq!(loaded.default_scene_id, secid("sec-verse"));
         Ok(())
     }
 
@@ -280,12 +280,12 @@ mod tests {
         let s1 = Song::new(
             seed_id("s1"),
             "Song 1",
-            Section::from_patch(seed_id("sec1"), "Verse", seed_id("p1")),
+            Scene::from_patch(seed_id("sec1"), "Verse", seed_id("p1")),
         );
         let s2 = Song::new(
             seed_id("s2"),
             "Song 2",
-            Section::from_patch(seed_id("sec2"), "Verse", seed_id("p2")),
+            Scene::from_patch(seed_id("sec2"), "Verse", seed_id("p2")),
         );
         repo.save_song(&s1).await?;
         repo.save_song(&s2).await?;
@@ -324,7 +324,7 @@ mod tests {
         let variant = variant.expect("should find section");
         assert_eq!(variant.name, "Chorus");
         match &variant.source {
-            SectionSource::Patch { patch_id } => {
+            SceneSource::Patch { patch_id } => {
                 assert_eq!(
                     *patch_id,
                     signal_proto::profile::PatchId::from_uuid(seed_id("patch-lead"))
@@ -338,7 +338,7 @@ mod tests {
     #[tokio::test]
     async fn rig_scene_source_round_trip() -> Result<()> {
         let repo = test_repo().await?;
-        let section = Section::from_rig_scene(
+        let section = Scene::from_rig_scene(
             seed_id("sec-1"),
             "Intro",
             seed_id("rig-1"),
@@ -348,9 +348,9 @@ mod tests {
         repo.save_song(&song).await?;
 
         let loaded = repo.load_song(&soid("song-2")).await?.unwrap();
-        let sec = &loaded.sections[0];
+        let sec = &loaded.scenes[0];
         match &sec.source {
-            SectionSource::RigScene { rig_id, scene_id } => {
+            SceneSource::RigScene { rig_id, scene_id } => {
                 assert_eq!(
                     *rig_id,
                     signal_proto::rig::RigId::from_uuid(seed_id("rig-1"))
@@ -371,7 +371,7 @@ mod tests {
         let song = Song::new(
             seed_id("song-3"),
             "Untitled",
-            Section::from_patch(seed_id("s1"), "Main", seed_id("p1")),
+            Scene::from_patch(seed_id("s1"), "Main", seed_id("p1")),
         );
         repo.save_song(&song).await?;
 
@@ -388,13 +388,13 @@ mod tests {
         let updated = Song::new(
             seed_id("song-1"),
             "Renamed Song",
-            Section::from_patch(seed_id("sec-only"), "Only Section", seed_id("p1")),
+            Scene::from_patch(seed_id("sec-only"), "Only Scene", seed_id("p1")),
         );
         repo.save_song(&updated).await?;
 
         let loaded = repo.load_song(&soid("song-1")).await?.unwrap();
         assert_eq!(loaded.name, "Renamed Song");
-        assert_eq!(loaded.sections.len(), 1);
+        assert_eq!(loaded.scenes.len(), 1);
         assert!(loaded.artist.is_none());
         Ok(())
     }

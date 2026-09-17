@@ -413,32 +413,32 @@ async fn test_live_load_profile_variant() -> Result<()> {
 
 #[tokio::test]
 async fn test_live_load_song_variant() -> Result<()> {
-    use signal_proto::song::{Section, SectionSource};
+    use signal_proto::song::{Scene, SceneSource};
 
     let svc = seeded_service().await?;
 
-    let verse = Section::from_patch(seed_id("sec-verse"), "Verse", seed_id("patch-clean"));
-    let bridge = Section::from_rig_scene(
+    let verse = Scene::from_patch(seed_id("sec-verse"), "Verse", seed_id("patch-clean"));
+    let bridge = Scene::from_rig_scene(
         seed_id("sec-bridge"),
         "Bridge",
         seed_id("rig-1"),
         seed_id("rs-ambient"),
     );
     let mut song = Song::new(seed_id("song-2"), "Instrumental", verse);
-    song.add_section(bridge);
+    song.add_scene(bridge);
     svc.save_song(song).await?;
 
     let variant = svc
         .load_song_variant(
             SongId::from_uuid(seed_id("song-2")),
-            SectionId::from_uuid(seed_id("sec-bridge")),
+            SceneId::from_uuid(seed_id("sec-bridge")),
         )
         .await?;
     assert!(variant.is_some());
     let variant = variant.unwrap();
     assert_eq!(variant.name, "Bridge");
     match &variant.source {
-        SectionSource::RigScene { rig_id, scene_id } => {
+        SceneSource::RigScene { rig_id, scene_id } => {
             assert_eq!(*rig_id, RigId::from_uuid(seed_id("rig-1")));
             assert_eq!(*scene_id, RigSceneId::from_uuid(seed_id("rs-ambient")));
         }

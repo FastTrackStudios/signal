@@ -22,7 +22,7 @@ pub mod patch;
 pub mod profile;
 
 // Song
-pub mod section;
+pub mod scene;
 pub mod song;
 
 // Setlist

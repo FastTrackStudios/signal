@@ -2,9 +2,9 @@
 //!
 //! Covers:
 //!   - Profile / Patch CRUD and persistence
-//!   - Song / Section CRUD (Patch-sourced and RigScene-sourced)
+//!   - Song / Scene CRUD (Patch-sourced and RigScene-sourced)
 //!   - `resolve_target()` — the DAW integration path that compiles any target
-//!     (`RigScene` / `ProfilePatch` / `SongSection`) into a flat `ResolvedGraph` with
+//!     (`RigScene` / `ProfilePatch` / `SongScene`) into a flat `ResolvedGraph` with
 //!     merged overrides and final parameter values
 //!
 //! Run with:
@@ -18,7 +18,7 @@ use signal::{
     profile::{Patch, PatchId, PatchTarget, Profile, ProfileId},
     resolve::ResolveTarget,
     seed_id,
-    song::{Section, SectionId, SectionSource, Song, SongId},
+    song::{Scene, SceneId, SceneSource, Song, SongId},
 };
 
 /// Bootstrap an in-memory controller pre-seeded with the guitar profiles.
@@ -244,7 +244,7 @@ async fn blues_profile_default_is_crunch() {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Song / Section tests
+//  Song / Scene tests
 // ─────────────────────────────────────────────────────────────
 
 /// Verify seed songs are present.
@@ -255,7 +255,7 @@ async fn seed_songs_are_loaded() {
     let songs = signal.songs().list().await.unwrap();
     println!("Seeded songs:");
     for s in &songs {
-        println!("  {} — {} ({} sections)", s.id, s.name, s.sections.len());
+        println!("  {} — {} ({} sections)", s.id, s.name, s.scenes.len());
     }
 
     assert!(!songs.is_empty(), "should have seeded songs");
@@ -266,16 +266,16 @@ async fn seed_songs_are_loaded() {
 async fn create_song_with_mixed_section_sources() {
     let signal = controller().await;
 
-    let verse_id = SectionId::new();
-    let chorus_id = SectionId::new();
-    let bridge_id = SectionId::new();
+    let verse_id = SceneId::new();
+    let chorus_id = SceneId::new();
+    let bridge_id = SceneId::new();
     let song_id = SongId::new();
 
     // Verse references an existing profile patch
-    let verse = Section::from_patch(verse_id.clone(), "Verse", seed_id("guitar-worship-clean"));
+    let verse = Scene::from_patch(verse_id.clone(), "Verse", seed_id("guitar-worship-clean"));
 
     // Chorus references another patch
-    let chorus = Section::from_patch(
+    let chorus = Scene::from_patch(
         chorus_id.clone(),
         "Chorus",
         seed_id("guitar-worship-crunch"),
@@ -289,7 +289,7 @@ async fn create_song_with_mixed_section_sources() {
     ));
 
     // Bridge references a rig scene directly (bypasses profile)
-    let bridge = Section::from_rig_scene(
+    let bridge = Scene::from_rig_scene(
         bridge_id.clone(),
         "Bridge",
         guitar_megarig_id(),
@@ -297,8 +297,8 @@ async fn create_song_with_mixed_section_sources() {
     );
 
     let mut song = Song::new(song_id.clone(), "Test Song", verse).with_artist("Test Artist");
-    song.add_section(chorus);
-    song.add_section(bridge);
+    song.add_scene(chorus);
+    song.add_scene(bridge);
 
     signal.songs().save(song).await.unwrap();
 
@@ -313,20 +313,20 @@ async fn create_song_with_mixed_section_sources() {
         "Reloaded song '{}' by {}: {} sections",
         reloaded.name,
         reloaded.artist.as_deref().unwrap_or("(none)"),
-        reloaded.sections.len()
+        reloaded.scenes.len()
     );
 
     assert_eq!(reloaded.name, "Test Song");
     assert_eq!(reloaded.artist.as_deref(), Some("Test Artist"));
-    assert_eq!(reloaded.sections.len(), 3);
+    assert_eq!(reloaded.scenes.len(), 3);
 
     // Verify sources round-trip correctly
-    let verse_section = reloaded.section(&verse_id).expect("verse not found");
-    matches!(&verse_section.source, SectionSource::Patch { .. });
+    let verse_section = reloaded.scene(&verse_id).expect("verse not found");
+    matches!(&verse_section.source, SceneSource::Patch { .. });
 
-    let bridge_section = reloaded.section(&bridge_id).expect("bridge not found");
+    let bridge_section = reloaded.scene(&bridge_id).expect("bridge not found");
     match &bridge_section.source {
-        SectionSource::RigScene { rig_id, scene_id } => {
+        SceneSource::RigScene { rig_id, scene_id } => {
             assert_eq!(rig_id.to_string(), guitar_megarig_id().to_string());
             assert_eq!(
                 scene_id.to_string(),
@@ -336,7 +336,7 @@ async fn create_song_with_mixed_section_sources() {
         _ => panic!("bridge should be RigScene source"),
     }
 
-    let chorus_section = reloaded.section(&chorus_id).expect("chorus not found");
+    let chorus_section = reloaded.scene(&chorus_id).expect("chorus not found");
     assert_eq!(
         chorus_section.overrides.len(),
         1,
@@ -349,11 +349,11 @@ async fn create_song_with_mixed_section_sources() {
 async fn update_section_override_persists() {
     let signal = controller().await;
 
-    let section_id = SectionId::new();
+    let scene_id = SceneId::new();
     let song_id = SongId::new();
 
-    let section = Section::from_rig_scene(
-        section_id.clone(),
+    let section = Scene::from_rig_scene(
+        scene_id.clone(),
         "Main",
         guitar_megarig_id(),
         guitar_megarig_default_scene(),
@@ -362,7 +362,7 @@ async fn update_section_override_persists() {
     signal.songs().save(song.clone()).await.unwrap();
 
     // Add an override to the existing section
-    if let Some(s) = song.sections.iter_mut().find(|s| s.id == section_id) {
+    if let Some(s) = song.scenes.iter_mut().find(|s| s.id == scene_id) {
         s.overrides.push(Override::set(
             NodePath::engine("guitar-engine")
                 .with_layer("guitar-layer-archetype-jm")
@@ -379,10 +379,10 @@ async fn update_section_override_persists() {
         .await
         .unwrap()
         .expect("song not found after update");
-    let section = reloaded.section(&section_id).unwrap();
+    let section = reloaded.scene(&scene_id).unwrap();
 
     println!(
-        "Section '{}' overrides: {}",
+        "Scene '{}' overrides: {}",
         section.name,
         section.overrides.len()
     );
@@ -503,7 +503,7 @@ async fn resolve_lead_patch_has_higher_gain_than_clean() {
     }
 }
 
-/// Resolve a `SongSection` backed by a Patch and confirm the graph is equivalent
+/// Resolve a `SongScene` backed by a Patch and confirm the graph is equivalent
 /// to resolving that patch directly.
 #[tokio::test]
 async fn resolve_song_section_via_patch_matches_direct_patch() {
@@ -519,42 +519,42 @@ async fn resolve_song_section_via_patch_matches_direct_patch() {
         println!("No worship song seeded — creating one for this test");
         // Create a minimal test song with a section from a known patch
         let section =
-            Section::from_patch(SectionId::new(), "Intro", seed_id("guitar-worship-clean"));
+            Scene::from_patch(SceneId::new(), "Intro", seed_id("guitar-worship-clean"));
         let song_id = SongId::new();
-        let section_id = section.id.clone();
+        let scene_id = section.id.clone();
         let song = Song::new(song_id.clone(), "Test Worship Song", section);
         signal.songs().save(song).await.unwrap();
 
         let graph = signal
-            .resolve_target(ResolveTarget::SongSection {
+            .resolve_target(ResolveTarget::SongScene {
                 song_id,
-                section_id,
+                scene_id,
             })
             .await
             .expect("resolve song section failed");
 
-        println!("Resolved SongSection: {} engines", graph.engines.len());
+        println!("Resolved SongScene: {} engines", graph.engines.len());
         assert!(!graph.engines.is_empty());
         return;
     }
 
     let song = worship_song.unwrap();
-    let first_section = song.sections.first().expect("song has no sections");
+    let first_section = song.scenes.first().expect("song has no sections");
     println!(
         "Resolving section '{}' from song '{}'",
         first_section.name, song.name
     );
 
     let graph = signal
-        .resolve_target(ResolveTarget::SongSection {
+        .resolve_target(ResolveTarget::SongScene {
             song_id: song.id.clone(),
-            section_id: first_section.id.clone(),
+            scene_id: first_section.id.clone(),
         })
         .await
         .expect("resolve song section failed");
 
     println!(
-        "Resolved SongSection '{}': {} engines, {} overrides",
+        "Resolved SongScene '{}': {} engines, {} overrides",
         first_section.name,
         graph.engines.len(),
         graph.effective_overrides.len()
@@ -566,17 +566,17 @@ async fn resolve_song_section_via_patch_matches_direct_patch() {
     );
 }
 
-/// Resolve a `SectionSource::RigScene` directly — verifies it resolves identically
+/// Resolve a `SceneSource::RigScene` directly — verifies it resolves identically
 /// to the equivalent `RigScene` target.
 #[tokio::test]
 async fn resolve_rig_scene_section_equals_direct_rig_scene() {
     let signal = controller().await;
 
-    let section_id = SectionId::new();
+    let scene_id = SceneId::new();
     let song_id = SongId::new();
 
-    let section = Section::from_rig_scene(
-        section_id.clone(),
+    let section = Scene::from_rig_scene(
+        scene_id.clone(),
         "Direct Scene",
         guitar_megarig_id(),
         guitar_megarig_default_scene(),
@@ -585,9 +585,9 @@ async fn resolve_rig_scene_section_equals_direct_rig_scene() {
     signal.songs().save(song).await.unwrap();
 
     let via_section = signal
-        .resolve_target(ResolveTarget::SongSection {
+        .resolve_target(ResolveTarget::SongScene {
             song_id,
-            section_id,
+            scene_id,
         })
         .await
         .expect("resolve via section failed");
@@ -799,7 +799,7 @@ async fn resolve_valid_patch_chain_succeeds() {
     );
 }
 
-/// `SongSection` referencing a cyclic patch should also detect the cycle.
+/// `SongScene` referencing a cyclic patch should also detect the cycle.
 #[tokio::test]
 async fn resolve_song_section_with_cyclic_patch_detects_cycle() {
     let signal = controller().await;
@@ -816,16 +816,16 @@ async fn resolve_song_section_with_cyclic_patch_detects_cycle() {
     signal.profiles().save(profile).await.unwrap();
 
     // Create a song section referencing the cyclic patch
-    let section_id = SectionId::new();
+    let scene_id = SceneId::new();
     let song_id = SongId::new();
-    let section = Section::from_patch(section_id.clone(), "Cyclic Section", patch_a_id.clone());
+    let section = Scene::from_patch(scene_id.clone(), "Cyclic Scene", patch_a_id.clone());
     let song = Song::new(song_id.clone(), "Cycle Song", section);
     signal.songs().save(song).await.unwrap();
 
     let result = signal
-        .resolve_target(ResolveTarget::SongSection {
+        .resolve_target(ResolveTarget::SongScene {
             song_id,
-            section_id,
+            scene_id,
         })
         .await;
 
@@ -929,22 +929,22 @@ async fn create_song_from_profile_generates_sections() {
 
     // One section per patch
     assert_eq!(
-        song.sections.len(),
+        song.scenes.len(),
         profile.patches.len(),
         "song should have {} sections, got {}",
         profile.patches.len(),
-        song.sections.len()
+        song.scenes.len()
     );
 
     // Each section is Patch-sourced with matching patch_id and name
-    for (i, section) in song.sections.iter().enumerate() {
+    for (i, section) in song.scenes.iter().enumerate() {
         let expected_patch = &profile.patches[i];
         assert_eq!(
             section.name, expected_patch.name,
             "section {i} name should match patch name"
         );
         match &section.source {
-            SectionSource::Patch { patch_id } => {
+            SceneSource::Patch { patch_id } => {
                 assert_eq!(
                     patch_id, &expected_patch.id,
                     "section {} should reference patch {}",
@@ -968,7 +968,7 @@ async fn create_song_from_profile_generates_sections() {
         .await
         .unwrap()
         .expect("song not found after save");
-    assert_eq!(reloaded.sections.len(), profile.patches.len());
+    assert_eq!(reloaded.scenes.len(), profile.patches.len());
     assert_eq!(
         reloaded.metadata.base_profile_id.as_deref(),
         Some(seed_id("guitar-worship-profile").to_string().as_str()),
@@ -1007,7 +1007,7 @@ async fn change_base_profile_remaps_sections() {
         .unwrap()
         .expect("worship profile not found");
 
-    assert_eq!(song.sections.len(), worship.patches.len());
+    assert_eq!(song.scenes.len(), worship.patches.len());
 
     // Manually relink section 1 to a patch from a different profile
     let blues = signal
@@ -1022,8 +1022,8 @@ async fn change_base_profile_remaps_sections() {
         .songs()
         .set_section_source(
             song.id.clone(),
-            song.sections[1].id.clone(),
-            SectionSource::Patch {
+            song.scenes[1].id.clone(),
+            SceneSource::Patch {
                 patch_id: foreign_patch.id.clone(),
             },
         )
@@ -1049,9 +1049,9 @@ async fn change_base_profile_remaps_sections() {
         Some(seed_id("guitar-rock-profile").to_string().as_str()),
     );
 
-    // Section 0: was worship slot 0 → now rock slot 0
-    match &updated.sections[0].source {
-        SectionSource::Patch { patch_id } => {
+    // Scene 0: was worship slot 0 → now rock slot 0
+    match &updated.scenes[0].source {
+        SceneSource::Patch { patch_id } => {
             assert_eq!(
                 patch_id, &rock.patches[0].id,
                 "slot 0 should remap to rock patch 0"
@@ -1060,9 +1060,9 @@ async fn change_base_profile_remaps_sections() {
         _ => panic!("expected Patch source"),
     }
 
-    // Section 1: was manually relinked → still foreign patch
-    match &updated.sections[1].source {
-        SectionSource::Patch { patch_id } => {
+    // Scene 1: was manually relinked → still foreign patch
+    match &updated.scenes[1].source {
+        SceneSource::Patch { patch_id } => {
             assert_eq!(
                 patch_id, &foreign_patch.id,
                 "manually relinked section should be preserved"

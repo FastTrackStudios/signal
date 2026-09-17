@@ -23,7 +23,7 @@ pub enum RigControlCommand {
         patch_id: String,
     },
     /// Load a specific song section — resolves scene for current rig.
-    LoadSongSection { song_id: String, section_id: String },
+    LoadSongSection { song_id: String, scene_id: String },
     /// Apply a snapshot to a specific module slot (parameter changes only).
     ApplySnapshot {
         module_type: ModuleType,
@@ -31,7 +31,7 @@ pub enum RigControlCommand {
         snapshot_id: ModuleSnapshotId,
     },
     /// Preload a section for gapless transition.
-    PreloadSection { song_id: String, section_id: String },
+    PreloadSection { song_id: String, scene_id: String },
     /// Mute a specific slot.
     DisableSlot { module_type: ModuleType },
     /// Un-mute a specific slot.
@@ -78,7 +78,7 @@ pub enum RigControlEvent {
     SongChanged { song_id: String, song_name: String },
     /// Navigated to a different section.
     SectionChanged {
-        section_id: String,
+        scene_id: String,
         section_name: String,
     },
     /// Morph position changed.

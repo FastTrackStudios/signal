@@ -177,7 +177,7 @@ fn SongPartsDockPanel() -> Element {
                 if let Some(song) = songs.first() {
                     song_name.set(song.name.clone());
                     let entries: Vec<SectionEntry> = song
-                        .sections()
+                        .scenes()
                         .iter()
                         .map(|s| SectionEntry {
                             id: s.id.to_string(),
@@ -237,7 +237,7 @@ fn SongSelectorDockPanel() -> Element {
                     .map(|s| SongEntry {
                         id: s.id.to_string(),
                         name: s.name.clone(),
-                        section_count: s.sections().len(),
+                        section_count: s.scenes().len(),
                         duration_display: None,
                     })
                     .collect();

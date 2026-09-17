@@ -12,7 +12,7 @@ use crate::active_context::ActiveContext;
 use crate::{SignalApi, SignalController};
 use signal_proto::profile::PatchId;
 use signal_proto::rig::RigSceneId;
-use signal_proto::song::SectionId;
+use signal_proto::song::SceneId;
 use signal_proto::traits::{Collection, Variant};
 use tracing::{info, warn};
 
@@ -205,7 +205,7 @@ where
             Err(e) => return SwitchResult::LoadError(format!("loading song: {e}")),
         };
 
-        let sections = song.sections();
+        let sections = song.scenes();
         if index >= sections.len() {
             return SwitchResult::OutOfBounds {
                 requested: index + 1,
@@ -214,7 +214,7 @@ where
         }
 
         let section = &sections[index];
-        let _section_id: SectionId = section.id.clone();
+        let _section_id: SceneId = section.id.clone();
         let name = section.name.clone();
 
         info!("switching to song section {}: {}", index + 1, name);
@@ -237,16 +237,16 @@ where
             // install, activate — not by this DAW-facing applier. Reported
             // rather than silently doing nothing, which is what an unhandled
             // arm would have looked like from the stage.
-            signal_proto::song::SectionSource::Node { node, .. } => {
+            signal_proto::song::SceneSource::Node { node, .. } => {
                 SwitchResult::ActivateError(format!(
                     "section targets node {}; play it through the rig's node path",
                     node.as_str()
                 ))
             }
-            signal_proto::song::SectionSource::Patch { patch_id } => {
-                let target = signal_proto::resolve::ResolveTarget::SongSection {
+            signal_proto::song::SceneSource::Patch { patch_id } => {
+                let target = signal_proto::resolve::ResolveTarget::SongScene {
                     song_id: song_id.clone(),
-                    section_id: section.id.clone(),
+                    scene_id: section.id.clone(),
                 };
                 match self.resolve_target(target).await {
                     Ok(graph) => {
@@ -264,7 +264,7 @@ where
                     )),
                 }
             }
-            signal_proto::song::SectionSource::RigScene { rig_id, scene_id } => {
+            signal_proto::song::SceneSource::RigScene { rig_id, scene_id } => {
                 if let Some(rig_applier) = rig_applier {
                     match rig_applier
                         .switch_scene(rig_id.as_ref(), scene_id.as_ref(), Some(&name))

@@ -48,7 +48,7 @@
 //! - **Engine collections** (`Engine`) group scene variants (`EngineScene`).
 //! - **Rig presets** (`Rig`) group rig scene variants (`RigScene`).
 //! - **Profiles** (`Profile`) group patch variants (`Patch`).
-//! - **Songs** (`Song`) group section variants (`Section`).
+//! - **Songs** (`Song`) group section variants (`Scene`).
 //!
 //! When a block variant is loaded (via `load_block_preset` / `load_block_preset_snapshot`), the
 //! service applies a **side-effect**: the resolved block state is persisted as
@@ -131,7 +131,7 @@ use signal_proto::{
     rig::{Rig, RigId, RigScene, RigSceneId},
     scene_template::{SceneTemplate, SceneTemplateId},
     setlist::{Setlist, SetlistEntry, SetlistEntryId, SetlistId},
-    song::{Section, SectionId, Song, SongId},
+    song::{Scene, SceneId, Song, SongId},
     tagging::{
         BrowserEntityKind, BrowserEntry, BrowserHit, BrowserIndex, BrowserNodeId, BrowserQuery,
         StructuredTag, TagCategory, TagSet, TagWeights, infer_tags_from_name,
