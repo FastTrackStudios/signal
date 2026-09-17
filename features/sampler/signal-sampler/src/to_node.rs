@@ -43,8 +43,10 @@ use crate::rig_node::{Container, RigNode};
 ///
 /// A prefix rather than a separate field: a lifted block's raw values are
 /// still *settings of that node*, and giving them their own channel in the
-/// domain would be a second parameter system to keep in step.
-pub const RAW_PARAM: &str = "param:";
+/// domain would be a second parameter system to keep in step. Defined in
+/// `signal-proto` because the resolver has to honour it — a value carried
+/// this way is still overridable.
+pub use signal_proto::node_routing::RAW_PARAM;
 
 /// The setting a block's explicit module grouping is carried as.
 ///

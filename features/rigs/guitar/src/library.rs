@@ -104,8 +104,8 @@ pub struct RigLibrary {
 
 // The in-repo default config, embedded so installed binaries can seed a
 // fresh machine without a checkout.
-const DEFAULT_PROFILE: &str = include_str!("../default-config/profile.styx");
-const DEFAULT_DRIVE_PRESETS: &str = include_str!("../default-config/drive-presets.styx");
+pub(crate) const DEFAULT_PROFILE: &str = include_str!("../default-config/profile.styx");
+pub(crate) const DEFAULT_DRIVE_PRESETS: &str = include_str!("../default-config/drive-presets.styx");
 const DEFAULT_SONGS: &str = include_str!("../default-config/songs.styx");
 const DEFAULT_SETLISTS: &str = include_str!("../default-config/setlists.styx");
 const DEFAULT_MIDI: &str = include_str!("../default-config/midi.styx");

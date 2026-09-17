@@ -227,12 +227,25 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     }
 
     // ── Pedals: one node each, its captures as variants ──────────────────
+    //
+    // A pedal's leaves are named after the **slot** the profile assigns it
+    // to, because that is how a patch addresses them; see `drive_leaf`. A
+    // pedal the profile does not use keeps the capture's name, since there is
+    // no slot to name it after.
+    let slot_of = |preset: &str| {
+        def.drives
+            .iter()
+            .find(|d| d.preset.eq_ignore_ascii_case(preset))
+            .map(|d| d.block.clone())
+    };
     let mut pedals = Vec::new();
     for pedal in drives {
         let Some(first) = pedal.options.first() else {
             continue;
         };
-        let default_leaf = drive_leaf(&first.name, &first.nam);
+        let slot = slot_of(&pedal.name);
+        let leaf_name = |capture: &str| slot.clone().unwrap_or_else(|| capture.to_string());
+        let default_leaf = drive_leaf(&leaf_name(&first.name), &first.nam);
         let default_id = default_leaf.id.clone();
         library.insert(default_leaf);
 
@@ -248,7 +261,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
         // Its own default variant is the first capture; each later capture
         // swaps the node in that slot. One pedal, several settings.
         for option in pedal.options.iter().skip(1) {
-            let leaf = drive_leaf(&option.name, &option.nam);
+            let leaf = drive_leaf(&leaf_name(&option.name), &option.nam);
             let mut variant = Variant::new(&option.name);
             variant.overrides.push(Override {
                 path: NodePath::new(vec![NodePathSegment::Block {
@@ -280,8 +293,27 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     // library a sketch of the rig rather than the rig. Lifting the rest is
     // what lets the library be the source of truth: what resolves out of it
     // is the chain, not an outline of it.
-    let built = crate::profiles::build_profile(def, drives);
-    let base_chain: &[signal_sampler::RigBlock] = built
+    // The chain as the builder makes it, *before* any patch bends it.
+    //
+    // `build_profile` applies each patch's overrides to that patch's own
+    // chain, so `patches[0]` is not the base — it is the first patch. Lifting
+    // that as the base baked Clean's gate threshold, EQ and delay mix into
+    // every other patch's starting point, and only a patch that happened to
+    // override the same parameter corrected it. Silent, and exactly the kind
+    // of thing you would chase as "the Dry patch sounds gated".
+    let unbent = ProfileDef {
+        patches: def
+            .patches
+            .iter()
+            .map(|patch| crate::profiles::PatchDef {
+                overrides: Vec::new(),
+                ..patch.clone()
+            })
+            .collect(),
+        ..def.clone()
+    };
+    let base = crate::profiles::build_profile(&unbent, drives);
+    let base_chain: &[signal_sampler::RigBlock] = base
         .patches
         .first()
         .map_or(&[], |patch| patch.chain.as_slice());
@@ -914,6 +946,134 @@ mod tests {
                 ("Drive 3".to_string(), "drive".to_string()),
             ],
             "the only unrangeable values should be the placeholder pedals'"
+        );
+    }
+
+    /// The rig that actually plays, reproduced from the node library.
+    ///
+    /// `worship_def()` is the hard-coded fallback for a machine with no
+    /// config. What the rig loads is `default-config/profile.styx` — thirteen
+    /// patches whose override values were captured by playing them, with
+    /// rig-relative capture paths. It is a different and much less forgiving
+    /// shape than the fallback: real dB and Hz values on real blocks, drive
+    /// slots pointed at capture *option 1* rather than the first, and a
+    /// `module Utility` label that matches no block category.
+    ///
+    /// If this passes, the node library is the guitar rig rather than a model
+    /// of it.
+    #[test]
+    fn the_library_reproduces_the_shipped_rig() {
+        let def: ProfileDef = facet_styx::from_str(crate::library::DEFAULT_PROFILE)
+            .expect("the shipped profile parses");
+        let drives: Vec<DrivePresetDef> = {
+            #[derive(facet::Facet)]
+            struct Presets {
+                presets: Vec<DrivePresetDef>,
+            }
+            let parsed: Presets = facet_styx::from_str(crate::library::DEFAULT_DRIVE_PRESETS)
+                .expect("the shipped drive presets parse");
+            parsed.presets
+        };
+
+        assert_eq!(
+            def.patches.len(),
+            13,
+            "the shipped rig has thirteen patches"
+        );
+
+        let rig = to_nodes(&def, &drives);
+        let built = crate::profiles::build_profile(&def, &drives);
+
+        for patch in &built.patches {
+            let variant = rig
+                .patch(&patch.name)
+                .unwrap_or_else(|| panic!("{} has no variant", patch.name));
+            let (resolved, report) = resolve(&rig.library, &rig.chain, Some(variant))
+                .unwrap_or_else(|e| panic!("{} did not resolve: {e}", patch.name));
+            assert!(report.is_clean(), "{}: {report:?}", patch.name);
+
+            let chain = signal_sampler::from_node::to_chain(&resolved);
+            assert_eq!(
+                chain.len(),
+                patch.chain.len(),
+                "{}: block count from the library",
+                patch.name
+            );
+
+            for (from_library, from_builder) in chain.iter().zip(patch.chain.iter()) {
+                assert_eq!(
+                    from_library.block_type,
+                    from_builder.block_type,
+                    "{}: block type at {}",
+                    patch.name,
+                    from_builder.display_name()
+                );
+                assert_eq!(
+                    from_library.nam,
+                    from_builder.nam,
+                    "{}: capture for {}",
+                    patch.name,
+                    from_builder.display_name()
+                );
+                assert_eq!(
+                    from_library.bypassed,
+                    from_builder.bypassed,
+                    "{}: bypass of {}",
+                    patch.name,
+                    from_builder.display_name()
+                );
+                for param in &from_builder.params {
+                    let want: f32 = param.value.trim().parse().unwrap_or(0.0);
+                    let got = from_library.param_f32(&param.name).unwrap_or_else(|| {
+                        panic!(
+                            "{}: {} lost parameter {}",
+                            patch.name,
+                            from_builder.display_name(),
+                            param.name
+                        )
+                    });
+                    assert!(
+                        (got - want).abs() < want.abs().mul_add(0.01, 0.01),
+                        "{}: {}.{} was {want} and came back {got}",
+                        patch.name,
+                        from_builder.display_name(),
+                        param.name
+                    );
+                }
+            }
+        }
+    }
+
+    /// And the shipped rig's parameters are all ones the domain can range,
+    /// bar the placeholder pedals whose block types have no DSP.
+    #[test]
+    fn the_shipped_rigs_parameters_are_ranged() {
+        let def: ProfileDef =
+            facet_styx::from_str(crate::library::DEFAULT_PROFILE).expect("parses");
+        let drives: Vec<DrivePresetDef> = {
+            #[derive(facet::Facet)]
+            struct Presets {
+                presets: Vec<DrivePresetDef>,
+            }
+            let parsed: Presets =
+                facet_styx::from_str(crate::library::DEFAULT_DRIVE_PRESETS).expect("parses");
+            parsed.presets
+        };
+
+        let built = crate::profiles::build_profile(&def, &drives);
+        let mut unranged = Vec::new();
+        for patch in &built.patches {
+            for block in &patch.chain {
+                let (_, report) = signal_sampler::to_node::lift_one_block(block);
+                unranged.extend(report.unranged.into_iter().map(|(_, param)| param));
+            }
+        }
+        unranged.sort();
+        unranged.dedup();
+        assert_eq!(
+            unranged,
+            vec!["drive".to_string()],
+            "only the placeholder pedals' `drive` should be unrangeable"
         );
     }
 }

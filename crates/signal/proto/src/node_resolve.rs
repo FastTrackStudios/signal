@@ -466,6 +466,15 @@ const fn segment_id(segment: &NodePathSegment) -> Option<&String> {
 }
 
 fn set_parameter(node: &mut Resolved, param: &str, value: f32) -> bool {
+    // A value the domain could not range is carried verbatim as a setting.
+    // It is still a parameter, so an override still has to reach it — see
+    // [`RAW_PARAM`](crate::node_routing::RAW_PARAM). Checked first because a
+    // node carrying one does not have the ranged parameter to find.
+    let raw = format!("{}{param}", crate::node_routing::RAW_PARAM);
+    if let Some(setting) = node.settings.iter_mut().find(|s| s.name == raw) {
+        setting.value = value.to_string();
+        return true;
+    }
     let ResolvedContent::Leaf { block, .. } = &mut node.content else {
         return false;
     };

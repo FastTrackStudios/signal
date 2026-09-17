@@ -205,6 +205,22 @@ pub struct ModRoute {
     pub depth: f32,
 }
 
+/// Prefix marking a [`Setting`] that is really a **parameter** — one whose
+/// range nothing could determine, so its value is carried in the units it
+/// was written in rather than as a normalized position.
+///
+/// A hosted plugin's parameters are the plugin's, readable only once it is
+/// loaded; a native block type with no DSP yet declares none at all. Rather
+/// than guess a range and clamp the value, the value is kept verbatim under
+/// this prefix — see `signal_sampler::to_node`.
+///
+/// It lives here, and not in the crate that writes it, because
+/// [`apply_override`](crate::node_resolve) has to know it: a value carried
+/// this way must still be overridable, or the fallback is a dead end rather
+/// than a fallback. The guitar rig's drive pedals are exactly that case —
+/// `drive` has no DSP behind it, and every patch still sets it.
+pub const RAW_PARAM: &str = "param:";
+
 /// A node-level setting that is not a block — a Layer's `voice_mode` or
 /// `octave`, an Engine's menu options.
 ///
