@@ -100,7 +100,8 @@ pub use signal_macromod::easing;
 pub use signal_macromod::macro_bank;
 pub use signal_macromod::runtime;
 pub use signal_macromod::{
-    BlockParameter, MacroBinding, ParamTarget, ParameterValue, ResponseCurve,
+    BlockParameter, MacroBinding, ParamTarget, ParameterRange, ParameterValue, ResponseCurve,
+    Taper, Unit,
 };
 
 /// Backward-compatible `modulation` module path.

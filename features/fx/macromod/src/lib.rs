@@ -17,6 +17,7 @@ pub mod easing;
 pub mod learn;
 pub mod macro_bank;
 pub mod parameter;
+pub mod range;
 pub mod response;
 pub mod routing;
 pub mod runtime;
@@ -33,6 +34,7 @@ pub use easing::{EasingCurve, lerp_eased};
 pub use learn::{LearnState, PendingBinding};
 pub use macro_bank::{GroupSelector, MacroBank, MacroGroup, MacroKnob};
 pub use parameter::{BlockParameter, ParameterValue};
+pub use range::{ParameterRange, Taper, Unit};
 pub use response::ResponseCurve;
 pub use routing::{ModulationRoute, ModulationRouteSet};
 pub use sources::{

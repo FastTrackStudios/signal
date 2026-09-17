@@ -23,17 +23,18 @@
 //! This conversion is lossless by construction: everything a `RigBlock` can
 //! hold is read off the resolved node, and nothing is skipped.
 //!
-//! # One thing it cannot yet do: units
+//! # Units cross correctly
 //!
-//! `signal_proto`'s `ParameterValue` is **normalized, clamped to 0..=1**. A
-//! `RigBlock` parameter is a raw string in the DSP's own units — the chain
-//! builder writes `80` for 80 Hz and `-40` for −40 dB.
+//! A `RigBlock` parameter is a raw string in the DSP's own units — the chain
+//! builder writes `80` for 80 Hz and `-40` for −40 dB. The domain stores a
+//! *normalized* position, because that is what automation, modulation and
+//! MIDI learn all want.
 //!
-//! So values cross this boundary verbatim and normalized, which is right for
-//! anything already in 0..1 (a mix, a depth) and wrong for anything in real
-//! units. Denormalizing needs a range per parameter, and nothing in the
-//! domain carries one yet. Until it does, a node model built from the guitar
-//! rig has to hold normalized values — this is the seam where that bites.
+//! Each parameter carries a `ParameterRange` saying what its position means,
+//! so this boundary denormalizes: `BlockParameter::real()` is the value the
+//! DSP is handed. Before ranges existed the two halves disagreed silently —
+//! a band frequency of 5500 clamped to 1.0 on the way in, and nothing said
+//! so.
 
 use signal_proto::block_kind::BlockKind;
 use signal_proto::node_resolve::{Resolved, ResolvedContent};
@@ -80,10 +81,10 @@ pub fn to_block(leaf: &Resolved) -> RigBlock {
         BlockKind::Native | BlockKind::Custom(_) => {}
     }
 
-    // Every parameter, by the id the DSP knows it by. This is the half the
-    // old bridge dropped entirely.
+    // Every parameter, by the id the DSP knows it by, denormalized through
+    // its range. This is the half the old bridge dropped entirely.
     for param in block.parameters() {
-        rb = rb.with_param(param.id(), param.value().get().to_string());
+        rb = rb.with_param(param.id(), param.real().to_string());
     }
 
     // Bypass is resolved state, not authored state: it may have been set by
@@ -95,7 +96,7 @@ pub fn to_block(leaf: &Resolved) -> RigBlock {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use signal_proto::BlockParameter;
+    use signal_proto::{BlockParameter, ParameterRange, Unit};
     use signal_proto::block::BlockType;
     use signal_proto::block_kind::NamRef;
     use signal_proto::model::Block;
@@ -103,16 +104,21 @@ mod tests {
     use signal_proto::node_resolve::resolve;
     use signal_proto::overrides::{NodePath, NodePathSegment, Override};
 
-    /// The worship Amp EQ's five bands — normalized, because that is what the
-    /// domain stores. See the module docs on units: raw Hz would clamp to 1.0.
+    /// The worship Amp EQ's magic frequencies, in Hz, on a logarithmic range
+    /// — which is how a frequency control has to behave to be playable.
     fn eq_block() -> Block {
+        let audio = || ParameterRange::logarithmic(20.0, 20_000.0, Unit::Hz);
         Block::from_parameters(vec![
-            BlockParameter::new("b1_freq", "Band 1 Freq", 0.1),
-            BlockParameter::new("b2_freq", "Band 2 Freq", 0.25),
-            BlockParameter::new("b3_freq", "Band 3 Freq", 0.4),
-            BlockParameter::new("b4_freq", "Band 4 Freq", 0.6),
-            BlockParameter::new("b5_freq", "Band 5 Freq", 0.85),
+            BlockParameter::ranged("b1_freq", "Low cut", 80.0, audio()),
+            BlockParameter::ranged("b2_freq", "Body", 212.0, audio()),
+            BlockParameter::ranged("b3_freq", "Character", 560.0, audio()),
+            BlockParameter::ranged("b4_freq", "Honk", 1400.0, audio()),
+            BlockParameter::ranged("b5_freq", "Presence", 5500.0, audio()),
         ])
+    }
+
+    fn approx(a: Option<f32>, b: f32) -> bool {
+        a.is_some_and(|v| (v - b).abs() < b * 0.001)
     }
 
     /// The case the old bridge could not survive: a natively-realized block
@@ -133,11 +139,14 @@ mod tests {
         let block = &chain[0];
         assert_eq!(block.name, "Amp EQ");
         assert_eq!(block.block_type, BlockType::Eq);
-        assert_eq!(
-            block.param_f32("b5_freq"),
-            Some(0.85),
-            "every band's value survives the trip"
+        // Real Hz reach the DSP, not a normalized 0..1 position. Before
+        // ranges, 5500 clamped to 1.0 on the way in and nothing said so.
+        assert!(
+            approx(block.param_f32("b5_freq"), 5500.0),
+            "presence band should arrive as 5500 Hz, got {:?}",
+            block.param_f32("b5_freq")
         );
+        assert!(approx(block.param_f32("b1_freq"), 80.0));
         assert_eq!(block.params.len(), 5, "all five bands, not none");
         assert!(!block.id.is_empty(), "identity travels with the block");
     }
