@@ -500,20 +500,23 @@ pub fn GuitarRigRemote() -> Element {
                                 if mode() == Mode::Routing {
                                     crate::grid::RigGraph { blocks: blocks() }
                                 } else if mode() == Mode::Tones {
-                                    // A downloaded model becomes a preset:
-                                    // the browser hands back a name and the
-                                    // path it landed at on the engine, which
-                                    // is exactly what `add_preset` takes.
+                                    // A downloaded capture goes to the engine
+                                    // as what it is — the browser reports the
+                                    // gear and the tone it came from, and the
+                                    // rig decides whether that is an amp
+                                    // preset or a pedal on the drive board.
                                     {
                                         let rig = rig.clone();
                                         rsx! {
                                             div { class: "h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card",
                                                 signal_tone3000_ui::ToneBrowser {
-                                                    on_loaded: move |(name, path): (String, String)| {
+                                                    on_loaded: move |i: signal_tone3000_ui::ToneImport| {
                                                         let rig = rig.clone();
                                                         spawn(async move {
                                                             if let Some(r) = rig {
-                                                                let _ = r.add_preset(name, path).await;
+                                                                let _ = r
+                                                                    .import_capture(i.name, i.path, i.gear, i.group)
+                                                                    .await;
                                                             }
                                                         });
                                                     },

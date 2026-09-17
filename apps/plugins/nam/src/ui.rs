@@ -11,7 +11,7 @@
 //! engine ([`crate::engine`]).
 
 use audiocore_core::prelude::*;
-use signal_tone3000_ui::{ToneBrowser, UrlOpener};
+use signal_tone3000_ui::{ToneBrowser, ToneImport, UrlOpener};
 
 use crate::state::NamUi;
 
@@ -64,10 +64,12 @@ pub fn App() -> Element {
 
             div { style: "flex:1;min-height:0;",
                 ToneBrowser {
-                    on_loaded: move |(name, path): (String, String)| {
+                    on_loaded: move |i: ToneImport| {
                         // The browser has already put the file on this
-                        // machine; all that is left is to play it.
-                        ui.load(&name, &path);
+                        // machine; all that is left is to play it. The
+                        // plugin has one amp slot, so it ignores the gear
+                        // the rig would have routed on.
+                        ui.load(&i.name, &i.path);
                     },
                 }
             }

@@ -9,17 +9,18 @@ use dioxus::prelude::*;
 use signal_tone3000_proto::tone3000::Tone3000Client;
 use signal_tone3000_proto::{PickedTone, ToneModel};
 
+use crate::ToneImport;
 use crate::art::ToneArt;
 use crate::state::{Tone3000State, UrlOpener};
 use crate::style;
 
-/// The detail panel. `on_loaded` fires when a model has finished downloading
-/// and the user asked for it in the rig, with `(display name, engine path)`.
+/// The detail panel. `on_loaded` fires with a [`ToneImport`] when a model has
+/// finished downloading and the user asked for it in the rig.
 #[component]
 pub fn ToneDetail(
     tone: PickedTone,
     on_close: Callback<()>,
-    on_loaded: Callback<(String, String)>,
+    on_loaded: Callback<ToneImport>,
 ) -> Element {
     let opener = use_hook(try_consume_context::<UrlOpener>);
 
@@ -120,6 +121,10 @@ pub fn ToneDetail(
                             ModelRow {
                                 key: "{model.id}",
                                 tone_id: tone.id.clone(),
+                                // What the rig needs to route the capture,
+                                // carried from the tone the row belongs to.
+                                gear: tone.gear.clone(),
+                                group: crate::grouping_key(&tone),
                                 model: model.clone(),
                                 on_loaded,
                             }
@@ -133,7 +138,13 @@ pub fn ToneDetail(
 
 /// One downloadable variant: what it is, and the one button that matters.
 #[component]
-fn ModelRow(tone_id: String, model: ToneModel, on_loaded: Callback<(String, String)>) -> Element {
+fn ModelRow(
+    tone_id: String,
+    gear: String,
+    group: String,
+    model: ToneModel,
+    on_loaded: Callback<ToneImport>,
+) -> Element {
     let client = use_hook(try_consume_context::<Tone3000Client>);
     let state = use_context::<Tone3000State>();
     let done = state.completed(&model.id);
@@ -177,11 +188,16 @@ fn ModelRow(tone_id: String, model: ToneModel, on_loaded: Callback<(String, Stri
                 {
                     // Cloned per click, not per render: the callback may fire
                     // more than once and cannot consume what it captures.
-                    let (label, path) = (name, finished.path);
+                    let import = ToneImport {
+                        name,
+                        path: finished.path,
+                        gear,
+                        group,
+                    };
                     rsx! {
                         button {
                             style: style::primary_button(),
-                            onclick: move |_| on_loaded.call((label.clone(), path.clone())),
+                            onclick: move |_| on_loaded.call(import.clone()),
                             "Use in rig"
                         }
                     }

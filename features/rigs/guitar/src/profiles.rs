@@ -12,8 +12,13 @@ use signal_sampler::{RigBlock, RigPatch, RigProfile};
 const FENDER_DIR: &str =
     "/home/cody/Downloads/Fender Deluxe Reverb '65 Reissue _ Clean _ SM57 + Royer R-121 + Room";
 const CUSTOM_DIR: &str = "/home/cody/Downloads/Fender Style Custom Patches Made with Custom IR";
-const AC30_MODEL: &str =
-    "/home/cody/Downloads/1965 VOX AC30 Top Boost/'65 AC30_6 - The Iconic Cleanish.nam";
+// TONE3000 tone 82521 — "1964 VOX AC30 Top Boost Super Twin - Edge of
+// Breakup - A2" by amalgamaudio, the most-downloaded AC30 on the catalog
+// (35.9K). A JMI-era Top Boost Super Twin into a VOX 2x12 with Alnico
+// Silvers, mic'd R121/R160/U87, so it is a complete rig in one capture —
+// which is what this chain needs, since it has no cab IR block after the
+// amp. Fetch it with `signal tone3000 fetch 82521`.
+const AC30_MODEL: &str = "models/VX TB30 BR Edge0 BAL2 CAB FREE.nam";
 
 /// A bypassed (off-by-default) native FX block of the given type.
 fn off(block_type: BlockType, name: &str) -> RigBlock {
@@ -45,6 +50,16 @@ fn off_fx(block_type: BlockType, name: &str, params: &[(&str, &str)]) -> RigBloc
 pub struct PresetDef {
     pub name: String,
     pub nam: String,
+    /// SHA-256 of the capture — the key the NAM catalog indexes by, and so
+    /// the way this preset finds out what it *is*: creator, licence, the
+    /// tone it came from, its cover art.
+    ///
+    /// Content-addressed rather than path-addressed on purpose. A library
+    /// reorganised on disk, or copied to another machine, keeps its
+    /// attribution; a path would not. Empty for a capture added by hand that
+    /// the catalog has never seen.
+    #[facet(default)]
+    pub hash: String,
 }
 
 /// One NAM option inside a drive block preset — pedals are commonly
@@ -53,6 +68,9 @@ pub struct PresetDef {
 pub struct DriveOptionDef {
     pub name: String,
     pub nam: String,
+    /// SHA-256 of the capture. See [`PresetDef::hash`].
+    #[facet(default)]
+    pub hash: String,
 }
 
 /// A **Drive Block Preset**: the thing a drive slot loads. Wraps one or
@@ -62,6 +80,13 @@ pub struct DrivePresetDef {
     pub name: String,
     pub options: Vec<DriveOptionDef>,
 }
+
+/// The drive slots the standard chain builds, in board order.
+///
+/// One definition, because two things walk this list and they must not
+/// drift: the chain builder, which creates the blocks, and an import,
+/// which claims the first slot no profile has assigned yet.
+pub const DRIVE_SLOTS: [&str; 3] = ["Drive 1", "Drive 2", "Drive 3"];
 
 /// A drive slot in the chain: which preset it runs and which of the
 /// preset's NAM options is selected.
@@ -76,9 +101,13 @@ pub struct DriveSlotDef {
 /// The drive block preset library.
 #[must_use]
 pub fn drive_presets() -> Vec<DrivePresetDef> {
+    // The seeds carry no hash: they are files shipped with the binary, not
+    // catalog entries. An import fills it in; a seeded one simply has no
+    // provenance to show until the same capture is fetched from its source.
     let opt = |name: &str, nam: &str| DriveOptionDef {
         name: name.to_string(),
         nam: nam.to_string(),
+        hash: String::new(),
     };
     vec![
         DrivePresetDef {
@@ -230,6 +259,7 @@ pub fn worship_def() -> ProfileDef {
     let preset = |name: &str, nam: String| PresetDef {
         name: name.to_string(),
         nam,
+        hash: String::new(),
     };
     let stack = |name: &str, patches: &[&str]| StackDef {
         name: name.to_string(),
@@ -392,12 +422,26 @@ fn drive_block(def: &ProfileDef, dps: &[DrivePresetDef], block: &str) -> RigBloc
     b
 }
 
+/// Append the drive board to a patch under construction: a boost, then every
+/// slot in [`DRIVE_SLOTS`] in board order. All off until the control surface
+/// engages them, and a slot the profile has not assigned builds as a
+/// transparent placeholder so every slot stays addressable either way.
+fn drive_board(def: &ProfileDef, dps: &[DrivePresetDef], patch: RigPatch) -> RigPatch {
+    let boosted = patch.with_block(off_fx(BlockType::Boost, "Boost", &[("drive", "0.5")]));
+    DRIVE_SLOTS
+        .iter()
+        .fold(boosted, |p, slot| p.with_block(drive_block(def, dps, slot)))
+}
+
 #[must_use]
 pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
     // The standard full chain around one NAM capture — see the block-name
     // comments in the module docs (names match the guitar-rig-template slots).
     let amp = |name: &str, path: String| {
-        RigPatch::new(name)
+        // The head of the chain, up to and including the drive board. Split
+        // out because the board is a fold over `DRIVE_SLOTS` rather than a
+        // fixed run of `.with_block` calls.
+        let head = RigPatch::new(name)
             .with_block(on_fx(
                 BlockType::Compressor,
                 "Compressor",
@@ -409,14 +453,8 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                 BlockType::Volume,
                 "Volume Pedal",
                 &[("gain_db", "0")],
-            ))
-            // The drive board — four pedals into the amp, all off until
-            // engaged from the control surface (DSP lands with drive-dsp;
-            // placeholders keep the blocks addressable + level-staged).
-            .with_block(off_fx(BlockType::Boost, "Boost", &[("drive", "0.5")]))
-            .with_block(drive_block(def, dps, "Drive 1"))
-            .with_block(drive_block(def, dps, "Drive 2"))
-            .with_block(drive_block(def, dps, "Drive 3"))
+            ));
+        drive_board(def, dps, head)
             .with_block(RigBlock::nam(path).named("Amp L"))
             // Post-amp shaping, part of the Amp module: gate into the amp
             // EQ — both dialed against the amp's character.
@@ -715,4 +753,174 @@ pub fn default_keymap() -> Vec<KeyBindingDef> {
         b("ctrl+space", "tap"),
         b("ctrl+r", "reload"),
     ]
+}
+
+// ── Importing a downloaded capture ───────────────────────────────────────────
+
+/// What importing a pedal capture did to the library.
+///
+/// Returned rather than logged in place so the caller decides whether the
+/// change is worth persisting and rebuilding for, and so a test can assert
+/// the routing without a live rig behind it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DriveImport {
+    /// The preset already held this exact capture — nothing changed. A
+    /// download the user repeats is the same file, not a second option.
+    AlreadyPresent,
+    /// Added as another option of a pedal already on the board.
+    Option { preset: String },
+    /// A pedal new to the board, which claimed the named drive slot.
+    Slot { preset: String, block: String },
+    /// A pedal new to the board, but every drive slot was already
+    /// assigned. The capture is in the library and a slot can be pointed
+    /// at it by editing the styx.
+    NoFreeSlot { preset: String },
+}
+
+/// Route a downloaded pedal capture into the drive library.
+///
+/// Captures group by the tone they came from: the first one creates the
+/// preset and claims the first drive slot nothing is assigned to, and later
+/// ones become further options of it — which is how a pedal captured at
+/// three gain settings ends up as one pedal with three options rather than
+/// three pedals.
+///
+/// Pure, so the caller persists and rebuilds; it mutates only what it is
+/// handed.
+pub fn import_drive_capture(
+    def: &mut ProfileDef,
+    dps: &mut Vec<DrivePresetDef>,
+    group: &str,
+    option: &str,
+    nam_path: &str,
+    hash: &str,
+) -> DriveImport {
+    let fresh = !dps.iter().any(|p| p.name.eq_ignore_ascii_case(group));
+    if fresh {
+        dps.push(DrivePresetDef {
+            name: group.to_string(),
+            options: Vec::new(),
+        });
+    }
+    let Some(preset) = dps.iter_mut().find(|p| p.name.eq_ignore_ascii_case(group)) else {
+        return DriveImport::AlreadyPresent;
+    };
+    if preset.options.iter().any(|o| o.nam == nam_path) {
+        return DriveImport::AlreadyPresent;
+    }
+    preset.options.push(DriveOptionDef {
+        name: option.to_string(),
+        nam: nam_path.to_string(),
+        hash: hash.to_string(),
+    });
+    if !fresh {
+        return DriveImport::Option {
+            preset: group.to_string(),
+        };
+    }
+    let free = DRIVE_SLOTS
+        .iter()
+        .find(|s| !def.drives.iter().any(|d| d.block.eq_ignore_ascii_case(s)));
+    let Some(block) = free else {
+        return DriveImport::NoFreeSlot {
+            preset: group.to_string(),
+        };
+    };
+    def.drives.push(DriveSlotDef {
+        block: (*block).to_string(),
+        preset: group.to_string(),
+        option: 0,
+    });
+    DriveImport::Slot {
+        preset: group.to_string(),
+        block: (*block).to_string(),
+    }
+}
+
+#[cfg(test)]
+mod import_tests {
+    use super::{DriveImport, DrivePresetDef, ProfileDef, import_drive_capture};
+
+    /// A profile with no drive slots assigned yet.
+    fn empty_profile() -> ProfileDef {
+        ProfileDef {
+            drives: Vec::new(),
+            name: "Test".to_string(),
+            presets: Vec::new(),
+            patches: Vec::new(),
+            stacks: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_pedals_captures_group_into_one_preset_on_one_slot() {
+        let mut def = empty_profile();
+        let mut dps: Vec<DrivePresetDef> = Vec::new();
+
+        // The first capture of a tone creates the pedal and puts it on the
+        // board.
+        let first = import_drive_capture(&mut def, &mut dps, "Klon", "Low", "/n/low.nam", "h-low");
+        assert_eq!(
+            first,
+            DriveImport::Slot {
+                preset: "Klon".to_string(),
+                block: "Drive 1".to_string(),
+            }
+        );
+
+        // A second capture of the SAME tone is another option of it, not a
+        // second pedal, and does not claim a second slot.
+        let second = import_drive_capture(&mut def, &mut dps, "Klon", "High", "/n/high.nam", "h-high");
+        assert_eq!(
+            second,
+            DriveImport::Option {
+                preset: "Klon".to_string()
+            }
+        );
+        assert_eq!(dps.len(), 1);
+        assert_eq!(dps[0].options.len(), 2);
+        assert_eq!(def.drives.len(), 1);
+        assert_eq!(def.drives[0].block, "Drive 1");
+
+        // A different tone takes the next free slot.
+        let other = import_drive_capture(&mut def, &mut dps, "Timmy", "Stock", "/n/timmy.nam", "h-timmy");
+        assert_eq!(
+            other,
+            DriveImport::Slot {
+                preset: "Timmy".to_string(),
+                block: "Drive 2".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn the_same_file_twice_is_the_same_capture() {
+        let mut def = empty_profile();
+        let mut dps: Vec<DrivePresetDef> = Vec::new();
+        import_drive_capture(&mut def, &mut dps, "Klon", "Low", "/n/low.nam", "h-low");
+        let again = import_drive_capture(&mut def, &mut dps, "Klon", "Low again", "/n/low.nam", "h-low");
+        assert_eq!(again, DriveImport::AlreadyPresent);
+        assert_eq!(dps[0].options.len(), 1);
+    }
+
+    #[test]
+    fn a_full_board_still_keeps_the_capture() {
+        let mut def = empty_profile();
+        let mut dps: Vec<DrivePresetDef> = Vec::new();
+        for (i, name) in ["A", "B", "C"].iter().enumerate() {
+            let r = import_drive_capture(&mut def, &mut dps, name, "Stock", &format!("/n/{i}.nam"), &format!("h-{i}"));
+            assert!(matches!(r, DriveImport::Slot { .. }), "{name} took a slot");
+        }
+        // Every slot is taken, so the fourth pedal lands in the library
+        // without one rather than being dropped.
+        let overflow = import_drive_capture(&mut def, &mut dps, "D", "Stock", "/n/3.nam", "h-3");
+        assert_eq!(
+            overflow,
+            DriveImport::NoFreeSlot {
+                preset: "D".to_string()
+            }
+        );
+        assert_eq!(dps.len(), 4);
+        assert_eq!(def.drives.len(), 3);
+    }
 }

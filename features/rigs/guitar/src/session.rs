@@ -24,7 +24,9 @@ use signal_proto::block::BlockType;
 use signal_sampler::{DeviceInfo, GuitarRig, ProfileRig, RigBlock, RigManager};
 
 use crate::library::RigLibrary;
-use crate::profiles::{DrivePresetDef, ProfileDef, SetlistDef, SongDef, build_profile};
+use crate::profiles::{
+    DriveImport, DrivePresetDef, ProfileDef, SetlistDef, SongDef, build_profile,
+};
 
 /// Rig whose audio prefs the settings service reads/writes (persisted to
 /// `<config>/signal/rigs/guitar-rig.styx` by `RigManager`).
@@ -362,6 +364,48 @@ impl GuitarRigBackend {
         self.apply_boost_to_block();
         self.apply_all_drives();
         self.publish_state();
+    }
+
+    /// Add a pedal capture to the drive library as an option of `group`,
+    /// creating that preset the first time the tone is seen and claiming a
+    /// free drive slot for it.
+    ///
+    /// Re-importing a file already in the preset is a no-op rather than a
+    /// duplicate option — a download the user repeats is the same capture.
+    fn import_drive_capture(&self, group: &str, option: &str, nam_path: &str, hash: &str) {
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let mut dps = self.drive_presets.lock_ok();
+            let outcome = crate::profiles::import_drive_capture(
+                &mut def, &mut dps, group, option, nam_path, hash,
+            );
+            match &outcome {
+                // A file the library already holds is not a change, so
+                // there is nothing to persist and nothing to rebuild for.
+                DriveImport::AlreadyPresent => {
+                    tracing::info!("import: '{group}' already holds this capture");
+                    return;
+                }
+                DriveImport::Option { preset } => {
+                    tracing::info!("import: '{option}' added to '{preset}'");
+                }
+                DriveImport::Slot { preset, block } => {
+                    tracing::info!("import: '{preset}' → {block}");
+                }
+                DriveImport::NoFreeSlot { preset } => {
+                    tracing::warn!("import: '{preset}' has no free drive slot to claim");
+                }
+            }
+            RigLibrary::save_drive_presets(&dps);
+            // Only a claimed slot changes the profile; the other outcomes
+            // touch the drive library alone.
+            if matches!(outcome, DriveImport::Slot { .. }) {
+                RigLibrary::save_profile(&def);
+            }
+            build_profile(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+        self.spawn_drive_calibration();
     }
 
     /// The NAM capture behind a board block, if any: drive slots resolve
@@ -1620,18 +1664,78 @@ impl Rig for GuitarRigBackend {
                 .find(|p| p.name.eq_ignore_ascii_case(&ap))
                 .map(|p| p.preset.clone())
         });
+        // One catalog read for the whole pool, not one per preset: this is
+        // called on every performance-model change.
+        let catalog = nam_catalog();
         def.presets
             .iter()
-            .map(|preset| PresetInfo {
-                name: preset.name.clone(),
-                active: active_preset.as_deref() == Some(preset.name.as_str()),
-                used_by: def
-                    .patches
-                    .iter()
-                    .filter(|p| p.preset.eq_ignore_ascii_case(&preset.name))
-                    .count() as u32,
+            .map(|preset| {
+                let provenance = catalog
+                    .as_ref()
+                    .and_then(|c| c.get_entry(&preset.hash))
+                    .and_then(|e| e.provenance.as_ref());
+                PresetInfo {
+                    name: preset.name.clone(),
+                    active: active_preset.as_deref() == Some(preset.name.as_str()),
+                    used_by: def
+                        .patches
+                        .iter()
+                        .filter(|p| p.preset.eq_ignore_ascii_case(&preset.name))
+                        .count() as u32,
+                    creator: provenance
+                        .and_then(|p| p.creator.clone())
+                        .unwrap_or_default(),
+                    license: provenance
+                        .and_then(|p| p.license.clone())
+                        .unwrap_or_default(),
+                    tone_url: provenance
+                        .and_then(|p| p.tone_url.clone())
+                        .unwrap_or_default(),
+                    gear: provenance.and_then(|p| p.gear.clone()).unwrap_or_default(),
+                    has_artwork: provenance.is_some_and(|p| p.artwork_path.is_some()),
+                }
             })
             .collect()
+    }
+
+    fn preset_artwork(&self, preset: String) -> signal_guitar_proto::Artwork {
+        use signal_guitar_proto::Artwork;
+        let hash = {
+            let def = self.profile_def.lock_ok();
+            let Some(found) = def
+                .presets
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&preset))
+            else {
+                return Artwork {
+                    error: format!("no preset '{preset}'"),
+                    ..Artwork::default()
+                };
+            };
+            found.hash.clone()
+        };
+        // A preset with no cover is ordinary, not a failure: an empty
+        // Artwork says "nothing to draw", which is what a UI needs to know.
+        let Some(relative) = nam_catalog()
+            .as_ref()
+            .and_then(|c| c.get_entry(&hash))
+            .and_then(|e| e.provenance.as_ref())
+            .and_then(|p| p.artwork_path.clone())
+        else {
+            return Artwork::default();
+        };
+        let path = nam_root().join(&relative);
+        match std::fs::read(&path) {
+            Ok(bytes) => Artwork {
+                mime: mime_for_path(&relative).to_string(),
+                bytes,
+                error: String::new(),
+            },
+            Err(e) => Artwork {
+                error: e.to_string(),
+                ..Artwork::default()
+            },
+        }
     }
 
     fn set_patch_preset(&self, patch: u32, preset: u32) {
@@ -1772,6 +1876,7 @@ impl Rig for GuitarRigBackend {
             }
             def.presets.push(crate::profiles::PresetDef {
                 name: name.clone(),
+                hash: capture_hash(&nam_path),
                 nam: nam_path,
             });
             RigLibrary::save_profile(&def);
@@ -1842,6 +1947,32 @@ impl Rig for GuitarRigBackend {
         self.reload_rebuilt(rebuilt);
     }
 
+    fn import_capture(&self, name: String, nam_path: String, gear: String, group: String) {
+        if !std::path::Path::new(&nam_path).exists() {
+            tracing::warn!("import_capture: {nam_path} does not exist");
+            return;
+        }
+        // A tone with no title groups under the model's own name, which
+        // degrades to one preset per capture — the same shape as before,
+        // rather than every ungrouped capture colliding in one preset.
+        let group = if group.trim().is_empty() {
+            name.clone()
+        } else {
+            group
+        };
+        // Hashed once, here: the content hash is what the NAM catalog keys
+        // by, so it is how this capture will later find its own creator,
+        // licence and cover art.
+        let hash = capture_hash(&nam_path);
+        if gear.eq_ignore_ascii_case("pedal") {
+            self.import_drive_capture(&group, &name, &nam_path, &hash);
+        } else {
+            // An amp tone joins the pool under the capture's own name;
+            // `add_preset` already dedupes and persists.
+            self.add_preset(name, nam_path);
+        }
+    }
+
     fn add_drive_preset(&self, name: String, nam_path: String) {
         if !std::path::Path::new(&nam_path).exists() {
             tracing::warn!("add_drive_preset: {nam_path} does not exist");
@@ -1856,6 +1987,7 @@ impl Rig for GuitarRigBackend {
                 name: name.clone(),
                 options: vec![crate::profiles::DriveOptionDef {
                     name: "Default".to_string(),
+                    hash: capture_hash(&nam_path),
                     nam: nam_path,
                 }],
             });
@@ -2786,4 +2918,51 @@ fn spectrum_bins(samples: &[f32], rate: f32, bins: usize) -> Vec<f32> {
         };
     }
     out
+}
+
+/// The content hash of a capture on disk — the key the NAM catalog indexes
+/// by, and so the handle a preset keeps on its own provenance.
+///
+/// Empty when the file cannot be read: a preset without a hash simply shows
+/// no attribution, which is the right failure. Refusing the import because a
+/// picture might be missing would be the wrong one.
+fn capture_hash(path: &str) -> String {
+    std::fs::read(path).map_or_else(
+        |e| {
+            tracing::debug!(path, %e, "capture hash: unreadable");
+            String::new()
+        },
+        |bytes| signal_nam::sha256_hex(&bytes),
+    )
+}
+
+/// Root of the local NAM library — what a cover's recorded path resolves
+/// against. The same resolution the engine and the `signal` CLI use, so all
+/// three agree on one library.
+fn nam_root() -> std::path::PathBuf {
+    let config = signal_rig_host::store::signal_config_dir();
+    signal_nam::nam_root_from_env(&config.join("nam"))
+}
+
+/// The NAM catalog, or `None` when there is not one yet.
+///
+/// A missing catalog is the ordinary state of a rig that has never imported
+/// anything. Presets then show no provenance, which is correct rather than
+/// broken — the seeded captures have none to show.
+fn nam_catalog() -> Option<signal_nam::NamCatalog> {
+    signal_nam::NamCatalog::load(&nam_root().join("catalog.json")).ok()
+}
+
+/// Media type from a cover's extension. The download writes that extension
+/// from the type it was served, so this reads it straight back.
+fn mime_for_path(path: &str) -> &'static str {
+    match std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+    {
+        Some("png") => "image/png",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        _ => "image/jpeg",
+    }
 }

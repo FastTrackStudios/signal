@@ -16,14 +16,15 @@
 //! ```ignore
 //! use_context_provider(|| client.clone());
 //! use_context_provider(|| UrlOpener::new(|url| open_in_system_browser(&url)));
-//! rsx! { ToneBrowser { on_loaded: move |(name, path)| add_preset(name, path) } }
+//! rsx! { ToneBrowser { on_loaded: move |i: ToneImport| import(i) } }
 //! ```
 //!
-//! `on_loaded` is the seam to the rig: it fires with a display name and the
-//! path the model landed at on the engine, which is exactly what
-//! `Rig::add_preset` / `Rig::set_preset_nam` take. The browser deliberately
-//! does not reach into the rig itself — it has no business knowing whether it
-//! is feeding a preset, a block, or a plugin's single amp slot.
+//! `on_loaded` is the seam to the rig: it fires with a [`ToneImport`] — what
+//! was captured, and where the file landed on the engine. The browser
+//! deliberately does not reach into the rig itself. It has no business
+//! knowing whether it is feeding a preset pool, a drive slot, or a plugin's
+//! single amp slot, which is why it reports what the capture *is* and lets
+//! the far side decide.
 
 mod art;
 mod detail;
@@ -36,7 +37,7 @@ pub use state::{Tone3000State, UrlOpener, use_tone3000_state};
 
 use dioxus::prelude::*;
 use signal_tone3000_proto::tone3000::Tone3000Client;
-use signal_tone3000_proto::{TonePage, ToneQuery, ToneShelf, ToneSummary};
+use signal_tone3000_proto::{PickedTone, TonePage, ToneQuery, ToneShelf, ToneSummary};
 
 /// What the grid is currently showing.
 #[derive(Clone, PartialEq)]
@@ -58,12 +59,117 @@ const GEARS: [(&str, &str); 4] = [
     ("pedal", "Pedals"),
 ];
 
+/// A downloaded capture, on its way into a rig.
+///
+/// More than a path, because a rig routes on what was captured: `gear`
+/// separates a pedal from an amp, and `group` collects captures of the same
+/// piece of gear, so three captures of one pedal can land as three options of
+/// one preset rather than three presets holding a third of it each.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ToneImport {
+    /// The model's display name — the preset or option label.
+    pub name: String,
+    /// Where the file landed, on the machine running the engine. That is the
+    /// right frame of reference even for a GUI on another device: the engine
+    /// is what will load it.
+    pub path: String,
+    /// The catalog's category — `amp`, `amp-cab`, `pedal`, `cab`, …
+    pub gear: String,
+    /// The Block Preset this capture belongs to — the tone it came from.
+    ///
+    /// One tone is one capture session of one rig by one creator, and its
+    /// models are that session at different settings: a Block Preset and its
+    /// variants. Two creators' AC30s are two Presets you choose between, not
+    /// variants of each other. See [`grouping_key`].
+    pub group: String,
+}
+
+/// The Block Preset a downloaded capture belongs to: **the tone it came
+/// from**.
+///
+/// A tone is one capture session — one piece of gear, one signal chain, one
+/// creator — and its models are that session at different settings. That is
+/// exactly a Block Preset and its variants, so the catalog's own unit of
+/// publication is the unit we adopt.
+///
+/// It is tempting to group by `makes` instead, so that every AC30 lands in one
+/// "AC30" preset. That is wrong twice over. It is wrong by the model — a 1964
+/// Super Twin through a Neve is not a variant of a 1965 through an SSL, they
+/// are different presets you choose between — and it is wrong in practice,
+/// because `makes` is not a gear identifier. Creators list the whole chain in
+/// it (one AC30 tone names the console, the preamp, two mics and the speaker)
+/// and spell the same amp three different ways. Grouping on it would merge
+/// captures that should stay apart and split ones that belong together.
+///
+/// Collecting two tones into one preset is therefore a decision a person
+/// makes, not one inferred from a free-text field.
+#[must_use]
+pub fn grouping_key(tone: &PickedTone) -> String {
+    tone.name.trim().to_string()
+}
+
+#[cfg(test)]
+mod grouping_tests {
+    use super::grouping_key;
+    use signal_tone3000_proto::PickedTone;
+
+    fn tone(name: &str, makes: &[&str]) -> PickedTone {
+        PickedTone {
+            name: name.to_string(),
+            makes: makes.iter().map(|m| (*m).to_string()).collect(),
+            ..PickedTone::default()
+        }
+    }
+
+    #[test]
+    fn two_captures_of_the_same_amp_are_different_presets() {
+        // Real catalog rows. Same amp, different year, different room,
+        // different creator — things you choose between, not variants of
+        // one another.
+        let amalgam = tone(
+            "1964 VOX AC30 Top Boost Super Twin - Edge of Breakup - A2",
+            &["1964 VOX AC30 Top Boost Super Twin"],
+        );
+        let bennett = tone("1965 VOX AC30 Top Boost", &["1965 Vox AC30"]);
+        assert_ne!(grouping_key(&amalgam), grouping_key(&bennett));
+    }
+
+    #[test]
+    fn makes_is_not_a_gear_identifier() {
+        // Clay Bennett's AC30 lists its whole capture chain in `makes` —
+        // console, preamp, mics, speaker — so its first entry is not the
+        // gear, and grouping on it would be arbitrary.
+        let bennett = tone(
+            "1965 VOX AC30 Top Boost",
+            &[
+                "1965 Vox AC30",
+                "1987 SSL G Series Console",
+                "Celestion Blue",
+                "Neve 1073",
+                "Royer R-121",
+                "Shure SM57",
+            ],
+        );
+        assert_eq!(grouping_key(&bennett), "1965 VOX AC30 Top Boost");
+    }
+
+    #[test]
+    fn creators_spelling_the_same_amp_differently_do_not_collide() {
+        // "VOX AC30 Top boost" and "VOX AC30 Top Boost" are the same string
+        // to nobody and the same amp to everybody — which is exactly why the
+        // tone, not the spelling, is the identity.
+        let roby = tone("RR AC30 TB", &["VOX AC30 Top boost"]);
+        let other = tone("Someone Else's AC30", &["VOX AC30 Top Boost"]);
+        assert_ne!(grouping_key(&roby), grouping_key(&other));
+    }
+}
+
 /// The tone browser.
 ///
-/// `on_loaded` fires with `(display name, engine path)` when the user picks a
-/// downloaded model for the rig.
+/// `on_loaded` fires with a [`ToneImport`] when the user picks a downloaded
+/// model for the rig.
 #[component]
-pub fn ToneBrowser(on_loaded: Callback<(String, String)>) -> Element {
+pub fn ToneBrowser(on_loaded: Callback<ToneImport>) -> Element {
     let client = use_hook(try_consume_context::<Tone3000Client>);
     let opener = use_hook(try_consume_context::<UrlOpener>);
     // Run the hook, THEN provide its value. Passing `use_tone3000_state`

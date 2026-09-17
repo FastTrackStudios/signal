@@ -180,6 +180,39 @@ pub struct PresetInfo {
     pub active: bool,
     /// How many patches point at it.
     pub used_by: u32,
+    /// Who captured it, as the source names them. Empty for a capture the
+    /// catalog has never seen — a file someone dropped in by hand.
+    pub creator: String,
+    /// Licence as the source states it (`t3k`, `cc-by`, …). Shown next to
+    /// the preset because the terms it arrived under travel with it.
+    pub license: String,
+    /// The tone's page, for an attribution link.
+    pub tone_url: String,
+    /// What was captured: `amp`, `amp-cab`, `pedal`, …
+    pub gear: String,
+    /// Whether the catalog holds cover art for this preset — so a list can
+    /// leave room for a picture before asking for the bytes.
+    /// Fetch it with [`Rig::preset_artwork`].
+    pub has_artwork: bool,
+}
+
+/// Cover art for a preset, as bytes.
+///
+/// Bytes rather than a path, for the same reason TONE3000 artwork travels as
+/// bytes: the file is on whichever machine runs the engine, a browser remote
+/// may be on a different device entirely, and a Blitz plugin editor has no
+/// browser behind it to fetch anything. A UI renders it as a `data:` URI.
+#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
+pub struct Artwork {
+    /// Encoded image bytes exactly as the library holds them — no
+    /// re-encoding, so nothing is lost or silently transcoded.
+    pub bytes: Vec<u8>,
+    /// `image/jpeg`, `image/png`, … for the `data:` URI's media type.
+    pub mime: String,
+    /// Non-empty when the art could not be read; `bytes` is then empty.
+    /// A preset with no art at all is not an error — every field is simply
+    /// empty.
+    pub error: String,
 }
 
 /// One song slot in the active setlist — key/tempo already resolved
@@ -279,7 +312,9 @@ pub mod rig {
     //! `RigStreamService`, with the `RigStreamSource` backend contract.
     use facet::Facet;
 
-    use super::{LiveBlock, PatchInfo, PerformanceModel, PresetInfo, RigStatus, TunerReading};
+    use super::{
+        Artwork, LiveBlock, PatchInfo, PerformanceModel, PresetInfo, RigStatus, TunerReading,
+    };
 
     /// One live rig change. Every variant carries **full state** (idempotent
     /// re-application), not a diff — a late or reconnecting subscriber is
@@ -344,6 +379,11 @@ pub mod rig {
         fn select_patch(&self, index: u32);
         /// The preset pool (what patches point at).
         fn presets(&self) -> Vec<PresetInfo>;
+        /// Cover art for a pool preset, by name. Every field empty when the
+        /// preset has none — a hand-added capture, or a tone that published
+        /// no photographs. Kept off [`PresetInfo`] so listing the pool does
+        /// not drag every picture across the wire.
+        fn preset_artwork(&self, preset: String) -> Artwork;
         /// Point patch `patch` at preset `preset` — rebuilds and reloads the
         /// profile's chains (brief audio gap; an edit-time operation).
         fn set_patch_preset(&self, patch: u32, preset: u32);
@@ -376,6 +416,18 @@ pub mod rig {
         /// Create a drive block preset (single option) from a `.nam`
         /// capture; add more options by editing drive-presets.styx.
         fn add_drive_preset(&self, name: String, nam_path: String);
+        /// Import a downloaded capture, routed by what was captured.
+        ///
+        /// `gear` is the catalog's own category (`pedal`, `amp`,
+        /// `amp-cab`, …) and decides the destination: a pedal becomes a
+        /// drive block preset and claims a free drive slot, anything else
+        /// joins the amp preset pool. `group` is the tone the capture came
+        /// from, so several captures of one pedal become several options of
+        /// one preset rather than several presets holding one option each.
+        ///
+        /// The routing lives here rather than in a GUI because it is rig
+        /// policy, and every GUI is a remote.
+        fn import_capture(&self, name: String, nam_path: String, gear: String, group: String);
         /// Re-read the styx library from disk and rebuild the live rig —
         /// the hook for external edits (text editor, LLM, git).
         fn reload_library(&self);
