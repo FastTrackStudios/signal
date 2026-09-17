@@ -177,7 +177,37 @@ pub struct EngineDef {
     /// The engine's own fader (dB) — rides all its layers.
     #[facet(default)]
     pub gain_db: f32,
+    /// Which kind of playable thing this is: `keys`, `organ`, `pad`,
+    /// `synth`, `bass`. Empty is inferred from [`name`](Self::name).
+    ///
+    /// `Role::Engine` says a node *is* an Engine; this says it is the Organ,
+    /// which is the definition of one. A lift cannot work it out — a
+    /// container tree never knew — so authoring has to say, and this is
+    /// where the keys rig says it.
+    ///
+    /// A string rather than an `EngineType` because it is authored in styx
+    /// and needs a "not stated" value, and facet-styx cannot read back an
+    /// optional unit-tagged enum.
+    #[facet(default)]
+    pub engine_type: String,
     pub layers: Vec<LayerDef>,
+}
+
+impl EngineDef {
+    /// The engine's kind: what it declares, else what its name implies.
+    ///
+    /// The fallback is [`EngineType::Keys`] rather than the type's own
+    /// default of `Guitar`, because every engine in a keys profile is a keys
+    /// engine of some sort — an unrecognised name is a keyboard, not a
+    /// guitar.
+    #[must_use]
+    pub fn engine_type(&self) -> signal_proto::EngineType {
+        use signal_proto::EngineType;
+        if let Some(stated) = EngineType::from_str(&self.engine_type.to_lowercase()) {
+            return stated;
+        }
+        EngineType::from_str(&self.name.to_lowercase()).unwrap_or(EngineType::Keys)
+    }
 }
 
 /// A complete keys profile: the mixer shape plus the stacks that recall it.
@@ -352,7 +382,22 @@ impl KeysProfile {
     ) -> signal_sampler::to_node::Lift {
         let mut tree = self.build_tree(resolve);
         tree.canonicalize();
-        signal_sampler::to_node::lift(&tree)
+        let mut lifted = signal_sampler::to_node::lift(&tree);
+
+        // Name which kind of playable thing each Engine is. The lift cannot:
+        // a container tree only ever knew that a node *was* an Engine.
+        for engine in &self.engines {
+            let kind = engine.engine_type();
+            if let Some(node) = lifted
+                .library
+                .nodes
+                .iter_mut()
+                .find(|n| n.name == engine.name && n.role == signal_proto::node::Role::Engine)
+            {
+                node.engine_type = kind;
+            }
+        }
+        lifted
     }
 
     /// As [`build_tree`](Self::build_tree), with the live macro values for
@@ -487,6 +532,7 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "Keys".into(),
                 gain_db: 0.0,
+                engine_type: String::new(),
                 // Three lanes, matching the live rig's mixer strip. Traced
                 // through that rig's connection graph, they carried:
                 //
@@ -512,6 +558,7 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "Pad".into(),
                 gain_db: 0.0,
+                engine_type: String::new(),
                 // Both lanes are read off the live rig's `Omni Pads` instance
                 // rather than guessed — see `gig_extract omni`. Each patch
                 // stacks two soundsources, which is what modules A and B are
@@ -547,11 +594,13 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "Organ".into(),
                 gain_db: 0.0,
+                engine_type: String::new(),
                 layers: vec![LayerDef::new("Organ A", ""), LayerDef::new("Organ B", "")],
             },
             EngineDef {
                 name: "Bass".into(),
                 gain_db: 0.0,
+                engine_type: String::new(),
                 // Its own engine, not an Aux lane. Bass occupies a register
                 // nothing else in the rig touches, it is nearly always mono
                 // and nearly always the one voice that must not be ducked by a
@@ -574,6 +623,7 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "Aux".into(),
                 gain_db: 0.0,
+                engine_type: String::new(),
                 // The two synth voices a song reaches for, seeded from the
                 // rackspaces' `Omni Synths` instance. Synth 1 is the plucked
                 // colour a song is built around; Synth 2 is the pulsing lead
@@ -607,6 +657,7 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "Drone".into(),
                 gain_db: 0.0,
+                engine_type: String::new(),
                 // The bed under a moment — a Pad-Player-style drone that
                 // holds a key while the band moves over it. One lane, because
                 // a drone is one sustained thing; the key it drones on is a
@@ -621,6 +672,7 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "SFX".into(),
                 gain_db: 0.0,
+                engine_type: String::new(),
                 // Risers, impacts, swells — fired, not played, so the lanes
                 // start empty and get filled from the browser for the song at
                 // hand.
@@ -897,6 +949,7 @@ mod order_tests {
         fresh.engines.push(EngineDef {
             name: "Brass".into(),
             gain_db: 0.0,
+            engine_type: String::new(),
             layers: vec![LayerDef::new("Brass A", "")],
         });
         fresh.apply_order(&saved_order);
@@ -1010,5 +1063,67 @@ mod order_tests {
             assert_eq!(found.zone.key_lo, lane.key_lo, "{} key_lo", lane.name);
             assert_eq!(found.zone.key_hi, lane.key_hi, "{} key_hi", lane.name);
         }
+    }
+
+    /// Every Engine in the library says which kind of playable thing it is —
+    /// the one fact a lift cannot recover, because a container tree never
+    /// carried it.
+    #[test]
+    fn every_engine_names_its_kind() {
+        use signal_proto::EngineType;
+        use signal_proto::node::Role;
+
+        let profile = worship_profile();
+        let lifted = profile.build_library(|_| None);
+
+        for engine in &profile.engines {
+            let node = lifted
+                .library
+                .nodes
+                .iter()
+                .find(|n| n.name == engine.name && n.role == Role::Engine)
+                .unwrap_or_else(|| panic!("{} is an Engine node", engine.name));
+            assert_eq!(
+                node.engine_type,
+                engine.engine_type(),
+                "{} kind",
+                engine.name
+            );
+        }
+
+        // And the inference is by name where nothing is stated, falling back
+        // to Keys rather than the type's own default of Guitar.
+        assert_eq!(
+            EngineDef {
+                name: "Organ".into(),
+                gain_db: 0.0,
+                engine_type: String::new(),
+                layers: Vec::new(),
+            }
+            .engine_type(),
+            EngineType::Organ
+        );
+        assert_eq!(
+            EngineDef {
+                name: "Aux".into(),
+                gain_db: 0.0,
+                engine_type: String::new(),
+                layers: Vec::new(),
+            }
+            .engine_type(),
+            EngineType::Keys,
+            "an unrecognised name in a keys profile is a keyboard"
+        );
+        assert_eq!(
+            EngineDef {
+                name: "Anything".into(),
+                gain_db: 0.0,
+                engine_type: "pad".into(),
+                layers: Vec::new(),
+            }
+            .engine_type(),
+            EngineType::Pad,
+            "and what it declares wins over its name"
+        );
     }
 }

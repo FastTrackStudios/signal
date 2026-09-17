@@ -176,6 +176,27 @@ empty for the worship keys profile and the Nord reference program; for the
 guitar rig it lists exactly the empty drive-board slots, whose `drive`
 value reaches no DSP because those block types have none yet.
 
+### Authoring formats stay; there is one domain
+
+Each rig has its own flat, styx-friendly def types — `ProfileDef`,
+`PatchDef`, `DrivePresetDef`, `OverrideDef` for the guitar; `KeysProfile`,
+`EngineDef`, `LayerDef` for the keys. They look like duplication of the
+node model and they are not: they are an **authoring format**, and they
+are a good one. A profile is a file a person edits at nine on a Sunday
+morning, and a flat list of lanes with patch names beats a graph of
+id-referenced nodes for that job every time.
+
+So the decision, stated so it stops being re-litigated: **the def types
+stay, and they compile to nodes.** `KeysProfile::build_library` and the
+guitar rig's `to_nodes` are the two compilers. What is *not* allowed is a
+second model — anything that resolves, overrides, stores variants or
+reaches the audio path goes through `Node`.
+
+The one thing a compiler cannot recover is what was never written down:
+`engine_type` — which kind of playable thing an Engine is. A container
+tree only ever knew that a node *was* an Engine, so `EngineDef` names it
+(inferring from the engine's name when unstated).
+
 ### The one pattern: a Collection of Variants
 
 This is the part worth internalising, because it repeats at every level.
