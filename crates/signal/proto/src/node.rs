@@ -40,6 +40,7 @@
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
+use crate::block::BlockType;
 use crate::model::Block;
 use crate::overrides::Override;
 
@@ -91,7 +92,15 @@ pub enum Combine {
 #[repr(C)]
 pub enum Content {
     /// A leaf. The only node that processes audio.
-    Leaf { block: Block },
+    ///
+    /// Carries its own [`BlockType`] because `Block` does not: in the older
+    /// model the type lived on the block-level `Preset` wrapping it, which a
+    /// single node type has no room for. A leaf has to know whether it is an
+    /// amp or a delay — the renderer asks, and so does every UI.
+    Leaf {
+        block_type: BlockType,
+        block: Block,
+    },
     /// References to other nodes, in order. Resolved through a
     /// [`NodeLibrary`] — see the module docs on why these are ids.
     Children { nodes: Vec<NodeId> },
@@ -184,14 +193,14 @@ impl Node {
     }
 
     /// A leaf holding one block.
-    pub fn leaf(name: impl Into<String>, block: Block) -> Self {
+    pub fn leaf(name: impl Into<String>, block_type: BlockType, block: Block) -> Self {
         let default = Variant::new("Default");
         Self {
             id: NodeId::new(),
             name: name.into(),
             role: Role::Module,
             combine: Combine::Serial,
-            content: Content::Leaf { block },
+            content: Content::Leaf { block_type, block },
             default_variant: default.id.clone(),
             variants: vec![default],
         }
@@ -302,8 +311,8 @@ mod tests {
     #[test]
     fn a_serial_chain_is_modules_and_leaves() {
         let mut lib = NodeLibrary::new();
-        let comp = Node::leaf("Compressor", block());
-        let amp = Node::leaf("AC30", block());
+        let comp = Node::leaf("Compressor", BlockType::Compressor, block());
+        let amp = Node::leaf("AC30", BlockType::Amp, block());
         let board = Node::container("Drive board", Role::Module, Combine::Serial);
 
         let chain = Node::container("Worship", Role::Preset, Combine::Serial)
@@ -343,7 +352,7 @@ mod tests {
     #[test]
     fn one_node_is_shared_by_every_parent_that_references_it() {
         let mut lib = NodeLibrary::new();
-        let ac30 = Node::leaf("AC30", block());
+        let ac30 = Node::leaf("AC30", BlockType::Amp, block());
         let clean = Node::container("Clean", Role::Preset, Combine::Serial).with_child(&ac30);
         let ambient = Node::container("Ambient", Role::Preset, Combine::Serial).with_child(&ac30);
 

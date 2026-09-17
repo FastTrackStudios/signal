@@ -142,6 +142,7 @@ pub mod rig;
 pub mod rig_library;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod rig_manager;
+pub mod from_node;
 pub mod rig_node;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod rig_prefs;

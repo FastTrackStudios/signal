@@ -41,7 +41,10 @@ pub struct Resolved {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResolvedContent {
-    Leaf { block: Block },
+    Leaf {
+        block_type: crate::block::BlockType,
+        block: Block,
+    },
     Children(Vec<Resolved>),
 }
 
@@ -123,7 +126,8 @@ fn resolve_node(
         .or_else(|| node.default_variant());
 
     let content = match &node.content {
-        Content::Leaf { block } => ResolvedContent::Leaf {
+        Content::Leaf { block_type, block } => ResolvedContent::Leaf {
+            block_type: *block_type,
             block: block.clone(),
         },
         Content::Children { nodes } => {
@@ -300,7 +304,7 @@ const fn segment_id(segment: &NodePathSegment) -> Option<&String> {
 }
 
 fn set_parameter(node: &mut Resolved, param: &str, value: f32) -> bool {
-    let ResolvedContent::Leaf { block } = &mut node.content else {
+    let ResolvedContent::Leaf { block, .. } = &mut node.content else {
         return false;
     };
     let Some(index) = block
@@ -360,7 +364,7 @@ mod tests {
 
     fn param_of(resolved: &Resolved, node: &NodeId, param: &str) -> Option<f32> {
         match &resolved.find(node)?.content {
-            ResolvedContent::Leaf { block } => block
+            ResolvedContent::Leaf { block, .. } => block
                 .parameters()
                 .iter()
                 .find(|p| p.id() == param)
@@ -372,8 +376,8 @@ mod tests {
     #[test]
     fn a_tree_resolves_to_its_leaves_in_order() {
         let mut lib = NodeLibrary::new();
-        let comp = Node::leaf("Comp", block_with("threshold", -40.0));
-        let amp = Node::leaf("AC30", block_with("gain", 0.5));
+        let comp = Node::leaf("Comp", crate::block::BlockType::Compressor, block_with("threshold", -40.0));
+        let amp = Node::leaf("AC30", crate::block::BlockType::Amp, block_with("gain", 0.5));
         let chain = Node::container("Worship", Role::Preset, Combine::Serial)
             .with_child(&comp)
             .with_child(&amp);
@@ -391,7 +395,7 @@ mod tests {
     #[test]
     fn an_override_reaches_one_parameter_of_one_block() {
         let mut lib = NodeLibrary::new();
-        let verb = Node::leaf("VERB 1", block_with("mix", 0.08));
+        let verb = Node::leaf("VERB 1", crate::block::BlockType::Reverb, block_with("mix", 0.08));
         let verb_id = verb.id.clone();
 
         // "Ambient": the same reverb, wetter. The block itself is untouched.
@@ -434,7 +438,7 @@ mod tests {
         let mut lib = NodeLibrary::new();
 
         // A pedal with two captures. Its "High" variant pushes the drive.
-        let pedal = Node::leaf("Drive", block_with("drive", 0.2));
+        let pedal = Node::leaf("Drive", crate::block::BlockType::Drive, block_with("drive", 0.2));
         let pedal_id = pedal.id.clone();
         let mut high = Variant::new("High");
         high.overrides.push(Override::set(
@@ -485,8 +489,8 @@ mod tests {
     #[test]
     fn a_missing_child_is_a_hole_not_a_failure() {
         let mut lib = NodeLibrary::new();
-        let present = Node::leaf("Amp", block_with("gain", 0.5));
-        let absent = Node::leaf("Gone", block_with("x", 0.0));
+        let present = Node::leaf("Amp", crate::block::BlockType::Amp, block_with("gain", 0.5));
+        let absent = Node::leaf("Gone", crate::block::BlockType::Amp, block_with("x", 0.0));
         let chain = Node::container("P", Role::Preset, Combine::Serial)
             .with_child(&present)
             .with_child(&absent);
@@ -505,8 +509,8 @@ mod tests {
     #[test]
     fn replace_ref_swaps_which_node_sits_at_a_position() {
         let mut lib = NodeLibrary::new();
-        let fender = Node::leaf("Fender Clean", block_with("gain", 0.3));
-        let ac30 = Node::leaf("AC30", block_with("gain", 0.7));
+        let fender = Node::leaf("Fender Clean", crate::block::BlockType::Amp, block_with("gain", 0.3));
+        let ac30 = Node::leaf("AC30", crate::block::BlockType::Amp, block_with("gain", 0.7));
         let fender_id = fender.id.clone();
         let ac30_id = ac30.id.clone();
 
@@ -538,7 +542,7 @@ mod tests {
     #[test]
     fn a_replacement_the_library_lacks_leaves_the_original_playing() {
         let mut lib = NodeLibrary::new();
-        let amp = Node::leaf("Amp", block_with("gain", 0.5));
+        let amp = Node::leaf("Amp", crate::block::BlockType::Amp, block_with("gain", 0.5));
         let mut broken = Variant::new("Broken");
         broken.overrides.push(Override {
             path: NodePath::new(vec![NodePathSegment::Block { id: "Amp".into() }]),
@@ -566,7 +570,7 @@ mod tests {
     #[test]
     fn a_library_round_trips_through_styx() {
         let mut lib = NodeLibrary::new();
-        let amp = Node::leaf("AC30", block_with("gain", 0.7));
+        let amp = Node::leaf("AC30", crate::block::BlockType::Amp, block_with("gain", 0.7));
         let mut lead = Variant::new("Lead");
         lead.overrides.push(Override::set(
             NodePath::new(vec![
@@ -599,7 +603,7 @@ mod tests {
     #[test]
     fn an_override_that_matches_nothing_is_reported() {
         let mut lib = NodeLibrary::new();
-        let amp = Node::leaf("Amp", block_with("gain", 0.5));
+        let amp = Node::leaf("Amp", crate::block::BlockType::Amp, block_with("gain", 0.5));
         let mut stale = Variant::new("Stale");
         // The name this points at was renamed — the silent-miss hazard,
         // surfaced instead of swallowed.

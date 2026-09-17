@@ -29,6 +29,7 @@
 //! you choose between them. See the README on where a capture becomes a
 //! preset and where it becomes a variant.
 
+use signal_proto::block::BlockType;
 use signal_proto::block_kind::{BlockKind, NamRef};
 use signal_proto::model::Block;
 use signal_proto::node::{Combine, Content, Node, NodeId, NodeLibrary, Role, Variant};
@@ -58,13 +59,17 @@ impl RigNodes {
 }
 
 /// A leaf node realized by a `.nam` capture.
-fn nam_leaf(name: &str, path: &str) -> Node {
+///
+/// `block_type` is the role the capture plays — `Amp` for a preset in the
+/// pool, `Drive` for a pedal's capture. Same `BlockKind::Nam` either way:
+/// what a capture *is* and what it *does* are the two orthogonal axes.
+fn nam_leaf(name: &str, path: &str, block_type: BlockType) -> Node {
     let mut block = Block::from_parameters(Vec::new());
     block.kind = BlockKind::Nam(NamRef {
         model_path: path.to_string(),
         model_id: None,
     });
-    Node::leaf(name, block)
+    Node::leaf(name, block_type, block)
 }
 
 /// Convert this crate's profile into the domain's node model.
@@ -80,7 +85,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     // ── Amp captures: one node each, because they are different amps ─────
     let mut amps = Vec::new();
     for preset in &def.presets {
-        let node = nam_leaf(&preset.name, &preset.nam);
+        let node = nam_leaf(&preset.name, &preset.nam, BlockType::Amp);
         amps.push((preset.name.clone(), node.id.clone()));
         library.insert(node);
     }
@@ -91,7 +96,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
         let Some(first) = pedal.options.first() else {
             continue;
         };
-        let default_leaf = nam_leaf(&first.name, &first.nam);
+        let default_leaf = nam_leaf(&first.name, &first.nam, BlockType::Drive);
         let default_id = default_leaf.id.clone();
         library.insert(default_leaf);
 
@@ -102,7 +107,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
         // Its own default variant is the first capture; each later capture
         // swaps the node in that slot. One pedal, several settings.
         for option in pedal.options.iter().skip(1) {
-            let leaf = nam_leaf(&option.name, &option.nam);
+            let leaf = nam_leaf(&option.name, &option.nam, BlockType::Drive);
             let mut variant = Variant::new(&option.name);
             variant.overrides.push(Override {
                 path: NodePath::new(vec![NodePathSegment::Block {
@@ -217,7 +222,7 @@ mod tests {
 
     fn nam_of(node: &signal_proto::node_resolve::Resolved) -> Option<&str> {
         match &node.content {
-            ResolvedContent::Leaf { block } => match &block.kind {
+            ResolvedContent::Leaf { block, .. } => match &block.kind {
                 BlockKind::Nam(nam) => Some(nam.model_path.as_str()),
                 _ => None,
             },
@@ -295,6 +300,34 @@ mod tests {
                 .any(|o| matches!(o.op, NodeOverrideOp::ReplaceRef { id: _ }))),
             "a later capture swaps the node in the slot"
         );
+    }
+
+    /// The end of the road: nodes to something the sampler plays.
+    ///
+    /// This is what the old `from_proto` could not do — it dropped names and
+    /// parameters and skipped native blocks, which is why the rig never used
+    /// it.
+    #[test]
+    fn a_patch_resolves_all_the_way_to_playable_blocks() {
+        let rig = to_nodes(&worship_def(), &drive_presets());
+        let ambient = rig.patch("Ambient").expect("Ambient");
+        let (resolved, report) =
+            resolve(&rig.library, &rig.chain, Some(ambient)).expect("resolves");
+        assert!(report.missing.is_empty());
+
+        let chain = signal_sampler::from_node::to_chain(&resolved);
+        assert!(!chain.is_empty(), "the patch renders to a chain");
+
+        let amp = chain.last().expect("the chain ends in the amp");
+        assert_eq!(amp.block_type, signal_proto::block::BlockType::Amp);
+        assert!(
+            amp.nam.contains("AC30") || amp.nam.contains("TB30"),
+            "and it is the AC30 this patch asked for: {}",
+            amp.nam
+        );
+        // Names and identity survive, which the old bridge dropped outright.
+        assert!(chain.iter().all(|b| !b.name.is_empty()));
+        assert!(chain.iter().all(|b| !b.id.is_empty()));
     }
 
     /// The whole rig survives the format it is stored in.
