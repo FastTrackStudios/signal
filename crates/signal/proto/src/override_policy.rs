@@ -27,7 +27,7 @@ pub struct ScenePolicy;
 pub struct FreePolicy;
 
 fn is_parameter_target(path: &NodePath) -> bool {
-    matches!(path.segments().last(), Some(NodePathSegment::Parameter(_)))
+    matches!(path.segments().last(), Some(NodePathSegment::Parameter { id: _ }))
 }
 
 const fn is_flow_mutation(op: &NodeOverrideOp) -> bool {

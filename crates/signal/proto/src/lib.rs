@@ -73,6 +73,8 @@ pub mod midi;
 pub mod midi_actions;
 pub mod module_type;
 pub mod override_policy;
+pub mod node;
+pub mod node_resolve;
 pub mod overrides;
 pub mod plugin_block;
 pub mod profile;

@@ -27,3 +27,6 @@ getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 serde_json.workspace = true
+# The node model persists as styx — the rig library is hand-editable text,
+# so the round trip is a property worth testing, not an assumption.
+facet-styx.workspace = true

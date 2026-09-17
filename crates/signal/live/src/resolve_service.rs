@@ -78,35 +78,35 @@ fn id_matches(entity_id: &str, path_or_alias: &str) -> bool {
 
 fn segment_engine(path: &signal_proto::overrides::NodePath) -> Option<&str> {
     path.segments().iter().find_map(|seg| match seg {
-        NodePathSegment::Engine(v) => Some(v.as_str()),
+        NodePathSegment::Engine { id: v } => Some(v.as_str()),
         _ => None,
     })
 }
 
 fn segment_layer(path: &signal_proto::overrides::NodePath) -> Option<&str> {
     path.segments().iter().find_map(|seg| match seg {
-        NodePathSegment::Layer(v) => Some(v.as_str()),
+        NodePathSegment::Layer { id: v } => Some(v.as_str()),
         _ => None,
     })
 }
 
 fn segment_module(path: &signal_proto::overrides::NodePath) -> Option<&str> {
     path.segments().iter().find_map(|seg| match seg {
-        NodePathSegment::Module(v) => Some(v.as_str()),
+        NodePathSegment::Module { id: v } => Some(v.as_str()),
         _ => None,
     })
 }
 
 fn segment_block(path: &signal_proto::overrides::NodePath) -> Option<&str> {
     path.segments().iter().find_map(|seg| match seg {
-        NodePathSegment::Block(v) => Some(v.as_str()),
+        NodePathSegment::Block { id: v } => Some(v.as_str()),
         _ => None,
     })
 }
 
 fn segment_param(path: &signal_proto::overrides::NodePath) -> Option<&str> {
     path.segments().iter().find_map(|seg| match seg {
-        NodePathSegment::Parameter(v) => Some(v.as_str()),
+        NodePathSegment::Parameter { id: v } => Some(v.as_str()),
         _ => None,
     })
 }

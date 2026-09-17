@@ -11,27 +11,34 @@ use crate::ParameterValue;
 
 // ─── Override target path ───────────────────────────────────────
 
-/// Strongly-typed segment inside an override path.
+/// One step of an override's path — a strongly-typed segment.
+///
+/// **Struct variants, not tuple variants.** A newtype tuple variant does not
+/// round-trip through styx: it writes `@Engine"x"` and cannot read that back.
+/// The rig library is hand-editable styx text, so every variant here carries a
+/// named field instead — the same reason `RigNode::Block` is a struct variant.
+/// These were all tuple variants once; persisting the override system is what
+/// changed them.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum NodePathSegment {
-    Engine(String),
-    Layer(String),
-    Module(String),
-    Block(String),
-    Parameter(String),
-    Raw(String),
+    Engine { id: String },
+    Layer { id: String },
+    Module { id: String },
+    Block { id: String },
+    Parameter { id: String },
+    Raw { text: String },
 }
 
 impl NodePathSegment {
     fn to_legacy_piece(&self) -> String {
         match self {
-            Self::Engine(id) => format!("engine.{id}"),
-            Self::Layer(id) => format!("layer.{id}"),
-            Self::Module(id) => format!("module.{id}"),
-            Self::Block(id) => format!("block.{id}"),
-            Self::Parameter(id) => format!("param.{id}"),
-            Self::Raw(raw) => raw.clone(),
+            Self::Engine { id } => format!("engine.{id}"),
+            Self::Layer { id } => format!("layer.{id}"),
+            Self::Module { id } => format!("module.{id}"),
+            Self::Block { id } => format!("block.{id}"),
+            Self::Parameter { id } => format!("param.{id}"),
+            Self::Raw { text } => text.clone(),
         }
     }
 }
@@ -71,52 +78,52 @@ impl NodePath {
     }
 
     pub fn engine(id: impl Into<String>) -> Self {
-        Self(vec![NodePathSegment::Engine(id.into())])
+        Self(vec![NodePathSegment::Engine { id: id.into() }])
     }
 
     pub fn layer(id: impl Into<String>) -> Self {
-        Self(vec![NodePathSegment::Layer(id.into())])
+        Self(vec![NodePathSegment::Layer { id: id.into() }])
     }
 
     pub fn module(id: impl Into<String>) -> Self {
-        Self(vec![NodePathSegment::Module(id.into())])
+        Self(vec![NodePathSegment::Module { id: id.into() }])
     }
 
     pub fn block(id: impl Into<String>) -> Self {
-        Self(vec![NodePathSegment::Block(id.into())])
+        Self(vec![NodePathSegment::Block { id: id.into() }])
     }
 
     pub fn parameter(id: impl Into<String>) -> Self {
-        Self(vec![NodePathSegment::Parameter(id.into())])
+        Self(vec![NodePathSegment::Parameter { id: id.into() }])
     }
 
     #[must_use]
     pub fn with_engine(mut self, id: impl Into<String>) -> Self {
-        self.0.push(NodePathSegment::Engine(id.into()));
+        self.0.push(NodePathSegment::Engine { id: id.into() });
         self
     }
 
     #[must_use]
     pub fn with_layer(mut self, id: impl Into<String>) -> Self {
-        self.0.push(NodePathSegment::Layer(id.into()));
+        self.0.push(NodePathSegment::Layer { id: id.into() });
         self
     }
 
     #[must_use]
     pub fn with_module(mut self, id: impl Into<String>) -> Self {
-        self.0.push(NodePathSegment::Module(id.into()));
+        self.0.push(NodePathSegment::Module { id: id.into() });
         self
     }
 
     #[must_use]
     pub fn with_block(mut self, id: impl Into<String>) -> Self {
-        self.0.push(NodePathSegment::Block(id.into()));
+        self.0.push(NodePathSegment::Block { id: id.into() });
         self
     }
 
     #[must_use]
     pub fn with_parameter(mut self, id: impl Into<String>) -> Self {
-        self.0.push(NodePathSegment::Parameter(id.into()));
+        self.0.push(NodePathSegment::Parameter { id: id.into() });
         self
     }
 
@@ -140,27 +147,27 @@ impl NodePath {
             let next = tokens.get(i + 1).copied();
             match (tok, next) {
                 ("engine", Some(id)) => {
-                    out.push(NodePathSegment::Engine(id.to_string()));
+                    out.push(NodePathSegment::Engine { id: id.to_string() });
                     i += 2;
                 }
                 ("layer", Some(id)) => {
-                    out.push(NodePathSegment::Layer(id.to_string()));
+                    out.push(NodePathSegment::Layer { id: id.to_string() });
                     i += 2;
                 }
                 ("module", Some(id)) => {
-                    out.push(NodePathSegment::Module(id.to_string()));
+                    out.push(NodePathSegment::Module { id: id.to_string() });
                     i += 2;
                 }
                 ("block", Some(id)) => {
-                    out.push(NodePathSegment::Block(id.to_string()));
+                    out.push(NodePathSegment::Block { id: id.to_string() });
                     i += 2;
                 }
                 ("param" | "parameter", Some(id)) => {
-                    out.push(NodePathSegment::Parameter(id.to_string()));
+                    out.push(NodePathSegment::Parameter { id: id.to_string() });
                     i += 2;
                 }
                 _ => {
-                    out.push(NodePathSegment::Raw(tok.to_string()));
+                    out.push(NodePathSegment::Raw { text: tok.to_string() });
                     i += 1;
                 }
             }
@@ -182,36 +189,26 @@ impl NodePath {
             let kind = tokens[i];
             let id = tokens.get(i + 1).copied();
             match kind {
-                "engine" => out.push(NodePathSegment::Engine(
-                    id.ok_or(NodePathError::MissingSegmentId {
+                "engine" => out.push(NodePathSegment::Engine { id: id.ok_or(NodePathError::MissingSegmentId {
                         kind: kind.to_string(),
                     })?
-                    .to_string(),
-                )),
-                "layer" => out.push(NodePathSegment::Layer(
-                    id.ok_or(NodePathError::MissingSegmentId {
+                    .to_string(), }),
+                "layer" => out.push(NodePathSegment::Layer { id: id.ok_or(NodePathError::MissingSegmentId {
                         kind: kind.to_string(),
                     })?
-                    .to_string(),
-                )),
-                "module" => out.push(NodePathSegment::Module(
-                    id.ok_or(NodePathError::MissingSegmentId {
+                    .to_string(), }),
+                "module" => out.push(NodePathSegment::Module { id: id.ok_or(NodePathError::MissingSegmentId {
                         kind: kind.to_string(),
                     })?
-                    .to_string(),
-                )),
-                "block" => out.push(NodePathSegment::Block(
-                    id.ok_or(NodePathError::MissingSegmentId {
+                    .to_string(), }),
+                "block" => out.push(NodePathSegment::Block { id: id.ok_or(NodePathError::MissingSegmentId {
                         kind: kind.to_string(),
                     })?
-                    .to_string(),
-                )),
-                "param" | "parameter" => out.push(NodePathSegment::Parameter(
-                    id.ok_or(NodePathError::MissingSegmentId {
+                    .to_string(), }),
+                "param" | "parameter" => out.push(NodePathSegment::Parameter { id: id.ok_or(NodePathError::MissingSegmentId {
                         kind: kind.to_string(),
                     })?
-                    .to_string(),
-                )),
+                    .to_string(), }),
                 other => return Err(NodePathError::UnknownKind(other.to_string())),
             }
             i += 2;
@@ -225,11 +222,11 @@ impl NodePath {
         self.0.iter().any(|seg| {
             matches!(
                 seg,
-                NodePathSegment::Engine(_)
-                    | NodePathSegment::Layer(_)
-                    | NodePathSegment::Module(_)
-                    | NodePathSegment::Block(_)
-                    | NodePathSegment::Parameter(_)
+                NodePathSegment::Engine { id: _ }
+                    | NodePathSegment::Layer { id: _ }
+                    | NodePathSegment::Module { id: _ }
+                    | NodePathSegment::Block { id: _ }
+                    | NodePathSegment::Parameter { id: _ }
             )
         })
     }
