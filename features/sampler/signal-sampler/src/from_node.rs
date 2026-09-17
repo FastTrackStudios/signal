@@ -79,6 +79,7 @@ pub fn to_block(leaf: &Resolved) -> RigBlock {
             rb.id = leaf.id.as_str().to_string();
             rb.block_type = *block_type;
         }
+        BlockKind::ImpulseResponse { ir } => rb.ir = ir.path.clone(),
         BlockKind::Sample { sample } => {
             rb.sample = sample.spec_path.clone();
             rb.samples_root = sample.samples_root.clone();
@@ -93,6 +94,22 @@ pub fn to_block(leaf: &Resolved) -> RigBlock {
     for param in block.parameters() {
         rb = rb.with_param(param.id(), param.real().to_string());
     }
+
+    // Values a lift could not range are carried as settings rather than
+    // clamped into the unit interval — see `to_node`. They go back exactly
+    // as they came, which is what makes that trade lossless.
+    for setting in &leaf.settings {
+        if let Some(name) = setting.name.strip_prefix(crate::to_node::RAW_PARAM) {
+            rb = rb.with_param(name, setting.value.clone());
+        } else if setting.name == crate::to_node::MODULE_SETTING {
+            rb.module = setting.value.clone();
+        }
+    }
+
+    // A leaf's input and output level ARE a block's trims. The five-level
+    // model needed a separate pair of fields because a block was not a node.
+    rb.input_trim_db = leaf.input_db;
+    rb.output_trim_db = leaf.output_db;
 
     // Bypass is resolved state, not authored state: it may have been set by
     // an override from any level above this leaf.

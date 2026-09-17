@@ -23,7 +23,7 @@
 //! the whole rig down.
 
 use crate::model::Block;
-use crate::node::{Combine, Content, NodeId, NodeLibrary, Role, VariantId};
+use crate::node::{Combine, Content, NodeId, NodeLibrary, Role, Selection, VariantId};
 use crate::node_routing::{AudioSend, ModRoute, Setting, Zone};
 use crate::overrides::{NodeOverrideOp, NodePath, NodePathSegment, Override};
 
@@ -123,14 +123,36 @@ pub fn resolve(
 ) -> Result<(Resolved, Report), ResolveError> {
     let mut report = Report::default();
     let mut path = Vec::new();
-    let resolved = resolve_node(library, root, variant, &mut path, &mut report)?;
+    let resolved = resolve_node(
+        library,
+        root,
+        variant,
+        &Inherited::default(),
+        &mut path,
+        &mut report,
+    )?;
     Ok((resolved, report))
+}
+
+/// What an ancestor's variant decided that still applies further down.
+///
+/// Both halves address a node **by id**, and ids are unique, so neither needs
+/// to say how deep the node sits — and therefore both should reach however
+/// deep it actually is. See [`effective_selections`] for what went wrong when
+/// they reached exactly one level.
+#[derive(Default, Clone)]
+struct Inherited {
+    selections: Vec<Selection>,
+    /// `ReplaceRef` overrides whose path is a single segment: "wherever this
+    /// node is below me, use that one instead".
+    replacements: Vec<Override>,
 }
 
 fn resolve_node(
     library: &NodeLibrary,
     id: &NodeId,
     variant: Option<&VariantId>,
+    inherited: &Inherited,
     path: &mut Vec<NodeId>,
     report: &mut Report,
 ) -> Result<Resolved, ResolveError> {
@@ -154,15 +176,23 @@ fn resolve_node(
         },
         Content::Children { nodes } => {
             path.push(id.clone());
+            let scope = Inherited {
+                selections: effective_selections(chosen, &inherited.selections),
+                replacements: effective_replacements(chosen, &inherited.replacements),
+            };
             let mut children = Vec::with_capacity(nodes.len());
             for child in nodes {
                 // `ReplaceRef` swaps *which node* sits here, so it has to be
                 // read before the child is resolved — this is how one patch
                 // recalls the chain with a different amp in it.
-                let child = replacement_for(library, chosen, child).unwrap_or(child);
-                // A child the variant does not name uses its own default.
-                let child_variant = chosen.and_then(|v| v.selection_for(child));
-                match resolve_node(library, child, child_variant, path, report) {
+                let child = replacement_for(library, &scope.replacements, child).unwrap_or(child);
+                // A child nothing has named uses its own default.
+                let child_variant = scope
+                    .selections
+                    .iter()
+                    .find(|s| &s.node == child)
+                    .map(|s| &s.variant);
+                match resolve_node(library, child, child_variant, &scope, path, report) {
                     Ok(resolved) => children.push(resolved),
                     // A dangling reference is a hole, not a failure: play the
                     // rest of the rig and say what is missing.
@@ -184,7 +214,7 @@ fn resolve_node(
     let mut modulators = Vec::with_capacity(node.modulators.len());
     path.push(id.clone());
     for modulator in &node.modulators {
-        match resolve_node(library, modulator, None, path, report) {
+        match resolve_node(library, modulator, None, inherited, path, report) {
             Ok(resolved) => modulators.push(resolved),
             Err(ResolveError::NoSuchNode(missing)) => report.missing.push(missing),
             Err(cycle) => {
@@ -224,6 +254,59 @@ fn resolve_node(
     Ok(resolved)
 }
 
+/// The selections in force inside a node: its chosen variant's own, plus
+/// everything an ancestor's variant selected that it has not overruled.
+///
+/// A [`Selection`] names a node **by id**, and ids are unique, so it does not
+/// need to say how deep that node sits — which means it should reach however
+/// deep the node actually is. Without this it reached exactly one level, and
+/// the depth a node happened to sit at silently decided whether a variant
+/// applied: the guitar rig's drive pedals stopped obeying their patch the
+/// moment they were grouped into a Drive module, and played their first
+/// capture instead of the selected one. Nothing said so; it was just the
+/// wrong pedal setting.
+///
+/// The nearer variant wins, so a Layer can pick a capture its Engine also
+/// picked differently — the same precedence overrides have.
+fn effective_selections(
+    variant: Option<&crate::node::Variant>,
+    inherited: &[Selection],
+) -> Vec<Selection> {
+    let own = variant.map_or(&[][..], |v| v.selections.as_slice());
+    let mut out = own.to_vec();
+    for selection in inherited {
+        if !out.iter().any(|s| s.node == selection.node) {
+            out.push(selection.clone());
+        }
+    }
+    out
+}
+
+/// The single-segment `ReplaceRef` overrides in force inside a node: its
+/// chosen variant's, plus an ancestor's.
+///
+/// Inherited ones come last, so a nearer variant's replacement of the same
+/// node wins — the same precedence as selections.
+fn effective_replacements(
+    variant: Option<&crate::node::Variant>,
+    inherited: &[Override],
+) -> Vec<Override> {
+    let mut out: Vec<Override> = variant
+        .map(|v| {
+            v.overrides
+                .iter()
+                .filter(|ov| {
+                    matches!(ov.op, NodeOverrideOp::ReplaceRef { id: _ })
+                        && ov.path.segments().len() == 1
+                })
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    out.extend(inherited.iter().cloned());
+    out
+}
+
 /// The node a variant wants in `child`'s place, if it names one.
 ///
 /// A `ReplaceRef` whose path is a single segment naming this child swaps the
@@ -235,11 +318,10 @@ fn resolve_node(
 /// into a hole: the original child still plays.
 fn replacement_for<'a>(
     library: &'a NodeLibrary,
-    variant: Option<&'a crate::node::Variant>,
+    replacements: &[Override],
     child: &'a NodeId,
 ) -> Option<&'a NodeId> {
-    let variant = variant?;
-    variant.overrides.iter().find_map(|ov| {
+    replacements.iter().find_map(|ov| {
         let NodeOverrideOp::ReplaceRef { id: with } = &ov.op else {
             return None;
         };
@@ -307,20 +389,52 @@ fn apply_override(root: &mut Resolved, ov: &Override) -> bool {
 /// Matches a segment against a node's **id first, then its name**. Ids are
 /// what a stored override should carry; names are accepted so a hand-written
 /// styx file stays readable.
+/// Walk a path from `root`, matching each segment against a **descendant**
+/// rather than only a direct child.
+///
+/// So a path is relative, and its segments need not be consecutive: `block
+/// VERB 1 -> param mix` reaches the reverb wherever it sits, and `module Time
+/// -> block VERB 1` reaches it via the Time module without having to name
+/// every container in between.
+///
+/// This is the same rule selections and `ReplaceRef` follow, and it is what
+/// the rig itself has always done — the guitar rig's own override applier
+/// finds a block by name anywhere in the chain. Requiring direct children
+/// made an override's survival depend on how deeply the block happened to be
+/// grouped: grouping the chain into Module containers silently stopped every
+/// patch override from applying, which on stage is a patch that does not
+/// change what it promised to change.
+///
+/// First match wins, depth-first in chain order. Two nodes sharing a name is
+/// the ambiguity a name always carries — an id cannot be ambiguous, which is
+/// why an id is the better thing to address with.
 fn walk<'a>(root: &'a mut Resolved, path: &[NodePathSegment]) -> Option<&'a mut Resolved> {
     let mut current = root;
     for segment in path {
         let Some(wanted) = segment_id(segment) else {
             continue;
         };
-        let ResolvedContent::Children(children) = &mut current.content else {
-            return None;
-        };
-        current = children
-            .iter_mut()
-            .find(|c| c.id.as_str() == wanted || &c.name == wanted)?;
+        current = find_descendant(current, wanted)?;
     }
     Some(current)
+}
+
+/// The nearest descendant matching `wanted` by id or name, depth-first.
+fn find_descendant<'a>(node: &'a mut Resolved, wanted: &str) -> Option<&'a mut Resolved> {
+    let ResolvedContent::Children(children) = &mut node.content else {
+        return None;
+    };
+    // Breadth first among siblings, so a direct child always beats a deeper
+    // namesake — the nearer answer is the one an author meant.
+    if let Some(index) = children
+        .iter()
+        .position(|c| c.id.as_str() == wanted || c.name == wanted)
+    {
+        return children.get_mut(index);
+    }
+    children
+        .iter_mut()
+        .find_map(|child| find_descendant(child, wanted))
 }
 
 /// A readable rendering of a path, for a report a person has to act on.

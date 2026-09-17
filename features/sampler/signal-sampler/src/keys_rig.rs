@@ -921,6 +921,40 @@ impl KeysRig {
         f32::from_bits(self.gain.load(std::sync::atomic::Ordering::Relaxed))
     }
 
+    /// Swap the playable preset, from the domain library it lives in.
+    ///
+    /// The library is the source of truth: `root` names the program, and
+    /// `variant` picks which of its variants to recall — a Snapshot, which
+    /// the container tree has no way to express. Resolution applies the
+    /// variant's selections and overrides, and the result renders exactly as
+    /// a hand-built tree of the same shape would.
+    ///
+    /// Falls back to nothing if the root is not in the library: a rig that
+    /// cannot find its program keeps playing the one it has, which is the
+    /// only useful behaviour on stage.
+    pub fn load_node(
+        &mut self,
+        library: &signal_proto::node::NodeLibrary,
+        root: &signal_proto::node::NodeId,
+        variant: Option<&signal_proto::node::VariantId>,
+    ) {
+        match signal_proto::node_resolve::resolve(library, root, variant) {
+            Ok((resolved, report)) => {
+                if !report.is_clean() {
+                    // A hole resolves to silence in that lane rather than a
+                    // failure to load — say which, then play the rest.
+                    tracing::warn!(
+                        missing = report.missing.len(),
+                        unmatched = report.unmatched_overrides.len(),
+                        "keys rig: program resolved with holes"
+                    );
+                }
+                self.load_preset(&crate::from_node::to_container(&resolved));
+            }
+            Err(e) => tracing::warn!(error = %e, "keys rig: program did not resolve"),
+        }
+    }
+
     /// Swap the playable preset (glitch-free re-insert under the renderer
     /// lock). The master gain lives on the track fader, so it carries over.
     /// Single mode only — lane mode reloads via [`load_lanes`](Self::load_lanes).

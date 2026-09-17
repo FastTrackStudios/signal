@@ -47,6 +47,13 @@ pub enum BlockKind {
     Nam { model: NamRef },
     /// Third-party CLAP / VST3 plugin loaded from disk.
     HostedPlugin { plugin: HostedPluginRef },
+    /// Convolution with a cabinet impulse response.
+    ///
+    /// Distinct from `Nam`: a `.nam` model is a learned nonlinearity, an IR
+    /// is a linear convolution, and a rig routinely has one of each in
+    /// series — amp model into cabinet IR. Without this a lifted cabinet
+    /// lost its IR path, which is most of what a cabinet is.
+    ImpulseResponse { ir: IrRef },
     /// Sampled playback from a sample-library spec — a Keyscape piano, an
     /// Omnisphere soundsource, a drum kit, an orchestral section.
     ///
@@ -69,6 +76,7 @@ impl BlockKind {
             Self::Native => "native",
             Self::Nam { .. } => "nam",
             Self::HostedPlugin { .. } => "plugin",
+            Self::ImpulseResponse { .. } => "ir",
             Self::Sample { .. } => "sample",
             Self::Custom { .. } => "custom",
         }
@@ -196,6 +204,13 @@ pub struct HostedPluginRef {
     /// the host's `save_state`. Base64 or raw — host decides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_b64: Option<String>,
+}
+
+/// Reference to a cabinet impulse response.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Facet)]
+pub struct IrRef {
+    /// Path to the `.wav` impulse response.
+    pub path: String,
 }
 
 /// Reference to a sample library and the part of it a block plays.
@@ -328,6 +343,11 @@ mod tests {
                     format: "Clap".into(),
                     path: "/usr/lib/clap/x.clap".into(),
                     state_b64: Some("AAAA".into()),
+                },
+            },
+            BlockKind::ImpulseResponse {
+                ir: IrRef {
+                    path: "cabs/greenback.wav".into(),
                 },
             },
             BlockKind::Sample {

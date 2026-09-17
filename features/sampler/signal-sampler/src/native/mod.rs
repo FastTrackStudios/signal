@@ -19,6 +19,7 @@ mod control;
 mod filter;
 mod freq_shifter;
 mod modal;
+mod ranges;
 mod registry;
 mod waveshaper;
 mod wavetable;
@@ -32,6 +33,7 @@ pub use control::{ControlEnv, ControlLfo, ControlSource, LfoWave, MidiMod, MidiS
 pub use filter::{FilterCharacter, FilterMode, Ladder, NativeFilter, Svf};
 pub use freq_shifter::NativeDfs;
 pub use modal::NativeModal;
+pub use ranges::{default_of, range_of, ranges_of};
 pub(crate) use registry::build_native_source;
 pub use registry::{build_native, native_dsp_available};
 pub use waveshaper::NativeWaveshaper;

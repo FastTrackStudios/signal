@@ -32,7 +32,7 @@
 use signal_proto::block::BlockType;
 use signal_proto::block_kind::{BlockKind, NamRef};
 use signal_proto::model::Block;
-use signal_proto::node::{Combine, Content, Node, NodeId, NodeLibrary, Role, Variant};
+use signal_proto::node::{Combine, Content, Node, NodeId, NodeLibrary, Role, Selection, Variant};
 use signal_proto::overrides::{NodeOverrideOp, NodePath, NodePathSegment, Override};
 
 use signal_sampler::gapless::{Bank, InstallError, Resident, VariantBank};
@@ -156,7 +156,7 @@ impl PatchBank {
 /// pool, `Drive` for a pedal's capture. Same `BlockKind::Nam` either way:
 /// what a capture *is* and what it *does* are the two orthogonal axes.
 fn nam_leaf(name: &str, path: &str, block_type: BlockType) -> Node {
-    let mut block = Block::from_parameters(Vec::new());
+    let mut block = Block::with_exact_parameters(Vec::new());
     block.kind = BlockKind::Nam {
         model: NamRef {
             model_path: path.to_string(),
@@ -166,12 +166,54 @@ fn nam_leaf(name: &str, path: &str, block_type: BlockType) -> Node {
     Node::leaf(name, block_type, block)
 }
 
+/// The module a block belongs to: what it says, or what its type implies.
+///
+/// `RigBlock::module` is the explicit answer and is usually empty; the block
+/// type's category is the implicit one the rig has always used ("Empty =
+/// grouped by the block type's category"). Either way every block has a
+/// purpose, and in the node model a purpose is a container.
+fn module_of(block: &signal_sampler::RigBlock) -> String {
+    if block.module.is_empty() {
+        block.block_type.category().display_name().to_string()
+    } else {
+        block.module.clone()
+    }
+}
+
+/// A pedal capture as a leaf, matching what the chain builder makes of the
+/// same capture.
+///
+/// The drive board comes up **bypassed** — every pedal off until the control
+/// surface engages it — and that is state, not decoration: a chain resolved
+/// with three drives live is a different rig. The `drive` value rides along
+/// as a setting because `BlockType::Drive` has no native DSP to range it
+/// against; see `to_node` on why that is carried rather than guessed.
+fn drive_leaf(name: &str, path: &str) -> Node {
+    let mut node = nam_leaf(name, path, BlockType::Drive);
+    node.bypassed = true;
+    node.settings.push(signal_proto::node_routing::Setting {
+        name: format!("{}drive", signal_sampler::to_node::RAW_PARAM),
+        value: "0.5".to_string(),
+    });
+    node
+}
+
 /// Convert this crate's profile into the domain's node model.
 ///
-/// Structure only — the native FX blocks the chain builder adds (compressor,
-/// EQ, delays, reverbs) are not carried yet, because the audio-side bridge
-/// still drops their parameters. What is carried is everything the patches
-/// actually differ by: the amp, the drive board, and the overrides.
+/// The **whole** chain, not an outline of it: the compressor, the volume
+/// pedal, the drive board, the amp, the gate, the amp EQ and the time module
+/// all become nodes, with their parameter values ranged against the DSP that
+/// reads them. It was structure-only until the audio-side bridge stopped
+/// dropping parameters and `native::range_of` gave the values somewhere to
+/// land.
+///
+/// One thing is deliberately *not* a copy of the built chain. A drive slot
+/// points at that pedal's container node — whose variants are its captures —
+/// rather than at a flat block named after the slot. So the resolved chain
+/// names a drive by its capture ("Both Sides") where the builder names it by
+/// its slot ("Drive 1"). That is the model earning its keep: the pedal is one
+/// node with several settings, and swapping between them is a variant switch
+/// rather than a rebuild.
 #[must_use]
 pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     let mut library = NodeLibrary::new();
@@ -190,7 +232,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
         let Some(first) = pedal.options.first() else {
             continue;
         };
-        let default_leaf = nam_leaf(&first.name, &first.nam, BlockType::Drive);
+        let default_leaf = drive_leaf(&first.name, &first.nam);
         let default_id = default_leaf.id.clone();
         library.insert(default_leaf);
 
@@ -198,10 +240,15 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
         if let Content::Children { nodes } = &mut node.content {
             nodes.push(default_id.clone());
         }
+        // Option index → the variant that recalls it. Index 0 is the node's
+        // own default; the rest are variants that swap the capture in the
+        // slot. A profile assigns a slot *an option*, so the chain has to be
+        // able to name one.
+        let mut options = vec![node.default_variant.clone()];
         // Its own default variant is the first capture; each later capture
         // swaps the node in that slot. One pedal, several settings.
         for option in pedal.options.iter().skip(1) {
-            let leaf = nam_leaf(&option.name, &option.nam, BlockType::Drive);
+            let leaf = drive_leaf(&option.name, &option.nam);
             let mut variant = Variant::new(&option.name);
             variant.overrides.push(Override {
                 path: NodePath::new(vec![NodePathSegment::Block {
@@ -212,42 +259,141 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
                 },
             });
             library.insert(leaf);
+            options.push(variant.id.clone());
             node.variants.push(variant);
         }
-        pedals.push((pedal.name.clone(), node.id.clone()));
+        pedals.push((pedal.name.clone(), node.id.clone(), options));
         library.insert(node);
     }
 
-    // ── The chain: one node, with a slot per drive and one for the amp ───
+    // ── The chain: the real chain, slot for slot ─────────────────────────
+    //
+    // Built by walking the chain `build_profile` produces — the compressor,
+    // the volume pedal, the gate, the amp EQ, the time module, all of it —
+    // and lifting each block into a leaf node, except at two kinds of slot:
+    //
+    // - a **drive slot** points at that pedal's container node, so its
+    //   captures stay variants of one pedal;
+    // - the **amp slot** points at an amp capture node, which patches swap.
+    //
+    // This used to hold only the drives and the amp, which made the node
+    // library a sketch of the rig rather than the rig. Lifting the rest is
+    // what lets the library be the source of truth: what resolves out of it
+    // is the chain, not an outline of it.
+    let built = crate::profiles::build_profile(def, drives);
+    let base_chain: &[signal_sampler::RigBlock] = built
+        .patches
+        .first()
+        .map_or(&[], |patch| patch.chain.as_slice());
+
     let mut chain = Node::container(&def.name, Role::Preset, Combine::Serial);
     let mut amp_slot = None;
-    if let Content::Children { nodes } = &mut chain.content {
-        for slot in crate::profiles::DRIVE_SLOTS {
-            let assigned = def
-                .drives
+    let mut slot_options: Vec<Selection> = Vec::new();
+    // Blocks grouped into Module containers, because that is what a Module
+    // *is* — "a collection of blocks with a purpose". The rig already says
+    // which purpose each block belongs to: its explicit `module`, or its
+    // block type's category. A patch override addressed as
+    // `module Time -> block VERB 1 -> param mix` needs the Time module to
+    // exist as a node, and this is where it comes from.
+    let mut modules: Vec<(String, Vec<NodeId>)> = Vec::new();
+    let mut push_into = |module: String, id: NodeId, modules: &mut Vec<(String, Vec<NodeId>)>| {
+        // Consecutive blocks of one purpose are one module. Non-consecutive
+        // ones are separate modules of the same name — the chain's order is
+        // the signal order and must not be rearranged to tidy the grouping.
+        match modules.last_mut() {
+            Some((name, ids)) if *name == module => ids.push(id),
+            _ => modules.push((module, vec![id])),
+        }
+    };
+    {
+        for block in base_chain {
+            // A drive slot: the block's name is one of the board's slots.
+            let drive_slot = crate::profiles::DRIVE_SLOTS
                 .iter()
-                .find(|d| d.block.eq_ignore_ascii_case(slot))
-                .and_then(|d| {
-                    pedals
-                        .iter()
-                        .find(|(name, _)| name.eq_ignore_ascii_case(&d.preset))
-                });
-            if let Some((_, id)) = assigned {
-                nodes.push(id.clone());
+                .find(|slot| block.display_name().eq_ignore_ascii_case(slot));
+            if let Some(slot) = drive_slot {
+                let assigned = def
+                    .drives
+                    .iter()
+                    .find(|d| d.block.eq_ignore_ascii_case(slot))
+                    .and_then(|d| {
+                        pedals
+                            .iter()
+                            .find(|(name, _, _)| name.eq_ignore_ascii_case(&d.preset))
+                            .map(|(_, id, options)| (id, options, d.option))
+                    });
+                if let Some((id, options, option)) = assigned {
+                    push_into(module_of(block), id.clone(), &mut modules);
+                    // Which of the pedal's captures this slot runs. Without
+                    // this the chain resolved every pedal to its first
+                    // capture, so a slot assigned the Medium Gain setting
+                    // played the Low Gain one — the same pedal, the wrong
+                    // sound.
+                    if let Some(variant) = options.get(option) {
+                        slot_options.push(Selection {
+                            node: id.clone(),
+                            variant: variant.clone(),
+                        });
+                    }
+                    continue;
+                }
+                // A slot the profile has not assigned is still a slot: the
+                // builder puts a transparent placeholder there so every slot
+                // stays addressable, and dropping it here would make the
+                // library's chain a block shorter than the rig's.
             }
+            // The amp slot holds the first capture; every patch that wants a
+            // different one swaps it.
+            if block.block_type == BlockType::Amp {
+                if let Some((_, id)) = amps.first() {
+                    push_into(module_of(block), id.clone(), &mut modules);
+                    amp_slot = Some(id.clone());
+                }
+                continue;
+            }
+            // Everything else is itself.
+            let (leaf, _report) = signal_sampler::to_node::lift_one_block(block);
+            push_into(module_of(block), leaf.id.clone(), &mut modules);
+            library.insert(leaf);
         }
-        // The amp slot holds the first preset; every patch that wants a
-        // different one swaps it.
-        if let Some((_, id)) = amps.first() {
-            nodes.push(id.clone());
-            amp_slot = Some(id.clone());
+    }
+
+    // One container per module, in chain order, under the chain node.
+    if let Content::Children { nodes } = &mut chain.content {
+        for (name, children) in modules {
+            let mut module = Node::container(&name, Role::Module, Combine::Serial);
+            if let Content::Children { nodes: inner } = &mut module.content {
+                *inner = children;
+            }
+            nodes.push(module.id.clone());
+            library.insert(module);
         }
+    }
+
+    // What a parameter of a named block means — the base chain knows which
+    // block type each name is, and the block type's DSP knows the range.
+    let ranges = |block: &str, param: &str| {
+        base_chain
+            .iter()
+            .find(|b| b.display_name().eq_ignore_ascii_case(block))
+            .and_then(|b| signal_sampler::native::range_of(b.block_type, param))
+    };
+
+    // The pedal settings the board is wired to, on the chain's own default.
+    if let Some(default) = chain.variants.first_mut() {
+        default.selections.extend(slot_options.iter().cloned());
     }
 
     // ── Patches: variants of that one chain ──────────────────────────────
     let mut patches = Vec::new();
     for patch in &def.patches {
         let mut variant = Variant::new(&patch.name);
+        // Each variant carries the board's pedal settings, because a child
+        // a variant does not name falls back to its *own* default — not to
+        // whatever the node's default variant selected. A patch that said
+        // nothing about the drives would otherwise quietly play a different
+        // capture from the one the board is wired to.
+        variant.selections.extend(slot_options.iter().cloned());
         // A patch wanting the amp already in the slot needs no override;
         // every other patch swaps it.
         if let Some(slot) = amp_slot.as_ref()
@@ -265,11 +411,57 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
                 },
             });
         }
-        variant
-            .overrides
-            .extend(patch.overrides.iter().filter_map(to_override));
+        variant.overrides.extend(
+            patch
+                .overrides
+                .iter()
+                .filter_map(|ov| to_override(ov, &ranges)),
+        );
         patches.push((patch.name.clone(), variant.id.clone()));
         chain.variants.push(variant);
+    }
+
+    // A patch may bend a parameter the chain never set — the Ambient patch
+    // picks a reverb algorithm, and the built chain only sets mix, decay and
+    // size. The rig's own applier pushes such a parameter onto the block when
+    // it is missing; the domain cannot, because an override names a parameter
+    // and does not carry its range.
+    //
+    // So seed it here, at the DSP's own default, and let the override move it
+    // from there. Only the parameters some patch actually touches exist,
+    // which keeps the library the size of the rig rather than the size of
+    // every knob the DSP has.
+    for patch in &def.patches {
+        for ov in &patch.overrides {
+            if ov.op.as_str() != "set" || ov.param.is_empty() || ov.block.is_empty() {
+                continue;
+            }
+            let Some(target) = base_chain
+                .iter()
+                .find(|b| b.display_name().eq_ignore_ascii_case(&ov.block))
+            else {
+                continue;
+            };
+            let Some(range) = signal_sampler::native::range_of(target.block_type, &ov.param) else {
+                continue;
+            };
+            let default = signal_sampler::native::default_of(target.block_type, &ov.param)
+                .unwrap_or(range.min);
+            let Some(node) = library
+                .nodes
+                .iter_mut()
+                .find(|n| n.name.eq_ignore_ascii_case(&ov.block) && n.is_leaf())
+            else {
+                continue;
+            };
+            if let Content::Leaf { block, .. } = &mut node.content
+                && !block.parameters().iter().any(|p| p.id() == ov.param)
+            {
+                block.push_parameter(signal_proto::BlockParameter::ranged(
+                    &ov.param, &ov.param, default, range,
+                ));
+            }
+        }
     }
 
     let chain_id = chain.id.clone();
@@ -286,13 +478,32 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
 /// Returns `None` for an op this rig writes but the domain expresses another
 /// way — `set_text` swaps an asset, which is a `ReplaceRef` against a node,
 /// not a parameter write.
-fn to_override(ov: &OverrideDef) -> Option<Override> {
+/// One of this crate's flat override defs as a domain [`Override`].
+///
+/// `ranges` answers what a block's parameter means, by block name — the
+/// override's value is a **real** value in the DSP's units (a delay feedback
+/// of 0.4 on a 0..0.95 control, 800 Hz on a filter) while the domain stores a
+/// normalized position, so it has to be converted here. Without that, a
+/// feedback of 0.4 was stored as the position 0.4 and came back out as 0.38:
+/// a real difference, silently, on every patch that bends a parameter.
+///
+/// A parameter `ranges` cannot answer for keeps the value as written, which
+/// is the same trade the lift makes for an unrangeable parameter.
+fn to_override(
+    ov: &OverrideDef,
+    ranges: &impl Fn(&str, &str) -> Option<signal_proto::ParameterRange>,
+) -> Option<Override> {
     let mut segments = Vec::new();
-    if !ov.module.is_empty() {
-        segments.push(NodePathSegment::Module {
-            id: ov.module.clone(),
-        });
-    }
+    // `OverrideDef::module` is deliberately NOT part of the path.
+    //
+    // It reads like an address and is not one: this crate's own applier
+    // (`profiles::apply_overrides`) matches on the block name alone and never
+    // looks at it, and `ProfileDef::override_modules` collects it "for the
+    // UI's" benefit. It is a display grouping, and the names it uses are the
+    // player's ("Utility"), not the block types' categories ("Dynamics").
+    //
+    // Emitting it as a path segment made the domain stricter than the rig has
+    // ever been, and the override then matched nothing.
     if !ov.block.is_empty() {
         segments.push(NodePathSegment::Block {
             id: ov.block.clone(),
@@ -303,7 +514,9 @@ fn to_override(ov: &OverrideDef) -> Option<Override> {
             segments.push(NodePathSegment::Parameter {
                 id: ov.param.clone(),
             });
-            Some(Override::set(NodePath::new(segments), ov.value))
+            let position =
+                ranges(&ov.block, &ov.param).map_or(ov.value, |range| range.normalize(ov.value));
+            Some(Override::set(NodePath::new(segments), position))
         }
         "bypass" => Some(Override::bypass(NodePath::new(segments), ov.value >= 0.5)),
         _ => None,
@@ -315,6 +528,17 @@ mod tests {
     use super::*;
     use crate::profiles::{drive_presets, worship_def};
     use signal_proto::node_resolve::{ResolvedContent, resolve};
+
+    /// The amp capture in a resolved chain, by block type — the chain runs
+    /// on past it, so position says nothing.
+    fn amp_leaf<'a>(
+        leaves: &[&'a signal_proto::node_resolve::Resolved],
+    ) -> Option<&'a signal_proto::node_resolve::Resolved> {
+        leaves.iter().copied().find(|leaf| match &leaf.content {
+            ResolvedContent::Leaf { block_type, .. } => *block_type == BlockType::Amp,
+            ResolvedContent::Children(_) => false,
+        })
+    }
 
     fn nam_of(node: &signal_proto::node_resolve::Resolved) -> Option<&str> {
         match &node.content {
@@ -358,8 +582,10 @@ mod tests {
         let clean = rig.patch("Clean").expect("Clean exists");
         let (resolved, report) = resolve(&rig.library, &rig.chain, Some(clean)).expect("resolves");
         assert!(report.missing.is_empty(), "no dangling references");
+        // By block type, not by position: the chain continues past the amp
+        // into the gate, the amp EQ and the time module.
         let leaves = resolved.leaves();
-        let amp = leaves.last().expect("the chain ends in the amp");
+        let amp = amp_leaf(&leaves).expect("the chain has an amp");
         assert!(
             nam_of(amp).is_some_and(|p| p.contains("Fender")),
             "Clean points at the Fender capture, got {:?}",
@@ -368,7 +594,8 @@ mod tests {
 
         let ambient = rig.patch("Ambient").expect("Ambient exists");
         let (resolved, _) = resolve(&rig.library, &rig.chain, Some(ambient)).expect("resolves");
-        let amp = resolved.leaves().last().copied().expect("amp");
+        let leaves = resolved.leaves();
+        let amp = amp_leaf(&leaves).expect("amp");
         assert!(
             nam_of(amp).is_some_and(|p| p.contains("AC30") || p.contains("TB30")),
             "Ambient points at the AC30 capture, got {:?}",
@@ -414,8 +641,10 @@ mod tests {
         let chain = signal_sampler::from_node::to_chain(&resolved);
         assert!(!chain.is_empty(), "the patch renders to a chain");
 
-        let amp = chain.last().expect("the chain ends in the amp");
-        assert_eq!(amp.block_type, signal_proto::block::BlockType::Amp);
+        let amp = chain
+            .iter()
+            .find(|b| b.block_type == signal_proto::block::BlockType::Amp)
+            .expect("the chain has an amp");
         assert!(
             amp.nam.contains("AC30") || amp.nam.contains("TB30"),
             "and it is the AC30 this patch asked for: {}",
@@ -554,6 +783,137 @@ mod tests {
             before.leaves().len(),
             after.leaves().len(),
             "the same rig plays after a save and load"
+        );
+    }
+
+    /// The library reproduces the rig, patch for patch and block for block.
+    ///
+    /// `build_profile` is the rig as it plays today; the node library is the
+    /// rig as the domain holds it. This resolves every patch's variant, sends
+    /// it through `from_node`, and compares the result against the chain
+    /// `build_profile` builds for the same patch — names, types, capture
+    /// paths and every parameter value.
+    ///
+    /// It is the check that makes adoption safe rather than hopeful: if this
+    /// passes, the rig can be driven from the library without sounding any
+    /// different.
+    #[test]
+    fn the_library_reproduces_every_patch_of_the_rig() {
+        let def = worship_def();
+        let drives = drive_presets();
+        let rig = to_nodes(&def, &drives);
+        let built = crate::profiles::build_profile(&def, &drives);
+
+        for patch in &built.patches {
+            let variant = rig.patch(&patch.name).unwrap_or_else(|| {
+                panic!("{} has no variant", patch.name);
+            });
+            let (resolved, report) = resolve(&rig.library, &rig.chain, Some(variant))
+                .unwrap_or_else(|e| panic!("{} did not resolve: {e}", patch.name));
+            assert!(report.is_clean(), "{}: {report:?}", patch.name);
+
+            let chain = signal_sampler::from_node::to_chain(&resolved);
+            assert_eq!(
+                chain.len(),
+                patch.chain.len(),
+                "{}: {} blocks from the library against {} from the builder\n  library: {:?}\n  builder: {:?}",
+                patch.name,
+                chain.len(),
+                patch.chain.len(),
+                chain
+                    .iter()
+                    .map(|b| b.display_name().to_string())
+                    .collect::<Vec<_>>(),
+                patch
+                    .chain
+                    .iter()
+                    .map(|b| b.display_name().to_string())
+                    .collect::<Vec<_>>(),
+            );
+
+            for (from_library, from_builder) in chain.iter().zip(patch.chain.iter()) {
+                assert_eq!(
+                    from_library.block_type,
+                    from_builder.block_type,
+                    "{}: block type at {}",
+                    patch.name,
+                    from_builder.display_name()
+                );
+                assert_eq!(
+                    from_library.nam,
+                    from_builder.nam,
+                    "{}: capture for {}",
+                    patch.name,
+                    from_builder.display_name()
+                );
+                assert_eq!(
+                    from_library.bypassed,
+                    from_builder.bypassed,
+                    "{}: bypass state of {} — the drive board comes up off",
+                    patch.name,
+                    from_builder.display_name()
+                );
+                for param in &from_builder.params {
+                    let want: f32 = param.value.trim().parse().unwrap_or(0.0);
+                    let got = from_library.param_f32(&param.name).unwrap_or_else(|| {
+                        panic!(
+                            "{}: {} lost parameter {}",
+                            patch.name,
+                            from_builder.display_name(),
+                            param.name
+                        )
+                    });
+                    assert!(
+                        (got - want).abs() < want.abs() * 0.01 + 0.01,
+                        "{}: {}.{} was {want} and came back {got}",
+                        patch.name,
+                        from_builder.display_name(),
+                        param.name
+                    );
+                }
+            }
+        }
+    }
+
+    /// And the library understands the rig's parameters rather than carrying
+    /// them as opaque strings — the measure of how much of the guitar rig the
+    /// domain actually models.
+    #[test]
+    fn the_rigs_parameters_are_all_ranged() {
+        let def = worship_def();
+        let drives = drive_presets();
+        let built = crate::profiles::build_profile(&def, &drives);
+
+        let mut unranged = Vec::new();
+        for patch in &built.patches {
+            for block in &patch.chain {
+                let (_, report) = signal_sampler::to_node::lift_one_block(block);
+                unranged.extend(report.unranged);
+            }
+        }
+        unranged.sort();
+        unranged.dedup();
+
+        // Exactly four, and they are the same finding four times: the empty
+        // drive-board slots are `BlockType::Boost` / `BlockType::Drive`
+        // placeholders carrying `("drive", "0.5")`, and neither type has any
+        // native DSP — both build as `NativePassthrough`, which declares no
+        // parameters at all.
+        //
+        // So there is no range to declare, because there is nothing for the
+        // value to mean yet. Worth knowing on its own: that `drive` reaches
+        // no DSP today, and has not since the placeholders were added. The
+        // lift carries it verbatim, so it is there for whoever writes the
+        // pedal, and this list is how we will notice when they do.
+        assert_eq!(
+            unranged,
+            vec![
+                ("Boost".to_string(), "drive".to_string()),
+                ("Drive 1".to_string(), "drive".to_string()),
+                ("Drive 2".to_string(), "drive".to_string()),
+                ("Drive 3".to_string(), "drive".to_string()),
+            ],
+            "the only unrangeable values should be the placeholder pedals'"
         );
     }
 }

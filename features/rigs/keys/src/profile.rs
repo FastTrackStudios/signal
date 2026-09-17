@@ -333,6 +333,28 @@ impl KeysProfile {
         })
     }
 
+    /// The profile as a **node library** — the domain form, and the one the
+    /// rig should hold.
+    ///
+    /// Same tree as [`build_tree`](Self::build_tree), lifted: every lane,
+    /// module and block becomes a node with a stable id, and the program
+    /// gains what a `Container` has never had — variants at every level
+    /// (a Snapshot per stack), overrides that reach a single parameter,
+    /// persistence, and gapless recall between variants.
+    ///
+    /// The tree is canonicalized first, so the cross-tree sends resolve to
+    /// ids rather than staying names. The returned report lists any
+    /// parameter whose range the domain could not determine; it is empty for
+    /// the shipped profiles, and a regression test keeps it that way.
+    pub fn build_library(
+        &self,
+        resolve: impl Fn(&str) -> Option<String>,
+    ) -> signal_sampler::to_node::Lift {
+        let mut tree = self.build_tree(resolve);
+        tree.canonicalize();
+        signal_sampler::to_node::lift(&tree)
+    }
+
     /// As [`build_tree`](Self::build_tree), with the live macro values for
     /// each `(layer, module)` — what makes the Filter block and the envelopes
     /// carry the rig's actual settings.
@@ -883,5 +905,110 @@ mod order_tests {
             &["SFX".to_string(), "Drone".to_string()]
         );
         assert!(fresh.engine("Brass").is_some());
+    }
+
+    /// The worship keys rig, through the domain and back out unchanged.
+    ///
+    /// This is the thing that was not possible before: a keys lane is a
+    /// sampler with a key split, a fader and a filter envelope, and until
+    /// `Node` gained zones, faders and a sample realization there was no way
+    /// to put one in a `NodeLibrary` at all. Now the whole profile lifts,
+    /// resolves and renders back to the identical tree — so the library can
+    /// be the source of truth without the rig sounding any different.
+    #[test]
+    fn the_worship_profile_survives_the_domain() {
+        use signal_proto::node_resolve::resolve;
+
+        let profile = worship_profile();
+        let mut tree = profile.build_tree(|_| None);
+        tree.canonicalize();
+        let before = tree.dump();
+
+        let lifted = signal_sampler::to_node::lift(&tree);
+        let (resolved, report) =
+            resolve(&lifted.library, &lifted.root, None).expect("the profile resolves");
+        assert!(report.is_clean(), "{report:?}");
+
+        let after = signal_sampler::from_node::to_container(&resolved).dump();
+        assert_eq!(before, after, "the keys rig changed crossing the domain");
+    }
+
+    /// Every lane's parameters cross as ranged domain parameters, not as raw
+    /// settings — so the lift report is the measure of how much of the rig
+    /// the domain actually understands.
+    #[test]
+    fn the_worship_profiles_parameters_are_all_ranged() {
+        let profile = worship_profile();
+        let mut tree = profile.build_tree(|_| None);
+        tree.canonicalize();
+
+        let lifted = signal_sampler::to_node::lift(&tree);
+        assert!(
+            lifted.report.is_clean(),
+            "parameters the domain could not range: {:?}",
+            lifted.report.unranged
+        );
+    }
+
+    /// The rig playing from the library, not from a tree: build the profile
+    /// as nodes, resolve, compile, and check the renderer found the same
+    /// faders it finds from the hand-built tree.
+    ///
+    /// This is what "the library is the source of truth" means in practice —
+    /// the audio path is reached through `resolve`, and nothing downstream
+    /// can tell the difference.
+    #[test]
+    fn the_rig_compiles_from_the_library() {
+        use signal_proto::node_resolve::resolve;
+        use signal_sampler::rig_node::Role;
+
+        let profile = worship_profile();
+        let lifted = profile.build_library(|_| None);
+        let (resolved, report) =
+            resolve(&lifted.library, &lifted.root, None).expect("the program resolves");
+        assert!(report.is_clean(), "{report:?}");
+
+        let tree = signal_sampler::from_node::to_container(&resolved);
+        let (_, cells) = signal_sampler::node_render::RenderNode::compile_with_cells(&tree, 48_000);
+
+        for name in profile.layer_names() {
+            assert!(
+                cells.get(Role::Layer, &name).is_some(),
+                "no gain cell for lane {name} when compiled from the library"
+            );
+        }
+        for engine in &profile.engines {
+            assert!(
+                cells.get(Role::Engine, &engine.name).is_some(),
+                "no gain cell for engine {} when compiled from the library",
+                engine.name
+            );
+        }
+    }
+
+    /// Each lane's key split reaches the renderer through the domain. A
+    /// `Node` could not express a zone at all until this work, so a keys
+    /// program crossing the domain used to mean losing every split.
+    #[test]
+    fn key_splits_survive_the_library() {
+        use signal_proto::node_resolve::resolve;
+
+        let profile = worship_profile();
+        let split_lanes: Vec<&LayerDef> = profile
+            .engines
+            .iter()
+            .flat_map(|e| e.layers.iter())
+            .filter(|l| !l.is_full_range())
+            .collect();
+
+        let lifted = profile.build_library(|_| None);
+        let (resolved, _) = resolve(&lifted.library, &lifted.root, None).expect("resolves");
+        let tree = signal_sampler::from_node::to_container(&resolved);
+
+        for lane in split_lanes {
+            let found = tree.find(&lane.name).expect(&lane.name);
+            assert_eq!(found.zone.key_lo, lane.key_lo, "{} key_lo", lane.name);
+            assert_eq!(found.zone.key_hi, lane.key_hi, "{} key_hi", lane.name);
+        }
     }
 }

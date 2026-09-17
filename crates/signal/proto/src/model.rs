@@ -98,6 +98,25 @@ impl Block {
         ])
     }
 
+    /// A block holding exactly these parameters — including none.
+    ///
+    /// [`from_parameters`](Self::from_parameters) substitutes a placeholder
+    /// `value` parameter for an empty list, so that a block built by hand
+    /// always has something to show. That is wrong for a block being
+    /// *converted* from somewhere else: a passthrough Rotary declares no
+    /// parameters, and inventing one means the conversion back invents a
+    /// parameter write too.
+    #[must_use]
+    pub fn with_exact_parameters(parameters: Vec<signal_macromod::BlockParameter>) -> Self {
+        Self {
+            parameters,
+            macro_bank: None,
+            param_curation: None,
+            modulation: None,
+            kind: crate::block_kind::BlockKind::Native,
+        }
+    }
+
     #[must_use]
     pub fn from_parameters(parameters: Vec<signal_macromod::BlockParameter>) -> Self {
         let parameters = if parameters.is_empty() {
@@ -118,6 +137,23 @@ impl Block {
     #[must_use]
     pub fn parameters(&self) -> &[signal_macromod::BlockParameter] {
         &self.parameters
+    }
+
+    /// Add a parameter this block does not have yet.
+    ///
+    /// A block stores the parameters something has an opinion about, not
+    /// every knob its DSP owns — a reverb declares 181 and a rig typically
+    /// sets three. So a parameter that is about to be overridden has to be
+    /// given a starting point first, because an [`Override`](crate::overrides::Override)
+    /// names a parameter and carries no range of its own.
+    ///
+    /// Does nothing if the id is already present: the existing value and its
+    /// range are the authored ones and outrank a default.
+    pub fn push_parameter(&mut self, parameter: signal_macromod::BlockParameter) {
+        if self.parameters.iter().any(|p| p.id() == parameter.id()) {
+            return;
+        }
+        self.parameters.push(parameter);
     }
 
     pub fn set_parameter_value(&mut self, index: usize, value: f32) {

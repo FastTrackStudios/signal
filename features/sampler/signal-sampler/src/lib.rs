@@ -156,6 +156,7 @@ pub mod soundsource;
 pub mod spec;
 pub mod stats;
 pub mod styx_edit;
+pub mod to_node;
 
 pub use audio_soundsource::AudioSoundsource;
 pub use bank::{PreloadProfile, SamplerBank};
