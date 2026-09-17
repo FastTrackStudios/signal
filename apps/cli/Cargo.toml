@@ -1,0 +1,33 @@
+[package]
+name = "signal-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The `signal` command line — the rig and its tone library, without a GUI"
+
+[[bin]]
+name = "signal"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The TONE3000 half of the engine: session, search, downloads. The CLI is a
+# second front-end onto the same backend the app and the plugin drive, not a
+# second implementation of it.
+signal-tone3000.workspace = true
+signal-tone3000-proto.workspace = true
+# The account broker — a linked FastTrackStudio account authorizes downloads
+# on a machine that never signed in to TONE3000 itself.
+signal-account.workspace = true
+# Where the NAM library lives (`NAM_LIBRARY_PATH`, else <config>/nam).
+signal-nam.workspace = true
+# `signal_config_dir()`. Deliberately rig-host rather than signal-sampler:
+# the CLI wants the path, not an audio engine.
+signal-rig-host.workspace = true
+
+clap = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true

@@ -63,10 +63,9 @@ apps/      desktop (signal-desktop — THE app: the Signal desktop GUI;
            feature embed-web. Renamed from `fasttrackstudio` in Aug 2026
            when the app became Signal-only; the iOS app builds from this
            same crate),
-           daw-cli, keyflow-cli, installer, plugins/, extensions/,
-           site (fts-site — fasttrackstudio.app website, dioxus web),
-           docs-site (docs.fasttrackstudio.app — dodeca + kf docs, NOT a
-           cargo member; `just docs-build` / `just docs-serve`)
+           cli (signal-cli — the `signal` command; `signal tone3000
+           search|show|fetch` browses the catalog and pulls captures into
+           the NAM library without a GUI), fts-convert, plugins/, web
 docs/      cross-domain guides (facet, styx, tracey, spec/)
 ```
 
@@ -155,7 +154,7 @@ Everything builds from the repo root (one workspace):
 ```bash
 cargo check --workspace                          # the whole tree
 cargo build -p signal-desktop                   # THE app (GUI; `--engine` = headless signal engine)
-cargo build -p fts-cli                           # the unified `fts` CLI (fts daw / fts kf / fts signal engine / fts status)
+cargo build -p signal-cli                        # the `signal` CLI (signal tone3000 status|login|search|show|fetch)
 cargo check -p signal-desktop --target wasm32-unknown-unknown --no-default-features --features signal  # browser remote (web build)
 ```
 
