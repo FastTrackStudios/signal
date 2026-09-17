@@ -119,6 +119,63 @@ a mod route by **id**, the renderer still by **display name**, so the
 conversion translates. Until the renderer takes ids, renaming a block can
 still miss a route on the audio side.
 
+### Ranges: what a parameter's number means
+
+A parameter's stored value is a **position**, 0..=1, with no units. That is
+the right thing to automate, modulate, learn a MIDI CC onto and save —
+every one of those wants a single dimensionless number.
+
+It is the wrong thing to hand a DSP, which wants 5500 Hz, and the wrong
+thing to show a player. A `ParameterRange` is the missing half: the span,
+the taper and the unit. `BlockParameter::ranged(id, name, real, range)`
+takes the real value and stores the position; `param.real()` gives it
+back.
+
+**Taper is not decoration.** A frequency knob with a linear taper is
+unusable — half its travel sits above 10 kHz. Frequency, time and Q are
+heard as ratios and want `Logarithmic`, where the midpoint is the
+geometric mean; dB is already logarithmic in the ear and wants `Linear`.
+And because a position means whatever its range says, changing a taper
+later *moves* every stored value of that parameter. It has to be right
+before values are stored.
+
+Where a range comes from, in order:
+
+1. **The DSP itself.** Every native block declares its parameters'
+   min/max, so `native::range_of` reads them off one cached instance per
+   block type — 800-odd parameters across 22 types, never a copy that can
+   drift.
+2. **Declared by hand**, for the control-rate blocks (envelope, LFO,
+   arpeggiator) that have no instance to ask, against the code that reads
+   them.
+3. **Nowhere.** A hosted plugin's parameters are the plugin's, readable
+   only once it is loaded. Those values are carried verbatim rather than
+   guessed into the unit interval, which would clamp 2.5 Hz to 1.0.
+
+The one thing that cannot be inferred is what a name means: an envelope's
+`attack` is in **seconds** and a compressor's is in **milliseconds**. Only
+the code reading a value knows what the number is, which is why a range is
+keyed by block type and not by parameter name.
+
+### Lifting an audio tree into the domain
+
+`signal_sampler::to_node::lift` takes a `Container` tree — what the rigs'
+builders produce — and puts it in a `NodeLibrary`, where it gains stable
+identity, variants at every level, overrides, persistence and gapless
+recall. `from_node::to_container` renders it back.
+
+That is how both rigs adopted the domain without being rewritten: the
+builders still hold the knowledge, and the library is the source of truth.
+`KeysProfile::build_library` and the guitar rig's `to_nodes` are the two
+entry points, and both are covered by tests that resolve the real rig out
+of the library and compare it block for block against what the builder
+makes.
+
+A lift reports any parameter whose range it could not determine. It is
+empty for the worship keys profile and the Nord reference program; for the
+guitar rig it lists exactly the empty drive-board slots, whose `drive`
+value reaches no DSP because those block types have none yet.
+
 ### The one pattern: a Collection of Variants
 
 This is the part worth internalising, because it repeats at every level.
@@ -175,6 +232,20 @@ tree — all the way down to **one parameter inside one block**:
 engine "Pad" → layer "Shimmer" → module "Tone" → block "Hi Cut" → param "freq"
 ```
 
+**A path is relative, and its segments need not be consecutive.** Each one
+matches a *descendant*, nearest first — so `block "Hi Cut" → param "freq"`
+reaches that block wherever it sits, and naming the Engine and Layer above
+it only narrows which "Hi Cut" is meant when there are several.
+
+That is deliberate, and it was learned the hard way. When a segment had to
+match a direct child, an override's survival depended on how deeply the
+block happened to be grouped: grouping the guitar chain into Module
+containers silently stopped *every* patch override from applying. Nothing
+errored — the patches just no longer changed what they promised to change.
+Selections and `ReplaceRef` reach the same way, and for the same reason:
+all three address a node by id, ids are unique, so none of them needs to
+say how deep the node is.
+
 Stop anywhere on that walk and you have a legal target, so the same
 mechanism covers every grain:
 
@@ -190,7 +261,7 @@ The operations:
 
 | Op | What it does |
 |---|---|
-| `Set(value)` | Put a parameter at an absolute value. |
+| `Set(value)` | Put a parameter at an absolute **normalized position** — see below. |
 | `ReplaceRef(id)` | **Swap the preset/variant referenced at this path** — recall an Engine but with a different Layer preset loaded, or a different Module inside one of its Layers. |
 | `Bypass(bool)` | Bypass a block or a whole module. |
 | `Enable(bool)` | Enable / disable the node. |
@@ -203,6 +274,12 @@ So "recall this Engine, but swap Shimmer's preset" is one `ReplaceRef` on
 copied either way, and the Shimmer preset itself never changes — which is
 the point: the same preset can be loaded in twenty songs, each bending a
 different parameter of it, with one thing on disk.
+
+A `Set` carries a position, not a value in the parameter's units, because
+that is what the domain stores everywhere — see *Ranges* below. Whatever
+authors an override in real units has to convert first; the guitar rig's
+patch defs do, and before they did, a delay feedback of 0.4 on a 0..0.95
+control came back as 0.38 on every patch that bent a parameter.
 
 **Not every level may do everything.** Which operations are legal depends
 on what is carrying the override, enforced by `override_policy`:

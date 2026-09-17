@@ -148,6 +148,110 @@ fn lift_container(
     library.insert(node)
 }
 
+/// A [`RigPreset`](crate::rig_library::RigPreset) as a node with one variant
+/// per scene — the third preset concept, folded into the first.
+///
+/// A rig library's preset is a name with several scenes under it, each a
+/// whole chain: "Marshall JCM800" holding Clean, Drive and Lead. A `Node`
+/// with variants is the same idea, so this is the same collapse the five
+/// levels went through — `RigPreset`/`RigScene` were a parallel preset
+/// system, with their own default, their own naming and no overrides.
+///
+/// The shape needs one indirection. A scene is not a *diff* of another scene,
+/// it is an independent chain, and a variant may not rewrite its node's child
+/// list. So the preset node holds a single slot, each scene is its own chain
+/// node, and each variant swaps the slot with a `ReplaceRef`. Recalling a
+/// scene is then the ordinary variant switch every other level already has —
+/// including gapless, which a `RigScene` never was.
+///
+/// Returns the library, the preset node, and each scene's variant by name.
+#[must_use]
+pub fn lift_preset(preset: &crate::rig_library::RigPreset) -> ScenePreset {
+    use signal_proto::node::{Combine, Role};
+    use signal_proto::overrides::{NodeOverrideOp, NodePath, NodePathSegment, Override};
+
+    let mut library = NodeLibrary::new();
+    let mut report = LiftReport::default();
+
+    // Each scene as its own chain node. A scene's trims are the node's input
+    // and output level — the same unification a block's trims got.
+    let mut scenes = Vec::new();
+    for scene in &preset.scenes {
+        let mut node = Node::container(&scene.name, Role::Module, Combine::Serial);
+        node.input_db = scene.input_trim_db;
+        node.output_db = scene.output_trim_db;
+        if let Content::Children { nodes } = &mut node.content {
+            for block in &scene.chain {
+                nodes.push(lift_block(block, &mut library, &mut report));
+            }
+        }
+        scenes.push((scene.name.clone(), library.insert(node)));
+    }
+
+    // The preset: one slot, holding its default scene.
+    let default_index = preset.default_scene.min(scenes.len().saturating_sub(1));
+    let mut node = Node::container(&preset.name, Role::Preset, Combine::Serial);
+    let slot = scenes.get(default_index).map(|(_, id)| id.clone());
+    if let (Content::Children { nodes }, Some(slot)) = (&mut node.content, slot.as_ref()) {
+        nodes.push(slot.clone());
+    }
+
+    // One variant per scene. The default scene's variant is the node's own
+    // default and needs no override; every other swaps the slot.
+    let mut variants = Vec::new();
+    for (index, (name, id)) in scenes.iter().enumerate() {
+        if index == default_index {
+            if let Some(default) = node.variants.first_mut() {
+                default.name = name.clone();
+                variants.push((name.clone(), default.id.clone()));
+            }
+            continue;
+        }
+        let mut variant = Variant::new(name);
+        if let Some(slot) = slot.as_ref() {
+            variant.overrides.push(Override {
+                path: NodePath::new(vec![NodePathSegment::Block {
+                    id: slot.as_str().to_string(),
+                }]),
+                op: NodeOverrideOp::ReplaceRef {
+                    id: id.as_str().to_string(),
+                },
+            });
+        }
+        variants.push((name.clone(), variant.id.clone()));
+        node.variants.push(variant);
+    }
+
+    let root = library.insert(node);
+    ScenePreset {
+        library,
+        root,
+        scenes: variants,
+        report,
+    }
+}
+
+/// A [`RigPreset`](crate::rig_library::RigPreset) in the domain.
+pub struct ScenePreset {
+    pub library: NodeLibrary,
+    /// The preset node. Resolve it with one of [`scenes`](Self::scenes).
+    pub root: NodeId,
+    /// Scene name → the variant that recalls it.
+    pub scenes: Vec<(String, signal_proto::node::VariantId)>,
+    pub report: LiftReport,
+}
+
+impl ScenePreset {
+    /// The variant for a scene by name.
+    #[must_use]
+    pub fn scene(&self, name: &str) -> Option<&signal_proto::node::VariantId> {
+        self.scenes
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v)
+    }
+}
+
 /// One block as a leaf node, with whatever the lift could not range.
 ///
 /// Public because a rig that composes its own library needs the same
@@ -314,7 +418,7 @@ mod tests {
     use signal_proto::block::BlockType;
     use signal_proto::node_resolve::resolve;
 
-    use crate::from_node::to_container;
+    use crate::from_node::{to_chain, to_container};
 
     /// Lift, resolve, render — and the tree that comes out is the tree that
     /// went in. `dump()` is the comparison because it shows everything the
@@ -578,5 +682,77 @@ mod tests {
                 send.label
             );
         }
+    }
+
+    /// A rig library preset's scenes become variants of one node, which is
+    /// the third preset system folded into the first.
+    #[test]
+    fn a_presets_scenes_become_its_variants() {
+        use crate::rig_library::{RigPreset, RigScene};
+
+        let preset = RigPreset::new("Marshall JCM800")
+            .with_scene(RigScene::single(
+                "Clean",
+                RigBlock::nam("amps/jcm800-clean.nam").named("Amp"),
+            ))
+            .with_scene(RigScene::single(
+                "Lead",
+                RigBlock::nam("amps/jcm800-lead.nam").named("Amp"),
+            ));
+
+        let lifted = lift_preset(&preset);
+        assert_eq!(lifted.scenes.len(), 2, "one variant per scene");
+
+        // The default scene is what resolves when nothing names one.
+        let (default, report) = resolve(&lifted.library, &lifted.root, None).expect("resolves");
+        assert!(report.is_clean(), "{report:?}");
+        assert_eq!(
+            to_chain(&default)
+                .first()
+                .map(|b| b.nam.clone())
+                .unwrap_or_default(),
+            "amps/jcm800-clean.nam"
+        );
+
+        // And each scene resolves to its own chain — an ordinary variant
+        // switch, which is what a scene recall never was.
+        let lead = lifted.scene("Lead").expect("Lead is a variant");
+        let (resolved, _) = resolve(&lifted.library, &lifted.root, Some(lead)).expect("resolves");
+        assert_eq!(
+            to_chain(&resolved)
+                .first()
+                .map(|b| b.nam.clone())
+                .unwrap_or_default(),
+            "amps/jcm800-lead.nam"
+        );
+
+        // The scene chains are separate nodes, shared by nothing — because a
+        // scene is an independent chain, not a diff of another.
+        let chains = lifted
+            .library
+            .nodes
+            .iter()
+            .filter(|n| !n.is_leaf() && n.role == signal_proto::node::Role::Module)
+            .count();
+        assert_eq!(chains, 2);
+    }
+
+    /// A scene's trims are the node's input and output level — the same
+    /// unification a block's trims got, one level up.
+    #[test]
+    fn a_scenes_trims_become_the_nodes_levels() {
+        use crate::rig_library::{RigPreset, RigScene};
+
+        let mut scene = RigScene::single("Hot", RigBlock::nam("a.nam").named("Amp"));
+        scene.input_trim_db = -6.0;
+        scene.output_trim_db = 3.0;
+        let preset = RigPreset::new("P").with_scene(scene);
+
+        let lifted = lift_preset(&preset);
+        let (resolved, _) = resolve(&lifted.library, &lifted.root, None).expect("resolves");
+        let container = to_container(&resolved);
+        let hot = container.find("Hot").expect("the scene is a node");
+        assert_eq!(hot.input_db, -6.0);
+        assert_eq!(hot.output_db, 3.0);
     }
 }
