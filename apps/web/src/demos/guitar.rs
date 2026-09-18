@@ -280,6 +280,7 @@ fn demo_nodes() -> Vec<LiveNode> {
         bypassed: false,
         presets: Vec::new(),
         preset_id: String::new(),
+        alternatives: Vec::new(),
     };
 
     let mut kot = node("kot", "King of Tone", "module", 2, None);
@@ -297,6 +298,18 @@ fn demo_nodes() -> Vec<LiveNode> {
 
     let mut drive_1 = node("drive-1", "Drive 1", "module", 3, Some(BlockType::Drive));
     drive_1.bypassed = true;
+
+    // The board's other pedals — what the slot could hold instead.
+    kot.alternatives = vec![
+        LivePreset {
+            id: "kot".into(),
+            name: "King of Tone".into(),
+        },
+        LivePreset {
+            id: "morning-glory".into(),
+            name: "JHS Morning Glory".into(),
+        },
+    ];
 
     vec![
         node("chain", "Worship", "preset", 0, None),

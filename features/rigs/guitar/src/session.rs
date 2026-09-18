@@ -1422,6 +1422,21 @@ fn flatten_nodes(
         ResolvedContent::Children(_) => (false, None),
     };
 
+    // What else could sit here. A drive slot can hold any pedal in the
+    // library — including ones not currently on the board — which is the
+    // choice the profile has always had and no surface has ever offered.
+    let alternatives: Vec<LivePreset> = if rig.slot_of_node(node.id.as_str()).is_some() {
+        rig.pedals()
+            .into_iter()
+            .map(|(name, id)| LivePreset {
+                id: id.as_str().to_string(),
+                name,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     out.push(LiveNode {
         id: node.id.as_str().to_string(),
         name: node.name.clone(),
@@ -1432,6 +1447,7 @@ fn flatten_nodes(
         bypassed: node.bypassed,
         presets,
         preset_id,
+        alternatives,
     });
 
     if let ResolvedContent::Children(children) = &node.content {
@@ -1676,6 +1692,44 @@ impl Rig for GuitarRigBackend {
 
     fn clear_block_overrides(&self, id: String) {
         self.clear_overrides(&id, None);
+    }
+
+    fn replace_node(&self, node: String, with: String) {
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let dps = self.drive_presets.lock_ok();
+            let rig = crate::nodes::library_for(&def, &dps);
+
+            // Which slot is being filled, and with which pedal. Both are
+            // node ids on the wire; the profile stores a slot name and a
+            // preset name, so this is where they meet.
+            let (Some(slot), Some(pedal)) = (rig.slot_of_node(&node), rig.pedal_name(&with)) else {
+                tracing::warn!(
+                    node.id = %node,
+                    with.id = %with,
+                    "guitar: nothing replaceable there — only a drive slot takes another node today"
+                );
+                return;
+            };
+            let Some(assigned) = def
+                .drives
+                .iter_mut()
+                .find(|d| d.block.eq_ignore_ascii_case(&slot))
+            else {
+                return;
+            };
+            if assigned.preset == pedal {
+                return;
+            }
+            assigned.preset.clone_from(&pedal);
+            // A different pedal has its own captures, so the option index
+            // from the old one means nothing on it.
+            assigned.option = 0;
+            tracing::info!(slot = %slot, pedal = %pedal, "guitar: drive slot filled");
+            RigLibrary::save_profile(&def);
+            profile_from_library(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
     }
 
     fn save_preset(&self, node: String, name: String) {

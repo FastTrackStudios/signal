@@ -53,4 +53,15 @@ pub struct LiveNode {
     pub presets: Vec<LivePreset>,
     /// Which of them is loaded.
     pub preset_id: String,
+    /// What else could sit in this slot — a *different* node, not a different
+    /// setting of this one.
+    ///
+    /// The distinction the domain draws and a player also draws: presets are
+    /// "this pedal, its other settings"; alternatives are "a different pedal
+    /// in this slot". One is a variant, the other is a `ReplaceRef`, and
+    /// conflating them is how you end up unable to say either.
+    ///
+    /// Empty where nothing else fits, which is most of a fixed chain.
+    #[facet(default)]
+    pub alternatives: Vec<LivePreset>,
 }

@@ -47,6 +47,9 @@ pub struct RigNodes {
     pub chain: NodeId,
     /// Patch name → the variant that recalls it.
     pub patches: Vec<(String, signal_proto::node::VariantId)>,
+    /// Every drive preset's name, so a pedal node can be told from any other
+    /// container.
+    pub pedal_names: Vec<String>,
     /// Which drive slot each pedal node occupies, and which of its variants
     /// is which capture option.
     ///
@@ -126,6 +129,41 @@ impl RigNodes {
             profile = profile.with_stack(RigStack::new(&stack.name, stack.patches.clone()));
         }
         profile
+    }
+
+    /// Every pedal node in the library, by name — the board's alternatives.
+    ///
+    /// `to_nodes` builds a node for *every* drive preset the library holds,
+    /// not only the assigned ones, so the unassigned ones are already here
+    /// waiting to be put in a slot.
+    #[must_use]
+    pub fn pedals(&self) -> Vec<(String, NodeId)> {
+        self.library
+            .nodes
+            .iter()
+            .filter(|n| self.pedal_names.iter().any(|name| name == &n.name))
+            .map(|n| (n.name.clone(), n.id.clone()))
+            .collect()
+    }
+
+    /// The drive slot a pedal node currently occupies, if it is on the board.
+    #[must_use]
+    pub fn slot_of_node(&self, node: &str) -> Option<String> {
+        self.drive_slots
+            .iter()
+            .find(|s| s.node.as_str() == node)
+            .map(|s| s.slot.clone())
+    }
+
+    /// The drive preset a node is, by name — what the profile stores in a
+    /// slot.
+    #[must_use]
+    pub fn pedal_name(&self, node: &str) -> Option<String> {
+        self.library
+            .nodes
+            .iter()
+            .find(|n| n.id.as_str() == node && self.pedal_names.iter().any(|p| p == &n.name))
+            .map(|n| n.name.clone())
     }
 
     /// The drive slot and option index a `(node, variant)` choice means, if
@@ -729,6 +767,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
         library,
         chain: chain_id,
         patches,
+        pedal_names: drives.iter().map(|p| p.name.clone()).collect(),
         drive_slots,
     }
 }
@@ -1473,5 +1512,48 @@ mod tests {
             out
         };
         assert_eq!(variants(&first), variants(&second), "variant ids too");
+    }
+
+    /// A drive slot can be filled with a different pedal — the choice the
+    /// profile has always had (`DriveSlotDef::preset`) and no surface ever
+    /// offered. Distinct from choosing a capture, which is a variant of the
+    /// pedal already there.
+    #[test]
+    fn a_slot_offers_every_pedal_in_the_library() {
+        let (def, drives) = shipped();
+        let rig = to_nodes(&def, &drives);
+
+        let pedals = rig.pedals();
+        assert!(
+            pedals.len() >= 2,
+            "the library holds more pedals than the board uses: {pedals:?}"
+        );
+
+        // The pedal on Drive 1, and the slot it reports.
+        let (_, on_board) = pedals
+            .iter()
+            .find(|(name, _)| name == "King of Tone")
+            .expect("King of Tone is in the library");
+        assert_eq!(
+            rig.slot_of_node(on_board.as_str()).as_deref(),
+            Some("Drive 1")
+        );
+        assert_eq!(
+            rig.pedal_name(on_board.as_str()).as_deref(),
+            Some("King of Tone"),
+            "and the node maps back to the name the profile stores"
+        );
+
+        // A pedal the board is not using has no slot — it is an alternative,
+        // not a fixture.
+        let unassigned = pedals
+            .iter()
+            .find(|(_, id)| rig.slot_of_node(id.as_str()).is_none());
+        if let Some((name, id)) = unassigned {
+            assert!(
+                rig.pedal_name(id.as_str()).is_some(),
+                "{name} is still a pedal, just not on the board"
+            );
+        }
     }
 }

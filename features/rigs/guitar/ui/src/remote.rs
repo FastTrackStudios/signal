@@ -515,6 +515,7 @@ pub fn GuitarRigRemote() -> Element {
                                         // since every rig has its own wire.
                                         let select = rig.clone();
                                         let save = rig.clone();
+                                        let replace = rig.clone();
                                         rsx! {
                                             div { class: "h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card",
                                                 signal_widgets::PresetTree {
@@ -529,6 +530,12 @@ pub fn GuitarRigRemote() -> Element {
                                                         let Some(rig) = save.clone() else { return };
                                                         spawn(async move {
                                                             let _ = rig.save_preset(node, name).await;
+                                                        });
+                                                    },
+                                                    on_replace: move |(node, with): (String, String)| {
+                                                        let Some(rig) = replace.clone() else { return };
+                                                        spawn(async move {
+                                                            let _ = rig.replace_node(node, with).await;
                                                         });
                                                     },
                                                 }

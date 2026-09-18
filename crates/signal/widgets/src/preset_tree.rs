@@ -33,6 +33,8 @@ pub fn PresetTree(
     nodes: Vec<LiveNode>,
     on_select: EventHandler<(String, String)>,
     on_save: EventHandler<(String, String)>,
+    /// Put a different node in this slot: `(node id, replacement id)`.
+    on_replace: EventHandler<(String, String)>,
 ) -> Element {
     if nodes.is_empty() {
         return rsx! {
@@ -46,7 +48,7 @@ pub fn PresetTree(
     rsx! {
         div { class: "h-full min-h-0 overflow-y-auto p-3 flex flex-col gap-1",
             for node in nodes {
-                NodeRow { node: node.clone(), on_select, on_save }
+                NodeRow { node: node.clone(), on_select, on_save, on_replace }
             }
         }
     }
@@ -58,6 +60,7 @@ fn NodeRow(
     node: LiveNode,
     on_select: EventHandler<(String, String)>,
     on_save: EventHandler<(String, String)>,
+    on_replace: EventHandler<(String, String)>,
 ) -> Element {
     // Depth as an indent, so the tree reads as a tree. Inline rather than a
     // Tailwind class because the value is computed — see the repo's UI rules
@@ -97,6 +100,19 @@ fn NodeRow(
                 span { class: "shrink-0 text-[10px] text-muted-foreground", "bypassed" }
             }
 
+            // What sits here, then which setting of it. Two pickers because
+            // they are two different questions — "a different pedal" and
+            // "the same pedal, its other capture" — and a player asks them
+            // separately.
+            if node.alternatives.len() > 1 {
+                SlotPicker {
+                    node: node.id.clone(),
+                    alternatives: node.alternatives.clone(),
+                    current: node.name.clone(),
+                    on_replace,
+                }
+            }
+
             if node.presets.len() > 1 {
                 PresetPicker {
                     node: node.id.clone(),
@@ -107,6 +123,38 @@ fn NodeRow(
             }
 
             SavePreset { node: node.id.clone(), name: node.name.clone(), on_save }
+        }
+    }
+}
+
+/// Which node sits in this slot.
+///
+/// Selected by name rather than id, because the slot holds *that node* and
+/// its id is the thing being chosen — there is nothing else to match against.
+#[component]
+fn SlotPicker(
+    node: String,
+    alternatives: Vec<LivePreset>,
+    current: String,
+    on_replace: EventHandler<(String, String)>,
+) -> Element {
+    rsx! {
+        select {
+            class: "shrink-0 max-w-[10rem] bg-background/60 border border-dashed border-border rounded px-1.5 py-0.5 text-xs",
+            title: "What sits in this slot",
+            onclick: move |e: MouseEvent| e.stop_propagation(),
+            onchange: {
+                let node = node.clone();
+                move |e: FormEvent| on_replace.call((node.clone(), e.value()))
+            },
+            for alternative in alternatives {
+                option {
+                    key: "{alternative.id}",
+                    value: "{alternative.id}",
+                    selected: alternative.name == current,
+                    "{alternative.name}"
+                }
+            }
         }
     }
 }

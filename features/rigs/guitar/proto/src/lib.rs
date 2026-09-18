@@ -451,6 +451,12 @@ pub mod rig {
         /// Works at any level, which is the point — a block's settings, a
         /// module's combination of them.
         fn save_preset(&self, node: String, name: String);
+        /// Put a different node in this slot — a different pedal on the
+        /// board, not a different capture of the same one.
+        ///
+        /// `with` is one of the slot's
+        /// [`alternatives`](signal_proto::live_node::LiveNode::alternatives).
+        fn replace_node(&self, node: String, with: String);
         /// Undo the active patch's override of one parameter, returning it
         /// to what the chain builds it as.
         fn clear_block_param(&self, id: String, param: String);
