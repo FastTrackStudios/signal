@@ -258,6 +258,47 @@ fn nam_leaf(name: &str, path: &str, block_type: BlockType) -> Node {
     Node::leaf(name, block_type, block)
 }
 
+/// A node's id, derived from **what it is** rather than minted fresh.
+///
+/// `to_nodes` runs again on every profile edit — a rename, a trim, an
+/// imported capture — so an id minted per build is not an identity: a stored
+/// preset, an override addressed by id, a UI holding a selection would all
+/// dangle on the next keystroke, silently.
+///
+/// UUIDv5 over a readable path (`worship/Time/DLY 1`), so the same profile
+/// always names the same nodes, on this machine and any other. That is the
+/// opposite tool from the v7 ids a *distributable* rig mints for nodes a
+/// person creates — this is derived content, and derived content must agree
+/// everywhere rather than be unique everywhere.
+fn seeded(path: &str) -> NodeId {
+    NodeId::from(signal_proto::seed_id(path).to_string())
+}
+
+/// A variant's id, seeded the same way: `<node path>@<variant name>`.
+fn seeded_variant(path: &str, variant: &str) -> signal_proto::node::VariantId {
+    signal_proto::node::VariantId::from(
+        signal_proto::seed_id(&format!("{path}@{variant}")).to_string(),
+    )
+}
+
+/// A variant with a stable id.
+fn variant_at(path: &str, name: &str) -> Variant {
+    let mut variant = Variant::new(name);
+    variant.id = seeded_variant(path, name);
+    variant
+}
+
+/// Give a node a seeded id, and seed its default variant with it.
+fn at_path(mut node: Node, path: &str) -> Node {
+    node.id = seeded(path);
+    if let Some(default) = node.variants.first_mut() {
+        let name = default.name.clone();
+        default.id = seeded_variant(path, &name);
+        node.default_variant = default.id.clone();
+    }
+    node
+}
+
 /// The module a block belongs to: what it says, or what its type implies.
 ///
 /// `RigBlock::module` is the explicit answer and is usually empty; the block
@@ -334,7 +375,10 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     // ── Amp captures: one node each, because they are different amps ─────
     let mut amps = Vec::new();
     for preset in &def.presets {
-        let node = nam_leaf(&preset.name, &preset.nam, BlockType::Amp);
+        let node = at_path(
+            nam_leaf(&preset.name, &preset.nam, BlockType::Amp),
+            &format!("{}/amp/{}", def.name, preset.name),
+        );
         amps.push((preset.name.clone(), node.id.clone()));
         library.insert(node);
     }
@@ -359,11 +403,18 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
         };
         let slot = slot_of(&pedal.name);
         let leaf_name = |capture: &str| slot.clone().unwrap_or_else(|| capture.to_string());
-        let default_leaf = drive_leaf(&leaf_name(&first.name), &first.nam);
+        let pedal_path = format!("{}/pedal/{}", def.name, pedal.name);
+        let default_leaf = at_path(
+            drive_leaf(&leaf_name(&first.name), &first.nam),
+            &format!("{pedal_path}/{}", first.name),
+        );
         let default_id = default_leaf.id.clone();
         library.insert(default_leaf);
 
-        let mut node = Node::container(&pedal.name, Role::Module, Combine::Serial);
+        let mut node = at_path(
+            Node::container(&pedal.name, Role::Module, Combine::Serial),
+            &pedal_path,
+        );
         if let Content::Children { nodes } = &mut node.content {
             nodes.push(default_id.clone());
         }
@@ -375,8 +426,11 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
         // Its own default variant is the first capture; each later capture
         // swaps the node in that slot. One pedal, several settings.
         for option in pedal.options.iter().skip(1) {
-            let leaf = drive_leaf(&leaf_name(&option.name), &option.nam);
-            let mut variant = Variant::new(&option.name);
+            let leaf = at_path(
+                drive_leaf(&leaf_name(&option.name), &option.nam),
+                &format!("{pedal_path}/{}", option.name),
+            );
+            let mut variant = variant_at(&pedal_path, &option.name);
             variant.overrides.push(Override {
                 path: NodePath::new(vec![NodePathSegment::Block {
                     id: default_id.as_str().to_string(),
@@ -439,7 +493,11 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
         .first()
         .map_or(&[], |patch| patch.chain.as_slice());
 
-    let mut chain = Node::container(&def.name, Role::Preset, Combine::Serial);
+    let chain_path = format!("{}/chain", def.name);
+    let mut chain = at_path(
+        Node::container(&def.name, Role::Preset, Combine::Serial),
+        &chain_path,
+    );
     let mut amp_slot = None;
     let mut slot_options: Vec<Selection> = Vec::new();
     // Blocks grouped into Module containers, because that is what a Module
@@ -449,6 +507,9 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     // `module Time -> block VERB 1 -> param mix` needs the Time module to
     // exist as a node, and this is where it comes from.
     let mut modules: Vec<(String, Vec<NodeId>)> = Vec::new();
+    // How many blocks of each `(module, name)` the chain has held so far.
+    let mut occurrences: std::collections::HashMap<(String, String), u32> =
+        std::collections::HashMap::new();
     let mut push_into = |module: String, id: NodeId, modules: &mut Vec<(String, Vec<NodeId>)>| {
         // Consecutive blocks of one purpose are one module. Non-consecutive
         // ones are separate modules of the same name — the chain's order is
@@ -504,17 +565,50 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
                 }
                 continue;
             }
-            // Everything else is itself.
+            // Everything else is itself, at a path built from where it sits:
+            // `<profile>/<module>/<name>`, plus an occurrence number when a
+            // module holds two blocks of the same name. The chain has two
+            // called "Boost" — the board's and the post-amp one — and without
+            // the discriminator they would seed to the same id and the second
+            // would silently replace the first in the library.
             let (leaf, _report) = signal_sampler::to_node::lift_one_block(block);
-            push_into(module_of(block), leaf.id.clone(), &mut modules);
+            let module = module_of(block);
+            let key = (module.clone(), block.display_name());
+            let seen = occurrences.entry(key).or_insert(0);
+            *seen += 1;
+            let path = if *seen == 1 {
+                format!("{}/{module}/{}", def.name, block.display_name())
+            } else {
+                format!("{}/{module}/{}#{seen}", def.name, block.display_name())
+            };
+            let leaf = at_path(leaf, &path);
+            push_into(module, leaf.id.clone(), &mut modules);
             library.insert(leaf);
         }
     }
 
     // One container per module, in chain order, under the chain node.
     if let Content::Children { nodes } = &mut chain.content {
+        // A module name can appear more than once: the chain groups
+        // *consecutive* blocks of one purpose, and Dynamics occurs twice —
+        // the compressor at the front, the gate after the amp. They are two
+        // different modules that happen to share a word, so they need two
+        // ids; seeding both from the name alone made the second replace the
+        // first in the library and the chain lost its compressor.
+        let mut module_seen: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
         for (name, children) in modules {
-            let mut module = Node::container(&name, Role::Module, Combine::Serial);
+            let seen = module_seen.entry(name.clone()).or_insert(0);
+            *seen += 1;
+            let module_path = if *seen == 1 {
+                format!("{}/module/{name}", def.name)
+            } else {
+                format!("{}/module/{name}#{seen}", def.name)
+            };
+            let mut module = at_path(
+                Node::container(&name, Role::Module, Combine::Serial),
+                &module_path,
+            );
             if let Content::Children { nodes: inner } = &mut module.content {
                 *inner = children;
             }
@@ -540,7 +634,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
     // ── Patches: variants of that one chain ──────────────────────────────
     let mut patches = Vec::new();
     for patch in &def.patches {
-        let mut variant = Variant::new(&patch.name);
+        let mut variant = variant_at(&chain_path, &patch.name);
         // Each variant carries the board's pedal settings, because a child
         // a variant does not name falls back to its *own* default — not to
         // whatever the node's default variant selected. A patch that said
@@ -1323,5 +1417,49 @@ mod tests {
 
         // And an unknown pair is not guessed at.
         assert_eq!(rig.drive_option_for("nope", "nope"), None);
+    }
+
+    /// Node ids must survive a rebuild, and until this test they did not.
+    ///
+    /// Everything the node model promises rests on a node keeping its
+    /// identity: a stored preset, an override addressed by id, a UI that
+    /// names what to change. `to_nodes` is called afresh on every profile
+    /// edit — a patch rename, a trim, a capture import — so an id minted per
+    /// build is not an identity at all. A saved reference would dangle on the
+    /// very next keystroke, silently.
+    #[test]
+    fn node_ids_survive_a_rebuild() {
+        let (def, drives) = shipped();
+        let first = to_nodes(&def, &drives);
+        let second = to_nodes(&def, &drives);
+
+        let ids = |rig: &RigNodes| -> Vec<(String, String)> {
+            let mut out: Vec<(String, String)> = rig
+                .library
+                .nodes
+                .iter()
+                .map(|n| (n.name.clone(), n.id.as_str().to_string()))
+                .collect();
+            out.sort();
+            out
+        };
+        assert_eq!(
+            ids(&first),
+            ids(&second),
+            "the same profile built twice must name the same nodes"
+        );
+
+        // And the variants a preset is chosen by, for the same reason.
+        let variants = |rig: &RigNodes| -> Vec<String> {
+            let mut out: Vec<String> = rig
+                .library
+                .nodes
+                .iter()
+                .flat_map(|n| n.variants.iter().map(|v| v.id.as_str().to_string()))
+                .collect();
+            out.sort();
+            out
+        };
+        assert_eq!(variants(&first), variants(&second), "variant ids too");
     }
 }
