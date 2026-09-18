@@ -257,6 +257,27 @@ fn drive_leaf(name: &str, path: &str) -> Node {
     node
 }
 
+/// The playable profile for a rig definition — **the path the live rig
+/// takes**.
+///
+/// Builds the node library and resolves every patch out of it, rather than
+/// building chains directly. One function so the whole session has one seam:
+/// everything that installs a profile goes through here, and what the rig
+/// plays is what the domain resolved.
+///
+/// `build_profile` is still the builder underneath — [`to_nodes`] uses it to
+/// get the chain's shape before any patch bends it — but nothing downstream
+/// of this sees its output. The two are pinned equal for the shipped rig by
+/// `to_profile_matches_the_builder_for_the_shipped_rig`, patch for patch and
+/// parameter for parameter.
+#[must_use]
+pub fn profile_from_library(
+    def: &ProfileDef,
+    drives: &[DrivePresetDef],
+) -> signal_sampler::rig_profile::RigProfile {
+    to_nodes(def, drives).to_profile(def)
+}
+
 /// Convert this crate's profile into the domain's node model.
 ///
 /// The **whole** chain, not an outline of it: the compressor, the volume

@@ -24,9 +24,8 @@ use signal_proto::block::BlockType;
 use signal_sampler::{DeviceInfo, GuitarRig, ProfileRig, RigBlock, RigManager};
 
 use crate::library::RigLibrary;
-use crate::profiles::{
-    DriveImport, DrivePresetDef, ProfileDef, SetlistDef, SongDef, build_profile,
-};
+use crate::nodes::profile_from_library;
+use crate::profiles::{DriveImport, DrivePresetDef, ProfileDef, SetlistDef, SongDef};
 
 /// Rig whose audio prefs the settings service reads/writes (persisted to
 /// `<config>/signal/rigs/guitar-rig.styx` by `RigManager`).
@@ -402,7 +401,7 @@ impl GuitarRigBackend {
             if matches!(outcome, DriveImport::Slot { .. }) {
                 RigLibrary::save_profile(&def);
             }
-            build_profile(&def, &dps)
+            profile_from_library(&def, &dps)
         };
         self.reload_rebuilt(rebuilt);
         self.spawn_drive_calibration();
@@ -946,7 +945,7 @@ impl GuitarRigBackend {
                 let profile = {
                     let def = self.profile_def.lock_ok();
                     let dps = self.drive_presets.lock_ok();
-                    build_profile(&def, &dps)
+                    profile_from_library(&def, &dps)
                 };
                 match prig.load_profile(profile, None) {
                     Ok(()) => tracing::info!("profile loaded ({} patches)", prig.patches().len()),
@@ -1753,7 +1752,7 @@ impl Rig for GuitarRigBackend {
             RigLibrary::save_profile(&def);
             {
                 let dps = self.drive_presets.lock_ok();
-                build_profile(&def, &dps)
+                profile_from_library(&def, &dps)
             }
         };
         // …then rebuild the live chains. A full reload (brief gap) — this is
@@ -1825,7 +1824,7 @@ impl Rig for GuitarRigBackend {
             RigLibrary::save_profile(&def);
             {
                 let dps = self.drive_presets.lock_ok();
-                build_profile(&def, &dps)
+                profile_from_library(&def, &dps)
             }
         };
         let active = {
@@ -1941,7 +1940,7 @@ impl Rig for GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            build_profile(&def, &dps)
+            profile_from_library(&def, &dps)
         };
         tracing::info!("patch added: {name}");
         self.reload_rebuilt(rebuilt);
@@ -2013,7 +2012,7 @@ impl Rig for GuitarRigBackend {
         let rebuilt = {
             let def = self.profile_def.lock_ok();
             let dps = self.drive_presets.lock_ok();
-            build_profile(&def, &dps)
+            profile_from_library(&def, &dps)
         };
         self.reload_rebuilt(rebuilt);
         self.spawn_drive_calibration();
@@ -2040,7 +2039,7 @@ impl Rig for GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            build_profile(&def, &dps)
+            profile_from_library(&def, &dps)
         };
         tracing::info!("preset renamed: {old} → {new_name}");
         self.reload_rebuilt(rebuilt);
@@ -2087,7 +2086,7 @@ impl Rig for GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            build_profile(&def, &dps)
+            profile_from_library(&def, &dps)
         };
         tracing::info!("patch renamed: {old} → {new_name}");
         self.reload_rebuilt(rebuilt);
@@ -2106,7 +2105,7 @@ impl Rig for GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            build_profile(&def, &dps)
+            profile_from_library(&def, &dps)
         };
         tracing::info!("patch deleted: {name}");
         self.reload_rebuilt(rebuilt);
@@ -2280,7 +2279,7 @@ impl Rig for GuitarRigBackend {
             }
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            build_profile(&def, &dps)
+            profile_from_library(&def, &dps)
         };
         tracing::info!("{block_name}: custom IR {path}");
         self.reload_rebuilt(rebuilt);
@@ -2300,7 +2299,7 @@ impl Rig for GuitarRigBackend {
             p.nam = nam_path;
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            build_profile(&def, &dps)
+            profile_from_library(&def, &dps)
         };
         self.reload_rebuilt(rebuilt);
         self.spawn_drive_calibration();
@@ -2316,7 +2315,7 @@ impl Rig for GuitarRigBackend {
             tracing::info!("patch '{}' trim {:+.1} dB", p.name, p.trim_db);
             RigLibrary::save_profile(&def);
             let dps = self.drive_presets.lock_ok();
-            build_profile(&def, &dps)
+            profile_from_library(&def, &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
