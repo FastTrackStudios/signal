@@ -272,6 +272,15 @@ pub struct BlockParam {
     pub value: f32,
     pub min: f32,
     pub max: f32,
+    /// Whether the **active patch** has moved this away from what the chain
+    /// builds it as.
+    ///
+    /// Every knob move is recorded as an override on the patch, immediately
+    /// and permanently, so without this a player cannot tell what they have
+    /// changed from what came with the preset — and has no way back.
+    /// [`clear_block_param`](rig::Rig::clear_block_param) is the way back.
+    #[facet(default)]
+    pub overridden: bool,
 }
 
 /// One preset a node can be recalled as — a [`Variant`] of it, on the wire.
@@ -343,6 +352,11 @@ pub struct LiveBlock {
     /// The preset's selectable options (NAM captures) + current selection.
     pub options: Vec<String>,
     pub option: u32,
+    /// Whether the active patch overrides anything on this block — a
+    /// parameter or its bypass. The block-level summary of
+    /// [`BlockParam::overridden`], for a dot on a header.
+    #[facet(default)]
+    pub overridden: bool,
 }
 
 // ── Services ──────────────────────────────────────────────────────────────
@@ -477,6 +491,12 @@ pub mod rig {
         /// Works at any level, which is the point — a block's settings, a
         /// module's combination of them.
         fn save_preset(&self, node: String, name: String);
+        /// Undo the active patch's override of one parameter, returning it
+        /// to what the chain builds it as.
+        fn clear_block_param(&self, id: String, param: String);
+        /// Undo every override the active patch has on this block — its
+        /// parameters and its bypass.
+        fn clear_block_overrides(&self, id: String);
         /// Record `seconds` of the live guitar input as the calibration DI
         /// reference, then re-measure every NAM against it. Play
         /// representatively while it runs.

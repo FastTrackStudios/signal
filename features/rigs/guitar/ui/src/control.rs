@@ -151,6 +151,28 @@ fn ParamSlider(block_id: String, p: BlockParam, #[props(default)] fmt_hz: bool) 
         div { class: "flex flex-col gap-0.5 min-w-0",
             div { class: "flex items-center justify-between gap-1",
                 span { class: "text-[9px] font-mono text-muted-foreground truncate", "{p.name}" }
+                // A parameter the active patch has moved away from what the
+                // chain builds. Every knob move is recorded as an override
+                // the instant it happens, so without this a player cannot
+                // tell their own changes from what came with the preset —
+                // and clicking the dot is the only way back.
+                if p.overridden {
+                    button {
+                        class: "shrink-0 leading-none text-[10px] text-accent-foreground/90 hover:text-foreground",
+                        title: "Changed from the preset — click to put {p.name} back",
+                        onclick: {
+                            let (rig, block_id, name) = (rig.clone(), block_id.clone(), p.name.clone());
+                            move |_| {
+                                let Some(rig) = rig.clone() else { return };
+                                let (block_id, name) = (block_id.clone(), name.clone());
+                                spawn(async move {
+                                    let _ = rig.clear_block_param(block_id, name).await;
+                                });
+                            }
+                        },
+                        "●"
+                    }
+                }
                 span { class: "text-[9px] font-mono", "{label}" }
             }
             input {

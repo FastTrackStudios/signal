@@ -241,10 +241,12 @@ fn eq_block() -> LiveBlock {
                 value,
                 min: 0.0,
                 max: 20_000.0,
+                overridden: false,
             });
         }
     }
     LiveBlock {
+        overridden: false,
         id: "eq".into(),
         block_type: BlockType::Eq,
         // ControlView looks this block up by name — see `find_block`.
@@ -323,6 +325,7 @@ fn demo_blocks() -> Vec<LiveBlock> {
     let mut blocks = vec![
         eq_block(),
         LiveBlock {
+            overridden: true,
             id: "comp".into(),
             block_type: BlockType::Compressor,
             // Also looked up by name by ControlView.
@@ -338,24 +341,30 @@ fn demo_blocks() -> Vec<LiveBlock> {
                     value: -18.0,
                     min: -60.0,
                     max: 0.0,
+                    // Marked so the demo shows what a changed parameter
+                    // looks like: a dot beside the name, which puts it back.
+                    overridden: true,
                 },
                 BlockParam {
                     name: "ratio".into(),
                     value: 4.0,
                     min: 1.0,
                     max: 20.0,
+                    overridden: false,
                 },
                 BlockParam {
                     name: "attack".into(),
                     value: 12.0,
                     min: 0.1,
                     max: 100.0,
+                    overridden: false,
                 },
                 BlockParam {
                     name: "release".into(),
                     value: 180.0,
                     min: 10.0,
                     max: 1000.0,
+                    overridden: false,
                 },
             ],
             preset: "Studio Comp".into(),
@@ -365,6 +374,7 @@ fn demo_blocks() -> Vec<LiveBlock> {
     ];
     blocks.extend(BOARD.iter().copied().map(
         |(id, block_type, name, preset, bypassed, param, value, min, max)| LiveBlock {
+            overridden: false,
             id: id.into(),
             block_type,
             name: name.into(),
@@ -378,6 +388,7 @@ fn demo_blocks() -> Vec<LiveBlock> {
                 value,
                 min,
                 max,
+                overridden: false,
             }],
             preset: preset.into(),
             options: Vec::new(),

@@ -700,6 +700,65 @@ impl GuitarRigBackend {
     /// Record a live edit into the ACTIVE patch's overrides — dialing in a
     /// sound on a stack auto-saves; returning to the patch restores exactly
     /// what it sounded like. `param: None` records a bypass override.
+    /// Drop the active patch's overrides of a block — one parameter, or all
+    /// of them — and rebuild so the values return to what the chain builds.
+    ///
+    /// The other half of [`record_patch_override`](Self::record_patch_override),
+    /// which every knob move calls. Without it a patch could only ever
+    /// accumulate changes.
+    fn clear_overrides(&self, block_id: &str, param: Option<&str>) {
+        let block_name = {
+            let blocks = self.blocks.lock_ok();
+            blocks
+                .iter()
+                .find(|b| b.id == block_id)
+                .map(|b| b.name.clone())
+        };
+        let Some(block_name) = block_name else { return };
+        let active = {
+            let guard = self.rig.lock_ok();
+            guard
+                .as_ref()
+                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+        };
+        let Some(patch_name) = active else { return };
+
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let Some(patch) = def
+                .patches
+                .iter_mut()
+                .find(|p| p.name.eq_ignore_ascii_case(&patch_name))
+            else {
+                return;
+            };
+            let before = patch.overrides.len();
+            patch.overrides.retain(|o| {
+                if !o.block.eq_ignore_ascii_case(&block_name) {
+                    return true;
+                }
+                match param {
+                    Some(name) => !(o.op == "set" && o.param.eq_ignore_ascii_case(name)),
+                    None => false,
+                }
+            });
+            if patch.overrides.len() == before {
+                return;
+            }
+            tracing::info!(
+                patch.name = %patch_name,
+                block.name = %block_name,
+                param = param.unwrap_or("*"),
+                cleared = before - patch.overrides.len(),
+                "guitar: patch override cleared"
+            );
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+    }
+
     fn record_patch_override(&self, block_id: &str, param: Option<&str>, value: f32) {
         let block = {
             let blocks = self.blocks.lock_ok();
@@ -980,6 +1039,25 @@ impl GuitarRigBackend {
     /// so the off-by-default blocks must be re-bypassed here).
     fn resync_blocks(&self) {
         let mut out = Vec::new();
+        // The active patch's overrides, read once: what the player has moved
+        // away from the chain as built.
+        let active_overrides: Vec<crate::profiles::OverrideDef> = {
+            let active = self
+                .rig
+                .lock_ok()
+                .as_ref()
+                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()));
+            active
+                .and_then(|name| {
+                    self.profile_def
+                        .lock_ok()
+                        .patches
+                        .iter()
+                        .find(|p| p.name.eq_ignore_ascii_case(&name))
+                        .map(|p| p.overrides.clone())
+                })
+                .unwrap_or_default()
+        };
         {
             let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
@@ -1006,15 +1084,31 @@ impl GuitarRigBackend {
                         } else {
                             block.name.clone()
                         };
-                        let params = param_specs(block.block_type)
+                        // What the active patch has moved away from the
+                        // built chain. Every knob move is recorded as an
+                        // override the instant it happens, so this is the
+                        // only way a player can see what they changed.
+                        let overrides: Vec<(String, String)> = active_overrides
+                            .iter()
+                            .filter(|o| o.block.eq_ignore_ascii_case(&name))
+                            .map(|o| (o.op.clone(), o.param.clone()))
+                            .collect();
+                        let is_overridden = |param: &str| {
+                            overrides
+                                .iter()
+                                .any(|(op, p)| op == "set" && p.eq_ignore_ascii_case(param))
+                        };
+                        let params: Vec<BlockParam> = param_specs(block.block_type)
                             .iter()
                             .map(|(pname, min, max, dflt)| BlockParam {
                                 name: pname.clone(),
                                 value: block.param_f32(pname).unwrap_or(*dflt),
                                 min: *min,
                                 max: *max,
+                                overridden: is_overridden(pname),
                             })
                             .collect();
+                        let block_overridden = !overrides.is_empty();
                         // Drive slots: surface the loaded drive preset and
                         // its NAM options for the board's quick switch.
                         let (preset, options, option) = {
@@ -1050,6 +1144,7 @@ impl GuitarRigBackend {
                             preset,
                             options,
                             option,
+                            overridden: block_overridden,
                         });
                     }
                 }
@@ -1573,6 +1668,14 @@ impl Rig for GuitarRigBackend {
         let mut out = Vec::new();
         flatten_nodes(&resolved, &rig, 0, &mut out);
         out
+    }
+
+    fn clear_block_param(&self, id: String, param: String) {
+        self.clear_overrides(&id, Some(&param));
+    }
+
+    fn clear_block_overrides(&self, id: String) {
+        self.clear_overrides(&id, None);
     }
 
     fn save_preset(&self, node: String, name: String) {
