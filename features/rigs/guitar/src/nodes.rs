@@ -349,7 +349,19 @@ pub fn profile_from_library(
     def: &ProfileDef,
     drives: &[DrivePresetDef],
 ) -> signal_sampler::rig_profile::RigProfile {
-    to_nodes(def, drives).to_profile(def)
+    library_for(def, drives).to_profile(def)
+}
+
+/// The rig's node library: derived from the profile, then everything saved
+/// about its nodes applied on top.
+///
+/// One function, so no caller can accidentally use the bare derivation and
+/// silently lose a saved preset.
+#[must_use]
+pub fn library_for(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
+    let mut rig = to_nodes(def, drives);
+    crate::library::RigLibrary::load_node_store().apply(&mut rig);
+    rig
 }
 
 /// Convert this crate's profile into the domain's node model.

@@ -509,6 +509,21 @@ impl Resolved {
         }
     }
 
+    /// A descendant by id, including self — mutably.
+    ///
+    /// The read-only [`find`](Self::find) answers what a tree *is*; this is
+    /// for changing what it resolved to, which is what an editor does before
+    /// saving the result as a preset.
+    pub fn find_mut(&mut self, id: &NodeId) -> Option<&mut Self> {
+        if &self.id == id {
+            return Some(self);
+        }
+        match &mut self.content {
+            ResolvedContent::Leaf { .. } => None,
+            ResolvedContent::Children(children) => children.iter_mut().find_map(|c| c.find_mut(id)),
+        }
+    }
+
     /// A descendant by id, including self.
     #[must_use]
     pub fn find(&self, id: &NodeId) -> Option<&Self> {

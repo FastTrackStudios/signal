@@ -18,6 +18,7 @@ workspace = true
 pipewire = []
 
 [dependencies]
+uuid.workspace = true
 signal-rigs-proto.workspace = true
 # The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
 # RigAudioPrefs. The guitar feature is a thin live-handle layer on top.

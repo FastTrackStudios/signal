@@ -1554,7 +1554,7 @@ impl Rig for GuitarRigBackend {
     fn nodes(&self) -> Vec<LiveNode> {
         let def = self.profile_def.lock_ok();
         let dps = self.drive_presets.lock_ok();
-        let rig = crate::nodes::to_nodes(&def, &dps);
+        let rig = crate::nodes::library_for(&def, &dps);
 
         // The tree as the *active patch* resolves it, so what the UI lists is
         // what is playing rather than the chain's unbent default.
@@ -1575,23 +1575,65 @@ impl Rig for GuitarRigBackend {
         out
     }
 
+    fn save_preset(&self, node: String, name: String) {
+        let def = self.profile_def.lock_ok();
+        let dps = self.drive_presets.lock_ok();
+        let rig = crate::nodes::library_for(&def, &dps);
+
+        // What the node sounds like right now: the active patch's tree, with
+        // every override the player has dialled in already applied.
+        let active = self
+            .rig
+            .lock_ok()
+            .as_ref()
+            .and_then(|prig| prig.active_patch().map(|p| p.name.clone()));
+        let variant = active.as_deref().and_then(|name| rig.patch(name));
+        let Ok((current, _)) =
+            signal_proto::node_resolve::resolve(&rig.library, &rig.chain, variant)
+        else {
+            tracing::warn!("guitar: preset not saved — the rig did not resolve");
+            return;
+        };
+
+        let id = signal_proto::node::NodeId::from(node.clone());
+        let Some(preset) = crate::node_store::capture(&rig, &current, &id, &name) else {
+            tracing::warn!(node.id = %node, "guitar: preset not saved — no such node");
+            return;
+        };
+        let changed = preset.overrides.len();
+
+        let mut store = RigLibrary::load_node_store();
+        store.presets.retain(|p| p.id != preset.id);
+        store.presets.push(preset);
+        RigLibrary::save_node_store(&store);
+        tracing::info!(
+            node.id = %node,
+            preset.name = %name,
+            preset.changed = changed,
+            "guitar: preset saved"
+        );
+    }
+
     fn select_preset(&self, node: String, preset: String) {
         let rebuilt = {
             let mut def = self.profile_def.lock_ok();
             let dps = self.drive_presets.lock_ok();
-            let rig = crate::nodes::to_nodes(&def, &dps);
+            let rig = crate::nodes::library_for(&def, &dps);
 
             // Which drive slot this node is, and which of its captures the
-            // variant names. The node library is *derived* from the profile
-            // def, so a choice has to be written back to the def or it is
-            // gone on the next rebuild — see `nodes` on what that costs.
+            // variant names. A drive slot's capture lives in the profile —
+            // `DriveSlotDef::option` — so that choice is written there, and
+            // nowhere else: one fact stored twice is a fact that can disagree
+            // with itself.
             let Some((slot, option)) = rig.drive_option_for(&node, &preset) else {
-                tracing::warn!(
-                    node.id = %node,
-                    preset.id = %preset,
-                    "guitar: preset not selectable — no profile field holds it"
-                );
-                return;
+                // Everything else — a preset on a module, a preset someone
+                // saved — has no profile field, so it is recorded in the node
+                // store and applied over the derived library on every build.
+                let mut store = RigLibrary::load_node_store();
+                store.select(&node, &preset);
+                RigLibrary::save_node_store(&store);
+                tracing::info!(node.id = %node, preset.id = %preset, "guitar: preset selected");
+                return self.reload_rebuilt(profile_from_library(&def, &dps));
             };
             let Some(assigned) = def
                 .drives

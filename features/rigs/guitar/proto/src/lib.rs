@@ -466,6 +466,17 @@ pub mod rig {
         /// ahead of it in the list. Rebuilds the chains — an edit-time
         /// operation, like `set_block_option`.
         fn select_preset(&self, node: String, preset: String);
+        /// Save what a node currently sounds like as a preset of it.
+        ///
+        /// A preset is a **diff**: what is saved is every parameter that
+        /// differs from what the node resolves to on its own, so editing the
+        /// node later still reaches every preset of it. The new preset
+        /// appears in [`nodes`](Self::nodes) and can be recalled with
+        /// [`select_preset`](Self::select_preset).
+        ///
+        /// Works at any level, which is the point — a block's settings, a
+        /// module's combination of them.
+        fn save_preset(&self, node: String, name: String);
         /// Record `seconds` of the live guitar input as the calibration DI
         /// reference, then re-measure every NAM against it. Play
         /// representatively while it runs.

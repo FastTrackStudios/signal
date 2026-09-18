@@ -93,6 +93,8 @@ fn NodeRow(node: LiveNode) -> Element {
                     current: node.preset_id.clone(),
                 }
             }
+
+            SavePreset { node: node.id.clone(), name: node.name.clone() }
         }
     }
 }
@@ -129,6 +131,82 @@ fn PresetPicker(node: String, presets: Vec<LivePreset>, current: String) -> Elem
                     selected: preset.id == current,
                     "{preset.name}"
                 }
+            }
+        }
+    }
+}
+
+/// Save what a node sounds like now as a preset of it.
+///
+/// The gesture the rig has never had. Every knob move is already recorded as
+/// an override on the active patch — silently and permanently — so a player
+/// could tweak endlessly and keep nothing by name. This is the other half:
+/// name it, and it becomes a preset of that node, recallable from the picker
+/// beside this button.
+#[component]
+fn SavePreset(node: String, name: String) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut naming = use_signal(|| false);
+    let mut draft = use_signal(String::new);
+
+    // A plain fn rather than a closure, so both the Enter key and the button
+    // can call it without fighting over one `FnMut`.
+    fn save(
+        rig: Option<RigClient>,
+        mut naming: Signal<bool>,
+        mut draft: Signal<String>,
+        node: String,
+    ) {
+        let Some(rig) = rig else { return };
+        let preset = draft().trim().to_string();
+        if preset.is_empty() {
+            return;
+        }
+        naming.set(false);
+        draft.set(String::new());
+        spawn(async move {
+            let _ = rig.save_preset(node, preset).await;
+        });
+    }
+
+    if !naming() {
+        return rsx! {
+            button {
+                class: "shrink-0 px-1.5 py-0.5 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground",
+                title: "Save {name}'s current settings as a preset",
+                onclick: move |_| naming.set(true),
+                "Save"
+            }
+        };
+    }
+
+    rsx! {
+        div { class: "shrink-0 flex items-center gap-1",
+            input {
+                class: "w-28 bg-background border border-border rounded px-1.5 py-0.5 text-xs",
+                placeholder: "Preset name",
+                autofocus: true,
+                value: "{draft}",
+                oninput: move |e| draft.set(e.value()),
+                onkeydown: {
+                    let (rig, node) = (rig.clone(), node.clone());
+                    move |e: KeyboardEvent| match e.key() {
+                        Key::Enter => save(rig.clone(), naming, draft, node.clone()),
+                        Key::Escape => {
+                            naming.set(false);
+                            draft.set(String::new());
+                        }
+                        _ => {}
+                    }
+                },
+            }
+            button {
+                class: "px-1.5 py-0.5 rounded bg-accent text-accent-foreground text-[10px]",
+                onclick: {
+                    let (rig, node) = (rig.clone(), node.clone());
+                    move |_| save(rig.clone(), naming, draft, node.clone())
+                },
+                "Keep"
             }
         }
     }

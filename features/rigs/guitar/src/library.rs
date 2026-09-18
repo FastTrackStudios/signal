@@ -233,6 +233,23 @@ impl RigLibrary {
         }
     }
 
+    /// Everything saved about nodes that the profile cannot hold — presets
+    /// on a module, presets saved from a tweak, selections with no profile
+    /// field. Missing or unreadable reads as empty: a rig with no saved
+    /// presets is the normal state, not an error.
+    #[must_use]
+    pub fn load_node_store() -> crate::node_store::NodeStore {
+        store()
+            .read(crate::node_store::NODE_STORE_FILE)
+            .unwrap_or_default()
+    }
+
+    /// Write it back. Best-effort, like the profile: losing a preset is not
+    /// worth failing a rig for.
+    pub fn save_node_store(nodes: &crate::node_store::NodeStore) {
+        store().write(crate::node_store::NODE_STORE_FILE, nodes);
+    }
+
     pub fn save_profile(profile: &ProfileDef) {
         let store = store();
         let mut profile = profile.clone();

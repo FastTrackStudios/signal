@@ -20,6 +20,7 @@
 use std::path::Path;
 
 pub mod library;
+pub mod node_store;
 pub mod nodes;
 pub mod profiles;
 pub mod session;
