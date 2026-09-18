@@ -10,4 +10,5 @@ description = "Shared Blitz-safe Dioxus widgets for signal rig UIs — knob, arc
 workspace = true
 
 [dependencies]
+signal-proto.workspace = true
 dioxus.workspace = true

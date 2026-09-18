@@ -12,5 +12,8 @@
 
 pub mod arc;
 pub mod knob;
+pub mod preset_tree;
 
 pub use knob::{FmtFn, Knob, KnobSize};
+
+pub use preset_tree::PresetTree;

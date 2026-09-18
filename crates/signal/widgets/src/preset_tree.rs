@@ -21,12 +21,19 @@
 //! nothing to pick between, and a dropdown with one entry is noise.
 
 use dioxus::prelude::*;
-use signal_guitar_proto::rig::RigClient;
-use signal_guitar_proto::{LiveNode, LivePreset};
+use signal_proto::live_node::{LiveNode, LivePreset};
 
 /// The node tree with a preset picker on every node that has a choice.
+///
+/// Takes what to *do* rather than who to talk to: every rig has its own wire
+/// contract, and the tree is the same tree in all of them. `on_select` fires
+/// with `(node id, preset id)`, `on_save` with `(node id, preset name)`.
 #[component]
-pub fn PresetTree(nodes: Vec<LiveNode>) -> Element {
+pub fn PresetTree(
+    nodes: Vec<LiveNode>,
+    on_select: EventHandler<(String, String)>,
+    on_save: EventHandler<(String, String)>,
+) -> Element {
     if nodes.is_empty() {
         return rsx! {
             div {
@@ -39,7 +46,7 @@ pub fn PresetTree(nodes: Vec<LiveNode>) -> Element {
     rsx! {
         div { class: "h-full min-h-0 overflow-y-auto p-3 flex flex-col gap-1",
             for node in nodes {
-                NodeRow { node: node.clone() }
+                NodeRow { node: node.clone(), on_select, on_save }
             }
         }
     }
@@ -47,7 +54,11 @@ pub fn PresetTree(nodes: Vec<LiveNode>) -> Element {
 
 /// One node: its name, what kind of thing it is, and its presets.
 #[component]
-fn NodeRow(node: LiveNode) -> Element {
+fn NodeRow(
+    node: LiveNode,
+    on_select: EventHandler<(String, String)>,
+    on_save: EventHandler<(String, String)>,
+) -> Element {
     // Depth as an indent, so the tree reads as a tree. Inline rather than a
     // Tailwind class because the value is computed — see the repo's UI rules
     // on why signal surfaces carry their layout-critical styles inline.
@@ -91,10 +102,11 @@ fn NodeRow(node: LiveNode) -> Element {
                     node: node.id.clone(),
                     presets: node.presets.clone(),
                     current: node.preset_id.clone(),
+                    on_select,
                 }
             }
 
-            SavePreset { node: node.id.clone(), name: node.name.clone() }
+            SavePreset { node: node.id.clone(), name: node.name.clone(), on_save }
         }
     }
 }
@@ -104,25 +116,19 @@ fn NodeRow(node: LiveNode) -> Element {
 /// A list's order changes the moment a capture is imported; an index into it
 /// does not survive that, and the wrong pedal setting is a silent failure.
 #[component]
-fn PresetPicker(node: String, presets: Vec<LivePreset>, current: String) -> Element {
-    // The client comes from context rather than a prop: it is not `PartialEq`,
-    // which every Dioxus prop must be, and the rest of this UI reads it the
-    // same way.
-    let rig = use_hook(try_consume_context::<RigClient>);
+fn PresetPicker(
+    node: String,
+    presets: Vec<LivePreset>,
+    current: String,
+    on_select: EventHandler<(String, String)>,
+) -> Element {
     rsx! {
         select {
             class: "shrink-0 max-w-[12rem] bg-background/80 border border-border rounded px-1.5 py-0.5 text-xs",
             onclick: move |e: MouseEvent| e.stop_propagation(),
             onchange: {
-                let rig = rig.clone();
                 let node = node.clone();
-                move |e: FormEvent| {
-                    let Some(rig) = rig.clone() else { return };
-                    let (node, preset) = (node.clone(), e.value());
-                    spawn(async move {
-                        let _ = rig.select_preset(node, preset).await;
-                    });
-                }
+                move |e: FormEvent| on_select.call((node.clone(), e.value()))
             },
             for preset in presets {
                 option {
@@ -144,29 +150,25 @@ fn PresetPicker(node: String, presets: Vec<LivePreset>, current: String) -> Elem
 /// name it, and it becomes a preset of that node, recallable from the picker
 /// beside this button.
 #[component]
-fn SavePreset(node: String, name: String) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+fn SavePreset(node: String, name: String, on_save: EventHandler<(String, String)>) -> Element {
     let mut naming = use_signal(|| false);
     let mut draft = use_signal(String::new);
 
     // A plain fn rather than a closure, so both the Enter key and the button
     // can call it without fighting over one `FnMut`.
     fn save(
-        rig: Option<RigClient>,
+        on_save: EventHandler<(String, String)>,
         mut naming: Signal<bool>,
         mut draft: Signal<String>,
         node: String,
     ) {
-        let Some(rig) = rig else { return };
         let preset = draft().trim().to_string();
         if preset.is_empty() {
             return;
         }
         naming.set(false);
         draft.set(String::new());
-        spawn(async move {
-            let _ = rig.save_preset(node, preset).await;
-        });
+        on_save.call((node, preset));
     }
 
     if !naming() {
@@ -189,9 +191,9 @@ fn SavePreset(node: String, name: String) -> Element {
                 value: "{draft}",
                 oninput: move |e| draft.set(e.value()),
                 onkeydown: {
-                    let (rig, node) = (rig.clone(), node.clone());
+                    let node = node.clone();
                     move |e: KeyboardEvent| match e.key() {
-                        Key::Enter => save(rig.clone(), naming, draft, node.clone()),
+                        Key::Enter => save(on_save, naming, draft, node.clone()),
                         Key::Escape => {
                             naming.set(false);
                             draft.set(String::new());
@@ -203,8 +205,8 @@ fn SavePreset(node: String, name: String) -> Element {
             button {
                 class: "px-1.5 py-0.5 rounded bg-accent text-accent-foreground text-[10px]",
                 onclick: {
-                    let (rig, node) = (rig.clone(), node.clone());
-                    move |_| save(rig.clone(), naming, draft, node.clone())
+                    let node = node.clone();
+                    move |_| save(on_save, naming, draft, node.clone())
                 },
                 "Keep"
             }

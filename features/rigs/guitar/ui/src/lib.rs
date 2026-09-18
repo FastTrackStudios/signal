@@ -17,7 +17,6 @@ mod icons;
 mod meters;
 mod palette;
 mod perform;
-mod presets;
 mod remote;
 mod settings;
 mod sidebars;
@@ -31,10 +30,11 @@ pub use grid::RigGraph;
 pub use icons::module_icon;
 pub use meters::{MeterBar, MeterPair, meter_level};
 pub use perform::PerformGrid;
-pub use presets::PresetTree;
 pub use remote::GuitarRigRemote;
 pub use settings::{AudioSettingsBridge, AudioSettingsModal};
 pub use sidebars::{LeftSidebar, RightSidebar};
+/// The node/preset tree (moved to signal-widgets — both rigs draw it).
+pub use signal_widgets::PresetTree;
 pub use signal_widgets::{Knob, KnobSize};
 pub use state::{RigViewState, use_rig_state};
 

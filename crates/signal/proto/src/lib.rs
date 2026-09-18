@@ -68,6 +68,7 @@ pub mod defaults;
 pub mod engine;
 pub mod fx_send;
 pub mod layer;
+pub mod live_node;
 pub mod metadata;
 pub mod midi;
 pub mod midi_actions;

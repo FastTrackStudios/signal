@@ -509,8 +509,31 @@ pub fn GuitarRigRemote() -> Element {
                                         nodes: state.nodes.read().clone(),
                                     }
                                 } else if mode() == Mode::Presets {
-                                    div { class: "h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card",
-                                        crate::presets::PresetTree { nodes: state.nodes.read().clone() }
+                                    {
+                                        // The tree is shared (signal-widgets);
+                                        // this supplies what to do with it,
+                                        // since every rig has its own wire.
+                                        let select = rig.clone();
+                                        let save = rig.clone();
+                                        rsx! {
+                                            div { class: "h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card",
+                                                signal_widgets::PresetTree {
+                                                    nodes: state.nodes.read().clone(),
+                                                    on_select: move |(node, preset): (String, String)| {
+                                                        let Some(rig) = select.clone() else { return };
+                                                        spawn(async move {
+                                                            let _ = rig.select_preset(node, preset).await;
+                                                        });
+                                                    },
+                                                    on_save: move |(node, name): (String, String)| {
+                                                        let Some(rig) = save.clone() else { return };
+                                                        spawn(async move {
+                                                            let _ = rig.save_preset(node, name).await;
+                                                        });
+                                                    },
+                                                }
+                                            }
+                                        }
                                     }
                                 } else if mode() == Mode::Tones {
                                     // A downloaded capture goes to the engine
