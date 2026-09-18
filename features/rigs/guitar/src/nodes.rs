@@ -47,6 +47,25 @@ pub struct RigNodes {
     pub chain: NodeId,
     /// Patch name → the variant that recalls it.
     pub patches: Vec<(String, signal_proto::node::VariantId)>,
+    /// Which drive slot each pedal node occupies, and which of its variants
+    /// is which capture option.
+    ///
+    /// The way back from a node choice to the profile field that stores it.
+    /// The library is *derived* from `ProfileDef`, so selecting a preset has
+    /// to be written back to the def or it is gone on the next rebuild —
+    /// until the library itself is what is stored, this is what makes a
+    /// choice persist.
+    pub drive_slots: Vec<DriveSlotNodes>,
+}
+
+/// One drive slot's node, and its captures in profile-option order.
+pub struct DriveSlotNodes {
+    /// The slot as the profile names it — "Drive 1".
+    pub slot: String,
+    /// The pedal node sitting in it.
+    pub node: NodeId,
+    /// Variant per capture, indexed the way `DriveSlotDef::option` counts.
+    pub options: Vec<signal_proto::node::VariantId>,
 }
 
 impl RigNodes {
@@ -107,6 +126,20 @@ impl RigNodes {
             profile = profile.with_stack(RigStack::new(&stack.name, stack.patches.clone()));
         }
         profile
+    }
+
+    /// The drive slot and option index a `(node, variant)` choice means, if
+    /// the profile has a field that can hold it.
+    ///
+    /// `None` for anything else — a module's preset, a block whose variants
+    /// exist only in the library. Those are real choices the domain can
+    /// express and the profile cannot, and saying so is better than writing
+    /// them somewhere they will not survive a rebuild.
+    #[must_use]
+    pub fn drive_option_for(&self, node: &str, variant: &str) -> Option<(String, usize)> {
+        let slot = self.drive_slots.iter().find(|s| s.node.as_str() == node)?;
+        let option = slot.options.iter().position(|v| v.as_str() == variant)?;
+        Some((slot.slot.clone(), option))
     }
 
     /// The variant for a patch by name.
@@ -319,6 +352,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
             .map(|d| d.block.clone())
     };
     let mut pedals = Vec::new();
+    let mut drive_slots: Vec<DriveSlotNodes> = Vec::new();
     for pedal in drives {
         let Some(first) = pedal.options.first() else {
             continue;
@@ -354,6 +388,13 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
             library.insert(leaf);
             options.push(variant.id.clone());
             node.variants.push(variant);
+        }
+        if let Some(slot) = slot.clone() {
+            drive_slots.push(DriveSlotNodes {
+                slot,
+                node: node.id.clone(),
+                options: options.clone(),
+            });
         }
         pedals.push((pedal.name.clone(), node.id.clone(), options));
         library.insert(node);
@@ -582,6 +623,7 @@ pub fn to_nodes(def: &ProfileDef, drives: &[DrivePresetDef]) -> RigNodes {
         library,
         chain: chain_id,
         patches,
+        drive_slots,
     }
 }
 
@@ -1232,5 +1274,54 @@ mod tests {
             p.stacks.iter().map(|s| s.name.clone()).collect()
         };
         assert_eq!(names(&from_nodes), names(&from_builder));
+    }
+
+    /// A pedal's captures are addressable as presets, and the choice maps
+    /// back to the profile field that stores it.
+    ///
+    /// The library is derived from `ProfileDef`, so a selection that has no
+    /// field to live in would be lost on the next rebuild. This is the lookup
+    /// that decides which choices are real.
+    #[test]
+    fn a_pedals_captures_map_back_to_their_profile_slot() {
+        let (def, drives) = shipped();
+        let rig = to_nodes(&def, &drives);
+
+        // The shipped rig wires King of Tone into Drive 1 at option 1.
+        let kot = rig
+            .library
+            .nodes
+            .iter()
+            .find(|n| n.name == "King of Tone")
+            .expect("the pedal is a node");
+        assert!(kot.variants.len() >= 2, "two captures to choose between");
+
+        for (index, variant) in kot.variants.iter().enumerate() {
+            let (slot, option) = rig
+                .drive_option_for(kot.id.as_str(), variant.id.as_str())
+                .unwrap_or_else(|| panic!("{} has no profile field", variant.name));
+            assert_eq!(slot, "Drive 1", "the slot the profile assigns it to");
+            assert_eq!(option, index, "option order follows the pedal's captures");
+        }
+    }
+
+    /// A choice the profile cannot hold says so rather than being written
+    /// somewhere it will not survive.
+    #[test]
+    fn a_choice_with_no_profile_field_is_refused() {
+        let (def, drives) = shipped();
+        let rig = to_nodes(&def, &drives);
+
+        // The chain itself has variants — the patches — but they are not a
+        // drive slot's captures, so there is no slot field for them.
+        let chain = rig.library.get(&rig.chain).expect("the chain");
+        let patch = chain.variants.last().expect("a patch variant");
+        assert_eq!(
+            rig.drive_option_for(chain.id.as_str(), patch.id.as_str()),
+            None
+        );
+
+        // And an unknown pair is not guessed at.
+        assert_eq!(rig.drive_option_for("nope", "nope"), None);
     }
 }

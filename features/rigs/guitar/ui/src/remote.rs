@@ -37,6 +37,11 @@ enum Mode {
     /// preset. Lives beside the rig rather than behind a file dialog
     /// because picking an amp is a playing decision, not a filing one.
     Tones,
+    /// The rig as a tree, with a preset picker on every node that has a
+    /// choice — blocks *and* the modules holding them. The chain views
+    /// render a flat block list, which is the right shape for playing and
+    /// has nowhere to put a module.
+    Presets,
 }
 
 /// The remote rig UI. Prop-less: everything arrives via context
@@ -381,6 +386,7 @@ pub fn GuitarRigRemote() -> Element {
                         (Mode::Routing, "Routing"),
                         (Mode::Control, "Control"),
                         (Mode::Session, "Session"),
+                        (Mode::Presets, "Presets"),
                         (Mode::Tones, "Tones"),
                     ] {
                         button {
@@ -499,6 +505,10 @@ pub fn GuitarRigRemote() -> Element {
                                 style: "flex: 2 1 0%;",
                                 if mode() == Mode::Routing {
                                     crate::grid::RigGraph { blocks: blocks() }
+                                } else if mode() == Mode::Presets {
+                                    div { class: "h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card",
+                                        crate::presets::PresetTree { nodes: state.nodes.read().clone() }
+                                    }
                                 } else if mode() == Mode::Tones {
                                     // A downloaded capture goes to the engine
                                     // as what it is — the browser reports the

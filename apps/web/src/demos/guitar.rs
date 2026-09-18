@@ -38,7 +38,9 @@
 use std::time::Duration;
 
 use dioxus::prelude::*;
-use signal_guitar_ui::proto::{BlockParam, LiveBlock, PerfStack, PerformanceModel};
+use signal_guitar_ui::proto::{
+    BlockParam, LiveBlock, LiveNode, LivePreset, PerfStack, PerformanceModel,
+};
 use signal_guitar_ui::{ControlView, PerformGrid, RigViewState};
 use signal_proto::block::BlockType;
 
@@ -260,6 +262,63 @@ fn eq_block() -> LiveBlock {
 }
 
 /// The demo patch: EQ, compressor, and the drive board.
+/// The rig as the Presets view draws it: containers and blocks in tree
+/// order, with a picker wherever there is a real choice.
+///
+/// The drive board is the interesting row — one pedal, two captures — since
+/// that is the choice the tree exists to offer.
+fn demo_nodes() -> Vec<LiveNode> {
+    let node = |id: &str, name: &str, role: &str, depth: u32, block: Option<BlockType>| LiveNode {
+        id: id.into(),
+        name: name.into(),
+        role: role.into(),
+        depth,
+        is_block: block.is_some(),
+        block_type: block,
+        bypassed: false,
+        presets: Vec::new(),
+        preset_id: String::new(),
+    };
+
+    let mut kot = node("kot", "King of Tone", "module", 2, None);
+    kot.presets = vec![
+        LivePreset {
+            id: "kot-both".into(),
+            name: "Both sides".into(),
+        },
+        LivePreset {
+            id: "kot-red".into(),
+            name: "Red as boost".into(),
+        },
+    ];
+    kot.preset_id = "kot-both".into();
+
+    let mut drive_1 = node("drive-1", "Drive 1", "module", 3, Some(BlockType::Drive));
+    drive_1.bypassed = true;
+
+    vec![
+        node("chain", "Worship", "preset", 0, None),
+        node("dynamics", "Dynamics", "module", 1, None),
+        node(
+            "comp",
+            "Compressor",
+            "module",
+            2,
+            Some(BlockType::Compressor),
+        ),
+        node("drive-board", "Drive", "module", 1, None),
+        kot,
+        drive_1,
+        node("amp-mod", "Amp", "module", 1, None),
+        node("amp", "AC30 Clean", "module", 2, Some(BlockType::Amp)),
+        node("eq-mod", "Eq", "module", 1, None),
+        node("amp-eq", "Amp EQ", "module", 2, Some(BlockType::Eq)),
+        node("time", "Time", "module", 1, None),
+        node("dly1", "DLY 1", "module", 2, Some(BlockType::Delay)),
+        node("verb1", "VERB 1", "module", 2, Some(BlockType::Reverb)),
+    ]
+}
+
 fn demo_blocks() -> Vec<LiveBlock> {
     let mut blocks = vec![
         eq_block(),
@@ -474,6 +533,7 @@ pub fn GuitarDemo() -> Element {
         comp_wave: Signal::new((Vec::new(), Vec::new())),
         perf: Signal::new(worship_performance()),
         blocks: Signal::new(demo_blocks()),
+        nodes: Signal::new(demo_nodes()),
         active_patch: Signal::new(Some("Crunch Edge".to_string())),
     });
 

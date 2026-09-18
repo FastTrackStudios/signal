@@ -4,7 +4,7 @@
 use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::{RigClient, RigEvent, RigStreamClient};
-use signal_guitar_proto::{LiveBlock, PerformanceModel};
+use signal_guitar_proto::{LiveBlock, LiveNode, PerformanceModel};
 
 use crate::meters::meter_level;
 
@@ -35,6 +35,10 @@ pub struct RigViewState {
     pub perf: Signal<PerformanceModel>,
     /// The active patch's FX chain.
     pub blocks: Signal<Vec<LiveBlock>>,
+    /// The rig as nodes — every block *and* container, with the presets each
+    /// can be recalled as. What `blocks` cannot say: a chain is flat, so a
+    /// Module has nowhere to appear in it.
+    pub nodes: Signal<Vec<LiveNode>>,
     /// Name of the active patch (raw backend name, e.g. "Crunch Edge").
     pub active_patch: Signal<Option<String>>,
 }
@@ -60,12 +64,13 @@ pub fn use_rig_state() -> RigViewState {
     let comp_wave = use_signal(|| (Vec::<f32>::new(), Vec::<f32>::new()));
     let mut perf = use_signal(PerformanceModel::default);
     let mut blocks = use_signal(Vec::<LiveBlock>::new);
+    let mut nodes = use_signal(Vec::<LiveNode>::new);
     let mut active_patch = use_signal(|| None::<String>);
 
     // Seed once — the event stream only carries *changes*; a fresh
     // subscriber needs the current state to start from.
     {
-        let rig = rig;
+        let rig = rig.clone();
         use_future(move || {
             let rig = rig.clone();
             async move {
@@ -91,6 +96,9 @@ pub fn use_rig_state() -> RigViewState {
                 if let Ok(c) = rig.chain().await {
                     blocks.set(c);
                 }
+                if let Ok(n) = rig.nodes().await {
+                    nodes.set(n);
+                }
             }
         });
     }
@@ -108,82 +116,101 @@ pub fn use_rig_state() -> RigViewState {
                     }
                 }
             },
-            move |ev: RigEvent| {
-                let (
-                    mut running,
-                    mut in_level,
-                    mut out_level,
-                    mut in_peak_db,
-                    mut out_peak_db,
-                    mut stereo_db,
-                    mut comp_gr_db,
-                    mut spectrum,
-                    mut comp_wave,
-                    mut perf,
-                    mut blocks,
-                    mut active_patch,
-                ) = (
-                    running,
-                    in_level,
-                    out_level,
-                    in_peak_db,
-                    out_peak_db,
-                    stereo_db,
-                    comp_gr_db,
-                    spectrum,
-                    comp_wave,
-                    perf,
-                    blocks,
-                    active_patch,
-                );
-                match ev {
-                    RigEvent::Status(s) => {
-                        running.set(s.running);
-                        in_level.set(meter_level(s.input_peak));
-                        out_level.set(meter_level(s.output_peak));
-                        in_peak_db.set(peak_db(s.input_peak));
-                        out_peak_db.set(peak_db(s.output_peak));
-                        stereo_db.set((
-                            peak_db(s.input_peak_l),
-                            peak_db(s.input_peak_r),
-                            peak_db(s.output_peak_l),
-                            peak_db(s.output_peak_r),
-                        ));
-                        comp_gr_db.set(s.comp_gr_db);
-                        active_patch.set(s.active_patch);
-                    }
-                    RigEvent::Perf(p) => perf.set(p),
-                    RigEvent::Chain(c) => blocks.set(c),
-                    RigEvent::Spectrum(bins) => {
-                        // Analyzer ballistics: instant attack, ~40 dB/s
-                        // decay, plus a light 3-tap frequency smooth — the
-                        // standard "looks right to a human" treatment.
-                        let prev = spectrum.peek().clone();
-                        let n = bins.len();
-                        let mut out = Vec::with_capacity(n);
-                        for i in 0..n {
-                            let (a, b, c) =
-                                (bins[i.saturating_sub(1)], bins[i], bins[(i + 1).min(n - 1)]);
-                            let fresh = (2.0f32.mul_add(b, a) + c) / 4.0;
-                            let fallen = prev.get(i).copied().unwrap_or(-90.0) - 1.3; // per frame at ~30 Hz ≈ 40 dB/s
-                            out.push(fresh.max(fallen).max(-90.0));
+            {
+                let rig_for_events = rig.clone();
+                move |ev: RigEvent| {
+                    let rig = rig_for_events.clone();
+                    let (
+                        mut running,
+                        mut in_level,
+                        mut out_level,
+                        mut in_peak_db,
+                        mut out_peak_db,
+                        mut stereo_db,
+                        mut comp_gr_db,
+                        mut spectrum,
+                        mut comp_wave,
+                        mut perf,
+                        mut blocks,
+                        mut nodes,
+                        mut active_patch,
+                    ) = (
+                        running,
+                        in_level,
+                        out_level,
+                        in_peak_db,
+                        out_peak_db,
+                        stereo_db,
+                        comp_gr_db,
+                        spectrum,
+                        comp_wave,
+                        perf,
+                        blocks,
+                        nodes,
+                        active_patch,
+                    );
+                    match ev {
+                        RigEvent::Status(s) => {
+                            running.set(s.running);
+                            in_level.set(meter_level(s.input_peak));
+                            out_level.set(meter_level(s.output_peak));
+                            in_peak_db.set(peak_db(s.input_peak));
+                            out_peak_db.set(peak_db(s.output_peak));
+                            stereo_db.set((
+                                peak_db(s.input_peak_l),
+                                peak_db(s.input_peak_r),
+                                peak_db(s.output_peak_l),
+                                peak_db(s.output_peak_r),
+                            ));
+                            comp_gr_db.set(s.comp_gr_db);
+                            active_patch.set(s.active_patch);
                         }
-                        spectrum.set(out);
-                    }
-                    RigEvent::CompWave(i, g) => {
-                        // A soft 3-tap along time keeps the rolling traces
-                        // fluid without hiding transients.
-                        let smooth = |v: &[f32]| -> Vec<f32> {
-                            let n = v.len();
-                            (0..n)
-                                .map(|k| {
-                                    (2.0f32.mul_add(v[k], v[k.saturating_sub(1)])
-                                        + v[(k + 1).min(n - 1)])
-                                        / 4.0
-                                })
-                                .collect()
-                        };
-                        comp_wave.set((smooth(&i), smooth(&g)));
+                        RigEvent::Perf(p) => perf.set(p),
+                        RigEvent::Chain(c) => {
+                            blocks.set(c);
+                            // The tree changes with the chain — a patch switch
+                            // can swap which capture a slot holds — and the
+                            // event carries blocks only, so re-read it.
+                            let rig = rig.clone();
+                            spawn(async move {
+                                if let Some(rig) = rig
+                                    && let Ok(n) = rig.nodes().await
+                                {
+                                    nodes.set(n);
+                                }
+                            });
+                        }
+                        RigEvent::Spectrum(bins) => {
+                            // Analyzer ballistics: instant attack, ~40 dB/s
+                            // decay, plus a light 3-tap frequency smooth — the
+                            // standard "looks right to a human" treatment.
+                            let prev = spectrum.peek().clone();
+                            let n = bins.len();
+                            let mut out = Vec::with_capacity(n);
+                            for i in 0..n {
+                                let (a, b, c) =
+                                    (bins[i.saturating_sub(1)], bins[i], bins[(i + 1).min(n - 1)]);
+                                let fresh = (2.0f32.mul_add(b, a) + c) / 4.0;
+                                let fallen = prev.get(i).copied().unwrap_or(-90.0) - 1.3; // per frame at ~30 Hz ≈ 40 dB/s
+                                out.push(fresh.max(fallen).max(-90.0));
+                            }
+                            spectrum.set(out);
+                        }
+                        RigEvent::CompWave(i, g) => {
+                            // A soft 3-tap along time keeps the rolling traces
+                            // fluid without hiding transients.
+                            let smooth = |v: &[f32]| -> Vec<f32> {
+                                let n = v.len();
+                                (0..n)
+                                    .map(|k| {
+                                        (2.0f32.mul_add(v[k], v[k.saturating_sub(1)])
+                                            + v[(k + 1).min(n - 1)])
+                                            / 4.0
+                                    })
+                                    .collect()
+                            };
+                            comp_wave.set((smooth(&i), smooth(&g)));
+                        }
                     }
                 }
             },
@@ -202,6 +229,7 @@ pub fn use_rig_state() -> RigViewState {
         comp_wave,
         perf,
         blocks,
+        nodes,
         active_patch,
     }
 }

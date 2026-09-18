@@ -274,6 +274,51 @@ pub struct BlockParam {
     pub max: f32,
 }
 
+/// One preset a node can be recalled as — a [`Variant`] of it, on the wire.
+///
+/// "Preset" is the player's word and `Variant` is the domain's; they are the
+/// same thing seen from two sides. A pedal's presets are its captures, a
+/// module's are the combinations of its blocks, an amp's are the models it
+/// can load.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct LivePreset {
+    /// The variant's id — what [`select_preset`](rig::Rig::select_preset)
+    /// takes. An id rather than an index into the list beside it, because a
+    /// list's order changes when a capture is imported and an index does not
+    /// survive that.
+    pub id: String,
+    pub name: String,
+}
+
+/// One node of the live rig, as the UI needs to draw and address it.
+///
+/// A flat list in tree order with an explicit `depth`, rather than a nested
+/// structure: the wire contract is `Facet`-encoded and a recursive type is
+/// awkward to encode, while every surface that renders this — a chain strip,
+/// an indented list, a routing graph — walks it in order anyway.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct LiveNode {
+    /// Stable node id. What every edit addresses.
+    pub id: String,
+    pub name: String,
+    /// What it means to a player: `preset` / `engine` / `layer` / `module`.
+    /// A UI groups and indents by this; it carries no behaviour.
+    pub role: String,
+    /// How deep in the tree, for indenting a flat list.
+    pub depth: u32,
+    /// True for a leaf — a block, the only thing that processes audio.
+    pub is_block: bool,
+    /// The block's type, when this is one. Empty for a container.
+    pub block_type: Option<BlockType>,
+    /// Whether this node (or its whole subtree) is bypassed.
+    pub bypassed: bool,
+    /// The presets this node can be recalled as. Empty means it has only its
+    /// default — most blocks, until someone saves a second setting.
+    pub presets: Vec<LivePreset>,
+    /// Which of them is loaded.
+    pub preset_id: String,
+}
+
 /// One block in the live active-patch FX chain.
 #[derive(Clone, PartialEq, Debug, Facet)]
 pub struct LiveBlock {
@@ -313,7 +358,8 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, LiveBlock, PatchInfo, PerformanceModel, PresetInfo, RigStatus, TunerReading,
+        Artwork, LiveBlock, LiveNode, PatchInfo, PerformanceModel, PresetInfo, RigStatus,
+        TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -400,7 +446,26 @@ pub mod rig {
         fn select_setlist(&self, index: u32);
         /// Select a block preset's NAM option (e.g. a pedal's gain capture).
         /// Rebuilds the chains — an edit-time operation.
+        ///
+        /// Superseded by [`select_preset`](Self::select_preset), which
+        /// addresses the same choice by node and variant id rather than by
+        /// block name and list position.
         fn set_block_option(&self, id: String, option: u32);
+        /// The live rig as nodes — every block **and every container**, in
+        /// tree order, each with the presets it can be recalled as.
+        ///
+        /// What [`chain`](Self::chain) cannot say: a chain is a flat list of
+        /// blocks, so a Module has nowhere to appear and nothing but a drive
+        /// slot can offer a preset. This is the whole tree the rig resolved.
+        fn nodes(&self) -> Vec<LiveNode>;
+        /// Recall a node as one of its presets — a pedal's capture, a
+        /// module's combination, an amp's model.
+        ///
+        /// Addressed by ids on both sides: the node keeps its id when it is
+        /// renamed, and the variant keeps its id when a capture is imported
+        /// ahead of it in the list. Rebuilds the chains — an edit-time
+        /// operation, like `set_block_option`.
+        fn select_preset(&self, node: String, preset: String);
         /// Record `seconds` of the live guitar input as the calibration DI
         /// reference, then re-measure every NAM against it. Play
         /// representatively while it runs.

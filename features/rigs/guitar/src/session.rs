@@ -17,8 +17,8 @@ use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use signal_guitar_proto::audio::AudioSettings;
 use signal_guitar_proto::rig::{Rig, RigEvent, RigStreamSource};
 use signal_guitar_proto::{
-    AudioDevice, AudioDevices, AudioPrefs, BlockParam, HeadphoneState, LiveBlock, PatchInfo,
-    PerfStack, PerformanceModel, PresetInfo, RigStatus, TunerReading,
+    AudioDevice, AudioDevices, AudioPrefs, BlockParam, HeadphoneState, LiveBlock, LiveNode,
+    LivePreset, PatchInfo, PerfStack, PerformanceModel, PresetInfo, RigStatus, TunerReading,
 };
 use signal_proto::block::BlockType;
 use signal_sampler::{DeviceInfo, GuitarRig, ProfileRig, RigBlock, RigManager};
@@ -1293,6 +1293,59 @@ fn activate_patch_by_name(prig: &mut ProfileRig, name: &str) -> bool {
     true
 }
 
+/// The resolved tree as the flat, depth-tagged list the wire carries.
+///
+/// A node's **presets are its variants**, and only where there is more than
+/// one: a node with a single default has nothing to choose between, and
+/// offering a picker with one entry is noise.
+fn flatten_nodes(
+    node: &signal_proto::node_resolve::Resolved,
+    rig: &crate::nodes::RigNodes,
+    depth: u32,
+    out: &mut Vec<LiveNode>,
+) {
+    use signal_proto::node_resolve::ResolvedContent;
+
+    let library_node = rig.library.get(&node.id);
+    let presets: Vec<LivePreset> = library_node
+        .filter(|n| n.variants.len() > 1)
+        .map(|n| {
+            n.variants
+                .iter()
+                .map(|v| LivePreset {
+                    id: v.id.as_str().to_string(),
+                    name: v.name.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let preset_id =
+        library_node.map_or_else(String::new, |n| n.default_variant.as_str().to_string());
+
+    let (is_block, block_type) = match &node.content {
+        ResolvedContent::Leaf { block_type, .. } => (true, Some(*block_type)),
+        ResolvedContent::Children(_) => (false, None),
+    };
+
+    out.push(LiveNode {
+        id: node.id.as_str().to_string(),
+        name: node.name.clone(),
+        role: node.role.tag().to_lowercase(),
+        depth,
+        is_block,
+        block_type,
+        bypassed: node.bypassed,
+        presets,
+        preset_id,
+    });
+
+    if let ResolvedContent::Children(children) = &node.content {
+        for child in children {
+            flatten_nodes(child, rig, depth + 1, out);
+        }
+    }
+}
+
 fn map_device(d: DeviceInfo) -> AudioDevice {
     AudioDevice {
         name: d.name,
@@ -1496,6 +1549,66 @@ impl Rig for GuitarRigBackend {
 
     fn chain(&self) -> Vec<LiveBlock> {
         self.blocks.lock_ok().clone()
+    }
+
+    fn nodes(&self) -> Vec<LiveNode> {
+        let def = self.profile_def.lock_ok();
+        let dps = self.drive_presets.lock_ok();
+        let rig = crate::nodes::to_nodes(&def, &dps);
+
+        // The tree as the *active patch* resolves it, so what the UI lists is
+        // what is playing rather than the chain's unbent default.
+        let active = self
+            .rig
+            .lock_ok()
+            .as_ref()
+            .and_then(|prig| prig.active_patch().map(|p| p.name.clone()));
+        let variant = active.as_deref().and_then(|name| rig.patch(name));
+        let Ok((resolved, _)) =
+            signal_proto::node_resolve::resolve(&rig.library, &rig.chain, variant)
+        else {
+            return Vec::new();
+        };
+
+        let mut out = Vec::new();
+        flatten_nodes(&resolved, &rig, 0, &mut out);
+        out
+    }
+
+    fn select_preset(&self, node: String, preset: String) {
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            let dps = self.drive_presets.lock_ok();
+            let rig = crate::nodes::to_nodes(&def, &dps);
+
+            // Which drive slot this node is, and which of its captures the
+            // variant names. The node library is *derived* from the profile
+            // def, so a choice has to be written back to the def or it is
+            // gone on the next rebuild — see `nodes` on what that costs.
+            let Some((slot, option)) = rig.drive_option_for(&node, &preset) else {
+                tracing::warn!(
+                    node.id = %node,
+                    preset.id = %preset,
+                    "guitar: preset not selectable — no profile field holds it"
+                );
+                return;
+            };
+            let Some(assigned) = def
+                .drives
+                .iter_mut()
+                .find(|d| d.block.eq_ignore_ascii_case(&slot))
+            else {
+                return;
+            };
+            if assigned.option == option {
+                return;
+            }
+            assigned.option = option;
+            tracing::info!(slot = %slot, option, "guitar: drive slot preset selected");
+            RigLibrary::save_profile(&def);
+            profile_from_library(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
     }
 
     fn press_stack(&self, index: u32) {
