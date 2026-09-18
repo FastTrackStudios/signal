@@ -504,7 +504,10 @@ pub fn GuitarRigRemote() -> Element {
                                 class: "min-h-0 flex flex-col overflow-hidden",
                                 style: "flex: 2 1 0%;",
                                 if mode() == Mode::Routing {
-                                    crate::grid::RigGraph { blocks: blocks() }
+                                    crate::grid::RigGraph {
+                                        blocks: blocks(),
+                                        nodes: state.nodes.read().clone(),
+                                    }
                                 } else if mode() == Mode::Presets {
                                     div { class: "h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card",
                                         crate::presets::PresetTree { nodes: state.nodes.read().clone() }
