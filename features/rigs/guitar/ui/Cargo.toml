@@ -29,6 +29,7 @@ session-ui = { workspace = true, features = ["web"] }
 # The real FTS-EQ editor core (band model, response math, SVG generators,
 # interaction rules) — wasm-portable; see eq_surface.rs.
 eq-ui.workspace = true
+fts-audio-ui.workspace = true
 # BlockType — chain-strip coloring.
 signal-proto.workspace = true
 # The zoomable rig graph + the headless slot conversion (both wasm-clean).

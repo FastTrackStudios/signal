@@ -82,7 +82,13 @@ repository = "https://github.com/FastTrackStudios/signal"
 [workspace.dependencies]
 # ── Internal — every moved crate, path declared ONCE here ─────────────
 fts-chrome = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
-fts-audio-ui = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
+# From processor, which owns the FX and their widgets since the September
+# 2026 split — and, crucially, the same copy `eq-ui` is built against. Two
+# `fts-audio-ui` crates in one graph means two incompatible `ParamHandle`
+# types, so a widget from eq-ui cannot be handed a handle built here. This
+# pointed at daw until 2026-09-19, when nothing used it: the entry was left
+# behind by the split, and the first crate to want it got the wrong one.
+fts-audio-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
 fts-plug-ui = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
 dock-dioxus = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3", default-features = false }
 dock-proto = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }

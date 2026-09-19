@@ -13157,6 +13157,7 @@ dependencies = [
  "architect",
  "dioxus",
  "eq-ui",
+ "fts-audio-ui",
  "lumen-blocks",
  "session-ui",
  "signal-grid",
