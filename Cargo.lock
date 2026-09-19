@@ -2249,7 +2249,7 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/processor?tag=v0.2.1#b3dbe81936663d52ffe1d8c1d96bc699775fb42f"
 dependencies = [
  "audiocore-dsp",
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/processor?tag=v0.2.1)",
 ]
 
 [[package]]
@@ -3387,7 +3387,7 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/processor?tag=v0.2.1#b3dbe81936663d52ffe1d8c1d96bc699775fb42f"
 dependencies = [
  "audiocore-dsp",
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/processor?tag=v0.2.1)",
  "pitch-dsp",
 ]
 
@@ -4453,6 +4453,10 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 [[package]]
 name = "dsp-core"
 version = "0.1.0"
+
+[[package]]
+name = "dsp-core"
+version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/processor?tag=v0.2.1#b3dbe81936663d52ffe1d8c1d96bc699775fb42f"
 
 [[package]]
@@ -4675,7 +4679,17 @@ name = "eq"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/processor?tag=v0.2.1#b3dbe81936663d52ffe1d8c1d96bc699775fb42f"
 dependencies = [
- "eq-dsp",
+ "eq-dsp 0.1.0 (git+https://github.com/FastTrackStudios/processor?tag=v0.2.1)",
+]
+
+[[package]]
+name = "eq-dsp"
+version = "0.1.0"
+dependencies = [
+ "audiocore-dsp",
+ "dsp-core 0.1.0",
+ "realfft",
+ "smallvec 1.15.2",
 ]
 
 [[package]]
@@ -4684,7 +4698,7 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/processor?tag=v0.2.1#b3dbe81936663d52ffe1d8c1d96bc699775fb42f"
 dependencies = [
  "audiocore-dsp",
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/processor?tag=v0.2.1)",
  "realfft",
  "smallvec 1.15.2",
 ]
@@ -4692,11 +4706,10 @@ dependencies = [
 [[package]]
 name = "eq-ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/processor?tag=v0.2.1#b3dbe81936663d52ffe1d8c1d96bc699775fb42f"
 dependencies = [
  "blitz-dom",
  "dioxus",
- "eq-dsp",
+ "eq-dsp 0.1.0",
  "fts-audio-ui",
  "parking_lot",
  "spectrum-analyzer",
@@ -5383,7 +5396,6 @@ checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 [[package]]
 name = "fts-audio-ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/processor?tag=v0.2.1#b3dbe81936663d52ffe1d8c1d96bc699775fb42f"
 dependencies = [
  "anyrender",
  "architect-ui",
@@ -11787,7 +11799,7 @@ source = "git+https://github.com/FastTrackStudios/processor?tag=v0.2.1#b3dbe8193
 dependencies = [
  "audiocore-dsp",
  "crossbeam-channel",
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/processor?tag=v0.2.1)",
  "fts-modulation",
  "pitch-dsp",
  "realfft",
@@ -12169,7 +12181,7 @@ name = "saturate-dsp"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/processor?tag=v0.2.1#b3dbe81936663d52ffe1d8c1d96bc699775fb42f"
 dependencies = [
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/processor?tag=v0.2.1)",
 ]
 
 [[package]]
@@ -12831,7 +12843,7 @@ name = "signal-analyzer"
 version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
- "eq-dsp",
+ "eq-dsp 0.1.0 (git+https://github.com/FastTrackStudios/processor?tag=v0.2.1)",
  "fx-blocks",
  "hound",
  "realfft",
@@ -13157,6 +13169,7 @@ dependencies = [
  "architect",
  "dioxus",
  "eq-ui",
+ "fts-audio-ui",
  "lumen-blocks",
  "session-ui",
  "signal-grid",
@@ -13204,7 +13217,7 @@ name = "signal-import"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "eq-dsp",
+ "eq-dsp 0.1.0 (git+https://github.com/FastTrackStudios/processor?tag=v0.2.1)",
  "eyre",
  "fx-blocks",
  "reverb-dsp",
@@ -14016,7 +14029,6 @@ dependencies = [
 [[package]]
 name = "spectrum-analyzer"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/processor?tag=v0.2.1#b3dbe81936663d52ffe1d8c1d96bc699775fb42f"
 dependencies = [
  "spectrum-analyzer-dsp",
 ]
@@ -14024,7 +14036,6 @@ dependencies = [
 [[package]]
 name = "spectrum-analyzer-dsp"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/processor?tag=v0.2.1#b3dbe81936663d52ffe1d8c1d96bc699775fb42f"
 dependencies = [
  "once_cell",
  "parking_lot",

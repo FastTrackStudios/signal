@@ -97,6 +97,9 @@ fn send(rig: &Option<RigClient>, block_id: &str, band: usize, field: &str, value
 /// shape/enable/delete on the selection.
 #[component]
 pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
+    // Where the dynamics panel's knob edits go. One drain per surface; see
+    // `wire_param` on why a widget's closure cannot hold the client itself.
+    let edits = crate::wire_param::use_wire_params();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut selected = use_signal(|| None::<usize>);
     let mut dragging = use_signal(|| None::<usize>);
@@ -495,6 +498,13 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                                 },
                                 "Delete"
                             }
+                            // Everything that makes the band dynamic: the
+                            // processor's own panel, bound to the wire.
+                            // Sixteen of the block's twenty-two per-band
+                            // parameters were reachable by nothing before
+                            // this. Collapsed it is one row, which is why it
+                            // sits in this strip rather than under it.
+                            {crate::eq_dynamics::band_dynamics(&block, i, &edits)}
                         }
                     }
                 }
