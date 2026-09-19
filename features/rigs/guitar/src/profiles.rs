@@ -609,6 +609,58 @@ pub struct SongDef {
     /// patch while this song is up (e.g. Clean → "Clean Verb"), so the
     /// footswitches are dialed for the song. Cursors reset on recall.
     pub stack_defaults: Vec<StackDefaultDef>,
+    /// What each section recalls: selecting the part switches to this patch.
+    ///
+    /// Additive rather than folded into [`parts`](Self::parts), and
+    /// deliberately: `parts` is a list of bare strings in `songs.styx`, and
+    /// changing its shape would make every existing file fail to parse —
+    /// which `read_or_seed` answers by silently reseeding the shipped
+    /// defaults. A format change that can quietly replace a person's set
+    /// list is not worth the tidier struct. Same idiom as
+    /// [`stack_defaults`](Self::stack_defaults), one level down.
+    ///
+    /// Keyed by section **name**, not index: a section list gets reordered
+    /// and renamed while a song is being worked out, and a name survives the
+    /// first of those.
+    #[facet(default)]
+    pub part_recalls: Vec<PartRecallDef>,
+}
+
+impl SongDef {
+    /// Each section paired with the patch it recalls, in section order.
+    ///
+    /// The empty string for a section nothing has been assigned to — which is
+    /// every section until someone does, and is why this is a pair rather
+    /// than an `Option`: a UI renders "recalls nothing" the same way it
+    /// renders a name, and the wire has no room for absence.
+    ///
+    /// Matched by name, case-insensitively, because a section list gets
+    /// renamed and reordered while a song is being worked out.
+    #[must_use]
+    pub fn parts_with_recalls(&self) -> Vec<(String, String)> {
+        self.parts
+            .iter()
+            .map(|name| {
+                let patch = self
+                    .part_recalls
+                    .iter()
+                    .find(|r| r.part.eq_ignore_ascii_case(name))
+                    .map(|r| r.patch.clone())
+                    .unwrap_or_default();
+                (name.clone(), patch)
+            })
+            .collect()
+    }
+}
+
+/// One section's recall: the patch selecting it switches to.
+#[derive(Clone, Debug, Facet)]
+pub struct PartRecallDef {
+    /// The section's name, as it appears in [`SongDef::parts`].
+    pub part: String,
+    /// The patch to switch to. Empty means the section recalls nothing —
+    /// which is what every section did before this existed.
+    pub patch: String,
 }
 
 /// One song-level stack override: which patch a stack lands on.
@@ -647,6 +699,7 @@ pub fn song_library() -> Vec<SongDef> {
             stack: 0, // open on Clean; per-song stacks come with song editing
             parts: Vec::new(),
             stack_defaults: Vec::new(),
+            part_recalls: Vec::new(),
         }
     }
     vec![
@@ -944,5 +997,77 @@ mod import_tests {
         );
         assert_eq!(dps.len(), 4);
         assert_eq!(def.drives.len(), 3);
+    }
+}
+
+#[cfg(test)]
+mod song_tests {
+    use super::*;
+
+    fn song() -> SongDef {
+        SongDef {
+            name: "No Other Name".into(),
+            key: "G".into(),
+            bpm: 74,
+            stack: 0,
+            parts: vec![
+                "Intro".into(),
+                "Verse".into(),
+                "Chorus".into(),
+                "Bridge".into(),
+            ],
+            stack_defaults: Vec::new(),
+            part_recalls: vec![
+                PartRecallDef {
+                    part: "chorus".into(),
+                    patch: "Ambient".into(),
+                },
+                PartRecallDef {
+                    part: "Bridge".into(),
+                    patch: "Lead".into(),
+                },
+            ],
+        }
+    }
+
+    /// A section recalls the patch assigned to it, and nothing when none is.
+    /// Every section was a label before this, so "nothing" has to stay a
+    /// first-class answer.
+    #[test]
+    fn sections_pair_with_what_they_recall() {
+        let pairs = song().parts_with_recalls();
+        assert_eq!(
+            pairs,
+            vec![
+                ("Intro".to_string(), String::new()),
+                ("Verse".to_string(), String::new()),
+                ("Chorus".to_string(), "Ambient".to_string()),
+                ("Bridge".to_string(), "Lead".to_string()),
+            ],
+            "in section order, with empty for the unassigned"
+        );
+    }
+
+    /// Matched case-insensitively: the assignment above says "chorus" and the
+    /// section is "Chorus". A section gets renamed while a song is being
+    /// worked out, and a recall that only matches one capitalisation is a
+    /// recall that stops firing without saying so.
+    #[test]
+    fn a_recall_matches_its_section_whatever_the_case() {
+        let pairs = song().parts_with_recalls();
+        assert_eq!(pairs[2].1, "Ambient");
+    }
+
+    /// A recall naming a section the song does not have is ignored rather
+    /// than appearing as an extra section — the sections are the song's, and
+    /// this list only says what they do.
+    #[test]
+    fn a_recall_for_a_missing_section_adds_nothing() {
+        let mut s = song();
+        s.part_recalls.push(PartRecallDef {
+            part: "Outro".into(),
+            patch: "Clean".into(),
+        });
+        assert_eq!(s.parts_with_recalls().len(), 4);
     }
 }

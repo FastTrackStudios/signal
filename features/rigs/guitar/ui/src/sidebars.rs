@@ -517,6 +517,29 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
 #[component]
 pub fn RightSidebar(model: PerformanceModel) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    // The patch list, for telling a section what to recall. Re-fetched when
+    // the model changes, the same way the left sidebar does it: a patch added
+    // or renamed has to appear here too.
+    let mut rev = use_signal(|| 0u64);
+    let mut last = use_signal(|| None::<PerformanceModel>);
+    if last.read().as_ref() != Some(&model) {
+        last.set(Some(model.clone()));
+        rev += 1;
+    }
+    let patches = use_resource({
+        let rig = rig.clone();
+        move || {
+            let _ = rev();
+            let rig = rig.clone();
+            async move {
+                match rig {
+                    Some(r) => r.patches().await.unwrap_or_default(),
+                    None => Vec::new(),
+                }
+            }
+        }
+    });
+    let patch_list: Vec<PatchInfo> = patches.read().clone().unwrap_or_default();
     // Per-entry key/bpm editor + the add forms.
     let mut editing_entry = use_signal(|| None::<usize>);
     let mut edit_key = use_signal(String::new);
@@ -541,7 +564,8 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
             div { class: "grid grid-cols-2 gap-1.5 p-2 flex-shrink-0",
                 for (i, part) in model.parts.iter().enumerate() {
                     {
-                        let name = part.clone();
+                        let name = part.name.clone();
+                        let patch = part.patch.clone();
                         let is_current = i == model.part_index as usize;
                         rsx! {
                             button {
@@ -559,7 +583,40 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
                                         }
                                     }
                                 },
-                                "{name}"
+                                div { class: "flex flex-col items-start leading-tight",
+                                    span { "{name}" }
+                                    if !patch.is_empty() {
+                                        span { class: "text-[9px] opacity-60", "→ {patch}" }
+                                    }
+                                }
+                            }
+                            // Which patch this section recalls. The sidebar is
+                            // where a set is built, so it is where a section
+                            // is told what to do — the perform grid only
+                            // fires it.
+                            select {
+                                class: "rounded bg-background/70 border border-border px-1 py-0.5 text-[10px]",
+                                title: "What {name} recalls",
+                                onclick: move |e: MouseEvent| e.stop_propagation(),
+                                onchange: {
+                                    let (rig, part) = (rig.clone(), name.clone());
+                                    move |e: FormEvent| {
+                                        let Some(r) = rig.clone() else { return };
+                                        let (part, patch) = (part.clone(), e.value());
+                                        spawn(async move {
+                                            let _ = r.set_part_patch(part, patch).await;
+                                        });
+                                    }
+                                },
+                                option { value: "", selected: patch.is_empty(), "—" }
+                                for p in patch_list.iter() {
+                                    option {
+                                        key: "{p.name}",
+                                        value: "{p.name}",
+                                        selected: p.name == patch,
+                                        "{p.name}"
+                                    }
+                                }
                             }
                         }
                     }

@@ -138,8 +138,13 @@ pub struct PerformanceModel {
     /// Keyboard bindings (keymap.styx) — "ctrl+1"-style keys → rig action
     /// strings, interpreted by every remote.
     pub key_bindings: Vec<KeyBinding>,
-    /// The current song's section names (Intro, V1, Chorus, …).
-    pub parts: Vec<String>,
+    /// The current song's sections (Intro, V1, Chorus, …) and what each
+    /// recalls.
+    ///
+    /// Shape changed here where it could not in `songs.styx`: the wire ships
+    /// with both ends, so a new field costs a recompile. The stored format
+    /// ships with the *player's data*, so it got an additive field instead.
+    pub parts: Vec<PerfPart>,
     /// Index of the current section.
     pub part_index: u32,
     /// Headphone-cue module state.
@@ -263,6 +268,15 @@ pub struct TunerReading {
     pub note: String,
     /// Distance from the note in cents (−50..+50; negative = flat).
     pub cents: f32,
+}
+
+/// One section of the current song, and the patch selecting it recalls.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct PerfPart {
+    pub name: String,
+    /// The patch this section switches to. Empty means it recalls nothing —
+    /// a label, which is what every section was before.
+    pub patch: String,
 }
 
 /// One controllable parameter of a live block.
@@ -457,6 +471,9 @@ pub mod rig {
         /// `with` is one of the slot's
         /// [`alternatives`](signal_proto::live_node::LiveNode::alternatives).
         fn replace_node(&self, node: String, with: String);
+        /// Set what a section of the **current song** recalls. An empty
+        /// `patch` clears it, making the section a label again.
+        fn set_part_patch(&self, part: String, patch: String);
         /// Undo the active patch's override of one parameter, returning it
         /// to what the chain builds it as.
         fn clear_block_param(&self, id: String, param: String);

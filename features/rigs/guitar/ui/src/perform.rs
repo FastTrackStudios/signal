@@ -323,7 +323,15 @@ pub fn PerformGrid(
                                 }
                             }
                         },
-                        "{part}"
+                        div { class: "flex flex-col items-center leading-tight",
+                            span { "{part.name}" }
+                            // What the section recalls, when it has been
+                            // given a patch — so a player can see the song
+                            // move the rig, not just the highlight.
+                            if !part.patch.is_empty() {
+                                span { class: "text-[9px] opacity-60 truncate max-w-full", "{part.patch}" }
+                            }
+                        }
                     }
                 }
             } else if let Some(stack) = stacks.get(4).cloned() {

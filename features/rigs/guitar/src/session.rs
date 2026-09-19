@@ -18,7 +18,8 @@ use signal_guitar_proto::audio::AudioSettings;
 use signal_guitar_proto::rig::{Rig, RigEvent, RigStreamSource};
 use signal_guitar_proto::{
     AudioDevice, AudioDevices, AudioPrefs, BlockParam, HeadphoneState, LiveBlock, LiveNode,
-    LivePreset, PatchInfo, PerfStack, PerformanceModel, PresetInfo, RigStatus, TunerReading,
+    LivePreset, PatchInfo, PerfPart, PerfStack, PerformanceModel, PresetInfo, RigStatus,
+    TunerReading,
 };
 use signal_proto::block::BlockType;
 use signal_sampler::{DeviceInfo, GuitarRig, ProfileRig, RigBlock, RigManager};
@@ -880,7 +881,7 @@ impl GuitarRigBackend {
     /// The active setlist's entries, resolved against the song library:
     /// `(name, key, bpm, stack, sections)` per slot — per-set overrides win
     /// over the song's defaults.
-    fn resolved_setlist(&self) -> Vec<(String, String, u32, usize, Vec<String>)> {
+    fn resolved_setlist(&self) -> Vec<(String, String, u32, usize, Vec<PerfPart>)> {
         let lib = self.songs_lib.lock_ok();
         let setlists = self.setlists.lock_ok();
         let idx = *self.setlist_index.lock_ok();
@@ -902,7 +903,16 @@ impl GuitarRigBackend {
                     e.bpm
                 };
                 let stack = song.map_or(0, |s| s.stack);
-                let parts = song.map(|s| s.parts.clone()).unwrap_or_default();
+                // Each section with what it recalls: the song's `part_recalls`
+                // matched by name, empty for a section that is still a label.
+                let parts: Vec<PerfPart> = song
+                    .map(|s| {
+                        s.parts_with_recalls()
+                            .into_iter()
+                            .map(|(name, patch)| PerfPart { name, patch })
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 (e.song.clone(), key, bpm, stack, parts)
             })
             .collect()
@@ -1694,6 +1704,41 @@ impl Rig for GuitarRigBackend {
         self.clear_overrides(&id, None);
     }
 
+    fn set_part_patch(&self, part: String, patch: String) {
+        let song_name = {
+            let idx = *self.song_index.lock_ok();
+            self.resolved_setlist()
+                .get(idx)
+                .map(|(name, ..)| name.clone())
+        };
+        let Some(song_name) = song_name else { return };
+        {
+            let mut songs = self.songs_lib.lock_ok();
+            let Some(song) = songs
+                .iter_mut()
+                .find(|s| s.name.eq_ignore_ascii_case(&song_name))
+            else {
+                return;
+            };
+            song.part_recalls
+                .retain(|r| !r.part.eq_ignore_ascii_case(&part));
+            if !patch.is_empty() {
+                song.part_recalls.push(crate::profiles::PartRecallDef {
+                    part: part.clone(),
+                    patch: patch.clone(),
+                });
+            }
+            tracing::info!(
+                song = %song_name,
+                part = %part,
+                patch = %patch,
+                "guitar: section recall set"
+            );
+            RigLibrary::save_songs(&songs);
+        }
+        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
     fn replace_node(&self, node: String, with: String) {
         let rebuilt = {
             let mut def = self.profile_def.lock_ok();
@@ -1852,9 +1897,41 @@ impl Rig for GuitarRigBackend {
         let idx = (index as usize).min(last);
         *self.part_index.lock_ok() = idx;
         self.mark_state_dirty();
-        tracing::info!("part → {idx} (song {song_idx})");
-        // Sections don't drive audio yet (scenes later) — publish so every
-        // remote follows the section highlight.
+
+        // A section recalls a patch, when it has been given one. That is what
+        // makes a section part of the performance rather than a label on it:
+        // stepping through a song's sections switches the rig with it.
+        let recall = self
+            .resolved_setlist()
+            .get(song_idx)
+            .and_then(|(_, _, _, _, parts)| parts.get(idx).cloned())
+            .filter(|part| !part.patch.is_empty());
+        if let Some(part) = recall {
+            tracing::info!(part = %part.name, patch = %part.patch, "part → patch");
+            let switched = {
+                let mut guard = self.rig.lock_ok();
+                guard
+                    .as_mut()
+                    .is_some_and(|prig| activate_patch_by_name(prig, &part.patch))
+            };
+            if switched {
+                // The same follow-up a footswitch press does: the chain
+                // mirror, the delays' tempo, the boost and the drives.
+                self.resync_blocks();
+                self.apply_tempo_to_delays();
+                self.recall_patch_boost();
+                self.apply_boost_to_block();
+                self.apply_all_drives();
+            } else {
+                tracing::warn!(
+                    part = %part.name,
+                    patch = %part.patch,
+                    "guitar: section names a patch the profile does not have"
+                );
+            }
+        } else {
+            tracing::info!("part → {idx} (song {song_idx})");
+        }
         self.events.publish(RigEvent::Perf(Rig::perf(self)));
     }
 
@@ -2469,6 +2546,7 @@ impl Rig for GuitarRigBackend {
                 stack: 0,
                 parts: Vec::new(),
                 stack_defaults: Vec::new(),
+                part_recalls: Vec::new(),
             });
             RigLibrary::save_songs(&songs);
         }
