@@ -1023,7 +1023,10 @@ fn ModGroupPanel(
         d.push_str(if px == 0 { "M " } else { "L " });
         let _ = write!(d, "{:.1} {:.1} ", 4.0 + t * 192.0, y);
     }
-    let color = if engaged { "#f472b6" } else { "#3f3f46" };
+    // Modulation is cyan, motion is pink — the two groups sit one above the
+    // other and the colour is how you tell which you are reading.
+    let group_color = if tempo_divisions { "#f472b6" } else { "#22d3ee" };
+    let color = if engaged { group_color } else { "#3f3f46" };
 
     // Motion speed: current rate expressed as the nearest tempo division.
     let quarter_hz = tempo_bpm.max(1) as f32 / 60.0;
@@ -1123,16 +1126,7 @@ fn ModGroupPanel(
             }
             // LFO trace — flat and labeled while the group is bypassed.
             div { class: "relative flex-1", style: "min-height: 14px;",
-                svg { class: "w-full h-full", view_box: "0 0 200 52", preserve_aspect_ratio: "none",
-                    line { x1: "0", y1: "26", x2: "200", y2: "26", stroke: "#27272a", stroke_width: "1" }
-                    path {
-                        d: "{d}",
-                        fill: "none",
-                        stroke: "{color}",
-                        stroke_width: "1.5",
-                        opacity: if engaged { "1" } else { "0.35" },
-                    }
-                }
+                {mod_lane(&cur, rate, depth, engaged, group_color, &d, color)}
                 if !engaged {
                     span {
                         class: "absolute inset-0 flex items-center justify-center text-[8px] uppercase tracking-[2px]",
@@ -1395,6 +1389,52 @@ fn delay_lane(
                     fill_opacity: if on { "0.9" } else { "0.25" },
                     rx: "1",
                 }
+            }
+        }
+    }
+}
+
+/// One modulation lane: the engine's own painted visualiser where a renderer
+/// can composite a scene, the generic LFO trace where it cannot.
+#[cfg(not(target_arch = "wasm32"))]
+fn mod_lane(
+    cur: &LiveBlock,
+    rate: f32,
+    depth: f32,
+    engaged: bool,
+    group_color: &'static str,
+    _d: &str,
+    _stroke: &'static str,
+) -> Element {
+    let Some(engine) = crate::mod_viz::Engine::of(cur.block_type) else {
+        return rsx! {};
+    };
+    let mix = param_v(cur, "mix", 0.5);
+    let color = crate::fx_viz::rgb(group_color);
+    rsx! {
+        crate::mod_viz::ModViz { engine, rate, depth, mix, on: engaged, color }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn mod_lane(
+    _cur: &LiveBlock,
+    _rate: f32,
+    _depth: f32,
+    engaged: bool,
+    _group_color: &'static str,
+    d: &str,
+    stroke: &'static str,
+) -> Element {
+    rsx! {
+        svg { class: "w-full h-full", view_box: "0 0 200 52", preserve_aspect_ratio: "none",
+            line { x1: "0", y1: "26", x2: "200", y2: "26", stroke: "#27272a", stroke_width: "1" }
+            path {
+                d: "{d}",
+                fill: "none",
+                stroke: "{stroke}",
+                stroke_width: "1.5",
+                opacity: if engaged { "1" } else { "0.35" },
             }
         }
     }

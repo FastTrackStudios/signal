@@ -1,5 +1,5 @@
 //! The FTS-Comp editor, detached — a 1:1 port of the comp-plugin layout:
-//! the rolling peak waveform fills the panel (teal input fill from the
+//! the rolling peak waveform fills the panel (neutral grey input fill from the
 //! bottom, red gain-reduction fill from the top — Pro-C 3 style), with the
 //! transfer curve + threshold line + input ball overlaid, and the two knob
 //! rows floating at the bottom (Threshold/Ratio/Attack/Release large,
@@ -245,12 +245,19 @@ pub fn CompSurface(
                 },
 
                 defs {
-                    // Input level — dark teal gradient (painter's stops).
+                    // Input level — neutral grey.
+                    //
+                    // The input is the one trace here that is not an effect:
+                    // it is what arrived. Gain reduction is red because it is
+                    // the compressor acting, and giving the thing being acted
+                    // ON a colour of its own implied a second process. Grey
+                    // says "this is just the signal", and leaves red the only
+                    // hue in the panel that means anything.
                     linearGradient { id: "comp-in", x1: "0", y1: "0", x2: "0", y2: "1",
-                        stop { offset: "0", stop_color: "rgba(20,110,115,0.82)" }
-                        stop { offset: "0.45", stop_color: "rgba(14,80,85,0.51)" }
-                        stop { offset: "0.80", stop_color: "rgba(8,50,55,0.22)" }
-                        stop { offset: "1", stop_color: "rgba(4,25,28,0.06)" }
+                        stop { offset: "0", stop_color: "rgba(226,232,240,0.60)" }
+                        stop { offset: "0.45", stop_color: "rgba(180,188,200,0.34)" }
+                        stop { offset: "0.80", stop_color: "rgba(120,128,140,0.15)" }
+                        stop { offset: "1", stop_color: "rgba(80,86,96,0.05)" }
                     }
                     // Gain reduction — red gradient from the top.
                     linearGradient { id: "comp-gr", x1: "0", y1: "0", x2: "0", y2: "1",
@@ -261,11 +268,11 @@ pub fn CompSurface(
                     }
                 }
 
-                // Input waveform: fill + glow edge + bright cyan edge.
+                // Input waveform: fill + glow edge + bright edge, all neutral.
                 if !in_fill.is_empty() {
                     path { d: "{in_fill}", fill: "url(#comp-in)" }
-                    path { d: "{in_edge}", fill: "none", stroke: "rgba(0,200,210,0.12)", stroke_width: "4" }
-                    path { d: "{in_edge}", fill: "none", stroke: "rgba(60,210,220,0.78)", stroke_width: "1.5" }
+                    path { d: "{in_edge}", fill: "none", stroke: "rgba(200,208,220,0.12)", stroke_width: "4" }
+                    path { d: "{in_edge}", fill: "none", stroke: "rgba(232,238,248,0.80)", stroke_width: "1.5" }
                 }
                 // GR from the top: fill + glow + bright red edge. Hidden
                 // while the detector is idle (a zero trace would still

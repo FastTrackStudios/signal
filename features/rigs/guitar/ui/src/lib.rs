@@ -14,6 +14,9 @@ mod eq_surface;
 /// Blitz host).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod fx_viz;
+/// A painted visualiser per modulation engine — native only.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod mod_viz;
 /// The plugin's own vello EQ editor — native only (a painted scene needs a
 /// Blitz host; the wasm remote draws [`eq_surface`] instead).
 #[cfg(all(not(target_arch = "wasm32"), feature = "eq-vello"))]

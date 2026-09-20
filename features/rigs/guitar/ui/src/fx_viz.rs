@@ -764,7 +764,7 @@ pub fn rgb(hex: &str) -> [u8; 3] {
 ///
 /// `schedule_update` is documented as safe to call from off the runtime,
 /// which is exactly what this is.
-fn use_repaint_clock() {
+pub(crate) fn use_repaint_clock() {
     use_hook(|| {
         let updater = dioxus_core::schedule_update();
         std::thread::spawn(move || {
