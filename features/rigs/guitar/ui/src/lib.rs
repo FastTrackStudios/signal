@@ -36,7 +36,7 @@ pub use settings::{AudioSettingsBridge, AudioSettingsModal};
 pub use sidebars::{LeftSidebar, RightSidebar};
 /// The node/preset tree (moved to signal-widgets — both rigs draw it).
 pub use signal_widgets::PresetTree;
-pub use signal_widgets::{Knob, KnobSize};
+pub use signal_widgets::{Knob, KnobSize, Picker, PickerSize};
 pub use state::{RigViewState, use_rig_state};
 pub use wire_param::{EditSink, WireParam, use_wire_params};
 

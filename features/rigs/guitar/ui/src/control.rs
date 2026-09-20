@@ -18,6 +18,7 @@ use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{BlockParam, LiveBlock, PerformanceModel};
 use signal_proto::block::BlockType;
+use signal_widgets::{Picker, PickerSize};
 
 use crate::state::RigViewState;
 
@@ -605,17 +606,11 @@ fn ParamSelect(
     rsx! {
         div { class: "flex flex-col gap-0.5 min-w-0",
             span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "{label}" }
-            select {
-                class: "bg-transparent border border-border rounded-sm text-[10px] px-0.5 py-0",
-                value: "{value as usize}",
-                onchange: move |e: FormEvent| {
-                    if let Ok(v) = e.value().parse::<usize>() {
-                        send_param(&rig, &block_id, name, v as f32);
-                    }
-                },
-                for (i, o) in options.iter().enumerate() {
-                    option { key: "{i}", value: "{i}", selected: i == value as usize, "{o}" }
-                }
+            Picker {
+                options: options.iter().map(|o| (*o).to_string()).collect::<Vec<String>>(),
+                selected: value as u32,
+                size: PickerSize::Tiny,
+                on_select: move |v: u32| send_param(&rig, &block_id, name, v as f32),
             }
         }
     }
@@ -759,18 +754,14 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                                     let id = b.id.clone();
                                     let div = param_v(b, "tap_div_l", 0.0);
                                     rsx! {
-                                        select {
-                                            class: "bg-transparent border border-border rounded-sm text-[10px] px-0.5 py-0",
-                                            value: "{div as usize}",
-                                            onchange: move |e: FormEvent| {
-                                                if let Ok(v) = e.value().parse::<usize>() {
-                                                    send_param(&rig, &id, "tap_div_l", v as f32);
-                                                    send_param(&rig, &id, "tap_div_r", v as f32);
-                                                }
+                                        Picker {
+                                            options: DIV_LABELS.iter().map(|o| (*o).to_string()).collect::<Vec<String>>(),
+                                            selected: div as u32,
+                                            size: PickerSize::Tiny,
+                                            on_select: move |v: u32| {
+                                                send_param(&rig, &id, "tap_div_l", v as f32);
+                                                send_param(&rig, &id, "tap_div_r", v as f32);
                                             },
-                                            for (i, o) in DIV_LABELS.iter().enumerate() {
-                                                option { key: "{i}", value: "{i}", selected: i == div as usize, "{o}" }
-                                            }
                                         }
                                     }
                                 }
@@ -1167,28 +1158,25 @@ fn ModGroupPanel(
                     // Speed as a note division, mapped to Hz from the tempo.
                     div { class: "flex flex-col gap-0.5",
                         span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "Speed" }
-                        select {
-                            class: "bg-background border border-border rounded-sm text-[9px] px-0.5",
-                            style: "height: 16px; line-height: 1;",
-                            value: "{cur_div}",
-                            onchange: {
+                        Picker {
+                            options: ["1/4", "1/8.", "1/8", "1/4T", "1/16", "Golden", "Silver"]
+                                .iter().map(|l| (*l).to_string()).collect::<Vec<String>>(),
+                            selected: cur_div as u32,
+                            size: PickerSize::Tiny,
+                            on_select: {
                                 let rig = rig.clone();
                                 let id = cur.id.clone();
-                                move |e: FormEvent| {
-                                    if let Ok(i) = e.value().parse::<usize>() {
-                                        let hz = div_hz.get(i).copied().unwrap_or(2.0);
-                                        if let Some(r) = rig.clone() {
-                                            let id = id.clone();
-                                            spawn(async move {
-                                                let _ = r.set_block_param(id, "rate".into(), hz).await;
-                                            });
-                                        }
+                                let div_hz = div_hz.clone();
+                                move |i: u32| {
+                                    let hz = div_hz.get(i as usize).copied().unwrap_or(2.0);
+                                    if let Some(r) = rig.clone() {
+                                        let id = id.clone();
+                                        spawn(async move {
+                                            let _ = r.set_block_param(id, "rate".into(), hz).await;
+                                        });
                                     }
                                 }
                             },
-                            for (i, l) in ["1/4", "1/8.", "1/8", "1/4T", "1/16", "Golden", "Silver"].iter().enumerate() {
-                                option { key: "{i}", value: "{i}", selected: i == cur_div, "{l}" }
-                            }
                         }
                     }
                 } else if let Some(p) = param(&cur, "rate") {
@@ -1342,25 +1330,25 @@ fn DriveChunk(
                     class: if engaged { "text-[10px] font-semibold truncate" } else { "text-[10px] truncate text-muted-foreground" },
                     "{name}"
                 }
-                // NAM option quick-switch (captures within the preset).
+                // Quick-switch: the captures within a drive's preset, or the
+                // pool presets an amp can be. Drawn rather than a `<select>`,
+                // which Blitz renders with platform chrome and no popup.
                 if options.len() > 1 {
-                    select {
-                        class: "ml-auto pointer-events-auto bg-background/60 border border-border/60 rounded-sm text-[8px] px-0.5 text-muted-foreground flex-shrink-0", style: "max-width: 84px; height: 14px;",
-                        value: "{option}",
-                        onpointerdown: move |e: PointerEvent| e.stop_propagation(),
-                        onchange: {
-                            let rig = rig.clone();
-                            let block_id = block_id.clone();
-                            move |e: FormEvent| {
-                                if let (Some(r), Some(id), Ok(v)) =
-                                    (rig.clone(), block_id.clone(), e.value().parse::<u32>())
-                                {
-                                    spawn(async move { let _ = r.set_block_option(id, v).await; });
+                    div { class: "ml-auto pointer-events-auto",
+                        Picker {
+                            options: options.clone(),
+                            selected: option,
+                            size: PickerSize::Tiny,
+                            width: "84px".to_string(),
+                            on_select: {
+                                let rig = rig.clone();
+                                let block_id = block_id.clone();
+                                move |v: u32| {
+                                    if let (Some(r), Some(id)) = (rig.clone(), block_id.clone()) {
+                                        spawn(async move { let _ = r.set_block_option(id, v).await; });
+                                    }
                                 }
-                            }
-                        },
-                        for (i, o) in options.iter().enumerate() {
-                            option { key: "{i}", value: "{i}", selected: i as u32 == option, "{o}" }
+                            },
                         }
                     }
                 }

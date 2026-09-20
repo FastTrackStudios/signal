@@ -13,6 +13,7 @@ use std::time::Duration;
 
 use dioxus::dioxus_core::Task;
 use dioxus::prelude::*;
+use signal_widgets::{Picker, PickerSize};
 
 use signal_guitar_proto::LiveBlock;
 use signal_guitar_proto::rig::RigClient;
@@ -219,19 +220,18 @@ pub fn PerformGrid(
             // into the patch like any live edit) ──
             div { class: "flex items-center gap-2 flex-shrink-0",
                 span { class: "text-[10px] uppercase tracking-wider text-muted-foreground", "Preset" }
-                select {
-                    class: "bg-background border border-border rounded px-2 py-1 text-sm",
-                    onchange: {
-                        let rig = rig;
-                        move |e: FormEvent| {
-                            if let (Some(r), Ok(i)) = (rig.clone(), e.value().parse::<u32>()) {
+                Picker {
+                    options: preset_list.iter().map(|p| p.name.clone()).collect::<Vec<String>>(),
+                    selected: preset_list.iter().position(|p| p.active).unwrap_or(usize::MAX) as u32,
+                    placeholder: "preset…".to_string(),
+                    on_select: {
+                        let rig = rig.clone();
+                        move |i: u32| {
+                            if let Some(r) = rig.clone() {
                                 spawn(async move { let _ = r.play_preset(i).await; });
                             }
                         }
                     },
-                    for (i, p) in preset_list.iter().enumerate() {
-                        option { key: "{i}", value: "{i}", selected: p.active, "{p.name}" }
-                    }
                 }
             }
             div { class: "grid grid-cols-5 auto-rows-fr gap-3 flex-1 min-h-0",
@@ -274,22 +274,20 @@ pub fn PerformGrid(
                                 // Editing surface: block presets with NAM
                                 // options get a picker right on the pedal.
                                 if !b.options.is_empty() {
-                                    select {
-                                        class: "bg-background/80 border border-border rounded px-1 py-0.5 text-[10px] max-w-full",
-                                        onclick: move |e: MouseEvent| e.stop_propagation(),
-                                        onchange: {
+                                    Picker {
+                                        options: b.options.clone(),
+                                        selected: b.option,
+                                        size: PickerSize::Tiny,
+                                        on_select: {
                                             let rig = rig.clone();
                                             let id = b.id.clone();
-                                            move |e: FormEvent| {
-                                                if let (Some(r), Ok(i)) = (rig.clone(), e.value().parse::<u32>()) {
+                                            move |i: u32| {
+                                                if let Some(r) = rig.clone() {
                                                     let id = id.clone();
                                                     spawn(async move { let _ = r.set_block_option(id, i).await; });
                                                 }
                                             }
                                         },
-                                        for (i, opt) in b.options.iter().enumerate() {
-                                            option { key: "{i}", value: "{i}", selected: i as u32 == b.option, "{opt}" }
-                                        }
                                     }
                                 }
                             }

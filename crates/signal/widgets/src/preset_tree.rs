@@ -139,22 +139,26 @@ fn SlotPicker(
     on_replace: EventHandler<(String, String)>,
 ) -> Element {
     rsx! {
-        select {
-            class: "shrink-0 max-w-[10rem] bg-background/60 border border-dashed border-border rounded px-1.5 py-0.5 text-xs",
-            title: "What sits in this slot",
-            onclick: move |e: MouseEvent| e.stop_propagation(),
-            onchange: {
+        crate::picker::Picker {
+            options: alternatives.iter().map(|a| a.name.clone()).collect::<Vec<String>>(),
+            selected: alternatives
+                .iter()
+                .position(|a| a.name == current)
+                .map_or(u32::MAX, |i| i as u32),
+            placeholder: "—".to_string(),
+            width: "10rem".to_string(),
+            on_select: {
                 let node = node.clone();
-                move |e: FormEvent| on_replace.call((node.clone(), e.value()))
-            },
-            for alternative in alternatives {
-                option {
-                    key: "{alternative.id}",
-                    value: "{alternative.id}",
-                    selected: alternative.name == current,
-                    "{alternative.name}"
+                // The wire wants the id, not the position: a list reorders the
+                // moment a capture is imported, and an index into it would then
+                // choose the wrong node, silently.
+                let ids: Vec<String> = alternatives.iter().map(|a| a.id.clone()).collect();
+                move |i: u32| {
+                    if let Some(id) = ids.get(i as usize) {
+                        on_replace.call((node.clone(), id.clone()));
+                    }
                 }
-            }
+            },
         }
     }
 }
@@ -171,21 +175,24 @@ fn PresetPicker(
     on_select: EventHandler<(String, String)>,
 ) -> Element {
     rsx! {
-        select {
-            class: "shrink-0 max-w-[12rem] bg-background/80 border border-border rounded px-1.5 py-0.5 text-xs",
-            onclick: move |e: MouseEvent| e.stop_propagation(),
-            onchange: {
+        crate::picker::Picker {
+            options: presets.iter().map(|p| p.name.clone()).collect::<Vec<String>>(),
+            selected: presets
+                .iter()
+                .position(|p| p.id == current)
+                .map_or(u32::MAX, |i| i as u32),
+            placeholder: "—".to_string(),
+            width: "12rem".to_string(),
+            on_select: {
                 let node = node.clone();
-                move |e: FormEvent| on_select.call((node.clone(), e.value()))
-            },
-            for preset in presets {
-                option {
-                    key: "{preset.id}",
-                    value: "{preset.id}",
-                    selected: preset.id == current,
-                    "{preset.name}"
+                // By id, for the reason in the docs above.
+                let ids: Vec<String> = presets.iter().map(|p| p.id.clone()).collect();
+                move |i: u32| {
+                    if let Some(id) = ids.get(i as usize) {
+                        on_select.call((node.clone(), id.clone()));
+                    }
                 }
-            }
+            },
         }
     }
 }

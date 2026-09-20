@@ -7,6 +7,7 @@
 //! [`PerformanceModel`], so they work identically on desktop and web.
 
 use dioxus::prelude::*;
+use signal_widgets::{Picker, PickerSize};
 
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{PatchInfo, PerformanceModel, PresetInfo};
@@ -149,20 +150,36 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                         oninput: move |e| new_name.set(e.value()),
                     }
                     div { class: "flex gap-1",
-                        select {
-                            class: "flex-1 min-w-0 bg-background border border-border rounded px-1 py-0.5 text-xs",
-                            onchange: move |e| new_stack_sel.set(e.value()),
-                            option { value: "", "stack…" }
-                            for st in model.stacks.iter() {
-                                option { key: "{st.name}", value: "{st.name}", "{st.name}" }
+                        div { class: "flex-1 min-w-0",
+                            Picker {
+                                options: model.stacks.iter().map(|st| st.name.clone()).collect::<Vec<String>>(),
+                                selected: name_index(&model.stacks.iter().map(|st| st.name.clone()).collect::<Vec<String>>(), &new_stack_sel()),
+                                placeholder: "stack…".to_string(),
+                                width: "100%".to_string(),
+                                on_select: {
+                                    let names: Vec<String> = model.stacks.iter().map(|st| st.name.clone()).collect();
+                                    move |i: u32| {
+                                        if let Some(n) = names.get(i as usize) {
+                                            new_stack_sel.set(n.clone());
+                                        }
+                                    }
+                                },
                             }
                         }
-                        select {
-                            class: "flex-1 min-w-0 bg-background border border-border rounded px-1 py-0.5 text-xs",
-                            onchange: move |e| new_preset_sel.set(e.value()),
-                            option { value: "", "preset…" }
-                            for p in preset_list.iter() {
-                                option { key: "{p.name}", value: "{p.name}", "{p.name}" }
+                        div { class: "flex-1 min-w-0",
+                            Picker {
+                                options: preset_list.iter().map(|p| p.name.clone()).collect::<Vec<String>>(),
+                                selected: name_index(&preset_list.iter().map(|p| p.name.clone()).collect::<Vec<String>>(), &new_preset_sel()),
+                                placeholder: "preset…".to_string(),
+                                width: "100%".to_string(),
+                                on_select: {
+                                    let names: Vec<String> = preset_list.iter().map(|p| p.name.clone()).collect();
+                                    move |i: u32| {
+                                        if let Some(n) = names.get(i as usize) {
+                                            new_preset_sel.set(n.clone());
+                                        }
+                                    }
+                                },
                             }
                         }
                         button {
@@ -594,29 +611,24 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
                             // where a set is built, so it is where a section
                             // is told what to do — the perform grid only
                             // fires it.
-                            select {
-                                class: "rounded bg-background/70 border border-border px-1 py-0.5 text-[10px]",
-                                title: "What {name} recalls",
-                                onclick: move |e: MouseEvent| e.stop_propagation(),
-                                onchange: {
+                            Picker {
+                                options: patch_list.iter().map(|p| p.name.clone()).collect::<Vec<String>>(),
+                                selected: name_index(&patch_list.iter().map(|p| p.name.clone()).collect::<Vec<String>>(), &patch),
+                                placeholder: "—".to_string(),
+                                size: PickerSize::Tiny,
+                                on_select: {
                                     let (rig, part) = (rig.clone(), name.clone());
-                                    move |e: FormEvent| {
-                                        let Some(r) = rig.clone() else { return };
-                                        let (part, patch) = (part.clone(), e.value());
+                                    let names: Vec<String> = patch_list.iter().map(|p| p.name.clone()).collect();
+                                    move |i: u32| {
+                                        let (Some(r), Some(patch)) = (rig.clone(), names.get(i as usize).cloned()) else {
+                                            return;
+                                        };
+                                        let part = part.clone();
                                         spawn(async move {
                                             let _ = r.set_part_patch(part, patch).await;
                                         });
                                     }
                                 },
-                                option { value: "", selected: patch.is_empty(), "—" }
-                                for p in patch_list.iter() {
-                                    option {
-                                        key: "{p.name}",
-                                        value: "{p.name}",
-                                        selected: p.name == patch,
-                                        "{p.name}"
-                                    }
-                                }
                             }
                         }
                     }
@@ -787,12 +799,27 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
             // ── Set building: add a song, new set, new library song ──
             div { class: "flex flex-col gap-1 p-2 border-t border-border flex-shrink-0",
                 div { class: "flex gap-1",
-                    select {
-                        class: "flex-1 min-w-0 bg-background border border-border rounded px-1 py-0.5 text-xs",
-                        onchange: move |e| add_song_sel.set(e.value()),
-                        option { value: "", "add song to set…" }
-                        for s in model.library_songs.iter() {
-                            option { key: "{s.name}", value: "{s.name}", "{s.name} ({s.key} · {s.bpm})" }
+                    div { class: "flex-1 min-w-0",
+                        Picker {
+                            options: model
+                                .library_songs
+                                .iter()
+                                .map(|s| format!("{} ({} · {})", s.name, s.key, s.bpm))
+                                .collect::<Vec<String>>(),
+                            selected: name_index(
+                                &model.library_songs.iter().map(|s| s.name.clone()).collect::<Vec<String>>(),
+                                &add_song_sel(),
+                            ),
+                            placeholder: "add song to set…".to_string(),
+                            width: "100%".to_string(),
+                            on_select: {
+                                let names: Vec<String> = model.library_songs.iter().map(|s| s.name.clone()).collect();
+                                move |i: u32| {
+                                    if let Some(n) = names.get(i as usize) {
+                                        add_song_sel.set(n.clone());
+                                    }
+                                }
+                            },
                         }
                     }
                     button {
@@ -886,5 +913,41 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
                 }
             }
         }
+    }
+}
+
+/// Where a name sits in a list of names, for a [`Picker`] that stores its
+/// choice as a name rather than an index.
+///
+/// `u32::MAX` when the name is absent or empty — a Picker shows its
+/// placeholder for an index past the end, which is what "nothing chosen yet"
+/// should look like rather than the first option appearing pre-selected.
+fn name_index(names: &[String], current: &str) -> u32 {
+    if current.is_empty() {
+        return u32::MAX;
+    }
+    names
+        .iter()
+        .position(|n| n == current)
+        .map_or(u32::MAX, |i| i as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::name_index;
+
+    /// A name that is in the list selects it; anything else selects nothing,
+    /// so the picker shows its placeholder rather than making the first option
+    /// look chosen. An unset slot that appears to hold the first patch is the
+    /// failure this guards: a player would read it as configured.
+    #[test]
+    fn nothing_chosen_selects_nothing() {
+        let names = vec!["Clean".to_string(), "Crunch".to_string()];
+        assert_eq!(name_index(&names, "Clean"), 0);
+        assert_eq!(name_index(&names, "Crunch"), 1);
+        assert_eq!(name_index(&names, ""), u32::MAX);
+        // A name the list no longer holds — a patch renamed or deleted under
+        // an old section assignment.
+        assert_eq!(name_index(&names, "Lead"), u32::MAX);
     }
 }

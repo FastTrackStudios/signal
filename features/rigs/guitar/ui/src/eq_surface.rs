@@ -12,6 +12,7 @@
 //! block (shape = `EqBandShape` ordinal).
 
 use dioxus::prelude::*;
+use signal_widgets::{Picker, PickerSize};
 use std::fmt::Write;
 
 use eq_ui::cheatsheet::GUITAR_ELECTRIC;
@@ -458,17 +459,11 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                                 style: "background-color: {color};",
                             }
                             span { class: "text-[10px] font-mono", "{b.frequency:.0} Hz · {b.gain:+.1} dB" }
-                            select {
-                                class: "bg-transparent border border-border rounded text-[10px] px-1",
-                                value: "{shape_index(b.shape) as usize}",
-                                onchange: move |e: FormEvent| {
-                                    if let Ok(v) = e.value().parse::<usize>() {
-                                        send(&rig1, &id1, i, "shape", v as f32);
-                                    }
-                                },
-                                for (si, s) in EqBandShape::all().iter().enumerate() {
-                                    option { key: "{si}", value: "{si}", selected: *s == b.shape, "{s.label()}" }
-                                }
+                            Picker {
+                                options: EqBandShape::all().iter().map(|s| s.label().to_string()).collect::<Vec<String>>(),
+                                selected: shape_index(b.shape) as u32,
+                                size: PickerSize::Tiny,
+                                on_select: move |v: u32| send(&rig1, &id1, i, "shape", v as f32),
                             }
                             span { class: "text-[9px] font-mono text-muted-foreground", "Q" }
                             input {
