@@ -31,6 +31,7 @@
 //! |---|---|
 //! | `SIGNAL_RIG_EPHEMERAL=1` | every save is a no-op — the rig plays the real library and forgets everything, so a test run cannot move the player's position or edit their profile |
 //! | `SIGNAL_RIG_SILENT=1` | the master is muted (−96 dB after the chain), so every block still processes and nothing is heard |
+//! | `SIGNAL_RIG_DESIGN=1` | no audio device, no MIDI, no DSP — the UI over a synthesised rig, so several can run at once. Implies ephemeral |
 //! | `SIGNAL_RIG_DIR=<path>` | a different library entirely — isolation, but a different rig |
 
 use std::path::PathBuf;
@@ -79,7 +80,7 @@ fn env_flag(name: &str) -> bool {
 /// leaves its seed directory alone.
 #[must_use]
 pub fn rig_is_ephemeral() -> bool {
-    env_flag("SIGNAL_RIG_EPHEMERAL")
+    env_flag("SIGNAL_RIG_EPHEMERAL") || rig_is_design()
 }
 
 /// Run with the output muted, processing everything (`SIGNAL_RIG_SILENT`).
@@ -90,6 +91,21 @@ pub fn rig_is_ephemeral() -> bool {
 #[must_use]
 pub fn rig_is_silent() -> bool {
     env_flag("SIGNAL_RIG_SILENT")
+}
+
+/// Run the GUI with no audio at all (`SIGNAL_RIG_DESIGN`).
+///
+/// For designing the interface: the profile loads, the whole UI renders, the
+/// meters move, and nothing is opened — no audio device, no MIDI node, no DSP.
+/// Several instances can therefore run side by side, which is the point: a
+/// device is exclusive and two rigs fighting over one interface is not a thing
+/// you can lay out a screen against.
+///
+/// Implies [`rig_is_ephemeral`]: a run with no audio has nothing worth saving,
+/// and a design session must not move the player's position.
+#[must_use]
+pub fn rig_is_design() -> bool {
+    env_flag("SIGNAL_RIG_DESIGN")
 }
 
 /// The store, or `None` when this run does not persist.

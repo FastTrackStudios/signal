@@ -129,6 +129,12 @@ pub struct GuitarRigBackend {
     /// Perform-grid mode (0 Preset / 1 Profile / 2 Setlist).
     perform_mode: Arc<Mutex<u32>>,
     /// Deferred profile save (live-edit auto-save marks; pump flushes).
+    /// The active patch, when there is no engine holding one (design mode).
+    ///
+    /// Not a second source of truth: with a rig open, the engine's
+    /// `active_patch()` is the answer and this is unread. It exists because
+    /// design mode has no engine and a UI still has to know which patch is lit.
+    design_patch: Arc<Mutex<String>>,
     /// The last patch-levelling pass — progress while it runs, results after.
     levelling: Arc<Mutex<signal_guitar_proto::LevelProgress>>,
     /// Set while a levelling pass is in flight, so a second press does not
@@ -190,6 +196,7 @@ impl GuitarRigBackend {
             drive_presets: Arc::new(Mutex::new(lib.drive_presets)),
             tuner_visible: Arc::new(Mutex::new(false)),
             perform_mode: Arc::new(Mutex::new(1)),
+            design_patch: Arc::new(Mutex::new(String::new())),
             levelling: Arc::new(Mutex::new(signal_guitar_proto::LevelProgress::default())),
             levelling_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             library_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -222,7 +229,12 @@ impl GuitarRigBackend {
         // checked every ~2 s, so a mid-set replug comes back on its own.
         // `rescan_stream` drops the old stream's OS clients BEFORE opening
         // anew (the ALSA-seq queue-exhaustion invariant).
-        if pump.tick == 1 || pump.tick.is_multiple_of(60) {
+        // Design mode opens no MIDI: the hub creates a graph node and claims
+        // every input port, so two copies would fight over the footswitch and
+        // clutter the patchbay of whatever rig is actually playing.
+        if !crate::library::rig_is_design()
+            && (pump.tick == 1 || pump.tick.is_multiple_of(60))
+        {
             // Subscribe once, then let the hub own re-opening. The pump used
             // to call `rescan_stream`, which reopened all 23 ports whenever
             // the ordered port list differed — an unstable enumeration order
@@ -758,6 +770,9 @@ impl GuitarRigBackend {
             *self.tempo.lock_ok() = Some(st.tempo_bpm.clamp(40.0, 300.0));
         }
         if !st.active_patch.is_empty() {
+            // Recorded whether or not an engine exists: design mode reads it
+            // from here, since it has nothing to activate.
+            *self.design_patch.lock_ok() = st.active_patch.clone();
             let mut guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_mut() {
                 if !activate_patch_by_name(prig, &st.active_patch) {
@@ -1003,6 +1018,127 @@ impl GuitarRigBackend {
         }
     }
 
+    /// Step stack `index` the way `activate_stack` would: onto its current
+    /// patch, or to the next one if that patch is already live.
+    fn rotate_design_stack(&self, index: usize) {
+        let next = {
+            let def = self.profile_def.lock_ok();
+            let Some(stack) = def.stacks.get(index) else {
+                return;
+            };
+            if stack.patches.is_empty() {
+                return;
+            }
+            let live = self.design_patch.lock_ok().clone();
+            let at = stack
+                .patches
+                .iter()
+                .position(|p| p.eq_ignore_ascii_case(&live));
+            let pos = match at {
+                // Already on this stack — rotate.
+                Some(i) => (i + 1) % stack.patches.len(),
+                // Coming from elsewhere — land on where the stack is pointing.
+                None => 0,
+            };
+            stack.patches[pos].clone()
+        };
+        *self.design_patch.lock_ok() = next;
+    }
+
+    /// Seconds since the process started — the fake instrument's clock.
+    ///
+    /// Wall clock rather than a tick count so the instrument runs at the same
+    /// speed whatever rate the pump happens to be publishing at.
+    fn design_seconds(&self) -> f32 {
+        static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        START.get_or_init(std::time::Instant::now).elapsed().as_secs_f32()
+    }
+
+    /// Load the profile and nothing else — see [`open_blocking`](Self::open_blocking).
+    fn open_for_design(&self) {
+        tracing::info!("design mode: no audio device, no MIDI, no DSP");
+        *self.rig.lock_ok() = None;
+        *self.open_prefs.lock_ok() = None;
+        self.restore_last_state();
+        self.resync_blocks();
+        self.publish_state();
+    }
+
+    /// The active patch's chain, from the definition rather than the engine.
+    ///
+    /// What the rig would build, without building it. Used by design mode,
+    /// where there is no engine to mirror — the block ids are the chain
+    /// position rather than engine slot ids, which is enough for every UI that
+    /// addresses a block by id, since every write in design mode lands in the
+    /// definition too.
+    fn design_blocks(&self) -> Vec<LiveBlock> {
+        let wanted = self.design_patch.lock_ok().clone();
+        let def = self.profile_def.lock_ok();
+        let dps = self.drive_presets.lock_ok();
+        let profile = profile_from_library(&def, &dps);
+        let active = Some(wanted)
+            .filter(|n| !n.is_empty())
+            .and_then(|name| {
+                profile
+                    .patches
+                    .iter()
+                    .find(|p| p.name.eq_ignore_ascii_case(&name))
+                    .cloned()
+            })
+            .or_else(|| profile.patches.first().cloned());
+        let Some(patch) = active else {
+            return Vec::new();
+        };
+        patch
+            .chain
+            .iter()
+            .filter(|b| b.has_backend())
+            .enumerate()
+            .map(|(i, block)| {
+                let name = if block.name.trim().is_empty() {
+                    format!("{:?}", block.block_type)
+                } else {
+                    block.name.clone()
+                };
+                let (param_name, param_min, param_max, param_value) =
+                    match primary_param(block.block_type) {
+                        Some((n, mn, mx, dflt)) => (
+                            Some(n.to_string()),
+                            mn,
+                            mx,
+                            block.param_f32(n).unwrap_or(dflt),
+                        ),
+                        None => (None, 0.0, 0.0, 0.0),
+                    };
+                let params: Vec<BlockParam> = param_specs(block.block_type)
+                    .iter()
+                    .map(|(pname, min, max, dflt)| BlockParam {
+                        name: pname.clone(),
+                        value: block.param_f32(pname).unwrap_or(*dflt),
+                        min: *min,
+                        max: *max,
+                        overridden: false,
+                    })
+                    .collect();
+                LiveBlock {
+                    id: format!("design-{i}"),
+                    block_type: block.block_type,
+                    name,
+                    bypassed: block.bypassed,
+                    param_name,
+                    param_value,
+                    param_min,
+                    param_max,
+                    params,
+                    preset: String::new(),
+                    options: Vec::new(),
+                    option: 0,
+                    overridden: false,
+                }
+            })
+            .collect()
+    }
+
     /// Activate a footswitch stack and re-sync everything that activation
     /// resets: the block mirror + bypass defaults, the tapped tempo on the
     /// fresh delays, and the boost gain block.
@@ -1010,9 +1146,18 @@ impl GuitarRigBackend {
         let t0 = std::time::Instant::now();
         {
             let mut guard = self.rig.lock_ok();
-            if let Some(prig) = guard.as_mut() {
-                prig.activate_stack(index);
-            }
+            match guard.as_mut() {
+                Some(prig) => prig.activate_stack(index),
+                // No engine: do to the definition what activation does to the
+                // engine — land on the stack's patch, or rotate if already on
+                // it. A footswitch in design mode has to move the UI, or the
+                // performance surfaces cannot be designed at all.
+                None => {
+                    drop(guard);
+                    self.rotate_design_stack(index);
+                    false
+                }
+            };
         }
         let audible = t0.elapsed();
         self.sync_after_switch(audible, "stack");
@@ -1162,6 +1307,22 @@ impl GuitarRigBackend {
     /// re-acquire it — otherwise the re-open races the teardown into "device
     /// busy".
     pub fn open_blocking(&self) {
+        // Design mode opens nothing.
+        //
+        // No device, no MIDI node, no DSP — so two of these can run side by
+        // side, which is the whole point: an interface is exclusive, and a
+        // screen cannot be laid out against a rig that will not start because
+        // another copy already holds the hardware.
+        //
+        // The profile still loads, because a UI with no patches, presets or
+        // chain is not the UI. Everything downstream reads the definition
+        // instead of the engine: `perf` already has a static path for a rig
+        // that is not open, `chain` gets one here, and the meters are
+        // synthesised by the pump.
+        if crate::library::rig_is_design() {
+            self.open_for_design();
+            return;
+        }
         tracing::info!("rig open: begin");
         let had_previous = self.rig.lock_ok().take().is_some();
         if had_previous {
@@ -1243,6 +1404,11 @@ impl GuitarRigBackend {
     /// block's initial bypass to the engine (activation re-enables all slots,
     /// so the off-by-default blocks must be re-bypassed here).
     fn resync_blocks(&self) {
+        // No engine to mirror — build the chain the definition describes.
+        if self.rig.lock_ok().is_none() && crate::library::rig_is_design() {
+            *self.blocks.lock_ok() = self.design_blocks();
+            return;
+        }
         let mut out = Vec::new();
         // The active patch's overrides, read once: what the player has moved
         // away from the chain as built.
@@ -1518,12 +1684,22 @@ fn patch_display(stack_name: &str, patch_name: &str) -> String {
 /// the audio rig opens (e.g. iOS with no interface plugged in yet) so the
 /// perform grid shows the stacks instead of an empty screen; the live model
 /// ([`build_perf_model`]) takes over once the rig is open.
-fn build_perf_model_static(def: &ProfileDef) -> PerformanceModel {
+fn build_perf_model_static(def: &ProfileDef, live: &str) -> PerformanceModel {
     let stacks = def
         .stacks
         .iter()
         .map(|st| {
-            let cur = st.patches.first().cloned().unwrap_or_default();
+            // Where this stack is pointing. With a `live` patch — design mode,
+            // which has a real active patch and no engine — the stack holding
+            // it shows it and reads as active, so the footswitch grid responds
+            // to a press. Without one (no interface plugged in yet) every stack
+            // rests at its first patch, which is what it will land on.
+            let at = st
+                .patches
+                .iter()
+                .position(|p| !live.is_empty() && p.eq_ignore_ascii_case(live));
+            let pos = at.unwrap_or(0);
+            let cur = st.patches.get(pos).cloned().unwrap_or_default();
             let patch_def = def
                 .patches
                 .iter()
@@ -1531,10 +1707,10 @@ fn build_perf_model_static(def: &ProfileDef) -> PerformanceModel {
             PerfStack {
                 name: st.name.clone(),
                 current_patch: patch_display(&st.name, &cur),
-                position: 0,
+                position: pos as u32,
                 patch_count: st.patches.len() as u32,
-                available: false,
-                is_active: false,
+                available: at.is_some(),
+                is_active: at.is_some(),
                 preset: patch_def.map(|p| p.preset.clone()).unwrap_or_default(),
                 override_modules: patch_def
                     .map(super::profiles::PatchDef::override_modules)
@@ -1730,7 +1906,9 @@ impl RigBackend for GuitarRigBackend {
     }
 
     fn is_running(&self) -> bool {
-        self.rig.lock_ok().is_some()
+        // Design mode has no engine and still has to tick: the meters, the
+        // analyser and the compressor trace are the surfaces being designed.
+        self.rig.lock_ok().is_some() || crate::library::rig_is_design()
     }
 
     fn pump_started(&self) -> &std::sync::atomic::AtomicBool {
@@ -1753,6 +1931,16 @@ impl RigBackend for GuitarRigBackend {
     /// `PubSub::publish` takes a lock so it must never run RT.
     fn on_running_tick(&self) {
         self.events.publish(RigEvent::Status(Rig::status(self)));
+        if crate::library::rig_is_design() {
+            let t = self.design_seconds();
+            self.events
+                .publish(RigEvent::Spectrum(crate::design::spectrum(t, 96)));
+            // A rolling window of the same instrument, so the compressor's
+            // traces sweep rather than sit still.
+            let (wave_in, wave_gr) = crate::design::traces(t, 120);
+            self.events.publish(RigEvent::CompWave(wave_in, wave_gr));
+            return;
+        }
         if let Some(bins) = self.input_spectrum() {
             self.events.publish(RigEvent::Spectrum(bins));
         }
@@ -1808,6 +1996,26 @@ impl Rig for GuitarRigBackend {
     }
 
     fn status(&self) -> RigStatus {
+        // Design mode: the fake instrument, and the patch the definition says
+        // is live. Everything else on this payload is genuinely absent — there
+        // is no engine to report a block size or a render time, and inventing
+        // those would make the DSP strip lie about a rig that is not running.
+        if crate::library::rig_is_design() && self.rig.lock_ok().is_none() {
+            let f = crate::design::frame(self.design_seconds());
+            let patch = self.design_patch.lock_ok().clone();
+            return RigStatus {
+                running: true,
+                input_peak: f.input,
+                output_peak: f.output,
+                active_patch: Some(patch).filter(|p| !p.is_empty()),
+                comp_gr_db: f.gain_reduction_db,
+                input_peak_l: f.input,
+                input_peak_r: f.input,
+                output_peak_l: f.output,
+                output_peak_r: f.output,
+                perf: signal_guitar_proto::RigPerf::default(),
+            };
+        }
         let guard = self.rig.lock_ok();
         let (input_peak, output_peak, in_lr, out_lr, active_patch, perf) = match guard.as_ref() {
             Some(prig) => {
@@ -1861,8 +2069,9 @@ impl Rig for GuitarRigBackend {
             // Live model when the audio rig is open; otherwise the static
             // model from the profile def, so the footswitch stacks still
             // render before the device opens (iOS with no interface yet).
+            let live = self.design_patch.lock_ok().clone();
             self.rig.lock_ok().as_ref().map_or_else(
-                || build_perf_model_static(&def),
+                || build_perf_model_static(&def, &live),
                 |prig| build_perf_model(prig, &def),
             )
         };
@@ -2162,9 +2371,23 @@ impl Rig for GuitarRigBackend {
             tracing::info!(part = %part.name, patch = %part.patch, "part → patch");
             let switched = {
                 let mut guard = self.rig.lock_ok();
-                guard
-                    .as_mut()
-                    .is_some_and(|prig| activate_patch_by_name(prig, &part.patch))
+                match guard.as_mut() {
+                    Some(prig) => activate_patch_by_name(prig, &part.patch),
+                    // Design mode: the section still recalls its patch.
+                    None => {
+                        drop(guard);
+                        let known = {
+                            let def = self.profile_def.lock_ok();
+                            def.patches
+                                .iter()
+                                .any(|p| p.name.eq_ignore_ascii_case(&part.patch))
+                        };
+                        if known {
+                            *self.design_patch.lock_ok() = part.patch.clone();
+                        }
+                        known
+                    }
+                }
             };
             if switched {
                 // The same follow-up a footswitch press does, measured the
@@ -3034,8 +3257,23 @@ impl Rig for GuitarRigBackend {
         };
         {
             let mut guard = self.rig.lock_ok();
-            if let Some(prig) = guard.as_mut() {
-                prig.activate(idx);
+            match guard.as_mut() {
+                Some(prig) => {
+                    prig.activate(idx);
+                }
+                // Design mode: the browser still changes what is live.
+                None => {
+                    drop(guard);
+                    let name = self
+                        .profile_def
+                        .lock_ok()
+                        .patches
+                        .get(idx)
+                        .map(|p| p.name.clone());
+                    if let Some(name) = name {
+                        *self.design_patch.lock_ok() = name;
+                    }
+                }
             }
         }
         tracing::info!("preset mode → {preset_name}");

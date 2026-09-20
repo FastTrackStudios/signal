@@ -482,6 +482,9 @@ fn apply_open_args() {
     // examples) and all of them should honour the same switch.
     let silent = args.iter().any(|a| a == "--silent");
     let ephemeral = args.iter().any(|a| a == "--ephemeral" || a == "--no-save");
+    // Design mode: the UI over a synthesised rig — no device, no MIDI, no DSP,
+    // so several copies run side by side. See `signal_guitar::library`.
+    let design = args.iter().any(|a| a == "--design" || a == "--mock");
     // SAFETY: single-threaded, before any GUI or thread init.
     unsafe {
         if let Some(w) = workspace {
@@ -495,6 +498,9 @@ fn apply_open_args() {
         }
         if ephemeral {
             std::env::set_var("SIGNAL_RIG_EPHEMERAL", "1");
+        }
+        if design {
+            std::env::set_var("SIGNAL_RIG_DESIGN", "1");
         }
     }
 }
