@@ -703,22 +703,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                             class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
                             style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", di * 2) } else { format!("order: {}; border-left: 2px solid transparent;", di * 2) },
                             onclick: move |_| sel.set(di),
-                            svg { class: "w-full h-full", view_box: "0 0 460 56", preserve_aspect_ratio: "none",
-                                line { x1: "0", y1: "28", x2: "460", y2: "28", stroke: "#27272a", stroke_width: "1" }
-                                rect { x: "4", y: "14", width: "2", height: "28", fill: "#e4e4e7", rx: "1" }
-                                for (i, (t, amp, upv)) in taps.iter().enumerate() {
-                                    rect {
-                                        key: "{i}",
-                                        x: "{4.0 + t / win_ms * (W - 8.0):.1}",
-                                        y: if *upv { format!("{:.1}", 28.0 - amp * 26.0) } else { "28".to_string() },
-                                        width: "2",
-                                        height: "{amp * 26.0:.1}",
-                                        fill: "{color}",
-                                        fill_opacity: if dim { "0.25" } else { "0.9" },
-                                        rx: "1",
-                                    }
-                                }
-                            }
+                            {delay_lane(taps.clone(), win_ms, !dim, color, W)}
                             div { class: "absolute top-0.5 left-1.5 flex items-center gap-1.5",
                                 button {
                                     style: if dim { "font-size:10px; line-height:1; color:#52525b;" } else { "font-size:10px; line-height:1; color:#4ade80;" },
@@ -1351,6 +1336,50 @@ fn DriveChunk(
                             },
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// One delay lane's taps: the painted widget where a renderer can composite
+/// a scene, the SVG stems where it cannot.
+///
+/// The browser build is the second case and not a lesser one — a DOM renderer
+/// cannot be handed a painted scene at all, so the stems are what it draws.
+#[cfg(not(target_arch = "wasm32"))]
+fn delay_lane(
+    taps: Vec<(f32, f32, bool)>,
+    win_ms: f32,
+    on: bool,
+    _color: &'static str,
+    _w: f32,
+) -> Element {
+    rsx! { crate::fx_viz::DelayViz { taps, win_ms, on } }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn delay_lane(
+    taps: Vec<(f32, f32, bool)>,
+    win_ms: f32,
+    on: bool,
+    color: &'static str,
+    w: f32,
+) -> Element {
+    rsx! {
+        svg { class: "w-full h-full", view_box: "0 0 460 56", preserve_aspect_ratio: "none",
+            line { x1: "0", y1: "28", x2: "460", y2: "28", stroke: "#27272a", stroke_width: "1" }
+            rect { x: "4", y: "14", width: "2", height: "28", fill: "#e4e4e7", rx: "1" }
+            for (i, (t, amp, upv)) in taps.iter().enumerate() {
+                rect {
+                    key: "{i}",
+                    x: "{4.0 + t / win_ms * (w - 8.0):.1}",
+                    y: if *upv { format!("{:.1}", 28.0 - amp * 26.0) } else { "28".to_string() },
+                    width: "2",
+                    height: "{amp * 26.0:.1}",
+                    fill: "{color}",
+                    fill_opacity: if on { "0.9" } else { "0.25" },
+                    rx: "1",
                 }
             }
         }

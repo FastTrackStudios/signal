@@ -10,6 +10,10 @@ mod chain;
 mod comp_surface;
 mod control;
 mod eq_surface;
+/// Painted delay + reverb visualisers — native only (a painted scene needs a
+/// Blitz host).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod fx_viz;
 /// The plugin's own vello EQ editor — native only (a painted scene needs a
 /// Blitz host; the wasm remote draws [`eq_surface`] instead).
 #[cfg(all(not(target_arch = "wasm32"), feature = "eq-vello"))]
