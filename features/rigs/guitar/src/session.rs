@@ -408,25 +408,6 @@ impl GuitarRigBackend {
         self.spawn_drive_calibration();
     }
 
-    /// Which pool preset the active patch points at — the amp, by name.
-    ///
-    /// An amp block carries no preset of its own: the patch names one from the
-    /// pool, and that is the tone in the amp slot. Anything that wants to show
-    /// or change "the current amp" goes through here, so the board and the
-    /// capture lookup cannot disagree about what is loaded.
-    fn active_pool_preset(&self, def: &crate::profiles::ProfileDef) -> Option<String> {
-        let active = {
-            let guard = self.rig.lock_ok();
-            guard
-                .as_ref()
-                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))?
-        };
-        def.patches
-            .iter()
-            .find(|p| p.name.eq_ignore_ascii_case(&active))
-            .map(|p| p.preset.clone())
-    }
-
     /// The NAM capture behind a board block, if any: drive slots resolve
     /// through their drive preset; the amp resolves through the active
     /// patch's pool preset.
@@ -444,7 +425,13 @@ impl GuitarRigBackend {
                 .and_then(|p| p.options.get(slot.option).map(|o| o.nam.clone()));
         }
         if block_name.eq_ignore_ascii_case("Amp L") || block_name.eq_ignore_ascii_case("Amp R") {
-            let preset = self.active_pool_preset(&def)?;
+            let active = {
+                let guard = self.rig.lock_ok();
+                guard
+                    .as_ref()
+                    .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))?
+            };
+            let preset = pool_preset_of(&def, &active)?;
             return def
                 .presets
                 .iter()
@@ -1158,7 +1145,8 @@ impl GuitarRigBackend {
                                     })
                                     .unwrap_or_default()
                             } else if block.block_type == BlockType::Amp {
-                                let current = self.active_pool_preset(&def).unwrap_or_default();
+                                let current =
+                                    pool_preset_of(&def, &patch.name).unwrap_or_default();
                                 let pool: Vec<String> =
                                     def.presets.iter().map(|p| p.name.clone()).collect();
                                 let index = pool
@@ -1191,6 +1179,26 @@ impl GuitarRigBackend {
         }
         *self.blocks.lock_ok() = out;
     }
+}
+
+/// Which pool preset a patch points at — the amp, by name.
+///
+/// An amp block carries no preset of its own: the patch names one from the
+/// pool, and that is the tone in the amp slot. Anything that shows or changes
+/// "the current amp" resolves it here, so the board and the capture lookup
+/// cannot disagree about what is loaded.
+///
+/// A free function over the definition, taking the patch by name, because the
+/// callers do not agree about what they already hold. `resync_blocks` walks
+/// the chain with the rig mutex held and the active patch in hand; a method
+/// that re-locked the rig to find that same patch deadlocked on the spot —
+/// `std::sync::Mutex` is not reentrant — and took the chain publish, the
+/// delay tempo, the boost recall and the drive calibration down with it.
+fn pool_preset_of(def: &crate::profiles::ProfileDef, patch: &str) -> Option<String> {
+    def.patches
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(patch))
+        .map(|p| p.preset.clone())
 }
 
 /// Every controllable param for a block type: `(name, min, max, default)` —
@@ -3424,5 +3432,54 @@ fn mime_for_path(path: &str) -> &'static str {
         Some("gif") => "image/gif",
         Some("webp") => "image/webp",
         _ => "image/jpeg",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pool_preset_of;
+    use crate::profiles::{PatchDef, ProfileDef};
+
+    fn patch(name: &str, preset: &str) -> PatchDef {
+        PatchDef {
+            name: name.to_string(),
+            preset: preset.to_string(),
+            trim_db: 0.0,
+            boost_db: 0.0,
+            overrides: Vec::new(),
+        }
+    }
+
+    /// The amp a patch is on is the pool preset it names — resolved from the
+    /// definition alone, taking the patch by name.
+    ///
+    /// The signature is the point. An earlier version was a method that found
+    /// the active patch by locking the rig, and `resync_blocks` calls it while
+    /// already holding that lock: a non-reentrant mutex re-locked on the same
+    /// thread, which hung the open sequence at the chain publish and took the
+    /// delay tempo, boost recall and drive calibration with it. Keeping the
+    /// lookup pure means a caller can only pass in what it already has.
+    #[test]
+    fn a_patch_names_its_amp() {
+        let def = ProfileDef {
+            drives: Vec::new(),
+            name: "test".to_string(),
+            presets: Vec::new(),
+            patches: vec![patch("Clean", "Fender Clean"), patch("Lead", "Arena Lead")],
+            stacks: Vec::new(),
+        };
+        assert_eq!(
+            pool_preset_of(&def, "Lead").as_deref(),
+            Some("Arena Lead"),
+            "the patch names the amp"
+        );
+        // Patch names are matched the way the rest of the profile matches them.
+        assert_eq!(
+            pool_preset_of(&def, "clean").as_deref(),
+            Some("Fender Clean")
+        );
+        // A patch the profile no longer holds has no amp, rather than the
+        // first one — the board would otherwise name a tone that is not loaded.
+        assert_eq!(pool_preset_of(&def, "Crunch"), None);
     }
 }
