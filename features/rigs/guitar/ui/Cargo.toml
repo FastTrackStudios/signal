@@ -48,3 +48,24 @@ signal-grid-ui.workspace = true
 uuid = { version = "1", features = ["v4"] }
 # use_stream (atom+vox) + the portable sleep (platform: tokio native / gloo wasm).
 architect = { workspace = true, features = ["atom", "vox", "platform"] }
+
+# `rig_shot` — the UI rendered to a PNG with no window and no audio device.
+# The backend is a dev-dep because the UI crate does not depend on it (the
+# arrow runs the other way, and the remote talks over a wire, not a link);
+# for a picture the two have to meet, and an example is where they can.
+[dev-dependencies]
+signal-guitar.workspace = true
+# `local` — the in-process server the shot establishes against.
+architect = { workspace = true, features = ["atom", "vox", "platform", "local"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tracing-subscriber.workspace = true
+dioxus-native-dom.workspace = true
+blitz-dom.workspace = true
+blitz-paint.workspace = true
+blitz-traits.workspace = true
+anyrender.workspace = true
+anyrender_vello.workspace = true
+image.workspace = true
+
+[[example]]
+name = "rig_shot"
