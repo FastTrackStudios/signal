@@ -76,12 +76,9 @@ architect = { workspace = true, features = ["atom", "vox", "platform"] }
 # their blitz rev (the custom-widget `Widget` trait differs between them).
 # Flip it on, with both aligned, and the rig draws the real editor.
 #
-# Deliberately empty rather than `["eq-ui/graph"]`: cargo validates a
-# feature reference even when the feature is off, and the pinned tag has no
-# `graph` yet — declaring it would break every build in the tree. Turning
-# this on therefore means BOTH enabling it here and pointing eq-ui at a
-# checkout that has `graph`, via a local `[patch]`.
-eq-vello = []
+# Needs an eq-ui with `graph`, which is newer than the pinned tag — so a
+# local `[patch]` to a processor checkout until processor releases one.
+eq-vello = ["eq-ui/graph"]
 
 [dev-dependencies]
 signal-guitar.workspace = true

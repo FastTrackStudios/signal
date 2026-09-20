@@ -68,6 +68,13 @@ pub struct DelayView {
     /// What the division is called ("1/4", "1/8."), if the block is locked to
     /// one. Drawn once rather than per tap.
     pub division: String,
+    /// Seconds since the panel appeared — the animation's clock.
+    ///
+    /// Read from the widget's own `Instant` rather than pushed in by the
+    /// component: a repaint can happen for reasons the component knows
+    /// nothing about, and an animation that only advances when a prop
+    /// changes is an animation that stutters.
+    pub time: f32,
 }
 
 /// What the reverb panel draws.
@@ -84,6 +91,8 @@ pub struct ReverbView {
     /// Seconds per beat — the tail is measured against the tempo, so "two
     /// bars of reverb" is a thing the picture can say.
     pub beat: f32,
+    /// Seconds since the panel appeared. See [`DelayView::time`].
+    pub time: f32,
 }
 
 /// The numbers a widget reads, written by the component that owns it.
@@ -93,12 +102,14 @@ pub type Shared<T> = Rc<RefCell<T>>;
 pub struct DelayWidget {
     view: Shared<DelayView>,
     gpu: Option<GpuSeam>,
+    born: std::time::Instant,
 }
 
 /// The reverb's decay, painted.
 pub struct ReverbWidget {
     view: Shared<ReverbView>,
     gpu: Option<GpuSeam>,
+    born: std::time::Instant,
 }
 
 /// Where the WGSL path will attach.
@@ -117,14 +128,22 @@ struct GpuSeam {
 impl DelayWidget {
     #[must_use]
     pub fn new(view: Shared<DelayView>) -> Self {
-        Self { view, gpu: None }
+        Self {
+            view,
+            gpu: None,
+            born: std::time::Instant::now(),
+        }
     }
 }
 
 impl ReverbWidget {
     #[must_use]
     pub fn new(view: Shared<ReverbView>) -> Self {
-        Self { view, gpu: None }
+        Self {
+            view,
+            gpu: None,
+            born: std::time::Instant::now(),
+        }
     }
 }
 
@@ -148,7 +167,9 @@ impl Widget for DelayWidget {
         if w < 2.0 || h < 2.0 {
             return scene;
         }
-        paint_delay(&mut scene, &self.view.borrow(), w, h);
+        let mut view = self.view.borrow().clone();
+        view.time = self.born.elapsed().as_secs_f32();
+        paint_delay(&mut scene, &view, w, h);
         scene
     }
 }
@@ -173,7 +194,9 @@ impl Widget for ReverbWidget {
         if w < 2.0 || h < 2.0 {
             return scene;
         }
-        paint_reverb(&mut scene, &self.view.borrow(), w, h);
+        let mut view = self.view.borrow().clone();
+        view.time = self.born.elapsed().as_secs_f32();
+        paint_reverb(&mut scene, &view, w, h);
         scene
     }
 }
@@ -309,30 +332,96 @@ pub fn paint_delay(scene: &mut Scene, view: &DelayView, w: f64, h: f64) {
     // chip — the panel's own "1/4" selector is inches away, and what this
     // picture adds is that the taps sit on the grid, which needs no caption.
 
+    // The playhead: a pulse crossing the window once per cycle, so the panel
+    // keeps the tempo even when nothing is being played into it.
+    //
+    // Not decoration. The taps are static geometry — they say *where* the
+    // repeats land — and the sweep is what makes that a rhythm you can read
+    // at a glance rather than a row of sticks.
+    let beat = f64::from(view.beat).max(1e-3);
+    let cycle = beat * ((window / beat).ceil()).max(1.0);
+    let head = if view.on && cycle > 0.0 {
+        (f64::from(view.time) % cycle) / cycle
+    } else {
+        -1.0
+    };
+
     // Each tap: an impulse whose height is its level and whose offset from the
-    // centre is its pan, with a head bright enough to count at a glance.
+    // centre is its pan, with a head bright enough to count at a glance. A tap
+    // blooms as the sweep reaches it and falls back over the next beat.
     for tap in &view.taps {
         let x = f64::from(tap.at) / window * w;
         if x > w {
             continue;
         }
         let level = f64::from(tap.level).clamp(0.0, 1.0);
-        let reach = level * h * 0.42;
+
+        // How recently the playhead passed this tap, 0..=1.
+        let hit = if head < 0.0 {
+            0.0
+        } else {
+            let at = f64::from(tap.at) / window;
+            let since = (head - at + 1.0) % 1.0;
+            // A bloom that dies within a beat, so two taps a beat apart never
+            // glow at once and the eye follows one moving highlight.
+            let over = beat / cycle;
+            if since < over {
+                (1.0 - since / over).powi(3)
+            } else {
+                0.0
+            }
+        };
+
+        let reach = level * h * 0.42 * (1.0 + 0.22 * hit);
         let pan = f64::from(tap.pan).clamp(-1.0, 1.0);
         let y = mid - pan * h * 0.16;
+
+        // The bloom, behind: a soft halo that only exists while lit.
+        if hit > 0.01 {
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                with_alpha(accent, (0.30 * hit) as f32),
+                None,
+                &Circle::new(Point::new(x, y), 4.0 + 16.0 * hit * (0.4 + level)),
+            );
+        }
+
         scene.stroke(
-            &Stroke::new(2.0),
+            &Stroke::new(2.0 + 1.5 * hit),
             Affine::IDENTITY,
-            with_alpha(signal, 0.35 + 0.65 * level as f32),
+            with_alpha(signal, (0.35 + 0.65 * level + 0.6 * hit) as f32),
             None,
             &Line::new(Point::new(x, y - reach), Point::new(x, y + reach)),
         );
         scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
-            with_alpha(signal, 0.5 + 0.5 * level as f32),
+            with_alpha(signal, (0.5 + 0.5 * level + 0.5 * hit) as f32),
             None,
-            &Circle::new(Point::new(x, y), 1.5 + 2.0 * level),
+            &Circle::new(Point::new(x, y), 1.5 + 2.0 * level + 2.5 * hit),
+        );
+    }
+
+    // The sweep itself — a thin bright edge with a trail behind it.
+    if head >= 0.0 {
+        let hx = head * w;
+        scene.fill(
+            Fill::NonZero,
+            Affine::IDENTITY,
+            &Gradient::new_linear(Point::new(hx - w * 0.08, 0.0), Point::new(hx, 0.0)).with_stops([
+                ColorStop::from((0.0, with_alpha(signal, 0.0))),
+                ColorStop::from((1.0, with_alpha(signal, 0.16))),
+            ]),
+            None,
+            &Rect::new((hx - w * 0.08).max(0.0), 0.0, hx.max(0.0), h),
+        );
+        scene.stroke(
+            &Stroke::new(1.0),
+            Affine::IDENTITY,
+            with_alpha(signal, 0.5),
+            None,
+            &Line::new(Point::new(hx, 0.0), Point::new(hx, h)),
         );
     }
 }
@@ -404,6 +493,45 @@ pub fn paint_reverb(scene: &mut Scene, view: &ReverbView, w: f64, h: f64) {
         );
     }
 
+    // A shimmer riding the tail: a bright band travelling from the onset out
+    // to where the decay dies, once per bar.
+    //
+    // What it shows is the reverb's own time — how far the tail actually
+    // reaches before it is gone — which a static envelope states and a moving
+    // one makes you feel.
+    let beat = f64::from(view.beat).max(1e-3);
+    if view.on {
+        let bar = beat * 4.0;
+        let phase = (f64::from(view.time) % bar) / bar;
+        let head_t = phase * window;
+        let hx = pre + (head_t / window) * (w - pre);
+        let amp = (-6.908 * head_t / decay).exp();
+        let top = h - amp * h * 0.88;
+        // Fades out as the tail does, so the shimmer dies where the reverb
+        // does rather than sweeping on through silence.
+        let lit = (amp * (1.0 - phase * 0.35)).clamp(0.0, 1.0) as f32;
+        if lit > 0.01 && hx <= w {
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                &Gradient::new_linear(Point::new(hx - w * 0.10, 0.0), Point::new(hx, 0.0))
+                    .with_stops([
+                        ColorStop::from((0.0, with_alpha(signal, 0.0))),
+                        ColorStop::from((1.0, with_alpha(signal, 0.26 * lit))),
+                    ]),
+                None,
+                &Rect::new((hx - w * 0.10).max(0.0), top, hx, h),
+            );
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                with_alpha(accent, 0.55 * lit),
+                None,
+                &Circle::new(Point::new(hx, top), 2.0 + 5.0 * f64::from(lit)),
+            );
+        }
+    }
+
     // Pre-delay: the silence before any of it, marked rather than implied.
     if pre > 1.0 {
         scene.fill(
@@ -442,6 +570,7 @@ mod tests {
             on: true,
             beat: 0.4,
             division: "1/4".to_string(),
+            time: 0.0,
         };
         for (w, h) in [(2.0, 2.0), (120.0, 40.0), (1280.0, 300.0)] {
             let mut scene = Scene::new();
@@ -454,6 +583,7 @@ mod tests {
             mix: 0.3,
             on: true,
             beat: 0.4,
+            time: 0.0,
         };
         for (w, h) in [(2.0, 2.0), (120.0, 40.0), (1280.0, 300.0)] {
             let mut scene = Scene::new();
@@ -495,6 +625,58 @@ mod tests {
         paint_beats(&mut scene, 400.0, 60.0, 2.0, 0.0, true);
     }
 
+    /// The animation stays inside the panel and repeats: a sweep that runs
+    /// off the end, or never comes back, is a sweep nobody can read a tempo
+    /// from. Painting at a spread of times must not panic or diverge.
+    #[test]
+    fn the_sweep_wraps_and_stays_in_frame() {
+        let mut view = DelayView {
+            taps: taps(4),
+            window: 3.2,
+            mix: 1.0,
+            on: true,
+            beat: 0.4,
+            division: "1/4".to_string(),
+            time: 0.0,
+        };
+        for step in 0..200 {
+            view.time = step as f32 * 0.05;
+            let mut scene = Scene::new();
+            paint_delay(&mut scene, &view, 640.0, 56.0);
+        }
+        let mut rev = ReverbView {
+            decay: 2.4,
+            density: 0.6,
+            predelay: 0.02,
+            mix: 0.3,
+            on: true,
+            beat: 0.4,
+            time: 0.0,
+        };
+        for step in 0..200 {
+            rev.time = step as f32 * 0.05;
+            let mut scene = Scene::new();
+            paint_reverb(&mut scene, &rev, 640.0, 56.0);
+        }
+    }
+
+    /// A bypassed block does not animate — a panel that is not in the signal
+    /// path must not look like one that is.
+    #[test]
+    fn bypassed_does_not_sweep() {
+        let view = DelayView {
+            taps: taps(4),
+            window: 3.2,
+            mix: 1.0,
+            on: false,
+            beat: 0.4,
+            division: String::new(),
+            time: 1.7,
+        };
+        let mut scene = Scene::new();
+        paint_delay(&mut scene, &view, 640.0, 56.0);
+    }
+
     /// A reverb with no decay set still has a window, so the envelope maths
     /// cannot divide by zero or run off the panel.
     #[test]
@@ -517,6 +699,27 @@ mod tests {
 
 use dioxus::prelude::*;
 
+/// Mark this scope dirty ~40 times a second, for as long as it lives.
+///
+/// Blitz repaints when the document changes, and an animation changes
+/// nothing in the DOM — the movement is inside a widget's scene. So the
+/// clock has to come from outside: a thread that pokes the runtime, which
+/// is the same driver `eq_graph` uses for its analyser.
+///
+/// `schedule_update` is documented as safe to call from off the runtime,
+/// which is exactly what this is.
+fn use_repaint_clock() {
+    use_hook(|| {
+        let updater = dioxus_core::schedule_update();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(25));
+                updater();
+            }
+        });
+    });
+}
+
 /// A delay lane, painted by [`DelayWidget`].
 ///
 /// A component per lane because `CustomWidgetAttr` is write-once: the widget
@@ -531,6 +734,7 @@ pub fn DelayViz(
     beat_ms: f32,
     division: String,
 ) -> Element {
+    use_repaint_clock();
     let view: Shared<DelayView> = use_hook(|| Rc::new(RefCell::new(DelayView::default())));
     let attr = use_hook(|| {
         dioxus_native_dom::CustomWidgetAttr::new(DelayWidget::new(Rc::clone(&view)))
@@ -561,6 +765,8 @@ pub fn DelayViz(
         on,
         beat: beat_ms / 1000.0,
         division,
+        // The widget keeps its own clock; this is only a starting value.
+        time: 0.0,
     };
 
     rsx! {
@@ -582,6 +788,7 @@ pub fn ReverbViz(
     on: bool,
     beat_ms: f32,
 ) -> Element {
+    use_repaint_clock();
     let view: Shared<ReverbView> = use_hook(|| Rc::new(RefCell::new(ReverbView::default())));
     let attr = use_hook(|| {
         dioxus_native_dom::CustomWidgetAttr::new(ReverbWidget::new(Rc::clone(&view)))
@@ -594,6 +801,7 @@ pub fn ReverbViz(
         mix,
         on,
         beat: beat_ms / 1000.0,
+        time: 0.0,
     };
 
     rsx! {

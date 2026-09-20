@@ -1462,6 +1462,7 @@ fn eq_panel(block: LiveBlock, spectrum: Vec<f32>) -> Element {
     rsx! { crate::eq_vello::EqVelloSurface { block, spectrum } }
 }
 
+/// The wasm remote, which has no GPU surface to paint into.
 #[cfg(not(all(not(target_arch = "wasm32"), feature = "eq-vello")))]
 fn eq_panel(block: LiveBlock, spectrum: Vec<f32>) -> Element {
     rsx! { crate::eq_surface::EqProSurface { block, spectrum } }
