@@ -242,7 +242,11 @@ fn StereoMeter(
 
 // ── Time-section constants ──────────────────────────────────────────────────
 
-const DELAY_COLORS: [&str; 2] = ["#38bdf8", "#818cf8"];
+// Deep blue, not sky: the delay lanes sit a row below the modulation lane,
+// which is cyan-led, and `#38bdf8` was close enough to it that the two read
+// as the same family of thing. Blue and indigo are far enough from cyan to
+// be told apart at a glance and from each other up close.
+const DELAY_COLORS: [&str; 2] = ["#3b82f6", "#6366f1"];
 /// Reverb is purple-led, the way delay is blue-led: the two time effects sit
 /// side by side and the colour is how you tell which lane you are reading
 /// without going to the label.
