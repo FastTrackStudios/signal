@@ -17,6 +17,8 @@ use dioxus::prelude::*;
 use signal_guitar_proto::rig::RigClient;
 use signal_guitar_proto::{BlockParam, LiveBlock};
 
+use dioxus::html::input_data::MouseButton;
+
 use crate::knob::{Knob, KnobSize};
 
 /// What a pointer drag on the display is editing.
@@ -107,6 +109,24 @@ fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) 
     d
 }
 
+/// How close to the threshold line counts as grabbing it, in graph units.
+const GRAB_PX: f32 = 22.0;
+
+/// A pointer's y, in graph units, or `None` before the widget has painted.
+///
+/// `element_coordinates()` is already element-local and in CSS pixels; the
+/// panel's height comes from the widget's own box. Nothing here is
+/// asynchronous, which is the entire point — the press that started a drag
+/// used to be decided inside an `await`, so it landed a frame late with its
+/// first movement already gone.
+fn graph_y(metrics: &comp_ui::viz::MetricsHandle, element_y: f64) -> Option<f32> {
+    let h = metrics.get().css_height();
+    if h < 1.0 {
+        return None;
+    }
+    Some((element_y / h) as f32 * H as f32)
+}
+
 /// dB (0 top of range … −`RANGE_DB`) → y within the waveform area.
 fn db_to_y(db: f64, h: f64) -> f64 {
     ((-db) / RANGE_DB).clamp(0.0, 1.0) * h
@@ -124,9 +144,18 @@ pub fn CompSurface(
     gr_db: f32,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let mut svg_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
-    let mut svg_rect = use_signal(|| None::<(f64, f64, f64)>); // (top, height, _)
+    // The widget publishes its own box here every paint, so a pointer maps
+    // into graph space synchronously. The previous arrangement measured the
+    // element with `get_client_rect().await` on pointer-down, which meant
+    // the gesture did not know whether it had grabbed anything until the
+    // await resolved — the press was dead for a frame or more, the first
+    // movement was dropped, and the cached rect went stale for the rest of
+    // the drag. `eq_graph` hit the same thing and says so in its own source.
+    let metrics = use_hook(comp_ui::viz::MetricsHandle::new);
     let mut dragging = use_signal(|| None::<CompDrag>);
+    // Whether the pointer is close enough to the threshold to take it. A
+    // control you can grab should look like one before you try.
+    let mut hot = use_signal(|| false);
     let (wave_in, wave_gr) = wave;
 
     let threshold = param_v(&block, "threshold", -18.0);
@@ -210,6 +239,8 @@ pub fn CompSurface(
                     gr_db,
                     wave: (wave_in_scaled.clone(), gr_scaled.clone()),
                     on: true,
+                    grabbable: hot() || dragging().is_some(),
+                    metrics: metrics.clone(),
                     // Grey, not a hue: the input is the signal itself rather
                     // than an effect's contribution to it.
                     color: [228u8, 228u8, 231u8],
@@ -222,26 +253,79 @@ pub fn CompSurface(
                 class: "w-full flex-1 min-h-0 touch-none select-none",
                 view_box: "0 0 360 360",
                 preserve_aspect_ratio: "none",
-                onmounted: move |e| svg_el.set(Some(e.data())),
+                // Everything below is synchronous. `element_coordinates()`
+                // is already element-local, and the panel's height comes
+                // from the widget's last paint, so a press is decided in the
+                // handler that received it.
                 onpointerdown: {
                     let ratio0 = ratio;
+                    let metrics = metrics.clone();
                     move |e: PointerEvent| {
-                        let coords = e.element_coordinates();
-                        let el = svg_el();
-                        spawn(async move {
-                            let Some(el) = el else { return };
-                            let Ok(rect) = el.get_client_rect().await else { return };
-                            svg_rect.set(Some((rect.origin.y, rect.height(), rect.width())));
-                            let y = (coords.y / rect.height()) as f32 * H as f32;
+                        let Some(y) = graph_y(&metrics, e.element_coordinates().y) else {
+                            return;
+                        };
+                        let ty = db_to_y(f64::from(thr), H) as f32;
+                        if (y - ty).abs() < GRAB_PX {
+                            dragging.set(Some(CompDrag::Threshold));
+                        } else if y < ty {
+                            // Above the threshold line = the compressed
+                            // region — drag tilts the slope.
+                            dragging.set(Some(CompDrag::Ratio(y, ratio0)));
+                        }
+                        e.prevent_default();
+                    }
+                },
+                onpointermove: {
+                    let rig = rig.clone();
+                    let id = block.id.clone();
+                    let metrics = metrics.clone();
+                    move |e: PointerEvent| {
+                        let Some(y) = graph_y(&metrics, e.element_coordinates().y) else {
+                            return;
+                        };
+                        let Some(mode) = *dragging.read() else {
+                            // Not dragging: light the threshold when it is
+                            // within reach, so the control announces itself.
                             let ty = db_to_y(f64::from(thr), H) as f32;
-                            if (y - ty).abs() < 22.0 {
-                                dragging.set(Some(CompDrag::Threshold));
-                            } else if y < ty {
-                                // Above the threshold line = the compressed
-                                // region — drag tilts the slope.
-                                dragging.set(Some(CompDrag::Ratio(y, ratio0)));
+                            let near = (y - ty).abs() < GRAB_PX;
+                            if near != *hot.peek() {
+                                hot.set(near);
                             }
-                        });
+                            return;
+                        };
+                        // Released outside the panel: end the gesture on
+                        // re-entry rather than resuming it (eq_graph idiom).
+                        if !e.held_buttons().contains(MouseButton::Primary) {
+                            dragging.set(None);
+                            return;
+                        }
+                        let Some(r) = rig.clone() else { return };
+                        let id = id.clone();
+                        match mode {
+                            CompDrag::Threshold => {
+                                let db = (-(y / H as f32) * RANGE_DB as f32).clamp(-60.0, 0.0);
+                                spawn(async move {
+                                    let _ = r.set_block_param(id, "threshold".into(), db).await;
+                                });
+                            }
+                            CompDrag::Ratio(y0, r0) => {
+                                // Drag down = more ratio (harder tilt). A
+                                // doubling per eighth of the panel: at a
+                                // sixth it took a twitch to cross the whole
+                                // 1:1..20:1 range.
+                                let span = H as f32 / 8.0;
+                                let ratio = (r0 * ((y - y0) / span).exp2()).clamp(1.0, 20.0);
+                                spawn(async move {
+                                    let _ = r.set_block_param(id, "ratio".into(), ratio).await;
+                                });
+                            }
+                        }
+                    }
+                },
+                onpointerup: move |_| dragging.set(None),
+                onpointerleave: move |_| {
+                    if hot() {
+                        hot.set(false);
                     }
                 },
 
@@ -255,42 +339,6 @@ pub fn CompSurface(
                     fill: "rgba(255,120,120,0.15)", stroke: "rgba(255,120,120,0.5)", stroke_width: "1" }
                 text { x: "343", y: "{thresh_y + 3.5:.1}", fill: "#ff9c9c", font_size: "9",
                     text_anchor: "middle", pointer_events: "none", "{thr:.0}" }
-            }
-
-            // Drag shield: threshold/ratio keep tracking outside the panel
-            // until release.
-            if dragging().is_some() {
-                div {
-                    class: "fixed inset-0",
-                    style: "z-index: 1000; cursor: ns-resize;",
-                    onpointermove: {
-                        let rig = rig.clone();
-                        let id = block.id.clone();
-                        move |e: PointerEvent| {
-                            let Some(mode) = dragging() else { return };
-                            let Some((top, h, _)) = svg_rect() else { return };
-                            let y = ((e.client_coordinates().y - top) / h) as f32 * H as f32;
-                            let Some(r) = rig.clone() else { return };
-                            let id = id.clone();
-                            match mode {
-                                CompDrag::Threshold => {
-                                    let db = (-(y / H as f32) * RANGE_DB as f32).clamp(-60.0, 0.0);
-                                    spawn(async move {
-                                        let _ = r.set_block_param(id, "threshold".into(), db).await;
-                                    });
-                                }
-                                CompDrag::Ratio(y0, r0) => {
-                                    // Drag down = more ratio (harder tilt).
-                                    let ratio = (r0 * ((y - y0) / 60.0).exp2()).clamp(1.0, 20.0);
-                                    spawn(async move {
-                                        let _ = r.set_block_param(id, "ratio".into(), ratio).await;
-                                    });
-                                }
-                            }
-                        }
-                    },
-                    onpointerup: move |_| dragging.set(None),
-                }
             }
 
             // GR readout, top right (real detector value).
@@ -318,5 +366,83 @@ pub fn CompSurface(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use comp_ui::viz::{CompMetrics, MetricsHandle};
+
+    fn metrics(css_height: f32) -> MetricsHandle {
+        // Two physical pixels per CSS pixel, so the test would catch a
+        // mapping that forgot the scale — which is the mistake that makes a
+        // drag track at half speed on a HiDPI screen and nowhere else.
+        MetricsHandle::from(CompMetrics {
+            width: 800.0,
+            height: css_height * 2.0,
+            scale: 2.0,
+        })
+    }
+
+    /// The top of the panel is 0 dB and the bottom is the full range, in the
+    /// pointer's own units.
+    #[test]
+    fn a_pointer_maps_through_the_widgets_own_box() {
+        let m = metrics(500.0);
+        let top = graph_y(&m, 0.0).expect("measured");
+        let bottom = graph_y(&m, 500.0).expect("measured");
+        assert!((top - 0.0).abs() < 1e-3);
+        assert!((bottom - H as f32).abs() < 1e-3);
+        // Halfway down is halfway through the range.
+        let mid = graph_y(&m, 250.0).expect("measured");
+        assert!((mid - H as f32 / 2.0).abs() < 1e-2, "got {mid}");
+    }
+
+    /// Before the first paint there is no box, and a gesture must decline
+    /// rather than invent one — a drag mapped through a guessed height jumps
+    /// the parameter the moment it starts.
+    #[test]
+    fn an_unmeasured_panel_refuses_to_map() {
+        assert!(graph_y(&MetricsHandle::new(), 120.0).is_none());
+    }
+
+    /// Grabbing the threshold is a synchronous decision made from the press
+    /// itself. This is the shape of that decision: near the line takes it,
+    /// above the line tilts the slope, below it does nothing.
+    #[test]
+    fn the_press_decides_what_it_grabbed() {
+        let m = metrics(500.0);
+        let thr = -20.0_f64;
+        let ty = db_to_y(thr, H) as f32;
+        // The threshold's y in graph units, back into CSS pixels.
+        let css_of = |graph_y_units: f32| f64::from(graph_y_units) / H * 500.0;
+
+        let on_line = graph_y(&m, css_of(ty)).expect("measured");
+        assert!((on_line - ty).abs() < GRAB_PX, "the line itself is grabbable");
+
+        let just_above = graph_y(&m, css_of(ty) - 60.0).expect("measured");
+        assert!(
+            (just_above - ty).abs() >= GRAB_PX && just_above < ty,
+            "well above the line is the compressed region, not the handle"
+        );
+
+        let well_below = graph_y(&m, css_of(ty) + 120.0).expect("measured");
+        assert!(
+            (well_below - ty).abs() >= GRAB_PX && well_below > ty,
+            "below the line is neither"
+        );
+    }
+
+    /// A doubling per eighth of the panel. At a sixth the whole 1:1..20:1
+    /// range crossed in a twitch, which is what made the tilt feel unusable.
+    #[test]
+    fn the_ratio_tilt_doubles_over_an_eighth_of_the_panel() {
+        let span = H as f32 / 8.0;
+        let doubled = 4.0_f32 * ((span) / span).exp2();
+        assert!((doubled - 8.0).abs() < 1e-3, "got {doubled}");
+        // And the full useful range needs most of the panel, not a flick.
+        let from_one = 1.0_f32 * ((H as f32 * 0.5) / span).exp2();
+        assert!(from_one > 15.0, "half the panel should reach the top: {from_one}");
     }
 }
