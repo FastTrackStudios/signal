@@ -148,34 +148,16 @@ pub fn CompSurface(
         })
         .collect();
 
-    let in_fill = smooth_path(&wave_in_scaled, W, H, true, true);
-    let in_edge = smooth_path(&wave_in_scaled, W, H, true, false);
     // GR ring is normalized to 30 dB FS; rescale onto the display range.
     let gr_scaled: Vec<f32> = wave_gr
         .iter()
         .map(|&g| (g * 30.0 / RANGE_DB as f32).clamp(0.0, 1.0))
         .collect();
-    let gr_fill = smooth_path(&gr_scaled, W, H, false, true);
-    let gr_edge = smooth_path(&gr_scaled, W, H, false, false);
 
+    // The only geometry this component still computes itself: where to put
+    // the threshold's grab chip and its number. The traces, the transfer
+    // curve and the ball are `comp_ui::viz`'s, drawn on the GPU.
     let thresh_y = db_to_y(f64::from(threshold), H);
-
-    // Transfer curve overlay across the panel (yellow-green, Pro-C 3).
-    let mut tc = String::new();
-    for i in 0..=60 {
-        let input = (f64::from(i) / 60.0).mul_add(RANGE_DB, -(RANGE_DB));
-        let output = f64::from(compress_transfer(input as f32, threshold, ratio, knee));
-        let x = (input + RANGE_DB) / RANGE_DB * W;
-        let y = db_to_y(output, H);
-        tc.push_str(if i == 0 { "M " } else { "L " });
-        let _ = write!(tc, "{x:.1} {y:.1} ");
-    }
-    let ball = {
-        let level = in_db.clamp(-(RANGE_DB as f32), 0.0);
-        let out = f64::from(compress_transfer(level, threshold, ratio, knee));
-        let x = (f64::from(level) + RANGE_DB) / RANGE_DB * W;
-        (x, db_to_y(out, H))
-    };
 
     // Knob writes.
     let knob = |name: &'static str,
@@ -215,8 +197,27 @@ pub fn CompSurface(
         div { class: "relative flex flex-col h-full min-h-0 overflow-hidden",
             style: "background: #080808;",
 
-            // ── The rolling display — grab the threshold line to move it;
-            // grab the transfer curve above the knee to tilt the ratio ──
+            // The picture, drawn by the compressor itself — the same widget
+            // the plugin mounts, so the rig and the plugin cannot disagree
+            // about what this block looks like. It paints and does not
+            // listen; the svg above it owns every gesture.
+            div { style: "position:absolute; inset:0;",
+                comp_ui::viz::CompViz {
+                    threshold,
+                    ratio,
+                    knee,
+                    in_db,
+                    gr_db,
+                    wave: (wave_in_scaled.clone(), gr_scaled.clone()),
+                    on: true,
+                    // Grey, not a hue: the input is the signal itself rather
+                    // than an effect's contribution to it.
+                    color: [228u8, 228u8, 231u8],
+                }
+            }
+
+            // ── The gestures — grab the threshold line to move it; grab the
+            // transfer curve above the knee to tilt the ratio ──
             svg {
                 class: "w-full flex-1 min-h-0 touch-none select-none",
                 view_box: "0 0 360 360",
@@ -244,56 +245,16 @@ pub fn CompSurface(
                     }
                 },
 
-                defs {
-                    // Input level — neutral grey.
-                    //
-                    // The input is the one trace here that is not an effect:
-                    // it is what arrived. Gain reduction is red because it is
-                    // the compressor acting, and giving the thing being acted
-                    // ON a colour of its own implied a second process. Grey
-                    // says "this is just the signal", and leaves red the only
-                    // hue in the panel that means anything.
-                    linearGradient { id: "comp-in", x1: "0", y1: "0", x2: "0", y2: "1",
-                        stop { offset: "0", stop_color: "rgba(226,232,240,0.60)" }
-                        stop { offset: "0.45", stop_color: "rgba(180,188,200,0.34)" }
-                        stop { offset: "0.80", stop_color: "rgba(120,128,140,0.15)" }
-                        stop { offset: "1", stop_color: "rgba(80,86,96,0.05)" }
-                    }
-                    // Gain reduction — red gradient from the top.
-                    linearGradient { id: "comp-gr", x1: "0", y1: "0", x2: "0", y2: "1",
-                        stop { offset: "0", stop_color: "rgba(220,40,40,0.82)" }
-                        stop { offset: "0.35", stop_color: "rgba(200,30,30,0.51)" }
-                        stop { offset: "0.70", stop_color: "rgba(175,25,25,0.22)" }
-                        stop { offset: "1", stop_color: "rgba(150,20,20,0.06)" }
-                    }
-                }
-
-                // Input waveform: fill + glow edge + bright edge, all neutral.
-                if !in_fill.is_empty() {
-                    path { d: "{in_fill}", fill: "url(#comp-in)" }
-                    path { d: "{in_edge}", fill: "none", stroke: "rgba(200,208,220,0.12)", stroke_width: "4" }
-                    path { d: "{in_edge}", fill: "none", stroke: "rgba(232,238,248,0.80)", stroke_width: "1.5" }
-                }
-                // GR from the top: fill + glow + bright red edge. Hidden
-                // while the detector is idle (a zero trace would still
-                // paint its edge line across the top).
-                if !gr_fill.is_empty() && gr_scaled.iter().any(|&g| g > 0.002) {
-                    path { d: "{gr_fill}", fill: "url(#comp-gr)" }
-                    path { d: "{gr_edge}", fill: "none", stroke: "rgba(255,60,60,0.12)", stroke_width: "4" }
-                    path { d: "{gr_edge}", fill: "none", stroke: "rgba(255,80,80,0.82)", stroke_width: "1.5" }
-                }
-
-                // Threshold line — the grabbable control.
-                line { x1: "0", y1: "{thresh_y:.1}", x2: "360", y2: "{thresh_y:.1}",
-                    stroke: "rgba(255,120,120,0.55)", stroke_width: "2", stroke_dasharray: "6,4" }
-                // Grab handle chip at the right end.
+                // The traces, the transfer curve, the threshold rule and the
+                // ball are all painted by `CompViz` below this svg. What is
+                // left here is what a painted scene cannot do: the grab
+                // handle's NUMBER. Text in a scene needs a font handle the
+                // widget has not got, and the threshold is the one value on
+                // this panel that has to be readable while it is dragged.
                 rect { x: "328", y: "{thresh_y - 7.0:.1}", width: "30", height: "14", rx: "3",
                     fill: "rgba(255,120,120,0.15)", stroke: "rgba(255,120,120,0.5)", stroke_width: "1" }
                 text { x: "343", y: "{thresh_y + 3.5:.1}", fill: "#ff9c9c", font_size: "9",
                     text_anchor: "middle", pointer_events: "none", "{thr:.0}" }
-                // Transfer curve + input ball.
-                path { d: "{tc}", fill: "none", stroke: "rgba(180,210,140,0.71)", stroke_width: "2" }
-                circle { cx: "{ball.0:.1}", cy: "{ball.1:.1}", r: "3", fill: "rgba(255,255,255,0.78)" }
             }
 
             // Drag shield: threshold/ratio keep tracking outside the panel
