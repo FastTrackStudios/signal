@@ -4,7 +4,7 @@
 use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::{RigClient, RigEvent, RigStreamClient};
-use signal_guitar_proto::{LiveBlock, LiveNode, PerformanceModel};
+use signal_guitar_proto::{LiveBlock, LiveNode, PerformanceModel, RigPerf};
 
 use crate::meters::meter_level;
 
@@ -41,6 +41,9 @@ pub struct RigViewState {
     pub nodes: Signal<Vec<LiveNode>>,
     /// Name of the active patch (raw backend name, e.g. "Crunch Edge").
     pub active_patch: Signal<Option<String>>,
+    /// What the rig costs to run — render time, load, dropouts. Rides on the
+    /// status payload, so it updates at meter rate.
+    pub dsp: Signal<RigPerf>,
 }
 
 /// Seed the rig view-state with one `status`/`perf`/`chain` fetch, then fold
@@ -66,6 +69,7 @@ pub fn use_rig_state() -> RigViewState {
     let mut blocks = use_signal(Vec::<LiveBlock>::new);
     let mut nodes = use_signal(Vec::<LiveNode>::new);
     let mut active_patch = use_signal(|| None::<String>);
+    let mut dsp = use_signal(RigPerf::default);
 
     // Seed once — the event stream only carries *changes*; a fresh
     // subscriber needs the current state to start from.
@@ -89,6 +93,7 @@ pub fn use_rig_state() -> RigViewState {
                     ));
                     comp_gr_db.set(s.comp_gr_db);
                     active_patch.set(s.active_patch);
+                    dsp.set(s.perf);
                 }
                 if let Ok(p) = rig.perf().await {
                     perf.set(p);
@@ -134,6 +139,7 @@ pub fn use_rig_state() -> RigViewState {
                         mut blocks,
                         mut nodes,
                         mut active_patch,
+                        mut dsp,
                     ) = (
                         running,
                         in_level,
@@ -148,6 +154,7 @@ pub fn use_rig_state() -> RigViewState {
                         blocks,
                         nodes,
                         active_patch,
+                        dsp,
                     );
                     match ev {
                         RigEvent::Status(s) => {
@@ -164,6 +171,7 @@ pub fn use_rig_state() -> RigViewState {
                             ));
                             comp_gr_db.set(s.comp_gr_db);
                             active_patch.set(s.active_patch);
+                            dsp.set(s.perf);
                         }
                         RigEvent::Perf(p) => perf.set(p),
                         RigEvent::Chain(c) => {
@@ -231,6 +239,7 @@ pub fn use_rig_state() -> RigViewState {
         blocks,
         nodes,
         active_patch,
+        dsp,
     }
 }
 

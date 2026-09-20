@@ -57,6 +57,68 @@ impl Default for AudioPrefs {
     }
 }
 
+/// What the rig costs to run, as the realtime callback measures it.
+///
+/// This rides on [`RigStatus`] rather than a call of its own because it is
+/// wanted exactly when the meters are: while playing. The meter loop is
+/// already a round-trip every 50 ms, and these are nine scalars.
+///
+/// Two of everything, deliberately. **Peak** answers "did the player hear a
+/// dropout" — one overrun is audible and must not be averaged away. **Mean**
+/// answers "is this build faster than that one" — a peak moves milliseconds
+/// when the scheduler preempts one block on a busy machine and says nothing
+/// about the DSP. A benchmark reads the mean; a dropout hunt reads the peak
+/// and [`over_budget`](Self::over_budget).
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct RigPerf {
+    /// Frames in the running block (the negotiated quantum).
+    pub block_frames: u32,
+    /// Negotiated sample rate, Hz — with `block_frames`, the budget.
+    pub sample_rate: u32,
+    /// Render time of the last block, microseconds.
+    pub render_us: u32,
+    /// Worst render since the peak was last reset, microseconds.
+    pub peak_render_us: u32,
+    /// Mean render across every block since the device opened, microseconds.
+    pub mean_render_us: u32,
+    /// Last block's render as a fraction of its realtime budget (0..=1).
+    pub load: f32,
+    /// The mean block's share of the budget (0..=1) — the comparable number.
+    pub mean_load: f32,
+    /// Blocks that overran their deadline. Ours; every one is a dropout.
+    pub over_budget: u64,
+    /// Xruns the graph reported. Can sit at zero on a follower node while
+    /// audio is dropping, so read `over_budget` first.
+    pub xruns: u64,
+    /// Blocks rendered — the sample count behind `mean_render_us`.
+    pub blocks: u64,
+}
+
+impl RigPerf {
+    /// One block's realtime budget in microseconds: how long the callback has
+    /// before the next one is late.
+    #[must_use]
+    pub fn budget_us(&self) -> u32 {
+        if self.sample_rate == 0 {
+            return 0;
+        }
+        (f64::from(self.block_frames) / f64::from(self.sample_rate) * 1e6) as u32
+    }
+
+    /// Round-trip latency the buffer itself imposes, milliseconds.
+    ///
+    /// One block in and one block out — what the player feels as delay
+    /// between the string and the speaker, before the interface's own
+    /// converters add theirs.
+    #[must_use]
+    pub fn buffer_latency_ms(&self) -> f32 {
+        if self.sample_rate == 0 {
+            return 0.0;
+        }
+        (self.block_frames * 2) as f32 / self.sample_rate as f32 * 1000.0
+    }
+}
+
 /// Live transport + meter snapshot — the high-rate poll payload, batched into
 /// one call so a 20 Hz meter loop is one round-trip, not five.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
@@ -77,6 +139,8 @@ pub struct RigStatus {
     pub input_peak_r: f32,
     pub output_peak_l: f32,
     pub output_peak_r: f32,
+    /// What the rig costs to run — see [`RigPerf`].
+    pub perf: RigPerf,
 }
 
 /// One keyboard binding for the remotes to interpret.
@@ -577,5 +641,54 @@ pub mod audio {
         fn prefs(&self) -> AudioPrefs;
         /// Persist edited preferences (takes effect on the next `rig::Rig::start`).
         fn save_prefs(&self, prefs: AudioPrefs);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RigPerf;
+
+    /// A block's budget is its own duration: 64 frames at 48 kHz is 1.33 ms,
+    /// and a callback slower than that has already made the next one late.
+    #[test]
+    fn a_blocks_budget_is_its_own_duration() {
+        let perf = RigPerf {
+            block_frames: 64,
+            sample_rate: 48_000,
+            ..RigPerf::default()
+        };
+        assert_eq!(perf.budget_us(), 1333);
+
+        let bigger = RigPerf {
+            block_frames: 512,
+            sample_rate: 48_000,
+            ..RigPerf::default()
+        };
+        assert_eq!(bigger.budget_us(), 10_666);
+    }
+
+    /// Round-trip latency is two blocks, not one: the player waits for the
+    /// buffer to fill and again for it to drain.
+    #[test]
+    fn round_trip_latency_is_two_blocks() {
+        let perf = RigPerf {
+            block_frames: 64,
+            sample_rate: 48_000,
+            ..RigPerf::default()
+        };
+        assert!(
+            (perf.buffer_latency_ms() - 2.667).abs() < 0.01,
+            "got {}",
+            perf.buffer_latency_ms()
+        );
+    }
+
+    /// Before the device opens there is no rate, and dividing by it would give
+    /// a plausible-looking number for a rig that is not running.
+    #[test]
+    fn an_unopened_rig_reports_no_budget() {
+        let perf = RigPerf::default();
+        assert_eq!(perf.budget_us(), 0);
+        assert_eq!(perf.buffer_latency_ms(), 0.0);
     }
 }

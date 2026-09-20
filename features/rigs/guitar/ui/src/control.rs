@@ -1382,6 +1382,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
     let gr_db = state.comp_gr_db.cloned();
     let spectrum = state.spectrum.cloned();
     let comp_wave = state.comp_wave.cloned();
+    let dsp = state.dsp.cloned();
 
     let eq = find_block(&blocks, BlockType::Eq, "Amp EQ");
     // The drive board: Boost + the three drives, plus the amps.
@@ -1568,7 +1569,13 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                 }
 
-
+                // The cost strip, under the modules — what the rig is spending
+                // of its realtime budget while it plays. Here rather than in a
+                // settings page because the number that matters is the one
+                // measured with the chain a player is actually running.
+                div { style: "flex-shrink: 0; display: flex; justify-content: flex-end;",
+                    crate::meters::DspReadout { perf: dsp }
+                }
             }
 
             // ── Output rail: mute on top, then FOH trim + out meter,

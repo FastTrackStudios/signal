@@ -1833,6 +1833,56 @@ impl GuitarRig {
         })
     }
 
+    /// Mean render time per block, microseconds — the stable measure.
+    ///
+    /// Peak answers "did we drop audio"; the mean answers "is this build
+    /// faster than that one". One preempted block on a shared machine moves
+    /// the peak by milliseconds and says nothing about the code, so a
+    /// benchmark reads this and a dropout hunt reads the peak.
+    pub fn mean_render_us(&self) -> u32 {
+        self.engine_stats
+            .as_ref()
+            .map_or(0, |s| (s.mean_render_ms() * 1000.0) as u32)
+    }
+
+    /// Blocks rendered since the device opened — the sample count behind
+    /// [`mean_render_us`](Self::mean_render_us).
+    pub fn blocks_rendered(&self) -> u64 {
+        self.engine_stats
+            .as_ref()
+            .map_or(0, |s| s.calls.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    /// Blocks whose render overran the block's own realtime budget.
+    ///
+    /// This is the dropout count that is actually ours: a callback that
+    /// misses its deadline has already made the next one late, whether or not
+    /// the graph gets around to calling it an xrun. Prefer it to
+    /// [`underruns`](Self::underruns), which reads the driver's clock and can
+    /// sit at zero while the graph drops audio.
+    pub fn over_budget(&self) -> u64 {
+        self.engine_stats.as_ref().map_or(0, |s| {
+            s.over_budget.load(std::sync::atomic::Ordering::Relaxed)
+        })
+    }
+
+    /// Fraction of the realtime budget the last block consumed (0..=1).
+    pub fn dsp_load(&self) -> f32 {
+        self.engine_stats
+            .as_ref()
+            .map_or(0.0, |s| s.load(self.sample_rate) as f32)
+    }
+
+    /// Fraction of the budget the MEAN block consumes (0..=1) — the number to
+    /// compare across builds, since it does not move with one stalled block.
+    pub fn mean_dsp_load(&self) -> f32 {
+        let budget_us = f64::from(self.block_frames()) / f64::from(self.sample_rate.max(1)) * 1e6;
+        if budget_us <= 0.0 {
+            return 0.0;
+        }
+        ((f64::from(self.mean_render_us()) / budget_us) as f32).clamp(0.0, 1.0)
+    }
+
     pub fn reset_render_peak(&self) {
         if let Some(s) = &self.engine_stats {
             s.reset_peak();

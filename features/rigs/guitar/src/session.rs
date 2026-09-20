@@ -1573,14 +1573,29 @@ impl Rig for GuitarRigBackend {
 
     fn status(&self) -> RigStatus {
         let guard = self.rig.lock_ok();
-        let (input_peak, output_peak, in_lr, out_lr, active_patch) = match guard.as_ref() {
-            Some(prig) => (
-                prig.rig().input_peak(),
-                prig.rig().output_peak(),
-                prig.rig().input_peak_lr(),
-                prig.rig().output_peak_lr(),
-                prig.active_patch().map(|p| p.name.clone()),
-            ),
+        let (input_peak, output_peak, in_lr, out_lr, active_patch, perf) = match guard.as_ref() {
+            Some(prig) => {
+                let rig = prig.rig();
+                (
+                    rig.input_peak(),
+                    rig.output_peak(),
+                    rig.input_peak_lr(),
+                    rig.output_peak_lr(),
+                    prig.active_patch().map(|p| p.name.clone()),
+                    signal_guitar_proto::RigPerf {
+                        block_frames: rig.block_frames(),
+                        sample_rate: rig.sample_rate,
+                        render_us: rig.render_us(),
+                        peak_render_us: rig.peak_render_us(),
+                        mean_render_us: rig.mean_render_us(),
+                        load: rig.dsp_load(),
+                        mean_load: rig.mean_dsp_load(),
+                        over_budget: rig.over_budget(),
+                        xruns: rig.underruns(),
+                        blocks: rig.blocks_rendered(),
+                    },
+                )
+            }
             None => return RigStatus::default(),
         };
         drop(guard);
@@ -1600,6 +1615,7 @@ impl Rig for GuitarRigBackend {
             input_peak_r: in_lr.1,
             output_peak_l: out_lr.0,
             output_peak_r: out_lr.1,
+            perf,
         }
     }
 
