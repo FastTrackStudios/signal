@@ -89,6 +89,9 @@ async fn main() {
                 n_chain += 1;
                 eprintln!("chain event: {} blocks", c.len());
             }
+            RigEvent::Levelling(l) => {
+                eprintln!("levelling event: {}/{}", l.done, l.total);
+            }
             RigEvent::Spectrum(_) | RigEvent::CompWave(..) => {}
         });
     }

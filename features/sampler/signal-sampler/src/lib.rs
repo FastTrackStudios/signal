@@ -125,6 +125,8 @@ pub mod node_render;
 pub mod nord;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pack_cli;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod patch_level;
 pub mod pack_plan;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pack_rewrite;

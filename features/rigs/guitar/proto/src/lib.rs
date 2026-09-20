@@ -143,6 +143,33 @@ pub struct RigStatus {
     pub perf: RigPerf,
 }
 
+/// How a patch-levelling pass is going.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct LevelProgress {
+    /// Patches measured so far.
+    pub done: u32,
+    /// Patches in the pass.
+    pub total: u32,
+    /// The patch being measured, or the last one measured when finished.
+    pub patch: String,
+    /// Finished — `done == total`, or the pass gave up.
+    pub complete: bool,
+    /// What each patch was measured at and the trim it was given, in pass
+    /// order: `(patch, measured LUFS, trim dB)`. Filled as it goes, so a
+    /// remote can show the table building.
+    pub results: Vec<PatchLevel>,
+}
+
+/// One patch's measured loudness and the trim it was given.
+#[derive(Clone, PartialEq, Debug, Facet)]
+pub struct PatchLevel {
+    pub patch: String,
+    /// Integrated loudness of the rendered patch, LUFS.
+    pub lufs: f32,
+    /// Output trim applied to bring it to the target, dB.
+    pub trim_db: f32,
+}
+
 /// One keyboard binding for the remotes to interpret.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Facet)]
 pub struct KeyBinding {
@@ -410,8 +437,8 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        Artwork, LiveBlock, LiveNode, PatchInfo, PerformanceModel, PresetInfo, RigStatus,
-        TunerReading,
+        Artwork, LevelProgress, LiveBlock, LiveNode, PatchInfo, PerformanceModel, PresetInfo,
+        RigStatus, TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -433,6 +460,10 @@ pub mod rig {
         /// Compressor rolling telemetry, ~15 Hz: `(input_peaks, gain_reduction)`
         /// — both 0..1, oldest → newest, a ~4-second window.
         CompWave(Vec<f32>, Vec<f32>),
+        /// Progress of a patch-levelling pass. Levelling renders every patch
+        /// offline and a NAM block is far from realtime, so this can run for a
+        /// minute: without progress a player cannot tell it from a hang.
+        Levelling(LevelProgress),
     }
 
     #[architect::rpc]
@@ -482,6 +513,25 @@ pub mod rig {
         /// no photographs. Kept off [`PresetInfo`] so listing the pool does
         /// not drag every picture across the wire.
         fn preset_artwork(&self, preset: String) -> Artwork;
+        /// Measure every patch through its whole chain and trim each to a
+        /// common loudness.
+        ///
+        /// The rig's other two loudness mechanisms work on single blocks — a
+        /// capture held at unity across its drive range, an amp's measured
+        /// level — and a patch's loudness is a property of the whole chain:
+        /// how many gain stages stack, where the EQ sits, how hard the
+        /// compressor works, how much reverb is in the mix. So this renders
+        /// each patch against the DI reference and sets its trim from what
+        /// came out, which is the only measurement that answers "why is the
+        /// clean patch quieter than the drive".
+        ///
+        /// Runs off-thread; follow it on [`RigEvent::Levelling`]. Measurements
+        /// are cached per chain, so a second pass is quick and an edited patch
+        /// re-measures alone.
+        fn level_patches(&self);
+        /// The last levelling pass's progress and results (empty before one
+        /// has run) — so a remote that connects mid-pass, or after it, sees it.
+        fn level_progress(&self) -> LevelProgress;
         /// Point patch `patch` at preset `preset` — rebuilds and reloads the
         /// profile's chains (brief audio gap; an edit-time operation).
         fn set_patch_preset(&self, patch: u32, preset: u32);

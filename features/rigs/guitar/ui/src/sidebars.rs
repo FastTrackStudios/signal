@@ -525,6 +525,10 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                     }
                 }
             }
+
+            // The levelling tool sits at the foot of the profile tree,
+            // because what it changes is every patch in that tree.
+            PatchLevelling {}
         }
     }
 }
@@ -949,5 +953,125 @@ mod tests {
         // A name the list no longer holds — a patch renamed or deleted under
         // an old section assignment.
         assert_eq!(name_index(&names, "Lead"), u32::MAX);
+    }
+}
+
+/// Level every patch to a common loudness, and show what it measured.
+///
+/// The rig's other loudness machinery works a block at a time — a capture held
+/// at unity across its drive range, an amp's own measured level — and none of
+/// it can know that a clean patch lands several dB under a high-gain one,
+/// because that is a property of the whole chain. This runs the measurement
+/// that does know, and shows the numbers, because a player who can see that
+/// the clean patch came in at −27 LUFS can tell the difference between a rig
+/// that is level and a rig that has merely been trimmed.
+#[component]
+pub fn PatchLevelling() -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let state = crate::state::use_rig_state();
+    let progress = state.levelling.cloned();
+
+    let running = progress.total > 0 && !progress.complete;
+    let pct = if progress.total == 0 {
+        0
+    } else {
+        progress.done * 100 / progress.total
+    };
+
+    // The spread is the number that says whether the rig needed this: the
+    // distance between its quietest and loudest patch before trimming.
+    let spread = {
+        let mut lufs: Vec<f32> = progress
+            .results
+            .iter()
+            .map(|r| r.lufs)
+            .filter(|l| l.is_finite())
+            .collect();
+        lufs.sort_by(f32::total_cmp);
+        match (lufs.first(), lufs.last()) {
+            (Some(lo), Some(hi)) if lufs.len() > 1 => Some(hi - lo),
+            _ => None,
+        }
+    };
+
+    rsx! {
+        div { class: "flex flex-col gap-1 px-2 py-1.5 border-t border-border flex-shrink-0",
+            div { class: "flex items-center gap-1.5",
+                span { class: "text-[9px] font-semibold uppercase tracking-[1.5px] text-muted-foreground",
+                    "Levels"
+                }
+                button {
+                    class: "ml-auto text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground",
+                    disabled: running,
+                    title: "Measure every patch through its whole chain and trim each to the same loudness",
+                    onclick: {
+                        let rig = rig.clone();
+                        move |_| {
+                            if let Some(r) = rig.clone() {
+                                spawn(async move { let _ = r.level_patches().await; });
+                            }
+                        }
+                    },
+                    if running { "measuring…" } else { "Level patches" }
+                }
+            }
+
+            if running {
+                div { class: "flex flex-col gap-0.5",
+                    div { style: "width: 100%; height: 4px; border-radius: 2px; background-color: rgba(0,0,0,0.45); overflow: hidden;",
+                        div { style: "height: 100%; width: {pct}%; background-color: #22c55e;" }
+                    }
+                    span { class: "text-[9px] text-muted-foreground truncate",
+                        "{progress.done}/{progress.total} · {progress.patch}"
+                    }
+                }
+            }
+
+            // Rendering a chain is far from realtime, so a finished pass keeps
+            // its table up: it is the only place the measurement is visible.
+            if !progress.results.is_empty() {
+                if let Some(spread) = spread {
+                    span { class: "text-[9px] text-muted-foreground",
+                        "spread was {spread:.1} dB"
+                    }
+                }
+                div { class: "flex flex-col max-h-40 overflow-y-auto",
+                    for r in progress.results.iter() {
+                        div {
+                            key: "{r.patch}",
+                            class: "flex items-center gap-1 text-[9px] leading-tight py-0.5",
+                            span { class: "flex-1 min-w-0 truncate text-muted-foreground", "{r.patch}" }
+                            if r.lufs.is_finite() {
+                                span { style: "font-variant-numeric: tabular-nums; color: #71717a;", "{r.lufs:.1}" }
+                                span {
+                                    style: "font-variant-numeric: tabular-nums; width: 42px; text-align: right; color: {trim_colour(r.trim_db)};",
+                                    "{r.trim_db:+.1}"
+                                }
+                            } else {
+                                // Unmeasured, and said so: a dash cannot be
+                                // mistaken for a level that was checked.
+                                span {
+                                    style: "font-variant-numeric: tabular-nums; width: 62px; text-align: right; color: #ef4444;",
+                                    "not measured"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A trim big enough to be worth a second look is coloured.
+///
+/// Under 3 dB is ordinary variation between amps. Past 12 dB the patch is
+/// probably built wrong rather than merely unlevel, and no trim will make it
+/// sit right — so it is worth saying so rather than silently applying it.
+fn trim_colour(trim_db: f32) -> &'static str {
+    match trim_db.abs() {
+        d if d > 12.0 => "#ef4444",
+        d if d > 3.0 => "#eab308",
+        _ => "#71717a",
     }
 }

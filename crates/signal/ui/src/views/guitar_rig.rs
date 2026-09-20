@@ -245,7 +245,11 @@ pub fn GuitarRigView() -> Element {
                     }
                     RigEvent::Perf(p) => perf.set(p),
                     RigEvent::Chain(c) => live_blocks.set(c),
-                    RigEvent::Spectrum(_) | RigEvent::CompWave(..) => {}
+                    // This view draws the chain, not the analyzers or the
+                    // levelling pass — the rig remote owns those.
+                    RigEvent::Spectrum(_)
+                    | RigEvent::CompWave(..)
+                    | RigEvent::Levelling(_) => {}
                 }
             },
         );

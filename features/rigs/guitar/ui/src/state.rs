@@ -4,7 +4,7 @@
 use dioxus::prelude::*;
 
 use signal_guitar_proto::rig::{RigClient, RigEvent, RigStreamClient};
-use signal_guitar_proto::{LiveBlock, LiveNode, PerformanceModel, RigPerf};
+use signal_guitar_proto::{LevelProgress, LiveBlock, LiveNode, PerformanceModel, RigPerf};
 
 use crate::meters::meter_level;
 
@@ -44,6 +44,9 @@ pub struct RigViewState {
     /// What the rig costs to run — render time, load, dropouts. Rides on the
     /// status payload, so it updates at meter rate.
     pub dsp: Signal<RigPerf>,
+    /// The last patch-levelling pass. Seeded from the backend so a remote that
+    /// connects after a pass still sees its results.
+    pub levelling: Signal<LevelProgress>,
 }
 
 /// Seed the rig view-state with one `status`/`perf`/`chain` fetch, then fold
@@ -70,6 +73,7 @@ pub fn use_rig_state() -> RigViewState {
     let mut nodes = use_signal(Vec::<LiveNode>::new);
     let mut active_patch = use_signal(|| None::<String>);
     let mut dsp = use_signal(RigPerf::default);
+    let mut levelling = use_signal(LevelProgress::default);
 
     // Seed once — the event stream only carries *changes*; a fresh
     // subscriber needs the current state to start from.
@@ -103,6 +107,9 @@ pub fn use_rig_state() -> RigViewState {
                 }
                 if let Ok(n) = rig.nodes().await {
                     nodes.set(n);
+                }
+                if let Ok(l) = rig.level_progress().await {
+                    levelling.set(l);
                 }
             }
         });
@@ -140,6 +147,7 @@ pub fn use_rig_state() -> RigViewState {
                         mut nodes,
                         mut active_patch,
                         mut dsp,
+                        mut levelling,
                     ) = (
                         running,
                         in_level,
@@ -155,6 +163,7 @@ pub fn use_rig_state() -> RigViewState {
                         nodes,
                         active_patch,
                         dsp,
+                        levelling,
                     );
                     match ev {
                         RigEvent::Status(s) => {
@@ -173,6 +182,7 @@ pub fn use_rig_state() -> RigViewState {
                             active_patch.set(s.active_patch);
                             dsp.set(s.perf);
                         }
+                        RigEvent::Levelling(l) => levelling.set(l),
                         RigEvent::Perf(p) => perf.set(p),
                         RigEvent::Chain(c) => {
                             blocks.set(c);
@@ -240,6 +250,7 @@ pub fn use_rig_state() -> RigViewState {
         nodes,
         active_patch,
         dsp,
+        levelling,
     }
 }
 

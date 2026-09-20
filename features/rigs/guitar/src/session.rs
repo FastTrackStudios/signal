@@ -129,6 +129,11 @@ pub struct GuitarRigBackend {
     /// Perform-grid mode (0 Preset / 1 Profile / 2 Setlist).
     perform_mode: Arc<Mutex<u32>>,
     /// Deferred profile save (live-edit auto-save marks; pump flushes).
+    /// The last patch-levelling pass — progress while it runs, results after.
+    levelling: Arc<Mutex<signal_guitar_proto::LevelProgress>>,
+    /// Set while a levelling pass is in flight, so a second press does not
+    /// start a second pass over the same patches.
+    levelling_busy: Arc<std::sync::atomic::AtomicBool>,
     library_dirty: Arc<std::sync::atomic::AtomicBool>,
     /// Deferred last-active-state save (`last-state.styx`) — marked on
     /// patch/song/part/setlist/tempo changes; the pump flushes it so a
@@ -185,6 +190,8 @@ impl GuitarRigBackend {
             drive_presets: Arc::new(Mutex::new(lib.drive_presets)),
             tuner_visible: Arc::new(Mutex::new(false)),
             perform_mode: Arc::new(Mutex::new(1)),
+            levelling: Arc::new(Mutex::new(signal_guitar_proto::LevelProgress::default())),
+            levelling_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             library_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             state_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             opening: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -498,6 +505,147 @@ impl GuitarRigBackend {
         for (id, name, drive) in blocks {
             self.apply_drive(&id, &name, drive);
         }
+    }
+
+    /// Measure every patch through its whole chain and trim each one to a
+    /// common loudness.
+    ///
+    /// Runs on its own thread — rendering a chain with three NAM blocks against
+    /// ~2 seconds of DI is far from realtime, and there are as many patches as
+    /// the profile holds.
+    ///
+    /// The trim goes into the patch definition rather than being applied live,
+    /// for the same reason the drive calibration is cached: it is a measured
+    /// property of that chain, it does not change until the chain does, and a
+    /// player should be able to see it, edit it and keep it.
+    fn run_levelling(&self) {
+        let sample_rate = self
+            .rig
+            .lock_ok()
+            .as_ref()
+            .map_or(48_000, signal_sampler::rig_profile::ProfileRig::sample_rate);
+
+        // The chains as built, paired with the patch definition they came from.
+        // Taken from the live rig rather than the definition because the
+        // installed chain is what is actually heard — overrides included.
+        let chains: Vec<(String, Vec<signal_sampler::rig::RigBlock>)> = {
+            let guard = self.rig.lock_ok();
+            let Some(prig) = guard.as_ref() else {
+                tracing::warn!("patch levelling needs an open rig");
+                return;
+            };
+            prig.patches()
+                .iter()
+                .map(|p| {
+                    let blocks = p
+                        .chain
+                        .iter()
+                        .filter(|b| b.has_backend())
+                        .cloned()
+                        .collect();
+                    (p.name.clone(), blocks)
+                })
+                .collect()
+        };
+
+        let total = chains.len() as u32;
+        {
+            let mut progress = self.levelling.lock_ok();
+            *progress = signal_guitar_proto::LevelProgress {
+                done: 0,
+                total,
+                patch: String::new(),
+                complete: false,
+                results: Vec::new(),
+            };
+        }
+        self.publish_levelling();
+        tracing::info!(patches = total, "patch levelling: begin");
+
+        let mut measured: Vec<(String, f32, f32)> = Vec::with_capacity(chains.len());
+        for (name, blocks) in chains {
+            {
+                let mut progress = self.levelling.lock_ok();
+                progress.patch = name.clone();
+            }
+            self.publish_levelling();
+
+            let measurement = signal_sampler::patch_level::level_of(&blocks, sample_rate)
+                .filter(|lufs| lufs.is_finite());
+            let Some(lufs) = measurement else {
+                // No measurement means no trim. The tempting thing is to treat
+                // silence as "very quiet" and apply the maximum makeup, which
+                // is the worst possible answer: the patch is not quiet, it did
+                // not render, and +24 dB on the one patch that *does* play
+                // would be the loudest mistake the rig could make.
+                tracing::warn!(
+                    patch = %name,
+                    "patch levelling: chain did not render — leaving its trim alone"
+                );
+                let mut progress = self.levelling.lock_ok();
+                progress.done += 1;
+                progress.results.push(signal_guitar_proto::PatchLevel {
+                    patch: name,
+                    lufs: f32::NEG_INFINITY,
+                    trim_db: f32::NAN,
+                });
+                drop(progress);
+                self.publish_levelling();
+                continue;
+            };
+            let trim = (signal_sampler::patch_level::TARGET_LUFS - lufs) as f32;
+            // A wide but finite range: a patch needing more than this is a
+            // patch built wrong, and 30 dB of makeup would only amplify noise.
+            let trim = trim.clamp(-24.0, 24.0);
+            tracing::info!(patch = %name, lufs, trim_db = trim, "patch levelling: measured");
+            measured.push((name.clone(), lufs as f32, trim));
+            {
+                let mut progress = self.levelling.lock_ok();
+                progress.done += 1;
+                progress.results.push(signal_guitar_proto::PatchLevel {
+                    patch: name,
+                    lufs: lufs as f32,
+                    trim_db: trim,
+                });
+            }
+            self.publish_levelling();
+        }
+
+        // Write the trims into the definition, then rebuild so they are live.
+        let rebuilt = {
+            let mut def = self.profile_def.lock_ok();
+            for (name, _, trim) in &measured {
+                if let Some(patch) = def
+                    .patches
+                    .iter_mut()
+                    .find(|p| p.name.eq_ignore_ascii_case(name))
+                {
+                    patch.trim_db = *trim;
+                }
+            }
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock_ok();
+            profile_from_library(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+
+        {
+            let mut progress = self.levelling.lock_ok();
+            progress.complete = true;
+            progress.patch.clear();
+        }
+        self.publish_levelling();
+        tracing::info!(
+            patches = measured.len(),
+            target_lufs = signal_sampler::patch_level::TARGET_LUFS,
+            "patch levelling: done"
+        );
+    }
+
+    fn publish_levelling(&self) {
+        let progress = self.levelling.lock_ok().clone();
+        self.events
+            .publish(RigEvent::Levelling(progress));
     }
 
     /// Pre-measure drive curves for every NAM the profile can reach (drive
@@ -2224,6 +2372,26 @@ impl Rig for GuitarRigBackend {
                 ..Artwork::default()
             },
         }
+    }
+
+    fn level_progress(&self) -> signal_guitar_proto::LevelProgress {
+        self.levelling.lock_ok().clone()
+    }
+
+    fn level_patches(&self) {
+        use std::sync::atomic::Ordering;
+        if self
+            .levelling_busy
+            .swap(true, Ordering::SeqCst)
+        {
+            tracing::info!("patch levelling already running");
+            return;
+        }
+        let backend = self.clone();
+        std::thread::spawn(move || {
+            backend.run_levelling();
+            backend.levelling_busy.store(false, Ordering::SeqCst);
+        });
     }
 
     fn set_patch_preset(&self, patch: u32, preset: u32) {
