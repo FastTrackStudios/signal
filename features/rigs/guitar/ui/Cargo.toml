@@ -28,7 +28,7 @@ signal-tone3000-ui.workspace = true
 session-ui = { workspace = true, features = ["web"] }
 # The real FTS-EQ editor core (band model, response math, SVG generators,
 # interaction rules) — wasm-portable; see eq_surface.rs.
-# The real EQ editor's graph, natively.
+# The real EQ editor's graph — see the `eq-vello` feature.
 #
 # `graph` is the vello surface as an embeddable widget — the plugin's own
 # painter, hit-testing and interaction rules, driven by `bands` and band
@@ -38,7 +38,7 @@ session-ui = { workspace = true, features = ["web"] }
 eq-ui.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-eq-ui = { workspace = true, features = ["graph"] }
+eq-ui = { workspace = true }
 fts-audio-ui.workspace = true
 # BlockType — chain-strip coloring.
 signal-proto.workspace = true
@@ -53,6 +53,23 @@ architect = { workspace = true, features = ["atom", "vox", "platform"] }
 # The backend is a dev-dep because the UI crate does not depend on it (the
 # arrow runs the other way, and the remote talks over a wire, not a link);
 # for a picture the two have to meet, and an example is where they can.
+[features]
+# Mount the EQ plugin's own vello editor instead of the portable SVG
+# re-host (`eq_vello` vs `eq_surface`).
+#
+# Off by default because it needs eq-ui's `graph` feature, which is newer
+# than the tag this workspace pins — turning it on requires a local
+# `[patch]` to a processor checkout, and processor and signal must agree on
+# their blitz rev (the custom-widget `Widget` trait differs between them).
+# Flip it on, with both aligned, and the rig draws the real editor.
+#
+# Deliberately empty rather than `["eq-ui/graph"]`: cargo validates a
+# feature reference even when the feature is off, and the pinned tag has no
+# `graph` yet — declaring it would break every build in the tree. Turning
+# this on therefore means BOTH enabling it here and pointing eq-ui at a
+# checkout that has `graph`, via a local `[patch]`.
+eq-vello = []
+
 [dev-dependencies]
 signal-guitar.workspace = true
 # `local` — the in-process server the shot establishes against.
