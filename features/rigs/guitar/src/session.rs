@@ -1124,7 +1124,19 @@ impl GuitarRigBackend {
                     id: format!("design-{i}"),
                     block_type: block.block_type,
                     name,
-                    bypassed: block.bypassed,
+                    // Everything engaged.
+                    //
+                    // A patch keeps most of its chain bypassed — that is what
+                    // a patch IS — and a bypassed block draws unlit, so a
+                    // design session spent looking at the rig would be a
+                    // session looking at six grey panels. Design mode exists
+                    // to see the interface, and you cannot design a surface
+                    // you cannot see.
+                    //
+                    // Not a lie about the rig: nothing here is playing. The
+                    // real chain reports its real bypass, because there the
+                    // distinction is audible.
+                    bypassed: false,
                     param_name,
                     param_value,
                     param_min,

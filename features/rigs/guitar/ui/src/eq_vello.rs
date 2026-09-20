@@ -41,6 +41,12 @@ use crate::eq_surface::{NUM_BANDS, bands_of, shape_index};
 /// The plugin's graph, driving one rig block over the wire.
 #[component]
 pub fn EqVelloSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
+    // The analyser moves without the DOM changing — the spectrum lives inside
+    // the widget's scene — so the same clock the other painted panels use.
+    // Without it the graph draws once and the spectrum never appears, which
+    // looks like the data not arriving rather than the frame not being asked
+    // for.
+    crate::fx_viz::use_repaint_clock();
     let rig = use_hook(try_consume_context::<RigClient>);
     let block_id = block.id.clone();
 
