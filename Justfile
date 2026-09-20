@@ -166,6 +166,20 @@ guitar-design *ARGS:
 
 alias gd := guitar-design
 
+# Every visualiser in the rig, in one window, on the design rig's fake guitar.
+#
+# The rack shows one delay family, one reverb family and one modulation
+# engine at a time — whichever is loaded — so comparing two of them means
+# loading one, looking, loading the other, and remembering. This is all of
+# them at once, moving, on the same clock and the same signal.
+#
+# Stills of one effect at a time, rendered offline with no window:
+#   cargo run -p delay-ui      --features viz --example family_sheet -- out/
+#   cargo run -p reverb-ui     --features viz --example family_sheet -- out/
+#   cargo run -p modulation-ui --features viz --example engine_sheet -- out/
+viz-gallery:
+    cargo run --release -p signal-guitar-ui --example viz_gallery
+
 # A picture of the rig as it is ACTUALLY running, shaders and all.
 #
 #   just guitar-grab                    rig-live.png

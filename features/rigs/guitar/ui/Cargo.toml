@@ -101,6 +101,9 @@ eq-vello = ["eq-ui/graph"]
 # tree would catch a shader that does not compile until someone ran the app.
 naga = { version = "29", features = ["wgsl-in"] }
 signal-guitar.workspace = true
+# The visualiser gallery (examples/viz_gallery.rs) opens a real window, so it
+# needs the same launcher the app uses.
+dioxus-native.workspace = true
 # `local` — the in-process server the shot establishes against.
 architect = { workspace = true, features = ["atom", "vox", "platform", "local"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

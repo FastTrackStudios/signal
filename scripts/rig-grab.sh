@@ -14,21 +14,24 @@ set -euo pipefail
 
 OUT="${1:-rig-live.png}"
 EXPECT_W="${2:-}"
+# Which window to raise. The rig by default; the gallery is the other thing
+# worth photographing and it is a different binary.
+MATCH="${3:-signal-desktop}"
 
-if ! pgrep -x signal-desktop >/dev/null; then
-    echo "rig-grab: no signal-desktop is running — start one with 'just guitar --design'" >&2
+if ! pgrep -x "$MATCH" >/dev/null; then
+    echo "rig-grab: no $MATCH is running — start one with 'just guitar --design' (or 'just viz-gallery')" >&2
     exit 1
 fi
 
 SCRIPT="$(mktemp --suffix=.js)"
 trap 'rm -f "$SCRIPT"' EXIT
-cat > "$SCRIPT" <<'JS'
-// Raise the rig, so "the active window" means the rig.
+cat > "$SCRIPT" <<JS
+// Raise the target, so "the active window" means the target.
 var list = workspace.windowList();
 for (var i = 0; i < list.length; i++) {
     var w = list[i];
     var id = (w.resourceClass || "") + " " + (w.resourceName || "");
-    if (id.indexOf("signal-desktop") !== -1) {
+    if (id.indexOf("$MATCH") !== -1) {
         workspace.activeWindow = w;
         break;
     }
