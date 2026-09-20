@@ -61,6 +61,13 @@ pub struct DelayView {
     /// Engaged; a bypassed delay draws its shape unlit rather than vanishing,
     /// because "off" and "not configured" must not look the same.
     pub on: bool,
+    /// Seconds per beat. The whole point of the picture: a tap that lands on a
+    /// gridline is a tap in time, and a quarter-note delay is one you can see
+    /// is a quarter note without reading a number.
+    pub beat: f32,
+    /// What the division is called ("1/4", "1/8."), if the block is locked to
+    /// one. Drawn once rather than per tap.
+    pub division: String,
 }
 
 /// What the reverb panel draws.
@@ -74,6 +81,9 @@ pub struct ReverbView {
     pub predelay: f32,
     pub mix: f32,
     pub on: bool,
+    /// Seconds per beat — the tail is measured against the tempo, so "two
+    /// bars of reverb" is a thing the picture can say.
+    pub beat: f32,
 }
 
 /// The numbers a widget reads, written by the component that owns it.
@@ -189,6 +199,44 @@ fn with_alpha(c: Color, a: f32) -> Color {
     c.multiply_alpha(a.clamp(0.0, 1.0))
 }
 
+/// The beat grid: a line per beat across `window` seconds, the downbeat of
+/// every bar brighter.
+///
+/// Drawn under everything else, because it is the ruler the rest is read
+/// against — a tap sitting exactly on a line is the whole message.
+fn paint_beats(scene: &mut Scene, w: f64, h: f64, window: f64, beat: f64, lit: bool) {
+    if beat <= 0.0 || window <= 0.0 {
+        return;
+    }
+    let beats = (window / beat).ceil() as usize;
+    // A grid denser than this stops being a ruler and becomes a texture.
+    if beats > 64 {
+        return;
+    }
+    for i in 1..=beats {
+        let t = beat * i as f64;
+        if t > window {
+            break;
+        }
+        let x = t / window * w;
+        let bar = i % 4 == 0;
+        let alpha = if !lit {
+            0.06
+        } else if bar {
+            0.30
+        } else {
+            0.13
+        };
+        scene.stroke(
+            &Stroke::new(if bar { 1.5 } else { 1.0 }),
+            Affine::IDENTITY,
+            Color::from_rgba8(148, 163, 184, 255).multiply_alpha(alpha),
+            None,
+            &Line::new(Point::new(x, 0.0), Point::new(x, h)),
+        );
+    }
+}
+
 /// The taps, on a time axis, with the tail they imply.
 pub fn paint_delay(scene: &mut Scene, view: &DelayView, w: f64, h: f64) {
     let (signal, accent) = palette(view.on);
@@ -206,6 +254,8 @@ pub fn paint_delay(scene: &mut Scene, view: &DelayView, w: f64, h: f64) {
         None,
         &Rect::new(0.0, 0.0, w, h),
     );
+
+    paint_beats(scene, w, h, window, f64::from(view.beat), view.on);
 
     // The centre line — the stereo axis the taps hang off.
     scene.stroke(
@@ -253,6 +303,11 @@ pub fn paint_delay(scene: &mut Scene, view: &DelayView, w: f64, h: f64) {
             &env,
         );
     }
+
+    // The division's NAME is not drawn here. Text in a scene needs a font
+    // handle the widget does not have, and an empty chip is worse than no
+    // chip — the panel's own "1/4" selector is inches away, and what this
+    // picture adds is that the taps sit on the grid, which needs no caption.
 
     // Each tap: an impulse whose height is its level and whose offset from the
     // centre is its pan, with a head bright enough to count at a glance.
@@ -302,6 +357,8 @@ pub fn paint_reverb(scene: &mut Scene, view: &ReverbView, w: f64, h: f64) {
         None,
         &Rect::new(0.0, 0.0, w, h),
     );
+
+    paint_beats(scene, w, h, window, f64::from(view.beat), view.on);
 
     // The decay envelope, exponential to −60 dB across the tail.
     let mut env = BezPath::new();
@@ -383,6 +440,8 @@ mod tests {
             window: 2.0,
             mix: 0.3,
             on: true,
+            beat: 0.4,
+            division: "1/4".to_string(),
         };
         for (w, h) in [(2.0, 2.0), (120.0, 40.0), (1280.0, 300.0)] {
             let mut scene = Scene::new();
@@ -394,11 +453,46 @@ mod tests {
             predelay: 0.02,
             mix: 0.3,
             on: true,
+            beat: 0.4,
         };
         for (w, h) in [(2.0, 2.0), (120.0, 40.0), (1280.0, 300.0)] {
             let mut scene = Scene::new();
             paint_reverb(&mut scene, &rev, w, h);
         }
+    }
+
+    /// A delay locked to a quarter note puts a tap on every beat line — the
+    /// whole reason the grid is drawn. Checked as geometry rather than
+    /// pixels: tap `n` sits at `n` beats, so it shares an x with gridline `n`.
+    #[test]
+    fn a_quarter_note_delay_lands_on_the_grid() {
+        let beat = 0.4_f32;
+        let taps: Vec<Tap> = (1..=4)
+            .map(|n| Tap {
+                at: beat * n as f32,
+                level: 0.8_f32.powi(n),
+                pan: 0.0,
+            })
+            .collect();
+        let window = 8.0_f64 * f64::from(beat);
+        for (i, tap) in taps.iter().enumerate() {
+            let tap_x = f64::from(tap.at) / window;
+            let line_x = f64::from(beat) * (i + 1) as f64 / window;
+            // A fraction of the window, so the tolerance means something on
+            // screen: 1e-6 of a 2560px panel is three thousandths of a pixel.
+            // Tighter than that is measuring f32's rounding, not alignment.
+            assert!(
+                (tap_x - line_x).abs() < 1e-6,
+                "tap {i} at {tap_x} should sit on gridline at {line_x}"
+            );
+        }
+    }
+
+    /// No tempo, no grid — and no division by zero either.
+    #[test]
+    fn a_free_running_delay_draws_no_grid() {
+        let mut scene = Scene::new();
+        paint_beats(&mut scene, 400.0, 60.0, 2.0, 0.0, true);
     }
 
     /// A reverb with no decay set still has a window, so the envelope maths
@@ -430,7 +524,13 @@ use dioxus::prelude::*;
 /// through the shared cell instead of rebuilding it. Rebuilding would hand
 /// Blitz a second widget for the same node and lose the first one's state.
 #[component]
-pub fn DelayViz(taps: Vec<(f32, f32, bool)>, win_ms: f32, on: bool) -> Element {
+pub fn DelayViz(
+    taps: Vec<(f32, f32, bool)>,
+    win_ms: f32,
+    on: bool,
+    beat_ms: f32,
+    division: String,
+) -> Element {
     let view: Shared<DelayView> = use_hook(|| Rc::new(RefCell::new(DelayView::default())));
     let attr = use_hook(|| {
         dioxus_native_dom::CustomWidgetAttr::new(DelayWidget::new(Rc::clone(&view)))
@@ -438,18 +538,29 @@ pub fn DelayViz(taps: Vec<(f32, f32, bool)>, win_ms: f32, on: bool) -> Element {
 
     // Milliseconds in, seconds out: the widget speaks in the units a tail is
     // measured in, and the panel happens to hold the other.
+    // Levels normalised to the loudest tap.
+    //
+    // The panel's amplitudes start at the wet mix, so a delay at 8% sits in
+    // the bottom twentieth of the lane and its decay is invisible. What the
+    // picture is for is the PATTERN — where the taps land and how fast they
+    // give up — and both survive normalising; the absolute level is on the
+    // MIX knob two inches away.
+    let peak = taps.iter().map(|(_, a, _)| *a).fold(0.0f32, f32::max);
+    let scale = if peak > f32::EPSILON { 1.0 / peak } else { 1.0 };
     *view.borrow_mut() = DelayView {
         taps: taps
             .iter()
             .map(|(t, amp, up)| Tap {
                 at: t / 1000.0,
-                level: *amp,
+                level: (amp * scale).clamp(0.0, 1.0),
                 pan: if *up { -0.8 } else { 0.8 },
             })
             .collect(),
         window: win_ms / 1000.0,
         mix: 1.0,
         on,
+        beat: beat_ms / 1000.0,
+        division,
     };
 
     rsx! {
@@ -463,7 +574,14 @@ pub fn DelayViz(taps: Vec<(f32, f32, bool)>, win_ms: f32, on: bool) -> Element {
 
 /// A reverb, painted by [`ReverbWidget`].
 #[component]
-pub fn ReverbViz(decay: f32, density: f32, predelay: f32, mix: f32, on: bool) -> Element {
+pub fn ReverbViz(
+    decay: f32,
+    density: f32,
+    predelay: f32,
+    mix: f32,
+    on: bool,
+    beat_ms: f32,
+) -> Element {
     let view: Shared<ReverbView> = use_hook(|| Rc::new(RefCell::new(ReverbView::default())));
     let attr = use_hook(|| {
         dioxus_native_dom::CustomWidgetAttr::new(ReverbWidget::new(Rc::clone(&view)))
@@ -475,6 +593,7 @@ pub fn ReverbViz(decay: f32, density: f32, predelay: f32, mix: f32, on: bool) ->
         predelay,
         mix,
         on,
+        beat: beat_ms / 1000.0,
     };
 
     rsx! {

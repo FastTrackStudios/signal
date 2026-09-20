@@ -251,6 +251,16 @@ const DIV_LABELS: [&str; 8] = [
     "1/4", "1/8.", "1/8", "1/4T", "1/16", "Golden", "Silver", "Free",
 ];
 
+/// What a delay block's left tap is locked to ("1/4"), or empty when it runs
+/// free on its own time knob.
+fn div_label(b: &LiveBlock) -> String {
+    let idx = param_v(b, "tap_div_l", 0.0) as usize;
+    if div_factor(idx as f32) <= 0.0 {
+        return String::new();
+    }
+    DIV_LABELS.get(idx).copied().unwrap_or("").to_string()
+}
+
 /// Division → multiple of a quarter note, for the tap visualization
 /// (Free returns 0 → the caller falls back to the block's `time`).
 fn div_factor(idx: f32) -> f32 {
@@ -703,7 +713,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                             class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
                             style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", di * 2) } else { format!("order: {}; border-left: 2px solid transparent;", di * 2) },
                             onclick: move |_| sel.set(di),
-                            {delay_lane(taps.clone(), win_ms, !dim, color, W)}
+                            {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b))}
                             div { class: "absolute top-0.5 left-1.5 flex items-center gap-1.5",
                                 button {
                                     style: if dim { "font-size:10px; line-height:1; color:#52525b;" } else { "font-size:10px; line-height:1; color:#4ade80;" },
@@ -793,7 +803,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
 /// stacked — click a lane to select — with the selected reverb's controls
 /// beneath.
 #[component]
-fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
+fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut sel = use_signal(|| 0usize);
     const W: f32 = 460.0;
@@ -856,24 +866,20 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                             class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
                             style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", vi * 2) } else { format!("order: {}; border-left: 2px solid transparent;", vi * 2) },
                             onclick: move |_| sel.set(vi),
-                            svg { class: "w-full h-full", view_box: "0 0 460 56", preserve_aspect_ratio: "none",
-                                line { x1: "0", y1: "28", x2: "460", y2: "28", stroke: "#27272a", stroke_width: "1" }
-                                // Time scale: seconds gridlines + labels.
-                                for (mx, ml) in markers.iter() {
-                                    line { x1: "{mx:.1}", y1: "4", x2: "{mx:.1}", y2: "52",
-                                        stroke: "#ffffff", stroke_opacity: "0.06", stroke_width: "1" }
-                                    text { x: "{mx + 1.5:.1}", y: "52", fill: "#52525b", font_size: "7",
-                                        "{ml}" }
-                                }
-                                path { d: "{top}", fill: "{color}", fill_opacity: if dim { "0.08" } else { "0.25" },
-                                    stroke: "{color}", stroke_opacity: if dim { "0.25" } else { "0.8" }, stroke_width: "1" }
-                                path { d: "{bot}", fill: "{color}", fill_opacity: if dim { "0.06" } else { "0.18" },
-                                    stroke: "{color}", stroke_opacity: if dim { "0.2" } else { "0.55" }, stroke_width: "1" }
-                                // t60 tick: where the tail dies.
-                                line { x1: "{x_of_t(t60):.1}", y1: "10", x2: "{x_of_t(t60):.1}", y2: "46",
-                                    stroke: "{color}", stroke_opacity: if dim { "0.2" } else { "0.55" },
-                                    stroke_width: "1", stroke_dasharray: "2,2" }
-                            }
+                            {reverb_lane(
+                                t60 as f32,
+                                size,
+                                param_v(b, "predelay", 0.0),
+                                mix,
+                                !dim,
+                                60_000.0 / tempo_bpm.max(1) as f32,
+                                &markers,
+                                color,
+                                dim,
+                                &top,
+                                &bot,
+                                x_of_t(t60),
+                            )}
                             div { class: "absolute top-0.5 left-1.5 flex items-center gap-1.5",
                                 button {
                                     style: if dim { "font-size:10px; line-height:1; color:#52525b;" } else { "font-size:10px; line-height:1; color:#4ade80;" },
@@ -1354,8 +1360,10 @@ fn delay_lane(
     on: bool,
     _color: &'static str,
     _w: f32,
+    beat_ms: f32,
+    division: String,
 ) -> Element {
-    rsx! { crate::fx_viz::DelayViz { taps, win_ms, on } }
+    rsx! { crate::fx_viz::DelayViz { taps, win_ms, on, beat_ms, division } }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1365,6 +1373,8 @@ fn delay_lane(
     on: bool,
     color: &'static str,
     w: f32,
+    _beat_ms: f32,
+    _division: String,
 ) -> Element {
     rsx! {
         svg { class: "w-full h-full", view_box: "0 0 460 56", preserve_aspect_ratio: "none",
@@ -1382,6 +1392,62 @@ fn delay_lane(
                     rx: "1",
                 }
             }
+        }
+    }
+}
+
+/// One reverb lane: the painted widget where a renderer can composite a
+/// scene, the SVG tail where it cannot.
+#[cfg(not(target_arch = "wasm32"))]
+#[expect(clippy::too_many_arguments, reason = "a drawing and everything it needs")]
+fn reverb_lane(
+    decay: f32,
+    density: f32,
+    predelay: f32,
+    mix: f32,
+    on: bool,
+    beat_ms: f32,
+    _markers: &[(f32, &'static str)],
+    _color: &'static str,
+    _dim: bool,
+    _top: &str,
+    _bot: &str,
+    _t60_x: f32,
+) -> Element {
+    rsx! { crate::fx_viz::ReverbViz { decay, density, predelay, mix, on, beat_ms } }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[expect(clippy::too_many_arguments, reason = "a drawing and everything it needs")]
+fn reverb_lane(
+    _decay: f32,
+    _density: f32,
+    _predelay: f32,
+    _mix: f32,
+    _on: bool,
+    _beat_ms: f32,
+    markers: &[(f32, &'static str)],
+    color: &'static str,
+    dim: bool,
+    top: &str,
+    bot: &str,
+    t60_x: f32,
+) -> Element {
+    rsx! {
+        svg { class: "w-full h-full", view_box: "0 0 460 56", preserve_aspect_ratio: "none",
+            line { x1: "0", y1: "28", x2: "460", y2: "28", stroke: "#27272a", stroke_width: "1" }
+            for (mx, ml) in markers.iter() {
+                line { x1: "{mx:.1}", y1: "4", x2: "{mx:.1}", y2: "52",
+                    stroke: "#ffffff", stroke_opacity: "0.06", stroke_width: "1" }
+                text { x: "{mx + 1.5:.1}", y: "52", fill: "#52525b", font_size: "7", "{ml}" }
+            }
+            path { d: "{top}", fill: "{color}", fill_opacity: if dim { "0.08" } else { "0.25" },
+                stroke: "{color}", stroke_opacity: if dim { "0.25" } else { "0.8" }, stroke_width: "1" }
+            path { d: "{bot}", fill: "{color}", fill_opacity: if dim { "0.06" } else { "0.18" },
+                stroke: "{color}", stroke_opacity: if dim { "0.2" } else { "0.55" }, stroke_width: "1" }
+            line { x1: "{t60_x:.1}", y1: "10", x2: "{t60_x:.1}", y2: "46",
+                stroke: "{color}", stroke_opacity: if dim { "0.2" } else { "0.55" },
+                stroke_width: "1", stroke_dasharray: "2,2" }
         }
     }
 }
@@ -1621,7 +1687,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                                         }
                                     }
                                 })),
-                                ReverbPanel { blocks: blocks.clone() }
+                                ReverbPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
                             }
                         }
                     }
