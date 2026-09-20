@@ -243,7 +243,10 @@ fn StereoMeter(
 // ── Time-section constants ──────────────────────────────────────────────────
 
 const DELAY_COLORS: [&str; 2] = ["#38bdf8", "#818cf8"];
-const VERB_COLORS: [&str; 2] = ["#2dd4bf", "#a78bfa"];
+/// Reverb is purple-led, the way delay is blue-led: the two time effects sit
+/// side by side and the colour is how you tell which lane you are reading
+/// without going to the label.
+const VERB_COLORS: [&str; 2] = ["#a78bfa", "#c084fc"];
 
 /// Tempo-division labels — `delay::TapDivision` order (Quarter, dotted 8th,
 /// 8th, triplet, 16th, golden ratio, silver ratio, free-running).
@@ -1358,12 +1361,13 @@ fn delay_lane(
     taps: Vec<(f32, f32, bool)>,
     win_ms: f32,
     on: bool,
-    _color: &'static str,
+    color: &'static str,
     _w: f32,
     beat_ms: f32,
     division: String,
 ) -> Element {
-    rsx! { crate::fx_viz::DelayViz { taps, win_ms, on, beat_ms, division } }
+    let color = crate::fx_viz::rgb(color);
+    rsx! { crate::fx_viz::DelayViz { taps, win_ms, on, beat_ms, division, color } }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1408,13 +1412,14 @@ fn reverb_lane(
     on: bool,
     beat_ms: f32,
     _markers: &[(f32, &'static str)],
-    _color: &'static str,
+    color: &'static str,
     _dim: bool,
     _top: &str,
     _bot: &str,
     _t60_x: f32,
 ) -> Element {
-    rsx! { crate::fx_viz::ReverbViz { decay, density, predelay, mix, on, beat_ms } }
+    let color = crate::fx_viz::rgb(color);
+    rsx! { crate::fx_viz::ReverbViz { decay, density, predelay, mix, on, beat_ms, color } }
 }
 
 #[cfg(target_arch = "wasm32")]

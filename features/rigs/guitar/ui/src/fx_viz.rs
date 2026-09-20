@@ -68,6 +68,10 @@ pub struct DelayView {
     /// What the division is called ("1/4", "1/8."), if the block is locked to
     /// one. Drawn once rather than per tap.
     pub division: String,
+    /// The lane's own colour, as the panel draws it. Delay is blue-led and
+    /// reverb purple-led, and a painted lane that ignored that would be the
+    /// one thing on screen disagreeing about which effect it is.
+    pub color: [u8; 3],
     /// Seconds since the panel appeared — the animation's clock.
     ///
     /// Read from the widget's own `Instant` rather than pushed in by the
@@ -91,6 +95,8 @@ pub struct ReverbView {
     /// Seconds per beat — the tail is measured against the tempo, so "two
     /// bars of reverb" is a thing the picture can say.
     pub beat: f32,
+    /// The lane's own colour. See [`DelayView::color`].
+    pub color: [u8; 3],
     /// Seconds since the panel appeared. See [`DelayView::time`].
     pub time: f32,
 }
@@ -203,19 +209,26 @@ impl Widget for ReverbWidget {
 
 // ── The fallback painters ───────────────────────────────────────────────────
 
-/// Teal for signal, amber for feedback, dimmed when bypassed.
-fn palette(on: bool) -> (Color, Color) {
-    if on {
-        (
-            Color::from_rgba8(34, 211, 238, 255),
-            Color::from_rgba8(245, 158, 11, 255),
-        )
-    } else {
-        (
-            Color::from_rgba8(63, 63, 70, 255),
-            Color::from_rgba8(63, 63, 70, 255),
-        )
+/// The lane's colour and a highlight lifted out of it, dimmed when bypassed.
+///
+/// The highlight is the same hue raised toward white rather than a second
+/// colour: a bloom in an unrelated hue reads as a different signal arriving,
+/// which is exactly the wrong thing to say about a repeat of the one already
+/// there.
+fn palette(on: bool, color: [u8; 3]) -> (Color, Color) {
+    if !on {
+        let grey = Color::from_rgba8(63, 63, 70, 255);
+        return (grey, grey);
     }
+    let [r, g, b] = color;
+    let lift = |c: u8| -> u8 {
+        let raised = f32::from(c).mul_add(0.45, 255.0 * 0.55);
+        raised as u8
+    };
+    (
+        Color::from_rgba8(r, g, b, 255),
+        Color::from_rgba8(lift(r), lift(g), lift(b), 255),
+    )
 }
 
 fn with_alpha(c: Color, a: f32) -> Color {
@@ -262,7 +275,7 @@ fn paint_beats(scene: &mut Scene, w: f64, h: f64, window: f64, beat: f64, lit: b
 
 /// The taps, on a time axis, with the tail they imply.
 pub fn paint_delay(scene: &mut Scene, view: &DelayView, w: f64, h: f64) {
-    let (signal, accent) = palette(view.on);
+    let (signal, accent) = palette(view.on, view.color);
     let mid = h * 0.5;
     let window = f64::from(view.window.max(0.05));
 
@@ -428,7 +441,7 @@ pub fn paint_delay(scene: &mut Scene, view: &DelayView, w: f64, h: f64) {
 
 /// The reverb's decay: pre-delay, early reflections, then the tail.
 pub fn paint_reverb(scene: &mut Scene, view: &ReverbView, w: f64, h: f64) {
-    let (signal, accent) = palette(view.on);
+    let (signal, accent) = palette(view.on, view.color);
     let decay = f64::from(view.decay.max(0.05));
     // Show the whole tail plus a little air, so a long reverb is not clipped
     // at the right edge and a short one is not lost against it.
@@ -570,6 +583,7 @@ mod tests {
             on: true,
             beat: 0.4,
             division: "1/4".to_string(),
+            color: [56, 189, 248],
             time: 0.0,
         };
         for (w, h) in [(2.0, 2.0), (120.0, 40.0), (1280.0, 300.0)] {
@@ -583,6 +597,7 @@ mod tests {
             mix: 0.3,
             on: true,
             beat: 0.4,
+            color: [167, 139, 250],
             time: 0.0,
         };
         for (w, h) in [(2.0, 2.0), (120.0, 40.0), (1280.0, 300.0)] {
@@ -637,6 +652,7 @@ mod tests {
             on: true,
             beat: 0.4,
             division: "1/4".to_string(),
+            color: [56, 189, 248],
             time: 0.0,
         };
         for step in 0..200 {
@@ -651,6 +667,7 @@ mod tests {
             mix: 0.3,
             on: true,
             beat: 0.4,
+            color: [167, 139, 250],
             time: 0.0,
         };
         for step in 0..200 {
@@ -671,10 +688,33 @@ mod tests {
             on: false,
             beat: 0.4,
             division: String::new(),
+            color: [56, 189, 248],
             time: 1.7,
         };
         let mut scene = Scene::new();
         paint_delay(&mut scene, &view, 640.0, 56.0);
+    }
+
+    /// The painted lane reads the same constants the DOM lane does, so the
+    /// two halves of one panel cannot disagree about its colour.
+    #[test]
+    fn a_lane_colour_survives_the_trip() {
+        assert_eq!(rgb("#38bdf8"), [0x38, 0xbd, 0xf8]);
+        assert_eq!(rgb("a78bfa"), [0xa7, 0x8b, 0xfa]);
+        // Nonsense gets a neutral, not a panic or a black lane.
+        assert_eq!(rgb("nope"), [113, 113, 122]);
+    }
+
+    /// The highlight is the lane's own hue raised toward white, not a
+    /// different colour — a bloom in another hue reads as a different signal
+    /// arriving, which is the wrong thing to say about a repeat.
+    #[test]
+    fn the_highlight_is_the_same_hue() {
+        let blue = [0x38, 0xbd, 0xf8];
+        let (signal, accent) = palette(true, blue);
+        assert_ne!(signal, accent, "the highlight must be distinguishable");
+        let c = accent.to_rgba8();
+        assert!(c.b > c.r, "a blue lane's highlight stays blue-dominant");
     }
 
     /// A reverb with no decay set still has a window, so the envelope maths
@@ -689,8 +729,9 @@ mod tests {
     /// configured" must not look the same.
     #[test]
     fn bypassed_is_not_blank() {
-        let (on_signal, _) = palette(true);
-        let (off_signal, _) = palette(false);
+        let blue = [0x38, 0xbd, 0xf8];
+        let (on_signal, _) = palette(true, blue);
+        let (off_signal, _) = palette(false, blue);
         assert_ne!(on_signal, off_signal);
     }
 }
@@ -698,6 +739,21 @@ mod tests {
 // ── Mounting ────────────────────────────────────────────────────────────────
 
 use dioxus::prelude::*;
+
+/// `#rrggbb` → components, falling back to a neutral grey.
+///
+/// The panel's colour constants stay strings because that is what the DOM
+/// parts of the same lane need; this is the one place the painted part reads
+/// them, rather than a second list that could drift.
+#[must_use]
+pub fn rgb(hex: &str) -> [u8; 3] {
+    let h = hex.strip_prefix('#').unwrap_or(hex);
+    if h.len() != 6 {
+        return [113, 113, 122];
+    }
+    let part = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).unwrap_or(113);
+    [part(0), part(2), part(4)]
+}
 
 /// Mark this scope dirty ~40 times a second, for as long as it lives.
 ///
@@ -733,6 +789,7 @@ pub fn DelayViz(
     on: bool,
     beat_ms: f32,
     division: String,
+    color: [u8; 3],
 ) -> Element {
     use_repaint_clock();
     let view: Shared<DelayView> = use_hook(|| Rc::new(RefCell::new(DelayView::default())));
@@ -765,6 +822,7 @@ pub fn DelayViz(
         on,
         beat: beat_ms / 1000.0,
         division,
+        color,
         // The widget keeps its own clock; this is only a starting value.
         time: 0.0,
     };
@@ -787,6 +845,7 @@ pub fn ReverbViz(
     mix: f32,
     on: bool,
     beat_ms: f32,
+    color: [u8; 3],
 ) -> Element {
     use_repaint_clock();
     let view: Shared<ReverbView> = use_hook(|| Rc::new(RefCell::new(ReverbView::default())));
@@ -801,6 +860,7 @@ pub fn ReverbViz(
         mix,
         on,
         beat: beat_ms / 1000.0,
+        color,
         time: 0.0,
     };
 
