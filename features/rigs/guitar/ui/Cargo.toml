@@ -44,7 +44,11 @@ eq-ui = { workspace = true }
 # cannot be handed an `Any` attribute at all (it panics), so the browser
 # draws the DOM panels instead.
 anyrender.workspace = true
-blitz-dom.workspace = true
+# `custom-widget` is what compiles the painted-scene path in at all: without
+# it `process_custom_widget_node` is `#[cfg]`'d out and a widget silently
+# draws nothing. `dioxus-native` turns it on for the window; anything that
+# paints a document itself — the screenshot tool — has to ask too.
+blitz-dom = { workspace = true, features = ["custom-widget"] }
 blitz-traits.workspace = true
 dioxus-native-dom.workspace = true
 vello.workspace = true
@@ -87,7 +91,7 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tracing-subscriber.workspace = true
 dioxus-native-dom.workspace = true
 blitz-dom.workspace = true
-blitz-paint.workspace = true
+blitz-paint = { workspace = true, features = ["custom-widget"] }
 blitz-traits.workspace = true
 anyrender.workspace = true
 anyrender_vello.workspace = true
