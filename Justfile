@@ -130,6 +130,65 @@ desktop-run: tailwind
     RUST_LOG="${RUST_LOG:-info,vox_core=warn,schema_deser=off}" \
         ./target/release/signal-desktop
 
+# ── The guitar rig ───────────────────────────────────────────────────────
+
+# The rig, straight to the guitar view, on the release build.
+#
+#   just guitar                 the real rig: your interface, your DSP
+#   just guitar --design        no device, no MIDI, no DSP — several at once
+#   just guitar --silent        plays everything, heard by nobody
+#   just guitar --ephemeral     touches nothing on disk
+#
+# Release, not debug: the debug build renders the UI at a rate you can watch
+# arrive. Run it from the dev shell — the window is Blitz/Vello now, and wgpu
+# needs `libvulkan.so` on the library path; outside it, wgpu finds only the GL
+# backend and panics before drawing a frame. WebKit never needed that, which
+# is why it is new.
+
+# The guitar rig — the desktop app, release build
+guitar *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p signal-desktop
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
+    RUST_LOG="${RUST_LOG:-info,vox_core=warn,schema_deser=off}" \
+        ./target/release/signal-desktop --guitar {{ARGS}}
+
+# The rig with no audio at all: the profile loads, the meters move, and
+# nothing is opened. Several of these run side by side — an interface is
+# exclusive, and a screen cannot be laid out against a rig that will not
+# start because another copy holds the hardware. Implies ephemeral, so a
+# design session cannot move your position or edit your profile.
+
+# The rig with no device, no MIDI and no DSP — run several at once
+guitar-design *ARGS:
+    @just guitar --design {{ARGS}}
+
+alias gd := guitar-design
+
+# The rig UI rendered to a PNG — no window, no compositor, no device.
+#
+#   just guitar-shot                    rig.png at 1600x1000
+#   just guitar-shot /tmp/rig.png 2560 1440
+#
+# Design mode is forced, so this can be taken while the rig is playing.
+# Note it draws the VECTOR fallback for any painted panel: the headless
+# renderer hands out no GPU device, so the WGSL path never runs here.
+
+# Render the rig UI to a PNG — no window, no compositor, no device
+guitar-shot OUT="rig.png" W="1600" H="1000":
+    cargo run --release -p signal-guitar-ui --example rig_shot -- {{OUT}} {{W}} {{H}}
+
+# What the rig costs to run, measured on the real device (silent + ephemeral).
+guitar-bench SECONDS="10":
+    cargo run --release -p signal-guitar --features signal-sampler/pipewire \
+        --example rig_bench -- {{SECONDS}}
+
+# How long a patch switch takes, and where the time goes.
+guitar-switch-bench SWITCHES="12":
+    cargo run --release -p signal-guitar --features signal-sampler/pipewire \
+        --example switch_bench -- {{SWITCHES}}
+
 # The signal engine — the headless rig core (serves the vox router on
 # ws://:4040/vox): the signal-desktop binary in --engine mode. `rigd`
 # kept as an alias for muscle memory.
@@ -636,8 +695,14 @@ rig-link:
     ln -s "$target" "$rig"
     echo "linked: $rig -> $target"
 
-# Open the default guitar rig (Yamaha TF ch4 → NAM amps)
-guitar: (rig "Guitar Rig")
+# The guitar rig as a TUI (meters + patch switching in a terminal).
+#
+# Was `just guitar` until the desktop app became the rig's real surface;
+# that name now opens the app. This is still the way in over ssh, or when
+# you want the rig without a window.
+
+# The guitar rig as a TUI (was `just guitar`)
+guitar-tui: (rig "Guitar Rig")
 
 # Open the default drums rig (needs `just rig-setup "Drum Rig" ...` first)
 drums: (rig "Drum Rig")
