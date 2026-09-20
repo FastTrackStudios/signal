@@ -432,6 +432,13 @@ fn apply_open_args() {
             rig.get_or_insert_with(|| slug.to_string());
         }
     }
+    // Two flags for running the real rig without consequences — see
+    // `signal_guitar::library` for what they do. Translated to environment
+    // here rather than threaded through as arguments because the rig core is
+    // reached by more than one path (this app, `--engine`, the benchmark
+    // examples) and all of them should honour the same switch.
+    let silent = args.iter().any(|a| a == "--silent");
+    let ephemeral = args.iter().any(|a| a == "--ephemeral" || a == "--no-save");
     // SAFETY: single-threaded, before any GUI or thread init.
     unsafe {
         if let Some(w) = workspace {
@@ -439,6 +446,12 @@ fn apply_open_args() {
         }
         if let Some(r) = rig {
             std::env::set_var("FTS_OPEN_RIG", r);
+        }
+        if silent {
+            std::env::set_var("SIGNAL_RIG_SILENT", "1");
+        }
+        if ephemeral {
+            std::env::set_var("SIGNAL_RIG_EPHEMERAL", "1");
         }
     }
 }

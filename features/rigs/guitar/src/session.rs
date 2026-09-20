@@ -859,19 +859,61 @@ impl GuitarRigBackend {
     /// resets: the block mirror + bypass defaults, the tapped tempo on the
     /// fresh delays, and the boost gain block.
     fn activate_stack_and_sync(&self, index: usize) {
+        let t0 = std::time::Instant::now();
         {
             let mut guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_mut() {
                 prig.activate_stack(index);
             }
         }
+        let audible = t0.elapsed();
+        self.sync_after_switch(audible, "stack");
+    }
+
+    /// Everything a switch does after the audio has already changed, timed.
+    ///
+    /// The activate above is the switch a player hears; this is the follow-up
+    /// that makes the rest of the rig agree with it — the chain mirror the UI
+    /// draws, the delays' tempo, the boost, the drive trims. It is measured
+    /// because it is the part that can be slow, and a switch that takes a
+    /// second to settle is not a switch a player can use: the trims land after
+    /// the note, so the level shifts under them.
+    fn sync_after_switch(&self, audible: std::time::Duration, via: &str) {
+        let t = std::time::Instant::now();
         self.resync_blocks();
+        let resync = t.elapsed();
+
+        let t = std::time::Instant::now();
         self.apply_tempo_to_delays();
+        let tempo = t.elapsed();
+
+        let t = std::time::Instant::now();
         self.recall_patch_boost();
         self.apply_boost_to_block();
+        let boost = t.elapsed();
+
+        let t = std::time::Instant::now();
         self.apply_all_drives();
+        let drives = t.elapsed();
+
+        let t = std::time::Instant::now();
         self.publish_state();
+        let publish = t.elapsed();
+
         self.mark_state_dirty();
+
+        let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0;
+        tracing::info!(
+            switch.via = via,
+            switch.audible_ms = ms(audible),
+            switch.resync_ms = ms(resync),
+            switch.tempo_ms = ms(tempo),
+            switch.boost_ms = ms(boost),
+            switch.drives_ms = ms(drives),
+            switch.publish_ms = ms(publish),
+            switch.total_ms = ms(audible) + ms(resync) + ms(tempo) + ms(boost) + ms(drives) + ms(publish),
+            "patch switch"
+        );
     }
 
     /// The active setlist's entries, resolved against the song library:
@@ -1027,6 +1069,15 @@ impl GuitarRigBackend {
                 *self.open_prefs.lock_ok() = None;
                 tracing::error!("rig open failed: {e:#}");
             }
+        }
+        // A silent run processes everything and is heard by nobody: mute is a
+        // −96 dB trim on the master, after the chain, so the DSP load a
+        // benchmark measures is the load a player pays. Engaged here rather
+        // than left to the caller so it is on before the first block, not a
+        // few hundred milliseconds of full-volume audio later.
+        if crate::library::rig_is_silent() {
+            self.headphone.lock_ok().main_mute = true;
+            tracing::info!("silent run — main output muted, chain still processing");
         }
         // Land back where the last set was (crash-restart recovery).
         self.restore_last_state();
@@ -1968,13 +2019,9 @@ impl Rig for GuitarRigBackend {
                     .is_some_and(|prig| activate_patch_by_name(prig, &part.patch))
             };
             if switched {
-                // The same follow-up a footswitch press does: the chain
-                // mirror, the delays' tempo, the boost and the drives.
-                self.resync_blocks();
-                self.apply_tempo_to_delays();
-                self.recall_patch_boost();
-                self.apply_boost_to_block();
-                self.apply_all_drives();
+                // The same follow-up a footswitch press does, measured the
+                // same way — a section recall is a switch a player feels.
+                self.sync_after_switch(std::time::Duration::ZERO, "section");
             } else {
                 tracing::warn!(
                     part = %part.name,

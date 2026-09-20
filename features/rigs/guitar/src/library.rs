@@ -21,6 +21,17 @@
 //! and a fresh engine makes sound out of the box. NAM paths in the
 //! defaults are relative (`models/<file>.nam`) and resolve against the
 //! rig directory at load; absolute paths pass through untouched.
+//!
+//! # Running without leaving a mark
+//!
+//! Two environment flags, for measuring and testing the real rig rather than
+//! a stand-in of it:
+//!
+//! | flag | effect |
+//! |---|---|
+//! | `SIGNAL_RIG_EPHEMERAL=1` | every save is a no-op — the rig plays the real library and forgets everything, so a test run cannot move the player's position or edit their profile |
+//! | `SIGNAL_RIG_SILENT=1` | the master is muted (−96 dB after the chain), so every block still processes and nothing is heard |
+//! | `SIGNAL_RIG_DIR=<path>` | a different library entirely — isolation, but a different rig |
 
 use std::path::PathBuf;
 
@@ -46,6 +57,52 @@ pub fn rig_dir() -> PathBuf {
 /// The styx store over [`rig_dir`].
 fn store() -> StyxDir {
     StyxDir::new(rig_dir())
+}
+
+/// Whether an environment flag is set to something meaning "yes".
+fn env_flag(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|v| {
+        let v = v.trim();
+        !(v.is_empty() || v == "0" || v.eq_ignore_ascii_case("false"))
+    })
+}
+
+/// Run without persisting anything: every save is a no-op (`SIGNAL_RIG_EPHEMERAL`).
+///
+/// Reads still work, so the rig plays the real library — this is not a
+/// sandbox, it is a rig that forgets. That is what a benchmark or a test
+/// wants: the actual profile, the actual captures, and no trace afterwards.
+///
+/// The alternative, pointing [`SIGNAL_RIG_DIR`](rig_dir) at a temp
+/// directory, gives isolation but a *different* rig, which is the wrong
+/// instrument to measure. Both together give an isolated rig that also
+/// leaves its seed directory alone.
+#[must_use]
+pub fn rig_is_ephemeral() -> bool {
+    env_flag("SIGNAL_RIG_EPHEMERAL")
+}
+
+/// Run with the output muted, processing everything (`SIGNAL_RIG_SILENT`).
+///
+/// Mute is a −96 dB trim on the master, applied after the chain, so every
+/// block still runs and every measurement is the real one. A benchmark must
+/// not be quieter *to compute* than the rig it stands in for.
+#[must_use]
+pub fn rig_is_silent() -> bool {
+    env_flag("SIGNAL_RIG_SILENT")
+}
+
+/// The store, or `None` when this run does not persist.
+///
+/// Every save goes through here rather than checking the flag itself: there
+/// is then no way to write to the library without having asked whether this
+/// run is allowed to, including from a save function nobody has written yet.
+fn writable_store() -> Option<StyxDir> {
+    if rig_is_ephemeral() {
+        tracing::debug!("ephemeral run — skipping library write");
+        return None;
+    }
+    Some(store())
 }
 
 // Wrapper structs: styx serialises a struct per file.
@@ -247,11 +304,12 @@ impl RigLibrary {
     /// Write it back. Best-effort, like the profile: losing a preset is not
     /// worth failing a rig for.
     pub fn save_node_store(nodes: &crate::node_store::NodeStore) {
-        store().write(crate::node_store::NODE_STORE_FILE, nodes);
+        let Some(store) = writable_store() else { return };
+        store.write(crate::node_store::NODE_STORE_FILE, nodes);
     }
 
     pub fn save_profile(profile: &ProfileDef) {
-        let store = store();
+        let Some(store) = writable_store() else { return };
         let mut profile = profile.clone();
         for preset in &mut profile.presets {
             store.relativize(&mut preset.nam);
@@ -260,7 +318,7 @@ impl RigLibrary {
     }
 
     pub fn save_drive_presets(presets: &[DrivePresetDef]) {
-        let store = store();
+        let Some(store) = writable_store() else { return };
         let mut presets = presets.to_vec();
         for dp in &mut presets {
             for option in &mut dp.options {
@@ -271,7 +329,8 @@ impl RigLibrary {
     }
 
     pub fn save_songs(songs: &[SongDef]) {
-        store().write(
+        let Some(store) = writable_store() else { return };
+        store.write(
             "songs.styx",
             &SongLib {
                 songs: songs.to_vec(),
@@ -280,7 +339,8 @@ impl RigLibrary {
     }
 
     pub fn save_setlists(setlists: &[SetlistDef]) {
-        store().write(
+        let Some(store) = writable_store() else { return };
+        store.write(
             "setlists.styx",
             &SetlistLib {
                 setlists: setlists.to_vec(),
@@ -289,7 +349,8 @@ impl RigLibrary {
     }
 
     pub fn save_last_state(state: &LastState) {
-        store().write("last-state.styx", state);
+        let Some(store) = writable_store() else { return };
+        store.write("last-state.styx", state);
     }
 
     /// `None` when the file is missing (fresh install) or unparsable.

@@ -26,6 +26,10 @@
 //! cumulatively over the wire: it is the worst block since the open, warm-up
 //! included. Read it as a ceiling, and read `drops` for whether any block
 //! actually missed its deadline.
+//!
+//! Runs silent and ephemeral by default: a measurement must not move the
+//! player's position, edit their profile, or be heard. Set
+//! `SIGNAL_RIG_SILENT=0` / `SIGNAL_RIG_EPHEMERAL=0` to override.
 
 use architect::rig::RigBackend as _;
 use architect::{LocalServer, Scope};
@@ -59,6 +63,18 @@ async fn main() {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
         )
         .init();
+
+    // A benchmark leaves no trace and makes no sound unless told otherwise.
+    // Defaults rather than forced values, so a run can still be listened to.
+    // SAFETY: single-threaded, before the rig or any thread is created.
+    unsafe {
+        for flag in ["SIGNAL_RIG_SILENT", "SIGNAL_RIG_EPHEMERAL"] {
+            if std::env::var_os(flag).is_none() {
+                std::env::set_var(flag, "1");
+            }
+        }
+    }
+
 
     let mut args = std::env::args().skip(1);
     let seconds: u64 = args.next().and_then(|a| a.parse().ok()).unwrap_or(10);
