@@ -1413,6 +1413,14 @@ fn delay_lane(
 /// effect's. Translating here is what keeps the visualiser reusable by the
 /// plugins, which have no block types at all.
 #[cfg(not(target_arch = "wasm32"))]
+/// The block types each modulation slot offers, as the effect groups them.
+///
+/// Stated here as one list per slot so the pickers below and the visualiser
+/// cannot disagree about which machines belong where — `modulation-ui` owns
+/// the grouping and `modulation_slots` is checked against it.
+const MOD_KINDS: [BlockType; 3] = [BlockType::Chorus, BlockType::Phaser, BlockType::Flanger];
+const MOTION_KINDS: [BlockType; 3] = [BlockType::Trem, BlockType::Vibrato, BlockType::Rotary];
+
 fn engine_of(block_type: BlockType) -> Option<crate::mod_viz::Engine> {
     use crate::mod_viz::Engine;
     Some(match block_type {
@@ -1708,7 +1716,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             ZoomPanel { title: "Modulation".to_string(),
                                 ModGroupPanel {
                                     title: "Mod",
-                                    kinds: vec![BlockType::Chorus, BlockType::Phaser, BlockType::Flanger],
+                                    kinds: MOD_KINDS.to_vec(),
                                     blocks: blocks.clone(),
                                     tempo_bpm: model.tempo_bpm,
                                 }
@@ -1716,7 +1724,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             ZoomPanel { title: "Motion".to_string(),
                                 ModGroupPanel {
                                     title: "Motion",
-                                    kinds: vec![BlockType::Trem, BlockType::Vibrato, BlockType::Rotary],
+                                    kinds: MOTION_KINDS.to_vec(),
                                     blocks: blocks.clone(),
                                     tempo_bpm: model.tempo_bpm,
                                     tempo_divisions: true,
@@ -1866,6 +1874,37 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod slot_tests {
+    use super::*;
+    use crate::mod_viz::{Engine, Group};
+
+    /// The rig's two modulation slots offer exactly the machines the effect
+    /// says belong in them.
+    ///
+    /// `modulation-ui` owns the grouping — one set colours a signal where it
+    /// stands, the other moves it — and the rig listing its own three per
+    /// slot is the kind of duplication that drifts silently. A slot offering
+    /// a tremolo where a chorus belongs is offering the wrong thing whatever
+    /// colour it is drawn in.
+    #[test]
+    fn each_slot_offers_the_engines_its_group_holds() {
+        for (kinds, group) in [
+            (MOD_KINDS.as_slice(), Group::Colouring),
+            (MOTION_KINDS.as_slice(), Group::Moving),
+        ] {
+            let mut got: Vec<Engine> = kinds
+                .iter()
+                .map(|k| engine_of(*k).expect("every offered kind is an engine"))
+                .collect();
+            let mut want = Engine::of(group).to_vec();
+            got.sort_by_key(|e| format!("{e:?}"));
+            want.sort_by_key(|e| format!("{e:?}"));
+            assert_eq!(got, want, "the {group:?} slot offers the wrong machines");
         }
     }
 }

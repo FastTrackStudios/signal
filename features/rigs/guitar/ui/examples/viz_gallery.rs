@@ -99,17 +99,22 @@ fn Gallery() -> Element {
                     display:flex; flex-direction:column; overflow:hidden; \
                     font-family: ui-sans-serif, system-ui, sans-serif;",
 
-            Band { title: "MODULATION — cyan", 
-                for engine in Engine::ALL {
+            // The two slots hold DIFFERENT machines — the rig's MOD picker
+            // offers chorus, phaser and flanger, and MOTION offers tremolo,
+            // vibrato and rotary. Listing all six in both rows drew each
+            // engine twice in two colours and said the slots were
+            // interchangeable, which is the one thing they are not.
+            Band { title: "MODULATION — the three that colour a signal",
+                for engine in Engine::COLOURING {
                     Cell { label: engine_name(engine),
-                        ModViz { engine, rate: 0.9, depth: 0.75, mix: 0.5, on: true, color: CYAN }
+                        ModViz { engine, rate: 0.9, depth: 0.75, mix: 0.55, on: true, color: CYAN }
                     }
                 }
             }
-            Band { title: "MOTION — pink",
-                for engine in Engine::ALL {
+            Band { title: "MOTION — the three that move it",
+                for engine in Engine::MOVING {
                     Cell { label: engine_name(engine),
-                        ModViz { engine, rate: 1.4, depth: 0.65, mix: 0.5, on: true, color: PINK }
+                        ModViz { engine, rate: 1.4, depth: 0.65, mix: 0.6, on: true, color: PINK }
                     }
                 }
             }
