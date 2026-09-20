@@ -716,7 +716,8 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                             class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
                             style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", di * 2) } else { format!("order: {}; border-left: 2px solid transparent;", di * 2) },
                             onclick: move |_| sel.set(di),
-                            {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b))}
+                            {delay_lane(taps.clone(), win_ms, !dim, color, W, quarter, div_label(b),
+                                param_v(b, "style", 1.0) as u32)}
                             div { class: "absolute top-0.5 left-1.5 flex items-center gap-1.5",
                                 button {
                                     style: if dim { "font-size:10px; line-height:1; color:#52525b;" } else { "font-size:10px; line-height:1; color:#4ade80;" },
@@ -874,6 +875,8 @@ fn ReverbPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                                 size,
                                 param_v(b, "predelay", 0.0),
                                 mix,
+                                param_v(b, "damp", 0.0).clamp(0.0, 1.0),
+                                param_v(b, "algorithm", 1.0) as u32,
                                 !dim,
                                 60_000.0 / tempo_bpm.max(1) as f32,
                                 &markers,
@@ -1359,9 +1362,13 @@ fn delay_lane(
     _w: f32,
     beat_ms: f32,
     division: String,
+    style: u32,
 ) -> Element {
     let color = crate::fx_viz::rgb(color);
-    rsx! { crate::fx_viz::DelayViz { taps, win_ms, on, beat_ms, division, color } }
+    // The style index is `DELAY_ALGOS`'s, which is the DSP's own order; the
+    // effect owns the table that turns it into a machine.
+    let family = delay_ui::viz::family_of_style(style);
+    rsx! { crate::fx_viz::DelayViz { taps, win_ms, on, beat_ms, division, family, color } }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1373,6 +1380,7 @@ fn delay_lane(
     w: f32,
     _beat_ms: f32,
     _division: String,
+    _style: u32,
 ) -> Element {
     rsx! {
         svg { class: "w-full h-full", view_box: "0 0 460 56", preserve_aspect_ratio: "none",
@@ -1469,6 +1477,8 @@ fn reverb_lane(
     density: f32,
     predelay: f32,
     mix: f32,
+    damp: f32,
+    algorithm: u32,
     on: bool,
     beat_ms: f32,
     _markers: &[(f32, &'static str)],
@@ -1479,7 +1489,10 @@ fn reverb_lane(
     _t60_x: f32,
 ) -> Element {
     let color = crate::fx_viz::rgb(color);
-    rsx! { crate::fx_viz::ReverbViz { decay, density, predelay, mix, on, beat_ms, color } }
+    // The algorithm index is `VERB_ALGOS`'s, which is the DSP's own order;
+    // the effect owns the table that turns it into a machine.
+    let family = reverb_ui::viz::family_of_algorithm(algorithm);
+    rsx! { crate::fx_viz::ReverbViz { decay, density, predelay, mix, damp, family, on, beat_ms, color } }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1489,6 +1502,8 @@ fn reverb_lane(
     _density: f32,
     _predelay: f32,
     _mix: f32,
+    _damp: f32,
+    _algorithm: u32,
     _on: bool,
     _beat_ms: f32,
     markers: &[(f32, &'static str)],
