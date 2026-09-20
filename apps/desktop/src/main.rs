@@ -254,7 +254,55 @@ fn window_placement() -> WindowPlacement {
     )
 }
 
-#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
+/// The window, on Blitz — the renderer that can be handed a painted scene.
+///
+/// `dioxus_native::launch_cfg` is Blitz → Vello → winit. The alternative,
+/// `dioxus::desktop::LaunchBuilder`, puts WebKit/WRY behind the same
+/// components and renders them through a different engine entirely — and a
+/// WebView cannot host a custom widget at all: dioxus panics on the first DOM
+/// mutation carrying an `Any` attribute and takes the window down. Since every
+/// processor effect editor is a vello-painted custom widget, this is the only
+/// desktop path on which the real editors exist.
+#[cfg(all(
+    not(any(target_arch = "wasm32", target_os = "ios")),
+    not(feature = "webview")
+))]
+fn launch_app() {
+    use dioxus_native::{Config, LogicalSize, WindowAttributes, launch_cfg};
+    let (pos, size, fullscreen) = window_placement();
+    let (w, h) = size.unwrap_or((1280.0, 820.0));
+    let mut window = WindowAttributes::default()
+        .with_title("FastTrackStudio")
+        .with_decorations(false)
+        .with_surface_size(LogicalSize::new(w, h))
+        .with_min_surface_size(LogicalSize::new(720.0, 480.0));
+    // Position first: borderless fullscreen picks the monitor the window is
+    // on, so placing it inside the target screen is what selects that screen.
+    if let Some((x, y)) = pos {
+        window = window.with_position(dioxus_native::winit::dpi::LogicalPosition::new(x, y));
+    }
+    if fullscreen {
+        window = window.with_fullscreen(Some(
+            dioxus_native::winit::monitor::Fullscreen::Borderless(None),
+        ));
+    }
+    launch_cfg(
+        App,
+        vec![],
+        vec![Box::new(Config::new().with_window_attributes(window))],
+    );
+    // The event loop returned (last window closed) — reap the engine we
+    // spawned so it doesn't outlive the app. The engine's own watchdog is the
+    // backstop for exits that never reach here (SIGKILL, crash).
+    #[cfg(feature = "signal")]
+    engines::shutdown();
+}
+
+/// The same window on WebKit/WRY — the escape hatch, painted surfaces absent.
+#[cfg(all(
+    not(any(target_arch = "wasm32", target_os = "ios")),
+    feature = "webview"
+))]
 fn launch_app() {
     use dioxus::desktop::tao::dpi::{LogicalPosition, LogicalSize};
     use dioxus::desktop::tao::window::Fullscreen;
@@ -268,8 +316,6 @@ fn launch_app() {
             None => LogicalSize::new(1280.0, 820.0),
         })
         .with_min_inner_size(LogicalSize::new(720.0, 480.0));
-    // Position first: borderless fullscreen picks the monitor the window is
-    // on, so placing it inside the target screen is what selects that screen.
     if let Some((x, y)) = pos {
         window = window.with_position(LogicalPosition::new(x, y));
     }
@@ -279,9 +325,6 @@ fn launch_app() {
     dioxus::LaunchBuilder::new()
         .with_cfg(Config::new().with_window(window).with_menu(None))
         .launch(App);
-    // The desktop event loop returned (last window closed) — reap the engine we
-    // spawned so it doesn't outlive the app. The engine's own watchdog is the
-    // backstop for exits that never reach here (SIGKILL, crash).
     #[cfg(feature = "signal")]
     engines::shutdown();
 }
@@ -573,14 +616,85 @@ fn App() -> Element {
 
 // ── Custom window chrome (desktop is frameless) ─────────────────────────────
 
+/// The frameless window's own chrome, against whichever renderer is hosting it.
+///
+/// Blitz hands out a `winit` window; WRY hands out its own. They agree on what
+/// these five gestures mean and disagree on every name, so the difference is
+/// confined here rather than at each button.
+///
+/// `winit` has no `close()` — a window closes when the event loop stops owning
+/// it — so the close button exits the process after the engine has been reaped,
+/// which is what the WRY path's `close()` amounted to anyway.
+#[cfg(all(
+    not(any(target_arch = "wasm32", target_os = "ios")),
+    not(feature = "webview")
+))]
+mod chrome {
+    pub use dioxus_native::winit::window::ResizeDirection as Dir;
+
+    /// The host window. A hook, so every caller must be inside a component —
+    /// which they are: all five of these run from a title-bar button.
+    fn window() -> std::sync::Arc<dyn dioxus_native::winit::window::Window> {
+        dioxus_native::use_window()
+    }
+
+    pub fn drag() {
+        let _ = window().drag_window();
+    }
+
+    pub fn toggle_maximize() {
+        let w = window();
+        let maximized = w.is_maximized();
+        w.set_maximized(!maximized);
+    }
+
+    pub fn minimize() {
+        window().set_minimized(true);
+    }
+
+    pub fn resize(dir: Dir) {
+        let _ = window().drag_resize_window(dir);
+    }
+
+    pub fn close() {
+        #[cfg(feature = "signal")]
+        crate::engines::shutdown();
+        std::process::exit(0);
+    }
+}
+
+#[cfg(all(
+    not(any(target_arch = "wasm32", target_os = "ios")),
+    feature = "webview"
+))]
+mod chrome {
+    pub use dioxus::desktop::tao::window::ResizeDirection as Dir;
+
+    pub fn drag() {
+        dioxus::desktop::window().drag();
+    }
+    pub fn toggle_maximize() {
+        dioxus::desktop::window().toggle_maximized();
+    }
+    pub fn minimize() {
+        dioxus::desktop::window().set_minimized(true);
+    }
+    pub fn resize(dir: Dir) {
+        let _ = dioxus::desktop::window().drag_resize_window(dir);
+    }
+    pub fn close() {
+        dioxus::desktop::window().close();
+    }
+}
+
 fn drag_window() {
     #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
-    dioxus::desktop::window().drag();
+    chrome::drag();
 }
 
 fn toggle_maximize() {
     #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
-    dioxus::desktop::window().toggle_maximized();
+    chrome::toggle_maximize();
 }
 
 /// Minimize / maximize / close — the right end of the title bar.
@@ -593,7 +707,7 @@ fn WindowControls() -> Element {
             WindowButton {
                 icon: Icon::Minimize,
                 title: "Minimize".to_string(),
-                on_click: move |()| dioxus::desktop::window().set_minimized(true),
+                on_click: move |()| chrome::minimize(),
             }
             WindowButton {
                 icon: Icon::Maximize,
@@ -604,7 +718,7 @@ fn WindowControls() -> Element {
                 icon: Icon::Close,
                 title: "Close".to_string(),
                 danger: true,
-                on_click: move |()| dioxus::desktop::window().close(),
+                on_click: move |()| chrome::close(),
             }
         }
     }
@@ -623,7 +737,7 @@ fn WindowControls() -> Element {
 #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
 #[component]
 fn ResizeHandles() -> Element {
-    use dioxus::desktop::tao::window::ResizeDirection as Dir;
+    use chrome::Dir;
     let handles: &[(&str, Dir)] = &[
         (
             "top: 0; left: 12px; right: 12px; height: 5px; cursor: ns-resize;",
@@ -663,7 +777,7 @@ fn ResizeHandles() -> Element {
             div {
                 style: "position: fixed; z-index: 2147483647; {pos}",
                 onmousedown: move |_| {
-                    let _ = dioxus::desktop::window().drag_resize_window(dir);
+                    chrome::resize(dir);
                 },
             }
         }

@@ -9,6 +9,9 @@ resolver = "3"
 
 members = [
     "apps/desktop",
+    # Vendored, patched dioxus-native-dom — see its UPSTREAM.md and the
+    # `[patch]` for DioxusLabs/dioxus below.
+    "libs/vendor/dioxus-native-dom",
     "apps/web",
     "apps/cli",
     "apps/fts-convert",
@@ -1070,3 +1073,70 @@ opt-level = 3
 # COOP/COEP headers that unlock SharedArrayBuffer. Developing against the
 # local checkout per CLAUDE.md; the release path is: land in architect,
 # tag, bump the rev here, delete this block.
+
+# TEMPORARY — LOCAL DEVELOPMENT ONLY, DO NOT COMMIT.
+#
+# Overrides the tagged daw dep with the local checkout so the MiniFuse work
+# (multi-route device selection + real port names) can be run before daw is
+# tagged. Every daw crate in the graph has to be listed, not just the two
+# being changed: the processor crates depend on daw at its tag, so redirecting
+# a subset puts `daw-proto` and `midicore-proto` in the graph twice and
+# nothing compiles.
+#
+# To finish: push + tag daw, bump the tags at the top of this file, delete
+# this block.
+# The Blitz DOM, patched.
+#
+# `dioxus-native` reaches Blitz through `dioxus-native-dom`, and upstream's
+# copy borrows the document unconditionally when a measurement is asked for
+# from a background task. The document is usually already borrowed — event
+# handling and rendering both hold it — so it panics with "RefCell already
+# borrowed" and takes the window down. The vendored copy asks with
+# `try_borrow_mut` and answers "later" instead, and also fixes stale
+# ElementId→NodeId mappings after a subtree is removed.
+#
+# Both are bugs session hit building its workstation on Blitz; this is its
+# patch, vendored rather than re-derived. Remove after an upstream release
+# with equivalent guarantees — see libs/vendor/dioxus-native-dom/UPSTREAM.md.
+[patch."https://github.com/DioxusLabs/dioxus"]
+dioxus-native-dom = { path = "libs/vendor/dioxus-native-dom" }
+
+[patch."https://github.com/FastTrackStudios/daw"]
+audio-controls = { path = "../daw/features/audio/audio-controls" }
+audiocore-core = { path = "../daw/crates/audiocore/audiocore-core" }
+audiocore-dsp = { path = "../daw/crates/audiocore/audiocore-dsp" }
+audiocore-gui = { path = "../daw/crates/audiocore/audiocore-gui" }
+daw = { path = "../daw/crates/daw/daw" }
+daw-audio-io = { path = "../daw/features/audio/daw-audio-io" }
+daw-audio-sync = { path = "../daw/features/sync/daw-audio-sync" }
+daw-control = { path = "../daw/crates/daw/control" }
+daw-extension-runtime = { path = "../daw/features/reaper/daw-extension-runtime" }
+dawfile-aaf = { path = "../daw/features/dawfile/dawfile-aaf" }
+dawfile-ableton = { path = "../daw/features/dawfile/dawfile-ableton" }
+dawfile-dawproject = { path = "../daw/features/dawfile/dawfile-dawproject" }
+dawfile-protools = { path = "../daw/features/dawfile/dawfile-protools" }
+dawfile-reaper = { path = "../daw/features/dawfile/dawfile-reaper" }
+daw-module = { path = "../daw/crates/daw/module" }
+daw-proto = { path = "../daw/crates/daw/proto" }
+daw-reaper = { path = "../daw/features/reaper/daw-reaper" }
+daw-standalone = { path = "../daw/features/standalone/daw-standalone" }
+daw-test-macro = { path = "../daw/libs/devtools/daw-test-macro" }
+dock-dioxus = { path = "../daw/libs/dock/dock-dioxus" }
+dock-proto = { path = "../daw/libs/dock/dock-proto" }
+engine-launcher = { path = "../daw/libs/engine-launcher" }
+fts-chrome = { path = "../daw/libs/fts-chrome" }
+fts-modulation = { path = "../daw/crates/audiocore/fts-modulation" }
+fts-sample = { path = "../daw/crates/audiocore/fts-sample" }
+keyflow-proto = { path = "../daw/crates/keyflow/keyflow-proto" }
+keyflow-syntax = { path = "../daw/crates/keyflow/keyflow-syntax" }
+kontrol = { path = "../daw/crates/kontrol/kontrol" }
+level-dsp = { path = "../daw/features/fx/level/level-dsp" }
+midicore = { path = "../daw/crates/midicore/midicore" }
+midicore-midir = { path = "../daw/crates/midicore/midicore-midir" }
+midicore-pipewire = { path = "../daw/crates/midicore/midicore-pipewire" }
+midicore-proto = { path = "../daw/crates/midicore/midicore-proto" }
+midicore-ui = { path = "../daw/crates/midicore/midicore-ui" }
+pitch-dsp = { path = "../daw/features/fx/pitch/pitch-dsp" }
+reaper-launcher = { path = "../daw/features/reaper/reaper-launcher" }
+tune-dsp = { path = "../daw/features/fx/tune/tune-dsp" }
+utils = { path = "../daw/libs/utils" }

@@ -42,6 +42,13 @@ workspace = true
 # `cargo run -p signal-desktop --no-default-features --features "session,charts"`
 # skips the heavy `signal` rig (nam C++, lucide icons, webkit engine deps).
 default = ["signal"]
+# Render the desktop window with WebKit/WRY instead of Blitz.
+#
+# The old path, kept as an escape hatch while the Blitz migration settles —
+# Blitz supports less CSS than a WebView, so a surface that has not been
+# brought under the inline-style rules may still need it. Nothing painted can
+# be mounted under this: see `dioxus-native` in the native dependency table.
+webview = []
 # signal also force-enables session-ui/desktop: signal-guitar-ui pulls
 # session-ui (default-features off), which only compiles with its dioxus
 # renderer feature on (dock-dioxus needs "web" for its prelude).
@@ -247,6 +254,17 @@ eyre = { workspace = true, optional = true }
 # further down).
 [target.'cfg(not(any(target_arch = "wasm32", target_os = "ios")))'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
+# The Blitz native renderer — the default desktop path.
+#
+# `dioxus::desktop` puts WebKit/WRY behind the same components, and a WebView
+# cannot be handed a painted scene: `CustomWidgetAttr` is an `Any` attribute,
+# and dioxus does not ignore it but panics on the first mutation carrying one
+# ("Any attributes are not supported by the current renderer") and takes the
+# window with it. Every processor effect editor — the EQ's vello graph first —
+# is such a widget, so the real editors can only be mounted here. See the
+# `webview` feature for the old path.
+dioxus-native = { workspace = true }
+dioxus-native-dom = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tracing-subscriber.workspace = true

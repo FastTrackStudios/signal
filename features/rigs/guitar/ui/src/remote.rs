@@ -261,12 +261,14 @@ pub fn GuitarRigRemote() -> Element {
         div {
             class: "flex flex-col h-full bg-background text-foreground outline-none",
             tabindex: "0",
-            // Grab focus on mount so Cmd/Ctrl+P works before any click.
-            onmounted: move |e| {
-                spawn(async move {
-                    let _ = e.data().set_focus(true).await;
-                });
-            },
+            // Grab focus so Cmd/Ctrl+P works before any click.
+            //
+            // Declaratively, not from a task in `onmounted`: a task runs
+            // inside the render pass, which is holding the document, so
+            // asking the renderer to move focus from there is a re-entrant
+            // borrow. Blitz honours `autofocus` itself, at a moment when it
+            // is safe to.
+            autofocus: true,
             // Cmd/Ctrl+P: the command palette. Everything else: the
             // keymap (keymap.styx) — "ctrl+1" strings → rig actions.
             onkeydown: {
