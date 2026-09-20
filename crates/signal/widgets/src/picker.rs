@@ -16,13 +16,22 @@
 //! standalone, as a plugin, and embedded in REAPER — which is the whole point
 //! of the rendering rules.
 //!
+//! # What Blitz does not give us
+//!
+//! Three of this widget's obvious implementations are unavailable, and the
+//! substitutions are deliberate rather than sloppy (see `blitz.is/status/css`):
+//!
+//! | wanted | why not | instead |
+//! |---|---|---|
+//! | `position: fixed` backdrop | unsupported; an absolute box positions against its immediate parent, so nothing in here can cover the window | close on `focusout` |
+//! | `overflow-y: auto` on a long list | unsupported | the list grows; keep option counts human |
+//! | `text-overflow: ellipsis` | unsupported | `overflow: hidden` clips |
+//!
 //! # Closing it
 //!
-//! A real dropdown closes when you click away from it, and there is no
-//! document-level click handler to hang that on here. Instead an open picker
-//! lays a transparent full-viewport backdrop *behind* its list: any press that
-//! is not on an option lands on the backdrop and closes it. That also stops
-//! the press reaching whatever is underneath, which a click-away should.
+//! A real dropdown closes when you click away from it. Focus leaving the
+//! picker is that gesture, and it costs nothing that a backdrop would have
+//! given: Escape and tabbing away close it too, which a backdrop never did.
 
 use dioxus::prelude::*;
 
@@ -93,6 +102,21 @@ pub fn Picker(
     rsx! {
         div {
             style: "position: relative; display: inline-flex; flex-shrink: 0; {width_rule}",
+            // Click-away, without a backdrop.
+            //
+            // The obvious implementation is a fixed full-viewport layer behind
+            // the list, and Blitz does not support `position: fixed` at all —
+            // an absolute box positions against its immediate parent, so there
+            // is no way to cover the window from in here. Focus leaving the
+            // picker is the same gesture by another route, and it also closes
+            // on Escape and on tabbing away, which a backdrop never did.
+            tabindex: "-1",
+            onfocusout: move |_| open.set(false),
+            onkeydown: move |e: KeyboardEvent| {
+                if e.key() == Key::Escape {
+                    open.set(false);
+                }
+            },
             button {
                 style: "width: 100%; display: flex; align-items: center; gap: 3px; \
                         appearance: none; box-sizing: border-box; \
@@ -113,7 +137,8 @@ pub fn Picker(
                     }
                 },
                 span {
-                    style: "flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                    // No `text-overflow` on Blitz — a long name clips.
+                    style: "flex: 1 1 auto; overflow: hidden; white-space: nowrap;",
                     "{current}"
                 }
                 if interactive {
@@ -122,20 +147,9 @@ pub fn Picker(
             }
 
             if open() {
-                // Behind the list, in front of everything else: a press that
-                // misses an option closes the picker instead of reaching the
-                // control underneath.
-                div {
-                    style: "position: fixed; inset: 0; z-index: 90;",
-                    onpointerdown: move |e: PointerEvent| e.stop_propagation(),
-                    onclick: move |e: MouseEvent| {
-                        e.stop_propagation();
-                        open.set(false);
-                    },
-                }
                 div {
                     style: "position: absolute; top: calc(100% + 2px); left: 0; z-index: 91; \
-                            min-width: 100%; max-height: 240px; overflow-y: auto; \
+                            min-width: 100%; \
                             display: flex; flex-direction: column; \
                             border: 1px solid #3f3f46; border-radius: 4px; \
                             background-color: #131317; \

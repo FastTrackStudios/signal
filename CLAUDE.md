@@ -228,6 +228,23 @@ pipeline: `nice-plug-dioxus` → Blitz (Vello + wgpu) → baseview:
 - Root `App` components take no props (context via `use_context_provider`)
   so the same component works standalone and as a plugin editor.
 
+**CSS Blitz does not support** — the desktop app renders on Blitz/Vello
+(`dioxus_native::launch_cfg`), not a WebView, so the browser's CSS is not
+the target. Current status: <https://blitz.is/status/css>. The ones that
+bite this repo, with what to write instead:
+
+| unsupported | instead |
+|---|---|
+| `position: fixed` (and `sticky`, `static`) | an absolute box positions against its *immediate parent*; for overlays, mount at the root and use `position: absolute; inset: 0` there, or close on `focusout` rather than covering the window |
+| `overflow: auto` (`overflow-y-auto`, …) | `overflow: hidden` renders; a scrollable pane needs its own solution, so cap what you put in one |
+| `text-overflow` / `truncate` | `overflow: hidden` clips |
+| CSS `fill:` / `stroke:` on SVG | SVG *presentation attributes* (`fill: "none"`, `stroke_width: "2"`) work — style geometry there, not in `style` |
+| `vertical-align`, `text-shadow`, `mix-blend-mode`, 3D transforms, multi-column, container queries, scroll-snap, custom cursors, `border-image` | no substitute; design without them |
+
+`filter: blur`/`drop-shadow` work on the vello backend only. A WebView
+escape hatch exists (`signal-desktop --features webview`) but nothing
+painted can mount under it — see the launch docs in `apps/desktop`.
+
 **Platform targets** — processing-core crates (`daw-audio-graph`,
 signal DSP cores in `features/fx/*-dsp`, sampler engine) must support
 native, WASM/AudioWorklet, and embedded `no_std`:
