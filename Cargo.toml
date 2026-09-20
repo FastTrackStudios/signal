@@ -91,7 +91,7 @@ fts-chrome = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3"
 # types, so a widget from eq-ui cannot be handed a handle built here. This
 # pointed at daw until 2026-09-19, when nothing used it: the entry was left
 # behind by the split, and the first crate to want it got the wrong one.
-fts-audio-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
+fts-audio-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.2" }
 fts-plug-ui = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
 dock-dioxus = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3", default-features = false }
 dock-proto = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
@@ -311,7 +311,8 @@ signal-synth-rig = { path = "features/rigs/synth/rig" }
 # the nice-plug/Blitz editor is behind its `native` feature.
 # The full Pro-Q EQ editor. Core (graph model / response / SVG / interaction)
 # is wasm-portable; the vello/nice-plug editor is behind its `native` feature.
-eq-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
+eq-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.2" }
+modulation-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.2" }
 # The comp plugin editor. Core (profile view data model) is portable; the
 # nice-plug/Blitz editor is behind its `native` feature.
 pitch-dsp = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
@@ -330,12 +331,12 @@ expression-editor-tools = { git = "https://github.com/FastTrackStudios/daw", tag
 expression-editor-ui = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
 level-dsp = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
 # Internal DSP cores (behind the facades).
-eq-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
-reverb-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
-pattern-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
+eq-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.2" }
+reverb-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.2" }
+pattern-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.2" }
 signal-analyzer = { path = "features/analyzer/signal-analyzer" }
 signal-separator = { path = "features/separator/signal-separator" }
-fx-blocks = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.1" }
+fx-blocks = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.2" }
 
 # ── Facet reflection + vox RPC — the rc.5 fleet pins ──────────────────
 facet = { version = "0.50.0-rc.5", features = ["reflect", "chrono", "uuid"] }
@@ -823,12 +824,12 @@ pipewire-sys = { git = "https://gitlab.freedesktop.org/pipewire/pipewire-rs.git"
 # Rebased branches are parked on the fork at fts-focus-2026-08 (onto
 # main) and fts-focus-2026-08b (onto db12391a, the last commit with
 # the `incremental` feature) so the rebase does not have to be redone.
-blitz-dom = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
-blitz-traits = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
-blitz-paint = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
-blitz-shell = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
-blitz-net = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
-blitz-html = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
+blitz-dom = { git = "https://github.com/FastTrackStudios/blitz", rev = "58e9e9d50d268e4443f5a559cd05651a55e05233" }
+blitz-traits = { git = "https://github.com/FastTrackStudios/blitz", rev = "58e9e9d50d268e4443f5a559cd05651a55e05233" }
+blitz-paint = { git = "https://github.com/FastTrackStudios/blitz", rev = "58e9e9d50d268e4443f5a559cd05651a55e05233" }
+blitz-shell = { git = "https://github.com/FastTrackStudios/blitz", rev = "58e9e9d50d268e4443f5a559cd05651a55e05233" }
+blitz-net = { git = "https://github.com/FastTrackStudios/blitz", rev = "58e9e9d50d268e4443f5a559cd05651a55e05233" }
+blitz-html = { git = "https://github.com/FastTrackStudios/blitz", rev = "58e9e9d50d268e4443f5a559cd05651a55e05233" }
 # Vendored one-line fix: quote scalars containing `<`/`>` — upstream
 # (facet-rs/facet) styx-format emits them bare but styx-parse rejects
 # them, so serialized keybind configs (`keys "<C-s>"`) could not be

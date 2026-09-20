@@ -270,7 +270,12 @@ fn window_placement() -> WindowPlacement {
 fn launch_app() {
     use dioxus_native::{Config, LogicalSize, WindowAttributes, launch_cfg};
     let (pos, size, fullscreen) = window_placement();
-    let (w, h) = size.unwrap_or((1280.0, 820.0));
+    // 2560x1440 by default. The rig's control surface is a wall of panels —
+    // the drive board, three module panels, the time section, the footswitch
+    // grid — and at 1280 they are all legible and none of them is usable.
+    // `FTS_WINDOW_SIZE=WxH` still wins, and the window is resizable; this is
+    // only where it starts.
+    let (w, h) = size.unwrap_or((2560.0, 1440.0));
     let mut window = WindowAttributes::default()
         .with_title("FastTrackStudio")
         .with_decorations(false)
@@ -313,7 +318,7 @@ fn launch_app() {
         .with_decorations(false)
         .with_inner_size(match size {
             Some((w, h)) => LogicalSize::new(w, h),
-            None => LogicalSize::new(1280.0, 820.0),
+            None => LogicalSize::new(2560.0, 1440.0),
         })
         .with_min_inner_size(LogicalSize::new(720.0, 480.0));
     if let Some((x, y)) = pos {

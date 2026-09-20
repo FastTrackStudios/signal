@@ -75,6 +75,7 @@ architect = { workspace = true, features = ["atom", "vox", "platform"] }
 # arrow runs the other way, and the remote talks over a wire, not a link);
 # for a picture the two have to meet, and an example is where they can.
 [features]
+default = ["eq-vello"]
 # Mount the EQ plugin's own vello editor instead of the portable SVG
 # re-host (`eq_vello` vs `eq_surface`).
 #

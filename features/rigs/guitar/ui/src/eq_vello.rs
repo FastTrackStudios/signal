@@ -31,7 +31,7 @@
 //! wire for nothing.
 
 use dioxus::prelude::*;
-use eq_ui::eq_graph::EqGraph;
+use eq_ui::eq_graph::{AnalyzerSnapshot, EqGraph};
 use eq_ui::eq_graph_model::EqBand;
 use signal_guitar_proto::LiveBlock;
 use signal_guitar_proto::rig::RigClient;
@@ -85,7 +85,17 @@ pub fn EqVelloSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
             bands,
             db_range: db_range(),
             on_db_range_change: move |r: f64| db_range.set(r),
+            // Both, and they are not the same thing. `spectrum_db` is the
+            // graph's GAIN curve — it is clamped to ±db_range and drawn
+            // against the boost/cut axis, so a −90..0 dBFS level curve
+            // flattens onto the floor and vanishes. The analyzer snapshot is
+            // the LEVEL axis (0 dB at the top of the panel, 90 dB down), which
+            // is what the rig's tap actually is. The glow shader reads
+            // `spectrum_db` directly and wants the raw dBFS, so it is still
+            // fed; the vector pass prefers the snapshot and so draws neither
+            // twice.
             spectrum_db: (!spectrum.is_empty()).then(|| spectrum.clone()),
+            analyzer_snapshot: analyzer_of(&spectrum),
             // The rig's EQ sits in a chain; the mix-EQ teaching furniture is
             // authored for the plugin's own window and its words do not apply
             // to a hundred-pixel-tall panel in a guitar rack.
@@ -129,6 +139,34 @@ pub fn EqVelloSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
             },
         }
     }
+}
+
+/// The rig's spectrum event, as the graph's analyser.
+///
+/// `RigEvent::Spectrum` is documented as dB magnitudes over log-spaced bins
+/// from 20 Hz to 20 kHz, so the frequency of bin `i` is recoverable — the wire
+/// carries the levels and the contract carries the axis. Giving the graph the
+/// frequencies explicitly is what lets it draw against its own log scale
+/// rather than stretching the array across the panel.
+///
+/// Fed as `pre_db`: the rig taps its input, which is ahead of this EQ.
+fn analyzer_of(spectrum: &[f32]) -> Option<AnalyzerSnapshot> {
+    if spectrum.len() < 2 {
+        return None;
+    }
+    let last = (spectrum.len() - 1) as f32;
+    let freq_hz = (0..spectrum.len())
+        .map(|i| 20.0 * 1000f32.powf(i as f32 / last))
+        .collect();
+    Some(AnalyzerSnapshot {
+        freq_hz,
+        pre_db: spectrum.to_vec(),
+        // 90 dB of level, 0 dBFS at the top of the panel — the floor the rig
+        // clamps to, so a silent input sits on the bottom edge rather than
+        // somewhere arbitrary inside the graph.
+        range_db: 90.0,
+        ..AnalyzerSnapshot::default()
+    })
 }
 
 /// Which of a band's wire fields differ from what the rig last reported.

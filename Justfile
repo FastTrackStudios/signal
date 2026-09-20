@@ -166,6 +166,18 @@ guitar-design *ARGS:
 
 alias gd := guitar-design
 
+# A picture of the rig as it is ACTUALLY running, shaders and all.
+#
+#   just guitar-grab                    rig-live.png
+#   just guitar-grab /tmp/eq.png 2560   refuse anything but a 2560px-wide window
+#
+# Unlike `guitar-shot` this needs a rig on screen, because that is the point:
+# the headless renderer hands out no GPU device, so it can only ever draw the
+# vector fallback. KWin raises the rig and captures that window alone — never
+# the rest of the screen.
+guitar-grab OUT="rig-live.png" EXPECT_W="":
+    ./scripts/rig-grab.sh {{OUT}} {{EXPECT_W}}
+
 # The rig UI rendered to a PNG — no window, no compositor, no device.
 #
 #   just guitar-shot                    rig.png at 1600x1000
