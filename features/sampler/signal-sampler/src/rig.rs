@@ -1209,6 +1209,16 @@ struct ResidentChain {
     /// live-rig layer address a running block by id (snapshot / per-block
     /// bypass / per-block param). Defaults to the block's file stem.
     block_ids: Vec<String>,
+    /// Which slots must be re-prepared when this chain is armed, parallel to
+    /// `boxes` — the ones holding time-based state.
+    ///
+    /// Arming used to re-prepare every slot, which is how a switch came to
+    /// cost 40 ms: three NAM blocks at ~9.7 ms each rebuild their networks,
+    /// and a neural amp has no tail to clear. Preparing exists to stop a
+    /// delay line or reverb tail from the chain's last activation dumping out
+    /// as a burst on the switch, so it is the time blocks — ~0.5 ms each — that
+    /// need it and nothing else.
+    prepare_on_arm: Vec<bool>,
 }
 
 /// Mutable swap state shared behind a [`Mutex`] so the patch-switch surface
@@ -1483,6 +1493,8 @@ impl GuitarRig {
         let mut boxes: Vec<Option<Box<dyn PluginInstance>>> = Vec::with_capacity(blocks.len());
         let mut names = Vec::with_capacity(blocks.len());
         let mut ids = Vec::with_capacity(blocks.len());
+        // Which slots hold a tail that must be cleared when the chain is armed.
+        let mut prepare_on_arm = Vec::with_capacity(blocks.len());
         let mut primary_loudness = None;
         let mut primary_expected_sr = None;
         let mut primary_input_level_dbu = None;
@@ -1507,6 +1519,7 @@ impl GuitarRig {
                     .cloned()
                     .unwrap_or_else(|| default_block_id(b.asset_path())),
             );
+            prepare_on_arm.push(b.is_time_fx());
             boxes.push(Some(built.boxed));
         }
 
@@ -1532,6 +1545,7 @@ impl GuitarRig {
                     info,
                     boxes,
                     block_ids: ids,
+                    prepare_on_arm,
                 },
             );
         Ok(id)
@@ -1579,60 +1593,131 @@ impl GuitarRig {
         let chain_guids = &self.slot_guids[1..]; // slot 0 is the input probe
         let sr = self.sample_rate as f64;
         let bypass = swap.bypass;
+        let known = id.filter(|i| swap.chains.contains_key(i));
+        let arming = known.filter(|_| !bypass);
 
-        // Clear any per-block bypass (daw `fx_enabled`) from the previous patch:
-        // re-enable every chain slot so a new chain starts with all blocks live.
-        // (Per-block bypass via `set_block_slot_bypass` flips these flags; they
-        // must not leak across a patch switch.)
+        // Re-arming the chain that is already live is the one case that cannot
+        // be prepared ahead: its boxes are in the engine, not in the resident
+        // map, so there is nothing to prepare until they have been taken back.
+        // Handled first, on its own, so the common case — switching to a
+        // *different* patch — stays a single pass.
+        if swap.active.is_some() && swap.active == arming {
+            self.reclaim_active(&mut swap, chain_guids, sr);
+        }
+
+        // ── Phase 1: allocate and prepare, touching nothing the audio thread
+        // can see.
+        //
+        // `prepare` is where a switch spends its time — a reverb sizes its
+        // delay lines, a NAM resets its network — and all of it used to happen
+        // *between* the first slot being swapped and the last. That window is
+        // one where the graph runs half of one patch and half of another,
+        // which is what a player hears as a switch that is neither instant nor
+        // clean. Nothing here is visible to the renderer, so it can take as
+        // long as it takes.
+
+        // Identities to leave behind in the outgoing chain's slots.
+        let mut reclaim_fill: Vec<Option<Box<dyn PluginInstance>>> = if swap.active.is_some() {
+            chain_guids
+                .iter()
+                .map(|_| Some(Self::fresh_identity(sr)))
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        // The incoming boxes, re-prepared: this clears delay lines and reverb
+        // tails left from this chain's last activation, which would otherwise
+        // dump out as a burst on the switch.
+        let incoming: Vec<Box<dyn PluginInstance>> = match arming {
+            Some(cid) => {
+                let chain = swap.chains.get_mut(&cid).expect("checked contains_key");
+                (0..chain_guids.len())
+                    .map(|slot| {
+                        let mut new_box = match chain.boxes.get_mut(slot) {
+                            Some(slot_box) if slot_box.is_some() => {
+                                slot_box.take().expect("checked is_some")
+                            }
+                            _ => Self::fresh_identity(sr),
+                        };
+                        // Only where a tail could survive; see `prepare_on_arm`.
+                        if chain.prepare_on_arm.get(slot).copied().unwrap_or(true) {
+                            let _ = new_box.prepare(sr, FX_PREPARE_BLOCK);
+                        }
+                        new_box
+                    })
+                    .collect()
+            }
+            // Bypassed, or an id the rig does not hold: clean passthrough.
+            None => chain_guids.iter().map(|_| Self::fresh_identity(sr)).collect(),
+        };
+
+        // ── Phase 2: the swap. Engine mutations only, back to back. ──
+
+        // Clear any per-block bypass (daw `fx_enabled`) from the previous
+        // patch: re-enable every chain slot so a new chain starts with all
+        // blocks live. (Per-block bypass via `set_block_slot_bypass` flips
+        // these flags; they must not leak across a patch switch.)
         let fx_ctx = FxChainContext::track(self.track_guid.clone());
         for slot in 1..self.slot_guids.len() {
             let _ =
                 <Standalone as FxChains>::set_enabled(&self.daw, fx_ctx.clone(), slot as u32, true);
         }
 
-        // 1. Reclaim the previously-active chain's boxes back into the resident
-        //    map so it can be re-armed (replace each live box with an identity).
+        // Reclaim the outgoing chain's boxes back into the resident map so it
+        // can be re-armed later.
         if let Some(prev) = swap.active.take() {
             if let Some(chain) = swap.chains.get_mut(&prev) {
                 for (slot, guid) in chain_guids.iter().enumerate() {
                     if slot < chain.boxes.len() {
-                        let reclaimed = self
-                            .daw
-                            .insert_plugin_instance(guid.clone(), Self::fresh_identity(sr));
-                        chain.boxes[slot] = reclaimed;
+                        let Some(fill) = reclaim_fill.get_mut(slot).and_then(Option::take) else {
+                            continue;
+                        };
+                        chain.boxes[slot] = self.daw.insert_plugin_instance(guid.clone(), fill);
                     }
                 }
             }
         }
 
-        // 2. Arm the requested chain — unless bypassed, or the id is unknown.
-        let known = id.filter(|i| swap.chains.contains_key(i));
-        if let Some(cid) = known.filter(|_| !bypass) {
-            let chain = swap.chains.get_mut(&cid).expect("checked contains_key");
-            for (slot, guid) in chain_guids.iter().enumerate() {
-                let mut new_box: Box<dyn PluginInstance> = match chain.boxes.get_mut(slot) {
-                    Some(slot_box) if slot_box.is_some() => slot_box.take().unwrap(),
-                    _ => Self::fresh_identity(sr),
-                };
-                // Re-prepare on arm: clears delay lines and reverb tails
-                // left from this chain's last activation — otherwise the
-                // stale tail dumps out as a burst on the patch switch.
-                // (Control thread, not the audio callback.)
-                let _ = new_box.prepare(sr, FX_PREPARE_BLOCK);
-                drop(self.daw.insert_plugin_instance(guid.clone(), new_box));
-            }
-            swap.active = Some(cid);
-        } else {
-            for guid in chain_guids {
-                drop(
-                    self.daw
-                        .insert_plugin_instance(guid.clone(), Self::fresh_identity(sr)),
-                );
-            }
+
+        // Arm.
+        for (guid, new_box) in chain_guids.iter().zip(incoming) {
+            drop(self.daw.insert_plugin_instance(guid.clone(), new_box));
+        }
+
+        swap.active = match arming {
+            Some(cid) => Some(cid),
             // When bypassed, remember the requested (known) id so toggling
             // bypass off re-arms it; otherwise we're cleanly passthrough.
-            swap.active = if bypass { known } else { None };
+            None if bypass => known,
+            None => None,
+        };
+    }
+
+    /// Take the live chain's boxes out of the engine and back into the
+    /// resident map, leaving identities in their place.
+    ///
+    /// Only needed when re-arming the chain that is already active — every
+    /// other path reclaims as part of the swap itself.
+    fn reclaim_active(
+        &self,
+        swap: &mut std::sync::MutexGuard<'_, SwapState>,
+        chain_guids: &[String],
+        sr: f64,
+    ) {
+        let Some(prev) = swap.active.take() else {
+            return;
+        };
+        if let Some(chain) = swap.chains.get_mut(&prev) {
+            for (slot, guid) in chain_guids.iter().enumerate() {
+                if slot < chain.boxes.len() {
+                    chain.boxes[slot] = self
+                        .daw
+                        .insert_plugin_instance(guid.clone(), Self::fresh_identity(sr));
+                }
+            }
         }
+        swap.active = Some(prev);
     }
 
     fn fresh_identity(sr: f64) -> Box<dyn PluginInstance> {

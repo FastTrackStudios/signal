@@ -74,6 +74,17 @@ pub fn di_reference_path() -> PathBuf {
     calibration_dir().join("di-reference.wav")
 }
 
+/// The DI reference, by sample rate — see [`DiReference::load_or_synthetic`].
+///
+/// Keyed on the rate's bits because `f64` is not `Hash`; the rate is a
+/// negotiated device rate, so it takes a handful of distinct values at most.
+fn di_memo() -> &'static std::sync::Mutex<std::collections::HashMap<u64, DiReference>> {
+    static MEMO: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<u64, DiReference>>,
+    > = std::sync::OnceLock::new();
+    MEMO.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
 /// A mono DI signal used to excite every model identically.
 #[derive(Clone, Debug)]
 pub struct DiReference {
@@ -117,8 +128,23 @@ impl DiReference {
     /// Load the configured DI, or synthesise a deterministic fallback pluck.
     #[must_use]
     pub fn load_or_synthetic(target_sr: f64) -> Self {
+        // Remembered per sample rate, because a patch switch asks for this once
+        // per drive, boost and amp block — and each ask either re-reads the DI
+        // wav or regenerates ~1.8 s of synthetic guitar. All any of them needs
+        // is [`id`](Self::id), to look up a measurement that is already cached.
+        //
+        // Cleared by `install_di_reference`, which is the only thing that can
+        // change what this answers.
+        if let Some(hit) = di_memo()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&target_sr.to_bits())
+        {
+            return hit.clone();
+        }
+
         let path = di_reference_path();
-        match Self::load(&path, target_sr) {
+        let di = match Self::load(&path, target_sr) {
             Ok(di) => {
                 tracing::info!(path = %path.display(), id = %di.id, "NAM calibration: using DI reference");
                 di
@@ -129,7 +155,12 @@ impl DiReference {
                 }
                 Self::synthetic(target_sr)
             }
-        }
+        };
+        di_memo()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(target_sr.to_bits(), di.clone());
+        di
     }
 
     /// A deterministic ~1.8 s synthetic DI: a sequence of plucked notes across
@@ -173,10 +204,46 @@ impl DiReference {
 ///
 /// Returns `Err` if the file cannot be read.
 pub fn hash_file(path: &Path) -> Result<String, String> {
+    // Remembered by identity-on-disk, because this is on the patch-switch path.
+    //
+    // Every drive, boost and amp block asks for its capture's hash when a
+    // patch is recalled, to find that capture's calibration. Hashing is how a
+    // capture is identified at all — a library reorganised on disk keeps its
+    // measurements — but re-reading and re-digesting megabytes of model per
+    // block per switch cost more than everything else the switch did.
+    //
+    // Keyed on size and mtime as well as the path, so a capture that is
+    // replaced in place is re-hashed rather than silently keeping the old
+    // measurement.
+    type HashCache = std::collections::HashMap<(std::path::PathBuf, u64, i64), String>;
+    static SEEN: std::sync::Mutex<Option<HashCache>> = std::sync::Mutex::new(None);
+
+    let stamp = std::fs::metadata(path).ok().map(|m| {
+        let mtime = m
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_nanos() as i64);
+        (path.to_path_buf(), m.len(), mtime)
+    });
+
+    if let Some(key) = &stamp {
+        let cache = SEEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(hit) = cache.as_ref().and_then(|c| c.get(key)) {
+            return Ok(hit.clone());
+        }
+    }
+
     let bytes = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let mut h = Sha256::new();
     h.update(&bytes);
-    Ok(hex(&h.finalize()))
+    let digest = hex(&h.finalize());
+
+    if let Some(key) = stamp {
+        let mut cache = SEEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        cache.get_or_insert_with(HashCache::default).insert(key, digest.clone());
+    }
+    Ok(digest)
 }
 
 fn hash_samples(samples: &[f64]) -> String {
@@ -708,7 +775,12 @@ pub fn install_di_reference(samples: &[f32], sample_rate: u32) -> Result<(), Str
         writer.write_sample(*s).map_err(|e| e.to_string())?;
     }
     writer.finalize().map_err(|e| e.to_string())?;
-    // Invalidate everything measured against the old DI.
+    // Invalidate everything measured against the old DI — including the memo
+    // of the DI itself, which is now a different signal with a different id.
+    di_memo()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clear();
     let _ = std::fs::remove_file(dir.join("loudness-cache.styx"));
     let _ = std::fs::remove_file(DriveCurveCache::path());
     *drive_cache()
