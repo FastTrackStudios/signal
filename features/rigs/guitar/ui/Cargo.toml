@@ -52,6 +52,11 @@ blitz-dom = { workspace = true, features = ["custom-widget"] }
 blitz-traits.workspace = true
 dioxus-native-dom.workspace = true
 vello.workspace = true
+# The shader path: a WGSL fragment shader rendered into a texture vello
+# composites. See `shader.rs` for why this is optional at runtime rather
+# than at build time.
+wgpu.workspace = true
+bytemuck = { version = "1", features = ["derive"] }
 fts-audio-ui.workspace = true
 # BlockType — chain-strip coloring.
 signal-proto.workspace = true
@@ -81,6 +86,10 @@ architect = { workspace = true, features = ["atom", "vox", "platform"] }
 eq-vello = ["eq-ui/graph"]
 
 [dev-dependencies]
+# Validate the WGSL without a GPU. The screenshot tool cannot run the shader
+# path — `VelloImageRenderer` has no device to give — so nothing else in the
+# tree would catch a shader that does not compile until someone ran the app.
+naga = { version = "29", features = ["wgsl-in"] }
 signal-guitar.workspace = true
 # `local` — the in-process server the shot establishes against.
 architect = { workspace = true, features = ["atom", "vox", "platform", "local"] }

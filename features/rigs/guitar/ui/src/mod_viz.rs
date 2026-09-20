@@ -77,10 +77,18 @@ pub struct ModView {
 
 pub type Shared<T> = Rc<RefCell<T>>;
 
-/// The engine, painted.
+/// The WGSL the shader path runs. See `mod_shader.wgsl`.
+const MOD_SHADER: &str = include_str!("mod_shader.wgsl");
+
+/// The engine, painted — on the GPU where there is one, in vectors where
+/// there is not.
 pub struct ModWidget {
     view: Shared<ModView>,
     born: std::time::Instant,
+    /// Built once, from whatever `can_create_surfaces` hands over. `None` on a
+    /// renderer with no device to give, which is not an error: the vector
+    /// painter below draws the same engines.
+    gpu: Option<crate::shader::ShaderSurface>,
 }
 
 impl ModWidget {
@@ -89,11 +97,18 @@ impl ModWidget {
         Self {
             view,
             born: std::time::Instant::now(),
+            gpu: None,
         }
     }
 }
 
 impl Widget for ModWidget {
+    fn can_create_surfaces(&mut self, render_ctx: &mut dyn RenderContext) {
+        self.gpu = render_ctx
+            .renderer_specific_context()
+            .and_then(|ctx| crate::shader::ShaderSurface::new(ctx, MOD_SHADER));
+    }
+
     fn paint(
         &mut self,
         _render_ctx: &mut dyn RenderContext,
@@ -109,8 +124,48 @@ impl Widget for ModWidget {
         }
         let mut view = self.view.borrow().clone();
         view.time = self.born.elapsed().as_secs_f32();
+
+        // The shader, if the renderer will take its texture this frame. It
+        // may decline for reasons that change frame to frame — a surface that
+        // is not up yet — so this is asked every time rather than decided
+        // once.
+        if let Some(gpu) = self.gpu.as_mut() {
+            let [r, g, b] = view.color;
+            let uniforms = crate::shader::Uniforms {
+                frame: [w as f32, h as f32, view.time, engine_index(view.engine)],
+                params: [
+                    view.rate,
+                    view.depth,
+                    view.mix,
+                    if view.on { 1.0 } else { 0.0 },
+                ],
+                color: [
+                    f32::from(r) / 255.0,
+                    f32::from(g) / 255.0,
+                    f32::from(b) / 255.0,
+                    1.0,
+                ],
+            };
+            if gpu.draw(_render_ctx, &mut scene, width, height, uniforms) {
+                return scene;
+            }
+        }
+
         paint_mod(&mut scene, &view, w, h);
         scene
+    }
+}
+
+/// The engine, as the shader's `u.frame.w`. The order is the shader's
+/// constants; the two must agree, so they are written next to each other.
+fn engine_index(engine: Engine) -> f32 {
+    match engine {
+        Engine::Chorus => 0.0,
+        Engine::Flanger => 1.0,
+        Engine::Phaser => 2.0,
+        Engine::Tremolo => 3.0,
+        Engine::Vibrato => 4.0,
+        Engine::Rotary => 5.0,
     }
 }
 
@@ -480,6 +535,61 @@ mod tests {
             v.depth = 0.0;
             let mut scene = Scene::new();
             paint_mod(&mut scene, &v, 200.0, 60.0);
+        }
+    }
+
+    /// The shader compiles.
+    ///
+    /// Nothing else in the tree would notice if it did not: the screenshot
+    /// tool cannot run the shader path at all — `VelloImageRenderer` hands out
+    /// no device, so the vector fallback is what it always draws — and the
+    /// window would simply show the fallback too, silently, because a
+    /// `ShaderSurface` that fails to build is indistinguishable from a
+    /// renderer that declined. This is the only thing standing between a typo
+    /// and a feature that quietly never runs.
+    #[test]
+    fn the_shader_compiles_and_validates() {
+        let source = format!("{}\n{}", crate::shader::PRELUDE, MOD_SHADER);
+        let module = naga::front::wgsl::parse_str(&source)
+            .unwrap_or_else(|e| panic!("the shader does not parse: {}", e.emit_to_string(&source)));
+        let mut validator = naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::empty(),
+        );
+        if let Err(e) = validator.validate(&module) {
+            panic!("the shader does not validate: {e:?}");
+        }
+    }
+
+    /// The engine indices the shader branches on match the order its
+    /// constants declare. They are two halves of one switch written in two
+    /// languages, and nothing but this checks that they agree.
+    #[test]
+    fn the_shader_and_rust_agree_on_engine_order() {
+        let wgsl = include_str!("mod_shader.wgsl");
+        for (engine, name) in [
+            (Engine::Chorus, "CHORUS"),
+            (Engine::Flanger, "FLANGER"),
+            (Engine::Phaser, "PHASER"),
+            (Engine::Tremolo, "TREMOLO"),
+            (Engine::Vibrato, "VIBRATO"),
+            (Engine::Rotary, "ROTARY"),
+        ] {
+            let want = format!("const {name}:");
+            let line = wgsl
+                .lines()
+                .find(|l| l.trim_start().starts_with(&want))
+                .unwrap_or_else(|| panic!("{name} is not declared in the shader"));
+            let value: f32 = line
+                .rsplit('=')
+                .next()
+                .and_then(|v| v.trim().trim_end_matches(';').parse().ok())
+                .unwrap_or_else(|| panic!("{name} has no numeric value: {line}"));
+            assert!(
+                (value - engine_index(engine)).abs() < f32::EPSILON,
+                "{name} is {value} in the shader and {} in rust",
+                engine_index(engine)
+            );
         }
     }
 
