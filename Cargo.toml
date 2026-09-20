@@ -91,7 +91,7 @@ fts-chrome = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3"
 # types, so a widget from eq-ui cannot be handed a handle built here. This
 # pointed at daw until 2026-09-19, when nothing used it: the entry was left
 # behind by the split, and the first crate to want it got the wrong one.
-fts-audio-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.10" }
+fts-audio-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.11" }
 fts-plug-ui = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
 dock-dioxus = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3", default-features = false }
 dock-proto = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
@@ -311,12 +311,12 @@ signal-synth-rig = { path = "features/rigs/synth/rig" }
 # the nice-plug/Blitz editor is behind its `native` feature.
 # The full Pro-Q EQ editor. Core (graph model / response / SVG / interaction)
 # is wasm-portable; the vello/nice-plug editor is behind its `native` feature.
-eq-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.10" }
-modulation-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.10" }
+eq-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.11" }
+modulation-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.11" }
 # The rest of the visualisers, each from the effect that owns it.
-delay-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.10" }
-reverb-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.10" }
-comp-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.10" }
+delay-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.11" }
+reverb-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.11" }
+comp-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.11" }
 # The comp plugin editor. Core (profile view data model) is portable; the
 # nice-plug/Blitz editor is behind its `native` feature.
 pitch-dsp = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
@@ -335,12 +335,12 @@ expression-editor-tools = { git = "https://github.com/FastTrackStudios/daw", tag
 expression-editor-ui = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
 level-dsp = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.6.3" }
 # Internal DSP cores (behind the facades).
-eq-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.10" }
-reverb-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.10" }
-pattern-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.10" }
+eq-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.11" }
+reverb-dsp = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.11" }
+pattern-ui = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.11" }
 signal-analyzer = { path = "features/analyzer/signal-analyzer" }
 signal-separator = { path = "features/separator/signal-separator" }
-fx-blocks = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.10" }
+fx-blocks = { git = "https://github.com/FastTrackStudios/processor", tag = "v0.2.11" }
 
 # ── Facet reflection + vox RPC — the rc.5 fleet pins ──────────────────
 facet = { version = "0.50.0-rc.5", features = ["reflect", "chrono", "uuid"] }
