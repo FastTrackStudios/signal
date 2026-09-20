@@ -258,17 +258,22 @@ pub fn GuitarRigRemote() -> Element {
     });
 
     rsx! {
+        // Every `fts_audio_ui` widget in the rig — the EQ's band popup and its
+        // knobs among them — reads a `DragState` from context, and without it
+        // the first one built panics with "Could not find context" and leaves
+        // a half-constructed DOM that takes the window down a frame later with
+        // an unrelated-looking unwrap deep in blitz. The plugin wraps its
+        // editor root in this; the rig never did.
+        //
+        // At the ROOT, not around the EQ: the provider's own element is
+        // `100vw x 100vh`, which is the truth here and nonsense inside a
+        // panel — put around the graph it sized the graph to the window.
+        // It also has to span everything for a drag to end where it ends,
+        // since mouseup is captured here.
+        fts_audio_ui::drag::DragProvider {
         div {
             class: "flex flex-col h-full bg-background text-foreground outline-none",
             tabindex: "0",
-            // Grab focus so Cmd/Ctrl+P works before any click.
-            //
-            // Declaratively, not from a task in `onmounted`: a task runs
-            // inside the render pass, which is holding the document, so
-            // asking the renderer to move focus from there is a re-entrant
-            // borrow. Blitz honours `autofocus` itself, at a moment when it
-            // is safe to.
-            autofocus: true,
             // Cmd/Ctrl+P: the command palette. Everything else: the
             // keymap (keymap.styx) — "ctrl+1" strings → rig actions.
             onkeydown: {
@@ -689,6 +694,7 @@ pub fn GuitarRigRemote() -> Element {
                     on_close: move |()| audio_open.set(false),
                 }
             }
+        }
         }
     }
 }
