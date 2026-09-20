@@ -1431,7 +1431,10 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
             div { class: "flex flex-col gap-1 flex-1 min-w-0 min-h-0",
                 // Main modules, in signal order: Compressor → Gate → Amp EQ,
                 // with the time section (Delay | Reverb) docked flush beneath.
-                div { class: "flex flex-col gap-0 min-h-0",
+                // Grows, so the rows below it have a height to divide. Left
+                // content-sized, a `flex` weight on a child has nothing to
+                // take a share OF and collapses to its basis — which is zero.
+                div { class: "flex flex-col gap-0 min-h-0", style: "flex: 1 1 0%;",
                     // ── The drive board: 4 drives + 2 amps, one sliver each.
                     // The whole chunk is the drive-level fader. ──
                     div { class: "flex gap-0 flex-shrink-0", style: "height: 34px;",
@@ -1465,7 +1468,17 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                             amp_style: true,
                         }
                     }
-                    div { class: "flex gap-0 min-h-0 w-full", style: "aspect-ratio: 25 / 9; max-height: 56%;",
+                    // Height from the column, not from an aspect ratio.
+                    //
+                    // This row asked for `aspect-ratio: 25 / 9` to get its
+                    // height from its width. Blitz resolves it the other way —
+                    // the row took its *width* from its height and came out
+                    // 1060px inside a 1285px column, which is what made the EQ
+                    // look half-drawn with its ruler hanging off the end. A
+                    // flex weight against the time row below gives the same
+                    // proportion without the ambiguity, and the compressor's
+                    // `aspect-square` still takes its width from the height.
+                    div { class: "flex gap-0 min-h-0 w-full", style: "flex: 3 1 0%; min-height: 0;",
                         // Height-driven square: width follows the row height.
                         div { class: "min-h-0 h-full aspect-square flex flex-col flex-shrink-0",
                             ZoomPanel { title: "Compressor".to_string(),
@@ -1510,7 +1523,7 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         }
                     }
                     // Time section: stereo delay + stereo reverb + modulation.
-                    div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 150px;",
+                    div { class: "flex gap-0 min-h-0 w-full", style: "flex: 2 1 0%; min-height: 150px;",
                         div { class: "min-h-0 h-full flex flex-col gap-0", style: "flex: 1 1 0%;",
                             ZoomPanel { title: "Modulation".to_string(),
                                 ModGroupPanel {

@@ -164,7 +164,10 @@ fn Shot() -> Element {
             {"html,body{margin:0;padding:0;height:100%;background:#0a0a0a;overflow:hidden;}*{box-sizing:border-box;}"}
         }
         style { {SIGNAL_TAILWIND} }
-        div { style: "width: 100%; height: 100%;",
+        // Viewport units, not percentages: a percentage height needs a
+        // definite height on every ancestor, and in a headless document the
+        // chain above this is not one the app controls.
+        div { style: "width: 100vw; height: 100vh;",
             signal_guitar_ui::GuitarRigRemote {}
         }
     }
