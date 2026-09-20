@@ -39,6 +39,9 @@ eq-ui.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 eq-ui = { workspace = true }
+# The modulation visualisers, from the effect that owns them. Signal draws
+# processor's picture of a chorus rather than keeping a second one.
+modulation-ui = { workspace = true, features = ["viz"] }
 # The custom-widget surface: a painted scene composited into Blitz's own
 # paint pass. Native only — the dx-web build is a DOM renderer, which
 # cannot be handed an `Any` attribute at all (it panics), so the browser

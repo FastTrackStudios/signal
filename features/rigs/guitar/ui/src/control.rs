@@ -1394,6 +1394,26 @@ fn delay_lane(
     }
 }
 
+/// Which of the effect's engines a rig block is.
+///
+/// Signal's side of the join: `modulation-ui` owns the pictures and knows
+/// nothing about `BlockType`, which is the rig's vocabulary, not the
+/// effect's. Translating here is what keeps the visualiser reusable by the
+/// plugins, which have no block types at all.
+#[cfg(not(target_arch = "wasm32"))]
+fn engine_of(block_type: BlockType) -> Option<crate::mod_viz::Engine> {
+    use crate::mod_viz::Engine;
+    Some(match block_type {
+        BlockType::Chorus => Engine::Chorus,
+        BlockType::Flanger => Engine::Flanger,
+        BlockType::Phaser => Engine::Phaser,
+        BlockType::Trem => Engine::Tremolo,
+        BlockType::Vibrato => Engine::Vibrato,
+        BlockType::Rotary => Engine::Rotary,
+        _ => return None,
+    })
+}
+
 /// One modulation lane: the engine's own painted visualiser where a renderer
 /// can composite a scene, the generic LFO trace where it cannot.
 #[cfg(not(target_arch = "wasm32"))]
@@ -1406,7 +1426,7 @@ fn mod_lane(
     _d: &str,
     _stroke: &'static str,
 ) -> Element {
-    let Some(engine) = crate::mod_viz::Engine::of(cur.block_type) else {
+    let Some(engine) = engine_of(cur.block_type) else {
         return rsx! {};
     };
     let mix = param_v(cur, "mix", 0.5);
