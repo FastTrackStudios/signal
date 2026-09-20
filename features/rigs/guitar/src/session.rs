@@ -408,6 +408,25 @@ impl GuitarRigBackend {
         self.spawn_drive_calibration();
     }
 
+    /// Which pool preset the active patch points at — the amp, by name.
+    ///
+    /// An amp block carries no preset of its own: the patch names one from the
+    /// pool, and that is the tone in the amp slot. Anything that wants to show
+    /// or change "the current amp" goes through here, so the board and the
+    /// capture lookup cannot disagree about what is loaded.
+    fn active_pool_preset(&self, def: &crate::profiles::ProfileDef) -> Option<String> {
+        let active = {
+            let guard = self.rig.lock_ok();
+            guard
+                .as_ref()
+                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))?
+        };
+        def.patches
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&active))
+            .map(|p| p.preset.clone())
+    }
+
     /// The NAM capture behind a board block, if any: drive slots resolve
     /// through their drive preset; the amp resolves through the active
     /// patch's pool preset.
@@ -425,17 +444,7 @@ impl GuitarRigBackend {
                 .and_then(|p| p.options.get(slot.option).map(|o| o.nam.clone()));
         }
         if block_name.eq_ignore_ascii_case("Amp L") || block_name.eq_ignore_ascii_case("Amp R") {
-            let active = {
-                let guard = self.rig.lock_ok();
-                guard
-                    .as_ref()
-                    .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))?
-            };
-            let preset = def
-                .patches
-                .iter()
-                .find(|p| p.name.eq_ignore_ascii_case(&active))
-                .map(|p| p.preset.clone())?;
+            let preset = self.active_pool_preset(&def)?;
             return def
                 .presets
                 .iter()
@@ -1121,25 +1130,45 @@ impl GuitarRigBackend {
                         let block_overridden = !overrides.is_empty();
                         // Drive slots: surface the loaded drive preset and
                         // its NAM options for the board's quick switch.
+                        // Drive slots: surface the loaded drive preset and its
+                        // NAM options. Amps: the pool preset the active patch
+                        // points at, and the whole pool as the alternatives —
+                        // an amp block has no preset of its own, its identity
+                        // IS the patch's preset, so that is what the board
+                        // must name. Without this an amp chunk had an empty
+                        // preset and no options, which is why it could only
+                        // fall back to printing its slot name.
                         let (preset, options, option) = {
                             let def = self.profile_def.lock_ok();
-                            def.drives
+                            if let Some(d) = def
+                                .drives
                                 .iter()
                                 .find(|d| d.block.eq_ignore_ascii_case(&name))
-                                .and_then(|d| {
-                                    self.drive_presets
-                                        .lock_ok()
-                                        .iter()
-                                        .find(|p| p.name.eq_ignore_ascii_case(&d.preset))
-                                        .map(|p| {
-                                            (
-                                                p.name.clone(),
-                                                p.options.iter().map(|o| o.name.clone()).collect(),
-                                                d.option as u32,
-                                            )
-                                        })
-                                })
-                                .unwrap_or_default()
+                            {
+                                self.drive_presets
+                                    .lock_ok()
+                                    .iter()
+                                    .find(|p| p.name.eq_ignore_ascii_case(&d.preset))
+                                    .map(|p| {
+                                        (
+                                            p.name.clone(),
+                                            p.options.iter().map(|o| o.name.clone()).collect(),
+                                            d.option as u32,
+                                        )
+                                    })
+                                    .unwrap_or_default()
+                            } else if block.block_type == BlockType::Amp {
+                                let current = self.active_pool_preset(&def).unwrap_or_default();
+                                let pool: Vec<String> =
+                                    def.presets.iter().map(|p| p.name.clone()).collect();
+                                let index = pool
+                                    .iter()
+                                    .position(|p| p.eq_ignore_ascii_case(&current))
+                                    .unwrap_or(0) as u32;
+                                (current, pool, index)
+                            } else {
+                                <(String, Vec<String>, u32)>::default()
+                            }
                         };
                         out.push(LiveBlock {
                             id: id.clone(),
@@ -2206,6 +2235,32 @@ impl Rig for GuitarRigBackend {
             .find(|b| b.id == id)
             .map(|b| b.name.clone());
         let Some(block_name) = block_name else { return };
+
+        // An amp block has no option list of its own — its alternatives are
+        // the preset pool, and choosing one means repointing the patch. Same
+        // operation the preset browser performs, so it goes to the same place
+        // rather than growing a second way to load an amp.
+        if block_name.eq_ignore_ascii_case("Amp L") || block_name.eq_ignore_ascii_case("Amp R") {
+            let patch = {
+                let def = self.profile_def.lock_ok();
+                let guard = self.rig.lock_ok();
+                let Some(active) = guard
+                    .as_ref()
+                    .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+                else {
+                    return;
+                };
+                drop(guard);
+                def.patches
+                    .iter()
+                    .position(|p| p.name.eq_ignore_ascii_case(&active))
+            };
+            if let Some(patch) = patch {
+                self.set_patch_preset(patch as u32, option);
+            }
+            return;
+        }
+
         let rebuilt = {
             let mut def = self.profile_def.lock_ok();
             let Some(slot) = def

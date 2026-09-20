@@ -1383,14 +1383,23 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
         .iter()
         .find(|b| b.block_type == BlockType::Amp && b.name.eq_ignore_ascii_case("Amp L"))
         .cloned();
-    // The amp chunk shows the active patch's preset (the pool preset the
-    // patch points at), not the raw block name.
-    let amp_preset = model
-        .stacks
-        .iter()
-        .find(|st| st.is_active)
-        .map(|st| st.preset.clone())
+    // The amp chunk names the tone that is loaded, not the slot it sits in.
+    // The block's own preset is the authority — the session fills it from the
+    // active patch's pool preset — and the active stack is only a fallback for
+    // the moment before the first chain publish arrives. "Amp L" last, because
+    // a slot name tells a player nothing about what they are hearing.
+    let amp_preset = amp_l
+        .as_ref()
+        .map(|a| a.preset.clone())
         .filter(|p| !p.is_empty())
+        .or_else(|| {
+            model
+                .stacks
+                .iter()
+                .find(|st| st.is_active)
+                .map(|st| st.preset.clone())
+                .filter(|p| !p.is_empty())
+        })
         .unwrap_or_else(|| "Amp L".to_string());
     let comp = find_block(&blocks, BlockType::Compressor, "Compressor");
     let gate = find_block(&blocks, BlockType::Gate, "Gate");

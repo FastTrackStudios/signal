@@ -12,6 +12,7 @@ use dioxus::prelude::*;
 use signal_guitar_proto::AudioPrefs;
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::RigClient;
+use signal_widgets::Picker;
 
 use crate::perform::PerformGrid;
 use crate::settings::{AudioSettingsBridge, AudioSettingsModal};
@@ -160,6 +161,22 @@ pub fn GuitarRigRemote() -> Element {
             .cloned()
             .unwrap_or_else(|| "no patch".to_string()),
     };
+
+    // The amp, named in the header.
+    //
+    // It belongs here rather than only on the drive board because it is the
+    // single largest thing about how the rig sounds, and a 34px sliver among
+    // six is not where a player looks to answer "what amp am I on". The
+    // session fills the amp block's `preset` from the active patch's pool
+    // preset, so this is the loaded tone, not the slot's name.
+    let amp = blocks
+        .read()
+        .iter()
+        .find(|b| {
+            b.block_type == signal_proto::block::BlockType::Amp
+                && b.name.eq_ignore_ascii_case("Amp L")
+        })
+        .cloned();
 
     // The five rig controls, shared by the standalone Perform view and the
     // Edit view's bottom dock.
@@ -352,6 +369,39 @@ pub fn GuitarRigRemote() -> Element {
                     class: "flex items-center rounded-md px-2.5 py-1",
                     style: "background-color: {lens_bg}; color: {lens_fg};",
                     span { class: "text-xs font-bold tracking-wide whitespace-nowrap", "{lens_label}" }
+                }
+
+                // The amp — shown, and changeable where it is shown. Choosing
+                // one repoints the active patch at that pool preset, the same
+                // operation the preset browser performs.
+                if let Some(amp) = amp.clone() {
+                    div { class: "flex items-center gap-1.5 rounded-md border border-border bg-background/40 px-2 py-1 ml-1",
+                        span { class: "text-[9px] font-semibold uppercase tracking-[1.5px] text-muted-foreground",
+                            "Amp"
+                        }
+                        if amp.options.len() > 1 {
+                            Picker {
+                                options: amp.options.clone(),
+                                selected: amp.option,
+                                width: "170px".to_string(),
+                                placeholder: "— no amp —".to_string(),
+                                on_select: {
+                                    let rig = rig.clone();
+                                    let id = amp.id.clone();
+                                    move |v: u32| {
+                                        if let Some(r) = rig.clone() {
+                                            let id = id.clone();
+                                            spawn(async move { let _ = r.set_block_option(id, v).await; });
+                                        }
+                                    }
+                                },
+                            }
+                        } else {
+                            span { class: "text-xs font-bold whitespace-nowrap",
+                                if amp.preset.is_empty() { "— no amp —" } else { "{amp.preset}" }
+                            }
+                        }
+                    }
                 }
 
                 // Play group: Preset / Profile / Setlist — jumps to the
