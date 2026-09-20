@@ -28,7 +28,17 @@ signal-tone3000-ui.workspace = true
 session-ui = { workspace = true, features = ["web"] }
 # The real FTS-EQ editor core (band model, response math, SVG generators,
 # interaction rules) — wasm-portable; see eq_surface.rs.
+# The real EQ editor's graph, natively.
+#
+# `graph` is the vello surface as an embeddable widget — the plugin's own
+# painter, hit-testing and interaction rules, driven by `bands` and band
+# events rather than a parameter tree. Native only: a custom widget is a
+# painted scene, which needs a Blitz host. The wasm remote builds the same
+# crate without the feature and draws the portable SVG path instead.
 eq-ui.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+eq-ui = { workspace = true, features = ["graph"] }
 fts-audio-ui.workspace = true
 # BlockType — chain-strip coloring.
 signal-proto.workspace = true

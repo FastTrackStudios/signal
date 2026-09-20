@@ -1357,6 +1357,21 @@ fn DriveChunk(
     }
 }
 
+/// The EQ surface for this build: the plugin's vello editor natively, the
+/// portable SVG one on wasm.
+///
+/// One function rather than a `cfg` at the call site, so the panel's layout
+/// does not have to know which renderer it is inside.
+#[cfg(not(target_arch = "wasm32"))]
+fn eq_panel(block: LiveBlock, spectrum: Vec<f32>) -> Element {
+    rsx! { crate::eq_vello::EqVelloSurface { block, spectrum } }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn eq_panel(block: LiveBlock, spectrum: Vec<f32>) -> Element {
+    rsx! { crate::eq_surface::EqProSurface { block, spectrum } }
+}
+
 // ── The Control view ────────────────────────────────────────────────────────
 
 /// The guitar instrument panel — see the module docs for the layout.
@@ -1483,7 +1498,11 @@ pub fn ControlView(model: PerformanceModel, state: RigViewState) -> Element {
                         div { class: "min-h-0 flex flex-col", style: "flex: 1 1 0%;",
                             ZoomPanel { title: "Amp EQ".to_string(),
                                 if let Some(eq) = eq {
-                                    crate::eq_surface::EqProSurface { block: eq, spectrum }
+                                    // The plugin's own editor where there is a
+                                    // renderer that can paint it; the portable
+                                    // SVG re-host on wasm. Same band model
+                                    // either way — see `eq_vello`.
+                                    {eq_panel(eq, spectrum)}
                                 } else {
                                     {empty_slot("Amp EQ")}
                                 }

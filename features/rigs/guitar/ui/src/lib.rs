@@ -10,6 +10,10 @@ mod chain;
 mod comp_surface;
 mod control;
 mod eq_surface;
+/// The plugin's own vello EQ editor — native only (a painted scene needs a
+/// Blitz host; the wasm remote draws [`eq_surface`] instead).
+#[cfg(not(target_arch = "wasm32"))]
+mod eq_vello;
 mod grid;
 /// The shared audio-gui knob (moved to signal-widgets).
 pub use signal_widgets::knob;

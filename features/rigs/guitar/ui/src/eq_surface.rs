@@ -25,7 +25,7 @@ use eq_ui::eq_graph_svg::{generate_all_eq_curves, generate_freq_labels, generate
 use signal_guitar_proto::LiveBlock;
 use signal_guitar_proto::rig::RigClient;
 
-const NUM_BANDS: usize = 24;
+pub(crate) const NUM_BANDS: usize = 24;
 const H: f64 = 270.0; // viewBox height; width follows the panel's aspect
 const MIN_FREQ: f64 = 10.0; // "0 Hz" — log axis floor
 const MAX_FREQ: f64 = 22_050.0;
@@ -45,7 +45,7 @@ fn magic_label(freq: f32) -> Option<&'static str> {
         .map(|z| z.role)
 }
 
-fn shape_index(s: EqBandShape) -> f32 {
+pub(crate) fn shape_index(s: EqBandShape) -> f32 {
     EqBandShape::all().iter().position(|x| *x == s).unwrap_or(0) as f32
 }
 
@@ -54,7 +54,7 @@ fn shape_from_index(i: usize) -> EqBandShape {
 }
 
 /// Decode the wire params into the eq-ui band model.
-fn bands_of(block: &LiveBlock) -> Vec<EqBand> {
+pub(crate) fn bands_of(block: &LiveBlock) -> Vec<EqBand> {
     let get = |name: &str, dflt: f32| -> f32 {
         block
             .params
