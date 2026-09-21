@@ -150,9 +150,18 @@ pub fn drive_presets() -> Vec<DrivePresetDef> {
 pub struct PatchDef {
     pub name: String,
     pub preset: String,
-    /// Manual output trim (dB) on top of the loudness calibration —
-    /// patch-level levelling when the ears disagree with the meter.
+    /// The player's own level for this patch, dB, relative to every other
+    /// patch after normalisation.
+    ///
+    /// This is the knob that says "the lead is 3 dB up". It is never written
+    /// by the levelling pass — normalisation puts every patch at the same
+    /// loudness and this is what you want ON TOP of that, so a pass that
+    /// clobbered it would erase the one thing the player set by ear.
     pub trim_db: f32,
+    /// The loudness calibration, dB — what the levelling pass measured this
+    /// patch needs to sit at the target. Written by the pass, not by hand.
+    #[facet(default)]
+    pub level_db: f32,
     /// Boost level recalled with the patch (0 = boost off).
     pub boost_db: f32,
     pub overrides: Vec<OverrideDef>,
@@ -272,6 +281,7 @@ pub fn worship_def() -> ProfileDef {
         name: name.to_string(),
         preset: preset.to_string(),
         trim_db: 0.0,
+        level_db: 0.0,
         boost_db: 0.0,
         overrides: Vec::new(),
     };
@@ -484,6 +494,12 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
                     ("b5_freq", "5500"),
                 ],
             ))
+            // The patch's own level, and the LAST thing before the time
+            // section. Normalisation and the player's per-patch offset both
+            // land here rather than on the scene's output, so switching
+            // patches cannot rescale a delay or reverb tail that is already
+            // ringing — see `set_patch_trim`.
+            .with_block(on_fx(BlockType::Volume, "Patch Trim", &[("gain_db", "0")]))
             // Boost gain block the footswitch drives (0 dB until engaged).
             .with_block(on_fx(BlockType::Volume, "Boost", &[("gain_db", "0")]))
             // Modulation + Motion modules — all off by default.
@@ -538,7 +554,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
     let mut profile = RigProfile::new(&def.name);
     for p in &def.patches {
         let mut patch = amp(&p.name, nam_of(&p.preset));
-        patch.output_trim_db += p.trim_db;
+        set_patch_trim(&mut patch, p.level_db + p.trim_db);
         apply_overrides(&mut patch, &p.overrides);
         profile = profile.with_patch(patch);
     }
@@ -546,6 +562,44 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
         profile = profile.with_stack(RigStack::new(&st.name, st.patches.clone()));
     }
     profile
+}
+
+/// The block a patch's level lands on.
+pub const TRIM_BLOCK: &str = "Patch Trim";
+
+/// Put a patch's level on its trim block, INSIDE the chain and upstream of
+/// the time effects.
+///
+/// Not on the scene's output. A patch's level used to be `output_trim_db`,
+/// which the graph applies after everything in the scene — including the
+/// delays and the reverbs. Switching patches then rescaled whatever was
+/// still ringing: a tail that was decaying at one level jumped to another
+/// mid-decay, which is audible and is exactly what you do not want at the
+/// moment you change sound.
+///
+/// Upstream of the time section, a change only reaches signal that has not
+/// been fed to them yet. What is already in the delay and reverb buffers
+/// decays at the level it went in at, and the new patch arrives at its own
+/// level behind it — which is what a real rig does and what the ear expects.
+pub fn set_patch_trim(patch: &mut RigPatch, db: f32) {
+    let Some(block) = patch
+        .chain
+        .iter_mut()
+        .find(|b| b.name.eq_ignore_ascii_case(TRIM_BLOCK))
+    else {
+        // A profile built before the trim block existed, or one the player
+        // has edited the block out of. The patch still plays; it just plays
+        // uncalibrated, which is better than refusing to build it.
+        tracing::debug!(patch = %patch.name, "no trim block — patch level not applied");
+        return;
+    };
+    match block.params.iter_mut().find(|p| p.name == "gain_db") {
+        Some(p) => p.value = db.to_string(),
+        None => block.params.push(signal_sampler::rig_node::Param {
+            name: "gain_db".to_string(),
+            value: db.to_string(),
+        }),
+    }
 }
 
 /// Apply a patch's overrides onto its built chain: `set` writes the param
@@ -1069,5 +1123,105 @@ mod song_tests {
             patch: "Clean".into(),
         });
         assert_eq!(s.parts_with_recalls().len(), 4);
+    }
+}
+
+#[cfg(test)]
+mod trim_tests {
+    use super::*;
+
+    fn a_patch() -> RigPatch {
+        let profile = build_profile(&worship_def(), &drive_presets());
+        profile
+            .patches
+            .first()
+            .cloned()
+            .expect("the default profile has patches")
+    }
+
+    /// The trim block exists, and it is UPSTREAM of every time effect.
+    ///
+    /// This is the whole reason it exists. A level after the delays and
+    /// reverbs rescales whatever is still ringing the moment a patch
+    /// changes — the tail jumps mid-decay, which is audible and lands
+    /// exactly when the player is changing sound. Upstream, a change only
+    /// reaches signal that has not been fed to them yet.
+    #[test]
+    fn the_trim_sits_before_the_time_effects() {
+        let patch = a_patch();
+        let at = |name: &str| {
+            patch
+                .chain
+                .iter()
+                .position(|b| b.name.eq_ignore_ascii_case(name))
+        };
+        let trim = at(TRIM_BLOCK).expect("every patch has a trim block");
+
+        for time in ["DLY 1", "DLY 2", "VERB 1", "VERB 2"] {
+            let i = at(time).unwrap_or_else(|| panic!("{time} is in the chain"));
+            assert!(
+                trim < i,
+                "the trim must come before {time} — a level applied after a \
+                 reverb rescales the tail that is already ringing"
+            );
+        }
+    }
+
+    /// And before the modulation, which is also downstream of it.
+    #[test]
+    fn the_trim_sits_before_the_modulation() {
+        let patch = a_patch();
+        let trim = patch
+            .chain
+            .iter()
+            .position(|b| b.name.eq_ignore_ascii_case(TRIM_BLOCK))
+            .expect("trim block");
+        for m in ["Chorus", "Tremolo", "Rotary"] {
+            if let Some(i) = patch
+                .chain
+                .iter()
+                .position(|b| b.name.eq_ignore_ascii_case(m))
+            {
+                assert!(trim < i, "the trim must come before {m}");
+            }
+        }
+    }
+
+    /// Calibration and the player's own level ADD. Normalisation puts every
+    /// patch at the same loudness; the offset is what you want on top, and a
+    /// scheme that used one or the other would lose whichever it dropped.
+    #[test]
+    fn calibration_and_the_players_level_add_up() {
+        let mut def = worship_def();
+        {
+            let p = def.patches.first_mut().expect("a patch");
+            p.level_db = -4.5;
+            p.trim_db = 3.0;
+        }
+        let profile = build_profile(&def, &drive_presets());
+        let patch = profile.patches.first().expect("a patch");
+        let gain: f32 = patch
+            .chain
+            .iter()
+            .find(|b| b.name.eq_ignore_ascii_case(TRIM_BLOCK))
+            .and_then(|b| b.params.iter().find(|p| p.name == "gain_db"))
+            .and_then(|p| p.value.parse().ok())
+            .expect("the trim block carries a gain");
+        assert!((gain - (-1.5)).abs() < 1e-4, "got {gain}");
+    }
+
+    /// A patch's level no longer rides the scene's output. If it did, every
+    /// word of the doc above would be false again.
+    #[test]
+    fn the_level_is_not_on_the_scene_output() {
+        let mut def = worship_def();
+        def.patches.first_mut().expect("a patch").trim_db = 6.0;
+        let profile = build_profile(&def, &drive_presets());
+        let patch = profile.patches.first().expect("a patch");
+        assert!(
+            patch.output_trim_db.abs() < 1e-6,
+            "the patch level leaked onto the scene output ({})",
+            patch.output_trim_db
+        );
     }
 }

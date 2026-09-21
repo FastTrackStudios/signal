@@ -632,7 +632,12 @@ impl GuitarRigBackend {
                     .iter_mut()
                     .find(|p| p.name.eq_ignore_ascii_case(name))
                 {
-                    patch.trim_db = *trim;
+                    // The CALIBRATION, not the player's own level. These are
+                    // two different numbers and the pass used to overwrite
+                    // one with the other — so normalising erased "the lead
+                    // is 3 dB up", which is the one thing here that was set
+                    // by ear and cannot be measured back.
+                    patch.level_db = *trim;
                 }
             }
             RigLibrary::save_profile(&def);
@@ -2846,6 +2851,7 @@ impl Rig for GuitarRigBackend {
                 name: name.clone(),
                 preset,
                 trim_db: 0.0,
+                level_db: 0.0,
                 boost_db: 0.0,
                 overrides: Vec::new(),
             });
@@ -3910,6 +3916,7 @@ mod tests {
             name: name.to_string(),
             preset: preset.to_string(),
             trim_db: 0.0,
+            level_db: 0.0,
             boost_db: 0.0,
             overrides: Vec::new(),
         }

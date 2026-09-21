@@ -109,6 +109,54 @@ fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) 
     d
 }
 
+/// The compressor's circuit, as `comp_dsp::CompressionStyle` orders them.
+///
+/// Named here rather than derived because the rig takes the DSP as a tagged
+/// git dep and these are wire values — a list that drifts would silently
+/// select a different circuit, so the test below pins it to the enum.
+const COMP_STYLES: [&str; 4] = ["Clean", "FET", "VCA", "Opto"];
+
+/// The circuit selector. A compressor's style changes its whole character —
+/// an opto and a FET at identical settings are different machines — so it
+/// belongs on the surface next to the knobs it changes the meaning of.
+fn style_picker(block: &LiveBlock, rig: Option<RigClient>) -> Element {
+    let current = param_v(block, "style", 0.0).round().clamp(0.0, 3.0) as usize;
+    let id = block.id.clone();
+    rsx! {
+        div { class: "flex flex-col items-center gap-0.5",
+            span { style: "font-size:8px; color:#8a8a92; text-transform:uppercase;", "Style" }
+            div { class: "flex gap-0.5",
+                for (i, name) in COMP_STYLES.iter().enumerate() {
+                    button {
+                        key: "{name}",
+                        class: "rounded-sm px-1 py-0.5 text-[9px] font-semibold tracking-wide",
+                        style: if i == current {
+                            "background:#e4e4e7; color:#111;".to_string()
+                        } else {
+                            "background:rgba(255,255,255,0.06); color:#8a8a92;".to_string()
+                        },
+                        onclick: {
+                            let rig = rig.clone();
+                            let id = id.clone();
+                            move |_| {
+                                if let Some(r) = rig.clone() {
+                                    let id = id.clone();
+                                    spawn(async move {
+                                        let _ = r
+                                            .set_block_param(id, "style".into(), i as f32)
+                                            .await;
+                                    });
+                                }
+                            }
+                        },
+                        "{name}"
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// How close to the threshold line counts as grabbing it, in graph units.
 const GRAB_PX: f32 = 22.0;
 
@@ -220,6 +268,8 @@ pub fn CompSurface(
 
     let _fmt_ratio: fn(f32) -> String = |v| format!("{v:.1}:1");
     let fmt_ms = crate::knob::FmtFn(|v| format!("{v:.1}ms"));
+    let fmt_db = crate::knob::FmtFn(|v| format!("{v:.0}dB"));
+    let fmt_pct = crate::knob::FmtFn(|v| format!("{:.0}%", v * 100.0));
     let _fmt_db: fn(f32) -> String = |v| format!("{v:.1}dB");
 
     rsx! {
@@ -360,9 +410,17 @@ pub fn CompSurface(
                         "{thr:.1} dB · {ratio:.1}:1"
                     }
                 }
-                div { class: "ml-auto flex gap-2",
+                // Every parameter the block has. Threshold and ratio live on
+                // the display itself; the rest are knobs, because a block
+                // with controls the surface does not offer is a block you
+                // have to leave the rig to set.
+                div { class: "ml-auto flex items-end gap-2",
                     {knob("attack", "Atk", KnobSize::Small, Some(fmt_ms))}
                     {knob("release", "Rel", KnobSize::Small, Some(fmt_ms))}
+                    {knob("knee", "Knee", KnobSize::Small, Some(fmt_db))}
+                    {knob("range", "Range", KnobSize::Small, Some(fmt_db))}
+                    {knob("fold", "Fold", KnobSize::Small, Some(fmt_pct))}
+                    {style_picker(&block, rig.clone())}
                 }
             }
         }
@@ -432,6 +490,44 @@ mod tests {
             (well_below - ty).abs() >= GRAB_PX && well_below > ty,
             "below the line is neither"
         );
+    }
+
+    /// Every parameter the compressor block declares has a control on the
+    /// surface.
+    ///
+    /// Four of the eight had none — knee, range, fold and style were read or
+    /// ignored but never settable, which means the only way to change them
+    /// was to leave the rig. A control that is missing does not look missing:
+    /// the panel is full of knobs and nothing says which ones are not there.
+    #[test]
+    fn every_parameter_the_block_has_is_reachable() {
+        // `session::block_params` for `BlockType::Compressor`.
+        const DECLARED: [&str; 8] = [
+            "threshold", "ratio", "attack", "release", "knee", "range", "fold", "style",
+        ];
+        let src = include_str!("comp_surface.rs");
+        for name in DECLARED {
+            let knobbed = src.contains(&format!("knob(\"{name}\""));
+            // Threshold and ratio are dragged on the display, not knobbed.
+            let dragged = src.contains(&format!("\"{name}\".into()"));
+            assert!(
+                knobbed || dragged,
+                "the compressor declares `{name}` and the surface offers no \
+                 way to set it"
+            );
+        }
+    }
+
+    /// The style list is the DSP's `CompressionStyle` order. These are wire
+    /// values: a list that drifted would select a different circuit than the
+    /// one it names, silently.
+    #[test]
+    fn the_style_list_matches_the_dsp() {
+        assert_eq!(COMP_STYLES.len(), 4, "Clean, FET, VCA, Opto");
+        assert_eq!(COMP_STYLES[0], "Clean");
+        // `session::block_params` caps style at 4.0; the reserved fifth is
+        // deliberately not offered.
+        assert!(COMP_STYLES.len() <= 5);
     }
 
     /// A doubling per eighth of the panel. At a sixth the whole 1:1..20:1

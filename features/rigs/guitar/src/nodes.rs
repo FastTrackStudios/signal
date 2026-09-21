@@ -122,7 +122,10 @@ impl RigNodes {
 
             let mut built = RigPatch::new(&patch.name);
             built.chain = signal_sampler::from_node::to_chain(&resolved);
-            built.output_trim_db += patch.trim_db;
+            // On the trim block inside the chain, not the scene's output —
+            // see `profiles::set_patch_trim` for why a level after the
+            // reverbs cannot be changed without hearing it.
+            crate::profiles::set_patch_trim(&mut built, patch.level_db + patch.trim_db);
             profile = profile.with_patch(built);
         }
         for stack in &def.stacks {
