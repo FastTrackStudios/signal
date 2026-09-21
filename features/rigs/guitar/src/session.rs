@@ -1025,6 +1025,70 @@ impl GuitarRigBackend {
 
     /// Step stack `index` the way `activate_stack` would: onto its current
     /// patch, or to the next one if that patch is already live.
+    /// The profile as the live rig would load it — pure data, no engine.
+    /// Design mode's source for patches, stacks and chains.
+    fn design_profile(&self) -> signal_sampler::rig_profile::RigProfile {
+        let def = self.profile_def.lock_ok();
+        let dps = self.drive_presets.lock_ok();
+        profile_from_library(&def, &dps)
+    }
+
+    /// Design mode's active patch: the restored/selected `design_patch`, or
+    /// the first patch when that is empty or no longer in the profile — the
+    /// same fallback `design_blocks` builds the chain from.
+    fn design_active_patch(
+        &self,
+        profile: &signal_sampler::rig_profile::RigProfile,
+    ) -> Option<String> {
+        let chosen = self.design_patch.lock_ok().clone();
+        profile
+            .patches
+            .iter()
+            .find(|p| !chosen.is_empty() && p.name.eq_ignore_ascii_case(&chosen))
+            .or_else(|| profile.patches.first())
+            .map(|p| p.name.clone())
+    }
+
+    /// The sidebar's view of `patches`, grouped by `stacks`. One mapping
+    /// for the live rig and design mode, so the two cannot drift apart.
+    fn patch_infos(
+        &self,
+        patches: &[signal_sampler::rig_profile::RigPatch],
+        stacks: &[signal_sampler::rig_profile::RigStack],
+        active: Option<&str>,
+        available: impl Fn(usize) -> bool,
+    ) -> Vec<PatchInfo> {
+        let def = self.profile_def.lock_ok();
+        patches
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let stack_entry = stacks
+                    .iter()
+                    .find(|st| st.patches.iter().any(|n| n.eq_ignore_ascii_case(&p.name)));
+                let stack = stack_entry.map(|st| st.name.clone()).unwrap_or_default();
+                let default_in_stack = stack_entry
+                    .and_then(|st| st.patches.first())
+                    .is_some_and(|first| first.eq_ignore_ascii_case(&p.name));
+                let (preset, override_modules) = def
+                    .patches
+                    .iter()
+                    .find(|d| d.name.eq_ignore_ascii_case(&p.name))
+                    .map(|d| (d.preset.clone(), d.override_modules()))
+                    .unwrap_or_default();
+                PatchInfo {
+                    preset,
+                    override_modules,
+                    default_in_stack,
+                    name: p.name.clone(),
+                    stack,
+                    available: available(i),
+                    active: active == Some(p.name.as_str()),
+                }
+            })
+            .collect()
+    }
+
     fn rotate_design_stack(&self, index: usize) {
         let next = {
             let def = self.profile_def.lock_ok();
@@ -2748,40 +2812,21 @@ impl Rig for GuitarRigBackend {
     fn patches(&self) -> Vec<PatchInfo> {
         let guard = self.rig.lock_ok();
         let Some(prig) = guard.as_ref() else {
-            return Vec::new();
+            drop(guard);
+            // Design mode builds no engine, but the profile is plain data:
+            // list its patches exactly as the live rig would (same order,
+            // same stacks), so the sidebar shows the real profile.
+            if !crate::library::rig_is_design() {
+                return Vec::new();
+            }
+            let profile = self.design_profile();
+            let active = self.design_active_patch(&profile);
+            return self.patch_infos(&profile.patches, &profile.stacks, active.as_deref(), |_| true);
         };
         let active = prig.active_patch().map(|p| p.name.clone());
-        let stacks = prig.stacks().to_vec();
-        prig.patches()
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                let stack_entry = stacks
-                    .iter()
-                    .find(|st| st.patches.iter().any(|n| n.eq_ignore_ascii_case(&p.name)));
-                let stack = stack_entry.map(|st| st.name.clone()).unwrap_or_default();
-                let default_in_stack = stack_entry
-                    .and_then(|st| st.patches.first())
-                    .is_some_and(|first| first.eq_ignore_ascii_case(&p.name));
-                let (preset, override_modules) = {
-                    let def = self.profile_def.lock_ok();
-                    def.patches
-                        .iter()
-                        .find(|d| d.name.eq_ignore_ascii_case(&p.name))
-                        .map(|d| (d.preset.clone(), d.override_modules()))
-                        .unwrap_or_default()
-                };
-                PatchInfo {
-                    preset,
-                    override_modules,
-                    default_in_stack,
-                    name: p.name.clone(),
-                    stack,
-                    available: prig.is_patch_available(i),
-                    active: active.as_deref() == Some(p.name.as_str()),
-                }
-            })
-            .collect()
+        self.patch_infos(prig.patches(), prig.stacks(), active.as_deref(), |i| {
+            prig.is_patch_available(i)
+        })
     }
 
     fn select_patch(&self, index: u32) {
@@ -2790,6 +2835,13 @@ impl Rig for GuitarRigBackend {
             if let Some(prig) = guard.as_mut() {
                 if let Some(name) = prig.patches().get(index as usize).map(|p| p.name.clone()) {
                     activate_patch_by_name(prig, &name);
+                }
+            } else if crate::library::rig_is_design() {
+                drop(guard);
+                // Same indices as `patches()` above; `resync_blocks` below
+                // rebuilds the design chain from `design_patch`.
+                if let Some(p) = self.design_profile().patches.get(index as usize) {
+                    *self.design_patch.lock_ok() = p.name.clone();
                 }
             }
         }
@@ -2803,12 +2855,17 @@ impl Rig for GuitarRigBackend {
     }
 
     fn presets(&self) -> Vec<PresetInfo> {
+        let design_active = crate::library::rig_is_design() && self.rig.lock_ok().is_none();
+        let active_patch = if design_active {
+            let profile = self.design_profile();
+            self.design_active_patch(&profile)
+        } else {
+            self.rig
+                .lock_ok()
+                .as_ref()
+                .and_then(|p| p.active_patch().map(|p| p.name.clone()))
+        };
         let def = self.profile_def.lock_ok();
-        let active_patch = self
-            .rig
-            .lock_ok()
-            .as_ref()
-            .and_then(|p| p.active_patch().map(|p| p.name.clone()));
         let active_preset = active_patch.and_then(|ap| {
             def.patches
                 .iter()
