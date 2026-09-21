@@ -33,6 +33,7 @@ blitz rev in the root `Cargo.toml`.
 | multi-column (`column-count`) | not supported | grid. |
 | `scroll-snap-*`, `overscroll-behavior` | not supported | snap in Rust on `scroll`/`wheel`. |
 | `<select>`, `<meter>`, `<progress>`, `<output>`, `<dialog>`, `<video>`, `<audio>`, `<picture>`, `<script>` | not supported | build them from `div`s (see `architect-ui`'s pickers); `<canvas>` for anything drawn. |
+| a `<button>` made `flex` expecting its content at the start | Blitz's UA sheet gives buttons `justify-content: center`, which survives an author `display: flex` (a browser would start-align) | the app's global sheet sets `@layer base{:where(button.flex,button.inline-flex){justify-content:flex-start}}` (layered: Tailwind v4 utilities live in `@layer utilities`, and an unlayered rule would beat them all) (apps/desktop `main.rs`); in a crate rendered elsewhere, set `justify-content` on the button or use a `div` row. |
 | `onchange` on inputs | `change` event not supported | `oninput`, and commit on `onblur` / Enter (`onkeydown`). |
 | drag & drop events (`ondragstart`, `ondrop`…) | not supported | pointer events: `onpointerdown` → track `onpointermove` → `onpointerup` (single primary pointer only). |
 | clipboard events, `resize`/`load` window events, Resize/Intersection/Mutation observers | not supported | read sizes from props/state; do not wait on load. |

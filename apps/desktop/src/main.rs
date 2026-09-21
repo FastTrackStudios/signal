@@ -632,6 +632,14 @@ fn App() -> Element {
         // body margin + white page background, which shows as a white border
         // around the dark 100vh app. Zero it and paint the page dark.
         document::Style { {"html,body{margin:0;padding:0;height:100%;background:#0a0a0a;overflow:hidden;}*{box-sizing:border-box;}"} }
+        // Blitz's user-agent sheet makes every <button> inline-flex with
+        // `justify-content: center` (its way of centring button content). A
+        // browser drops that centring once the author makes the button a flex
+        // container; Blitz keeps it, so every `flex` button row centred its
+        // label. Restore the browser's behaviour — in the `base` layer, which
+        // Tailwind v4 orders below `utilities`: an unlayered rule would beat
+        // every layered utility, including an explicit `justify-center`.
+        document::Style { {"@layer base{:where(button.flex,button.inline-flex){justify-content:flex-start;}}"} }
         ResizeHandles {}
         PlatformMenu {}
         // ONE bar over two rails (fts_chrome::AppFrame). The bar is also the
