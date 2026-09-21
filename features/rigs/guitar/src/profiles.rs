@@ -706,6 +706,67 @@ impl SongDef {
             .collect()
     }
 
+    /// Name a new section, appended. `false` if the name is taken or empty.
+    ///
+    /// Names must be unique because recalls are keyed by name: two sections
+    /// called "Chorus" would share whatever either was given.
+    pub fn add_part(&mut self, name: &str) -> bool {
+        let name = name.trim();
+        if name.is_empty() || self.parts.iter().any(|p| p.eq_ignore_ascii_case(name)) {
+            return false;
+        }
+        self.parts.push(name.to_string());
+        true
+    }
+
+    /// Rename a section, carrying what it recalls and changes.
+    ///
+    /// The carry is the whole subtlety. Recalls are keyed by NAME, so a
+    /// rename that left them behind would silently empty the section — which
+    /// reads as "the rename worked and it was always blank", and the player
+    /// finds out mid-song.
+    pub fn rename_part(&mut self, old: &str, new_name: &str) -> bool {
+        let new_name = new_name.trim();
+        if new_name.is_empty()
+            || old.eq_ignore_ascii_case(new_name)
+            || self.parts.iter().any(|p| p.eq_ignore_ascii_case(new_name))
+        {
+            return false;
+        }
+        let Some(slot) = self.parts.iter_mut().find(|p| p.eq_ignore_ascii_case(old)) else {
+            return false;
+        };
+        *slot = new_name.to_string();
+        for r in &mut self.part_recalls {
+            if r.part.eq_ignore_ascii_case(old) {
+                r.part = new_name.to_string();
+            }
+        }
+        true
+    }
+
+    /// Remove a section and whatever it recalled.
+    pub fn remove_part(&mut self, name: &str) -> bool {
+        let before = self.parts.len();
+        self.parts.retain(|p| !p.eq_ignore_ascii_case(name));
+        self.part_recalls
+            .retain(|r| !r.part.eq_ignore_ascii_case(name));
+        self.parts.len() != before
+    }
+
+    /// Move a section, for arranging a song.
+    ///
+    /// `part_recalls` is keyed by name and order-independent, so nothing
+    /// there needs touching — which is the reason it is keyed by name.
+    pub fn move_part(&mut self, from: usize, to: usize) -> bool {
+        if from >= self.parts.len() || to >= self.parts.len() || from == to {
+            return false;
+        }
+        let name = self.parts.remove(from);
+        self.parts.insert(to, name);
+        true
+    }
+
     /// Every section with the patch it recalls AND what it changes on top.
     ///
     /// The recall alone stopped being the whole story when sections gained
@@ -1344,6 +1405,86 @@ mod section_tests {
             .expect("Bridge");
         assert_eq!(bridge.1, "Lead");
         assert_eq!(bridge.2.len(), 1);
+    }
+
+    /// Renaming a section keeps everything it was given.
+    ///
+    /// The subtle one. Recalls are keyed by name, so a rename that did not
+    /// carry them would silently empty the section — and it reads as "the
+    /// rename worked and it was always blank", which the player finds out
+    /// mid-song.
+    #[test]
+    fn renaming_a_section_carries_what_it_recalls_and_changes() {
+        let mut song = song_with_sections();
+        assert!(song.rename_part("Bridge", "Instrumental"));
+        let changes = song.parts_with_changes();
+        assert!(
+            changes.iter().all(|(n, ..)| n != "Bridge"),
+            "the old name is gone"
+        );
+        let renamed = changes
+            .iter()
+            .find(|(n, ..)| n == "Instrumental")
+            .expect("the new name is there");
+        assert_eq!(renamed.1, "Lead", "it kept its patch");
+        assert_eq!(renamed.2.len(), 1, "and what it changes");
+    }
+
+    /// Two sections cannot share a name, because recalls are keyed by it.
+    #[test]
+    fn section_names_are_unique() {
+        let mut song = song_with_sections();
+        assert!(!song.add_part("Chorus"), "duplicate refused");
+        assert!(!song.add_part("  chorus "), "and case/space insensitively");
+        assert!(!song.rename_part("Verse", "Chorus"), "rename cannot collide");
+        assert_eq!(song.parts.len(), 3);
+    }
+
+    /// Adding names a section at the end; empty names are not sections.
+    #[test]
+    fn adding_appends_and_refuses_nothing() {
+        let mut song = song_with_sections();
+        assert!(song.add_part("Outro"));
+        assert_eq!(song.parts.last().map(String::as_str), Some("Outro"));
+        assert!(!song.add_part("   "));
+        assert_eq!(song.parts.len(), 4);
+    }
+
+    /// Removing a section takes its recall with it — otherwise a section
+    /// added later under the same name would inherit a stranger's settings.
+    #[test]
+    fn removing_a_section_takes_its_recall() {
+        let mut song = song_with_sections();
+        assert!(song.remove_part("Bridge"));
+        assert_eq!(song.parts.len(), 2);
+        assert!(
+            song.part_recalls
+                .iter()
+                .all(|r| !r.part.eq_ignore_ascii_case("Bridge")),
+            "its recall went with it"
+        );
+        assert!(!song.remove_part("Bridge"), "and it is gone");
+    }
+
+    /// Reordering does not disturb what any section recalls. Recalls are
+    /// keyed by name precisely so arranging a song is free.
+    #[test]
+    fn moving_a_section_keeps_every_recall() {
+        let mut song = song_with_sections();
+        let before = song.parts_with_changes();
+        assert!(song.move_part(2, 0), "Bridge to the front");
+        assert_eq!(song.parts[0], "Bridge");
+        let after = song.parts_with_changes();
+        for (name, patch, ovs) in &before {
+            let now = after
+                .iter()
+                .find(|(n, ..)| n == name)
+                .unwrap_or_else(|| panic!("{name} survived"));
+            assert_eq!(&now.1, patch, "{name} kept its patch");
+            assert_eq!(now.2.len(), ovs.len(), "{name} kept its changes");
+        }
+        assert!(!song.move_part(0, 9), "out of range is refused");
+        assert!(!song.move_part(1, 1), "and a no-op is not a change");
     }
 
     /// `parts_with_recalls` still answers what it always answered, so the

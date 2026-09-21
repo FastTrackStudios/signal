@@ -1232,6 +1232,46 @@ impl GuitarRigBackend {
         tracing::info!(count = overrides.len(), "section overrides applied");
     }
 
+    /// Edit the song that is currently up, save, and publish.
+    ///
+    /// Every section edit is the same three steps against the same song, and
+    /// writing them out per call is how one of them ends up not saving.
+    /// `edit` returns whether anything actually changed — a no-op must not
+    /// rewrite the library or fire a perf event.
+    fn edit_current_song<F>(&self, what: &str, edit: F)
+    where
+        F: FnOnce(&mut crate::profiles::SongDef) -> bool,
+    {
+        let song_name = {
+            let i = *self.song_index.lock_ok();
+            self.resolved_setlist()
+                .get(i)
+                .map(|(name, ..)| name.clone())
+        };
+        let Some(song_name) = song_name else {
+            tracing::warn!(what, "no song is up");
+            return;
+        };
+        let changed = {
+            let mut songs = self.songs_lib.lock_ok();
+            let Some(song) = songs
+                .iter_mut()
+                .find(|s| s.name.eq_ignore_ascii_case(&song_name))
+            else {
+                return;
+            };
+            let changed = edit(song);
+            if changed {
+                RigLibrary::save_songs(&songs);
+            }
+            changed
+        };
+        if changed {
+            tracing::info!(song = %song_name, what, "guitar: song edited");
+            self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        }
+    }
+
     fn sync_after_switch(&self, audible: std::time::Duration, via: &str) {
         let t = std::time::Instant::now();
         self.resync_blocks();
@@ -2282,6 +2322,37 @@ impl Rig for GuitarRigBackend {
             RigLibrary::save_songs(&songs);
         }
         self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
+    fn add_part(&self, name: String) {
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+        self.edit_current_song("section added", |song| song.add_part(&name));
+    }
+
+    fn rename_part(&self, old: String, new_name: String) {
+        self.edit_current_song("section renamed", |song| song.rename_part(&old, &new_name));
+    }
+
+    fn remove_part(&self, name: String) {
+        self.edit_current_song("section removed", |song| song.remove_part(&name));
+        // The cursor may now be past the end.
+        let last = self
+            .resolved_setlist()
+            .get(*self.song_index.lock_ok())
+            .map_or(0, |(_, _, _, _, parts)| parts.len().saturating_sub(1));
+        let mut idx = self.part_index.lock_ok();
+        if *idx > last {
+            *idx = last;
+        }
+    }
+
+    fn move_part(&self, from: u32, to: u32) {
+        self.edit_current_song("section moved", |song| {
+            song.move_part(from as usize, to as usize)
+        });
     }
 
     fn set_part_overrides(

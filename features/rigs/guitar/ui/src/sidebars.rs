@@ -576,12 +576,84 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
         .get(model.song_index as usize)
         .map(|s| s.name.clone())
         .unwrap_or_default();
+    // Section editing: one form for adding, one slot for the section being
+    // renamed. Both live here rather than per-row so only one can be open.
+    let mut adding_part = use_signal(|| false);
+    let mut new_part = use_signal(String::new);
+    let mut renaming_part = use_signal(|| None::<String>);
+    let mut rename_to = use_signal(String::new);
+    let part_count = model.parts.len();
 
     rsx! {
         aside { class: "w-64 flex-shrink-0 flex flex-col border-l border-border bg-card min-h-0",
             // ── Song sections ──
             PanelLabel { label: "Song Parts" }
-            div { class: "px-3 pt-2 text-sm font-bold truncate flex-shrink-0", "{current_song}" }
+            div { class: "flex items-center gap-1 px-3 pt-2 flex-shrink-0",
+                div { class: "text-sm font-bold truncate", "{current_song}" }
+                button {
+                    class: "ml-auto rounded px-1.5 py-0.5 text-[10px] border border-border text-muted-foreground hover:bg-accent/40",
+                    onclick: move |_| {
+                        let open = !adding_part();
+                        adding_part.set(open);
+                        if open {
+                            new_part.set(String::new());
+                        }
+                    },
+                    if adding_part() { "×" } else { "+ part" }
+                }
+            }
+            // Naming a new section. A song's structure is the player's, not
+            // something derivable — an "Instrumental 2" exists because the
+            // song has one.
+            if adding_part() && !current_song.is_empty() {
+                div { class: "flex gap-1 px-2 pt-1 flex-shrink-0",
+                    input {
+                        class: "flex-1 min-w-0 rounded bg-input px-1.5 py-0.5 text-[11px]",
+                        placeholder: "Verse / Chorus / Bridge…",
+                        value: "{new_part}",
+                        oninput: move |e| new_part.set(e.value()),
+                        onkeydown: {
+                            let rig = rig.clone();
+                            move |e: KeyboardEvent| {
+                                if e.key() != Key::Enter {
+                                    return;
+                                }
+                                let name = new_part().trim().to_string();
+                                if name.is_empty() {
+                                    return;
+                                }
+                                if let Some(r) = rig.clone() {
+                                    spawn(async move { let _ = r.add_part(name).await; });
+                                }
+                                new_part.set(String::new());
+                            }
+                        },
+                    }
+                    button {
+                        class: "rounded px-2 py-0.5 text-[10px] bg-accent text-accent-foreground",
+                        onclick: {
+                            let rig = rig.clone();
+                            move |_| {
+                                let name = new_part().trim().to_string();
+                                if name.is_empty() {
+                                    return;
+                                }
+                                if let Some(r) = rig.clone() {
+                                    spawn(async move { let _ = r.add_part(name).await; });
+                                }
+                                new_part.set(String::new());
+                            }
+                        },
+                        "Add"
+                    }
+                }
+            }
+            if model.parts.is_empty() && !current_song.is_empty() {
+                div { class: "px-3 py-2 text-[10px] text-muted-foreground leading-snug flex-shrink-0",
+                    "No sections yet. Name them and each can recall a patch and change \
+                     what it needs on top of it."
+                }
+            }
             div { class: "grid grid-cols-2 gap-1.5 p-2 flex-shrink-0",
                 for (i, part) in model.parts.iter().enumerate() {
                     {
@@ -609,6 +681,17 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
                                     if !patch.is_empty() {
                                         span { class: "text-[9px] opacity-60", "→ {patch}" }
                                     }
+                                    // What the section changes on top. A
+                                    // section with no patch and two
+                                    // overrides is doing more than one with
+                                    // a patch and none, so the count has to
+                                    // be visible or the row reads as empty.
+                                    if !part.overrides.is_empty() {
+                                        span { class: "text-[9px] opacity-60",
+                                            "± {part.overrides.len()} change"
+                                            if part.overrides.len() != 1 { "s" }
+                                        }
+                                    }
                                 }
                             }
                             // Which patch this section recalls. The sidebar is
@@ -633,6 +716,99 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
                                         });
                                     }
                                 },
+                            }
+                            // Arranging: rename, move, remove. A song's
+                            // sections get reworked while the song is being
+                            // worked out, and doing that in a text file is
+                            // not something anyone does mid-rehearsal.
+                            div { class: "col-span-2 flex items-center gap-1 -mt-0.5 mb-1",
+                                if renaming_part() == Some(name.clone()) {
+                                    input {
+                                        class: "flex-1 min-w-0 rounded bg-input px-1.5 py-0.5 text-[10px]",
+                                        value: "{rename_to}",
+                                        oninput: move |e| rename_to.set(e.value()),
+                                        onkeydown: {
+                                            let (rig, old) = (rig.clone(), name.clone());
+                                            move |e: KeyboardEvent| {
+                                                if e.key() != Key::Enter {
+                                                    return;
+                                                }
+                                                let new_name = rename_to().trim().to_string();
+                                                if !new_name.is_empty() {
+                                                    if let Some(r) = rig.clone() {
+                                                        let old = old.clone();
+                                                        spawn(async move {
+                                                            let _ = r.rename_part(old, new_name).await;
+                                                        });
+                                                    }
+                                                }
+                                                renaming_part.set(None);
+                                            }
+                                        },
+                                    }
+                                    button {
+                                        class: "rounded px-1 py-0.5 text-[9px] text-muted-foreground hover:bg-accent/40",
+                                        onclick: move |_| renaming_part.set(None),
+                                        "esc"
+                                    }
+                                } else {
+                                    button {
+                                        class: "rounded px-1 py-0.5 text-[9px] text-muted-foreground hover:bg-accent/40",
+                                        onclick: {
+                                            let name = name.clone();
+                                            move |_| {
+                                                rename_to.set(name.clone());
+                                                renaming_part.set(Some(name.clone()));
+                                            }
+                                        },
+                                        "rename"
+                                    }
+                                    button {
+                                        class: "rounded px-1 py-0.5 text-[9px] text-muted-foreground hover:bg-accent/40 disabled:opacity-30",
+                                        disabled: i == 0,
+                                        onclick: {
+                                            let rig = rig.clone();
+                                            move |_| {
+                                                if let Some(r) = rig.clone() {
+                                                    spawn(async move {
+                                                        let _ = r.move_part(i as u32, i as u32 - 1).await;
+                                                    });
+                                                }
+                                            }
+                                        },
+                                        "↑"
+                                    }
+                                    button {
+                                        class: "rounded px-1 py-0.5 text-[9px] text-muted-foreground hover:bg-accent/40 disabled:opacity-30",
+                                        disabled: i + 1 >= part_count,
+                                        onclick: {
+                                            let rig = rig.clone();
+                                            move |_| {
+                                                if let Some(r) = rig.clone() {
+                                                    spawn(async move {
+                                                        let _ = r.move_part(i as u32, i as u32 + 1).await;
+                                                    });
+                                                }
+                                            }
+                                        },
+                                        "↓"
+                                    }
+                                    button {
+                                        class: "ml-auto rounded px-1 py-0.5 text-[9px] text-muted-foreground hover:bg-destructive/30",
+                                        onclick: {
+                                            let (rig, name) = (rig.clone(), name.clone());
+                                            move |_| {
+                                                if let Some(r) = rig.clone() {
+                                                    let name = name.clone();
+                                                    spawn(async move {
+                                                        let _ = r.remove_part(name).await;
+                                                    });
+                                                }
+                                            }
+                                        },
+                                        "remove"
+                                    }
+                                }
                             }
                         }
                     }

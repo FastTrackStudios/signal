@@ -658,6 +658,22 @@ pub mod rig {
         fn rename_stack(&self, old: String, new_name: String);
         /// Delete a stack (its patches stay in the pool).
         fn delete_stack(&self, name: String);
+        /// Name a new section on the current song, appended at the end.
+        ///
+        /// Sections are the song's structure, so they are ordered and named
+        /// by the player rather than derived from anything — an "Instrumental
+        /// 2" exists because the song has one.
+        fn add_part(&self, name: String);
+        /// Rename a section, keeping what it recalls and changes.
+        ///
+        /// Recalls are keyed by NAME, so a rename that did not carry them
+        /// across would silently empty the section — which looks like the
+        /// rename worked and the section was always blank.
+        fn rename_part(&self, old: String, new_name: String);
+        /// Remove a section and whatever it recalled.
+        fn remove_part(&self, name: String);
+        /// Move a section to a new position, for arranging a song.
+        fn move_part(&self, from: u32, to: u32);
         /// Set what a section changes on top of its patch.
         ///
         /// Replaces the whole list for that section, so a remote sends the
