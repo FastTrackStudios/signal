@@ -1076,6 +1076,17 @@ impl GuitarRigBackend {
     /// position rather than engine slot ids, which is enough for every UI that
     /// addresses a block by id, since every write in design mode lands in the
     /// definition too.
+    /// A capture or IR path as the name a player reads.
+    ///
+    /// The file stem, without its extension: a NAM capture named
+    /// `Fender Deluxe Clean.nam` is "Fender Deluxe Clean" on the panel.
+    fn asset_stem(path: &str) -> String {
+        std::path::Path::new(path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    }
+
     fn design_blocks(&self) -> Vec<LiveBlock> {
         let wanted = self.design_patch.lock_ok().clone();
         let def = self.profile_def.lock_ok();
@@ -1147,7 +1158,12 @@ impl GuitarRigBackend {
                     param_min,
                     param_max,
                     params,
-                    preset: String::new(),
+                    // The tone this block is loaded with, from its own
+                    // asset. Blank here meant the amp chunk on the drive
+                    // board had no name to show and read as an empty slot —
+                    // "the amp is missing" — when the block was there all
+                    // along with a capture in it.
+                    preset: Self::asset_stem(block.asset_path()),
                     options: Vec::new(),
                     option: 0,
                     overridden: false,
