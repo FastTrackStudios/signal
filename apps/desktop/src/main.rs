@@ -111,6 +111,9 @@ mod mobile_view;
 #[expect(dead_code)]
 #[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
 mod rig_engine;
+// The macOS menu bar: audio readout + Settings… ⌘, (reads the embedded rig).
+#[cfg(all(target_os = "macos", feature = "signal-guitar"))]
+mod mac_menu;
 
 fn main() {
     // NVIDIA + Wayland: force the WebKitGTK webview through XWayland before
@@ -220,38 +223,99 @@ fn main() {
     launch_app();
 }
 
-/// Window position, inner size, and whether to go borderless
-/// fullscreen — each `None` meaning "let the platform decide".
+/// Window position, inner size, whether to go borderless fullscreen, and
+/// whether to open maximized — each `None`/`false` meaning "let the platform
+/// decide".
 #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
-type WindowPlacement = (Option<(f64, f64)>, Option<(f64, f64)>, bool);
+type WindowPlacement = (Option<(f64, f64)>, Option<(f64, f64)>, bool, bool);
 
 /// Desktop: a frameless window — the app draws its own top bar (the
 /// header doubles as title bar: drag surfaces + window controls).
-/// Where the window opens, for multi-monitor desks. Placement is a *runtime*
-/// concern (Dioxus.toml configures bundling, not windows), so it rides on env
-/// vars — set them once in the `dx serve` command and every hot-reload lands
-/// in the same place instead of being dragged back:
+/// Where the window opens, for multi-monitor desks and small laptops alike.
+/// Placement is a *runtime*, per-machine concern (Dioxus.toml configures
+/// bundling, not windows). Each setting is read from the environment first,
+/// then from this machine's prefs (`$XDG_CONFIG_HOME/fts/<key>`, one value
+/// per file), so a desk sets it once and every launch — `dx serve`
+/// hot-reloads included — lands in the same place:
 ///
-/// - `FTS_WINDOW_POS="6560,0"` — top-left corner in desktop coordinates
-///   (`kscreen-doctor -o` on KDE prints each screen's geometry).
-/// - `FTS_WINDOW_SIZE="2560x1440"` — inner size when not fullscreen.
-/// - `FTS_WINDOW_FULLSCREEN=1` — borderless fullscreen on whichever monitor
-///   the position lands on.
+/// | env var | pref key | value |
+/// |---|---|---|
+/// | `FTS_WINDOW_POS` | `window-pos` | `"6560,0"` — top-left corner in desktop coordinates (`kscreen-doctor -o` on KDE prints each screen's geometry) |
+/// | `FTS_WINDOW_SIZE` | `window-size` | `"1760x1100"` — inner size when not fullscreen |
+/// | `FTS_WINDOW_FULLSCREEN` | `window-fullscreen` | `1` — borderless fullscreen on whichever monitor the position lands on |
+/// | `FTS_WINDOW_MAXIMIZED` | `window-maximized` | `1` — open maximized: the screen's usable area, around the menu bar and Dock (`0` to opt out) |
+///
+/// With no size set, the window opens maximized on macOS — exactly the space
+/// the screen has — and [`default_window_size`] is what it restores to.
 #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
 fn window_placement() -> WindowPlacement {
-    fn pair(var: &str, sep: char) -> Option<(f64, f64)> {
-        let raw = std::env::var(var).ok()?;
+    fn setting(var: &str, key: &str) -> Option<String> {
+        std::env::var(var)
+            .ok()
+            .or_else(|| prefs::get(key))
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+    }
+    fn pair(var: &str, key: &str, sep: char) -> Option<(f64, f64)> {
+        let raw = setting(var, key)?;
         let (a, b) = raw.split_once(sep)?;
         Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
     }
-    let fullscreen = std::env::var("FTS_WINDOW_FULLSCREEN")
-        .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
-        .unwrap_or(false);
+    let truthy = |v: String| v != "0" && !v.eq_ignore_ascii_case("false");
+    let fullscreen = setting("FTS_WINDOW_FULLSCREEN", "window-fullscreen")
+        .is_some_and(truthy);
+    let size = pair("FTS_WINDOW_SIZE", "window-size", 'x');
+    let maximized = setting("FTS_WINDOW_MAXIMIZED", "window-maximized")
+        .map(truthy)
+        .unwrap_or(cfg!(target_os = "macos") && size.is_none());
     (
-        pair("FTS_WINDOW_POS", ','),
-        pair("FTS_WINDOW_SIZE", 'x'),
+        pair("FTS_WINDOW_POS", "window-pos", ','),
+        size,
         fullscreen,
+        maximized,
     )
+}
+
+/// 2560x1440, shrunk to fit the main screen where it can be measured.
+///
+/// The size matters beyond looks on macOS: a window larger than its screen
+/// still renders every frame but never presents one, so the app sits on its
+/// first frame forever ("Looking for the signal engine…" over a rig that is
+/// running fine). Linux desks set their size explicitly, so it is left alone
+/// there.
+#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
+fn default_window_size() -> (f64, f64) {
+    let (w, h): (f64, f64) = (2560.0, 1440.0);
+    match main_screen_size() {
+        // Room for the menu bar and a margin; never below the min size.
+        Some((sw, sh)) => (w.min(sw - 40.0).max(720.0), h.min(sh - 80.0).max(480.0)),
+        None => (w, h),
+    }
+}
+
+/// The main display's size in points.
+#[cfg(target_os = "macos")]
+fn main_screen_size() -> Option<(f64, f64)> {
+    #[repr(C)]
+    struct CGRect {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+    }
+    #[link(name = "CoreGraphics", kind = "framework")]
+    unsafe extern "C" {
+        fn CGMainDisplayID() -> u32;
+        fn CGDisplayBounds(display: u32) -> CGRect;
+    }
+    // SAFETY: plain CoreGraphics queries with no preconditions.
+    let bounds = unsafe { CGDisplayBounds(CGMainDisplayID()) };
+    (bounds.w > 0.0 && bounds.h > 0.0).then_some((bounds.w, bounds.h))
+}
+
+#[cfg(not(any(target_os = "macos", target_arch = "wasm32", target_os = "ios")))]
+fn main_screen_size() -> Option<(f64, f64)> {
+    None
 }
 
 /// The window, on Blitz — the renderer that can be handed a painted scene.
@@ -269,18 +333,19 @@ fn window_placement() -> WindowPlacement {
 ))]
 fn launch_app() {
     use dioxus_native::{Config, LogicalSize, WindowAttributes, launch_cfg};
-    let (pos, size, fullscreen) = window_placement();
+    let (pos, size, fullscreen, maximized) = window_placement();
     // 2560x1440 by default. The rig's control surface is a wall of panels —
     // the drive board, three module panels, the time section, the footswitch
     // grid — and at 1280 they are all legible and none of them is usable.
     // `FTS_WINDOW_SIZE=WxH` still wins, and the window is resizable; this is
     // only where it starts.
-    let (w, h) = size.unwrap_or((2560.0, 1440.0));
+    let (w, h) = size.unwrap_or_else(default_window_size);
     let mut window = WindowAttributes::default()
         .with_title("FastTrackStudio")
         .with_decorations(false)
         .with_surface_size(LogicalSize::new(w, h))
-        .with_min_surface_size(LogicalSize::new(720.0, 480.0));
+        .with_min_surface_size(LogicalSize::new(720.0, 480.0))
+        .with_maximized(maximized && !fullscreen);
     // Position first: borderless fullscreen picks the monitor the window is
     // on, so placing it inside the target screen is what selects that screen.
     if let Some((x, y)) = pos {
@@ -312,15 +377,16 @@ fn launch_app() {
     use dioxus::desktop::tao::dpi::{LogicalPosition, LogicalSize};
     use dioxus::desktop::tao::window::Fullscreen;
     use dioxus::desktop::{Config, WindowBuilder};
-    let (pos, size, fullscreen) = window_placement();
+    let (pos, size, fullscreen, maximized) = window_placement();
     let mut window = WindowBuilder::new()
         .with_title("FastTrackStudio")
         .with_decorations(false)
-        .with_inner_size(match size {
-            Some((w, h)) => LogicalSize::new(w, h),
-            None => LogicalSize::new(2560.0, 1440.0),
+        .with_inner_size({
+            let (w, h) = size.unwrap_or_else(default_window_size);
+            LogicalSize::new(w, h)
         })
-        .with_min_inner_size(LogicalSize::new(720.0, 480.0));
+        .with_min_inner_size(LogicalSize::new(720.0, 480.0))
+        .with_maximized(maximized && !fullscreen);
     if let Some((x, y)) = pos {
         window = window.with_position(LogicalPosition::new(x, y));
     }
@@ -382,15 +448,6 @@ impl Workspace {
             .into_iter()
             .find(|(w, _)| *w == self)
             .map_or("?", |(_, l)| l)
-    }
-
-    /// The rail glyph. The rail is icon-only, so this is how a workspace is
-    /// recognised — labels are tooltips.
-    const fn icon(self) -> fts_chrome::Icon {
-        match self {
-            #[cfg(feature = "signal")]
-            Self::Signal => fts_chrome::Icon::Signal,
-        }
     }
 }
 
@@ -547,24 +604,28 @@ fn App() -> Element {
         })
         .unwrap_or_default(),
     );
+    // No side rails: switching workspace or rig is rare, and both already
+    // live in the top bar (the "Signal ▾" and "Guitar ▾" crumb menus). The
+    // one app-level flyout, Settings (engine status included), opens from
+    // the gear beside the window controls.
     level.panels(vec![
-        fts_chrome::PanelSpec::new("engines", "Engines", fts_chrome::Icon::Engine).width(300),
         fts_chrome::PanelSpec::new("settings", "Settings", fts_chrome::Icon::Settings).width(300),
     ]);
 
-    let rail_items: Vec<fts_chrome::RailItem> = Workspace::all()
-        .into_iter()
-        .map(|(w, label)| {
-            fts_chrome::RailItem::new(
-                label,
-                label,
-                w.icon(),
-                current() == Some(w),
-                Callback::new(move |()| go.call(w)),
-            )
-        })
-        .collect();
-    let sub_rail = chrome.sub_rail.read().clone();
+    // The window's own controls, for whichever bar is showing: the app's, or
+    // the one a view draws when it claims the bar (fts_chrome::use_bar_claim
+    // — the guitar rig does, so there is one bar, not the app's over the
+    // rig's). Desktop only; the browser and phone draw their own chrome.
+    #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
+    fts_chrome::provide_window_actions(fts_chrome::WindowActions {
+        drag: Callback::new(move |()| drag_window()),
+        expand: Callback::new(move |()| toggle_maximize()),
+        minimize: Callback::new(move |()| chrome::minimize()),
+        maximize: Callback::new(move |()| toggle_maximize()),
+        close: Callback::new(move |()| chrome::close()),
+        settings: Some(Callback::new(move |()| chrome.toggle_panel("settings"))),
+    });
+    let bar_claimed = chrome.bar_claimed();
 
     rsx! {
         // Global reset: the frameless WebView keeps the platform's default 8px
@@ -572,11 +633,13 @@ fn App() -> Element {
         // around the dark 100vh app. Zero it and paint the page dark.
         document::Style { {"html,body{margin:0;padding:0;height:100%;background:#0a0a0a;overflow:hidden;}*{box-sizing:border-box;}"} }
         ResizeHandles {}
+        PlatformMenu {}
         // ONE bar over two rails (fts_chrome::AppFrame). The bar is also the
         // title bar — the native decorations are off on desktop, so its slack
         // is the drag surface and the window controls sit at its right end.
         fts_chrome::AppFrame {
             top: rsx! {
+                if !bar_claimed {
                 fts_chrome::TopBar {
                     leading: rsx! {
                         span {
@@ -587,23 +650,29 @@ fn App() -> Element {
                             "FTS"
                         }
                     },
-                    trailing: rsx! { WindowControls {} },
+                    trailing: rsx! {
+                        // No window shell there, so no WindowCluster — but
+                        // settings still needs a way in.
+                        if cfg!(any(target_arch = "wasm32", target_os = "ios")) {
+                            fts_chrome::WindowButton {
+                                icon: fts_chrome::Icon::Settings,
+                                title: "Settings".to_string(),
+                                on_click: move |()| chrome.toggle_panel("settings"),
+                            }
+                        }
+                        fts_chrome::WindowCluster {}
+                    },
                     on_drag: move |()| drag_window(),
                     on_expand: move |()| toggle_maximize(),
                 }
+                }
             },
-            rail: rsx! {
-                fts_chrome::IconRail { items: rail_items, sub: sub_rail }
-            },
+            rail: rsx! {},
             // App-level flyouts. Views render their own inside their layout.
             panel: rsx! {
-                fts_chrome::PanelHost { id: "engines".to_string(),
-                    div { style: "padding: 12px;", EnginesArea {} }
-                }
                 fts_chrome::PanelHost { id: "settings".to_string(), SettingsPanel {} }
             },
-            right: rsx! { fts_chrome::PanelRail {} },
-            main { style: "flex: 1; min-height: 0; display: flex;",
+            main { style: "flex: 1; min-width: 0; min-height: 0; display: flex;",
                 match here {
                     // No domain feature compiled in — there is nowhere to go.
                     None => rsx! {
@@ -708,38 +777,21 @@ fn toggle_maximize() {
     chrome::toggle_maximize();
 }
 
-/// Minimize / maximize / close — the right end of the title bar.
-#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
+/// The OS menu bar's share of the app: on macOS, the audio readout and
+/// Settings… ⌘, (see `mac_menu`). Nothing elsewhere.
 #[component]
-fn WindowControls() -> Element {
-    use fts_chrome::{Icon, WindowButton};
-    rsx! {
-        div { style: "display: flex; align-items: center; gap: 2px; margin-left: 2px;",
-            WindowButton {
-                icon: Icon::Minimize,
-                title: "Minimize".to_string(),
-                on_click: move |()| chrome::minimize(),
-            }
-            WindowButton {
-                icon: Icon::Maximize,
-                title: "Maximize".to_string(),
-                on_click: move |()| toggle_maximize(),
-            }
-            WindowButton {
-                icon: Icon::Close,
-                title: "Close".to_string(),
-                danger: true,
-                on_click: move |()| chrome::close(),
-            }
+fn PlatformMenu() -> Element {
+    #[cfg(all(target_os = "macos", feature = "signal-guitar"))]
+    {
+        let chrome = fts_chrome::use_chrome();
+        rsx! {
+            mac_menu::MacMenuBar { on_settings: move |()| chrome.toggle_panel("settings") }
         }
     }
-}
-
-/// The browser/phone draws its own chrome.
-#[cfg(any(target_arch = "wasm32", target_os = "ios"))]
-#[component]
-fn WindowControls() -> Element {
-    rsx! {}
+    #[cfg(not(all(target_os = "macos", feature = "signal-guitar")))]
+    {
+        rsx! {}
+    }
 }
 
 /// Invisible edge/corner strips that restore native-feeling resize on
@@ -902,6 +954,7 @@ fn SettingsPanel() -> Element {
             style: "display: flex; flex-direction: column; align-items: flex-start; gap: 12px; \
                     padding: 12px; font-size: 12px;",
             span { style: "color: #a1a1aa;", "Signal v{env!(\"CARGO_PKG_VERSION\")}" }
+            EnginesArea {}
             EngineModeSetting {}
             UpdateCheck { msg: update_msg }
             if !update_msg().is_empty() {

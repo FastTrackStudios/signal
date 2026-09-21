@@ -346,6 +346,13 @@ include_dir = { workspace = true, optional = true }
 # The native PipeWire duplex backend is Linux-only (cpal's pipewire host);
 # on macOS/other platforms the sampler core falls back to plain cpal
 # (CoreAudio), keeping engine mode buildable on darwin (voyager).
+# ── macOS — the native menu bar (mac_menu.rs): audio stats in the bar,
+# Settings… ⌘, in the app menu. The same objc2 line winit already links.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSMenu", "NSMenuItem", "NSResponder"] }
+
 # ── iPhone (dx build --platform ios) — the in-process rig + phone shell ──
 [target.'cfg(target_os = "ios")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["mobile", "launch"] }
